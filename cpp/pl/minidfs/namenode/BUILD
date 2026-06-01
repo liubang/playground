@@ -102,11 +102,28 @@ cc_library(
         ":block_manager",
         ":datanode_manager",
         ":lease_manager",
+        ":namenode_maintenance",
         ":namespace_manager",
         "//cpp/pl/minidfs/common",
         "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
         "//cpp/pl/status",
         "@brpc",
+    ],
+)
+
+cc_library(
+    name = "namenode_maintenance",
+    srcs = ["namenode_maintenance.cpp"],
+    hdrs = ["namenode_maintenance.h"],
+    deps = [
+        ":block_manager",
+        ":datanode_manager",
+        ":namespace_manager",
+        ":replication_manager",
+        "//cpp/pl/minidfs/common",
+        "//cpp/pl/minidfs/metadata:metadata_store",
+        "//cpp/pl/status",
+        "@folly//folly/logging",
     ],
 )
 
@@ -136,8 +153,10 @@ cc_binary(
         ":datanode_manager",
         ":lease_manager",
         ":namenode_service_impl",
+        ":namenode_maintenance",
         ":namespace_manager",
         ":placement_manager",
+        ":replication_manager",
         "//cpp/pl/minidfs/metadata:metadata_store",
         "//cpp/pl/minidfs/metadata:mysql_connection_pool",
         "//cpp/pl/minidfs/metadata:mysql_metadata_store",

@@ -21,6 +21,7 @@
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 #include "cpp/pl/minidfs/namenode/datanode_manager.h"
 #include "cpp/pl/minidfs/namenode/lease_manager.h"
+#include "cpp/pl/minidfs/namenode/namenode_maintenance.h"
 #include "cpp/pl/minidfs/namenode/namespace_manager.h"
 #include "cpp/pl/minidfs/protocol/minidfs.pb.h"
 
@@ -47,6 +48,11 @@ public:
     void CreateFile(google::protobuf::RpcController* controller,
                     const protocol::CreateFileRequest* request,
                     protocol::CreateFileResponse* response,
+                    google::protobuf::Closure* done) override;
+
+    void AppendFile(google::protobuf::RpcController* controller,
+                    const protocol::AppendFileRequest* request,
+                    protocol::AppendFileResponse* response,
                     google::protobuf::Closure* done) override;
 
     void CompleteFile(google::protobuf::RpcController* controller,
@@ -113,7 +119,9 @@ private:
 
 class DataNodeProtocolServiceImpl : public protocol::DataNodeProtocolService {
 public:
-    DataNodeProtocolServiceImpl(DataNodeManager* dn_mgr, BlockManager* block_mgr);
+    DataNodeProtocolServiceImpl(DataNodeManager* dn_mgr,
+                                BlockManager* block_mgr,
+                                NameNodeMaintenance* maintenance);
     ~DataNodeProtocolServiceImpl() override = default;
 
     void RegisterDataNode(google::protobuf::RpcController* controller,
@@ -141,6 +149,7 @@ private:
 
     DataNodeManager* dn_mgr_;
     BlockManager* block_mgr_;
+    NameNodeMaintenance* maintenance_;
 };
 
 } // namespace pl::minidfs

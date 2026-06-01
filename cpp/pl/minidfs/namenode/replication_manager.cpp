@@ -18,8 +18,10 @@
 #include "cpp/pl/minidfs/namenode/replication_manager.h"
 
 #include <algorithm>
+#include <unordered_set>
 
 #include "cpp/pl/minidfs/common/constants.h"
+#include "cpp/pl/minidfs/common/time_util.h"
 
 namespace pl::minidfs {
 
@@ -46,44 +48,50 @@ pl::Result<std::vector<ReplicationTask>> ReplicationManager::scan() {
             continue; // Skip blocks we can't query.
         }
 
-        // Count healthy (finalized) replicas.
+        // Count only finalized replicas on live datanodes as healthy. Existing
+        // writing replicas are durable pending work and must not be scheduled
+        // again onto another target.
         auto& replicas = replicas_result.value();
-        uint32_t healthy_count = 0;
-        uint64_t source_dn = 0;
-        std::vector<uint64_t> existing_dns;
+        std::vector<uint64_t> healthy_sources;
+        std::vector<uint64_t> pending_targets;
+        std::unordered_set<uint64_t> existing_dns;
+        std::unordered_set<uint64_t> healthy_dns;
 
         for (const auto& r : replicas) {
-            if (r.state == ReplicaState::kFinalized) {
-                ++healthy_count;
-                source_dn = r.datanode_id;
-                existing_dns.push_back(r.datanode_id);
+            existing_dns.insert(r.datanode_id);
+            auto dn = store_->get_datanode(r.datanode_id);
+            bool is_live = dn.hasValue() && dn.value().state == DataNodeState::kLive;
+            if (r.state == ReplicaState::kFinalized && is_live) {
+                healthy_sources.push_back(r.datanode_id);
+                healthy_dns.insert(r.datanode_id);
+            } else if (r.state == ReplicaState::kWriting && is_live) {
+                pending_targets.push_back(r.datanode_id);
             }
         }
 
-        if (healthy_count < block.desired_replica && healthy_count > 0) {
-            // Under-replicated: need to add replicas.
-            uint32_t deficit = block.desired_replica - healthy_count;
-            auto targets = placement_->choose_targets(deficit, std::nullopt);
-            if (targets.hasError()) {
-                continue; // Cannot find targets, skip.
-            }
-
-            for (const auto& target : targets.value()) {
-                // Don't replicate to a node that already has this block.
-                bool already_has =
-                    std::find(existing_dns.begin(), existing_dns.end(), target.datanode_id) !=
-                    existing_dns.end();
-                if (already_has) {
-                    continue;
+        uint32_t healthy_count = healthy_sources.size();
+        uint32_t effective_count = healthy_count + pending_targets.size();
+        if (effective_count < block.desired_replica && !healthy_sources.empty()) {
+            uint32_t deficit = block.desired_replica - effective_count;
+            for (uint32_t i = 0; i < deficit; ++i) {
+                auto targets = placement_->choose_targets(1, existing_dns);
+                if (targets.hasError()) {
+                    break;
                 }
-
-                ReplicationTask task;
-                task.block_id = block.block_id;
-                task.source_datanode = source_dn;
-                task.target_datanode = target.datanode_id;
-                task.is_deletion = false;
-                tasks.push_back(task);
-                ++task_count;
+                const auto& target = targets.value().front();
+                BlockReplica replica;
+                replica.block_id = block.block_id;
+                replica.datanode_id = target.datanode_id;
+                replica.state = ReplicaState::kWriting;
+                replica.length = block.length;
+                replica.generation_stamp = block.generation_stamp;
+                replica.report_time_ms = now_ms();
+                auto upsert = store_->upsert_replica(replica);
+                if (upsert.hasError()) {
+                    return folly::makeUnexpected(upsert.error());
+                }
+                existing_dns.insert(target.datanode_id);
+                pending_targets.push_back(target.datanode_id);
             }
         } else if (healthy_count > block.desired_replica) {
             // Over-replicated: need to remove excess replicas.
@@ -91,18 +99,49 @@ pl::Result<std::vector<ReplicationTask>> ReplicationManager::scan() {
             // Remove replicas from nodes with least free space (greedy).
             // For simplicity, just pick the last N in the replica list.
             uint32_t removed = 0;
-            for (auto it = replicas.rbegin(); it != replicas.rend() && removed < excess; ++it) {
-                if (it->state == ReplicaState::kFinalized) {
+            for (auto it = replicas.rbegin();
+                 it != replicas.rend() && removed < excess &&
+                 task_count < kDefaultMaxReplicationTasksPerRound;
+                 ++it) {
+                if (it->state == ReplicaState::kFinalized &&
+                    healthy_dns.contains(it->datanode_id)) {
+                    auto mark = store_->update_replica_state(
+                        block.block_id, it->datanode_id, ReplicaState::kDeleting);
+                    if (mark.hasError()) {
+                        return folly::makeUnexpected(mark.error());
+                    }
                     ReplicationTask task;
                     task.block_id = block.block_id;
                     task.source_datanode = 0;
                     task.target_datanode = it->datanode_id;
+                    task.inode_id = block.inode_id;
+                    task.block_index = block.block_index;
+                    task.generation_stamp = block.generation_stamp;
                     task.is_deletion = true;
                     tasks.push_back(task);
                     ++task_count;
                     ++removed;
                 }
             }
+        }
+
+        if (healthy_sources.empty()) {
+            continue;
+        }
+        for (uint64_t target : pending_targets) {
+            if (task_count >= kDefaultMaxReplicationTasksPerRound) {
+                break;
+            }
+            tasks.push_back(ReplicationTask{
+                .block_id = block.block_id,
+                .source_datanode = healthy_sources.front(),
+                .target_datanode = target,
+                .inode_id = block.inode_id,
+                .block_index = block.block_index,
+                .generation_stamp = block.generation_stamp,
+                .is_deletion = false,
+            });
+            ++task_count;
         }
     }
 

@@ -82,6 +82,7 @@ public:
     pl::Result<pl::Void> renew_lease(uint64_t inode_id, uint64_t new_expire_ms) override;
     pl::Result<pl::Void> close_lease(uint64_t inode_id) override;
     pl::Result<uint64_t> expire_leases(uint64_t now_ms) override;
+    pl::Result<std::vector<Lease>> list_expired_leases(uint64_t now_ms) override;
 
     // ID Allocation
 

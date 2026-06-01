@@ -124,3 +124,20 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "namenode_maintenance_test",
+    srcs = ["namenode_maintenance_test.cpp"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":mock_metadata_store",
+        "//cpp/pl/minidfs/namenode:block_manager",
+        "//cpp/pl/minidfs/namenode:datanode_manager",
+        "//cpp/pl/minidfs/namenode:namenode_maintenance",
+        "//cpp/pl/minidfs/namenode:namespace_manager",
+        "//cpp/pl/minidfs/namenode:placement_manager",
+        "//cpp/pl/minidfs/namenode:replication_manager",
+        "@googletest//:gtest_main",
+    ],
+)

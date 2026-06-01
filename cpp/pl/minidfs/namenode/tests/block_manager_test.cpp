@@ -43,6 +43,12 @@ protected:
         placement_ = std::make_unique<PlacementManager>(dn_mgr_.get());
         block_mgr_ = std::make_unique<BlockManager>(store_.get(), placement_.get());
 
+        Inode file;
+        file.inode_id = 100;
+        file.type = InodeType::kFile;
+        file.state = FileState::kUnderConstruction;
+        ASSERT_TRUE(store_->create_inode(file).hasValue());
+
         // Register 3 datanodes so placement can succeed.
         dn_mgr_->register_datanode("dn-1", "host1", "10.0.0.1", 9000, 9100, "/rack1", 1000 * kGB);
         dn_mgr_->register_datanode("dn-2", "host2", "10.0.0.2", 9000, 9100, "/rack2", 1000 * kGB);
@@ -185,11 +191,19 @@ TEST_F(BlockManagerTest, CommitBlockOnlyFinalizesReportedReplicas) {
 }
 
 TEST_F(BlockManagerTest, GenerationStampMonotonic) {
-    uint64_t g1 = block_mgr_->next_generation_stamp();
-    uint64_t g2 = block_mgr_->next_generation_stamp();
-    uint64_t g3 = block_mgr_->next_generation_stamp();
-    EXPECT_LT(g1, g2);
-    EXPECT_LT(g2, g3);
+    auto g1 = block_mgr_->next_generation_stamp();
+    auto g2 = block_mgr_->next_generation_stamp();
+    auto g3 = block_mgr_->next_generation_stamp();
+    ASSERT_TRUE(g1.hasValue());
+    ASSERT_TRUE(g2.hasValue());
+    ASSERT_TRUE(g3.hasValue());
+    EXPECT_LT(g1.value(), g2.value());
+    EXPECT_LT(g2.value(), g3.value());
+}
+
+TEST_F(BlockManagerTest, AllocateBlockRejectsDuplicateIndex) {
+    ASSERT_TRUE(block_mgr_->allocate_block(100, 0, 3).hasValue());
+    EXPECT_TRUE(block_mgr_->allocate_block(100, 0, 3).hasError());
 }
 
 } // namespace

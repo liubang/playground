@@ -18,6 +18,7 @@
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 
 #include <fmt/format.h>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "cpp/pl/minidfs/common/error_code.h"
@@ -29,21 +30,46 @@ namespace pl::minidfs {
 BlockManager::BlockManager(MetadataStore* store, PlacementManager* placement)
     : store_(store), placement_(placement) {}
 
-uint64_t BlockManager::next_generation_stamp() {
-    return generation_stamp_counter_.fetch_add(1, std::memory_order_relaxed) + 1;
+pl::Result<uint64_t> BlockManager::next_generation_stamp() {
+    return store_->alloc_id("generation_stamp");
 }
 
 pl::Result<LocatedBlock> BlockManager::allocate_block(uint64_t inode_id,
                                                       uint32_t block_index,
                                                       uint32_t replication) {
+    auto inode = store_->get_inode(inode_id);
+    if (inode.hasError()) {
+        return folly::makeUnexpected(inode.error());
+    }
+    if (inode.value().type != InodeType::kFile ||
+        inode.value().state != FileState::kUnderConstruction) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kFileUnderConstruction),
+                             "blocks can only be allocated for files under construction");
+    }
+    auto existing_blocks = store_->get_blocks_by_inode(inode_id);
+    if (existing_blocks.hasError()) {
+        return folly::makeUnexpected(existing_blocks.error());
+    }
+    for (const auto& block : existing_blocks.value()) {
+        if (block.block_index == block_index && block.state != BlockState::kDeleted) {
+            return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kAlreadyExists),
+                                 fmt::format("block index {} already exists", block_index));
+        }
+    }
+
     // Allocate a block ID.
     auto id_result = store_->alloc_id("block");
     if (id_result.hasError()) {
         return folly::makeUnexpected(id_result.error());
     }
 
+    auto generation_stamp = next_generation_stamp();
+    if (generation_stamp.hasError()) {
+        return folly::makeUnexpected(generation_stamp.error());
+    }
+
     uint64_t block_id = id_result.value();
-    uint64_t gen = next_generation_stamp();
+    uint64_t gen = generation_stamp.value();
     uint64_t ts = now_ms();
 
     // Create block metadata entry (state = Allocating).
@@ -256,6 +282,47 @@ pl::Result<pl::Void> BlockManager::invalidate_blocks(uint64_t inode_id) {
     return pl::Void{};
 }
 
+pl::Result<uint64_t> BlockManager::recover_file(uint64_t inode_id) {
+    auto blocks_result = store_->get_blocks_by_inode(inode_id);
+    if (blocks_result.hasError()) {
+        return folly::makeUnexpected(blocks_result.error());
+    }
+
+    uint64_t final_length = 0;
+    for (auto& block : blocks_result.value()) {
+        if (block.state == BlockState::kCommitted) {
+            final_length += block.length;
+            continue;
+        }
+        if (block.state == BlockState::kDeleted) {
+            continue;
+        }
+
+        auto replicas = store_->get_replicas(block.block_id);
+        if (replicas.hasError()) {
+            return folly::makeUnexpected(replicas.error());
+        }
+        for (const auto& replica : replicas.value()) {
+            if (replica.state == ReplicaState::kDeleted) {
+                continue;
+            }
+            auto mark = store_->update_replica_state(
+                block.block_id, replica.datanode_id, ReplicaState::kDeleting);
+            if (mark.hasError()) {
+                return folly::makeUnexpected(mark.error());
+            }
+        }
+
+        block.state = BlockState::kDeleted;
+        block.mtime_ms = now_ms();
+        auto update = store_->update_block(block);
+        if (update.hasError()) {
+            return folly::makeUnexpected(update.error());
+        }
+    }
+    return final_length;
+}
+
 pl::Result<std::vector<BlockMeta>> BlockManager::get_blocks_to_delete(uint64_t datanode_id) {
     auto replicas = store_->get_replicas_by_datanode(datanode_id);
     if (replicas.hasError()) {
@@ -277,17 +344,41 @@ pl::Result<std::vector<BlockMeta>> BlockManager::get_blocks_to_delete(uint64_t d
 }
 
 pl::Result<pl::Void> BlockManager::reconcile_block_report(
-    uint64_t datanode_id, const std::unordered_set<uint64_t>& reported_block_ids) {
+    uint64_t datanode_id, const std::vector<ReportedBlock>& reported_blocks, bool full_report) {
     auto replicas = store_->get_replicas_by_datanode(datanode_id);
     if (replicas.hasError()) {
         return folly::makeUnexpected(replicas.error());
     }
 
+    std::unordered_map<uint64_t, ReportedBlock> reported;
+    reported.reserve(reported_blocks.size());
+    for (const auto& block : reported_blocks) {
+        reported.emplace(block.block_id, block);
+    }
+
     for (const auto& replica : replicas.value()) {
+        auto report = reported.find(replica.block_id);
+        bool is_reported = report != reported.end();
         if (replica.state == ReplicaState::kDeleting &&
-            !reported_block_ids.contains(replica.block_id)) {
+            full_report && !is_reported) {
             auto mark =
                 store_->update_replica_state(replica.block_id, datanode_id, ReplicaState::kDeleted);
+            if (mark.hasError()) {
+                return folly::makeUnexpected(mark.error());
+            }
+        } else if ((replica.state == ReplicaState::kWriting ||
+                    replica.state == ReplicaState::kStale) &&
+                   is_reported && report->second.generation_stamp == replica.generation_stamp) {
+            auto mark =
+                store_->update_replica_state(replica.block_id, datanode_id, ReplicaState::kFinalized);
+            if (mark.hasError()) {
+                return folly::makeUnexpected(mark.error());
+            }
+        } else if (replica.state == ReplicaState::kFinalized &&
+                   ((!is_reported && full_report) ||
+                    (is_reported && report->second.generation_stamp != replica.generation_stamp))) {
+            auto mark =
+                store_->update_replica_state(replica.block_id, datanode_id, ReplicaState::kStale);
             if (mark.hasError()) {
                 return folly::makeUnexpected(mark.error());
             }

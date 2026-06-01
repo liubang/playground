@@ -17,9 +17,8 @@
 
 #include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
 
+#include <algorithm>
 #include <brpc/closure_guard.h>
-#include <unordered_set>
-
 #include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
@@ -246,6 +245,51 @@ void NameNodeServiceImpl::CompleteFile(google::protobuf::RpcController* /*contro
     fill_status(response->mutable_status(), 0);
 }
 
+void NameNodeServiceImpl::AppendFile(google::protobuf::RpcController* /*controller*/,
+                                     const protocol::AppendFileRequest* request,
+                                     protocol::AppendFileResponse* response,
+                                     google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+
+    auto txn = metadata_store_->begin_transaction();
+    if (txn.hasError()) {
+        fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
+        return;
+    }
+    auto inode = ns_mgr_->begin_append(request->path());
+    if (inode.hasError()) {
+        fill_status(response->mutable_status(), inode.error().code(), inode.error().message());
+        return;
+    }
+    auto lease = lease_mgr_->acquire_lease(inode.value().inode_id, request->client_id());
+    if (lease.hasError()) {
+        fill_status(response->mutable_status(), lease.error().code(), lease.error().message());
+        return;
+    }
+    auto blocks = metadata_store_->get_blocks_by_inode(inode.value().inode_id);
+    if (blocks.hasError()) {
+        fill_status(response->mutable_status(), blocks.error().code(), blocks.error().message());
+        return;
+    }
+
+    uint32_t next_block_index = 0;
+    for (const auto& block : blocks.value()) {
+        next_block_index = std::max(next_block_index, block.block_index + 1);
+    }
+    auto commit = txn.value()->commit();
+    if (commit.hasError()) {
+        fill_status(response->mutable_status(), commit.error().code(), commit.error().message());
+        return;
+    }
+
+    fill_status(response->mutable_status(), 0);
+    response->set_inode_id(inode.value().inode_id);
+    response->set_lease_id(lease.value().lease_id);
+    response->set_next_block_index(next_block_index);
+    response->set_block_size(inode.value().block_size);
+    response->set_replication(inode.value().replication);
+}
+
 void NameNodeServiceImpl::GetFileStatus(google::protobuf::RpcController* /*controller*/,
                                         const protocol::GetFileStatusRequest* request,
                                         protocol::GetFileStatusResponse* response,
@@ -394,6 +438,11 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
 
     uint32_t replication =
         request->replication() > 0 ? request->replication() : kDefaultReplication;
+    auto lease = lease_mgr_->validate_lease(request->inode_id(), request->client_id());
+    if (lease.hasError()) {
+        fill_status(response->mutable_status(), lease.error().code(), lease.error().message());
+        return;
+    }
     auto result =
         block_mgr_->allocate_block(request->inode_id(), request->block_index(), replication);
     if (result.hasError()) {
@@ -449,8 +498,9 @@ void DataNodeProtocolServiceImpl::fill_status(protocol::StatusProto* proto,
 }
 
 DataNodeProtocolServiceImpl::DataNodeProtocolServiceImpl(DataNodeManager* dn_mgr,
-                                                         BlockManager* block_mgr)
-    : dn_mgr_(dn_mgr), block_mgr_(block_mgr) {}
+                                                         BlockManager* block_mgr,
+                                                         NameNodeMaintenance* maintenance)
+    : dn_mgr_(dn_mgr), block_mgr_(block_mgr), maintenance_(maintenance) {}
 
 void DataNodeProtocolServiceImpl::RegisterDataNode(google::protobuf::RpcController* /*controller*/,
                                                    const protocol::RegisterDataNodeRequest* request,
@@ -504,6 +554,22 @@ void DataNodeProtocolServiceImpl::Heartbeat(google::protobuf::RpcController* /*c
         command->set_block_id(block.block_id);
         command->set_generation_stamp(block.generation_stamp);
     }
+
+    for (const auto& task : maintenance_->take_replication_tasks(request->datanode_id())) {
+        auto target = dn_mgr_->get_datanode(task.target_datanode);
+        if (target.hasError() || target.value().state != DataNodeState::kLive) {
+            continue;
+        }
+        auto* command = response->add_commands();
+        command->set_type(protocol::DataNodeCommand::REPLICATE);
+        command->set_block_id(task.block_id);
+        command->set_generation_stamp(task.generation_stamp);
+        command->set_inode_id(task.inode_id);
+        command->set_block_index(task.block_index);
+        command->set_target_host(target.value().ip.empty() ? target.value().hostname
+                                                            : target.value().ip);
+        command->set_target_port(target.value().data_port);
+    }
 }
 
 void DataNodeProtocolServiceImpl::BlockReport(google::protobuf::RpcController* /*controller*/,
@@ -512,13 +578,18 @@ void DataNodeProtocolServiceImpl::BlockReport(google::protobuf::RpcController* /
                                               google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
-    std::unordered_set<uint64_t> reported;
+    std::vector<ReportedBlock> reported;
     reported.reserve(request->blocks_size());
     for (const auto& block : request->blocks()) {
-        reported.insert(block.block_id());
+        reported.push_back({
+            .block_id = block.block_id(),
+            .generation_stamp = block.generation_stamp(),
+            .length = block.length(),
+        });
     }
 
-    auto reconcile = block_mgr_->reconcile_block_report(request->datanode_id(), reported);
+    auto reconcile =
+        block_mgr_->reconcile_block_report(request->datanode_id(), reported, request->full_report());
     if (reconcile.hasError()) {
         fill_status(
             response->mutable_status(), reconcile.error().code(), reconcile.error().message());

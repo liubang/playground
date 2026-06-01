@@ -78,6 +78,8 @@ TEST_F(ReplicationWorkerTest, CopyTaskSuccess) {
 
     CopyFunc copy_func = [&](uint64_t block_id,
                              uint64_t gs,
+                             uint64_t,
+                             uint32_t,
                              const std::string& data,
                              const std::string& host,
                              uint32_t port) -> Result<Void> {
@@ -117,7 +119,13 @@ TEST_F(ReplicationWorkerTest, DeleteTaskSuccess) {
     EXPECT_TRUE(store_->has_block(200, 6000));
 
     CopyFunc copy_func =
-        [](uint64_t, uint64_t, const std::string&, const std::string&, uint32_t) -> Result<Void> {
+        [](uint64_t,
+           uint64_t,
+           uint64_t,
+           uint32_t,
+           const std::string&,
+           const std::string&,
+           uint32_t) -> Result<Void> {
         RETURN_VOID;
     };
 
@@ -146,7 +154,13 @@ TEST_F(ReplicationWorkerTest, MultipleTasks) {
 
     std::atomic<int> copy_count{0};
     CopyFunc copy_func =
-        [&](uint64_t, uint64_t, const std::string&, const std::string&, uint32_t) -> Result<Void> {
+        [&](uint64_t,
+            uint64_t,
+            uint64_t,
+            uint32_t,
+            const std::string&,
+            const std::string&,
+            uint32_t) -> Result<Void> {
         copy_count++;
         RETURN_VOID;
     };
@@ -181,7 +195,13 @@ TEST_F(ReplicationWorkerTest, CopyBlockNotFound) {
     // Block 999 doesn't exist — copy should fail gracefully (not crash)
     std::atomic<int> copy_count{0};
     CopyFunc copy_func =
-        [&](uint64_t, uint64_t, const std::string&, const std::string&, uint32_t) -> Result<Void> {
+        [&](uint64_t,
+            uint64_t,
+            uint64_t,
+            uint32_t,
+            const std::string&,
+            const std::string&,
+            uint32_t) -> Result<Void> {
         copy_count++;
         RETURN_VOID;
     };
@@ -208,7 +228,13 @@ TEST_F(ReplicationWorkerTest, CopyBlockNotFound) {
 
 TEST_F(ReplicationWorkerTest, PendingCount) {
     CopyFunc copy_func =
-        [](uint64_t, uint64_t, const std::string&, const std::string&, uint32_t) -> Result<Void> {
+        [](uint64_t,
+           uint64_t,
+           uint64_t,
+           uint32_t,
+           const std::string&,
+           const std::string&,
+           uint32_t) -> Result<Void> {
         // Slow task
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         RETURN_VOID;
@@ -245,7 +271,13 @@ TEST_F(ReplicationWorkerTest, StopDrainsQueue) {
 
     std::atomic<int> copy_count{0};
     CopyFunc copy_func =
-        [&](uint64_t, uint64_t, const std::string&, const std::string&, uint32_t) -> Result<Void> {
+        [&](uint64_t,
+            uint64_t,
+            uint64_t,
+            uint32_t,
+            const std::string&,
+            const std::string&,
+            uint32_t) -> Result<Void> {
         copy_count++;
         RETURN_VOID;
     };

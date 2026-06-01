@@ -65,10 +65,11 @@ TEST_F(BlockReporterTest, SendFullReportEmpty) {
     std::atomic<int> report_count{0};
     BlockReportFunc report_func =
         [&](uint64_t datanode_id,
-            const std::vector<BlockInfo>& blocks) -> Result<BlockReportResponse> {
+            const BlockReport& report) -> Result<BlockReportResponse> {
         report_count++;
         EXPECT_EQ(datanode_id, 42u);
-        EXPECT_TRUE(blocks.empty());
+        EXPECT_TRUE(report.full_report);
+        EXPECT_TRUE(report.blocks.empty());
         return BlockReportResponse{};
     };
 
@@ -92,8 +93,8 @@ TEST_F(BlockReporterTest, SendFullReportWithBlocks) {
     std::vector<BlockInfo> reported_blocks;
     BlockReportFunc report_func =
         [&](uint64_t datanode_id,
-            const std::vector<BlockInfo>& blocks) -> Result<BlockReportResponse> {
-        reported_blocks = blocks;
+            const BlockReport& report) -> Result<BlockReportResponse> {
+        reported_blocks = report.blocks;
         return BlockReportResponse{};
     };
     DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
@@ -113,8 +114,7 @@ TEST_F(BlockReporterTest, ReportResponseDeletesBlocks) {
     create_finalized_block(201, 6001);
 
     std::vector<std::pair<uint64_t, uint64_t>> deleted;
-    BlockReportFunc report_func = [](uint64_t,
-                                     const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
         BlockReportResponse resp;
         resp.blocks_to_delete = {200}; // NN says delete block 200
         return resp;
@@ -134,8 +134,7 @@ TEST_F(BlockReporterTest, ReportResponseDeletesBlocks) {
 }
 
 TEST_F(BlockReporterTest, NotifyBlockFinalized) {
-    BlockReportFunc report_func = [](uint64_t,
-                                     const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
         return BlockReportResponse{};
     };
     DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
@@ -146,13 +145,12 @@ TEST_F(BlockReporterTest, NotifyBlockFinalized) {
     BlockReporter reporter(cfg, store_.get(), report_func, delete_func);
 
     // Should not crash, just update internal tracking
-    reporter.notify_block_finalized(300, 7000);
-    reporter.notify_block_finalized(301, 7001);
+    reporter.notify_block_finalized(300);
+    reporter.notify_block_finalized(301);
 }
 
 TEST_F(BlockReporterTest, NotifyBlockDeleted) {
-    BlockReportFunc report_func = [](uint64_t,
-                                     const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
         return BlockReportResponse{};
     };
     DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
@@ -162,15 +160,39 @@ TEST_F(BlockReporterTest, NotifyBlockDeleted) {
     cfg.datanode_id = 1;
     BlockReporter reporter(cfg, store_.get(), report_func, delete_func);
 
-    reporter.notify_block_finalized(400, 8000);
+    reporter.notify_block_finalized(400);
     reporter.notify_block_deleted(400);
     // The block should now be in the removed set, not added set
+}
+
+TEST_F(BlockReporterTest, SendIncrementalReportWithFinalizedBlock) {
+    create_finalized_block(500, 9000);
+
+    BlockReport reported;
+    BlockReportFunc report_func = [&](uint64_t, const BlockReport& report) {
+        reported = report;
+        return Result<BlockReportResponse>(BlockReportResponse{});
+    };
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    };
+
+    BlockReporter::Config cfg;
+    cfg.datanode_id = 1;
+    BlockReporter reporter(cfg, store_.get(), report_func, delete_func);
+
+    reporter.notify_block_finalized(500);
+    auto result = reporter.send_incremental_report();
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_FALSE(reported.full_report);
+    ASSERT_EQ(reported.blocks.size(), 1u);
+    EXPECT_EQ(reported.blocks[0].block_id, 500u);
+    EXPECT_EQ(reported.blocks[0].generation_stamp, 9000u);
 }
 
 TEST_F(BlockReporterTest, StartAndStop) {
     std::atomic<int> report_count{0};
     BlockReportFunc report_func =
-        [&](uint64_t, const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
+        [&](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
         report_count++;
         return BlockReportResponse{};
     };
@@ -196,8 +218,7 @@ TEST_F(BlockReporterTest, StartAndStop) {
 }
 
 TEST_F(BlockReporterTest, ReportRPCFailure) {
-    BlockReportFunc report_func = [](uint64_t,
-                                     const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
         return pl::makeError(pl::Status(5000, "RPC failed"));
     };
     DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {

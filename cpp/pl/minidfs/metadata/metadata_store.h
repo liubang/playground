@@ -163,6 +163,9 @@ public:
     /// Expire all leases whose expire_time_ms < now_ms. Returns number expired.
     virtual pl::Result<uint64_t> expire_leases(uint64_t now_ms) = 0;
 
+    /// List active leases whose expire_time_ms < now_ms.
+    virtual pl::Result<std::vector<Lease>> list_expired_leases(uint64_t now_ms) = 0;
+
     // ID Allocation
 
     /// Allocate `count` consecutive IDs from the named allocator.

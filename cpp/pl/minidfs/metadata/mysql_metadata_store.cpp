@@ -1024,6 +1024,36 @@ pl::Result<uint64_t> MySQLMetadataStore::expire_leases(uint64_t now_ms) {
     return res.value().affected_rows();
 }
 
+pl::Result<std::vector<Lease>> MySQLMetadataStore::list_expired_leases(uint64_t now_ms) {
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
+    }
+    auto* conn = get_active_conn(owned);
+
+    auto sql = fmt::format(
+        "SELECT lease_id, inode_id, client_id, state, expire_time_ms, ctime_ms, mtime_ms "
+        "FROM leases WHERE state = 0 AND expire_time_ms < {}",
+        now_ms);
+
+    auto res = conn->execute(sql);
+    if (res.hasError()) {
+        return folly::makeUnexpected(res.error());
+    }
+
+    std::vector<Lease> result;
+    auto rows = res.value().rows();
+    result.reserve(rows.size());
+    for (const auto& row : rows) {
+        result.push_back(row_to_lease(row));
+    }
+    return result;
+}
+
 // ID Allocation
 
 pl::Result<uint64_t> MySQLMetadataStore::alloc_id(std::string_view name, uint64_t count) {

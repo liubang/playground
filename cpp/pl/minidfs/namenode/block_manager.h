@@ -17,9 +17,7 @@
 
 #pragma once
 
-#include <atomic>
 #include <cstdint>
-#include <unordered_set>
 #include <vector>
 
 #include "cpp/pl/minidfs/common/types.h"
@@ -29,6 +27,12 @@
 namespace pl::minidfs {
 
 class PlacementManager;
+
+struct ReportedBlock {
+    uint64_t block_id = 0;
+    uint64_t generation_stamp = 0;
+    uint64_t length = 0;
+};
 
 // BlockManager — manages block lifecycle on the NameNode side.
 //
@@ -69,20 +73,23 @@ public:
     /// Must be called before the inode is deleted from the namespace.
     pl::Result<pl::Void> invalidate_blocks(uint64_t inode_id);
 
+    /// Recover an abandoned file write. Keeps committed blocks, invalidates
+    /// allocating blocks, and returns the length of the readable prefix.
+    pl::Result<uint64_t> recover_file(uint64_t inode_id);
+
     /// Return pending block deletion commands for a datanode.
     pl::Result<std::vector<BlockMeta>> get_blocks_to_delete(uint64_t datanode_id);
 
     /// Mark replicas no longer reported by a datanode as deleted.
     pl::Result<pl::Void> reconcile_block_report(
-        uint64_t datanode_id, const std::unordered_set<uint64_t>& reported_block_ids);
+        uint64_t datanode_id, const std::vector<ReportedBlock>& reported_blocks, bool full_report);
 
     /// Generate a new unique generation stamp.
-    uint64_t next_generation_stamp();
+    pl::Result<uint64_t> next_generation_stamp();
 
 private:
     MetadataStore* store_;
     PlacementManager* placement_;
-    std::atomic<uint64_t> generation_stamp_counter_{0};
 };
 
 } // namespace pl::minidfs

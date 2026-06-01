@@ -21,7 +21,6 @@
 #include <brpc/channel.h>
 #include <brpc/controller.h>
 #include <cstdint>
-#include <cstring>
 #include <fcntl.h>
 #include <fmt/core.h>
 #include <folly/logging/xlog.h>
@@ -82,6 +81,24 @@ public:
 private:
     int fd_;
 };
+
+Result<Void> copy_to_stream(int fd, DfsOutputStream* stream) {
+    std::vector<char> buffer(64 * kKB);
+    while (true) {
+        auto count = ::read(fd, buffer.data(), buffer.size());
+        if (count < 0) {
+            return pl::makeError(static_cast<status_code_t>(ErrorCode::kIOError),
+                                 "failed to read local file");
+        }
+        if (count == 0) {
+            return stream->close();
+        }
+        auto written = stream->write(buffer.data(), static_cast<uint64_t>(count));
+        if (written.hasError()) {
+            return written;
+        }
+    }
+}
 
 } // namespace
 
@@ -238,8 +255,6 @@ Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_pa
                             "Cannot stat local file: {}",
                             local_path);
     }
-    const uint64_t file_size = static_cast<uint64_t>(st.st_size);
-
     // 2. CreateFile on NameNode
     protocol::NameNodeService_Stub stub(&namenode_channel_);
     brpc::Controller cntl;
@@ -267,174 +282,60 @@ Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_pa
     }
 
     const uint64_t inode_id = create_resp.inode_id();
-
-    // 3. Write blocks
-    uint64_t remaining = file_size;
-    uint32_t block_index = 0;
-    std::vector<char> buf(config_.block_size);
-
-    while (remaining > 0) {
-        const uint64_t to_read = std::min(remaining, config_.block_size);
-        uint64_t bytes_read = 0;
-
-        while (bytes_read < to_read) {
-            auto n = ::read(fd.get(), buf.data() + bytes_read, to_read - bytes_read);
-            if (n <= 0) {
-                return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
-                                    "Read error on local file at offset {}",
-                                    file_size - remaining + bytes_read);
-            }
-            bytes_read += static_cast<uint64_t>(n);
-        }
-
-        auto result = write_block(inode_id, block_index, buf.data(), bytes_read);
-        if (result.hasError()) {
-            RETURN_ERROR(result);
-        }
-
-        remaining -= bytes_read;
-        ++block_index;
+    auto stream = DfsOutputStream::create(&namenode_channel_,
+                                          inode_id,
+                                          config_.client_id,
+                                          {
+                                              .block_size = config_.block_size,
+                                              .chunk_size = config_.chunk_size,
+                                              .replication = config_.replication,
+                                              .rpc_timeout_ms = config_.rpc_timeout_ms,
+                                          });
+    if (stream.hasError()) {
+        return folly::makeUnexpected(stream.error());
     }
-
-    // 4. CompleteFile
-    cntl.Reset();
-    protocol::CompleteFileRequest complete_req;
-    complete_req.set_inode_id(inode_id);
-    complete_req.set_client_id(config_.client_id);
-
-    protocol::CompleteFileResponse complete_resp;
-    stub.CompleteFile(&cntl, &complete_req, &complete_resp, nullptr);
-
-    if (cntl.Failed()) {
-        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "CompleteFile RPC failed: {}",
-                            cntl.ErrorText());
-    }
-    return check_status(complete_resp.status());
+    return copy_to_stream(fd.get(), &stream.value());
 }
 
-Result<uint64_t> DfsClient::write_block(uint64_t inode_id,
-                                        uint32_t block_index,
-                                        const char* data,
-                                        uint64_t length) {
-    // Allocate block from NameNode
-    protocol::NameNodeService_Stub nn_stub(&namenode_channel_);
-    brpc::Controller cntl;
+Result<Void> DfsClient::append(std::string_view local_path, std::string_view dfs_path) {
+    ScopedFd fd(::open(std::string(local_path).c_str(), O_RDONLY));
+    if (fd.get() < 0) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
+                            "Cannot open local file: {}",
+                            local_path);
+    }
 
-    protocol::AllocateBlockRequest alloc_req;
-    alloc_req.set_inode_id(inode_id);
-    alloc_req.set_block_index(block_index);
-    alloc_req.set_replication(config_.replication);
-
-    protocol::AllocateBlockResponse alloc_resp;
-    nn_stub.AllocateBlock(&cntl, &alloc_req, &alloc_resp, nullptr);
-
-    if (cntl.Failed()) {
+    protocol::NameNodeService_Stub stub(&namenode_channel_);
+    brpc::Controller controller;
+    protocol::AppendFileRequest request;
+    request.set_path(std::string(dfs_path));
+    request.set_client_id(config_.client_id);
+    protocol::AppendFileResponse response;
+    stub.AppendFile(&controller, &request, &response, nullptr);
+    if (controller.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "AllocateBlock RPC failed: {}",
-                            cntl.ErrorText());
+                            "AppendFile RPC failed: {}",
+                            controller.ErrorText());
     }
-    if (alloc_resp.status().code() != 0) {
-        return pl::makeError(static_cast<status_code_t>(alloc_resp.status().code()),
-                             alloc_resp.status().message());
-    }
-
-    const auto& located_block = alloc_resp.block();
-    if (located_block.locations_size() == 0) {
-        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kNoAvailableDataNode),
-                            "No DataNode locations for block {}",
-                            located_block.block_id());
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(response.status().code()),
+                             response.status().message());
     }
 
-    // Connect to first DataNode in the pipeline
-    const auto& primary = located_block.locations(0);
-    brpc::Channel dn_channel;
-    brpc::ChannelOptions dn_options;
-    dn_options.timeout_ms = config_.rpc_timeout_ms * 2; // writes may be slower
-    dn_options.max_retry = 1;
-
-    std::string dn_addr = primary.host() + ":" + std::to_string(primary.data_port());
-    if (dn_channel.Init(dn_addr.c_str(), &dn_options) != 0) {
-        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCConnectFailed),
-                            "Cannot connect to DataNode {}",
-                            dn_addr);
+    auto stream = DfsOutputStream::create(&namenode_channel_,
+                                          response.inode_id(),
+                                          config_.client_id,
+                                          {
+                                              .block_size = response.block_size(),
+                                              .chunk_size = config_.chunk_size,
+                                              .replication = response.replication(),
+                                              .rpc_timeout_ms = config_.rpc_timeout_ms,
+                                              .starting_block_index = response.next_block_index(),
+                                          });
+    if (stream.hasError()) {
+        return folly::makeUnexpected(stream.error());
     }
-
-    protocol::DataTransferService_Stub dn_stub(&dn_channel);
-
-    // Send data in chunks
-    const uint32_t chunk_size = config_.chunk_size;
-    uint64_t offset = 0;
-    uint32_t chunk_index = 0;
-
-    while (offset < length) {
-        const uint32_t this_chunk =
-            static_cast<uint32_t>(std::min<uint64_t>(chunk_size, length - offset));
-
-        brpc::Controller write_cntl;
-        protocol::WriteBlockRequest write_req;
-        write_req.set_block_id(located_block.block_id());
-        write_req.set_inode_id(inode_id);
-        write_req.set_block_index(block_index);
-        write_req.set_generation_stamp(located_block.generation_stamp());
-
-        // Build pipeline: remaining nodes after the primary
-        for (int i = 1; i < located_block.locations_size(); ++i) {
-            auto* target = write_req.add_pipeline();
-            target->set_datanode_id(located_block.locations(i).datanode_id());
-            target->set_host(located_block.locations(i).host());
-            target->set_data_port(located_block.locations(i).data_port());
-        }
-
-        write_req.set_data(data + offset, this_chunk);
-        write_req.set_chunk_index(chunk_index);
-        write_req.set_checksum(compute_crc32c(data + offset, this_chunk));
-        write_req.set_is_last_chunk(offset + this_chunk >= length);
-
-        protocol::WriteBlockResponse write_resp;
-        dn_stub.WriteBlock(&write_cntl, &write_req, &write_resp, nullptr);
-
-        if (write_cntl.Failed()) {
-            return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                                "WriteBlock RPC failed at chunk {}: {}",
-                                chunk_index,
-                                write_cntl.ErrorText());
-        }
-        if (write_resp.status().code() != 0) {
-            return pl::makeError(static_cast<status_code_t>(write_resp.status().code()),
-                                 write_resp.status().message());
-        }
-
-        offset += this_chunk;
-        ++chunk_index;
-    }
-
-    // Commit the block on NameNode after all chunks are written
-    cntl.Reset();
-    protocol::CommitBlockRequest commit_req;
-    commit_req.set_block_id(located_block.block_id());
-    commit_req.set_length(length);
-    commit_req.set_generation_stamp(located_block.generation_stamp());
-    commit_req.set_datanode_id(primary.datanode_id());
-    for (const auto& location : located_block.locations()) {
-        commit_req.add_finalized_datanode_ids(location.datanode_id());
-    }
-
-    protocol::CommitBlockResponse commit_resp;
-    protocol::DataNodeProtocolService_Stub dn_proto_stub(&namenode_channel_);
-    dn_proto_stub.CommitBlock(&cntl, &commit_req, &commit_resp, nullptr);
-
-    if (cntl.Failed()) {
-        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "CommitBlock RPC failed: {}",
-                            cntl.ErrorText());
-    }
-    if (commit_resp.status().code() != 0) {
-        return pl::makeError(static_cast<status_code_t>(commit_resp.status().code()),
-                             commit_resp.status().message());
-    }
-
-    return length;
+    return copy_to_stream(fd.get(), &stream.value());
 }
 
 // File read
