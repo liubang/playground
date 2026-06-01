@@ -88,6 +88,12 @@ public:
     /// Complete a file (transition from UnderConstruction to Normal).
     pl::Result<pl::Void> complete_file(uint64_t inode_id, uint64_t final_length);
 
+    /// Update the length of an existing closed file after block truncation.
+    pl::Result<pl::Void> set_file_length(uint64_t inode_id, uint64_t length);
+
+    /// Update the desired replication factor recorded on an existing closed file.
+    pl::Result<pl::Void> set_replication(uint64_t inode_id, uint32_t replication);
+
 private:
     /// Split an absolute path into components.
     static std::vector<std::string_view> split_path(std::string_view path);

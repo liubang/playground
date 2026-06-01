@@ -46,6 +46,11 @@ public:
                        protocol::TransferBlockResponse* response,
                        google::protobuf::Closure* done) override;
 
+    void TruncateBlock(google::protobuf::RpcController* controller,
+                       const protocol::TruncateBlockRequest* request,
+                       protocol::TruncateBlockResponse* response,
+                       google::protobuf::Closure* done) override;
+
 private:
     static void fill_status(protocol::StatusProto* proto, uint32_t code, std::string_view msg = {});
 

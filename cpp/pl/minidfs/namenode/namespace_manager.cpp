@@ -527,4 +527,44 @@ pl::Result<pl::Void> NamespaceManager::complete_file(uint64_t inode_id, uint64_t
     return store_->update_inode(inode);
 }
 
+pl::Result<pl::Void> NamespaceManager::set_file_length(uint64_t inode_id, uint64_t length) {
+    auto inode_result = store_->get_inode(inode_id);
+    if (inode_result.hasError()) {
+        return folly::makeUnexpected(inode_result.error());
+    }
+    auto& inode = inode_result.value();
+    if (inode.type != InodeType::kFile) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kIsDirectory),
+                             "cannot truncate a directory");
+    }
+    if (inode.state != FileState::kNormal) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kFileUnderConstruction),
+                             "cannot truncate a file under construction");
+    }
+    inode.length = length;
+    inode.mtime_ms = now_ms();
+    ++inode.version;
+    return store_->update_inode(inode);
+}
+
+pl::Result<pl::Void> NamespaceManager::set_replication(uint64_t inode_id, uint32_t replication) {
+    auto inode_result = store_->get_inode(inode_id);
+    if (inode_result.hasError()) {
+        return folly::makeUnexpected(inode_result.error());
+    }
+    auto& inode = inode_result.value();
+    if (inode.type != InodeType::kFile) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kIsDirectory),
+                             "cannot set replication on a directory");
+    }
+    if (inode.state != FileState::kNormal) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kFileUnderConstruction),
+                             "cannot set replication on a file under construction");
+    }
+    inode.replication = replication;
+    inode.mtime_ms = now_ms();
+    ++inode.version;
+    return store_->update_inode(inode);
+}
+
 } // namespace pl::minidfs

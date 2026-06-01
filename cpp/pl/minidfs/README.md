@@ -272,8 +272,10 @@ docker compose down -v
 | mkdir  | 创建目录（支持多级路径）         |
 | ls     | 列出目录内容（-d/-h/-R/-t/-S/-r）|
 | stat   | 查看文件/目录详细信息            |
-| put    | 上传本地文件到 DFS               |
+| put    | 上传本地文件到 DFS（-f 覆盖）    |
 | append | 追加本地文件内容到已有 DFS 文件  |
+| truncate | 截断已有 DFS 文件             |
+| setrep | 设置文件副本数                   |
 | get    | 从 DFS 下载文件到本地            |
 | rm     | 删除文件或目录（-r 递归删除）    |
 | mv     | 重命名/移动文件或目录            |
@@ -307,8 +309,13 @@ File System Commands:
   stat <path>                查看文件/目录详细信息
   rm [-r] <path>             删除文件或目录（-r 递归）
   mv <src> <dst>             重命名/移动
-  put <local> <dfs_path>     上传本地文件
+  put [-f] <local> <dfs_path>
+                             上传本地文件（-f 覆盖）
   append <local> <dfs_path>  追加本地文件内容到已有 DFS 文件
+  truncate <length> <dfs_path>
+                             截断已有 DFS 文件
+  setrep <replication> <dfs_path>
+                             设置文件副本数
   get <dfs_path> <local>     下载文件到本地
 
 Admin Commands:
@@ -339,8 +346,15 @@ minidfs -namenode=$NAMENODE mkdir /data/logs
 # 上传文件
 minidfs -namenode=$NAMENODE put ./access.log /data/logs/access.log
 
+# 覆盖文件
+minidfs -namenode=$NAMENODE put -f ./access.log /data/logs/access.log
+
 # 追加文件内容
 minidfs -namenode=$NAMENODE append ./access.log.1 /data/logs/access.log
+
+# 截断文件并设置副本数
+minidfs -namenode=$NAMENODE truncate 1048576 /data/logs/access.log
+minidfs -namenode=$NAMENODE setrep 2 /data/logs/access.log
 
 # 查看目录
 minidfs -namenode=$NAMENODE ls /data/logs

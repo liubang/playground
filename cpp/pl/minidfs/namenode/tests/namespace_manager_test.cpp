@@ -245,6 +245,26 @@ TEST_F(NamespaceManagerTest, CompleteFileOnDir) {
     ASSERT_TRUE(result.hasError());
 }
 
+TEST_F(NamespaceManagerTest, SetFileLengthAndReplicationOnClosedFile) {
+    auto file = mgr_->create_file("/closed", "user", "group", 0644, 3, 128);
+    ASSERT_TRUE(file.hasValue());
+    ASSERT_TRUE(mgr_->complete_file(file.value().inode_id, 64).hasValue());
+
+    ASSERT_TRUE(mgr_->set_file_length(file.value().inode_id, 32).hasValue());
+    ASSERT_TRUE(mgr_->set_replication(file.value().inode_id, 2).hasValue());
+
+    auto inode = store_->get_inode(file.value().inode_id);
+    ASSERT_TRUE(inode.hasValue());
+    EXPECT_EQ(inode.value().length, 32u);
+    EXPECT_EQ(inode.value().replication, 2u);
+}
+
+TEST_F(NamespaceManagerTest, SetFileLengthRejectsUnderConstructionFile) {
+    auto file = mgr_->create_file("/wip-length", "user", "group", 0644, 3, 128);
+    ASSERT_TRUE(file.hasValue());
+    EXPECT_TRUE(mgr_->set_file_length(file.value().inode_id, 0).hasError());
+}
+
 TEST_F(NamespaceManagerTest, BeginAppendReopensCompletedFile) {
     auto file = mgr_->create_file("/append", "user", "group", 0644, 3, 128);
     ASSERT_TRUE(file.hasValue());
