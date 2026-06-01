@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "cpp/pl/minidfs/common/types.h"
+#include "cpp/pl/minidfs/client/dfs_output_stream.h"
 #include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
@@ -76,6 +77,9 @@ public:
     /// Write a local file to DFS using pipeline replication.
     /// The full path must not already exist.
     [[nodiscard]] Result<Void> put(std::string_view local_path, std::string_view dfs_path);
+
+    /// Append a local file to an existing DFS file.
+    [[nodiscard]] Result<Void> append(std::string_view local_path, std::string_view dfs_path);
 
     /// Read a DFS file to a local path.
     [[nodiscard]] Result<Void> get(std::string_view dfs_path, std::string_view local_path);
@@ -186,12 +190,6 @@ private:
 
     /// Initialize the brpc channel to NameNode.
     [[nodiscard]] bool init();
-
-    /// Write one block through the pipeline. Returns bytes written.
-    [[nodiscard]] Result<uint64_t> write_block(uint64_t inode_id,
-                                               uint32_t block_index,
-                                               const char* data,
-                                               uint64_t length);
 
     /// Read one block from a DataNode.
     [[nodiscard]] Result<std::string> read_block(const LocatedBlock& block);

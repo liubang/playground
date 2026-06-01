@@ -31,6 +31,9 @@ struct ReplicationTask {
     uint64_t block_id = 0;
     uint64_t source_datanode = 0; // Copy from (0 if deletion task)
     uint64_t target_datanode = 0; // Copy to (0 if deletion task)
+    uint64_t inode_id = 0;
+    uint32_t block_index = 0;
+    uint64_t generation_stamp = 0;
     bool is_deletion = false;
 };
 

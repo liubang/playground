@@ -56,6 +56,11 @@ std::string generate_uuid() {
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
+    if (FLAGS_heartbeat_interval_ms <= 0 || FLAGS_block_report_interval_ms <= 0) {
+        XLOG(FATAL, "DataNode report intervals must be positive");
+        return 1;
+    }
+
     std::string uuid = FLAGS_uuid.empty() ? generate_uuid() : FLAGS_uuid;
 
     // Initialize local block store
@@ -134,6 +139,8 @@ int main(int argc, char* argv[]) {
             cmd.type = static_cast<pl::minidfs::CommandType>(cmd_proto.type());
             cmd.block_id = cmd_proto.block_id();
             cmd.generation_stamp = cmd_proto.generation_stamp();
+            cmd.inode_id = cmd_proto.inode_id();
+            cmd.block_index = cmd_proto.block_index();
             cmd.target_host = cmd_proto.target_host();
             cmd.target_port = cmd_proto.target_port();
             commands.push_back(std::move(cmd));
@@ -144,6 +151,8 @@ int main(int argc, char* argv[]) {
     // Setup replication worker
     pl::minidfs::CopyFunc copy_func = [](uint64_t block_id,
                                          uint64_t generation_stamp,
+                                         uint64_t inode_id,
+                                         uint32_t block_index,
                                          const std::string& data,
                                          const std::string& target_host,
                                          uint32_t target_port) -> pl::Result<pl::Void> {
@@ -162,6 +171,8 @@ int main(int argc, char* argv[]) {
         pl::minidfs::protocol::TransferBlockRequest req;
         req.set_block_id(block_id);
         req.set_generation_stamp(generation_stamp);
+        req.set_inode_id(inode_id);
+        req.set_block_index(block_index);
         req.set_data(data);
 
         pl::minidfs::protocol::TransferBlockResponse resp;
@@ -189,6 +200,8 @@ int main(int argc, char* argv[]) {
             pl::minidfs::DataNodeTask task;
             task.block_id = cmd.block_id;
             task.generation_stamp = cmd.generation_stamp;
+            task.inode_id = cmd.inode_id;
+            task.block_index = cmd.block_index;
             task.target_host = cmd.target_host;
             task.target_port = cmd.target_port;
             switch (cmd.type) {
@@ -214,11 +227,12 @@ int main(int argc, char* argv[]) {
 
     // Setup block reporter
     pl::minidfs::BlockReportFunc report_func =
-        [&nn_stub](uint64_t dn_id, const std::vector<pl::minidfs::BlockInfo>& blocks)
+        [&nn_stub](uint64_t dn_id, const pl::minidfs::BlockReport& report)
         -> pl::Result<pl::minidfs::BlockReportResponse> {
         pl::minidfs::protocol::BlockReportRequest req;
         req.set_datanode_id(dn_id);
-        for (const auto& b : blocks) {
+        req.set_full_report(report.full_report);
+        for (const auto& b : report.blocks) {
             auto* bp = req.add_blocks();
             bp->set_block_id(b.block_id);
             bp->set_generation_stamp(b.generation_stamp);

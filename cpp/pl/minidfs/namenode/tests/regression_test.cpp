@@ -313,9 +313,8 @@ TEST_F(RegressionNameNodeTest, P1_DeleteFileLeavesBlockMetadata) {
     ASSERT_FALSE(commands.value().empty())
         << "FIX VERIFIED: NameNode can still issue a delete command for this replica";
 
-    std::unordered_set<uint64_t> empty_report;
     auto reconcile =
-        block_mgr_->reconcile_block_report(replicas.value()[0].datanode_id, empty_report);
+        block_mgr_->reconcile_block_report(replicas.value()[0].datanode_id, {}, true);
     ASSERT_TRUE(reconcile.hasValue());
 
     auto after_reconcile = store_raw()->get_replicas(block_id);

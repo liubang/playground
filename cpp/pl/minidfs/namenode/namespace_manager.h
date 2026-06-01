@@ -63,6 +63,9 @@ public:
                                   uint32_t replication,
                                   uint64_t block_size);
 
+    /// Reopen an existing file for append.
+    pl::Result<Inode> begin_append(std::string_view path);
+
     /// Delete a file or empty directory. Returns the deleted inode.
     pl::Result<Inode> remove(std::string_view path, bool recursive = false);
 

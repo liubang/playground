@@ -26,7 +26,7 @@ BlockReporter::BlockReporter(Config config,
                              LocalBlockStore* store,
                              BlockReportFunc report_func,
                              DeleteBlockFunc delete_func)
-    : config_(std::move(config)),
+    : config_(config),
       store_(store),
       report_func_(std::move(report_func)),
       delete_func_(std::move(delete_func)) {}
@@ -57,7 +57,11 @@ pl::Result<BlockReportResponse> BlockReporter::send_full_report() {
         return pl::makeError(std::move(blocks_result.error()));
     }
 
-    auto response = report_func_(config_.datanode_id, blocks_result.value());
+    BlockReport report{
+        .full_report = true,
+        .blocks = std::move(blocks_result.value()),
+    };
+    auto response = report_func_(config_.datanode_id, report);
     if (response.hasError()) {
         XLOGF(WARN,
               "block report RPC failed for datanode {}: {}",
@@ -69,18 +73,61 @@ pl::Result<BlockReportResponse> BlockReporter::send_full_report() {
     // Process NN commands
     process_response(response.value());
 
-    // Clear incremental delta after a successful full report
+    // Clear only blocks covered by this report. A block may finalize while the
+    // RPC is in flight and must remain pending for the next incremental report.
     {
         std::lock_guard lock(delta_mu_);
-        added_blocks_.clear();
+        for (const auto& block : report.blocks) {
+            added_blocks_.erase(block.block_id);
+        }
         removed_blocks_.clear();
     }
 
     return std::move(response.value());
 }
 
-void BlockReporter::notify_block_finalized(uint64_t block_id,
-                                           [[maybe_unused]] uint64_t generation_stamp) {
+pl::Result<BlockReportResponse> BlockReporter::send_incremental_report() {
+    std::unordered_set<uint64_t> added_blocks;
+    {
+        std::lock_guard lock(delta_mu_);
+        added_blocks = added_blocks_;
+    }
+    if (added_blocks.empty()) {
+        return BlockReportResponse{};
+    }
+
+    auto blocks_result = store_->report_blocks();
+    if (blocks_result.hasError()) {
+        return pl::makeError(std::move(blocks_result.error()));
+    }
+
+    BlockReport report;
+    std::vector<uint64_t> reported_block_ids;
+    for (auto& block : blocks_result.value()) {
+        if (added_blocks.contains(block.block_id)) {
+            reported_block_ids.push_back(block.block_id);
+            report.blocks.push_back(block);
+        }
+    }
+    if (report.blocks.empty()) {
+        return BlockReportResponse{};
+    }
+    auto response = report_func_(config_.datanode_id, report);
+    if (response.hasError()) {
+        return pl::makeError(std::move(response.error()));
+    }
+
+    process_response(response.value());
+    {
+        std::lock_guard lock(delta_mu_);
+        for (uint64_t block_id : reported_block_ids) {
+            added_blocks_.erase(block_id);
+        }
+    }
+    return std::move(response.value());
+}
+
+void BlockReporter::notify_block_finalized(uint64_t block_id) {
     std::lock_guard lock(delta_mu_);
     removed_blocks_.erase(block_id);
     added_blocks_.insert(block_id);
@@ -113,6 +160,7 @@ void BlockReporter::run_loop() {
         while (running_.load(std::memory_order_relaxed) &&
                std::chrono::steady_clock::now() < deadline) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            (void)send_incremental_report();
         }
 
         if (!running_.load(std::memory_order_relaxed)) {

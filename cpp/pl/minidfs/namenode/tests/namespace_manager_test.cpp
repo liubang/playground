@@ -245,5 +245,21 @@ TEST_F(NamespaceManagerTest, CompleteFileOnDir) {
     ASSERT_TRUE(result.hasError());
 }
 
+TEST_F(NamespaceManagerTest, BeginAppendReopensCompletedFile) {
+    auto file = mgr_->create_file("/append", "user", "group", 0644, 3, 128);
+    ASSERT_TRUE(file.hasValue());
+    ASSERT_TRUE(mgr_->complete_file(file.value().inode_id, 64).hasValue());
+
+    auto reopened = mgr_->begin_append("/append");
+    ASSERT_TRUE(reopened.hasValue());
+    EXPECT_EQ(reopened.value().state, FileState::kUnderConstruction);
+    EXPECT_EQ(reopened.value().length, 64u);
+}
+
+TEST_F(NamespaceManagerTest, BeginAppendRejectsUnderConstructionFile) {
+    ASSERT_TRUE(mgr_->create_file("/append", "user", "group", 0644, 3, 128).hasValue());
+    EXPECT_TRUE(mgr_->begin_append("/append").hasError());
+}
+
 } // namespace
 } // namespace pl::minidfs
