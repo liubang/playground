@@ -29,5 +29,31 @@ jobs:
           repository-cache: true
           disk-cache: ${{ github.workflow }}-${{ runner.os }}
       - name: build and test
+        id: test
+        continue-on-error: true
         run: |
           bazel test --config=ci //python/...
+      - name: generate success badge
+        if: steps.test.outcome == 'success'
+        run: |
+          mkdir -p coverage-python
+          echo '{"schemaVersion":1,"label":"Python","message":"passing","color":"brightgreen"}' > coverage-python/badge.json
+      - name: generate failure badge
+        if: steps.test.outcome == 'failure'
+        run: |
+          mkdir -p coverage-python
+          echo '{"schemaVersion":1,"label":"Python","message":"failed","color":"red"}' > coverage-python/badge.json
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v4
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./coverage-python
+          publish_branch: coverage
+          destination_dir: python
+          keep_files: true
+          user_name: "liubang"
+          user_email: "it.liubang@gmail.com"
+      - name: Fail the job if test failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1
