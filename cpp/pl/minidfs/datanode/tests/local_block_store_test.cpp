@@ -155,6 +155,36 @@ TEST_F(LocalBlockStoreTest, DeleteBlockNotInCurrent) {
     EXPECT_TRUE(result.hasError());
 }
 
+TEST_F(LocalBlockStoreTest, TruncateBlockRebuildsChecksumsAcrossChunks) {
+    store_->create_block(450, 1, 0, 8500);
+    std::string first = "abcd";
+    std::string second = "efgh";
+    store_->append_chunk(450, 8500, first.data(), first.size(), 0);
+    store_->append_chunk(450, 8500, second.data(), second.size(), 1);
+    store_->finalize_block(450, 8500);
+
+    ASSERT_TRUE(store_->truncate_block(450, 8500, 6).hasValue());
+    ASSERT_TRUE(store_->truncate_block(450, 8500, 6).hasValue());
+
+    auto data = store_->read_block_data(450, 8500);
+    ASSERT_TRUE(data.hasValue());
+    EXPECT_EQ(data.value(), "abcdef");
+    auto chunk = store_->read_chunk(450, 8500, 1);
+    ASSERT_TRUE(chunk.hasValue());
+    EXPECT_EQ(chunk.value(), "ef");
+    auto verify = store_->verify_block(450, 8500);
+    ASSERT_TRUE(verify.hasValue());
+    EXPECT_TRUE(verify.value());
+}
+
+TEST_F(LocalBlockStoreTest, TruncateBlockRejectsExpansion) {
+    store_->create_block(451, 1, 0, 8501);
+    store_->append_chunk(451, 8501, "data", 4, 0);
+    store_->finalize_block(451, 8501);
+
+    EXPECT_TRUE(store_->truncate_block(451, 8501, 5).hasError());
+}
+
 // purge_trash tests
 TEST_F(LocalBlockStoreTest, PurgeTrash) {
     store_->create_block(500, 1, 0, 9000);
