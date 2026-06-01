@@ -19,12 +19,16 @@
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
+#include <exception>
 #include <fmt/core.h>
 #include <gflags/gflags.h>
 #include <iomanip>
 #include <iostream>
+#include <limits>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "cpp/pl/ascii_table/pretty.h"
@@ -83,6 +87,22 @@ std::string format_size(uint64_t size) {
 /// Format permission as octal string.
 std::string format_permission(uint32_t perm) {
     return fmt::format("{:04o}", perm);
+}
+
+std::optional<uint64_t> parse_uint64(std::string_view value) {
+    if (value.empty() || value.front() == '-') {
+        return std::nullopt;
+    }
+    size_t parsed = 0;
+    try {
+        auto number = std::stoull(std::string(value), &parsed);
+        if (parsed != value.size()) {
+            return std::nullopt;
+        }
+        return number;
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
 }
 
 /// Create the DfsClient from flags.
@@ -350,16 +370,22 @@ int cmd_mv(DfsClient* client, int argc, char* argv[]) {
 }
 
 int cmd_put(DfsClient* client, int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: minidfs -put <local_path> <dfs_path>\n";
+    bool overwrite = false;
+    int path_idx = 0;
+    if (argc > 0 && std::string(argv[0]) == "-f") {
+        overwrite = true;
+        path_idx = 1;
+    }
+    if (argc - path_idx < 2) {
+        std::cerr << "Usage: minidfs -put [-f] <local_path> <dfs_path>\n";
         return 1;
     }
-    auto result = client->put(argv[0], argv[1]);
+    auto result = client->put(argv[path_idx], argv[path_idx + 1], overwrite);
     if (result.hasError()) {
         std::cerr << "put failed: " << result.error().describe() << "\n";
         return 1;
     }
-    std::cout << "Uploaded " << argv[0] << " -> " << argv[1] << "\n";
+    std::cout << "Uploaded " << argv[path_idx] << " -> " << argv[path_idx + 1] << "\n";
     return 0;
 }
 
@@ -374,6 +400,42 @@ int cmd_append(DfsClient* client, int argc, char* argv[]) {
         return 1;
     }
     std::cout << "Appended " << argv[0] << " -> " << argv[1] << "\n";
+    return 0;
+}
+
+int cmd_truncate(DfsClient* client, int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cerr << "Usage: minidfs truncate <length> <dfs_path>\n";
+        return 1;
+    }
+    auto length = parse_uint64(argv[0]);
+    if (!length.has_value()) {
+        std::cerr << "truncate failed: invalid length\n";
+        return 1;
+    }
+    auto result = client->truncate(argv[1], *length);
+    if (result.hasError()) {
+        std::cerr << "truncate failed: " << result.error().describe() << "\n";
+        return 1;
+    }
+    return 0;
+}
+
+int cmd_setrep(DfsClient* client, int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cerr << "Usage: minidfs setrep <replication> <dfs_path>\n";
+        return 1;
+    }
+    auto replication = parse_uint64(argv[0]);
+    if (!replication.has_value() || *replication > std::numeric_limits<uint32_t>::max()) {
+        std::cerr << "setrep failed: invalid replication factor\n";
+        return 1;
+    }
+    auto result = client->setrep(argv[1], static_cast<uint32_t>(*replication));
+    if (result.hasError()) {
+        std::cerr << "setrep failed: " << result.error().describe() << "\n";
+        return 1;
+    }
     return 0;
 }
 
@@ -641,8 +703,10 @@ void print_usage() {
               << "  stat <path>                Show file/directory status\n"
               << "  rm [-r] <path>             Delete a file or directory\n"
               << "  mv <src> <dst>             Rename/move a file or directory\n"
-              << "  put <local> <dfs_path>     Upload a local file to DFS\n"
+              << "  put [-f] <local> <dfs_path> Upload a local file to DFS\n"
               << "  append <local> <dfs_path>  Append a local file to DFS\n"
+              << "  truncate <len> <dfs_path>  Shrink a DFS file\n"
+              << "  setrep <n> <dfs_path>      Set a DFS file's replication factor\n"
               << "  get <dfs_path> <local>     Download a DFS file to local\n"
               << "\n"
               << "Admin Commands:\n"
@@ -703,6 +767,12 @@ int main(int argc, char* argv[]) {
     }
     if (cmd == "append") {
         return cmd_append(client.get(), cmd_argc, cmd_argv);
+    }
+    if (cmd == "-truncate" || cmd == "truncate") {
+        return cmd_truncate(client.get(), cmd_argc, cmd_argv);
+    }
+    if (cmd == "-setrep" || cmd == "setrep") {
+        return cmd_setrep(client.get(), cmd_argc, cmd_argv);
     }
     if (cmd == "-get" || cmd == "get") {
         return cmd_get(client.get(), cmd_argc, cmd_argv);

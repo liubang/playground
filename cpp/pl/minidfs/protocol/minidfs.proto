@@ -88,6 +88,7 @@ message CreateFileRequest {
     uint32 replication = 5;
     uint64 block_size = 6;
     string client_id = 7;
+    bool overwrite = 8;
     RequestHeader header = 15;
 }
 
@@ -191,6 +192,24 @@ message RenewLeaseResponse {
     StatusProto status = 1;
 }
 
+message TruncateFileRequest {
+    string path = 1;
+    uint64 length = 2;
+}
+
+message TruncateFileResponse {
+    StatusProto status = 1;
+}
+
+message SetReplicationRequest {
+    string path = 1;
+    uint32 replication = 2;
+}
+
+message SetReplicationResponse {
+    StatusProto status = 1;
+}
+
 // NameNode DataNode Protocol — RPCs called by DataNodes
 message RegisterDataNodeRequest {
     string uuid = 1;
@@ -272,6 +291,8 @@ service NameNodeService {
     rpc ListStatus(ListStatusRequest) returns (ListStatusResponse);
     rpc Delete(DeleteRequest) returns (DeleteResponse);
     rpc Rename(RenameRequest) returns (RenameResponse);
+    rpc TruncateFile(TruncateFileRequest) returns (TruncateFileResponse);
+    rpc SetReplication(SetReplicationRequest) returns (SetReplicationResponse);
 
     // Block operations
     rpc AllocateBlock(AllocateBlockRequest) returns (AllocateBlockResponse);
@@ -304,6 +325,7 @@ service DataTransferService {
     rpc WriteBlock(WriteBlockRequest) returns (WriteBlockResponse);
     rpc ReadBlock(ReadBlockRequest) returns (ReadBlockResponse);
     rpc TransferBlock(TransferBlockRequest) returns (TransferBlockResponse);
+    rpc TruncateBlock(TruncateBlockRequest) returns (TruncateBlockResponse);
 }
 
 message WriteBlockRequest {
@@ -347,6 +369,16 @@ message TransferBlockRequest {
 }
 
 message TransferBlockResponse {
+    StatusProto status = 1;
+}
+
+message TruncateBlockRequest {
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+    uint64 length = 3;
+}
+
+message TruncateBlockResponse {
     StatusProto status = 1;
 }
 
