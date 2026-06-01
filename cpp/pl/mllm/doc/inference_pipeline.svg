@@ -8,6 +8,9 @@
     <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
       <path d="M0,0 L10,4 L0,8 Z" fill="#64748b"/>
     </marker>
+    <marker id="arrow-loop" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#fb923c"/>
+    </marker>
     <style>
       text { font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace; }
       .bg { fill: #020617; }
@@ -18,8 +21,9 @@
       .step-title { fill: #f8fafc; font-size: 11px; font-weight: 700; }
       .step-sub { fill: #94a3b8; font-size: 8.5px; }
       .label { fill: #cbd5e1; font-size: 10px; }
+      .label-loop { fill: #fb923c; font-size: 9.5px; font-weight: 700; }
       .line { fill: none; stroke: #64748b; stroke-width: 1.5; marker-end: url(#arrow); }
-      .loop { fill: none; stroke: #fb923c; stroke-width: 1.5; stroke-dasharray: 6 4; marker-end: url(#arrow); }
+      .loop { fill: none; stroke: #fb923c; stroke-width: 1.5; stroke-dasharray: 6 4; marker-end: url(#arrow-loop); }
       .io { fill: rgba(8, 51, 68, 0.42); stroke: #22d3ee; stroke-width: 1.5; }
       .runtime { fill: rgba(6, 78, 59, 0.42); stroke: #34d399; stroke-width: 1.5; }
       .state { fill: rgba(76, 29, 149, 0.42); stroke: #a78bfa; stroke-width: 1.5; }
@@ -45,7 +49,12 @@
   <path class="line" d="M445 420 H375"/>
   <path class="line" d="M245 420 H175"/>
   <path class="line" d="M110 460 V535 H845"/>
+  <!-- Decode loop back-edge with termination annotation -->
   <path class="loop" d="M930 460 V535 H1010 V380 H970"/>
+  <text class="label-loop" x="1018" y="460">until EOS</text>
+  <text class="label-loop" x="1018" y="474">or max_tokens</text>
+  <text class="label-loop" x="1018" y="488">or overflow</text>
+  <text class="label-loop" x="1018" y="502">or cancel</text>
   <path class="line" d="M245 585 H845"/>
 
   <!-- Lanes -->
@@ -81,6 +90,12 @@
   <rect class="runtime" x="845" y="130" width="130" height="60" rx="6"/>
   <text class="step-title" x="910" y="154" text-anchor="middle">Last Logits</text>
   <text class="step-sub" x="910" y="172" text-anchor="middle">start decode</text>
+
+  <!-- Prefill-to-Decode transition -->
+  <rect class="mask" x="845" y="260" width="130" height="60" rx="6"/>
+  <rect class="runtime" x="845" y="260" width="130" height="60" rx="6"/>
+  <text class="step-title" x="910" y="284" text-anchor="middle">First Sample</text>
+  <text class="step-sub" x="910" y="302" text-anchor="middle">greedy argmax</text>
 
   <!-- Decode nodes -->
   <rect class="mask" x="845" y="380" width="130" height="80" rx="6"/>
@@ -123,6 +138,5 @@
   <text class="step-title" x="155" y="613" text-anchor="middle">Detokenize Safely</text>
 
   <!-- Annotations -->
-  <text class="label" x="790" y="525">loop until max tokens, EOS, overflow, or cancellation</text>
-  <text class="label" x="56" y="286">Validation points: token ids vs llama.cpp, logits golden tests, CPU/Metal tolerance checks</text>
+  <text class="label" x="56" y="286">Validation: token ids vs llama.cpp, logits golden tests, CPU/Metal tolerance checks</text>
 </svg>
