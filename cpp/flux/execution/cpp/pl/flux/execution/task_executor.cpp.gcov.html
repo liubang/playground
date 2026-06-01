@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-01 00:18:40</td>
+            <td class="headerValue">2026-06-01 13:59:28</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -138,8 +138,8 @@
 <span id="L67"><span class="lineNum">      67</span>                 :             :     while (true) {</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             :         std::function&lt;void()&gt; task;</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :         {</span>
-<span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 1002 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1002 :             std::unique_lock&lt;std::mutex&gt; lock(mu_);</span></span>
-<span id="L71"><span class="lineNum">      71</span>   [<span class="tlaGBC" title="Branch 0 was taken 1425 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 501 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 924 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 501 times"> + </span> :<span class="tlaGNC">        2928 :             cv_.wait(lock, [this]() { return shutdown_ || !tasks_.empty(); });</span></span>
+<span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 1002 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1001 :             std::unique_lock&lt;std::mutex&gt; lock(mu_);</span></span>
+<span id="L71"><span class="lineNum">      71</span>   [<span class="tlaGBC" title="Branch 0 was taken 1432 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 501 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 931 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 501 times"> + </span> :<span class="tlaGNC">        2935 :             cv_.wait(lock, [this]() { return shutdown_ || !tasks_.empty(); });</span></span>
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1002 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L72"><span class="lineNum">      72</span>   [<span class="tlaGBC" title="Branch 0 was taken 501 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 501 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 501 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        1002 :             if (shutdown_ &amp;&amp; tasks_.empty()) {</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">         500 :                 return;</span></span>
@@ -147,7 +147,7 @@
 <span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">         501 :             task = std::move(tasks_.front());</span></span>
 <span id="L76"><span class="lineNum">      76</span>                 :             :             tasks_.pop();</span>
 <span id="L77"><span class="lineNum">      77</span>                 :             :         }</span>
-<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaGBC" title="Branch 0 was taken 501 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         501 :         task();</span></span>
+<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaGBC" title="Branch 0 was taken 500 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         501 :         task();</span></span>
 <span id="L79"><span class="lineNum">      79</span>                 :             :     }</span>
 <span id="L80"><span class="lineNum">      80</span>                 :             : }</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             : </span>
