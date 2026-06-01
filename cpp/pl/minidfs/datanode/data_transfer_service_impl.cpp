@@ -266,4 +266,22 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
     fill_status(response->mutable_status(), 0);
 }
 
+void DataTransferServiceImpl::TruncateBlock(google::protobuf::RpcController* /*controller*/,
+                                            const protocol::TruncateBlockRequest* request,
+                                            protocol::TruncateBlockResponse* response,
+                                            google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto truncate =
+        store_->truncate_block(request->block_id(), request->generation_stamp(), request->length());
+    if (truncate.hasError()) {
+        fill_status(response->mutable_status(), truncate.error().code(), truncate.error().message());
+        return;
+    }
+    if (reporter_) {
+        reporter_->notify_block_finalized(request->block_id());
+        (void)reporter_->send_incremental_report();
+    }
+    fill_status(response->mutable_status(), 0);
+}
+
 } // namespace pl::minidfs

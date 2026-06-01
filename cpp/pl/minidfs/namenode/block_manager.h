@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 #include "cpp/pl/minidfs/common/types.h"
@@ -33,6 +34,9 @@ struct ReportedBlock {
     uint64_t generation_stamp = 0;
     uint64_t length = 0;
 };
+
+using TruncateReplicaFunc =
+    std::function<pl::Result<pl::Void>(const BlockReplica& replica, uint64_t length)>;
 
 // BlockManager — manages block lifecycle on the NameNode side.
 //
@@ -77,6 +81,15 @@ public:
     /// allocating blocks, and returns the length of the readable prefix.
     pl::Result<uint64_t> recover_file(uint64_t inode_id);
 
+    /// Shrink a closed file's blocks to new_length. Tail blocks are invalidated
+    /// and the last retained block is physically truncated on its replicas.
+    pl::Result<pl::Void> truncate_file(uint64_t inode_id,
+                                       uint64_t new_length,
+                                       const TruncateReplicaFunc& truncate_replica);
+
+    /// Update the desired replica count for every live block in a file.
+    pl::Result<pl::Void> set_replication(uint64_t inode_id, uint32_t replication);
+
     /// Return pending block deletion commands for a datanode.
     pl::Result<std::vector<BlockMeta>> get_blocks_to_delete(uint64_t datanode_id);
 
@@ -88,6 +101,8 @@ public:
     pl::Result<uint64_t> next_generation_stamp();
 
 private:
+    pl::Result<pl::Void> invalidate_block(BlockMeta* block);
+
     MetadataStore* store_;
     PlacementManager* placement_;
 };

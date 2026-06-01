@@ -251,6 +251,26 @@ pl::Result<pl::Void> BlockManager::report_corrupt_replica(uint64_t block_id, uin
     return store_->update_replica_state(block_id, datanode_id, ReplicaState::kCorrupt);
 }
 
+pl::Result<pl::Void> BlockManager::invalidate_block(BlockMeta* block) {
+    auto replicas = store_->get_replicas(block->block_id);
+    if (replicas.hasError()) {
+        return folly::makeUnexpected(replicas.error());
+    }
+    for (const auto& replica : replicas.value()) {
+        if (replica.state == ReplicaState::kDeleted) {
+            continue;
+        }
+        auto mark = store_->update_replica_state(
+            block->block_id, replica.datanode_id, ReplicaState::kDeleting);
+        if (mark.hasError()) {
+            return folly::makeUnexpected(mark.error());
+        }
+    }
+    block->state = BlockState::kDeleted;
+    block->mtime_ms = now_ms();
+    return store_->update_block(*block);
+}
+
 pl::Result<pl::Void> BlockManager::invalidate_blocks(uint64_t inode_id) {
     auto blocks_result = store_->get_blocks_by_inode(inode_id);
     if (blocks_result.hasError()) {
@@ -258,25 +278,11 @@ pl::Result<pl::Void> BlockManager::invalidate_blocks(uint64_t inode_id) {
     }
 
     for (auto& block : blocks_result.value()) {
-        auto replicas = store_->get_replicas(block.block_id);
-        if (replicas.hasError()) {
-            return folly::makeUnexpected(replicas.error());
-        }
-        for (const auto& replica : replicas.value()) {
-            if (replica.state != ReplicaState::kDeleted) {
-                auto mark = store_->update_replica_state(
-                    block.block_id, replica.datanode_id, ReplicaState::kDeleting);
-                if (mark.hasError()) {
-                    return folly::makeUnexpected(mark.error());
-                }
+        if (block.state != BlockState::kDeleted) {
+            auto invalidate = invalidate_block(&block);
+            if (invalidate.hasError()) {
+                return invalidate;
             }
-        }
-        // Mark block as deleted.
-        block.state = BlockState::kDeleted;
-        block.mtime_ms = now_ms();
-        auto upd = store_->update_block(block);
-        if (upd.hasError()) {
-            return folly::makeUnexpected(upd.error());
         }
     }
     return pl::Void{};
@@ -298,29 +304,117 @@ pl::Result<uint64_t> BlockManager::recover_file(uint64_t inode_id) {
             continue;
         }
 
-        auto replicas = store_->get_replicas(block.block_id);
-        if (replicas.hasError()) {
-            return folly::makeUnexpected(replicas.error());
+        auto invalidate = invalidate_block(&block);
+        if (invalidate.hasError()) {
+            return folly::makeUnexpected(invalidate.error());
         }
-        for (const auto& replica : replicas.value()) {
-            if (replica.state == ReplicaState::kDeleted) {
-                continue;
-            }
-            auto mark = store_->update_replica_state(
-                block.block_id, replica.datanode_id, ReplicaState::kDeleting);
-            if (mark.hasError()) {
-                return folly::makeUnexpected(mark.error());
-            }
+    }
+    return final_length;
+}
+
+pl::Result<pl::Void> BlockManager::truncate_file(uint64_t inode_id,
+                                                 uint64_t new_length,
+                                                 const TruncateReplicaFunc& truncate_replica) {
+    auto inode = store_->get_inode(inode_id);
+    if (inode.hasError()) {
+        return folly::makeUnexpected(inode.error());
+    }
+    if (inode.value().type != InodeType::kFile || inode.value().state != FileState::kNormal) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kFileUnderConstruction),
+                             "only closed files can be truncated");
+    }
+    if (new_length > inode.value().length) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+                             "truncate length exceeds file length");
+    }
+    if (new_length == inode.value().length) {
+        return pl::Void{};
+    }
+
+    auto blocks = store_->get_blocks_by_inode(inode_id);
+    if (blocks.hasError()) {
+        return folly::makeUnexpected(blocks.error());
+    }
+
+    uint64_t offset = 0;
+    for (auto& block : blocks.value()) {
+        if (block.state == BlockState::kDeleted) {
+            continue;
+        }
+        if (block.state != BlockState::kCommitted) {
+            return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+                                 "closed file contains an uncommitted block");
         }
 
-        block.state = BlockState::kDeleted;
+        uint64_t block_end = offset + block.length;
+        if (offset >= new_length) {
+            auto invalidate = invalidate_block(&block);
+            if (invalidate.hasError()) {
+                return invalidate;
+            }
+        } else if (block_end > new_length) {
+            uint64_t truncated_length = new_length - offset;
+            auto replicas = store_->get_replicas(block.block_id);
+            if (replicas.hasError()) {
+                return folly::makeUnexpected(replicas.error());
+            }
+
+            uint32_t successful_replicas = 0;
+            for (auto replica : replicas.value()) {
+                if (replica.state != ReplicaState::kFinalized) {
+                    continue;
+                }
+                auto truncate = truncate_replica(replica, truncated_length);
+                if (truncate.hasError()) {
+                    auto deleting = store_->update_replica_state(
+                        block.block_id, replica.datanode_id, ReplicaState::kDeleting);
+                    if (deleting.hasError()) {
+                        return folly::makeUnexpected(deleting.error());
+                    }
+                    continue;
+                }
+                replica.length = truncated_length;
+                replica.report_time_ms = now_ms();
+                auto update = store_->upsert_replica(replica);
+                if (update.hasError()) {
+                    return folly::makeUnexpected(update.error());
+                }
+                ++successful_replicas;
+            }
+            if (successful_replicas == 0) {
+                return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kIOError),
+                                     "failed to truncate every finalized block replica");
+            }
+
+            block.length = truncated_length;
+            block.mtime_ms = now_ms();
+            auto update = store_->update_block(block);
+            if (update.hasError()) {
+                return folly::makeUnexpected(update.error());
+            }
+        }
+        offset = block_end;
+    }
+    return pl::Void{};
+}
+
+pl::Result<pl::Void> BlockManager::set_replication(uint64_t inode_id, uint32_t replication) {
+    auto blocks = store_->get_blocks_by_inode(inode_id);
+    if (blocks.hasError()) {
+        return folly::makeUnexpected(blocks.error());
+    }
+    for (auto& block : blocks.value()) {
+        if (block.state == BlockState::kDeleted) {
+            continue;
+        }
+        block.desired_replica = replication;
         block.mtime_ms = now_ms();
         auto update = store_->update_block(block);
         if (update.hasError()) {
             return folly::makeUnexpected(update.error());
         }
     }
-    return final_length;
+    return pl::Void{};
 }
 
 pl::Result<std::vector<BlockMeta>> BlockManager::get_blocks_to_delete(uint64_t datanode_id) {

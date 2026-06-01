@@ -75,11 +75,19 @@ public:
     // File read/write operations
 
     /// Write a local file to DFS using pipeline replication.
-    /// The full path must not already exist.
-    [[nodiscard]] Result<Void> put(std::string_view local_path, std::string_view dfs_path);
+    /// Existing closed files may be replaced when overwrite=true.
+    [[nodiscard]] Result<Void> put(std::string_view local_path,
+                                   std::string_view dfs_path,
+                                   bool overwrite = false);
 
     /// Append a local file to an existing DFS file.
     [[nodiscard]] Result<Void> append(std::string_view local_path, std::string_view dfs_path);
+
+    /// Shrink an existing DFS file.
+    [[nodiscard]] Result<Void> truncate(std::string_view dfs_path, uint64_t length);
+
+    /// Change an existing DFS file's desired replication factor.
+    [[nodiscard]] Result<Void> setrep(std::string_view dfs_path, uint32_t replication);
 
     /// Read a DFS file to a local path.
     [[nodiscard]] Result<Void> get(std::string_view dfs_path, std::string_view local_path);

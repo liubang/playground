@@ -17,6 +17,7 @@
 
 #include "cpp/pl/minidfs/datanode/local_block_store.h"
 
+#include <algorithm>
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
@@ -346,6 +347,86 @@ pl::Result<pl::Void> LocalBlockStore::delete_block(uint64_t block_id, uint64_t g
     if (ec) {
         return pl::makeError(
             make_io_error(fmt::format("failed to move block to trash: {}", ec.message())));
+    }
+    RETURN_VOID;
+}
+
+pl::Result<pl::Void> LocalBlockStore::truncate_block(uint64_t block_id,
+                                                    uint64_t generation_stamp,
+                                                    uint64_t length) {
+    std::lock_guard lock(mu_);
+
+    auto path = block_path("current", block_id, generation_stamp);
+    auto header_result = read_header(path);
+    if (header_result.hasError()) {
+        return folly::makeUnexpected(header_result.error());
+    }
+    const auto original_header = header_result.value();
+    auto header = original_header;
+    if (length > header.data_length) {
+        return pl::makeError(pl::Status(
+            static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+            fmt::format("truncate length {} exceeds block length {}", length, header.data_length)));
+    }
+    if (length == header.data_length) {
+        RETURN_VOID;
+    }
+
+    std::ifstream ifs(path, std::ios::binary);
+    if (!ifs.is_open()) {
+        return pl::makeError(make_not_found(path.string()));
+    }
+    ifs.seekg(kBlockHeaderSize);
+    std::string data(length, '\0');
+    if (length > 0) {
+        ifs.read(data.data(), static_cast<std::streamsize>(length));
+        if (!ifs.good()) {
+            return pl::makeError(make_io_error("failed to read block prefix for truncate"));
+        }
+    }
+
+    std::memset(header.chunk_offsets, 0, sizeof(header.chunk_offsets));
+    std::memset(header.chunk_checksums, 0, sizeof(header.chunk_checksums));
+    uint32_t retained_chunks = 0;
+    for (uint32_t i = 0;
+         i < original_header.chunk_count && original_header.chunk_offsets[i] < length;
+         ++i) {
+        uint32_t offset = original_header.chunk_offsets[i];
+        uint64_t original_end =
+            i + 1 < original_header.chunk_count ? original_header.chunk_offsets[i + 1]
+                                                : original_header.data_length;
+        uint32_t end = static_cast<uint32_t>(std::min<uint64_t>(original_end, length));
+        header.chunk_offsets[retained_chunks] = offset;
+        header.chunk_checksums[retained_chunks] = compute_crc32c(data.data() + offset, end - offset);
+        ++retained_chunks;
+    }
+    header.chunk_count = retained_chunks;
+    header.data_length = length;
+    header.block_checksum = compute_crc32c(data.data(), data.size());
+
+    auto replacement = tmp_path_ / path.filename();
+    std::ofstream ofs(replacement, std::ios::binary | std::ios::trunc);
+    if (!ofs.is_open()) {
+        return pl::makeError(
+            make_io_error(fmt::format("cannot create truncated block: {}", replacement.string())));
+    }
+    ofs.write(reinterpret_cast<const char*>(&header), sizeof(BlockHeader));
+    ofs.write(data.data(), static_cast<std::streamsize>(data.size()));
+    ofs.flush();
+    if (!ofs.good()) {
+        std::error_code ec;
+        fs::remove(replacement, ec);
+        return pl::makeError(
+            make_io_error(fmt::format("failed to write truncated block: {}", replacement.string())));
+    }
+    ofs.close();
+
+    std::error_code ec;
+    fs::rename(replacement, path, ec);
+    if (ec) {
+        fs::remove(replacement, ec);
+        return pl::makeError(
+            make_io_error(fmt::format("failed to install truncated block: {}", path.string())));
     }
     RETURN_VOID;
 }

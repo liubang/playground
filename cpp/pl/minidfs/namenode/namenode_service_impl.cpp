@@ -18,7 +18,10 @@
 #include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
 
 #include <algorithm>
+#include <brpc/channel.h>
 #include <brpc/closure_guard.h>
+#include <brpc/controller.h>
+
 #include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
@@ -30,6 +33,49 @@ void set_status(protocol::StatusProto* proto, uint32_t code, std::string_view ms
     if (!msg.empty()) {
         proto->set_message(std::string(msg));
     }
+}
+
+pl::Result<pl::Void> truncate_replica(MetadataStore* store,
+                                      const BlockReplica& replica,
+                                      uint64_t length) {
+    auto datanode = store->get_datanode(replica.datanode_id);
+    if (datanode.hasError()) {
+        return folly::makeUnexpected(datanode.error());
+    }
+    if (datanode.value().state != DataNodeState::kLive) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kNoAvailableDataNode),
+                             "cannot truncate replica on non-live datanode");
+    }
+
+    brpc::Channel channel;
+    brpc::ChannelOptions options;
+    options.timeout_ms = 10000;
+    options.max_retry = 1;
+    std::string host =
+        datanode.value().ip.empty() ? datanode.value().hostname : datanode.value().ip;
+    std::string address = host + ":" + std::to_string(datanode.value().data_port);
+    if (channel.Init(address.c_str(), &options) != 0) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kRPCConnectFailed),
+                             "failed to connect to datanode for truncate");
+    }
+
+    protocol::DataTransferService_Stub stub(&channel);
+    brpc::Controller controller;
+    protocol::TruncateBlockRequest request;
+    request.set_block_id(replica.block_id);
+    request.set_generation_stamp(replica.generation_stamp);
+    request.set_length(length);
+    protocol::TruncateBlockResponse response;
+    stub.TruncateBlock(&controller, &request, &response, nullptr);
+    if (controller.Failed()) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kRPCError),
+                             controller.ErrorText());
+    }
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<pl::status_code_t>(response.status().code()),
+                             response.status().message());
+    }
+    return pl::Void{};
 }
 
 } // namespace
@@ -150,6 +196,42 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
     if (txn.hasError()) {
         fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
         return;
+    }
+
+    if (request->overwrite()) {
+        auto existing = ns_mgr_->resolve_path(request->path());
+        if (existing.hasValue()) {
+            if (existing.value().type != InodeType::kFile) {
+                fill_status(response->mutable_status(),
+                            static_cast<uint32_t>(ErrorCode::kIsDirectory),
+                            "cannot overwrite a directory");
+                return;
+            }
+            if (existing.value().state != FileState::kNormal) {
+                fill_status(response->mutable_status(),
+                            static_cast<uint32_t>(ErrorCode::kFileUnderConstruction),
+                            "cannot overwrite a file under construction");
+                return;
+            }
+            auto invalidate = block_mgr_->invalidate_blocks(existing.value().inode_id);
+            if (invalidate.hasError()) {
+                fill_status(response->mutable_status(),
+                            invalidate.error().code(),
+                            invalidate.error().message());
+                return;
+            }
+            auto remove = ns_mgr_->remove(request->path());
+            if (remove.hasError()) {
+                fill_status(
+                    response->mutable_status(), remove.error().code(), remove.error().message());
+                return;
+            }
+        } else if (existing.error().code() !=
+                   static_cast<pl::status_code_t>(ErrorCode::kNotFound)) {
+            fill_status(
+                response->mutable_status(), existing.error().code(), existing.error().message());
+            return;
+        }
     }
 
     auto result = ns_mgr_->create_file(request->path(),
@@ -421,6 +503,86 @@ void NameNodeServiceImpl::Rename(google::protobuf::RpcController* /*controller*/
 
     if (request->has_header()) {
         write_oplog("rename", 0, request->header());
+    }
+    fill_status(response->mutable_status(), 0);
+}
+
+void NameNodeServiceImpl::TruncateFile(google::protobuf::RpcController* /*controller*/,
+                                       const protocol::TruncateFileRequest* request,
+                                       protocol::TruncateFileResponse* response,
+                                       google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto inode = ns_mgr_->resolve_path(request->path());
+    if (inode.hasError()) {
+        fill_status(response->mutable_status(), inode.error().code(), inode.error().message());
+        return;
+    }
+
+    auto txn = metadata_store_->begin_transaction();
+    if (txn.hasError()) {
+        fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
+        return;
+    }
+    auto truncate = block_mgr_->truncate_file(
+        inode.value().inode_id,
+        request->length(),
+        [this](const BlockReplica& replica, uint64_t length) {
+            return truncate_replica(metadata_store_, replica, length);
+        });
+    if (truncate.hasError()) {
+        fill_status(
+            response->mutable_status(), truncate.error().code(), truncate.error().message());
+        return;
+    }
+    auto update = ns_mgr_->set_file_length(inode.value().inode_id, request->length());
+    if (update.hasError()) {
+        fill_status(response->mutable_status(), update.error().code(), update.error().message());
+        return;
+    }
+    auto commit = txn.value()->commit();
+    if (commit.hasError()) {
+        fill_status(response->mutable_status(), commit.error().code(), commit.error().message());
+        return;
+    }
+    fill_status(response->mutable_status(), 0);
+}
+
+void NameNodeServiceImpl::SetReplication(google::protobuf::RpcController* /*controller*/,
+                                         const protocol::SetReplicationRequest* request,
+                                         protocol::SetReplicationResponse* response,
+                                         google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    if (request->replication() == 0) {
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kInvalidArgument),
+                    "replication must be positive");
+        return;
+    }
+    auto inode = ns_mgr_->resolve_path(request->path());
+    if (inode.hasError()) {
+        fill_status(response->mutable_status(), inode.error().code(), inode.error().message());
+        return;
+    }
+
+    auto txn = metadata_store_->begin_transaction();
+    if (txn.hasError()) {
+        fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
+        return;
+    }
+    auto update = ns_mgr_->set_replication(inode.value().inode_id, request->replication());
+    if (update.hasError()) {
+        fill_status(response->mutable_status(), update.error().code(), update.error().message());
+        return;
+    }
+    auto blocks = block_mgr_->set_replication(inode.value().inode_id, request->replication());
+    if (blocks.hasError()) {
+        fill_status(response->mutable_status(), blocks.error().code(), blocks.error().message());
+        return;
+    }
+    auto commit = txn.value()->commit();
+    if (commit.hasError()) {
+        fill_status(response->mutable_status(), commit.error().code(), commit.error().message());
+        return;
     }
     fill_status(response->mutable_status(), 0);
 }

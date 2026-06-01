@@ -80,6 +80,16 @@ public:
                 protocol::RenameResponse* response,
                 google::protobuf::Closure* done) override;
 
+    void TruncateFile(google::protobuf::RpcController* controller,
+                      const protocol::TruncateFileRequest* request,
+                      protocol::TruncateFileResponse* response,
+                      google::protobuf::Closure* done) override;
+
+    void SetReplication(google::protobuf::RpcController* controller,
+                        const protocol::SetReplicationRequest* request,
+                        protocol::SetReplicationResponse* response,
+                        google::protobuf::Closure* done) override;
+
     void AllocateBlock(google::protobuf::RpcController* controller,
                        const protocol::AllocateBlockRequest* request,
                        protocol::AllocateBlockResponse* response,

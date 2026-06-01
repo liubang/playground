@@ -206,5 +206,92 @@ TEST_F(BlockManagerTest, AllocateBlockRejectsDuplicateIndex) {
     EXPECT_TRUE(block_mgr_->allocate_block(100, 0, 3).hasError());
 }
 
+TEST_F(BlockManagerTest, TruncateFileShrinksLastRetainedBlockAndInvalidatesTail) {
+    auto first = block_mgr_->allocate_block(100, 0, 3);
+    ASSERT_TRUE(first.hasValue());
+    ASSERT_TRUE(block_mgr_
+                    ->commit_block(first.value().block_id,
+                                   8,
+                                   first.value().generation_stamp,
+                                   datanode_ids(first.value()))
+                    .hasValue());
+    auto second = block_mgr_->allocate_block(100, 1, 3);
+    ASSERT_TRUE(second.hasValue());
+    ASSERT_TRUE(block_mgr_
+                    ->commit_block(second.value().block_id,
+                                   6,
+                                   second.value().generation_stamp,
+                                   datanode_ids(second.value()))
+                    .hasValue());
+    auto inode = store_->get_inode(100);
+    ASSERT_TRUE(inode.hasValue());
+    inode.value().state = FileState::kNormal;
+    inode.value().length = 14;
+    ASSERT_TRUE(store_->update_inode(inode.value()).hasValue());
+
+    std::vector<uint64_t> truncated_lengths;
+    auto result = block_mgr_->truncate_file(
+        100, 5, [&](const BlockReplica& /*replica*/, uint64_t length) {
+            truncated_lengths.push_back(length);
+            return pl::Result<pl::Void>(pl::Void{});
+        });
+    ASSERT_TRUE(result.hasValue());
+    EXPECT_EQ(truncated_lengths, (std::vector<uint64_t>{5, 5, 5}));
+
+    auto first_meta = store_->get_block(first.value().block_id);
+    auto second_meta = store_->get_block(second.value().block_id);
+    ASSERT_TRUE(first_meta.hasValue());
+    ASSERT_TRUE(second_meta.hasValue());
+    EXPECT_EQ(first_meta.value().length, 5u);
+    EXPECT_EQ(second_meta.value().state, BlockState::kDeleted);
+    for (const auto& replica : store_->get_replicas(second.value().block_id).value()) {
+        EXPECT_EQ(replica.state, ReplicaState::kDeleting);
+    }
+}
+
+TEST_F(BlockManagerTest, SetReplicationUpdatesEveryLiveBlock) {
+    auto block = block_mgr_->allocate_block(100, 0, 3);
+    ASSERT_TRUE(block.hasValue());
+    ASSERT_TRUE(block_mgr_->set_replication(100, 1).hasValue());
+
+    auto metadata = store_->get_block(block.value().block_id);
+    ASSERT_TRUE(metadata.hasValue());
+    EXPECT_EQ(metadata.value().desired_replica, 1u);
+}
+
+TEST_F(BlockManagerTest, TruncateFileMarksFailedReplicaForDeletion) {
+    auto block = block_mgr_->allocate_block(100, 0, 3);
+    ASSERT_TRUE(block.hasValue());
+    ASSERT_TRUE(block_mgr_
+                    ->commit_block(block.value().block_id,
+                                   8,
+                                   block.value().generation_stamp,
+                                   datanode_ids(block.value()))
+                    .hasValue());
+    auto inode = store_->get_inode(100);
+    ASSERT_TRUE(inode.hasValue());
+    inode.value().state = FileState::kNormal;
+    inode.value().length = 8;
+    ASSERT_TRUE(store_->update_inode(inode.value()).hasValue());
+
+    uint64_t failed_datanode = block.value().locations.front().datanode_id;
+    auto result = block_mgr_->truncate_file(
+        100, 5, [failed_datanode](const BlockReplica& replica,
+                                  uint64_t /*length*/) -> pl::Result<pl::Void> {
+            if (replica.datanode_id == failed_datanode) {
+                return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kIOError),
+                                     "simulated truncate failure");
+            }
+            return pl::Result<pl::Void>(pl::Void{});
+        });
+    ASSERT_TRUE(result.hasValue());
+
+    for (const auto& replica : store_->get_replicas(block.value().block_id).value()) {
+        EXPECT_EQ(replica.state,
+                  replica.datanode_id == failed_datanode ? ReplicaState::kDeleting
+                                                        : ReplicaState::kFinalized);
+    }
+}
+
 } // namespace
 } // namespace pl::minidfs
