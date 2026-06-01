@@ -29,20 +29,11 @@
 | [MiniDFS](cpp/pl/minidfs/) | HDFS-like 分布式文件系统。NameNode/DataNode/Client 完整架构，brpc 通信，块存储与副本管理，MySQL 元数据，Docker 部署 | ~70 files |
 | [Flux 解释器](cpp/pl/flux/) | Flux 查询语言子集实现。Scanner/Parser/AST → 语义分析 → 优化器(RBO+CBO) → 物理执行引擎 → Connector(SQLite/MySQL)，附带 LSP 和 REPL | ~120 files |
 | [SSTable 引擎](cpp/pl/sst/) | LSM-Tree 存储引擎核心组件。Block 编解码、布隆过滤器、压缩(zstd/snappy)、迭代器、版本管理，含 CLI 工具 | ~30 files |
-| [InfluxQL Parser](cpp/pl/influxql/) | InfluxQL 词法/语法分析器，Ragel 生成的 scanner + 手写 parser | — |
 | [Braft 分布式计数器](cpp/pl/braft/) | 基于 braft 的 Raft 状态机示例：日志复制、快照、leader 选举、集群部署 | — |
 | [模板元编程库](cpp/meta/) | C++20 元编程：Type List、Expression Template、Pattern Matching、Tuple Iteration，全部带单元测试 | — |
-| [LLVM Kaleidoscope](cpp/pl/llvm/) | LLVM 官方教程的 C++ 实现，Lexer → AST → Codegen | — |
 | [Recall (FAISS)](cpp/pl/recall/) | 基于 FAISS 的向量召回服务，gRPC 接口 | — |
 
 其他小型实现：[Skip List](cpp/pl/skiplist/)、[Bloom Filter](cpp/pl/bloom/)、[Arena Allocator](cpp/pl/arena/)、[Thread Pool](cpp/pl/thread/)、[Geohash](cpp/pl/geohash/)、[Brainfuck 解释器](cpp/pl/bf/)、[HTTP Server](cpp/pl/http/)
-
-## 当前重点
-
-- **MiniDFS** — 完善 DataNode 心跳、块汇报、副本恢复流程
-- **Flux** — 优化器与执行引擎迭代，扩展 connector 支持
-- **SSTable** — Compaction 策略、Range Query 优化
-- **TLA+** — 分布式协议的形式化验证练习
 
 ## 仓库结构
 
@@ -64,7 +55,16 @@ Bazel 在这个场景下解决了几个问题：所有语言用同一套 `BUILD`
 
 ## 构建
 
-本地依赖：Bazelisk + C++ 编译器（macOS: `brew install bazelisk llvm libomp`，Linux: GCC 14+ 或 Clang 18+）。其余工具链（JDK 21、Go 1.24、Python 3.13）由 Bazel 自动下载。
+本地依赖：Bazelisk + C++ 编译器，其余工具链（JDK 21、Go 1.24、Python 3.13）由 Bazel 自动下载。
+
+```bash
+# macOS
+brew install bazelisk llvm libomp
+
+# Ubuntu/Debian
+sudo apt-get install -y gcc-14 g++-14 nasm   # 或 clang-18
+curl -L https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 -o /usr/local/bin/bazel && chmod +x /usr/local/bin/bazel
+```
 
 ```bash
 bazel build //...    # 全量构建
