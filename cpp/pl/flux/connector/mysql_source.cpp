@@ -876,6 +876,7 @@ SourceCapabilities MySQLSource::Capabilities() const {
 }
 
 absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
+    constexpr size_t kMostCommonValueLimit = 8;
     const std::string key = cache_key(dsn_, table_);
     {
         auto& cache = metadata_cache();
@@ -946,10 +947,39 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
             if (!average_width_bytes.has_value() && statistics.row_count.value_or(0.0) == 0.0) {
                 average_width_bytes = 0.0;
             }
+            std::vector<MostCommonValue> most_common_values;
+            auto most_common_or = execute_query(conn_or->connection(),
+                                                absl::StrCat("SELECT ",
+                                                             quote_identifier(column.name),
+                                                             ", COUNT(*) FROM (",
+                                                             query_,
+                                                             ") AS flux_source WHERE ",
+                                                             quote_identifier(column.name),
+                                                             " IS NOT NULL GROUP BY ",
+                                                             quote_identifier(column.name),
+                                                             " ORDER BY COUNT(*) DESC LIMIT ",
+                                                             kMostCommonValueLimit),
+                                                "most common values statistics query");
+            if (most_common_or.ok() && most_common_or->meta().size() >= 2) {
+                for (const auto common_row : most_common_or->rows()) {
+                    if (common_row.size() < 2) {
+                        continue;
+                    }
+                    const auto frequency = numeric_from_mysql_field(common_row.at(1));
+                    if (frequency.has_value()) {
+                        most_common_values.push_back(
+                            {.value =
+                                 value_from_mysql_field(common_row.at(0), most_common_or->meta()[0])
+                                     .string(),
+                             .frequency = *frequency});
+                    }
+                }
+            }
             statistics.columns.push_back({.name = column.name,
                                           .distinct_values = distinct_values,
                                           .null_fraction = null_fraction,
-                                          .average_width_bytes = average_width_bytes});
+                                          .average_width_bytes = average_width_bytes,
+                                          .most_common_values = std::move(most_common_values)});
         }
     }
     {

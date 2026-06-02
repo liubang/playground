@@ -167,7 +167,7 @@ Universe builtin 默认注入，无需 `import`。
 | `join.right(left:, right:, on:)`     | 右连接                           |
 | `join.full(left:, right:, on:)`      | 全连接                           |
 
-`join` package 是顶层 `join()` 的 facade。`on` 可以是 predicate 函数，也可以是列名数组；列名数组路径下可用 `leftName` / `rightName` 控制重名列输出后缀。两侧输入都有 lazy plan 时，列名数组 join 会保留 federated logical plan，由本地 physical planner 根据统计量选择 gather 或 partitioned local hash join。大输入通常按 group key 和 join columns 做 hash repartition；build side 足够小的 inner join 会广播 build rows，并 round-robin 分散 probe rows，避免热点 key 重新压回单个 driver。execution profile 会列出各 partition 的 rows/bytes。predicate 和自定义 `as` 路径仍走 eager fallback。
+`join` package 是顶层 `join()` 的 facade。`on` 可以是 predicate 函数，也可以是列名数组；列名数组路径下可用 `leftName` / `rightName` 控制重名列输出后缀。两侧输入都有 lazy plan 时，列名数组 join 会保留 federated logical plan，由 CBO 根据 connector 行数、列基数和 top-K 高频值选择 gather、双侧 hash repartition、小 build side broadcast 或大 build side salted repartition。salted 路径处理单列等值 join，只复制热点 build rows，并 round-robin 分散对应 probe rows；execution profile 会列出 distribution、heavy hitters 和各 partition 的 rows/bytes。predicate 和自定义 `as` 路径仍走 eager fallback。
 
 ### `json`
 

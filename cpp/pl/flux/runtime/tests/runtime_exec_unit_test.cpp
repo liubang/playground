@@ -1164,7 +1164,8 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
     ASSERT_TRUE(task_or.ok()) << task_or.status();
     ASSERT_EQ(3, task_or->pipelines.size());
     EXPECT_EQ("join-left", task_or->pipelines[0].id);
-    EXPECT_EQ("probe", task_or->pipelines[0].role);
+    EXPECT_NE(task_or->pipelines[0].role, task_or->pipelines[1].role);
+    EXPECT_TRUE(task_or->pipelines[0].role == "build" || task_or->pipelines[0].role == "probe");
     EXPECT_TRUE(task_or->pipelines[0].root != nullptr ||
                 !task_or->pipelines[0].driver_roots.empty());
     EXPECT_EQ((std::vector<std::string>{
@@ -1173,7 +1174,7 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
               }),
               task_or->pipelines[0].operators);
     EXPECT_EQ("join-right", task_or->pipelines[1].id);
-    EXPECT_EQ("build", task_or->pipelines[1].role);
+    EXPECT_TRUE(task_or->pipelines[1].role == "build" || task_or->pipelines[1].role == "probe");
     EXPECT_TRUE(task_or->pipelines[1].root != nullptr ||
                 !task_or->pipelines[1].driver_roots.empty());
     EXPECT_EQ((std::vector<std::string>{
@@ -1383,26 +1384,65 @@ TEST(RuntimeExecTest, PhysicalPlannerRepartitionsLargeJoinBelowBlockingWrapper) 
     EXPECT_EQ("8191", result_or->as_table().rows[0]->lookup("usage")->string());
 }
 
-TEST(RuntimeExecTest, PartitionedJoinProfileExposesSkewedHashDistribution) {
+TEST(RuntimeExecTest, SaltedJoinSpreadsHotProbeRowsAndReplicatesOnlyHotBuildRows) {
     auto project = PartitionedMemoryJoinPlan(true);
+    SCOPED_TRACE(optimizer::FormatPhysicalPlan(project));
 
-    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(project);
+    auto task_or = execution::PhysicalPlanner().Plan(project);
 
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(3, task_or->pipelines.size());
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "SaltedProbeExchangeSinkOperator",
+              }),
+              task_or->pipelines[0].operators);
+    ASSERT_TRUE(task_or->pipelines[0].distribution.has_value());
+    EXPECT_EQ("salted_probe", task_or->pipelines[0].distribution->kind);
+    EXPECT_EQ((std::vector<std::string>{"host=\"edge-0\"\n"}),
+              task_or->pipelines[0].distribution->heavy_hitters);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "SaltedBuildExchangeSinkOperator",
+              }),
+              task_or->pipelines[1].operators);
+    ASSERT_TRUE(task_or->pipelines[1].distribution.has_value());
+    EXPECT_EQ("salted_build", task_or->pipelines[1].distribution->kind);
+    ASSERT_TRUE(task_or->pipelines[2].distribution.has_value());
+    EXPECT_EQ("round_robin", task_or->pipelines[2].distribution->kind);
+
+    const auto graph = execution::FormatPipelinePlanMermaid(project);
+    EXPECT_NE(std::string::npos, graph.find("SaltedProbeExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, graph.find("SaltedBuildExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, graph.find("heavy_hitters="));
+    const auto logical = optimizer::FormatOptimizedLogicalPlan(project);
+    EXPECT_NE(std::string::npos, logical.find(R"(distribution="salted")"));
+    EXPECT_NE(std::string::npos, logical.find("heavy_hitters="));
+
+    auto result_or = execution::Scheduler().RunWithProfile(std::move(*task_or));
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     EXPECT_EQ(8192, result_or->value.as_table().rows.size());
     ASSERT_EQ(3, result_or->profile.pipelines.size());
-    const auto& partition_stats = result_or->profile.pipelines[0].exchange_partition_stats;
-    ASSERT_EQ(3, partition_stats.size());
-    size_t non_empty_partitions = 0;
-    size_t max_partition_rows = 0;
-    for (const auto& stats : partition_stats) {
-        if (stats.rows != 0) {
-            ++non_empty_partitions;
-        }
-        max_partition_rows = std::max(max_partition_rows, stats.rows);
+    const auto& probe_stats = result_or->profile.pipelines[0].exchange_partition_stats;
+    ASSERT_EQ(3, probe_stats.size());
+    size_t min_probe_rows = 8192;
+    size_t max_probe_rows = 0;
+    for (const auto& stats : probe_stats) {
+        min_probe_rows = std::min(min_probe_rows, stats.rows);
+        max_probe_rows = std::max(max_probe_rows, stats.rows);
     }
-    EXPECT_EQ(1, non_empty_partitions);
-    EXPECT_EQ(8192, max_partition_rows);
+    EXPECT_LE(max_probe_rows - min_probe_rows, 8);
+    const auto& build_stats = result_or->profile.pipelines[1].exchange_partition_stats;
+    ASSERT_EQ(3, build_stats.size());
+    size_t replicated_build_rows = 0;
+    for (const auto& stats : build_stats) {
+        replicated_build_rows += stats.rows;
+    }
+    EXPECT_EQ(4098, replicated_build_rows);
+    const auto profile = execution::FormatExecutionProfile(result_or->profile);
+    EXPECT_NE(std::string::npos, profile.find("heavy_hitters="));
+    const auto profile_json = execution::FormatExecutionProfileJson(result_or->profile);
+    EXPECT_NE(std::string::npos, profile_json.find(R"("heavyHitters":["host=\"edge-0\"\n"])"));
 }
 
 TEST(RuntimeExecTest, BroadcastJoinSpreadsHotProbeRowsAcrossDrivers) {
@@ -1583,7 +1623,7 @@ TEST(RuntimeExecTest, TwoStageAggregateConsumesJoinDriversWithoutIntermediateGat
                   "ProjectOperator",
                   "GroupOperator",
                   "PartialAggregateOperator",
-                  "ExchangeSinkOperator",
+                  "HashPartitionExchangeSinkOperator",
               }),
               task_or->pipelines[2].operators);
     EXPECT_EQ("main", task_or->pipelines[3].id);
@@ -2290,8 +2330,8 @@ TEST(RuntimeExecTest, PhysicalExplainShowsCboAlternatives) {
     const auto physical = optimizer::FormatPhysicalPlan(plan);
 
     EXPECT_NE(std::string::npos, physical.find("alternatives:\n"));
-    EXPECT_NE(std::string::npos, physical.find("- local_hash_join_build_left*"));
-    EXPECT_NE(std::string::npos, physical.find("local_hash_join_build_right"));
+    EXPECT_NE(std::string::npos, physical.find("- local_hash_join_build_left_gather*"));
+    EXPECT_NE(std::string::npos, physical.find("local_hash_join_build_right_gather"));
 }
 
 TEST(RuntimeExecTest, PipelineExplainShowsPipelineDag) {

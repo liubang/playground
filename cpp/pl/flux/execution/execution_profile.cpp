@@ -90,6 +90,9 @@ std::string FormatDistribution(const ExchangeDistributionProfile& distribution) 
     if (!distribution.partition_keys.empty()) {
         out << ", keys=" << plan::StringList(distribution.partition_keys);
     }
+    if (!distribution.heavy_hitters.empty()) {
+        out << ", heavy_hitters=" << plan::StringList(distribution.heavy_hitters);
+    }
     out << ", include_group_key=" << (distribution.include_group_key ? "true" : "false") << ")";
     return out.str();
 }
@@ -102,6 +105,7 @@ std::string FormatDistributionJson(const std::optional<ExchangeDistributionProfi
     out << "{";
     out << "\"kind\":" << JsonString(distribution->kind);
     out << ",\"partitionKeys\":" << JsonStringArray(distribution->partition_keys);
+    out << ",\"heavyHitters\":" << JsonStringArray(distribution->heavy_hitters);
     out << ",\"includeGroupKey\":" << (distribution->include_group_key ? "true" : "false");
     out << ",\"partitions\":" << distribution->partitions;
     out << "}";

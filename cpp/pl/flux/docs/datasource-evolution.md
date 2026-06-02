@@ -1467,8 +1467,8 @@ probe/build 比例明显悬殊时，广播 build side，并 round-robin 分散 p
 
 已落地：
 
-- `ChooseLocalHashJoinPartitionStrategy` 集中选择 gather、双侧 hash repartition 或
-  broadcast-build + round-robin-probe；三个 join planner 入口共享同一策略。
+- CBO 集中选择 gather、双侧 hash repartition 或 broadcast-build + round-robin-probe；
+  physical planner 只编译被选中的 distribution contract，三个 join planner 入口共享同一策略。
 - `PartitionedExchangeSinkOperator` 支持 `hash`、`round_robin` 和 `broadcast` 三种本地路由；
   pipeline 文本、JSON、Mermaid 和 execution profile 继续使用同一 distribution contract。
 - broadcast 仅用于 `inner join`。left/right/full join 保持 hash repartition，避免复制 preserved
@@ -1503,6 +1503,33 @@ probe/build 比例明显悬殊时，广播 build side，并 round-robin 分散 p
 验收：
 
 - `//cpp/pl/flux/execution:execution` 独立构建通过。
+
+### Phase 27: Federated Join Distribution CBO and Large-Build Skew Handling
+
+状态：已完成多输入 local hash join 的 distribution 候选枚举、统一代价选择和大 build side 热点处理。
+此前 planner 仍按总行数直接决定 gather/hash/broadcast，大 build side 无法整体广播时，单热点 probe
+rows 仍会集中到一个 driver。现在 connector metadata 会提供 top-K 高频值，CBO 为每个 join 递归枚举
+build side 与 exchange topology，并将选中的 distribution contract 写回 logical join。
+
+已落地：
+
+- memory、SQLite 和 MySQL connector column statistics 增加 top-K most-common values 与频次。
+- CBO 为 local hash join 枚举 gather、双侧 hash repartition、小 build side broadcast 和大 build
+  side salted repartition；代价模型显式计入 gather contention、hash skew、exchange 和 replication。
+- nested join 会合并左右输出列统计，并累计子 join 已选 exchange 的代价，使多输入计划不会低估内部
+  repartition 成本。
+- salted repartition 对普通 key 保持双侧 hash；对单列等值 join 的 heavy-hitter probe rows 做
+  round-robin，对匹配 build rows 做局部 replication。只有热点 build rows 被复制，不会放大整个
+  build side。
+- logical explain、physical pipeline 文本、JSON、Mermaid 和 execution profile 会暴露 distribution、
+  partition 数、heavy hitters 与 per-partition rows/bytes。
+
+验收：
+
+- connector 单测直接验证 memory、SQLite 和 MySQL top-K 高频值统计。
+- CBO 单测验证 join build-side 与 distribution alternative 命名。
+- runtime 构造 8192:4096 大 build side 单热点 join，确认 probe rows 均匀分散，build rows 总量仅从
+  4096 增加到 4098，结果仍为 8192 行；graph 与 profile 同时暴露 salted contract。
 
 ## Test Plan
 
@@ -1557,5 +1584,5 @@ probe/build 比例明显悬殊时，广播 build side，并 round-robin 分散 p
   contract 评估 per-connection prepared statement cache 的收益和生命周期。
 - Page source 内存优化：继续减少 `Value` string/blob allocation，并评估是否需要 connector-local
   arena。
-- 大 build side skew：当前 small-build inner join 已可 broadcast；下一步基于 per-partition profile
-  评估 heavy-hitter 采样、salted repartition 或热点 key 局部 replication，处理无法整体广播的 build side。
+- statistics 生命周期：当前 connector metadata 会即时计算 top-K 高频值；后续评估显式 analyze、
+  采样和持久化统计，避免大表 metadata 查询重复扫描。

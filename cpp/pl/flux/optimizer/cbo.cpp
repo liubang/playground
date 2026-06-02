@@ -38,6 +38,19 @@ constexpr double kConnectorCpuPerRow = 0.05;
 constexpr double kMaterializeCpuPerRow = 0.1;
 constexpr double kJoinBuildCpuPerRow = 1.25;
 constexpr double kJoinProbeCpuPerRow = 0.75;
+constexpr double kExchangeCpuPerRow = 0.2;
+constexpr double kGatherContentionCpuPerRow = 0.75;
+constexpr double kHashSkewCpuPerRow = 0.8;
+constexpr double kSaltedSkewCpuPerRow = 0.1;
+constexpr double kReplicationCpuPerRow = 0.1;
+constexpr double kMinPartitionedRows = 8192.0;
+constexpr double kTargetRowsPerPartition = 4096.0;
+constexpr double kMaxBroadcastBuildRows = 1024.0;
+constexpr double kMinBroadcastProbeRows = 8192.0;
+constexpr double kMinBroadcastProbeToBuildRatio = 8.0;
+constexpr double kMinHeavyHitterRows = 1024.0;
+constexpr double kMinHeavyHitterFraction = 0.2;
+constexpr size_t kMaxPartitions = 8;
 
 bool has_rows(const plan::CostEstimate& cost) {
     return cost.rows.has_value();
@@ -47,6 +60,11 @@ struct EstimatedPlan {
     plan::CostEstimate cost;
     std::vector<connector::ColumnStatistics> columns{};
 };
+
+plan::CostEstimate add_selected_join_distribution_cost(plan::CostEstimate cost,
+                                                       const EstimatedPlan& left,
+                                                       const EstimatedPlan& right,
+                                                       const plan::JoinSpec& join);
 
 enum class ExecutionLocation {
     Memory,
@@ -105,10 +123,13 @@ double distinct_values_with_null(const connector::ColumnStatistics& column) {
            (column.null_fraction.value_or(0.0) > 0.0 ? 1.0 : 0.0);
 }
 
-void cap_distinct_values(std::vector<connector::ColumnStatistics>* columns, double row_count) {
+void cap_column_statistics(std::vector<connector::ColumnStatistics>* columns, double row_count) {
     for (auto& column : *columns) {
         if (column.distinct_values.has_value()) {
             column.distinct_values = std::min(std::max(0.0, *column.distinct_values), row_count);
+        }
+        for (auto& value : column.most_common_values) {
+            value.frequency = std::min(std::max(0.0, value.frequency), row_count);
         }
     }
 }
@@ -139,7 +160,7 @@ std::vector<connector::ColumnStatistics> filter_columns(
     std::vector<connector::ColumnStatistics> columns,
     const std::vector<plan::PredicateSpec>& predicates,
     double output_rows) {
-    cap_distinct_values(&columns, output_rows);
+    cap_column_statistics(&columns, output_rows);
     for (const auto& predicate : predicates) {
         auto* column = find_column(&columns, predicate.column);
         if (column == nullptr) {
@@ -166,6 +187,15 @@ std::vector<connector::ColumnStatistics> project_columns(
         }
     }
     return projected;
+}
+
+void append_missing_columns(std::vector<connector::ColumnStatistics>* columns,
+                            const std::vector<connector::ColumnStatistics>& candidates) {
+    for (const auto& column : candidates) {
+        if (find_column(*columns, column.name) == nullptr) {
+            columns->push_back(column);
+        }
+    }
 }
 
 std::vector<connector::ColumnStatistics> rename_columns(
@@ -250,7 +280,7 @@ EstimatedPlan combine_unary_cost(const EstimatedPlan& input,
                                  double output_rows,
                                  double extra_cpu,
                                  std::vector<connector::ColumnStatistics> columns) {
-    cap_distinct_values(&columns, output_rows);
+    cap_column_statistics(&columns, output_rows);
     return EstimatedPlan{
         .cost =
             {
@@ -330,6 +360,11 @@ public:
         return estimated_or->cost;
     }
 
+    [[nodiscard]] absl::StatusOr<EstimatedPlan> EstimatePlan(
+        const std::shared_ptr<plan::PlanNode>& node, const StatsProvider& stats_provider) const {
+        return estimate(node, stats_provider, ExecutionLocation::Memory);
+    }
+
 private:
     [[nodiscard]] absl::StatusOr<EstimatedPlan> estimate(
         const std::shared_ptr<plan::PlanNode>& node,
@@ -375,14 +410,19 @@ private:
             const double probe_rows = build_left ? right_rows : left_rows;
             const double output_rows =
                 estimate_join_rows(*left_or, *right_or, node->join(), left_rows, right_rows);
+            auto cost = plan::CostEstimate{
+                .rows = output_rows,
+                .cpu = left_or->cost.cpu.value_or(0.0) + right_or->cost.cpu.value_or(0.0) +
+                       build_rows * kJoinBuildCpuPerRow + probe_rows * kJoinProbeCpuPerRow,
+                .io = left_or->cost.io.value_or(0.0) + right_or->cost.io.value_or(0.0),
+            };
+            cost = add_selected_join_distribution_cost(cost, *left_or, *right_or, node->join());
+            auto columns = std::move(left_or->columns);
+            append_missing_columns(&columns, right_or->columns);
+            cap_column_statistics(&columns, output_rows);
             return EstimatedPlan{
-                .cost =
-                    {
-                        .rows = output_rows,
-                        .cpu = left_or->cost.cpu.value_or(0.0) + right_or->cost.cpu.value_or(0.0) +
-                               build_rows * kJoinBuildCpuPerRow + probe_rows * kJoinProbeCpuPerRow,
-                        .io = left_or->cost.io.value_or(0.0) + right_or->cost.io.value_or(0.0),
-                    },
+                .cost = cost,
+                .columns = std::move(columns),
             };
         }
 
@@ -460,7 +500,7 @@ private:
                 extra_cpu = input_rows * kMaterializeCpuPerRow;
                 break;
             case plan::PlanNodeKind::Exchange:
-                extra_cpu = input_rows * 0.2;
+                extra_cpu = input_rows * kExchangeCpuPerRow;
                 break;
             default:
                 return unknown_plan();
@@ -510,6 +550,12 @@ std::string cbo_decision(const CboOptions& options, const plan::CostEstimate& co
 
 std::string join_alternative_name(plan::JoinBuildSide side) {
     return absl::StrCat("local_hash_join_build_", plan::JoinBuildSideName(side));
+}
+
+std::string join_distribution_alternative_name(const plan::JoinSpec& join) {
+    return absl::StrCat(join_alternative_name(join.build_side),
+                        "_",
+                        plan::JoinDistributionKindName(join.distribution.kind));
 }
 
 absl::StatusOr<plan::CostEstimate> EstimateJoinWithBuildSide(
@@ -563,6 +609,212 @@ absl::Status ChooseJoinBuildSides(const std::shared_ptr<plan::PlanNode>& node,
         }
     }
     return ChooseJoinBuildSide(node, cost_model, stats_provider);
+}
+
+size_t choose_lowest_known_cost(const std::vector<PlanAlternative>& alternatives);
+
+size_t join_partition_count(double input_rows) {
+    if (input_rows < kMinPartitionedRows) {
+        return 1;
+    }
+    return std::min(
+        kMaxPartitions,
+        std::max<size_t>(2, static_cast<size_t>(std::ceil(input_rows / kTargetRowsPerPartition))));
+}
+
+const connector::MostCommonValue* find_most_common_value(const connector::ColumnStatistics* column,
+                                                         const std::string& value) {
+    if (column == nullptr) {
+        return nullptr;
+    }
+    const auto it = std::ranges::find_if(column->most_common_values,
+                                         [&](const auto& item) { return item.value == value; });
+    return it == column->most_common_values.end() ? nullptr : &*it;
+}
+
+struct JoinSkewEstimate {
+    std::vector<std::string> heavy_hitters{};
+    double probe_rows = 0.0;
+    double replicated_build_rows = 0.0;
+};
+
+JoinSkewEstimate estimate_join_skew(const EstimatedPlan& build,
+                                    const EstimatedPlan& probe,
+                                    const plan::JoinSpec& join) {
+    JoinSkewEstimate estimate;
+    if (join.on.size() != 1 || !probe.cost.rows.has_value()) {
+        return estimate;
+    }
+    const auto& key = join.on.front();
+    const auto* probe_column = find_column(probe.columns, key);
+    const auto* build_column = find_column(build.columns, key);
+    if (probe_column == nullptr) {
+        return estimate;
+    }
+    for (const auto& value : probe_column->most_common_values) {
+        if (value.frequency < kMinHeavyHitterRows ||
+            value.frequency < probe.cost.rows.value_or(0.0) * kMinHeavyHitterFraction) {
+            continue;
+        }
+        estimate.heavy_hitters.push_back(absl::StrCat(key, "=", value.value, "\n"));
+        estimate.probe_rows += value.frequency;
+        if (const auto* build_value = find_most_common_value(build_column, value.value);
+            build_value != nullptr) {
+            estimate.replicated_build_rows += build_value->frequency;
+        } else if (build_column != nullptr && build.cost.rows.has_value() &&
+                   build_column->distinct_values.has_value() &&
+                   *build_column->distinct_values > 0.0) {
+            estimate.replicated_build_rows +=
+                build.cost.rows.value_or(0.0) / *build_column->distinct_values;
+        }
+    }
+    return estimate;
+}
+
+struct JoinDistributionCostInput {
+    size_t partitions = 1;
+    double left_rows = 0.0;
+    double right_rows = 0.0;
+    double build_rows = 0.0;
+};
+
+plan::CostEstimate add_join_distribution_cost(plan::CostEstimate cost,
+                                              plan::JoinDistributionKind kind,
+                                              const JoinDistributionCostInput& input,
+                                              const JoinSkewEstimate& skew) {
+    if (!cost.cpu.has_value()) {
+        return cost;
+    }
+    const double input_rows = input.left_rows + input.right_rows;
+    switch (kind) {
+        case plan::JoinDistributionKind::Gather:
+            *cost.cpu +=
+                input_rows >= kMinPartitionedRows ? input_rows * kGatherContentionCpuPerRow : 0.0;
+            break;
+        case plan::JoinDistributionKind::Hash:
+            *cost.cpu += input_rows * kExchangeCpuPerRow + skew.probe_rows * kHashSkewCpuPerRow;
+            break;
+        case plan::JoinDistributionKind::Broadcast:
+            *cost.cpu += input_rows * kExchangeCpuPerRow +
+                         input.build_rows * static_cast<double>(input.partitions - 1) *
+                             kReplicationCpuPerRow;
+            break;
+        case plan::JoinDistributionKind::Salted:
+            *cost.cpu += input_rows * kExchangeCpuPerRow + skew.probe_rows * kSaltedSkewCpuPerRow +
+                         skew.replicated_build_rows * static_cast<double>(input.partitions - 1) *
+                             kReplicationCpuPerRow;
+            break;
+        case plan::JoinDistributionKind::Auto:
+            break;
+    }
+    return cost;
+}
+
+plan::CostEstimate add_selected_join_distribution_cost(plan::CostEstimate cost,
+                                                       const EstimatedPlan& left,
+                                                       const EstimatedPlan& right,
+                                                       const plan::JoinSpec& join) {
+    if (!left.cost.rows.has_value() || !right.cost.rows.has_value()) {
+        return cost;
+    }
+    const bool build_left = join.build_side == plan::JoinBuildSide::Left;
+    const auto& build = build_left ? left : right;
+    const auto& probe = build_left ? right : left;
+    return add_join_distribution_cost(cost,
+                                      join.distribution.kind,
+                                      {
+                                          .partitions = join.distribution.partitions,
+                                          .left_rows = left.cost.rows.value_or(0.0),
+                                          .right_rows = right.cost.rows.value_or(0.0),
+                                          .build_rows = build.cost.rows.value_or(0.0),
+                                      },
+                                      estimate_join_skew(build, probe, join));
+}
+
+absl::StatusOr<std::vector<PlanAlternative>> EnumerateJoinAlternatives(
+    const std::shared_ptr<plan::PlanNode>& node,
+    const HeuristicCostModel& cost_model,
+    const ConnectorStatsProvider& stats_provider) {
+    std::vector<PlanAlternative> alternatives;
+    if (node == nullptr || node->kind != plan::PlanNodeKind::Join || node->inputs.size() != 2 ||
+        node->inputs[0] == nullptr || node->inputs[1] == nullptr) {
+        return alternatives;
+    }
+    auto left_or = cost_model.EstimatePlan(node->inputs[0], stats_provider);
+    auto right_or = cost_model.EstimatePlan(node->inputs[1], stats_provider);
+    if (!left_or.ok() || !right_or.ok() || !left_or->cost.rows.has_value() ||
+        !right_or->cost.rows.has_value()) {
+        return alternatives;
+    }
+    const double left_rows = *left_or->cost.rows;
+    const double right_rows = *right_or->cost.rows;
+    const size_t partitions = join_partition_count(left_rows + right_rows);
+    for (const auto side : {plan::JoinBuildSide::Left, plan::JoinBuildSide::Right}) {
+        const bool build_left = side == plan::JoinBuildSide::Left;
+        const auto& build = build_left ? *left_or : *right_or;
+        const auto& probe = build_left ? *right_or : *left_or;
+        const double build_rows = build_left ? left_rows : right_rows;
+        const double probe_rows = build_left ? right_rows : left_rows;
+        const auto skew = estimate_join_skew(build, probe, node->join());
+        auto append = [&](plan::JoinDistributionKind kind,
+                          std::vector<std::string> heavy_hitters = {}) {
+            auto candidate = clone_plan(node);
+            candidate->join().build_side = side;
+            candidate->join().distribution = {
+                .kind = kind,
+                .partitions = kind == plan::JoinDistributionKind::Gather ? 1 : partitions,
+                .heavy_hitters = std::move(heavy_hitters),
+            };
+            auto cost_or = EstimateJoinWithBuildSide(candidate, side, cost_model, stats_provider);
+            alternatives.push_back({
+                .name = join_distribution_alternative_name(candidate->join()),
+                .shape = PhysicalShape::LocalHashJoin,
+                .plan = std::move(candidate),
+                .cost = cost_or.ok() ? *cost_or : unknown_cost(),
+            });
+        };
+        append(plan::JoinDistributionKind::Gather);
+        if (partitions <= 1) {
+            continue;
+        }
+        append(plan::JoinDistributionKind::Hash);
+        if (node->join().method == plan::JoinMethod::Inner && build_rows > 0.0 &&
+            build_rows <= kMaxBroadcastBuildRows && probe_rows >= kMinBroadcastProbeRows &&
+            probe_rows >= build_rows * kMinBroadcastProbeToBuildRatio) {
+            append(plan::JoinDistributionKind::Broadcast);
+        }
+        if (node->join().method == plan::JoinMethod::Inner && build_rows > kMaxBroadcastBuildRows &&
+            !skew.heavy_hitters.empty() && skew.replicated_build_rows > 0.0) {
+            append(plan::JoinDistributionKind::Salted, skew.heavy_hitters);
+        }
+    }
+    return alternatives;
+}
+
+absl::Status ChooseJoinDistributions(const std::shared_ptr<plan::PlanNode>& node,
+                                     const HeuristicCostModel& cost_model,
+                                     const ConnectorStatsProvider& stats_provider) {
+    if (node == nullptr) {
+        return absl::OkStatus();
+    }
+    for (const auto& input : node->inputs) {
+        auto status = ChooseJoinDistributions(input, cost_model, stats_provider);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    if (node->kind != plan::PlanNodeKind::Join) {
+        return absl::OkStatus();
+    }
+    auto alternatives_or = EnumerateJoinAlternatives(node, cost_model, stats_provider);
+    if (!alternatives_or.ok()) {
+        return alternatives_or.status();
+    }
+    if (!alternatives_or->empty()) {
+        const size_t chosen = choose_lowest_known_cost(*alternatives_or);
+        node->join() = (*alternatives_or)[chosen].plan->join();
+    }
+    return absl::OkStatus();
 }
 
 struct ConnectorMemorySuffixPlan {
@@ -641,6 +893,10 @@ absl::StatusOr<CboPlanResult> CostBasedOptimizer::OptimizeWithTrace(
     if (!choose_status.ok()) {
         return choose_status;
     }
+    choose_status = ChooseJoinDistributions(rbo_or->plan, cost_model, stats_provider);
+    if (!choose_status.ok()) {
+        return choose_status;
+    }
     const PhysicalShape shape = physical_shape_for(*rbo_or);
     CboPlanResult result;
     result.rbo_result = std::move(*rbo_or);
@@ -672,36 +928,24 @@ absl::StatusOr<CboPlanResult> CostBasedOptimizer::OptimizeWithTrace(
             });
         }
     } else if (shape == PhysicalShape::LocalHashJoin) {
-        const auto chosen_side = result.rbo_result.plan->join().build_side;
-        const auto other_side = chosen_side == plan::JoinBuildSide::Left
-                                    ? plan::JoinBuildSide::Right
-                                    : plan::JoinBuildSide::Left;
-        auto chosen_cost_or = EstimateJoinWithBuildSide(
-            result.rbo_result.plan, chosen_side, cost_model, stats_provider);
-        if (!chosen_cost_or.ok()) {
-            return chosen_cost_or.status();
+        auto alternatives_or =
+            EnumerateJoinAlternatives(result.rbo_result.plan, cost_model, stats_provider);
+        if (!alternatives_or.ok()) {
+            return alternatives_or.status();
         }
-        auto chosen_plan = clone_plan(result.rbo_result.plan);
-        chosen_plan->join().build_side = chosen_side;
-        result.alternatives.push_back({
-            .name = join_alternative_name(chosen_side),
-            .shape = PhysicalShape::LocalHashJoin,
-            .plan = std::move(chosen_plan),
-            .cost = *chosen_cost_or,
-        });
-        auto other_cost_or = EstimateJoinWithBuildSide(
-            result.rbo_result.plan, other_side, cost_model, stats_provider);
-        result.alternatives.push_back(PlanAlternative{
-            .name = join_alternative_name(other_side),
-            .shape = PhysicalShape::LocalHashJoin,
-            .plan =
-                [&] {
-                    auto candidate_plan = clone_plan(result.rbo_result.plan);
-                    candidate_plan->join().build_side = other_side;
-                    return candidate_plan;
-                }(),
-            .cost = other_cost_or.ok() ? *other_cost_or : unknown_cost(),
-        });
+        result.alternatives = std::move(*alternatives_or);
+        if (result.alternatives.empty()) {
+            auto cost_or = cost_model.EstimateCost(result.rbo_result.plan, stats_provider);
+            if (!cost_or.ok()) {
+                return cost_or.status();
+            }
+            result.alternatives.push_back({
+                .name = join_distribution_alternative_name(result.rbo_result.plan->join()),
+                .shape = PhysicalShape::LocalHashJoin,
+                .plan = result.rbo_result.plan,
+                .cost = *cost_or,
+            });
+        }
     } else {
         auto cost_or = cost_model.EstimateCost(result.rbo_result.plan, stats_provider);
         if (!cost_or.ok()) {
