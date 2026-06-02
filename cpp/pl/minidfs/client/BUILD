@@ -42,7 +42,6 @@ cc_library(
         "//cpp/pl/status",
         "@brpc",
         "@fmt",
-        "@folly//folly/logging",
     ],
 )
 

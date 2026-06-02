@@ -18,6 +18,7 @@
 #include "cpp/pl/sst/sstable.h"
 
 #include <folly/ScopeGuard.h>
+#include <folly/logging/xlog.h>
 
 #include "cpp/pl/fs/posix_fs.h"
 #include "cpp/pl/sst/encoding.h"

@@ -17,7 +17,7 @@
 
 #include "cpp/pl/minidfs/datanode/replication_worker.h"
 
-#include <folly/logging/xlog.h>
+#include <butil/logging.h>
 
 namespace pl::minidfs {
 
@@ -98,10 +98,8 @@ void ReplicationWorker::execute_copy(const DataNodeTask& task) {
     // Read full block data from local store
     auto data_result = store_->read_block_data(task.block_id, task.generation_stamp);
     if (data_result.hasError()) {
-        XLOGF(ERR,
-              "replication copy failed: cannot read block {}: {}",
-              task.block_id,
-              data_result.error().describe());
+        LOG(ERROR) << "replication copy failed: cannot read block " << task.block_id << ": "
+                   << data_result.error().describe();
         return;
     }
 
@@ -114,33 +112,25 @@ void ReplicationWorker::execute_copy(const DataNodeTask& task) {
                                   task.target_host,
                                   task.target_port);
     if (copy_result.hasError()) {
-        XLOGF(ERR,
-              "replication copy failed: send to {}:{} for block {}: {}",
-              task.target_host,
-              task.target_port,
-              task.block_id,
-              copy_result.error().describe());
+        LOG(ERROR) << "replication copy failed: send to " << task.target_host << ":"
+                   << task.target_port << " for block " << task.block_id << ": "
+                   << copy_result.error().describe();
         return;
     }
 
-    XLOGF(INFO,
-          "replication copy succeeded: block {} -> {}:{}",
-          task.block_id,
-          task.target_host,
-          task.target_port);
+    LOG(INFO) << "replication copy succeeded: block " << task.block_id << " -> "
+              << task.target_host << ":" << task.target_port;
 }
 
 void ReplicationWorker::execute_delete(const DataNodeTask& task) {
     auto result = store_->delete_block(task.block_id, task.generation_stamp);
     if (result.hasError()) {
-        XLOGF(WARN,
-              "replication delete failed for block {}: {}",
-              task.block_id,
-              result.error().describe());
+        LOG(WARNING) << "replication delete failed for block " << task.block_id << ": "
+                     << result.error().describe();
         return;
     }
 
-    XLOGF(INFO, "replication delete succeeded: block {}", task.block_id);
+    LOG(INFO) << "replication delete succeeded: block " << task.block_id;
 }
 
 } // namespace pl::minidfs
