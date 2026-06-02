@@ -18,77 +18,94 @@
   </a>
 </p>
 
-个人技术实验 Monorepo。使用 [Bazel](https://bazel.build/) 统一构建 C++/Java/Go/Python 多语言项目。
+这是一个个人技术实验 Monorepo，内容集中在分布式系统、存储引擎、编译器与解释器、模板元编程等方向。仓库使用 [Bazel](https://bazel.build/) 统一管理 C++、Java、Go 和 Python 项目的构建与测试。
 
-不是代码片段集合 —— 仓库中包含多个从零实现的系统级项目（分布式文件系统、查询语言解释器、存储引擎等），每个都有完整的模块划分、测试覆盖和 CI。技术方向集中在分布式系统、存储引擎、编译器/解释器和模板元编程。
+## 主要项目
 
-## 特色项目
+| 项目 | 说明 |
+| --- | --- |
+| [MiniDFS](cpp/pl/minidfs/) | 类 HDFS 的分布式文件系统，包含 NameNode、DataNode 和 Client，支持块存储、副本管理、心跳与块汇报、MySQL 元数据存储及 Docker 部署。 |
+| [Flux](cpp/pl/flux/) | Flux 查询语言子集解释器，覆盖词法分析、语法分析、AST、语义分析、规则与代价优化、物理执行、SQLite/MySQL Connector，并提供 LSP 和 REPL。 |
+| [SSTable](cpp/pl/sst/) | LSM-Tree 存储引擎组件，包含 Block 编解码、布隆过滤器、zstd/snappy 压缩、迭代器、版本管理和 CLI 工具。 |
+| [Braft Counter](cpp/pl/braft/) | 基于 braft 的 Raft 状态机示例，演示日志复制、快照、Leader 选举和集群部署。 |
+| [Meta](cpp/meta/) | C++20 模板元编程实验，包括 Type List、Expression Template、Pattern Matching 和 Tuple Iteration。 |
+| [Recall](cpp/pl/recall/) | 基于 FAISS 的向量召回服务，提供 gRPC 接口。 |
 
-| 项目 | 简介 | 规模 |
-|------|------|------|
-| [MiniDFS](cpp/pl/minidfs/) | HDFS-like 分布式文件系统。NameNode/DataNode/Client 完整架构，brpc 通信，块存储与副本管理，MySQL 元数据，Docker 部署 | ~70 files |
-| [Flux 解释器](cpp/pl/flux/) | Flux 查询语言子集实现。Scanner/Parser/AST → 语义分析 → 优化器(RBO+CBO) → 物理执行引擎 → Connector(SQLite/MySQL)，附带 LSP 和 REPL | ~120 files |
-| [SSTable 引擎](cpp/pl/sst/) | LSM-Tree 存储引擎核心组件。Block 编解码、布隆过滤器、压缩(zstd/snappy)、迭代器、版本管理，含 CLI 工具 | ~30 files |
-| [Braft 分布式计数器](cpp/pl/braft/) | 基于 braft 的 Raft 状态机示例：日志复制、快照、leader 选举、集群部署 | — |
-| [模板元编程库](cpp/meta/) | C++20 元编程：Type List、Expression Template、Pattern Matching、Tuple Iteration，全部带单元测试 | — |
-| [Recall (FAISS)](cpp/pl/recall/) | 基于 FAISS 的向量召回服务，gRPC 接口 | — |
-
-其他小型实现：[Skip List](cpp/pl/skiplist/)、[Bloom Filter](cpp/pl/bloom/)、[Arena Allocator](cpp/pl/arena/)、[Thread Pool](cpp/pl/thread/)、[Geohash](cpp/pl/geohash/)、[Brainfuck 解释器](cpp/pl/bf/)、[HTTP Server](cpp/pl/http/)
+此外，仓库还包含 [Skip List](cpp/pl/skiplist/)、[Bloom Filter](cpp/pl/bloom/)、[Arena Allocator](cpp/pl/arena/)、[Thread Pool](cpp/pl/thread/)、[Geohash](cpp/pl/geohash/)、[Brainfuck Interpreter](cpp/pl/bf/) 和 [HTTP Server](cpp/pl/http/) 等小型实现。
 
 ## 仓库结构
 
 | 目录 | 说明 |
-|------|------|
-| `cpp/` | C++20 项目。分布式系统、存储引擎、查询语言、元编程、RPC 示例等 |
-| `java/` | Java 21。Spring Boot 3.5 + Bazel 原生构建 |
-| `go/` | Go 1.24。工具库、cgo 多模式示范 |
-| `python/` | Python 3.13。pybind11 绑定、Manim 动画 |
-| `proto/` | 跨语言共享的 Protobuf 定义 |
-| `tla/` | TLA+ 形式化规约（Transfer、SimpleProgram 等） |
-| `registry/` | Bazel 本地模块注册表（OpenBLAS、ISA-L 等） |
-
-## 为什么用 Bazel
-
-四种语言 + Protobuf 跨语言生成，如果用传统方案需要同时维护 CMake、Maven、go build、pip 四套构建系统，且无法表达跨语言依赖（比如 Go 通过 cgo 调用 C++ 库，Python 通过 pybind11 绑定 C++ 代码）。
-
-Bazel 在这个场景下解决了几个问题：所有语言用同一套 `BUILD` 文件描述依赖图；Java/Go/Python 工具链自动下载，本地只需要 Bazel + C++ 编译器；Protobuf 定义一次编写，各语言的 stub 自动生成；基于内容哈希的缓存避免不必要的重新编译；`.bazelversion` + `MODULE.bazel.lock` + `maven_install.json` 锁定全部版本，任何人 clone 后构建结果一致。
+| --- | --- |
+| `cpp/` | C++20 项目，包括分布式系统、存储引擎、查询语言、模板元编程和 RPC 示例。 |
+| `java/` | Java 21 项目，包括 Spring Boot 3.5 示例。 |
+| `go/` | Go 1.24 项目，包括工具库和多种 cgo 调用方式。 |
+| `python/` | Python 3.13 项目，包括 pybind11 绑定和 Manim 动画。 |
+| `proto/` | 跨语言共享的 Protobuf 定义。 |
+| `tla/` | TLA+ 形式化规约。 |
+| `registry/` | Bazel 本地模块注册表，包括 OpenBLAS、ISA-L 等模块。 |
+| `php/` | PHP Router 示例。 |
+| `bash/` | Shell 脚本示例。 |
 
 ## 构建
 
-本地依赖：Bazelisk + C++ 编译器，其余工具链（JDK 21、Go 1.24、Python 3.13）由 Bazel 自动下载。
+本地需要安装 Bazelisk 和 C++ 编译器。JDK 21、Go 1.24 和 Python 3.13 工具链由 Bazel 自动下载。
 
 ```bash
 # macOS
 brew install bazelisk llvm libomp
 
 # Ubuntu/Debian
-sudo apt-get install -y gcc-14 g++-14 nasm   # 或 clang-18
-curl -L https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 -o /usr/local/bin/bazel && chmod +x /usr/local/bin/bazel
+sudo apt-get install -y gcc-14 g++-14 nasm
+curl -L https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 \
+  -o /usr/local/bin/bazel
+chmod +x /usr/local/bin/bazel
 ```
 
-```bash
-bazel build //...    # 全量构建
-bazel test //...     # 全量测试
+常用命令：
 
-# 单语言
+```bash
+# 全量构建与测试
+bazel build //...
+bazel test //...
+
+# 按语言构建
 bazel build //cpp/...
 bazel build //java/...
 bazel build //go/...
 bazel build //python/...
 
-# C++ 配置选项
-bazel build //cpp/... --config=llvm      # Linux 切换 LLVM 工具链
-bazel build //cpp/... --config=release   # 关闭 ASan
+# C++ 构建配置
+bazel build //cpp/... --config=llvm
+bazel build //cpp/... --config=release
 ```
 
-Bazel 版本锁定为 8.6.0（见 `.bazelversion`），默认开启 AddressSanitizer。
+项目通过 `.bazelversion` 锁定 Bazel `8.7.0`。开发构建默认开启 AddressSanitizer；使用 `--config=release` 时关闭。
 
-Java Maven 依赖修改后需 `REPIN=1 bazel run @maven//:pin` 重新生成锁文件。
+Java Maven 依赖变更后，运行以下命令重新生成锁文件：
+
+```bash
+REPIN=1 bazel run @maven//:pin
+```
+
+## Bazel 配置
+
+Bazel 负责维护跨语言依赖图和工具链配置：
+
+- 使用统一的 `BUILD` 文件描述 C++、Java、Go 和 Python 目标。
+- 从共享 Protobuf 定义生成各语言代码。
+- 自动下载 Java、Go 和 Python 工具链。
+- 通过内容哈希缓存减少重复构建。
+- 使用 `.bazelversion`、`MODULE.bazel.lock` 和 `maven_install.json` 固定构建依赖。
 
 ## 覆盖率
 
-CI 自动生成测试覆盖率报告：[C++](https://liubang.github.io/playground/cpp/) | [Java](https://liubang.github.io/playground/java/) | [Go](https://liubang.github.io/playground/go/)
+CI 自动生成覆盖率报告：
+
+- [C++](https://liubang.github.io/playground/cpp/)
+- [Java](https://liubang.github.io/playground/java/)
+- [Go](https://liubang.github.io/playground/go/)
 
 ## 许可证
 
-Apache License 2.0，详见 [LICENSE](./LICENSE)。
+本项目使用 [Apache License 2.0](./LICENSE)。
