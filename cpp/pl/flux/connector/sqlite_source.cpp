@@ -444,6 +444,7 @@ SourceCapabilities SQLiteSource::Capabilities() const {
 }
 
 absl::StatusOr<TableStatistics> SQLiteSource::Statistics() const {
+    constexpr size_t kMostCommonValueLimit = 8;
     if (cached_statistics_.has_value()) {
         return *cached_statistics_;
     }
@@ -493,6 +494,7 @@ absl::StatusOr<TableStatistics> SQLiteSource::Statistics() const {
             std::optional<double> distinct_values;
             std::optional<double> null_fraction;
             std::optional<double> average_width_bytes;
+            std::vector<MostCommonValue> most_common_values;
             const int column_step_rc = sqlite3_step(column_stats_or->get());
             if (column_step_rc == SQLITE_ROW) {
                 if (sqlite3_column_type(column_stats_or->get(), 0) != SQLITE_NULL) {
@@ -513,10 +515,30 @@ absl::StatusOr<TableStatistics> SQLiteSource::Statistics() const {
                     average_width_bytes = 0.0;
                 }
             }
+            auto most_common_or = prepare_statement(db_or->get(),
+                                                    absl::StrCat("SELECT ",
+                                                                 quote_identifier(column.name),
+                                                                 ", COUNT(*) FROM (",
+                                                                 query_,
+                                                                 ") AS flux_source WHERE ",
+                                                                 quote_identifier(column.name),
+                                                                 " IS NOT NULL GROUP BY ",
+                                                                 quote_identifier(column.name),
+                                                                 " ORDER BY COUNT(*) DESC LIMIT ",
+                                                                 kMostCommonValueLimit));
+            if (most_common_or.ok()) {
+                while (sqlite3_step(most_common_or->get()) == SQLITE_ROW) {
+                    most_common_values.push_back(
+                        {.value = value_from_sqlite_column(most_common_or->get(), 0).string(),
+                         .frequency =
+                             static_cast<double>(sqlite3_column_int64(most_common_or->get(), 1))});
+                }
+            }
             statistics.columns.push_back({.name = column.name,
                                           .distinct_values = distinct_values,
                                           .null_fraction = null_fraction,
-                                          .average_width_bytes = average_width_bytes});
+                                          .average_width_bytes = average_width_bytes,
+                                          .most_common_values = std::move(most_common_values)});
         }
     }
 

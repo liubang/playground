@@ -23,6 +23,7 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -176,6 +177,7 @@ Value projected_value(const ObjectValue& row,
 }
 
 TableStatistics statistics_from_rows(const std::vector<std::shared_ptr<ObjectValue>>& rows) {
+    constexpr size_t kMostCommonValueLimit = 8;
     TableStatistics statistics;
     statistics.row_count = static_cast<double>(rows.size());
     const auto schema = schema_from_rows(rows);
@@ -184,6 +186,7 @@ TableStatistics statistics_from_rows(const std::vector<std::shared_ptr<ObjectVal
         size_t null_count = 0;
         size_t non_null_count = 0;
         size_t total_width = 0;
+        std::unordered_map<std::string, size_t> frequencies;
         std::unordered_set<std::string> distinct_values;
         for (const auto& row : rows) {
             const Value* value = row == nullptr ? nullptr : row->lookup(column.name);
@@ -193,18 +196,33 @@ TableStatistics statistics_from_rows(const std::vector<std::shared_ptr<ObjectVal
             }
             const std::string encoded = value->string();
             distinct_values.insert(encoded);
+            ++frequencies[encoded];
             total_width += encoded.size();
             ++non_null_count;
         }
-        statistics.columns.push_back(
-            {.name = column.name,
-             .distinct_values = static_cast<double>(distinct_values.size()),
-             .null_fraction =
-                 rows.empty() ? 0.0
-                              : static_cast<double>(null_count) / static_cast<double>(rows.size()),
-             .average_width_bytes = non_null_count == 0 ? 0.0
-                                                        : static_cast<double>(total_width) /
-                                                              static_cast<double>(non_null_count)});
+        std::vector<MostCommonValue> most_common_values;
+        most_common_values.reserve(frequencies.size());
+        for (const auto& [value, count] : frequencies) {
+            most_common_values.push_back({.value = value, .frequency = static_cast<double>(count)});
+        }
+        std::ranges::sort(most_common_values, [](const auto& lhs, const auto& rhs) {
+            return lhs.frequency != rhs.frequency ? lhs.frequency > rhs.frequency
+                                                  : lhs.value < rhs.value;
+        });
+        if (most_common_values.size() > kMostCommonValueLimit) {
+            most_common_values.resize(kMostCommonValueLimit);
+        }
+        statistics.columns.push_back({
+            .name = column.name,
+            .distinct_values = static_cast<double>(distinct_values.size()),
+            .null_fraction =
+                rows.empty() ? 0.0
+                             : static_cast<double>(null_count) / static_cast<double>(rows.size()),
+            .average_width_bytes = non_null_count == 0 ? 0.0
+                                                       : static_cast<double>(total_width) /
+                                                             static_cast<double>(non_null_count),
+            .most_common_values = std::move(most_common_values),
+        });
     }
     return statistics;
 }
