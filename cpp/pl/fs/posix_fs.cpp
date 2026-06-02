@@ -22,6 +22,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
+#include <folly/logging/xlog.h>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>

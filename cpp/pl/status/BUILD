@@ -37,7 +37,6 @@ cc_library(
     deps = [
         "@folly//folly:expected",
         "@folly//folly:unit",
-        "@folly//folly/logging",
     ],
 )
 

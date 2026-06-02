@@ -18,8 +18,8 @@
 #include "cpp/pl/minidfs/namenode/namenode_maintenance.h"
 
 #include <algorithm>
+#include <butil/logging.h>
 #include <chrono>
-#include <folly/logging/xlog.h>
 #include <functional>
 
 #include "cpp/pl/minidfs/common/time_util.h"
@@ -93,11 +93,8 @@ pl::Result<pl::Void> NameNodeMaintenance::recover_expired_leases() {
         if (commit.hasError()) {
             return folly::makeUnexpected(commit.error());
         }
-        XLOGF(INFO,
-              "recovered expired lease {} for inode {}, readable length={}",
-              lease.lease_id,
-              lease.inode_id,
-              final_length.value());
+        LOG(INFO) << "recovered expired lease " << lease.lease_id << " for inode " << lease.inode_id
+                  << ", readable length=" << final_length.value();
     }
     return pl::Void{};
 }
@@ -170,21 +167,21 @@ void NameNodeMaintenance::run_loop() {
         if (now >= next_lease_recovery) {
             auto result = recover_expired_leases();
             if (result.hasError()) {
-                XLOGF(ERR, "lease recovery scan failed: {}", result.error().describe());
+                LOG(ERROR) << "lease recovery scan failed: " << result.error().describe();
             }
             next_lease_recovery = now + std::chrono::milliseconds(config_.lease_recovery_interval_ms);
         }
         if (now >= next_datanode_scan) {
             auto result = scan_datanodes();
             if (result.hasError()) {
-                XLOGF(ERR, "DataNode liveness scan failed: {}", result.error().describe());
+                LOG(ERROR) << "DataNode liveness scan failed: " << result.error().describe();
             }
             next_datanode_scan = now + std::chrono::milliseconds(config_.datanode_scan_interval_ms);
         }
         if (now >= next_replication_scan) {
             auto result = scan_replication();
             if (result.hasError()) {
-                XLOGF(ERR, "replication scan failed: {}", result.error().describe());
+                LOG(ERROR) << "replication scan failed: " << result.error().describe();
             }
             next_replication_scan =
                 now + std::chrono::milliseconds(config_.replication_scan_interval_ms);

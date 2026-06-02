@@ -17,8 +17,8 @@
 
 #include <brpc/channel.h>
 #include <brpc/server.h>
+#include <butil/logging.h>
 #include <fmt/format.h>
-#include <folly/logging/xlog.h>
 #include <gflags/gflags.h>
 
 #include "cpp/pl/minidfs/common/error_code.h"
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     if (FLAGS_heartbeat_interval_ms <= 0 || FLAGS_block_report_interval_ms <= 0) {
-        XLOG(FATAL, "DataNode report intervals must be positive");
+        LOG(FATAL) << "DataNode report intervals must be positive";
         return 1;
     }
 
@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
     pl::minidfs::LocalBlockStore store(store_config);
     auto init_result = store.init();
     if (init_result.hasError()) {
-        XLOGF(FATAL, "failed to initialize block store: {}", init_result.error().describe());
+        LOG(FATAL) << "failed to initialize block store: " << init_result.error().describe();
         return 1;
     }
 
@@ -79,7 +79,7 @@ int main(int argc, char* argv[]) {
     brpc::ChannelOptions channel_opts;
     channel_opts.timeout_ms = 5000;
     if (nn_channel.Init(FLAGS_namenode_addr.c_str(), &channel_opts) != 0) {
-        XLOGF(FATAL, "failed to connect to NameNode at {}", FLAGS_namenode_addr);
+        LOG(FATAL) << "failed to connect to NameNode at " << FLAGS_namenode_addr;
         return 1;
     }
 
@@ -101,16 +101,16 @@ int main(int argc, char* argv[]) {
     brpc::Controller reg_cntl;
     nn_stub.RegisterDataNode(&reg_cntl, &reg_req, &reg_resp, nullptr);
     if (reg_cntl.Failed()) {
-        XLOGF(FATAL, "RegisterDataNode RPC failed: {}", reg_cntl.ErrorText());
+        LOG(FATAL) << "RegisterDataNode RPC failed: " << reg_cntl.ErrorText();
         return 1;
     }
     if (reg_resp.status().code() != 0) {
-        XLOGF(FATAL, "RegisterDataNode failed: {}", reg_resp.status().message());
+        LOG(FATAL) << "RegisterDataNode failed: " << reg_resp.status().message();
         return 1;
     }
 
     uint64_t datanode_id = reg_resp.datanode_id();
-    XLOGF(INFO, "registered with NameNode, datanode_id={}", datanode_id);
+    LOG(INFO) << "registered with NameNode, datanode_id=" << datanode_id;
 
     // Setup heartbeat sender
     pl::minidfs::HeartbeatFunc heartbeat_func =
@@ -272,13 +272,13 @@ int main(int argc, char* argv[]) {
     // Start brpc server
     brpc::Server server;
     if (server.AddService(&data_transfer_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-        XLOG(FATAL, "failed to add DataTransferService");
+        LOG(FATAL) << "failed to add DataTransferService";
         return 1;
     }
 
     brpc::ServerOptions options;
     if (server.Start(FLAGS_port, &options) != 0) {
-        XLOGF(FATAL, "failed to start DataNode server on port {}", FLAGS_port);
+        LOG(FATAL) << "failed to start DataNode server on port " << FLAGS_port;
         return 1;
     }
 
@@ -287,11 +287,8 @@ int main(int argc, char* argv[]) {
     block_reporter.start();
     replication_worker.start();
 
-    XLOGF(INFO,
-          "MiniDFS DataNode started on port {}, datanode_id={}, storage={}",
-          FLAGS_port,
-          datanode_id,
-          FLAGS_storage_root);
+    LOG(INFO) << "MiniDFS DataNode started on port " << FLAGS_port
+              << ", datanode_id=" << datanode_id << ", storage=" << FLAGS_storage_root;
 
     server.RunUntilAskedToQuit();
 
