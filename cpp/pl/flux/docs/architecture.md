@@ -191,8 +191,8 @@ RBO 规则（按顺序应用）：
 4. Sort elimination — 移除冗余排序
 
 CBO 在 RBO 之后：
-1. 从 ConnectorMetadata 收集统计信息（行数、大小）
-2. 生成候选物理计划（如 ConnectorScan vs LocalHashJoin）
+1. 从 ConnectorMetadata 收集统计信息（行数、大小、列基数、null fraction、top-K 高频值）
+2. 生成候选物理计划（如 ConnectorScan vs LocalHashJoin，以及 gather/hash/broadcast/salted exchange）
 3. 估算代价（rows/cpu/io）
 4. 选择最低代价的方案
 

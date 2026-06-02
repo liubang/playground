@@ -17,6 +17,7 @@
 
 #include <cstdlib>
 #include <optional>
+#include <ranges>
 
 #include "cpp/pl/flux/connector/mysql_connection_pool.h"
 #include "cpp/pl/flux/connector/mysql_source.h"
@@ -129,6 +130,13 @@ TEST(MySQLSourceTest, ReportsFixtureTableStatistics) {
     EXPECT_EQ(6.0, *statistics_or->row_count);
     ASSERT_EQ(7, statistics_or->columns.size());
     EXPECT_EQ("_time", statistics_or->columns[0].name);
+    const auto host = std::ranges::find_if(
+        statistics_or->columns, [](const auto& column) { return column.name == "host"; });
+    ASSERT_NE(statistics_or->columns.end(), host);
+    const auto edge_1 = std::ranges::find_if(
+        host->most_common_values, [](const auto& value) { return value.value == "\"edge-1\""; });
+    ASSERT_NE(host->most_common_values.end(), edge_1);
+    EXPECT_EQ(2.0, edge_1->frequency);
 }
 
 TEST(MySQLSourceTest, SplitManagerBuildsNumericRangeSplitsForFixture) {

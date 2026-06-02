@@ -79,6 +79,7 @@ private:
 struct ExchangeDistributionProfile {
     std::string kind;
     std::vector<std::string> partition_keys;
+    std::vector<std::string> heavy_hitters;
     bool include_group_key = false;
     size_t partitions = 1;
 };

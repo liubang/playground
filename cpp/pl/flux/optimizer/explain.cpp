@@ -111,7 +111,13 @@ void FormatLogicalNodeDetail(const plan::PlanNode& node, std::ostringstream* out
     } else if (node.kind == plan::PlanNodeKind::Join) {
         *out << "(method=\"" << plan::JoinMethodName(node.join().method)
              << "\", on=" << plan::StringList(node.join().on) << ", build=\""
-             << plan::JoinBuildSideName(node.join().build_side) << "\")";
+             << plan::JoinBuildSideName(node.join().build_side) << "\", distribution=\""
+             << plan::JoinDistributionKindName(node.join().distribution.kind)
+             << "\", partitions=" << node.join().distribution.partitions;
+        if (!node.join().distribution.heavy_hitters.empty()) {
+            *out << ", heavy_hitters=" << plan::StringList(node.join().distribution.heavy_hitters);
+        }
+        *out << ")";
     } else if (node.kind == plan::PlanNodeKind::Exchange) {
         *out << "(kind=\"" << plan::ExchangeKindName(node.exchange().kind) << "\"";
         if (!node.exchange().partition_keys.empty()) {
@@ -446,18 +452,19 @@ std::string FormatOptimizedLogicalPlan(const std::shared_ptr<plan::PlanNode>& pl
     if (plan == nullptr) {
         return "OptimizedLogicalPlan\n<no plan>\n";
     }
-    auto optimized_or = DefaultRuleBasedOptimizer().Optimize(plan);
-    if (!optimized_or.ok()) {
-        return optimized_or.status().ToString() + "\n";
+    auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(plan);
+    if (!cbo_or.ok()) {
+        return cbo_or.status().ToString() + "\n";
     }
+    const auto& optimized = cbo_or->rbo_result;
     std::ostringstream out;
     out << "OptimizedLogicalPlan\n";
-    out << FormatLogicalPlanOnly(optimized_or->plan);
-    const auto rules = AppliedRuleNames(*optimized_or);
+    out << FormatLogicalPlanOnly(optimized.plan);
+    const auto rules = AppliedRuleNames(optimized);
     if (!rules.empty()) {
         out << "RBO(rules=" << plan::StringList(rules) << ")\n";
     }
-    if (auto summary = SourcePushdownSummary(*optimized_or); summary.has_value()) {
+    if (auto summary = SourcePushdownSummary(optimized); summary.has_value()) {
         out << *summary;
     }
     return out.str();
@@ -467,14 +474,14 @@ std::string FormatOptimizedLogicalPlanMermaid(const std::shared_ptr<plan::PlanNo
     if (plan == nullptr) {
         return "flowchart TD\n  n0[\"<no plan>\"]\n";
     }
-    auto optimized_or = DefaultRuleBasedOptimizer().Optimize(plan);
-    if (!optimized_or.ok()) {
+    auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(plan);
+    if (!cbo_or.ok()) {
         std::ostringstream out;
         out << "flowchart TD\n";
-        AppendMermaidNode("n0", optimized_or.status().ToString(), &out);
+        AppendMermaidNode("n0", cbo_or.status().ToString(), &out);
         return out.str();
     }
-    return FormatLogicalPlanMermaidOnly(optimized_or->plan);
+    return FormatLogicalPlanMermaidOnly(cbo_or->rbo_result.plan);
 }
 
 std::string FormatPhysicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
