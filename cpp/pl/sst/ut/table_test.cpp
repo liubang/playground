@@ -16,6 +16,7 @@
 // Created: 2023/06/04 22:43
 
 #include <cstdio>
+#include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
 #include <set>
 

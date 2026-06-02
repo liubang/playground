@@ -65,7 +65,7 @@ cc_library(
         ":local_block_store",
         "//cpp/pl/minidfs/common",
         "//cpp/pl/status",
-        "@folly//folly/logging",
+        "@brpc",
     ],
 )
 
@@ -77,7 +77,7 @@ cc_library(
         ":local_block_store",
         "//cpp/pl/minidfs/common",
         "//cpp/pl/status",
-        "@folly//folly/logging",
+        "@brpc",
     ],
 )
 
@@ -88,7 +88,7 @@ cc_library(
     deps = [
         ":local_block_store",
         "//cpp/pl/status",
-        "@folly//folly/logging",
+        "@brpc",
     ],
 )
 
@@ -104,7 +104,6 @@ cc_library(
         "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
         "//cpp/pl/status",
         "@brpc",
-        "@folly//folly/logging",
     ],
 )
 
@@ -122,7 +121,6 @@ cc_binary(
         "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
         "@brpc",
         "@fmt",
-        "@folly//folly/logging",
         "@gflags",
     ],
 )

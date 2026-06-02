@@ -20,10 +20,10 @@
 #include <algorithm>
 #include <brpc/channel.h>
 #include <brpc/controller.h>
+#include <butil/logging.h>
 #include <cstdint>
 #include <fcntl.h>
 #include <fmt/core.h>
-#include <folly/logging/xlog.h>
 #include <fstream>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -121,7 +121,7 @@ bool DfsClient::init() {
     options.timeout_ms = config_.rpc_timeout_ms;
     options.max_retry = config_.max_retry;
     if (namenode_channel_.Init(config_.namenode_address.c_str(), &options) != 0) {
-        XLOGF(ERR, "Failed to init channel to NameNode at {}", config_.namenode_address);
+        LOG(ERROR) << "Failed to init channel to NameNode at " << config_.namenode_address;
         return false;
     }
     return true;
@@ -813,22 +813,22 @@ Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
         dn_stub.ReadBlock(&cntl, &req, &resp, nullptr);
 
         if (cntl.Failed()) {
-            XLOGF(
-                WARN, "ReadBlock from {} failed: {}, trying next replica", addr, cntl.ErrorText());
+            LOG(WARNING) << "ReadBlock from " << addr << " failed: " << cntl.ErrorText()
+                         << ", trying next replica";
             continue;
         }
         if (resp.status().code() != 0) {
-            XLOGF(WARN,
-                  "ReadBlock from {} returned error: {}, trying next replica",
-                  addr,
-                  resp.status().message());
+            LOG(WARNING) << "ReadBlock from " << addr
+                         << " returned error: " << resp.status().message()
+                         << ", trying next replica";
             continue;
         }
 
         // Verify checksum
         uint32_t computed = compute_crc32c(resp.data().data(), resp.data().size());
         if (computed != resp.checksum()) {
-            XLOGF(WARN, "ReadBlock from {}: checksum mismatch, trying next replica", addr);
+            LOG(WARNING) << "ReadBlock from " << addr
+                         << ": checksum mismatch, trying next replica";
             continue;
         }
 
