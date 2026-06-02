@@ -262,9 +262,9 @@ TEST(CostBasedOptimizerTest, ChoosesSmallerJoinBuildSide) {
     ASSERT_EQ(plan::PlanNodeKind::Join, result_or->rbo_result.plan->kind);
     EXPECT_EQ(plan::JoinBuildSide::Left, result_or->rbo_result.plan->join().build_side);
     ASSERT_GE(result_or->alternatives.size(), 2);
-    EXPECT_EQ("local_hash_join_build_left", result_or->alternatives[0].name);
+    EXPECT_EQ("local_hash_join_build_left_gather", result_or->alternatives[0].name);
     EXPECT_TRUE(result_or->alternatives[0].chosen);
-    EXPECT_EQ("local_hash_join_build_right", result_or->alternatives[1].name);
+    EXPECT_EQ("local_hash_join_build_right_gather", result_or->alternatives[1].name);
     EXPECT_FALSE(result_or->alternatives[1].chosen);
 }
 
@@ -305,6 +305,20 @@ TEST(CostBasedOptimizerTest, UsesColumnStatisticsForManyToOneJoinCardinality) {
     ASSERT_TRUE(left_or.ok()) << left_or.status();
     ASSERT_TRUE(left_or->cost.rows.has_value());
     EXPECT_EQ(4.0, *left_or->cost.rows);
+}
+
+TEST(CostBasedOptimizerTest, PreservesRightInputStatisticsAcrossJoin) {
+    auto logical_plan =
+        plan::MakeDistinct(plan::MakeJoin(plan::MakeProject(SourceScanPlan(), {"host", "usage"}),
+                                          plan::MakeProject(SourceScanPlan(), {"host", "region"}),
+                                          {"host"}),
+                           "region");
+
+    auto result_or = DefaultCostBasedOptimizer().OptimizeWithTrace(logical_plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(result_or->cost.rows.has_value());
+    EXPECT_EQ(2.0, *result_or->cost.rows);
 }
 
 } // namespace
