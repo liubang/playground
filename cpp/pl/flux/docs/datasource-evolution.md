@@ -1486,6 +1486,24 @@ probe/build 比例明显悬殊时，广播 build side，并 round-robin 分散 p
 - runtime 覆盖相同输入的 left join 继续使用 hash repartition。
 - runtime 覆盖 `count(group(project(broadcast_join(...))))` 直接融合 partial accumulator。
 
+### Phase 26: Physical Execution Module Boundaries
+
+状态：已完成物理执行主干的职责拆分。此前 planner、operator、driver、scheduler、profile formatter 和
+查询级内存上下文集中在 `physical_executor.cpp`，后续继续扩展计划优化时容易让执行入口和实现细节
+彼此牵连。现在对外接口保持不变，内部按职责分离。
+
+已落地：
+
+- `physical_executor.cpp` 只保留 facade；`physical_planner.cpp` 承载物理计划与 operator 构造。
+- `scheduler.cpp` 独立承载 Pipeline DAG 调度、Driver 执行与 profile 采集。
+- `execution_profile.cpp` 独立承载文本、JSON、Mermaid 格式化。
+- `query_memory_context.cpp` 独立承载查询级内存预算。
+- 新增窄内部接口 `physical_executor_internal.h`，只共享 scheduler/profile 真正需要的 helper。
+
+验收：
+
+- `//cpp/pl/flux/execution:execution` 独立构建通过。
+
 ## Test Plan
 
 测试分层：
