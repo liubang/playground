@@ -40,6 +40,7 @@ cc_library(
         "//cpp/pl/utility",
         "@crc32c",
         "@folly//folly:scope_guard",
+        "@folly//folly/logging",
         "@snappy",
         "@xxhash",
         "@zstd",

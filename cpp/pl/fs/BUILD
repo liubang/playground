@@ -38,6 +38,7 @@ cc_library(
     deps = [
         "//cpp/pl/status",
         "//cpp/pl/utility",
+        "@folly//folly/logging",
     ],
 )
 

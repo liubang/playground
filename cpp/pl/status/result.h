@@ -17,8 +17,8 @@
 
 #pragma once
 
+#include <cstdio>
 #include <folly/Expected.h>
-#include <folly/logging/xlog.h>
 #include <type_traits>
 
 #include "cpp/pl/status/status.h"
@@ -30,13 +30,14 @@
 
 #define MAKE_ERROR_F(code, ...) pl::makeError((code), fmt::format(__VA_ARGS__))
 
-#define RETURN_AND_LOG_ON_ERROR(result)               \
-    do {                                              \
-        auto&& _result = (result);                    \
-        if (UNLIKELY(_result.hasError())) {           \
-            XLOGF(ERR, "error: {}", _result.error()); \
-            RETURN_ERROR(_result);                    \
-        }                                             \
+#define RETURN_AND_LOG_ON_ERROR(result)                                    \
+    do {                                                                   \
+        auto&& _result = (result);                                         \
+        if (UNLIKELY(_result.hasError())) {                                \
+            const auto _message = _result.error().describe();              \
+            std::fprintf(stderr, "error: %s\n", _message.c_str());         \
+            RETURN_ERROR(_result);                                         \
+        }                                                                  \
     } while (0)
 
 namespace pl {

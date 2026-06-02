@@ -123,7 +123,7 @@ cc_library(
         "//cpp/pl/minidfs/common",
         "//cpp/pl/minidfs/metadata:metadata_store",
         "//cpp/pl/status",
-        "@folly//folly/logging",
+        "@brpc",
     ],
 )
 
@@ -161,7 +161,6 @@ cc_binary(
         "//cpp/pl/minidfs/metadata:mysql_connection_pool",
         "//cpp/pl/minidfs/metadata:mysql_metadata_store",
         "@brpc",
-        "@folly//folly/logging",
         "@gflags",
     ],
 )

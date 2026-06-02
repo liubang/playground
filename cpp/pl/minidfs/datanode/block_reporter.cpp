@@ -17,8 +17,8 @@
 
 #include "cpp/pl/minidfs/datanode/block_reporter.h"
 
+#include <butil/logging.h>
 #include <chrono>
-#include <folly/logging/xlog.h>
 
 namespace pl::minidfs {
 
@@ -53,7 +53,7 @@ void BlockReporter::stop() {
 pl::Result<BlockReportResponse> BlockReporter::send_full_report() {
     auto blocks_result = store_->report_blocks();
     if (blocks_result.hasError()) {
-        XLOGF(ERR, "failed to enumerate blocks for report: {}", blocks_result.error().describe());
+        LOG(ERROR) << "failed to enumerate blocks for report: " << blocks_result.error().describe();
         return pl::makeError(std::move(blocks_result.error()));
     }
 
@@ -63,10 +63,8 @@ pl::Result<BlockReportResponse> BlockReporter::send_full_report() {
     };
     auto response = report_func_(config_.datanode_id, report);
     if (response.hasError()) {
-        XLOGF(WARN,
-              "block report RPC failed for datanode {}: {}",
-              config_.datanode_id,
-              response.error().describe());
+        LOG(WARNING) << "block report RPC failed for datanode " << config_.datanode_id << ": "
+                     << response.error().describe();
         return pl::makeError(std::move(response.error()));
     }
 
