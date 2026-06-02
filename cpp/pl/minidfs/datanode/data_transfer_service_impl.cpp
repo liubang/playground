@@ -20,7 +20,7 @@
 #include <brpc/channel.h>
 #include <brpc/closure_guard.h>
 #include <brpc/controller.h>
-#include <folly/logging/xlog.h>
+#include <butil/logging.h>
 
 #include "cpp/pl/minidfs/common/checksum.h"
 #include "cpp/pl/minidfs/common/error_code.h"
@@ -160,7 +160,7 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
             (void)reporter_->send_incremental_report();
         }
 
-        XLOGF(INFO, "block {}:{} finalized via pipeline", block_id, generation_stamp);
+        LOG(INFO) << "block " << block_id << ":" << generation_stamp << " finalized via pipeline";
     }
 
     fill_status(response->mutable_status(), 0);
@@ -257,11 +257,8 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
         (void)reporter_->send_incremental_report();
     }
 
-    XLOGF(INFO,
-          "block {}:{} received via transfer replication ({} bytes)",
-          block_id,
-          generation_stamp,
-          data.size());
+    LOG(INFO) << "block " << block_id << ":" << generation_stamp
+              << " received via transfer replication (" << data.size() << " bytes)";
 
     fill_status(response->mutable_status(), 0);
 }

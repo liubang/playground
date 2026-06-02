@@ -17,8 +17,8 @@
 
 #include "cpp/pl/minidfs/datanode/heartbeat_sender.h"
 
+#include <butil/logging.h>
 #include <chrono>
-#include <folly/logging/xlog.h>
 
 namespace pl::minidfs {
 
@@ -65,10 +65,8 @@ pl::Result<std::vector<HeartbeatCommand>> HeartbeatSender::send_once() {
     // Send heartbeat via the provided RPC function
     auto result = heartbeat_func_(config_.datanode_id, capacity_bytes, used_bytes, free_bytes);
     if (result.hasError()) {
-        XLOGF(WARN,
-              "heartbeat failed for datanode {}: {}",
-              config_.datanode_id,
-              result.error().describe());
+        LOG(WARNING) << "heartbeat failed for datanode " << config_.datanode_id << ": "
+                     << result.error().describe();
         return pl::makeError(std::move(result.error()));
     }
 

@@ -16,7 +16,7 @@
 // Created: 2026/05/10 18:30
 
 #include <brpc/server.h>
-#include <folly/logging/xlog.h>
+#include <butil/logging.h>
 #include <gflags/gflags.h>
 
 #include "cpp/pl/minidfs/metadata/mysql_connection_pool.h"
@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
 
     if (FLAGS_lease_recovery_interval_ms <= 0 || FLAGS_datanode_scan_interval_ms <= 0 ||
         FLAGS_replication_scan_interval_ms <= 0) {
-        XLOG(FATAL, "NameNode maintenance intervals must be positive");
+        LOG(FATAL) << "NameNode maintenance intervals must be positive";
         return 1;
     }
 
@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
 
     auto pool_result = pl::minidfs::MySQLConnectionPool::create(mysql_config);
     if (pool_result.hasError()) {
-        XLOGF(FATAL, "failed to initialize MySQL pool: {}", pool_result.error().describe());
+        LOG(FATAL) << "failed to initialize MySQL pool: " << pool_result.error().describe();
         return 1;
     }
     auto pool = std::move(pool_result.value());
@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
     // Create metadata store
     auto store_result = pl::minidfs::MySQLMetadataStore::create(pool);
     if (store_result.hasError()) {
-        XLOGF(FATAL, "failed to create metadata store: {}", store_result.error().describe());
+        LOG(FATAL) << "failed to create metadata store: " << store_result.error().describe();
         return 1;
     }
     auto& metadata_store = *store_result.value();
@@ -106,25 +106,25 @@ int main(int argc, char* argv[]) {
     brpc::Server server;
 
     if (server.AddService(&namenode_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-        XLOG(FATAL, "failed to add NameNodeService");
+        LOG(FATAL) << "failed to add NameNodeService";
         return 1;
     }
     if (server.AddService(&datanode_protocol_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-        XLOG(FATAL, "failed to add DataNodeProtocolService");
+        LOG(FATAL) << "failed to add DataNodeProtocolService";
         return 1;
     }
     if (server.AddService(&admin_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-        XLOG(FATAL, "failed to add AdminService");
+        LOG(FATAL) << "failed to add AdminService";
         return 1;
     }
 
     brpc::ServerOptions options;
     if (server.Start(FLAGS_port, &options) != 0) {
-        XLOGF(FATAL, "failed to start server on port {}", FLAGS_port);
+        LOG(FATAL) << "failed to start server on port " << FLAGS_port;
         return 1;
     }
 
-    XLOGF(INFO, "MiniDFS NameNode started on port {}", FLAGS_port);
+    LOG(INFO) << "MiniDFS NameNode started on port " << FLAGS_port;
     maintenance.start();
     server.RunUntilAskedToQuit();
     maintenance.stop();

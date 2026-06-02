@@ -34,6 +34,7 @@ load(
             "//cpp/pl/log:logger",
             "//cpp/pl/random",
             "//cpp/pl/sst:sstable",
+            "@folly//folly/logging",
             "@googletest//:gtest_main",
         ],
     )
