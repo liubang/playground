@@ -110,6 +110,9 @@ TEST(SQLiteSourceTest, ReportsTableStatistics) {
     EXPECT_EQ(0.0, *statistics_or->columns[1].null_fraction);
     EXPECT_TRUE(statistics_or->columns[1].average_width_bytes.has_value());
     EXPECT_GT(*statistics_or->columns[1].average_width_bytes, 0.0);
+    ASSERT_FALSE(statistics_or->columns[1].most_common_values.empty());
+    EXPECT_EQ("\"edge-1\"", statistics_or->columns[1].most_common_values[0].value);
+    EXPECT_EQ(2.0, statistics_or->columns[1].most_common_values[0].frequency);
 }
 
 TEST(SQLiteSourceTest, RuntimeMetadataSplitAndPageSourceScansTable) {

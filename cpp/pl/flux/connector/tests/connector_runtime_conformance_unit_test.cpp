@@ -107,6 +107,9 @@ TEST(ConnectorRuntimeConformanceTest, MemoryRuntimeExposesMetadataSplitsAndMulti
     EXPECT_EQ(3.0, *statistics_or->columns[0].distinct_values);
     EXPECT_EQ(0.0, *statistics_or->columns[0].null_fraction);
     EXPECT_GT(*statistics_or->columns[0].average_width_bytes, 0.0);
+    ASSERT_EQ(3, statistics_or->columns[0].most_common_values.size());
+    EXPECT_EQ("\"edge-1\"", statistics_or->columns[0].most_common_values[0].value);
+    EXPECT_EQ(1.0, statistics_or->columns[0].most_common_values[0].frequency);
 
     auto pages_or = collect_pages(*runtime, spec, {});
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();

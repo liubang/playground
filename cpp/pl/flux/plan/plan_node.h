@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -160,12 +161,27 @@ enum class JoinBuildSide {
     Right,
 };
 
+enum class JoinDistributionKind {
+    Auto,
+    Gather,
+    Hash,
+    Broadcast,
+    Salted,
+};
+
+struct JoinDistributionSpec {
+    JoinDistributionKind kind = JoinDistributionKind::Auto;
+    size_t partitions = 1;
+    std::vector<std::string> heavy_hitters{};
+};
+
 struct JoinSpec {
     std::vector<std::string> on;
     std::string left_name = "left";
     std::string right_name = "right";
     JoinMethod method = JoinMethod::Inner;
     JoinBuildSide build_side = JoinBuildSide::Right;
+    JoinDistributionSpec distribution{};
 };
 
 enum class ExchangeKind {
@@ -409,6 +425,7 @@ inline std::shared_ptr<PlanNode> MakeJoin(std::shared_ptr<PlanNode> left,
         .right_name = std::move(right_name),
         .method = method,
         .build_side = JoinBuildSide::Right,
+        .distribution = {},
     };
     return node;
 }
@@ -446,6 +463,22 @@ inline std::string JoinBuildSideName(JoinBuildSide side) {
             return "right";
     }
     return "right";
+}
+
+inline std::string JoinDistributionKindName(JoinDistributionKind kind) {
+    switch (kind) {
+        case JoinDistributionKind::Auto:
+            return "auto";
+        case JoinDistributionKind::Gather:
+            return "gather";
+        case JoinDistributionKind::Hash:
+            return "hash";
+        case JoinDistributionKind::Broadcast:
+            return "broadcast";
+        case JoinDistributionKind::Salted:
+            return "salted";
+    }
+    return "auto";
 }
 
 inline std::string ExchangeKindName(ExchangeKind kind) {
@@ -577,7 +610,13 @@ inline void FormatNodeDetail(const PlanNode& node, std::ostringstream* out) {
     } else if (node.kind == PlanNodeKind::Join) {
         const auto& join = node.join();
         *out << "(method=\"" << JoinMethodName(join.method) << "\", on=" << StringList(join.on)
-             << ", build=\"" << JoinBuildSideName(join.build_side) << "\")";
+             << ", build=\"" << JoinBuildSideName(join.build_side) << "\", distribution=\""
+             << JoinDistributionKindName(join.distribution.kind)
+             << "\", partitions=" << join.distribution.partitions;
+        if (!join.distribution.heavy_hitters.empty()) {
+            *out << ", heavy_hitters=" << StringList(join.distribution.heavy_hitters);
+        }
+        *out << ")";
     } else if (node.kind == PlanNodeKind::Exchange) {
         const auto& exchange = node.exchange();
         *out << "(kind=\"" << ExchangeKindName(exchange.kind) << "\"";
