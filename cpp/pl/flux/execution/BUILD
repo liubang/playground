@@ -28,8 +28,12 @@ cc_library(
     name = "execution",
     srcs = [
         "accumulator.cpp",
+        "execution_profile.cpp",
         "materializer.cpp",
         "physical_executor.cpp",
+        "physical_planner.cpp",
+        "query_memory_context.cpp",
+        "scheduler.cpp",
         "task_executor.cpp",
     ],
     hdrs = [
@@ -37,6 +41,7 @@ cc_library(
         "materializer.h",
         "page_budget.h",
         "physical_executor.h",
+        "physical_executor_internal.h",
         "task_executor.h",
     ],
     copts = COPTS,
