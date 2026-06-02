@@ -146,7 +146,7 @@ bazel build //cpp/pl/flux/contrib/lsp:flux-ls
 | `connector/`                  | 数据源连接器（SQLite、MySQL） |
 | `optimizer/`                  | RBO + CBO 查询优化         |
 | `plan/`                       | 逻辑/物理计划 IR           |
-| `execution/`                  | Pipeline 物理执行引擎      |
+| `execution/`                  | 物理计划、Pipeline 调度、执行 profile |
 | `cli/`                        | CLI、REPL、输出格式        |
 | `contrib/lsp/`                | Language Server             |
 | `benchmark/`                  | 性能基准测试               |

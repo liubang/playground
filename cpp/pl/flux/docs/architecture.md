@@ -17,7 +17,7 @@ Flux 是 InfluxData 设计的数据查询与处理语言。本项目实现了 Fl
 | 数据源 | InfluxDB | SQLite、MySQL、内存 |
 | 优化器 | 无独立优化器 | RBO + CBO，支持 predicate/projection/limit pushdown |
 | 分布式 | 无 | 无（单机多线程） |
-| 语言覆盖 | 完整 | 子集（无 testcase、部分类型语法） |
+| 语言覆盖 | 完整 | 子集（支持 testcase 基础语义、部分类型语法） |
 
 ## Architecture
 
@@ -109,7 +109,11 @@ graph LR
 
 | 模块 | 文件 | 职责 |
 |------|------|------|
-| PhysicalExecutor | `physical_executor.h` | Pipeline/Operator/Driver/Scheduler 完整执行框架 |
+| PhysicalExecutor | `physical_executor.cpp` | 对外执行 facade：普通执行与带 profile 执行 |
+| PhysicalPlanner | `physical_planner.cpp` | 逻辑计划到 Pipeline/Operator/Driver 的物理计划构造 |
+| Scheduler | `scheduler.cpp` | Pipeline DAG 调度、Driver 执行与 profile 采集 |
+| ExecutionProfile | `execution_profile.cpp` | Pipeline plan 与执行 profile 的文本、JSON、Mermaid 格式化 |
+| QueryMemoryContext | `query_memory_context.cpp` | 查询级内存预算、reserve/release 与 peak tracking |
 | TaskExecutor | `task_executor.h` | 线程池：并行 driver 执行 |
 | Accumulator | `accumulator.h` | 流式算子：Group、Distinct、Aggregate（Partial/Final） |
 | Materializer | `materializer.h` | lazy table → materialized table 转换 |
