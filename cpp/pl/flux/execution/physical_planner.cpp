@@ -1206,6 +1206,19 @@ ExchangeDistributionProfile BroadcastDistribution(size_t partitions) {
     };
 }
 
+ExchangeDistributionProfile SaltedDistribution(std::vector<std::string> partition_keys,
+                                               std::vector<std::string> heavy_hitters,
+                                               bool build_side,
+                                               size_t partitions) {
+    return ExchangeDistributionProfile{
+        .kind = build_side ? "salted_build" : "salted_probe",
+        .partition_keys = std::move(partition_keys),
+        .heavy_hitters = std::move(heavy_hitters),
+        .include_group_key = true,
+        .partitions = partitions,
+    };
+}
+
 class ExchangeSinkOperator final : public Operator {
 public:
     ExchangeSinkOperator(std::unique_ptr<Operator> input, std::shared_ptr<ExchangeBuffer> buffer)
@@ -1324,6 +1337,12 @@ public:
         if (distribution_.kind == "round_robin") {
             return "RoundRobinPartitionExchangeSinkOperator";
         }
+        if (distribution_.kind == "salted_build") {
+            return "SaltedBuildExchangeSinkOperator";
+        }
+        if (distribution_.kind == "salted_probe") {
+            return "SaltedProbeExchangeSinkOperator";
+        }
         return "HashPartitionExchangeSinkOperator";
     }
 
@@ -1412,7 +1431,23 @@ public:
                     append(next_partition_++ % buffers_.size());
                     continue;
                 }
-                if (distribution_.kind != "hash") {
+                auto row_key = exchange_partition_key(*row, distribution_.partition_keys);
+                const bool heavy_hitter =
+                    row_key.has_value() &&
+                    std::ranges::find(distribution_.heavy_hitters, *row_key) !=
+                        distribution_.heavy_hitters.end();
+                if (distribution_.kind == "salted_build" && heavy_hitter) {
+                    for (size_t partition = 0; partition < buffers_.size(); ++partition) {
+                        append(partition);
+                    }
+                    continue;
+                }
+                if (distribution_.kind == "salted_probe" && heavy_hitter) {
+                    append(next_partition_++ % buffers_.size());
+                    continue;
+                }
+                if (distribution_.kind != "hash" && distribution_.kind != "salted_build" &&
+                    distribution_.kind != "salted_probe") {
                     return absl::InvalidArgumentError(absl::StrCat(
                         "unsupported partitioned exchange distribution: ", distribution_.kind));
                 }
@@ -2223,48 +2258,43 @@ struct LocalHashJoinPartitionStrategy {
 
 LocalHashJoinPartitionStrategy ChooseLocalHashJoinPartitionStrategy(
     const UnaryWrappedJoinPlan& wrapped_join) {
-    constexpr double kMinPartitionedRows = 8192.0;
-    constexpr double kTargetRowsPerPartition = 4096.0;
-    constexpr double kMaxBroadcastBuildRows = 1024.0;
-    constexpr double kMinBroadcastProbeRows = 8192.0;
-    constexpr double kMinBroadcastProbeToBuildRatio = 8.0;
-    constexpr size_t kMaxPartitions = 8;
     const auto& join = wrapped_join.join;
     if (!CanPartitionUnaryWrappedJoin(wrapped_join) || join == nullptr ||
         join->kind != plan::PlanNodeKind::Join || join->inputs.size() != 2 ||
         join->inputs[0] == nullptr || join->inputs[1] == nullptr || join->join().on.empty()) {
         return {};
     }
-    const auto left_rows = EstimateRowsForPlan(join->inputs[0]);
-    const auto right_rows = EstimateRowsForPlan(join->inputs[1]);
-    if (!left_rows.has_value() || !right_rows.has_value()) {
+    const auto& distribution = join->join().distribution;
+    if (distribution.partitions <= 1 || distribution.kind == plan::JoinDistributionKind::Auto ||
+        distribution.kind == plan::JoinDistributionKind::Gather) {
         return {};
     }
-    const double input_rows = *left_rows + *right_rows;
-    if (input_rows < kMinPartitionedRows) {
-        return {};
-    }
-    const size_t partitions = std::min(
-        kMaxPartitions,
-        std::max<size_t>(2, static_cast<size_t>(std::ceil(input_rows / kTargetRowsPerPartition))));
     const bool build_left = join->join().build_side == plan::JoinBuildSide::Left;
-    const double build_rows = build_left ? *left_rows : *right_rows;
-    const double probe_rows = build_left ? *right_rows : *left_rows;
-    if (join->join().method == plan::JoinMethod::Inner && build_rows > 0.0 &&
-        build_rows <= kMaxBroadcastBuildRows && probe_rows >= kMinBroadcastProbeRows &&
-        probe_rows >= build_rows * kMinBroadcastProbeToBuildRatio) {
-        const auto broadcast = BroadcastDistribution(partitions);
-        const auto round_robin = RoundRobinDistribution(partitions);
+    if (distribution.kind == plan::JoinDistributionKind::Broadcast) {
+        const auto broadcast = BroadcastDistribution(distribution.partitions);
+        const auto round_robin = RoundRobinDistribution(distribution.partitions);
         return LocalHashJoinPartitionStrategy{
-            .partitions = partitions,
+            .partitions = distribution.partitions,
             .left = build_left ? broadcast : round_robin,
             .right = build_left ? round_robin : broadcast,
             .output = round_robin,
         };
     }
-    const auto hash = HashDistribution(join->join().on, true, partitions);
+    if (distribution.kind == plan::JoinDistributionKind::Salted) {
+        const auto build = SaltedDistribution(
+            join->join().on, distribution.heavy_hitters, true, distribution.partitions);
+        const auto probe = SaltedDistribution(
+            join->join().on, distribution.heavy_hitters, false, distribution.partitions);
+        return LocalHashJoinPartitionStrategy{
+            .partitions = distribution.partitions,
+            .left = build_left ? build : probe,
+            .right = build_left ? probe : build,
+            .output = RoundRobinDistribution(distribution.partitions),
+        };
+    }
+    const auto hash = HashDistribution(join->join().on, true, distribution.partitions);
     return LocalHashJoinPartitionStrategy{
-        .partitions = partitions,
+        .partitions = distribution.partitions,
         .left = hash,
         .right = hash,
         .output = hash,
