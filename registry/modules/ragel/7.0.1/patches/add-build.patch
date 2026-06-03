@@ -1,0 +1,203 @@
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -0,0 +1,200 @@
++# Copyright (c) 2026 The Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      https://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++# Authors: liubang (it.liubang@gmail.com)
++
++package(default_visibility = ["//visibility:public"])
++
++# ============================================================================
++# Generated config/version headers
++# ============================================================================
++
++genrule(
++    name = "gen_config_h",
++    outs = ["src/config.h"],
++    cmd = "\n".join([
++        "cat > $@ << 'EOF'",
++        "#ifndef _CONFIG_H",
++        "#define _CONFIG_H",
++        "#define HAVE_DLFCN_H 1",
++        "#define HAVE_INTTYPES_H 1",
++        "#define HAVE_MEMORY_H 1",
++        "#define HAVE_STDINT_H 1",
++        "#define HAVE_STDLIB_H 1",
++        "#define HAVE_STRINGS_H 1",
++        "#define HAVE_STRING_H 1",
++        "#define HAVE_SYS_MMAN_H 1",
++        "#define HAVE_SYS_STAT_H 1",
++        "#define HAVE_SYS_TYPES_H 1",
++        "#define HAVE_SYS_WAIT_H 1",
++        "#define HAVE_UNISTD_H 1",
++        "#define SIZEOF_INT 4",
++        "#define SIZEOF_LONG 8",
++        "#define SIZEOF_UNSIGNED_LONG 8",
++        "#define SIZEOF_UNSIGNED_LONG_LONG 8",
++        "#define SIZEOF_VOID_P 8",
++        "#define STDC_HEADERS 1",
++        '#define PACKAGE "ragel"',
++        '#define PACKAGE_BUGREPORT ""',
++        '#define PACKAGE_NAME "ragel"',
++        '#define PACKAGE_STRING "ragel 7.0.1"',
++        '#define PACKAGE_TARNAME "ragel"',
++        '#define PACKAGE_URL ""',
++        '#define PACKAGE_VERSION "7.0.1"',
++        '#define VERSION "7.0.1"',
++        "#endif",
++        "EOF",
++    ]),
++)
++
++genrule(
++    name = "gen_version_h",
++    outs = ["src/version.h"],
++    cmd = "\n".join([
++        "cat > $@ << 'EOF'",
++        '#define RAGEL_VERSION "7.0.1"',
++        '#define RAGEL_PUBDATE "November 2020"',
++        "EOF",
++    ]),
++)
++
++# ============================================================================
++# libragel -- ragel core library
++# ============================================================================
++
++cc_library(
++    name = "libragel",
++    srcs = [
++        "src/inputdata.cc",
++        "src/load.cc",
++        "src/longest.cc",
++        "src/parsedata.cc",
++        "src/parsetree.cc",
++        "src/reducer.cc",
++    ],
++    hdrs = [
++        "src/config.h",
++        "src/inputdata.h",
++        "src/load.h",
++        "src/parsedata.h",
++        "src/parsetree.h",
++        "src/pcheck.h",
++        "src/reducer.h",
++        "src/rlscan.h",
++        "src/version.h",
++    ],
++    copts = [
++        "-w",
++        "-DBINDIR=\\\"\\\"",
++    ],
++    strip_include_prefix = "src",
++    deps = [
++        "@colm//:aapl",
++        "@colm//:colm_hdrs",
++        "@colm//:libcolm",
++        "@colm//:libfsm",
++    ],
++)
++
++# ============================================================================
++# Generate ragel parser from rlparse.lm using colm
++# ============================================================================
++
++genrule(
++    name = "gen_ragel_parse",
++    srcs = [
++        "src/ragel.lm",
++        "src/rlparse.lm",
++        "src/rlreduce.lm",
++    ],
++    outs = [
++        "src/parse.c",
++        "src/rlreduce.cc",
++    ],
++    cmd = " && ".join([
++        "COLM=\"$$(cd $$(dirname $(location @colm//:colm)) && pwd)/$$(basename $(location @colm//:colm))\"",
++        "SRCDIR=\"$$(cd $$(dirname $(location src/rlparse.lm)) && pwd)\"",
++        "OUTDIR=$$(dirname $(location src/parse.c))",
++        "mkdir -p $$OUTDIR",
++        "cd $$OUTDIR && \"$$COLM\" -I \"$$SRCDIR\" -c -b rlparseC -p parse.c -m rlreduce.cc \"$$SRCDIR/rlparse.lm\"",
++    ]),
++    tools = ["@colm//:colm"],
++)
++
++# ============================================================================
++# ragel binary (frontend: parses .rl, builds FSM, outputs intermediate)
++# ============================================================================
++
++cc_binary(
++    name = "ragel",
++    srcs = [
++        "src/main.cc",
++        "src/parse.c",
++        "src/rlreduce.cc",
++    ],
++    copts = ["-w"],
++    deps = [
++        ":libragel",
++        "@colm//:colm_hdrs",
++        "@colm//:libcolm",
++        "@colm//:libfsm",
++    ],
++)
++
++# ============================================================================
++# Generate ragel-c parser from host-c/rlparse.lm using colm
++# ============================================================================
++
++genrule(
++    name = "gen_ragel_c_parse",
++    srcs = [
++        "src/host-c/rlparse.lm",
++        "src/ragel.lm",
++        "src/rlreduce.lm",
++    ],
++    outs = [
++        "src/host-c/rlparse.c",
++        "src/host-c/rlreduce.cc",
++    ],
++    cmd = " && ".join([
++        "COLM=\"$$(cd $$(dirname $(location @colm//:colm)) && pwd)/$$(basename $(location @colm//:colm))\"",
++        "SRCDIR=\"$$(cd $$(dirname $(location src/ragel.lm)) && pwd)\"",
++        "HOSTDIR=\"$$(cd $$(dirname $(location src/host-c/rlparse.lm)) && pwd)\"",
++        "OUTDIR=$$(dirname $(location src/host-c/rlparse.c))",
++        "mkdir -p $$OUTDIR",
++        "cd $$OUTDIR && \"$$COLM\" -I \"$$SRCDIR\" -c -b rlparseC -p rlparse.c -m rlreduce.cc \"$$HOSTDIR/rlparse.lm\"",
++    ]),
++    tools = ["@colm//:colm"],
++)
++
++# ============================================================================
++# ragel-c binary (C/C++ code generation backend)
++# ============================================================================
++
++cc_binary(
++    name = "ragel-c",
++    srcs = [
++        "src/host-c/main.cc",
++        "src/host-c/rlhc.c",
++        "src/host-c/rlparse.c",
++        "src/host-c/rlreduce.cc",
++    ],
++    copts = ["-w"],
++    deps = [
++        ":libragel",
++        "@colm//:colm_hdrs",
++        "@colm//:libcolm",
++        "@colm//:libfsm",
++    ],
++)
