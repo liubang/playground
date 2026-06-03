@@ -196,6 +196,10 @@ use_repo(flex, "flex")
 
 register_toolchains("@flex//:toolchain")
 
+# ragel (depends on colm)
+bazel_dep(name = "colm", version = "0.14.2")
+bazel_dep(name = "ragel", version = "7.0.1")
+
 ###################################################################################################
 # for java
 ###################################################################################################

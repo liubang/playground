@@ -1,0 +1,9 @@
+{
+  "url": "https://www.colm.net/files/ragel/ragel-7.0.1.tar.gz",
+  "strip_prefix": "ragel-7.0.1",
+  "integrity": "sha256-Q3XWZoBmGf/8GcvE96gzqRRq6tuGrUBPGsFCiHw3t4o=",
+  "patch_strip": 1,
+  "patches": {
+    "add-build.patch": "sha256-VCO9sHCZzYmnuu8dgrtIiljzfJ2Lves/f3WuKo9C9dM="
+  }
+}

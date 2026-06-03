@@ -1,0 +1,371 @@
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -0,0 +1,368 @@
++# Copyright (c) 2026 The Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      https://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++# Authors: liubang (it.liubang@gmail.com)
++
++package(default_visibility = ["//visibility:public"])
++
++# ============================================================================
++# Header-only aapl library
++# ============================================================================
++
++cc_library(
++    name = "aapl",
++    hdrs = glob(["src/aapl/*.h"]),
++    strip_include_prefix = "src/aapl",
++)
++
++# ============================================================================
++# Public colm headers — exposed with "colm/" prefix for external consumers
++# (C runtime uses #include <colm/xxx.h>)
++# ============================================================================
++
++cc_library(
++    name = "colm_hdrs",
++    hdrs = glob(["src/*.h"], exclude = [
++        "src/config.h.in",
++        "src/defs.h.in",
++    ]),
++    include_prefix = "colm",
++    strip_include_prefix = "src",
++    deps = [":aapl"],
++)
++
++# ============================================================================
++# Internal colm headers — bare include path for internal code
++# (C++ compiler code uses #include "compiler.h", #include "config.h", etc.)
++# ============================================================================
++
++cc_library(
++    name = "colm_hdrs_internal",
++    hdrs = glob(["src/*.h"], exclude = [
++        "src/config.h.in",
++        "src/defs.h.in",
++    ]),
++    strip_include_prefix = "src",
++    deps = [":aapl"],
++)
++
++# ============================================================================
++# libfsm — FSM construction + code generation backends
++# (sources use #include "config.h" which resolves to src/config.h via
++#  colm_hdrs_internal, and #include "codegen.h" etc. via strip_include_prefix)
++# ============================================================================
++
++cc_library(
++    name = "libfsm",
++    srcs = [
++        "src/libfsm/actexp.cc",
++        "src/libfsm/actloop.cc",
++        "src/libfsm/allocgen.cc",
++        "src/libfsm/asm.cc",
++        "src/libfsm/binary.cc",
++        "src/libfsm/binbreak.cc",
++        "src/libfsm/bingoto.cc",
++        "src/libfsm/binvar.cc",
++        "src/libfsm/codegen.cc",
++        "src/libfsm/common.cc",
++        "src/libfsm/dot.cc",
++        "src/libfsm/flat.cc",
++        "src/libfsm/flatbreak.cc",
++        "src/libfsm/flatgoto.cc",
++        "src/libfsm/flatvar.cc",
++        "src/libfsm/fsmap.cc",
++        "src/libfsm/fsmattach.cc",
++        "src/libfsm/fsmbase.cc",
++        "src/libfsm/fsmcond.cc",
++        "src/libfsm/fsmgraph.cc",
++        "src/libfsm/fsmmin.cc",
++        "src/libfsm/fsmnfa.cc",
++        "src/libfsm/fsmstate.cc",
++        "src/libfsm/gendata.cc",
++        "src/libfsm/goto.cc",
++        "src/libfsm/gotoexp.cc",
++        "src/libfsm/gotoloop.cc",
++        "src/libfsm/idbase.cc",
++        "src/libfsm/ipgoto.cc",
++        "src/libfsm/redfsm.cc",
++        "src/libfsm/switch.cc",
++        "src/libfsm/switchbreak.cc",
++        "src/libfsm/switchgoto.cc",
++        "src/libfsm/switchvar.cc",
++        "src/libfsm/tables.cc",
++        "src/libfsm/tabbreak.cc",
++        "src/libfsm/tabgoto.cc",
++        "src/libfsm/tabvar.cc",
++    ],
++    hdrs = glob(["src/libfsm/*.h"]),
++    copts = ["-w"],
++    include_prefix = "libfsm",
++    strip_include_prefix = "src/libfsm",
++    deps = [
++        ":aapl",
++        ":colm_hdrs_internal",
++    ],
++)
++
++# ============================================================================
++# libcolm — C runtime library
++# (sources use #include <colm/pool.h> style)
++# ============================================================================
++
++cc_library(
++    name = "libcolm",
++    srcs = [
++        "src/bytecode.c",
++        "src/codevect.c",
++        "src/commit.c",
++        "src/debug.c",
++        "src/input.c",
++        "src/iter.c",
++        "src/list.c",
++        "src/map.c",
++        "src/pdarun.c",
++        "src/pool.c",
++        "src/print.c",
++        "src/program.c",
++        "src/stream.c",
++        "src/string.c",
++        "src/struct.c",
++        "src/tree.c",
++    ],
++    copts = ["-w"],
++    deps = [":colm_hdrs"],
++)
++
++# ============================================================================
++# libprog — colm compiler engine (C++ sources)
++# (sources use #include "compiler.h", #include "pdarun.h" etc.)
++# ============================================================================
++
++cc_library(
++    name = "libprog",
++    srcs = [
++        "src/closure.cc",
++        "src/codegen.cc",
++        "src/compiler.cc",
++        "src/ctinput.cc",
++        "src/declare.cc",
++        "src/dotgen.cc",
++        "src/exports.cc",
++        "src/fsmap.cc",
++        "src/fsmattach.cc",
++        "src/fsmbase.cc",
++        "src/fsmcodegen.cc",
++        "src/fsmexec.cc",
++        "src/fsmgraph.cc",
++        "src/fsmmin.cc",
++        "src/fsmstate.cc",
++        "src/lookup.cc",
++        "src/parser.cc",
++        "src/parsetree.cc",
++        "src/pcheck.cc",
++        "src/pdabuild.cc",
++        "src/pdacodegen.cc",
++        "src/pdagraph.cc",
++        "src/redbuild.cc",
++        "src/redfsm.cc",
++        "src/reduce.cc",
++        "src/resolve.cc",
++        "src/synthesis.cc",
++    ],
++    copts = [
++        "-w",
++        '-DPREFIX=""',
++    ],
++    deps = [
++        ":colm_hdrs_internal",
++        ":libcolm",
++    ],
++)
++
++# ============================================================================
++# Bootstrap Stage 0: hardcoded grammar via C++ constructors
++# ============================================================================
++
++cc_binary(
++    name = "bootstrap0",
++    srcs = [
++        "src/consinit.cc",
++        "src/consinit.h",
++        "src/main.cc",
++    ],
++    copts = [
++        "-w",
++        "-DCONS_INIT",
++        '-DPREFIX=""',
++    ],
++    deps = [
++        ":colm_hdrs_internal",
++        ":libcolm",
++        ":libprog",
++    ],
++)
++
++# ============================================================================
++# Bootstrap Stage 1: bootstrap0 processes "no-input" → parse1.c, if1.h, if1.cc
++# ============================================================================
++
++genrule(
++    name = "gen_stage1",
++    srcs = [],
++    outs = [
++        "gen/parse1.c",
++        "gen/if1.h",
++        "gen/if1.cc",
++    ],
++    cmd = " && ".join([
++        "COLM=\"$$(cd $$(dirname $(location :bootstrap0)) && pwd)/$$(basename $(location :bootstrap0))\"",
++        "mkdir -p $(@D)/gen",
++        "cd $(@D) && \"$$COLM\" -c -p gen/parse1.c -e gen/if1.h -x gen/if1.cc no-input",
++    ]),
++    tools = [":bootstrap0"],
++)
++
++cc_binary(
++    name = "bootstrap1",
++    srcs = [
++        "gen/if1.cc",
++        "gen/if1.h",
++        "gen/parse1.c",
++        "src/loadinit.cc",
++        "src/loadinit.h",
++        "src/main.cc",
++    ],
++    copts = [
++        "-w",
++        "-DLOAD_INIT",
++        '-DPREFIX=""',
++    ],
++    deps = [
++        ":colm_hdrs_internal",
++        ":libcolm",
++        ":libprog",
++    ],
++)
++
++# ============================================================================
++# Bootstrap Stage 2: bootstrap1 processes colm.lm → parse2.c, if2.h, if2.cc
++# ============================================================================
++
++genrule(
++    name = "gen_stage2",
++    srcs = ["src/colm.lm"],
++    outs = [
++        "gen/parse2.c",
++        "gen/if2.h",
++        "gen/if2.cc",
++    ],
++    cmd = " && ".join([
++        "COLM=\"$$(cd $$(dirname $(location :bootstrap1)) && pwd)/$$(basename $(location :bootstrap1))\"",
++        "SRC=\"$$(cd $$(dirname $(location src/colm.lm)) && pwd)/$$(basename $(location src/colm.lm))\"",
++        "mkdir -p $(@D)/gen",
++        "cd $(@D) && \"$$COLM\" -c -p gen/parse2.c -e gen/if2.h -x gen/if2.cc \"$$SRC\"",
++    ]),
++    tools = [":bootstrap1"],
++)
++
++# loadfinal.cc is #include'd (not compiled separately) by loadboot2.cc and loadcolm.cc
++cc_library(
++    name = "loadfinal_textual",
++    textual_hdrs = [
++        "src/loadfinal.cc",
++        "src/loadfinal.h",
++    ],
++    deps = [":colm_hdrs_internal"],
++)
++
++cc_binary(
++    name = "bootstrap2",
++    srcs = [
++        "gen/if2.cc",
++        "gen/if2.h",
++        "gen/parse2.c",
++        "src/loadboot2.cc",
++        "src/main.cc",
++    ],
++    copts = [
++        "-w",
++        "-DLOAD_COLM",
++        '-DPREFIX=""',
++    ],
++    deps = [
++        ":colm_hdrs_internal",
++        ":libcolm",
++        ":libprog",
++        ":loadfinal_textual",
++    ],
++)
++
++# ============================================================================
++# Bootstrap Stage 3: bootstrap2 processes prog.lm → parse3.c, if3.h, if3.cc
++# ============================================================================
++
++genrule(
++    name = "gen_stage3",
++    srcs = [
++        "src/colm.lm",
++        "src/prog.lm",
++    ],
++    outs = [
++        "gen/parse3.c",
++        "gen/if3.h",
++        "gen/if3.cc",
++    ],
++    cmd = " && ".join([
++        "COLM=\"$$(cd $$(dirname $(location :bootstrap2)) && pwd)/$$(basename $(location :bootstrap2))\"",
++        "SRCDIR=\"$$(cd $$(dirname $(location src/prog.lm)) && pwd)\"",
++        "mkdir -p $(@D)/gen",
++        "cd $(@D) && \"$$COLM\" -I \"$$SRCDIR\" -c -p gen/parse3.c -e gen/if3.h -x gen/if3.cc \"$$SRCDIR/prog.lm\"",
++    ]),
++    tools = [":bootstrap2"],
++)
++
++# ============================================================================
++# Final colm binary
++# ============================================================================
++
++cc_binary(
++    name = "colm",
++    srcs = [
++        "gen/if3.cc",
++        "gen/if3.h",
++        "gen/parse3.c",
++        "src/loadcolm.cc",
++        "src/main.cc",
++    ],
++    copts = [
++        "-w",
++        "-DLOAD_COLM",
++        '-DPREFIX=""',
++    ],
++    deps = [
++        ":colm_hdrs_internal",
++        ":libcolm",
++        ":libprog",
++        ":loadfinal_textual",
++    ],
++)
++
++# ============================================================================
++# Data files (cgil .lm files for ragel backends)
++# ============================================================================
++
++filegroup(
++    name = "share",
++    srcs = glob(["src/cgil/*.lm"]),
++)

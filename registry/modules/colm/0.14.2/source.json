@@ -1,0 +1,9 @@
+{
+  "url": "https://www.colm.net/files/colm/colm-0.14.2.tar.gz",
+  "strip_prefix": "colm-0.14.2",
+  "integrity": "sha256-udXf6Nh0zNvm0ftIkIPVSo7y2ddOpT1PdCWku8LRyWU=",
+  "patch_strip": 1,
+  "patches": {
+    "add-build.patch": "sha256-ZfPFbyu8s6ln/stX2seQv1Dw78CgiHHQJbU24MLQ2J4="
+  }
+}

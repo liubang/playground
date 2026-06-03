@@ -16,6 +16,7 @@
 # Created: 2026/05/10 23:13
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("//bazel:ragel.bzl", "ragel")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",
@@ -24,11 +25,22 @@ load(
 
 package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
 
+ragel(
+    name = "scanner_generated",
+    src = "scanner.rl",
+    out = "scanner_generated.cc",
+    data = ["unicode.rl"],
+    ragel_options = [
+        "-I",
+        "cpp/pl/flux",
+    ],
+)
+
 cc_library(
     name = "scanner",
     srcs = [
         "scanner.cpp",
-        "scanner_generated.cc",
+        ":scanner_generated",
     ],
     hdrs = [
         "scanner.h",
