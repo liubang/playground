@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">83.3&nbsp;%</td>
@@ -244,35 +244,35 @@
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 9 was not executed"> # </span><span class="tlaUNC" title="Branch 10 was not executed"> # </span><span class="tlaUNC" title="Branch 11 was not executed"> # </span><span class="tlaUNC" title="Branch 12 was not executed"> # </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 13 was not executed"> # </span>]
 <span id="L171"><span class="lineNum">     171</span>                 :             :             }</span>
-<span id="L172"><span class="lineNum">     172</span>                 :             :             next_lease_recovery = now + std::chrono::milliseconds(config_.lease_recovery_interval_ms);</span>
-<span id="L173"><span class="lineNum">     173</span>                 :             :         }</span>
-<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (now &gt;= next_datanode_scan) {</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaUNC">           0 :             auto result = scan_datanodes();</span></span>
-<span id="L176"><span class="lineNum">     176</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if (result.hasError()) {</span></span>
-<span id="L177"><span class="lineNum">     177</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :                 LOG(ERROR) &lt;&lt; &quot;DataNode liveness scan failed: &quot; &lt;&lt; result.error().describe();</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :             :             next_lease_recovery =</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             :                 now + std::chrono::milliseconds(config_.lease_recovery_interval_ms);</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             :         }</span>
+<span id="L175"><span class="lineNum">     175</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (now &gt;= next_datanode_scan) {</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaUNC">           0 :             auto result = scan_datanodes();</span></span>
+<span id="L177"><span class="lineNum">     177</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if (result.hasError()) {</span></span>
+<span id="L178"><span class="lineNum">     178</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :                 LOG(ERROR) &lt;&lt; &quot;DataNode liveness scan failed: &quot; &lt;&lt; result.error().describe();</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span><span class="tlaUNC" title="Branch 6 was not executed"> # </span><span class="tlaUNC" title="Branch 7 was not executed"> # </span><span class="tlaUNC" title="Branch 8 was not executed"> # </span> 
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 9 was not executed"> # </span><span class="tlaUNC" title="Branch 10 was not executed"> # </span><span class="tlaUNC" title="Branch 11 was not executed"> # </span><span class="tlaUNC" title="Branch 12 was not executed"> # </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 13 was not executed"> # </span>]
-<span id="L178"><span class="lineNum">     178</span>                 :             :             }</span>
-<span id="L179"><span class="lineNum">     179</span>                 :             :             next_datanode_scan = now + std::chrono::milliseconds(config_.datanode_scan_interval_ms);</span>
-<span id="L180"><span class="lineNum">     180</span>                 :             :         }</span>
-<span id="L181"><span class="lineNum">     181</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (now &gt;= next_replication_scan) {</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaUNC">           0 :             auto result = scan_replication();</span></span>
-<span id="L183"><span class="lineNum">     183</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if (result.hasError()) {</span></span>
-<span id="L184"><span class="lineNum">     184</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :                 LOG(ERROR) &lt;&lt; &quot;replication scan failed: &quot; &lt;&lt; result.error().describe();</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :             :             }</span>
+<span id="L180"><span class="lineNum">     180</span>                 :             :             next_datanode_scan = now + std::chrono::milliseconds(config_.datanode_scan_interval_ms);</span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :         }</span>
+<span id="L182"><span class="lineNum">     182</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (now &gt;= next_replication_scan) {</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaUNC">           0 :             auto result = scan_replication();</span></span>
+<span id="L184"><span class="lineNum">     184</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if (result.hasError()) {</span></span>
+<span id="L185"><span class="lineNum">     185</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :                 LOG(ERROR) &lt;&lt; &quot;replication scan failed: &quot; &lt;&lt; result.error().describe();</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span><span class="tlaUNC" title="Branch 6 was not executed"> # </span><span class="tlaUNC" title="Branch 7 was not executed"> # </span><span class="tlaUNC" title="Branch 8 was not executed"> # </span> 
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 9 was not executed"> # </span><span class="tlaUNC" title="Branch 10 was not executed"> # </span><span class="tlaUNC" title="Branch 11 was not executed"> # </span><span class="tlaUNC" title="Branch 12 was not executed"> # </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 13 was not executed"> # </span>]
-<span id="L185"><span class="lineNum">     185</span>                 :             :             }</span>
-<span id="L186"><span class="lineNum">     186</span>                 :             :             next_replication_scan =</span>
-<span id="L187"><span class="lineNum">     187</span>                 :             :                 now + std::chrono::milliseconds(config_.replication_scan_interval_ms);</span>
-<span id="L188"><span class="lineNum">     188</span>                 :             :         }</span>
-<span id="L189"><span class="lineNum">     189</span>                 :             : </span>
-<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaUNC">           0 :         auto deadline = std::min({next_lease_recovery, next_datanode_scan, next_replication_scan});</span></span>
-<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaUNC">           0 :         std::unique_lock lock(wait_mu_);</span></span>
-<span id="L192"><span class="lineNum">     192</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         wait_cv_.wait_until(lock, deadline, [this] {</span></span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaUNC">           0 :             return !running_.load(std::memory_order_relaxed);</span></span>
-<span id="L194"><span class="lineNum">     194</span>                 :             :         });</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :             }</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             :             next_replication_scan =</span>
+<span id="L188"><span class="lineNum">     188</span>                 :             :                 now + std::chrono::milliseconds(config_.replication_scan_interval_ms);</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             :         }</span>
+<span id="L190"><span class="lineNum">     190</span>                 :             : </span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaUNC">           0 :         auto deadline = std::min({next_lease_recovery, next_datanode_scan, next_replication_scan});</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaUNC">           0 :         std::unique_lock lock(wait_mu_);</span></span>
+<span id="L193"><span class="lineNum">     193</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         wait_cv_.wait_until(</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaUNC">           0 :             lock, deadline, [this] { return !running_.load(std::memory_order_relaxed); });</span></span>
 <span id="L195"><span class="lineNum">     195</span>                 :             :     }</span>
 <span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaUNC">           0 : }</span></span>
 <span id="L197"><span class="lineNum">     197</span>                 :             : </span>

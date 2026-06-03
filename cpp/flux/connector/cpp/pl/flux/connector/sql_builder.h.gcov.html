@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -112,7 +112,7 @@
 <span id="L41"><span class="lineNum">      41</span>                 :             :     /// Format a literal value for embedding directly in SQL.</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             :     /// Returns a SQL-safe string representation.</span>
 <span id="L43"><span class="lineNum">      43</span>                 :             :     [[nodiscard]] virtual absl::StatusOr&lt;std::string&gt; FormatLiteral(</span>
-<span id="L44"><span class="lineNum">      44</span>                 :             :         const Value&amp; value, bool normalize_time = false) const = 0;</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :         const runtime::Value&amp; value, bool normalize_time = false) const = 0;</span>
 <span id="L45"><span class="lineNum">      45</span>                 :             : </span>
 <span id="L46"><span class="lineNum">      46</span>                 :             :     /// Return the source name for error messages (e.g. &quot;sqlite&quot;, &quot;mysql&quot;).</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             :     [[nodiscard]] virtual std::string SourceName() const = 0;</span>
@@ -128,13 +128,13 @@
 <span id="L57"><span class="lineNum">      57</span>                 :             : </span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : /// A bound SQL parameter plus whether string/time values should be normalized to</span>
 <span id="L59"><span class="lineNum">      59</span>                 :             : /// the backend's timestamp representation before binding.</span>
-<span id="L60"><span class="lineNum">      60</span>         [<span class="tlaGBC" title="Branch 0 was taken 327 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        1703 : struct SqlParam {</span></span>
-<span id="L61"><span class="lineNum">      61</span>                 :             :     Value value{};</span>
+<span id="L60"><span class="lineNum">      60</span>         [<span class="tlaGBC" title="Branch 0 was taken 328 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        1706 : struct SqlParam {</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :     runtime::Value value{};</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :     bool normalize_time = false;</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             : };</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             : </span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : /// Parameterized SQL text and the values to bind to each placeholder.</span>
-<span id="L66"><span class="lineNum">      66</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 183 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 188 times"> + </span>]:<span class="tlaGNC">        1816 : struct ParameterizedSql {</span></span>
+<span id="L66"><span class="lineNum">      66</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 184 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 189 times"> + </span>]:<span class="tlaGNC">        1818 : struct ParameterizedSql {</span></span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :     std::string sql{};</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             :     std::vector&lt;SqlParam&gt; params{};</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : };</span>

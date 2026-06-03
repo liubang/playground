@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">97.6&nbsp;%</td>
@@ -108,7 +108,7 @@
 <span id="L37"><span class="lineNum">      37</span>                 :             : #include &quot;cpp/pl/flux/runtime/runtime_builtin_package.h&quot;</span>
 <span id="L38"><span class="lineNum">      38</span>                 :             : #include &quot;cpp/pl/flux/syntax/strconv.h&quot;</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             : </span>
-<span id="L40"><span class="lineNum">      40</span>                 :             : namespace pl::flux::builtin {</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : namespace pl::flux::runtime::builtin {</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             : namespace {</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : </span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : struct ParsedDuration {</span>
@@ -385,7 +385,7 @@
 <span id="L307"><span class="lineNum">     307</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(</span></span>
 <span id="L308"><span class="lineNum">     308</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             absl::StrCat(name, &quot; `&quot;, property, &quot;` must be a positive duration&quot;));</span></span>
 <span id="L309"><span class="lineNum">     309</span>                 :             :     }</span>
-<span id="L310"><span class="lineNum">     310</span>         [<span class="tlaGBC" title="Branch 0 was taken 48 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          48 :     auto parts_or = StrConv::parse_duration(normalized);</span></span>
+<span id="L310"><span class="lineNum">     310</span>         [<span class="tlaGBC" title="Branch 0 was taken 48 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          48 :     auto parts_or = syntax::StrConv::parse_duration(normalized);</span></span>
 <span id="L311"><span class="lineNum">     311</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 48 times"> + </span>]:<span class="tlaGNC">          48 :     if (!parts_or.ok()) {</span></span>
 <span id="L312"><span class="lineNum">     312</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(</span></span>
 <span id="L313"><span class="lineNum">     313</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             absl::StrCat(name, &quot; failed to parse `&quot;, property, &quot;` duration&quot;));</span></span>
@@ -1680,7 +1680,7 @@
 <span id="L1449"><span class="lineNum">    1449</span>   [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          50 :     RegisterPackage(&quot;types&quot;, make_types_package);</span></span>
 <span id="L1450"><span class="lineNum">    1450</span>                 :<span class="tlaGNC">          25 : }</span></span>
 <span id="L1451"><span class="lineNum">    1451</span>                 :             : </span>
-<span id="L1452"><span class="lineNum">    1452</span>                 :             : } // namespace pl::flux::builtin</span>
+<span id="L1452"><span class="lineNum">    1452</span>                 :             : } // namespace pl::flux::runtime::builtin</span>
         </pre>
               </td>
             </tr>

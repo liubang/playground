@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">61.9&nbsp;%</td>
@@ -101,14 +101,14 @@
 <span id="L30"><span class="lineNum">      30</span>                 :             : </span>
 <span id="L31"><span class="lineNum">      31</span>                 :             : #define MAKE_ERROR_F(code, ...) pl::makeError((code), fmt::format(__VA_ARGS__))</span>
 <span id="L32"><span class="lineNum">      32</span>                 :             : </span>
-<span id="L33"><span class="lineNum">      33</span>                 :             : #define RETURN_AND_LOG_ON_ERROR(result)                                    \</span>
-<span id="L34"><span class="lineNum">      34</span>                 :             :     do {                                                                   \</span>
-<span id="L35"><span class="lineNum">      35</span>                 :             :         auto&amp;&amp; _result = (result);                                         \</span>
-<span id="L36"><span class="lineNum">      36</span>                 :             :         if (UNLIKELY(_result.hasError())) {                                \</span>
-<span id="L37"><span class="lineNum">      37</span>                 :             :             const auto _message = _result.error().describe();              \</span>
-<span id="L38"><span class="lineNum">      38</span>                 :             :             std::fprintf(stderr, &quot;error: %s\n&quot;, _message.c_str());         \</span>
-<span id="L39"><span class="lineNum">      39</span>                 :             :             RETURN_ERROR(_result);                                         \</span>
-<span id="L40"><span class="lineNum">      40</span>                 :             :         }                                                                  \</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : #define RETURN_AND_LOG_ON_ERROR(result)                            \</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :     do {                                                           \</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         auto&amp;&amp; _result = (result);                                 \</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         if (UNLIKELY(_result.hasError())) {                        \</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :             const auto _message = _result.error().describe();      \</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :             std::fprintf(stderr, &quot;error: %s\n&quot;, _message.c_str()); \</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :             RETURN_ERROR(_result);                                 \</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         }                                                          \</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             :     } while (0)</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : </span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : namespace pl {</span>

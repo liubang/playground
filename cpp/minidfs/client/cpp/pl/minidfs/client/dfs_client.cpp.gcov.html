@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
@@ -913,21 +913,20 @@
 <span id="L827"><span class="lineNum">     827</span>                 :             :         // Verify checksum</span>
 <span id="L828"><span class="lineNum">     828</span>                 :             :         uint32_t computed = compute_crc32c(resp.data().data(), resp.data().size());</span>
 <span id="L829"><span class="lineNum">     829</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (computed != resp.checksum()) {</span></span>
-<span id="L830"><span class="lineNum">     830</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :             LOG(WARNING) &lt;&lt; &quot;ReadBlock from &quot; &lt;&lt; addr</span></span>
+<span id="L830"><span class="lineNum">     830</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :             LOG(WARNING) &lt;&lt; &quot;ReadBlock from &quot; &lt;&lt; addr &lt;&lt; &quot;: checksum mismatch, trying next replica&quot;;</span></span>
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span><span class="tlaUNC" title="Branch 6 was not executed"> # </span><span class="tlaUNC" title="Branch 7 was not executed"> # </span>]
-<span id="L831"><span class="lineNum">     831</span>                 :             :                          &lt;&lt; &quot;: checksum mismatch, trying next replica&quot;;</span>
-<span id="L832"><span class="lineNum">     832</span>                 :<span class="tlaUNC">           0 :             continue;</span></span>
-<span id="L833"><span class="lineNum">     833</span>                 :             :         }</span>
-<span id="L834"><span class="lineNum">     834</span>                 :             : </span>
-<span id="L835"><span class="lineNum">     835</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return std::string(resp.data());</span></span>
-<span id="L836"><span class="lineNum">     836</span>                 :<span class="tlaUNC">           0 :     }</span></span>
-<span id="L837"><span class="lineNum">     837</span>                 :             : </span>
-<span id="L838"><span class="lineNum">     838</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     return MAKE_ERROR_F(static_cast&lt;status_code_t&gt;(ErrorCode::kNoAvailableDataNode),</span></span>
-<span id="L839"><span class="lineNum">     839</span>                 :             :                         &quot;No reachable DataNode for block {}&quot;,</span>
-<span id="L840"><span class="lineNum">     840</span>                 :             :                         block.block_id);</span>
-<span id="L841"><span class="lineNum">     841</span>                 :             : }</span>
-<span id="L842"><span class="lineNum">     842</span>                 :             : </span>
-<span id="L843"><span class="lineNum">     843</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L831"><span class="lineNum">     831</span>                 :<span class="tlaUNC">           0 :             continue;</span></span>
+<span id="L832"><span class="lineNum">     832</span>                 :             :         }</span>
+<span id="L833"><span class="lineNum">     833</span>                 :             : </span>
+<span id="L834"><span class="lineNum">     834</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return std::string(resp.data());</span></span>
+<span id="L835"><span class="lineNum">     835</span>                 :<span class="tlaUNC">           0 :     }</span></span>
+<span id="L836"><span class="lineNum">     836</span>                 :             : </span>
+<span id="L837"><span class="lineNum">     837</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     return MAKE_ERROR_F(static_cast&lt;status_code_t&gt;(ErrorCode::kNoAvailableDataNode),</span></span>
+<span id="L838"><span class="lineNum">     838</span>                 :             :                         &quot;No reachable DataNode for block {}&quot;,</span>
+<span id="L839"><span class="lineNum">     839</span>                 :             :                         block.block_id);</span>
+<span id="L840"><span class="lineNum">     840</span>                 :             : }</span>
+<span id="L841"><span class="lineNum">     841</span>                 :             : </span>
+<span id="L842"><span class="lineNum">     842</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>
