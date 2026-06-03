@@ -20,49 +20,88 @@
 
 这是一个个人技术实验 Monorepo，内容集中在分布式系统、存储引擎、编译器与解释器、模板元编程等方向。仓库使用 [Bazel](https://bazel.build/) 统一管理 C++、Java、Go 和 Python 项目的构建与测试。
 
+## 为什么是 Monorepo + Bazel
+
+将多语言项目放在同一个仓库中，配合 Bazel 构建系统，带来几个实际好处：
+
+- **统一构建入口**：无论 C++、Java、Go 还是 Python，一条 `bazel build //...` 即可完成全量构建，不需要为每种语言维护独立的构建脚本和工具链。
+- **跨语言依赖管理**：共享的 Protobuf 定义可以一次编写，自动生成各语言代码；跨语言调用的接口变更在同一次提交中完成，不会出现版本漂移。
+- **确定性与可复现**：Bazel 通过内容哈希缓存和沙箱执行保证构建结果确定，同一份代码在 macOS 和 Linux CI 上产出一致的产物。工具链（JDK、Go、Python）由 Bazel 自动下载，开发者只需安装 Bazelisk 即可上手。
+- **增量构建**：依赖图精确到文件级别，修改一个 `.proto` 文件只会重新编译受影响的目标，大幅缩短开发迭代周期。
+- **多平台 CI**：当前 CI 覆盖 Linux (GCC-14 / Clang) 和 macOS (Apple Clang) 三个矩阵，确保代码在不同编译器和操作系统上行为一致。
+
+> "Almost every new project benefits from incorporating an artifact-based build system like Bazel right from the start."
+>
+> "The monorepo approach has some inherent benefits, and chief among them is that adhering to One Version is trivial."
+>
+> — *Software Engineering at Google*, Chapter 16 & 18
+
+更多讨论见 [Chapter 16: Version Control and Branch Management](https://abseil.io/resources/swe-book/html/ch16.html) 和 [Chapter 18: Build Systems and Build Philosophy](https://abseil.io/resources/swe-book/html/ch18.html)。
+
 ## 主要项目
 
-| 项目 | 说明 |
-| --- | --- |
-| [MiniDFS](cpp/pl/minidfs/) | 类 HDFS 的分布式文件系统，包含 NameNode、DataNode 和 Client，支持块存储、副本管理、心跳与块汇报、MySQL 元数据存储及 Docker 部署。 |
-| [Flux](cpp/pl/flux/) | Flux 查询语言子集解释器，覆盖词法分析、语法分析、AST、语义分析、规则与代价优化、物理执行、SQLite/MySQL Connector，并提供 LSP 和 REPL。 |
-| [SSTable](cpp/pl/sst/) | LSM-Tree 存储引擎组件，包含 Block 编解码、布隆过滤器、zstd/snappy 压缩、迭代器、版本管理和 CLI 工具。 |
-| [Braft Counter](cpp/pl/braft/) | 基于 braft 的 Raft 状态机示例，演示日志复制、快照、Leader 选举和集群部署。 |
-| [Meta](cpp/meta/) | C++20 模板元编程实验，包括 Type List、Expression Template、Pattern Matching 和 Tuple Iteration。 |
-| [Recall](cpp/pl/recall/) | 基于 FAISS 的向量召回服务，提供 gRPC 接口。 |
+| 项目 | 说明 | 技术栈 |
+| --- | --- | --- |
+| [MiniDFS](cpp/pl/minidfs/) | 类 HDFS 的分布式文件系统，包含 NameNode、DataNode 和 Client，支持块存储、副本管理、心跳与块汇报、MySQL 元数据存储及 Docker 部署。 | C++20, brpc, protobuf, Boost.MySQL, ISA-L/crc32c, zstd |
+| [Flux](cpp/pl/flux/) | Flux 查询语言子集解释器，覆盖词法分析、语法分析、AST、语义分析、规则与代价优化、物理执行、SQLite/MySQL Connector，并提供 LSP 和 REPL。 | C++20, Abseil, simdjson, SQLite, MySQL |
+| [SSTable](cpp/pl/sst/) | LSM-Tree 存储引擎组件，包含 Block 编解码、布隆过滤器、zstd/snappy 压缩、迭代器、版本管理和 CLI 工具。 | C++20, zstd, snappy |
+| [Braft Counter](cpp/pl/braft/) | 基于 braft 的 Raft 状态机示例，演示日志复制、快照、Leader 选举和集群部署。 | C++20, braft, brpc, protobuf |
+| [Meta](cpp/meta/) | C++20 模板元编程实验，包括 Type List、Expression Template、Pattern Matching 和 Tuple Iteration。 | C++20 |
+| [Recall](cpp/pl/recall/) | 基于 FAISS 的向量召回服务，提供 gRPC 接口。 | C++20, FAISS, OpenBLAS, gRPC, protobuf |
 
 此外，仓库还包含 [Skip List](cpp/pl/skiplist/)、[Bloom Filter](cpp/pl/bloom/)、[Arena Allocator](cpp/pl/arena/)、[Thread Pool](cpp/pl/thread/)、[Geohash](cpp/pl/geohash/)、[Brainfuck Interpreter](cpp/pl/bf/) 和 [HTTP Server](cpp/pl/http/) 等小型实现。
 
 ## 仓库结构
 
-| 目录 | 说明 |
-| --- | --- |
-| `cpp/` | C++20 项目，包括分布式系统、存储引擎、查询语言、模板元编程和 RPC 示例。 |
-| `java/` | Java 21 项目，包括 Spring Boot 3.5 示例。 |
-| `go/` | Go 1.24 项目，包括工具库和多种 cgo 调用方式。 |
-| `python/` | Python 3.13 项目，包括 pybind11 绑定和 Manim 动画。 |
-| `proto/` | 跨语言共享的 Protobuf 定义。 |
-| `tla/` | TLA+ 形式化规约。 |
-| `registry/` | Bazel 本地模块注册表，包括 OpenBLAS、ISA-L 等模块。 |
-| `php/` | PHP Router 示例。 |
-| `bash/` | Shell 脚本示例。 |
+| 目录 | 说明 | 技术栈 |
+| --- | --- | --- |
+| `cpp/` | C++20 项目，包括分布式系统、存储引擎、查询语言、模板元编程和 RPC 示例。 | C++20, Clang/GCC, folly, brpc, Abseil |
+| `java/` | Java 项目，包括 Spring Boot 示例。 | Java 21, Spring Boot 3.5 |
+| `go/` | Go 项目，包括工具库和多种 cgo 调用方式。 | Go 1.24, cgo |
+| `python/` | Python 项目，包括 pybind11 绑定和 Manim 动画。 | Python 3.13, pybind11, Manim |
+| `proto/` | 跨语言共享的 Protobuf 定义。 | protobuf |
+| `tla/` | TLA+ 形式化规约。 | TLA+ |
+| `registry/` | Bazel 本地模块注册表，包括 OpenBLAS、ISA-L 等模块。 | Bazel bzlmod |
+| `php/` | PHP Router 示例。 | PHP |
+| `bash/` | Shell 脚本示例。 | Bash |
 
 ## 构建
 
-本地需要安装 Bazelisk 和 C++ 编译器。JDK 21、Go 1.24 和 Python 3.13 工具链由 Bazel 自动下载。
+### 前置依赖
+
+以下工具需要手动安装，其余依赖（JDK 21、Go 1.24、Python 3.13 工具链及所有第三方 C++ 库）由 Bazel 自动下载。
+
+| 依赖 | 最低版本 | 说明 |
+| --- | --- | --- |
+| [Bazelisk](https://github.com/bazelbuild/bazelisk) | — | Bazel 版本管理器，项目通过 `.bazelversion` 锁定 Bazel `8.7.0` |
+| C++ 编译器 | Clang 16+ 或 GCC 13+ | 需支持 C++20；macOS 推荐 Homebrew LLVM，Linux 推荐 GCC-14 |
+| nasm | 2.15+ | 仅 Linux，ISA-L 汇编优化需要 |
+| libomp | — | OpenMP 支持，macOS 和 Linux 均需要 |
+| pkg-config | — | 仅 macOS |
+
+### macOS 安装
 
 ```bash
-# macOS
-brew install bazelisk llvm libomp
-
-# Ubuntu/Debian
-sudo apt-get install -y gcc-14 g++-14 nasm
-curl -L https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 \
-  -o /usr/local/bin/bazel
-chmod +x /usr/local/bin/bazel
+brew install bazelisk llvm libomp pkg-config
 ```
 
-常用命令：
+Homebrew LLVM 安装后，`.bazelrc` 中的 `--config=macos` 会自动使用 `/opt/homebrew/opt/llvm/bin/clang`。最低系统版本要求 macOS 13.3。
+
+### Ubuntu/Debian 安装
+
+```bash
+# 编译器与工具
+sudo apt-get install -y gcc-14 g++-14 nasm libomp-dev
+
+# Bazelisk
+curl -fSL https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 \
+  -o /usr/local/bin/bazel
+sudo chmod +x /usr/local/bin/bazel
+```
+
+如需使用 Clang 构建，安装 `clang-18` 并通过 `--action_env=CC=clang-18` 指定。
+
+### 常用命令
 
 ```bash
 # 全量构建与测试
@@ -76,11 +115,22 @@ bazel build //go/...
 bazel build //python/...
 
 # C++ 构建配置
-bazel build //cpp/... --config=llvm
-bazel build //cpp/... --config=release
+bazel build //cpp/... --config=release   # 优化构建，关闭 ASan
+bazel build //cpp/... --config=llvm      # 使用自定义 LLVM 路径
 ```
 
-项目通过 `.bazelversion` 锁定 Bazel `8.7.0`。开发构建默认开启 AddressSanitizer；使用 `--config=release` 时关闭。
+### 构建配置说明
+
+项目通过 `.bazelrc` 提供以下预设配置：
+
+| 配置 | 说明 |
+| --- | --- |
+| 默认 | C++20，开启 AddressSanitizer |
+| `--config=release` | 优化构建（`-c opt`），关闭 ASan |
+| `--config=llvm` | 使用 `/opt/app/llvm` 下的 Clang + libc++ + lld |
+| `--config=gcc` | 使用 GCC + gold 链接器 |
+| `--config=macos` | macOS 默认，Homebrew LLVM + libc++ |
+| `--config=linux` | Linux 默认，等同于 `--config=gcc` |
 
 Java Maven 依赖变更后，运行以下命令重新生成锁文件：
 
@@ -88,15 +138,27 @@ Java Maven 依赖变更后，运行以下命令重新生成锁文件：
 REPIN=1 bazel run @maven//:pin
 ```
 
-## Bazel 配置
+### Bazel 自动管理的工具链与依赖
 
-Bazel 负责维护跨语言依赖图和工具链配置：
+以下工具链和库无需手动安装，由 `MODULE.bazel` 声明并在首次构建时自动下载：
 
-- 使用统一的 `BUILD` 文件描述 C++、Java、Go 和 Python 目标。
-- 从共享 Protobuf 定义生成各语言代码。
-- 自动下载 Java、Go 和 Python 工具链。
-- 通过内容哈希缓存减少重复构建。
-- 使用 `.bazelversion`、`MODULE.bazel.lock` 和 `maven_install.json` 固定构建依赖。
+| 类别 | 版本 |
+| --- | --- |
+| JDK | 21 |
+| Go SDK | 1.24.12 |
+| Python | 3.13 |
+| protobuf | 31.1 |
+| gRPC | 1.74.1 |
+| Abseil C++ | 20250127.1 |
+| folly | 2025.01.13 |
+| brpc | 1.16.0 |
+| Boost | 1.90.0 |
+| FAISS | 1.14.1 |
+| fmt | 12.1.0 |
+| zstd / snappy | 1.5.6 / 1.2.1 |
+| GoogleTest | 1.17 |
+
+完整依赖列表见 [`MODULE.bazel`](MODULE.bazel)。构建依赖通过 `.bazelversion`、`MODULE.bazel.lock` 和 `maven_install.json` 固定版本，确保可复现。
 
 ## 覆盖率
 
