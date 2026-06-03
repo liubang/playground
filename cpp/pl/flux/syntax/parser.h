@@ -28,7 +28,7 @@
 #include "strconv.h"
 #include "token.h"
 
-namespace pl::flux {
+namespace pl::flux::syntax {
 
 struct TokenError {
     TokenError() = default;
@@ -274,4 +274,4 @@ private:
     uint32_t depth_{0};
 };
 
-} // namespace pl::flux
+} // namespace pl::flux::syntax

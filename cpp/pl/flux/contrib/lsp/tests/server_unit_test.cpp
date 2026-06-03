@@ -26,8 +26,6 @@
 #include "cpp/pl/flux/contrib/lsp/transport.h"
 #include "simdjson.h"
 
-using namespace pl::flux::lsp;
-
 // 向 FILE* 写入一条完整的 LSP 消息 (Content-Length header + body)
 static void write_lsp_message(FILE* f, const std::string& json) {
     fprintf(f, "Content-Length: %zu\r\n\r\n%s", json.size(), json.c_str());
@@ -77,8 +75,8 @@ static std::string make_exit_notification() {
 
 static std::string make_did_open_notification(const std::string& uri, const std::string& text) {
     return R"({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":)" +
-           json_escape(uri) + R"(,"languageId":"flux","version":0,"text":)" + json_escape(text) +
-           R"(}}})";
+           pl::flux::lsp::json_escape(uri) + R"(,"languageId":"flux","version":0,"text":)" +
+           pl::flux::lsp::json_escape(text) + R"(}}})";
 }
 
 static std::string make_completion_request(int id,
@@ -136,8 +134,8 @@ TEST(FluxLanguageServerTest, InitializeHandshake) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -172,8 +170,8 @@ TEST(FluxLanguageServerTest, RejectBeforeInitialized) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -202,8 +200,8 @@ TEST(FluxLanguageServerTest, DidOpenWithDiagnostics) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -239,8 +237,8 @@ TEST(FluxLanguageServerTest, CompletionReturnsItems) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -280,8 +278,8 @@ TEST(FluxLanguageServerTest, CompletionReturnsFunctionSnippets) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -321,8 +319,8 @@ TEST(FluxLanguageServerTest, FormattingReturnsEdits) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -370,8 +368,8 @@ TEST(FluxLanguageServerTest, IncrementalSync) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -416,8 +414,8 @@ TEST(FluxLanguageServerTest, DocumentSymbol) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -462,8 +460,8 @@ TEST(FluxLanguageServerTest, FoldingRange) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -502,8 +500,8 @@ TEST(FluxLanguageServerTest, CompletionIncludesUserSymbols) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -548,8 +546,8 @@ TEST(FluxLanguageServerTest, GoToDefinition) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -591,8 +589,8 @@ TEST(FluxLanguageServerTest, GoToDefinitionAfterUtf8Text) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -628,8 +626,8 @@ TEST(FluxLanguageServerTest, GoToDefinitionForInlineLambdaParameter) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -668,8 +666,8 @@ TEST(FluxLanguageServerTest, FindReferences) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -716,8 +714,8 @@ TEST(FluxLanguageServerTest, FindReferencesCanExcludeDeclaration) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -752,8 +750,8 @@ TEST(FluxLanguageServerTest, RenameSymbol) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -794,8 +792,8 @@ TEST(FluxLanguageServerTest, RenameSameNameParameterDoesNotCrossFunctionScope) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -834,8 +832,8 @@ TEST(FluxLanguageServerTest, SignatureHelp) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -875,8 +873,8 @@ TEST(FluxLanguageServerTest, SignatureHelpUsesBuiltinMetadataLabel) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -913,8 +911,8 @@ TEST(FluxLanguageServerTest, HoverPrefersBuiltinSignatureOverExpressionType) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -950,8 +948,8 @@ TEST(FluxLanguageServerTest, HoverPrefersPackageFunctionSignatureOverExpressionT
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -989,8 +987,8 @@ TEST(FluxLanguageServerTest, SignatureHelpUsesPackageFunctionMetadataLabel) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -1031,8 +1029,8 @@ TEST(FluxLanguageServerTest, PackageAliasDrivesCompletionHoverAndSignatureHelp) 
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -1078,8 +1076,8 @@ TEST(FluxLanguageServerTest, HoverShowsContextualRowFieldType) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -1115,8 +1113,8 @@ TEST(FluxLanguageServerTest, DocumentHighlight) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -1163,8 +1161,8 @@ TEST(FluxLanguageServerTest, SemanticTokensFull) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -1206,8 +1204,8 @@ TEST(FluxLanguageServerTest, SemanticTokensImportUsesPackageNameRange) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -1245,8 +1243,8 @@ TEST(FluxLanguageServerTest, CodeAction) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -1286,8 +1284,8 @@ TEST(FluxLanguageServerTest, SelectionRange) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -1322,8 +1320,8 @@ TEST(FluxLanguageServerTest, Phase3Capabilities) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);
@@ -1355,8 +1353,8 @@ TEST(FluxLanguageServerTest, ShutdownAndExit) {
     write_lsp_message(in_file, make_exit_notification());
     rewind(in_file);
 
-    StdioTransport transport(in_file, out_file);
-    FluxLanguageServer server(std::move(transport));
+    pl::flux::lsp::StdioTransport transport(in_file, out_file);
+    pl::flux::lsp::FluxLanguageServer server(std::move(transport));
     server.run();
 
     rewind(out_file);

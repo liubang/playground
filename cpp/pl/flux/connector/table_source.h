@@ -29,7 +29,7 @@ namespace pl::flux::connector {
 
 struct ColumnSchema {
     std::string name{};
-    Value::Type type = Value::Type::Null;
+    runtime::Value::Type type = runtime::Value::Type::Null;
     bool nullable = true;
 };
 
@@ -83,7 +83,7 @@ enum class PredicateOp {
 struct Predicate {
     PredicateOp op = PredicateOp::Eq;
     std::string column{};
-    Value literal{};
+    runtime::Value literal{};
 };
 
 struct OrderBy {

@@ -26,7 +26,7 @@
 #include "cpp/pl/lang/assume.h"
 #include "token.h"
 
-namespace pl::flux {
+namespace pl::flux::syntax {
 
 struct Comment;
 struct Attribute;
@@ -998,4 +998,4 @@ struct ParameterType {
         : type(type_in), value(std::move(value_in)) {}
 };
 
-} // namespace pl::flux
+} // namespace pl::flux::syntax

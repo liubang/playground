@@ -22,7 +22,7 @@
 
 #include "absl/strings/str_join.h"
 
-namespace pl::flux {
+namespace pl::flux::syntax {
 namespace {
 
 std::string attributes_summary(const std::vector<std::shared_ptr<Attribute>>& attributes) {
@@ -1162,4 +1162,4 @@ std::string dump_ast_json(const File& file) {
     return AstJsonDumper().dump(file);
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::syntax

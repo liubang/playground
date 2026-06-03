@@ -94,8 +94,9 @@ public:
     pl::Result<std::vector<BlockMeta>> get_blocks_to_delete(uint64_t datanode_id);
 
     /// Mark replicas no longer reported by a datanode as deleted.
-    pl::Result<pl::Void> reconcile_block_report(
-        uint64_t datanode_id, const std::vector<ReportedBlock>& reported_blocks, bool full_report);
+    pl::Result<pl::Void> reconcile_block_report(uint64_t datanode_id,
+                                                const std::vector<ReportedBlock>& reported_blocks,
+                                                bool full_report);
 
     /// Generate a new unique generation stamp.
     pl::Result<uint64_t> next_generation_stamp();

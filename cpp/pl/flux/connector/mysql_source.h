@@ -61,7 +61,7 @@ public:
     [[nodiscard]] absl::StatusOr<TableSchema> Schema() const;
     [[nodiscard]] SourceCapabilities Capabilities() const;
     [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const;
-    absl::StatusOr<Value> Scan(const ScanRequest& request);
+    absl::StatusOr<runtime::Value> Scan(const ScanRequest& request);
 
 private:
     std::string dsn_;
@@ -127,7 +127,7 @@ public:
                     MySQLRuntimeOptions options = {});
 
     absl::Status Initialize();
-    absl::StatusOr<std::optional<Page>> NextPage() override;
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override;
     [[nodiscard]] ConnectorSplitStats Stats() const override;
     [[nodiscard]] bool Finished() const override;
 
