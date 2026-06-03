@@ -24,9 +24,8 @@
 #include "cpp/pl/flux/runtime/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
-using namespace detail;
 
 std::optional<const TableValue*> piped_table_argument(const std::vector<Value>& args,
                                                       const std::string& property) {
@@ -76,7 +75,7 @@ absl::StatusOr<Value> table_numeric_aggregate(const TableValue& table,
     std::vector<TableChunk> chunks;
     chunks.reserve(table.table_count());
     for (const auto& chunk : table.tables) {
-        auto values_or = numeric_values_for_chunk(chunk, name, column);
+        auto values_or = detail::numeric_values_for_chunk(chunk, name, column);
         if (!values_or.ok()) {
             return values_or.status();
         }
@@ -107,11 +106,12 @@ absl::StatusOr<Value> table_numeric_aggregate(const TableValue& table,
                 break;
         }
         TableChunk next;
-        next.rows.push_back(materialize_group_value_row(chunk, column, Value::floating(value)));
+        next.rows.push_back(
+            detail::materialize_group_value_row(chunk, column, Value::floating(value)));
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(table, std::move(chunks));
-    return with_aggregate_plan(std::move(result), table, fn, column);
+    auto result = detail::table_with_chunks_like(table, std::move(chunks));
+    return detail::with_aggregate_plan(std::move(result), table, fn, column);
 }
 
 std::shared_ptr<ObjectValue> materialize_distinct_row(const TableChunk& chunk,
@@ -147,15 +147,15 @@ absl::StatusOr<Value> builtin_sum(const std::vector<Value>& args) {
         const std::string column = aggregate_column_argument(args, "column");
         return table_numeric_aggregate(**table, "sum", column, plan::AggregateFunction::Sum);
     }
-    auto array_or = require_array_argument(args, "sum");
+    auto array_or = detail::require_array_argument(args, "sum");
     if (!array_or.ok()) {
         return array_or.status();
     }
-    auto summary_or = summarize_numeric_array(**array_or, "sum");
+    auto summary_or = detail::summarize_numeric_array(**array_or, "sum");
     if (!summary_or.ok()) {
         return summary_or.status();
     }
-    return numeric_sum_value(*summary_or);
+    return detail::numeric_sum_value(*summary_or);
 }
 
 absl::StatusOr<Value> builtin_mean(const std::vector<Value>& args) {
@@ -163,24 +163,24 @@ absl::StatusOr<Value> builtin_mean(const std::vector<Value>& args) {
         const std::string column = aggregate_column_argument(args, "column");
         return table_numeric_aggregate(**table, "mean", column, plan::AggregateFunction::Mean);
     }
-    auto array_or = require_array_argument(args, "mean");
+    auto array_or = detail::require_array_argument(args, "mean");
     if (!array_or.ok()) {
         return array_or.status();
     }
     if ((*array_or)->elements.empty()) {
         return absl::InvalidArgumentError("mean expects a non-empty array");
     }
-    auto summary_or = summarize_numeric_array(**array_or, "mean");
+    auto summary_or = detail::summarize_numeric_array(**array_or, "mean");
     if (!summary_or.ok()) {
         return summary_or.status();
     }
     const auto count = static_cast<double>((*array_or)->elements.size());
     switch (summary_or->kind) {
-        case NumericKind::UInt:
+        case detail::NumericKind::UInt:
             return Value::floating(static_cast<double>(summary_or->uint_sum) / count);
-        case NumericKind::Int:
+        case detail::NumericKind::Int:
             return Value::floating(static_cast<double>(summary_or->int_sum) / count);
-        case NumericKind::Float:
+        case detail::NumericKind::Float:
             return Value::floating(summary_or->float_sum / count);
         default:
             PL_FLUX_UNREACHABLE();
@@ -192,7 +192,7 @@ absl::StatusOr<Value> builtin_min(const std::vector<Value>& args) {
         const std::string column = aggregate_column_argument(args, "column");
         return table_numeric_aggregate(**table, "min", column, plan::AggregateFunction::Min);
     }
-    return aggregate_min_max(args, "min", true);
+    return detail::aggregate_min_max(args, "min", true);
 }
 
 absl::StatusOr<Value> builtin_max(const std::vector<Value>& args) {
@@ -200,23 +200,23 @@ absl::StatusOr<Value> builtin_max(const std::vector<Value>& args) {
         const std::string column = aggregate_column_argument(args, "column");
         return table_numeric_aggregate(**table, "max", column, plan::AggregateFunction::Max);
     }
-    return aggregate_min_max(args, "max", false);
+    return detail::aggregate_min_max(args, "max", false);
 }
 
 absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "reduce");
+    auto object_or = detail::require_object_argument(args, "reduce");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "reduce", "tables");
+    auto table_or = detail::require_table_property(**object_or, "reduce", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto fn_or = require_object_property(**object_or, "reduce", "fn");
+    auto fn_or = detail::require_object_property(**object_or, "reduce", "fn");
     if (!fn_or.ok()) {
         return fn_or.status();
     }
-    auto identity_or = require_object_property(**object_or, "reduce", "identity");
+    auto identity_or = detail::require_object_property(**object_or, "reduce", "identity");
     if (!identity_or.ok()) {
         return identity_or.status();
     }
@@ -254,20 +254,20 @@ absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
         next.rows.push_back(std::make_shared<ObjectValue>(accumulator.as_object()));
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(*table, std::move(chunks));
-    return with_materialization_barrier(std::move(result), **table_or, "reduce");
+    auto result = detail::table_with_chunks_like(*table, std::move(chunks));
+    return detail::with_materialization_barrier(std::move(result), **table_or, "reduce");
 }
 
 absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "distinct");
+    auto object_or = detail::require_object_argument(args, "distinct");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "distinct", "tables");
+    auto table_or = detail::require_table_property(**object_or, "distinct", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto column_or = optional_string_property(**object_or, "distinct", "column", "_value");
+    auto column_or = detail::optional_string_property(**object_or, "distinct", "column", "_value");
     if (!column_or.ok()) {
         return column_or.status();
     }
@@ -292,16 +292,16 @@ absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
         }
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(**table_or, std::move(chunks));
-    return with_distinct_plan(std::move(result), **table_or, *column_or);
+    auto result = detail::table_with_chunks_like(**table_or, std::move(chunks));
+    return detail::with_distinct_plan(std::move(result), **table_or, *column_or);
 }
 
 absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "count");
+    auto object_or = detail::require_object_argument(args, "count");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "count", "tables");
+    auto table_or = detail::require_table_property(**object_or, "count", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
@@ -323,24 +323,24 @@ absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
             }
         }
         TableChunk next;
-        next.rows.push_back(materialize_group_count_row(chunk, column, count));
+        next.rows.push_back(detail::materialize_group_count_row(chunk, column, count));
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(**table_or, std::move(chunks));
-    return with_aggregate_plan(
+    auto result = detail::table_with_chunks_like(**table_or, std::move(chunks));
+    return detail::with_aggregate_plan(
         std::move(result), **table_or, plan::AggregateFunction::Count, column);
 }
 
 absl::StatusOr<Value> builtin_spread(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "spread");
+    auto object_or = detail::require_object_argument(args, "spread");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "spread", "tables");
+    auto table_or = detail::require_table_property(**object_or, "spread", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto column_or = optional_string_property(**object_or, "spread", "column", "_value");
+    auto column_or = detail::optional_string_property(**object_or, "spread", "column", "_value");
     if (!column_or.ok()) {
         return column_or.status();
     }
@@ -354,7 +354,7 @@ absl::StatusOr<Value> builtin_spread(const std::vector<Value>& args) {
     std::vector<TableChunk> chunks;
     chunks.reserve(table->table_count());
     for (const auto& chunk : table->tables) {
-        auto values_or = numeric_values_for_chunk(chunk, "spread", *column_or);
+        auto values_or = detail::numeric_values_for_chunk(chunk, "spread", *column_or);
         if (!values_or.ok()) {
             return values_or.status();
         }
@@ -363,28 +363,28 @@ absl::StatusOr<Value> builtin_spread(const std::vector<Value>& args) {
         }
         const auto [min_it, max_it] = std::minmax_element(values_or->begin(), values_or->end());
         TableChunk next;
-        next.rows.push_back(
-            materialize_group_value_row(chunk, *column_or, Value::floating(*max_it - *min_it)));
+        next.rows.push_back(detail::materialize_group_value_row(
+            chunk, *column_or, Value::floating(*max_it - *min_it)));
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(*table, std::move(chunks));
-    return with_materialization_barrier(std::move(result), **table_or, "spread");
+    auto result = detail::table_with_chunks_like(*table, std::move(chunks));
+    return detail::with_materialization_barrier(std::move(result), **table_or, "spread");
 }
 
 absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "quantile");
+    auto object_or = detail::require_object_argument(args, "quantile");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "quantile", "tables");
+    auto table_or = detail::require_table_property(**object_or, "quantile", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto column_or = optional_string_property(**object_or, "quantile", "column", "_value");
+    auto column_or = detail::optional_string_property(**object_or, "quantile", "column", "_value");
     if (!column_or.ok()) {
         return column_or.status();
     }
-    auto quantiles_or = quantile_values_property(**object_or, "quantile", "q");
+    auto quantiles_or = detail::quantile_values_property(**object_or, "quantile", "q");
     if (!quantiles_or.ok()) {
         return quantiles_or.status();
     }
@@ -398,7 +398,7 @@ absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
     std::vector<TableChunk> chunks;
     chunks.reserve(table->table_count());
     for (const auto& chunk : table->tables) {
-        auto values_or = numeric_values_for_chunk(chunk, "quantile", *column_or);
+        auto values_or = detail::numeric_values_for_chunk(chunk, "quantile", *column_or);
         if (!values_or.ok()) {
             return values_or.status();
         }
@@ -409,23 +409,24 @@ absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
         TableChunk next;
         next.rows.reserve(quantiles_or->size());
         for (double q : *quantiles_or) {
-            auto quantile_or = quantile_for_sorted_values(*values_or, q);
+            auto quantile_or = detail::quantile_for_sorted_values(*values_or, q);
             if (!quantile_or.ok()) {
                 return quantile_or.status();
             }
-            auto row =
-                materialize_group_value_row(chunk, *column_or, Value::floating(*quantile_or));
-            Value updated = object_with_upserted_property(*row, "quantile", Value::floating(q));
+            auto row = detail::materialize_group_value_row(
+                chunk, *column_or, Value::floating(*quantile_or));
+            Value updated =
+                detail::object_with_upserted_property(*row, "quantile", Value::floating(q));
             next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
         }
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(*table, std::move(chunks));
-    return with_materialization_barrier(std::move(result), **table_or, "quantile");
+    auto result = detail::table_with_chunks_like(*table, std::move(chunks));
+    return detail::with_materialization_barrier(std::move(result), **table_or, "quantile");
 }
 
 absl::StatusOr<Value> builtin_median(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "median");
+    auto object_or = detail::require_object_argument(args, "median");
     if (!object_or.ok()) {
         return object_or.status();
     }
@@ -440,7 +441,7 @@ absl::StatusOr<Value> builtin_median(const std::vector<Value>& args) {
     }
     if (const Value* table_value = (*object_or)->lookup("tables");
         table_value != nullptr && table_value->type() == Value::Type::Table) {
-        return with_materialization_barrier(
+        return detail::with_materialization_barrier(
             std::move(*result_or), table_value->as_table(), "median");
     }
     return result_or;
@@ -449,19 +450,20 @@ absl::StatusOr<Value> builtin_median(const std::vector<Value>& args) {
 absl::StatusOr<Value> table_order_builtin(const std::vector<Value>& args,
                                           const std::string& name,
                                           bool descending) {
-    auto object_or = require_object_argument(args, name);
+    auto object_or = detail::require_object_argument(args, name);
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, name, "tables");
+    auto table_or = detail::require_table_property(**object_or, name, "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto columns_or = optional_string_array_property(**object_or, name, "columns", {"_value"});
+    auto columns_or =
+        detail::optional_string_array_property(**object_or, name, "columns", {"_value"});
     if (!columns_or.ok()) {
         return columns_or.status();
     }
-    auto n_or = integer_property(**object_or, name, "n");
+    auto n_or = detail::integer_property(**object_or, name, "n");
     if (!n_or.ok()) {
         return n_or.status();
     }
@@ -475,14 +477,14 @@ absl::StatusOr<Value> table_order_builtin(const std::vector<Value>& args,
     }
     const TableValue* table = *materialized_or;
 
-    auto chunks = clone_table_chunks(*table);
+    auto chunks = detail::clone_table_chunks(*table);
     for (auto& chunk : chunks) {
         std::ranges::stable_sort(chunk.rows, [&](const auto& lhs, const auto& rhs) {
             if (lhs == nullptr || rhs == nullptr) {
                 return lhs != nullptr;
             }
             for (const auto& column : *columns_or) {
-                const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
+                const int cmp = detail::compare_values(lhs->lookup(column), rhs->lookup(column));
                 if (cmp != 0) {
                     return descending ? cmp > 0 : cmp < 0;
                 }
@@ -493,8 +495,8 @@ absl::StatusOr<Value> table_order_builtin(const std::vector<Value>& args,
             chunk.rows.resize(static_cast<size_t>(*n_or));
         }
     }
-    auto result = table_with_chunks_like(*table, std::move(chunks));
-    return with_materialization_barrier(std::move(result), **table_or, name);
+    auto result = detail::table_with_chunks_like(*table, std::move(chunks));
+    return detail::with_materialization_barrier(std::move(result), **table_or, name);
 }
 
 absl::StatusOr<Value> builtin_top(const std::vector<Value>& args) {
@@ -508,15 +510,15 @@ absl::StatusOr<Value> builtin_bottom(const std::vector<Value>& args) {
 absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
                                                const std::string& name,
                                                bool use_last) {
-    auto object_or = require_object_argument(args, name);
+    auto object_or = detail::require_object_argument(args, name);
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, name, "tables");
+    auto table_or = detail::require_table_property(**object_or, name, "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto column_or = optional_string_property(**object_or, name, "column", "_value");
+    auto column_or = detail::optional_string_property(**object_or, name, "column", "_value");
     if (!column_or.ok()) {
         return column_or.status();
     }
@@ -558,8 +560,8 @@ absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
             chunks.push_back(std::move(next));
         }
     }
-    auto result = table_with_chunks_like(*table, std::move(chunks));
-    return with_materialization_barrier(std::move(result), **table_or, name);
+    auto result = detail::table_with_chunks_like(*table, std::move(chunks));
+    return detail::with_materialization_barrier(std::move(result), **table_or, name);
 }
 
 absl::StatusOr<Value> builtin_first(const std::vector<Value>& args) {
@@ -574,62 +576,62 @@ absl::StatusOr<Value> builtin_last(const std::vector<Value>& args) {
 
 bool InstallKnownUniverseAggregateBuiltin(Environment& env, const std::string& name) {
     if (name == "sum") {
-        install_builtin(env, "sum", builtin_sum, "values");
+        detail::install_builtin(env, "sum", builtin_sum, "values");
         return true;
     }
     if (name == "mean") {
-        install_builtin(env, "mean", builtin_mean, "values");
+        detail::install_builtin(env, "mean", builtin_mean, "values");
         return true;
     }
     if (name == "min") {
-        install_builtin(env, "min", builtin_min, "values");
+        detail::install_builtin(env, "min", builtin_min, "values");
         return true;
     }
     if (name == "max") {
-        install_builtin(env, "max", builtin_max, "values");
+        detail::install_builtin(env, "max", builtin_max, "values");
         return true;
     }
     if (name == "reduce") {
-        install_builtin(env, "reduce", builtin_reduce, "tables");
+        detail::install_builtin(env, "reduce", builtin_reduce, "tables");
         return true;
     }
     if (name == "distinct") {
-        install_builtin(env, "distinct", builtin_distinct, "tables");
+        detail::install_builtin(env, "distinct", builtin_distinct, "tables");
         return true;
     }
     if (name == "count") {
-        install_builtin(env, "count", builtin_count, "tables");
+        detail::install_builtin(env, "count", builtin_count, "tables");
         return true;
     }
     if (name == "spread") {
-        install_builtin(env, "spread", builtin_spread, "tables");
+        detail::install_builtin(env, "spread", builtin_spread, "tables");
         return true;
     }
     if (name == "quantile") {
-        install_builtin(env, "quantile", builtin_quantile, "tables");
+        detail::install_builtin(env, "quantile", builtin_quantile, "tables");
         return true;
     }
     if (name == "median") {
-        install_builtin(env, "median", builtin_median, "tables");
+        detail::install_builtin(env, "median", builtin_median, "tables");
         return true;
     }
     if (name == "first") {
-        install_builtin(env, "first", builtin_first, "tables");
+        detail::install_builtin(env, "first", builtin_first, "tables");
         return true;
     }
     if (name == "last") {
-        install_builtin(env, "last", builtin_last, "tables");
+        detail::install_builtin(env, "last", builtin_last, "tables");
         return true;
     }
     if (name == "top") {
-        install_builtin(env, "top", builtin_top, "tables");
+        detail::install_builtin(env, "top", builtin_top, "tables");
         return true;
     }
     if (name == "bottom") {
-        install_builtin(env, "bottom", builtin_bottom, "tables");
+        detail::install_builtin(env, "bottom", builtin_bottom, "tables");
         return true;
     }
     return false;
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

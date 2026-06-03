@@ -34,7 +34,7 @@
 #include "cpp/pl/flux/runtime/runtime_builtin_package.h"
 #include "cpp/pl/flux/runtime/runtime_eval.h"
 
-namespace pl::flux::builtin {
+namespace pl::flux::runtime::builtin {
 namespace {
 
 Value make_builtin_value(const std::string& name,
@@ -1249,4 +1249,4 @@ void RegisterTableStdlibPackages() {
     RegisterPackage("csv", make_csv_package);
 }
 
-} // namespace pl::flux::builtin
+} // namespace pl::flux::runtime::builtin

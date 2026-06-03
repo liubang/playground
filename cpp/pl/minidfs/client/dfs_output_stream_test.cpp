@@ -16,11 +16,11 @@
 
 #include <brpc/closure_guard.h>
 #include <brpc/server.h>
+#include <gtest/gtest.h>
 #include <netinet/in.h>
+#include <string>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <gtest/gtest.h>
-#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -139,14 +139,13 @@ protected:
         ASSERT_EQ(datanode_server_.Start(datanode_port, nullptr), 0);
 
         namenode_.set_datanode_port(datanode_server_.listen_address().port);
-        ASSERT_EQ(namenode_server_.AddService(
-                      static_cast<protocol::NameNodeService*>(&namenode_),
-                      brpc::SERVER_DOESNT_OWN_SERVICE),
+        ASSERT_EQ(namenode_server_.AddService(static_cast<protocol::NameNodeService*>(&namenode_),
+                                              brpc::SERVER_DOESNT_OWN_SERVICE),
                   0);
-        ASSERT_EQ(namenode_server_.AddService(
-                      static_cast<protocol::DataNodeProtocolService*>(&namenode_),
-                      brpc::SERVER_DOESNT_OWN_SERVICE),
-                  0);
+        ASSERT_EQ(
+            namenode_server_.AddService(static_cast<protocol::DataNodeProtocolService*>(&namenode_),
+                                        brpc::SERVER_DOESNT_OWN_SERVICE),
+            0);
         const int namenode_port = pick_unused_port();
         ASSERT_GT(namenode_port, 0);
         ASSERT_EQ(namenode_server_.Start(namenode_port, nullptr), 0);

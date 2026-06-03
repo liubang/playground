@@ -17,7 +17,7 @@
 
 #include "scanner.h"
 
-namespace pl::flux {
+namespace pl::flux::syntax {
 
 namespace {
 
@@ -160,4 +160,4 @@ void Scanner::maybe_promote_unsigned_integer(Token* token) {
     p_ = suffix;
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::syntax

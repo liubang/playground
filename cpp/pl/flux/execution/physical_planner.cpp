@@ -50,41 +50,42 @@
 
 namespace pl::flux::execution {
 namespace {
-using namespace detail;
 using Clock = std::chrono::steady_clock;
 
-Value literal_value(const plan::PredicateLiteral& literal) {
+runtime::Value literal_value(const plan::PredicateLiteral& literal) {
     switch (literal.kind) {
         case plan::PredicateLiteralKind::Bool:
-            return Value::boolean(literal.bool_value);
+            return runtime::Value::boolean(literal.bool_value);
         case plan::PredicateLiteralKind::Int:
-            return Value::integer(literal.int_value);
+            return runtime::Value::integer(literal.int_value);
         case plan::PredicateLiteralKind::UInt:
-            return Value::uinteger(literal.uint_value);
+            return runtime::Value::uinteger(literal.uint_value);
         case plan::PredicateLiteralKind::Float:
-            return Value::floating(literal.float_value);
+            return runtime::Value::floating(literal.float_value);
         case plan::PredicateLiteralKind::String:
-            return Value::string(literal.string_value);
+            return runtime::Value::string(literal.string_value);
         case plan::PredicateLiteralKind::Time:
-            return Value::time(literal.string_value);
+            return runtime::Value::time(literal.string_value);
     }
-    return Value::null();
+    return runtime::Value::null();
 }
 
-bool page_row_time_in_range(const PageChunk& chunk, size_t row_index, const plan::RangeSpec& spec) {
-    const Value* value = PageChunkValueAt(chunk, row_index, "_time");
+bool page_row_time_in_range(const runtime::PageChunk& chunk,
+                            size_t row_index,
+                            const plan::RangeSpec& spec) {
+    const runtime::Value* value = PageChunkValueAt(chunk, row_index, "_time");
     if (value == nullptr) {
         return false;
     }
     const std::string literal =
-        value->type() == Value::Type::Time ? value->as_time().literal : value->string();
+        value->type() == runtime::Value::Type::Time ? value->as_time().literal : value->string();
     if (!spec.start.empty() && literal < spec.start) {
         return false;
     }
     return !spec.stop.has_value() || literal < *spec.stop;
 }
 
-Page page_with_plan(Page page, const std::shared_ptr<plan::PlanNode>& plan) {
+runtime::Page page_with_plan(runtime::Page page, const std::shared_ptr<plan::PlanNode>& plan) {
     page.plan = plan;
     page.materialized = true;
     return page;
@@ -147,7 +148,7 @@ double elapsed_ms(Clock::time_point start) {
     return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
 }
 
-void add_page_to_split_stats(connector::ConnectorSplitStats* stats, const Page& page) {
+void add_page_to_split_stats(connector::ConnectorSplitStats* stats, const runtime::Page& page) {
     if (stats == nullptr) {
         return;
     }
@@ -170,14 +171,15 @@ void copy_source_profile(connector::ConnectorSplitStats* stats,
     stats->page_build_time_ms = source.page_build_time_ms;
 }
 
-bool page_row_less(const std::shared_ptr<ObjectValue>& lhs,
-                   const std::shared_ptr<ObjectValue>& rhs,
+bool page_row_less(const std::shared_ptr<runtime::ObjectValue>& lhs,
+                   const std::shared_ptr<runtime::ObjectValue>& rhs,
                    const std::vector<plan::SortKey>& keys) {
     if (lhs == nullptr || rhs == nullptr) {
         return lhs != nullptr;
     }
     for (const auto& key : keys) {
-        const int cmp = compare_values(lhs->lookup(key.column), rhs->lookup(key.column));
+        const int cmp =
+            runtime::detail::compare_values(lhs->lookup(key.column), rhs->lookup(key.column));
         if (cmp != 0) {
             return key.desc ? cmp > 0 : cmp < 0;
         }
@@ -185,8 +187,8 @@ bool page_row_less(const std::shared_ptr<ObjectValue>& lhs,
     return false;
 }
 
-std::vector<std::shared_ptr<ObjectValue>> rows_from_page(const Page& page) {
-    std::vector<std::shared_ptr<ObjectValue>> rows;
+std::vector<std::shared_ptr<runtime::ObjectValue>> rows_from_page(const runtime::Page& page) {
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
     rows.reserve(page.row_count());
     for (const auto& chunk : page.chunks) {
         for (size_t row_index = 0; row_index < chunk.row_count; ++row_index) {
@@ -196,31 +198,31 @@ std::vector<std::shared_ptr<ObjectValue>> rows_from_page(const Page& page) {
     return rows;
 }
 
-absl::StatusOr<Page> apply_sort_page(const Page& input,
-                                     const std::shared_ptr<plan::PlanNode>& plan) {
+absl::StatusOr<runtime::Page> apply_sort_page(const runtime::Page& input,
+                                              const std::shared_ptr<plan::PlanNode>& plan) {
     auto rows = rows_from_page(input);
     std::ranges::stable_sort(rows, [&](const auto& lhs, const auto& rhs) {
         return page_row_less(lhs, rhs, plan->sort().keys);
     });
-    Page output = PageFromRows(input.bucket, std::move(rows));
+    runtime::Page output = runtime::PageFromRows(input.bucket, std::move(rows));
     output.range_start = input.range_start;
     output.range_stop = input.range_stop;
     output.result_name = input.result_name;
     return page_with_plan(std::move(output), plan);
 }
 
-absl::StatusOr<Page> apply_topn_page(const Page& input,
-                                     const std::shared_ptr<plan::PlanNode>& sort_plan,
-                                     size_t limit) {
+absl::StatusOr<runtime::Page> apply_topn_page(const runtime::Page& input,
+                                              const std::shared_ptr<plan::PlanNode>& sort_plan,
+                                              size_t limit) {
     if (limit == 0) {
-        return page_with_plan(PageFromRows(input.bucket, {}), sort_plan);
+        return page_with_plan(runtime::PageFromRows(input.bucket, {}), sort_plan);
     }
     const auto& keys = sort_plan->sort().keys;
     auto worse_first = [&](const auto& lhs, const auto& rhs) {
         return page_row_less(lhs, rhs, keys);
     };
-    std::priority_queue<std::shared_ptr<ObjectValue>,
-                        std::vector<std::shared_ptr<ObjectValue>>,
+    std::priority_queue<std::shared_ptr<runtime::ObjectValue>,
+                        std::vector<std::shared_ptr<runtime::ObjectValue>>,
                         decltype(worse_first)>
         heap(worse_first);
     for (const auto& row : rows_from_page(input)) {
@@ -236,7 +238,7 @@ absl::StatusOr<Page> apply_topn_page(const Page& input,
             heap.push(row);
         }
     }
-    std::vector<std::shared_ptr<ObjectValue>> rows;
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
     rows.reserve(heap.size());
     while (!heap.empty()) {
         rows.push_back(heap.top());
@@ -244,45 +246,45 @@ absl::StatusOr<Page> apply_topn_page(const Page& input,
     }
     std::ranges::stable_sort(
         rows, [&](const auto& lhs, const auto& rhs) { return page_row_less(lhs, rhs, keys); });
-    Page output = PageFromRows(input.bucket, std::move(rows));
+    runtime::Page output = runtime::PageFromRows(input.bucket, std::move(rows));
     output.range_start = input.range_start;
     output.range_stop = input.range_stop;
     output.result_name = input.result_name;
     return page_with_plan(std::move(output), sort_plan);
 }
 
-Value value_from_page(const Page& page) {
-    TableValue table = TableValueFromPage(page);
-    Value value = Value::table_stream(table.bucket,
-                                      std::move(table.tables),
-                                      table.range_start,
-                                      table.range_stop,
-                                      table.result_name);
+runtime::Value value_from_page(const runtime::Page& page) {
+    runtime::TableValue table = TableValueFromPage(page);
+    runtime::Value value = runtime::Value::table_stream(table.bucket,
+                                                        std::move(table.tables),
+                                                        table.range_start,
+                                                        table.range_stop,
+                                                        table.result_name);
     value.as_table_mut().plan = table.plan;
     value.as_table_mut().materialized = table.materialized;
     return value;
 }
 
-Page page_from_value(const Value& value) {
+runtime::Page page_from_value(const runtime::Value& value) {
     return PageFromTableValue(value.as_table());
 }
 
-absl::StatusOr<Page> apply_range_page(const Page& input,
-                                      const std::shared_ptr<plan::PlanNode>& plan) {
+absl::StatusOr<runtime::Page> apply_range_page(const runtime::Page& input,
+                                               const std::shared_ptr<plan::PlanNode>& plan) {
     auto status = ValidatePage(input);
     if (!status.ok()) {
         return status;
     }
-    std::vector<PageChunk> chunks;
+    std::vector<runtime::PageChunk> chunks;
     chunks.reserve(input.chunks.size());
     for (const auto& source : input.chunks) {
-        PageChunk chunk;
+        runtime::PageChunk chunk;
         chunk.group_key = source.group_key;
         chunk.row_count = 0;
         chunk.columns.reserve(source.columns.size());
         for (const auto& source_column : source.columns) {
-            chunk.columns.push_back(
-                ColumnVector{.name = source_column.name, .type = source_column.type, .values = {}});
+            chunk.columns.push_back(runtime::ColumnVector{
+                .name = source_column.name, .type = source_column.type, .values = {}});
         }
         for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
             if (!page_row_time_in_range(source, row_index, plan->range())) {
@@ -299,20 +301,20 @@ absl::StatusOr<Page> apply_range_page(const Page& input,
     return page_with_plan(PageLike(input, std::move(chunks)), plan);
 }
 
-absl::StatusOr<Page> apply_filter_page(const Page& input,
-                                       const std::shared_ptr<plan::PlanNode>& plan) {
+absl::StatusOr<runtime::Page> apply_filter_page(const runtime::Page& input,
+                                                const std::shared_ptr<plan::PlanNode>& plan) {
     auto status = ValidatePage(input);
     if (!status.ok()) {
         return status;
     }
-    std::vector<PageChunk> chunks;
+    std::vector<runtime::PageChunk> chunks;
     chunks.reserve(input.chunks.size());
     for (const auto& source : input.chunks) {
-        PageSchema schema = SchemaFromPageChunk(source);
+        runtime::PageSchema schema = runtime::SchemaFromPageChunk(source);
         struct IndexedPredicate {
             const plan::PredicateSpec* predicate = nullptr;
             size_t column_index = 0;
-            Value literal;
+            runtime::Value literal;
         };
         std::vector<IndexedPredicate> predicates;
         predicates.reserve(plan->filter().predicates.size());
@@ -329,13 +331,13 @@ absl::StatusOr<Page> apply_filter_page(const Page& input,
             });
         }
 
-        PageChunk chunk;
+        runtime::PageChunk chunk;
         chunk.group_key = source.group_key;
         chunk.row_count = 0;
         chunk.columns.reserve(source.columns.size());
         for (const auto& source_column : source.columns) {
-            chunk.columns.push_back(
-                ColumnVector{.name = source_column.name, .type = source_column.type, .values = {}});
+            chunk.columns.push_back(runtime::ColumnVector{
+                .name = source_column.name, .type = source_column.type, .values = {}});
             chunk.columns.back().values.reserve(source_column.values.size());
         }
         for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
@@ -346,7 +348,8 @@ absl::StatusOr<Page> apply_filter_page(const Page& input,
                     keep = false;
                     break;
                 }
-                const int cmp = compare_values(&column.values[row_index], &item.literal);
+                const int cmp =
+                    runtime::detail::compare_values(&column.values[row_index], &item.literal);
                 bool matches = false;
                 switch (item.predicate->op) {
                     case plan::PredicateOp::Eq:
@@ -387,22 +390,22 @@ absl::StatusOr<Page> apply_filter_page(const Page& input,
     return page_with_plan(PageLike(input, std::move(chunks)), plan);
 }
 
-absl::StatusOr<Page> apply_project_page(const Page& input,
-                                        const std::shared_ptr<plan::PlanNode>& plan) {
+absl::StatusOr<runtime::Page> apply_project_page(const runtime::Page& input,
+                                                 const std::shared_ptr<plan::PlanNode>& plan) {
     auto status = ValidatePage(input);
     if (!status.ok()) {
         return status;
     }
-    std::vector<PageChunk> chunks;
+    std::vector<runtime::PageChunk> chunks;
     chunks.reserve(input.chunks.size());
     for (const auto& source : input.chunks) {
-        PageChunk chunk;
+        runtime::PageChunk chunk;
         chunk.group_key = source.group_key;
         chunk.row_count = source.row_count;
         chunk.columns.reserve(plan->project().columns.size());
-        PageSchema schema = SchemaFromPageChunk(source);
+        runtime::PageSchema schema = runtime::SchemaFromPageChunk(source);
         for (const auto& column_name : plan->project().columns) {
-            ColumnVector column;
+            runtime::ColumnVector column;
             column.name = column_name;
             column.values.reserve(source.row_count);
             auto source_index = schema.FindColumn(column_name);
@@ -411,8 +414,8 @@ absl::StatusOr<Page> apply_project_page(const Page& input,
                 column.type = source_column.type;
                 column.values = source_column.values;
             } else {
-                column.type = Value::Type::Null;
-                column.values.assign(source.row_count, Value::null());
+                column.type = runtime::Value::Type::Null;
+                column.values.assign(source.row_count, runtime::Value::null());
             }
             chunk.columns.push_back(std::move(column));
         }
@@ -421,34 +424,35 @@ absl::StatusOr<Page> apply_project_page(const Page& input,
     return page_with_plan(PageLike(input, std::move(chunks)), plan);
 }
 
-absl::StatusOr<Page> apply_rename_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+absl::StatusOr<runtime::Page> apply_rename_page(runtime::Page input,
+                                                const std::shared_ptr<plan::PlanNode>& plan) {
     auto status = ValidatePage(input);
     if (!status.ok()) {
         return status;
     }
     for (auto& chunk : input.chunks) {
         for (auto& column : chunk.columns) {
-            column.name =
-                mapped_column_name(plan->rename().columns, column.name).value_or(column.name);
+            column.name = runtime::detail::mapped_column_name(plan->rename().columns, column.name)
+                              .value_or(column.name);
         }
     }
     return page_with_plan(std::move(input), plan);
 }
 
-Page materialize_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+runtime::Page materialize_page(runtime::Page input, const std::shared_ptr<plan::PlanNode>& plan) {
     input.plan = plan;
     input.materialized = true;
     return input;
 }
 
-std::optional<std::string> exchange_partition_key(const ObjectValue& row,
+std::optional<std::string> exchange_partition_key(const runtime::ObjectValue& row,
                                                   const std::vector<std::string>& columns) {
     if (columns.empty()) {
         return std::string("__single_partition__");
     }
     std::string key;
     for (const auto& column : columns) {
-        const Value* value = row.lookup(column);
+        const runtime::Value* value = row.lookup(column);
         if (value == nullptr || value->is_null()) {
             absl::StrAppend(&key, column, "=<null>\n");
         } else {
@@ -458,8 +462,8 @@ std::optional<std::string> exchange_partition_key(const ObjectValue& row,
     return key;
 }
 
-absl::StatusOr<Page> apply_exchange_page(const Page& input,
-                                         const std::shared_ptr<plan::PlanNode>& plan) {
+absl::StatusOr<runtime::Page> apply_exchange_page(const runtime::Page& input,
+                                                  const std::shared_ptr<plan::PlanNode>& plan) {
     auto status = ValidatePage(input);
     if (!status.ok()) {
         return status;
@@ -469,7 +473,7 @@ absl::StatusOr<Page> apply_exchange_page(const Page& input,
         return page_with_plan(input, plan);
     }
 
-    std::vector<TableChunk> chunks;
+    std::vector<runtime::TableChunk> chunks;
     std::unordered_map<std::string, size_t> partition_index;
     std::vector<std::string> partition_order;
     for (const auto& page_chunk : input.chunks) {
@@ -489,7 +493,7 @@ absl::StatusOr<Page> apply_exchange_page(const Page& input,
                 const size_t index = chunks.size();
                 partition_index.emplace(*key, index);
                 partition_order.push_back(*key);
-                TableChunk chunk;
+                runtime::TableChunk chunk;
                 chunk.columns = columns;
                 chunks.push_back(std::move(chunk));
                 it = partition_index.find(partition_order.back());
@@ -497,16 +501,16 @@ absl::StatusOr<Page> apply_exchange_page(const Page& input,
             chunks[it->second].rows.push_back(std::move(row));
         }
     }
-    Page output = PageFromTableChunks(
+    runtime::Page output = PageFromTableChunks(
         input.bucket, chunks, input.range_start, input.range_stop, input.result_name);
     return page_with_plan(std::move(output), plan);
 }
 
-std::optional<std::string> local_join_key(const ObjectValue& row,
+std::optional<std::string> local_join_key(const runtime::ObjectValue& row,
                                           const std::vector<std::string>& columns) {
     std::string key;
     for (const auto& column : columns) {
-        const Value* value = row.lookup(column);
+        const runtime::Value* value = row.lookup(column);
         if (value == nullptr || value->is_null()) {
             return std::nullopt;
         }
@@ -515,33 +519,34 @@ std::optional<std::string> local_join_key(const ObjectValue& row,
     return key;
 }
 
-std::shared_ptr<ObjectValue> null_row_for_columns(const std::vector<std::string>& columns) {
-    std::vector<std::pair<std::string, Value>> props;
+std::shared_ptr<runtime::ObjectValue> null_row_for_columns(
+    const std::vector<std::string>& columns) {
+    std::vector<std::pair<std::string, runtime::Value>> props;
     props.reserve(columns.size());
     for (const auto& column : columns) {
-        props.emplace_back(column, Value::null());
+        props.emplace_back(column, runtime::Value::null());
     }
-    return std::make_shared<ObjectValue>(std::move(props));
+    return std::make_shared<runtime::ObjectValue>(std::move(props));
 }
 
 std::string local_joined_property_name(const std::string& table_name, const std::string& column) {
     return absl::StrCat(column, "_", table_name);
 }
 
-std::vector<std::pair<std::string, Value>> local_join_group_properties(
-    const ObjectValue* left,
-    const ObjectValue* right,
+std::vector<std::pair<std::string, runtime::Value>> local_join_group_properties(
+    const runtime::ObjectValue* left,
+    const runtime::ObjectValue* right,
     const plan::JoinSpec& spec,
     const std::unordered_set<std::string>& overlapping_columns) {
     const std::unordered_set<std::string> on_columns(spec.on.begin(), spec.on.end());
-    std::vector<std::pair<std::string, Value>> props;
+    std::vector<std::pair<std::string, runtime::Value>> props;
     std::unordered_set<std::string> inserted;
-    auto append = [&](const ObjectValue* row, const std::string& table_name) {
+    auto append = [&](const runtime::ObjectValue* row, const std::string& table_name) {
         if (row == nullptr) {
             return;
         }
-        const Value* group = row->lookup("_group");
-        if (group == nullptr || group->type() != Value::Type::Object) {
+        const runtime::Value* group = row->lookup("_group");
+        if (group == nullptr || group->type() != runtime::Value::Type::Object) {
             return;
         }
         for (const auto& [key, value] : group->as_object().properties) {
@@ -565,11 +570,11 @@ std::vector<std::pair<std::string, Value>> local_join_group_properties(
     return props;
 }
 
-std::shared_ptr<ObjectValue> local_join_row(const ObjectValue* left,
-                                            const std::vector<std::string>& left_columns,
-                                            const ObjectValue* right,
-                                            const std::vector<std::string>& right_columns,
-                                            const plan::JoinSpec& spec) {
+std::shared_ptr<runtime::ObjectValue> local_join_row(const runtime::ObjectValue* left,
+                                                     const std::vector<std::string>& left_columns,
+                                                     const runtime::ObjectValue* right,
+                                                     const std::vector<std::string>& right_columns,
+                                                     const plan::JoinSpec& spec) {
     const std::unordered_set<std::string> on_columns(spec.on.begin(), spec.on.end());
     const std::unordered_set<std::string> right_column_set(right_columns.begin(),
                                                            right_columns.end());
@@ -580,21 +585,21 @@ std::shared_ptr<ObjectValue> local_join_row(const ObjectValue* left,
         }
     }
     auto group_props = local_join_group_properties(left, right, spec, overlapping_columns);
-    std::vector<std::pair<std::string, Value>> props;
+    std::vector<std::pair<std::string, runtime::Value>> props;
     props.reserve(left_columns.size() + right_columns.size() + group_props.size() + 1);
     for (const auto& [key, value] : group_props) {
         props.emplace_back(key, value);
     }
 
-    auto append = [&](const std::string& column, const Value* value) {
+    auto append = [&](const std::string& column, const runtime::Value* value) {
         const bool already_present = std::ranges::any_of(
             props, [&](const auto& property) { return property.first == column; });
         if (!already_present) {
-            props.emplace_back(column, value == nullptr ? Value::null() : *value);
+            props.emplace_back(column, value == nullptr ? runtime::Value::null() : *value);
         }
     };
     for (const auto& column : spec.on) {
-        const Value* value = left == nullptr ? nullptr : left->lookup(column);
+        const runtime::Value* value = left == nullptr ? nullptr : left->lookup(column);
         if ((value == nullptr || value->is_null()) && right != nullptr) {
             value = right->lookup(column);
         }
@@ -619,12 +624,12 @@ std::shared_ptr<ObjectValue> local_join_row(const ObjectValue* left,
         append(output_name, right == nullptr ? nullptr : right->lookup(column));
     }
     if (!group_props.empty()) {
-        props.emplace_back("_group", Value::object(std::move(group_props)));
+        props.emplace_back("_group", runtime::Value::object(std::move(group_props)));
     }
-    return std::make_shared<ObjectValue>(std::move(props));
+    return std::make_shared<runtime::ObjectValue>(std::move(props));
 }
 
-std::string local_chunk_group_key(const TableChunk& chunk) {
+std::string local_chunk_group_key(const runtime::TableChunk& chunk) {
     if (chunk.group_key != nullptr) {
         return chunk.group_key->string();
     }
@@ -632,14 +637,15 @@ std::string local_chunk_group_key(const TableChunk& chunk) {
         if (row == nullptr) {
             continue;
         }
-        const Value* group = row->lookup("_group");
+        const runtime::Value* group = row->lookup("_group");
         return group == nullptr ? "" : group->string();
     }
     return "";
 }
 
-std::vector<const ObjectValue*> local_rows(const std::vector<const TableChunk*>& chunks) {
-    std::vector<const ObjectValue*> rows;
+std::vector<const runtime::ObjectValue*> local_rows(
+    const std::vector<const runtime::TableChunk*>& chunks) {
+    std::vector<const runtime::ObjectValue*> rows;
     for (const auto* chunk : chunks) {
         for (const auto& row : chunk->rows) {
             if (row != nullptr) {
@@ -650,14 +656,15 @@ std::vector<const ObjectValue*> local_rows(const std::vector<const TableChunk*>&
     return rows;
 }
 
-TableChunk local_hash_join_group(const std::vector<const ObjectValue*>& left_rows,
-                                 const std::vector<const ObjectValue*>& right_rows,
-                                 const std::vector<std::string>& left_columns,
-                                 const std::vector<std::string>& right_columns,
-                                 const plan::JoinSpec& spec) {
+runtime::TableChunk local_hash_join_group(
+    const std::vector<const runtime::ObjectValue*>& left_rows,
+    const std::vector<const runtime::ObjectValue*>& right_rows,
+    const std::vector<std::string>& left_columns,
+    const std::vector<std::string>& right_columns,
+    const plan::JoinSpec& spec) {
     auto left_null = null_row_for_columns(left_columns);
     auto right_null = null_row_for_columns(right_columns);
-    TableChunk chunk;
+    runtime::TableChunk chunk;
     if (spec.build_side == plan::JoinBuildSide::Left) {
         std::unordered_map<std::string, std::vector<size_t>> left_rows_by_key;
         left_rows_by_key.reserve(left_rows.size());
@@ -742,31 +749,31 @@ TableChunk local_hash_join_group(const std::vector<const ObjectValue*>& left_row
     return chunk;
 }
 
-absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
-                                             const Value& right_value,
-                                             const std::shared_ptr<plan::PlanNode>& plan) {
+absl::StatusOr<runtime::Value> local_hash_join_values(const runtime::Value& left_value,
+                                                      const runtime::Value& right_value,
+                                                      const std::shared_ptr<plan::PlanNode>& plan) {
     const auto& spec = plan->join();
     if (spec.on.empty()) {
         return absl::InvalidArgumentError("local hash join requires at least one key");
     }
-    const TableValue& left_table = left_value.as_table();
-    const TableValue& right_table = right_value.as_table();
-    const auto left_columns = all_visible_columns_in_order(left_table);
-    const auto right_columns = all_visible_columns_in_order(right_table);
+    const runtime::TableValue& left_table = left_value.as_table();
+    const runtime::TableValue& right_table = right_value.as_table();
+    const auto left_columns = runtime::detail::all_visible_columns_in_order(left_table);
+    const auto right_columns = runtime::detail::all_visible_columns_in_order(right_table);
 
-    std::unordered_map<std::string, std::vector<const TableChunk*>> right_chunks_by_group;
+    std::unordered_map<std::string, std::vector<const runtime::TableChunk*>> right_chunks_by_group;
     right_chunks_by_group.reserve(right_table.table_count());
     for (const auto& chunk : right_table.tables) {
         right_chunks_by_group[local_chunk_group_key(chunk)].push_back(&chunk);
     }
 
-    std::unordered_map<std::string, std::vector<const TableChunk*>> left_chunks_by_group;
+    std::unordered_map<std::string, std::vector<const runtime::TableChunk*>> left_chunks_by_group;
     left_chunks_by_group.reserve(left_table.table_count());
     for (const auto& chunk : left_table.tables) {
         left_chunks_by_group[local_chunk_group_key(chunk)].push_back(&chunk);
     }
 
-    std::vector<TableChunk> chunks;
+    std::vector<runtime::TableChunk> chunks;
     std::unordered_set<std::string> processed_groups;
     for (const auto& [group_key, left_chunks] : left_chunks_by_group) {
         processed_groups.insert(group_key);
@@ -777,7 +784,7 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
         }
         auto chunk = local_hash_join_group(local_rows(left_chunks),
                                            right_it == right_chunks_by_group.end()
-                                               ? std::vector<const ObjectValue*>{}
+                                               ? std::vector<const runtime::ObjectValue*>{}
                                                : local_rows(right_it->second),
                                            left_columns,
                                            right_columns,
@@ -799,7 +806,7 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
         }
     }
 
-    Value value = Value::table_stream(
+    runtime::Value value = runtime::Value::table_stream(
         left_table.bucket.empty() ? right_table.bucket : left_table.bucket,
         std::move(chunks),
         left_table.range_start.has_value() ? left_table.range_start : right_table.range_start,
@@ -809,18 +816,18 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
     return value;
 }
 
-absl::StatusOr<std::optional<Page>> next_input_page(Operator* input) {
+absl::StatusOr<std::optional<runtime::Page>> next_input_page(Operator* input) {
     if (input == nullptr) {
         return absl::InvalidArgumentError("operator has no input");
     }
     return input->NextPage();
 }
 
-absl::StatusOr<Value> collect_input_value(Operator* input) {
+absl::StatusOr<runtime::Value> collect_input_value(Operator* input) {
     if (input == nullptr) {
         return absl::InvalidArgumentError("operator has no input");
     }
-    std::optional<Page> output;
+    std::optional<runtime::Page> output;
     while (true) {
         auto page_or = input->NextPage();
         if (!page_or.ok()) {
@@ -836,16 +843,16 @@ absl::StatusOr<Value> collect_input_value(Operator* input) {
         AppendPage(&*output, std::move(page_or->value()));
     }
     if (!output.has_value()) {
-        return Value::table_stream("", {});
+        return runtime::Value::table_stream("", {});
     }
     return value_from_page(*output);
 }
 
-absl::StatusOr<Page> collect_input_page(Operator* input) {
+absl::StatusOr<runtime::Page> collect_input_page(Operator* input) {
     if (input == nullptr) {
         return absl::InvalidArgumentError("operator has no input");
     }
-    std::optional<Page> output;
+    std::optional<runtime::Page> output;
     while (true) {
         auto page_or = input->NextPage();
         if (!page_or.ok()) {
@@ -861,7 +868,7 @@ absl::StatusOr<Page> collect_input_page(Operator* input) {
         AppendPage(&*output, std::move(page_or->value()));
     }
     if (!output.has_value()) {
-        return Page{};
+        return runtime::Page{};
     }
     return std::move(*output);
 }
@@ -884,7 +891,7 @@ public:
         }
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         if (!initialized_) {
             auto status = Initialize();
             if (!status.ok()) {
@@ -992,7 +999,7 @@ public:
         }
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         if (!initialized_) {
             auto runtime_or = connector::ConnectorRegistry::Global().CreateRuntime(
                 source_spec_from_split(split_));
@@ -1063,7 +1070,7 @@ public:
         producer_count_ = std::max<size_t>(1, producer_count);
     }
 
-    absl::Status AddPage(Page page) {
+    absl::Status AddPage(runtime::Page page) {
         const size_t page_bytes = EstimatePageBytes(page);
         std::unique_lock<std::mutex> lock(mu_);
         cv_.wait(lock, [this, page_bytes]() {
@@ -1088,7 +1095,7 @@ public:
         return absl::OkStatus();
     }
 
-    absl::StatusOr<std::optional<Page>> PopPage() {
+    absl::StatusOr<std::optional<runtime::Page>> PopPage() {
         std::unique_lock<std::mutex> lock(mu_);
         cv_.wait(lock, [this]() { return !pages_.empty() || finished_ || error_.has_value(); });
         if (error_.has_value()) {
@@ -1097,7 +1104,7 @@ public:
         if (pages_.empty()) {
             return std::nullopt;
         }
-        Page page = std::move(pages_.front());
+        runtime::Page page = std::move(pages_.front());
         pages_.pop_front();
         const size_t page_bytes = EstimatePageBytes(page);
         buffered_bytes_ = page_bytes > buffered_bytes_ ? 0 : buffered_bytes_ - page_bytes;
@@ -1156,7 +1163,7 @@ public:
 private:
     mutable std::mutex mu_;
     std::condition_variable cv_;
-    std::deque<Page> pages_;
+    std::deque<runtime::Page> pages_;
     size_t max_pages_ = 1024;
     size_t max_buffered_bytes_ = size_t{64} * 1024 * 1024;
     size_t buffered_bytes_ = 0;
@@ -1247,7 +1254,7 @@ public:
         }
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         if (finished_) {
             return std::nullopt;
         }
@@ -1270,8 +1277,8 @@ public:
         if (buffer_->closed()) {
             return absl::FailedPreconditionError("exchange sink writes to closed buffer");
         }
-        Page output = std::move(**page_or);
-        Page buffered = output;
+        runtime::Page output = std::move(**page_or);
+        runtime::Page buffered = output;
         auto status = buffer_->AddPage(std::move(buffered));
         if (!status.ok()) {
             return status;
@@ -1293,7 +1300,7 @@ size_t partition_index_for_key(const std::string& key, size_t partition_count) {
 }
 
 std::optional<std::string> partition_key_for_page_row(
-    const PageChunk& chunk,
+    const runtime::PageChunk& chunk,
     size_t row_index,
     const std::vector<std::string>& partition_keys,
     bool include_group_key) {
@@ -1375,7 +1382,7 @@ public:
         }
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         if (finished_) {
             return std::nullopt;
         }
@@ -1398,14 +1405,14 @@ public:
             return std::nullopt;
         }
 
-        Page output = std::move(**page_or);
+        runtime::Page output = std::move(**page_or);
         auto status = ValidatePage(output);
         if (!status.ok()) {
             MarkBuffersError(status);
             return status;
         }
 
-        std::vector<std::vector<TableChunk>> partitions(buffers_.size());
+        std::vector<std::vector<runtime::TableChunk>> partitions(buffers_.size());
         for (const auto& chunk : output.chunks) {
             std::vector<std::string> columns;
             columns.reserve(chunk.columns.size());
@@ -1415,7 +1422,7 @@ public:
             for (size_t row_index = 0; row_index < chunk.row_count; ++row_index) {
                 auto row = RowFromPageChunk(chunk, row_index);
                 auto append = [&](size_t partition) {
-                    TableChunk partition_chunk;
+                    runtime::TableChunk partition_chunk;
                     partition_chunk.group_key = chunk.group_key;
                     partition_chunk.columns = columns;
                     partition_chunk.rows.push_back(row);
@@ -1465,11 +1472,11 @@ public:
             if (partitions[index].empty()) {
                 continue;
             }
-            Page partitioned = PageFromTableChunks(output.bucket,
-                                                   partitions[index],
-                                                   output.range_start,
-                                                   output.range_stop,
-                                                   output.result_name);
+            runtime::Page partitioned = PageFromTableChunks(output.bucket,
+                                                            partitions[index],
+                                                            output.range_start,
+                                                            output.range_stop,
+                                                            output.result_name);
             partitioned.plan = output.plan;
             partitioned.materialized = output.materialized;
             partition_stats_[index].rows += partitioned.row_count();
@@ -1512,7 +1519,7 @@ public:
         }
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         if (buffer_ == nullptr) {
             return absl::InvalidArgumentError("exchange source has no buffer");
         }
@@ -1528,7 +1535,7 @@ public:
     PageUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
         : plan_(std::move(plan)), input_(std::move(input)) {}
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         auto input_or = next_input_page(input_.get());
         if (!input_or.ok()) {
             return input_or.status();
@@ -1564,7 +1571,7 @@ public:
 protected:
     [[nodiscard]] const std::shared_ptr<plan::PlanNode>& plan() const { return plan_; }
     [[nodiscard]] Operator* input() const { return input_.get(); }
-    virtual absl::StatusOr<Page> Apply(Page input) const = 0;
+    virtual absl::StatusOr<runtime::Page> Apply(runtime::Page input) const = 0;
 
 private:
     std::shared_ptr<plan::PlanNode> plan_;
@@ -1576,7 +1583,7 @@ public:
     BlockingPageUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
         : plan_(std::move(plan)), input_(std::move(input)) {}
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         if (emitted_) {
             return std::nullopt;
         }
@@ -1612,7 +1619,7 @@ public:
 
 protected:
     [[nodiscard]] const std::shared_ptr<plan::PlanNode>& plan() const { return plan_; }
-    virtual absl::StatusOr<Page> Apply(Page input) const = 0;
+    virtual absl::StatusOr<runtime::Page> Apply(runtime::Page input) const = 0;
 
 private:
     std::shared_ptr<plan::PlanNode> plan_;
@@ -1626,7 +1633,7 @@ public:
     [[nodiscard]] std::string name() const override { return "RangeOperator"; }
 
 private:
-    absl::StatusOr<Page> Apply(Page input) const override {
+    absl::StatusOr<runtime::Page> Apply(runtime::Page input) const override {
         return apply_range_page(input, plan());
     }
 };
@@ -1637,7 +1644,7 @@ public:
     [[nodiscard]] std::string name() const override { return "FilterOperator"; }
 
 private:
-    absl::StatusOr<Page> Apply(Page input) const override {
+    absl::StatusOr<runtime::Page> Apply(runtime::Page input) const override {
         return apply_filter_page(input, plan());
     }
 };
@@ -1648,7 +1655,7 @@ public:
     [[nodiscard]] std::string name() const override { return "ProjectOperator"; }
 
 private:
-    absl::StatusOr<Page> Apply(Page input) const override {
+    absl::StatusOr<runtime::Page> Apply(runtime::Page input) const override {
         return apply_project_page(input, plan());
     }
 };
@@ -1659,7 +1666,7 @@ public:
     [[nodiscard]] std::string name() const override { return "RenameOperator"; }
 
 private:
-    absl::StatusOr<Page> Apply(Page input) const override {
+    absl::StatusOr<runtime::Page> Apply(runtime::Page input) const override {
         return apply_rename_page(std::move(input), plan());
     }
 };
@@ -1689,7 +1696,7 @@ public:
         }
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         auto input_or = next_input_page(input_.get());
         if (!input_or.ok()) {
             return input_or.status();
@@ -1736,7 +1743,7 @@ public:
         }
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         if (remaining_limit_ == 0) {
             return std::nullopt;
         }
@@ -1749,12 +1756,12 @@ public:
                 return std::nullopt;
             }
 
-            Page input = std::move(input_or->value());
+            runtime::Page input = std::move(input_or->value());
             auto status = ValidatePage(input);
             if (!status.ok()) {
                 return status;
             }
-            std::vector<PageChunk> chunks;
+            std::vector<runtime::PageChunk> chunks;
             chunks.reserve(input.chunks.size());
             for (const auto& source : input.chunks) {
                 if (remaining_limit_ == 0) {
@@ -1768,11 +1775,11 @@ public:
                 remaining_offset_ = 0;
                 const size_t take = std::min<size_t>(source.row_count - start,
                                                      static_cast<size_t>(remaining_limit_));
-                PageChunk chunk = SlicePageChunkRows(source, start, take);
+                runtime::PageChunk chunk = SlicePageChunkRows(source, start, take);
                 remaining_limit_ -= static_cast<int64_t>(chunk.row_count);
                 chunks.push_back(std::move(chunk));
             }
-            Page output = PageLike(input, std::move(chunks));
+            runtime::Page output = PageLike(input, std::move(chunks));
             output.plan = plan_;
             if (!output.empty() || remaining_limit_ == 0) {
                 return output;
@@ -1793,7 +1800,9 @@ public:
     [[nodiscard]] std::string name() const override { return "SortOperator"; }
 
 private:
-    absl::StatusOr<Page> Apply(Page input) const override { return apply_sort_page(input, plan()); }
+    absl::StatusOr<runtime::Page> Apply(runtime::Page input) const override {
+        return apply_sort_page(input, plan());
+    }
 };
 
 class TopNOperator final : public BlockingPageUnaryOperator {
@@ -1806,7 +1815,7 @@ public:
     [[nodiscard]] std::string name() const override { return "TopNOperator"; }
 
 private:
-    absl::StatusOr<Page> Apply(Page input) const override {
+    absl::StatusOr<runtime::Page> Apply(runtime::Page input) const override {
         return apply_topn_page(input, plan(), limit_);
     }
 
@@ -1840,7 +1849,7 @@ public:
         }
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         if (emitted_) {
             return std::nullopt;
         }
@@ -1873,7 +1882,7 @@ public:
     [[nodiscard]] std::string name() const override { return "MaterializeOperator"; }
 
 private:
-    absl::StatusOr<Page> Apply(Page input) const override {
+    absl::StatusOr<runtime::Page> Apply(runtime::Page input) const override {
         return materialize_page(std::move(input), plan());
     }
 };
@@ -1902,7 +1911,7 @@ public:
         }
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         auto input_or = next_input_page(input_.get());
         if (!input_or.ok()) {
             return input_or.status();
@@ -3236,7 +3245,7 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
 
 } // namespace
 
-Value internal::ValueFromPage(const Page& page) {
+runtime::Value internal::ValueFromPage(const runtime::Page& page) {
     return value_from_page(page);
 }
 

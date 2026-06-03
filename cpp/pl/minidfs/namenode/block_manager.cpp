@@ -453,8 +453,7 @@ pl::Result<pl::Void> BlockManager::reconcile_block_report(
     for (const auto& replica : replicas.value()) {
         auto report = reported.find(replica.block_id);
         bool is_reported = report != reported.end();
-        if (replica.state == ReplicaState::kDeleting &&
-            full_report && !is_reported) {
+        if (replica.state == ReplicaState::kDeleting && full_report && !is_reported) {
             auto mark =
                 store_->update_replica_state(replica.block_id, datanode_id, ReplicaState::kDeleted);
             if (mark.hasError()) {
@@ -463,8 +462,8 @@ pl::Result<pl::Void> BlockManager::reconcile_block_report(
         } else if ((replica.state == ReplicaState::kWriting ||
                     replica.state == ReplicaState::kStale) &&
                    is_reported && report->second.generation_stamp == replica.generation_stamp) {
-            auto mark =
-                store_->update_replica_state(replica.block_id, datanode_id, ReplicaState::kFinalized);
+            auto mark = store_->update_replica_state(
+                replica.block_id, datanode_id, ReplicaState::kFinalized);
             if (mark.hasError()) {
                 return folly::makeUnexpected(mark.error());
             }

@@ -25,9 +25,9 @@
 namespace {
 
 // 解析 Flux 源码并格式化，返回格式化结果
-// 封装 Parser + Formatter 的调用链，避免每个 TEST 重复样板代码
+// 封装 syntax::Parser + Formatter 的调用链，避免每个 TEST 重复样板代码
 std::string format_source(const std::string& source, pl::flux::lsp::FormatOptions opts = {}) {
-    pl::flux::Parser parser(source);
+    pl::flux::syntax::Parser parser(source);
     auto file = parser.parse_file("test.flux");
     pl::flux::lsp::Formatter formatter(opts);
     return formatter.format(*file);
@@ -98,7 +98,7 @@ TEST(FormatterTest, FunctionExprWithMultipleParams) {
 }
 
 TEST(FormatterTest, FunctionExprWithBlockBody) {
-    // Block body 的函数需要展开为多行
+    // syntax::Block body 的函数需要展开为多行
     const std::string source = "fn = (x) => {\n    return x + 1\n}";
     const std::string result = format_source(source);
 
@@ -166,7 +166,7 @@ TEST(FormatterTest, LongObjectExpressionWraps) {
     EXPECT_NE(result.find("\n    b:"), std::string::npos);
 }
 
-// ==================== Package 和 Import ====================
+// ==================== syntax::Package 和 Import ====================
 
 TEST(FormatterTest, PackageAndImports) {
     // package clause 和 import 声明的格式化

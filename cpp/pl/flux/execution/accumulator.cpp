@@ -57,7 +57,7 @@ private:
     Clock::time_point start_;
 };
 
-absl::StatusOr<std::optional<Page>> next_accumulator_input_page(Operator* input) {
+absl::StatusOr<std::optional<runtime::Page>> next_accumulator_input_page(Operator* input) {
     if (input == nullptr) {
         return absl::InvalidArgumentError("operator has no input");
     }
@@ -77,41 +77,41 @@ size_t parse_accumulator_memory_limit() {
     return static_cast<size_t>(parsed);
 }
 
-size_t estimate_value_memory_bytes(const Value& value) {
+size_t estimate_value_memory_bytes(const runtime::Value& value) {
     switch (value.type()) {
-        case Value::Type::Null:
-        case Value::Type::Bool:
-        case Value::Type::Int:
-        case Value::Type::UInt:
-        case Value::Type::Float:
-        case Value::Type::Time:
-        case Value::Type::Duration:
-        case Value::Type::Regex:
-            return sizeof(Value);
-        case Value::Type::String:
-            return sizeof(Value) + value.as_string().size();
-        case Value::Type::Array: {
-            size_t bytes = sizeof(Value);
+        case runtime::Value::Type::Null:
+        case runtime::Value::Type::Bool:
+        case runtime::Value::Type::Int:
+        case runtime::Value::Type::UInt:
+        case runtime::Value::Type::Float:
+        case runtime::Value::Type::Time:
+        case runtime::Value::Type::Duration:
+        case runtime::Value::Type::Regex:
+            return sizeof(runtime::Value);
+        case runtime::Value::Type::String:
+            return sizeof(runtime::Value) + value.as_string().size();
+        case runtime::Value::Type::Array: {
+            size_t bytes = sizeof(runtime::Value);
             for (const auto& element : value.as_array().elements) {
                 bytes += estimate_value_memory_bytes(element);
             }
             return bytes;
         }
-        case Value::Type::Object: {
-            size_t bytes = sizeof(Value);
+        case runtime::Value::Type::Object: {
+            size_t bytes = sizeof(runtime::Value);
             for (const auto& [name, property] : value.as_object().properties) {
                 bytes += name.size() + estimate_value_memory_bytes(property);
             }
             return bytes;
         }
-        case Value::Type::Table:
-        case Value::Type::Function:
-            return sizeof(Value);
+        case runtime::Value::Type::Table:
+        case runtime::Value::Type::Function:
+            return sizeof(runtime::Value);
     }
-    return sizeof(Value);
+    return sizeof(runtime::Value);
 }
 
-size_t estimate_group_key_memory_bytes(const std::shared_ptr<ObjectValue>& group_key) {
+size_t estimate_group_key_memory_bytes(const std::shared_ptr<runtime::ObjectValue>& group_key) {
     constexpr size_t kStateOverhead = 128;
     if (group_key == nullptr) {
         return kStateOverhead;
@@ -157,24 +157,25 @@ void release_accumulator_memory(const std::shared_ptr<QueryMemoryContext>& memor
     }
 }
 
-Page page_with_plan(Page page, const std::shared_ptr<plan::PlanNode>& plan) {
+runtime::Page page_with_plan(runtime::Page page, const std::shared_ptr<plan::PlanNode>& plan) {
     page.plan = plan;
     page.materialized = true;
     return page;
 }
 
-bool is_numeric_value(const Value& value) {
-    return value.type() == Value::Type::Int || value.type() == Value::Type::UInt ||
-           value.type() == Value::Type::Float;
+bool is_numeric_value(const runtime::Value& value) {
+    return value.type() == runtime::Value::Type::Int ||
+           value.type() == runtime::Value::Type::UInt ||
+           value.type() == runtime::Value::Type::Float;
 }
 
-double numeric_value(const Value& value) {
+double numeric_value(const runtime::Value& value) {
     switch (value.type()) {
-        case Value::Type::Int:
+        case runtime::Value::Type::Int:
             return static_cast<double>(value.as_int());
-        case Value::Type::UInt:
+        case runtime::Value::Type::UInt:
             return static_cast<double>(value.as_uint());
-        case Value::Type::Float:
+        case runtime::Value::Type::Float:
             return value.as_float();
         default:
             return 0.0;
@@ -185,31 +186,31 @@ size_t hash_combine(size_t seed, size_t value) {
     return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U));
 }
 
-size_t value_hash(const Value& value) {
+size_t value_hash(const runtime::Value& value) {
     size_t seed = std::hash<int>{}(static_cast<int>(value.type()));
     switch (value.type()) {
-        case Value::Type::Null:
+        case runtime::Value::Type::Null:
             return seed;
-        case Value::Type::Bool:
+        case runtime::Value::Type::Bool:
             return hash_combine(seed, std::hash<bool>{}(value.as_bool()));
-        case Value::Type::Int:
+        case runtime::Value::Type::Int:
             return hash_combine(seed, std::hash<int64_t>{}(value.as_int()));
-        case Value::Type::UInt:
+        case runtime::Value::Type::UInt:
             return hash_combine(seed, std::hash<uint64_t>{}(value.as_uint()));
-        case Value::Type::Float:
+        case runtime::Value::Type::Float:
             return hash_combine(seed, std::hash<double>{}(value.as_float()));
-        case Value::Type::String:
+        case runtime::Value::Type::String:
             return hash_combine(seed, std::hash<std::string>{}(value.as_string()));
-        case Value::Type::Duration:
+        case runtime::Value::Type::Duration:
             return hash_combine(seed, std::hash<std::string>{}(value.as_duration().literal));
-        case Value::Type::Time:
+        case runtime::Value::Type::Time:
             return hash_combine(seed, std::hash<std::string>{}(value.as_time().literal));
-        case Value::Type::Regex:
+        case runtime::Value::Type::Regex:
             return hash_combine(seed, std::hash<std::string>{}(value.as_regex().literal));
-        case Value::Type::Array:
-        case Value::Type::Object:
-        case Value::Type::Table:
-        case Value::Type::Function:
+        case runtime::Value::Type::Array:
+        case runtime::Value::Type::Object:
+        case runtime::Value::Type::Table:
+        case runtime::Value::Type::Function:
             return hash_combine(seed, std::hash<std::string>{}(value.string()));
     }
     return seed;
@@ -217,7 +218,7 @@ size_t value_hash(const Value& value) {
 
 struct GroupKeyPart {
     bool missing = false;
-    Value value = Value::null();
+    runtime::Value value = runtime::Value::null();
 
     bool operator==(const GroupKeyPart& other) const {
         if (missing || other.missing) {
@@ -301,7 +302,7 @@ struct PageMetadata {
 };
 
 struct AggregateState {
-    std::shared_ptr<ObjectValue> group_key;
+    std::shared_ptr<runtime::ObjectValue> group_key;
     int64_t count = 0;
     size_t numeric_count = 0;
     double sum = 0.0;
@@ -310,7 +311,7 @@ struct AggregateState {
     bool has_numeric = false;
 };
 
-void capture_page_metadata(PageMetadata* metadata, const Page& page) {
+void capture_page_metadata(PageMetadata* metadata, const runtime::Page& page) {
     if (metadata == nullptr || metadata->initialized) {
         return;
     }
@@ -321,10 +322,10 @@ void capture_page_metadata(PageMetadata* metadata, const Page& page) {
     metadata->initialized = true;
 }
 
-Page page_from_accumulated_page_chunks(PageMetadata metadata,
-                                       std::vector<PageChunk> chunks,
-                                       const std::shared_ptr<plan::PlanNode>& plan) {
-    Page output;
+runtime::Page page_from_accumulated_page_chunks(PageMetadata metadata,
+                                                std::vector<runtime::PageChunk> chunks,
+                                                const std::shared_ptr<plan::PlanNode>& plan) {
+    runtime::Page output;
     output.bucket = std::move(metadata.bucket);
     output.chunks = std::move(chunks);
     output.range_start = std::move(metadata.range_start);
@@ -334,11 +335,12 @@ Page page_from_accumulated_page_chunks(PageMetadata metadata,
     return page_with_plan(std::move(output), plan);
 }
 
-std::optional<size_t> find_page_chunk_column(const PageChunk& chunk, const std::string& name) {
+std::optional<size_t> find_page_chunk_column(const runtime::PageChunk& chunk,
+                                             const std::string& name) {
     return chunk.FindColumn(name);
 }
 
-std::vector<std::optional<size_t>> group_column_indexes(const PageChunk& chunk,
+std::vector<std::optional<size_t>> group_column_indexes(const runtime::PageChunk& chunk,
                                                         const std::vector<std::string>& columns) {
     std::vector<std::optional<size_t>> indexes;
     indexes.reserve(columns.size());
@@ -348,9 +350,9 @@ std::vector<std::optional<size_t>> group_column_indexes(const PageChunk& chunk,
     return indexes;
 }
 
-const Value* page_chunk_value_at_index(const PageChunk& chunk,
-                                       size_t row_index,
-                                       std::optional<size_t> column_index) {
+const runtime::Value* page_chunk_value_at_index(const runtime::PageChunk& chunk,
+                                                size_t row_index,
+                                                std::optional<size_t> column_index) {
     if (!column_index.has_value() || *column_index >= chunk.columns.size() ||
         row_index >= chunk.row_count) {
         return nullptr;
@@ -362,7 +364,7 @@ const Value* page_chunk_value_at_index(const PageChunk& chunk,
     return &column.values[row_index];
 }
 
-GroupKey group_key_for_row(const PageChunk& chunk,
+GroupKey group_key_for_row(const runtime::PageChunk& chunk,
                            size_t row_index,
                            const std::vector<std::optional<size_t>>& column_indexes) {
     GroupKey key;
@@ -372,7 +374,8 @@ GroupKey group_key_for_row(const PageChunk& chunk,
     }
     if (column_indexes.size() == 1) {
         key.kind = GroupKey::Kind::Single;
-        const Value* value = page_chunk_value_at_index(chunk, row_index, column_indexes[0]);
+        const runtime::Value* value =
+            page_chunk_value_at_index(chunk, row_index, column_indexes[0]);
         key.single = value == nullptr ? GroupKeyPart{.missing = true}
                                       : GroupKeyPart{.missing = false, .value = *value};
         return key;
@@ -380,30 +383,31 @@ GroupKey group_key_for_row(const PageChunk& chunk,
     key.kind = GroupKey::Kind::Multi;
     key.parts.reserve(column_indexes.size());
     for (const auto& column_index : column_indexes) {
-        const Value* value = page_chunk_value_at_index(chunk, row_index, column_index);
+        const runtime::Value* value = page_chunk_value_at_index(chunk, row_index, column_index);
         key.parts.push_back(value == nullptr ? GroupKeyPart{.missing = true}
                                              : GroupKeyPart{.missing = false, .value = *value});
     }
     return key;
 }
 
-std::shared_ptr<ObjectValue> group_key_object_for_row(
-    const PageChunk& chunk,
+std::shared_ptr<runtime::ObjectValue> group_key_object_for_row(
+    const runtime::PageChunk& chunk,
     size_t row_index,
     const std::vector<std::string>& columns,
     const std::vector<std::optional<size_t>>& column_indexes) {
-    std::vector<std::pair<std::string, Value>> group_props;
+    std::vector<std::pair<std::string, runtime::Value>> group_props;
     group_props.reserve(columns.size());
     for (size_t index = 0; index < columns.size(); ++index) {
-        const Value* value = page_chunk_value_at_index(chunk, row_index, column_indexes[index]);
+        const runtime::Value* value =
+            page_chunk_value_at_index(chunk, row_index, column_indexes[index]);
         if (value != nullptr) {
             group_props.emplace_back(columns[index], *value);
         }
     }
-    return std::make_shared<ObjectValue>(std::move(group_props));
+    return std::make_shared<runtime::ObjectValue>(std::move(group_props));
 }
 
-GroupKey group_key_from_object(const std::shared_ptr<ObjectValue>& object) {
+GroupKey group_key_from_object(const std::shared_ptr<runtime::ObjectValue>& object) {
     GroupKey key;
     if (object == nullptr || object->properties.empty()) {
         key.kind = GroupKey::Kind::Empty;
@@ -422,40 +426,43 @@ GroupKey group_key_from_object(const std::shared_ptr<ObjectValue>& object) {
     return key;
 }
 
-ColumnVector make_empty_column_like(const ColumnVector& source, size_t row_count) {
-    ColumnVector column;
+runtime::ColumnVector make_empty_column_like(const runtime::ColumnVector& source,
+                                             size_t row_count) {
+    runtime::ColumnVector column;
     column.name = source.name;
     column.type = source.type;
-    column.values.resize(row_count, Value::null());
+    column.values.resize(row_count, runtime::Value::null());
     return column;
 }
 
-ColumnVector make_empty_column(std::string name, Value::Type type, size_t row_count) {
-    ColumnVector column;
+runtime::ColumnVector make_empty_column(std::string name,
+                                        runtime::Value::Type type,
+                                        size_t row_count) {
+    runtime::ColumnVector column;
     column.name = std::move(name);
     column.type = type;
-    column.values.resize(row_count, Value::null());
+    column.values.resize(row_count, runtime::Value::null());
     return column;
 }
 
-void ensure_column(PageChunk* target, const ColumnVector& source) {
+void ensure_column(runtime::PageChunk* target, const runtime::ColumnVector& source) {
     if (target == nullptr || find_page_chunk_column(*target, source.name).has_value()) {
         return;
     }
     target->columns.push_back(make_empty_column_like(source, target->row_count));
 }
 
-void ensure_named_column(PageChunk* target, std::string name, Value::Type type) {
+void ensure_named_column(runtime::PageChunk* target, std::string name, runtime::Value::Type type) {
     if (target == nullptr || find_page_chunk_column(*target, name).has_value()) {
         return;
     }
     target->columns.push_back(make_empty_column(std::move(name), type, target->row_count));
 }
 
-void append_source_row_to_chunk(PageChunk* target,
-                                const PageChunk& source,
+void append_source_row_to_chunk(runtime::PageChunk* target,
+                                const runtime::PageChunk& source,
                                 size_t row_index,
-                                const std::shared_ptr<ObjectValue>& group_key) {
+                                const std::shared_ptr<runtime::ObjectValue>& group_key) {
     if (target == nullptr) {
         return;
     }
@@ -465,30 +472,31 @@ void append_source_row_to_chunk(PageChunk* target,
         }
     }
     if (group_key != nullptr) {
-        ColumnVector group_column =
-            make_empty_column("_group", Value::Type::Object, target->row_count);
+        runtime::ColumnVector group_column =
+            make_empty_column("_group", runtime::Value::Type::Object, target->row_count);
         ensure_column(target, group_column);
     }
 
     for (auto& target_column : target->columns) {
         if (target_column.name == "_group") {
-            target_column.values.push_back(Value::object(group_key));
+            target_column.values.push_back(runtime::Value::object(group_key));
             continue;
         }
         const auto source_index = find_page_chunk_column(source, target_column.name);
-        const Value* value = page_chunk_value_at_index(source, row_index, source_index);
-        target_column.values.push_back(value == nullptr ? Value::null() : *value);
-        if (target_column.type == Value::Type::Null && value != nullptr && !value->is_null()) {
+        const runtime::Value* value = page_chunk_value_at_index(source, row_index, source_index);
+        target_column.values.push_back(value == nullptr ? runtime::Value::null() : *value);
+        if (target_column.type == runtime::Value::Type::Null && value != nullptr &&
+            !value->is_null()) {
             target_column.type = value->type();
         }
     }
     ++target->row_count;
 }
 
-void append_distinct_row_to_chunk(PageChunk* target,
-                                  const std::shared_ptr<ObjectValue>& group_key,
+void append_distinct_row_to_chunk(runtime::PageChunk* target,
+                                  const std::shared_ptr<runtime::ObjectValue>& group_key,
                                   const std::string& column_name,
-                                  const Value& value) {
+                                  const runtime::Value& value) {
     if (target == nullptr) {
         return;
     }
@@ -496,45 +504,46 @@ void append_distinct_row_to_chunk(PageChunk* target,
         for (const auto& [name, group_value] : group_key->properties) {
             ensure_named_column(target, name, group_value.type());
         }
-        ensure_named_column(target, "_group", Value::Type::Object);
+        ensure_named_column(target, "_group", runtime::Value::Type::Object);
     }
     ensure_named_column(target, column_name, value.type());
 
     for (auto& target_column : target->columns) {
         if (target_column.name == "_group") {
-            target_column.values.push_back(Value::object(group_key));
+            target_column.values.push_back(runtime::Value::object(group_key));
             continue;
         }
-        const Value* output = nullptr;
+        const runtime::Value* output = nullptr;
         if (target_column.name == column_name) {
             output = &value;
         } else if (group_key != nullptr) {
             output = group_key->lookup(target_column.name);
         }
-        target_column.values.push_back(output == nullptr ? Value::null() : *output);
-        if (target_column.type == Value::Type::Null && output != nullptr && !output->is_null()) {
+        target_column.values.push_back(output == nullptr ? runtime::Value::null() : *output);
+        if (target_column.type == runtime::Value::Type::Null && output != nullptr &&
+            !output->is_null()) {
             target_column.type = output->type();
         }
     }
     ++target->row_count;
 }
 
-void append_result_column(PageChunk* chunk, std::string name, Value value) {
+void append_result_column(runtime::PageChunk* chunk, std::string name, runtime::Value value) {
     if (chunk == nullptr) {
         return;
     }
-    ColumnVector column;
+    runtime::ColumnVector column;
     column.name = std::move(name);
     column.type = value.type();
     column.values.push_back(std::move(value));
     chunk->columns.push_back(std::move(column));
 }
 
-PageChunk aggregate_result_chunk(const std::shared_ptr<ObjectValue>& group_key,
-                                 const std::string& column_name,
-                                 std::optional<Value> aggregate_value,
-                                 std::optional<int64_t> partial_count = std::nullopt) {
-    PageChunk chunk;
+runtime::PageChunk aggregate_result_chunk(const std::shared_ptr<runtime::ObjectValue>& group_key,
+                                          const std::string& column_name,
+                                          std::optional<runtime::Value> aggregate_value,
+                                          std::optional<int64_t> partial_count = std::nullopt) {
+    runtime::PageChunk chunk;
     chunk.group_key = group_key;
     if (!aggregate_value.has_value()) {
         chunk.row_count = 0;
@@ -546,19 +555,22 @@ PageChunk aggregate_result_chunk(const std::shared_ptr<ObjectValue>& group_key,
             append_result_column(&chunk, name, value);
         }
         append_result_column(
-            &chunk, "_group", Value::object(std::make_shared<ObjectValue>(*group_key)));
+            &chunk,
+            "_group",
+            runtime::Value::object(std::make_shared<runtime::ObjectValue>(*group_key)));
     }
     append_result_column(&chunk, column_name, std::move(*aggregate_value));
     if (partial_count.has_value()) {
-        append_result_column(&chunk, kPartialAggregateCountColumn, Value::integer(*partial_count));
+        append_result_column(
+            &chunk, kPartialAggregateCountColumn, runtime::Value::integer(*partial_count));
     }
     return chunk;
 }
 
 absl::Status update_aggregate_state(AggregateState* state,
                                     const plan::AggregateSpec& aggregate,
-                                    const Value* value,
-                                    const Value* partial_count = nullptr,
+                                    const runtime::Value* value,
+                                    const runtime::Value* partial_count = nullptr,
                                     AggregatePhase phase = AggregatePhase::Single) {
     if (state == nullptr) {
         return absl::InvalidArgumentError("aggregate state is missing");
@@ -568,11 +580,11 @@ absl::Status update_aggregate_state(AggregateState* state,
             if (value == nullptr || value->is_null()) {
                 return absl::OkStatus();
             }
-            if (value->type() == Value::Type::Int) {
+            if (value->type() == runtime::Value::Type::Int) {
                 state->count += value->as_int();
                 return absl::OkStatus();
             }
-            if (value->type() == Value::Type::UInt) {
+            if (value->type() == runtime::Value::Type::UInt) {
                 state->count += static_cast<int64_t>(value->as_uint());
                 return absl::OkStatus();
             }
@@ -596,9 +608,9 @@ absl::Status update_aggregate_state(AggregateState* state,
             return absl::OkStatus();
         }
         int64_t count = 0;
-        if (partial_count->type() == Value::Type::Int) {
+        if (partial_count->type() == runtime::Value::Type::Int) {
             count = partial_count->as_int();
-        } else if (partial_count->type() == Value::Type::UInt) {
+        } else if (partial_count->type() == runtime::Value::Type::UInt) {
             count = static_cast<int64_t>(partial_count->as_uint());
         } else {
             return absl::InvalidArgumentError("partial mean count must be integral");
@@ -639,7 +651,7 @@ absl::Status update_aggregate_state(AggregateState* state,
 
 absl::Status update_aggregate_state_from_column(AggregateState* state,
                                                 const plan::AggregateSpec& aggregate,
-                                                const ColumnVector* column) {
+                                                const runtime::ColumnVector* column) {
     if (aggregate.fn == plan::AggregateFunction::Count) {
         if (state != nullptr && column != nullptr) {
             state->count += static_cast<int64_t>(column->values.size());
@@ -658,11 +670,12 @@ absl::Status update_aggregate_state_from_column(AggregateState* state,
     return absl::OkStatus();
 }
 
-std::optional<Value> aggregate_value_from_state(const AggregateState& state,
-                                                const plan::AggregateSpec& aggregate,
-                                                AggregatePhase phase = AggregatePhase::Single) {
+std::optional<runtime::Value> aggregate_value_from_state(
+    const AggregateState& state,
+    const plan::AggregateSpec& aggregate,
+    AggregatePhase phase = AggregatePhase::Single) {
     if (aggregate.fn == plan::AggregateFunction::Count) {
-        return Value::integer(state.count);
+        return runtime::Value::integer(state.count);
     }
     if (!state.has_numeric) {
         return std::nullopt;
@@ -686,7 +699,7 @@ std::optional<Value> aggregate_value_from_state(const AggregateState& state,
         case plan::AggregateFunction::Count:
             break;
     }
-    return Value::floating(value);
+    return runtime::Value::floating(value);
 }
 
 void collect_child_split_stats(const std::unique_ptr<Operator>& input,
@@ -751,14 +764,14 @@ void StreamingGroupOperator::CollectAccumulatorStats(std::vector<AccumulatorStat
     collect_child_accumulator_stats(input_, stats_, out);
 }
 
-absl::StatusOr<std::optional<Page>> StreamingGroupOperator::NextPage() {
+absl::StatusOr<std::optional<runtime::Page>> StreamingGroupOperator::NextPage() {
     if (emitted_) {
         return std::nullopt;
     }
     emitted_ = true;
 
     PageMetadata metadata;
-    std::vector<PageChunk> chunks;
+    std::vector<runtime::PageChunk> chunks;
     std::unordered_map<GroupKey, size_t, GroupKeyHash> chunk_indexes;
     while (true) {
         auto page_or = next_accumulator_input_page(input_.get());
@@ -768,7 +781,7 @@ absl::StatusOr<std::optional<Page>> StreamingGroupOperator::NextPage() {
         if (!page_or->has_value()) {
             break;
         }
-        const Page& page = **page_or;
+        const runtime::Page& page = **page_or;
         auto status = ValidatePage(page);
         if (!status.ok()) {
             return status;
@@ -863,14 +876,14 @@ void StreamingDistinctOperator::CollectAccumulatorStats(std::vector<AccumulatorS
     collect_child_accumulator_stats(input_, stats_, out);
 }
 
-absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
+absl::StatusOr<std::optional<runtime::Page>> StreamingDistinctOperator::NextPage() {
     if (emitted_) {
         return std::nullopt;
     }
     emitted_ = true;
 
     struct DistinctState {
-        PageChunk chunk;
+        runtime::PageChunk chunk;
         std::unordered_set<GroupKey, GroupKeyHash> seen;
     };
 
@@ -885,7 +898,7 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
         if (!page_or->has_value()) {
             break;
         }
-        const Page& page = **page_or;
+        const runtime::Page& page = **page_or;
         auto status = ValidatePage(page);
         if (!status.ok()) {
             return status;
@@ -913,7 +926,7 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                 ++stats_.input_rows;
                 GroupKey value_key;
                 size_t value_key_memory_bytes = 0;
-                const Value* value =
+                const runtime::Value* value =
                     page_chunk_value_at_index(page_chunk, row_index, distinct_column);
                 {
                     ScopedAccumulatorTimer timer(&stats_.key_time_ms);
@@ -921,8 +934,8 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                     value_key.single = value == nullptr
                                            ? GroupKeyPart{.missing = true}
                                            : GroupKeyPart{.missing = false, .value = *value};
-                    value_key_memory_bytes =
-                        value == nullptr ? sizeof(Value) : estimate_value_memory_bytes(*value);
+                    value_key_memory_bytes = value == nullptr ? sizeof(runtime::Value)
+                                                              : estimate_value_memory_bytes(*value);
                 }
                 bool keep = false;
                 {
@@ -939,13 +952,14 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                     append_distinct_row_to_chunk(&state.chunk,
                                                  page_chunk.group_key,
                                                  plan_->distinct().column,
-                                                 value == nullptr ? Value::null() : *value);
+                                                 value == nullptr ? runtime::Value::null()
+                                                                  : *value);
                 }
             }
         }
     }
 
-    std::vector<PageChunk> chunks;
+    std::vector<runtime::PageChunk> chunks;
     chunks.reserve(groups.size());
     for (auto& group : groups) {
         chunks.push_back(std::move(group.chunk));
@@ -1001,7 +1015,7 @@ void StreamingAggregateOperator::CollectAccumulatorStats(std::vector<Accumulator
     collect_child_accumulator_stats(input_, stats_, out);
 }
 
-absl::StatusOr<std::optional<Page>> StreamingAggregateOperator::NextPage() {
+absl::StatusOr<std::optional<runtime::Page>> StreamingAggregateOperator::NextPage() {
     if (emitted_) {
         return std::nullopt;
     }
@@ -1018,7 +1032,7 @@ absl::StatusOr<std::optional<Page>> StreamingAggregateOperator::NextPage() {
         if (!page_or->has_value()) {
             break;
         }
-        const Page& page = **page_or;
+        const runtime::Page& page = **page_or;
         auto status = ValidatePage(page);
         if (!status.ok()) {
             return status;
@@ -1043,7 +1057,7 @@ absl::StatusOr<std::optional<Page>> StreamingAggregateOperator::NextPage() {
             AggregateState& state = groups[it->second];
             const auto aggregate_column_index =
                 find_page_chunk_column(page_chunk, plan_->aggregate().column);
-            const ColumnVector* aggregate_column =
+            const runtime::ColumnVector* aggregate_column =
                 aggregate_column_index.has_value() ? &page_chunk.columns[*aggregate_column_index]
                                                    : nullptr;
             ScopedAccumulatorTimer timer(&stats_.update_time_ms);
@@ -1055,7 +1069,7 @@ absl::StatusOr<std::optional<Page>> StreamingAggregateOperator::NextPage() {
         }
     }
 
-    std::vector<PageChunk> chunks;
+    std::vector<runtime::PageChunk> chunks;
     chunks.reserve(groups.empty() ? 1 : groups.size());
     if (groups.empty()) {
         groups.emplace_back();
@@ -1129,7 +1143,7 @@ void StreamingGroupedAggregateOperator::CollectAccumulatorStats(
     collect_child_accumulator_stats(input_, stats_, out);
 }
 
-absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage() {
+absl::StatusOr<std::optional<runtime::Page>> StreamingGroupedAggregateOperator::NextPage() {
     if (emitted_) {
         return std::nullopt;
     }
@@ -1146,7 +1160,7 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
         if (!page_or->has_value()) {
             break;
         }
-        const Page& page = **page_or;
+        const runtime::Page& page = **page_or;
         auto status = ValidatePage(page);
         if (!status.ok()) {
             return status;
@@ -1210,7 +1224,7 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
         AggregateState state;
         groups.push_back(std::move(state));
     }
-    std::vector<PageChunk> chunks;
+    std::vector<runtime::PageChunk> chunks;
     chunks.reserve(groups.size());
     {
         ScopedAccumulatorTimer timer(&stats_.result_time_ms);

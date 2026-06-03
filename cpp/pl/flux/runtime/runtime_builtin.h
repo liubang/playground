@@ -23,7 +23,7 @@
 #include "absl/status/statusor.h"
 #include "cpp/pl/flux/runtime/runtime_env.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 
 class BuiltinRegistry {
 public:
@@ -32,4 +32,4 @@ public:
     static absl::StatusOr<Value> ImportPackage(const std::string& path);
 };
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

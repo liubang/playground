@@ -29,20 +29,26 @@ namespace {
 
 constexpr const char* kMetricsDb = "cpp/pl/flux/examples/cross_source/metrics.db";
 
-std::vector<std::shared_ptr<ObjectValue>> make_rows() {
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.push_back(std::make_shared<ObjectValue>(std::vector<std::pair<std::string, Value>>{
-        {"host", Value::string("edge-1")}, {"usage", Value::floating(71.5)}}));
-    rows.push_back(std::make_shared<ObjectValue>(std::vector<std::pair<std::string, Value>>{
-        {"host", Value::string("edge-2")}, {"usage", Value::floating(81.0)}}));
-    rows.push_back(std::make_shared<ObjectValue>(std::vector<std::pair<std::string, Value>>{
-        {"host", Value::string("edge-3")}, {"usage", Value::floating(62.75)}}));
+std::vector<std::shared_ptr<runtime::ObjectValue>> make_rows() {
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
+    rows.push_back(
+        std::make_shared<runtime::ObjectValue>(std::vector<std::pair<std::string, runtime::Value>>{
+            {"host", runtime::Value::string("edge-1")},
+            {"usage", runtime::Value::floating(71.5)}}));
+    rows.push_back(
+        std::make_shared<runtime::ObjectValue>(std::vector<std::pair<std::string, runtime::Value>>{
+            {"host", runtime::Value::string("edge-2")},
+            {"usage", runtime::Value::floating(81.0)}}));
+    rows.push_back(
+        std::make_shared<runtime::ObjectValue>(std::vector<std::pair<std::string, runtime::Value>>{
+            {"host", runtime::Value::string("edge-3")},
+            {"usage", runtime::Value::floating(62.75)}}));
     return rows;
 }
 
-absl::StatusOr<std::vector<Page>> collect_pages(ConnectorRuntime& runtime,
-                                                const SourceSpec& spec,
-                                                const ScanRequest& request) {
+absl::StatusOr<std::vector<runtime::Page>> collect_pages(ConnectorRuntime& runtime,
+                                                         const SourceSpec& spec,
+                                                         const ScanRequest& request) {
     auto handle_or = runtime.metadata->GetTableHandle(spec);
     if (!handle_or.ok()) {
         return handle_or.status();
@@ -52,7 +58,7 @@ absl::StatusOr<std::vector<Page>> collect_pages(ConnectorRuntime& runtime,
         return splits_or.status();
     }
 
-    std::vector<Page> pages;
+    std::vector<runtime::Page> pages;
     for (const auto& split : *splits_or) {
         auto source_or = runtime.page_source_provider->CreatePageSource(split);
         if (!source_or.ok()) {
@@ -114,8 +120,8 @@ TEST(ConnectorRuntimeConformanceTest, MemoryRuntimeExposesMetadataSplitsAndMulti
     auto pages_or = collect_pages(*runtime, spec, {});
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();
     ASSERT_EQ(2, pages_or->size());
-    TableValue first = TableValueFromPage(pages_or->at(0));
-    TableValue second = TableValueFromPage(pages_or->at(1));
+    runtime::TableValue first = TableValueFromPage(pages_or->at(0));
+    runtime::TableValue second = TableValueFromPage(pages_or->at(1));
     ASSERT_EQ(2, first.rows.size());
     ASSERT_EQ(1, second.rows.size());
     EXPECT_EQ("\"edge-1\"", first.rows[0]->lookup("host")->string());
@@ -186,7 +192,7 @@ TEST(ConnectorRuntimeConformanceTest, MemoryRuntimePushesProjectionFilterAndLimi
     ScanRequest request;
     request.projection_columns.push_back({.column = "host", .alias = "service"});
     request.predicates.push_back(
-        {.op = PredicateOp::Gt, .column = "usage", .literal = Value::floating(70.0)});
+        {.op = PredicateOp::Gt, .column = "usage", .literal = runtime::Value::floating(70.0)});
     request.limit = 1;
 
     auto handle_or = runtime->metadata->GetTableHandle(spec);
@@ -198,7 +204,7 @@ TEST(ConnectorRuntimeConformanceTest, MemoryRuntimePushesProjectionFilterAndLimi
     auto pages_or = collect_pages(*runtime, spec, request);
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();
     ASSERT_EQ(1, pages_or->size());
-    TableValue table = TableValueFromPage(pages_or->front());
+    runtime::TableValue table = TableValueFromPage(pages_or->front());
     ASSERT_EQ(1, table.rows.size());
     EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("service")->string());
     EXPECT_EQ(nullptr, table.rows[0]->lookup("host"));
@@ -228,7 +234,7 @@ TEST(ConnectorRuntimeConformanceTest, SQLiteRuntimeExposesMetadataSplitsAndStrea
     auto pages_or = collect_pages(*runtime, spec, request);
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();
     ASSERT_EQ(1, pages_or->size());
-    TableValue table = TableValueFromPage(pages_or->front());
+    runtime::TableValue table = TableValueFromPage(pages_or->front());
     ASSERT_EQ(4, table.rows.size());
     EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
     EXPECT_EQ(nullptr, table.rows[0]->lookup("region"));
@@ -278,7 +284,7 @@ TEST(ConnectorRuntimeConformanceTest, MySQLRuntimeConformsWhenIntegrationDsnIsCo
     auto pages_or = collect_pages(*runtime, spec, request);
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();
     ASSERT_FALSE(pages_or->empty());
-    TableValue table = TableValueFromPage(pages_or->front());
+    runtime::TableValue table = TableValueFromPage(pages_or->front());
     ASSERT_LE(1, table.rows.size());
     EXPECT_NE(nullptr, table.rows[0]->lookup("host"));
 }

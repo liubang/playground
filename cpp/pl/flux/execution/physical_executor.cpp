@@ -39,7 +39,7 @@ absl::StatusOr<SchedulerStreamResult> PhysicalExecutor::ExecuteToSink(
     return Scheduler().RunToSink(std::move(*task_or), sink);
 }
 
-absl::StatusOr<Value> PhysicalExecutor::Execute(
+absl::StatusOr<runtime::Value> PhysicalExecutor::Execute(
     const std::shared_ptr<plan::PlanNode>& logical_plan) const {
     auto result_or = ExecuteWithProfile(logical_plan);
     if (!result_or.ok()) {

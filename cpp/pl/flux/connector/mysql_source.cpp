@@ -456,21 +456,21 @@ std::optional<std::string> rfc3339_to_mysql_datetime(std::string_view literal) {
 }
 
 absl::StatusOr<std::string> format_literal(mysql::format_options opts,
-                                           const Value& value,
+                                           const runtime::Value& value,
                                            bool normalize_rfc3339_time = false) {
     try {
         switch (value.type()) {
-            case Value::Type::Null:
+            case runtime::Value::Type::Null:
                 return std::string("NULL");
-            case Value::Type::Bool:
+            case runtime::Value::Type::Bool:
                 return value.as_bool() ? std::string("TRUE") : std::string("FALSE");
-            case Value::Type::Int:
+            case runtime::Value::Type::Int:
                 return mysql::format_sql(opts, "{}", value.as_int());
-            case Value::Type::UInt:
+            case runtime::Value::Type::UInt:
                 return mysql::format_sql(opts, "{}", value.as_uint());
-            case Value::Type::Float:
+            case runtime::Value::Type::Float:
                 return mysql::format_sql(opts, "{}", value.as_float());
-            case Value::Type::String: {
+            case runtime::Value::Type::String: {
                 std::string literal = value.as_string();
                 if (normalize_rfc3339_time) {
                     if (auto mysql_time = rfc3339_to_mysql_datetime(literal);
@@ -480,7 +480,7 @@ absl::StatusOr<std::string> format_literal(mysql::format_options opts,
                 }
                 return mysql::format_sql(opts, "{}", literal);
             }
-            case Value::Type::Time: {
+            case runtime::Value::Type::Time: {
                 std::string literal = value.as_time().literal;
                 if (auto mysql_time = rfc3339_to_mysql_datetime(literal); mysql_time.has_value()) {
                     literal = *mysql_time;
@@ -497,19 +497,19 @@ absl::StatusOr<std::string> format_literal(mysql::format_options opts,
 }
 
 absl::StatusOr<mysql::field> mysql_field_from_param(const SqlParam& param) {
-    const Value& value = param.value;
+    const runtime::Value& value = param.value;
     switch (value.type()) {
-        case Value::Type::Null:
+        case runtime::Value::Type::Null:
             return mysql::field(nullptr);
-        case Value::Type::Bool:
+        case runtime::Value::Type::Bool:
             return mysql::field(static_cast<int64_t>(value.as_bool() ? 1 : 0));
-        case Value::Type::Int:
+        case runtime::Value::Type::Int:
             return mysql::field(value.as_int());
-        case Value::Type::UInt:
+        case runtime::Value::Type::UInt:
             return mysql::field(value.as_uint());
-        case Value::Type::Float:
+        case runtime::Value::Type::Float:
             return mysql::field(value.as_float());
-        case Value::Type::String: {
+        case runtime::Value::Type::String: {
             std::string literal = value.as_string();
             if (param.normalize_time) {
                 if (auto mysql_time = rfc3339_to_mysql_datetime(literal); mysql_time.has_value()) {
@@ -518,7 +518,7 @@ absl::StatusOr<mysql::field> mysql_field_from_param(const SqlParam& param) {
             }
             return mysql::field(std::move(literal));
         }
-        case Value::Type::Time: {
+        case runtime::Value::Type::Time: {
             std::string literal = value.as_time().literal;
             if (auto mysql_time = rfc3339_to_mysql_datetime(literal); mysql_time.has_value()) {
                 literal = *mysql_time;
@@ -553,7 +553,7 @@ public:
         return quote_identifier(identifier);
     }
 
-    [[nodiscard]] absl::StatusOr<std::string> FormatLiteral(const Value& value,
+    [[nodiscard]] absl::StatusOr<std::string> FormatLiteral(const runtime::Value& value,
                                                             bool normalize_time) const override {
         return format_literal(opts_, value, normalize_time);
     }
@@ -585,33 +585,33 @@ private:
     mysql::format_options opts_;
 };
 
-Value::Type value_type_from_metadata(const mysql::metadata& meta) {
+runtime::Value::Type value_type_from_metadata(const mysql::metadata& meta) {
     switch (meta.type()) {
         case mysql::column_type::tinyint:
             if (meta.column_length() == 1) {
-                return Value::Type::Bool;
+                return runtime::Value::Type::Bool;
             }
-            return meta.is_unsigned() ? Value::Type::UInt : Value::Type::Int;
+            return meta.is_unsigned() ? runtime::Value::Type::UInt : runtime::Value::Type::Int;
         case mysql::column_type::smallint:
         case mysql::column_type::mediumint:
         case mysql::column_type::int_:
         case mysql::column_type::bigint:
         case mysql::column_type::year:
-            return meta.is_unsigned() ? Value::Type::UInt : Value::Type::Int;
+            return meta.is_unsigned() ? runtime::Value::Type::UInt : runtime::Value::Type::Int;
         case mysql::column_type::float_:
         case mysql::column_type::double_:
-            return Value::Type::Float;
+            return runtime::Value::Type::Float;
         case mysql::column_type::decimal:
-            return Value::Type::String;
+            return runtime::Value::Type::String;
         case mysql::column_type::date:
-            return Value::Type::String;
+            return runtime::Value::Type::String;
         case mysql::column_type::datetime:
         case mysql::column_type::timestamp:
-            return Value::Type::Time;
+            return runtime::Value::Type::Time;
         case mysql::column_type::time:
-            return Value::Type::String;
+            return runtime::Value::Type::String;
         default:
-            return Value::Type::String;
+            return runtime::Value::Type::String;
     }
 }
 
@@ -657,49 +657,49 @@ std::string format_time(mysql::time value) {
     return out.str();
 }
 
-Value value_from_mysql_field(mysql::field_view field, const mysql::metadata& meta) {
+runtime::Value value_from_mysql_field(mysql::field_view field, const mysql::metadata& meta) {
     if (field.is_null()) {
-        return Value::null();
+        return runtime::Value::null();
     }
     if (meta.type() == mysql::column_type::tinyint && meta.column_length() == 1) {
         if (field.is_int64()) {
-            return Value::boolean(field.as_int64() != 0);
+            return runtime::Value::boolean(field.as_int64() != 0);
         }
         if (field.is_uint64()) {
-            return Value::boolean(field.as_uint64() != 0);
+            return runtime::Value::boolean(field.as_uint64() != 0);
         }
     }
     if (field.is_int64()) {
-        return Value::integer(field.as_int64());
+        return runtime::Value::integer(field.as_int64());
     }
     if (field.is_uint64()) {
-        return Value::uinteger(field.as_uint64());
+        return runtime::Value::uinteger(field.as_uint64());
     }
     if (field.is_float()) {
-        return Value::floating(field.as_float());
+        return runtime::Value::floating(field.as_float());
     }
     if (field.is_double()) {
-        return Value::floating(field.as_double());
+        return runtime::Value::floating(field.as_double());
     }
     if (field.is_string()) {
         const auto text = field.as_string();
-        return Value::string(std::string(text.data(), text.size()));
+        return runtime::Value::string(std::string(text.data(), text.size()));
     }
     if (field.is_blob()) {
         const auto bytes = field.as_blob();
         const auto* data = reinterpret_cast<const char*>(bytes.data());
-        return Value::string(data == nullptr ? "" : std::string(data, bytes.size()));
+        return runtime::Value::string(data == nullptr ? "" : std::string(data, bytes.size()));
     }
     if (field.is_date()) {
-        return Value::string(format_date(field.as_date()));
+        return runtime::Value::string(format_date(field.as_date()));
     }
     if (field.is_datetime()) {
-        return Value::time(format_datetime(field.as_datetime()));
+        return runtime::Value::time(format_datetime(field.as_datetime()));
     }
     if (field.is_time()) {
-        return Value::string(format_time(field.as_time()));
+        return runtime::Value::string(format_time(field.as_time()));
     }
-    return Value::string("");
+    return runtime::Value::string("");
 }
 
 std::optional<double> numeric_from_mysql_field(mysql::field_view field) {
@@ -743,8 +743,8 @@ bool request_requires_global_mysql_order(const ScanRequest& request) {
            request.distinct.has_value();
 }
 
-bool is_integer_split_type(Value::Type type) {
-    return type == Value::Type::Int || type == Value::Type::UInt;
+bool is_integer_split_type(runtime::Value::Type type) {
+    return type == runtime::Value::Type::Int || type == runtime::Value::Type::UInt;
 }
 
 absl::StatusOr<TableSchema> schema_from_result(const mysql::results& result) {
@@ -772,33 +772,34 @@ std::vector<std::string> mysql_column_names(mysql::metadata_collection_view meta
     return column_names;
 }
 
-std::shared_ptr<ObjectValue> row_from_mysql_view(mysql::row_view row,
-                                                 mysql::metadata_collection_view meta,
-                                                 const std::vector<std::string>& column_names) {
-    std::vector<std::pair<std::string, Value>> properties;
+std::shared_ptr<runtime::ObjectValue> row_from_mysql_view(
+    mysql::row_view row,
+    mysql::metadata_collection_view meta,
+    const std::vector<std::string>& column_names) {
+    std::vector<std::pair<std::string, runtime::Value>> properties;
     properties.reserve(column_names.size());
     for (size_t i = 0; i < column_names.size(); ++i) {
         properties.emplace_back(column_names[i], value_from_mysql_field(row.at(i), meta[i]));
     }
-    return std::make_shared<ObjectValue>(std::move(properties));
+    return std::make_shared<runtime::ObjectValue>(std::move(properties));
 }
 
-std::shared_ptr<ObjectValue> mysql_row_with_group(const std::shared_ptr<ObjectValue>& row,
-                                                  const std::vector<std::string>& group_by) {
+std::shared_ptr<runtime::ObjectValue> mysql_row_with_group(
+    const std::shared_ptr<runtime::ObjectValue>& row, const std::vector<std::string>& group_by) {
     if (row == nullptr) {
         return nullptr;
     }
-    std::vector<std::pair<std::string, Value>> group_props;
+    std::vector<std::pair<std::string, runtime::Value>> group_props;
     group_props.reserve(group_by.size());
     for (const auto& column : group_by) {
-        const Value* value = row->lookup(column);
+        const runtime::Value* value = row->lookup(column);
         if (value != nullptr) {
             group_props.emplace_back(column, *value);
         }
     }
-    std::vector<std::pair<std::string, Value>> props = row->properties;
-    props.emplace_back("_group", Value::object(std::move(group_props)));
-    return std::make_shared<ObjectValue>(std::move(props));
+    std::vector<std::pair<std::string, runtime::Value>> props = row->properties;
+    props.emplace_back("_group", runtime::Value::object(std::move(group_props)));
+    return std::make_shared<runtime::ObjectValue>(std::move(props));
 }
 
 } // namespace
@@ -990,7 +991,7 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
     return statistics;
 }
 
-absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
+absl::StatusOr<runtime::Value> MySQLSource::Scan(const ScanRequest& request) {
     auto conn_or = acquire_mysql_connection(dsn_, pool_);
     if (!conn_or.ok()) {
         return conn_or.status();
@@ -1023,24 +1024,24 @@ absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
     const mysql::metadata_collection_view meta = result_or->meta();
     std::vector<std::string> column_names = mysql_column_names(meta);
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
     for (const auto row : result_or->rows()) {
         rows.push_back(row_from_mysql_view(row, meta, column_names));
     }
 
     if (request.aggregate.has_value()) {
-        std::vector<TableChunk> chunks;
+        std::vector<runtime::TableChunk> chunks;
         chunks.reserve(rows.size());
         for (auto& row : rows) {
             row = mysql_row_with_group(row, request.group_by);
-            TableChunk chunk;
+            runtime::TableChunk chunk;
             chunk.rows.push_back(row);
             chunks.push_back(std::move(chunk));
         }
-        return Value::table_stream("mysql", std::move(chunks));
+        return runtime::Value::table_stream("mysql", std::move(chunks));
     }
 
-    return Value::table("mysql", std::move(rows));
+    return runtime::Value::table("mysql", std::move(rows));
 }
 
 MySQLConnectorMetadata::MySQLConnectorMetadata(SourceSpec spec) : spec_(std::move(spec)) {}
@@ -1271,7 +1272,7 @@ struct MySQLPageSource::Impl {
     std::optional<int64_t> split_lower;
     std::optional<int64_t> split_upper;
     std::vector<std::string> column_names;
-    std::vector<Value::Type> column_types;
+    std::vector<runtime::Value::Type> column_types;
     bool emitted_empty = false;
     bool emitted_any_row = false;
 
@@ -1328,12 +1329,12 @@ absl::Status MySQLPageSource::Initialize() {
         effective_request.predicates.push_back({
             .op = PredicateOp::Gte,
             .column = *impl_->split_column,
-            .literal = Value::integer(*impl_->split_lower),
+            .literal = runtime::Value::integer(*impl_->split_lower),
         });
         effective_request.predicates.push_back({
             .op = PredicateOp::Lte,
             .column = *impl_->split_column,
-            .literal = Value::integer(*impl_->split_upper),
+            .literal = runtime::Value::integer(*impl_->split_upper),
         });
     }
     const auto sql_started = Clock::now();
@@ -1382,7 +1383,7 @@ absl::Status MySQLPageSource::Initialize() {
     return absl::OkStatus();
 }
 
-absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
+absl::StatusOr<std::optional<runtime::Page>> MySQLPageSource::NextPage() {
     if (impl_ == nullptr || impl_->state.should_start_op()) {
         return absl::InvalidArgumentError("mysql page source is not initialized");
     }
@@ -1393,7 +1394,7 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
     if (impl_->state.complete()) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            Page page = PageFromRows("mysql", {});
+            runtime::Page page = runtime::PageFromRows("mysql", {});
             ++stats_.pages_produced;
             return page;
         }
@@ -1402,14 +1403,14 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
     }
 
     const bool aggregate = impl_->request.aggregate.has_value();
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    PageChunk direct_chunk;
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
+    runtime::PageChunk direct_chunk;
     if (aggregate) {
         rows.reserve(rows_per_page_);
     } else {
         direct_chunk.columns.reserve(impl_->column_names.size());
         for (size_t index = 0; index < impl_->column_names.size(); ++index) {
-            direct_chunk.columns.push_back(ColumnVector{
+            direct_chunk.columns.push_back(runtime::ColumnVector{
                 .name = impl_->column_names[index],
                 .type = impl_->column_types[index],
             });
@@ -1456,7 +1457,7 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
     if (empty) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            Page page = PageFromRows("mysql", {});
+            runtime::Page page = runtime::PageFromRows("mysql", {});
             ++stats_.pages_produced;
             return page;
         }
@@ -1466,12 +1467,12 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
 
     impl_->emitted_any_row = true;
     const auto page_started = Clock::now();
-    Page page;
+    runtime::Page page;
     if (aggregate) {
-        std::vector<TableChunk> chunks;
+        std::vector<runtime::TableChunk> chunks;
         chunks.reserve(rows.size());
         for (auto& row : rows) {
-            TableChunk chunk;
+            runtime::TableChunk chunk;
             chunk.rows.push_back(std::move(row));
             chunks.push_back(std::move(chunk));
         }

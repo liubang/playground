@@ -21,10 +21,12 @@
 namespace pl::flux::connector {
 namespace {
 
-std::vector<std::shared_ptr<ObjectValue>> make_rows() {
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.push_back(std::make_shared<ObjectValue>(std::vector<std::pair<std::string, Value>>{
-        {"host", Value::string("edge-1")}, {"usage", Value::floating(91.5)}}));
+std::vector<std::shared_ptr<runtime::ObjectValue>> make_rows() {
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
+    rows.push_back(
+        std::make_shared<runtime::ObjectValue>(std::vector<std::pair<std::string, runtime::Value>>{
+            {"host", runtime::Value::string("edge-1")},
+            {"usage", runtime::Value::floating(91.5)}}));
     return rows;
 }
 
@@ -34,7 +36,7 @@ TEST(ArraySourceTest, ScansRowsWithConfiguredBucket) {
     auto value_or = source.Scan({});
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     EXPECT_EQ("hosts", value_or->as_table().bucket);
     ASSERT_EQ(1, value_or->as_table().rows.size());
     EXPECT_EQ("\"edge-1\"", value_or->as_table().rows[0]->lookup("host")->string());
@@ -46,7 +48,7 @@ TEST(CsvSourceTest, ScansRowsWithCsvBucket) {
     auto value_or = source.Scan({});
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     EXPECT_EQ("csv", value_or->as_table().bucket);
     ASSERT_EQ(1, value_or->as_table().rows.size());
     EXPECT_EQ("91.5", value_or->as_table().rows[0]->lookup("usage")->string());
@@ -60,9 +62,9 @@ TEST(MemorySourceTest, ReportsSchemaFromRows) {
     ASSERT_TRUE(schema_or.ok()) << schema_or.status();
     ASSERT_EQ(2, schema_or->columns.size());
     EXPECT_EQ("host", schema_or->columns[0].name);
-    EXPECT_EQ(Value::Type::String, schema_or->columns[0].type);
+    EXPECT_EQ(runtime::Value::Type::String, schema_or->columns[0].type);
     EXPECT_EQ("usage", schema_or->columns[1].name);
-    EXPECT_EQ(Value::Type::Float, schema_or->columns[1].type);
+    EXPECT_EQ(runtime::Value::Type::Float, schema_or->columns[1].type);
 }
 
 TEST(MemorySourceTest, RejectsPushdownUntilImplemented) {
@@ -92,7 +94,7 @@ TEST(MemorySourceTest, RuntimeEmitsRowsThroughPageSource) {
     auto page_or = (*page_source_or)->NextPage();
     ASSERT_TRUE(page_or.ok()) << page_or.status();
     ASSERT_TRUE(page_or->has_value());
-    TableValue table = TableValueFromPage(page_or->value());
+    runtime::TableValue table = TableValueFromPage(page_or->value());
     EXPECT_EQ("hosts", table.bucket);
     ASSERT_EQ(1, table.rows.size());
     EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());

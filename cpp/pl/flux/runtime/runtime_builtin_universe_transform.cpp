@@ -29,9 +29,8 @@
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
 #include "cpp/pl/flux/syntax/ast.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
-using namespace detail;
 
 absl::StatusOr<Value> materialized_table_value(const TableValue& table) {
     Value value =
@@ -59,30 +58,30 @@ absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table
     return &storage->as_table();
 }
 
-absl::StatusOr<std::string> predicate_property_name(const PropertyKey& key) {
+absl::StatusOr<std::string> predicate_property_name(const syntax::PropertyKey& key) {
     switch (key.type) {
-        case PropertyKey::Type::Identifier:
-            return std::get<std::unique_ptr<Identifier>>(key.key)->name;
-        case PropertyKey::Type::StringLiteral:
-            return std::get<std::unique_ptr<StringLit>>(key.key)->value;
+        case syntax::PropertyKey::Type::Identifier:
+            return std::get<std::unique_ptr<syntax::Identifier>>(key.key)->name;
+        case syntax::PropertyKey::Type::StringLiteral:
+            return std::get<std::unique_ptr<syntax::StringLit>>(key.key)->value;
     }
     return absl::InvalidArgumentError("unsupported predicate property key");
 }
 
-absl::StatusOr<std::string> predicate_parameter_name(const Property& param) {
+absl::StatusOr<std::string> predicate_parameter_name(const syntax::Property& param) {
     return predicate_property_name(*param.key);
 }
 
-std::optional<std::string> row_member_column(const Expression& expr,
+std::optional<std::string> row_member_column(const syntax::Expression& expr,
                                              const std::string& row_param_name) {
-    if (expr.type != Expression::Type::MemberExpr) {
+    if (expr.type != syntax::Expression::Type::MemberExpr) {
         return std::nullopt;
     }
-    const auto& member = std::get<std::unique_ptr<MemberExpr>>(expr.expr);
-    if (member->object->type != Expression::Type::Identifier) {
+    const auto& member = std::get<std::unique_ptr<syntax::MemberExpr>>(expr.expr);
+    if (member->object->type != syntax::Expression::Type::Identifier) {
         return std::nullopt;
     }
-    const auto& root = std::get<std::unique_ptr<Identifier>>(member->object->expr);
+    const auto& root = std::get<std::unique_ptr<syntax::Identifier>>(member->object->expr);
     if (root->name != row_param_name) {
         return std::nullopt;
     }
@@ -93,10 +92,10 @@ std::optional<std::string> row_member_column(const Expression& expr,
     return *column_or;
 }
 
-const Expression& unwrap_paren_expr(const Expression& expr) {
+const syntax::Expression& unwrap_paren_expr(const syntax::Expression& expr) {
     const auto* current = &expr;
-    while (current->type == Expression::Type::ParenExpr) {
-        const auto& paren = std::get<std::unique_ptr<ParenExpr>>(current->expr);
+    while (current->type == syntax::Expression::Type::ParenExpr) {
+        const auto& paren = std::get<std::unique_ptr<syntax::ParenExpr>>(current->expr);
         current = paren->expression.get();
     }
     return *current;
@@ -109,57 +108,58 @@ plan::PredicateLiteral boolean_predicate_literal(bool value) {
     };
 }
 
-std::optional<plan::PredicateLiteral> predicate_literal(const Expression& expr) {
+std::optional<plan::PredicateLiteral> predicate_literal(const syntax::Expression& expr) {
     const auto& unwrapped = unwrap_paren_expr(expr);
     switch (unwrapped.type) {
-        case Expression::Type::BooleanLit:
+        case syntax::Expression::Type::BooleanLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::Bool,
-                .bool_value = std::get<std::unique_ptr<BooleanLit>>(unwrapped.expr)->value,
+                .bool_value = std::get<std::unique_ptr<syntax::BooleanLit>>(unwrapped.expr)->value,
             };
-        case Expression::Type::IntegerLit:
+        case syntax::Expression::Type::IntegerLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::Int,
-                .int_value = std::get<std::unique_ptr<IntegerLit>>(unwrapped.expr)->value,
+                .int_value = std::get<std::unique_ptr<syntax::IntegerLit>>(unwrapped.expr)->value,
             };
-        case Expression::Type::UnsignedIntegerLit:
+        case syntax::Expression::Type::UnsignedIntegerLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::UInt,
-                .uint_value = std::get<std::unique_ptr<UintLit>>(unwrapped.expr)->value,
+                .uint_value = std::get<std::unique_ptr<syntax::UintLit>>(unwrapped.expr)->value,
             };
-        case Expression::Type::FloatLit:
+        case syntax::Expression::Type::FloatLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::Float,
-                .float_value = std::get<std::unique_ptr<FloatLit>>(unwrapped.expr)->value,
+                .float_value = std::get<std::unique_ptr<syntax::FloatLit>>(unwrapped.expr)->value,
             };
-        case Expression::Type::StringLit:
+        case syntax::Expression::Type::StringLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::String,
-                .string_value = std::get<std::unique_ptr<StringLit>>(unwrapped.expr)->value,
+                .string_value = std::get<std::unique_ptr<syntax::StringLit>>(unwrapped.expr)->value,
             };
-        case Expression::Type::DateTimeLit:
+        case syntax::Expression::Type::DateTimeLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::Time,
-                .string_value = std::get<std::unique_ptr<DateTimeLit>>(unwrapped.expr)->string(),
+                .string_value =
+                    std::get<std::unique_ptr<syntax::DateTimeLit>>(unwrapped.expr)->string(),
             };
         default:
             return std::nullopt;
     }
 }
 
-std::optional<plan::PredicateOp> predicate_op(Operator op) {
+std::optional<plan::PredicateOp> predicate_op(syntax::Operator op) {
     switch (op) {
-        case Operator::EqualOperator:
+        case syntax::Operator::EqualOperator:
             return plan::PredicateOp::Eq;
-        case Operator::NotEqualOperator:
+        case syntax::Operator::NotEqualOperator:
             return plan::PredicateOp::NotEq;
-        case Operator::LessThanOperator:
+        case syntax::Operator::LessThanOperator:
             return plan::PredicateOp::Lt;
-        case Operator::LessThanEqualOperator:
+        case syntax::Operator::LessThanEqualOperator:
             return plan::PredicateOp::Lte;
-        case Operator::GreaterThanOperator:
+        case syntax::Operator::GreaterThanOperator:
             return plan::PredicateOp::Gt;
-        case Operator::GreaterThanEqualOperator:
+        case syntax::Operator::GreaterThanEqualOperator:
             return plan::PredicateOp::Gte;
         default:
             return std::nullopt;
@@ -184,7 +184,7 @@ plan::PredicateOp reverse_predicate_op(plan::PredicateOp op) {
     return plan::PredicateOp::Eq;
 }
 
-std::optional<plan::PredicateSpec> extract_binary_predicate(const BinaryExpr& binary,
+std::optional<plan::PredicateSpec> extract_binary_predicate(const syntax::BinaryExpr& binary,
                                                             const std::string& row_param_name) {
     auto op = predicate_op(binary.op);
     if (!op.has_value()) {
@@ -219,7 +219,7 @@ std::optional<plan::PredicateSpec> extract_binary_predicate(const BinaryExpr& bi
 }
 
 std::optional<plan::PredicateSpec> extract_bool_member_predicate(
-    const Expression& expr, const std::string& row_param_name) {
+    const syntax::Expression& expr, const std::string& row_param_name) {
     const auto& unwrapped = unwrap_paren_expr(expr);
     if (auto column = row_member_column(unwrapped, row_param_name); column.has_value()) {
         return plan::PredicateSpec{
@@ -228,11 +228,11 @@ std::optional<plan::PredicateSpec> extract_bool_member_predicate(
             .literal = boolean_predicate_literal(true),
         };
     }
-    if (unwrapped.type != Expression::Type::UnaryExpr) {
+    if (unwrapped.type != syntax::Expression::Type::UnaryExpr) {
         return std::nullopt;
     }
-    const auto& unary = std::get<std::unique_ptr<UnaryExpr>>(unwrapped.expr);
-    if (unary->op != Operator::NotOperator) {
+    const auto& unary = std::get<std::unique_ptr<syntax::UnaryExpr>>(unwrapped.expr);
+    if (unary->op != syntax::Operator::NotOperator) {
         return std::nullopt;
     }
     const auto& argument = unwrap_paren_expr(*unary->argument);
@@ -247,22 +247,22 @@ std::optional<plan::PredicateSpec> extract_bool_member_predicate(
     };
 }
 
-bool extract_predicates_from_expr(const Expression& expr,
+bool extract_predicates_from_expr(const syntax::Expression& expr,
                                   const std::string& row_param_name,
                                   std::vector<plan::PredicateSpec>* predicates) {
     const auto& unwrapped = unwrap_paren_expr(expr);
-    if (unwrapped.type == Expression::Type::LogicalExpr) {
-        const auto& logical = std::get<std::unique_ptr<LogicalExpr>>(unwrapped.expr);
-        if (logical->op != LogicalOperator::AndOperator) {
+    if (unwrapped.type == syntax::Expression::Type::LogicalExpr) {
+        const auto& logical = std::get<std::unique_ptr<syntax::LogicalExpr>>(unwrapped.expr);
+        if (logical->op != syntax::LogicalOperator::AndOperator) {
             return false;
         }
         return extract_predicates_from_expr(*logical->left, row_param_name, predicates) &&
                extract_predicates_from_expr(*logical->right, row_param_name, predicates);
     }
     auto predicate =
-        unwrapped.type == Expression::Type::BinaryExpr
-            ? extract_binary_predicate(*std::get<std::unique_ptr<BinaryExpr>>(unwrapped.expr),
-                                       row_param_name)
+        unwrapped.type == syntax::Expression::Type::BinaryExpr
+            ? extract_binary_predicate(
+                  *std::get<std::unique_ptr<syntax::BinaryExpr>>(unwrapped.expr), row_param_name)
             : extract_bool_member_predicate(unwrapped, row_param_name);
     if (!predicate.has_value()) {
         return false;
@@ -274,14 +274,14 @@ bool extract_predicates_from_expr(const Expression& expr,
 std::optional<std::vector<plan::PredicateSpec>> extract_filter_predicates(const FunctionValue& fn) {
     if (fn.kind != FunctionValue::Kind::User || fn.user_function == nullptr ||
         fn.user_function->params.size() != 1 || fn.user_function->body == nullptr ||
-        fn.user_function->body->type != FunctionBody::Type::Expression) {
+        fn.user_function->body->type != syntax::FunctionBody::Type::Expression) {
         return std::nullopt;
     }
     auto row_param_or = predicate_parameter_name(*fn.user_function->params[0]);
     if (!row_param_or.ok()) {
         return std::nullopt;
     }
-    const auto& body = *std::get<std::unique_ptr<Expression>>(fn.user_function->body->body);
+    const auto& body = *std::get<std::unique_ptr<syntax::Expression>>(fn.user_function->body->body);
     std::vector<plan::PredicateSpec> predicates;
     if (!extract_predicates_from_expr(body, *row_param_or, &predicates) || predicates.empty()) {
         return std::nullopt;
@@ -450,20 +450,20 @@ Value lazy_table_with_plan(const TableValue& input, std::shared_ptr<plan::PlanNo
 }
 
 absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "range");
+    auto object_or = detail::require_object_argument(args, "range");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "range", "tables");
+    auto table_or = detail::require_table_property(**object_or, "range", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto start_or = require_object_property(**object_or, "range", "start");
+    auto start_or = detail::require_object_property(**object_or, "range", "start");
     if (!start_or.ok()) {
         return start_or.status();
     }
     const auto start = (*start_or)->string();
-    const auto stop = optional_literal_property(**object_or, "stop");
+    const auto stop = detail::optional_literal_property(**object_or, "stop");
     if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
         auto result =
             lazy_table_with_plan(**table_or, plan::MakeRange((*table_or)->plan, start, stop));
@@ -472,12 +472,12 @@ absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
         return result;
     }
 
-    auto ranged_or = transform_rows_preserving_chunks(
+    auto ranged_or = detail::transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
-            if (!row_matches_time_bounds(row, start, stop)) {
+            if (!detail::row_matches_time_bounds(row, start, stop)) {
                 return std::shared_ptr<ObjectValue>{};
             }
-            return clone_row(row);
+            return detail::clone_row(row);
         });
     if (!ranged_or.ok()) {
         return ranged_or.status();
@@ -494,35 +494,35 @@ absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "filter");
+    auto object_or = detail::require_object_argument(args, "filter");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "filter", "tables");
+    auto table_or = detail::require_table_property(**object_or, "filter", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto fn_or = require_object_property(**object_or, "filter", "fn");
+    auto fn_or = detail::require_object_property(**object_or, "filter", "fn");
     if (!fn_or.ok()) {
         return fn_or.status();
     }
     if ((*fn_or)->type() != Value::Type::Function) {
         return absl::InvalidArgumentError("filter `fn` must be a function");
     }
-    auto on_empty_or = optional_string_property(**object_or, "filter", "onEmpty", "drop");
+    auto on_empty_or = detail::optional_string_property(**object_or, "filter", "onEmpty", "drop");
     if (!on_empty_or.ok()) {
         return on_empty_or.status();
     }
-    EmptyChunkPolicy empty_policy;
+    detail::EmptyChunkPolicy empty_policy;
     if (*on_empty_or == "drop") {
-        empty_policy = EmptyChunkPolicy::Drop;
+        empty_policy = detail::EmptyChunkPolicy::Drop;
     } else if (*on_empty_or == "keep") {
-        empty_policy = EmptyChunkPolicy::Keep;
+        empty_policy = detail::EmptyChunkPolicy::Keep;
     } else {
         return absl::InvalidArgumentError(R"(filter `onEmpty` must be "drop" or "keep")");
     }
     std::optional<std::vector<plan::PredicateSpec>> predicates;
-    if (empty_policy == EmptyChunkPolicy::Drop) {
+    if (empty_policy == detail::EmptyChunkPolicy::Drop) {
         predicates = extract_filter_predicates((*fn_or)->as_function());
     }
     Value materialized_input;
@@ -540,10 +540,11 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
         table_or = &materialized_input.as_table();
     }
 
-    auto result_or = transform_rows_preserving_chunks(
+    auto result_or = detail::transform_rows_preserving_chunks(
         **table_or,
         [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
-            auto keep_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(clone_row(row))});
+            auto keep_or =
+                ExpressionEvaluator::Invoke(**fn_or, {Value::object(detail::clone_row(row))});
             if (!keep_or.ok()) {
                 return keep_or.status();
             }
@@ -553,7 +554,7 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
             if (!keep_or->as_bool()) {
                 return std::shared_ptr<ObjectValue>{};
             }
-            return clone_row(row);
+            return detail::clone_row(row);
         },
         empty_policy);
     if (!result_or.ok()) {
@@ -563,15 +564,15 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "map");
+    auto object_or = detail::require_object_argument(args, "map");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "map", "tables");
+    auto table_or = detail::require_table_property(**object_or, "map", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto fn_or = require_object_property(**object_or, "map", "fn");
+    auto fn_or = detail::require_object_property(**object_or, "map", "fn");
     if (!fn_or.ok()) {
         return fn_or.status();
     }
@@ -585,9 +586,10 @@ absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
     }
     const TableValue* table = *materialized_or;
 
-    auto result_or = transform_rows_preserving_chunks(
+    auto result_or = detail::transform_rows_preserving_chunks(
         *table, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
-            auto mapped_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(clone_row(row))});
+            auto mapped_or =
+                ExpressionEvaluator::Invoke(**fn_or, {Value::object(detail::clone_row(row))});
             if (!mapped_or.ok()) {
                 return mapped_or.status();
             }
@@ -599,19 +601,19 @@ absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
     if (!result_or.ok()) {
         return result_or.status();
     }
-    return with_materialization_barrier(std::move(*result_or), **table_or, "map");
+    return detail::with_materialization_barrier(std::move(*result_or), **table_or, "map");
 }
 
 absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "limit");
+    auto object_or = detail::require_object_argument(args, "limit");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "limit", "tables");
+    auto table_or = detail::require_table_property(**object_or, "limit", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto n_or = integer_property(**object_or, "limit", "n");
+    auto n_or = detail::integer_property(**object_or, "limit", "n");
     if (!n_or.ok()) {
         return n_or.status();
     }
@@ -640,7 +642,7 @@ absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
         return lazy_table_with_plan(**table_or, plan::MakeLimit((*table_or)->plan, *n_or, offset));
     }
     const auto begin = static_cast<size_t>(offset);
-    auto result = slice_table_like(**table_or, [&](size_t size) {
+    auto result = detail::slice_table_like(**table_or, [&](size_t size) {
         const size_t end = std::min(size, begin + static_cast<size_t>(*n_or));
         return std::pair<size_t, size_t>{begin, end};
     });
@@ -648,15 +650,15 @@ absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "tail");
+    auto object_or = detail::require_object_argument(args, "tail");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "tail", "tables");
+    auto table_or = detail::require_table_property(**object_or, "tail", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto n_or = integer_property(**object_or, "tail", "n");
+    auto n_or = detail::integer_property(**object_or, "tail", "n");
     if (!n_or.ok()) {
         return n_or.status();
     }
@@ -687,26 +689,26 @@ absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
         return materialized_or.status();
     }
     const TableValue* table = *materialized_or;
-    auto result = slice_table_like(*table, [&](size_t row_count) {
+    auto result = detail::slice_table_like(*table, [&](size_t row_count) {
         const size_t tail_end =
             std::cmp_greater_equal(offset, row_count) ? 0 : row_count - static_cast<size_t>(offset);
         const size_t tail_begin =
             std::cmp_greater_equal(*n_or, tail_end) ? 0 : tail_end - static_cast<size_t>(*n_or);
         return std::pair<size_t, size_t>{tail_begin, tail_end};
     });
-    return with_materialization_barrier(std::move(result), **table_or, "tail");
+    return detail::with_materialization_barrier(std::move(result), **table_or, "tail");
 }
 
 absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "keep");
+    auto object_or = detail::require_object_argument(args, "keep");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "keep", "tables");
+    auto table_or = detail::require_table_property(**object_or, "keep", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto columns_or = string_array_property(**object_or, "keep", "columns");
+    auto columns_or = detail::string_array_property(**object_or, "keep", "columns");
     if (!columns_or.ok()) {
         return columns_or.status();
     }
@@ -714,7 +716,7 @@ absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
         return lazy_table_with_plan(**table_or, plan::MakeProject((*table_or)->plan, *columns_or));
     }
     const std::unordered_set<std::string> selected(columns_or->begin(), columns_or->end());
-    auto result_or = transform_rows_preserving_chunks(
+    auto result_or = detail::transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             std::vector<std::pair<std::string, Value>> props;
             props.reserve(row.properties.size());
@@ -732,15 +734,15 @@ absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "drop");
+    auto object_or = detail::require_object_argument(args, "drop");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "drop", "tables");
+    auto table_or = detail::require_table_property(**object_or, "drop", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto columns_or = string_array_property(**object_or, "drop", "columns");
+    auto columns_or = detail::string_array_property(**object_or, "drop", "columns");
     if (!columns_or.ok()) {
         return columns_or.status();
     }
@@ -761,7 +763,7 @@ absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
                                     plan::MakeProject((*table_or)->plan, std::move(projected)));
     }
     const std::unordered_set<std::string> dropped(columns_or->begin(), columns_or->end());
-    auto result_or = transform_rows_preserving_chunks(
+    auto result_or = detail::transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             std::vector<std::pair<std::string, Value>> props;
             props.reserve(row.properties.size());
@@ -779,15 +781,15 @@ absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "rename");
+    auto object_or = detail::require_object_argument(args, "rename");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "rename", "tables");
+    auto table_or = detail::require_table_property(**object_or, "rename", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto columns_or = string_map_property(**object_or, "rename", "columns");
+    auto columns_or = detail::string_map_property(**object_or, "rename", "columns");
     if (!columns_or.ok()) {
         return columns_or.status();
     }
@@ -802,12 +804,13 @@ absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
         return result;
     }
 
-    auto result_or = transform_rows_preserving_chunks(
+    auto result_or = detail::transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             std::vector<std::pair<std::string, Value>> props;
             props.reserve(row.properties.size());
             for (const auto& [key, value] : row.properties) {
-                if (auto renamed = mapped_column_name(*columns_or, key); renamed.has_value()) {
+                if (auto renamed = detail::mapped_column_name(*columns_or, key);
+                    renamed.has_value()) {
                     props.emplace_back(*renamed, value);
                 } else {
                     props.emplace_back(key, value);
@@ -822,19 +825,19 @@ absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "duplicate");
+    auto object_or = detail::require_object_argument(args, "duplicate");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "duplicate", "tables");
+    auto table_or = detail::require_table_property(**object_or, "duplicate", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto column_or = string_property(**object_or, "duplicate", "column");
+    auto column_or = detail::string_property(**object_or, "duplicate", "column");
     if (!column_or.ok()) {
         return column_or.status();
     }
-    auto as_or = string_property(**object_or, "duplicate", "as");
+    auto as_or = detail::string_property(**object_or, "duplicate", "as");
     if (!as_or.ok()) {
         return as_or.status();
     }
@@ -845,35 +848,35 @@ absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
     }
     const TableValue* table = *materialized_or;
 
-    auto result_or = transform_rows_preserving_chunks(
+    auto result_or = detail::transform_rows_preserving_chunks(
         *table, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             const Value* value = row.lookup(*column_or);
             if (value == nullptr) {
-                return clone_row(row);
+                return detail::clone_row(row);
             }
-            auto duplicated = object_with_upserted_property(row, *as_or, *value);
+            auto duplicated = detail::object_with_upserted_property(row, *as_or, *value);
             return std::make_shared<ObjectValue>(duplicated.as_object());
         });
     if (!result_or.ok()) {
         return result_or.status();
     }
-    return with_materialization_barrier(std::move(*result_or), **table_or, "duplicate");
+    return detail::with_materialization_barrier(std::move(*result_or), **table_or, "duplicate");
 }
 
 absl::StatusOr<Value> builtin_set(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "set");
+    auto object_or = detail::require_object_argument(args, "set");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "set", "tables");
+    auto table_or = detail::require_table_property(**object_or, "set", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto key_or = string_property(**object_or, "set", "key");
+    auto key_or = detail::string_property(**object_or, "set", "key");
     if (!key_or.ok()) {
         return key_or.status();
     }
-    auto value_or = require_object_property(**object_or, "set", "value");
+    auto value_or = detail::require_object_property(**object_or, "set", "value");
     if (!value_or.ok()) {
         return value_or.status();
     }
@@ -884,31 +887,32 @@ absl::StatusOr<Value> builtin_set(const std::vector<Value>& args) {
     }
     const TableValue* table = *materialized_or;
 
-    auto result_or = transform_rows_preserving_chunks(
+    auto result_or = detail::transform_rows_preserving_chunks(
         *table, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
-            auto updated = object_with_upserted_property(row, *key_or, **value_or);
+            auto updated = detail::object_with_upserted_property(row, *key_or, **value_or);
             return std::make_shared<ObjectValue>(updated.as_object());
         });
     if (!result_or.ok()) {
         return result_or.status();
     }
-    return with_materialization_barrier(std::move(*result_or), **table_or, "set");
+    return detail::with_materialization_barrier(std::move(*result_or), **table_or, "set");
 }
 
 absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "sort");
+    auto object_or = detail::require_object_argument(args, "sort");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "sort", "tables");
+    auto table_or = detail::require_table_property(**object_or, "sort", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto columns_or = optional_string_array_property(**object_or, "sort", "columns", {"_value"});
+    auto columns_or =
+        detail::optional_string_array_property(**object_or, "sort", "columns", {"_value"});
     if (!columns_or.ok()) {
         return columns_or.status();
     }
-    auto desc_or = optional_bool_property(**object_or, "sort", "desc", false);
+    auto desc_or = detail::optional_bool_property(**object_or, "sort", "desc", false);
     if (!desc_or.ok()) {
         return desc_or.status();
     }
@@ -924,14 +928,14 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
         return lazy_table_with_plan(**table_or, plan::MakeSort((*table_or)->plan, std::move(keys)));
     }
 
-    auto chunks = clone_table_chunks(**table_or);
+    auto chunks = detail::clone_table_chunks(**table_or);
     for (auto& chunk : chunks) {
         std::ranges::stable_sort(chunk.rows, [&](const auto& lhs, const auto& rhs) {
             if (lhs == nullptr || rhs == nullptr) {
                 return lhs != nullptr;
             }
             for (const auto& column : *columns_or) {
-                const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
+                const int cmp = detail::compare_values(lhs->lookup(column), rhs->lookup(column));
                 if (cmp != 0) {
                     return *desc_or ? cmp > 0 : cmp < 0;
                 }
@@ -939,24 +943,24 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
             return false;
         });
     }
-    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = detail::table_with_chunks_like(**table_or, std::move(chunks));
     return with_sort_plan(std::move(result), **table_or, *columns_or, *desc_or);
 }
 
 absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "group");
+    auto object_or = detail::require_object_argument(args, "group");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "group", "tables");
+    auto table_or = detail::require_table_property(**object_or, "group", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto columns_or = optional_string_array_property(**object_or, "group", "columns", {});
+    auto columns_or = detail::optional_string_array_property(**object_or, "group", "columns", {});
     if (!columns_or.ok()) {
         return columns_or.status();
     }
-    auto mode_or = optional_string_property(**object_or, "group", "mode", "by");
+    auto mode_or = detail::optional_string_property(**object_or, "group", "mode", "by");
     if (!mode_or.ok()) {
         return mode_or.status();
     }
@@ -992,7 +996,7 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
     if (*mode_or == "except") {
         group_columns.clear();
         const std::unordered_set<std::string> excluded(columns_or->begin(), columns_or->end());
-        for (const auto& column : all_visible_columns_in_order(*table)) {
+        for (const auto& column : detail::all_visible_columns_in_order(*table)) {
             if (excluded.count(column) == 0) {
                 group_columns.push_back(column);
             }
@@ -1004,7 +1008,7 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
     chunks.reserve(table->rows.size());
     for (const auto& row : table->rows) {
         if (row != nullptr) {
-            auto [grouped_row, key] = clone_row_with_group_and_key(*row, group_columns);
+            auto [grouped_row, key] = detail::clone_row_with_group_and_key(*row, group_columns);
             auto [it, inserted] = chunk_indexes.emplace(key, chunks.size());
             if (inserted) {
                 chunks.emplace_back();
@@ -1015,28 +1019,28 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
     if (chunks.empty()) {
         chunks.emplace_back();
     }
-    auto result = table_with_chunks_like(*table, std::move(chunks));
+    auto result = detail::table_with_chunks_like(*table, std::move(chunks));
     return with_group_plan(std::move(result), **table_or, std::move(group_columns));
 }
 
 absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "pivot");
+    auto object_or = detail::require_object_argument(args, "pivot");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "pivot", "tables");
+    auto table_or = detail::require_table_property(**object_or, "pivot", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto row_key_or = string_array_property(**object_or, "pivot", "rowKey");
+    auto row_key_or = detail::string_array_property(**object_or, "pivot", "rowKey");
     if (!row_key_or.ok()) {
         return row_key_or.status();
     }
-    auto column_key_or = string_array_property(**object_or, "pivot", "columnKey");
+    auto column_key_or = detail::string_array_property(**object_or, "pivot", "columnKey");
     if (!column_key_or.ok()) {
         return column_key_or.status();
     }
-    auto value_column_or = string_property(**object_or, "pivot", "valueColumn");
+    auto value_column_or = detail::string_property(**object_or, "pivot", "valueColumn");
     if (!value_column_or.ok()) {
         return value_column_or.status();
     }
@@ -1067,7 +1071,7 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
         next.group_key = chunk.group_key;
         std::unordered_map<std::string, size_t> row_indexes;
         std::unordered_map<std::string, std::string> pivot_name_cache;
-        std::vector<PivotOutputRow> output_rows;
+        std::vector<detail::PivotOutputRow> output_rows;
         row_indexes.reserve(chunk.rows.size());
         pivot_name_cache.reserve(chunk.rows.size());
         output_rows.reserve(chunk.rows.size());
@@ -1076,10 +1080,10 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
             if (row == nullptr) {
                 continue;
             }
-            PivotRowProjection projection =
-                project_pivot_row(*row, row_key_indexes, column_key_indexes, *value_column_or);
+            detail::PivotRowProjection projection = detail::project_pivot_row(
+                *row, row_key_indexes, column_key_indexes, *value_column_or);
             const std::string identity =
-                row_identity_key_from_values(*row_key_or, projection.row_key_values);
+                detail::row_identity_key_from_values(*row_key_or, projection.row_key_values);
             size_t row_index = 0;
             if (const auto existing = row_indexes.find(identity); existing != row_indexes.end()) {
                 row_index = existing->second;
@@ -1088,7 +1092,7 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
                 props.reserve(projection.row_key_values.size() +
                               projection.passthrough_props.size() +
                               std::max<size_t>(1, pivot_name_cache.size()));
-                PivotOutputRow output_state;
+                detail::PivotOutputRow output_state;
                 output_state.property_indexes.reserve(props.capacity());
                 for (size_t i = 0; i < row_key_or->size(); ++i) {
                     if (const Value* value = projection.row_key_values[i]; value != nullptr) {
@@ -1112,35 +1116,37 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
             if (value == nullptr) {
                 continue;
             }
-            PivotColumnIdentity column_identity =
-                pivot_column_identity_from_values(projection.column_key_values);
+            detail::PivotColumnIdentity column_identity =
+                detail::pivot_column_identity_from_values(projection.column_key_values);
             auto [pivot_name_it, inserted] =
                 pivot_name_cache.try_emplace(column_identity.cache_key);
             if (inserted) {
                 pivot_name_it->second = std::move(column_identity.name);
             }
-            upsert_property_with_index(output_rows[row_index], pivot_name_it->second, *value);
+            detail::upsert_property_with_index(
+                output_rows[row_index], pivot_name_it->second, *value);
         }
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(*table, std::move(chunks));
-    return with_materialization_barrier(std::move(result), **table_or, "pivot");
+    auto result = detail::table_with_chunks_like(*table, std::move(chunks));
+    return detail::with_materialization_barrier(std::move(result), **table_or, "pivot");
 }
 
 absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "fill");
+    auto object_or = detail::require_object_argument(args, "fill");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "fill", "tables");
+    auto table_or = detail::require_table_property(**object_or, "fill", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto column_or = optional_string_property(**object_or, "fill", "column", "_value");
+    auto column_or = detail::optional_string_property(**object_or, "fill", "column", "_value");
     if (!column_or.ok()) {
         return column_or.status();
     }
-    auto use_previous_or = optional_bool_property(**object_or, "fill", "usePrevious", false);
+    auto use_previous_or =
+        detail::optional_bool_property(**object_or, "fill", "usePrevious", false);
     if (!use_previous_or.ok()) {
         return use_previous_or.status();
     }
@@ -1164,8 +1170,8 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
         }
         const Value* current = row->lookup(*column_or);
         const bool needs_fill = current == nullptr || current->is_null();
-        auto next_row = clone_row(*row);
-        const std::string group_key = group_key_for_row(*row);
+        auto next_row = detail::clone_row(*row);
+        const std::string group_key = detail::group_key_for_row(*row);
 
         if (needs_fill) {
             std::optional<Value> replacement;
@@ -1178,7 +1184,8 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
                 replacement = *explicit_value;
             }
             if (replacement.has_value()) {
-                auto updated = object_with_upserted_property(*next_row, *column_or, *replacement);
+                auto updated =
+                    detail::object_with_upserted_property(*next_row, *column_or, *replacement);
                 next_row = std::make_shared<ObjectValue>(updated.as_object());
                 previous_by_group[group_key] = *replacement;
             }
@@ -1189,15 +1196,15 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
     }
     auto result =
         Value::table(table->bucket, std::move(rows), table->range_start, table->range_stop);
-    return with_materialization_barrier(std::move(result), **table_or, "fill");
+    return detail::with_materialization_barrier(std::move(result), **table_or, "fill");
 }
 
 absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "union");
+    auto object_or = detail::require_object_argument(args, "union");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto tables_or = require_table_array_property(**object_or, "union", "tables");
+    auto tables_or = detail::require_table_array_property(**object_or, "union", "tables");
     if (!tables_or.ok()) {
         return tables_or.status();
     }
@@ -1243,66 +1250,66 @@ absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
 
 bool InstallKnownUniverseTransformBuiltin(Environment& env, const std::string& name) {
     if (name == "range") {
-        install_builtin(env, "range", builtin_range, "tables");
+        detail::install_builtin(env, "range", builtin_range, "tables");
         return true;
     }
     if (name == "filter") {
-        install_builtin(env, "filter", builtin_filter, "tables");
+        detail::install_builtin(env, "filter", builtin_filter, "tables");
         return true;
     }
     if (name == "map") {
-        install_builtin(env, "map", builtin_map, "tables");
+        detail::install_builtin(env, "map", builtin_map, "tables");
         return true;
     }
     if (name == "limit") {
-        install_builtin(env, "limit", builtin_limit, "tables");
+        detail::install_builtin(env, "limit", builtin_limit, "tables");
         return true;
     }
     if (name == "tail") {
-        install_builtin(env, "tail", builtin_tail, "tables");
+        detail::install_builtin(env, "tail", builtin_tail, "tables");
         return true;
     }
     if (name == "keep") {
-        install_builtin(env, "keep", builtin_keep, "tables");
+        detail::install_builtin(env, "keep", builtin_keep, "tables");
         return true;
     }
     if (name == "drop") {
-        install_builtin(env, "drop", builtin_drop, "tables");
+        detail::install_builtin(env, "drop", builtin_drop, "tables");
         return true;
     }
     if (name == "rename") {
-        install_builtin(env, "rename", builtin_rename, "tables");
+        detail::install_builtin(env, "rename", builtin_rename, "tables");
         return true;
     }
     if (name == "duplicate") {
-        install_builtin(env, "duplicate", builtin_duplicate, "tables");
+        detail::install_builtin(env, "duplicate", builtin_duplicate, "tables");
         return true;
     }
     if (name == "set") {
-        install_builtin(env, "set", builtin_set, "tables");
+        detail::install_builtin(env, "set", builtin_set, "tables");
         return true;
     }
     if (name == "sort") {
-        install_builtin(env, "sort", builtin_sort, "tables");
+        detail::install_builtin(env, "sort", builtin_sort, "tables");
         return true;
     }
     if (name == "group") {
-        install_builtin(env, "group", builtin_group, "tables");
+        detail::install_builtin(env, "group", builtin_group, "tables");
         return true;
     }
     if (name == "pivot") {
-        install_builtin(env, "pivot", builtin_pivot, "tables");
+        detail::install_builtin(env, "pivot", builtin_pivot, "tables");
         return true;
     }
     if (name == "fill") {
-        install_builtin(env, "fill", builtin_fill, "tables");
+        detail::install_builtin(env, "fill", builtin_fill, "tables");
         return true;
     }
     if (name == "union") {
-        install_builtin(env, "union", builtin_union);
+        detail::install_builtin(env, "union", builtin_union);
         return true;
     }
     return false;
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

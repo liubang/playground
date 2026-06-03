@@ -24,9 +24,9 @@ namespace pl::flux::execution {
 
 class Materializer {
 public:
-    [[nodiscard]] absl::StatusOr<Value> Materialize(Value value) const;
+    [[nodiscard]] absl::StatusOr<runtime::Value> Materialize(runtime::Value value) const;
 };
 
-absl::StatusOr<Value> MaterializeValue(Value value);
+absl::StatusOr<runtime::Value> MaterializeValue(runtime::Value value);
 
 } // namespace pl::flux::execution

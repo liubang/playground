@@ -29,7 +29,7 @@ namespace pl::flux::analysis {
 namespace {
 
 AnalysisResult Analyze(const std::string& source) {
-    Parser parser(source);
+    syntax::Parser parser(source);
     auto file = parser.parse_file("semantic_test.flux");
     EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
     return SemanticAnalyzer().Analyze(*file);
@@ -54,8 +54,8 @@ int DiagnosticCount(const AnalysisResult& result, const std::string& needle) {
     return count;
 }
 
-std::shared_ptr<File> ParseFile(const std::string& source, const std::string& name) {
-    Parser parser(source);
+std::shared_ptr<syntax::File> ParseFile(const std::string& source, const std::string& name) {
+    syntax::Parser parser(source);
     auto file = parser.parse_file(name);
     EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
     return file;
@@ -333,7 +333,7 @@ import "csv"
 
 csv.from(file: "owners.csv", mode: "raw")
 )";
-    Parser parser(source);
+    syntax::Parser parser(source);
     auto file = parser.parse_file("cpp/pl/flux/examples/cross_source/mysql_csv_join.flux");
     ASSERT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
 
@@ -457,7 +457,7 @@ y = if 1 then "yes" else "no"
 }
 
 TEST(SemanticAnalyzerTest, AnalyzesPackageExportsAcrossFiles) {
-    Package package;
+    syntax::Package package;
     package.path = "example";
     package.package = "example";
     package.files.push_back(ParseFile("a = 1\n", "a.flux"));

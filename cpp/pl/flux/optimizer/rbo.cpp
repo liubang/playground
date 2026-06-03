@@ -66,22 +66,22 @@ connector::AggregateFunction to_connector_aggregate_fn(plan::AggregateFunction f
     return connector::AggregateFunction::Count;
 }
 
-Value to_connector_literal(const plan::PredicateLiteral& literal) {
+runtime::Value to_connector_literal(const plan::PredicateLiteral& literal) {
     switch (literal.kind) {
         case plan::PredicateLiteralKind::Bool:
-            return Value::boolean(literal.bool_value);
+            return runtime::Value::boolean(literal.bool_value);
         case plan::PredicateLiteralKind::Int:
-            return Value::integer(literal.int_value);
+            return runtime::Value::integer(literal.int_value);
         case plan::PredicateLiteralKind::UInt:
-            return Value::uinteger(literal.uint_value);
+            return runtime::Value::uinteger(literal.uint_value);
         case plan::PredicateLiteralKind::Float:
-            return Value::floating(literal.float_value);
+            return runtime::Value::floating(literal.float_value);
         case plan::PredicateLiteralKind::String:
-            return Value::string(literal.string_value);
+            return runtime::Value::string(literal.string_value);
         case plan::PredicateLiteralKind::Time:
-            return Value::time(literal.string_value);
+            return runtime::Value::time(literal.string_value);
     }
-    return Value::null();
+    return runtime::Value::null();
 }
 
 absl::StatusOr<size_t> visible_column_index(const std::vector<std::string>& visible_columns,
@@ -180,20 +180,21 @@ bool is_upper_bound(connector::PredicateOp op) {
     return op == connector::PredicateOp::Lt || op == connector::PredicateOp::Lte;
 }
 
-std::optional<long double> numeric_literal(const Value& value) {
+std::optional<long double> numeric_literal(const runtime::Value& value) {
     switch (value.type()) {
-        case Value::Type::Int:
+        case runtime::Value::Type::Int:
             return static_cast<long double>(value.as_int());
-        case Value::Type::UInt:
+        case runtime::Value::Type::UInt:
             return static_cast<long double>(value.as_uint());
-        case Value::Type::Float:
+        case runtime::Value::Type::Float:
             return static_cast<long double>(value.as_float());
         default:
             return std::nullopt;
     }
 }
 
-std::optional<int> compare_predicate_literals(const Value& left, const Value& right) {
+std::optional<int> compare_predicate_literals(const runtime::Value& left,
+                                              const runtime::Value& right) {
     if (auto left_number = numeric_literal(left); left_number.has_value()) {
         auto right_number = numeric_literal(right);
         if (!right_number.has_value()) {
@@ -211,12 +212,12 @@ std::optional<int> compare_predicate_literals(const Value& left, const Value& ri
         return std::nullopt;
     }
     switch (left.type()) {
-        case Value::Type::Bool:
+        case runtime::Value::Type::Bool:
             if (left.as_bool() == right.as_bool()) {
                 return 0;
             }
             return std::nullopt;
-        case Value::Type::String:
+        case runtime::Value::Type::String:
             if (left.as_string() < right.as_string()) {
                 return -1;
             }
@@ -224,7 +225,7 @@ std::optional<int> compare_predicate_literals(const Value& left, const Value& ri
                 return 1;
             }
             return 0;
-        case Value::Type::Time:
+        case runtime::Value::Type::Time:
             if (left.as_time().literal < right.as_time().literal) {
                 return -1;
             }

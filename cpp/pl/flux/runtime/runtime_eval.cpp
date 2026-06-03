@@ -26,10 +26,10 @@
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/common/compat.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
 
-std::string expr_tag(const Expression& expr) {
+std::string expr_tag(const syntax::Expression& expr) {
     if (expr.loc.is_valid()) {
         std::stringstream ss;
         ss << expr.loc;
@@ -38,12 +38,12 @@ std::string expr_tag(const Expression& expr) {
     return expr.string();
 }
 
-absl::Status unsupported(const Expression& expr, const std::string& what) {
+absl::Status unsupported(const syntax::Expression& expr, const std::string& what) {
     return absl::UnimplementedError(
         absl::StrCat("unsupported expression ", what, " at ", expr_tag(expr)));
 }
 
-absl::Status type_error(const Expression& expr, const std::string& detail) {
+absl::Status type_error(const syntax::Expression& expr, const std::string& detail) {
     return absl::InvalidArgumentError(
         absl::StrCat("invalid expression ", detail, " at ", expr_tag(expr)));
 }
@@ -77,27 +77,27 @@ absl::StatusOr<std::string> dict_key_string(const Value& value) {
     }
 }
 
-absl::StatusOr<std::string> property_name(const PropertyKey& key) {
+absl::StatusOr<std::string> property_name(const syntax::PropertyKey& key) {
     switch (key.type) {
-        case PropertyKey::Type::Identifier:
-            return std::get<std::unique_ptr<Identifier>>(key.key)->name;
-        case PropertyKey::Type::StringLiteral:
-            return std::get<std::unique_ptr<StringLit>>(key.key)->value;
+        case syntax::PropertyKey::Type::Identifier:
+            return std::get<std::unique_ptr<syntax::Identifier>>(key.key)->name;
+        case syntax::PropertyKey::Type::StringLiteral:
+            return std::get<std::unique_ptr<syntax::StringLit>>(key.key)->value;
         default:
             PL_FLUX_UNREACHABLE();
     }
 }
 
-absl::StatusOr<std::string> flatten_member_name(const MemberExpr& member) {
+absl::StatusOr<std::string> flatten_member_name(const syntax::MemberExpr& member) {
     auto property_or = property_name(*member.property);
     if (!property_or.ok()) {
         return property_or.status();
     }
     std::string suffix = *property_or;
 
-    const Expression* cursor = member.object.get();
-    while (cursor->type == Expression::Type::MemberExpr) {
-        const auto& inner = std::get<std::unique_ptr<MemberExpr>>(cursor->expr);
+    const syntax::Expression* cursor = member.object.get();
+    while (cursor->type == syntax::Expression::Type::MemberExpr) {
+        const auto& inner = std::get<std::unique_ptr<syntax::MemberExpr>>(cursor->expr);
         auto inner_name_or = property_name(*inner->property);
         if (!inner_name_or.ok()) {
             return inner_name_or.status();
@@ -107,16 +107,16 @@ absl::StatusOr<std::string> flatten_member_name(const MemberExpr& member) {
         cursor = inner->object.get();
     }
 
-    if (cursor->type != Expression::Type::Identifier) {
+    if (cursor->type != syntax::Expression::Type::Identifier) {
         return absl::InvalidArgumentError("member access root must be an identifier");
     }
-    const auto& root = std::get<std::unique_ptr<Identifier>>(cursor->expr);
+    const auto& root = std::get<std::unique_ptr<syntax::Identifier>>(cursor->expr);
     return root->name + "." + suffix;
 }
 
-absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env);
+absl::StatusOr<Value> eval_impl(const syntax::Expression& expr, const Environment& env);
 
-absl::Status invalid_call(const Expression& expr, const std::string& detail) {
+absl::Status invalid_call(const syntax::Expression& expr, const std::string& detail) {
     return absl::InvalidArgumentError(
         absl::StrCat("invalid call ", detail, " at ", expr_tag(expr)));
 }
@@ -126,22 +126,22 @@ absl::Status invalid_invoke(const Value& callee, const std::string& detail) {
         absl::StrCat("invalid runtime call ", detail, " on ", callee.string()));
 }
 
-absl::StatusOr<std::string> parameter_name(const Property& param) {
+absl::StatusOr<std::string> parameter_name(const syntax::Property& param) {
     return property_name(*param.key);
 }
 
-bool is_named_call_argument(const Expression& expr) {
-    if (expr.type != Expression::Type::ObjectExpr) {
+bool is_named_call_argument(const syntax::Expression& expr) {
+    if (expr.type != syntax::Expression::Type::ObjectExpr) {
         return false;
     }
-    const auto& object = std::get<std::unique_ptr<ObjectExpr>>(expr.expr);
+    const auto& object = std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.expr);
     return object->with == nullptr;
 }
 
 absl::StatusOr<std::unordered_map<std::string, Value>> eval_named_arguments(
-    const Expression& expr, const Environment& env) {
+    const syntax::Expression& expr, const Environment& env) {
     std::unordered_map<std::string, Value> named_args;
-    const auto& object = std::get<std::unique_ptr<ObjectExpr>>(expr.expr);
+    const auto& object = std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.expr);
     for (const auto& property : object->properties) {
         auto name_or = property_name(*property->key);
         if (!name_or.ok()) {
@@ -160,18 +160,19 @@ absl::StatusOr<std::unordered_map<std::string, Value>> eval_named_arguments(
     return named_args;
 }
 
-absl::StatusOr<Value> execute_function_body(const FunctionBody& body, Environment& env) {
+absl::StatusOr<Value> execute_function_body(const syntax::FunctionBody& body, Environment& env) {
     switch (body.type) {
-        case FunctionBody::Type::Expression:
-            return eval_impl(*std::get<std::unique_ptr<Expression>>(body.body), env);
-        case FunctionBody::Type::Block: {
-            const auto& block = std::get<std::unique_ptr<Block>>(body.body);
+        case syntax::FunctionBody::Type::Expression:
+            return eval_impl(*std::get<std::unique_ptr<syntax::Expression>>(body.body), env);
+        case syntax::FunctionBody::Type::Block: {
+            const auto& block = std::get<std::unique_ptr<syntax::Block>>(body.body);
             Environment block_env(std::make_shared<Environment>(env));
             Value last = Value::null();
             for (const auto& stmt : block->body) {
                 switch (stmt->type) {
-                    case Statement::Type::ExpressionStatement: {
-                        const auto& expr_stmt = std::get<std::unique_ptr<ExprStmt>>(stmt->stmt);
+                    case syntax::Statement::Type::ExpressionStatement: {
+                        const auto& expr_stmt =
+                            std::get<std::unique_ptr<syntax::ExprStmt>>(stmt->stmt);
                         auto value_or = eval_impl(*expr_stmt->expression, block_env);
                         if (!value_or.ok()) {
                             return value_or.status();
@@ -179,9 +180,9 @@ absl::StatusOr<Value> execute_function_body(const FunctionBody& body, Environmen
                         last = *value_or;
                         break;
                     }
-                    case Statement::Type::VariableAssignment: {
+                    case syntax::Statement::Type::VariableAssignment: {
                         const auto& assignment =
-                            std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
+                            std::get<std::unique_ptr<syntax::VariableAssgn>>(stmt->stmt);
                         auto value_or = eval_impl(*assignment->init, block_env);
                         if (!value_or.ok()) {
                             return value_or.status();
@@ -190,14 +191,16 @@ absl::StatusOr<Value> execute_function_body(const FunctionBody& body, Environmen
                         last = *value_or;
                         break;
                     }
-                    case Statement::Type::OptionStatement: {
-                        const auto& option = std::get<std::unique_ptr<OptionStmt>>(stmt->stmt);
-                        if (option->assignment->type != Assignment::Type::VariableAssignment) {
+                    case syntax::Statement::Type::OptionStatement: {
+                        const auto& option =
+                            std::get<std::unique_ptr<syntax::OptionStmt>>(stmt->stmt);
+                        if (option->assignment->type !=
+                            syntax::Assignment::Type::VariableAssignment) {
                             return absl::UnimplementedError(
                                 "unsupported option member assignment in function body");
                         }
-                        const auto& assignment =
-                            std::get<std::unique_ptr<VariableAssgn>>(option->assignment->value);
+                        const auto& assignment = std::get<std::unique_ptr<syntax::VariableAssgn>>(
+                            option->assignment->value);
                         auto value_or = eval_impl(*assignment->init, block_env);
                         if (!value_or.ok()) {
                             return value_or.status();
@@ -206,16 +209,16 @@ absl::StatusOr<Value> execute_function_body(const FunctionBody& body, Environmen
                         last = *value_or;
                         break;
                     }
-                    case Statement::Type::ReturnStatement: {
-                        const auto& ret = std::get<std::unique_ptr<ReturnStmt>>(stmt->stmt);
+                    case syntax::Statement::Type::ReturnStatement: {
+                        const auto& ret = std::get<std::unique_ptr<syntax::ReturnStmt>>(stmt->stmt);
                         return eval_impl(*ret->argument, block_env);
                     }
-                    case Statement::Type::BadStatement:
-                        return absl::InvalidArgumentError(
-                            absl::StrCat("cannot execute bad statement: ",
-                                         std::get<std::unique_ptr<BadStmt>>(stmt->stmt)->text));
-                    case Statement::Type::BuiltinStatement:
-                    case Statement::Type::TestCaseStatement:
+                    case syntax::Statement::Type::BadStatement:
+                        return absl::InvalidArgumentError(absl::StrCat(
+                            "cannot execute bad statement: ",
+                            std::get<std::unique_ptr<syntax::BadStmt>>(stmt->stmt)->text));
+                    case syntax::Statement::Type::BuiltinStatement:
+                    case syntax::Statement::Type::TestCaseStatement:
                         return absl::UnimplementedError("unsupported statement in function body");
                     default:
                         PL_FLUX_UNREACHABLE();
@@ -229,9 +232,9 @@ absl::StatusOr<Value> execute_function_body(const FunctionBody& body, Environmen
 }
 
 absl::Status bind_function_arguments(const FunctionValue& function,
-                                     const FunctionExpr& function_expr,
-                                     const CallExpr& call,
-                                     const Expression& whole_expr,
+                                     const syntax::FunctionExpr& function_expr,
+                                     const syntax::CallExpr& call,
+                                     const syntax::Expression& whole_expr,
                                      const Environment& caller_env,
                                      Environment& function_env,
                                      const std::optional<Value>& pipe_value) {
@@ -265,7 +268,7 @@ absl::Status bind_function_arguments(const FunctionValue& function,
             return name_or.status();
         }
         const std::string& name = *name_or;
-        if (param->value != nullptr && param->value->type == Expression::Type::PipeLit) {
+        if (param->value != nullptr && param->value->type == syntax::Expression::Type::PipeLit) {
             if (pipe_value.has_value()) {
                 function_env.define(name, *pipe_value);
                 continue;
@@ -316,7 +319,8 @@ absl::Status bind_function_arguments(const FunctionValue& function,
     return absl::OkStatus();
 }
 
-absl::StatusOr<Value> eval_function_expr(const FunctionExpr& function, const Environment& env) {
+absl::StatusOr<Value> eval_function_expr(const syntax::FunctionExpr& function,
+                                         const Environment& env) {
     auto callable = std::make_shared<FunctionValue>();
     callable->kind = FunctionValue::Kind::User;
     callable->name = "<anonymous>";
@@ -326,7 +330,7 @@ absl::StatusOr<Value> eval_function_expr(const FunctionExpr& function, const Env
 }
 
 absl::Status bind_positional_arguments(const FunctionValue& function,
-                                       const FunctionExpr& function_expr,
+                                       const syntax::FunctionExpr& function_expr,
                                        const std::vector<Value>& positional_args,
                                        Environment& function_env) {
     size_t positional_index = 0;
@@ -340,7 +344,7 @@ absl::Status bind_positional_arguments(const FunctionValue& function,
             function_env.define(name, positional_args[positional_index++]);
             continue;
         }
-        if (param->value != nullptr && param->value->type == Expression::Type::PipeLit) {
+        if (param->value != nullptr && param->value->type == syntax::Expression::Type::PipeLit) {
             return invalid_invoke(Value::function(std::make_shared<FunctionValue>(function)),
                                   absl::StrCat("missing pipe argument `", name, "`"));
         }
@@ -363,8 +367,8 @@ absl::Status bind_positional_arguments(const FunctionValue& function,
 }
 
 absl::StatusOr<Value> invoke_function(const FunctionValue& function,
-                                      const CallExpr& call,
-                                      const Expression& whole_expr,
+                                      const syntax::CallExpr& call,
+                                      const syntax::Expression& whole_expr,
                                       const Environment& env,
                                       const std::optional<Value>& pipe_value) {
     if (function.kind == FunctionValue::Kind::Builtin) {
@@ -443,9 +447,9 @@ absl::StatusOr<Value> invoke_prepared_function(const FunctionValue& function,
     return execute_function_body(*function.user_function->body, function_env);
 }
 
-absl::StatusOr<Value> eval_call(const CallExpr& call,
+absl::StatusOr<Value> eval_call(const syntax::CallExpr& call,
                                 const Environment& env,
-                                const Expression& whole_expr) {
+                                const syntax::Expression& whole_expr) {
     auto callee_or = eval_impl(*call.callee, env);
     if (!callee_or.ok()) {
         return callee_or.status();
@@ -457,9 +461,9 @@ absl::StatusOr<Value> eval_call(const CallExpr& call,
     return invoke_function(callee.as_function(), call, whole_expr, env, std::nullopt);
 }
 
-absl::StatusOr<Value> eval_pipe(const PipeExpr& pipe,
+absl::StatusOr<Value> eval_pipe(const syntax::PipeExpr& pipe,
                                 const Environment& env,
-                                const Expression& whole_expr) {
+                                const syntax::Expression& whole_expr) {
     auto input_or = eval_impl(*pipe.argument, env);
     if (!input_or.ok()) {
         return input_or.status();
@@ -474,9 +478,9 @@ absl::StatusOr<Value> eval_pipe(const PipeExpr& pipe,
     return invoke_function(callee_or->as_function(), *pipe.call, whole_expr, env, *input_or);
 }
 
-absl::StatusOr<Value> eval_member(const MemberExpr& member,
+absl::StatusOr<Value> eval_member(const syntax::MemberExpr& member,
                                   const Environment& env,
-                                  const Expression& whole_expr) {
+                                  const syntax::Expression& whole_expr) {
     auto member_name_or = flatten_member_name(member);
     auto object_or = eval_impl(*member.object, env);
     if (object_or.ok()) {
@@ -518,9 +522,9 @@ absl::StatusOr<Value> eval_member(const MemberExpr& member,
     return absl::NotFoundError(absl::StrCat("missing object property: ", *name_or));
 }
 
-absl::StatusOr<Value> eval_index(const IndexExpr& index,
+absl::StatusOr<Value> eval_index(const syntax::IndexExpr& index,
                                  const Environment& env,
-                                 const Expression& whole_expr) {
+                                 const syntax::Expression& whole_expr) {
     auto target_or = eval_impl(*index.array, env);
     if (!target_or.ok()) {
         return target_or.status();
@@ -564,15 +568,16 @@ absl::StatusOr<Value> eval_index(const IndexExpr& index,
     return type_error(whole_expr, "index access requires an array or object");
 }
 
-absl::StatusOr<Value> eval_string_expr(const StringExpr& expr, const Environment& env) {
+absl::StatusOr<Value> eval_string_expr(const syntax::StringExpr& expr, const Environment& env) {
     std::string out;
     for (const auto& part : expr.parts) {
         switch (part->type) {
-            case StringExprPart::Type::Text:
-                out += std::get<std::unique_ptr<TextPart>>(part->part)->value;
+            case syntax::StringExprPart::Type::Text:
+                out += std::get<std::unique_ptr<syntax::TextPart>>(part->part)->value;
                 break;
-            case StringExprPart::Type::Interpolated: {
-                const auto& interpolated = std::get<std::unique_ptr<InterpolatedPart>>(part->part);
+            case syntax::StringExprPart::Type::Interpolated: {
+                const auto& interpolated =
+                    std::get<std::unique_ptr<syntax::InterpolatedPart>>(part->part);
                 auto value_or = eval_impl(*interpolated->expression, env);
                 if (!value_or.ok()) {
                     return value_or.status();
@@ -586,9 +591,9 @@ absl::StatusOr<Value> eval_string_expr(const StringExpr& expr, const Environment
     return Value::string(out);
 }
 
-absl::StatusOr<Value> eval_object_expr(const ObjectExpr& object,
+absl::StatusOr<Value> eval_object_expr(const syntax::ObjectExpr& object,
                                        const Environment& env,
-                                       const Expression& whole_expr) {
+                                       const syntax::Expression& whole_expr) {
     std::vector<std::pair<std::string, Value>> props;
     if (object.with != nullptr && object.with->source != nullptr) {
         auto base_value_or = env.lookup(object.with->source->name);
@@ -631,7 +636,7 @@ absl::StatusOr<Value> eval_object_expr(const ObjectExpr& object,
     return Value::object(std::move(props));
 }
 
-absl::StatusOr<Value> eval_dict_expr(const DictExpr& dict, const Environment& env) {
+absl::StatusOr<Value> eval_dict_expr(const syntax::DictExpr& dict, const Environment& env) {
     std::vector<std::pair<std::string, Value>> props;
     for (const auto& item : dict.elements) {
         auto key_or = eval_impl(*item->key, env);
@@ -661,10 +666,10 @@ absl::StatusOr<Value> eval_dict_expr(const DictExpr& dict, const Environment& en
     return Value::object(std::move(props));
 }
 
-absl::StatusOr<Value> eval_unary(const UnaryExpr& unary,
+absl::StatusOr<Value> eval_unary(const syntax::UnaryExpr& unary,
                                  const Environment& env,
-                                 const Expression& whole_expr) {
-    if (unary.op == Operator::ExistsOperator) {
+                                 const syntax::Expression& whole_expr) {
+    if (unary.op == syntax::Operator::ExistsOperator) {
         auto result = eval_impl(*unary.argument, env);
         if (!result.ok() && result.status().code() == absl::StatusCode::kNotFound) {
             return Value::boolean(false);
@@ -681,12 +686,12 @@ absl::StatusOr<Value> eval_unary(const UnaryExpr& unary,
     }
     const auto& value = *value_or;
     switch (unary.op) {
-        case Operator::NotOperator:
+        case syntax::Operator::NotOperator:
             if (value.type() != Value::Type::Bool) {
                 return type_error(whole_expr, "`not` requires a boolean");
             }
             return Value::boolean(!value.as_bool());
-        case Operator::SubtractionOperator:
+        case syntax::Operator::SubtractionOperator:
             if (value.type() == Value::Type::Int) {
                 return Value::integer(-value.as_int());
             }
@@ -709,10 +714,10 @@ absl::StatusOr<Value> eval_unary(const UnaryExpr& unary,
     }
 }
 
-absl::StatusOr<Value> eval_binary_numeric(const BinaryExpr& binary,
+absl::StatusOr<Value> eval_binary_numeric(const syntax::BinaryExpr& binary,
                                           const Value& left,
                                           const Value& right,
-                                          const Expression& whole_expr) {
+                                          const syntax::Expression& whole_expr) {
     const bool use_float = left.type() == Value::Type::Float || right.type() == Value::Type::Float;
     auto left_num = left.type() == Value::Type::Float ? left.as_float()
                     : left.type() == Value::Type::Int ? static_cast<double>(left.as_int())
@@ -722,21 +727,21 @@ absl::StatusOr<Value> eval_binary_numeric(const BinaryExpr& binary,
                                                         : static_cast<double>(right.as_uint());
 
     switch (binary.op) {
-        case Operator::AdditionOperator:
+        case syntax::Operator::AdditionOperator:
             return use_float ? Value::floating(left_num + right_num)
                              : Value::integer(static_cast<int64_t>(left_num + right_num));
-        case Operator::SubtractionOperator:
+        case syntax::Operator::SubtractionOperator:
             return use_float ? Value::floating(left_num - right_num)
                              : Value::integer(static_cast<int64_t>(left_num - right_num));
-        case Operator::MultiplicationOperator:
+        case syntax::Operator::MultiplicationOperator:
             return use_float ? Value::floating(left_num * right_num)
                              : Value::integer(static_cast<int64_t>(left_num * right_num));
-        case Operator::DivisionOperator:
+        case syntax::Operator::DivisionOperator:
             if (right_num == 0) {
                 return type_error(whole_expr, "division by zero");
             }
             return Value::floating(left_num / right_num);
-        case Operator::ModuloOperator:
+        case syntax::Operator::ModuloOperator:
             if (use_float) {
                 return type_error(whole_expr, "modulo requires integer operands");
             }
@@ -744,26 +749,26 @@ absl::StatusOr<Value> eval_binary_numeric(const BinaryExpr& binary,
                 return type_error(whole_expr, "modulo by zero");
             }
             return Value::integer(static_cast<int64_t>(left_num) % static_cast<int64_t>(right_num));
-        case Operator::LessThanOperator:
+        case syntax::Operator::LessThanOperator:
             return Value::boolean(left_num < right_num);
-        case Operator::LessThanEqualOperator:
+        case syntax::Operator::LessThanEqualOperator:
             return Value::boolean(left_num <= right_num);
-        case Operator::GreaterThanOperator:
+        case syntax::Operator::GreaterThanOperator:
             return Value::boolean(left_num > right_num);
-        case Operator::GreaterThanEqualOperator:
+        case syntax::Operator::GreaterThanEqualOperator:
             return Value::boolean(left_num >= right_num);
-        case Operator::EqualOperator:
+        case syntax::Operator::EqualOperator:
             return Value::boolean(left_num == right_num);
-        case Operator::NotEqualOperator:
+        case syntax::Operator::NotEqualOperator:
             return Value::boolean(left_num != right_num);
         default:
             return unsupported(whole_expr, "numeric binary operator");
     }
 }
 
-absl::StatusOr<Value> eval_binary(const BinaryExpr& binary,
+absl::StatusOr<Value> eval_binary(const syntax::BinaryExpr& binary,
                                   const Environment& env,
-                                  const Expression& whole_expr) {
+                                  const syntax::Expression& whole_expr) {
     auto left_or = eval_impl(*binary.left, env);
     if (!left_or.ok()) {
         return left_or.status();
@@ -785,17 +790,17 @@ absl::StatusOr<Value> eval_binary(const BinaryExpr& binary,
     }
 
     switch (binary.op) {
-        case Operator::AdditionOperator:
+        case syntax::Operator::AdditionOperator:
             if (left.type() == Value::Type::String && right.type() == Value::Type::String) {
                 return Value::string(left.as_string() + right.as_string());
             }
             return type_error(whole_expr, "`+` requires numeric or string operands");
-        case Operator::EqualOperator:
+        case syntax::Operator::EqualOperator:
             return Value::boolean(left == right);
-        case Operator::NotEqualOperator:
+        case syntax::Operator::NotEqualOperator:
             return Value::boolean(left != right);
-        case Operator::RegexpMatchOperator:
-        case Operator::NotRegexpMatchOperator: {
+        case syntax::Operator::RegexpMatchOperator:
+        case syntax::Operator::NotRegexpMatchOperator: {
             if (left.type() != Value::Type::String || right.type() != Value::Type::Regex) {
                 return type_error(whole_expr, "regex match requires string =~ regex");
             }
@@ -804,14 +809,15 @@ absl::StatusOr<Value> eval_binary(const BinaryExpr& binary,
                 pattern = pattern.substr(1, pattern.size() - 2);
             }
             bool matched = std::regex_search(left.as_string(), std::regex(pattern));
-            return Value::boolean(binary.op == Operator::RegexpMatchOperator ? matched : !matched);
+            return Value::boolean(binary.op == syntax::Operator::RegexpMatchOperator ? matched
+                                                                                     : !matched);
         }
-        case Operator::StartsWithOperator:
+        case syntax::Operator::StartsWithOperator:
             if (left.type() != Value::Type::String || right.type() != Value::Type::String) {
                 return type_error(whole_expr, "`startswith` requires string operands");
             }
             return Value::boolean(left.as_string().starts_with(right.as_string()));
-        case Operator::InOperator:
+        case syntax::Operator::InOperator:
             if (right.type() != Value::Type::Array) {
                 return type_error(whole_expr, "`in` requires an array on the right-hand side");
             }
@@ -826,9 +832,9 @@ absl::StatusOr<Value> eval_binary(const BinaryExpr& binary,
     }
 }
 
-absl::StatusOr<Value> eval_logical(const LogicalExpr& logical,
+absl::StatusOr<Value> eval_logical(const syntax::LogicalExpr& logical,
                                    const Environment& env,
-                                   const Expression& whole_expr) {
+                                   const syntax::Expression& whole_expr) {
     auto left_or = eval_impl(*logical.left, env);
     if (!left_or.ok()) {
         return left_or.status();
@@ -837,10 +843,10 @@ absl::StatusOr<Value> eval_logical(const LogicalExpr& logical,
     if (left.type() != Value::Type::Bool) {
         return type_error(whole_expr, "logical operators require boolean operands");
     }
-    if (logical.op == LogicalOperator::AndOperator && !left.as_bool()) {
+    if (logical.op == syntax::LogicalOperator::AndOperator && !left.as_bool()) {
         return Value::boolean(false);
     }
-    if (logical.op == LogicalOperator::OrOperator && left.as_bool()) {
+    if (logical.op == syntax::LogicalOperator::OrOperator && left.as_bool()) {
         return Value::boolean(true);
     }
     auto right_or = eval_impl(*logical.right, env);
@@ -858,10 +864,10 @@ absl::StatusOr<Value> eval_logical(const LogicalExpr& logical,
     return Value::boolean(right.as_bool());
 }
 
-absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) {
+absl::StatusOr<Value> eval_impl(const syntax::Expression& expr, const Environment& env) {
     switch (expr.type) {
-        case Expression::Type::Identifier: {
-            const auto& name = std::get<std::unique_ptr<Identifier>>(expr.expr)->name;
+        case syntax::Expression::Type::Identifier: {
+            const auto& name = std::get<std::unique_ptr<syntax::Identifier>>(expr.expr)->name;
             auto value_or = env.lookup(name);
             if (value_or.ok()) {
                 return *value_or;
@@ -871,9 +877,10 @@ absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) 
             }
             return env.lookup_option(name);
         }
-        case Expression::Type::ArrayExpr: {
+        case syntax::Expression::Type::ArrayExpr: {
             std::vector<Value> elements;
-            for (const auto& item : std::get<std::unique_ptr<ArrayExpr>>(expr.expr)->elements) {
+            for (const auto& item :
+                 std::get<std::unique_ptr<syntax::ArrayExpr>>(expr.expr)->elements) {
                 auto value_or = eval_impl(*item->expression, env);
                 if (!value_or.ok()) {
                     return value_or.status();
@@ -882,26 +889,31 @@ absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) 
             }
             return Value::array(std::move(elements));
         }
-        case Expression::Type::ObjectExpr:
-            return eval_object_expr(*std::get<std::unique_ptr<ObjectExpr>>(expr.expr), env, expr);
-        case Expression::Type::FunctionExpr:
-            return eval_function_expr(*std::get<std::unique_ptr<FunctionExpr>>(expr.expr), env);
-        case Expression::Type::MemberExpr:
-            return eval_member(*std::get<std::unique_ptr<MemberExpr>>(expr.expr), env, expr);
-        case Expression::Type::IndexExpr:
-            return eval_index(*std::get<std::unique_ptr<IndexExpr>>(expr.expr), env, expr);
-        case Expression::Type::CallExpr:
-            return eval_call(*std::get<std::unique_ptr<CallExpr>>(expr.expr), env, expr);
-        case Expression::Type::PipeExpr:
-            return eval_pipe(*std::get<std::unique_ptr<PipeExpr>>(expr.expr), env, expr);
-        case Expression::Type::BinaryExpr:
-            return eval_binary(*std::get<std::unique_ptr<BinaryExpr>>(expr.expr), env, expr);
-        case Expression::Type::UnaryExpr:
-            return eval_unary(*std::get<std::unique_ptr<UnaryExpr>>(expr.expr), env, expr);
-        case Expression::Type::LogicalExpr:
-            return eval_logical(*std::get<std::unique_ptr<LogicalExpr>>(expr.expr), env, expr);
-        case Expression::Type::ConditionalExpr: {
-            const auto& conditional = std::get<std::unique_ptr<ConditionalExpr>>(expr.expr);
+        case syntax::Expression::Type::ObjectExpr:
+            return eval_object_expr(
+                *std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.expr), env, expr);
+        case syntax::Expression::Type::FunctionExpr:
+            return eval_function_expr(*std::get<std::unique_ptr<syntax::FunctionExpr>>(expr.expr),
+                                      env);
+        case syntax::Expression::Type::MemberExpr:
+            return eval_member(
+                *std::get<std::unique_ptr<syntax::MemberExpr>>(expr.expr), env, expr);
+        case syntax::Expression::Type::IndexExpr:
+            return eval_index(*std::get<std::unique_ptr<syntax::IndexExpr>>(expr.expr), env, expr);
+        case syntax::Expression::Type::CallExpr:
+            return eval_call(*std::get<std::unique_ptr<syntax::CallExpr>>(expr.expr), env, expr);
+        case syntax::Expression::Type::PipeExpr:
+            return eval_pipe(*std::get<std::unique_ptr<syntax::PipeExpr>>(expr.expr), env, expr);
+        case syntax::Expression::Type::BinaryExpr:
+            return eval_binary(
+                *std::get<std::unique_ptr<syntax::BinaryExpr>>(expr.expr), env, expr);
+        case syntax::Expression::Type::UnaryExpr:
+            return eval_unary(*std::get<std::unique_ptr<syntax::UnaryExpr>>(expr.expr), env, expr);
+        case syntax::Expression::Type::LogicalExpr:
+            return eval_logical(
+                *std::get<std::unique_ptr<syntax::LogicalExpr>>(expr.expr), env, expr);
+        case syntax::Expression::Type::ConditionalExpr: {
+            const auto& conditional = std::get<std::unique_ptr<syntax::ConditionalExpr>>(expr.expr);
             auto test_or = eval_impl(*conditional->test, env);
             if (!test_or.ok()) {
                 return test_or.status();
@@ -913,31 +925,33 @@ absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) 
             return test.as_bool() ? eval_impl(*conditional->consequent, env)
                                   : eval_impl(*conditional->alternate, env);
         }
-        case Expression::Type::StringExpr:
-            return eval_string_expr(*std::get<std::unique_ptr<StringExpr>>(expr.expr), env);
-        case Expression::Type::ParenExpr:
-            return eval_impl(*std::get<std::unique_ptr<ParenExpr>>(expr.expr)->expression, env);
-        case Expression::Type::IntegerLit:
-            return Value::integer(std::get<std::unique_ptr<IntegerLit>>(expr.expr)->value);
-        case Expression::Type::FloatLit:
-            return Value::floating(std::get<std::unique_ptr<FloatLit>>(expr.expr)->value);
-        case Expression::Type::StringLit:
-            return Value::string(std::get<std::unique_ptr<StringLit>>(expr.expr)->value);
-        case Expression::Type::DurationLit:
-            return Value::duration(std::get<std::unique_ptr<DurationLit>>(expr.expr)->string());
-        case Expression::Type::UnsignedIntegerLit:
-            return Value::uinteger(std::get<std::unique_ptr<UintLit>>(expr.expr)->value);
-        case Expression::Type::BooleanLit:
-            return Value::boolean(std::get<std::unique_ptr<BooleanLit>>(expr.expr)->value);
-        case Expression::Type::DateTimeLit:
-            return Value::time(std::get<std::unique_ptr<DateTimeLit>>(expr.expr)->string());
-        case Expression::Type::RegexpLit:
-            return Value::regex(std::get<std::unique_ptr<RegexpLit>>(expr.expr)->string());
-        case Expression::Type::DictExpr:
-            return eval_dict_expr(*std::get<std::unique_ptr<DictExpr>>(expr.expr), env);
-        case Expression::Type::PipeLit:
-        case Expression::Type::LabelLit:
-        case Expression::Type::BadExpr:
+        case syntax::Expression::Type::StringExpr:
+            return eval_string_expr(*std::get<std::unique_ptr<syntax::StringExpr>>(expr.expr), env);
+        case syntax::Expression::Type::ParenExpr:
+            return eval_impl(*std::get<std::unique_ptr<syntax::ParenExpr>>(expr.expr)->expression,
+                             env);
+        case syntax::Expression::Type::IntegerLit:
+            return Value::integer(std::get<std::unique_ptr<syntax::IntegerLit>>(expr.expr)->value);
+        case syntax::Expression::Type::FloatLit:
+            return Value::floating(std::get<std::unique_ptr<syntax::FloatLit>>(expr.expr)->value);
+        case syntax::Expression::Type::StringLit:
+            return Value::string(std::get<std::unique_ptr<syntax::StringLit>>(expr.expr)->value);
+        case syntax::Expression::Type::DurationLit:
+            return Value::duration(
+                std::get<std::unique_ptr<syntax::DurationLit>>(expr.expr)->string());
+        case syntax::Expression::Type::UnsignedIntegerLit:
+            return Value::uinteger(std::get<std::unique_ptr<syntax::UintLit>>(expr.expr)->value);
+        case syntax::Expression::Type::BooleanLit:
+            return Value::boolean(std::get<std::unique_ptr<syntax::BooleanLit>>(expr.expr)->value);
+        case syntax::Expression::Type::DateTimeLit:
+            return Value::time(std::get<std::unique_ptr<syntax::DateTimeLit>>(expr.expr)->string());
+        case syntax::Expression::Type::RegexpLit:
+            return Value::regex(std::get<std::unique_ptr<syntax::RegexpLit>>(expr.expr)->string());
+        case syntax::Expression::Type::DictExpr:
+            return eval_dict_expr(*std::get<std::unique_ptr<syntax::DictExpr>>(expr.expr), env);
+        case syntax::Expression::Type::PipeLit:
+        case syntax::Expression::Type::LabelLit:
+        case syntax::Expression::Type::BadExpr:
             return unsupported(expr, "kind");
         default:
             PL_FLUX_UNREACHABLE();
@@ -946,7 +960,7 @@ absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) 
 
 } // namespace
 
-absl::StatusOr<Value> ExpressionEvaluator::Evaluate(const Expression& expr,
+absl::StatusOr<Value> ExpressionEvaluator::Evaluate(const syntax::Expression& expr,
                                                     const Environment& env) {
     return eval_impl(expr, env);
 }
@@ -959,4 +973,4 @@ absl::StatusOr<Value> ExpressionEvaluator::Invoke(const Value& callee,
     return invoke_prepared_function(callee.as_function(), positional_args);
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

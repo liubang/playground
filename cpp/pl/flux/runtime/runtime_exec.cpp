@@ -24,10 +24,10 @@
 #include "cpp/pl/flux/runtime/runtime_builtin.h"
 #include "cpp/pl/flux/runtime/runtime_eval.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
 
-std::string location_text(const SourceLocation& loc) {
+std::string location_text(const syntax::SourceLocation& loc) {
     if (!loc.is_valid()) {
         return "<unknown>";
     }
@@ -36,7 +36,7 @@ std::string location_text(const SourceLocation& loc) {
     return ss.str();
 }
 
-absl::Status with_statement_location(const absl::Status& status, const Statement& stmt) {
+absl::Status with_statement_location(const absl::Status& status, const syntax::Statement& stmt) {
     if (status.ok()) {
         return status;
     }
@@ -45,18 +45,18 @@ absl::Status with_statement_location(const absl::Status& status, const Statement
         absl::StrCat(status.message(), " while executing statement at ", location_text(stmt.loc))};
 }
 
-absl::StatusOr<std::string> property_name(const PropertyKey& key) {
+absl::StatusOr<std::string> property_name(const syntax::PropertyKey& key) {
     switch (key.type) {
-        case PropertyKey::Type::Identifier:
-            return std::get<std::unique_ptr<Identifier>>(key.key)->name;
-        case PropertyKey::Type::StringLiteral:
-            return std::get<std::unique_ptr<StringLit>>(key.key)->value;
+        case syntax::PropertyKey::Type::Identifier:
+            return std::get<std::unique_ptr<syntax::Identifier>>(key.key)->name;
+        case syntax::PropertyKey::Type::StringLiteral:
+            return std::get<std::unique_ptr<syntax::StringLit>>(key.key)->value;
         default:
             PL_FLUX_UNREACHABLE();
     }
 }
 
-absl::StatusOr<std::string> flatten_member_name(const MemberExpr& member) {
+absl::StatusOr<std::string> flatten_member_name(const syntax::MemberExpr& member) {
     std::string suffix;
     auto property_or = property_name(*member.property);
     if (!property_or.ok()) {
@@ -64,9 +64,9 @@ absl::StatusOr<std::string> flatten_member_name(const MemberExpr& member) {
     }
     suffix = *property_or;
 
-    const Expression* cursor = member.object.get();
-    while (cursor->type == Expression::Type::MemberExpr) {
-        const auto& inner = std::get<std::unique_ptr<MemberExpr>>(cursor->expr);
+    const syntax::Expression* cursor = member.object.get();
+    while (cursor->type == syntax::Expression::Type::MemberExpr) {
+        const auto& inner = std::get<std::unique_ptr<syntax::MemberExpr>>(cursor->expr);
         auto inner_name_or = property_name(*inner->property);
         if (!inner_name_or.ok()) {
             return inner_name_or.status();
@@ -76,18 +76,18 @@ absl::StatusOr<std::string> flatten_member_name(const MemberExpr& member) {
         cursor = inner->object.get();
     }
 
-    if (cursor->type != Expression::Type::Identifier) {
+    if (cursor->type != syntax::Expression::Type::Identifier) {
         return absl::InvalidArgumentError("member assignment root must be an identifier");
     }
-    const auto& root = std::get<std::unique_ptr<Identifier>>(cursor->expr);
+    const auto& root = std::get<std::unique_ptr<syntax::Identifier>>(cursor->expr);
     return root->name + "." + suffix;
 }
 
-absl::StatusOr<ExecutionResult> execute_option_assignment(const Assignment& assignment,
+absl::StatusOr<ExecutionResult> execute_option_assignment(const syntax::Assignment& assignment,
                                                           Environment& env) {
     switch (assignment.type) {
-        case Assignment::Type::VariableAssignment: {
-            const auto& var = std::get<std::unique_ptr<VariableAssgn>>(assignment.value);
+        case syntax::Assignment::Type::VariableAssignment: {
+            const auto& var = std::get<std::unique_ptr<syntax::VariableAssgn>>(assignment.value);
             auto value_or = ExpressionEvaluator::Evaluate(*var->init, env);
             if (!value_or.ok()) {
                 return value_or.status();
@@ -95,8 +95,8 @@ absl::StatusOr<ExecutionResult> execute_option_assignment(const Assignment& assi
             env.define_option(var->id->name, *value_or);
             return ExecutionResult::normal(*value_or);
         }
-        case Assignment::Type::MemberAssignment: {
-            const auto& member = std::get<std::unique_ptr<MemberAssgn>>(assignment.value);
+        case syntax::Assignment::Type::MemberAssignment: {
+            const auto& member = std::get<std::unique_ptr<syntax::MemberAssgn>>(assignment.value);
             auto path_or = flatten_member_name(*member->member);
             if (!path_or.ok()) {
                 return path_or.status();
@@ -113,7 +113,7 @@ absl::StatusOr<ExecutionResult> execute_option_assignment(const Assignment& assi
     }
 }
 
-std::string import_binding_name(const ImportDeclaration& import) {
+std::string import_binding_name(const syntax::ImportDeclaration& import) {
     if (import.alias != nullptr) {
         return import.alias->name;
     }
@@ -122,7 +122,7 @@ std::string import_binding_name(const ImportDeclaration& import) {
     return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
-absl::StatusOr<Value> import_binding_value(const ImportDeclaration& import) {
+absl::StatusOr<Value> import_binding_value(const syntax::ImportDeclaration& import) {
     auto value_or = BuiltinRegistry::ImportPackage(import.path->value);
     if (!value_or.ok()) {
         return value_or.status();
@@ -135,7 +135,7 @@ absl::StatusOr<Value> import_binding_value(const ImportDeclaration& import) {
     return Value::object(std::move(props));
 }
 
-Value testcase_result_value(const TestCaseStmt& testcase, const ExecutionResult& result) {
+Value testcase_result_value(const syntax::TestCaseStmt& testcase, const ExecutionResult& result) {
     std::vector<std::pair<std::string, Value>> properties;
     properties.emplace_back("name", Value::string(testcase.id->name));
     properties.emplace_back("success", Value::boolean(true));
@@ -146,25 +146,25 @@ Value testcase_result_value(const TestCaseStmt& testcase, const ExecutionResult&
     return Value::object(std::move(properties));
 }
 
-std::string statement_result_name(const Statement& stmt) {
+std::string statement_result_name(const syntax::Statement& stmt) {
     switch (stmt.type) {
-        case Statement::Type::ExpressionStatement:
+        case syntax::Statement::Type::ExpressionStatement:
             return "_result";
-        case Statement::Type::VariableAssignment: {
-            const auto& var = std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt);
+        case syntax::Statement::Type::VariableAssignment: {
+            const auto& var = std::get<std::unique_ptr<syntax::VariableAssgn>>(stmt.stmt);
             return var->id->name;
         }
-        case Statement::Type::OptionStatement: {
-            const auto& option = std::get<std::unique_ptr<OptionStmt>>(stmt.stmt);
+        case syntax::Statement::Type::OptionStatement: {
+            const auto& option = std::get<std::unique_ptr<syntax::OptionStmt>>(stmt.stmt);
             switch (option->assignment->type) {
-                case Assignment::Type::VariableAssignment: {
+                case syntax::Assignment::Type::VariableAssignment: {
                     const auto& var =
-                        std::get<std::unique_ptr<VariableAssgn>>(option->assignment->value);
+                        std::get<std::unique_ptr<syntax::VariableAssgn>>(option->assignment->value);
                     return "option." + var->id->name;
                 }
-                case Assignment::Type::MemberAssignment: {
+                case syntax::Assignment::Type::MemberAssignment: {
                     const auto& member =
-                        std::get<std::unique_ptr<MemberAssgn>>(option->assignment->value);
+                        std::get<std::unique_ptr<syntax::MemberAssgn>>(option->assignment->value);
                     auto path_or = flatten_member_name(*member->member);
                     if (!path_or.ok()) {
                         return "option";
@@ -175,31 +175,31 @@ std::string statement_result_name(const Statement& stmt) {
                     PL_FLUX_UNREACHABLE();
             }
         }
-        case Statement::Type::BuiltinStatement: {
-            const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(stmt.stmt);
+        case syntax::Statement::Type::BuiltinStatement: {
+            const auto& builtin = std::get<std::unique_ptr<syntax::BuiltinStmt>>(stmt.stmt);
             return "builtin." + builtin->id->name;
         }
-        case Statement::Type::TestCaseStatement: {
-            const auto& testcase = std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt);
+        case syntax::Statement::Type::TestCaseStatement: {
+            const auto& testcase = std::get<std::unique_ptr<syntax::TestCaseStmt>>(stmt.stmt);
             return "testcase." + testcase->id->name;
         }
-        case Statement::Type::ReturnStatement:
+        case syntax::Statement::Type::ReturnStatement:
             return "return";
-        case Statement::Type::BadStatement:
+        case syntax::Statement::Type::BadStatement:
             return "bad";
         default:
             PL_FLUX_UNREACHABLE();
     }
 }
 
-std::string resolved_result_name(const Statement& stmt, const Value& value) {
+std::string resolved_result_name(const syntax::Statement& stmt, const Value& value) {
     if (value.type() == Value::Type::Table && value.as_table().result_name.has_value()) {
         return *value.as_table().result_name;
     }
     return statement_result_name(stmt);
 }
 
-void append_named_result(const Statement& stmt,
+void append_named_result(const syntax::Statement& stmt,
                          const ExecutionResult& exec_result,
                          FileExecutionResult& file_result) {
     if (exec_result.type != ExecutionResult::Type::Normal || exec_result.value.is_null()) {
@@ -209,7 +209,7 @@ void append_named_result(const Statement& stmt,
                                               .value = exec_result.value});
 }
 
-absl::StatusOr<ExecutionResult> execute_testcase_statement(const TestCaseStmt& testcase,
+absl::StatusOr<ExecutionResult> execute_testcase_statement(const syntax::TestCaseStmt& testcase,
                                                            Environment& env) {
     auto result_or = StatementExecutor::ExecuteBlock(*testcase.block, env);
     if (!result_or.ok()) {
@@ -222,19 +222,19 @@ absl::StatusOr<ExecutionResult> execute_testcase_statement(const TestCaseStmt& t
 
 } // namespace
 
-absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const Statement& stmt,
+absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const syntax::Statement& stmt,
                                                            Environment& env) {
     switch (stmt.type) {
-        case Statement::Type::ExpressionStatement: {
-            const auto& expr = std::get<std::unique_ptr<ExprStmt>>(stmt.stmt);
+        case syntax::Statement::Type::ExpressionStatement: {
+            const auto& expr = std::get<std::unique_ptr<syntax::ExprStmt>>(stmt.stmt);
             auto value_or = ExpressionEvaluator::Evaluate(*expr->expression, env);
             if (!value_or.ok()) {
                 return with_statement_location(value_or.status(), stmt);
             }
             return ExecutionResult::normal(*value_or);
         }
-        case Statement::Type::VariableAssignment: {
-            const auto& var = std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt);
+        case syntax::Statement::Type::VariableAssignment: {
+            const auto& var = std::get<std::unique_ptr<syntax::VariableAssgn>>(stmt.stmt);
             auto value_or = ExpressionEvaluator::Evaluate(*var->init, env);
             if (!value_or.ok()) {
                 return with_statement_location(value_or.status(), stmt);
@@ -242,38 +242,38 @@ absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const Statement& stmt
             env.define(var->id->name, *value_or);
             return ExecutionResult::normal(*value_or);
         }
-        case Statement::Type::OptionStatement: {
-            const auto& option = std::get<std::unique_ptr<OptionStmt>>(stmt.stmt);
+        case syntax::Statement::Type::OptionStatement: {
+            const auto& option = std::get<std::unique_ptr<syntax::OptionStmt>>(stmt.stmt);
             auto result_or = execute_option_assignment(*option->assignment, env);
             if (!result_or.ok()) {
                 return with_statement_location(result_or.status(), stmt);
             }
             return result_or;
         }
-        case Statement::Type::ReturnStatement: {
-            const auto& ret = std::get<std::unique_ptr<ReturnStmt>>(stmt.stmt);
+        case syntax::Statement::Type::ReturnStatement: {
+            const auto& ret = std::get<std::unique_ptr<syntax::ReturnStmt>>(stmt.stmt);
             auto value_or = ExpressionEvaluator::Evaluate(*ret->argument, env);
             if (!value_or.ok()) {
                 return with_statement_location(value_or.status(), stmt);
             }
             return ExecutionResult::returned(*value_or);
         }
-        case Statement::Type::BadStatement:
+        case syntax::Statement::Type::BadStatement:
             return with_statement_location(
                 absl::InvalidArgumentError(
                     absl::StrCat("cannot execute bad statement: ",
-                                 std::get<std::unique_ptr<BadStmt>>(stmt.stmt)->text)),
+                                 std::get<std::unique_ptr<syntax::BadStmt>>(stmt.stmt)->text)),
                 stmt);
-        case Statement::Type::TestCaseStatement: {
+        case syntax::Statement::Type::TestCaseStatement: {
             auto result_or = execute_testcase_statement(
-                *std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt), env);
+                *std::get<std::unique_ptr<syntax::TestCaseStmt>>(stmt.stmt), env);
             if (!result_or.ok()) {
                 return with_statement_location(result_or.status(), stmt);
             }
             return result_or;
         }
-        case Statement::Type::BuiltinStatement: {
-            const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(stmt.stmt);
+        case syntax::Statement::Type::BuiltinStatement: {
+            const auto& builtin = std::get<std::unique_ptr<syntax::BuiltinStmt>>(stmt.stmt);
             auto status = BuiltinRegistry::Ensure(env, builtin->id->name);
             if (!status.ok()) {
                 return with_statement_location(status, stmt);
@@ -289,7 +289,7 @@ absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const Statement& stmt
     }
 }
 
-absl::StatusOr<ExecutionResult> StatementExecutor::ExecuteBlock(const Block& block,
+absl::StatusOr<ExecutionResult> StatementExecutor::ExecuteBlock(const syntax::Block& block,
                                                                 Environment& env) {
     auto block_env = std::make_shared<Environment>(std::make_shared<Environment>(env));
     Environment local(block_env);
@@ -307,7 +307,7 @@ absl::StatusOr<ExecutionResult> StatementExecutor::ExecuteBlock(const Block& blo
     return last;
 }
 
-absl::StatusOr<FileExecutionResult> StatementExecutor::ExecuteFile(const File& file,
+absl::StatusOr<FileExecutionResult> StatementExecutor::ExecuteFile(const syntax::File& file,
                                                                    Environment& env) {
     FileExecutionResult result;
     if (file.package != nullptr) {
@@ -337,4 +337,4 @@ absl::StatusOr<FileExecutionResult> StatementExecutor::ExecuteFile(const File& f
     return result;
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime
