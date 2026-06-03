@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">91.8&nbsp;%</td>
+            <td class="headerCovTableEntryHi">92.4&nbsp;%</td>
             <td class="headerCovTableEntry">329</td>
-            <td class="headerCovTableEntry">302</td>
+            <td class="headerCovTableEntry">304</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-04 00:01:58</td>
+            <td class="headerValue">2026-06-04 01:11:53</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">95.7&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">57.4&nbsp;%</td>
+            <td class="headerCovTableEntryLo">57.9&nbsp;%</td>
             <td class="headerCovTableEntry">584</td>
-            <td class="headerCovTableEntry">335</td>
+            <td class="headerCovTableEntry">338</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -136,22 +136,22 @@
 <span id="L65"><span class="lineNum">      65</span>                 :             :     stats-&gt;error.clear();</span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : }</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : </span>
-<span id="L68"><span class="lineNum">      68</span>         [<span class="tlaGBC" title="Branch 0 was taken 1165 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1165 : void AddPipelineStatsPage(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats,</span></span>
+<span id="L68"><span class="lineNum">      68</span>         [<span class="tlaGBC" title="Branch 0 was taken 659 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         659 : void AddPipelineStatsPage(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats,</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :                           const runtime::Page&amp; page) {</span>
-<span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 1165 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1165 :     if (stats == nullptr) {</span></span>
+<span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 659 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         659 :     if (stats == nullptr) {</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :             :         return;</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             :     }</span>
-<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">        1165 :     std::scoped_lock lock(stats-&gt;mu);</span></span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">        1165 :     ++stats-&gt;pages;</span></span>
-<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">        1165 :     stats-&gt;rows += page.row_count();</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">         659 :     std::scoped_lock lock(stats-&gt;mu);</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">         659 :     ++stats-&gt;pages;</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">         659 :     stats-&gt;rows += page.row_count();</span></span>
 <span id="L76"><span class="lineNum">      76</span>                 :             : }</span>
 <span id="L77"><span class="lineNum">      77</span>                 :             : </span>
-<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 : void FinishPipelineStats(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats) {</span></span>
-<span id="L79"><span class="lineNum">      79</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 :     if (stats == nullptr) {</span></span>
+<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 : void FinishPipelineStats(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats) {</span></span>
+<span id="L79"><span class="lineNum">      79</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 :     if (stats == nullptr) {</span></span>
 <span id="L80"><span class="lineNum">      80</span>                 :             :         return;</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             :     }</span>
-<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">         493 :     std::scoped_lock lock(stats-&gt;mu);</span></span>
-<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">         493 :     stats-&gt;finished = true;</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">         492 :     std::scoped_lock lock(stats-&gt;mu);</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">         492 :     stats-&gt;finished = true;</span></span>
 <span id="L84"><span class="lineNum">      84</span>                 :             : }</span>
 <span id="L85"><span class="lineNum">      85</span>                 :             : </span>
 <span id="L86"><span class="lineNum">      86</span>         [<span class="tlaGBC" title="Branch 0 was taken 491 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         491 : void AddPipelineSplitStats(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats,</span></span>
@@ -160,12 +160,12 @@
 <span id="L89"><span class="lineNum">      89</span>                 :             :         return;</span>
 <span id="L90"><span class="lineNum">      90</span>                 :             :     }</span>
 <span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">         380 :     std::scoped_lock lock(stats-&gt;mu);</span></span>
-<span id="L92"><span class="lineNum">      92</span>         [<span class="tlaGBC" title="Branch 0 was taken 382 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         382 :     stats-&gt;split_stats.insert(stats-&gt;split_stats.end(), split_stats.begin(), split_stats.end());</span></span>
+<span id="L92"><span class="lineNum">      92</span>         [<span class="tlaGBC" title="Branch 0 was taken 381 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         381 :     stats-&gt;split_stats.insert(stats-&gt;split_stats.end(), split_stats.begin(), split_stats.end());</span></span>
 <span id="L93"><span class="lineNum">      93</span>                 :             : }</span>
 <span id="L94"><span class="lineNum">      94</span>                 :             : </span>
-<span id="L95"><span class="lineNum">      95</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 : void AddPipelineAccumulatorStats(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats,</span></span>
+<span id="L95"><span class="lineNum">      95</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 : void AddPipelineAccumulatorStats(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats,</span></span>
 <span id="L96"><span class="lineNum">      96</span>                 :             :                                  const std::vector&lt;AccumulatorStats&gt;&amp; accumulator_stats) {</span>
-<span id="L97"><span class="lineNum">      97</span>   [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 93 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 400 times"> + </span>]:<span class="tlaGNC">         493 :     if (stats == nullptr || accumulator_stats.empty()) {</span></span>
+<span id="L97"><span class="lineNum">      97</span>   [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 93 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 399 times"> + </span>]:<span class="tlaGNC">         492 :     if (stats == nullptr || accumulator_stats.empty()) {</span></span>
 <span id="L98"><span class="lineNum">      98</span>                 :             :         return;</span>
 <span id="L99"><span class="lineNum">      99</span>                 :             :     }</span>
 <span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">          93 :     std::scoped_lock lock(stats-&gt;mu);</span></span>
@@ -173,10 +173,10 @@
 <span id="L102"><span class="lineNum">     102</span>                 :             :         stats-&gt;accumulator_stats.end(), accumulator_stats.begin(), accumulator_stats.end());</span>
 <span id="L103"><span class="lineNum">     103</span>                 :             : }</span>
 <span id="L104"><span class="lineNum">     104</span>                 :             : </span>
-<span id="L105"><span class="lineNum">     105</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 : void AddPipelineExchangePartitionStats(</span></span>
+<span id="L105"><span class="lineNum">     105</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 : void AddPipelineExchangePartitionStats(</span></span>
 <span id="L106"><span class="lineNum">     106</span>                 :             :     const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats,</span>
 <span id="L107"><span class="lineNum">     107</span>                 :             :     const std::vector&lt;ExchangePartitionStats&gt;&amp; exchange_partition_stats) {</span>
-<span id="L108"><span class="lineNum">     108</span>   [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 187 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 306 times"> + </span>]:<span class="tlaGNC">         493 :     if (stats == nullptr || exchange_partition_stats.empty()) {</span></span>
+<span id="L108"><span class="lineNum">     108</span>   [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 187 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 305 times"> + </span>]:<span class="tlaGNC">         492 :     if (stats == nullptr || exchange_partition_stats.empty()) {</span></span>
 <span id="L109"><span class="lineNum">     109</span>                 :             :         return;</span>
 <span id="L110"><span class="lineNum">     110</span>                 :             :     }</span>
 <span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">         187 :     std::scoped_lock lock(stats-&gt;mu);</span></span>
@@ -191,52 +191,52 @@
 <span id="L120"><span class="lineNum">     120</span>                 :             :     }</span>
 <span id="L121"><span class="lineNum">     121</span>                 :             : }</span>
 <span id="L122"><span class="lineNum">     122</span>                 :             : </span>
-<span id="L123"><span class="lineNum">     123</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 : void FailPipelineStats(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats, const absl::Status&amp; status) {</span></span>
-<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     if (stats == nullptr) {</span></span>
+<span id="L123"><span class="lineNum">     123</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 : void FailPipelineStats(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats, const absl::Status&amp; status) {</span></span>
+<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :     if (stats == nullptr) {</span></span>
 <span id="L125"><span class="lineNum">     125</span>                 :             :         return;</span>
 <span id="L126"><span class="lineNum">     126</span>                 :             :     }</span>
-<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">           9 :     std::scoped_lock lock(stats-&gt;mu);</span></span>
-<span id="L128"><span class="lineNum">     128</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           9 :     stats-&gt;blocked = status.code() == absl::StatusCode::kUnavailable;</span></span>
-<span id="L129"><span class="lineNum">     129</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          17 :     stats-&gt;error = status.ToString();</span></span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">           8 :     stats-&gt;finished = true;</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">          10 :     std::scoped_lock lock(stats-&gt;mu);</span></span>
+<span id="L128"><span class="lineNum">     128</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :     stats-&gt;blocked = status.code() == absl::StatusCode::kUnavailable;</span></span>
+<span id="L129"><span class="lineNum">     129</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :     stats-&gt;error = status.ToString();</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          10 :     stats-&gt;finished = true;</span></span>
 <span id="L131"><span class="lineNum">     131</span>                 :             : }</span>
 <span id="L132"><span class="lineNum">     132</span>                 :             : </span>
 <span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">         502 : Driver::Driver(Pipeline pipeline) : pipeline_(std::move(pipeline)) {}</span></span>
 <span id="L134"><span class="lineNum">     134</span>                 :             : </span>
-<span id="L135"><span class="lineNum">     135</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 499 times"> + </span>]:<span class="tlaGNC">         499 : absl::Status Driver::RunToSink(const PageSink&amp; sink) const {</span></span>
-<span id="L136"><span class="lineNum">     136</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 499 times"> + </span>]:<span class="tlaGNC">         499 :     if (pipeline_.root == nullptr) {</span></span>
+<span id="L135"><span class="lineNum">     135</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 502 times"> + </span>]:<span class="tlaGNC">         502 : absl::Status Driver::RunToSink(const PageSink&amp; sink) const {</span></span>
+<span id="L136"><span class="lineNum">     136</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 502 times"> + </span>]:<span class="tlaGNC">         502 :     if (pipeline_.root == nullptr) {</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;pipeline has no root operator&quot;);</span></span>
 <span id="L138"><span class="lineNum">     138</span>                 :             :     }</span>
 <span id="L139"><span class="lineNum">     139</span>                 :             :     while (true) {</span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC tlaBgGNC">        1661 :         auto page_or = pipeline_.root-&gt;NextPage();</span></span>
-<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1656 times"> + </span>]:<span class="tlaGNC">        1664 :         if (!page_or.ok()) {</span></span>
-<span id="L142"><span class="lineNum">     142</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :             pipeline_.root-&gt;Cancel();</span></span>
-<span id="L143"><span class="lineNum">     143</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :             FailPipelineStats(pipeline_.stats, page_or.status());</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC tlaBgGNC">        1159 :         auto page_or = pipeline_.root-&gt;NextPage();</span></span>
+<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1149 times"> + </span>]:<span class="tlaGNC">        1158 :         if (!page_or.ok()) {</span></span>
+<span id="L142"><span class="lineNum">     142</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :             pipeline_.root-&gt;Cancel();</span></span>
+<span id="L143"><span class="lineNum">     143</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :             FailPipelineStats(pipeline_.stats, page_or.status());</span></span>
 <span id="L144"><span class="lineNum">     144</span>                 :             :             return page_or.status();</span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :         }</span>
-<span id="L146"><span class="lineNum">     146</span>         [<span class="tlaGBC" title="Branch 0 was taken 1165 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 491 times"> + </span>]:<span class="tlaGNC">        1656 :         if (!page_or-&gt;has_value()) {</span></span>
+<span id="L146"><span class="lineNum">     146</span>         [<span class="tlaGBC" title="Branch 0 was taken 659 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 490 times"> + </span>]:<span class="tlaGNC">        1149 :         if (!page_or-&gt;has_value()) {</span></span>
 <span id="L147"><span class="lineNum">     147</span>                 :             :             break;</span>
 <span id="L148"><span class="lineNum">     148</span>                 :             :         }</span>
-<span id="L149"><span class="lineNum">     149</span>         [<span class="tlaGBC" title="Branch 0 was taken 1165 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1165 :         AddPipelineStatsPage(pipeline_.stats, page_or-&gt;value());</span></span>
-<span id="L150"><span class="lineNum">     150</span>   [<span class="tlaGBC" title="Branch 0 was taken 1164 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 1163 times"> + </span>]:<span class="tlaGNC">        1165 :         auto status = sink(std::move(page_or-&gt;value()));</span></span>
-<span id="L151"><span class="lineNum">     151</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1163 times"> + </span>]:<span class="tlaGNC">        1164 :         if (!status.ok()) {</span></span>
+<span id="L149"><span class="lineNum">     149</span>         [<span class="tlaGBC" title="Branch 0 was taken 659 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         659 :         AddPipelineStatsPage(pipeline_.stats, page_or-&gt;value());</span></span>
+<span id="L150"><span class="lineNum">     150</span>   [<span class="tlaGBC" title="Branch 0 was taken 658 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 658 times"> + </span>]:<span class="tlaGNC">         659 :         auto status = sink(std::move(page_or-&gt;value()));</span></span>
+<span id="L151"><span class="lineNum">     151</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 658 times"> + </span>]:<span class="tlaGNC">         659 :         if (!status.ok()) {</span></span>
 <span id="L152"><span class="lineNum">     152</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :             pipeline_.root-&gt;Cancel();</span></span>
 <span id="L153"><span class="lineNum">     153</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :             FailPipelineStats(pipeline_.stats, status);</span></span>
 <span id="L154"><span class="lineNum">     154</span>                 :             :             return status;</span>
 <span id="L155"><span class="lineNum">     155</span>                 :             :         }</span>
 <span id="L156"><span class="lineNum">     156</span>                 :             :     }</span>
-<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         491 :     std::vector&lt;connector::ConnectorSplitStats&gt; split_stats;</span></span>
-<span id="L158"><span class="lineNum">     158</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         491 :     pipeline_.root-&gt;CollectSplitStats(&amp;split_stats);</span></span>
-<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 :     AddPipelineSplitStats(pipeline_.stats, split_stats);</span></span>
-<span id="L160"><span class="lineNum">     160</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 :     std::vector&lt;AccumulatorStats&gt; accumulator_stats;</span></span>
-<span id="L161"><span class="lineNum">     161</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 :     pipeline_.root-&gt;CollectAccumulatorStats(&amp;accumulator_stats);</span></span>
-<span id="L162"><span class="lineNum">     162</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 :     AddPipelineAccumulatorStats(pipeline_.stats, accumulator_stats);</span></span>
-<span id="L163"><span class="lineNum">     163</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 :     std::vector&lt;ExchangePartitionStats&gt; exchange_partition_stats;</span></span>
-<span id="L164"><span class="lineNum">     164</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 :     pipeline_.root-&gt;CollectExchangePartitionStats(&amp;exchange_partition_stats);</span></span>
-<span id="L165"><span class="lineNum">     165</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 :     AddPipelineExchangePartitionStats(pipeline_.stats, exchange_partition_stats);</span></span>
-<span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         493 :     FinishPipelineStats(pipeline_.stats);</span></span>
+<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 491 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         490 :     std::vector&lt;connector::ConnectorSplitStats&gt; split_stats;</span></span>
+<span id="L158"><span class="lineNum">     158</span>         [<span class="tlaGBC" title="Branch 0 was taken 491 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         490 :     pipeline_.root-&gt;CollectSplitStats(&amp;split_stats);</span></span>
+<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         491 :     AddPipelineSplitStats(pipeline_.stats, split_stats);</span></span>
+<span id="L160"><span class="lineNum">     160</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 :     std::vector&lt;AccumulatorStats&gt; accumulator_stats;</span></span>
+<span id="L161"><span class="lineNum">     161</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 :     pipeline_.root-&gt;CollectAccumulatorStats(&amp;accumulator_stats);</span></span>
+<span id="L162"><span class="lineNum">     162</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 :     AddPipelineAccumulatorStats(pipeline_.stats, accumulator_stats);</span></span>
+<span id="L163"><span class="lineNum">     163</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 :     std::vector&lt;ExchangePartitionStats&gt; exchange_partition_stats;</span></span>
+<span id="L164"><span class="lineNum">     164</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 :     pipeline_.root-&gt;CollectExchangePartitionStats(&amp;exchange_partition_stats);</span></span>
+<span id="L165"><span class="lineNum">     165</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 :     AddPipelineExchangePartitionStats(pipeline_.stats, exchange_partition_stats);</span></span>
+<span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 :     FinishPipelineStats(pipeline_.stats);</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :             :     return absl::OkStatus();</span>
-<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">         493 : }</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">         492 : }</span></span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : </span>
 <span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">           1 : absl::StatusOr&lt;runtime::Value&gt; Driver::Run() const {</span></span>
 <span id="L171"><span class="lineNum">     171</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     std::optional&lt;runtime::Page&gt; output;</span></span>
@@ -454,29 +454,29 @@
 <span id="L377"><span class="lineNum">     377</span>                 :             :                                                      -&gt; absl::StatusOr&lt;runtime::TableValue&gt; {</span>
 <span id="L378"><span class="lineNum">     378</span>                 :             :             runtime::TableValue table;</span>
 <span id="L379"><span class="lineNum">     379</span>                 :             :             auto status =</span>
-<span id="L380"><span class="lineNum">     380</span>   [<span class="tlaGBC" title="Branch 0 was taken 490 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 488 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 4 times"> + </span> :<span class="tlaGNC">         986 :                 Driver(std::move(driver_task.pipeline)).RunToSink([&amp;](const runtime::Page&amp; page) {</span></span>
-<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 483 times"> + </span>]
-<span id="L381"><span class="lineNum">     381</span>         [<span class="tlaGBC" title="Branch 0 was taken 443 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 159 times"> + </span>]:<span class="tlaGNC">         602 :                     if (!collect_output) {</span></span>
+<span id="L380"><span class="lineNum">     380</span>   [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 488 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 4 times"> + </span> :<span class="tlaGNC">         987 :                 Driver(std::move(driver_task.pipeline)).RunToSink([&amp;](const runtime::Page&amp; page) {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 484 times"> + </span>]
+<span id="L381"><span class="lineNum">     381</span>         [<span class="tlaGBC" title="Branch 0 was taken 442 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 159 times"> + </span>]:<span class="tlaGNC">         601 :                     if (!collect_output) {</span></span>
 <span id="L382"><span class="lineNum">     382</span>                 :             :                         return absl::OkStatus();</span>
 <span id="L383"><span class="lineNum">     383</span>                 :             :                     }</span>
 <span id="L384"><span class="lineNum">     384</span>                 :<span class="tlaGNC">         159 :                     runtime::TableValue next = TableValueFromPage(page);</span></span>
 <span id="L385"><span class="lineNum">     385</span>         [<span class="tlaGBC" title="Branch 0 was taken 129 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">         159 :                     if (table.bucket.empty()) {</span></span>
 <span id="L386"><span class="lineNum">     386</span>         [<span class="tlaGBC" title="Branch 0 was taken 129 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         129 :                         table.bucket = next.bucket;</span></span>
 <span id="L387"><span class="lineNum">     387</span>                 :             :                     }</span>
-<span id="L388"><span class="lineNum">     388</span>         [<span class="tlaGBC" title="Branch 0 was taken 157 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         159 :                     table.tables.insert(table.tables.end(),</span></span>
+<span id="L388"><span class="lineNum">     388</span>         [<span class="tlaGBC" title="Branch 0 was taken 158 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         159 :                     table.tables.insert(table.tables.end(),</span></span>
 <span id="L389"><span class="lineNum">     389</span>                 :             :                                         std::make_move_iterator(next.tables.begin()),</span>
 <span id="L390"><span class="lineNum">     390</span>                 :             :                                         std::make_move_iterator(next.tables.end()));</span>
-<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 157 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         157 :                     table.rows.insert(table.rows.end(),</span></span>
+<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 159 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         158 :                     table.rows.insert(table.rows.end(),</span></span>
 <span id="L392"><span class="lineNum">     392</span>                 :             :                                       std::make_move_iterator(next.rows.begin()),</span>
 <span id="L393"><span class="lineNum">     393</span>                 :             :                                       std::make_move_iterator(next.rows.end()));</span>
-<span id="L394"><span class="lineNum">     394</span>                 :<span class="tlaGNC">         157 :                     table.plan = next.plan;</span></span>
+<span id="L394"><span class="lineNum">     394</span>                 :<span class="tlaGNC">         159 :                     table.plan = next.plan;</span></span>
 <span id="L395"><span class="lineNum">     395</span>                 :             :                     return absl::OkStatus();</span>
-<span id="L396"><span class="lineNum">     396</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         649 :                 });</span></span>
-<span id="L397"><span class="lineNum">     397</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 487 times"> + </span>]:<span class="tlaGNC">         490 :             if (!status.ok()) {</span></span>
+<span id="L396"><span class="lineNum">     396</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         650 :                 });</span></span>
+<span id="L397"><span class="lineNum">     397</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 488 times"> + </span>]:<span class="tlaGNC">         492 :             if (!status.ok()) {</span></span>
 <span id="L398"><span class="lineNum">     398</span>                 :             :                 return status;</span>
 <span id="L399"><span class="lineNum">     399</span>                 :             :             }</span>
 <span id="L400"><span class="lineNum">     400</span>                 :             :             return table;</span>
-<span id="L401"><span class="lineNum">     401</span>                 :<span class="tlaGNC">         981 :         });</span></span>
+<span id="L401"><span class="lineNum">     401</span>                 :<span class="tlaGNC">         983 :         });</span></span>
 <span id="L402"><span class="lineNum">     402</span>                 :             :         running.push_back(std::move(running_pipeline));</span>
 <span id="L403"><span class="lineNum">     403</span>                 :<span class="tlaGNC">         492 :     }</span></span>
 <span id="L404"><span class="lineNum">     404</span>                 :             : </span>
@@ -484,18 +484,18 @@
 <span id="L406"><span class="lineNum">     406</span>                 :<span class="tlaGNC">          70 :     std::optional&lt;absl::Status&gt; non_output_error;</span></span>
 <span id="L407"><span class="lineNum">     407</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 70 times"> + </span>]:<span class="tlaGNC">         562 :     for (auto&amp; running_pipeline : running) {</span></span>
 <span id="L408"><span class="lineNum">     408</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         492 :         auto table_or = running_pipeline.value.get();</span></span>
-<span id="L409"><span class="lineNum">     409</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 489 times"> + </span>]:<span class="tlaGNC">         492 :         if (!table_or.ok()) {</span></span>
-<span id="L410"><span class="lineNum">     410</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :             if (running_pipeline.collect_output) {</span></span>
+<span id="L409"><span class="lineNum">     409</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 488 times"> + </span>]:<span class="tlaGNC">         492 :         if (!table_or.ok()) {</span></span>
+<span id="L410"><span class="lineNum">     410</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           4 :             if (running_pipeline.collect_output) {</span></span>
 <span id="L411"><span class="lineNum">     411</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :                 if (!output_error.has_value()) {</span></span>
 <span id="L412"><span class="lineNum">     412</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :                     output_error = table_or.status();</span></span>
 <span id="L413"><span class="lineNum">     413</span>                 :             :                 }</span>
-<span id="L414"><span class="lineNum">     414</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             } else if (!non_output_error.has_value()) {</span></span>
-<span id="L415"><span class="lineNum">     415</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                 non_output_error = table_or.status();</span></span>
+<span id="L414"><span class="lineNum">     414</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :             } else if (!non_output_error.has_value()) {</span></span>
+<span id="L415"><span class="lineNum">     415</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                 non_output_error = table_or.status();</span></span>
 <span id="L416"><span class="lineNum">     416</span>                 :             :             }</span>
-<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaGNC tlaBgGNC">           3 :             continue;</span></span>
+<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaGNC">           4 :             continue;</span></span>
 <span id="L418"><span class="lineNum">     418</span>                 :             :         }</span>
-<span id="L419"><span class="lineNum">     419</span>         [<span class="tlaGBC" title="Branch 0 was taken 360 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 129 times"> + </span>]:<span class="tlaGNC">         489 :         if (!running_pipeline.collect_output) {</span></span>
-<span id="L420"><span class="lineNum">     420</span>                 :<span class="tlaGNC">         360 :             continue;</span></span>
+<span id="L419"><span class="lineNum">     419</span>         [<span class="tlaGBC" title="Branch 0 was taken 359 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 129 times"> + </span>]:<span class="tlaGNC">         488 :         if (!running_pipeline.collect_output) {</span></span>
+<span id="L420"><span class="lineNum">     420</span>                 :<span class="tlaGNC">         359 :             continue;</span></span>
 <span id="L421"><span class="lineNum">     421</span>                 :             :         }</span>
 <span id="L422"><span class="lineNum">     422</span>         [<span class="tlaGBC" title="Branch 0 was taken 67 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 62 times"> + </span>]:<span class="tlaGNC">         129 :         if (!output.has_value()) {</span></span>
 <span id="L423"><span class="lineNum">     423</span>                 :<span class="tlaGNC">          67 :             output = std::move(*table_or);</span></span>
@@ -654,8 +654,8 @@
 <span id="L572"><span class="lineNum">     572</span>                 :<span class="tlaGNC">          18 :         running_pipeline.status = executor.Submit(</span></span>
 <span id="L573"><span class="lineNum">     573</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          27 :             [driver_task = std::move(item), stream_output, &amp;sink, &amp;sink_mu]() mutable {</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
-<span id="L574"><span class="lineNum">     574</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          17 :                 return Driver(std::move(driver_task.pipeline)).RunToSink([&amp;](runtime::Page page) {</span></span>
-<span id="L575"><span class="lineNum">     575</span>         [<span class="tlaGBC" title="Branch 0 was taken 538 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 25 times"> + </span>]:<span class="tlaGNC">         563 :                     if (!stream_output) {</span></span>
+<span id="L574"><span class="lineNum">     574</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          18 :                 return Driver(std::move(driver_task.pipeline)).RunToSink([&amp;](runtime::Page page) {</span></span>
+<span id="L575"><span class="lineNum">     575</span>         [<span class="tlaGBC" title="Branch 0 was taken 33 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 25 times"> + </span>]:<span class="tlaGNC">          58 :                     if (!stream_output) {</span></span>
 <span id="L576"><span class="lineNum">     576</span>                 :             :                         return absl::OkStatus();</span>
 <span id="L577"><span class="lineNum">     577</span>                 :             :                     }</span>
 <span id="L578"><span class="lineNum">     578</span>                 :<span class="tlaGNC">          25 :                     std::scoped_lock lock(sink_mu);</span></span>
