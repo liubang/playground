@@ -24,7 +24,7 @@
 
 #include "token.h"
 
-namespace pl::flux {
+namespace pl::flux::syntax {
 class Scanner {
 public:
     Scanner(const char* data, size_t len)
@@ -92,4 +92,4 @@ private:
     std::map<Position, uint32_t> positions_;
     std::vector<std::shared_ptr<Comment>> comments_;
 };
-} // namespace pl::flux
+} // namespace pl::flux::syntax

@@ -25,8 +25,8 @@
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 #include "cpp/pl/minidfs/namenode/datanode_manager.h"
 #include "cpp/pl/minidfs/namenode/lease_manager.h"
-#include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
 #include "cpp/pl/minidfs/namenode/namenode_maintenance.h"
+#include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
 #include "cpp/pl/minidfs/namenode/namespace_manager.h"
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
 #include "cpp/pl/minidfs/namenode/replication_manager.h"
@@ -87,7 +87,8 @@ int main(int argc, char* argv[]) {
         {
             .lease_recovery_interval_ms = static_cast<uint64_t>(FLAGS_lease_recovery_interval_ms),
             .datanode_scan_interval_ms = static_cast<uint64_t>(FLAGS_datanode_scan_interval_ms),
-            .replication_scan_interval_ms = static_cast<uint64_t>(FLAGS_replication_scan_interval_ms),
+            .replication_scan_interval_ms =
+                static_cast<uint64_t>(FLAGS_replication_scan_interval_ms),
         },
         &metadata_store,
         &ns_mgr,

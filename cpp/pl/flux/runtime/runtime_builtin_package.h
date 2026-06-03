@@ -23,7 +23,7 @@
 
 #include "cpp/pl/flux/runtime/runtime_value.h"
 
-namespace pl::flux::builtin {
+namespace pl::flux::runtime::builtin {
 
 using PackageBuilder = std::function<Value()>;
 
@@ -37,4 +37,4 @@ void RegisterJoinStdlibPackage();
 void RegisterSqliteStdlibPackage();
 void RegisterMysqlStdlibPackage();
 
-} // namespace pl::flux::builtin
+} // namespace pl::flux::runtime::builtin

@@ -21,7 +21,7 @@
 #include "cpp/pl/flux/runtime/runtime_env.h"
 #include "cpp/pl/flux/syntax/ast.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 
 struct ExecutionResult {
     enum class Type {
@@ -55,9 +55,11 @@ struct FileExecutionResult {
 
 class StatementExecutor {
 public:
-    static absl::StatusOr<ExecutionResult> Execute(const Statement& stmt, Environment& env);
-    static absl::StatusOr<ExecutionResult> ExecuteBlock(const Block& block, Environment& env);
-    static absl::StatusOr<FileExecutionResult> ExecuteFile(const File& file, Environment& env);
+    static absl::StatusOr<ExecutionResult> Execute(const syntax::Statement& stmt, Environment& env);
+    static absl::StatusOr<ExecutionResult> ExecuteBlock(const syntax::Block& block,
+                                                        Environment& env);
+    static absl::StatusOr<FileExecutionResult> ExecuteFile(const syntax::File& file,
+                                                           Environment& env);
 };
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

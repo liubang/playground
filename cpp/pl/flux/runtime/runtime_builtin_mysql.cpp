@@ -29,7 +29,7 @@
 #include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_package.h"
 
-namespace pl::flux::builtin {
+namespace pl::flux::runtime::builtin {
 namespace {
 
 Value make_builtin_value(const std::string& name, FunctionValue::BuiltinCallback fn) {
@@ -217,4 +217,4 @@ void RegisterMysqlStdlibPackage() {
     RegisterPackage("mysql", make_mysql_package);
 }
 
-} // namespace pl::flux::builtin
+} // namespace pl::flux::runtime::builtin

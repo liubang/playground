@@ -94,7 +94,7 @@ class Operator {
 public:
     virtual ~Operator() = default;
     [[nodiscard]] virtual std::string name() const = 0;
-    virtual absl::StatusOr<std::optional<Page>> NextPage() = 0;
+    virtual absl::StatusOr<std::optional<runtime::Page>> NextPage() = 0;
     virtual void Cancel() {}
     virtual void CollectSplitStats(std::vector<connector::ConnectorSplitStats>*) const {}
     virtual void CollectAccumulatorStats(std::vector<AccumulatorStats>*) const {}
@@ -155,7 +155,7 @@ struct ExecutionProfile {
 };
 
 struct SchedulerResult {
-    Value value;
+    runtime::Value value;
     ExecutionProfile profile;
 };
 
@@ -173,10 +173,10 @@ class Driver {
 public:
     explicit Driver(Pipeline pipeline);
 
-    using PageSink = std::function<absl::Status(Page)>;
+    using PageSink = std::function<absl::Status(runtime::Page)>;
 
     [[nodiscard]] absl::Status RunToSink(const PageSink& sink) const;
-    [[nodiscard]] absl::StatusOr<Value> Run() const;
+    [[nodiscard]] absl::StatusOr<runtime::Value> Run() const;
 
 private:
     Pipeline pipeline_;
@@ -203,7 +203,7 @@ public:
     [[nodiscard]] absl::StatusOr<SchedulerResult> RunWithProfile(ExecutionTask task) const;
     [[nodiscard]] absl::StatusOr<SchedulerStreamResult> RunToSink(ExecutionTask task,
                                                                   const PageSink& sink) const;
-    [[nodiscard]] absl::StatusOr<Value> Run(ExecutionTask task) const;
+    [[nodiscard]] absl::StatusOr<runtime::Value> Run(ExecutionTask task) const;
 };
 
 class PhysicalExecutor {
@@ -212,7 +212,7 @@ public:
         const std::shared_ptr<plan::PlanNode>& logical_plan) const;
     [[nodiscard]] absl::StatusOr<SchedulerStreamResult> ExecuteToSink(
         const std::shared_ptr<plan::PlanNode>& logical_plan, const Scheduler::PageSink& sink) const;
-    [[nodiscard]] absl::StatusOr<Value> Execute(
+    [[nodiscard]] absl::StatusOr<runtime::Value> Execute(
         const std::shared_ptr<plan::PlanNode>& logical_plan) const;
 };
 

@@ -30,7 +30,7 @@
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 
 struct ColumnVector {
     std::string name{};
@@ -391,4 +391,4 @@ inline void AppendPage(Page* output, Page page) {
     output->chunks.insert(output->chunks.end(), page.chunks.begin(), page.chunks.end());
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

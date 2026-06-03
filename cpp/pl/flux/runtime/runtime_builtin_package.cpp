@@ -20,7 +20,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace pl::flux::builtin {
+namespace pl::flux::runtime::builtin {
 namespace {
 
 std::unordered_map<std::string, PackageBuilder>& package_builders() {
@@ -47,4 +47,4 @@ Value MakeUnknownPackage(const std::string& path) {
     return Value::object({{"path", Value::string(path)}});
 }
 
-} // namespace pl::flux::builtin
+} // namespace pl::flux::runtime::builtin

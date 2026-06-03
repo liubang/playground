@@ -25,7 +25,7 @@
 
 #include "cpp/pl/flux/cli/flux_cli.h"
 
-namespace pl::flux {
+namespace pl::flux::cli {
 namespace {
 
 std::string ReplaceAll(std::string text,
@@ -105,7 +105,7 @@ std::string RewriteExamplePaths(std::string source) {
 }
 
 FluxCliResult ExecuteExampleScript(const std::string& relative_path,
-                                   Environment& env,
+                                   runtime::Environment& env,
                                    const FluxCliOptions& options = {}) {
     const std::string path = RunfilePath(relative_path);
     return ExecuteFluxSource(RewriteExamplePaths(ReadAllText(path)), path, env, options);
@@ -1093,4 +1093,4 @@ TEST(FluxCliTest, TrailingSemicolonReportsParserErrorInsteadOfCrashing) {
 }
 
 } // namespace
-} // namespace pl::flux
+} // namespace pl::flux::cli

@@ -37,7 +37,7 @@
 #include "cpp/pl/flux/runtime/runtime_builtin_package.h"
 #include "cpp/pl/flux/syntax/strconv.h"
 
-namespace pl::flux::builtin {
+namespace pl::flux::runtime::builtin {
 namespace {
 
 struct ParsedDuration {
@@ -307,7 +307,7 @@ absl::StatusOr<ParsedDuration> parse_duration_literal(const std::string& literal
         return absl::InvalidArgumentError(
             absl::StrCat(name, " `", property, "` must be a positive duration"));
     }
-    auto parts_or = StrConv::parse_duration(normalized);
+    auto parts_or = syntax::StrConv::parse_duration(normalized);
     if (!parts_or.ok()) {
         return absl::InvalidArgumentError(
             absl::StrCat(name, " failed to parse `", property, "` duration"));
@@ -1449,4 +1449,4 @@ void RegisterScalarStdlibPackages() {
     RegisterPackage("types", make_types_package);
 }
 
-} // namespace pl::flux::builtin
+} // namespace pl::flux::runtime::builtin

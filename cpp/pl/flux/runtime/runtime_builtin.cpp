@@ -25,7 +25,7 @@
 #include "cpp/pl/flux/runtime/runtime_builtin_package.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
 
 Value make_unimplemented_builtin_value(const std::string& name) {
@@ -91,4 +91,4 @@ absl::StatusOr<Value> BuiltinRegistry::ImportPackage(const std::string& path) {
     return builtin::MakeUnknownPackage(path);
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

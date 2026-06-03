@@ -72,7 +72,7 @@ TEST(SQLiteSourceTest, ScansTableIntoTableValue) {
     auto value_or = source.Scan({});
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(4, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
@@ -140,14 +140,14 @@ TEST(SQLiteSourceTest, RuntimeMetadataSplitAndPageSourceScansTable) {
     auto first_or = (*page_source_or)->NextPage();
     ASSERT_TRUE(first_or.ok()) << first_or.status();
     ASSERT_TRUE(first_or->has_value());
-    TableValue first = TableValueFromPage(first_or->value());
+    runtime::TableValue first = TableValueFromPage(first_or->value());
     EXPECT_EQ(2, first.rows.size());
     EXPECT_EQ("\"edge-1\"", first.rows[0]->lookup("host")->string());
 
     auto second_or = (*page_source_or)->NextPage();
     ASSERT_TRUE(second_or.ok()) << second_or.status();
     ASSERT_TRUE(second_or->has_value());
-    TableValue second = TableValueFromPage(second_or->value());
+    runtime::TableValue second = TableValueFromPage(second_or->value());
     EXPECT_EQ(2, second.rows.size());
 
     auto done_or = (*page_source_or)->NextPage();
@@ -223,7 +223,7 @@ TEST(SQLiteSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     request.predicates.push_back({
         .op = PredicateOp::Eq,
         .column = "host",
-        .literal = Value::string("edge-1"),
+        .literal = runtime::Value::string("edge-1"),
     });
     request.order_by.push_back({
         .column = "usage",
@@ -234,7 +234,7 @@ TEST(SQLiteSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     auto value_or = source.Scan(request);
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(1, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
@@ -253,12 +253,12 @@ TEST(SQLiteSourceTest, PushesDownBooleanPredicates) {
     request.predicates.push_back({
         .op = PredicateOp::Eq,
         .column = "active",
-        .literal = Value::boolean(true),
+        .literal = runtime::Value::boolean(true),
     });
     request.predicates.push_back({
         .op = PredicateOp::Eq,
         .column = "host",
-        .literal = Value::string("edge-2"),
+        .literal = runtime::Value::string("edge-2"),
     });
     request.order_by.push_back({
         .column = "_time",
@@ -268,7 +268,7 @@ TEST(SQLiteSourceTest, PushesDownBooleanPredicates) {
     auto value_or = source.Scan(request);
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(2, table.rows.size());
     EXPECT_EQ("\"edge-2\"", table.rows[0]->lookup("host")->string());
@@ -294,7 +294,7 @@ TEST(SQLiteSourceTest, PushesDownProjectionAliases) {
     auto value_or = source.Scan(request);
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(1, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
@@ -319,7 +319,7 @@ TEST(SQLiteSourceTest, PushesDownDistinctColumn) {
     auto value_or = source.Scan(request);
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(3, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
@@ -342,7 +342,7 @@ TEST(SQLiteSourceTest, PushesDownDistinctWithoutLeakingSourceColumns) {
     auto value_or = source.Scan(request);
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(3, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);

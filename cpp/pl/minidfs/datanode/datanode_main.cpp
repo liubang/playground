@@ -226,8 +226,8 @@ int main(int argc, char* argv[]) {
     pl::minidfs::HeartbeatSender heartbeat_sender(hb_config, &store, heartbeat_func, cmd_handler);
 
     // Setup block reporter
-    pl::minidfs::BlockReportFunc report_func =
-        [&nn_stub](uint64_t dn_id, const pl::minidfs::BlockReport& report)
+    pl::minidfs::BlockReportFunc report_func = [&nn_stub](uint64_t dn_id,
+                                                          const pl::minidfs::BlockReport& report)
         -> pl::Result<pl::minidfs::BlockReportResponse> {
         pl::minidfs::protocol::BlockReportRequest req;
         req.set_datanode_id(dn_id);

@@ -44,7 +44,7 @@ public:
     void Cancel() override;
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override;
     void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override;
-    absl::StatusOr<std::optional<Page>> NextPage() override;
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override;
 
 private:
     std::shared_ptr<plan::PlanNode> plan_;
@@ -67,7 +67,7 @@ public:
     void Cancel() override;
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override;
     void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override;
-    absl::StatusOr<std::optional<Page>> NextPage() override;
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override;
 
 private:
     std::shared_ptr<plan::PlanNode> plan_;
@@ -89,7 +89,7 @@ public:
     void Cancel() override;
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override;
     void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override;
-    absl::StatusOr<std::optional<Page>> NextPage() override;
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override;
 
 private:
     std::shared_ptr<plan::PlanNode> plan_;
@@ -115,7 +115,7 @@ public:
     void Cancel() override;
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override;
     void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override;
-    absl::StatusOr<std::optional<Page>> NextPage() override;
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override;
 
 private:
     std::shared_ptr<plan::PlanNode> aggregate_plan_;
