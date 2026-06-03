@@ -147,7 +147,7 @@
     *|;
 }%%
 
-namespace pl {
+namespace pl::flux {
 
 %% write data nofinal;
 
