@@ -25,7 +25,7 @@
 
 namespace pl::flux::execution::internal {
 
-Value ValueFromPage(const Page& page);
+runtime::Value ValueFromPage(const runtime::Page& page);
 bool HasBlockingOperator(const std::vector<std::string>& operators);
 
 } // namespace pl::flux::execution::internal

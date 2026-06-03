@@ -32,7 +32,7 @@
 namespace pl::flux::connector {
 namespace {
 
-TableSchema schema_from_rows(const std::vector<std::shared_ptr<ObjectValue>>& rows) {
+TableSchema schema_from_rows(const std::vector<std::shared_ptr<runtime::ObjectValue>>& rows) {
     TableSchema schema;
     std::unordered_set<std::string> seen;
     for (const auto& row : rows) {
@@ -63,24 +63,25 @@ bool has_unsupported_memory_pushdown(const ScanRequest& request) {
            request.distinct.has_value();
 }
 
-double numeric_value(const Value& value) {
+double numeric_value(const runtime::Value& value) {
     switch (value.type()) {
-        case Value::Type::Int:
+        case runtime::Value::Type::Int:
             return static_cast<double>(value.as_int());
-        case Value::Type::UInt:
+        case runtime::Value::Type::UInt:
             return static_cast<double>(value.as_uint());
-        case Value::Type::Float:
+        case runtime::Value::Type::Float:
             return value.as_float();
         default:
             return 0.0;
     }
 }
 
-bool is_numeric_type(Value::Type type) {
-    return type == Value::Type::Int || type == Value::Type::UInt || type == Value::Type::Float;
+bool is_numeric_type(runtime::Value::Type type) {
+    return type == runtime::Value::Type::Int || type == runtime::Value::Type::UInt ||
+           type == runtime::Value::Type::Float;
 }
 
-int compare_memory_values(const Value& lhs, const Value& rhs) {
+int compare_memory_values(const runtime::Value& lhs, const runtime::Value& rhs) {
     if (lhs.is_null() && rhs.is_null()) {
         return 0;
     }
@@ -112,9 +113,9 @@ int compare_memory_values(const Value& lhs, const Value& rhs) {
     return 0;
 }
 
-bool predicate_matches_row(const ObjectValue& row, const Predicate& predicate) {
-    const Value* value = row.lookup(predicate.column);
-    const Value lhs = value == nullptr ? Value::null() : *value;
+bool predicate_matches_row(const runtime::ObjectValue& row, const Predicate& predicate) {
+    const runtime::Value* value = row.lookup(predicate.column);
+    const runtime::Value lhs = value == nullptr ? runtime::Value::null() : *value;
     const int cmp = compare_memory_values(lhs, predicate.literal);
     switch (predicate.op) {
         case PredicateOp::Eq:
@@ -133,7 +134,7 @@ bool predicate_matches_row(const ObjectValue& row, const Predicate& predicate) {
     return false;
 }
 
-bool row_matches_request(const ObjectValue& row, const ScanRequest& request) {
+bool row_matches_request(const runtime::ObjectValue& row, const ScanRequest& request) {
     for (const auto& predicate : request.predicates) {
         if (!predicate_matches_row(row, predicate)) {
             return false;
@@ -142,8 +143,8 @@ bool row_matches_request(const ObjectValue& row, const ScanRequest& request) {
     return true;
 }
 
-std::vector<std::string> projection_columns(const ScanRequest& request,
-                                            const std::vector<std::shared_ptr<ObjectValue>>& rows) {
+std::vector<std::string> projection_columns(
+    const ScanRequest& request, const std::vector<std::shared_ptr<runtime::ObjectValue>>& rows) {
     std::vector<std::string> columns;
     if (!request.projection_columns.empty()) {
         columns.reserve(request.projection_columns.size());
@@ -163,20 +164,21 @@ std::vector<std::string> projection_columns(const ScanRequest& request,
     return columns;
 }
 
-Value projected_value(const ObjectValue& row,
-                      const ScanRequest& request,
-                      const std::string& output_name,
-                      size_t projection_index) {
+runtime::Value projected_value(const runtime::ObjectValue& row,
+                               const ScanRequest& request,
+                               const std::string& output_name,
+                               size_t projection_index) {
     if (!request.projection_columns.empty()) {
         const auto& projection = request.projection_columns[projection_index];
-        const Value* value = row.lookup(projection.column);
-        return value == nullptr ? Value::null() : *value;
+        const runtime::Value* value = row.lookup(projection.column);
+        return value == nullptr ? runtime::Value::null() : *value;
     }
-    const Value* value = row.lookup(output_name);
-    return value == nullptr ? Value::null() : *value;
+    const runtime::Value* value = row.lookup(output_name);
+    return value == nullptr ? runtime::Value::null() : *value;
 }
 
-TableStatistics statistics_from_rows(const std::vector<std::shared_ptr<ObjectValue>>& rows) {
+TableStatistics statistics_from_rows(
+    const std::vector<std::shared_ptr<runtime::ObjectValue>>& rows) {
     constexpr size_t kMostCommonValueLimit = 8;
     TableStatistics statistics;
     statistics.row_count = static_cast<double>(rows.size());
@@ -189,7 +191,7 @@ TableStatistics statistics_from_rows(const std::vector<std::shared_ptr<ObjectVal
         std::unordered_map<std::string, size_t> frequencies;
         std::unordered_set<std::string> distinct_values;
         for (const auto& row : rows) {
-            const Value* value = row == nullptr ? nullptr : row->lookup(column.name);
+            const runtime::Value* value = row == nullptr ? nullptr : row->lookup(column.name);
             if (value == nullptr || value->is_null()) {
                 ++null_count;
                 continue;
@@ -230,7 +232,7 @@ TableStatistics statistics_from_rows(const std::vector<std::shared_ptr<ObjectVal
 class MemoryPageSource final : public ConnectorPageSource {
 public:
     MemoryPageSource(std::string bucket,
-                     std::vector<std::shared_ptr<ObjectValue>> rows,
+                     std::vector<std::shared_ptr<runtime::ObjectValue>> rows,
                      ScanRequest request,
                      size_t start,
                      size_t count,
@@ -246,16 +248,16 @@ public:
         stats_.split_id = split_id;
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         if (finished_) {
             return std::nullopt;
         }
 
         while (true) {
-            PageChunk chunk;
+            runtime::PageChunk chunk;
             chunk.columns.reserve(columns_.size());
             for (const auto& name : columns_) {
-                chunk.columns.push_back(ColumnVector{.name = name});
+                chunk.columns.push_back(runtime::ColumnVector{.name = name});
             }
 
             while (next_ < end_ && chunk.row_count < rows_per_page_) {
@@ -271,9 +273,9 @@ public:
                     break;
                 }
                 for (size_t index = 0; index < columns_.size(); ++index) {
-                    Value value = projected_value(*row, request_, columns_[index], index);
+                    runtime::Value value = projected_value(*row, request_, columns_[index], index);
                     auto& column = chunk.columns[index];
-                    if (column.type == Value::Type::Null && !value.is_null()) {
+                    if (column.type == runtime::Value::Type::Null && !value.is_null()) {
                         column.type = value.type();
                     }
                     column.values.push_back(std::move(value));
@@ -290,7 +292,7 @@ public:
                     stats_.finished = true;
                     if (!emitted_any_page_) {
                         emitted_any_page_ = true;
-                        Page empty;
+                        runtime::Page empty;
                         empty.bucket = bucket_;
                         empty.chunks.push_back(std::move(chunk));
                         ++stats_.pages_produced;
@@ -301,7 +303,7 @@ public:
                 continue;
             }
 
-            Page page;
+            runtime::Page page;
             page.bucket = bucket_;
             page.chunks.push_back(std::move(chunk));
             emitted_any_page_ = true;
@@ -317,7 +319,7 @@ public:
 
 private:
     std::string bucket_;
-    std::vector<std::shared_ptr<ObjectValue>> rows_;
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows_;
     ScanRequest request_;
     size_t next_ = 0;
     size_t end_ = 0;
@@ -334,7 +336,8 @@ private:
 
 } // namespace
 
-ArraySource::ArraySource(std::string bucket, std::vector<std::shared_ptr<ObjectValue>> rows)
+ArraySource::ArraySource(std::string bucket,
+                         std::vector<std::shared_ptr<runtime::ObjectValue>> rows)
     : bucket_(std::move(bucket)), rows_(std::move(rows)) {}
 
 absl::StatusOr<TableSchema> ArraySource::Schema() const {
@@ -349,14 +352,15 @@ absl::StatusOr<TableStatistics> ArraySource::Statistics() const {
     return statistics_from_rows(rows_);
 }
 
-absl::StatusOr<Value> ArraySource::Scan(const ScanRequest& request) {
+absl::StatusOr<runtime::Value> ArraySource::Scan(const ScanRequest& request) {
     if (has_scan_pushdown(request)) {
         return absl::UnimplementedError("array source scan pushdown is not implemented");
     }
-    return Value::table(bucket_, rows_);
+    return runtime::Value::table(bucket_, rows_);
 }
 
-CsvSource::CsvSource(std::vector<std::shared_ptr<ObjectValue>> rows) : rows_(std::move(rows)) {}
+CsvSource::CsvSource(std::vector<std::shared_ptr<runtime::ObjectValue>> rows)
+    : rows_(std::move(rows)) {}
 
 absl::StatusOr<TableSchema> CsvSource::Schema() const {
     return schema_from_rows(rows_);
@@ -370,16 +374,15 @@ absl::StatusOr<TableStatistics> CsvSource::Statistics() const {
     return statistics_from_rows(rows_);
 }
 
-absl::StatusOr<Value> CsvSource::Scan(const ScanRequest& request) {
+absl::StatusOr<runtime::Value> CsvSource::Scan(const ScanRequest& request) {
     if (has_scan_pushdown(request)) {
         return absl::UnimplementedError("csv source scan pushdown is not implemented");
     }
-    return Value::table("csv", rows_);
+    return runtime::Value::table("csv", rows_);
 }
 
-MemoryConnectorMetadata::MemoryConnectorMetadata(SourceSpec spec,
-                                                 std::string bucket,
-                                                 std::vector<std::shared_ptr<ObjectValue>> rows)
+MemoryConnectorMetadata::MemoryConnectorMetadata(
+    SourceSpec spec, std::string bucket, std::vector<std::shared_ptr<runtime::ObjectValue>> rows)
     : spec_(std::move(spec)), bucket_(std::move(bucket)), rows_(std::move(rows)) {}
 
 absl::StatusOr<TableHandle> MemoryConnectorMetadata::GetTableHandle(const SourceSpec& spec) const {
@@ -440,9 +443,10 @@ absl::StatusOr<std::vector<ConnectorSplit>> MemorySplitManager::GetSplits(
     return splits;
 }
 
-MemoryPageSourceProvider::MemoryPageSourceProvider(std::string bucket,
-                                                   std::vector<std::shared_ptr<ObjectValue>> rows,
-                                                   size_t rows_per_page)
+MemoryPageSourceProvider::MemoryPageSourceProvider(
+    std::string bucket,
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows,
+    size_t rows_per_page)
     : bucket_(std::move(bucket)),
       rows_(std::move(rows)),
       rows_per_page_(std::max<size_t>(1, rows_per_page)) {}
@@ -465,7 +469,7 @@ absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MemoryPageSourceProvider::C
 std::unique_ptr<ConnectorRuntime> MakeMemoryConnectorRuntime(
     const SourceSpec& spec,
     std::string bucket,
-    std::vector<std::shared_ptr<ObjectValue>> rows,
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows,
     size_t rows_per_page,
     size_t split_count) {
     auto runtime = std::make_unique<ConnectorRuntime>();

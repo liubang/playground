@@ -23,13 +23,13 @@
 #include "cpp/pl/flux/runtime/runtime_env.h"
 #include "cpp/pl/flux/syntax/ast.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 
 class ExpressionEvaluator {
 public:
-    static absl::StatusOr<Value> Evaluate(const Expression& expr, const Environment& env);
+    static absl::StatusOr<Value> Evaluate(const syntax::Expression& expr, const Environment& env);
     static absl::StatusOr<Value> Invoke(const Value& callee,
                                         const std::vector<Value>& positional_args);
 };
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

@@ -37,11 +37,11 @@
 #include "cpp/pl/flux/runtime/runtime_exec.h"
 #include "cpp/pl/flux/syntax/parser.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
 
-std::unique_ptr<File> ParseFile(const std::string& source) {
-    Parser parser(source);
+std::unique_ptr<syntax::File> ParseFile(const std::string& source) {
+    syntax::Parser parser(source);
     auto file = parser.parse_file("exec_test.flux");
     EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
     return file;
@@ -281,7 +281,7 @@ TEST(RuntimeExecTest, ExecutesBlocksAndStopsAtReturn) {
     ASSERT_NE(file, nullptr);
     ASSERT_EQ(1, file->body.size());
 
-    const auto& testcase = std::get<std::unique_ptr<TestCaseStmt>>(file->body[0]->stmt);
+    const auto& testcase = std::get<std::unique_ptr<syntax::TestCaseStmt>>(file->body[0]->stmt);
     ASSERT_NE(testcase, nullptr);
     ASSERT_NE(testcase->block, nullptr);
 
@@ -4858,4 +4858,4 @@ TEST(RuntimeExecTest, UsesYieldNameForResultCollection) {
 }
 
 } // namespace
-} // namespace pl::flux
+} // namespace pl::flux::runtime

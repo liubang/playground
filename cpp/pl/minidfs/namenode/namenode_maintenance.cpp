@@ -169,7 +169,8 @@ void NameNodeMaintenance::run_loop() {
             if (result.hasError()) {
                 LOG(ERROR) << "lease recovery scan failed: " << result.error().describe();
             }
-            next_lease_recovery = now + std::chrono::milliseconds(config_.lease_recovery_interval_ms);
+            next_lease_recovery =
+                now + std::chrono::milliseconds(config_.lease_recovery_interval_ms);
         }
         if (now >= next_datanode_scan) {
             auto result = scan_datanodes();
@@ -189,9 +190,8 @@ void NameNodeMaintenance::run_loop() {
 
         auto deadline = std::min({next_lease_recovery, next_datanode_scan, next_replication_scan});
         std::unique_lock lock(wait_mu_);
-        wait_cv_.wait_until(lock, deadline, [this] {
-            return !running_.load(std::memory_order_relaxed);
-        });
+        wait_cv_.wait_until(
+            lock, deadline, [this] { return !running_.load(std::memory_order_relaxed); });
     }
 }
 

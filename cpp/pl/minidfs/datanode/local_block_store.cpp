@@ -352,8 +352,8 @@ pl::Result<pl::Void> LocalBlockStore::delete_block(uint64_t block_id, uint64_t g
 }
 
 pl::Result<pl::Void> LocalBlockStore::truncate_block(uint64_t block_id,
-                                                    uint64_t generation_stamp,
-                                                    uint64_t length) {
+                                                     uint64_t generation_stamp,
+                                                     uint64_t length) {
     std::lock_guard lock(mu_);
 
     auto path = block_path("current", block_id, generation_stamp);
@@ -392,12 +392,13 @@ pl::Result<pl::Void> LocalBlockStore::truncate_block(uint64_t block_id,
          i < original_header.chunk_count && original_header.chunk_offsets[i] < length;
          ++i) {
         uint32_t offset = original_header.chunk_offsets[i];
-        uint64_t original_end =
-            i + 1 < original_header.chunk_count ? original_header.chunk_offsets[i + 1]
-                                                : original_header.data_length;
+        uint64_t original_end = i + 1 < original_header.chunk_count
+                                    ? original_header.chunk_offsets[i + 1]
+                                    : original_header.data_length;
         uint32_t end = static_cast<uint32_t>(std::min<uint64_t>(original_end, length));
         header.chunk_offsets[retained_chunks] = offset;
-        header.chunk_checksums[retained_chunks] = compute_crc32c(data.data() + offset, end - offset);
+        header.chunk_checksums[retained_chunks] =
+            compute_crc32c(data.data() + offset, end - offset);
         ++retained_chunks;
     }
     header.chunk_count = retained_chunks;
@@ -416,8 +417,8 @@ pl::Result<pl::Void> LocalBlockStore::truncate_block(uint64_t block_id,
     if (!ofs.good()) {
         std::error_code ec;
         fs::remove(replacement, ec);
-        return pl::makeError(
-            make_io_error(fmt::format("failed to write truncated block: {}", replacement.string())));
+        return pl::makeError(make_io_error(
+            fmt::format("failed to write truncated block: {}", replacement.string())));
     }
     ofs.close();
 

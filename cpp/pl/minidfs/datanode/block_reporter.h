@@ -46,8 +46,8 @@ struct BlockReport {
 // Full report: sends all blocks in current/ periodically.
 // Incremental tracking: records adds/removes between full reports.
 // RPC is abstracted via a callback for testability.
-using BlockReportFunc = std::function<pl::Result<BlockReportResponse>(
-    uint64_t datanode_id, const BlockReport& report)>;
+using BlockReportFunc =
+    std::function<pl::Result<BlockReportResponse>(uint64_t datanode_id, const BlockReport& report)>;
 
 using DeleteBlockFunc = std::function<void(uint64_t block_id, uint64_t generation_stamp)>;
 

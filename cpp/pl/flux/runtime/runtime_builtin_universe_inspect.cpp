@@ -21,9 +21,8 @@
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
-using namespace detail;
 
 absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table, Value* storage) {
     if (table.materialized) {
@@ -40,15 +39,15 @@ absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table
 }
 
 absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "yield");
+    auto object_or = detail::require_object_argument(args, "yield");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "yield", "tables");
+    auto table_or = detail::require_table_property(**object_or, "yield", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto name_or = optional_string_property(
+    auto name_or = detail::optional_string_property(
         **object_or,
         "yield",
         "name",
@@ -67,11 +66,11 @@ absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_columns(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "columns");
+    auto object_or = detail::require_object_argument(args, "columns");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "columns", "tables");
+    auto table_or = detail::require_table_property(**object_or, "columns", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
@@ -83,7 +82,7 @@ absl::StatusOr<Value> builtin_columns(const std::vector<Value>& args) {
     const TableValue* table = *materialized_or;
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
-    for (const auto& column : visible_columns_in_order(*table)) {
+    for (const auto& column : detail::visible_columns_in_order(*table)) {
         rows.push_back(std::make_shared<ObjectValue>(
             std::vector<std::pair<std::string, Value>>{{"_value", Value::string(column)}}));
     }
@@ -91,11 +90,11 @@ absl::StatusOr<Value> builtin_columns(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_keys(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "keys");
+    auto object_or = detail::require_object_argument(args, "keys");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "keys", "tables");
+    auto table_or = detail::require_table_property(**object_or, "keys", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
@@ -107,7 +106,7 @@ absl::StatusOr<Value> builtin_keys(const std::vector<Value>& args) {
     const TableValue* table = *materialized_or;
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
-    for (const auto& column : group_columns_in_order(*table)) {
+    for (const auto& column : detail::group_columns_in_order(*table)) {
         rows.push_back(std::make_shared<ObjectValue>(
             std::vector<std::pair<std::string, Value>>{{"_value", Value::string(column)}}));
     }
@@ -115,19 +114,19 @@ absl::StatusOr<Value> builtin_keys(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_find_column(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "findColumn");
+    auto object_or = detail::require_object_argument(args, "findColumn");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "findColumn", "tables");
+    auto table_or = detail::require_table_property(**object_or, "findColumn", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto fn_or = require_object_property(**object_or, "findColumn", "fn");
+    auto fn_or = detail::require_object_property(**object_or, "findColumn", "fn");
     if (!fn_or.ok()) {
         return fn_or.status();
     }
-    auto column_or = string_property(**object_or, "findColumn", "column");
+    auto column_or = detail::string_property(**object_or, "findColumn", "column");
     if (!column_or.ok()) {
         return column_or.status();
     }
@@ -138,7 +137,7 @@ absl::StatusOr<Value> builtin_find_column(const std::vector<Value>& args) {
     }
     const TableValue* table = *materialized_or;
 
-    auto rows_or = filter_rows_by_function(*table, **fn_or, "findColumn");
+    auto rows_or = detail::filter_rows_by_function(*table, **fn_or, "findColumn");
     if (!rows_or.ok()) {
         return rows_or.status();
     }
@@ -155,19 +154,19 @@ absl::StatusOr<Value> builtin_find_column(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_find_record(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "findRecord");
+    auto object_or = detail::require_object_argument(args, "findRecord");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "findRecord", "tables");
+    auto table_or = detail::require_table_property(**object_or, "findRecord", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto fn_or = require_object_property(**object_or, "findRecord", "fn");
+    auto fn_or = detail::require_object_property(**object_or, "findRecord", "fn");
     if (!fn_or.ok()) {
         return fn_or.status();
     }
-    auto idx_or = optional_index_property(**object_or, "findRecord", "idx", 0);
+    auto idx_or = detail::optional_index_property(**object_or, "findRecord", "idx", 0);
     if (!idx_or.ok()) {
         return idx_or.status();
     }
@@ -178,7 +177,7 @@ absl::StatusOr<Value> builtin_find_record(const std::vector<Value>& args) {
     }
     const TableValue* table = *materialized_or;
 
-    auto rows_or = filter_rows_by_function(*table, **fn_or, "findRecord");
+    auto rows_or = detail::filter_rows_by_function(*table, **fn_or, "findRecord");
     if (!rows_or.ok()) {
         return rows_or.status();
     }
@@ -189,27 +188,27 @@ absl::StatusOr<Value> builtin_find_record(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "explain");
+    auto object_or = detail::require_object_argument(args, "explain");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto table_or = require_table_property(**object_or, "explain", "tables");
+    auto table_or = detail::require_table_property(**object_or, "explain", "tables");
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto physical_or = optional_bool_property(**object_or, "explain", "physical", false);
+    auto physical_or = detail::optional_bool_property(**object_or, "explain", "physical", false);
     if (!physical_or.ok()) {
         return physical_or.status();
     }
-    auto pipeline_or = optional_bool_property(**object_or, "explain", "pipeline", false);
+    auto pipeline_or = detail::optional_bool_property(**object_or, "explain", "pipeline", false);
     if (!pipeline_or.ok()) {
         return pipeline_or.status();
     }
-    auto json_or = optional_bool_property(**object_or, "explain", "json", false);
+    auto json_or = detail::optional_bool_property(**object_or, "explain", "json", false);
     if (!json_or.ok()) {
         return json_or.status();
     }
-    auto graph_or = optional_bool_property(**object_or, "explain", "graph", false);
+    auto graph_or = detail::optional_bool_property(**object_or, "explain", "graph", false);
     if (!graph_or.ok()) {
         return graph_or.status();
     }
@@ -227,7 +226,7 @@ absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
         return Value::string(*graph_or ? optimizer::FormatPhysicalPlanMermaid((*table_or)->plan)
                                        : optimizer::FormatPhysicalPlan((*table_or)->plan));
     }
-    auto optimized_or = optional_bool_property(**object_or, "explain", "optimized", false);
+    auto optimized_or = detail::optional_bool_property(**object_or, "explain", "optimized", false);
     if (!optimized_or.ok()) {
         return optimized_or.status();
     }
@@ -244,30 +243,30 @@ absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
 
 bool InstallKnownUniverseInspectBuiltin(Environment& env, const std::string& name) {
     if (name == "columns") {
-        install_builtin(env, "columns", builtin_columns, "tables");
+        detail::install_builtin(env, "columns", builtin_columns, "tables");
         return true;
     }
     if (name == "keys") {
-        install_builtin(env, "keys", builtin_keys, "tables");
+        detail::install_builtin(env, "keys", builtin_keys, "tables");
         return true;
     }
     if (name == "findColumn") {
-        install_builtin(env, "findColumn", builtin_find_column, "tables");
+        detail::install_builtin(env, "findColumn", builtin_find_column, "tables");
         return true;
     }
     if (name == "findRecord") {
-        install_builtin(env, "findRecord", builtin_find_record, "tables");
+        detail::install_builtin(env, "findRecord", builtin_find_record, "tables");
         return true;
     }
     if (name == "explain") {
-        install_builtin(env, "explain", builtin_explain, "tables");
+        detail::install_builtin(env, "explain", builtin_explain, "tables");
         return true;
     }
     if (name == "yield") {
-        install_builtin(env, "yield", builtin_yield, "tables");
+        detail::install_builtin(env, "yield", builtin_yield, "tables");
         return true;
     }
     return false;
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

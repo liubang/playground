@@ -33,9 +33,8 @@
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
 #include "cpp/pl/flux/runtime/runtime_eval.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
-using namespace detail;
 
 absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table, Value* storage) {
     if (table.materialized) {
@@ -90,7 +89,7 @@ absl::StatusOr<std::vector<std::pair<std::string, const TableValue*>>>
 require_named_table_object_property(const ObjectValue& object,
                                     const std::string& name,
                                     const std::string& property) {
-    auto value_or = require_object_property(object, name, property);
+    auto value_or = detail::require_object_property(object, name, property);
     if (!value_or.ok()) {
         return value_or.status();
     }
@@ -139,7 +138,7 @@ std::optional<std::string> join_row_key(const ObjectValue& row,
             return std::nullopt;
         }
         absl::StrAppend(&key, column, "=");
-        append_value_key_fragment(&key, *value);
+        detail::append_value_key_fragment(&key, *value);
         key.push_back('\n');
     }
     return key;
@@ -320,8 +319,8 @@ absl::StatusOr<Value> join_with_column_keys(const TableValue& left_table,
                                             const std::string& method,
                                             const FunctionValue* as_fn) {
     const std::unordered_set<std::string> on_column_set(on_columns.begin(), on_columns.end());
-    const auto left_columns = all_visible_columns_in_order(left_table);
-    const auto right_columns = all_visible_columns_in_order(right_table);
+    const auto left_columns = detail::all_visible_columns_in_order(left_table);
+    const auto right_columns = detail::all_visible_columns_in_order(right_table);
     const auto overlapping_columns =
         overlapping_join_columns(left_columns, right_columns, on_column_set);
 
@@ -330,7 +329,7 @@ absl::StatusOr<Value> join_with_column_keys(const TableValue& left_table,
     for (const auto& right_chunk : right_table.tables) {
         JoinChunkIndex index;
         index.chunk = &right_chunk;
-        index.columns = visible_columns_in_chunk(right_chunk);
+        index.columns = detail::visible_columns_in_chunk(right_chunk);
         index.rows_by_key.reserve(right_chunk.rows.size());
         for (const auto& right_row : right_chunk.rows) {
             if (right_row == nullptr) {
@@ -496,8 +495,8 @@ absl::StatusOr<Value> join_with_predicate(const TableValue& left_table,
                                           const FunctionValue& on_fn,
                                           const FunctionValue& as_fn,
                                           const std::string& method) {
-    const auto left_columns = all_visible_columns_in_order(left_table);
-    const auto right_columns = all_visible_columns_in_order(right_table);
+    const auto left_columns = detail::all_visible_columns_in_order(left_table);
+    const auto right_columns = detail::all_visible_columns_in_order(right_table);
 
     std::unordered_map<std::string, std::vector<const TableChunk*>> right_chunks_by_group;
     right_chunks_by_group.reserve(right_table.table_count());
@@ -610,7 +609,7 @@ absl::StatusOr<Value> join_with_predicate(const TableValue& left_table,
 }
 
 absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "join");
+    auto object_or = detail::require_object_argument(args, "join");
     if (!object_or.ok()) {
         return object_or.status();
     }
@@ -621,7 +620,7 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
     if (tables_or->size() != 2) {
         return absl::InvalidArgumentError("join currently expects exactly two input tables");
     }
-    auto on_or = string_array_property(**object_or, "join", "on");
+    auto on_or = detail::string_array_property(**object_or, "join", "on");
     if (!on_or.ok()) {
         return on_or.status();
     }
@@ -672,25 +671,25 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
         return result_or.status();
     }
     std::vector<const TableValue*> inputs{(*tables_or)[0].second, (*tables_or)[1].second};
-    return with_materialization_barrier(std::move(*result_or), inputs, "join");
+    return detail::with_materialization_barrier(std::move(*result_or), inputs, "join");
 }
 
 absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args,
                                                   const std::string& method) {
     const std::string name = absl::StrCat("join.", method);
-    auto object_or = require_object_argument(args, name);
+    auto object_or = detail::require_object_argument(args, name);
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto left_or = require_table_property(**object_or, name, "left");
+    auto left_or = detail::require_table_property(**object_or, name, "left");
     if (!left_or.ok()) {
         return left_or.status();
     }
-    auto right_or = require_table_property(**object_or, name, "right");
+    auto right_or = detail::require_table_property(**object_or, name, "right");
     if (!right_or.ok()) {
         return right_or.status();
     }
-    auto on_value_or = require_object_property(**object_or, name, "on");
+    auto on_value_or = detail::require_object_property(**object_or, name, "on");
     if (!on_value_or.ok()) {
         return on_value_or.status();
     }
@@ -708,15 +707,16 @@ absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args
     std::string left_name;
     std::string right_name;
     if ((*on_value_or)->type() == Value::Type::Array) {
-        auto on_or = string_array_value(**on_value_or, name, "on");
+        auto on_or = detail::string_array_value(**on_value_or, name, "on");
         if (!on_or.ok()) {
             return on_or.status();
         }
-        auto left_name_or = optional_string_property(**object_or, name, "leftName", "left");
+        auto left_name_or = detail::optional_string_property(**object_or, name, "leftName", "left");
         if (!left_name_or.ok()) {
             return left_name_or.status();
         }
-        auto right_name_or = optional_string_property(**object_or, name, "rightName", "right");
+        auto right_name_or =
+            detail::optional_string_property(**object_or, name, "rightName", "right");
         if (!right_name_or.ok()) {
             return right_name_or.status();
         }
@@ -750,7 +750,7 @@ absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args
             return result_or.status();
         }
         std::vector<const TableValue*> inputs{*left_or, *right_or};
-        return with_materialization_barrier(std::move(*result_or), inputs, name);
+        return detail::with_materialization_barrier(std::move(*result_or), inputs, name);
     }
     if ((*on_value_or)->type() == Value::Type::Function) {
         if (as_fn == nullptr) {
@@ -763,7 +763,7 @@ absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args
             return result_or.status();
         }
         std::vector<const TableValue*> inputs{*left_or, *right_or};
-        return with_materialization_barrier(std::move(*result_or), inputs, name);
+        return detail::with_materialization_barrier(std::move(*result_or), inputs, name);
     }
     return absl::InvalidArgumentError(absl::StrCat(name, " `on` must be an array or function"));
 }
@@ -772,25 +772,25 @@ Value make_join_package() {
     return Value::object({
         {"path", Value::string("join")},
         {"inner",
-         make_builtin_value("join.inner",
-                            [](const std::vector<Value>& args) {
-                                return builtin_join_package_method(args, "inner");
-                            })},
+         detail::make_builtin_value("join.inner",
+                                    [](const std::vector<Value>& args) {
+                                        return builtin_join_package_method(args, "inner");
+                                    })},
         {"left",
-         make_builtin_value("join.left",
-                            [](const std::vector<Value>& args) {
-                                return builtin_join_package_method(args, "left");
-                            })},
+         detail::make_builtin_value("join.left",
+                                    [](const std::vector<Value>& args) {
+                                        return builtin_join_package_method(args, "left");
+                                    })},
         {"right",
-         make_builtin_value("join.right",
-                            [](const std::vector<Value>& args) {
-                                return builtin_join_package_method(args, "right");
-                            })},
+         detail::make_builtin_value("join.right",
+                                    [](const std::vector<Value>& args) {
+                                        return builtin_join_package_method(args, "right");
+                                    })},
         {"full",
-         make_builtin_value("join.full",
-                            [](const std::vector<Value>& args) {
-                                return builtin_join_package_method(args, "full");
-                            })},
+         detail::make_builtin_value("join.full",
+                                    [](const std::vector<Value>& args) {
+                                        return builtin_join_package_method(args, "full");
+                                    })},
     });
 }
 
@@ -798,7 +798,7 @@ Value make_join_package() {
 
 bool InstallKnownUniverseJoinBuiltin(Environment& env, const std::string& name) {
     if (name == "join") {
-        install_builtin(env, "join", builtin_join);
+        detail::install_builtin(env, "join", builtin_join);
         return true;
     }
     return false;
@@ -812,4 +812,4 @@ void RegisterJoinStdlibPackage() {
 
 } // namespace builtin
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

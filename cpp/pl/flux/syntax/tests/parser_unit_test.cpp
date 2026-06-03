@@ -18,7 +18,7 @@
 #include "cpp/pl/flux/syntax/ast_debug.h"
 #include "cpp/pl/flux/syntax/parser.h"
 
-namespace pl::flux {
+namespace pl::flux::syntax {
 namespace {
 
 bool ErrorContains(const std::vector<std::string>& errors, const std::string& needle) {
@@ -1878,4 +1878,4 @@ next = 42
 }
 
 } // namespace
-} // namespace pl::flux
+} // namespace pl::flux::syntax

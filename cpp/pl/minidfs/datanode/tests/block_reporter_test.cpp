@@ -63,9 +63,8 @@ protected:
 
 TEST_F(BlockReporterTest, SendFullReportEmpty) {
     std::atomic<int> report_count{0};
-    BlockReportFunc report_func =
-        [&](uint64_t datanode_id,
-            const BlockReport& report) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [&](uint64_t datanode_id,
+                                      const BlockReport& report) -> Result<BlockReportResponse> {
         report_count++;
         EXPECT_EQ(datanode_id, 42u);
         EXPECT_TRUE(report.full_report);
@@ -91,9 +90,8 @@ TEST_F(BlockReporterTest, SendFullReportWithBlocks) {
     create_finalized_block(101, 5001);
 
     std::vector<BlockInfo> reported_blocks;
-    BlockReportFunc report_func =
-        [&](uint64_t datanode_id,
-            const BlockReport& report) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [&](uint64_t datanode_id,
+                                      const BlockReport& report) -> Result<BlockReportResponse> {
         reported_blocks = report.blocks;
         return BlockReportResponse{};
     };
@@ -191,8 +189,7 @@ TEST_F(BlockReporterTest, SendIncrementalReportWithFinalizedBlock) {
 
 TEST_F(BlockReporterTest, StartAndStop) {
     std::atomic<int> report_count{0};
-    BlockReportFunc report_func =
-        [&](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [&](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
         report_count++;
         return BlockReportResponse{};
     };

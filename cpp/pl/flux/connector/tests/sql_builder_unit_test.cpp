@@ -32,7 +32,7 @@ public:
     }
 
     [[nodiscard]] absl::StatusOr<std::string> FormatLiteral(
-        const Value& /*value*/, bool /*normalize_time*/) const override {
+        const runtime::Value& /*value*/, bool /*normalize_time*/) const override {
         return absl::UnimplementedError("literal formatting is not used by this test");
     }
 
@@ -51,21 +51,21 @@ TEST(SqlBuilderTest, PreservesBaseParametersBeforeOuterScanParameters) {
         .sql = "SELECT * FROM \"cpu\" WHERE rowid >= ? AND rowid <= ?",
         .params =
             {
-                {.value = Value::integer(17)},
-                {.value = Value::integer(29)},
+                {.value = runtime::Value::integer(17)},
+                {.value = runtime::Value::integer(29)},
             },
     };
     ScanRequest request;
     request.predicates.push_back({
         .op = PredicateOp::Eq,
         .column = "host",
-        .literal = Value::string("edge-1"),
+        .literal = runtime::Value::string("edge-1"),
     });
     request.limit = 3;
     const TableSchema schema{
         .columns =
             {
-                {.name = "host", .type = Value::Type::String},
+                {.name = "host", .type = runtime::Value::Type::String},
             },
     };
 

@@ -700,7 +700,7 @@ void FluxLanguageServer::ensure_ast(Document& doc) {
         return; // Cache is fresh
     }
 
-    Parser parser(doc.content);
+    syntax::Parser parser(doc.content);
     auto file = parser.parse_file(doc.uri);
     doc.parse_errors = parser.errors();
     doc.ast = std::move(file);
@@ -757,9 +757,9 @@ void FluxLanguageServer::publish_diagnostics(const std::string& uri) {
     // 从 AST 中收集 BadStatement 节点的精确位置
     if (doc.ast) {
         for (const auto& stmt : doc.ast->body) {
-            if (stmt->type == Statement::Type::BadStatement) {
+            if (stmt->type == syntax::Statement::Type::BadStatement) {
                 const auto& loc = stmt->loc;
-                const auto& bad = *std::get<std::unique_ptr<BadStmt>>(stmt->stmt);
+                const auto& bad = *std::get<std::unique_ptr<syntax::BadStmt>>(stmt->stmt);
                 emit_diagnostic(loc.start.line,
                                 loc.start.column,
                                 loc.end.line,
@@ -877,7 +877,7 @@ std::string FluxLanguageServer::build_completion_response(Document& doc, int lin
     auto pkg_prefix = prefix_before_dot(doc.content, line, character);
 
     if (!pkg_prefix.empty()) {
-        // Package member completion
+        // syntax::Package member completion
         ensure_analysis(doc);
         const auto package_path = package_path_for_qualifier(doc.analysis, pkg_prefix);
         if (!package_path.empty()) {
@@ -912,7 +912,7 @@ std::string FluxLanguageServer::build_completion_response(Document& doc, int lin
                     sig->name, analysis::SignatureDetail(*sig), analysis::CompletionParams(*sig));
             }
         }
-        // Package names
+        // syntax::Package names
         for (const auto& [pkg_name, _] : known_packages()) {
             add_plain_item(pkg_name, "package", 9 /* Module */);
         }
@@ -1048,7 +1048,7 @@ void FluxLanguageServer::handle_document_symbol(const JsonRpcMessage& msg) {
     os << "[";
     bool first = true;
 
-    auto emit_symbol = [&](const std::string& name, int kind, const SourceLocation& loc) {
+    auto emit_symbol = [&](const std::string& name, int kind, const syntax::SourceLocation& loc) {
         if (!first) {
             os << ",";
         }
@@ -1063,9 +1063,9 @@ void FluxLanguageServer::handle_document_symbol(const JsonRpcMessage& msg) {
            << R"(},"end":{"line":)" << el << R"(,"character":)" << ec << "}}}";
     };
 
-    // Package clause
+    // syntax::Package clause
     if (doc.ast->package && doc.ast->package->name) {
-        emit_symbol(doc.ast->package->name->name, 4 /* Package */, doc.ast->package->loc);
+        emit_symbol(doc.ast->package->name->name, 4 /* syntax::Package */, doc.ast->package->loc);
     }
 
     // Imports
@@ -1083,30 +1083,32 @@ void FluxLanguageServer::handle_document_symbol(const JsonRpcMessage& msg) {
 
     // Body statements
     for (const auto& stmt : doc.ast->body) {
-        if (stmt->type == Statement::Type::VariableAssignment) {
-            const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
+        if (stmt->type == syntax::Statement::Type::VariableAssignment) {
+            const auto& va = *std::get<std::unique_ptr<syntax::VariableAssgn>>(stmt->stmt);
             if (va.id && !va.id->name.empty()) {
                 int kind = 13; // Variable
-                if (va.init && va.init->type == Expression::Type::FunctionExpr) {
+                if (va.init && va.init->type == syntax::Expression::Type::FunctionExpr) {
                     kind = 12; // Function
                 }
                 emit_symbol(va.id->name, kind, stmt->loc);
             }
-        } else if (stmt->type == Statement::Type::OptionStatement) {
-            const auto& opt = *std::get<std::unique_ptr<OptionStmt>>(stmt->stmt);
-            if (opt.assignment && opt.assignment->type == Assignment::Type::VariableAssignment) {
-                const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(opt.assignment->value);
+        } else if (stmt->type == syntax::Statement::Type::OptionStatement) {
+            const auto& opt = *std::get<std::unique_ptr<syntax::OptionStmt>>(stmt->stmt);
+            if (opt.assignment &&
+                opt.assignment->type == syntax::Assignment::Type::VariableAssignment) {
+                const auto& va =
+                    *std::get<std::unique_ptr<syntax::VariableAssgn>>(opt.assignment->value);
                 if (va.id && !va.id->name.empty()) {
                     emit_symbol("option " + va.id->name, 14 /* Constant */, stmt->loc);
                 }
             }
-        } else if (stmt->type == Statement::Type::BuiltinStatement) {
-            const auto& bi = *std::get<std::unique_ptr<BuiltinStmt>>(stmt->stmt);
+        } else if (stmt->type == syntax::Statement::Type::BuiltinStatement) {
+            const auto& bi = *std::get<std::unique_ptr<syntax::BuiltinStmt>>(stmt->stmt);
             if (bi.id && !bi.id->name.empty()) {
                 emit_symbol(bi.id->name, 12 /* Function */, stmt->loc);
             }
-        } else if (stmt->type == Statement::Type::TestCaseStatement) {
-            const auto& tc = *std::get<std::unique_ptr<TestCaseStmt>>(stmt->stmt);
+        } else if (stmt->type == syntax::Statement::Type::TestCaseStatement) {
+            const auto& tc = *std::get<std::unique_ptr<syntax::TestCaseStmt>>(stmt->stmt);
             if (tc.id && !tc.id->name.empty()) {
                 emit_symbol(tc.id->name, 12 /* Function */, stmt->loc);
             }
@@ -1168,21 +1170,22 @@ void FluxLanguageServer::handle_folding_range(const JsonRpcMessage& msg) {
             continue;
         }
 
-        if (stmt->type == Statement::Type::VariableAssignment) {
-            const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
+        if (stmt->type == syntax::Statement::Type::VariableAssignment) {
+            const auto& va = *std::get<std::unique_ptr<syntax::VariableAssgn>>(stmt->stmt);
             // Functions and multi-line expressions are foldable
             if (va.init) {
-                const bool is_foldable_expr = va.init->type == Expression::Type::FunctionExpr ||
-                                              va.init->type == Expression::Type::ObjectExpr ||
-                                              va.init->type == Expression::Type::ArrayExpr ||
-                                              va.init->type == Expression::Type::PipeExpr;
+                const bool is_foldable_expr =
+                    va.init->type == syntax::Expression::Type::FunctionExpr ||
+                    va.init->type == syntax::Expression::Type::ObjectExpr ||
+                    va.init->type == syntax::Expression::Type::ArrayExpr ||
+                    va.init->type == syntax::Expression::Type::PipeExpr;
                 if (is_foldable_expr || loc.end.line > loc.start.line) {
                     emit_range(loc.start.line, loc.end.line, "region");
                 }
             }
-        } else if (stmt->type == Statement::Type::OptionStatement ||
-                   stmt->type == Statement::Type::TestCaseStatement ||
-                   stmt->type == Statement::Type::ExpressionStatement) {
+        } else if (stmt->type == syntax::Statement::Type::OptionStatement ||
+                   stmt->type == syntax::Statement::Type::TestCaseStatement ||
+                   stmt->type == syntax::Statement::Type::ExpressionStatement) {
             emit_range(loc.start.line, loc.end.line, "region");
         }
     }
@@ -1287,7 +1290,7 @@ void FluxLanguageServer::handle_references(const JsonRpcMessage& msg) {
     os << "[";
     bool first = true;
 
-    auto emit_location = [&](const SourceLocation& loc) {
+    auto emit_location = [&](const syntax::SourceLocation& loc) {
         if (!first) {
             os << ",";
         }
@@ -1343,7 +1346,7 @@ void FluxLanguageServer::handle_rename(const JsonRpcMessage& msg) {
     const auto& content = it->second.content;
 
     // Collect all locations that need to be renamed (definition + references)
-    std::vector<SourceLocation> locations;
+    std::vector<syntax::SourceLocation> locations;
 
     const auto ast_line = static_cast<uint32_t>(line + 1);
     const auto ast_col =
@@ -1577,7 +1580,7 @@ void FluxLanguageServer::handle_document_highlight(const JsonRpcMessage& msg) {
     os << "[";
     bool first = true;
 
-    auto emit_highlight = [&](const SourceLocation& loc, int kind) {
+    auto emit_highlight = [&](const syntax::SourceLocation& loc, int kind) {
         if (!first) {
             os << ",";
         }
@@ -1861,8 +1864,8 @@ void FluxLanguageServer::handle_inlay_hint(const JsonRpcMessage& msg) {
     auto range_end_line = get_int_field(doc_result.value(), "/range/end/line");
 
     // Inlay hints: show parameter names at call sites
-    // We traverse the AST looking for CallExpr nodes with named arguments
-    // For positional args (ObjectExpr properties in arguments), show the parameter name
+    // We traverse the AST looking for syntax::CallExpr nodes with named arguments
+    // For positional args (syntax::ObjectExpr properties in arguments), show the parameter name
     std::ostringstream os;
     os << "[";
     bool first = true;
@@ -1891,28 +1894,30 @@ void FluxLanguageServer::handle_inlay_hint(const JsonRpcMessage& msg) {
     // user-defined function calls by matching the function parameters
     // This is a simplified implementation - a full implementation would walk the AST
     for (const auto& stmt : doc.ast->body) {
-        if (stmt->type == Statement::Type::VariableAssignment) {
-            const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
-            if (va.init && va.init->type == Expression::Type::FunctionExpr) {
+        if (stmt->type == syntax::Statement::Type::VariableAssignment) {
+            const auto& va = *std::get<std::unique_ptr<syntax::VariableAssgn>>(stmt->stmt);
+            if (va.init && va.init->type == syntax::Expression::Type::FunctionExpr) {
                 // This is a function definition: show parameter types as hints
-                const auto& fn = *std::get<std::unique_ptr<FunctionExpr>>(va.init->expr);
+                const auto& fn = *std::get<std::unique_ptr<syntax::FunctionExpr>>(va.init->expr);
                 for (const auto& p : fn.params) {
                     if (p->value && p->key) {
                         // Has a default value — show the default as a hint
-                        if (p->key->type == PropertyKey::Type::Identifier) {
-                            const auto& id = *std::get<std::unique_ptr<Identifier>>(p->key->key);
-                            if (p->value->type == Expression::Type::IntegerLit) {
+                        if (p->key->type == syntax::PropertyKey::Type::Identifier) {
+                            const auto& id =
+                                *std::get<std::unique_ptr<syntax::Identifier>>(p->key->key);
+                            if (p->value->type == syntax::Expression::Type::IntegerLit) {
                                 emit_hint(p->loc.end.line,
                                           p->loc.end.column,
-                                          " = " +
-                                              std::to_string(std::get<std::unique_ptr<IntegerLit>>(
-                                                                 p->value->expr)
-                                                                 ->value));
-                            } else if (p->value->type == Expression::Type::BooleanLit) {
+                                          " = " + std::to_string(
+                                                      std::get<std::unique_ptr<syntax::IntegerLit>>(
+                                                          p->value->expr)
+                                                          ->value));
+                            } else if (p->value->type == syntax::Expression::Type::BooleanLit) {
                                 emit_hint(p->loc.end.line,
                                           p->loc.end.column,
                                           std::string(" = ") +
-                                              (std::get<std::unique_ptr<BooleanLit>>(p->value->expr)
+                                              (std::get<std::unique_ptr<syntax::BooleanLit>>(
+                                                   p->value->expr)
                                                        ->value
                                                    ? "true"
                                                    : "false"));
@@ -2010,7 +2015,7 @@ void FluxLanguageServer::handle_selection_range(const JsonRpcMessage& msg) {
         }
 
         // Find the enclosing statement
-        const SourceLocation* stmt_loc = nullptr;
+        const syntax::SourceLocation* stmt_loc = nullptr;
         for (const auto& stmt : doc.ast->body) {
             if (stmt->loc.start.line <= ast_line && stmt->loc.end.line >= ast_line) {
                 if (ast_line > stmt->loc.start.line || ast_col >= stmt->loc.start.column) {

@@ -230,8 +230,8 @@ TEST_F(BlockManagerTest, TruncateFileShrinksLastRetainedBlockAndInvalidatesTail)
     ASSERT_TRUE(store_->update_inode(inode.value()).hasValue());
 
     std::vector<uint64_t> truncated_lengths;
-    auto result = block_mgr_->truncate_file(
-        100, 5, [&](const BlockReplica& /*replica*/, uint64_t length) {
+    auto result =
+        block_mgr_->truncate_file(100, 5, [&](const BlockReplica& /*replica*/, uint64_t length) {
             truncated_lengths.push_back(length);
             return pl::Result<pl::Void>(pl::Void{});
         });
@@ -277,8 +277,10 @@ TEST_F(BlockManagerTest, TruncateFileMarksFailedReplicaForDeletion) {
 
     uint64_t failed_datanode = block.value().locations.front().datanode_id;
     auto result = block_mgr_->truncate_file(
-        100, 5, [failed_datanode](const BlockReplica& replica,
-                                  uint64_t /*length*/) -> pl::Result<pl::Void> {
+        100,
+        5,
+        [failed_datanode](const BlockReplica& replica,
+                          uint64_t /*length*/) -> pl::Result<pl::Void> {
             if (replica.datanode_id == failed_datanode) {
                 return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kIOError),
                                      "simulated truncate failure");
@@ -291,7 +293,7 @@ TEST_F(BlockManagerTest, TruncateFileMarksFailedReplicaForDeletion) {
     for (const auto& replica : final_replicas.value()) {
         EXPECT_EQ(replica.state,
                   replica.datanode_id == failed_datanode ? ReplicaState::kDeleting
-                                                        : ReplicaState::kFinalized);
+                                                         : ReplicaState::kFinalized);
     }
 }
 

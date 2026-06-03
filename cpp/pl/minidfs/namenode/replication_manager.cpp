@@ -99,9 +99,8 @@ pl::Result<std::vector<ReplicationTask>> ReplicationManager::scan() {
             // Remove replicas from nodes with least free space (greedy).
             // For simplicity, just pick the last N in the replica list.
             uint32_t removed = 0;
-            for (auto it = replicas.rbegin();
-                 it != replicas.rend() && removed < excess &&
-                 task_count < kDefaultMaxReplicationTasksPerRound;
+            for (auto it = replicas.rbegin(); it != replicas.rend() && removed < excess &&
+                                              task_count < kDefaultMaxReplicationTasksPerRound;
                  ++it) {
                 if (it->state == ReplicaState::kFinalized &&
                     healthy_dns.contains(it->datanode_id)) {

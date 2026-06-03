@@ -56,8 +56,7 @@ pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
     // Use a thread-local random engine for randomization.
     thread_local std::mt19937 rng = [] {
         std::random_device random_device;
-        std::seed_seq seed{
-            random_device(), random_device(), random_device(), random_device()};
+        std::seed_seq seed{random_device(), random_device(), random_device(), random_device()};
         return std::mt19937(seed);
     }();
 
@@ -69,8 +68,7 @@ pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
 
     // Add bounded randomness: shuffle within the top 2*num_replicas candidates
     // to avoid always picking the exact same nodes while still preferring high-free nodes.
-    size_t shuffle_range =
-        std::min(candidates.size(), static_cast<size_t>(num_replicas) * 2);
+    size_t shuffle_range = std::min(candidates.size(), static_cast<size_t>(num_replicas) * 2);
     std::shuffle(candidates.begin(),
                  candidates.begin() +
                      static_cast<std::vector<DataNodeInfo>::difference_type>(shuffle_range),

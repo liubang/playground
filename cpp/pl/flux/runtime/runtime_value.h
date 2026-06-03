@@ -29,13 +29,16 @@
 #include "absl/status/statusor.h"
 #include "cpp/pl/flux/plan/plan_node.h"
 
-namespace pl::flux {
+namespace pl::flux::syntax {
+struct FunctionExpr;
+}
+
+namespace pl::flux::runtime {
 
 struct ArrayValue;
 struct ObjectValue;
 struct TableChunk;
 struct TableValue;
-struct FunctionExpr;
 struct FunctionValue;
 
 class Environment;
@@ -213,11 +216,11 @@ struct FunctionValue {
     Kind kind = Kind::Builtin;
     std::string name;
     std::string pipe_param_name;
-    const FunctionExpr* user_function = nullptr;
+    const syntax::FunctionExpr* user_function = nullptr;
     std::shared_ptr<Environment> closure;
     BuiltinCallback builtin;
 
     [[nodiscard]] std::string string() const;
 };
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

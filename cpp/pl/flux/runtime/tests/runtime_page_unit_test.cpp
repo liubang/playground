@@ -22,7 +22,7 @@
 #include "cpp/pl/flux/runtime/runtime_page.h"
 #include "gtest/gtest.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
 
 std::shared_ptr<ObjectValue> row(std::vector<std::pair<std::string, Value>> props) {
@@ -126,4 +126,4 @@ TEST(RuntimePageTest, SlicesChunksWithoutMaterializingRows) {
 }
 
 } // namespace
-} // namespace pl::flux
+} // namespace pl::flux::runtime

@@ -25,7 +25,7 @@
 #include "absl/status/statusor.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 
 class Environment {
 public:
@@ -53,4 +53,4 @@ private:
     std::unordered_map<std::string, Value> options_;
 };
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

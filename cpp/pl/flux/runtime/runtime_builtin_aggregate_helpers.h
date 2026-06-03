@@ -26,7 +26,7 @@
 #include "cpp/pl/flux/common/compat.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 
-namespace pl::flux::detail {
+namespace pl::flux::runtime::detail {
 
 enum class NumericKind {
     UInt,
@@ -288,4 +288,4 @@ inline absl::StatusOr<Value> aggregate_min_max(const std::vector<Value>& args,
     return *best;
 }
 
-} // namespace pl::flux::detail
+} // namespace pl::flux::runtime::detail

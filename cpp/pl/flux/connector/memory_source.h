@@ -31,36 +31,36 @@ namespace pl::flux::connector {
 
 class ArraySource final {
 public:
-    ArraySource(std::string bucket, std::vector<std::shared_ptr<ObjectValue>> rows);
+    ArraySource(std::string bucket, std::vector<std::shared_ptr<runtime::ObjectValue>> rows);
 
     [[nodiscard]] absl::StatusOr<TableSchema> Schema() const;
     [[nodiscard]] SourceCapabilities Capabilities() const;
     [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const;
-    absl::StatusOr<Value> Scan(const ScanRequest& request);
+    absl::StatusOr<runtime::Value> Scan(const ScanRequest& request);
 
 private:
     std::string bucket_;
-    std::vector<std::shared_ptr<ObjectValue>> rows_;
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows_;
 };
 
 class CsvSource final {
 public:
-    explicit CsvSource(std::vector<std::shared_ptr<ObjectValue>> rows);
+    explicit CsvSource(std::vector<std::shared_ptr<runtime::ObjectValue>> rows);
 
     [[nodiscard]] absl::StatusOr<TableSchema> Schema() const;
     [[nodiscard]] SourceCapabilities Capabilities() const;
     [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const;
-    absl::StatusOr<Value> Scan(const ScanRequest& request);
+    absl::StatusOr<runtime::Value> Scan(const ScanRequest& request);
 
 private:
-    std::vector<std::shared_ptr<ObjectValue>> rows_;
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows_;
 };
 
 class MemoryConnectorMetadata final : public ConnectorMetadata {
 public:
     MemoryConnectorMetadata(SourceSpec spec,
                             std::string bucket,
-                            std::vector<std::shared_ptr<ObjectValue>> rows);
+                            std::vector<std::shared_ptr<runtime::ObjectValue>> rows);
 
     [[nodiscard]] absl::StatusOr<TableHandle> GetTableHandle(const SourceSpec& spec) const override;
     [[nodiscard]] absl::StatusOr<TableSchema> Schema(const TableHandle& table) const override;
@@ -71,7 +71,7 @@ public:
 private:
     SourceSpec spec_;
     std::string bucket_;
-    std::vector<std::shared_ptr<ObjectValue>> rows_;
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows_;
 };
 
 class MemorySplitManager final : public ConnectorSplitManager {
@@ -89,7 +89,7 @@ private:
 class MemoryPageSourceProvider final : public ConnectorPageSourceProvider {
 public:
     MemoryPageSourceProvider(std::string bucket,
-                             std::vector<std::shared_ptr<ObjectValue>> rows,
+                             std::vector<std::shared_ptr<runtime::ObjectValue>> rows,
                              size_t rows_per_page = 1024);
 
     [[nodiscard]] absl::StatusOr<std::unique_ptr<ConnectorPageSource>> CreatePageSource(
@@ -97,14 +97,14 @@ public:
 
 private:
     std::string bucket_;
-    std::vector<std::shared_ptr<ObjectValue>> rows_;
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows_;
     size_t rows_per_page_ = 1024;
 };
 
 std::unique_ptr<ConnectorRuntime> MakeMemoryConnectorRuntime(
     const SourceSpec& spec,
     std::string bucket,
-    std::vector<std::shared_ptr<ObjectValue>> rows,
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows,
     size_t rows_per_page = 1024,
     size_t split_count = 1);
 

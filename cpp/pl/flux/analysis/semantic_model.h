@@ -97,14 +97,14 @@ Type CommonType(const Type& lhs, const Type& rhs);
 Type ParseTypeExpression(std::string_view text);
 
 struct ExpressionInfo {
-    SourceLocation location;
+    syntax::SourceLocation location;
     Type type;
     std::optional<size_t> reference_index;
 };
 
 struct CallInfo {
-    SourceLocation location;
-    SourceLocation callee_location;
+    syntax::SourceLocation location;
+    syntax::SourceLocation callee_location;
     std::string callee;
     std::optional<std::string> package;
     std::optional<std::string> member;
@@ -115,13 +115,13 @@ struct CallInfo {
 };
 
 struct RecordSchema {
-    SourceLocation location;
+    syntax::SourceLocation location;
     std::vector<RecordFieldType> fields;
     bool open = false;
 };
 
 struct TableSchema {
-    SourceLocation location;
+    syntax::SourceLocation location;
     std::vector<RecordFieldType> columns;
     std::vector<std::string> group_key;
     bool open = false;

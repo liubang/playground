@@ -42,7 +42,7 @@ struct Document {
     int version = 0;
 
     // Cached parse result — invalidated on content change.
-    std::shared_ptr<File> ast;
+    std::shared_ptr<syntax::File> ast;
     std::vector<std::string> parse_errors;
     int ast_version = -1; // version at which ast was computed
 

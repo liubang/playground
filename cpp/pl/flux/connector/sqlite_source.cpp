@@ -104,8 +104,8 @@ ParameterizedSql query_for_table_rowid_range(const std::string& table,
             "SELECT * FROM ", quote_identifier(table), " WHERE rowid >= ? AND rowid <= ?"),
         .params =
             {
-                {.value = Value::integer(lower)},
-                {.value = Value::integer(upper)},
+                {.value = runtime::Value::integer(lower)},
+                {.value = runtime::Value::integer(upper)},
             },
     };
 }
@@ -130,21 +130,21 @@ public:
     }
 
     [[nodiscard]] absl::StatusOr<std::string> FormatLiteral(
-        const Value& value, bool /*normalize_time*/) const override {
+        const runtime::Value& value, bool /*normalize_time*/) const override {
         switch (value.type()) {
-            case Value::Type::Null:
+            case runtime::Value::Type::Null:
                 return "NULL";
-            case Value::Type::Bool:
+            case runtime::Value::Type::Bool:
                 return value.as_bool() ? "1" : "0";
-            case Value::Type::Int:
+            case runtime::Value::Type::Int:
                 return absl::StrCat(value.as_int());
-            case Value::Type::UInt:
+            case runtime::Value::Type::UInt:
                 return absl::StrCat(value.as_uint());
-            case Value::Type::Float:
+            case runtime::Value::Type::Float:
                 return absl::StrCat(value.as_float());
-            case Value::Type::String:
+            case runtime::Value::Type::String:
                 return quote_sql_string(value.as_string());
-            case Value::Type::Time:
+            case runtime::Value::Type::Time:
                 return quote_sql_string(value.as_time().literal);
             default:
                 return absl::InvalidArgumentError("sqlite source literal type is not pushable");
@@ -172,38 +172,38 @@ public:
 };
 
 struct SqliteParam {
-    Value value;
+    runtime::Value value;
 };
 
-absl::Status bind_value(sqlite3_stmt* stmt, int index, const Value& value) {
+absl::Status bind_value(sqlite3_stmt* stmt, int index, const runtime::Value& value) {
     int rc = SQLITE_OK;
     switch (value.type()) {
-        case Value::Type::Null:
+        case runtime::Value::Type::Null:
             rc = sqlite3_bind_null(stmt, index);
             break;
-        case Value::Type::Bool:
+        case runtime::Value::Type::Bool:
             rc = sqlite3_bind_int64(stmt, index, value.as_bool() ? 1 : 0);
             break;
-        case Value::Type::Int:
+        case runtime::Value::Type::Int:
             rc = sqlite3_bind_int64(stmt, index, value.as_int());
             break;
-        case Value::Type::UInt:
+        case runtime::Value::Type::UInt:
             if (value.as_uint() > static_cast<uint64_t>(INT64_MAX)) {
                 return absl::InvalidArgumentError("sqlite source uint parameter overflows int64");
             }
             rc = sqlite3_bind_int64(stmt, index, static_cast<int64_t>(value.as_uint()));
             break;
-        case Value::Type::Float:
+        case runtime::Value::Type::Float:
             rc = sqlite3_bind_double(stmt, index, value.as_float());
             break;
-        case Value::Type::String:
+        case runtime::Value::Type::String:
             rc = sqlite3_bind_text(stmt,
                                    index,
                                    value.as_string().c_str(),
                                    static_cast<int>(value.as_string().size()),
                                    SQLITE_TRANSIENT);
             break;
-        case Value::Type::Time:
+        case runtime::Value::Type::Time:
             rc = sqlite3_bind_text(stmt,
                                    index,
                                    value.as_time().literal.c_str(),
@@ -288,30 +288,30 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
     return build_scan_sql(ParameterizedSql{.sql = query}, request, schema);
 }
 
-Value value_from_sqlite_column(sqlite3_stmt* stmt, int column) {
+runtime::Value value_from_sqlite_column(sqlite3_stmt* stmt, int column) {
     switch (sqlite3_column_type(stmt, column)) {
         case SQLITE_NULL:
-            return Value::null();
+            return runtime::Value::null();
         case SQLITE_INTEGER:
-            return Value::integer(sqlite3_column_int64(stmt, column));
+            return runtime::Value::integer(sqlite3_column_int64(stmt, column));
         case SQLITE_FLOAT:
-            return Value::floating(sqlite3_column_double(stmt, column));
+            return runtime::Value::floating(sqlite3_column_double(stmt, column));
         case SQLITE_BLOB: {
             const auto* bytes = static_cast<const char*>(sqlite3_column_blob(stmt, column));
             const int size = sqlite3_column_bytes(stmt, column);
             if (bytes == nullptr || size <= 0) {
-                return Value::string("");
+                return runtime::Value::string("");
             }
-            return Value::string(std::string(bytes, static_cast<size_t>(size)));
+            return runtime::Value::string(std::string(bytes, static_cast<size_t>(size)));
         }
         case SQLITE_TEXT:
         default: {
             const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, column));
             const int size = sqlite3_column_bytes(stmt, column);
             if (text == nullptr || size <= 0) {
-                return Value::string("");
+                return runtime::Value::string("");
             }
-            return Value::string(std::string(text, static_cast<size_t>(size)));
+            return runtime::Value::string(std::string(text, static_cast<size_t>(size)));
         }
     }
 }
@@ -339,27 +339,27 @@ std::vector<std::string> sqlite_column_names(sqlite3_stmt* stmt) {
     return column_names;
 }
 
-std::shared_ptr<ObjectValue> row_from_sqlite_stmt(sqlite3_stmt* stmt,
-                                                  const std::vector<std::string>& column_names) {
-    std::vector<std::pair<std::string, Value>> properties;
+std::shared_ptr<runtime::ObjectValue> row_from_sqlite_stmt(
+    sqlite3_stmt* stmt, const std::vector<std::string>& column_names) {
+    std::vector<std::pair<std::string, runtime::Value>> properties;
     properties.reserve(column_names.size());
     for (size_t i = 0; i < column_names.size(); ++i) {
         properties.emplace_back(column_names[i],
                                 value_from_sqlite_column(stmt, static_cast<int>(i)));
     }
-    return std::make_shared<ObjectValue>(std::move(properties));
+    return std::make_shared<runtime::ObjectValue>(std::move(properties));
 }
 
-PageChunk empty_page_chunk_for_columns(const std::vector<std::string>& column_names) {
-    PageChunk chunk;
+runtime::PageChunk empty_page_chunk_for_columns(const std::vector<std::string>& column_names) {
+    runtime::PageChunk chunk;
     chunk.columns.reserve(column_names.size());
     for (const auto& name : column_names) {
-        chunk.columns.push_back(ColumnVector{.name = name});
+        chunk.columns.push_back(runtime::ColumnVector{.name = name});
     }
     return chunk;
 }
 
-void append_sqlite_stmt_to_page_chunk(sqlite3_stmt* stmt, PageChunk* chunk) {
+void append_sqlite_stmt_to_page_chunk(sqlite3_stmt* stmt, runtime::PageChunk* chunk) {
     if (chunk == nullptr) {
         return;
     }
@@ -368,13 +368,13 @@ void append_sqlite_stmt_to_page_chunk(sqlite3_stmt* stmt, PageChunk* chunk) {
         chunk->columns.reserve(static_cast<size_t>(column_count));
         for (int i = 0; i < column_count; ++i) {
             const char* name = sqlite3_column_name(stmt, i);
-            chunk->columns.push_back(ColumnVector{.name = name == nullptr ? "" : name});
+            chunk->columns.push_back(runtime::ColumnVector{.name = name == nullptr ? "" : name});
         }
     }
     for (size_t i = 0; i < chunk->columns.size(); ++i) {
-        Value value = value_from_sqlite_column(stmt, static_cast<int>(i));
+        runtime::Value value = value_from_sqlite_column(stmt, static_cast<int>(i));
         auto& column = chunk->columns[i];
-        if (column.type == Value::Type::Null && !value.is_null()) {
+        if (column.type == runtime::Value::Type::Null && !value.is_null()) {
             column.type = value.type();
         }
         column.values.push_back(std::move(value));
@@ -382,22 +382,22 @@ void append_sqlite_stmt_to_page_chunk(sqlite3_stmt* stmt, PageChunk* chunk) {
     ++chunk->row_count;
 }
 
-std::shared_ptr<ObjectValue> row_with_group(const std::shared_ptr<ObjectValue>& row,
-                                            const std::vector<std::string>& group_by) {
+std::shared_ptr<runtime::ObjectValue> row_with_group(
+    const std::shared_ptr<runtime::ObjectValue>& row, const std::vector<std::string>& group_by) {
     if (row == nullptr) {
         return nullptr;
     }
-    std::vector<std::pair<std::string, Value>> group_props;
+    std::vector<std::pair<std::string, runtime::Value>> group_props;
     group_props.reserve(group_by.size());
     for (const auto& column : group_by) {
-        const Value* value = row->lookup(column);
+        const runtime::Value* value = row->lookup(column);
         if (value != nullptr) {
             group_props.emplace_back(column, *value);
         }
     }
-    std::vector<std::pair<std::string, Value>> props = row->properties;
-    props.emplace_back("_group", Value::object(std::move(group_props)));
-    return std::make_shared<ObjectValue>(std::move(props));
+    std::vector<std::pair<std::string, runtime::Value>> props = row->properties;
+    props.emplace_back("_group", runtime::Value::object(std::move(group_props)));
+    return std::make_shared<runtime::ObjectValue>(std::move(props));
 }
 
 } // namespace
@@ -424,8 +424,9 @@ absl::StatusOr<TableSchema> SQLiteSource::Schema() const {
     schema.columns.reserve(static_cast<size_t>(column_count));
     for (int i = 0; i < column_count; ++i) {
         const char* name = sqlite3_column_name(stmt_or->get(), i);
-        schema.columns.push_back(
-            {.name = name == nullptr ? "" : name, .type = Value::Type::Null, .nullable = true});
+        schema.columns.push_back({.name = name == nullptr ? "" : name,
+                                  .type = runtime::Value::Type::Null,
+                                  .nullable = true});
     }
     cached_schema_ = schema;
     return schema;
@@ -546,7 +547,7 @@ absl::StatusOr<TableStatistics> SQLiteSource::Statistics() const {
     return statistics;
 }
 
-absl::StatusOr<Value> SQLiteSource::Scan(const ScanRequest& request) {
+absl::StatusOr<runtime::Value> SQLiteSource::Scan(const ScanRequest& request) {
     auto db_or = open_readonly_db(dsn_);
     if (!db_or.ok()) {
         return db_or.status();
@@ -573,7 +574,7 @@ absl::StatusOr<Value> SQLiteSource::Scan(const ScanRequest& request) {
 
     std::vector<std::string> column_names = sqlite_column_names(stmt);
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
     while (true) {
         const int step_rc = sqlite3_step(stmt);
         if (step_rc == SQLITE_DONE) {
@@ -588,18 +589,18 @@ absl::StatusOr<Value> SQLiteSource::Scan(const ScanRequest& request) {
     }
 
     if (request.aggregate.has_value()) {
-        std::vector<TableChunk> chunks;
+        std::vector<runtime::TableChunk> chunks;
         chunks.reserve(rows.size());
         for (auto& row : rows) {
             row = row_with_group(row, request.group_by);
-            TableChunk chunk;
+            runtime::TableChunk chunk;
             chunk.rows.push_back(row);
             chunks.push_back(std::move(chunk));
         }
-        return Value::table_stream("sqlite", std::move(chunks));
+        return runtime::Value::table_stream("sqlite", std::move(chunks));
     }
 
-    return Value::table("sqlite", std::move(rows));
+    return runtime::Value::table("sqlite", std::move(rows));
 }
 
 SQLiteConnectorMetadata::SQLiteConnectorMetadata(SourceSpec spec) : spec_(std::move(spec)) {}
@@ -757,14 +758,14 @@ absl::Status SQLitePageSource::Initialize() {
     return absl::OkStatus();
 }
 
-absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
+absl::StatusOr<std::optional<runtime::Page>> SQLitePageSource::NextPage() {
     if (impl_ == nullptr || impl_->stmt == nullptr) {
         return absl::InvalidArgumentError("sqlite page source is not initialized");
     }
     if (impl_->done) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            Page page;
+            runtime::Page page;
             page.bucket = "sqlite";
             page.chunks.push_back(empty_page_chunk_for_columns(impl_->column_names));
             ++stats_.pages_produced;
@@ -774,8 +775,8 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
         return std::nullopt;
     }
 
-    PageChunk chunk = empty_page_chunk_for_columns(impl_->column_names);
-    std::vector<std::shared_ptr<ObjectValue>> aggregate_rows;
+    runtime::PageChunk chunk = empty_page_chunk_for_columns(impl_->column_names);
+    std::vector<std::shared_ptr<runtime::ObjectValue>> aggregate_rows;
     if (impl_->request.aggregate.has_value()) {
         aggregate_rows.reserve(rows_per_page_);
     }
@@ -803,7 +804,7 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
     if (empty) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            Page page;
+            runtime::Page page;
             page.bucket = "sqlite";
             page.chunks.push_back(std::move(chunk));
             ++stats_.pages_produced;
@@ -814,12 +815,12 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
     }
 
     impl_->emitted_any_row = true;
-    Page page;
+    runtime::Page page;
     if (impl_->request.aggregate.has_value()) {
-        std::vector<TableChunk> chunks;
+        std::vector<runtime::TableChunk> chunks;
         chunks.reserve(aggregate_rows.size());
         for (auto& row : aggregate_rows) {
-            TableChunk aggregate_chunk;
+            runtime::TableChunk aggregate_chunk;
             aggregate_chunk.rows.push_back(std::move(row));
             chunks.push_back(std::move(aggregate_chunk));
         }

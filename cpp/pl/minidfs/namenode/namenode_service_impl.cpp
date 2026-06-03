@@ -523,12 +523,12 @@ void NameNodeServiceImpl::TruncateFile(google::protobuf::RpcController* /*contro
         fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
         return;
     }
-    auto truncate = block_mgr_->truncate_file(
-        inode.value().inode_id,
-        request->length(),
-        [this](const BlockReplica& replica, uint64_t length) {
-            return truncate_replica(metadata_store_, replica, length);
-        });
+    auto truncate =
+        block_mgr_->truncate_file(inode.value().inode_id,
+                                  request->length(),
+                                  [this](const BlockReplica& replica, uint64_t length) {
+                                      return truncate_replica(metadata_store_, replica, length);
+                                  });
     if (truncate.hasError()) {
         fill_status(
             response->mutable_status(), truncate.error().code(), truncate.error().message());
@@ -729,7 +729,7 @@ void DataNodeProtocolServiceImpl::Heartbeat(google::protobuf::RpcController* /*c
         command->set_inode_id(task.inode_id);
         command->set_block_index(task.block_index);
         command->set_target_host(target.value().ip.empty() ? target.value().hostname
-                                                            : target.value().ip);
+                                                           : target.value().ip);
         command->set_target_port(target.value().data_port);
     }
 }
@@ -750,8 +750,8 @@ void DataNodeProtocolServiceImpl::BlockReport(google::protobuf::RpcController* /
         });
     }
 
-    auto reconcile =
-        block_mgr_->reconcile_block_report(request->datanode_id(), reported, request->full_report());
+    auto reconcile = block_mgr_->reconcile_block_report(
+        request->datanode_id(), reported, request->full_report());
     if (reconcile.hasError()) {
         fill_status(
             response->mutable_status(), reconcile.error().code(), reconcile.error().message());

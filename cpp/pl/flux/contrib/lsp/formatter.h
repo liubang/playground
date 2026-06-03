@@ -39,63 +39,63 @@ public:
 
     explicit Formatter(Options opts = {});
 
-    // Format a parsed File AST into canonical source code.
-    [[nodiscard]] std::string format(const File& file);
+    // Format a parsed syntax::File AST into canonical source code.
+    [[nodiscard]] std::string format(const syntax::File& file);
 
 private:
-    // Expression formatting
-    void format_expr(const Expression& expr);
-    void format_identifier(const Identifier& id);
-    void format_array_expr(const ArrayExpr& expr);
-    void format_dict_expr(const DictExpr& expr);
-    void format_function_expr(const FunctionExpr& expr);
-    void format_logical_expr(const LogicalExpr& expr);
-    void format_object_expr(const ObjectExpr& expr);
-    void format_member_expr(const MemberExpr& expr);
-    void format_index_expr(const IndexExpr& expr);
-    void format_binary_expr(const BinaryExpr& expr);
-    void format_unary_expr(const UnaryExpr& expr);
-    void format_pipe_expr(const PipeExpr& expr);
-    void format_call_expr(const CallExpr& expr);
-    void format_conditional_expr(const ConditionalExpr& expr);
-    void format_string_expr(const StringExpr& expr);
-    void format_paren_expr(const ParenExpr& expr);
+    // syntax::Expression formatting
+    void format_expr(const syntax::Expression& expr);
+    void format_identifier(const syntax::Identifier& id);
+    void format_array_expr(const syntax::ArrayExpr& expr);
+    void format_dict_expr(const syntax::DictExpr& expr);
+    void format_function_expr(const syntax::FunctionExpr& expr);
+    void format_logical_expr(const syntax::LogicalExpr& expr);
+    void format_object_expr(const syntax::ObjectExpr& expr);
+    void format_member_expr(const syntax::MemberExpr& expr);
+    void format_index_expr(const syntax::IndexExpr& expr);
+    void format_binary_expr(const syntax::BinaryExpr& expr);
+    void format_unary_expr(const syntax::UnaryExpr& expr);
+    void format_pipe_expr(const syntax::PipeExpr& expr);
+    void format_call_expr(const syntax::CallExpr& expr);
+    void format_conditional_expr(const syntax::ConditionalExpr& expr);
+    void format_string_expr(const syntax::StringExpr& expr);
+    void format_paren_expr(const syntax::ParenExpr& expr);
 
-    // Statement formatting
-    void format_stmt(const Statement& stmt);
-    void format_expr_stmt(const ExprStmt& stmt);
-    void format_variable_assgn(const VariableAssgn& stmt);
-    void format_option_stmt(const OptionStmt& stmt);
-    void format_return_stmt(const ReturnStmt& stmt);
-    void format_testcase_stmt(const TestCaseStmt& stmt);
-    void format_builtin_stmt(const BuiltinStmt& stmt);
+    // syntax::Statement formatting
+    void format_stmt(const syntax::Statement& stmt);
+    void format_expr_stmt(const syntax::ExprStmt& stmt);
+    void format_variable_assgn(const syntax::VariableAssgn& stmt);
+    void format_option_stmt(const syntax::OptionStmt& stmt);
+    void format_return_stmt(const syntax::ReturnStmt& stmt);
+    void format_testcase_stmt(const syntax::TestCaseStmt& stmt);
+    void format_builtin_stmt(const syntax::BuiltinStmt& stmt);
 
     // Other nodes
-    void format_property(const Property& prop);
-    void format_property_key(const PropertyKey& key);
-    void format_block(const Block& block);
-    void format_function_body(const FunctionBody& body);
-    void format_assignment(const Assignment& assgn);
+    void format_property(const syntax::Property& prop);
+    void format_property_key(const syntax::PropertyKey& key);
+    void format_block(const syntax::Block& block);
+    void format_function_body(const syntax::FunctionBody& body);
+    void format_assignment(const syntax::Assignment& assgn);
 
     // Multi-line variants (expanded formatting)
-    void format_call_expr_multiline(const CallExpr& expr);
-    void format_object_expr_multiline(const ObjectExpr& expr);
-    void format_array_expr_multiline(const ArrayExpr& expr);
+    void format_call_expr_multiline(const syntax::CallExpr& expr);
+    void format_object_expr_multiline(const syntax::ObjectExpr& expr);
+    void format_array_expr_multiline(const syntax::ArrayExpr& expr);
 
     // Try to format an expression into a single-line string (for width checking).
     // 当 inline_budget_ > 0 时启用 early-exit：超出预算即停止输出。
-    [[nodiscard]] std::string try_format_inline(const Expression& expr);
-    [[nodiscard]] std::string try_format_property_inline(const Property& prop);
-    [[nodiscard]] std::string try_format_call_inline(const CallExpr& expr);
-    [[nodiscard]] std::string try_format_object_inline(const ObjectExpr& expr);
+    [[nodiscard]] std::string try_format_inline(const syntax::Expression& expr);
+    [[nodiscard]] std::string try_format_property_inline(const syntax::Property& prop);
+    [[nodiscard]] std::string try_format_call_inline(const syntax::CallExpr& expr);
+    [[nodiscard]] std::string try_format_object_inline(const syntax::ObjectExpr& expr);
 
     // Check if a call expression contains any "complex" arguments
     // (pipe expressions, nested calls with many args, objects with multiple props).
-    [[nodiscard]] bool is_complex_call(const CallExpr& expr) const;
-    [[nodiscard]] bool is_complex_expr(const Expression& expr) const;
+    [[nodiscard]] bool is_complex_call(const syntax::CallExpr& expr) const;
+    [[nodiscard]] bool is_complex_expr(const syntax::Expression& expr) const;
 
     // Check if a statement is a "simple" variable assignment (single-line, non-complex init).
-    [[nodiscard]] bool is_simple_variable_assgn(const Statement& stmt);
+    [[nodiscard]] bool is_simple_variable_assgn(const syntax::Statement& stmt);
 
     // Helpers
     void emit(std::string_view s);

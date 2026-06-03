@@ -16,7 +16,7 @@
 
 #include "cpp/pl/flux/syntax/scanner.h"
 
-namespace pl::flux {
+namespace pl::flux::syntax {
 namespace {
 
 TEST(FluxScannerTest, ScansCommentsIdentifiersAndLiterals) {
@@ -125,4 +125,4 @@ TEST(FluxScannerTest, ReturnsIllegalTokenForUnexpectedCharacters) {
 }
 
 } // namespace
-} // namespace pl::flux
+} // namespace pl::flux::syntax
