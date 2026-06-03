@@ -37,21 +37,21 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-01 13:59:28</td>
+            <td class="headerValue">2026-06-03 10:07:37</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryLo">52.9&nbsp;%</td>
-            <td class="headerCovTableEntry">17</td>
-            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">7</td>
+            <td class="headerCovTableEntry">7</td>
           </tr>
           <tr>
             <td></td>
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">48.6&nbsp;%</td>
-            <td class="headerCovTableEntry">212</td>
-            <td class="headerCovTableEntry">103</td>
+            <td class="headerCovTableEntryLo">52.6&nbsp;%</td>
+            <td class="headerCovTableEntry">192</td>
+            <td class="headerCovTableEntry">101</td>
           </tr>
                   <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -119,7 +119,7 @@
 <span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">           9 :     writer_ = std::make_unique&lt;PosixFileSystem&gt;();</span></span>
 <span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">           9 :     auto result = writer_-&gt;open(sst_file_, O_TRUNC | O_WRONLY | O_CREAT, &amp;fd_);</span></span>
 <span id="L50"><span class="lineNum">      50</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           9 :     RETURN_AND_LOG_ON_ERROR(result);</span></span>
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L51"><span class="lineNum">      51</span>                 :             :     RETURN_VOID;</span>
 <span id="L52"><span class="lineNum">      52</span>                 :             : }</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             : </span>
@@ -183,7 +183,7 @@
 <span id="L111"><span class="lineNum">     111</span>                 :             :     // 写入block</span>
 <span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">        3078 :     auto result = writeBlock(data_block_.get(), &amp;pending_handler_);</span></span>
 <span id="L113"><span class="lineNum">     113</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3077 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        3081 :     RETURN_AND_LOG_ON_ERROR(result);</span></span>
-<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L114"><span class="lineNum">     114</span>                 :             :     // 复位标记，下次开始一个新的block</span>
 <span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">        3077 :     pending_index_entry_ = true;</span></span>
 <span id="L116"><span class="lineNum">     116</span>                 :             :     RETURN_VOID;</span>
@@ -283,7 +283,7 @@
 <span id="L210"><span class="lineNum">     210</span>                 :             :     handle-&gt;setSize(content.size());</span>
 <span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">        3102 :     auto result = writer_-&gt;append(fd_, 0, content);</span></span>
 <span id="L212"><span class="lineNum">     212</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3102 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        3102 :     RETURN_AND_LOG_ON_ERROR(result);</span></span>
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L213"><span class="lineNum">     213</span>                 :             : </span>
 <span id="L214"><span class="lineNum">     214</span>                 :             :     // crc</span>
 <span id="L215"><span class="lineNum">     215</span>                 :             :     char trailer[BLOCK_TRAILER_LEN];</span>
@@ -294,7 +294,7 @@
 <span id="L220"><span class="lineNum">     220</span>                 :             :     memcpy(trailer + 1, encode_crc.data(), encode_crc.size());</span>
 <span id="L221"><span class="lineNum">     221</span>   [<span class="tlaGBC" title="Branch 0 was taken 3102 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 3102 times"> + </span>]:<span class="tlaGNC">        6204 :     result = writer_-&gt;append(fd_, 0, std::string_view(trailer, BLOCK_TRAILER_LEN));</span></span>
 <span id="L222"><span class="lineNum">     222</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3102 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        3102 :     RETURN_AND_LOG_ON_ERROR(result);</span></span>
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L223"><span class="lineNum">     223</span>                 :             : </span>
 <span id="L224"><span class="lineNum">     224</span>                 :             :     // 更新下一个block的offset</span>
 <span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">        3102 :     offset_ += content.size() + BLOCK_TRAILER_LEN;</span></span>
@@ -330,12 +330,12 @@
 <span id="L255"><span class="lineNum">     255</span>                 :             :         auto result = writeBlockRaw(</span>
 <span id="L256"><span class="lineNum">     256</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           4 :             filter_builder_-&gt;finish(&amp;filter_buf), CompressionType::NONE, &amp;filter_block_handle);</span></span>
 <span id="L257"><span class="lineNum">     257</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           4 :         RETURN_AND_LOG_ON_ERROR(result);</span></span>
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L258"><span class="lineNum">     258</span>                 :             :     } else {</span>
 <span id="L259"><span class="lineNum">     259</span>                 :             :         // Write empty filter block to make filter_block_handle valid.</span>
 <span id="L260"><span class="lineNum">     260</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :         auto result = writeBlockRaw(&quot;&quot;, CompressionType::NONE, &amp;filter_block_handle);</span></span>
 <span id="L261"><span class="lineNum">     261</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           5 :         RETURN_AND_LOG_ON_ERROR(result);</span></span>
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L262"><span class="lineNum">     262</span>                 :             :     }</span>
 <span id="L263"><span class="lineNum">     263</span>                 :             : </span>
 <span id="L264"><span class="lineNum">     264</span>                 :             :     // 写入index block</span>
@@ -350,7 +350,7 @@
 <span id="L273"><span class="lineNum">     273</span>                 :             :     }</span>
 <span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">           9 :     auto result = writeBlock(index_block_.get(), &amp;index_block_handle);</span></span>
 <span id="L275"><span class="lineNum">     275</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          12 :     RETURN_AND_LOG_ON_ERROR(result);</span></span>
-<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L276"><span class="lineNum">     276</span>                 :             : </span>
 <span id="L277"><span class="lineNum">     277</span>                 :             :     // 写入file meta，使用block格式有crc校验</span>
 <span id="L278"><span class="lineNum">     278</span>                 :             :     FileMeta file_meta;</span>
@@ -370,7 +370,7 @@
 <span id="L292"><span class="lineNum">     292</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     file_meta.encodeTo(&amp;file_meta_content);</span></span>
 <span id="L293"><span class="lineNum">     293</span>   [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 8 times"> + </span>]:<span class="tlaGNC">          16 :     result = writeBlockRaw(file_meta_content, CompressionType::NONE, &amp;file_meta_handle);</span></span>
 <span id="L294"><span class="lineNum">     294</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           8 :     RETURN_AND_LOG_ON_ERROR(result);</span></span>
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L295"><span class="lineNum">     295</span>                 :             : </span>
 <span id="L296"><span class="lineNum">     296</span>                 :             :     // 写入footer</span>
 <span id="L297"><span class="lineNum">     297</span>                 :             :     Footer footer;</span>
@@ -381,11 +381,11 @@
 <span id="L302"><span class="lineNum">     302</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     footer.encodeTo(&amp;footer_content);</span></span>
 <span id="L303"><span class="lineNum">     303</span>   [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 8 times"> + </span>]:<span class="tlaGNC">          16 :     result = writer_-&gt;append(fd_, 0, footer_content);</span></span>
 <span id="L304"><span class="lineNum">     304</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           8 :     RETURN_AND_LOG_ON_ERROR(result);</span></span>
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L305"><span class="lineNum">     305</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     offset_ += footer_content.size();</span></span>
 <span id="L306"><span class="lineNum">     306</span>   [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 8 times"> + </span>]:<span class="tlaGNC">          16 :     result = writer_-&gt;fsync(fd_, 0);</span></span>
 <span id="L307"><span class="lineNum">     307</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           8 :     RETURN_AND_LOG_ON_ERROR(result);</span></span>
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L308"><span class="lineNum">     308</span>                 :             :     RETURN_VOID;</span>
 <span id="L309"><span class="lineNum">     309</span>                 :             : }</span>
 <span id="L310"><span class="lineNum">     310</span>                 :             : </span>

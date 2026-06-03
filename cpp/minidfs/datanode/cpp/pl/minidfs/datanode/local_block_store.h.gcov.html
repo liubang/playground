@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-01 13:59:28</td>
+            <td class="headerValue">2026-06-03 10:07:37</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -136,13 +136,13 @@
 <span id="L65"><span class="lineNum">      65</span>                 :             : </span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : class LocalBlockStore {</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : public:</span>
-<span id="L68"><span class="lineNum">      68</span>   [<span class="tlaGBC" title="Branch 0 was taken 122 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 61 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         366 :     struct Config {</span></span>
+<span id="L68"><span class="lineNum">      68</span>   [<span class="tlaGBC" title="Branch 0 was taken 128 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 64 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         384 :     struct Config {</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :         std::string storage_root;</span>
 <span id="L70"><span class="lineNum">      70</span>                 :             :         uint64_t reserved_bytes = 1 * kGB; // reserved space, refuse writes if below</span>
 <span id="L71"><span class="lineNum">      71</span>                 :             :     };</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : </span>
 <span id="L73"><span class="lineNum">      73</span>                 :             :     explicit LocalBlockStore(Config config);</span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          61 :     ~LocalBlockStore() = default;</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          64 :     ~LocalBlockStore() = default;</span></span>
 <span id="L75"><span class="lineNum">      75</span>                 :             : </span>
 <span id="L76"><span class="lineNum">      76</span>                 :             :     LocalBlockStore(const LocalBlockStore&amp;) = delete;</span>
 <span id="L77"><span class="lineNum">      77</span>                 :             :     LocalBlockStore&amp; operator=(const LocalBlockStore&amp;) = delete;</span>
@@ -176,61 +176,66 @@
 <span id="L105"><span class="lineNum">     105</span>                 :             :     /// Soft-delete a block: move from current/ to trash/.</span>
 <span id="L106"><span class="lineNum">     106</span>                 :             :     pl::Result&lt;pl::Void&gt; delete_block(uint64_t block_id, uint64_t generation_stamp);</span>
 <span id="L107"><span class="lineNum">     107</span>                 :             : </span>
-<span id="L108"><span class="lineNum">     108</span>                 :             :     /// Permanently remove all files in trash/.</span>
-<span id="L109"><span class="lineNum">     109</span>                 :             :     pl::Result&lt;uint32_t&gt; purge_trash();</span>
-<span id="L110"><span class="lineNum">     110</span>                 :             : </span>
-<span id="L111"><span class="lineNum">     111</span>                 :             :     /// Read the full data region of a finalized block.</span>
-<span id="L112"><span class="lineNum">     112</span>                 :             :     /// Returns raw bytes (header excluded).</span>
-<span id="L113"><span class="lineNum">     113</span>                 :             :     pl::Result&lt;std::string&gt; read_block_data(uint64_t block_id, uint64_t generation_stamp);</span>
-<span id="L114"><span class="lineNum">     114</span>                 :             : </span>
-<span id="L115"><span class="lineNum">     115</span>                 :             :     /// Read a specific chunk from a finalized block.</span>
-<span id="L116"><span class="lineNum">     116</span>                 :             :     pl::Result&lt;std::string&gt; read_chunk(uint64_t block_id,</span>
-<span id="L117"><span class="lineNum">     117</span>                 :             :                                        uint64_t generation_stamp,</span>
-<span id="L118"><span class="lineNum">     118</span>                 :             :                                        uint32_t chunk_index);</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :     /// Shrink a finalized block and rebuild its checksums. Idempotent for retries.</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             :     pl::Result&lt;pl::Void&gt; truncate_block(uint64_t block_id,</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             :                                         uint64_t generation_stamp,</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :                                         uint64_t length);</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             : </span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :     /// Permanently remove all files in trash/.</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :     pl::Result&lt;uint32_t&gt; purge_trash();</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : </span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :     /// Read the full data region of a finalized block.</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             :     /// Returns raw bytes (header excluded).</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :     pl::Result&lt;std::string&gt; read_block_data(uint64_t block_id, uint64_t generation_stamp);</span>
 <span id="L119"><span class="lineNum">     119</span>                 :             : </span>
-<span id="L120"><span class="lineNum">     120</span>                 :             :     /// Verify CRC32C integrity of a finalized block.</span>
-<span id="L121"><span class="lineNum">     121</span>                 :             :     pl::Result&lt;bool&gt; verify_block(uint64_t block_id, uint64_t generation_stamp);</span>
-<span id="L122"><span class="lineNum">     122</span>                 :             : </span>
-<span id="L123"><span class="lineNum">     123</span>                 :             :     /// Report all finalized blocks (in current/).</span>
-<span id="L124"><span class="lineNum">     124</span>                 :             :     pl::Result&lt;std::vector&lt;BlockInfo&gt;&gt; report_blocks();</span>
-<span id="L125"><span class="lineNum">     125</span>                 :             : </span>
-<span id="L126"><span class="lineNum">     126</span>                 :             :     /// Check if a block exists in current/.</span>
-<span id="L127"><span class="lineNum">     127</span>                 :             :     bool has_block(uint64_t block_id, uint64_t generation_stamp) const;</span>
-<span id="L128"><span class="lineNum">     128</span>                 :             : </span>
-<span id="L129"><span class="lineNum">     129</span>                 :             :     /// Get available disk space in the storage root.</span>
-<span id="L130"><span class="lineNum">     130</span>                 :             :     pl::Result&lt;uint64_t&gt; available_bytes() const;</span>
-<span id="L131"><span class="lineNum">     131</span>                 :             : </span>
-<span id="L132"><span class="lineNum">     132</span>                 :             :     /// Get the storage root path.</span>
-<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     const std::string&amp; storage_root() const { return config_.storage_root; }</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :             : </span>
-<span id="L135"><span class="lineNum">     135</span>                 :             : private:</span>
-<span id="L136"><span class="lineNum">     136</span>                 :             :     /// Generate the canonical filename for a block.</span>
-<span id="L137"><span class="lineNum">     137</span>                 :             :     static std::string block_filename(uint64_t block_id, uint64_t generation_stamp);</span>
-<span id="L138"><span class="lineNum">     138</span>                 :             : </span>
-<span id="L139"><span class="lineNum">     139</span>                 :             :     /// Get full path for a block in a given subdirectory.</span>
-<span id="L140"><span class="lineNum">     140</span>                 :             :     std::filesystem::path block_path(std::string_view subdir,</span>
-<span id="L141"><span class="lineNum">     141</span>                 :             :                                      uint64_t block_id,</span>
-<span id="L142"><span class="lineNum">     142</span>                 :             :                                      uint64_t generation_stamp) const;</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :     /// Read a specific chunk from a finalized block.</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :     pl::Result&lt;std::string&gt; read_chunk(uint64_t block_id,</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :                                        uint64_t generation_stamp,</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :                                        uint32_t chunk_index);</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             : </span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :     /// Verify CRC32C integrity of a finalized block.</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :     pl::Result&lt;bool&gt; verify_block(uint64_t block_id, uint64_t generation_stamp);</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             : </span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :     /// Report all finalized blocks (in current/).</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :     pl::Result&lt;std::vector&lt;BlockInfo&gt;&gt; report_blocks();</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : </span>
+<span id="L131"><span class="lineNum">     131</span>                 :             :     /// Check if a block exists in current/.</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             :     bool has_block(uint64_t block_id, uint64_t generation_stamp) const;</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : </span>
+<span id="L134"><span class="lineNum">     134</span>                 :             :     /// Get available disk space in the storage root.</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             :     pl::Result&lt;uint64_t&gt; available_bytes() const;</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : </span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :     /// Get the storage root path.</span>
+<span id="L138"><span class="lineNum">     138</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     const std::string&amp; storage_root() const { return config_.storage_root; }</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :             : </span>
+<span id="L140"><span class="lineNum">     140</span>                 :             : private:</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :     /// Generate the canonical filename for a block.</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             :     static std::string block_filename(uint64_t block_id, uint64_t generation_stamp);</span>
 <span id="L143"><span class="lineNum">     143</span>                 :             : </span>
-<span id="L144"><span class="lineNum">     144</span>                 :             :     /// Read the BlockHeader from a file.</span>
-<span id="L145"><span class="lineNum">     145</span>                 :             :     pl::Result&lt;BlockHeader&gt; read_header(const std::filesystem::path&amp; path) const;</span>
-<span id="L146"><span class="lineNum">     146</span>                 :             : </span>
-<span id="L147"><span class="lineNum">     147</span>                 :             :     /// Verify CRC32C integrity for a block file at an explicit path.</span>
-<span id="L148"><span class="lineNum">     148</span>                 :             :     pl::Result&lt;bool&gt; verify_block_file(const std::filesystem::path&amp; path) const;</span>
-<span id="L149"><span class="lineNum">     149</span>                 :             : </span>
-<span id="L150"><span class="lineNum">     150</span>                 :             :     /// Write the BlockHeader to a file (at offset 0).</span>
-<span id="L151"><span class="lineNum">     151</span>                 :             :     pl::Result&lt;pl::Void&gt; write_header(const std::filesystem::path&amp; path,</span>
-<span id="L152"><span class="lineNum">     152</span>                 :             :                                       const BlockHeader&amp; header) const;</span>
-<span id="L153"><span class="lineNum">     153</span>                 :             : </span>
-<span id="L154"><span class="lineNum">     154</span>                 :             :     Config config_;</span>
-<span id="L155"><span class="lineNum">     155</span>                 :             :     std::filesystem::path root_path_;</span>
-<span id="L156"><span class="lineNum">     156</span>                 :             :     std::filesystem::path tmp_path_;</span>
-<span id="L157"><span class="lineNum">     157</span>                 :             :     std::filesystem::path current_path_;</span>
-<span id="L158"><span class="lineNum">     158</span>                 :             :     std::filesystem::path trash_path_;</span>
-<span id="L159"><span class="lineNum">     159</span>                 :             :     mutable std::mutex mu_;</span>
-<span id="L160"><span class="lineNum">     160</span>                 :             : };</span>
-<span id="L161"><span class="lineNum">     161</span>                 :             : </span>
-<span id="L162"><span class="lineNum">     162</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             :     /// Get full path for a block in a given subdirectory.</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             :     std::filesystem::path block_path(std::string_view subdir,</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             :                                      uint64_t block_id,</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             :                                      uint64_t generation_stamp) const;</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : </span>
+<span id="L149"><span class="lineNum">     149</span>                 :             :     /// Read the BlockHeader from a file.</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :     pl::Result&lt;BlockHeader&gt; read_header(const std::filesystem::path&amp; path) const;</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             : </span>
+<span id="L152"><span class="lineNum">     152</span>                 :             :     /// Verify CRC32C integrity for a block file at an explicit path.</span>
+<span id="L153"><span class="lineNum">     153</span>                 :             :     pl::Result&lt;bool&gt; verify_block_file(const std::filesystem::path&amp; path) const;</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             : </span>
+<span id="L155"><span class="lineNum">     155</span>                 :             :     /// Write the BlockHeader to a file (at offset 0).</span>
+<span id="L156"><span class="lineNum">     156</span>                 :             :     pl::Result&lt;pl::Void&gt; write_header(const std::filesystem::path&amp; path,</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :                                       const BlockHeader&amp; header) const;</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             : </span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :     Config config_;</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :     std::filesystem::path root_path_;</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             :     std::filesystem::path tmp_path_;</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             :     std::filesystem::path current_path_;</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             :     std::filesystem::path trash_path_;</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :     mutable std::mutex mu_;</span>
+<span id="L165"><span class="lineNum">     165</span>                 :             : };</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             : </span>
+<span id="L167"><span class="lineNum">     167</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>
