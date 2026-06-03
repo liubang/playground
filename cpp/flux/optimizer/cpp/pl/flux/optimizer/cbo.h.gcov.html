@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-01 13:59:28</td>
+            <td class="headerValue">2026-06-03 10:07:37</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -104,7 +104,7 @@
 <span id="L33"><span class="lineNum">      33</span>                 :             :     bool collect_connector_stats = true;</span>
 <span id="L34"><span class="lineNum">      34</span>                 :             : };</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             : </span>
-<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC tlaBgGNC">        2404 : struct PlanStatistics {</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC tlaBgGNC">        3436 : struct PlanStatistics {</span></span>
 <span id="L37"><span class="lineNum">      37</span>                 :             :     std::optional&lt;double&gt; row_count{};</span>
 <span id="L38"><span class="lineNum">      38</span>                 :             :     std::optional&lt;double&gt; size_bytes{};</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             :     std::vector&lt;connector::ColumnStatistics&gt; columns{};</span>
@@ -127,7 +127,7 @@
 <span id="L56"><span class="lineNum">      56</span>                 :             :     std::string reason{};</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : };</span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : </span>
-<span id="L59"><span class="lineNum">      59</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 388 times"> + </span>]:<span class="tlaGNC">         388 : struct CboPlanResult {</span></span>
+<span id="L59"><span class="lineNum">      59</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 345 times"> + </span>]:<span class="tlaGNC">         345 : struct CboPlanResult {</span></span>
 <span id="L60"><span class="lineNum">      60</span>                 :             :     PlanOptimizerResult rbo_result;</span>
 <span id="L61"><span class="lineNum">      61</span>                 :             :     std::string decision;</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :     plan::CostEstimate cost;</span>
