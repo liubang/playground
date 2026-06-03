@@ -26,15 +26,15 @@
 
 namespace {
 
-std::optional<pl::flux::FluxOutputFormat> parse_output_format(std::string_view value) {
+std::optional<pl::flux::cli::FluxOutputFormat> parse_output_format(std::string_view value) {
     if (value == "human") {
-        return pl::flux::FluxOutputFormat::Human;
+        return pl::flux::cli::FluxOutputFormat::Human;
     }
     if (value == "csv") {
-        return pl::flux::FluxOutputFormat::Csv;
+        return pl::flux::cli::FluxOutputFormat::Csv;
     }
     if (value == "json") {
-        return pl::flux::FluxOutputFormat::Json;
+        return pl::flux::cli::FluxOutputFormat::Json;
     }
     return std::nullopt;
 }
@@ -57,7 +57,7 @@ void print_usage(std::ostream& out) {
 }
 
 int run_ast_command(int argc, char* argv[]) {
-    pl::flux::FluxAstOptions options;
+    pl::flux::cli::FluxAstOptions options;
     std::optional<std::string> eval_source;
     std::optional<std::string> file_name;
 
@@ -109,14 +109,14 @@ int run_ast_command(int argc, char* argv[]) {
         source = read_all(std::cin);
     }
 
-    auto result = pl::flux::DumpFluxAstSource(source, name, options);
+    auto result = pl::flux::cli::DumpFluxAstSource(source, name, options);
     std::cout << result.output;
     std::cerr << result.error;
     return result.exit_code;
 }
 
 int run_analyze_command(int argc, char* argv[]) {
-    pl::flux::FluxAnalyzeOptions options;
+    pl::flux::cli::FluxAnalyzeOptions options;
     std::optional<std::string> eval_source;
     std::optional<std::string> file_name;
 
@@ -168,7 +168,7 @@ int run_analyze_command(int argc, char* argv[]) {
         source = read_all(std::cin);
     }
 
-    auto result = pl::flux::AnalyzeFluxSource(source, name, options);
+    auto result = pl::flux::cli::AnalyzeFluxSource(source, name, options);
     std::cout << result.output;
     std::cerr << result.error;
     return result.exit_code;
@@ -190,7 +190,7 @@ int run_builtins_command(int argc, char* argv[]) {
         print_usage(std::cerr);
         return 1;
     }
-    auto result = pl::flux::DumpFluxBuiltinCatalog(json);
+    auto result = pl::flux::cli::DumpFluxBuiltinCatalog(json);
     std::cout << result.output;
     std::cerr << result.error;
     return result.exit_code;
@@ -209,7 +209,7 @@ int main(int argc, char* argv[]) {
         return run_builtins_command(argc, argv);
     }
 
-    pl::flux::FluxCliOptions options;
+    pl::flux::cli::FluxCliOptions options;
     bool repl = false;
     std::optional<std::string> eval_source;
     std::optional<std::string> file_name;
@@ -302,7 +302,7 @@ int main(int argc, char* argv[]) {
 
     if (repl || (!file_name.has_value() && !eval_source.has_value())) {
         options.table_borders = isatty(STDOUT_FILENO) != 0;
-        return pl::flux::RunFluxRepl(
+        return pl::flux::cli::RunFluxRepl(
             std::cin, std::cout, std::cerr, isatty(STDIN_FILENO) != 0, options);
     }
 
@@ -321,8 +321,8 @@ int main(int argc, char* argv[]) {
     }
 
     options.table_borders = isatty(STDOUT_FILENO) != 0;
-    auto env = pl::flux::MakeFluxCliEnvironment(options);
-    auto result = pl::flux::ExecuteFluxSource(source, name, env, options);
+    auto env = pl::flux::cli::MakeFluxCliEnvironment(options);
+    auto result = pl::flux::cli::ExecuteFluxSource(source, name, env, options);
     std::cout << result.output;
     std::cerr << result.error;
     return result.exit_code;

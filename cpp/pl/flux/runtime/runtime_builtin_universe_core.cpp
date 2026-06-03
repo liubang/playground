@@ -25,7 +25,7 @@
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
 
 Value make_builtin_value(const std::string& name,
@@ -110,4 +110,4 @@ bool InstallKnownUniverseCoreBuiltin(Environment& env, const std::string& name) 
     return false;
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

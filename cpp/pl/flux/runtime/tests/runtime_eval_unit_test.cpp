@@ -25,16 +25,17 @@
 #include "cpp/pl/flux/runtime/runtime_eval.h"
 #include "cpp/pl/flux/syntax/parser.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 namespace {
 
-const Expression& ParseAssignmentInit(const std::string& source) {
-    static std::unique_ptr<File> file_holder;
-    Parser parser(source);
+const syntax::Expression& ParseAssignmentInit(const std::string& source) {
+    static std::unique_ptr<syntax::File> file_holder;
+    syntax::Parser parser(source);
     file_holder = parser.parse_file("eval_test.flux");
     EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
     EXPECT_EQ(1, file_holder->body.size());
-    const auto& assignment = std::get<std::unique_ptr<VariableAssgn>>(file_holder->body[0]->stmt);
+    const auto& assignment =
+        std::get<std::unique_ptr<syntax::VariableAssgn>>(file_holder->body[0]->stmt);
     EXPECT_NE(assignment, nullptr);
     return *assignment->init;
 }
@@ -2301,4 +2302,4 @@ TEST(RuntimeEvalTest, ReportsMissingBindings) {
 }
 
 } // namespace
-} // namespace pl::flux
+} // namespace pl::flux::runtime

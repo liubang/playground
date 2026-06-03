@@ -77,7 +77,7 @@ TEST(MySQLSourceTest, ScansFixtureTableIntoTableValue) {
     auto value_or = source.Scan({});
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(6, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
@@ -102,14 +102,14 @@ TEST(MySQLSourceTest, ReportsFixtureSchemaColumnNames) {
     ASSERT_TRUE(schema_or.ok()) << schema_or.status();
     ASSERT_EQ(7, schema_or->columns.size());
     EXPECT_EQ("_time", schema_or->columns[0].name);
-    EXPECT_EQ(Value::Type::Time, schema_or->columns[0].type);
+    EXPECT_EQ(runtime::Value::Type::Time, schema_or->columns[0].type);
     EXPECT_EQ("host", schema_or->columns[1].name);
     EXPECT_EQ("region", schema_or->columns[2].name);
     EXPECT_EQ("usage", schema_or->columns[3].name);
     EXPECT_EQ("cores", schema_or->columns[4].name);
-    EXPECT_EQ(Value::Type::UInt, schema_or->columns[4].type);
+    EXPECT_EQ(runtime::Value::Type::UInt, schema_or->columns[4].type);
     EXPECT_EQ("active", schema_or->columns[5].name);
-    EXPECT_EQ(Value::Type::Bool, schema_or->columns[5].type);
+    EXPECT_EQ(runtime::Value::Type::Bool, schema_or->columns[5].type);
     EXPECT_EQ("note", schema_or->columns[6].name);
     EXPECT_TRUE(schema_or->columns[6].nullable);
 }
@@ -232,7 +232,7 @@ TEST(MySQLSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     request.predicates.push_back({
         .op = PredicateOp::Eq,
         .column = "host",
-        .literal = Value::string("edge-1"),
+        .literal = runtime::Value::string("edge-1"),
     });
     request.order_by.push_back({
         .column = "usage",
@@ -243,7 +243,7 @@ TEST(MySQLSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     auto value_or = source.Scan(request);
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(1, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
@@ -265,20 +265,20 @@ TEST(MySQLSourceTest, MapsMySQLNativeTypesToFluxValues) {
 
     ASSERT_TRUE(schema_or.ok()) << schema_or.status();
     ASSERT_EQ(11, schema_or->columns.size());
-    EXPECT_EQ(Value::Type::Bool, schema_or->columns[1].type);
-    EXPECT_EQ(Value::Type::Int, schema_or->columns[2].type);
-    EXPECT_EQ(Value::Type::UInt, schema_or->columns[3].type);
-    EXPECT_EQ(Value::Type::String, schema_or->columns[4].type);
-    EXPECT_EQ(Value::Type::String, schema_or->columns[5].type);
-    EXPECT_EQ(Value::Type::String, schema_or->columns[6].type);
-    EXPECT_EQ(Value::Type::Time, schema_or->columns[7].type);
-    EXPECT_EQ(Value::Type::Time, schema_or->columns[8].type);
+    EXPECT_EQ(runtime::Value::Type::Bool, schema_or->columns[1].type);
+    EXPECT_EQ(runtime::Value::Type::Int, schema_or->columns[2].type);
+    EXPECT_EQ(runtime::Value::Type::UInt, schema_or->columns[3].type);
+    EXPECT_EQ(runtime::Value::Type::String, schema_or->columns[4].type);
+    EXPECT_EQ(runtime::Value::Type::String, schema_or->columns[5].type);
+    EXPECT_EQ(runtime::Value::Type::String, schema_or->columns[6].type);
+    EXPECT_EQ(runtime::Value::Type::Time, schema_or->columns[7].type);
+    EXPECT_EQ(runtime::Value::Type::Time, schema_or->columns[8].type);
     EXPECT_TRUE(schema_or->columns[10].nullable);
 
     auto value_or = source.Scan({});
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(1, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
@@ -316,7 +316,7 @@ TEST(MySQLSourceTest, PushesDownDistinctColumn) {
     auto value_or = source.Scan(request);
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(4, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
@@ -350,7 +350,7 @@ TEST(MySQLSourceTest, PushesDownGroupedAggregate) {
     auto value_or = source.Scan(request);
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
-    ASSERT_EQ(Value::Type::Table, value_or->type());
+    ASSERT_EQ(runtime::Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
     ASSERT_EQ(2, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);

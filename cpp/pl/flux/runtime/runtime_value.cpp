@@ -24,7 +24,7 @@
 
 #include "cpp/pl/flux/common/compat.h"
 
-namespace pl::flux {
+namespace pl::flux::runtime {
 
 namespace {
 
@@ -456,4 +456,4 @@ std::string FunctionValue::string() const {
     return kind == Kind::Builtin ? "<builtin " + name + ">" : "<function " + name + ">";
 }
 
-} // namespace pl::flux
+} // namespace pl::flux::runtime

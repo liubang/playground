@@ -24,8 +24,8 @@
 #include <string_view>
 #include <vector>
 
-#include "cpp/pl/minidfs/common/types.h"
 #include "cpp/pl/minidfs/client/dfs_output_stream.h"
+#include "cpp/pl/minidfs/common/types.h"
 #include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {

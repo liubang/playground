@@ -32,7 +32,7 @@
 namespace pl::flux::analysis {
 namespace {
 
-bool position_in_range(uint32_t line, uint32_t column, const SourceLocation& loc) {
+bool position_in_range(uint32_t line, uint32_t column, const syntax::SourceLocation& loc) {
     if (line < loc.start.line || line > loc.end.line) {
         return false;
     }
@@ -45,40 +45,40 @@ bool position_in_range(uint32_t line, uint32_t column, const SourceLocation& loc
     return true;
 }
 
-uint64_t location_span(const SourceLocation& loc) {
+uint64_t location_span(const syntax::SourceLocation& loc) {
     const auto line_span = static_cast<uint64_t>(loc.end.line - loc.start.line);
     const uint64_t col_span =
         loc.end.column >= loc.start.column ? loc.end.column - loc.start.column : 0;
     return line_span * 1000000ULL + col_span;
 }
 
-SourceLocation name_location(const SourceLocation& loc, std::string_view name) {
-    SourceLocation result = loc;
+syntax::SourceLocation name_location(const syntax::SourceLocation& loc, std::string_view name) {
+    syntax::SourceLocation result = loc;
     result.end.line = result.start.line;
     result.end.column = result.start.column + static_cast<uint32_t>(name.size());
     return result;
 }
 
-SourceLocation offset_name_location(const SourceLocation& loc,
-                                    uint32_t offset,
-                                    std::string_view name) {
-    SourceLocation result = loc;
+syntax::SourceLocation offset_name_location(const syntax::SourceLocation& loc,
+                                            uint32_t offset,
+                                            std::string_view name) {
+    syntax::SourceLocation result = loc;
     result.start.column += offset;
     result.end.line = result.start.line;
     result.end.column = result.start.column + static_cast<uint32_t>(name.size());
     return result;
 }
 
-std::string property_name(const PropertyKey& key) {
-    if (key.type == PropertyKey::Type::Identifier) {
-        const auto& id = *std::get<std::unique_ptr<Identifier>>(key.key);
+std::string property_name(const syntax::PropertyKey& key) {
+    if (key.type == syntax::PropertyKey::Type::Identifier) {
+        const auto& id = *std::get<std::unique_ptr<syntax::Identifier>>(key.key);
         return id.name;
     }
-    const auto& str = *std::get<std::unique_ptr<StringLit>>(key.key);
+    const auto& str = *std::get<std::unique_ptr<syntax::StringLit>>(key.key);
     return str.value;
 }
 
-std::string import_binding_name(const ImportDeclaration& imp) {
+std::string import_binding_name(const syntax::ImportDeclaration& imp) {
     if (imp.alias && !imp.alias->name.empty()) {
         return imp.alias->name;
     }
@@ -90,7 +90,8 @@ std::string import_binding_name(const ImportDeclaration& imp) {
     return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
-SourceLocation import_binding_location(const ImportDeclaration& imp, std::string_view name) {
+syntax::SourceLocation import_binding_location(const syntax::ImportDeclaration& imp,
+                                               std::string_view name) {
     if (imp.alias && !imp.alias->name.empty()) {
         return offset_name_location(imp.loc, 7, name);
     }
@@ -102,11 +103,11 @@ SourceLocation import_binding_location(const ImportDeclaration& imp, std::string
     return name_location(imp.loc, name);
 }
 
-bool is_named_call_argument(const Expression& expr) {
-    if (expr.type != Expression::Type::ObjectExpr) {
+bool is_named_call_argument(const syntax::Expression& expr) {
+    if (expr.type != syntax::Expression::Type::ObjectExpr) {
         return false;
     }
-    const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.expr);
+    const auto& obj = *std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.expr);
     return obj.with == nullptr;
 }
 
@@ -146,7 +147,7 @@ std::optional<std::string> closest_name(std::string_view target,
 
 struct ResolvedCallee {
     const BuiltinSignature* sig = nullptr;
-    SourceLocation location;
+    syntax::SourceLocation location;
     size_t package_definition_id = 0;
     std::string package;
     std::string member;
@@ -323,7 +324,7 @@ public:
     explicit Binder(SemanticAnalyzer::Options options = {})
         : source_schema_resolver_(std::move(options.source_base_dir)) {}
 
-    AnalysisResult Bind(const File& file) {
+    AnalysisResult Bind(const syntax::File& file) {
         push_scope(file.loc);
         bind_imports(file);
         predeclare_top_level_bindings(file);
@@ -343,7 +344,7 @@ private:
         std::unordered_map<std::string, size_t> definitions{};
     };
 
-    void bind_imports(const File& file) {
+    void bind_imports(const syntax::File& file) {
         for (const auto& imp : file.imports) {
             if (!imp || !imp->path) {
                 continue;
@@ -360,14 +361,14 @@ private:
         }
     }
 
-    void predeclare_top_level_bindings(const File& file) {
+    void predeclare_top_level_bindings(const syntax::File& file) {
         for (const auto& stmt : file.body) {
             if (!stmt) {
                 continue;
             }
             switch (stmt->type) {
-                case Statement::Type::VariableAssignment: {
-                    const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
+                case syntax::Statement::Type::VariableAssignment: {
+                    const auto& va = *std::get<std::unique_ptr<syntax::VariableAssgn>>(stmt->stmt);
                     if (va.id && !va.id->name.empty()) {
                         predeclare(va.id->name,
                                    SymbolKind::Variable,
@@ -375,8 +376,8 @@ private:
                     }
                     break;
                 }
-                case Statement::Type::BuiltinStatement: {
-                    const auto& bi = *std::get<std::unique_ptr<BuiltinStmt>>(stmt->stmt);
+                case syntax::Statement::Type::BuiltinStatement: {
+                    const auto& bi = *std::get<std::unique_ptr<syntax::BuiltinStmt>>(stmt->stmt);
                     if (bi.id && !bi.id->name.empty()) {
                         const uint32_t offset =
                             stmt->loc.start.column + 8 <= stmt->loc.end.column ? 8U : 0U;
@@ -387,8 +388,8 @@ private:
                     }
                     break;
                 }
-                case Statement::Type::TestCaseStatement: {
-                    const auto& tc = *std::get<std::unique_ptr<TestCaseStmt>>(stmt->stmt);
+                case syntax::Statement::Type::TestCaseStatement: {
+                    const auto& tc = *std::get<std::unique_ptr<syntax::TestCaseStmt>>(stmt->stmt);
                     if (tc.id && !tc.id->name.empty()) {
                         const uint32_t offset =
                             stmt->loc.start.column + 9 <= stmt->loc.end.column ? 9U : 0U;
@@ -404,50 +405,52 @@ private:
         }
     }
 
-    void visit_statement(const Statement& stmt) {
+    void visit_statement(const syntax::Statement& stmt) {
         switch (stmt.type) {
-            case Statement::Type::VariableAssignment:
-                visit_variable_assignment(*std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt),
-                                          stmt.loc);
+            case syntax::Statement::Type::VariableAssignment:
+                visit_variable_assignment(
+                    *std::get<std::unique_ptr<syntax::VariableAssgn>>(stmt.stmt), stmt.loc);
                 break;
-            case Statement::Type::OptionStatement:
-                visit_option_statement(*std::get<std::unique_ptr<OptionStmt>>(stmt.stmt), stmt.loc);
+            case syntax::Statement::Type::OptionStatement:
+                visit_option_statement(*std::get<std::unique_ptr<syntax::OptionStmt>>(stmt.stmt),
+                                       stmt.loc);
                 break;
-            case Statement::Type::BuiltinStatement:
-                visit_builtin_statement(*std::get<std::unique_ptr<BuiltinStmt>>(stmt.stmt),
+            case syntax::Statement::Type::BuiltinStatement:
+                visit_builtin_statement(*std::get<std::unique_ptr<syntax::BuiltinStmt>>(stmt.stmt),
                                         stmt.loc);
                 break;
-            case Statement::Type::ExpressionStatement: {
-                const auto& es = *std::get<std::unique_ptr<ExprStmt>>(stmt.stmt);
+            case syntax::Statement::Type::ExpressionStatement: {
+                const auto& es = *std::get<std::unique_ptr<syntax::ExprStmt>>(stmt.stmt);
                 if (es.expression) {
                     visit_expression(*es.expression);
                 }
                 break;
             }
-            case Statement::Type::ReturnStatement: {
-                const auto& ret = *std::get<std::unique_ptr<ReturnStmt>>(stmt.stmt);
+            case syntax::Statement::Type::ReturnStatement: {
+                const auto& ret = *std::get<std::unique_ptr<syntax::ReturnStmt>>(stmt.stmt);
                 if (ret.argument) {
                     visit_expression(*ret.argument);
                 }
                 break;
             }
-            case Statement::Type::TestCaseStatement:
-                visit_testcase_statement(*std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt),
-                                         stmt.loc);
+            case syntax::Statement::Type::TestCaseStatement:
+                visit_testcase_statement(
+                    *std::get<std::unique_ptr<syntax::TestCaseStmt>>(stmt.stmt), stmt.loc);
                 break;
-            case Statement::Type::BadStatement:
+            case syntax::Statement::Type::BadStatement:
                 break;
         }
     }
 
-    void visit_variable_assignment(const VariableAssgn& va, const SourceLocation& loc) {
+    void visit_variable_assignment(const syntax::VariableAssgn& va,
+                                   const syntax::SourceLocation& loc) {
         auto init_type = va.init ? visit_expression(*va.init) : Type::Unknown();
         if (va.id && !va.id->name.empty()) {
-            auto params =
-                va.init && va.init->type == Expression::Type::FunctionExpr
-                    ? function_param_names(*std::get<std::unique_ptr<FunctionExpr>>(va.init->expr))
-                    : std::vector<std::string>{};
-            const auto kind = va.init && va.init->type == Expression::Type::FunctionExpr
+            auto params = va.init && va.init->type == syntax::Expression::Type::FunctionExpr
+                              ? function_param_names(
+                                    *std::get<std::unique_ptr<syntax::FunctionExpr>>(va.init->expr))
+                              : std::vector<std::string>{};
+            const auto kind = va.init && va.init->type == syntax::Expression::Type::FunctionExpr
                                   ? SymbolKind::Function
                                   : SymbolKind::Variable;
             if (update_predeclared(va.id->name, kind, std::move(params), std::move(init_type))) {
@@ -463,12 +466,13 @@ private:
         }
     }
 
-    void visit_option_statement(const OptionStmt& opt, const SourceLocation& loc) {
+    void visit_option_statement(const syntax::OptionStmt& opt, const syntax::SourceLocation& loc) {
         if (!opt.assignment) {
             return;
         }
-        if (opt.assignment->type == Assignment::Type::VariableAssignment) {
-            const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(opt.assignment->value);
+        if (opt.assignment->type == syntax::Assignment::Type::VariableAssignment) {
+            const auto& va =
+                *std::get<std::unique_ptr<syntax::VariableAssgn>>(opt.assignment->value);
             auto init_type = va.init ? visit_expression(*va.init) : Type::Unknown();
             if (va.id && !va.id->name.empty()) {
                 define(va.id->name,
@@ -482,7 +486,7 @@ private:
             return;
         }
 
-        const auto& ma = *std::get<std::unique_ptr<MemberAssgn>>(opt.assignment->value);
+        const auto& ma = *std::get<std::unique_ptr<syntax::MemberAssgn>>(opt.assignment->value);
         if (ma.member) {
             visit_member_assignment_target(*ma.member);
         }
@@ -491,7 +495,7 @@ private:
         }
     }
 
-    void visit_builtin_statement(const BuiltinStmt& bi, const SourceLocation& loc) {
+    void visit_builtin_statement(const syntax::BuiltinStmt& bi, const syntax::SourceLocation& loc) {
         if (!bi.id || bi.id->name.empty()) {
             return;
         }
@@ -508,7 +512,8 @@ private:
                Type::Dynamic());
     }
 
-    void visit_testcase_statement(const TestCaseStmt& tc, const SourceLocation& loc) {
+    void visit_testcase_statement(const syntax::TestCaseStmt& tc,
+                                  const syntax::SourceLocation& loc) {
         if (tc.id && !tc.id->name.empty()) {
             if (update_predeclared(tc.id->name, SymbolKind::Function, {}, Type::Unknown())) {
                 if (tc.block) {
@@ -525,7 +530,7 @@ private:
         }
     }
 
-    void visit_block(const Block& block) {
+    void visit_block(const syntax::Block& block) {
         push_scope(block.loc);
         for (const auto& stmt : block.body) {
             if (stmt) {
@@ -535,94 +540,101 @@ private:
         pop_scope();
     }
 
-    Type visit_expression(const Expression& expr) {
+    Type visit_expression(const syntax::Expression& expr) {
         Type type = Type::Unknown();
         switch (expr.type) {
-            case Expression::Type::Identifier:
+            case syntax::Expression::Type::Identifier:
                 type = visit_identifier_expression(expr, ReferenceKind::Identifier);
                 break;
-            case Expression::Type::CallExpr:
-                type = visit_call_expression(
-                    *std::get<std::unique_ptr<CallExpr>>(expr.expr), false, Type::Unknown());
+            case syntax::Expression::Type::CallExpr:
+                type =
+                    visit_call_expression(*std::get<std::unique_ptr<syntax::CallExpr>>(expr.expr),
+                                          false,
+                                          Type::Unknown());
                 break;
-            case Expression::Type::PipeExpr:
-                type = visit_pipe_expression(*std::get<std::unique_ptr<PipeExpr>>(expr.expr));
+            case syntax::Expression::Type::PipeExpr:
+                type =
+                    visit_pipe_expression(*std::get<std::unique_ptr<syntax::PipeExpr>>(expr.expr));
                 break;
-            case Expression::Type::MemberExpr:
-                type = visit_member_expression(*std::get<std::unique_ptr<MemberExpr>>(expr.expr),
-                                               expr.loc);
+            case syntax::Expression::Type::MemberExpr:
+                type = visit_member_expression(
+                    *std::get<std::unique_ptr<syntax::MemberExpr>>(expr.expr), expr.loc);
                 break;
-            case Expression::Type::FunctionExpr:
+            case syntax::Expression::Type::FunctionExpr:
                 type = visit_function_expression(
-                    *std::get<std::unique_ptr<FunctionExpr>>(expr.expr), expr.loc, nullptr);
+                    *std::get<std::unique_ptr<syntax::FunctionExpr>>(expr.expr), expr.loc, nullptr);
                 break;
-            case Expression::Type::ObjectExpr:
-                type = visit_object_expression(*std::get<std::unique_ptr<ObjectExpr>>(expr.expr),
-                                               expr.loc);
+            case syntax::Expression::Type::ObjectExpr:
+                type = visit_object_expression(
+                    *std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.expr), expr.loc);
                 break;
-            case Expression::Type::ArrayExpr:
-                type = visit_array_expression(*std::get<std::unique_ptr<ArrayExpr>>(expr.expr));
+            case syntax::Expression::Type::ArrayExpr:
+                type = visit_array_expression(
+                    *std::get<std::unique_ptr<syntax::ArrayExpr>>(expr.expr));
                 break;
-            case Expression::Type::DictExpr:
-                type = visit_dict_expression(*std::get<std::unique_ptr<DictExpr>>(expr.expr));
+            case syntax::Expression::Type::DictExpr:
+                type =
+                    visit_dict_expression(*std::get<std::unique_ptr<syntax::DictExpr>>(expr.expr));
                 break;
-            case Expression::Type::IndexExpr:
-                type = visit_index_expression(*std::get<std::unique_ptr<IndexExpr>>(expr.expr));
+            case syntax::Expression::Type::IndexExpr:
+                type = visit_index_expression(
+                    *std::get<std::unique_ptr<syntax::IndexExpr>>(expr.expr));
                 break;
-            case Expression::Type::BinaryExpr:
-                type = visit_binary_expression(*std::get<std::unique_ptr<BinaryExpr>>(expr.expr),
-                                               expr.loc);
+            case syntax::Expression::Type::BinaryExpr:
+                type = visit_binary_expression(
+                    *std::get<std::unique_ptr<syntax::BinaryExpr>>(expr.expr), expr.loc);
                 break;
-            case Expression::Type::LogicalExpr:
-                type = visit_logical_expression(*std::get<std::unique_ptr<LogicalExpr>>(expr.expr),
-                                                expr.loc);
+            case syntax::Expression::Type::LogicalExpr:
+                type = visit_logical_expression(
+                    *std::get<std::unique_ptr<syntax::LogicalExpr>>(expr.expr), expr.loc);
                 break;
-            case Expression::Type::UnaryExpr:
-                type = visit_unary_expression(*std::get<std::unique_ptr<UnaryExpr>>(expr.expr),
-                                              expr.loc);
+            case syntax::Expression::Type::UnaryExpr:
+                type = visit_unary_expression(
+                    *std::get<std::unique_ptr<syntax::UnaryExpr>>(expr.expr), expr.loc);
                 break;
-            case Expression::Type::ConditionalExpr:
+            case syntax::Expression::Type::ConditionalExpr:
                 type = visit_conditional_expression(
-                    *std::get<std::unique_ptr<ConditionalExpr>>(expr.expr), expr.loc);
+                    *std::get<std::unique_ptr<syntax::ConditionalExpr>>(expr.expr), expr.loc);
                 break;
-            case Expression::Type::ParenExpr: {
-                const auto& paren = *std::get<std::unique_ptr<ParenExpr>>(expr.expr);
+            case syntax::Expression::Type::ParenExpr: {
+                const auto& paren = *std::get<std::unique_ptr<syntax::ParenExpr>>(expr.expr);
                 if (paren.expression) {
                     type = visit_expression(*paren.expression);
                 }
                 break;
             }
-            case Expression::Type::StringExpr:
-                type = visit_string_expression(*std::get<std::unique_ptr<StringExpr>>(expr.expr));
+            case syntax::Expression::Type::StringExpr:
+                type = visit_string_expression(
+                    *std::get<std::unique_ptr<syntax::StringExpr>>(expr.expr));
                 break;
-            case Expression::Type::IntegerLit:
+            case syntax::Expression::Type::IntegerLit:
                 type = Type::Scalar(TypeKind::Int);
                 break;
-            case Expression::Type::FloatLit:
+            case syntax::Expression::Type::FloatLit:
                 type = Type::Scalar(TypeKind::Float);
                 break;
-            case Expression::Type::StringLit:
+            case syntax::Expression::Type::StringLit:
                 type = Type::Scalar(TypeKind::String);
                 break;
-            case Expression::Type::DurationLit:
+            case syntax::Expression::Type::DurationLit:
                 type = Type::Scalar(TypeKind::Duration);
                 break;
-            case Expression::Type::UnsignedIntegerLit:
+            case syntax::Expression::Type::UnsignedIntegerLit:
                 type = Type::Scalar(TypeKind::UInt);
                 break;
-            case Expression::Type::BooleanLit:
+            case syntax::Expression::Type::BooleanLit:
                 type = Type::Scalar(TypeKind::Bool);
                 break;
-            case Expression::Type::DateTimeLit:
+            case syntax::Expression::Type::DateTimeLit:
                 type = Type::Scalar(TypeKind::Time);
                 break;
-            case Expression::Type::RegexpLit:
+            case syntax::Expression::Type::RegexpLit:
                 type = Type::Scalar(TypeKind::Regexp);
                 break;
-            case Expression::Type::LabelLit:
+            case syntax::Expression::Type::LabelLit:
                 type = Type::Scalar(TypeKind::Label);
                 break;
-            case Expression::Type::PipeLit:
+            case syntax::Expression::Type::PipeLit:
                 type = Type::Dynamic();
                 break;
             default:
@@ -632,8 +644,8 @@ private:
         return type;
     }
 
-    Type visit_identifier_expression(const Expression& expr, ReferenceKind kind) {
-        const auto& id = *std::get<std::unique_ptr<Identifier>>(expr.expr);
+    Type visit_identifier_expression(const syntax::Expression& expr, ReferenceKind kind) {
+        const auto& id = *std::get<std::unique_ptr<syntax::Identifier>>(expr.expr);
         if (!id.name.empty()) {
             (void)reference(id.name, expr.loc, kind);
             auto type = type_for_name(id.name);
@@ -642,7 +654,7 @@ private:
         return Type::Unknown();
     }
 
-    Type visit_call_expression(const CallExpr& call,
+    Type visit_call_expression(const syntax::CallExpr& call,
                                bool pipe_value_present,
                                const Type& pipe_type) {
         const auto resolved = resolve_callee(call);
@@ -653,7 +665,8 @@ private:
         std::vector<Type> arg_types;
         if (resolved.sig != nullptr && call.arguments.size() == 1 && call.arguments[0] &&
             is_named_call_argument(*call.arguments[0])) {
-            const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(call.arguments[0]->expr);
+            const auto& obj =
+                *std::get<std::unique_ptr<syntax::ObjectExpr>>(call.arguments[0]->expr);
             arg_types.push_back(visit_named_call_object(
                 obj, call.arguments[0]->loc, *resolved.sig, pipe_value_present, pipe_type));
         } else {
@@ -670,8 +683,8 @@ private:
         auto return_type =
             infer_call_return_type(call, resolved, pipe_value_present, pipe_type, arg_types);
         result_.calls.push_back({
-            .location = call.callee ? call.callee->loc : SourceLocation{},
-            .callee_location = call.callee ? call.callee->loc : SourceLocation{},
+            .location = call.callee ? call.callee->loc : syntax::SourceLocation{},
+            .callee_location = call.callee ? call.callee->loc : syntax::SourceLocation{},
             .callee = resolved.sig != nullptr ? resolved.sig->fq_name : callee_name(call),
             .package = resolved.package.empty() ? std::nullopt
                                                 : std::optional<std::string>(resolved.package),
@@ -685,7 +698,7 @@ private:
         return return_type;
     }
 
-    Type visit_pipe_expression(const PipeExpr& pipe) {
+    Type visit_pipe_expression(const syntax::PipeExpr& pipe) {
         auto pipe_type = Type::Unknown();
         if (pipe.argument) {
             pipe_type = visit_expression(*pipe.argument);
@@ -696,12 +709,12 @@ private:
         return pipe_type;
     }
 
-    void visit_callee(const Expression* callee, const ResolvedCallee& resolved) {
+    void visit_callee(const syntax::Expression* callee, const ResolvedCallee& resolved) {
         if (callee == nullptr) {
             return;
         }
-        if (callee->type == Expression::Type::Identifier) {
-            const auto& id = *std::get<std::unique_ptr<Identifier>>(callee->expr);
+        if (callee->type == syntax::Expression::Type::Identifier) {
+            const auto& id = *std::get<std::unique_ptr<syntax::Identifier>>(callee->expr);
             if (FindUniverseBuiltinSignature(id.name) != nullptr) {
                 (void)reference(id.name, callee->loc, ReferenceKind::Callee);
             } else {
@@ -709,10 +722,10 @@ private:
             }
             return;
         }
-        if (callee->type == Expression::Type::MemberExpr && resolved.sig != nullptr) {
-            const auto& mem = *std::get<std::unique_ptr<MemberExpr>>(callee->expr);
-            if (mem.object != nullptr && mem.object->type == Expression::Type::Identifier) {
-                const auto& obj = *std::get<std::unique_ptr<Identifier>>(mem.object->expr);
+        if (callee->type == syntax::Expression::Type::MemberExpr && resolved.sig != nullptr) {
+            const auto& mem = *std::get<std::unique_ptr<syntax::MemberExpr>>(callee->expr);
+            if (mem.object != nullptr && mem.object->type == syntax::Expression::Type::Identifier) {
+                const auto& obj = *std::get<std::unique_ptr<syntax::Identifier>>(mem.object->expr);
                 (void)reference(obj.name, mem.object->loc, ReferenceKind::PackageObject);
             }
             result_.references.push_back({
@@ -727,10 +740,10 @@ private:
             });
             return;
         }
-        if (callee->type == Expression::Type::MemberExpr && !resolved.package.empty()) {
-            const auto& mem = *std::get<std::unique_ptr<MemberExpr>>(callee->expr);
-            if (mem.object != nullptr && mem.object->type == Expression::Type::Identifier) {
-                const auto& obj = *std::get<std::unique_ptr<Identifier>>(mem.object->expr);
+        if (callee->type == syntax::Expression::Type::MemberExpr && !resolved.package.empty()) {
+            const auto& mem = *std::get<std::unique_ptr<syntax::MemberExpr>>(callee->expr);
+            if (mem.object != nullptr && mem.object->type == syntax::Expression::Type::Identifier) {
+                const auto& obj = *std::get<std::unique_ptr<syntax::Identifier>>(mem.object->expr);
                 (void)reference(obj.name, mem.object->loc, ReferenceKind::PackageObject);
             }
             return;
@@ -738,11 +751,11 @@ private:
         (void)visit_expression(*callee);
     }
 
-    Type visit_member_expression(const MemberExpr& mem, const SourceLocation& loc) {
+    Type visit_member_expression(const syntax::MemberExpr& mem, const syntax::SourceLocation& loc) {
         if (!mem.object) {
             return Type::Unknown();
         }
-        if (mem.object->type != Expression::Type::Identifier || !mem.property) {
+        if (mem.object->type != syntax::Expression::Type::Identifier || !mem.property) {
             auto object_type = visit_expression(*mem.object);
             if (mem.property) {
                 auto member = property_name(*mem.property);
@@ -757,7 +770,7 @@ private:
             }
             return Type::Dynamic();
         }
-        const auto& obj = *std::get<std::unique_ptr<Identifier>>(mem.object->expr);
+        const auto& obj = *std::get<std::unique_ptr<syntax::Identifier>>(mem.object->expr);
         const auto import_it = imports_.find(obj.name);
         if (import_it == imports_.end()) {
             const auto object_type =
@@ -795,14 +808,14 @@ private:
         return Type::Dynamic();
     }
 
-    void visit_member_assignment_target(const MemberExpr& mem) {
+    void visit_member_assignment_target(const syntax::MemberExpr& mem) {
         if (mem.object) {
             (void)visit_expression(*mem.object);
         }
     }
 
-    Type visit_function_expression(const FunctionExpr& fn,
-                                   const SourceLocation& loc,
+    Type visit_function_expression(const syntax::FunctionExpr& fn,
+                                   const syntax::SourceLocation& loc,
                                    const FunctionContext* context) {
         push_scope(loc);
         std::unordered_set<std::string> seen;
@@ -842,12 +855,12 @@ private:
         }
         Type result_type = Type::Unknown();
         if (fn.body) {
-            if (fn.body->type == FunctionBody::Type::Block) {
-                visit_block(*std::get<std::unique_ptr<Block>>(fn.body->body));
+            if (fn.body->type == syntax::FunctionBody::Type::Block) {
+                visit_block(*std::get<std::unique_ptr<syntax::Block>>(fn.body->body));
                 result_type = Type::Dynamic();
             } else {
                 result_type =
-                    visit_expression(*std::get<std::unique_ptr<Expression>>(fn.body->body));
+                    visit_expression(*std::get<std::unique_ptr<syntax::Expression>>(fn.body->body));
             }
         }
         if (context != nullptr && context->return_type.has_value() &&
@@ -861,8 +874,8 @@ private:
         return Type::Function(std::move(params), std::move(result_type));
     }
 
-    Type visit_named_call_object(const ObjectExpr& obj,
-                                 const SourceLocation& loc,
+    Type visit_named_call_object(const syntax::ObjectExpr& obj,
+                                 const syntax::SourceLocation& loc,
                                  const BuiltinSignature& sig,
                                  bool pipe_value_present,
                                  const Type& pipe_type) {
@@ -874,9 +887,10 @@ private:
             const auto name = property_name(*prop->key);
             auto context = function_context_for_argument(sig, name, pipe_value_present, pipe_type);
             Type value_type;
-            if (context.has_value() && prop->value->type == Expression::Type::FunctionExpr) {
+            if (context.has_value() &&
+                prop->value->type == syntax::Expression::Type::FunctionExpr) {
                 value_type = visit_function_expression(
-                    *std::get<std::unique_ptr<FunctionExpr>>(prop->value->expr),
+                    *std::get<std::unique_ptr<syntax::FunctionExpr>>(prop->value->expr),
                     prop->value->loc,
                     &*context);
                 check_contextual_function_result(sig, name, value_type, prop->value->loc);
@@ -918,7 +932,7 @@ private:
     void check_contextual_function_result(const BuiltinSignature& sig,
                                           std::string_view arg_name,
                                           const Type& fn_type,
-                                          const SourceLocation& loc) {
+                                          const syntax::SourceLocation& loc) {
         if (arg_name != "fn" || fn_type.kind != TypeKind::Function || fn_type.args.empty()) {
             return;
         }
@@ -931,7 +945,7 @@ private:
         }
     }
 
-    Type visit_object_expression(const ObjectExpr& obj, const SourceLocation& loc) {
+    Type visit_object_expression(const syntax::ObjectExpr& obj, const syntax::SourceLocation& loc) {
         std::vector<RecordFieldType> fields;
         bool open = false;
         if (obj.with && obj.with->source && !obj.with->source->name.empty()) {
@@ -956,7 +970,7 @@ private:
         return Type::Record(std::move(fields), open);
     }
 
-    Type visit_array_expression(const ArrayExpr& arr) {
+    Type visit_array_expression(const syntax::ArrayExpr& arr) {
         auto element_type = Type::Unknown();
         for (const auto& item : arr.elements) {
             if (item && item->expression) {
@@ -966,7 +980,7 @@ private:
         return Type::Array(std::move(element_type));
     }
 
-    Type visit_dict_expression(const DictExpr& dict) {
+    Type visit_dict_expression(const syntax::DictExpr& dict) {
         auto key_type = Type::Unknown();
         auto value_type = Type::Unknown();
         for (const auto& item : dict.elements) {
@@ -980,7 +994,7 @@ private:
         return Type::Dict(std::move(key_type), std::move(value_type));
     }
 
-    Type visit_index_expression(const IndexExpr& idx) {
+    Type visit_index_expression(const syntax::IndexExpr& idx) {
         auto array_type = Type::Unknown();
         if (idx.array) {
             array_type = visit_expression(*idx.array);
@@ -999,13 +1013,14 @@ private:
         return Type::Dynamic();
     }
 
-    Type visit_binary_expression(const BinaryExpr& bin, const SourceLocation& loc) {
+    Type visit_binary_expression(const syntax::BinaryExpr& bin, const syntax::SourceLocation& loc) {
         auto left = bin.left ? visit_expression(*bin.left) : Type::Unknown();
         auto right = bin.right ? visit_expression(*bin.right) : Type::Unknown();
         return infer_binary_type(bin.op, left, right, loc);
     }
 
-    Type visit_logical_expression(const LogicalExpr& log, const SourceLocation& loc) {
+    Type visit_logical_expression(const syntax::LogicalExpr& log,
+                                  const syntax::SourceLocation& loc) {
         auto left = log.left ? visit_expression(*log.left) : Type::Unknown();
         auto right = log.right ? visit_expression(*log.right) : Type::Unknown();
         check_bool(left, loc, "logical expression");
@@ -1013,14 +1028,14 @@ private:
         return Type::Scalar(TypeKind::Bool);
     }
 
-    Type visit_unary_expression(const UnaryExpr& un, const SourceLocation& loc) {
+    Type visit_unary_expression(const syntax::UnaryExpr& un, const syntax::SourceLocation& loc) {
         auto arg = un.argument ? visit_expression(*un.argument) : Type::Unknown();
-        if (un.op == Operator::NotOperator) {
+        if (un.op == syntax::Operator::NotOperator) {
             check_bool(arg, loc, "`not`");
             return Type::Scalar(TypeKind::Bool);
         }
-        if (un.op == Operator::ExistsOperator || un.op == Operator::EmptyOperator ||
-            un.op == Operator::NotEmptyOperator) {
+        if (un.op == syntax::Operator::ExistsOperator || un.op == syntax::Operator::EmptyOperator ||
+            un.op == syntax::Operator::NotEmptyOperator) {
             return Type::Scalar(TypeKind::Bool);
         }
         if (!arg.IsUnknownLike() && !arg.IsNumeric() && arg.kind != TypeKind::Duration) {
@@ -1032,7 +1047,8 @@ private:
         return arg;
     }
 
-    Type visit_conditional_expression(const ConditionalExpr& cond, const SourceLocation& loc) {
+    Type visit_conditional_expression(const syntax::ConditionalExpr& cond,
+                                      const syntax::SourceLocation& loc) {
         auto test = cond.test ? visit_expression(*cond.test) : Type::Unknown();
         check_bool(test, loc, "if condition");
         auto consequent = cond.consequent ? visit_expression(*cond.consequent) : Type::Unknown();
@@ -1048,12 +1064,13 @@ private:
         return result;
     }
 
-    Type visit_string_expression(const StringExpr& str) {
+    Type visit_string_expression(const syntax::StringExpr& str) {
         for (const auto& part : str.parts) {
-            if (!part || part->type != StringExprPart::Type::Interpolated) {
+            if (!part || part->type != syntax::StringExprPart::Type::Interpolated) {
                 continue;
             }
-            const auto& interpolated = *std::get<std::unique_ptr<InterpolatedPart>>(part->part);
+            const auto& interpolated =
+                *std::get<std::unique_ptr<syntax::InterpolatedPart>>(part->part);
             if (interpolated.expression) {
                 (void)visit_expression(*interpolated.expression);
             }
@@ -1061,7 +1078,7 @@ private:
         return Type::Scalar(TypeKind::String);
     }
 
-    void add_expression(const SourceLocation& loc, const Type& type) {
+    void add_expression(const syntax::SourceLocation& loc, const Type& type) {
         result_.expressions.push_back(
             {.location = loc, .type = type, .reference_index = std::nullopt});
     }
@@ -1114,21 +1131,21 @@ private:
             {.name = std::move(name), .type = std::make_shared<Type>(std::move(type))});
     }
 
-    Type infer_binary_type(Operator op,
+    Type infer_binary_type(syntax::Operator op,
                            const Type& left,
                            const Type& right,
-                           const SourceLocation& loc) {
+                           const syntax::SourceLocation& loc) {
         switch (op) {
-            case Operator::LessThanEqualOperator:
-            case Operator::LessThanOperator:
-            case Operator::GreaterThanEqualOperator:
-            case Operator::GreaterThanOperator:
-            case Operator::EqualOperator:
-            case Operator::NotEqualOperator:
-            case Operator::InOperator:
+            case syntax::Operator::LessThanEqualOperator:
+            case syntax::Operator::LessThanOperator:
+            case syntax::Operator::GreaterThanEqualOperator:
+            case syntax::Operator::GreaterThanOperator:
+            case syntax::Operator::EqualOperator:
+            case syntax::Operator::NotEqualOperator:
+            case syntax::Operator::InOperator:
                 return Type::Scalar(TypeKind::Bool);
-            case Operator::RegexpMatchOperator:
-            case Operator::NotRegexpMatchOperator:
+            case syntax::Operator::RegexpMatchOperator:
+            case syntax::Operator::NotRegexpMatchOperator:
                 if (!left.IsUnknownLike() && !left.IsString()) {
                     diagnostic("operator `" + op_string(op) +
                                    "` expects a string value on the left, got " + left.ToString(),
@@ -1144,14 +1161,14 @@ private:
                                DiagnosticSeverity::Warning);
                 }
                 return Type::Scalar(TypeKind::Bool);
-            case Operator::StartsWithOperator:
+            case syntax::Operator::StartsWithOperator:
                 if (!left.IsUnknownLike() && !left.IsString()) {
                     diagnostic("operator `startswith` expects string values",
                                loc,
                                DiagnosticSeverity::Warning);
                 }
                 return Type::Scalar(TypeKind::Bool);
-            case Operator::AdditionOperator:
+            case syntax::Operator::AdditionOperator:
                 if (left.kind == TypeKind::String && right.kind == TypeKind::String) {
                     return Type::Scalar(TypeKind::String);
                 }
@@ -1159,11 +1176,11 @@ private:
                     return Type::Scalar(TypeKind::Duration);
                 }
                 [[fallthrough]];
-            case Operator::SubtractionOperator:
-            case Operator::MultiplicationOperator:
-            case Operator::DivisionOperator:
-            case Operator::ModuloOperator:
-            case Operator::PowerOperator:
+            case syntax::Operator::SubtractionOperator:
+            case syntax::Operator::MultiplicationOperator:
+            case syntax::Operator::DivisionOperator:
+            case syntax::Operator::ModuloOperator:
+            case syntax::Operator::PowerOperator:
                 if (!left.IsUnknownLike() && !left.IsNumeric() && left.kind != TypeKind::Duration) {
                     diagnostic("operator `" + op_string(op) + "` expects numeric operands, got " +
                                    left.ToString(),
@@ -1183,7 +1200,7 @@ private:
         }
     }
 
-    void check_bool(const Type& type, const SourceLocation& loc, std::string_view context) {
+    void check_bool(const Type& type, const syntax::SourceLocation& loc, std::string_view context) {
         if (!type.IsUnknownLike() && !type.IsBool()) {
             diagnostic(std::string(context) + " expects bool, got " + type.ToString(),
                        loc,
@@ -1191,28 +1208,30 @@ private:
         }
     }
 
-    [[nodiscard]] std::string callee_name(const CallExpr& call) const {
+    [[nodiscard]] std::string callee_name(const syntax::CallExpr& call) const {
         if (!call.callee) {
             return "";
         }
-        if (call.callee->type == Expression::Type::Identifier) {
-            return std::get<std::unique_ptr<Identifier>>(call.callee->expr)->name;
+        if (call.callee->type == syntax::Expression::Type::Identifier) {
+            return std::get<std::unique_ptr<syntax::Identifier>>(call.callee->expr)->name;
         }
-        if (call.callee->type == Expression::Type::MemberExpr) {
-            const auto& mem = *std::get<std::unique_ptr<MemberExpr>>(call.callee->expr);
-            if (mem.object && mem.object->type == Expression::Type::Identifier && mem.property) {
-                return std::get<std::unique_ptr<Identifier>>(mem.object->expr)->name + "." +
+        if (call.callee->type == syntax::Expression::Type::MemberExpr) {
+            const auto& mem = *std::get<std::unique_ptr<syntax::MemberExpr>>(call.callee->expr);
+            if (mem.object && mem.object->type == syntax::Expression::Type::Identifier &&
+                mem.property) {
+                return std::get<std::unique_ptr<syntax::Identifier>>(mem.object->expr)->name + "." +
                        property_name(*mem.property);
             }
         }
         return "";
     }
 
-    [[nodiscard]] std::vector<std::string> call_argument_names(const CallExpr& call) const {
+    [[nodiscard]] std::vector<std::string> call_argument_names(const syntax::CallExpr& call) const {
         std::vector<std::string> names;
         if (call.arguments.size() == 1 && call.arguments[0] &&
             is_named_call_argument(*call.arguments[0])) {
-            const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(call.arguments[0]->expr);
+            const auto& obj =
+                *std::get<std::unique_ptr<syntax::ObjectExpr>>(call.arguments[0]->expr);
             for (const auto& prop : obj.properties) {
                 if (prop && prop->key) {
                     names.push_back(property_name(*prop->key));
@@ -1223,7 +1242,9 @@ private:
     }
 
     [[nodiscard]] std::optional<Type> named_argument_type(
-        const CallExpr& call, std::string_view name, const std::vector<Type>& arg_types) const {
+        const syntax::CallExpr& call,
+        std::string_view name,
+        const std::vector<Type>& arg_types) const {
         if (arg_types.empty() || call.arguments.size() != 1 || !call.arguments[0] ||
             !is_named_call_argument(*call.arguments[0]) || arg_types[0].kind != TypeKind::Record) {
             return std::nullopt;
@@ -1231,7 +1252,7 @@ private:
         return arg_types[0].Field(name);
     }
 
-    Type infer_call_return_type(const CallExpr& call,
+    Type infer_call_return_type(const syntax::CallExpr& call,
                                 const ResolvedCallee& resolved,
                                 bool pipe_value_present,
                                 const Type& pipe_type,
@@ -1246,7 +1267,7 @@ private:
         auto base = ParseTypeExpression(resolved.sig->return_type);
         if (!IsCallableBuiltin(*resolved.sig)) {
             diagnostic("value `" + resolved.sig->fq_name + "` is not callable",
-                       call.callee ? call.callee->loc : SourceLocation{},
+                       call.callee ? call.callee->loc : syntax::SourceLocation{},
                        DiagnosticSeverity::Error);
             return base;
         }
@@ -1254,7 +1275,8 @@ private:
         if (resolved.sig->provider) {
             if (auto provider = infer_provider_return_type(call, *resolved.sig);
                 provider.has_value()) {
-                add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, *provider);
+                add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{},
+                                 *provider);
                 return *provider;
             }
         }
@@ -1262,7 +1284,7 @@ private:
             auto rows = named_object_field_type(call, "rows");
             if (rows && rows->kind == TypeKind::Array && !rows->args.empty()) {
                 auto stream = Type::Stream(rows->args[0]);
-                add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, stream);
+                add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, stream);
                 return stream;
             }
         }
@@ -1295,7 +1317,7 @@ private:
             if (name == "distinct") {
                 return apply_distinct(call, pipe_type);
             }
-            add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, pipe_type);
+            add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, pipe_type);
             return pipe_type.IsUnknownLike() ? base : pipe_type;
         }
         if (name == "join" && resolved.package.empty()) {
@@ -1304,7 +1326,7 @@ private:
         return base;
     }
 
-    std::optional<Type> infer_provider_return_type(const CallExpr& call,
+    std::optional<Type> infer_provider_return_type(const syntax::CallExpr& call,
                                                    const BuiltinSignature& sig) {
         if (sig.package == "array" && sig.name == "from") {
             auto rows = named_object_field_type(call, "rows");
@@ -1332,15 +1354,16 @@ private:
         return make_field(std::move(name), std::move(type));
     }
 
-    Type visit_free_callee_type(const Expression& callee) {
-        if (callee.type == Expression::Type::Identifier) {
-            const auto& id = *std::get<std::unique_ptr<Identifier>>(callee.expr);
+    Type visit_free_callee_type(const syntax::Expression& callee) {
+        if (callee.type == syntax::Expression::Type::Identifier) {
+            const auto& id = *std::get<std::unique_ptr<syntax::Identifier>>(callee.expr);
             return type_for_name(id.name);
         }
         return Type::Dynamic();
     }
 
-    std::optional<Type> named_object_field_type(const CallExpr& call, std::string_view name) {
+    std::optional<Type> named_object_field_type(const syntax::CallExpr& call,
+                                                std::string_view name) {
         if (call.arguments.size() != 1 || !call.arguments[0] ||
             !is_named_call_argument(*call.arguments[0])) {
             return std::nullopt;
@@ -1349,10 +1372,10 @@ private:
         return type.Field(name);
     }
 
-    [[nodiscard]] Type expression_type_without_refs(const Expression& expr) const {
+    [[nodiscard]] Type expression_type_without_refs(const syntax::Expression& expr) const {
         switch (expr.type) {
-            case Expression::Type::ObjectExpr: {
-                const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.expr);
+            case syntax::Expression::Type::ObjectExpr: {
+                const auto& obj = *std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.expr);
                 std::vector<RecordFieldType> fields;
                 for (const auto& prop : obj.properties) {
                     if (prop && prop->key && prop->value) {
@@ -1363,8 +1386,8 @@ private:
                 }
                 return Type::Record(std::move(fields), obj.with != nullptr);
             }
-            case Expression::Type::ArrayExpr: {
-                const auto& arr = *std::get<std::unique_ptr<ArrayExpr>>(expr.expr);
+            case syntax::Expression::Type::ArrayExpr: {
+                const auto& arr = *std::get<std::unique_ptr<syntax::ArrayExpr>>(expr.expr);
                 auto element = Type::Unknown();
                 for (const auto& item : arr.elements) {
                     if (item && item->expression) {
@@ -1374,32 +1397,32 @@ private:
                 }
                 return Type::Array(element);
             }
-            case Expression::Type::StringLit:
-            case Expression::Type::StringExpr:
+            case syntax::Expression::Type::StringLit:
+            case syntax::Expression::Type::StringExpr:
                 return Type::Scalar(TypeKind::String);
-            case Expression::Type::IntegerLit:
+            case syntax::Expression::Type::IntegerLit:
                 return Type::Scalar(TypeKind::Int);
-            case Expression::Type::FloatLit:
+            case syntax::Expression::Type::FloatLit:
                 return Type::Scalar(TypeKind::Float);
-            case Expression::Type::BooleanLit:
+            case syntax::Expression::Type::BooleanLit:
                 return Type::Scalar(TypeKind::Bool);
-            case Expression::Type::DateTimeLit:
+            case syntax::Expression::Type::DateTimeLit:
                 return Type::Scalar(TypeKind::Time);
-            case Expression::Type::DurationLit:
+            case syntax::Expression::Type::DurationLit:
                 return Type::Scalar(TypeKind::Duration);
-            case Expression::Type::RegexpLit:
+            case syntax::Expression::Type::RegexpLit:
                 return Type::Scalar(TypeKind::Regexp);
-            case Expression::Type::FunctionExpr: {
-                const auto& fn = *std::get<std::unique_ptr<FunctionExpr>>(expr.expr);
-                if (fn.body && fn.body->type == FunctionBody::Type::Expression) {
+            case syntax::Expression::Type::FunctionExpr: {
+                const auto& fn = *std::get<std::unique_ptr<syntax::FunctionExpr>>(expr.expr);
+                if (fn.body && fn.body->type == syntax::FunctionBody::Type::Expression) {
                     auto ret = expression_type_without_refs(
-                        *std::get<std::unique_ptr<Expression>>(fn.body->body));
+                        *std::get<std::unique_ptr<syntax::Expression>>(fn.body->body));
                     return Type::Function({}, ret);
                 }
                 return Type::Function({}, Type::Dynamic());
             }
-            case Expression::Type::ParenExpr: {
-                const auto& paren = *std::get<std::unique_ptr<ParenExpr>>(expr.expr);
+            case syntax::Expression::Type::ParenExpr: {
+                const auto& paren = *std::get<std::unique_ptr<syntax::ParenExpr>>(expr.expr);
                 return paren.expression ? expression_type_without_refs(*paren.expression)
                                         : Type::Unknown();
             }
@@ -1408,7 +1431,7 @@ private:
         }
     }
 
-    Type apply_keep(const CallExpr& call, const Type& pipe_type) {
+    Type apply_keep(const syntax::CallExpr& call, const Type& pipe_type) {
         auto row = stream_row(pipe_type);
         auto columns = named_string_array(call, "columns");
         if (!row || columns.empty()) {
@@ -1423,11 +1446,11 @@ private:
             }
         }
         auto result = Type::Stream(Type::Record(std::move(fields), false));
-        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, result);
         return result;
     }
 
-    Type apply_drop(const CallExpr& call, const Type& pipe_type) {
+    Type apply_drop(const syntax::CallExpr& call, const Type& pipe_type) {
         auto row = stream_row(pipe_type);
         auto columns = named_string_array(call, "columns");
         if (!row || columns.empty()) {
@@ -1440,11 +1463,11 @@ private:
             }
         }
         auto result = Type::Stream(Type::Record(std::move(fields), row->open_record));
-        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, result);
         return result;
     }
 
-    Type apply_rename(const CallExpr& call, const Type& pipe_type) {
+    Type apply_rename(const syntax::CallExpr& call, const Type& pipe_type) {
         auto row = stream_row(pipe_type);
         auto mappings = named_string_record(call, "columns");
         if (!row || mappings.empty()) {
@@ -1458,24 +1481,24 @@ private:
             }
         }
         auto result = Type::Stream(Type::Record(std::move(fields), row->open_record));
-        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, result);
         return result;
     }
 
-    Type apply_map(const CallExpr& call,
+    Type apply_map(const syntax::CallExpr& call,
                    const Type& pipe_type,
                    const std::vector<Type>& arg_types) {
         auto fn = named_argument_type(call, "fn", arg_types);
         if (fn && fn->kind == TypeKind::Function && !fn->args.empty() &&
             fn->args[0].kind == TypeKind::Record) {
             auto result = Type::Stream(fn->args[0]);
-            add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+            add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, result);
             return result;
         }
         return pipe_type;
     }
 
-    Type apply_group(const CallExpr& call, const Type& pipe_type) {
+    Type apply_group(const syntax::CallExpr& call, const Type& pipe_type) {
         auto columns = named_string_array(call, "columns");
         const auto mode = literal_string_argument(call, "mode").value_or("by");
         if (mode == "except") {
@@ -1489,11 +1512,12 @@ private:
                 }
             }
         }
-        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, pipe_type, columns);
+        add_table_schema(
+            call.callee ? call.callee->loc : syntax::SourceLocation{}, pipe_type, columns);
         return pipe_type;
     }
 
-    Type apply_duplicate(const CallExpr& call, const Type& pipe_type) {
+    Type apply_duplicate(const syntax::CallExpr& call, const Type& pipe_type) {
         auto row = stream_row(pipe_type);
         const auto column = literal_string_argument(call, "column");
         const auto as = literal_string_argument(call, "as");
@@ -1504,11 +1528,11 @@ private:
         auto fields = row->fields;
         upsert_field(fields, *as, std::move(source));
         auto result = Type::Stream(Type::Record(std::move(fields), row->open_record));
-        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, result);
         return result;
     }
 
-    Type apply_set(const CallExpr& call, const Type& pipe_type) {
+    Type apply_set(const syntax::CallExpr& call, const Type& pipe_type) {
         auto row = stream_row(pipe_type);
         const auto key = literal_string_argument(call, "key");
         if (!row || !key.has_value()) {
@@ -1517,11 +1541,11 @@ private:
         auto fields = row->fields;
         upsert_field(fields, *key, Type::Scalar(TypeKind::String));
         auto result = Type::Stream(Type::Record(std::move(fields), row->open_record));
-        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, result);
         return result;
     }
 
-    Type apply_distinct(const CallExpr& call, const Type& pipe_type) {
+    Type apply_distinct(const syntax::CallExpr& call, const Type& pipe_type) {
         auto row = stream_row(pipe_type);
         if (!row) {
             return pipe_type;
@@ -1529,11 +1553,11 @@ private:
         const auto column = literal_string_argument(call, "column").value_or("_value");
         auto column_type = row->Field(column).value_or(Type::Dynamic());
         auto result = Type::Stream(Type::Record({field(column, std::move(column_type))}, false));
-        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, result);
         return result;
     }
 
-    Type apply_table_numeric_aggregate(const CallExpr& call,
+    Type apply_table_numeric_aggregate(const syntax::CallExpr& call,
                                        const BuiltinSignature&,
                                        const Type& pipe_type) {
         auto row = stream_row(pipe_type);
@@ -1543,11 +1567,11 @@ private:
         const auto column = literal_string_argument(call, "column").value_or("_value");
         auto result =
             Type::Stream(Type::Record({field(column, Type::Scalar(TypeKind::Float))}, false));
-        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, result);
         return result;
     }
 
-    Type apply_join(const CallExpr& call, const std::vector<Type>& arg_types) {
+    Type apply_join(const syntax::CallExpr& call, const std::vector<Type>& arg_types) {
         auto tables = named_argument_type(call, "tables", arg_types);
         const auto keys = named_string_array(call, "on");
         if (!tables || tables->kind != TypeKind::Record || tables->fields.empty()) {
@@ -1555,7 +1579,7 @@ private:
         }
         if (tables->fields.size() != 2) {
             diagnostic("join currently expects exactly two input tables",
-                       call.callee ? call.callee->loc : SourceLocation{},
+                       call.callee ? call.callee->loc : syntax::SourceLocation{},
                        DiagnosticSeverity::Error);
             return Type::Stream(Type::Record({}, true));
         }
@@ -1580,7 +1604,7 @@ private:
                     if (!row.open_record) {
                         diagnostic("join key `" + key + "` is missing from table `" +
                                        table_field.name + "`",
-                                   call.callee ? call.callee->loc : SourceLocation{},
+                                   call.callee ? call.callee->loc : syntax::SourceLocation{},
                                    DiagnosticSeverity::Error);
                     }
                     continue;
@@ -1589,7 +1613,7 @@ private:
                 if (existing != key_types.end() && !CanAssign(existing->second, *key_type)) {
                     diagnostic("join key `" + key + "` has incompatible types: " +
                                    existing->second.ToString() + " and " + key_type->ToString(),
-                               call.callee ? call.callee->loc : SourceLocation{},
+                               call.callee ? call.callee->loc : syntax::SourceLocation{},
                                DiagnosticSeverity::Warning);
                 } else {
                     key_types.emplace(key, *key_type);
@@ -1616,11 +1640,11 @@ private:
         append_table(tables->fields[1], *right_row);
 
         auto result = Type::Stream(Type::Record(std::move(fields), open));
-        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        add_table_schema(call.callee ? call.callee->loc : syntax::SourceLocation{}, result);
         return result;
     }
 
-    std::optional<Type> table_row_for_join(const CallExpr& call,
+    std::optional<Type> table_row_for_join(const syntax::CallExpr& call,
                                            const RecordFieldType& table_field) {
         if (!table_field.type) {
             return std::nullopt;
@@ -1629,7 +1653,7 @@ private:
         if (!row || row->kind != TypeKind::Record) {
             diagnostic("join table `" + table_field.name + "` must be a stream, got " +
                            table_field.type->ToString(),
-                       call.callee ? call.callee->loc : SourceLocation{},
+                       call.callee ? call.callee->loc : syntax::SourceLocation{},
                        DiagnosticSeverity::Error);
             return std::nullopt;
         }
@@ -1661,7 +1685,7 @@ private:
         return std::nullopt;
     }
 
-    void add_table_schema(const SourceLocation& loc,
+    void add_table_schema(const syntax::SourceLocation& loc,
                           const Type& type,
                           std::vector<std::string> group_key = {}) {
         auto row = stream_row(type);
@@ -1676,50 +1700,51 @@ private:
         });
     }
 
-    [[nodiscard]] std::vector<std::string> named_string_array(const CallExpr& call,
+    [[nodiscard]] std::vector<std::string> named_string_array(const syntax::CallExpr& call,
                                                               std::string_view name) const {
         const auto* expr = named_argument_expression(call, name);
-        if (expr == nullptr || expr->type != Expression::Type::ArrayExpr) {
+        if (expr == nullptr || expr->type != syntax::Expression::Type::ArrayExpr) {
             return {};
         }
         std::vector<std::string> values;
-        const auto& arr = *std::get<std::unique_ptr<ArrayExpr>>(expr->expr);
+        const auto& arr = *std::get<std::unique_ptr<syntax::ArrayExpr>>(expr->expr);
         for (const auto& item : arr.elements) {
             if (!item || !item->expression ||
-                item->expression->type != Expression::Type::StringLit) {
+                item->expression->type != syntax::Expression::Type::StringLit) {
                 continue;
             }
-            values.push_back(std::get<std::unique_ptr<StringLit>>(item->expression->expr)->value);
+            values.push_back(
+                std::get<std::unique_ptr<syntax::StringLit>>(item->expression->expr)->value);
         }
         return values;
     }
 
     [[nodiscard]] std::unordered_map<std::string, std::string> named_string_record(
-        const CallExpr& call, std::string_view name) const {
+        const syntax::CallExpr& call, std::string_view name) const {
         const auto* expr = named_argument_expression(call, name);
-        if (expr == nullptr || expr->type != Expression::Type::ObjectExpr) {
+        if (expr == nullptr || expr->type != syntax::Expression::Type::ObjectExpr) {
             return {};
         }
         std::unordered_map<std::string, std::string> result;
-        const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr->expr);
+        const auto& obj = *std::get<std::unique_ptr<syntax::ObjectExpr>>(expr->expr);
         for (const auto& prop : obj.properties) {
             if (!prop || !prop->key || !prop->value ||
-                prop->value->type != Expression::Type::StringLit) {
+                prop->value->type != syntax::Expression::Type::StringLit) {
                 continue;
             }
             result[property_name(*prop->key)] =
-                std::get<std::unique_ptr<StringLit>>(prop->value->expr)->value;
+                std::get<std::unique_ptr<syntax::StringLit>>(prop->value->expr)->value;
         }
         return result;
     }
 
-    [[nodiscard]] const Expression* named_argument_expression(const CallExpr& call,
-                                                              std::string_view name) const {
+    [[nodiscard]] const syntax::Expression* named_argument_expression(const syntax::CallExpr& call,
+                                                                      std::string_view name) const {
         if (call.arguments.size() != 1 || !call.arguments[0] ||
             !is_named_call_argument(*call.arguments[0])) {
             return nullptr;
         }
-        const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(call.arguments[0]->expr);
+        const auto& obj = *std::get<std::unique_ptr<syntax::ObjectExpr>>(call.arguments[0]->expr);
         for (const auto& prop : obj.properties) {
             if (prop && prop->key && property_name(*prop->key) == name) {
                 return prop->value.get();
@@ -1728,13 +1753,13 @@ private:
         return nullptr;
     }
 
-    [[nodiscard]] std::optional<std::string> literal_string_argument(const CallExpr& call,
+    [[nodiscard]] std::optional<std::string> literal_string_argument(const syntax::CallExpr& call,
                                                                      std::string_view name) const {
         const auto* expr = named_argument_expression(call, name);
-        if (expr == nullptr || expr->type != Expression::Type::StringLit) {
+        if (expr == nullptr || expr->type != syntax::Expression::Type::StringLit) {
             return std::nullopt;
         }
-        return std::get<std::unique_ptr<StringLit>>(expr->expr)->value;
+        return std::get<std::unique_ptr<syntax::StringLit>>(expr->expr)->value;
     }
 
     [[nodiscard]] std::string unknown_argument_message(const BuiltinSignature& sig,
@@ -1771,11 +1796,11 @@ private:
     }
 
     [[nodiscard]] bool can_call_without_pipe_argument(const BuiltinSignature& sig,
-                                                      const CallExpr& call) const {
+                                                      const syntax::CallExpr& call) const {
         return is_table_numeric_aggregate(sig) && !call.arguments.empty();
     }
 
-    void check_builtin_argument_types(const CallExpr& call,
+    void check_builtin_argument_types(const syntax::CallExpr& call,
                                       const BuiltinSignature& sig,
                                       const std::vector<Type>& arg_types,
                                       bool pipe_value_present,
@@ -1795,15 +1820,15 @@ private:
             if (!CanAssign(expected, *actual)) {
                 diagnostic("argument `" + param.name + "` for " + sig.fq_name + " expects " +
                                expected.ToString() + ", got " + actual->ToString(),
-                           call.callee ? call.callee->loc : SourceLocation{},
+                           call.callee ? call.callee->loc : syntax::SourceLocation{},
                            DiagnosticSeverity::Warning);
             }
         }
     }
 
-    void check_builtin_call(const CallExpr& call,
+    void check_builtin_call(const syntax::CallExpr& call,
                             const BuiltinSignature& sig,
-                            const SourceLocation& loc,
+                            const syntax::SourceLocation& loc,
                             bool pipe_value_present) {
         std::unordered_set<std::string> allowed;
         std::unordered_set<std::string> required;
@@ -1817,7 +1842,8 @@ private:
         }
 
         if (call.arguments.size() == 1 && is_named_call_argument(*call.arguments[0])) {
-            const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(call.arguments[0]->expr);
+            const auto& obj =
+                *std::get<std::unique_ptr<syntax::ObjectExpr>>(call.arguments[0]->expr);
             std::unordered_set<std::string> seen;
             for (const auto& prop : obj.properties) {
                 if (!prop || !prop->key) {
@@ -1869,26 +1895,27 @@ private:
         }
     }
 
-    ResolvedCallee resolve_callee(const CallExpr& call) {
+    ResolvedCallee resolve_callee(const syntax::CallExpr& call) {
         if (!call.callee) {
             return {};
         }
-        if (call.callee->type == Expression::Type::Identifier) {
-            const auto& id = *std::get<std::unique_ptr<Identifier>>(call.callee->expr);
+        if (call.callee->type == syntax::Expression::Type::Identifier) {
+            const auto& id = *std::get<std::unique_ptr<syntax::Identifier>>(call.callee->expr);
             return {.sig = FindUniverseBuiltinSignature(id.name),
                     .location = call.callee->loc,
                     .package_definition_id = 0,
                     .package = "",
                     .member = id.name};
         }
-        if (call.callee->type != Expression::Type::MemberExpr) {
+        if (call.callee->type != syntax::Expression::Type::MemberExpr) {
             return {};
         }
-        const auto& mem = *std::get<std::unique_ptr<MemberExpr>>(call.callee->expr);
-        if (!mem.object || mem.object->type != Expression::Type::Identifier || !mem.property) {
+        const auto& mem = *std::get<std::unique_ptr<syntax::MemberExpr>>(call.callee->expr);
+        if (!mem.object || mem.object->type != syntax::Expression::Type::Identifier ||
+            !mem.property) {
             return {};
         }
-        const auto& obj = *std::get<std::unique_ptr<Identifier>>(mem.object->expr);
+        const auto& obj = *std::get<std::unique_ptr<syntax::Identifier>>(mem.object->expr);
         const auto prop = property_name(*mem.property);
         const auto import_it = imports_.find(obj.name);
         if (import_it == imports_.end()) {
@@ -1907,7 +1934,7 @@ private:
                 .member = prop};
     }
 
-    std::vector<std::string> function_param_names(const FunctionExpr& fn) {
+    std::vector<std::string> function_param_names(const syntax::FunctionExpr& fn) {
         std::vector<std::string> params;
         for (const auto& param : fn.params) {
             if (param && param->key) {
@@ -1919,7 +1946,7 @@ private:
 
     size_t define(const std::string& name,
                   SymbolKind kind,
-                  const SourceLocation& loc,
+                  const syntax::SourceLocation& loc,
                   std::vector<std::string> params = {},
                   std::optional<std::string> import_path = std::nullopt,
                   std::optional<std::string> builtin_package = std::nullopt,
@@ -1948,7 +1975,7 @@ private:
 
     void predeclare(const std::string& name,
                     SymbolKind kind,
-                    const SourceLocation& loc,
+                    const syntax::SourceLocation& loc,
                     Type type = Type::Unknown()) {
         const auto id = define(name, kind, loc, {}, std::nullopt, std::nullopt, std::move(type));
         predeclared_definition_ids_.insert(id);
@@ -1975,7 +2002,9 @@ private:
         return false;
     }
 
-    size_t reference(const std::string& name, const SourceLocation& loc, ReferenceKind kind) {
+    size_t reference(const std::string& name,
+                     const syntax::SourceLocation& loc,
+                     ReferenceKind kind) {
         auto definition_id = resolve(name);
         const bool resolved = definition_id != 0 || FindUniverseBuiltinSignature(name) != nullptr ||
                               is_intrinsic(name);
@@ -2061,7 +2090,7 @@ private:
         return names.contains(name);
     }
 
-    void push_scope(const SourceLocation& loc) {
+    void push_scope(const syntax::SourceLocation& loc) {
         const auto parent = scopes_.empty() ? 0 : current_scope_id_;
         Scope scope{.id = scopes_.size(), .parent_id = scopes_.empty() ? 0 : parent};
         scopes_.push_back(std::move(scope));
@@ -2081,7 +2110,9 @@ private:
         current_scope_id_ = scopes_[current_scope_id_].parent_id;
     }
 
-    void diagnostic(std::string message, const SourceLocation& loc, DiagnosticSeverity severity) {
+    void diagnostic(std::string message,
+                    const syntax::SourceLocation& loc,
+                    DiagnosticSeverity severity) {
         result_.diagnostics.push_back({
             .message = std::move(message),
             .location = loc,
@@ -2250,7 +2281,7 @@ std::vector<const SymbolReference*> AnalysisResult::ReferencesOf(std::string_vie
     return result;
 }
 
-AnalysisResult SemanticAnalyzer::Analyze(const File& file, Options options) {
+AnalysisResult SemanticAnalyzer::Analyze(const syntax::File& file, Options options) {
     return Binder(std::move(options)).Bind(file);
 }
 
@@ -2263,10 +2294,10 @@ const Symbol* PackageAnalysisResult::FindExport(std::string_view name) const {
     return nullptr;
 }
 
-PackageAnalysisResult PackageAnalyzer::Analyze(const Package& package) {
+PackageAnalysisResult PackageAnalyzer::Analyze(const syntax::Package& package) {
     PackageAnalysisResult result;
     SemanticAnalyzer analyzer;
-    std::unordered_map<std::string, SourceLocation> exported_names;
+    std::unordered_map<std::string, syntax::SourceLocation> exported_names;
     for (const auto& file : package.files) {
         if (!file) {
             continue;

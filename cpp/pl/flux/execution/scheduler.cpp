@@ -65,7 +65,8 @@ void ResetPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats) {
     stats->error.clear();
 }
 
-void AddPipelineStatsPage(const std::shared_ptr<Pipeline::Stats>& stats, const Page& page) {
+void AddPipelineStatsPage(const std::shared_ptr<Pipeline::Stats>& stats,
+                          const runtime::Page& page) {
     if (stats == nullptr) {
         return;
     }
@@ -166,9 +167,9 @@ absl::Status Driver::RunToSink(const PageSink& sink) const {
     return absl::OkStatus();
 }
 
-absl::StatusOr<Value> Driver::Run() const {
-    std::optional<Page> output;
-    auto status = RunToSink([&](Page page) {
+absl::StatusOr<runtime::Value> Driver::Run() const {
+    std::optional<runtime::Page> output;
+    auto status = RunToSink([&](runtime::Page page) {
         if (!output.has_value()) {
             output = std::move(page);
             return absl::OkStatus();
@@ -180,9 +181,9 @@ absl::StatusOr<Value> Driver::Run() const {
         return status;
     }
     if (!output.has_value()) {
-        return Value::table_stream("", {});
+        return runtime::Value::table_stream("", {});
     }
-    Value value = internal::ValueFromPage(*output);
+    runtime::Value value = internal::ValueFromPage(*output);
     value.as_table_mut().materialized = true;
     return value;
 }
@@ -333,7 +334,7 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
         return absl::FailedPreconditionError("execution task pipeline dependency cycle");
     }
 
-    std::optional<TableValue> output;
+    std::optional<runtime::TableValue> output;
     bool ran_pipeline = false;
 
     struct RunningPipeline {
@@ -342,7 +343,7 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
         std::string role;
         size_t driver_id = 0;
         bool collect_output = false;
-        std::future<absl::StatusOr<TableValue>> value;
+        std::future<absl::StatusOr<runtime::TableValue>> value;
     };
 
     std::vector<DriverTask> driver_tasks;
@@ -371,33 +372,33 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
         running_pipeline.collect_output =
             item.role == "root" || item.pipeline_id == "main" || task.pipelines.size() == 1;
         const bool collect_output = running_pipeline.collect_output;
-        running_pipeline.value =
-            executor.Submit([driver_task = std::move(item),
-                             collect_output]() mutable -> absl::StatusOr<TableValue> {
-                TableValue table;
-                auto status =
-                    Driver(std::move(driver_task.pipeline)).RunToSink([&](const Page& page) {
-                        if (!collect_output) {
-                            return absl::OkStatus();
-                        }
-                        TableValue next = TableValueFromPage(page);
-                        if (table.bucket.empty()) {
-                            table.bucket = next.bucket;
-                        }
-                        table.tables.insert(table.tables.end(),
-                                            std::make_move_iterator(next.tables.begin()),
-                                            std::make_move_iterator(next.tables.end()));
-                        table.rows.insert(table.rows.end(),
-                                          std::make_move_iterator(next.rows.begin()),
-                                          std::make_move_iterator(next.rows.end()));
-                        table.plan = next.plan;
+        running_pipeline.value = executor.Submit([driver_task = std::move(item),
+                                                  collect_output]() mutable
+                                                     -> absl::StatusOr<runtime::TableValue> {
+            runtime::TableValue table;
+            auto status =
+                Driver(std::move(driver_task.pipeline)).RunToSink([&](const runtime::Page& page) {
+                    if (!collect_output) {
                         return absl::OkStatus();
-                    });
-                if (!status.ok()) {
-                    return status;
-                }
-                return table;
-            });
+                    }
+                    runtime::TableValue next = TableValueFromPage(page);
+                    if (table.bucket.empty()) {
+                        table.bucket = next.bucket;
+                    }
+                    table.tables.insert(table.tables.end(),
+                                        std::make_move_iterator(next.tables.begin()),
+                                        std::make_move_iterator(next.tables.end()));
+                    table.rows.insert(table.rows.end(),
+                                      std::make_move_iterator(next.rows.begin()),
+                                      std::make_move_iterator(next.rows.end()));
+                    table.plan = next.plan;
+                    return absl::OkStatus();
+                });
+            if (!status.ok()) {
+                return status;
+            }
+            return table;
+        });
         running.push_back(std::move(running_pipeline));
     }
 
@@ -440,16 +441,16 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
     }
     if (!output.has_value()) {
         SchedulerResult result;
-        result.value = Value::table_stream("", {});
+        result.value = runtime::Value::table_stream("", {});
         result.profile =
             BuildExecutionProfile(pipeline_profiles, pipeline_stats, task.memory_context);
         return result;
     }
-    Value value = Value::table_stream(output->bucket,
-                                      output->tables,
-                                      output->range_start,
-                                      output->range_stop,
-                                      output->result_name);
+    runtime::Value value = runtime::Value::table_stream(output->bucket,
+                                                        output->tables,
+                                                        output->range_start,
+                                                        output->range_stop,
+                                                        output->result_name);
     value.as_table_mut().plan = output->plan;
     value.as_table_mut().materialized = true;
     SchedulerResult result;
@@ -458,7 +459,7 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
     return result;
 }
 
-absl::StatusOr<Value> Scheduler::Run(ExecutionTask task) const {
+absl::StatusOr<runtime::Value> Scheduler::Run(ExecutionTask task) const {
     auto result_or = RunWithProfile(std::move(task));
     if (!result_or.ok()) {
         return result_or.status();
@@ -570,7 +571,7 @@ absl::StatusOr<SchedulerStreamResult> Scheduler::RunToSink(ExecutionTask task,
         const bool stream_output = running_pipeline.stream_output;
         running_pipeline.status = executor.Submit(
             [driver_task = std::move(item), stream_output, &sink, &sink_mu]() mutable {
-                return Driver(std::move(driver_task.pipeline)).RunToSink([&](Page page) {
+                return Driver(std::move(driver_task.pipeline)).RunToSink([&](runtime::Page page) {
                     if (!stream_output) {
                         return absl::OkStatus();
                     }

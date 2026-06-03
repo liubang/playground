@@ -15,9 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/06/01 23:01
 
-#include <gtest/gtest.h>
-
 #include <algorithm>
+#include <gtest/gtest.h>
 #include <unordered_set>
 
 #include "cpp/pl/minidfs/common/constants.h"
@@ -52,8 +51,8 @@ protected:
     }
 
     uint64_t register_datanode(std::string_view uuid) {
-        auto result = datanode_manager_->register_datanode(
-            uuid, uuid, uuid, 9000, 9100, "/rack", 1000 * kGB);
+        auto result =
+            datanode_manager_->register_datanode(uuid, uuid, uuid, 9000, 9100, "/rack", 1000 * kGB);
         EXPECT_TRUE(result.hasValue());
         return result.value();
     }
@@ -163,12 +162,11 @@ TEST_F(NameNodeMaintenanceTest, SchedulesDurableDeduplicatedRepairAwayFromDeadNo
     EXPECT_EQ(maintenance_->take_replication_tasks(source).size(), 1u);
 
     ASSERT_TRUE(block_manager_
-                    ->reconcile_block_report(
-                        target,
-                        {{.block_id = block.block_id,
-                          .generation_stamp = block.generation_stamp,
-                          .length = block.length}},
-                        false)
+                    ->reconcile_block_report(target,
+                                             {{.block_id = block.block_id,
+                                               .generation_stamp = block.generation_stamp,
+                                               .length = block.length}},
+                                             false)
                     .hasValue());
     ASSERT_TRUE(maintenance_->run_once().hasValue());
     EXPECT_TRUE(maintenance_->take_replication_tasks(source).empty());
