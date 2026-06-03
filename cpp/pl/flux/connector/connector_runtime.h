@@ -43,7 +43,7 @@ struct TableHandle {
 
 struct ColumnHandle {
     std::string name;
-    Value::Type type = Value::Type::Null;
+    runtime::Value::Type type = runtime::Value::Type::Null;
     bool nullable = true;
 };
 
@@ -86,7 +86,7 @@ class ConnectorPageSource {
 public:
     virtual ~ConnectorPageSource() = default;
 
-    virtual absl::StatusOr<std::optional<Page>> NextPage() = 0;
+    virtual absl::StatusOr<std::optional<runtime::Page>> NextPage() = 0;
 
     [[nodiscard]] virtual ConnectorSplitStats Stats() const { return {}; }
 
@@ -157,7 +157,7 @@ public:
 class ChunkedPageSource final : public ConnectorPageSource {
 public:
     ChunkedPageSource(std::string bucket,
-                      std::vector<TableChunk> chunks,
+                      std::vector<runtime::TableChunk> chunks,
                       size_t rows_per_page,
                       int64_t split_id = 0)
         : bucket_(std::move(bucket)),
@@ -166,14 +166,14 @@ public:
         stats_.split_id = split_id;
     }
 
-    absl::StatusOr<std::optional<Page>> NextPage() override {
+    absl::StatusOr<std::optional<runtime::Page>> NextPage() override {
         if (next_chunk_ >= chunks_.size()) {
             stats_.finished = true;
             return std::nullopt;
         }
 
-        const TableChunk& source = chunks_[next_chunk_];
-        TableChunk chunk;
+        const runtime::TableChunk& source = chunks_[next_chunk_];
+        runtime::TableChunk chunk;
         chunk.group_key = source.group_key;
         chunk.columns = source.columns;
         if (source.rows.empty()) {
@@ -191,9 +191,9 @@ public:
             }
         }
 
-        std::vector<TableChunk> chunks;
+        std::vector<runtime::TableChunk> chunks;
         chunks.push_back(std::move(chunk));
-        Page page = PageFromTableChunks(bucket_, chunks);
+        runtime::Page page = PageFromTableChunks(bucket_, chunks);
         ++stats_.pages_produced;
         stats_.rows_produced += page.row_count();
         return page;
@@ -205,7 +205,7 @@ public:
 
 private:
     std::string bucket_;
-    std::vector<TableChunk> chunks_;
+    std::vector<runtime::TableChunk> chunks_;
     size_t rows_per_page_ = 1024;
     size_t next_chunk_ = 0;
     size_t next_row_ = 0;

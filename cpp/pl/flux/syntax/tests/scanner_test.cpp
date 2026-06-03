@@ -35,12 +35,12 @@ int main(int /*argc*/, char* /*argv*/[]) {
         |> aggregateWindow(every: 1m, fn: mean)
     )";
 
-    std::unique_ptr<pl::flux::Scanner> scanner =
-        std::make_unique<pl::flux::Scanner>(flux.data(), flux.size());
+    std::unique_ptr<pl::flux::syntax::Scanner> scanner =
+        std::make_unique<pl::flux::syntax::Scanner>(flux.data(), flux.size());
 
     for (;;) {
         auto token = scanner->scan();
-        if (token->tok == pl::flux::TokenType::Eof) {
+        if (token->tok == pl::flux::syntax::TokenType::Eof) {
             break;
         }
         std::cout << (*token) << "\n";

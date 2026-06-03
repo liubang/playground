@@ -217,10 +217,8 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
     const auto& data = request->data();
 
     // Create block in tmp/
-    auto create_result = store_->create_block(block_id,
-                                              request->inode_id(),
-                                              request->block_index(),
-                                              generation_stamp);
+    auto create_result = store_->create_block(
+        block_id, request->inode_id(), request->block_index(), generation_stamp);
     if (create_result.hasError()) {
         fill_status(response->mutable_status(),
                     create_result.error().code(),
@@ -271,7 +269,8 @@ void DataTransferServiceImpl::TruncateBlock(google::protobuf::RpcController* /*c
     auto truncate =
         store_->truncate_block(request->block_id(), request->generation_stamp(), request->length());
     if (truncate.hasError()) {
-        fill_status(response->mutable_status(), truncate.error().code(), truncate.error().message());
+        fill_status(
+            response->mutable_status(), truncate.error().code(), truncate.error().message());
         return;
     }
     if (reporter_) {

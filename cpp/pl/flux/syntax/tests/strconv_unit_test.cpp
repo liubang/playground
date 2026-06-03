@@ -16,7 +16,7 @@
 
 #include "cpp/pl/flux/syntax/strconv.h"
 
-namespace pl::flux {
+namespace pl::flux::syntax {
 namespace {
 
 TEST(StrConvTest, ParseTextDecodesCommonEscapesAndHex) {
@@ -81,4 +81,4 @@ TEST(StrConvTest, ParseUnitRejectsDanglingMicrosecondPrefix) {
 }
 
 } // namespace
-} // namespace pl::flux
+} // namespace pl::flux::syntax

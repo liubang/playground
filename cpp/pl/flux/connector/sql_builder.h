@@ -41,7 +41,7 @@ public:
     /// Format a literal value for embedding directly in SQL.
     /// Returns a SQL-safe string representation.
     [[nodiscard]] virtual absl::StatusOr<std::string> FormatLiteral(
-        const Value& value, bool normalize_time = false) const = 0;
+        const runtime::Value& value, bool normalize_time = false) const = 0;
 
     /// Return the source name for error messages (e.g. "sqlite", "mysql").
     [[nodiscard]] virtual std::string SourceName() const = 0;
@@ -58,7 +58,7 @@ public:
 /// A bound SQL parameter plus whether string/time values should be normalized to
 /// the backend's timestamp representation before binding.
 struct SqlParam {
-    Value value{};
+    runtime::Value value{};
     bool normalize_time = false;
 };
 

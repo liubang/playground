@@ -33,7 +33,7 @@
 #include "cpp/pl/flux/runtime/runtime_env.h"
 #include "cpp/pl/flux/runtime/runtime_eval.h"
 
-namespace pl::flux::detail {
+namespace pl::flux::runtime::detail {
 
 inline absl::StatusOr<const ArrayValue*> require_array_argument(const std::vector<Value>& args,
                                                                 const std::string& name) {
@@ -802,4 +802,4 @@ inline void install_builtin(Environment& env,
     env.define(name, make_builtin_value(name, std::move(fn), std::move(pipe_param_name)));
 }
 
-} // namespace pl::flux::detail
+} // namespace pl::flux::runtime::detail

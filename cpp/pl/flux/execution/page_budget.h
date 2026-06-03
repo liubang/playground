@@ -24,30 +24,30 @@
 
 namespace pl::flux::execution {
 
-inline size_t EstimateValueBytes(const Value& value) {
+inline size_t EstimateValueBytes(const runtime::Value& value) {
     switch (value.type()) {
-        case Value::Type::String:
+        case runtime::Value::Type::String:
             return value.as_string().size();
-        case Value::Type::Time:
+        case runtime::Value::Type::Time:
             return value.as_time().literal.size();
-        case Value::Type::Array:
-        case Value::Type::Object:
-        case Value::Type::Function:
-        case Value::Type::Table:
+        case runtime::Value::Type::Array:
+        case runtime::Value::Type::Object:
+        case runtime::Value::Type::Function:
+        case runtime::Value::Type::Table:
             return value.string().size();
         default:
-            return sizeof(Value);
+            return sizeof(runtime::Value);
     }
 }
 
-inline size_t EstimatePageBytes(const Page& page) {
-    size_t bytes = sizeof(Page);
+inline size_t EstimatePageBytes(const runtime::Page& page) {
+    size_t bytes = sizeof(runtime::Page);
     for (const auto& chunk : page.chunks) {
-        bytes += sizeof(PageChunk);
-        bytes += chunk.columns.size() * sizeof(ColumnVector);
+        bytes += sizeof(runtime::PageChunk);
+        bytes += chunk.columns.size() * sizeof(runtime::ColumnVector);
         for (const auto& column : chunk.columns) {
             bytes += column.name.size();
-            bytes += column.values.capacity() * sizeof(Value);
+            bytes += column.values.capacity() * sizeof(runtime::Value);
             for (const auto& value : column.values) {
                 bytes += EstimateValueBytes(value);
             }

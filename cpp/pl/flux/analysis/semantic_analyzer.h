@@ -54,7 +54,7 @@ enum class ReferenceKind {
 
 struct SemanticDiagnostic {
     std::string message;
-    SourceLocation location;
+    syntax::SourceLocation location;
     DiagnosticSeverity severity = DiagnosticSeverity::Warning;
 };
 
@@ -62,7 +62,7 @@ struct Symbol {
     size_t id = 0;
     std::string name;
     SymbolKind kind = SymbolKind::Variable;
-    SourceLocation location;
+    syntax::SourceLocation location;
     size_t scope_id = 0;
     std::optional<std::string> import_path;
     std::optional<std::string> builtin_package;
@@ -72,7 +72,7 @@ struct Symbol {
 
 struct SymbolReference {
     std::string name;
-    SourceLocation location;
+    syntax::SourceLocation location;
     ReferenceKind kind = ReferenceKind::Identifier;
     size_t scope_id = 0;
     size_t definition_id = 0;
@@ -84,7 +84,7 @@ struct SymbolReference {
 struct ScopeInfo {
     size_t id = 0;
     size_t parent_id = 0;
-    SourceLocation location;
+    syntax::SourceLocation location;
     std::vector<size_t> definitions{};
 };
 
@@ -119,7 +119,7 @@ public:
         std::string source_base_dir;
     };
 
-    AnalysisResult Analyze(const File& file, Options options = {});
+    AnalysisResult Analyze(const syntax::File& file, Options options = {});
 };
 
 struct PackageAnalysisResult {
@@ -132,7 +132,7 @@ struct PackageAnalysisResult {
 
 class PackageAnalyzer {
 public:
-    PackageAnalysisResult Analyze(const Package& package);
+    PackageAnalysisResult Analyze(const syntax::Package& package);
 };
 
 } // namespace pl::flux::analysis

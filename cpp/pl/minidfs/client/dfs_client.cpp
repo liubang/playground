@@ -827,8 +827,7 @@ Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
         // Verify checksum
         uint32_t computed = compute_crc32c(resp.data().data(), resp.data().size());
         if (computed != resp.checksum()) {
-            LOG(WARNING) << "ReadBlock from " << addr
-                         << ": checksum mismatch, trying next replica";
+            LOG(WARNING) << "ReadBlock from " << addr << ": checksum mismatch, trying next replica";
             continue;
         }
 

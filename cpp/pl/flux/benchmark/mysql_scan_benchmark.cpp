@@ -122,12 +122,12 @@ int main(int argc, char** argv) {
     size_t output_rows = 0;
     size_t output_pages = 0;
     const auto started = std::chrono::steady_clock::now();
-    auto result_or = pl::flux::execution::Scheduler().RunToSink(std::move(*task_or),
-                                                                [&](const pl::flux::Page& page) {
-                                                                    ++output_pages;
-                                                                    output_rows += page.row_count();
-                                                                    return absl::OkStatus();
-                                                                });
+    auto result_or = pl::flux::execution::Scheduler().RunToSink(
+        std::move(*task_or), [&](const pl::flux::runtime::Page& page) {
+            ++output_pages;
+            output_rows += page.row_count();
+            return absl::OkStatus();
+        });
     const auto elapsed = std::chrono::steady_clock::now() - started;
     if (!result_or.ok()) {
         std::cerr << result_or.status() << "\n";

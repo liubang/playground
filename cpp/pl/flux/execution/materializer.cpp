@@ -22,8 +22,8 @@
 
 namespace pl::flux::execution {
 
-absl::StatusOr<Value> Materializer::Materialize(Value value) const {
-    if (value.type() != Value::Type::Table) {
+absl::StatusOr<runtime::Value> Materializer::Materialize(runtime::Value value) const {
+    if (value.type() != runtime::Value::Type::Table) {
         return value;
     }
     auto& table = value.as_table_mut();
@@ -45,7 +45,7 @@ absl::StatusOr<Value> Materializer::Materialize(Value value) const {
     return *materialized_or;
 }
 
-absl::StatusOr<Value> MaterializeValue(Value value) {
+absl::StatusOr<runtime::Value> MaterializeValue(runtime::Value value) {
     return Materializer().Materialize(std::move(value));
 }
 

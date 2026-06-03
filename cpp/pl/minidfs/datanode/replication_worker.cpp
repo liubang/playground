@@ -118,8 +118,8 @@ void ReplicationWorker::execute_copy(const DataNodeTask& task) {
         return;
     }
 
-    LOG(INFO) << "replication copy succeeded: block " << task.block_id << " -> "
-              << task.target_host << ":" << task.target_port;
+    LOG(INFO) << "replication copy succeeded: block " << task.block_id << " -> " << task.target_host
+              << ":" << task.target_port;
 }
 
 void ReplicationWorker::execute_delete(const DataNodeTask& task) {

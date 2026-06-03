@@ -23,7 +23,7 @@
 
 #include "cpp/pl/flux/runtime/runtime_env.h"
 
-namespace pl::flux {
+namespace pl::flux::cli {
 
 enum class FluxOutputFormat {
     Human,
@@ -54,10 +54,10 @@ struct FluxCliResult {
     std::string error;
 };
 
-Environment MakeFluxCliEnvironment(const FluxCliOptions& options = {});
+runtime::Environment MakeFluxCliEnvironment(const FluxCliOptions& options = {});
 FluxCliResult ExecuteFluxSource(const std::string& source,
                                 const std::string& name,
-                                Environment& env,
+                                runtime::Environment& env,
                                 const FluxCliOptions& options = {});
 FluxCliResult DumpFluxAstSource(const std::string& source,
                                 const std::string& name,
@@ -72,4 +72,4 @@ int RunFluxRepl(std::istream& input,
                 bool interactive,
                 const FluxCliOptions& options = {});
 
-} // namespace pl::flux
+} // namespace pl::flux::cli

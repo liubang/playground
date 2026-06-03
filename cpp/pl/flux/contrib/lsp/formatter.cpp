@@ -25,11 +25,11 @@ namespace pl::flux::lsp {
 
 Formatter::Formatter(Options opts) : opts_(opts) {}
 
-std::string Formatter::format(const File& file) {
+std::string Formatter::format(const syntax::File& file) {
     output_.clear();
     indent_level_ = 0;
 
-    // Package clause
+    // syntax::Package clause
     if (file.package && file.package->name) {
         if (!file.package->attributes.empty()) {
             for (const auto& attr : file.package->attributes) {
@@ -85,101 +85,101 @@ std::string Formatter::format(const File& file) {
 }
 
 // ============================================================
-// Expression formatting
+// syntax::Expression formatting
 // ============================================================
 
-void Formatter::format_expr(const Expression& expr) {
+void Formatter::format_expr(const syntax::Expression& expr) {
     switch (expr.type) {
-        case Expression::Type::Identifier:
-            format_identifier(*std::get<std::unique_ptr<Identifier>>(expr.expr));
+        case syntax::Expression::Type::Identifier:
+            format_identifier(*std::get<std::unique_ptr<syntax::Identifier>>(expr.expr));
             break;
-        case Expression::Type::ArrayExpr:
-            format_array_expr(*std::get<std::unique_ptr<ArrayExpr>>(expr.expr));
+        case syntax::Expression::Type::ArrayExpr:
+            format_array_expr(*std::get<std::unique_ptr<syntax::ArrayExpr>>(expr.expr));
             break;
-        case Expression::Type::DictExpr:
-            format_dict_expr(*std::get<std::unique_ptr<DictExpr>>(expr.expr));
+        case syntax::Expression::Type::DictExpr:
+            format_dict_expr(*std::get<std::unique_ptr<syntax::DictExpr>>(expr.expr));
             break;
-        case Expression::Type::FunctionExpr:
-            format_function_expr(*std::get<std::unique_ptr<FunctionExpr>>(expr.expr));
+        case syntax::Expression::Type::FunctionExpr:
+            format_function_expr(*std::get<std::unique_ptr<syntax::FunctionExpr>>(expr.expr));
             break;
-        case Expression::Type::LogicalExpr:
-            format_logical_expr(*std::get<std::unique_ptr<LogicalExpr>>(expr.expr));
+        case syntax::Expression::Type::LogicalExpr:
+            format_logical_expr(*std::get<std::unique_ptr<syntax::LogicalExpr>>(expr.expr));
             break;
-        case Expression::Type::ObjectExpr:
-            format_object_expr(*std::get<std::unique_ptr<ObjectExpr>>(expr.expr));
+        case syntax::Expression::Type::ObjectExpr:
+            format_object_expr(*std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.expr));
             break;
-        case Expression::Type::MemberExpr:
-            format_member_expr(*std::get<std::unique_ptr<MemberExpr>>(expr.expr));
+        case syntax::Expression::Type::MemberExpr:
+            format_member_expr(*std::get<std::unique_ptr<syntax::MemberExpr>>(expr.expr));
             break;
-        case Expression::Type::IndexExpr:
-            format_index_expr(*std::get<std::unique_ptr<IndexExpr>>(expr.expr));
+        case syntax::Expression::Type::IndexExpr:
+            format_index_expr(*std::get<std::unique_ptr<syntax::IndexExpr>>(expr.expr));
             break;
-        case Expression::Type::BinaryExpr:
-            format_binary_expr(*std::get<std::unique_ptr<BinaryExpr>>(expr.expr));
+        case syntax::Expression::Type::BinaryExpr:
+            format_binary_expr(*std::get<std::unique_ptr<syntax::BinaryExpr>>(expr.expr));
             break;
-        case Expression::Type::UnaryExpr:
-            format_unary_expr(*std::get<std::unique_ptr<UnaryExpr>>(expr.expr));
+        case syntax::Expression::Type::UnaryExpr:
+            format_unary_expr(*std::get<std::unique_ptr<syntax::UnaryExpr>>(expr.expr));
             break;
-        case Expression::Type::PipeExpr:
-            format_pipe_expr(*std::get<std::unique_ptr<PipeExpr>>(expr.expr));
+        case syntax::Expression::Type::PipeExpr:
+            format_pipe_expr(*std::get<std::unique_ptr<syntax::PipeExpr>>(expr.expr));
             break;
-        case Expression::Type::CallExpr:
-            format_call_expr(*std::get<std::unique_ptr<CallExpr>>(expr.expr));
+        case syntax::Expression::Type::CallExpr:
+            format_call_expr(*std::get<std::unique_ptr<syntax::CallExpr>>(expr.expr));
             break;
-        case Expression::Type::ConditionalExpr:
-            format_conditional_expr(*std::get<std::unique_ptr<ConditionalExpr>>(expr.expr));
+        case syntax::Expression::Type::ConditionalExpr:
+            format_conditional_expr(*std::get<std::unique_ptr<syntax::ConditionalExpr>>(expr.expr));
             break;
-        case Expression::Type::StringExpr:
-            format_string_expr(*std::get<std::unique_ptr<StringExpr>>(expr.expr));
+        case syntax::Expression::Type::StringExpr:
+            format_string_expr(*std::get<std::unique_ptr<syntax::StringExpr>>(expr.expr));
             break;
-        case Expression::Type::ParenExpr:
-            format_paren_expr(*std::get<std::unique_ptr<ParenExpr>>(expr.expr));
+        case syntax::Expression::Type::ParenExpr:
+            format_paren_expr(*std::get<std::unique_ptr<syntax::ParenExpr>>(expr.expr));
             break;
-        case Expression::Type::IntegerLit:
-            emit(std::get<std::unique_ptr<IntegerLit>>(expr.expr)->string());
+        case syntax::Expression::Type::IntegerLit:
+            emit(std::get<std::unique_ptr<syntax::IntegerLit>>(expr.expr)->string());
             break;
-        case Expression::Type::FloatLit:
-            emit(std::get<std::unique_ptr<FloatLit>>(expr.expr)->string());
+        case syntax::Expression::Type::FloatLit:
+            emit(std::get<std::unique_ptr<syntax::FloatLit>>(expr.expr)->string());
             break;
-        case Expression::Type::StringLit: {
-            const auto& lit = *std::get<std::unique_ptr<StringLit>>(expr.expr);
+        case syntax::Expression::Type::StringLit: {
+            const auto& lit = *std::get<std::unique_ptr<syntax::StringLit>>(expr.expr);
             emit("\"");
             emit(lit.string());
             emit("\"");
             break;
         }
-        case Expression::Type::DurationLit:
-            emit(std::get<std::unique_ptr<DurationLit>>(expr.expr)->string());
+        case syntax::Expression::Type::DurationLit:
+            emit(std::get<std::unique_ptr<syntax::DurationLit>>(expr.expr)->string());
             break;
-        case Expression::Type::UnsignedIntegerLit:
-            emit(std::get<std::unique_ptr<UintLit>>(expr.expr)->string());
+        case syntax::Expression::Type::UnsignedIntegerLit:
+            emit(std::get<std::unique_ptr<syntax::UintLit>>(expr.expr)->string());
             break;
-        case Expression::Type::BooleanLit:
-            emit(std::get<std::unique_ptr<BooleanLit>>(expr.expr)->string());
+        case syntax::Expression::Type::BooleanLit:
+            emit(std::get<std::unique_ptr<syntax::BooleanLit>>(expr.expr)->string());
             break;
-        case Expression::Type::DateTimeLit:
-            emit(std::get<std::unique_ptr<DateTimeLit>>(expr.expr)->string());
+        case syntax::Expression::Type::DateTimeLit:
+            emit(std::get<std::unique_ptr<syntax::DateTimeLit>>(expr.expr)->string());
             break;
-        case Expression::Type::RegexpLit:
-            emit(std::get<std::unique_ptr<RegexpLit>>(expr.expr)->string());
+        case syntax::Expression::Type::RegexpLit:
+            emit(std::get<std::unique_ptr<syntax::RegexpLit>>(expr.expr)->string());
             break;
-        case Expression::Type::PipeLit:
+        case syntax::Expression::Type::PipeLit:
             emit("<-");
             break;
-        case Expression::Type::LabelLit:
-            emit(std::get<std::unique_ptr<LabelLit>>(expr.expr)->string());
+        case syntax::Expression::Type::LabelLit:
+            emit(std::get<std::unique_ptr<syntax::LabelLit>>(expr.expr)->string());
             break;
-        case Expression::Type::BadExpr:
-            emit(std::get<std::unique_ptr<BadExpr>>(expr.expr)->text);
+        case syntax::Expression::Type::BadExpr:
+            emit(std::get<std::unique_ptr<syntax::BadExpr>>(expr.expr)->text);
             break;
     }
 }
 
-void Formatter::format_identifier(const Identifier& id) {
+void Formatter::format_identifier(const syntax::Identifier& id) {
     emit(id.name);
 }
 
-void Formatter::format_array_expr(const ArrayExpr& expr) {
+void Formatter::format_array_expr(const syntax::ArrayExpr& expr) {
     if (expr.elements.empty()) {
         emit("[]");
         return;
@@ -202,7 +202,7 @@ void Formatter::format_array_expr(const ArrayExpr& expr) {
     }
 }
 
-void Formatter::format_array_expr_multiline(const ArrayExpr& expr) {
+void Formatter::format_array_expr_multiline(const syntax::ArrayExpr& expr) {
     emit("[");
     indent();
     for (const auto& elem : expr.elements) {
@@ -217,7 +217,7 @@ void Formatter::format_array_expr_multiline(const ArrayExpr& expr) {
     emit("]");
 }
 
-void Formatter::format_dict_expr(const DictExpr& expr) {
+void Formatter::format_dict_expr(const syntax::DictExpr& expr) {
     if (expr.elements.empty()) {
         emit("[:]");
         return;
@@ -234,7 +234,7 @@ void Formatter::format_dict_expr(const DictExpr& expr) {
     emit("]");
 }
 
-void Formatter::format_function_expr(const FunctionExpr& expr) {
+void Formatter::format_function_expr(const syntax::FunctionExpr& expr) {
     emit("(");
     for (size_t i = 0; i < expr.params.size(); ++i) {
         if (i > 0) {
@@ -249,13 +249,13 @@ void Formatter::format_function_expr(const FunctionExpr& expr) {
     }
 }
 
-void Formatter::format_logical_expr(const LogicalExpr& expr) {
+void Formatter::format_logical_expr(const syntax::LogicalExpr& expr) {
     format_expr(*expr.left);
     emit(op_string(expr.op));
     format_expr(*expr.right);
 }
 
-void Formatter::format_object_expr(const ObjectExpr& expr) {
+void Formatter::format_object_expr(const syntax::ObjectExpr& expr) {
     if (expr.properties.empty() && !expr.with) {
         emit("{}");
         return;
@@ -284,7 +284,7 @@ void Formatter::format_object_expr(const ObjectExpr& expr) {
     }
 }
 
-void Formatter::format_object_expr_multiline(const ObjectExpr& expr) {
+void Formatter::format_object_expr_multiline(const syntax::ObjectExpr& expr) {
     emit("{");
     indent();
     if (expr.with) {
@@ -305,20 +305,20 @@ void Formatter::format_object_expr_multiline(const ObjectExpr& expr) {
     emit("}");
 }
 
-void Formatter::format_member_expr(const MemberExpr& expr) {
+void Formatter::format_member_expr(const syntax::MemberExpr& expr) {
     format_expr(*expr.object);
     emit(".");
     format_property_key(*expr.property);
 }
 
-void Formatter::format_index_expr(const IndexExpr& expr) {
+void Formatter::format_index_expr(const syntax::IndexExpr& expr) {
     format_expr(*expr.array);
     emit("[");
     format_expr(*expr.index);
     emit("]");
 }
 
-void Formatter::format_binary_expr(const BinaryExpr& expr) {
+void Formatter::format_binary_expr(const syntax::BinaryExpr& expr) {
     format_expr(*expr.left);
     emit(" ");
     emit(op_string(expr.op));
@@ -326,22 +326,22 @@ void Formatter::format_binary_expr(const BinaryExpr& expr) {
     format_expr(*expr.right);
 }
 
-void Formatter::format_unary_expr(const UnaryExpr& expr) {
+void Formatter::format_unary_expr(const syntax::UnaryExpr& expr) {
     emit(op_string(expr.op));
     format_expr(*expr.argument);
 }
 
-void Formatter::format_pipe_expr(const PipeExpr& expr) {
+void Formatter::format_pipe_expr(const syntax::PipeExpr& expr) {
     // Flatten the pipe chain: a |> b() |> c() is PipeExpr(PipeExpr(a, b), c)
     // Collect all pipe steps into a flat list.
-    std::vector<const CallExpr*> steps;
-    const PipeExpr* current = &expr;
+    std::vector<const syntax::CallExpr*> steps;
+    const syntax::PipeExpr* current = &expr;
 
     // Walk down the left-recursive pipe chain
     while (true) {
         steps.push_back(current->call.get());
-        if (current->argument->type == Expression::Type::PipeExpr) {
-            current = std::get<std::unique_ptr<PipeExpr>>(current->argument->expr).get();
+        if (current->argument->type == syntax::Expression::Type::PipeExpr) {
+            current = std::get<std::unique_ptr<syntax::PipeExpr>>(current->argument->expr).get();
         } else {
             break;
         }
@@ -364,7 +364,7 @@ void Formatter::format_pipe_expr(const PipeExpr& expr) {
     dedent();
 }
 
-void Formatter::format_call_expr(const CallExpr& expr) {
+void Formatter::format_call_expr(const syntax::CallExpr& expr) {
     // Expand to multi-line if the call contains structurally complex arguments
     // (pipe exprs, functions, deeply nested objects).
     if (is_complex_call(expr)) {
@@ -380,11 +380,12 @@ void Formatter::format_call_expr(const CallExpr& expr) {
         return;
     }
 
-    // Inline: unwrap single ObjectExpr argument
+    // Inline: unwrap single syntax::ObjectExpr argument
     format_expr(*expr.callee);
     emit("(");
-    if (expr.arguments.size() == 1 && expr.arguments[0]->type == Expression::Type::ObjectExpr) {
-        const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.arguments[0]->expr);
+    if (expr.arguments.size() == 1 &&
+        expr.arguments[0]->type == syntax::Expression::Type::ObjectExpr) {
+        const auto& obj = *std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.arguments[0]->expr);
         for (size_t i = 0; i < obj.properties.size(); ++i) {
             if (i > 0) {
                 emit(", ");
@@ -402,7 +403,7 @@ void Formatter::format_call_expr(const CallExpr& expr) {
     emit(")");
 }
 
-void Formatter::format_call_expr_multiline(const CallExpr& expr) {
+void Formatter::format_call_expr_multiline(const syntax::CallExpr& expr) {
     format_expr(*expr.callee);
     emit("(");
 
@@ -411,10 +412,11 @@ void Formatter::format_call_expr_multiline(const CallExpr& expr) {
         return;
     }
 
-    // For call arguments, which are typically ObjectExpr nodes wrapping named params,
-    // we check if there's a single ObjectExpr argument (the common pattern in Flux).
-    if (expr.arguments.size() == 1 && expr.arguments[0]->type == Expression::Type::ObjectExpr) {
-        const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.arguments[0]->expr);
+    // For call arguments, which are typically syntax::ObjectExpr nodes wrapping named params,
+    // we check if there's a single syntax::ObjectExpr argument (the common pattern in Flux).
+    if (expr.arguments.size() == 1 &&
+        expr.arguments[0]->type == syntax::Expression::Type::ObjectExpr) {
+        const auto& obj = *std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.arguments[0]->expr);
         // Expand the object's properties directly as call arguments
         indent();
         for (const auto& prop : obj.properties) {
@@ -442,7 +444,7 @@ void Formatter::format_call_expr_multiline(const CallExpr& expr) {
     }
 }
 
-void Formatter::format_conditional_expr(const ConditionalExpr& expr) {
+void Formatter::format_conditional_expr(const syntax::ConditionalExpr& expr) {
     emit("if ");
     format_expr(*expr.test);
     emit(" then ");
@@ -451,16 +453,17 @@ void Formatter::format_conditional_expr(const ConditionalExpr& expr) {
     format_expr(*expr.alternate);
 }
 
-void Formatter::format_string_expr(const StringExpr& expr) {
+void Formatter::format_string_expr(const syntax::StringExpr& expr) {
     emit("\"");
     for (const auto& part : expr.parts) {
         switch (part->type) {
-            case StringExprPart::Type::Text:
-                emit(std::get<std::unique_ptr<TextPart>>(part->part)->value);
+            case syntax::StringExprPart::Type::Text:
+                emit(std::get<std::unique_ptr<syntax::TextPart>>(part->part)->value);
                 break;
-            case StringExprPart::Type::Interpolated:
+            case syntax::StringExprPart::Type::Interpolated:
                 emit("${");
-                format_expr(*std::get<std::unique_ptr<InterpolatedPart>>(part->part)->expression);
+                format_expr(
+                    *std::get<std::unique_ptr<syntax::InterpolatedPart>>(part->part)->expression);
                 emit("}");
                 break;
         }
@@ -468,17 +471,17 @@ void Formatter::format_string_expr(const StringExpr& expr) {
     emit("\"");
 }
 
-void Formatter::format_paren_expr(const ParenExpr& expr) {
+void Formatter::format_paren_expr(const syntax::ParenExpr& expr) {
     emit("(");
     format_expr(*expr.expression);
     emit(")");
 }
 
 // ============================================================
-// Statement formatting
+// syntax::Statement formatting
 // ============================================================
 
-void Formatter::format_stmt(const Statement& stmt) {
+void Formatter::format_stmt(const syntax::Statement& stmt) {
     if (!stmt.attributes.empty()) {
         for (const auto& attr : stmt.attributes) {
             emit(attr->string());
@@ -487,51 +490,51 @@ void Formatter::format_stmt(const Statement& stmt) {
     }
 
     switch (stmt.type) {
-        case Statement::Type::ExpressionStatement:
-            format_expr_stmt(*std::get<std::unique_ptr<ExprStmt>>(stmt.stmt));
+        case syntax::Statement::Type::ExpressionStatement:
+            format_expr_stmt(*std::get<std::unique_ptr<syntax::ExprStmt>>(stmt.stmt));
             break;
-        case Statement::Type::VariableAssignment:
-            format_variable_assgn(*std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt));
+        case syntax::Statement::Type::VariableAssignment:
+            format_variable_assgn(*std::get<std::unique_ptr<syntax::VariableAssgn>>(stmt.stmt));
             break;
-        case Statement::Type::OptionStatement:
-            format_option_stmt(*std::get<std::unique_ptr<OptionStmt>>(stmt.stmt));
+        case syntax::Statement::Type::OptionStatement:
+            format_option_stmt(*std::get<std::unique_ptr<syntax::OptionStmt>>(stmt.stmt));
             break;
-        case Statement::Type::ReturnStatement:
-            format_return_stmt(*std::get<std::unique_ptr<ReturnStmt>>(stmt.stmt));
+        case syntax::Statement::Type::ReturnStatement:
+            format_return_stmt(*std::get<std::unique_ptr<syntax::ReturnStmt>>(stmt.stmt));
             break;
-        case Statement::Type::BadStatement:
-            emit(std::get<std::unique_ptr<BadStmt>>(stmt.stmt)->text);
+        case syntax::Statement::Type::BadStatement:
+            emit(std::get<std::unique_ptr<syntax::BadStmt>>(stmt.stmt)->text);
             break;
-        case Statement::Type::TestCaseStatement:
-            format_testcase_stmt(*std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt));
+        case syntax::Statement::Type::TestCaseStatement:
+            format_testcase_stmt(*std::get<std::unique_ptr<syntax::TestCaseStmt>>(stmt.stmt));
             break;
-        case Statement::Type::BuiltinStatement:
-            format_builtin_stmt(*std::get<std::unique_ptr<BuiltinStmt>>(stmt.stmt));
+        case syntax::Statement::Type::BuiltinStatement:
+            format_builtin_stmt(*std::get<std::unique_ptr<syntax::BuiltinStmt>>(stmt.stmt));
             break;
     }
 }
 
-void Formatter::format_expr_stmt(const ExprStmt& stmt) {
+void Formatter::format_expr_stmt(const syntax::ExprStmt& stmt) {
     format_expr(*stmt.expression);
 }
 
-void Formatter::format_variable_assgn(const VariableAssgn& stmt) {
+void Formatter::format_variable_assgn(const syntax::VariableAssgn& stmt) {
     emit(stmt.id->string());
     emit(" = ");
     format_expr(*stmt.init);
 }
 
-void Formatter::format_option_stmt(const OptionStmt& stmt) {
+void Formatter::format_option_stmt(const syntax::OptionStmt& stmt) {
     emit("option ");
     format_assignment(*stmt.assignment);
 }
 
-void Formatter::format_return_stmt(const ReturnStmt& stmt) {
+void Formatter::format_return_stmt(const syntax::ReturnStmt& stmt) {
     emit("return ");
     format_expr(*stmt.argument);
 }
 
-void Formatter::format_testcase_stmt(const TestCaseStmt& stmt) {
+void Formatter::format_testcase_stmt(const syntax::TestCaseStmt& stmt) {
     emit("testcase ");
     emit(stmt.id->string());
     if (stmt.extends) {
@@ -543,8 +546,8 @@ void Formatter::format_testcase_stmt(const TestCaseStmt& stmt) {
     format_block(*stmt.block);
 }
 
-void Formatter::format_builtin_stmt(const BuiltinStmt& stmt) {
-    // BuiltinStmt::string() already produces "builtin <id>: <type>" format
+void Formatter::format_builtin_stmt(const syntax::BuiltinStmt& stmt) {
+    // syntax::BuiltinStmt::string() already produces "builtin <id>: <type>" format
     emit(stmt.string());
 }
 
@@ -552,7 +555,7 @@ void Formatter::format_builtin_stmt(const BuiltinStmt& stmt) {
 // Other node formatting
 // ============================================================
 
-void Formatter::format_property(const Property& prop) {
+void Formatter::format_property(const syntax::Property& prop) {
     format_property_key(*prop.key);
     if (prop.value) {
         emit(": ");
@@ -560,13 +563,13 @@ void Formatter::format_property(const Property& prop) {
     }
 }
 
-void Formatter::format_property_key(const PropertyKey& key) {
+void Formatter::format_property_key(const syntax::PropertyKey& key) {
     switch (key.type) {
-        case PropertyKey::Type::Identifier:
-            emit(std::get<std::unique_ptr<Identifier>>(key.key)->string());
+        case syntax::PropertyKey::Type::Identifier:
+            emit(std::get<std::unique_ptr<syntax::Identifier>>(key.key)->string());
             break;
-        case PropertyKey::Type::StringLiteral: {
-            const auto& lit = *std::get<std::unique_ptr<StringLit>>(key.key);
+        case syntax::PropertyKey::Type::StringLiteral: {
+            const auto& lit = *std::get<std::unique_ptr<syntax::StringLit>>(key.key);
             emit("\"");
             emit(lit.string());
             emit("\"");
@@ -575,7 +578,7 @@ void Formatter::format_property_key(const PropertyKey& key) {
     }
 }
 
-void Formatter::format_block(const Block& block) {
+void Formatter::format_block(const syntax::Block& block) {
     if (block.body.empty()) {
         emit("{}");
         return;
@@ -593,24 +596,24 @@ void Formatter::format_block(const Block& block) {
     emit("}");
 }
 
-void Formatter::format_function_body(const FunctionBody& body) {
+void Formatter::format_function_body(const syntax::FunctionBody& body) {
     switch (body.type) {
-        case FunctionBody::Type::Block:
-            format_block(*std::get<std::unique_ptr<Block>>(body.body));
+        case syntax::FunctionBody::Type::Block:
+            format_block(*std::get<std::unique_ptr<syntax::Block>>(body.body));
             break;
-        case FunctionBody::Type::Expression:
-            format_expr(*std::get<std::unique_ptr<Expression>>(body.body));
+        case syntax::FunctionBody::Type::Expression:
+            format_expr(*std::get<std::unique_ptr<syntax::Expression>>(body.body));
             break;
     }
 }
 
-void Formatter::format_assignment(const Assignment& assgn) {
+void Formatter::format_assignment(const syntax::Assignment& assgn) {
     switch (assgn.type) {
-        case Assignment::Type::VariableAssignment:
-            format_variable_assgn(*std::get<std::unique_ptr<VariableAssgn>>(assgn.value));
+        case syntax::Assignment::Type::VariableAssignment:
+            format_variable_assgn(*std::get<std::unique_ptr<syntax::VariableAssgn>>(assgn.value));
             break;
-        case Assignment::Type::MemberAssignment: {
-            const auto& ma = *std::get<std::unique_ptr<MemberAssgn>>(assgn.value);
+        case syntax::Assignment::Type::MemberAssignment: {
+            const auto& ma = *std::get<std::unique_ptr<syntax::MemberAssgn>>(assgn.value);
             format_member_expr(*ma.member);
             emit(" = ");
             format_expr(*ma.init);
@@ -623,7 +626,7 @@ void Formatter::format_assignment(const Assignment& assgn) {
 // Inline (single-line) formatting for width estimation
 // ============================================================
 
-std::string Formatter::try_format_inline(const Expression& expr) {
+std::string Formatter::try_format_inline(const syntax::Expression& expr) {
     Formatter tmp(opts_);
     tmp.indent_level_ = 0;
     // 设置预算: 当前行剩余可用宽度
@@ -640,7 +643,7 @@ std::string Formatter::try_format_inline(const Expression& expr) {
     return tmp.output_;
 }
 
-std::string Formatter::try_format_property_inline(const Property& prop) {
+std::string Formatter::try_format_property_inline(const syntax::Property& prop) {
     Formatter tmp(opts_);
     tmp.indent_level_ = 0;
     tmp.inline_budget_ = opts_.max_line_width;
@@ -648,7 +651,7 @@ std::string Formatter::try_format_property_inline(const Property& prop) {
     return tmp.output_;
 }
 
-std::string Formatter::try_format_call_inline(const CallExpr& expr) {
+std::string Formatter::try_format_call_inline(const syntax::CallExpr& expr) {
     Formatter tmp(opts_);
     tmp.indent_level_ = 0;
     tmp.inline_budget_ = opts_.max_line_width;
@@ -659,9 +662,10 @@ std::string Formatter::try_format_call_inline(const CallExpr& expr) {
         return tmp.output_;
     }
 
-    // Unwrap single ObjectExpr argument (common Flux pattern: named params)
-    if (expr.arguments.size() == 1 && expr.arguments[0]->type == Expression::Type::ObjectExpr) {
-        const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.arguments[0]->expr);
+    // Unwrap single syntax::ObjectExpr argument (common Flux pattern: named params)
+    if (expr.arguments.size() == 1 &&
+        expr.arguments[0]->type == syntax::Expression::Type::ObjectExpr) {
+        const auto& obj = *std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.arguments[0]->expr);
         for (size_t i = 0; i < obj.properties.size(); ++i) {
             if (tmp.budget_exceeded_) {
                 return tmp.output_;
@@ -692,7 +696,7 @@ std::string Formatter::try_format_call_inline(const CallExpr& expr) {
     return tmp.output_;
 }
 
-std::string Formatter::try_format_object_inline(const ObjectExpr& expr) {
+std::string Formatter::try_format_object_inline(const syntax::ObjectExpr& expr) {
     Formatter tmp(opts_);
     tmp.indent_level_ = 0;
     tmp.inline_budget_ = opts_.max_line_width;
@@ -718,10 +722,11 @@ std::string Formatter::try_format_object_inline(const ObjectExpr& expr) {
 // Complexity checks
 // ============================================================
 
-bool Formatter::is_complex_call(const CallExpr& expr) const {
-    // Unwrap single ObjectExpr (Flux named params pattern)
-    if (expr.arguments.size() == 1 && expr.arguments[0]->type == Expression::Type::ObjectExpr) {
-        const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.arguments[0]->expr);
+bool Formatter::is_complex_call(const syntax::CallExpr& expr) const {
+    // Unwrap single syntax::ObjectExpr (Flux named params pattern)
+    if (expr.arguments.size() == 1 &&
+        expr.arguments[0]->type == syntax::Expression::Type::ObjectExpr) {
+        const auto& obj = *std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.arguments[0]->expr);
         return std::ranges::any_of(obj.properties, [this](const auto& prop) {
             return prop->value && is_complex_expr(*prop->value);
         });
@@ -731,12 +736,12 @@ bool Formatter::is_complex_call(const CallExpr& expr) const {
                                [this](const auto& arg) { return is_complex_expr(*arg); });
 }
 
-bool Formatter::is_complex_expr(const Expression& expr) const {
+bool Formatter::is_complex_expr(const syntax::Expression& expr) const {
     switch (expr.type) {
-        case Expression::Type::PipeExpr:
+        case syntax::Expression::Type::PipeExpr:
             return true;
-        case Expression::Type::CallExpr: {
-            const auto& call = *std::get<std::unique_ptr<CallExpr>>(expr.expr);
+        case syntax::Expression::Type::CallExpr: {
+            const auto& call = *std::get<std::unique_ptr<syntax::CallExpr>>(expr.expr);
             // A nested call with arguments is complex if its args are complex
             if (!call.arguments.empty()) {
                 for (const auto& arg : call.arguments) {
@@ -747,8 +752,8 @@ bool Formatter::is_complex_expr(const Expression& expr) const {
             }
             return false;
         }
-        case Expression::Type::ObjectExpr: {
-            const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.expr);
+        case syntax::Expression::Type::ObjectExpr: {
+            const auto& obj = *std::get<std::unique_ptr<syntax::ObjectExpr>>(expr.expr);
             // An object with properties that themselves contain pipe/call exprs is complex
             if (obj.properties.size() > 3) {
                 return true;
@@ -757,11 +762,11 @@ bool Formatter::is_complex_expr(const Expression& expr) const {
                 return prop->value && is_complex_expr(*prop->value);
             });
         }
-        case Expression::Type::FunctionExpr: {
-            const auto& fn = *std::get<std::unique_ptr<FunctionExpr>>(expr.expr);
+        case syntax::Expression::Type::FunctionExpr: {
+            const auto& fn = *std::get<std::unique_ptr<syntax::FunctionExpr>>(expr.expr);
             // A function is only complex if it has a block body (multi-statement).
             // Simple arrow functions like `(r) => r.x == "y"` are not complex.
-            return fn.body && fn.body->type == FunctionBody::Type::Block;
+            return fn.body && fn.body->type == syntax::FunctionBody::Type::Block;
         }
         default:
             return false;
@@ -769,14 +774,14 @@ bool Formatter::is_complex_expr(const Expression& expr) const {
 }
 
 // ============================================================
-// Statement classification
+// syntax::Statement classification
 // ============================================================
 
-bool Formatter::is_simple_variable_assgn(const Statement& stmt) {
-    if (stmt.type != Statement::Type::VariableAssignment) {
+bool Formatter::is_simple_variable_assgn(const syntax::Statement& stmt) {
+    if (stmt.type != syntax::Statement::Type::VariableAssignment) {
         return false;
     }
-    const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt);
+    const auto& va = *std::get<std::unique_ptr<syntax::VariableAssgn>>(stmt.stmt);
     if (!va.init) {
         return true;
     }
@@ -785,8 +790,8 @@ bool Formatter::is_simple_variable_assgn(const Statement& stmt) {
         return false;
     }
     // Also check if it's a call expression that would exceed line width
-    if (va.init->type == Expression::Type::CallExpr) {
-        const auto& call = *std::get<std::unique_ptr<CallExpr>>(va.init->expr);
+    if (va.init->type == syntax::Expression::Type::CallExpr) {
+        const auto& call = *std::get<std::unique_ptr<syntax::CallExpr>>(va.init->expr);
         std::string inline_str = try_format_call_inline(call);
         // Estimate: "name = " prefix + call inline
         int estimated_width =

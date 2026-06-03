@@ -22,7 +22,7 @@
 #include "absl/status/statusor.h"
 #include "ast.h"
 
-namespace pl::flux {
+namespace pl::flux::syntax {
 
 constexpr unsigned char DURATION_UNIT_US[] = "µ";
 constexpr char DURATION_UNIT_US_ASCII[] = "us";
@@ -50,4 +50,4 @@ public:
     static absl::StatusOr<std::string> parse_unit(const std::string& chars, size_t& i);
 };
 
-} // namespace pl::flux
+} // namespace pl::flux::syntax

@@ -271,14 +271,15 @@ absl::Status BuildWhereClause(std::string* sql,
         }
         if (request.time_range->start.has_value()) {
             auto literal_or =
-                dialect.FormatLiteral(Value::string(*request.time_range->start), true);
+                dialect.FormatLiteral(runtime::Value::string(*request.time_range->start), true);
             if (!literal_or.ok()) {
                 return literal_or.status();
             }
             where_clauses.push_back(dialect.QuoteIdentifier("_time") + " >= " + *literal_or);
         }
         if (request.time_range->stop.has_value()) {
-            auto literal_or = dialect.FormatLiteral(Value::string(*request.time_range->stop), true);
+            auto literal_or =
+                dialect.FormatLiteral(runtime::Value::string(*request.time_range->stop), true);
             if (!literal_or.ok()) {
                 return literal_or.status();
             }
@@ -326,14 +327,14 @@ absl::Status BuildParameterizedWhereClause(std::string* sql,
         if (request.time_range->start.has_value()) {
             where_clauses.push_back(dialect.QuoteIdentifier("_time") + " >= ?");
             params->push_back(SqlParam{
-                .value = Value::string(*request.time_range->start),
+                .value = runtime::Value::string(*request.time_range->start),
                 .normalize_time = true,
             });
         }
         if (request.time_range->stop.has_value()) {
             where_clauses.push_back(dialect.QuoteIdentifier("_time") + " < ?");
             params->push_back(SqlParam{
-                .value = Value::string(*request.time_range->stop),
+                .value = runtime::Value::string(*request.time_range->stop),
                 .normalize_time = true,
             });
         }
@@ -490,7 +491,7 @@ absl::StatusOr<ParameterizedSql> BuildParameterizedScanSql(ParameterizedSql base
 
     if (request.limit.has_value()) {
         out.sql += " LIMIT ?";
-        out.params.push_back(SqlParam{.value = Value::integer(*request.limit)});
+        out.params.push_back(SqlParam{.value = runtime::Value::integer(*request.limit)});
     }
     if (request.offset.has_value()) {
         if (!request.limit.has_value()) {
@@ -498,7 +499,7 @@ absl::StatusOr<ParameterizedSql> BuildParameterizedScanSql(ParameterizedSql base
             out.sql += dialect.UnboundedLimit();
         }
         out.sql += " OFFSET ?";
-        out.params.push_back(SqlParam{.value = Value::integer(*request.offset)});
+        out.params.push_back(SqlParam{.value = runtime::Value::integer(*request.offset)});
     }
 
     return out;
