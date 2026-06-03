@@ -244,7 +244,8 @@ TEST_F(BlockManagerTest, TruncateFileShrinksLastRetainedBlockAndInvalidatesTail)
     ASSERT_TRUE(second_meta.hasValue());
     EXPECT_EQ(first_meta.value().length, 5u);
     EXPECT_EQ(second_meta.value().state, BlockState::kDeleted);
-    for (const auto& replica : store_->get_replicas(second.value().block_id).value()) {
+    auto tail_replicas = store_->get_replicas(second.value().block_id);
+    for (const auto& replica : tail_replicas.value()) {
         EXPECT_EQ(replica.state, ReplicaState::kDeleting);
     }
 }
@@ -286,7 +287,8 @@ TEST_F(BlockManagerTest, TruncateFileMarksFailedReplicaForDeletion) {
         });
     ASSERT_TRUE(result.hasValue());
 
-    for (const auto& replica : store_->get_replicas(block.value().block_id).value()) {
+    auto final_replicas = store_->get_replicas(block.value().block_id);
+    for (const auto& replica : final_replicas.value()) {
         EXPECT_EQ(replica.state,
                   replica.datanode_id == failed_datanode ? ReplicaState::kDeleting
                                                         : ReplicaState::kFinalized);
