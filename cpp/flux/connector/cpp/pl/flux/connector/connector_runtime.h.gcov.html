@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">14.3&nbsp;%</td>
@@ -114,7 +114,7 @@
 <span id="L43"><span class="lineNum">      43</span>                 :             : </span>
 <span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaUNC tlaBgUNC">           0 : struct ColumnHandle {</span></span>
 <span id="L45"><span class="lineNum">      45</span>                 :             :     std::string name;</span>
-<span id="L46"><span class="lineNum">      46</span>                 :             :     Value::Type type = Value::Type::Null;</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :     runtime::Value::Type type = runtime::Value::Type::Null;</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             :     bool nullable = true;</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : };</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : </span>
@@ -135,7 +135,7 @@
 <span id="L64"><span class="lineNum">      64</span>                 :             :     bool finished = false;</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : };</span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : </span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC tlaBgGNC">         954 : struct ConnectorSplitStats {</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC tlaBgGNC">         949 : struct ConnectorSplitStats {</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :             :     int64_t split_id = 0;</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :     size_t pages_produced = 0;</span>
 <span id="L70"><span class="lineNum">      70</span>                 :             :     size_t rows_produced = 0;</span>
@@ -157,7 +157,7 @@
 <span id="L86"><span class="lineNum">      86</span>                 :             : public:</span>
 <span id="L87"><span class="lineNum">      87</span>                 :             :     virtual ~ConnectorPageSource() = default;</span>
 <span id="L88"><span class="lineNum">      88</span>                 :             : </span>
-<span id="L89"><span class="lineNum">      89</span>                 :             :     virtual absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() = 0;</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :     virtual absl::StatusOr&lt;std::optional&lt;runtime::Page&gt;&gt; NextPage() = 0;</span>
 <span id="L90"><span class="lineNum">      90</span>                 :             : </span>
 <span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     [[nodiscard]] virtual ConnectorSplitStats Stats() const { return {}; }</span></span>
 <span id="L92"><span class="lineNum">      92</span>                 :             : </span>
@@ -229,7 +229,7 @@
 <span id="L157"><span class="lineNum">     157</span>                 :             : class ChunkedPageSource final : public ConnectorPageSource {</span>
 <span id="L158"><span class="lineNum">     158</span>                 :             : public:</span>
 <span id="L159"><span class="lineNum">     159</span>                 :             :     ChunkedPageSource(std::string bucket,</span>
-<span id="L160"><span class="lineNum">     160</span>                 :             :                       std::vector&lt;TableChunk&gt; chunks,</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :                       std::vector&lt;runtime::TableChunk&gt; chunks,</span>
 <span id="L161"><span class="lineNum">     161</span>                 :             :                       size_t rows_per_page,</span>
 <span id="L162"><span class="lineNum">     162</span>                 :             :                       int64_t split_id = 0)</span>
 <span id="L163"><span class="lineNum">     163</span>                 :             :         : bucket_(std::move(bucket)),</span>
@@ -238,14 +238,14 @@
 <span id="L166"><span class="lineNum">     166</span>                 :             :         stats_.split_id = split_id;</span>
 <span id="L167"><span class="lineNum">     167</span>                 :             :     }</span>
 <span id="L168"><span class="lineNum">     168</span>                 :             : </span>
-<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override {</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     absl::StatusOr&lt;std::optional&lt;runtime::Page&gt;&gt; NextPage() override {</span></span>
 <span id="L170"><span class="lineNum">     170</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (next_chunk_ &gt;= chunks_.size()) {</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaUNC">           0 :             stats_.finished = true;</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :             :             return std::nullopt;</span>
 <span id="L173"><span class="lineNum">     173</span>                 :             :         }</span>
 <span id="L174"><span class="lineNum">     174</span>                 :             : </span>
-<span id="L175"><span class="lineNum">     175</span>                 :             :         const TableChunk&amp; source = chunks_[next_chunk_];</span>
-<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaUNC">           0 :         TableChunk chunk;</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :             :         const runtime::TableChunk&amp; source = chunks_[next_chunk_];</span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaUNC">           0 :         runtime::TableChunk chunk;</span></span>
 <span id="L177"><span class="lineNum">     177</span>                 :             :         chunk.group_key = source.group_key;</span>
 <span id="L178"><span class="lineNum">     178</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         chunk.columns = source.columns;</span></span>
 <span id="L179"><span class="lineNum">     179</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (source.rows.empty()) {</span></span>
@@ -263,9 +263,9 @@
 <span id="L191"><span class="lineNum">     191</span>                 :             :             }</span>
 <span id="L192"><span class="lineNum">     192</span>                 :             :         }</span>
 <span id="L193"><span class="lineNum">     193</span>                 :             : </span>
-<span id="L194"><span class="lineNum">     194</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         std::vector&lt;TableChunk&gt; chunks;</span></span>
+<span id="L194"><span class="lineNum">     194</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         std::vector&lt;runtime::TableChunk&gt; chunks;</span></span>
 <span id="L195"><span class="lineNum">     195</span>                 :             :         chunks.push_back(std::move(chunk));</span>
-<span id="L196"><span class="lineNum">     196</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :         Page page = PageFromTableChunks(bucket_, chunks);</span></span>
+<span id="L196"><span class="lineNum">     196</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :         runtime::Page page = PageFromTableChunks(bucket_, chunks);</span></span>
 <span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaUNC">           0 :         ++stats_.pages_produced;</span></span>
 <span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaUNC">           0 :         stats_.rows_produced += page.row_count();</span></span>
 <span id="L199"><span class="lineNum">     199</span>                 :             :         return page;</span>
@@ -277,7 +277,7 @@
 <span id="L205"><span class="lineNum">     205</span>                 :             : </span>
 <span id="L206"><span class="lineNum">     206</span>                 :             : private:</span>
 <span id="L207"><span class="lineNum">     207</span>                 :             :     std::string bucket_;</span>
-<span id="L208"><span class="lineNum">     208</span>                 :             :     std::vector&lt;TableChunk&gt; chunks_;</span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :     std::vector&lt;runtime::TableChunk&gt; chunks_;</span>
 <span id="L209"><span class="lineNum">     209</span>                 :             :     size_t rows_per_page_ = 1024;</span>
 <span id="L210"><span class="lineNum">     210</span>                 :             :     size_t next_chunk_ = 0;</span>
 <span id="L211"><span class="lineNum">     211</span>                 :             :     size_t next_row_ = 0;</span>

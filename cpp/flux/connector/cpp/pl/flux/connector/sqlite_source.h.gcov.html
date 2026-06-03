@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -109,7 +109,7 @@
 <span id="L38"><span class="lineNum">      38</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;TableSchema&gt; Schema() const;</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             :     [[nodiscard]] SourceCapabilities Capabilities() const;</span>
 <span id="L40"><span class="lineNum">      40</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;TableStatistics&gt; Statistics() const;</span>
-<span id="L41"><span class="lineNum">      41</span>                 :             :     absl::StatusOr&lt;Value&gt; Scan(const ScanRequest&amp; request);</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :     absl::StatusOr&lt;runtime::Value&gt; Scan(const ScanRequest&amp; request);</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : </span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : private:</span>
 <span id="L44"><span class="lineNum">      44</span>                 :             :     std::string dsn_;</span>
@@ -155,7 +155,7 @@
 <span id="L84"><span class="lineNum">      84</span>                 :             :                      int64_t split_id = 0);</span>
 <span id="L85"><span class="lineNum">      85</span>                 :             : </span>
 <span id="L86"><span class="lineNum">      86</span>                 :             :     absl::Status Initialize();</span>
-<span id="L87"><span class="lineNum">      87</span>                 :             :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override;</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :     absl::StatusOr&lt;std::optional&lt;runtime::Page&gt;&gt; NextPage() override;</span>
 <span id="L88"><span class="lineNum">      88</span>                 :             :     [[nodiscard]] ConnectorSplitStats Stats() const override;</span>
 <span id="L89"><span class="lineNum">      89</span>                 :             :     [[nodiscard]] bool Finished() const override;</span>
 <span id="L90"><span class="lineNum">      90</span>                 :             : </span>

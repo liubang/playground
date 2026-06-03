@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">42.9&nbsp;%</td>
@@ -97,15 +97,15 @@
 <span id="L26"><span class="lineNum">      26</span>                 :             : </span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : namespace {</span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : </span>
-<span id="L29"><span class="lineNum">      29</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          21 : std::optional&lt;pl::flux::FluxOutputFormat&gt; parse_output_format(std::string_view value) {</span></span>
+<span id="L29"><span class="lineNum">      29</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          21 : std::optional&lt;pl::flux::cli::FluxOutputFormat&gt; parse_output_format(std::string_view value) {</span></span>
 <span id="L30"><span class="lineNum">      30</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC">          21 :     if (value == &quot;human&quot;) {</span></span>
-<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::flux::FluxOutputFormat::Human;</span></span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::flux::cli::FluxOutputFormat::Human;</span></span>
 <span id="L32"><span class="lineNum">      32</span>                 :             :     }</span>
 <span id="L33"><span class="lineNum">      33</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          21 :     if (value == &quot;csv&quot;) {</span></span>
-<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::flux::FluxOutputFormat::Csv;</span></span>
+<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::flux::cli::FluxOutputFormat::Csv;</span></span>
 <span id="L35"><span class="lineNum">      35</span>                 :             :     }</span>
 <span id="L36"><span class="lineNum">      36</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          21 :     if (value == &quot;json&quot;) {</span></span>
-<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">          21 :         return pl::flux::FluxOutputFormat::Json;</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">          21 :         return pl::flux::cli::FluxOutputFormat::Json;</span></span>
 <span id="L38"><span class="lineNum">      38</span>                 :             :     }</span>
 <span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     return std::nullopt;</span></span>
 <span id="L40"><span class="lineNum">      40</span>                 :             : }</span>
@@ -128,7 +128,7 @@
 <span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaUNC">           0 : }</span></span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : </span>
 <span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaUNC">           0 : int run_ast_command(int argc, char* argv[]) {</span></span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaUNC">           0 :     pl::flux::FluxAstOptions options;</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaUNC">           0 :     pl::flux::cli::FluxAstOptions options;</span></span>
 <span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaUNC">           0 :     std::optional&lt;std::string&gt; eval_source;</span></span>
 <span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaUNC">           0 :     std::optional&lt;std::string&gt; file_name;</span></span>
 <span id="L63"><span class="lineNum">      63</span>                 :             : </span>
@@ -180,14 +180,14 @@
 <span id="L109"><span class="lineNum">     109</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         source = read_all(std::cin);</span></span>
 <span id="L110"><span class="lineNum">     110</span>                 :             :     }</span>
 <span id="L111"><span class="lineNum">     111</span>                 :             : </span>
-<span id="L112"><span class="lineNum">     112</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto result = pl::flux::DumpFluxAstSource(source, name, options);</span></span>
+<span id="L112"><span class="lineNum">     112</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto result = pl::flux::cli::DumpFluxAstSource(source, name, options);</span></span>
 <span id="L113"><span class="lineNum">     113</span>                 :             :     std::cout &lt;&lt; result.output;</span>
 <span id="L114"><span class="lineNum">     114</span>                 :             :     std::cerr &lt;&lt; result.error;</span>
 <span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaUNC">           0 :     return result.exit_code;</span></span>
 <span id="L116"><span class="lineNum">     116</span>                 :             : }</span>
 <span id="L117"><span class="lineNum">     117</span>                 :             : </span>
 <span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaUNC">           0 : int run_analyze_command(int argc, char* argv[]) {</span></span>
-<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaUNC">           0 :     pl::flux::FluxAnalyzeOptions options;</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaUNC">           0 :     pl::flux::cli::FluxAnalyzeOptions options;</span></span>
 <span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaUNC">           0 :     std::optional&lt;std::string&gt; eval_source;</span></span>
 <span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaUNC">           0 :     std::optional&lt;std::string&gt; file_name;</span></span>
 <span id="L122"><span class="lineNum">     122</span>                 :             : </span>
@@ -239,7 +239,7 @@
 <span id="L168"><span class="lineNum">     168</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         source = read_all(std::cin);</span></span>
 <span id="L169"><span class="lineNum">     169</span>                 :             :     }</span>
 <span id="L170"><span class="lineNum">     170</span>                 :             : </span>
-<span id="L171"><span class="lineNum">     171</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto result = pl::flux::AnalyzeFluxSource(source, name, options);</span></span>
+<span id="L171"><span class="lineNum">     171</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto result = pl::flux::cli::AnalyzeFluxSource(source, name, options);</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :             :     std::cout &lt;&lt; result.output;</span>
 <span id="L173"><span class="lineNum">     173</span>                 :             :     std::cerr &lt;&lt; result.error;</span>
 <span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaUNC">           0 :     return result.exit_code;</span></span>
@@ -261,7 +261,7 @@
 <span id="L190"><span class="lineNum">     190</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         print_usage(std::cerr);</span></span>
 <span id="L191"><span class="lineNum">     191</span>                 :             :         return 1;</span>
 <span id="L192"><span class="lineNum">     192</span>                 :             :     }</span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaUNC">           0 :     auto result = pl::flux::DumpFluxBuiltinCatalog(json);</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaUNC">           0 :     auto result = pl::flux::cli::DumpFluxBuiltinCatalog(json);</span></span>
 <span id="L194"><span class="lineNum">     194</span>                 :             :     std::cout &lt;&lt; result.output;</span>
 <span id="L195"><span class="lineNum">     195</span>                 :             :     std::cerr &lt;&lt; result.error;</span>
 <span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaUNC">           0 :     return result.exit_code;</span></span>
@@ -280,7 +280,7 @@
 <span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return run_builtins_command(argc, argv);</span></span>
 <span id="L210"><span class="lineNum">     210</span>                 :             :     }</span>
 <span id="L211"><span class="lineNum">     211</span>                 :             : </span>
-<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC tlaBgGNC">          23 :     pl::flux::FluxCliOptions options;</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC tlaBgGNC">          23 :     pl::flux::cli::FluxCliOptions options;</span></span>
 <span id="L213"><span class="lineNum">     213</span>                 :             :     bool repl = false;</span>
 <span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          23 :     std::optional&lt;std::string&gt; eval_source;</span></span>
 <span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">          23 :     std::optional&lt;std::string&gt; file_name;</span></span>
@@ -378,7 +378,7 @@
 <span id="L303"><span class="lineNum">     303</span>   [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 23 times"> + </span> :<span class="tlaGNC tlaBgGNC">          23 :     if (repl || (!file_name.has_value() &amp;&amp; !eval_source.has_value())) {</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         options.table_borders = isatty(STDOUT_FILENO) != 0;</span></span>
-<span id="L305"><span class="lineNum">     305</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return pl::flux::RunFluxRepl(</span></span>
+<span id="L305"><span class="lineNum">     305</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return pl::flux::cli::RunFluxRepl(</span></span>
 <span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaUNC">           0 :             std::cin, std::cout, std::cerr, isatty(STDIN_FILENO) != 0, options);</span></span>
 <span id="L307"><span class="lineNum">     307</span>                 :             :     }</span>
 <span id="L308"><span class="lineNum">     308</span>                 :             : </span>
@@ -397,8 +397,8 @@
 <span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          23 :     }</span></span>
 <span id="L322"><span class="lineNum">     322</span>                 :             : </span>
 <span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          23 :     options.table_borders = isatty(STDOUT_FILENO) != 0;</span></span>
-<span id="L324"><span class="lineNum">     324</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 :     auto env = pl::flux::MakeFluxCliEnvironment(options);</span></span>
-<span id="L325"><span class="lineNum">     325</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 :     auto result = pl::flux::ExecuteFluxSource(source, name, env, options);</span></span>
+<span id="L324"><span class="lineNum">     324</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 :     auto env = pl::flux::cli::MakeFluxCliEnvironment(options);</span></span>
+<span id="L325"><span class="lineNum">     325</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 :     auto result = pl::flux::cli::ExecuteFluxSource(source, name, env, options);</span></span>
 <span id="L326"><span class="lineNum">     326</span>                 :             :     std::cout &lt;&lt; result.output;</span>
 <span id="L327"><span class="lineNum">     327</span>                 :             :     std::cerr &lt;&lt; result.error;</span>
 <span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">          23 :     return result.exit_code;</span></span>

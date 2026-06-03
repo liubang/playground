@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -100,7 +100,7 @@
 <span id="L29"><span class="lineNum">      29</span>                 :             : #include &quot;absl/time/time.h&quot;</span>
 <span id="L30"><span class="lineNum">      30</span>                 :             : #include &quot;cpp/pl/flux/runtime/runtime_builtin_table_helpers.h&quot;</span>
 <span id="L31"><span class="lineNum">      31</span>                 :             : </span>
-<span id="L32"><span class="lineNum">      32</span>                 :             : namespace pl::flux::detail {</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : namespace pl::flux::runtime::detail {</span>
 <span id="L33"><span class="lineNum">      33</span>                 :             : </span>
 <span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC tlaBgGNC">          76 : inline std::optional&lt;std::string&gt; row_time_literal(const ObjectValue&amp; row) {</span></span>
 <span id="L35"><span class="lineNum">      35</span>         [<span class="tlaGBC" title="Branch 0 was taken 76 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          76 :     const Value* time = row.lookup(&quot;_time&quot;);</span></span>
@@ -698,7 +698,7 @@
 <span id="L606"><span class="lineNum">     606</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">           9 :            bounds.upper_seconds &lt;= range_stop_seconds;</span></span>
 <span id="L607"><span class="lineNum">     607</span>                 :             : }</span>
 <span id="L608"><span class="lineNum">     608</span>                 :             : </span>
-<span id="L609"><span class="lineNum">     609</span>                 :             : } // namespace pl::flux::detail</span>
+<span id="L609"><span class="lineNum">     609</span>                 :             : } // namespace pl::flux::runtime::detail</span>
         </pre>
               </td>
             </tr>

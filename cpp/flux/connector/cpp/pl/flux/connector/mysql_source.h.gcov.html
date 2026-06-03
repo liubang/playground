@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -132,7 +132,7 @@
 <span id="L61"><span class="lineNum">      61</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;TableSchema&gt; Schema() const;</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :     [[nodiscard]] SourceCapabilities Capabilities() const;</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;TableStatistics&gt; Statistics() const;</span>
-<span id="L64"><span class="lineNum">      64</span>                 :             :     absl::StatusOr&lt;Value&gt; Scan(const ScanRequest&amp; request);</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :     absl::StatusOr&lt;runtime::Value&gt; Scan(const ScanRequest&amp; request);</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : </span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : private:</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :     std::string dsn_;</span>
@@ -200,7 +200,7 @@
 <span id="L127"><span class="lineNum">     127</span>                 :             :                     MySQLRuntimeOptions options = {});</span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : </span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :     absl::Status Initialize();</span>
-<span id="L130"><span class="lineNum">     130</span>                 :             :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override;</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :     absl::StatusOr&lt;std::optional&lt;runtime::Page&gt;&gt; NextPage() override;</span>
 <span id="L131"><span class="lineNum">     131</span>                 :             :     [[nodiscard]] ConnectorSplitStats Stats() const override;</span>
 <span id="L132"><span class="lineNum">     132</span>                 :             :     [[nodiscard]] bool Finished() const override;</span>
 <span id="L133"><span class="lineNum">     133</span>                 :             : </span>

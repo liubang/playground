@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -115,7 +115,7 @@
 <span id="L44"><span class="lineNum">      44</span>                 :             :     void Cancel() override;</span>
 <span id="L45"><span class="lineNum">      45</span>                 :             :     void CollectSplitStats(std::vector&lt;connector::ConnectorSplitStats&gt;* out) const override;</span>
 <span id="L46"><span class="lineNum">      46</span>                 :             :     void CollectAccumulatorStats(std::vector&lt;AccumulatorStats&gt;* out) const override;</span>
-<span id="L47"><span class="lineNum">      47</span>                 :             :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override;</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :     absl::StatusOr&lt;std::optional&lt;runtime::Page&gt;&gt; NextPage() override;</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : </span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : private:</span>
 <span id="L50"><span class="lineNum">      50</span>                 :             :     std::shared_ptr&lt;plan::PlanNode&gt; plan_;</span>
@@ -138,7 +138,7 @@
 <span id="L67"><span class="lineNum">      67</span>                 :             :     void Cancel() override;</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             :     void CollectSplitStats(std::vector&lt;connector::ConnectorSplitStats&gt;* out) const override;</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :     void CollectAccumulatorStats(std::vector&lt;AccumulatorStats&gt;* out) const override;</span>
-<span id="L70"><span class="lineNum">      70</span>                 :             :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override;</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :     absl::StatusOr&lt;std::optional&lt;runtime::Page&gt;&gt; NextPage() override;</span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : </span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : private:</span>
 <span id="L73"><span class="lineNum">      73</span>                 :             :     std::shared_ptr&lt;plan::PlanNode&gt; plan_;</span>
@@ -160,7 +160,7 @@
 <span id="L89"><span class="lineNum">      89</span>                 :             :     void Cancel() override;</span>
 <span id="L90"><span class="lineNum">      90</span>                 :             :     void CollectSplitStats(std::vector&lt;connector::ConnectorSplitStats&gt;* out) const override;</span>
 <span id="L91"><span class="lineNum">      91</span>                 :             :     void CollectAccumulatorStats(std::vector&lt;AccumulatorStats&gt;* out) const override;</span>
-<span id="L92"><span class="lineNum">      92</span>                 :             :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override;</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :     absl::StatusOr&lt;std::optional&lt;runtime::Page&gt;&gt; NextPage() override;</span>
 <span id="L93"><span class="lineNum">      93</span>                 :             : </span>
 <span id="L94"><span class="lineNum">      94</span>                 :             : private:</span>
 <span id="L95"><span class="lineNum">      95</span>                 :             :     std::shared_ptr&lt;plan::PlanNode&gt; plan_;</span>
@@ -186,7 +186,7 @@
 <span id="L115"><span class="lineNum">     115</span>                 :             :     void Cancel() override;</span>
 <span id="L116"><span class="lineNum">     116</span>                 :             :     void CollectSplitStats(std::vector&lt;connector::ConnectorSplitStats&gt;* out) const override;</span>
 <span id="L117"><span class="lineNum">     117</span>                 :             :     void CollectAccumulatorStats(std::vector&lt;AccumulatorStats&gt;* out) const override;</span>
-<span id="L118"><span class="lineNum">     118</span>                 :             :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override;</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :     absl::StatusOr&lt;std::optional&lt;runtime::Page&gt;&gt; NextPage() override;</span>
 <span id="L119"><span class="lineNum">     119</span>                 :             : </span>
 <span id="L120"><span class="lineNum">     120</span>                 :             : private:</span>
 <span id="L121"><span class="lineNum">     121</span>                 :             :     std::shared_ptr&lt;plan::PlanNode&gt; aggregate_plan_;</span>

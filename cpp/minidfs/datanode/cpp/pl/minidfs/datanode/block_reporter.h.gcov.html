@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -117,8 +117,8 @@
 <span id="L46"><span class="lineNum">      46</span>                 :             : // Full report: sends all blocks in current/ periodically.</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             : // Incremental tracking: records adds/removes between full reports.</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : // RPC is abstracted via a callback for testability.</span>
-<span id="L49"><span class="lineNum">      49</span>                 :             : using BlockReportFunc = std::function&lt;pl::Result&lt;BlockReportResponse&gt;(</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :     uint64_t datanode_id, const BlockReport&amp; report)&gt;;</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : using BlockReportFunc =</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :     std::function&lt;pl::Result&lt;BlockReportResponse&gt;(uint64_t datanode_id, const BlockReport&amp; report)&gt;;</span>
 <span id="L51"><span class="lineNum">      51</span>                 :             : </span>
 <span id="L52"><span class="lineNum">      52</span>                 :             : using DeleteBlockFunc = std::function&lt;void(uint64_t block_id, uint64_t generation_stamp)&gt;;</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             : </span>

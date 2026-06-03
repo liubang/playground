@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-03 16:40:31</td>
+            <td class="headerValue">2026-06-04 00:01:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">39.0&nbsp;%</td>
+            <td class="headerCovTableEntryLo">38.1&nbsp;%</td>
             <td class="headerCovTableEntry">105</td>
-            <td class="headerCovTableEntry">41</td>
+            <td class="headerCovTableEntry">40</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -140,7 +140,7 @@
 <span id="L69"><span class="lineNum">      69</span>                 :             :         {</span>
 <span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :             std::unique_lock lock(queue_mu_);</span></span>
 <span id="L71"><span class="lineNum">      71</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :             queue_cv_.wait(lock, [this] {</span></span>
-<span id="L72"><span class="lineNum">      72</span>   [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 10 times"> + </span>]:<span class="tlaGNC">          30 :                 return !running_.load(std::memory_order_relaxed) || !task_queue_.empty();</span></span>
+<span id="L72"><span class="lineNum">      72</span>   [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 11 times"> + </span>]:<span class="tlaGNC">          31 :                 return !running_.load(std::memory_order_relaxed) || !task_queue_.empty();</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :             :             });</span>
 <span id="L74"><span class="lineNum">      74</span>                 :             : </span>
 <span id="L75"><span class="lineNum">      75</span>   [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          20 :             if (!running_.load(std::memory_order_relaxed) &amp;&amp; task_queue_.empty()) {</span></span>
@@ -183,8 +183,8 @@
 <span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">          10 :                                   task.block_index,</span></span>
 <span id="L111"><span class="lineNum">     111</span>                 :             :                                   data_result.value(),</span>
 <span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          10 :                                   task.target_host,</span></span>
-<span id="L113"><span class="lineNum">     113</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :                                   task.target_port);</span></span>
-<span id="L114"><span class="lineNum">     114</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">           9 :     if (copy_result.hasError()) {</span></span>
+<span id="L113"><span class="lineNum">     113</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :                                   task.target_port);</span></span>
+<span id="L114"><span class="lineNum">     114</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :     if (copy_result.hasError()) {</span></span>
 <span id="L115"><span class="lineNum">     115</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :         LOG(ERROR) &lt;&lt; &quot;replication copy failed: send to &quot; &lt;&lt; task.target_host &lt;&lt; &quot;:&quot;</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
 <span id="L116"><span class="lineNum">     116</span>                 :             :                    &lt;&lt; task.target_port &lt;&lt; &quot; for block &quot; &lt;&lt; task.block_id &lt;&lt; &quot;: &quot;</span>
@@ -193,9 +193,9 @@
 <span id="L118"><span class="lineNum">     118</span>                 :             :         return;</span>
 <span id="L119"><span class="lineNum">     119</span>                 :             :     }</span>
 <span id="L120"><span class="lineNum">     120</span>                 :             : </span>
-<span id="L121"><span class="lineNum">     121</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC tlaBgGNC">          19 :     LOG(INFO) &lt;&lt; &quot;replication copy succeeded: block &quot; &lt;&lt; task.block_id &lt;&lt; &quot; -&gt; &quot;</span></span>
+<span id="L121"><span class="lineNum">     121</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">          20 :     LOG(INFO) &lt;&lt; &quot;replication copy succeeded: block &quot; &lt;&lt; task.block_id &lt;&lt; &quot; -&gt; &quot; &lt;&lt; task.target_host</span></span>
 <span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
-<span id="L122"><span class="lineNum">     122</span>                 :             :               &lt;&lt; task.target_host &lt;&lt; &quot;:&quot; &lt;&lt; task.target_port;</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :               &lt;&lt; &quot;:&quot; &lt;&lt; task.target_port;</span>
 <span id="L123"><span class="lineNum">     123</span>                 :             : }</span>
 <span id="L124"><span class="lineNum">     124</span>                 :             : </span>
 <span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           1 : void ReplicationWorker::execute_delete(const DataNodeTask&amp; task) {</span></span>
