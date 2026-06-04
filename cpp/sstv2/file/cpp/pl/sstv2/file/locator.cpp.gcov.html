@@ -31,27 +31,27 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">93.9&nbsp;%</td>
-            <td class="headerCovTableEntry">33</td>
-            <td class="headerCovTableEntry">31</td>
+            <td class="headerCovTableEntryMed">84.1&nbsp;%</td>
+            <td class="headerCovTableEntry">69</td>
+            <td class="headerCovTableEntry">58</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-04 17:16:43</td>
+            <td class="headerValue">2026-06-04 22:38:31</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">5</td>
-            <td class="headerCovTableEntry">5</td>
+            <td class="headerCovTableEntryHi">90.0&nbsp;%</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">9</td>
           </tr>
           <tr>
             <td></td>
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">58.3&nbsp;%</td>
-            <td class="headerCovTableEntry">36</td>
-            <td class="headerCovTableEntry">21</td>
+            <td class="headerCovTableEntryLo">48.8&nbsp;%</td>
+            <td class="headerCovTableEntry">80</td>
+            <td class="headerCovTableEntry">39</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -84,91 +84,150 @@
 <span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
 <span id="L14"><span class="lineNum">      14</span>                 :             : </span>
 <span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
-<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/06/04 15:23</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/06/04 22:26</span>
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : #include &quot;cpp/pl/sstv2/file/locator.h&quot;</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;cpp/pl/sstv2/encode/fixed.h&quot;</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : #include &quot;cpp/pl/sstv2/encode/varints.h&quot;</span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : namespace pl::sstv2::file {</span>
-<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
-<span id="L25"><span class="lineNum">      25</span>                 :<span class="tlaGNC tlaBgGNC">          10 : void Locator::add(uint32_t section_type, uint64_t offset, uint64_t size) {</span></span>
-<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">          10 :     entries_.push_back({section_type, offset, size});</span></span>
-<span id="L27"><span class="lineNum">      27</span>                 :<span class="tlaGNC">          10 : }</span></span>
-<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
-<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">           3 : std::optional&lt;LocatorEntry&gt; Locator::find(uint32_t section_type) const {</span></span>
-<span id="L30"><span class="lineNum">      30</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           6 :     for (const auto&amp; entry : entries_) {</span></span>
-<span id="L31"><span class="lineNum">      31</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           5 :         if (entry.section_type == section_type) {</span></span>
-<span id="L32"><span class="lineNum">      32</span>                 :             :             return entry;</span>
-<span id="L33"><span class="lineNum">      33</span>                 :             :         }</span>
-<span id="L34"><span class="lineNum">      34</span>                 :             :     }</span>
-<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">           1 :     return std::nullopt;</span></span>
-<span id="L36"><span class="lineNum">      36</span>                 :             : }</span>
-<span id="L37"><span class="lineNum">      37</span>                 :             : </span>
-<span id="L38"><span class="lineNum">      38</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 : std::string Locator::serialize() const {</span></span>
-<span id="L39"><span class="lineNum">      39</span>                 :             :     using pl::sstv2::encode::encode_fixed;</span>
-<span id="L40"><span class="lineNum">      40</span>                 :             :     using pl::sstv2::encode::Varints;</span>
-<span id="L41"><span class="lineNum">      41</span>                 :             : </span>
-<span id="L42"><span class="lineNum">      42</span>                 :             :     std::string buf;</span>
-<span id="L43"><span class="lineNum">      43</span>                 :             :     // Reserve a reasonable amount</span>
-<span id="L44"><span class="lineNum">      44</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     buf.resize(Varints::kMaxVarint32Bytes + entries_.size() * (4 + 2 * Varints::kMaxVarint64Bytes));</span></span>
-<span id="L45"><span class="lineNum">      45</span>                 :             : </span>
-<span id="L46"><span class="lineNum">      46</span>                 :             :     auto* dst = reinterpret_cast&lt;std::byte*&gt;(buf.data());</span>
-<span id="L47"><span class="lineNum">      47</span>                 :             :     size_t pos = 0;</span>
-<span id="L48"><span class="lineNum">      48</span>                 :             : </span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     // entry count as varint</span>
-<span id="L50"><span class="lineNum">      50</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     pos += Varints::encode_uint32(static_cast&lt;uint32_t&gt;(entries_.size()), dst + pos);</span></span>
-<span id="L51"><span class="lineNum">      51</span>                 :             : </span>
-<span id="L52"><span class="lineNum">      52</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           7 :     for (const auto&amp; entry : entries_) {</span></span>
-<span id="L53"><span class="lineNum">      53</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         encode_fixed&lt;uint32_t&gt;(entry.section_type, dst + pos);</span></span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">           4 :         pos += 4;</span></span>
-<span id="L55"><span class="lineNum">      55</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         pos += Varints::encode_uint64(entry.offset, dst + pos);</span></span>
-<span id="L56"><span class="lineNum">      56</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         pos += Varints::encode_uint64(entry.size, dst + pos);</span></span>
-<span id="L57"><span class="lineNum">      57</span>                 :             :     }</span>
-<span id="L58"><span class="lineNum">      58</span>                 :             : </span>
-<span id="L59"><span class="lineNum">      59</span>                 :             :     buf.resize(pos);</span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">           3 :     return buf;</span></span>
-<span id="L61"><span class="lineNum">      61</span>                 :             : }</span>
-<span id="L62"><span class="lineNum">      62</span>                 :             : </span>
-<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">           3 : absl::StatusOr&lt;Locator&gt; Locator::deserialize(std::span&lt;const std::byte&gt; data) {</span></span>
-<span id="L64"><span class="lineNum">      64</span>                 :             :     using pl::sstv2::encode::decode_fixed;</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             :     using pl::sstv2::encode::Varints;</span>
-<span id="L66"><span class="lineNum">      66</span>                 :             : </span>
-<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (data.empty()) {</span></span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;empty locator data&quot;);</span></span>
-<span id="L69"><span class="lineNum">      69</span>                 :             :     }</span>
-<span id="L70"><span class="lineNum">      70</span>                 :             : </span>
-<span id="L71"><span class="lineNum">      71</span>                 :             :     size_t pos = 0;</span>
-<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
-<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC tlaBgGNC">           3 :     auto [count, count_bytes] = Varints::decode_uint32(data.subspan(pos));</span></span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">           3 :     pos += count_bytes;</span></span>
-<span id="L75"><span class="lineNum">      75</span>                 :             : </span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">           3 :     Locator locator;</span></span>
-<span id="L77"><span class="lineNum">      77</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           7 :     for (uint32_t i = 0; i &lt; count; ++i) {</span></span>
-<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :         if (pos + 4 &gt; data.size()) {</span></span>
-<span id="L79"><span class="lineNum">      79</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;truncated locator entry&quot;);</span></span>
-<span id="L80"><span class="lineNum">      80</span>                 :             :         }</span>
-<span id="L81"><span class="lineNum">      81</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           4 :         uint32_t section_type = decode_fixed&lt;uint32_t&gt;(data.data() + pos);</span></span>
-<span id="L82"><span class="lineNum">      82</span>                 :             :         pos += 4;</span>
-<span id="L83"><span class="lineNum">      83</span>                 :             : </span>
-<span id="L84"><span class="lineNum">      84</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         auto [offset, offset_bytes] = Varints::decode_uint64(data.subspan(pos));</span></span>
-<span id="L85"><span class="lineNum">      85</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         pos += offset_bytes;</span></span>
-<span id="L86"><span class="lineNum">      86</span>                 :             : </span>
-<span id="L87"><span class="lineNum">      87</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         auto [size, size_bytes] = Varints::decode_uint64(data.subspan(pos));</span></span>
-<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">           4 :         pos += size_bytes;</span></span>
-<span id="L89"><span class="lineNum">      89</span>                 :             : </span>
-<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         locator.add(section_type, offset, size);</span></span>
-<span id="L91"><span class="lineNum">      91</span>                 :             :     }</span>
-<span id="L92"><span class="lineNum">      92</span>                 :             : </span>
-<span id="L93"><span class="lineNum">      93</span>                 :             :     return locator;</span>
-<span id="L94"><span class="lineNum">      94</span>                 :             : }</span>
-<span id="L95"><span class="lineNum">      95</span>                 :             : </span>
-<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          11 : const std::vector&lt;LocatorEntry&gt;&amp; Locator::entries() const {</span></span>
-<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">          11 :     return entries_;</span></span>
-<span id="L98"><span class="lineNum">      98</span>                 :             : }</span>
-<span id="L99"><span class="lineNum">      99</span>                 :             : </span>
-<span id="L100"><span class="lineNum">     100</span>                 :             : } // namespace pl::sstv2::file</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;array&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;cstddef&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;string&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : </span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : #include &quot;absl/crc/crc32c.h&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : #include &quot;absl/status/status.h&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : #include &quot;cpp/pl/sstv2/encode/fixed.h&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : #include &quot;cpp/pl/sstv2/encode/varints.h&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : #include &quot;cpp/pl/sstv2/types/data_type.h&quot;</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : namespace pl::sstv2::file {</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : namespace {</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : </span>
+<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC tlaBgGNC">          67 : void AppendVarint64(uint64_t value, std::string&amp; out) {</span></span>
+<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">          67 :     std::array&lt;std::byte, encode::Varints::kMaxVarint64Bytes&gt; tmp{};</span></span>
+<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">          67 :     const size_t n = encode::Varints::encode_uint64(value, tmp.data());</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">          67 :     out.append(reinterpret_cast&lt;const char*&gt;(tmp.data()), n);</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">          67 : }</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : void AppendFixed32(uint32_t value, std::string&amp; out) {</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :     std::array&lt;std::byte, sizeof(uint32_t)&gt; tmp{};</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :     encode::encode_fixed&lt;uint32_t&gt;(value, tmp.data());</span>
+<span id="L42"><span class="lineNum">      42</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     out.append(reinterpret_cast&lt;const char*&gt;(tmp.data()), tmp.size());</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : }</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : </span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : void AppendFixed64(uint64_t value, std::string&amp; out) {</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :     std::array&lt;std::byte, sizeof(uint64_t)&gt; tmp{};</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :     encode::encode_fixed&lt;uint64_t&gt;(value, tmp.data());</span>
+<span id="L48"><span class="lineNum">      48</span>   [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 56 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          67 :     out.append(reinterpret_cast&lt;const char*&gt;(tmp.data()), tmp.size());</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : }</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : </span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">          31 : absl::StatusOr&lt;uint64_t&gt; ReadVarint64(std::span&lt;const std::byte&gt; bytes, size_t&amp; pos) {</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">          31 :     auto [value, consumed] = encode::Varints::decode_uint64(bytes.subspan(pos));</span></span>
+<span id="L53"><span class="lineNum">      53</span>   [<span class="tlaGBC" title="Branch 0 was taken 31 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 31 times"> + </span>]:<span class="tlaGNC">          31 :     if (consumed == 0 || pos + consumed &gt; bytes.size()) {</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;truncated locator varint&quot;);</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :     }</span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC tlaBgGNC">          31 :     pos += consumed;</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :     return value;</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : }</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : </span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">          14 : uint64_t SectionChecksum(std::string_view bytes) {</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          14 :     std::string copy(bytes);</span></span>
+<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :     std::fill(copy.begin() + 4, copy.begin() + 12, '\0');</span></span>
+<span id="L63"><span class="lineNum">      63</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :     return static_cast&lt;uint64_t&gt;(static_cast&lt;uint32_t&gt;(absl::ComputeCrc32c(copy)));</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : }</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             : </span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : } // namespace</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : </span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          84 : void Locator::set_uint64(std::string key, uint64_t value) {</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">          84 :     entries_[std::move(key)] = value;</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          84 : }</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : </span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          22 : std::optional&lt;uint64_t&gt; Locator::find_uint64(std::string_view key) const {</span></span>
+<span id="L73"><span class="lineNum">      73</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC">          22 :     auto it = entries_.find(std::string(key));</span></span>
+<span id="L74"><span class="lineNum">      74</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC">          22 :     if (it == entries_.end()) {</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return std::nullopt;</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :     }</span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC tlaBgGNC">          22 :     return it-&gt;second;</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :             : }</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             : </span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">          14 : void Locator::set_section(std::string_view name, SectionLocation location) {</span></span>
+<span id="L81"><span class="lineNum">      81</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          28 :     set_uint64(std::string(name) + &quot;_Offset&quot;, location.offset);</span></span>
+<span id="L82"><span class="lineNum">      82</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          28 :     set_uint64(std::string(name) + &quot;_Length&quot;, location.length);</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">          14 : }</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :             : </span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">          11 : std::optional&lt;SectionLocation&gt; Locator::find_section(std::string_view name) const {</span></span>
+<span id="L86"><span class="lineNum">      86</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          22 :     auto offset = find_uint64(std::string(name) + &quot;_Offset&quot;);</span></span>
+<span id="L87"><span class="lineNum">      87</span>   [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          22 :     auto length = find_uint64(std::string(name) + &quot;_Length&quot;);</span></span>
+<span id="L88"><span class="lineNum">      88</span>   [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 11 times"> + </span>]:<span class="tlaGNC">          11 :     if (!offset.has_value() || !length.has_value()) {</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return std::nullopt;</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :     }</span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC tlaBgGNC">          11 :     return SectionLocation{.offset = *offset, .length = *length};</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :             : }</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : </span>
+<span id="L94"><span class="lineNum">      94</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 : std::string Locator::encode() const {</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :     std::string out;</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :     AppendFixed32(kMagic, out);</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             :     AppendFixed64(0, out);</span>
+<span id="L98"><span class="lineNum">      98</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     AppendVarint64(entries_.size(), out);</span></span>
+<span id="L99"><span class="lineNum">      99</span>         [<span class="tlaGBC" title="Branch 0 was taken 56 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          67 :     for (const auto&amp; [key, value] : entries_) {</span></span>
+<span id="L100"><span class="lineNum">     100</span>         [<span class="tlaGBC" title="Branch 0 was taken 56 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          56 :         AppendVarint64(key.size(), out);</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :         out.append(key);</span>
+<span id="L102"><span class="lineNum">     102</span>         [<span class="tlaGBC" title="Branch 0 was taken 56 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          56 :         out.push_back(static_cast&lt;char&gt;(types::DataType::kUint64));</span></span>
+<span id="L103"><span class="lineNum">     103</span>         [<span class="tlaGBC" title="Branch 0 was taken 56 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          56 :         AppendFixed64(value, out);</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :     }</span>
+<span id="L105"><span class="lineNum">     105</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     encode::encode_fixed&lt;uint64_t&gt;(SectionChecksum(out),</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :             :                                    reinterpret_cast&lt;std::byte*&gt;(out.data()) + 4);</span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">          11 :     return out;</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :             : }</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : </span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">           3 : absl::StatusOr&lt;Locator&gt; Locator::decode(std::span&lt;const std::byte&gt; bytes) {</span></span>
+<span id="L111"><span class="lineNum">     111</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (bytes.size() &lt; 12) {</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;locator too small&quot;);</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :     }</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :     const uint32_t magic = encode::decode_fixed&lt;uint32_t&gt;(bytes.data());</span>
+<span id="L115"><span class="lineNum">     115</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           3 :     if (magic != kMagic) {</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;invalid locator magic&quot;);</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :             :     }</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :     const uint64_t checksum = encode::decode_fixed&lt;uint64_t&gt;(bytes.data() + 4);</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             :     std::string_view view(reinterpret_cast&lt;const char*&gt;(bytes.data()), bytes.size());</span>
+<span id="L120"><span class="lineNum">     120</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           3 :     if (checksum != SectionChecksum(view)) {</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::DataLossError(&quot;locator checksum mismatch&quot;);</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :     }</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             : </span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC tlaBgGNC">           3 :     size_t pos = 12;</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           3 :     auto count_or = ReadVarint64(bytes, pos);</span></span>
+<span id="L126"><span class="lineNum">     126</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (!count_or.ok()) {</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :             :         return count_or.status();</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :     }</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : </span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :     Locator locator;</span>
+<span id="L131"><span class="lineNum">     131</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">          62 :     for (uint64_t i = 0; i &lt; *count_or; ++i) {</span></span>
+<span id="L132"><span class="lineNum">     132</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          28 :         auto key_len_or = ReadVarint64(bytes, pos);</span></span>
+<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          28 :         if (!key_len_or.ok()) {</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :             :             return key_len_or.status();</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             :         }</span>
+<span id="L136"><span class="lineNum">     136</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          28 :         if (pos + *key_len_or + 1 + sizeof(uint64_t) &gt; bytes.size()) {</span></span>
+<span id="L137"><span class="lineNum">     137</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;truncated locator entry&quot;);</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :         }</span>
+<span id="L139"><span class="lineNum">     139</span>   [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 28 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          28 :         std::string key(reinterpret_cast&lt;const char*&gt;(bytes.data() + pos), *key_len_or);</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          28 :         pos += *key_len_or;</span></span>
+<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          28 :         const auto type = static_cast&lt;types::DataType&gt;(bytes[pos++]);</span></span>
+<span id="L142"><span class="lineNum">     142</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          28 :         if (type != types::DataType::kUint64) {</span></span>
+<span id="L143"><span class="lineNum">     143</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;locator value is not UInt64&quot;);</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :             :         }</span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC tlaBgGNC">          28 :         const uint64_t value = encode::decode_fixed&lt;uint64_t&gt;(bytes.data() + pos);</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">          28 :         pos += sizeof(uint64_t);</span></span>
+<span id="L147"><span class="lineNum">     147</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          56 :         locator.set_uint64(std::move(key), value);</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :             :     }</span>
+<span id="L149"><span class="lineNum">     149</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (pos != bytes.size()) {</span></span>
+<span id="L150"><span class="lineNum">     150</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;locator has trailing bytes&quot;);</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :             :     }</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             :     return locator;</span>
+<span id="L153"><span class="lineNum">     153</span>                 :             : }</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             : </span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaUNC">           0 : const std::map&lt;std::string, uint64_t&gt;&amp; Locator::entries() const {</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaUNC">           0 :     return entries_;</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :             : }</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             : </span>
+<span id="L159"><span class="lineNum">     159</span>                 :             : } // namespace pl::sstv2::file</span>
         </pre>
               </td>
             </tr>
