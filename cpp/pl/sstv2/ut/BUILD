@@ -64,3 +64,26 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "bloom_test",
+    srcs = ["bloom/bloom_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/bloom:bloom_builder",
+        "//cpp/pl/sstv2/bloom:bloom_reader",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "index_tree_test",
+    srcs = ["index/index_tree_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/index:index_block_writer",
+        "//cpp/pl/sstv2/index:index_iterator",
+        "//cpp/pl/sstv2/index:index_tree_builder",
+        "@googletest//:gtest_main",
+    ],
+)

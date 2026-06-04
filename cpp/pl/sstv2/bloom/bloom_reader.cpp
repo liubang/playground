@@ -18,6 +18,7 @@
 #include "cpp/pl/sstv2/bloom/bloom_reader.h"
 
 #include <cmath>
+#include <cstring>
 
 #include "cpp/pl/bloom/bloom.h"
 
@@ -25,18 +26,68 @@ namespace pl::sstv2::bloom {
 
 namespace {
 
+inline uint32_t fmix32(uint32_t h) {
+    h ^= h >> 16;
+    h *= 0x85ebca6b;
+    h ^= h >> 13;
+    h *= 0xc2b2ae35;
+    h ^= h >> 16;
+    return h;
+}
+
 void hash_key(std::string_view key, uint32_t* h1, uint32_t* h2) {
-    uint32_t hash = 0;
-    for (size_t i = 0; i < key.size(); ++i) {
-        hash = hash * 31 + static_cast<uint8_t>(key[i]);
+    const auto* data = reinterpret_cast<const uint8_t*>(key.data());
+    size_t len = key.size();
+
+    uint32_t seed1 = 0xcc9e2d51;
+    uint32_t seed2 = 0x1b873593;
+
+    uint32_t ha = seed1;
+    uint32_t hb = seed2;
+
+    size_t nblocks = len / 4;
+    for (size_t i = 0; i < nblocks; ++i) {
+        uint32_t k;
+        std::memcpy(&k, data + i * 4, 4);
+
+        k *= 0xcc9e2d51;
+        k = (k << 15) | (k >> 17);
+        k *= 0x1b873593;
+        ha ^= k;
+        ha = (ha << 13) | (ha >> 19);
+        ha = ha * 5 + 0xe6546b64;
+
+        k *= 0x85ebca6b;
+        k = (k << 13) | (k >> 19);
+        k *= 0xc2b2ae35;
+        hb ^= k;
+        hb = (hb << 16) | (hb >> 16);
+        hb = hb * 3 + 0x27d4eb2f;
     }
-    *h1 = hash;
-    *h2 = (hash >> 17) | (hash << 15);
-    *h2 = *h2 * 0x9e3779b9 + 0xdeadbeef;
-    for (size_t i = 0; i < key.size(); ++i) {
-        *h2 = *h2 ^ (static_cast<uint8_t>(key[i]) * 0x5bd1e995);
-        *h2 = (*h2 >> 13) ^ *h2;
+
+    const uint8_t* tail = data + nblocks * 4;
+    uint32_t k1 = 0;
+    switch (len & 3) {
+        case 3:
+            k1 ^= static_cast<uint32_t>(tail[2]) << 16;
+            [[fallthrough]];
+        case 2:
+            k1 ^= static_cast<uint32_t>(tail[1]) << 8;
+            [[fallthrough]];
+        case 1:
+            k1 ^= static_cast<uint32_t>(tail[0]);
+            k1 *= 0xcc9e2d51;
+            k1 = (k1 << 15) | (k1 >> 17);
+            k1 *= 0x1b873593;
+            ha ^= k1;
+            hb ^= k1;
     }
+
+    ha ^= static_cast<uint32_t>(len);
+    hb ^= static_cast<uint32_t>(len);
+
+    *h1 = fmix32(ha);
+    *h2 = fmix32(hb);
 }
 
 } // namespace
