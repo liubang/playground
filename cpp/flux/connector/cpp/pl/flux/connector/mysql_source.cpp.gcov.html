@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-04 01:11:53</td>
+            <td class="headerValue">2026-06-04 14:10:25</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">95.5&nbsp;%</td>
@@ -429,7 +429,7 @@
 <span id="L350"><span class="lineNum">     350</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          25 :         conn.connect(params);</span></span>
 <span id="L351"><span class="lineNum">     351</span>                 :             :         conn.set_meta_mode(mysql::metadata_mode::full);</span>
 <span id="L352"><span class="lineNum">     352</span>                 :             :         mysql::results result;</span>
-<span id="L353"><span class="lineNum">     353</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          25 :         conn.execute(&quot;SET time_zone = '+00:00'&quot;, result);</span></span>
+<span id="L353"><span class="lineNum">     353</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          24 :         conn.execute(&quot;SET time_zone = '+00:00'&quot;, result);</span></span>
 <span id="L354"><span class="lineNum">     354</span>                 :             :         return conn;</span>
 <span id="L355"><span class="lineNum">     355</span>      [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :     } catch (const mysql::error_with_diagnostics&amp; err) {</span></span>
 <span id="L356"><span class="lineNum">     356</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return absl::InvalidArgumentError(</span></span>
@@ -487,34 +487,34 @@
 <span id="L408"><span class="lineNum">     408</span>                 :             :     return holder;</span>
 <span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaGNC">          18 : }</span></span>
 <span id="L410"><span class="lineNum">     410</span>                 :             : </span>
-<span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaGNC">         224 : std::string quote_identifier(const std::string&amp; identifier) {</span></span>
-<span id="L412"><span class="lineNum">     412</span>                 :<span class="tlaGNC">         224 :     std::string out = &quot;`&quot;;</span></span>
-<span id="L413"><span class="lineNum">     413</span>         [<span class="tlaGBC" title="Branch 0 was taken 995 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 223 times"> + </span>]:<span class="tlaGNC">        1218 :     for (const char ch : identifier) {</span></span>
-<span id="L414"><span class="lineNum">     414</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 995 times"> + </span>]:<span class="tlaGNC">         995 :         if (ch == '`') {</span></span>
+<span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaGNC">         225 : std::string quote_identifier(const std::string&amp; identifier) {</span></span>
+<span id="L412"><span class="lineNum">     412</span>                 :<span class="tlaGNC">         225 :     std::string out = &quot;`&quot;;</span></span>
+<span id="L413"><span class="lineNum">     413</span>         [<span class="tlaGBC" title="Branch 0 was taken 1010 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 225 times"> + </span>]:<span class="tlaGNC">        1235 :     for (const char ch : identifier) {</span></span>
+<span id="L414"><span class="lineNum">     414</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1010 times"> + </span>]:<span class="tlaGNC">        1010 :         if (ch == '`') {</span></span>
 <span id="L415"><span class="lineNum">     415</span>                 :             :             out += &quot;``&quot;;</span>
 <span id="L416"><span class="lineNum">     416</span>                 :             :         } else {</span>
-<span id="L417"><span class="lineNum">     417</span>         [<span class="tlaGBC" title="Branch 0 was taken 995 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         995 :             out.push_back(ch);</span></span>
+<span id="L417"><span class="lineNum">     417</span>         [<span class="tlaGBC" title="Branch 0 was taken 1010 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1010 :             out.push_back(ch);</span></span>
 <span id="L418"><span class="lineNum">     418</span>                 :             :         }</span>
 <span id="L419"><span class="lineNum">     419</span>                 :             :     }</span>
-<span id="L420"><span class="lineNum">     420</span>         [<span class="tlaGBC" title="Branch 0 was taken 224 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         223 :     out.push_back('`');</span></span>
-<span id="L421"><span class="lineNum">     421</span>                 :<span class="tlaGNC">         224 :     return out;</span></span>
+<span id="L420"><span class="lineNum">     420</span>         [<span class="tlaGBC" title="Branch 0 was taken 225 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         225 :     out.push_back('`');</span></span>
+<span id="L421"><span class="lineNum">     421</span>                 :<span class="tlaGNC">         225 :     return out;</span></span>
 <span id="L422"><span class="lineNum">     422</span>                 :             : }</span>
 <span id="L423"><span class="lineNum">     423</span>                 :             : </span>
 <span id="L424"><span class="lineNum">     424</span>                 :<span class="tlaGNC">          57 : std::string quote_table_identifier(const std::string&amp; identifier) {</span></span>
 <span id="L425"><span class="lineNum">     425</span>                 :             :     std::string out;</span>
 <span id="L426"><span class="lineNum">     426</span>                 :             :     size_t start = 0;</span>
-<span id="L427"><span class="lineNum">     427</span>         [<span class="tlaGBC" title="Branch 0 was taken 56 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          56 :     while (start &lt;= identifier.size()) {</span></span>
-<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaGNC">          56 :         const size_t dot = identifier.find('.', start);</span></span>
-<span id="L429"><span class="lineNum">     429</span>         [<span class="tlaGBC" title="Branch 0 was taken 56 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          56 :         const std::string part = dot == std::string::npos ? identifier.substr(start)</span></span>
-<span id="L430"><span class="lineNum">     430</span>   [<span class="tlaGBC" title="Branch 0 was taken 57 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          56 :                                                           : identifier.substr(start, dot - start);</span></span>
+<span id="L427"><span class="lineNum">     427</span>         [<span class="tlaGBC" title="Branch 0 was taken 57 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          57 :     while (start &lt;= identifier.size()) {</span></span>
+<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaGNC">          57 :         const size_t dot = identifier.find('.', start);</span></span>
+<span id="L429"><span class="lineNum">     429</span>         [<span class="tlaGBC" title="Branch 0 was taken 57 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          57 :         const std::string part = dot == std::string::npos ? identifier.substr(start)</span></span>
+<span id="L430"><span class="lineNum">     430</span>   [<span class="tlaGBC" title="Branch 0 was taken 57 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          57 :                                                           : identifier.substr(start, dot - start);</span></span>
 <span id="L431"><span class="lineNum">     431</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 57 times"> + </span>]:<span class="tlaGNC">          57 :         if (part.empty()) {</span></span>
 <span id="L432"><span class="lineNum">     432</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             return quote_identifier(identifier);</span></span>
 <span id="L433"><span class="lineNum">     433</span>                 :             :         }</span>
 <span id="L434"><span class="lineNum">     434</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 57 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          57 :         if (!out.empty()) {</span></span>
 <span id="L435"><span class="lineNum">     435</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             out.push_back('.');</span></span>
 <span id="L436"><span class="lineNum">     436</span>                 :             :         }</span>
-<span id="L437"><span class="lineNum">     437</span>         [<span class="tlaGBC" title="Branch 0 was taken 56 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          57 :         out += quote_identifier(part);</span></span>
-<span id="L438"><span class="lineNum">     438</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 56 times"> + </span>]:<span class="tlaGNC">          56 :         if (dot == std::string::npos) {</span></span>
+<span id="L437"><span class="lineNum">     437</span>         [<span class="tlaGBC" title="Branch 0 was taken 57 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          57 :         out += quote_identifier(part);</span></span>
+<span id="L438"><span class="lineNum">     438</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 57 times"> + </span>]:<span class="tlaGNC">          57 :         if (dot == std::string::npos) {</span></span>
 <span id="L439"><span class="lineNum">     439</span>                 :             :             break;</span>
 <span id="L440"><span class="lineNum">     440</span>                 :             :         }</span>
 <span id="L441"><span class="lineNum">     441</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         start = dot + 1;</span></span>
@@ -633,8 +633,8 @@
 <span id="L549"><span class="lineNum">     549</span>                 :             : public:</span>
 <span id="L550"><span class="lineNum">     550</span>                 :<span class="tlaGNC">          21 :     explicit MySqlDialect(mysql::format_options opts) : opts_(opts) {}</span></span>
 <span id="L551"><span class="lineNum">     551</span>                 :             : </span>
-<span id="L552"><span class="lineNum">     552</span>                 :<span class="tlaGNC">          77 :     [[nodiscard]] std::string QuoteIdentifier(const std::string&amp; identifier) const override {</span></span>
-<span id="L553"><span class="lineNum">     553</span>                 :<span class="tlaGNC">          77 :         return quote_identifier(identifier);</span></span>
+<span id="L552"><span class="lineNum">     552</span>                 :<span class="tlaGNC">          78 :     [[nodiscard]] std::string QuoteIdentifier(const std::string&amp; identifier) const override {</span></span>
+<span id="L553"><span class="lineNum">     553</span>                 :<span class="tlaGNC">          78 :         return quote_identifier(identifier);</span></span>
 <span id="L554"><span class="lineNum">     554</span>                 :             :     }</span>
 <span id="L555"><span class="lineNum">     555</span>                 :             : </span>
 <span id="L556"><span class="lineNum">     556</span>                 :<span class="tlaGNC">           3 :     [[nodiscard]] absl::StatusOr&lt;std::string&gt; FormatLiteral(const runtime::Value&amp; value,</span></span>
@@ -912,7 +912,7 @@
 <span id="L820"><span class="lineNum">     820</span>                 :<span class="tlaGNC tlaBgGNC">          22 : MySQLSource::MySQLSource(std::string dsn, std::string table)</span></span>
 <span id="L821"><span class="lineNum">     821</span>                 :<span class="tlaGNC">          22 :     : dsn_(std::move(dsn)),</span></span>
 <span id="L822"><span class="lineNum">     822</span>                 :<span class="tlaGNC">          22 :       table_(std::move(table)),</span></span>
-<span id="L823"><span class="lineNum">     823</span>   [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          22 :       query_(absl::StrCat(&quot;SELECT * FROM &quot;, quote_table_identifier(table_))) {}</span></span>
+<span id="L823"><span class="lineNum">     823</span>   [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          22 :       query_(absl::StrCat(&quot;SELECT * FROM &quot;, quote_table_identifier(table_))) {}</span></span>
 <span id="L824"><span class="lineNum">     824</span>                 :             : </span>
 <span id="L825"><span class="lineNum">     825</span>                 :<span class="tlaGNC">          19 : MySQLSource::MySQLSource(std::string dsn,</span></span>
 <span id="L826"><span class="lineNum">     826</span>                 :             :                          std::string table,</span>
@@ -1430,7 +1430,7 @@
 <span id="L1313"><span class="lineNum">    1313</span>                 :             :     mysql::any_connection* conn = impl_-&gt;connection();</span>
 <span id="L1314"><span class="lineNum">    1314</span>                 :<span class="tlaGNC">          13 :     const auto schema_started = Clock::now();</span></span>
 <span id="L1315"><span class="lineNum">    1315</span>   [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          26 :     auto schema_or = MySQLSource(dsn_, table_).Schema();</span></span>
-<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
 <span id="L1316"><span class="lineNum">    1316</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          13 :     stats_.schema_time_ms += elapsed_ms(schema_started);</span></span>
 <span id="L1317"><span class="lineNum">    1317</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          13 :     if (!schema_or.ok()) {</span></span>
 <span id="L1318"><span class="lineNum">    1318</span>                 :             :         return schema_or.status();</span>
@@ -1451,14 +1451,14 @@
 <span id="L1331"><span class="lineNum">    1331</span>                 :             :             .column = *impl_-&gt;split_column,</span>
 <span id="L1332"><span class="lineNum">    1332</span>                 :             :             .literal = runtime::Value::integer(*impl_-&gt;split_lower),</span>
 <span id="L1333"><span class="lineNum">    1333</span>                 :             :         });</span>
-<span id="L1334"><span class="lineNum">    1334</span>                 :<span class="tlaGNC">          11 :         effective_request.predicates.push_back({</span></span>
+<span id="L1334"><span class="lineNum">    1334</span>                 :<span class="tlaGNC">          12 :         effective_request.predicates.push_back({</span></span>
 <span id="L1335"><span class="lineNum">    1335</span>                 :             :             .op = PredicateOp::Lte,</span>
 <span id="L1336"><span class="lineNum">    1336</span>                 :             :             .column = *impl_-&gt;split_column,</span>
 <span id="L1337"><span class="lineNum">    1337</span>                 :             :             .literal = runtime::Value::integer(*impl_-&gt;split_upper),</span>
 <span id="L1338"><span class="lineNum">    1338</span>                 :             :         });</span>
 <span id="L1339"><span class="lineNum">    1339</span>                 :             :     }</span>
-<span id="L1340"><span class="lineNum">    1340</span>                 :<span class="tlaGNC">          12 :     const auto sql_started = Clock::now();</span></span>
-<span id="L1341"><span class="lineNum">    1341</span>   [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          12 :     const std::string base_query = absl::StrCat(&quot;SELECT * FROM &quot;, quote_table_identifier(table_));</span></span>
+<span id="L1340"><span class="lineNum">    1340</span>                 :<span class="tlaGNC">          13 :     const auto sql_started = Clock::now();</span></span>
+<span id="L1341"><span class="lineNum">    1341</span>   [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          13 :     const std::string base_query = absl::StrCat(&quot;SELECT * FROM &quot;, quote_table_identifier(table_));</span></span>
 <span id="L1342"><span class="lineNum">    1342</span>                 :<span class="tlaGNC">          13 :     auto literal_sql_or = absl::StatusOr&lt;std::string&gt;(std::string());</span></span>
 <span id="L1343"><span class="lineNum">    1343</span>                 :<span class="tlaGNC">          13 :     auto prepared_sql_or = absl::StatusOr&lt;ParameterizedSql&gt;(ParameterizedSql{});</span></span>
 <span id="L1344"><span class="lineNum">    1344</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :     if (options_.use_prepared_statements) {</span></span>
