@@ -13,185 +13,200 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/06/04 12:01
+// Created: 2026/06/05 00:23
 
-#include <vector>
-
+#include "cpp/pl/sstv2/types/internal_schema.h"
 #include "cpp/pl/sstv2/types/schema.h"
-#include "gtest/gtest.h"
 
-using namespace pl::sstv2::types;
+#include <gtest/gtest.h>
 
-// === ExternalSchema basics ===
+namespace pl::sstv2::types {
+namespace {
 
-TEST(ExternalSchemaTest, Construction) {
-    std::vector<ColumnDef> cols = {
-        {.name = "key", .type = DataType::kString},
-        {.name = "age", .type = DataType::kInt32},
-        {.name = "score", .type = DataType::kDouble},
-    };
-    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
-    ExternalSchema schema(cols, key_cols);
-    EXPECT_EQ(schema.num_columns(), 3u);
-    EXPECT_EQ(schema.num_key_columns(), 1u);
+// =============================================================================
+// Schema (user-facing) tests.
+// =============================================================================
+
+TEST(SchemaTest, EmptySchema) {
+    Schema s;
+    EXPECT_EQ(s.row_key_column_count(), 0u);
 }
 
-TEST(ExternalSchemaTest, ColumnLookup) {
-    std::vector<ColumnDef> cols = {
-        {.name = "id", .type = DataType::kUint64},
-        {.name = "name", .type = DataType::kString},
-        {.name = "value", .type = DataType::kFloat},
-    };
-    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
-    ExternalSchema schema(cols, key_cols);
-
-    auto idx = schema.find_column("name");
-    ASSERT_TRUE(idx.has_value());
-    EXPECT_EQ(*idx, 1u);
-
-    EXPECT_FALSE(schema.find_column("nonexistent").has_value());
+TEST(SchemaTest, BuilderSingleColumn) {
+    auto schema = SchemaBuilder()
+                      .add_column("user_id", DataType::kUint64)
+                      .build();
+    EXPECT_EQ(schema.row_key_column_count(), 1u);
+    EXPECT_EQ(schema.column_name(0), "user_id");
+    EXPECT_EQ(schema.column_type(0), DataType::kUint64);
+    EXPECT_EQ(schema.column_order(0), SortOrder::kAscending);
 }
 
-TEST(ExternalSchemaTest, KeyColumns) {
-    std::vector<ColumnDef> cols = {
-        {.name = "tenant_id", .type = DataType::kUint64},
-        {.name = "user_id", .type = DataType::kString},
-        {.name = "col1", .type = DataType::kInt32},
-    };
-    std::vector<KeyColumnDef> key_cols = {
-        {.column_index = 0, .order = SortOrder::kAscending},
-        {.column_index = 1, .order = SortOrder::kDescending},
-    };
-    ExternalSchema schema(cols, key_cols);
+TEST(SchemaTest, BuilderMultipleColumns) {
+    auto schema = SchemaBuilder()
+                      .add_column("region", DataType::kString)
+                      .add_column("timestamp", DataType::kInt64, SortOrder::kDescending)
+                      .add_column("seq", DataType::kUint32)
+                      .build();
+    EXPECT_EQ(schema.row_key_column_count(), 3u);
 
-    EXPECT_EQ(schema.num_key_columns(), 2u);
-    EXPECT_EQ(schema.key_column(0).column_index, 0u);
-    EXPECT_EQ(schema.key_column(1).order, SortOrder::kDescending);
-    EXPECT_EQ(schema.key_column_type(0), DataType::kUint64);
-    EXPECT_EQ(schema.key_column_type(1), DataType::kString);
+    EXPECT_EQ(schema.column_name(0), "region");
+    EXPECT_EQ(schema.column_type(0), DataType::kString);
 
-    auto value_cols = schema.value_column_indices();
-    ASSERT_EQ(value_cols.size(), 1u);
-    EXPECT_EQ(value_cols[0], 2u);
+    EXPECT_EQ(schema.column_name(1), "timestamp");
+    EXPECT_EQ(schema.column_type(1), DataType::kInt64);
+    EXPECT_EQ(schema.column_order(1), SortOrder::kDescending);
+
+    EXPECT_EQ(schema.column_name(2), "seq");
+    EXPECT_EQ(schema.column_type(2), DataType::kUint32);
 }
 
-// === InternalSchema decomposition ===
-
-TEST(InternalSchemaTest, FixedTypeColumn) {
-    // A fixed-type column should produce exactly 1 sub-column
-    std::vector<ColumnDef> cols = {
-        {.name = "key", .type = DataType::kString},
-        {.name = "count", .type = DataType::kInt32},
-    };
-    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
-    ExternalSchema ext(cols, key_cols);
-    auto internal = InternalSchema::from_external(ext);
-
-    auto [start, end] = internal.sub_column_range(1);
-    EXPECT_EQ(end - start, 1u);
-
-    auto flag = internal.flag(start);
-    EXPECT_EQ(flag.type, DataType::kInt32);
-    EXPECT_FALSE(flag.compound_bit);
-    EXPECT_FALSE(flag.bitmap_bit);
-}
-
-TEST(InternalSchemaTest, StringColumn) {
-    // A string column should produce 2 sub-columns: length + data
-    std::vector<ColumnDef> cols = {
-        {.name = "key", .type = DataType::kUint64},
-        {.name = "text", .type = DataType::kString},
-    };
-    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
-    ExternalSchema ext(cols, key_cols);
-    auto internal = InternalSchema::from_external(ext);
-
-    auto [start, end] = internal.sub_column_range(1);
-    EXPECT_EQ(end - start, 2u);
-}
-
-TEST(InternalSchemaTest, NullableColumn) {
-    // A nullable column should get a bitmap flag
-    std::vector<ColumnDef> cols = {
-        {.name = "key", .type = DataType::kString},
-        {.name = "opt_val", .type = DataType::kInt64, .nullable = true},
-    };
-    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
-    ExternalSchema ext(cols, key_cols);
-    auto internal = InternalSchema::from_external(ext);
-
-    auto [start, end] = internal.sub_column_range(1);
-    // Check that at least one sub-column has bitmap_bit set
-    bool found_bitmap = false;
-    for (size_t i = start; i < end; ++i) {
-        if (internal.flag(i).bitmap_bit) {
-            found_bitmap = true;
-            break;
-        }
+TEST(SchemaTest, RangeForIteration) {
+    auto schema = SchemaBuilder()
+                      .add_column("a", DataType::kBool)
+                      .add_column("b", DataType::kDouble)
+                      .build();
+    size_t count = 0;
+    for (const auto& col : schema) {
+        (void)col;
+        ++count;
     }
-    EXPECT_TRUE(found_bitmap);
+    EXPECT_EQ(count, 2u);
 }
 
-TEST(InternalSchemaTest, ArrayColumn) {
-    // Array column → 3 sub-columns (offsets, lengths, data)
-    std::vector<ColumnDef> cols = {
-        {.name = "key", .type = DataType::kString},
-        {.name = "tags", .type = DataType::kArray, .element_type = DataType::kString},
-    };
-    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
-    ExternalSchema ext(cols, key_cols);
-    auto internal = InternalSchema::from_external(ext);
-
-    auto [start, end] = internal.sub_column_range(1);
-    EXPECT_EQ(end - start, 3u);
-
-    // Sub-columns of array should have compound_bit set
-    for (size_t i = start; i < end; ++i) {
-        EXPECT_TRUE(internal.flag(i).compound_bit);
-    }
+TEST(SchemaTest, BuilderRejectsEmptyName) {
+    SchemaBuilder builder;
+    builder.add_column("", DataType::kInt32);
+    auto schema = builder.build();
+    EXPECT_EQ(schema.row_key_column_count(), 0u);
+    EXPECT_FALSE(builder.error().empty());
 }
 
-TEST(InternalSchemaTest, MapColumn) {
-    // Map column → 5 sub-columns
-    std::vector<ColumnDef> cols = {
-        {.name = "key", .type = DataType::kString},
-        {.name = "metadata",
-         .type = DataType::kMap,
-         .key_type = DataType::kString,
-         .value_type = DataType::kInt32},
-    };
-    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
-    ExternalSchema ext(cols, key_cols);
-    auto internal = InternalSchema::from_external(ext);
-
-    auto [start, end] = internal.sub_column_range(1);
-    EXPECT_EQ(end - start, 5u);
-
-    // Sub-columns of map should have compound_bit set
-    for (size_t i = start; i < end; ++i) {
-        EXPECT_TRUE(internal.flag(i).compound_bit);
-    }
+TEST(SchemaTest, BuilderRejectsDuplicateName) {
+    SchemaBuilder builder;
+    builder.add_column("id", DataType::kUint64);
+    builder.add_column("id", DataType::kInt32);
+    auto schema = builder.build();
+    EXPECT_EQ(schema.row_key_column_count(), 0u);
+    EXPECT_FALSE(builder.error().empty());
 }
 
-TEST(InternalSchemaTest, SubColumnRangeMapping) {
-    // Multiple columns: verify ranges are contiguous and non-overlapping
-    std::vector<ColumnDef> cols = {
-        {.name = "key", .type = DataType::kString},  // 2 sub-cols
-        {.name = "age", .type = DataType::kInt32},   // 1 sub-col
-        {.name = "name", .type = DataType::kString}, // 2 sub-cols
-    };
-    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
-    ExternalSchema ext(cols, key_cols);
-    auto internal = InternalSchema::from_external(ext);
-
-    auto [s0, e0] = internal.sub_column_range(0);
-    auto [s1, e1] = internal.sub_column_range(1);
-    auto [s2, e2] = internal.sub_column_range(2);
-
-    // Ranges should be contiguous
-    EXPECT_EQ(e0, s1);
-    EXPECT_EQ(e1, s2);
-
-    // Total sub-columns = 2 + 1 + 2 = 5
-    EXPECT_EQ(internal.num_sub_columns(), 5u);
+TEST(SchemaTest, BuilderRejectsNonKeyType) {
+    SchemaBuilder builder;
+    builder.add_column("bad", DataType::kArray);
+    auto schema = builder.build();
+    EXPECT_EQ(schema.row_key_column_count(), 0u);
+    EXPECT_FALSE(builder.error().empty());
 }
+
+TEST(SchemaTest, BuilderRejectsPrivateType) {
+    SchemaBuilder builder;
+    builder.add_column("bad", DataType::kDataBlock);
+    auto schema = builder.build();
+    EXPECT_EQ(schema.row_key_column_count(), 0u);
+    EXPECT_FALSE(builder.error().empty());
+}
+
+TEST(SchemaTest, DirectConstruction) {
+    Schema s({
+        ColumnDef{"x", DataType::kUint64, SortOrder::kAscending},
+        ColumnDef{"y", DataType::kString, SortOrder::kDescending},
+    });
+    EXPECT_EQ(s.row_key_column_count(), 2u);
+    EXPECT_EQ(s.column(0).name, "x");
+    EXPECT_EQ(s.column(1).order, SortOrder::kDescending);
+}
+
+// =============================================================================
+// InternalSchema tests.
+// =============================================================================
+
+TEST(InternalSchemaTest, ColumnCount) {
+    auto schema = SchemaBuilder()
+                      .add_column("k1", DataType::kInt64)
+                      .add_column("k2", DataType::kString)
+                      .build();
+    InternalSchema is(schema);
+
+    EXPECT_EQ(is.user_column_count(), 2u);
+    EXPECT_EQ(is.column_count(), 9u);        // 2 + 7
+    EXPECT_EQ(is.sort_key_column_count(), 4u); // 2 + 2 (Version, OpType)
+}
+
+TEST(InternalSchemaTest, UserColumnsPassthrough) {
+    auto schema = SchemaBuilder()
+                      .add_column("region", DataType::kString, SortOrder::kAscending)
+                      .add_column("ts", DataType::kInt64, SortOrder::kDescending)
+                      .build();
+    InternalSchema is(schema);
+
+    EXPECT_EQ(is.column_name(0), "region");
+    EXPECT_EQ(is.column_type(0), DataType::kString);
+    EXPECT_EQ(is.column_order(0), SortOrder::kAscending);
+
+    EXPECT_EQ(is.column_name(1), "ts");
+    EXPECT_EQ(is.column_type(1), DataType::kInt64);
+    EXPECT_EQ(is.column_order(1), SortOrder::kDescending);
+}
+
+TEST(InternalSchemaTest, SystemColumns) {
+    auto schema = SchemaBuilder()
+                      .add_column("k", DataType::kUint64)
+                      .build();
+    InternalSchema is(schema);
+
+    // M=1, system columns at indices 1..7
+    EXPECT_EQ(is.version_index(), 1u);
+    EXPECT_EQ(is.op_type_index(), 2u);
+    EXPECT_EQ(is.flag_index(), 3u);
+    EXPECT_EQ(is.filename_index(), 4u);
+    EXPECT_EQ(is.offset_index(), 5u);
+    EXPECT_EQ(is.length_index(), 6u);
+    EXPECT_EQ(is.checksum_index(), 7u);
+
+    // Version is descending, OpType is ascending.
+    EXPECT_EQ(is.column_name(1), "Version");
+    EXPECT_EQ(is.column_type(1), DataType::kUint64);
+    EXPECT_EQ(is.column_order(1), SortOrder::kDescending);
+
+    EXPECT_EQ(is.column_name(2), "OpType");
+    EXPECT_EQ(is.column_type(2), DataType::kUint8);
+    EXPECT_EQ(is.column_order(2), SortOrder::kAscending);
+
+    // Payload columns.
+    EXPECT_EQ(is.column_name(3), "Flag");
+    EXPECT_EQ(is.column_type(3), DataType::kUint64);
+
+    EXPECT_EQ(is.column_name(4), "Filename");
+    EXPECT_EQ(is.column_type(4), DataType::kString);
+
+    EXPECT_EQ(is.column_name(5), "Offset");
+    EXPECT_EQ(is.column_type(5), DataType::kUint64);
+
+    EXPECT_EQ(is.column_name(6), "Length");
+    EXPECT_EQ(is.column_type(6), DataType::kUint64);
+
+    EXPECT_EQ(is.column_name(7), "Checksum");
+    EXPECT_EQ(is.column_type(7), DataType::kUint64);
+}
+
+TEST(InternalSchemaTest, IsSortColumn) {
+    auto schema = SchemaBuilder()
+                      .add_column("a", DataType::kUint32)
+                      .add_column("b", DataType::kString)
+                      .build();
+    InternalSchema is(schema);
+
+    // Sort columns: a(0), b(1), Version(2), OpType(3)
+    EXPECT_TRUE(is.is_sort_column(0));
+    EXPECT_TRUE(is.is_sort_column(1));
+    EXPECT_TRUE(is.is_sort_column(2));
+    EXPECT_TRUE(is.is_sort_column(3));
+    // Non-sort: Flag(4), Filename(5), Offset(6), Length(7), Checksum(8)
+    EXPECT_FALSE(is.is_sort_column(4));
+    EXPECT_FALSE(is.is_sort_column(5));
+    EXPECT_FALSE(is.is_sort_column(8));
+}
+
+} // namespace
+} // namespace pl::sstv2::types
