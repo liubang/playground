@@ -29,6 +29,12 @@
 
 namespace pl::sstv2::types {
 
+// Sort direction for key columns.
+enum class SortOrder : uint8_t {
+    kAscending = 0,
+    kDescending = 1,
+};
+
 // User-provided column definition.
 struct ColumnDef {
     std::string name;
@@ -39,20 +45,39 @@ struct ColumnDef {
     std::optional<DataType> value_type;   // Map value type
 };
 
+// Identifies a key column within ExternalSchema::columns_.
+struct KeyColumnDef {
+    size_t column_index;                         // index into columns_
+    SortOrder order = SortOrder::kAscending;
+};
+
 // External schema: the user-facing view of table columns.
 class ExternalSchema {
 public:
-    explicit ExternalSchema(std::vector<ColumnDef> columns);
+    // columns: all columns (key + value columns).
+    // key_columns: ordered list of columns forming the primary key.
+    ExternalSchema(std::vector<ColumnDef> columns, std::vector<KeyColumnDef> key_columns);
 
     [[nodiscard]] size_t num_columns() const;
     [[nodiscard]] const ColumnDef& column(size_t idx) const;
     [[nodiscard]] std::optional<size_t> find_column(std::string_view name) const;
 
-    // row_key is always the first column.
-    [[nodiscard]] const ColumnDef& row_key_column() const;
+    // Primary key definition.
+    [[nodiscard]] size_t num_key_columns() const;
+    [[nodiscard]] const KeyColumnDef& key_column(size_t key_idx) const;
+    [[nodiscard]] const std::vector<KeyColumnDef>& key_columns() const;
+
+    // Convenience: type of the i-th key column.
+    [[nodiscard]] DataType key_column_type(size_t key_idx) const;
+    // Convenience: nullable of the i-th key column.
+    [[nodiscard]] bool key_column_nullable(size_t key_idx) const;
+
+    // Value columns = all columns not in key_columns.
+    [[nodiscard]] std::vector<size_t> value_column_indices() const;
 
 private:
     std::vector<ColumnDef> columns_;
+    std::vector<KeyColumnDef> key_columns_;
 };
 
 // Internal schema: flattened representation of all columns decomposed

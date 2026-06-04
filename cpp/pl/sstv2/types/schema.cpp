@@ -17,14 +17,21 @@
 
 #include "cpp/pl/sstv2/types/schema.h"
 
+#include <algorithm>
 #include <cassert>
 
 namespace pl::sstv2::types {
 
 // --- ExternalSchema ---
 
-ExternalSchema::ExternalSchema(std::vector<ColumnDef> columns) : columns_(std::move(columns)) {
+ExternalSchema::ExternalSchema(std::vector<ColumnDef> columns, std::vector<KeyColumnDef> key_columns)
+    : columns_(std::move(columns)), key_columns_(std::move(key_columns)) {
     assert(!columns_.empty());
+    assert(!key_columns_.empty());
+    // Validate key column indices are within bounds.
+    for (const auto& kc : key_columns_) {
+        assert(kc.column_index < columns_.size());
+    }
 }
 
 size_t ExternalSchema::num_columns() const {
@@ -44,8 +51,37 @@ std::optional<size_t> ExternalSchema::find_column(std::string_view name) const {
     return std::nullopt;
 }
 
-const ColumnDef& ExternalSchema::row_key_column() const {
-    return columns_[0];
+size_t ExternalSchema::num_key_columns() const {
+    return key_columns_.size();
+}
+
+const KeyColumnDef& ExternalSchema::key_column(size_t key_idx) const {
+    assert(key_idx < key_columns_.size());
+    return key_columns_[key_idx];
+}
+
+const std::vector<KeyColumnDef>& ExternalSchema::key_columns() const {
+    return key_columns_;
+}
+
+DataType ExternalSchema::key_column_type(size_t key_idx) const {
+    return columns_[key_columns_[key_idx].column_index].type;
+}
+
+bool ExternalSchema::key_column_nullable(size_t key_idx) const {
+    return columns_[key_columns_[key_idx].column_index].nullable;
+}
+
+std::vector<size_t> ExternalSchema::value_column_indices() const {
+    std::vector<size_t> result;
+    for (size_t i = 0; i < columns_.size(); ++i) {
+        bool is_key = std::any_of(key_columns_.begin(), key_columns_.end(),
+                                  [i](const KeyColumnDef& kc) { return kc.column_index == i; });
+        if (!is_key) {
+            result.push_back(i);
+        }
+    }
+    return result;
 }
 
 // --- InternalSchema ---
