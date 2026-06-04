@@ -13,98 +13,150 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/06/04 12:01
+// Created: 2026/06/05 00:23
 
 #pragma once
 
+#include "cpp/pl/sstv2/types/data_type.h"
+
 #include <cstddef>
-#include <optional>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include "cpp/pl/sstv2/types/data_type.h"
-#include "cpp/pl/sstv2/types/flag.h"
-
 namespace pl::sstv2::types {
 
-// Sort direction for key columns.
+// =============================================================================
+// SortOrder: the ordering direction for a row key column.
+// =============================================================================
+
 enum class SortOrder : uint8_t {
-    kAscending = 0,
+    kAscending  = 0,
     kDescending = 1,
 };
 
-// User-provided column definition.
+// =============================================================================
+// ColumnDef: definition of a single column.
+//
+// Each column has a name (used in metadata serialization), a DataType,
+// and a sort direction. For non-sort columns, order is conventionally
+// kAscending but unused.
+// =============================================================================
+
 struct ColumnDef {
     std::string name;
-    DataType type;
-    bool nullable = false;
-    std::optional<DataType> element_type; // Array element type
-    std::optional<DataType> key_type;     // Map key type
-    std::optional<DataType> value_type;   // Map value type
+    DataType type    = DataType::kNone;
+    SortOrder order  = SortOrder::kAscending;
 };
 
-// Identifies a key column within ExternalSchema::columns_.
-struct KeyColumnDef {
-    size_t column_index; // index into columns_
-    SortOrder order = SortOrder::kAscending;
-};
+// =============================================================================
+// Schema: immutable description of the user-defined row key structure.
+//
+// This is the "external schema" — it describes only the M row key columns
+// that the user defines. The 7 system columns (Version, OpType, Flag,
+// Filename, Offset, Length, Checksum) are NOT part of Schema; they are
+// introduced by InternalSchema which wraps a Schema.
+//
+// Schema is constructed via SchemaBuilder to enforce invariants at build time.
+// Once constructed, a Schema is immutable.
+// =============================================================================
 
-// External schema: the user-facing view of table columns.
-class ExternalSchema {
+class Schema {
 public:
-    // columns: all columns (key + value columns).
-    // key_columns: ordered list of columns forming the primary key.
-    ExternalSchema(std::vector<ColumnDef> columns, std::vector<KeyColumnDef> key_columns);
+    // Default: empty schema (zero row key columns).
+    Schema() = default;
 
-    [[nodiscard]] size_t num_columns() const;
-    [[nodiscard]] const ColumnDef& column(size_t idx) const;
-    [[nodiscard]] std::optional<size_t> find_column(std::string_view name) const;
+    // Direct construction (prefer SchemaBuilder for validation).
+    explicit Schema(std::vector<ColumnDef> columns) : columns_(std::move(columns)) {}
 
-    // Primary key definition.
-    [[nodiscard]] size_t num_key_columns() const;
-    [[nodiscard]] const KeyColumnDef& key_column(size_t key_idx) const;
-    [[nodiscard]] const std::vector<KeyColumnDef>& key_columns() const;
+    // =========================================================================
+    // Row key column access.
+    // =========================================================================
 
-    // Convenience: type of the i-th key column.
-    [[nodiscard]] DataType key_column_type(size_t key_idx) const;
-    // Convenience: nullable of the i-th key column.
-    [[nodiscard]] bool key_column_nullable(size_t key_idx) const;
+    size_t row_key_column_count() const { return columns_.size(); }
 
-    // Value columns = all columns not in key_columns.
-    [[nodiscard]] std::vector<size_t> value_column_indices() const;
+    const ColumnDef& column(size_t index) const { return columns_[index]; }
+
+    std::string_view column_name(size_t index) const { return columns_[index].name; }
+    DataType column_type(size_t index) const { return columns_[index].type; }
+    SortOrder column_order(size_t index) const { return columns_[index].order; }
+
+    const std::vector<ColumnDef>& columns() const { return columns_; }
+
+    // =========================================================================
+    // Iteration (range-for support).
+    // =========================================================================
+
+    auto begin() const { return columns_.begin(); }
+    auto end() const { return columns_.end(); }
 
 private:
     std::vector<ColumnDef> columns_;
-    std::vector<KeyColumnDef> key_columns_;
 };
 
-// Internal schema: flattened representation of all columns decomposed
-// into sub-columns suitable for columnar storage and pattern encoding.
-class InternalSchema {
+// =============================================================================
+// SchemaBuilder: validated, fluent construction of Schema objects.
+//
+// Usage:
+//   auto schema = SchemaBuilder()
+//       .add_column("user_id", DataType::kUint64)
+//       .add_column("timestamp", DataType::kInt64, SortOrder::kDescending)
+//       .build();
+//
+// build() returns a valid Schema. If validation fails (e.g., duplicate names,
+// invalid types), build() returns an empty Schema — check error() for details.
+// =============================================================================
+
+class SchemaBuilder {
 public:
-    static InternalSchema from_external(const ExternalSchema& ext);
+    SchemaBuilder() = default;
 
-    [[nodiscard]] size_t num_sub_columns() const;
-    [[nodiscard]] Flag flag(size_t sub_col_idx) const;
-    [[nodiscard]] std::string_view sub_column_name(size_t sub_col_idx) const;
+    SchemaBuilder& add_column(std::string name, DataType type,
+                              SortOrder order = SortOrder::kAscending) {
+        columns_.push_back(ColumnDef{std::move(name), type, order});
+        return *this;
+    }
 
-    // Maps external column index → sub-column range [start, end).
-    [[nodiscard]] std::pair<size_t, size_t> sub_column_range(size_t ext_col_idx) const;
+    // Validate and build. Returns empty Schema on failure (check error()).
+    Schema build() {
+        error_.clear();
+        if (!validate()) {
+            return Schema{};
+        }
+        return Schema{std::move(columns_)};
+    }
+
+    // After a failed build(), returns the validation error message.
+    const std::string& error() const { return error_; }
 
 private:
-    InternalSchema() = default;
+    bool validate() {
+        for (size_t i = 0; i < columns_.size(); ++i) {
+            const auto& col = columns_[i];
+            if (col.name.empty()) {
+                error_ = "column " + std::to_string(i) + " has empty name";
+                return false;
+            }
+            if (!is_key_compatible(col.type)) {
+                error_ = "column '" + col.name + "' has non-key-compatible type " +
+                         std::string(data_type_name(col.type));
+                return false;
+            }
+            // Check for duplicate names.
+            for (size_t j = 0; j < i; ++j) {
+                if (columns_[j].name == col.name) {
+                    error_ = "duplicate column name '" + col.name + "'";
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 
-    struct SubColumn {
-        std::string name;
-        Flag flag;
-    };
-
-    std::vector<SubColumn> sub_columns_;
-    // For each external column, stores the starting sub-column index.
-    // The range for column i is [ranges_[i], ranges_[i+1]).
-    std::vector<size_t> ranges_;
+    std::vector<ColumnDef> columns_;
+    std::string error_;
 };
 
 } // namespace pl::sstv2::types
