@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-04 14:10:25</td>
+            <td class="headerValue">2026-06-04 15:24:17</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -90,7 +90,7 @@
 <span id="L19"><span class="lineNum">      19</span>                 :             :  * possible outputs as uniformly as possible.</span>
 <span id="L20"><span class="lineNum">      20</span>                 :             :  */</span>
 <span id="L21"><span class="lineNum">      21</span>                 :             : static inline uint32_t fastrange32(uint32_t word, uint32_t p) {</span>
-<span id="L22"><span class="lineNum">      22</span>                 :<span class="tlaGNC tlaBgGNC">        4096 :     return (uint32_t)(((uint64_t)word * (uint64_t)p) &gt;&gt; 32);</span></span>
+<span id="L22"><span class="lineNum">      22</span>                 :<span class="tlaGNC tlaBgGNC">       27299 :     return (uint32_t)(((uint64_t)word * (uint64_t)p) &gt;&gt; 32);</span></span>
 <span id="L23"><span class="lineNum">      23</span>                 :             : }</span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : </span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : #if defined(_MSC_VER) &amp;&amp; defined(_WIN64)</span>
