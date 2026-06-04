@@ -31,17 +31,17 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">10</td>
-            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntryLo">29.7&nbsp;%</td>
+            <td class="headerCovTableEntry">37</td>
+            <td class="headerCovTableEntry">11</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-04 17:16:43</td>
+            <td class="headerValue">2026-06-04 22:38:31</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
+            <td class="headerCovTableEntry">3</td>
             <td class="headerCovTableEntry">2</td>
           </tr>
           <tr>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryMed">75.0&nbsp;%</td>
-            <td class="headerCovTableEntry">12</td>
-            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntryLo">26.3&nbsp;%</td>
+            <td class="headerCovTableEntry">38</td>
+            <td class="headerCovTableEntry">10</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -172,7 +172,7 @@
 <span id="L100"><span class="lineNum">     100</span>                 :             : }</span>
 <span id="L101"><span class="lineNum">     101</span>                 :             : </span>
 <span id="L102"><span class="lineNum">     102</span>                 :             : constexpr bool is_variable_size(DataType t) {</span>
-<span id="L103"><span class="lineNum">     103</span>         [<span class="tlaGBC" title="Branch 0 was taken 124 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 29 times"> + </span>]:<span class="tlaGNC">         153 :     return t == DataType::kString || t == DataType::kU16String || t == DataType::kU32String ||</span></span>
+<span id="L103"><span class="lineNum">     103</span>         [<span class="tlaGBC" title="Branch 0 was taken 145 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 73 times"> + </span>]:<span class="tlaGNC">         218 :     return t == DataType::kString || t == DataType::kU16String || t == DataType::kU32String ||</span></span>
 <span id="L104"><span class="lineNum">     104</span>                 :             :            t == DataType::kBinary;</span>
 <span id="L105"><span class="lineNum">     105</span>                 :             : }</span>
 <span id="L106"><span class="lineNum">     106</span>                 :             : </span>
@@ -185,7 +185,7 @@
 <span id="L113"><span class="lineNum">     113</span>                 :             : }</span>
 <span id="L114"><span class="lineNum">     114</span>                 :             : </span>
 <span id="L115"><span class="lineNum">     115</span>                 :             : constexpr bool is_private(DataType t) {</span>
-<span id="L116"><span class="lineNum">     116</span>                 :             :     return t == DataType::kDataBlock || t == DataType::kIndexBlock;</span>
+<span id="L116"><span class="lineNum">     116</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :     return t == DataType::kDataBlock || t == DataType::kIndexBlock;</span></span>
 <span id="L117"><span class="lineNum">     117</span>                 :             : }</span>
 <span id="L118"><span class="lineNum">     118</span>                 :             : </span>
 <span id="L119"><span class="lineNum">     119</span>                 :             : constexpr bool is_public(DataType t) {</span>
@@ -220,56 +220,61 @@
 <span id="L148"><span class="lineNum">     148</span>                 :             :     }</span>
 <span id="L149"><span class="lineNum">     149</span>                 :             : }</span>
 <span id="L150"><span class="lineNum">     150</span>                 :             : </span>
-<span id="L151"><span class="lineNum">     151</span>                 :             : constexpr std::string_view data_type_name(DataType t) {</span>
-<span id="L152"><span class="lineNum">     152</span>                 :             :     switch (t) {</span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaUNC tlaBgUNC">           0 : constexpr std::string_view data_type_name(DataType t) {</span></span>
+<span id="L152"><span class="lineNum">     152</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :     switch (t) {</span></span>
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span><span class="tlaUNC" title="Branch 6 was not executed"> # </span><span class="tlaUNC" title="Branch 7 was not executed"> # </span><span class="tlaUNC" title="Branch 8 was not executed"> # </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not executed"> # </span><span class="tlaUNC" title="Branch 10 was not executed"> # </span><span class="tlaUNC" title="Branch 11 was not executed"> # </span><span class="tlaUNC" title="Branch 12 was not executed"> # </span><span class="tlaUNC" title="Branch 13 was not executed"> # </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not executed"> # </span><span class="tlaUNC" title="Branch 15 was not executed"> # </span><span class="tlaUNC" title="Branch 16 was not executed"> # </span><span class="tlaUNC" title="Branch 17 was not executed"> # </span><span class="tlaUNC" title="Branch 18 was not executed"> # </span> 
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 19 was not executed"> # </span><span class="tlaUNC" title="Branch 20 was not executed"> # </span><span class="tlaUNC" title="Branch 21 was not executed"> # </span><span class="tlaUNC" title="Branch 22 was not executed"> # </span> 
+<span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 23 was not executed"> # </span>]
 <span id="L153"><span class="lineNum">     153</span>                 :             :         case DataType::kNone:</span>
-<span id="L154"><span class="lineNum">     154</span>                 :             :             return &quot;None&quot;;</span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaUNC">           0 :             return &quot;None&quot;;</span></span>
 <span id="L155"><span class="lineNum">     155</span>                 :             :         case DataType::kBool:</span>
-<span id="L156"><span class="lineNum">     156</span>                 :             :             return &quot;Bool&quot;;</span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaUNC">           0 :             return &quot;Bool&quot;;</span></span>
 <span id="L157"><span class="lineNum">     157</span>                 :             :         case DataType::kInt8:</span>
-<span id="L158"><span class="lineNum">     158</span>                 :             :             return &quot;Int8&quot;;</span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaUNC">           0 :             return &quot;Int8&quot;;</span></span>
 <span id="L159"><span class="lineNum">     159</span>                 :             :         case DataType::kInt16:</span>
-<span id="L160"><span class="lineNum">     160</span>                 :             :             return &quot;Int16&quot;;</span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaUNC">           0 :             return &quot;Int16&quot;;</span></span>
 <span id="L161"><span class="lineNum">     161</span>                 :             :         case DataType::kInt32:</span>
-<span id="L162"><span class="lineNum">     162</span>                 :             :             return &quot;Int32&quot;;</span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaUNC">           0 :             return &quot;Int32&quot;;</span></span>
 <span id="L163"><span class="lineNum">     163</span>                 :             :         case DataType::kInt64:</span>
-<span id="L164"><span class="lineNum">     164</span>                 :             :             return &quot;Int64&quot;;</span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaUNC">           0 :             return &quot;Int64&quot;;</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :             :         case DataType::kUint8:</span>
-<span id="L166"><span class="lineNum">     166</span>                 :             :             return &quot;Uint8&quot;;</span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaUNC">           0 :             return &quot;Uint8&quot;;</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :             :         case DataType::kUint16:</span>
-<span id="L168"><span class="lineNum">     168</span>                 :             :             return &quot;Uint16&quot;;</span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaUNC">           0 :             return &quot;Uint16&quot;;</span></span>
 <span id="L169"><span class="lineNum">     169</span>                 :             :         case DataType::kUint32:</span>
-<span id="L170"><span class="lineNum">     170</span>                 :             :             return &quot;Uint32&quot;;</span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaUNC">           0 :             return &quot;Uint32&quot;;</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :             :         case DataType::kUint64:</span>
-<span id="L172"><span class="lineNum">     172</span>                 :             :             return &quot;Uint64&quot;;</span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaUNC">           0 :             return &quot;Uint64&quot;;</span></span>
 <span id="L173"><span class="lineNum">     173</span>                 :             :         case DataType::kFloat:</span>
-<span id="L174"><span class="lineNum">     174</span>                 :             :             return &quot;Float&quot;;</span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaUNC">           0 :             return &quot;Float&quot;;</span></span>
 <span id="L175"><span class="lineNum">     175</span>                 :             :         case DataType::kDouble:</span>
-<span id="L176"><span class="lineNum">     176</span>                 :             :             return &quot;Double&quot;;</span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaUNC">           0 :             return &quot;Double&quot;;</span></span>
 <span id="L177"><span class="lineNum">     177</span>                 :             :         case DataType::kLongDouble:</span>
-<span id="L178"><span class="lineNum">     178</span>                 :             :             return &quot;LongDouble&quot;;</span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaUNC">           0 :             return &quot;LongDouble&quot;;</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :             :         case DataType::kTime:</span>
-<span id="L180"><span class="lineNum">     180</span>                 :             :             return &quot;Time&quot;;</span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC">           0 :             return &quot;Time&quot;;</span></span>
 <span id="L181"><span class="lineNum">     181</span>                 :             :         case DataType::kVersion:</span>
-<span id="L182"><span class="lineNum">     182</span>                 :             :             return &quot;Version&quot;;</span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaUNC">           0 :             return &quot;Version&quot;;</span></span>
 <span id="L183"><span class="lineNum">     183</span>                 :             :         case DataType::kString:</span>
-<span id="L184"><span class="lineNum">     184</span>                 :             :             return &quot;String&quot;;</span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaUNC">           0 :             return &quot;String&quot;;</span></span>
 <span id="L185"><span class="lineNum">     185</span>                 :             :         case DataType::kU16String:</span>
-<span id="L186"><span class="lineNum">     186</span>                 :             :             return &quot;U16String&quot;;</span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaUNC">           0 :             return &quot;U16String&quot;;</span></span>
 <span id="L187"><span class="lineNum">     187</span>                 :             :         case DataType::kU32String:</span>
-<span id="L188"><span class="lineNum">     188</span>                 :             :             return &quot;U32String&quot;;</span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaUNC">           0 :             return &quot;U32String&quot;;</span></span>
 <span id="L189"><span class="lineNum">     189</span>                 :             :         case DataType::kBinary:</span>
-<span id="L190"><span class="lineNum">     190</span>                 :             :             return &quot;Binary&quot;;</span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaUNC">           0 :             return &quot;Binary&quot;;</span></span>
 <span id="L191"><span class="lineNum">     191</span>                 :             :         case DataType::kArray:</span>
-<span id="L192"><span class="lineNum">     192</span>                 :             :             return &quot;Array&quot;;</span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaUNC">           0 :             return &quot;Array&quot;;</span></span>
 <span id="L193"><span class="lineNum">     193</span>                 :             :         case DataType::kMap:</span>
-<span id="L194"><span class="lineNum">     194</span>                 :             :             return &quot;Map&quot;;</span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaUNC">           0 :             return &quot;Map&quot;;</span></span>
 <span id="L195"><span class="lineNum">     195</span>                 :             :         case DataType::kDataBlock:</span>
-<span id="L196"><span class="lineNum">     196</span>                 :             :             return &quot;DataBlock&quot;;</span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaUNC">           0 :             return &quot;DataBlock&quot;;</span></span>
 <span id="L197"><span class="lineNum">     197</span>                 :             :         case DataType::kIndexBlock:</span>
-<span id="L198"><span class="lineNum">     198</span>                 :             :             return &quot;IndexBlock&quot;;</span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaUNC">           0 :             return &quot;IndexBlock&quot;;</span></span>
 <span id="L199"><span class="lineNum">     199</span>                 :             :     }</span>
-<span id="L200"><span class="lineNum">     200</span>                 :             :     return &quot;Unknown&quot;;</span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaUNC">           0 :     return &quot;Unknown&quot;;</span></span>
 <span id="L201"><span class="lineNum">     201</span>                 :             : }</span>
 <span id="L202"><span class="lineNum">     202</span>                 :             : </span>
 <span id="L203"><span class="lineNum">     203</span>                 :             : } // namespace pl::sstv2::types</span>

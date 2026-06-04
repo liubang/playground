@@ -31,27 +31,27 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">14</td>
-            <td class="headerCovTableEntry">14</td>
+            <td class="headerCovTableEntryMed">80.0&nbsp;%</td>
+            <td class="headerCovTableEntry">20</td>
+            <td class="headerCovTableEntry">16</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-04 17:16:43</td>
+            <td class="headerValue">2026-06-04 22:38:31</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">2</td>
-            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">3</td>
           </tr>
           <tr>
             <td></td>
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryMed">87.5&nbsp;%</td>
-            <td class="headerCovTableEntry">8</td>
-            <td class="headerCovTableEntry">7</td>
+            <td class="headerCovTableEntryLo">31.2&nbsp;%</td>
+            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntry">5</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -84,66 +84,81 @@
 <span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
 <span id="L14"><span class="lineNum">      14</span>                 :             : </span>
 <span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
-<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/06/04 15:23</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/06/04 22:27</span>
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : #include &quot;cpp/pl/sstv2/file/tail.h&quot;</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;cpp/pl/sstv2/encode/fixed.h&quot;</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : #include &quot;cpp/pl/sstv2/types/constants.h&quot;</span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : namespace pl::sstv2::file {</span>
-<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
-<span id="L25"><span class="lineNum">      25</span>                 :<span class="tlaGNC tlaBgGNC">           3 : void Tail::encode_to(std::byte* dst) const {</span></span>
-<span id="L26"><span class="lineNum">      26</span>                 :             :     using pl::sstv2::encode::encode_fixed;</span>
-<span id="L27"><span class="lineNum">      27</span>                 :             :     size_t off = 0;</span>
-<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
-<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">           3 :     encode_fixed&lt;uint32_t&gt;(magic, dst + off);</span></span>
-<span id="L30"><span class="lineNum">      30</span>                 :             :     off += 4;</span>
-<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">           3 :     encode_fixed&lt;uint16_t&gt;(format_version, dst + off);</span></span>
-<span id="L32"><span class="lineNum">      32</span>                 :             :     off += 2;</span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">           3 :     encode_fixed&lt;uint16_t&gt;(reserved, dst + off);</span></span>
-<span id="L34"><span class="lineNum">      34</span>                 :             :     off += 2;</span>
-<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">           3 :     encode_fixed&lt;uint64_t&gt;(locator_offset, dst + off);</span></span>
-<span id="L36"><span class="lineNum">      36</span>                 :             :     off += 8;</span>
-<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">           3 :     encode_fixed&lt;uint32_t&gt;(locator_size, dst + off);</span></span>
-<span id="L38"><span class="lineNum">      38</span>                 :             :     off += 4;</span>
-<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">           3 :     encode_fixed&lt;uint32_t&gt;(locator_checksum, dst + off);</span></span>
-<span id="L40"><span class="lineNum">      40</span>                 :             :     off += 4;</span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">           3 :     encode_fixed&lt;uint64_t&gt;(file_checksum, dst + off);</span></span>
-<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">           3 : }</span></span>
-<span id="L43"><span class="lineNum">      43</span>                 :             : </span>
-<span id="L44"><span class="lineNum">      44</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           4 : absl::StatusOr&lt;Tail&gt; Tail::decode_from(std::span&lt;const std::byte&gt; src) {</span></span>
-<span id="L45"><span class="lineNum">      45</span>                 :             :     using pl::sstv2::encode::decode_fixed;</span>
-<span id="L46"><span class="lineNum">      46</span>                 :             : </span>
-<span id="L47"><span class="lineNum">      47</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           4 :     if (src.size() &lt; kSize) {</span></span>
-<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">           2 :         return absl::InvalidArgumentError(&quot;tail data too short&quot;);</span></span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     }</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             : </span>
-<span id="L51"><span class="lineNum">      51</span>                 :             :     Tail t;</span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     size_t off = 0;</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             : </span>
-<span id="L54"><span class="lineNum">      54</span>                 :             :     t.magic = decode_fixed&lt;uint32_t&gt;(src.data() + off);</span>
-<span id="L55"><span class="lineNum">      55</span>                 :             :     off += 4;</span>
-<span id="L56"><span class="lineNum">      56</span>                 :             :     t.format_version = decode_fixed&lt;uint16_t&gt;(src.data() + off);</span>
-<span id="L57"><span class="lineNum">      57</span>                 :             :     off += 2;</span>
-<span id="L58"><span class="lineNum">      58</span>                 :             :     t.reserved = decode_fixed&lt;uint16_t&gt;(src.data() + off);</span>
-<span id="L59"><span class="lineNum">      59</span>                 :             :     off += 2;</span>
-<span id="L60"><span class="lineNum">      60</span>                 :             :     t.locator_offset = decode_fixed&lt;uint64_t&gt;(src.data() + off);</span>
-<span id="L61"><span class="lineNum">      61</span>                 :             :     off += 8;</span>
-<span id="L62"><span class="lineNum">      62</span>                 :             :     t.locator_size = decode_fixed&lt;uint32_t&gt;(src.data() + off);</span>
-<span id="L63"><span class="lineNum">      63</span>                 :             :     off += 4;</span>
-<span id="L64"><span class="lineNum">      64</span>                 :             :     t.locator_checksum = decode_fixed&lt;uint32_t&gt;(src.data() + off);</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             :     off += 4;</span>
-<span id="L66"><span class="lineNum">      66</span>                 :             :     t.file_checksum = decode_fixed&lt;uint64_t&gt;(src.data() + off);</span>
-<span id="L67"><span class="lineNum">      67</span>                 :             : </span>
-<span id="L68"><span class="lineNum">      68</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 :     if (t.magic != types::kSstMagic) {</span></span>
-<span id="L69"><span class="lineNum">      69</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return absl::InvalidArgumentError(&quot;invalid SST magic number&quot;);</span></span>
-<span id="L70"><span class="lineNum">      70</span>                 :             :     }</span>
-<span id="L71"><span class="lineNum">      71</span>                 :             : </span>
-<span id="L72"><span class="lineNum">      72</span>                 :             :     return t;</span>
-<span id="L73"><span class="lineNum">      73</span>                 :             : }</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;algorithm&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;array&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;string_view&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : </span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : #include &quot;absl/crc/crc32c.h&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : #include &quot;absl/status/status.h&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : #include &quot;cpp/pl/sstv2/encode/fixed.h&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : namespace pl::sstv2::file {</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : namespace {</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : </span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC tlaBgGNC">           6 : uint64_t TailChecksum(std::span&lt;const std::byte, Tail::kSize&gt; bytes) {</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :     std::array&lt;std::byte, Tail::kSize&gt; copy;</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :     std::copy(bytes.begin(), bytes.end(), copy.begin());</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :     pl::sstv2::encode::encode_fixed&lt;uint64_t&gt;(0, copy.data());</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :     auto view = std::string_view(reinterpret_cast&lt;const char*&gt;(copy.data()), copy.size());</span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">           6 :     return static_cast&lt;uint64_t&gt;(static_cast&lt;uint32_t&gt;(absl::ComputeCrc32c(view)));</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : }</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : } // namespace</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : </span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">           3 : std::array&lt;std::byte, Tail::kSize&gt; Tail::encode() const {</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">           3 :     std::array&lt;std::byte, kSize&gt; bytes{};</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :     size_t off = 0;</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :     encode::encode_fixed&lt;uint64_t&gt;(0, bytes.data() + off);</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :     off += 8;</span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">           3 :     encode::encode_fixed&lt;uint64_t&gt;(locator_offset, bytes.data() + off);</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :     off += 8;</span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">           3 :     encode::encode_fixed&lt;uint64_t&gt;(locator_length, bytes.data() + off);</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     off += 8;</span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">           3 :     encode::encode_fixed&lt;uint32_t&gt;(version, bytes.data() + off);</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :     off += 4;</span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">           3 :     encode::encode_fixed&lt;uint32_t&gt;(magic, bytes.data() + off);</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">           3 :     encode::encode_fixed&lt;uint64_t&gt;(</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         TailChecksum(std::span&lt;const std::byte, kSize&gt;(bytes.data(), bytes.size())), bytes.data());</span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">           3 :     return bytes;</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : }</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : </span>
+<span id="L58"><span class="lineNum">      58</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 : absl::StatusOr&lt;Tail&gt; Tail::decode(std::span&lt;const std::byte&gt; bytes) {</span></span>
+<span id="L59"><span class="lineNum">      59</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (bytes.size() != kSize) {</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;SSTableV2 tail must be exactly 32 bytes&quot;);</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :     }</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             : </span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :     Tail tail;</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :     size_t off = 0;</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :     tail.checksum = encode::decode_fixed&lt;uint64_t&gt;(bytes.data() + off);</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :     off += 8;</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :     tail.locator_offset = encode::decode_fixed&lt;uint64_t&gt;(bytes.data() + off);</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :     off += 8;</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :     tail.locator_length = encode::decode_fixed&lt;uint64_t&gt;(bytes.data() + off);</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :     off += 8;</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :     tail.version = encode::decode_fixed&lt;uint32_t&gt;(bytes.data() + off);</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :     off += 4;</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             :     tail.magic = encode::decode_fixed&lt;uint32_t&gt;(bytes.data() + off);</span>
 <span id="L74"><span class="lineNum">      74</span>                 :             : </span>
-<span id="L75"><span class="lineNum">      75</span>                 :             : } // namespace pl::sstv2::file</span>
+<span id="L75"><span class="lineNum">      75</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           3 :     if (tail.magic != kMagic) {</span></span>
+<span id="L76"><span class="lineNum">      76</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;invalid SSTableV2 tail magic&quot;);</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :     }</span>
+<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           3 :     if (tail.version != kVersion) {</span></span>
+<span id="L79"><span class="lineNum">      79</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;unsupported SSTableV2 version&quot;);</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :     }</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : </span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :     const auto expected =</span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         TailChecksum(std::span&lt;const std::byte, kSize&gt;(bytes.data(), bytes.size()));</span></span>
+<span id="L84"><span class="lineNum">      84</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (tail.checksum != expected) {</span></span>
+<span id="L85"><span class="lineNum">      85</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::DataLossError(&quot;SSTableV2 tail checksum mismatch&quot;);</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :     }</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :     return tail;</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             : }</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             : </span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : } // namespace pl::sstv2::file</span>
         </pre>
               </td>
             </tr>
