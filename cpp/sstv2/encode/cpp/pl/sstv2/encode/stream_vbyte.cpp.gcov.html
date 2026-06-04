@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-04 15:24:17</td>
+            <td class="headerValue">2026-06-04 17:16:43</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -96,74 +96,74 @@
 <span id="L25"><span class="lineNum">      25</span>                 :             : </span>
 <span id="L26"><span class="lineNum">      26</span>                 :             : // Returns the number of bytes needed to store value (1-4)</span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : inline uint8_t byte_width(uint32_t value) {</span>
-<span id="L28"><span class="lineNum">      28</span>         [<span class="tlaGBC" title="Branch 0 was taken 1026 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 134 times"> + </span>]:<span class="tlaGNC tlaBgGNC">        1160 :     if (value &lt; (1u &lt;&lt; 8))</span></span>
+<span id="L28"><span class="lineNum">      28</span>         [<span class="tlaGBC" title="Branch 0 was taken 1033 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 155 times"> + </span>]:<span class="tlaGNC tlaBgGNC">        1188 :     if (value &lt; (1u &lt;&lt; 8))</span></span>
 <span id="L29"><span class="lineNum">      29</span>                 :             :         return 1;</span>
-<span id="L30"><span class="lineNum">      30</span>         [<span class="tlaGBC" title="Branch 0 was taken 953 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 73 times"> + </span>]:<span class="tlaGNC">        1026 :     if (value &lt; (1u &lt;&lt; 16))</span></span>
+<span id="L30"><span class="lineNum">      30</span>         [<span class="tlaGBC" title="Branch 0 was taken 955 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 78 times"> + </span>]:<span class="tlaGNC">        1033 :     if (value &lt; (1u &lt;&lt; 16))</span></span>
 <span id="L31"><span class="lineNum">      31</span>                 :             :         return 2;</span>
-<span id="L32"><span class="lineNum">      32</span>         [<span class="tlaGBC" title="Branch 0 was taken 939 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">         953 :     if (value &lt; (1u &lt;&lt; 24))</span></span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">         939 :         return 3;</span></span>
+<span id="L32"><span class="lineNum">      32</span>         [<span class="tlaGBC" title="Branch 0 was taken 941 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">         955 :     if (value &lt; (1u &lt;&lt; 24))</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">         941 :         return 3;</span></span>
 <span id="L34"><span class="lineNum">      34</span>                 :             :     return 4;</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             : }</span>
 <span id="L36"><span class="lineNum">      36</span>                 :             : </span>
 <span id="L37"><span class="lineNum">      37</span>                 :             : inline void write_value(uint32_t value, uint8_t width, std::byte* dst) {</span>
 <span id="L38"><span class="lineNum">      38</span>                 :             :     // Little-endian write of the lowest `width` bytes</span>
-<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">        1160 :     std::memcpy(dst, &amp;value, width);</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">        1188 :     std::memcpy(dst, &amp;value, width);</span></span>
 <span id="L40"><span class="lineNum">      40</span>                 :             : }</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             : </span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : inline uint32_t read_value(const std::byte* src, uint8_t width) {</span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">        1155 :     uint32_t value = 0;</span></span>
-<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">        1155 :     std::memcpy(&amp;value, src, width);</span></span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">        1155 :     return value;</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">        1183 :     uint32_t value = 0;</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">        1183 :     std::memcpy(&amp;value, src, width);</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">        1183 :     return value;</span></span>
 <span id="L46"><span class="lineNum">      46</span>                 :             : }</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             : </span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : } // namespace</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : </span>
-<span id="L50"><span class="lineNum">      50</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 : size_t StreamVByte::encode(std::span&lt;const uint32_t&gt; values, std::byte* dst) {</span></span>
+<span id="L50"><span class="lineNum">      50</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          18 : size_t StreamVByte::encode(std::span&lt;const uint32_t&gt; values, std::byte* dst) {</span></span>
 <span id="L51"><span class="lineNum">      51</span>                 :             :     const size_t count = values.size();</span>
-<span id="L52"><span class="lineNum">      52</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :     if (count == 0)</span></span>
+<span id="L52"><span class="lineNum">      52</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          18 :     if (count == 0)</span></span>
 <span id="L53"><span class="lineNum">      53</span>                 :             :         return 0;</span>
 <span id="L54"><span class="lineNum">      54</span>                 :             : </span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          13 :     const size_t num_control_bytes = (count + 3) / 4;</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          18 :     const size_t num_control_bytes = (count + 3) / 4;</span></span>
 <span id="L56"><span class="lineNum">      56</span>                 :             :     std::byte* control_ptr = dst;</span>
-<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          13 :     std::byte* data_ptr = dst + num_control_bytes;</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          18 :     std::byte* data_ptr = dst + num_control_bytes;</span></span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : </span>
 <span id="L59"><span class="lineNum">      59</span>                 :             :     // Zero out control bytes so partial groups are clean</span>
 <span id="L60"><span class="lineNum">      60</span>                 :             :     std::memset(control_ptr, 0, num_control_bytes);</span>
 <span id="L61"><span class="lineNum">      61</span>                 :             : </span>
-<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 293 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">         306 :     for (size_t i = 0; i &lt; count; i += 4) {</span></span>
+<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 301 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 18 times"> + </span>]:<span class="tlaGNC">         319 :     for (size_t i = 0; i &lt; count; i += 4) {</span></span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :         uint8_t control = 0;</span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">         293 :         const size_t group_size = std::min&lt;size_t&gt;(4, count - i);</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">         301 :         const size_t group_size = std::min&lt;size_t&gt;(4, count - i);</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : </span>
-<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaGBC" title="Branch 0 was taken 1160 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 293 times"> + </span>]:<span class="tlaGNC">        1453 :         for (size_t j = 0; j &lt; group_size; ++j) {</span></span>
-<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaGBC" title="Branch 0 was taken 1026 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 134 times"> + </span>]:<span class="tlaGNC">        1160 :             uint8_t width = byte_width(values[i + j]);</span></span>
+<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaGBC" title="Branch 0 was taken 1188 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 301 times"> + </span>]:<span class="tlaGNC">        1489 :         for (size_t j = 0; j &lt; group_size; ++j) {</span></span>
+<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaGBC" title="Branch 0 was taken 1033 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 155 times"> + </span>]:<span class="tlaGNC">        1188 :             uint8_t width = byte_width(values[i + j]);</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :             :             // Store width-1 in 2-bit slot (0=1byte, 1=2bytes, 2=3bytes, 3=4bytes)</span>
-<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">        1160 :             control |= static_cast&lt;uint8_t&gt;((width - 1) &lt;&lt; (j * 2));</span></span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">        1160 :             write_value(values[i + j], width, data_ptr);</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">        1160 :             data_ptr += width;</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">        1188 :             control |= static_cast&lt;uint8_t&gt;((width - 1) &lt;&lt; (j * 2));</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">        1188 :             write_value(values[i + j], width, data_ptr);</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">        1188 :             data_ptr += width;</span></span>
 <span id="L72"><span class="lineNum">      72</span>                 :             :         }</span>
 <span id="L73"><span class="lineNum">      73</span>                 :             : </span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">         293 :         *control_ptr++ = static_cast&lt;std::byte&gt;(control);</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">         301 :         *control_ptr++ = static_cast&lt;std::byte&gt;(control);</span></span>
 <span id="L75"><span class="lineNum">      75</span>                 :             :     }</span>
 <span id="L76"><span class="lineNum">      76</span>                 :             : </span>
-<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">          13 :     return static_cast&lt;size_t&gt;(data_ptr - dst);</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">          18 :     return static_cast&lt;size_t&gt;(data_ptr - dst);</span></span>
 <span id="L78"><span class="lineNum">      78</span>                 :             : }</span>
 <span id="L79"><span class="lineNum">      79</span>                 :             : </span>
-<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">          12 : void StreamVByte::decode(std::span&lt;const std::byte&gt; src, size_t count, uint32_t* dst) {</span></span>
-<span id="L81"><span class="lineNum">      81</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     if (count == 0)</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">          17 : void StreamVByte::decode(std::span&lt;const std::byte&gt; src, size_t count, uint32_t* dst) {</span></span>
+<span id="L81"><span class="lineNum">      81</span>         [<span class="tlaGBC" title="Branch 0 was taken 17 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          17 :     if (count == 0)</span></span>
 <span id="L82"><span class="lineNum">      82</span>                 :             :         return;</span>
 <span id="L83"><span class="lineNum">      83</span>                 :             : </span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">          12 :     const size_t num_control_bytes = (count + 3) / 4;</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">          17 :     const size_t num_control_bytes = (count + 3) / 4;</span></span>
 <span id="L85"><span class="lineNum">      85</span>                 :             :     const std::byte* control_ptr = src.data();</span>
-<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">          12 :     const std::byte* data_ptr = src.data() + num_control_bytes;</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">          17 :     const std::byte* data_ptr = src.data() + num_control_bytes;</span></span>
 <span id="L87"><span class="lineNum">      87</span>                 :             : </span>
-<span id="L88"><span class="lineNum">      88</span>         [<span class="tlaGBC" title="Branch 0 was taken 291 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">         303 :     for (size_t i = 0; i &lt; count; i += 4) {</span></span>
-<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">         291 :         uint8_t control = static_cast&lt;uint8_t&gt;(*control_ptr++);</span></span>
-<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">         291 :         const size_t group_size = std::min&lt;size_t&gt;(4, count - i);</span></span>
+<span id="L88"><span class="lineNum">      88</span>         [<span class="tlaGBC" title="Branch 0 was taken 299 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 17 times"> + </span>]:<span class="tlaGNC">         316 :     for (size_t i = 0; i &lt; count; i += 4) {</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">         299 :         uint8_t control = static_cast&lt;uint8_t&gt;(*control_ptr++);</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">         299 :         const size_t group_size = std::min&lt;size_t&gt;(4, count - i);</span></span>
 <span id="L91"><span class="lineNum">      91</span>                 :             : </span>
-<span id="L92"><span class="lineNum">      92</span>         [<span class="tlaGBC" title="Branch 0 was taken 1155 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 291 times"> + </span>]:<span class="tlaGNC">        1446 :         for (size_t j = 0; j &lt; group_size; ++j) {</span></span>
-<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">        1155 :             uint8_t width = ((control &gt;&gt; (j * 2)) &amp; 0x03) + 1;</span></span>
-<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">        1155 :             dst[i + j] = read_value(data_ptr, width);</span></span>
-<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">        1155 :             data_ptr += width;</span></span>
+<span id="L92"><span class="lineNum">      92</span>         [<span class="tlaGBC" title="Branch 0 was taken 1183 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 299 times"> + </span>]:<span class="tlaGNC">        1482 :         for (size_t j = 0; j &lt; group_size; ++j) {</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">        1183 :             uint8_t width = ((control &gt;&gt; (j * 2)) &amp; 0x03) + 1;</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">        1183 :             dst[i + j] = read_value(data_ptr, width);</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">        1183 :             data_ptr += width;</span></span>
 <span id="L96"><span class="lineNum">      96</span>                 :             :         }</span>
 <span id="L97"><span class="lineNum">      97</span>                 :             :     }</span>
 <span id="L98"><span class="lineNum">      98</span>                 :             : }</span>
