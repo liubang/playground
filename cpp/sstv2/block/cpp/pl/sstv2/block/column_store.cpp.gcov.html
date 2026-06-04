@@ -1,0 +1,211 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - sstv2/block/cpp/pl/sstv2/block/column_store.cpp</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">sstv2/block/cpp/pl/sstv2/block</a> - column_store.cpp<span style="font-size: 80%;"> (source / <a href="column_store.cpp.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">53</td>
+            <td class="headerCovTableEntry">53</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-06-04 17:16:43</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntry">9</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryLo">65.0&nbsp;%</td>
+            <td class="headerCovTableEntry">40</td>
+            <td class="headerCovTableEntry">26</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/06/04 13:06</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : #include &quot;cpp/pl/sstv2/block/column_store.h&quot;</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;cpp/pl/sstv2/pattern/pattern_decoder.h&quot;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &quot;cpp/pl/sstv2/pattern/pattern_selector.h&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : namespace pl::sstv2::block {</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
+<span id="L25"><span class="lineNum">      25</span>                 :<span class="tlaGNC tlaBgGNC">           4 : ColumnStoreBuilder::ColumnStoreBuilder(size_t num_sub_columns)</span></span>
+<span id="L26"><span class="lineNum">      26</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     : num_sub_columns_(num_sub_columns), values_(num_sub_columns), null_flags_(num_sub_columns) {}</span></span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
+<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">          25 : void ColumnStoreBuilder::add_value(size_t sub_col_idx, uint64_t value) {</span></span>
+<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">          25 :     values_[sub_col_idx].push_back(value);</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">          25 :     null_flags_[sub_col_idx].push_back(false);</span></span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">          25 : }</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : </span>
+<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">           3 : void ColumnStoreBuilder::add_null(size_t sub_col_idx) {</span></span>
+<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">           3 :     values_[sub_col_idx].push_back(0);</span></span>
+<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">           3 :     null_flags_[sub_col_idx].push_back(true);</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">           3 : }</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : </span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">          12 : void ColumnStoreBuilder::finish_row() {</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">          12 :     ++num_rows_;</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">          12 : }</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : </span>
+<span id="L42"><span class="lineNum">      42</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 : absl::StatusOr&lt;std::string&gt; ColumnStoreBuilder::build() {</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :     metas_.clear();</span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">           2 :     metas_.resize(num_sub_columns_);</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :     std::string output;</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : </span>
+<span id="L47"><span class="lineNum">      47</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           7 :     for (size_t i = 0; i &lt; num_sub_columns_; ++i) {</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :         auto&amp; meta = metas_[i];</span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">           5 :         meta.offset = static_cast&lt;uint32_t&gt;(output.size());</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : </span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :         // Check if there are any nulls</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :         bool has_nulls = false;</span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">           5 :         for (bool flag : null_flags_[i]) {</span></span>
+<span id="L54"><span class="lineNum">      54</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">          18 :             if (flag) {</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :                 has_nulls = true;</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :                 break;</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :             }</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :         }</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : </span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :         // Select pattern and encode</span>
+<span id="L61"><span class="lineNum">      61</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :         auto selection = pl::sstv2::pattern::PatternSelector::select(values_[i]);</span></span>
+<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :         meta.pattern_id = static_cast&lt;uint8_t&gt;(selection.pattern_id);</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : </span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :         std::string encoded;</span>
+<span id="L65"><span class="lineNum">      65</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :         auto status = selection.encoder-&gt;encode(values_[i], encoded);</span></span>
+<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :         if (!status.ok()) {</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :             return status;</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :         }</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :         output.append(encoded);</span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">           5 :         meta.size = static_cast&lt;uint32_t&gt;(encoded.size());</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : </span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :         // Append null bitmap if needed</span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">           5 :         meta.has_bitmap = has_nulls;</span></span>
+<span id="L74"><span class="lineNum">      74</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           5 :         if (has_nulls) {</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">           3 :             meta.bitmap_offset = static_cast&lt;uint32_t&gt;(output.size());</span></span>
+<span id="L76"><span class="lineNum">      76</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :             size_t bitmap_bytes = (num_rows_ + 7) / 8;</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :             std::string bitmap(bitmap_bytes, '\0');</span>
+<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">          15 :             for (size_t row = 0; row &lt; num_rows_; ++row) {</span></span>
+<span id="L79"><span class="lineNum">      79</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">          12 :                 if (null_flags_[i][row]) {</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">           3 :                     bitmap[row / 8] |= static_cast&lt;char&gt;(1 &lt;&lt; (row % 8));</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :             :                 }</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :             }</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :             output.append(bitmap);</span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">           3 :             meta.bitmap_size = static_cast&lt;uint32_t&gt;(bitmap_bytes);</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :         } else {</span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">           2 :             meta.bitmap_offset = 0;</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">           2 :             meta.bitmap_size = 0;</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :         }</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :     }</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : </span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :     return output;</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             : }</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : </span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">           2 : const std::vector&lt;SubColumnMeta&gt;&amp; ColumnStoreBuilder::sub_column_metas() const {</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">           2 :     return metas_;</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :             : }</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : </span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">           2 : ColumnStoreReader::ColumnStoreReader(std::span&lt;const std::byte&gt; data,</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :                                      std::span&lt;const SubColumnMeta&gt; metas,</span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">           2 :                                      size_t num_rows)</span></span>
+<span id="L101"><span class="lineNum">     101</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     : data_(data), metas_(metas.begin(), metas.end()), num_rows_(num_rows) {</span></span>
+<span id="L102"><span class="lineNum">     102</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     decoders_.reserve(metas_.size());</span></span>
+<span id="L103"><span class="lineNum">     103</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           7 :     for (const auto&amp; meta : metas_) {</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :         auto decoder = pl::sstv2::pattern::PatternDecoder::create(</span>
+<span id="L105"><span class="lineNum">     105</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :             static_cast&lt;pl::sstv2::pattern::PatternId&gt;(meta.pattern_id),</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">           5 :             data_.subspan(meta.offset, meta.size),</span></span>
+<span id="L107"><span class="lineNum">     107</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :             num_rows_);</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :         decoders_.push_back(std::move(decoder));</span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">           5 :     }</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">           2 : }</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :             : </span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          19 : uint64_t ColumnStoreReader::get(size_t sub_col_idx, size_t row_idx) const {</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">          19 :     return decoders_[sub_col_idx]-&gt;get(row_idx);</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :             : }</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : </span>
+<span id="L116"><span class="lineNum">     116</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 : bool ColumnStoreReader::is_null(size_t sub_col_idx, size_t row_idx) const {</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :             :     const auto&amp; meta = metas_[sub_col_idx];</span>
+<span id="L118"><span class="lineNum">     118</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     if (!meta.has_bitmap) {</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :             :         return false;</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :     }</span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">          12 :     const auto* bitmap = data_.data() + meta.bitmap_offset;</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">          12 :     auto byte_val = static_cast&lt;uint8_t&gt;(bitmap[row_idx / 8]);</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">          12 :     return (byte_val &gt;&gt; (row_idx % 8)) &amp; 1;</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :             : }</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             : </span>
+<span id="L126"><span class="lineNum">     126</span>                 :             : } // namespace pl::sstv2::block</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
