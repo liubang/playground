@@ -13,81 +13,61 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/06/04 12:01
+# Created: 2026/06/05 00:23
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "data_type",
     hdrs = ["data_type.h"],
-    visibility = ["//cpp/pl/sstv2:__subpackages__"],
 )
 
 cc_library(
-    name = "constants",
-    hdrs = ["constants.h"],
-    visibility = ["//cpp/pl/sstv2:__subpackages__"],
+    name = "op_type",
+    hdrs = ["op_type.h"],
 )
 
 cc_library(
-    name = "flag",
-    hdrs = ["flag.h"],
-    visibility = ["//cpp/pl/sstv2:__subpackages__"],
+    name = "column_flag",
+    hdrs = ["column_flag.h"],
     deps = [":data_type"],
 )
 
 cc_library(
-    name = "variant",
-    srcs = ["variant.cpp"],
-    hdrs = ["variant.h"],
-    visibility = ["//cpp/pl/sstv2:__subpackages__"],
-    deps = [
-        ":data_type",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-    ],
+    name = "value",
+    hdrs = ["value.h"],
+    deps = [":data_type"],
 )
 
 cc_library(
     name = "schema",
-    srcs = ["schema.cpp"],
     hdrs = ["schema.h"],
-    visibility = ["//cpp/pl/sstv2:__subpackages__"],
-    deps = [
-        ":data_type",
-        ":flag",
-    ],
+    deps = [":data_type"],
 )
 
 cc_library(
-    name = "row_key",
-    srcs = ["row_key.cpp"],
-    hdrs = ["row_key.h"],
-    visibility = ["//cpp/pl/sstv2:__subpackages__"],
+    name = "internal_schema",
+    hdrs = ["internal_schema.h"],
+    deps = [":schema"],
+)
+
+cc_library(
+    name = "row",
+    hdrs = ["row.h"],
     deps = [
-        ":data_type",
-        ":schema",
-        ":variant",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
+        ":op_type",
+        ":value",
     ],
 )
 
 cc_library(
     name = "internal_row",
     hdrs = ["internal_row.h"],
-    visibility = ["//cpp/pl/sstv2:__subpackages__"],
     deps = [
-        ":schema",
-        ":variant",
-    ],
-)
-
-cc_library(
-    name = "table_schema",
-    hdrs = ["table_schema.h"],
-    visibility = ["//cpp/pl/sstv2:__subpackages__"],
-    deps = [
-        ":data_type",
-        ":variant",
+        ":column_flag",
+        ":internal_schema",
+        ":value",
     ],
 )
