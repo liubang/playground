@@ -13,10 +13,11 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/06/04 15:23
+// Created: 2026/06/04 22:27
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -25,19 +26,20 @@
 
 namespace pl::sstv2::file {
 
+// PDF v0.95 tail. It is always the final 32 bytes of a key file.
 struct Tail {
     static constexpr size_t kSize = 32;
+    static constexpr uint32_t kMagic = 0x00545353; // "SST\0", little-endian.
+    static constexpr uint32_t kVersion = 2;
 
-    uint32_t magic = 0x53535432; // "SST2"
-    uint16_t format_version = 1;
-    uint16_t reserved = 0;
+    uint64_t checksum = 0;
     uint64_t locator_offset = 0;
-    uint32_t locator_size = 0;
-    uint32_t locator_checksum = 0; // CRC32C of locator section
-    uint64_t file_checksum = 0;    // CRC32C of entire file excluding tail
+    uint64_t locator_length = 0;
+    uint32_t version = kVersion;
+    uint32_t magic = kMagic;
 
-    void encode_to(std::byte* dst) const;
-    static absl::StatusOr<Tail> decode_from(std::span<const std::byte> src);
+    [[nodiscard]] std::array<std::byte, kSize> encode() const;
+    static absl::StatusOr<Tail> decode(std::span<const std::byte> bytes);
 };
 
 } // namespace pl::sstv2::file

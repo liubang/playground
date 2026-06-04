@@ -24,12 +24,13 @@ namespace pl::sstv2::types {
 
 // --- ExternalSchema ---
 
-ExternalSchema::ExternalSchema(std::vector<ColumnDef> columns, std::vector<KeyColumnDef> key_columns)
+ExternalSchema::ExternalSchema(std::vector<ColumnDef> columns,
+                               std::vector<KeyColumnDef> key_columns)
     : columns_(std::move(columns)), key_columns_(std::move(key_columns)) {
     assert(!columns_.empty());
     assert(!key_columns_.empty());
     // Validate key column indices are within bounds.
-    for (const auto& kc : key_columns_) {
+    for ([[maybe_unused]] const auto& kc : key_columns_) {
         assert(kc.column_index < columns_.size());
     }
 }
@@ -75,7 +76,8 @@ bool ExternalSchema::key_column_nullable(size_t key_idx) const {
 std::vector<size_t> ExternalSchema::value_column_indices() const {
     std::vector<size_t> result;
     for (size_t i = 0; i < columns_.size(); ++i) {
-        bool is_key = std::any_of(key_columns_.begin(), key_columns_.end(),
+        bool is_key = std::any_of(key_columns_.begin(),
+                                  key_columns_.end(),
                                   [i](const KeyColumnDef& kc) { return kc.column_index == i; });
         if (!is_key) {
             result.push_back(i);
