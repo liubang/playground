@@ -13,49 +13,93 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/06/04 15:23
+// Created: 2026/06/04 22:27
 
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "cpp/pl/sstv2/types/table_schema.h"
+#include "cpp/pl/sstv2/types/variant.h"
 
 namespace pl::sstv2::file {
 
 struct SSTableBuilderOptions {
-    size_t block_size = 65536;
-    uint8_t compression = 0; // 0=none
+    size_t max_embedded_value_size = 1024;
+    size_t max_data_block_size = 64 * 1024;
     size_t bloom_bits_per_key = 10;
-    size_t value_size_threshold = 1024;
-    std::string value_file_path; // empty = no KV separation
+    bool enable_bloom_filter = true;
+    std::string value_file_path;
+    bool emit_compatibility_metadata = true;
 };
 
 class SSTableBuilder {
 public:
     using Options = SSTableBuilderOptions;
 
-    explicit SSTableBuilder(std::string_view output_path, Options opts = {});
+    SSTableBuilder(types::TableSchema schema, std::string_view key_file_path, Options opts = {});
 
-    // Add a raw key-value pair (simplified interface)
+    absl::Status add(const types::Row& row);
+
+    // Compatibility helper for legacy tests/callers. It creates a single
+    // String row key, Version=0, OpType=0, and String value.
     absl::Status add(std::string_view key, std::string_view value);
 
-    // Finish building the SST file
     absl::Status finish();
-
-    // Abort (file left for GC)
     void abort();
 
-    uint64_t total_rows() const;
-    uint64_t data_size() const;
+    [[nodiscard]] uint64_t total_rows() const;
+    [[nodiscard]] uint64_t data_size() const;
 
 private:
+    struct PendingRow {
+        types::Row row;
+        std::string all_key;
+        std::string value_bytes;
+        std::string filename;
+        uint64_t value_offset = 0;
+        uint64_t value_length = 0;
+        uint64_t value_checksum = 0;
+        bool embedded = true;
+    };
+
+    absl::Status validate_schema() const;
+    absl::Status validate_row(const types::Row& row) const;
+    absl::Status append_value(types::Row row);
+    absl::Status flush_data_block();
+
+    [[nodiscard]] std::string encode_all_key(const types::Row& row) const;
+    [[nodiscard]] std::string build_data_block(std::span<const PendingRow> rows) const;
+    [[nodiscard]] std::string build_root_index_block() const;
+    [[nodiscard]] std::string build_bloom_filter() const;
+    [[nodiscard]] std::string build_metadata_section(
+        uint32_t magic, const std::vector<std::pair<std::string, uint64_t>>& values) const;
+    [[nodiscard]] std::string build_schema_metadata() const;
+
+    types::TableSchema schema_;
     Options opts_;
-    std::string output_path_;
-    std::string buffer_; // accumulates the full file content
+    std::string key_file_path_;
+    std::string key_file_;
+
+    std::vector<PendingRow> pending_rows_;
+    std::vector<std::pair<std::string, uint64_t>> value_file_entries_;
+    std::vector<std::string> bloom_keys_;
+
+    struct DataBlockIndex {
+        std::string last_all_key;
+        uint64_t offset = 0;
+        uint64_t length = 0;
+    };
+    std::vector<DataBlockIndex> data_blocks_;
+
     uint64_t total_rows_ = 0;
     uint64_t data_size_ = 0;
     bool finished_ = false;
