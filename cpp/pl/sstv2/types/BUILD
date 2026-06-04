@@ -58,6 +58,21 @@ cc_library(
 )
 
 cc_library(
+    name = "row_key",
+    srcs = ["row_key.cpp"],
+    hdrs = ["row_key.h"],
+    visibility = ["//cpp/pl/sstv2:__subpackages__"],
+    deps = [
+        ":data_type",
+        ":schema",
+        ":variant",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
     name = "internal_row",
     hdrs = ["internal_row.h"],
     visibility = ["//cpp/pl/sstv2:__subpackages__"],

@@ -30,8 +30,10 @@ TEST(ExternalSchemaTest, Construction) {
         {.name = "age", .type = DataType::kInt32},
         {.name = "score", .type = DataType::kDouble},
     };
-    ExternalSchema schema(cols);
+    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
+    ExternalSchema schema(cols, key_cols);
     EXPECT_EQ(schema.num_columns(), 3u);
+    EXPECT_EQ(schema.num_key_columns(), 1u);
 }
 
 TEST(ExternalSchemaTest, ColumnLookup) {
@@ -40,7 +42,8 @@ TEST(ExternalSchemaTest, ColumnLookup) {
         {.name = "name", .type = DataType::kString},
         {.name = "value", .type = DataType::kFloat},
     };
-    ExternalSchema schema(cols);
+    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
+    ExternalSchema schema(cols, key_cols);
 
     auto idx = schema.find_column("name");
     ASSERT_TRUE(idx.has_value());
@@ -49,16 +52,27 @@ TEST(ExternalSchemaTest, ColumnLookup) {
     EXPECT_FALSE(schema.find_column("nonexistent").has_value());
 }
 
-TEST(ExternalSchemaTest, RowKeyColumn) {
+TEST(ExternalSchemaTest, KeyColumns) {
     std::vector<ColumnDef> cols = {
-        {.name = "primary_key", .type = DataType::kString},
+        {.name = "tenant_id", .type = DataType::kUint64},
+        {.name = "user_id", .type = DataType::kString},
         {.name = "col1", .type = DataType::kInt32},
     };
-    ExternalSchema schema(cols);
+    std::vector<KeyColumnDef> key_cols = {
+        {.column_index = 0, .order = SortOrder::kAscending},
+        {.column_index = 1, .order = SortOrder::kDescending},
+    };
+    ExternalSchema schema(cols, key_cols);
 
-    const auto& rk = schema.row_key_column();
-    EXPECT_EQ(rk.name, "primary_key");
-    EXPECT_EQ(rk.type, DataType::kString);
+    EXPECT_EQ(schema.num_key_columns(), 2u);
+    EXPECT_EQ(schema.key_column(0).column_index, 0u);
+    EXPECT_EQ(schema.key_column(1).order, SortOrder::kDescending);
+    EXPECT_EQ(schema.key_column_type(0), DataType::kUint64);
+    EXPECT_EQ(schema.key_column_type(1), DataType::kString);
+
+    auto value_cols = schema.value_column_indices();
+    ASSERT_EQ(value_cols.size(), 1u);
+    EXPECT_EQ(value_cols[0], 2u);
 }
 
 // === InternalSchema decomposition ===
@@ -69,7 +83,8 @@ TEST(InternalSchemaTest, FixedTypeColumn) {
         {.name = "key", .type = DataType::kString},
         {.name = "count", .type = DataType::kInt32},
     };
-    ExternalSchema ext(cols);
+    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
+    ExternalSchema ext(cols, key_cols);
     auto internal = InternalSchema::from_external(ext);
 
     auto [start, end] = internal.sub_column_range(1);
@@ -87,7 +102,8 @@ TEST(InternalSchemaTest, StringColumn) {
         {.name = "key", .type = DataType::kUint64},
         {.name = "text", .type = DataType::kString},
     };
-    ExternalSchema ext(cols);
+    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
+    ExternalSchema ext(cols, key_cols);
     auto internal = InternalSchema::from_external(ext);
 
     auto [start, end] = internal.sub_column_range(1);
@@ -100,7 +116,8 @@ TEST(InternalSchemaTest, NullableColumn) {
         {.name = "key", .type = DataType::kString},
         {.name = "opt_val", .type = DataType::kInt64, .nullable = true},
     };
-    ExternalSchema ext(cols);
+    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
+    ExternalSchema ext(cols, key_cols);
     auto internal = InternalSchema::from_external(ext);
 
     auto [start, end] = internal.sub_column_range(1);
@@ -121,7 +138,8 @@ TEST(InternalSchemaTest, ArrayColumn) {
         {.name = "key", .type = DataType::kString},
         {.name = "tags", .type = DataType::kArray, .element_type = DataType::kString},
     };
-    ExternalSchema ext(cols);
+    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
+    ExternalSchema ext(cols, key_cols);
     auto internal = InternalSchema::from_external(ext);
 
     auto [start, end] = internal.sub_column_range(1);
@@ -142,7 +160,8 @@ TEST(InternalSchemaTest, MapColumn) {
          .key_type = DataType::kString,
          .value_type = DataType::kInt32},
     };
-    ExternalSchema ext(cols);
+    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
+    ExternalSchema ext(cols, key_cols);
     auto internal = InternalSchema::from_external(ext);
 
     auto [start, end] = internal.sub_column_range(1);
@@ -161,7 +180,8 @@ TEST(InternalSchemaTest, SubColumnRangeMapping) {
         {.name = "age", .type = DataType::kInt32},   // 1 sub-col
         {.name = "name", .type = DataType::kString}, // 2 sub-cols
     };
-    ExternalSchema ext(cols);
+    std::vector<KeyColumnDef> key_cols = {{.column_index = 0}};
+    ExternalSchema ext(cols, key_cols);
     auto internal = InternalSchema::from_external(ext);
 
     auto [s0, e0] = internal.sub_column_range(0);
