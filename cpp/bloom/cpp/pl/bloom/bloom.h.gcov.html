@@ -31,27 +31,27 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">98.2&nbsp;%</td>
-            <td class="headerCovTableEntry">56</td>
-            <td class="headerCovTableEntry">55</td>
+            <td class="headerCovTableEntryMed">88.4&nbsp;%</td>
+            <td class="headerCovTableEntry">43</td>
+            <td class="headerCovTableEntry">38</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-04 22:44:41</td>
+            <td class="headerValue">2026-06-05 01:02:41</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">8</td>
-            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntryMed">83.3&nbsp;%</td>
+            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntry">5</td>
           </tr>
           <tr>
             <td></td>
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">65.9&nbsp;%</td>
-            <td class="headerCovTableEntry">44</td>
-            <td class="headerCovTableEntry">29</td>
+            <td class="headerCovTableEntryLo">54.8&nbsp;%</td>
+            <td class="headerCovTableEntry">42</td>
+            <td class="headerCovTableEntry">23</td>
           </tr>
                   <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -98,23 +98,23 @@
 <span id="L27"><span class="lineNum">      27</span>                 :             : class BloomMath {</span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : public:</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             :     // Standard bloom filter false positive rate</span>
-<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC tlaBgGNC">           2 :     static double standard_fp_rate(double bits_per_key, int num_probes) {</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :             :     static double standard_fp_rate(double bits_per_key, int num_probes) {</span>
 <span id="L31"><span class="lineNum">      31</span>                 :             :         // Standard very-good-estimate formula. See</span>
 <span id="L32"><span class="lineNum">      32</span>                 :             :         // https://en.wikipedia.org/wiki/Bloom_filter#Probability_of_false_positives</span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">           2 :         return std::pow(1.0 - std::exp(-num_probes / bits_per_key), num_probes);</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :         return std::pow(1.0 - std::exp(-num_probes / bits_per_key), num_probes);</span>
 <span id="L34"><span class="lineNum">      34</span>                 :             :     }</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             : </span>
-<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">           1 :     static double blocked_bloom_fp_rate(double bits_per_key, int num_probes, int cache_line_bits) {</span></span>
-<span id="L37"><span class="lineNum">      37</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         if (bits_per_key &lt;= 0.0) {</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :     static double blocked_bloom_fp_rate(double bits_per_key, int num_probes, int cache_line_bits) {</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         if (bits_per_key &lt;= 0.0) {</span>
 <span id="L38"><span class="lineNum">      38</span>                 :             :             return 1.0;</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             :         }</span>
-<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">           1 :         double keys_per_cache_line = cache_line_bits / bits_per_key;</span></span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">           1 :         double keys_stddev = std::sqrt(keys_per_cache_line);</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         double keys_per_cache_line = cache_line_bits / bits_per_key;</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :         double keys_stddev = std::sqrt(keys_per_cache_line);</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             :         double crowded_fp =</span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">           1 :             standard_fp_rate(cache_line_bits / (keys_per_cache_line + keys_stddev), num_probes);</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :             standard_fp_rate(cache_line_bits / (keys_per_cache_line + keys_stddev), num_probes);</span>
 <span id="L44"><span class="lineNum">      44</span>                 :             :         double uncrowded_fp =</span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">           1 :             standard_fp_rate(cache_line_bits / (keys_per_cache_line - keys_stddev), num_probes);</span></span>
-<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">           1 :         return (crowded_fp + uncrowded_fp) / 2;</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :             standard_fp_rate(cache_line_bits / (keys_per_cache_line - keys_stddev), num_probes);</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :         return (crowded_fp + uncrowded_fp) / 2;</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             :     }</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : };</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : </span>
@@ -126,28 +126,28 @@
 <span id="L55"><span class="lineNum">      55</span>                 :             : // only needs one cache miss for every operation.</span>
 <span id="L56"><span class="lineNum">      56</span>                 :             : class BlockedBloomFilter {</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : public:</span>
-<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">           7 :     static int choose_num_probes(int millibits_per_key) {</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC tlaBgGNC">           1 :     static int choose_num_probes(int millibits_per_key) {</span></span>
 <span id="L59"><span class="lineNum">      59</span>                 :             :         // Since this implementation can (with AVX2) make up to 8 probes</span>
 <span id="L60"><span class="lineNum">      60</span>                 :             :         // for the same cost, we pick the most accurate num_probes, based</span>
 <span id="L61"><span class="lineNum">      61</span>                 :             :         // on actual tests of the implementation. Note that for higher</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :         // bits/key, the best choice for cache-local Bloom can be notably</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :         // smaller than standard bloom, e.g. 9 instead of 11 @ 16 b/k.</span>
-<span id="L64"><span class="lineNum">      64</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :         if (millibits_per_key &lt;= 2080) {</span></span>
+<span id="L64"><span class="lineNum">      64</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         if (millibits_per_key &lt;= 2080) {</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :             :             return 1;</span>
 <span id="L66"><span class="lineNum">      66</span>                 :             :         }</span>
-<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :         if (millibits_per_key &lt;= 3580) {</span></span>
+<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         if (millibits_per_key &lt;= 3580) {</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :             :             return 2;</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :         }</span>
-<span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :         if (millibits_per_key &lt;= 5100) {</span></span>
+<span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         if (millibits_per_key &lt;= 5100) {</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :             :             return 3;</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             :         }</span>
-<span id="L73"><span class="lineNum">      73</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :         if (millibits_per_key &lt;= 6640) {</span></span>
+<span id="L73"><span class="lineNum">      73</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         if (millibits_per_key &lt;= 6640) {</span></span>
 <span id="L74"><span class="lineNum">      74</span>                 :             :             return 4;</span>
 <span id="L75"><span class="lineNum">      75</span>                 :             :         }</span>
-<span id="L76"><span class="lineNum">      76</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :         if (millibits_per_key &lt;= 8300) {</span></span>
+<span id="L76"><span class="lineNum">      76</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         if (millibits_per_key &lt;= 8300) {</span></span>
 <span id="L77"><span class="lineNum">      77</span>                 :             :             return 5;</span>
 <span id="L78"><span class="lineNum">      78</span>                 :             :         }</span>
-<span id="L79"><span class="lineNum">      79</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           7 :         if (millibits_per_key &lt;= 10070) {</span></span>
+<span id="L79"><span class="lineNum">      79</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         if (millibits_per_key &lt;= 10070) {</span></span>
 <span id="L80"><span class="lineNum">      80</span>                 :             :             return 6;</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             :         }</span>
 <span id="L82"><span class="lineNum">      82</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         if (millibits_per_key &lt;= 11720) {</span></span>
@@ -183,18 +183,18 @@
 <span id="L112"><span class="lineNum">     112</span>                 :             : </span>
 <span id="L113"><span class="lineNum">     113</span>                 :             :     static void add_hash(uint32_t h1, uint32_t h2, uint32_t bytes_len, int num_probes, char* data) {</span>
 <span id="L114"><span class="lineNum">     114</span>                 :             :         // Use h1 to choese which cache-line-aligned block to be used.</span>
-<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC tlaBgGNC">       12101 :         uint32_t bytes_to_cache_line = fastrange32(h1, bytes_len &gt;&gt; 6) &lt;&lt; 6;</span></span>
-<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">       12101 :         add_hash_prepared(h2, num_probes, data + bytes_to_cache_line);</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :             :         uint32_t bytes_to_cache_line = fastrange32(h1, bytes_len &gt;&gt; 6) &lt;&lt; 6;</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :         add_hash_prepared(h2, num_probes, data + bytes_to_cache_line);</span>
 <span id="L117"><span class="lineNum">     117</span>                 :             :     }</span>
 <span id="L118"><span class="lineNum">     118</span>                 :             : </span>
-<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">       16197 :     static void add_hash_prepared(uint32_t h2, int num_probes, char* data_at_cache_line) {</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC tlaBgGNC">        4096 :     static void add_hash_prepared(uint32_t h2, int num_probes, char* data_at_cache_line) {</span></span>
 <span id="L120"><span class="lineNum">     120</span>                 :             :         uint32_t h = h2;</span>
-<span id="L121"><span class="lineNum">     121</span>         [<span class="tlaGBC" title="Branch 0 was taken 170910 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 16197 times"> + </span>]:<span class="tlaGNC">      187107 :         for (int i = 0; i &lt; num_probes; ++i, h *= uint32_t{0x9e3779b9}) {</span></span>
+<span id="L121"><span class="lineNum">     121</span>         [<span class="tlaGBC" title="Branch 0 was taken 98304 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4096 times"> + </span>]:<span class="tlaGNC">      102400 :         for (int i = 0; i &lt; num_probes; ++i, h *= uint32_t{0x9e3779b9}) {</span></span>
 <span id="L122"><span class="lineNum">     122</span>                 :             :             // 9-bit address within 512 bit cache line</span>
-<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">      170910 :             int bitpos = h &gt;&gt; (32 - 9);</span></span>
-<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">      170910 :             data_at_cache_line[bitpos &gt;&gt; 3] |= (uint8_t{1} &lt;&lt; (bitpos &amp; 7));</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">       98304 :             int bitpos = h &gt;&gt; (32 - 9);</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">       98304 :             data_at_cache_line[bitpos &gt;&gt; 3] |= (uint8_t{1} &lt;&lt; (bitpos &amp; 7));</span></span>
 <span id="L125"><span class="lineNum">     125</span>                 :             :         }</span>
-<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">       16197 :     }</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">        4096 :     }</span></span>
 <span id="L127"><span class="lineNum">     127</span>                 :             : </span>
 <span id="L128"><span class="lineNum">     128</span>                 :             :     static void prepare_hash(uint32_t h1,</span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :                              uint32_t bytes_len,</span>
@@ -209,19 +209,19 @@
 <span id="L138"><span class="lineNum">     138</span>                 :             :     static bool hash_may_match(</span>
 <span id="L139"><span class="lineNum">     139</span>                 :             :         uint32_t h1, uint32_t h2, uint32_t bytes_len, int num_probes, const char* data) {</span>
 <span id="L140"><span class="lineNum">     140</span>                 :             :         // Use h1 to choese which cache-line-aligned block to be used.</span>
-<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">       11102 :         uint32_t bytes_to_cache_line = fastrange32(h1, bytes_len &gt;&gt; 6) &lt;&lt; 6;</span></span>
-<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">       11102 :         return hash_may_match_prepared(h2, num_probes, data + bytes_to_cache_line);</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :         uint32_t bytes_to_cache_line = fastrange32(h1, bytes_len &gt;&gt; 6) &lt;&lt; 6;</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             :         return hash_may_match_prepared(h2, num_probes, data + bytes_to_cache_line);</span>
 <span id="L143"><span class="lineNum">     143</span>                 :             :     }</span>
 <span id="L144"><span class="lineNum">     144</span>                 :             : </span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">       11102 :     static bool hash_may_match_prepared(uint32_t h2,</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     static bool hash_may_match_prepared(uint32_t h2,</span></span>
 <span id="L146"><span class="lineNum">     146</span>                 :             :                                         int num_probes,</span>
 <span id="L147"><span class="lineNum">     147</span>                 :             :                                         const char* data_at_cache_line) {</span>
 <span id="L148"><span class="lineNum">     148</span>                 :             :         uint32_t h = h2;</span>
 <span id="L149"><span class="lineNum">     149</span>                 :             :         // TODO(liubang): use SIMD</span>
-<span id="L150"><span class="lineNum">     150</span>         [<span class="tlaGBC" title="Branch 0 was taken 24632 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1190 times"> + </span>]:<span class="tlaGNC">       25822 :         for (int i = 0; i &lt; num_probes; ++i, h *= uint32_t{0x9e3779b9}) {</span></span>
+<span id="L150"><span class="lineNum">     150</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         for (int i = 0; i &lt; num_probes; ++i, h *= uint32_t{0x9e3779b9}) {</span></span>
 <span id="L151"><span class="lineNum">     151</span>                 :             :             // 9-bit address within 512 bit cache line</span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">       24632 :             int bitpos = h &gt;&gt; (32 - 9);</span></span>
-<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaGBC" title="Branch 0 was taken 14720 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9912 times"> + </span>]:<span class="tlaGNC">       24632 :             if ((data_at_cache_line[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaUNC">           0 :             int bitpos = h &gt;&gt; (32 - 9);</span></span>
+<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if ((data_at_cache_line[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span></span>
 <span id="L154"><span class="lineNum">     154</span>                 :             :                 return false;</span>
 <span id="L155"><span class="lineNum">     155</span>                 :             :             }</span>
 <span id="L156"><span class="lineNum">     156</span>                 :             :         }</span>
@@ -232,7 +232,7 @@
 <span id="L161"><span class="lineNum">     161</span>                 :             : </span>
 <span id="L162"><span class="lineNum">     162</span>                 :             : class StandardBloomFilter {</span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : public:</span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">           3 :     static int choose_num_probes(int bits_per_key) {</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC tlaBgGNC">           3 :     static int choose_num_probes(int bits_per_key) {</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :             :         // 0.69 =~ ln(2)</span>
 <span id="L166"><span class="lineNum">     166</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           6 :         return std::min(30, std::max(1, static_cast&lt;int&gt;(bits_per_key * 0.69)));</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :             :     }</span>
