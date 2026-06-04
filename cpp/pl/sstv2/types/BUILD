@@ -81,3 +81,13 @@ cc_library(
         ":variant",
     ],
 )
+
+cc_library(
+    name = "table_schema",
+    hdrs = ["table_schema.h"],
+    visibility = ["//cpp/pl/sstv2:__subpackages__"],
+    deps = [
+        ":data_type",
+        ":variant",
+    ],
+)

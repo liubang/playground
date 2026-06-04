@@ -114,6 +114,7 @@ cc_test(
         "//cpp/pl/sstv2/file:tail",
         "//cpp/pl/sstv2/file:value_file_reader",
         "//cpp/pl/sstv2/file:value_file_writer",
+        "//cpp/pl/sstv2/types:table_schema",
         "@googletest//:gtest_main",
     ],
 )
