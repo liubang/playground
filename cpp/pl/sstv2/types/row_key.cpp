@@ -275,8 +275,8 @@ Variant decode_column(DataType type, std::string_view data, size_t& pos) {
         }
         case DataType::kBinary: {
             std::string s = decode_bytes_comparable(data, pos);
-            return Variant::binary(std::span<const std::byte>(
-                reinterpret_cast<const std::byte*>(s.data()), s.size()));
+            return Variant::binary(
+                std::span<const std::byte>(reinterpret_cast<const std::byte*>(s.data()), s.size()));
         }
         default:
             return Variant::none();
@@ -326,25 +326,28 @@ absl::StatusOr<RowKey> RowKey::create(const ExternalSchema& schema, std::vector<
         return absl::InvalidArgumentError("RowKey must have at least one column");
     }
     if (columns.size() > schema.num_key_columns()) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("too many key columns: got ", columns.size(), ", schema defines ",
-                         schema.num_key_columns()));
+        return absl::InvalidArgumentError(absl::StrCat("too many key columns: got ",
+                                                       columns.size(),
+                                                       ", schema defines ",
+                                                       schema.num_key_columns()));
     }
     for (size_t i = 0; i < columns.size(); ++i) {
         DataType expected = schema.key_column_type(i);
         DataType actual = columns[i].type();
         if (columns[i].is_none()) {
             if (!schema.key_column_nullable(i)) {
-                return absl::InvalidArgumentError(
-                    absl::StrCat("key column ", i, " (", data_type_name(expected),
-                                 ") does not allow null"));
+                return absl::InvalidArgumentError(absl::StrCat(
+                    "key column ", i, " (", data_type_name(expected), ") does not allow null"));
             }
             continue;
         }
         if (!type_matches(expected, actual)) {
-            return absl::InvalidArgumentError(
-                absl::StrCat("key column ", i, " type mismatch: expected ",
-                             data_type_name(expected), ", got ", data_type_name(actual)));
+            return absl::InvalidArgumentError(absl::StrCat("key column ",
+                                                           i,
+                                                           " type mismatch: expected ",
+                                                           data_type_name(expected),
+                                                           ", got ",
+                                                           data_type_name(actual)));
         }
     }
     return RowKey(schema, std::move(columns));
