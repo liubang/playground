@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-04 01:11:53</td>
+            <td class="headerValue">2026-06-04 14:10:25</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -140,7 +140,7 @@
 <span id="L69"><span class="lineNum">      69</span>                 :             :         {</span>
 <span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :             std::unique_lock lock(queue_mu_);</span></span>
 <span id="L71"><span class="lineNum">      71</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :             queue_cv_.wait(lock, [this] {</span></span>
-<span id="L72"><span class="lineNum">      72</span>   [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 10 times"> + </span>]:<span class="tlaGNC">          30 :                 return !running_.load(std::memory_order_relaxed) || !task_queue_.empty();</span></span>
+<span id="L72"><span class="lineNum">      72</span>   [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 9 times"> + </span>]:<span class="tlaGNC">          29 :                 return !running_.load(std::memory_order_relaxed) || !task_queue_.empty();</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :             :             });</span>
 <span id="L74"><span class="lineNum">      74</span>                 :             : </span>
 <span id="L75"><span class="lineNum">      75</span>   [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          20 :             if (!running_.load(std::memory_order_relaxed) &amp;&amp; task_queue_.empty()) {</span></span>
