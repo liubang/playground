@@ -13,51 +13,44 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/06/04 15:23
+// Created: 2026/06/04 22:27
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
-#include <vector>
+#include <string_view>
 
 #include "absl/status/statusor.h"
 
 namespace pl::sstv2::file {
 
-// Section type identifiers
-constexpr uint32_t kSectionDataBlocks = 0x01;
-constexpr uint32_t kSectionIndexBlocks = 0x02;
-constexpr uint32_t kSectionBloomFilter = 0x03;
-constexpr uint32_t kSectionConfiguration = 0x10;
-constexpr uint32_t kSectionSchema = 0x11;
-constexpr uint32_t kSectionStatistics = 0x12;
-constexpr uint32_t kSectionCompatibility = 0x13;
-constexpr uint32_t kSectionUserDefined = 0x14;
-constexpr uint32_t kSectionValueFile = 0x20;
-
-struct LocatorEntry {
-    uint32_t section_type = 0;
+struct SectionLocation {
     uint64_t offset = 0;
-    uint64_t size = 0;
+    uint64_t length = 0;
 };
 
+// PDF v0.95 locator: metadata-section shape, magic LOCA, checksum, map payload.
 class Locator {
 public:
-    void add(uint32_t section_type, uint64_t offset, uint64_t size);
-    std::optional<LocatorEntry> find(uint32_t section_type) const;
+    static constexpr uint32_t kMagic = 0x41434F4C; // "LOCA"
 
-    // Serialize: [entry_count:varint][entries: type(4B) + offset(varint) + size(varint)]...
-    std::string serialize() const;
-    static absl::StatusOr<Locator> deserialize(std::span<const std::byte> data);
+    void set_uint64(std::string key, uint64_t value);
+    [[nodiscard]] std::optional<uint64_t> find_uint64(std::string_view key) const;
 
-    const std::vector<LocatorEntry>& entries() const;
+    void set_section(std::string_view name, SectionLocation location);
+    [[nodiscard]] std::optional<SectionLocation> find_section(std::string_view name) const;
+
+    [[nodiscard]] std::string encode() const;
+    static absl::StatusOr<Locator> decode(std::span<const std::byte> bytes);
+
+    [[nodiscard]] const std::map<std::string, uint64_t>& entries() const;
 
 private:
-    std::vector<LocatorEntry> entries_;
+    std::map<std::string, uint64_t> entries_;
 };
 
 } // namespace pl::sstv2::file

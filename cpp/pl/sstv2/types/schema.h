@@ -47,7 +47,7 @@ struct ColumnDef {
 
 // Identifies a key column within ExternalSchema::columns_.
 struct KeyColumnDef {
-    size_t column_index;                         // index into columns_
+    size_t column_index; // index into columns_
     SortOrder order = SortOrder::kAscending;
 };
 

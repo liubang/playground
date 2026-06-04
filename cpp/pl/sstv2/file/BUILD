@@ -33,6 +33,9 @@ cc_library(
     deps = [
         "//cpp/pl/sstv2/encode:fixed",
         "//cpp/pl/sstv2/encode:varints",
+        "//cpp/pl/sstv2/types:data_type",
+        "@abseil-cpp//absl/crc:crc32c",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
     ],
 )
@@ -45,7 +48,8 @@ cc_library(
     linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/sstv2/encode:fixed",
-        "//cpp/pl/sstv2/types:constants",
+        "@abseil-cpp//absl/crc:crc32c",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
     ],
 )
@@ -86,6 +90,11 @@ cc_library(
     deps = [
         ":locator",
         ":tail",
+        "//cpp/pl/sstv2/encode:fixed",
+        "//cpp/pl/sstv2/encode:varints",
+        "//cpp/pl/sstv2/types:data_type",
+        "//cpp/pl/sstv2/types:table_schema",
+        "//cpp/pl/sstv2/types:variant",
         "@abseil-cpp//absl/crc:crc32c",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -101,7 +110,12 @@ cc_library(
     deps = [
         ":locator",
         ":tail",
+        "//cpp/pl/sstv2/encode:fixed",
+        "//cpp/pl/sstv2/encode:varints",
+        "//cpp/pl/sstv2/types:data_type",
+        "//cpp/pl/sstv2/types:variant",
         "@abseil-cpp//absl/crc:crc32c",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
     ],
 )
