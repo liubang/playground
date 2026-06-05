@@ -17,14 +17,14 @@
 
 #pragma once
 
-#include "cpp/pl/sstv2/types/column_flag.h"
-#include "cpp/pl/sstv2/types/internal_schema.h"
-#include "cpp/pl/sstv2/types/value.h"
-
 #include <cassert>
 #include <cstddef>
 #include <string_view>
 #include <vector>
+
+#include "cpp/pl/sstv2/types/column_flag.h"
+#include "cpp/pl/sstv2/types/internal_schema.h"
+#include "cpp/pl/sstv2/types/value.h"
 
 namespace pl::sstv2::types {
 
@@ -38,13 +38,13 @@ namespace pl::sstv2::types {
 // =============================================================================
 
 enum class ValueLocation : uint8_t {
-    kEmbedded  = 0, // Value is embedded in the current block's data table.
-    kKeyFile   = 1, // Value is elsewhere in the key file (index entries).
+    kEmbedded = 0,  // Value is embedded in the current block's data table.
+    kKeyFile = 1,   // Value is elsewhere in the key file (index entries).
     kValueFile = 2, // Value is in an external value file.
 };
 
 constexpr std::string_view kEmbeddedFilename = "@1";
-constexpr std::string_view kKeyFileFilename  = "@2";
+constexpr std::string_view kKeyFileFilename = "@2";
 
 // =============================================================================
 // InternalRow: the key-side M+7 column container of the Internal Table.
@@ -111,8 +111,10 @@ struct InternalRow {
 
     [[nodiscard]] ValueLocation location(const InternalSchema& s) const {
         auto fn = filename(s);
-        if (fn == kEmbeddedFilename) return ValueLocation::kEmbedded;
-        if (fn == kKeyFileFilename) return ValueLocation::kKeyFile;
+        if (fn == kEmbeddedFilename)
+            return ValueLocation::kEmbedded;
+        if (fn == kKeyFileFilename)
+            return ValueLocation::kKeyFile;
         return ValueLocation::kValueFile;
     }
 
