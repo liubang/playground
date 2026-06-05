@@ -17,14 +17,15 @@
 
 #pragma once
 
-#include "cpp/pl/sstv2/types/data_type.h"
-
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "cpp/pl/sstv2/types/data_type.h"
 
 namespace pl::sstv2::types {
 
@@ -33,7 +34,7 @@ namespace pl::sstv2::types {
 // =============================================================================
 
 enum class SortOrder : uint8_t {
-    kAscending  = 0,
+    kAscending = 0,
     kDescending = 1,
 };
 
@@ -47,8 +48,8 @@ enum class SortOrder : uint8_t {
 
 struct ColumnDef {
     std::string name;
-    DataType type    = DataType::kNone;
-    SortOrder order  = SortOrder::kAscending;
+    DataType type = DataType::kNone;
+    SortOrder order = SortOrder::kAscending;
 };
 
 // =============================================================================
@@ -113,17 +114,18 @@ class SchemaBuilder {
 public:
     SchemaBuilder() = default;
 
-    SchemaBuilder& add_column(std::string name, DataType type,
+    SchemaBuilder& add_column(std::string name,
+                              DataType type,
                               SortOrder order = SortOrder::kAscending) {
-        columns_.push_back(ColumnDef{.name=std::move(name), .type=type, .order=order});
+        columns_.push_back(ColumnDef{.name = std::move(name), .type = type, .order = order});
         return *this;
     }
 
-    // Validate and build. Returns empty Schema on failure (check error()).
-    Schema build() {
+    // Validate and build. Returns nullopt on failure (check error()).
+    std::optional<Schema> build() {
         error_.clear();
         if (!validate()) {
-            return Schema{};
+            return std::nullopt;
         }
         return Schema{std::move(columns_)};
     }

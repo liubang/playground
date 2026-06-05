@@ -15,9 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/06/05 00:23
 
-#include "cpp/pl/sstv2/types/column_flag.h"
-
 #include <gtest/gtest.h>
+
+#include "cpp/pl/sstv2/types/column_flag.h"
 
 namespace pl::sstv2::types {
 namespace {
