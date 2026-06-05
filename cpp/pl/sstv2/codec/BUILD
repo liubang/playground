@@ -27,6 +27,7 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "endian",
     hdrs = ["endian.h"],
+    deps = ["//cpp/pl/bits"],
 )
 
 cc_library(
@@ -43,5 +44,4 @@ cc_library(
     hdrs = ["comparable.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
-    deps = [":endian"],
 )

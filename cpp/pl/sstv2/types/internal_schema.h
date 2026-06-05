@@ -17,10 +17,11 @@
 
 #pragma once
 
-#include "cpp/pl/sstv2/types/schema.h"
-
 #include <cassert>
 #include <cstddef>
+#include <memory>
+
+#include "cpp/pl/sstv2/types/schema.h"
 
 namespace pl::sstv2::types {
 
@@ -45,71 +46,91 @@ namespace pl::sstv2::types {
 // all_key sort order. The remaining 5 columns (Flag..Checksum) are payload
 // columns that do not participate in sorting.
 //
-// InternalSchema does NOT own the user Schema — it holds a const reference.
-// The user Schema must outlive the InternalSchema.
+// InternalSchema holds a shared_ptr<const Schema> for safe shared ownership.
 // =============================================================================
 
 class InternalSchema {
 public:
-    explicit InternalSchema(const Schema& user_schema)
-        : user_schema_(user_schema) {}
+    explicit InternalSchema(std::shared_ptr<const Schema> user_schema)
+        : user_schema_(std::move(user_schema)) {
+        assert(user_schema_ != nullptr);
+    }
 
     // =========================================================================
     // Column count.
     // =========================================================================
 
     // Number of user-defined row key columns (M).
-    [[nodiscard]] size_t user_column_count() const { return user_schema_.row_key_column_count(); }
+    [[nodiscard]] size_t user_column_count() const { return user_schema_->row_key_column_count(); }
 
     // Total columns in the internal table (M + 7).
-    [[nodiscard]] size_t column_count() const { return user_schema_.row_key_column_count() + kSystemColumnCount; }
+    [[nodiscard]] size_t column_count() const {
+        return user_schema_->row_key_column_count() + kSystemColumnCount;
+    }
 
     // Number of columns that participate in the all_key (M + 2: RowKey + Version + OpType).
-    [[nodiscard]] size_t sort_key_column_count() const { return user_schema_.row_key_column_count() + 2; }
+    [[nodiscard]] size_t sort_key_column_count() const {
+        return user_schema_->row_key_column_count() + 2;
+    }
 
     // =========================================================================
     // Unified column access.
     // =========================================================================
 
-    // Get the ColumnDef for any column index in [0, M+7).
-    // For user columns, delegates to the user schema.
-    // For system columns, returns the predefined definitions.
-    [[nodiscard]] const ColumnDef& column(size_t index) const {
-        size_t m = user_schema_.row_key_column_count();
-        if (index < m) {
-            return user_schema_.column(index);
-        }
-        assert(index < m + kSystemColumnCount);
-        return kSystemColumns[index - m];
+    // For user columns (index < M), delegates to the user schema.
+    // For system columns (index >= M), reads from constexpr definitions.
+    [[nodiscard]] const ColumnDef& user_column(size_t index) const {
+        assert(index < user_schema_->row_key_column_count());
+        return user_schema_->column(index);
     }
 
-    [[nodiscard]] DataType column_type(size_t index) const { return column(index).type; }
-    [[nodiscard]] SortOrder column_order(size_t index) const { return column(index).order; }
-    [[nodiscard]] std::string_view column_name(size_t index) const { return column(index).name; }
+    [[nodiscard]] DataType column_type(size_t index) const {
+        size_t m = user_schema_->row_key_column_count();
+        if (index < m) return user_schema_->column(index).type;
+        assert(index < m + kSystemColumnCount);
+        return kSystemDefs[index - m].type;
+    }
+
+    [[nodiscard]] SortOrder column_order(size_t index) const {
+        size_t m = user_schema_->row_key_column_count();
+        if (index < m) return user_schema_->column(index).order;
+        assert(index < m + kSystemColumnCount);
+        return kSystemDefs[index - m].order;
+    }
+
+    [[nodiscard]] std::string_view column_name(size_t index) const {
+        size_t m = user_schema_->row_key_column_count();
+        if (index < m) return user_schema_->column(index).name;
+        assert(index < m + kSystemColumnCount);
+        return kSystemDefs[index - m].name;
+    }
 
     // =========================================================================
     // Named system column indices.
     // =========================================================================
 
-    [[nodiscard]] size_t version_index() const  { return user_schema_.row_key_column_count(); }
-    [[nodiscard]] size_t op_type_index() const  { return user_schema_.row_key_column_count() + 1; }
-    [[nodiscard]] size_t flag_index() const     { return user_schema_.row_key_column_count() + 2; }
-    [[nodiscard]] size_t filename_index() const { return user_schema_.row_key_column_count() + 3; }
-    [[nodiscard]] size_t offset_index() const   { return user_schema_.row_key_column_count() + 4; }
-    [[nodiscard]] size_t length_index() const   { return user_schema_.row_key_column_count() + 5; }
-    [[nodiscard]] size_t checksum_index() const { return user_schema_.row_key_column_count() + 6; }
+    [[nodiscard]] size_t version_index() const { return user_schema_->row_key_column_count(); }
+    [[nodiscard]] size_t op_type_index() const { return user_schema_->row_key_column_count() + 1; }
+    [[nodiscard]] size_t flag_index() const { return user_schema_->row_key_column_count() + 2; }
+    [[nodiscard]] size_t filename_index() const { return user_schema_->row_key_column_count() + 3; }
+    [[nodiscard]] size_t offset_index() const { return user_schema_->row_key_column_count() + 4; }
+    [[nodiscard]] size_t length_index() const { return user_schema_->row_key_column_count() + 5; }
+    [[nodiscard]] size_t checksum_index() const { return user_schema_->row_key_column_count() + 6; }
 
     // =========================================================================
     // Query: does this column participate in sorting?
     // =========================================================================
 
-    [[nodiscard]] bool is_sort_column(size_t index) const { return index < sort_key_column_count(); }
+    [[nodiscard]] bool is_sort_column(size_t index) const {
+        return index < sort_key_column_count();
+    }
 
     // =========================================================================
     // Access to the underlying user schema.
     // =========================================================================
 
-    [[nodiscard]] const Schema& user_schema() const { return user_schema_; }
+    [[nodiscard]] const Schema& user_schema() const { return *user_schema_; }
+    [[nodiscard]] std::shared_ptr<const Schema> user_schema_ptr() const { return user_schema_; }
 
     // =========================================================================
     // Constants.
@@ -118,19 +139,23 @@ public:
     static constexpr size_t kSystemColumnCount = 7;
 
 private:
-    const Schema& user_schema_;
+    std::shared_ptr<const Schema> user_schema_;
 
-    // Predefined system column definitions.
-    // These are static because they never change across schemas.
-    // SortOrder for non-sort columns is kAscending by convention (unused).
-    static inline const ColumnDef kSystemColumns[kSystemColumnCount] = {
-        {.name="Version",  .type=DataType::kUint64, .order=SortOrder::kDescending},
-        {.name="OpType",   .type=DataType::kUint8,  .order=SortOrder::kAscending},
-        {.name="Flag",     .type=DataType::kUint64, .order=SortOrder::kAscending},
-        {.name="Filename", .type=DataType::kString, .order=SortOrder::kAscending},
-        {.name="Offset",   .type=DataType::kUint64, .order=SortOrder::kAscending},
-        {.name="Length",   .type=DataType::kUint64, .order=SortOrder::kAscending},
-        {.name="Checksum", .type=DataType::kUint64, .order=SortOrder::kAscending},
+    // Constexpr system column descriptor (avoids dynamic initialization).
+    struct SystemColumnDef {
+        std::string_view name;
+        DataType type;
+        SortOrder order;
+    };
+
+    static constexpr SystemColumnDef kSystemDefs[kSystemColumnCount] = {
+        {"Version", DataType::kUint64, SortOrder::kDescending},
+        {"OpType", DataType::kUint8, SortOrder::kAscending},
+        {"Flag", DataType::kUint64, SortOrder::kAscending},
+        {"Filename", DataType::kString, SortOrder::kAscending},
+        {"Offset", DataType::kUint64, SortOrder::kAscending},
+        {"Length", DataType::kUint64, SortOrder::kAscending},
+        {"Checksum", DataType::kUint64, SortOrder::kAscending},
     };
 };
 

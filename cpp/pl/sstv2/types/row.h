@@ -17,12 +17,11 @@
 
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include "cpp/pl/sstv2/types/op_type.h"
 #include "cpp/pl/sstv2/types/value.h"
-
-#include <cstdint>
-#include <string>
-#include <vector>
 
 namespace pl::sstv2::types {
 
@@ -30,30 +29,25 @@ namespace pl::sstv2::types {
 // Row: the user-facing input structure for SSTableBuilder::add().
 //
 // Users construct a Row with their key column values, version, operation type,
-// and the raw value payload. SSTableBuilder is responsible for converting this
-// into an InternalRow (encoding all-key, deciding embedded/separated,
-// computing checksum, etc.).
+// and a typed value. SSTableBuilder is responsible for converting this into an
+// InternalRow (serializing the value, encoding all-key, deciding
+// embedded/separated, computing checksum, etc.).
 //
 // Invariants (enforced by SSTableBuilder, not by Row itself):
 //   - key_columns.size() == schema.row_key_column_count()
 //   - key_columns[i].type() matches schema.column_type(i)
 //   - Rows must be added in strictly increasing all-key order.
+//   - For delete tombstones, value should be default (null).
 // =============================================================================
 
 struct Row {
     std::vector<Value> key_columns; // RowKey[0..M-1], must match Schema.
     uint64_t version = 0;           // Version (sorted descending internally).
-    OpType op_type   = OpType::kPut;
+    OpType op_type = OpType::kPut;
 
-    // Value payload metadata.
-    DataType value_type = DataType::kNone;
-
-    // Raw value bytes. Encoding depends on value_type:
-    //   - Fixed-size scalars: little-endian bytes.
-    //   - Strings/Binary: raw bytes (no length prefix).
-    //   - Compound types: serialized per §13.2 of the spec.
-    // Empty string with value_type=kNone means no value (e.g., for deletes).
-    std::string value;
+    // The value payload. SSTableBuilder serializes it according to value.type().
+    // Default-constructed Value (type=kNone) means no value (e.g., for deletes).
+    Value value;
 };
 
 } // namespace pl::sstv2::types
