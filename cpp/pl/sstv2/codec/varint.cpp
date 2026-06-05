@@ -19,7 +19,7 @@
 
 namespace pl::sstv2::codec {
 
-size_t encode_varint(uint64_t value, uint8_t* dst) {
+size_t encode_varint(uint64_t value, uint8_t* dst) noexcept {
     size_t n = 0;
     while (value >= 0x80) {
         dst[n++] = static_cast<uint8_t>(value | 0x80);
@@ -29,7 +29,7 @@ size_t encode_varint(uint64_t value, uint8_t* dst) {
     return n;
 }
 
-size_t decode_varint(const uint8_t* src, size_t len, uint64_t* value) {
+size_t decode_varint(const uint8_t* src, size_t len, uint64_t* value) noexcept {
     uint64_t result = 0;
     for (size_t i = 0; i < len && i < 10; ++i) {
         uint64_t byte = src[i];
@@ -46,7 +46,7 @@ size_t decode_varint(const uint8_t* src, size_t len, uint64_t* value) {
     return 0; // truncated or overflow
 }
 
-size_t varint_length(uint64_t value) {
+size_t varint_length(uint64_t value) noexcept {
     size_t n = 1;
     while (value >= 0x80) {
         value >>= 7;
