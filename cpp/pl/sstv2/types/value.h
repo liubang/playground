@@ -72,7 +72,7 @@ using mapped_type_t = typename TypeMapping<DT>::type;
 class Value {
 public:
     // Monostate represents DataType::kNone.
-    Value() : type_(DataType::kNone), storage_(std::monostate{}) {}
+    Value() : storage_(std::monostate{}) {}
 
     // Compile-time typed construction.
     template <DataType DT>
@@ -99,18 +99,18 @@ public:
     }
 
     // Runtime type tag.
-    DataType type() const { return type_; }
-    bool is_null() const { return type_ == DataType::kNone; }
+    [[nodiscard]] DataType type() const { return type_; }
+    [[nodiscard]] bool is_null() const { return type_ == DataType::kNone; }
 
     // Typed access (by value, for scalars).
     template <DataType DT>
-    mapped_type_t<DT> get() const {
+    [[nodiscard]] mapped_type_t<DT> get() const {
         return std::get<mapped_type_t<DT>>(storage_);
     }
 
     // Typed access (by const reference, for heap types).
     template <DataType DT>
-    const mapped_type_t<DT>& ref() const {
+    [[nodiscard]] const mapped_type_t<DT>& ref() const {
         return std::get<mapped_type_t<DT>>(storage_);
     }
 
@@ -125,19 +125,19 @@ public:
     // Convenience accessors (non-template, for runtime-dispatched code paths).
     // =========================================================================
 
-    bool as_bool() const { return get<DataType::kBool>(); }
-    int8_t as_int8() const { return get<DataType::kInt8>(); }
-    uint8_t as_uint8() const { return get<DataType::kUint8>(); }
-    int16_t as_int16() const { return get<DataType::kInt16>(); }
-    uint16_t as_uint16() const { return get<DataType::kUint16>(); }
-    int32_t as_int32() const { return get<DataType::kInt32>(); }
-    uint32_t as_uint32() const { return get<DataType::kUint32>(); }
-    int64_t as_int64() const { return get<DataType::kInt64>(); }
-    uint64_t as_uint64() const { return get<DataType::kUint64>(); }
-    float as_float() const { return get<DataType::kFloat>(); }
-    double as_double() const { return get<DataType::kDouble>(); }
-    std::string_view as_string() const { return ref<DataType::kString>(); }
-    std::string_view as_binary() const { return ref<DataType::kBinary>(); }
+    [[nodiscard]] bool as_bool() const { return get<DataType::kBool>(); }
+    [[nodiscard]] int8_t as_int8() const { return get<DataType::kInt8>(); }
+    [[nodiscard]] uint8_t as_uint8() const { return get<DataType::kUint8>(); }
+    [[nodiscard]] int16_t as_int16() const { return get<DataType::kInt16>(); }
+    [[nodiscard]] uint16_t as_uint16() const { return get<DataType::kUint16>(); }
+    [[nodiscard]] int32_t as_int32() const { return get<DataType::kInt32>(); }
+    [[nodiscard]] uint32_t as_uint32() const { return get<DataType::kUint32>(); }
+    [[nodiscard]] int64_t as_int64() const { return get<DataType::kInt64>(); }
+    [[nodiscard]] uint64_t as_uint64() const { return get<DataType::kUint64>(); }
+    [[nodiscard]] float as_float() const { return get<DataType::kFloat>(); }
+    [[nodiscard]] double as_double() const { return get<DataType::kDouble>(); }
+    [[nodiscard]] std::string_view as_string() const { return ref<DataType::kString>(); }
+    [[nodiscard]] std::string_view as_binary() const { return ref<DataType::kBinary>(); }
 
     // Move out the underlying string.
     std::string take_string() { return take<DataType::kString>(); }
@@ -157,7 +157,7 @@ public:
     }
 
 private:
-    DataType type_;
+    DataType type_{};
 
     // std::monostate for kNone; String and Binary share std::string.
     // Note: kString and kBinary map to the same C++ type (std::string),
