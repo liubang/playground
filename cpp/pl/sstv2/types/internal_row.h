@@ -53,7 +53,7 @@ constexpr std::string_view kKeyFileFilename = "@2";
 // (design.md §7). It contains ONLY the M+7 column values:
 //
 //   columns[0..M-1]  = RowKey values
-//   columns[M]       = Version (uint64)
+//   columns[M]       = Version (major, minor)
 //   columns[M+1]     = OpType (uint8)
 //   columns[M+2]     = Flag (uint64, raw bits of ColumnFlag)
 //   columns[M+3]     = Filename (string: "@1", "@2", or external path)
@@ -77,8 +77,8 @@ struct InternalRow {
     // Typed accessors (convenience, require InternalSchema for index lookup).
     // =========================================================================
 
-    [[nodiscard]] uint64_t version(const InternalSchema& s) const {
-        return columns[s.version_index()].get<DataType::kUint64>();
+    [[nodiscard]] const Version& version(const InternalSchema& s) const {
+        return columns[s.version_index()].ref<DataType::kVersion>();
     }
 
     [[nodiscard]] uint8_t op_type(const InternalSchema& s) const {

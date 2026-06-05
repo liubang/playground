@@ -34,7 +34,7 @@ namespace pl::sstv2::types {
 //   Index       Name        Type       SortOrder
 //   -----       ----        ----       ---------
 //   0..M-1      (user)      (user)     (user)
-//   M           Version     kUint64    kDescending
+//   M           Version     kVersion   kDescending
 //   M+1         OpType      kUint8     kAscending
 //   M+2         Flag        kUint64    (none, not sorted)
 //   M+3         Filename    kString    (none)
@@ -51,9 +51,16 @@ namespace pl::sstv2::types {
 
 class InternalSchema {
 public:
+    using Ptr = std::shared_ptr<InternalSchema>;
+    using ConstPtr = std::shared_ptr<const InternalSchema>;
+
     explicit InternalSchema(std::shared_ptr<const Schema> user_schema)
         : user_schema_(std::move(user_schema)) {
         assert(user_schema_ != nullptr);
+    }
+
+    [[nodiscard]] static ConstPtr make(std::shared_ptr<const Schema> user_schema) {
+        return std::make_shared<const InternalSchema>(std::move(user_schema));
     }
 
     // =========================================================================
@@ -86,21 +93,24 @@ public:
 
     [[nodiscard]] DataType column_type(size_t index) const {
         size_t m = user_schema_->row_key_column_count();
-        if (index < m) return user_schema_->column(index).type;
+        if (index < m)
+            return user_schema_->column(index).type;
         assert(index < m + kSystemColumnCount);
         return kSystemDefs[index - m].type;
     }
 
     [[nodiscard]] SortOrder column_order(size_t index) const {
         size_t m = user_schema_->row_key_column_count();
-        if (index < m) return user_schema_->column(index).order;
+        if (index < m)
+            return user_schema_->column(index).order;
         assert(index < m + kSystemColumnCount);
         return kSystemDefs[index - m].order;
     }
 
     [[nodiscard]] std::string_view column_name(size_t index) const {
         size_t m = user_schema_->row_key_column_count();
-        if (index < m) return user_schema_->column(index).name;
+        if (index < m)
+            return user_schema_->column(index).name;
         assert(index < m + kSystemColumnCount);
         return kSystemDefs[index - m].name;
     }
@@ -149,7 +159,7 @@ private:
     };
 
     static constexpr SystemColumnDef kSystemDefs[kSystemColumnCount] = {
-        {"Version", DataType::kUint64, SortOrder::kDescending},
+        {"Version", DataType::kVersion, SortOrder::kDescending},
         {"OpType", DataType::kUint8, SortOrder::kAscending},
         {"Flag", DataType::kUint64, SortOrder::kAscending},
         {"Filename", DataType::kString, SortOrder::kAscending},
