@@ -33,6 +33,10 @@ size_t decode_varint(const uint8_t* src, size_t len, uint64_t* value) {
     uint64_t result = 0;
     for (size_t i = 0; i < len && i < 10; ++i) {
         uint64_t byte = src[i];
+        // The 10th byte (i==9) contributes bits 63, only bit 0 is valid.
+        if (i == 9 && (byte & 0x7E) != 0) {
+            return 0; // overflow: would exceed uint64
+        }
         result |= (byte & 0x7F) << (7 * i);
         if ((byte & 0x80) == 0) {
             *value = result;

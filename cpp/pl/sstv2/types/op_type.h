@@ -24,13 +24,18 @@ namespace pl::sstv2::types {
 // =============================================================================
 // OpType: the operation type for a row in the SSTable.
 //
-// Stored as uint8 on wire. Sorted ascending in the all-key (Put < Delete),
-// meaning for the same RowKey+Version, a Put sorts before a Delete.
+// Stored as uint8 on wire. Sorted ascending in the all-key:
+//   Put(0) < Merge(1) < Delete(2)
+//
+// For the same RowKey+Version, Put sorts first (base value), Merge next
+// (incremental update applied on top of base), Delete last (terminates
+// the key — compaction can discard earlier Merge/Put below it).
 // =============================================================================
 
 enum class OpType : uint8_t {
-    kPut    = 0, // Normal write.
-    kDelete = 1, // Tombstone (logical deletion).
+    kPut = 0,    // Full value write (base).
+    kMerge = 1,  // Incremental update, resolved by MergeOperator during compaction/read.
+    kDelete = 2, // Tombstone (logical deletion).
 };
 
 } // namespace pl::sstv2::types
