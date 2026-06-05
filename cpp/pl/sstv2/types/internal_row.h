@@ -77,31 +77,31 @@ struct InternalRow {
     // Typed accessors (convenience, require InternalSchema for index lookup).
     // =========================================================================
 
-    uint64_t version(const InternalSchema& s) const {
+    [[nodiscard]] uint64_t version(const InternalSchema& s) const {
         return columns[s.version_index()].get<DataType::kUint64>();
     }
 
-    uint8_t op_type(const InternalSchema& s) const {
+    [[nodiscard]] uint8_t op_type(const InternalSchema& s) const {
         return columns[s.op_type_index()].get<DataType::kUint8>();
     }
 
-    ColumnFlag flag(const InternalSchema& s) const {
+    [[nodiscard]] ColumnFlag flag(const InternalSchema& s) const {
         return ColumnFlag::from_raw(columns[s.flag_index()].get<DataType::kUint64>());
     }
 
-    std::string_view filename(const InternalSchema& s) const {
+    [[nodiscard]] std::string_view filename(const InternalSchema& s) const {
         return columns[s.filename_index()].ref<DataType::kString>();
     }
 
-    uint64_t offset(const InternalSchema& s) const {
+    [[nodiscard]] uint64_t offset(const InternalSchema& s) const {
         return columns[s.offset_index()].get<DataType::kUint64>();
     }
 
-    uint64_t length(const InternalSchema& s) const {
+    [[nodiscard]] uint64_t length(const InternalSchema& s) const {
         return columns[s.length_index()].get<DataType::kUint64>();
     }
 
-    uint64_t checksum(const InternalSchema& s) const {
+    [[nodiscard]] uint64_t checksum(const InternalSchema& s) const {
         return columns[s.checksum_index()].get<DataType::kUint64>();
     }
 
@@ -109,18 +109,18 @@ struct InternalRow {
     // Semantic queries.
     // =========================================================================
 
-    ValueLocation location(const InternalSchema& s) const {
+    [[nodiscard]] ValueLocation location(const InternalSchema& s) const {
         auto fn = filename(s);
         if (fn == kEmbeddedFilename) return ValueLocation::kEmbedded;
         if (fn == kKeyFileFilename) return ValueLocation::kKeyFile;
         return ValueLocation::kValueFile;
     }
 
-    bool is_embedded(const InternalSchema& s) const {
+    [[nodiscard]] bool is_embedded(const InternalSchema& s) const {
         return location(s) == ValueLocation::kEmbedded;
     }
 
-    bool is_index_entry(const InternalSchema& s) const {
+    [[nodiscard]] bool is_index_entry(const InternalSchema& s) const {
         return flag(s).is_index_entry();
     }
 
