@@ -42,7 +42,7 @@ namespace pl::sstv2::types {
 
 struct Row {
     std::vector<Value> key_columns; // RowKey[0..M-1], must match Schema.
-    uint64_t version = 0;           // Version (sorted descending internally).
+    Version version;                // Version (sorted descending internally).
     OpType op_type = OpType::kPut;
 
     // The value payload. SSTableBuilder serializes it according to value.type().
