@@ -28,14 +28,14 @@ namespace pl::sstv2::codec {
 
 // Encodes value into dst. Returns number of bytes written (1-10).
 // Caller must ensure dst has at least 10 bytes available.
-size_t encode_varint(uint64_t value, uint8_t* dst);
+[[nodiscard]] size_t encode_varint(uint64_t value, uint8_t* dst) noexcept;
 
 // Decodes a varint from src (up to len bytes). Stores result in *value.
 // Returns number of bytes consumed, or 0 on error (truncated/overflow).
-size_t decode_varint(const uint8_t* src, size_t len, uint64_t* value);
+[[nodiscard]] size_t decode_varint(const uint8_t* src, size_t len, uint64_t* value) noexcept;
 
 // Returns the number of bytes needed to encode value as a varint.
-size_t varint_length(uint64_t value);
+[[nodiscard]] size_t varint_length(uint64_t value) noexcept;
 
 // Convenience: encode varint and append to string.
 inline void encode_varint(uint64_t value, std::string* dst) {
@@ -46,11 +46,11 @@ inline void encode_varint(uint64_t value, std::string* dst) {
 
 // ZigZag encoding: maps signed integers to unsigned integers so that
 // values with small absolute value have small varint encodings.
-inline uint64_t zigzag_encode(int64_t value) {
+[[nodiscard]] inline uint64_t zigzag_encode(int64_t value) noexcept {
     return (static_cast<uint64_t>(value) << 1) ^ static_cast<uint64_t>(value >> 63);
 }
 
-inline int64_t zigzag_decode(uint64_t value) {
+[[nodiscard]] inline int64_t zigzag_decode(uint64_t value) noexcept {
     return static_cast<int64_t>((value >> 1) ^ -(value & 1));
 }
 
