@@ -77,34 +77,34 @@ public:
     // Bit field accessors.
     // =========================================================================
 
-    constexpr DataType data_type() const {
+    [[nodiscard]] constexpr DataType data_type() const {
         return static_cast<DataType>(bits_ & kDtMask);
     }
 
-    constexpr bool has_checksum() const { return (bits_ & kChecksumBit) != 0; }
-    constexpr bool bool_value() const   { return (bits_ & kBoolBit) != 0; }
+    [[nodiscard]] constexpr bool has_checksum() const { return (bits_ & kChecksumBit) != 0; }
+    [[nodiscard]] constexpr bool bool_value() const   { return (bits_ & kBoolBit) != 0; }
 
     // =========================================================================
     // Semantic queries.
     // =========================================================================
 
     // True if this flag represents an index entry (DataBlock or IndexBlock pointer).
-    constexpr bool is_index_entry() const {
+    [[nodiscard]] constexpr bool is_index_entry() const {
         return is_private_type(data_type());
     }
 
     // True if this flag points to a DataBlock (leaf of index tree).
-    constexpr bool is_data_block_ptr() const {
+    [[nodiscard]] constexpr bool is_data_block_ptr() const {
         return data_type() == DataType::kDataBlock;
     }
 
     // True if this flag points to an IndexBlock (internal node of index tree).
-    constexpr bool is_index_block_ptr() const {
+    [[nodiscard]] constexpr bool is_index_block_ptr() const {
         return data_type() == DataType::kIndexBlock;
     }
 
     // True if this flag represents a user value column (not an index entry).
-    constexpr bool is_value_flag() const {
+    [[nodiscard]] constexpr bool is_value_flag() const {
         return !is_index_entry();
     }
 
@@ -112,7 +112,7 @@ public:
     // - Reserved bits must be zero.
     // - Index entries must have C=0 and B=0.
     // - B bit must be 0 when DT != Bool.
-    constexpr bool is_valid() const {
+    [[nodiscard]] constexpr bool is_valid() const {
         if ((bits_ & kReservedMask) != 0) return false;
         if (is_index_entry() && (bits_ & (kChecksumBit | kBoolBit)) != 0) return false;
         if (data_type() != DataType::kBool && bool_value()) return false;
@@ -123,7 +123,7 @@ public:
     // Raw access and comparison.
     // =========================================================================
 
-    constexpr uint64_t raw() const { return bits_; }
+    [[nodiscard]] constexpr uint64_t raw() const { return bits_; }
 
     constexpr bool operator==(const ColumnFlag& rhs) const { return bits_ == rhs.bits_; }
     constexpr bool operator!=(const ColumnFlag& rhs) const { return bits_ != rhs.bits_; }

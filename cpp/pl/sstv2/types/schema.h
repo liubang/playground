@@ -75,22 +75,22 @@ public:
     // Row key column access.
     // =========================================================================
 
-    size_t row_key_column_count() const { return columns_.size(); }
+    [[nodiscard]] size_t row_key_column_count() const { return columns_.size(); }
 
-    const ColumnDef& column(size_t index) const { return columns_[index]; }
+    [[nodiscard]] const ColumnDef& column(size_t index) const { return columns_[index]; }
 
-    std::string_view column_name(size_t index) const { return columns_[index].name; }
-    DataType column_type(size_t index) const { return columns_[index].type; }
-    SortOrder column_order(size_t index) const { return columns_[index].order; }
+    [[nodiscard]] std::string_view column_name(size_t index) const { return columns_[index].name; }
+    [[nodiscard]] DataType column_type(size_t index) const { return columns_[index].type; }
+    [[nodiscard]] SortOrder column_order(size_t index) const { return columns_[index].order; }
 
-    const std::vector<ColumnDef>& columns() const { return columns_; }
+    [[nodiscard]] const std::vector<ColumnDef>& columns() const { return columns_; }
 
     // =========================================================================
     // Iteration (range-for support).
     // =========================================================================
 
-    auto begin() const { return columns_.begin(); }
-    auto end() const { return columns_.end(); }
+    [[nodiscard]] auto begin() const { return columns_.begin(); }
+    [[nodiscard]] auto end() const { return columns_.end(); }
 
 private:
     std::vector<ColumnDef> columns_;
@@ -115,7 +115,7 @@ public:
 
     SchemaBuilder& add_column(std::string name, DataType type,
                               SortOrder order = SortOrder::kAscending) {
-        columns_.push_back(ColumnDef{std::move(name), type, order});
+        columns_.push_back(ColumnDef{.name=std::move(name), .type=type, .order=order});
         return *this;
     }
 
@@ -129,7 +129,7 @@ public:
     }
 
     // After a failed build(), returns the validation error message.
-    const std::string& error() const { return error_; }
+    [[nodiscard]] const std::string& error() const { return error_; }
 
 private:
     bool validate() {
