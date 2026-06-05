@@ -358,9 +358,9 @@ public:
 
     // --- Type query ---
 
-    [[nodiscard]] DataType type() const { return type_; }
-    [[nodiscard]] bool is_null() const { return type_ == DataType::kNone; }
-    [[nodiscard]] StorageCategory category() const { return storage_category_of(type_); }
+    [[nodiscard]] DataType type() const noexcept { return type_; }
+    [[nodiscard]] bool is_null() const noexcept { return type_ == DataType::kNone; }
+    [[nodiscard]] StorageCategory category() const noexcept { return storage_category_of(type_); }
 
     // --- Equality ---
 
@@ -514,7 +514,7 @@ private:
     static_assert(sizeof(Version) <= kInlineCapacity);
 
     union Storage {
-        Storage() noexcept {}
+        Storage() noexcept : inline_data{} {}
         ~Storage() {} // Destruction managed by Value.
 
         std::aligned_storage_t<kInlineCapacity, alignof(uint64_t)> inline_data;
@@ -547,7 +547,6 @@ private:
     }
 
     void copy_from(const Value& other) {
-        type_ = other.type_;
         switch (storage_category_of(other.type_)) {
             case StorageCategory::kNone:
                 break;
@@ -564,6 +563,7 @@ private:
                 new (&storage_.map) MapStorage(other.storage_.map);
                 break;
         }
+        type_ = other.type_;  // Only set AFTER successful construction
     }
 
     void move_from(Value&& other) noexcept {

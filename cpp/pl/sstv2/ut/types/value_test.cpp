@@ -294,6 +294,73 @@ TEST(ValueTest, ConvenienceAccessorsMatchTemplated) {
     EXPECT_EQ(s.as_string(), s.ref<DataType::kString>());
 }
 
+// =============================================================================
+// Bug regression tests
+// =============================================================================
+
+// Regression: inline Value equality must not be affected by padding bytes.
+// Before fix, Storage union was uninitialized, causing memcmp on kInlineCapacity
+// to produce false negatives when the actual scalar is smaller than 24 bytes.
+TEST(ValueTest, InlineEqualityIgnoresPadding) {
+    // int32_t occupies 4 bytes; the remaining 20 bytes of inline_data must be
+    // zero-initialized so that two Values holding the same int32 compare equal.
+    auto a = Value::make<DataType::kInt32>(int32_t{42});
+    auto b = Value::make<DataType::kInt32>(int32_t{42});
+    EXPECT_EQ(a, b);
+
+    // Also verify with a type that doesn't fill the full 24 bytes.
+    auto t1 = Value::make<DataType::kTime>(Time{.seconds = 100, .nanoseconds = 200});
+    auto t2 = Value::make<DataType::kTime>(Time{.seconds = 100, .nanoseconds = 200});
+    EXPECT_EQ(t1, t2);
+
+    // Different values must not be equal.
+    auto c = Value::make<DataType::kInt32>(int32_t{43});
+    EXPECT_NE(a, c);
+}
+
+// Regression: copy_from must set type_ AFTER successful construction.
+// Before fix, if the copy constructor of std::string threw, type_ was already
+// set, causing the destructor to call ~basic_string() on uninitialized memory.
+// This test verifies the basic copy path is correct (we can't easily force
+// std::string to throw, but we verify the copy produces correct results and
+// that repeated copy-assign cycles don't corrupt state).
+TEST(ValueTest, CopyFromExceptionSafetyBasic) {
+    // Copy a string value.
+    auto original = Value::make<DataType::kString>("exception safety test");
+    Value copy = original; // NOLINT
+    EXPECT_EQ(copy.type(), DataType::kString);
+    EXPECT_EQ(copy.as_string(), "exception safety test");
+    EXPECT_EQ(original.as_string(), "exception safety test");
+
+    // Copy-assign over an existing string (exercises destroy + copy_from).
+    Value target = Value::make<DataType::kString>("old value");
+    target = original;
+    EXPECT_EQ(target.as_string(), "exception safety test");
+
+    // Copy-assign a string over an inline value.
+    Value inlined = Value::make<DataType::kInt64>(int64_t{999});
+    inlined = original;
+    EXPECT_EQ(inlined.type(), DataType::kString);
+    EXPECT_EQ(inlined.as_string(), "exception safety test");
+
+    // Copy-assign an inline over a string.
+    Value str_val = Value::make<DataType::kString>("will be overwritten");
+    str_val = Value::make<DataType::kDouble>(3.14);
+    EXPECT_EQ(str_val.type(), DataType::kDouble);
+    EXPECT_DOUBLE_EQ(str_val.as_double(), 3.14);
+}
+
+// Verify that after copy, modifying the copy doesn't affect the original.
+TEST(ValueTest, CopyIndependence) {
+    auto original = Value::make<DataType::kString>("shared?");
+    Value copy = original; // NOLINT
+
+    // Mutate copy by assigning a new value.
+    copy = Value::make<DataType::kString>("mutated");
+    EXPECT_EQ(original.as_string(), "shared?");
+    EXPECT_EQ(copy.as_string(), "mutated");
+}
+
 TEST(ValueTest, AssignmentOverwritesDifferentCategory) {
     // Assign string over inline.
     Value v = Value::make<DataType::kInt32>(int32_t{1});
