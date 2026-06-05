@@ -31,27 +31,27 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">93.0&nbsp;%</td>
-            <td class="headerCovTableEntry">71</td>
-            <td class="headerCovTableEntry">66</td>
+            <td class="headerCovTableEntryMed">87.2&nbsp;%</td>
+            <td class="headerCovTableEntry">86</td>
+            <td class="headerCovTableEntry">75</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-05 18:33:01</td>
+            <td class="headerValue">2026-06-05 21:49:10</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">8</td>
-            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntry">9</td>
           </tr>
           <tr>
             <td></td>
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">51.6&nbsp;%</td>
-            <td class="headerCovTableEntry">186</td>
-            <td class="headerCovTableEntry">96</td>
+            <td class="headerCovTableEntryLo">50.5&nbsp;%</td>
+            <td class="headerCovTableEntry">220</td>
+            <td class="headerCovTableEntry">111</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -355,26 +355,27 @@
 <span id="L284"><span class="lineNum">     284</span>                 :             : </span>
 <span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC tlaBgGNC">           1 :     Value() noexcept : type_(DataType::kNone) {}</span></span>
 <span id="L286"><span class="lineNum">     286</span>                 :             : </span>
-<span id="L287"><span class="lineNum">     287</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          53 :     ~Value() { destroy(); }</span></span>
+<span id="L287"><span class="lineNum">     287</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          58 :     ~Value() { destroy(); }</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
-<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span>]
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span>]
 <span id="L288"><span class="lineNum">     288</span>                 :             : </span>
-<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">           3 :     Value(const Value&amp; other) : type_(DataType::kNone) { copy_from(other); }</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">           5 :     Value(const Value&amp; other) : type_(DataType::kNone) { copy_from(other); }</span></span>
 <span id="L290"><span class="lineNum">     290</span>                 :             : </span>
 <span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">          23 :     Value(Value&amp;&amp; other) noexcept : type_(DataType::kNone) { move_from(std::move(other)); }</span></span>
 <span id="L292"><span class="lineNum">     292</span>                 :             : </span>
 <span id="L293"><span class="lineNum">     293</span>                 :             :     Value&amp; operator=(const Value&amp; other) {</span>
 <span id="L294"><span class="lineNum">     294</span>                 :             :         if (this != &amp;other) {</span>
-<span id="L295"><span class="lineNum">     295</span>                 :             :             destroy();</span>
-<span id="L296"><span class="lineNum">     296</span>                 :             :             copy_from(other);</span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">           1 :             destroy();</span></span>
+<span id="L296"><span class="lineNum">     296</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           2 :             copy_from(other);</span></span>
 <span id="L297"><span class="lineNum">     297</span>                 :             :         }</span>
 <span id="L298"><span class="lineNum">     298</span>                 :             :         return *this;</span>
 <span id="L299"><span class="lineNum">     299</span>                 :             :     }</span>
 <span id="L300"><span class="lineNum">     300</span>                 :             : </span>
 <span id="L301"><span class="lineNum">     301</span>                 :             :     Value&amp; operator=(Value&amp;&amp; other) noexcept {</span>
 <span id="L302"><span class="lineNum">     302</span>                 :             :         if (this != &amp;other) {</span>
-<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">           1 :             destroy();</span></span>
-<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">           3 :             move_from(std::move(other));</span></span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">           2 :             destroy();</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">           5 :             move_from(std::move(other));</span></span>
 <span id="L305"><span class="lineNum">     305</span>                 :             :         }</span>
 <span id="L306"><span class="lineNum">     306</span>                 :             :         return *this;</span>
 <span id="L307"><span class="lineNum">     307</span>                 :             :     }</span>
@@ -385,20 +386,8 @@
 <span id="L312"><span class="lineNum">     312</span>                 :             :               std::enable_if_t&lt;TypeTraits&lt;DT&gt;::category == StorageCategory::kInline, int&gt; = 0&gt;</span>
 <span id="L313"><span class="lineNum">     313</span>                 :             :     static Value make(native_type_t&lt;DT&gt; v) {</span>
 <span id="L314"><span class="lineNum">     314</span>                 :             :         Value val;</span>
-<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">          32 :         val.type_ = DT;</span></span>
-<span id="L316"><span class="lineNum">     316</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          32 :         new (&amp;val.storage_.inline_data) native_type_t&lt;DT&gt;(std::move(v));</span></span>
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaGBC" title="Branch 22 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span><span class="tlaGBC" title="Branch 26 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 27 was not taken"> - </span><span class="tlaGBC" title="Branch 28 was taken 1 time"> + </span> 
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 29 was not taken"> - </span><span class="tlaGBC" title="Branch 30 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 31 was not taken"> - </span><span class="tlaGBC" title="Branch 32 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 33 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 34 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 35 was not taken"> - </span><span class="tlaGBC" title="Branch 36 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 37 was not taken"> - </span><span class="tlaGBC" title="Branch 38 was taken 1 time"> + </span> 
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 39 was not taken"> - </span><span class="tlaGBC" title="Branch 40 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 41 was not taken"> - </span><span class="tlaGBC" title="Branch 42 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 43 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 44 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 45 was not taken"> - </span><span class="tlaGBC" title="Branch 46 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 47 was not taken"> - </span><span class="tlaGBC" title="Branch 48 was taken 1 time"> + </span> 
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 49 was not taken"> - </span><span class="tlaGBC" title="Branch 50 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 51 was not taken"> - </span><span class="tlaGBC" title="Branch 52 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 53 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 54 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 55 was not taken"> - </span><span class="tlaGBC" title="Branch 56 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 57 was not taken"> - </span><span class="tlaGBC" title="Branch 58 was taken 1 time"> + </span> 
-<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 59 was not taken"> - </span><span class="tlaGBC" title="Branch 60 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 61 was not taken"> - </span>]
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">          37 :         val.type_ = DT;</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">          37 :         new (&amp;val.storage_.inline_data) native_type_t&lt;DT&gt;(std::move(v));</span></span>
 <span id="L317"><span class="lineNum">     317</span>                 :             :         return val;</span>
 <span id="L318"><span class="lineNum">     318</span>                 :             :     }</span>
 <span id="L319"><span class="lineNum">     319</span>                 :             : </span>
@@ -406,8 +395,8 @@
 <span id="L321"><span class="lineNum">     321</span>                 :             :               std::enable_if_t&lt;TypeTraits&lt;DT&gt;::category == StorageCategory::kString, int&gt; = 0&gt;</span>
 <span id="L322"><span class="lineNum">     322</span>                 :             :     static Value make(std::string v) {</span>
 <span id="L323"><span class="lineNum">     323</span>                 :             :         Value val;</span>
-<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">          15 :         val.type_ = DT;</span></span>
-<span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaGNC">          15 :         new (&amp;val.storage_.str) std::string(std::move(v));</span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">          20 :         val.type_ = DT;</span></span>
+<span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaGNC">          20 :         new (&amp;val.storage_.str) std::string(std::move(v));</span></span>
 <span id="L326"><span class="lineNum">     326</span>                 :             :         return val;</span>
 <span id="L327"><span class="lineNum">     327</span>                 :             :     }</span>
 <span id="L328"><span class="lineNum">     328</span>                 :             : </span>
@@ -421,8 +410,8 @@
 <span id="L336"><span class="lineNum">     336</span>                 :             :     // String-like from const char* (copies).</span>
 <span id="L337"><span class="lineNum">     337</span>                 :             :     template &lt;DataType DT,</span>
 <span id="L338"><span class="lineNum">     338</span>                 :             :               std::enable_if_t&lt;TypeTraits&lt;DT&gt;::category == StorageCategory::kString, int&gt; = 0&gt;</span>
-<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">          14 :     static Value make(const char* s) {</span></span>
-<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC">          14 :         return make&lt;DT&gt;(std::string(s));</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">          19 :     static Value make(const char* s) {</span></span>
+<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC">          19 :         return make&lt;DT&gt;(std::string(s));</span></span>
 <span id="L341"><span class="lineNum">     341</span>                 :             :     }</span>
 <span id="L342"><span class="lineNum">     342</span>                 :             : </span>
 <span id="L343"><span class="lineNum">     343</span>                 :             :     // Array construction.</span>
@@ -443,38 +432,40 @@
 <span id="L358"><span class="lineNum">     358</span>                 :             : </span>
 <span id="L359"><span class="lineNum">     359</span>                 :             :     // --- Type query ---</span>
 <span id="L360"><span class="lineNum">     360</span>                 :             : </span>
-<span id="L361"><span class="lineNum">     361</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          13 :     [[nodiscard]] DataType type() const { return type_; }</span></span>
+<span id="L361"><span class="lineNum">     361</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          16 :     [[nodiscard]] DataType type() const noexcept { return type_; }</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaGBC" title="Branch 22 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
-<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span>]
-<span id="L362"><span class="lineNum">     362</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">           2 :     [[nodiscard]] bool is_null() const { return type_ == DataType::kNone; }</span></span>
-<span id="L363"><span class="lineNum">     363</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           6 :     [[nodiscard]] StorageCategory category() const { return storage_category_of(type_); }</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span><span class="tlaGBC" title="Branch 26 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 27 was not taken"> - </span><span class="tlaGBC" title="Branch 28 was taken 1 time"> + </span> 
+<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 29 was not taken"> - </span><span class="tlaGBC" title="Branch 30 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 31 was not taken"> - </span>]
+<span id="L362"><span class="lineNum">     362</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">           2 :     [[nodiscard]] bool is_null() const noexcept { return type_ == DataType::kNone; }</span></span>
+<span id="L363"><span class="lineNum">     363</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           6 :     [[nodiscard]] StorageCategory category() const noexcept { return storage_category_of(type_); }</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
 <span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaGBC" title="Branch 11 was taken 1 time"> + </span>]
 <span id="L364"><span class="lineNum">     364</span>                 :             : </span>
 <span id="L365"><span class="lineNum">     365</span>                 :             :     // --- Equality ---</span>
 <span id="L366"><span class="lineNum">     366</span>                 :             : </span>
-<span id="L367"><span class="lineNum">     367</span>                 :             :     bool operator==(const Value&amp; rhs) const {</span>
-<span id="L368"><span class="lineNum">     368</span>                 :             :         if (type_ != rhs.type_) return false;</span>
-<span id="L369"><span class="lineNum">     369</span>                 :             :         switch (storage_category_of(type_)) {</span>
+<span id="L367"><span class="lineNum">     367</span>                 :<span class="tlaGNC">           3 :     bool operator==(const Value&amp; rhs) const {</span></span>
+<span id="L368"><span class="lineNum">     368</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :         if (type_ != rhs.type_) return false;</span></span>
+<span id="L369"><span class="lineNum">     369</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           3 :         switch (storage_category_of(type_)) {</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L370"><span class="lineNum">     370</span>                 :             :             case StorageCategory::kNone:</span>
 <span id="L371"><span class="lineNum">     371</span>                 :             :                 return true;</span>
-<span id="L372"><span class="lineNum">     372</span>                 :             :             case StorageCategory::kInline:</span>
-<span id="L373"><span class="lineNum">     373</span>                 :             :                 return std::memcmp(&amp;storage_.inline_data, &amp;rhs.storage_.inline_data,</span>
-<span id="L374"><span class="lineNum">     374</span>                 :             :                                    kInlineCapacity) == 0;</span>
-<span id="L375"><span class="lineNum">     375</span>                 :             :             case StorageCategory::kString:</span>
-<span id="L376"><span class="lineNum">     376</span>                 :             :                 return storage_.str == rhs.storage_.str;</span>
-<span id="L377"><span class="lineNum">     377</span>                 :             :             case StorageCategory::kArray:</span>
-<span id="L378"><span class="lineNum">     378</span>                 :             :                 return storage_.array == rhs.storage_.array;</span>
-<span id="L379"><span class="lineNum">     379</span>                 :             :             case StorageCategory::kMap:</span>
-<span id="L380"><span class="lineNum">     380</span>                 :             :                 return storage_.map == rhs.storage_.map;</span>
+<span id="L372"><span class="lineNum">     372</span>                 :<span class="tlaGNC">           3 :             case StorageCategory::kInline:</span></span>
+<span id="L373"><span class="lineNum">     373</span>                 :<span class="tlaGNC">           3 :                 return std::memcmp(&amp;storage_.inline_data, &amp;rhs.storage_.inline_data,</span></span>
+<span id="L374"><span class="lineNum">     374</span>                 :<span class="tlaGNC">           3 :                                    kInlineCapacity) == 0;</span></span>
+<span id="L375"><span class="lineNum">     375</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             case StorageCategory::kString:</span></span>
+<span id="L376"><span class="lineNum">     376</span>                 :<span class="tlaUNC">           0 :                 return storage_.str == rhs.storage_.str;</span></span>
+<span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaUNC">           0 :             case StorageCategory::kArray:</span></span>
+<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaUNC">           0 :                 return storage_.array == rhs.storage_.array;</span></span>
+<span id="L379"><span class="lineNum">     379</span>                 :<span class="tlaUNC">           0 :             case StorageCategory::kMap:</span></span>
+<span id="L380"><span class="lineNum">     380</span>                 :<span class="tlaUNC">           0 :                 return storage_.map == rhs.storage_.map;</span></span>
 <span id="L381"><span class="lineNum">     381</span>                 :             :         }</span>
 <span id="L382"><span class="lineNum">     382</span>                 :             :         return false;</span>
 <span id="L383"><span class="lineNum">     383</span>                 :             :     }</span>
 <span id="L384"><span class="lineNum">     384</span>                 :             : </span>
-<span id="L385"><span class="lineNum">     385</span>                 :             :     bool operator!=(const Value&amp; rhs) const { return !(*this == rhs); }</span>
+<span id="L385"><span class="lineNum">     385</span>                 :<span class="tlaGNC tlaBgGNC">           1 :     bool operator!=(const Value&amp; rhs) const { return !(*this == rhs); }</span></span>
 <span id="L386"><span class="lineNum">     386</span>                 :             : </span>
 <span id="L387"><span class="lineNum">     387</span>                 :             :     // --- Typed access (compile-time checked) ---</span>
 <span id="L388"><span class="lineNum">     388</span>                 :             : </span>
@@ -488,14 +479,14 @@
 <span id="L396"><span class="lineNum">     396</span>                 :             :     template &lt;DataType DT,</span>
 <span id="L397"><span class="lineNum">     397</span>                 :             :               std::enable_if_t&lt;TypeTraits&lt;DT&gt;::category == StorageCategory::kInline, int&gt; = 0&gt;</span>
 <span id="L398"><span class="lineNum">     398</span>                 :             :     [[nodiscard]] native_type_t&lt;DT&gt; get() const {</span>
-<span id="L399"><span class="lineNum">     399</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          17 :         return ref&lt;DT&gt;();</span></span>
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span id="L399"><span class="lineNum">     399</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          18 :         return ref&lt;DT&gt;();</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaGBC" title="Branch 22 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span><span class="tlaUNC" title="Branch 26 was not taken"> - </span><span class="tlaGBC" title="Branch 27 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 28 was not taken"> - </span> 
-<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 29 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 30 was not taken"> - </span><span class="tlaGBC" title="Branch 31 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 32 was not taken"> - </span> 
-<span class="lineNum">        </span>             <span class="tlaGBC" title="Branch 33 was taken 1 time"> + </span>]
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span><span class="tlaGBC" title="Branch 26 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 27 was not taken"> - </span><span class="tlaUNC" title="Branch 28 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 29 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 30 was not taken"> - </span><span class="tlaGBC" title="Branch 31 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 32 was not taken"> - </span><span class="tlaGBC" title="Branch 33 was taken 1 time"> + </span> 
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 34 was not taken"> - </span><span class="tlaGBC" title="Branch 35 was taken 1 time"> + </span>]
 <span id="L400"><span class="lineNum">     400</span>                 :             :     }</span>
 <span id="L401"><span class="lineNum">     401</span>                 :             : </span>
 <span id="L402"><span class="lineNum">     402</span>                 :             :     template &lt;DataType DT,</span>
@@ -613,8 +604,23 @@
 <span id="L514"><span class="lineNum">     514</span>                 :             :     static_assert(sizeof(Version) &lt;= kInlineCapacity);</span>
 <span id="L515"><span class="lineNum">     515</span>                 :             : </span>
 <span id="L516"><span class="lineNum">     516</span>                 :             :     union Storage {</span>
-<span id="L517"><span class="lineNum">     517</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          23 :         Storage() noexcept {}</span></span>
-<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span id="L517"><span class="lineNum">     517</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          82 :         Storage() noexcept : inline_data{} {}</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaGBC" title="Branch 22 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span><span class="tlaGBC" title="Branch 26 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 27 was not taken"> - </span><span class="tlaGBC" title="Branch 28 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 29 was not taken"> - </span><span class="tlaGBC" title="Branch 30 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 31 was not taken"> - </span><span class="tlaGBC" title="Branch 32 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 33 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 34 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 35 was not taken"> - </span><span class="tlaGBC" title="Branch 36 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 37 was not taken"> - </span><span class="tlaGBC" title="Branch 38 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 39 was not taken"> - </span><span class="tlaGBC" title="Branch 40 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 41 was not taken"> - </span><span class="tlaGBC" title="Branch 42 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 43 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 44 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 45 was not taken"> - </span><span class="tlaGBC" title="Branch 46 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 47 was not taken"> - </span><span class="tlaGBC" title="Branch 48 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 49 was not taken"> - </span><span class="tlaGBC" title="Branch 50 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 51 was not taken"> - </span><span class="tlaGBC" title="Branch 52 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 53 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 54 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 55 was not taken"> - </span><span class="tlaGBC" title="Branch 56 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 57 was not taken"> - </span><span class="tlaGBC" title="Branch 58 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 59 was not taken"> - </span><span class="tlaGBC" title="Branch 60 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 61 was not taken"> - </span><span class="tlaGBC" title="Branch 62 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 63 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 64 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 65 was not taken"> - </span><span class="tlaGBC" title="Branch 66 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 67 was not taken"> - </span><span class="tlaGBC" title="Branch 68 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 69 was not taken"> - </span><span class="tlaGBC" title="Branch 70 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 71 was not taken"> - </span><span class="tlaGBC" title="Branch 72 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 73 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 74 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 75 was not taken"> - </span><span class="tlaGBC" title="Branch 76 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 77 was not taken"> - </span><span class="tlaGBC" title="Branch 78 was taken 1 time"> + </span> 
+<span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 79 was not taken"> - </span>]
 <span id="L518"><span class="lineNum">     518</span>                 :             :         ~Storage() {} // Destruction managed by Value.</span>
 <span id="L519"><span class="lineNum">     519</span>                 :             : </span>
 <span id="L520"><span class="lineNum">     520</span>                 :             :         std::aligned_storage_t&lt;kInlineCapacity, alignof(uint64_t)&gt; inline_data;</span>
@@ -628,14 +634,14 @@
 <span id="L528"><span class="lineNum">     528</span>                 :             : </span>
 <span id="L529"><span class="lineNum">     529</span>                 :             :     // --- Lifecycle helpers ---</span>
 <span id="L530"><span class="lineNum">     530</span>                 :             : </span>
-<span id="L531"><span class="lineNum">     531</span>                 :<span class="tlaGNC">          86 :     void destroy() {</span></span>
-<span id="L532"><span class="lineNum">     532</span>   [<span class="tlaGBC" title="Branch 0 was taken 56 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 6 times"> + </span> :<span class="tlaGNC">          86 :         switch (storage_category_of(type_)) {</span></span>
-<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 5 was taken 34 times"> + </span>]
+<span id="L531"><span class="lineNum">     531</span>                 :<span class="tlaGNC">         104 :     void destroy() {</span></span>
+<span id="L532"><span class="lineNum">     532</span>   [<span class="tlaGBC" title="Branch 0 was taken 72 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 32 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 24 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 6 times"> + </span> :<span class="tlaGNC">         104 :         switch (storage_category_of(type_)) {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 5 was taken 41 times"> + </span>]
 <span id="L533"><span class="lineNum">     533</span>                 :             :             case StorageCategory::kNone:</span>
 <span id="L534"><span class="lineNum">     534</span>                 :             :             case StorageCategory::kInline:</span>
 <span id="L535"><span class="lineNum">     535</span>                 :             :                 break; // Trivially destructible or POD-like.</span>
-<span id="L536"><span class="lineNum">     536</span>                 :<span class="tlaGNC">          15 :             case StorageCategory::kString:</span></span>
-<span id="L537"><span class="lineNum">     537</span>                 :<span class="tlaGNC">          15 :                 storage_.str.~basic_string();</span></span>
+<span id="L536"><span class="lineNum">     536</span>                 :<span class="tlaGNC">          24 :             case StorageCategory::kString:</span></span>
+<span id="L537"><span class="lineNum">     537</span>                 :<span class="tlaGNC">          24 :                 storage_.str.~basic_string();</span></span>
 <span id="L538"><span class="lineNum">     538</span>                 :             :                 break;</span>
 <span id="L539"><span class="lineNum">     539</span>                 :<span class="tlaGNC">           6 :             case StorageCategory::kArray:</span></span>
 <span id="L540"><span class="lineNum">     540</span>                 :<span class="tlaGNC">           6 :                 storage_.array.~vector();</span></span>
@@ -644,41 +650,41 @@
 <span id="L543"><span class="lineNum">     543</span>                 :<span class="tlaGNC">           1 :                 storage_.map.~vector();</span></span>
 <span id="L544"><span class="lineNum">     544</span>                 :<span class="tlaGNC">           1 :                 break;</span></span>
 <span id="L545"><span class="lineNum">     545</span>                 :             :         }</span>
-<span id="L546"><span class="lineNum">     546</span>                 :<span class="tlaGNC">          86 :         type_ = DataType::kNone;</span></span>
-<span id="L547"><span class="lineNum">     547</span>                 :<span class="tlaGNC">          86 :     }</span></span>
+<span id="L546"><span class="lineNum">     546</span>                 :<span class="tlaGNC">         104 :         type_ = DataType::kNone;</span></span>
+<span id="L547"><span class="lineNum">     547</span>                 :<span class="tlaGNC">         104 :     }</span></span>
 <span id="L548"><span class="lineNum">     548</span>                 :             : </span>
-<span id="L549"><span class="lineNum">     549</span>                 :<span class="tlaGNC">           3 :     void copy_from(const Value&amp; other) {</span></span>
-<span id="L550"><span class="lineNum">     550</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :         type_ = other.type_;</span></span>
-<span id="L551"><span class="lineNum">     551</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           3 :         switch (storage_category_of(other.type_)) {</span></span>
-<span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 4 was not taken"> - </span>]
-<span id="L552"><span class="lineNum">     552</span>                 :             :             case StorageCategory::kNone:</span>
-<span id="L553"><span class="lineNum">     553</span>                 :             :                 break;</span>
-<span id="L554"><span class="lineNum">     554</span>                 :<span class="tlaGNC">           1 :             case StorageCategory::kInline:</span></span>
-<span id="L555"><span class="lineNum">     555</span>                 :<span class="tlaGNC">           1 :                 std::memcpy(&amp;storage_.inline_data, &amp;other.storage_.inline_data, kInlineCapacity);</span></span>
-<span id="L556"><span class="lineNum">     556</span>                 :             :                 break;</span>
-<span id="L557"><span class="lineNum">     557</span>                 :<span class="tlaGNC">           1 :             case StorageCategory::kString:</span></span>
-<span id="L558"><span class="lineNum">     558</span>                 :<span class="tlaGNC">           1 :                 new (&amp;storage_.str) std::string(other.storage_.str);</span></span>
-<span id="L559"><span class="lineNum">     559</span>                 :             :                 break;</span>
-<span id="L560"><span class="lineNum">     560</span>                 :<span class="tlaGNC">           1 :             case StorageCategory::kArray:</span></span>
-<span id="L561"><span class="lineNum">     561</span>                 :<span class="tlaGNC">           1 :                 new (&amp;storage_.array) ArrayStorage(other.storage_.array);</span></span>
-<span id="L562"><span class="lineNum">     562</span>                 :             :                 break;</span>
-<span id="L563"><span class="lineNum">     563</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             case StorageCategory::kMap:</span></span>
-<span id="L564"><span class="lineNum">     564</span>                 :<span class="tlaUNC">           0 :                 new (&amp;storage_.map) MapStorage(other.storage_.map);</span></span>
-<span id="L565"><span class="lineNum">     565</span>                 :             :                 break;</span>
-<span id="L566"><span class="lineNum">     566</span>                 :             :         }</span>
-<span id="L567"><span class="lineNum">     567</span>                 :<span class="tlaGNC tlaBgGNC">           3 :     }</span></span>
+<span id="L549"><span class="lineNum">     549</span>                 :<span class="tlaGNC">           7 :     void copy_from(const Value&amp; other) {</span></span>
+<span id="L550"><span class="lineNum">     550</span>   [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 5 times"> + </span> :<span class="tlaGNC">           7 :         switch (storage_category_of(other.type_)) {</span></span>
+<span class="lineNum">        </span>       <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span>]
+<span id="L551"><span class="lineNum">     551</span>                 :             :             case StorageCategory::kNone:</span>
+<span id="L552"><span class="lineNum">     552</span>                 :             :                 break;</span>
+<span id="L553"><span class="lineNum">     553</span>                 :<span class="tlaGNC">           1 :             case StorageCategory::kInline:</span></span>
+<span id="L554"><span class="lineNum">     554</span>                 :<span class="tlaGNC">           1 :                 std::memcpy(&amp;storage_.inline_data, &amp;other.storage_.inline_data, kInlineCapacity);</span></span>
+<span id="L555"><span class="lineNum">     555</span>                 :             :                 break;</span>
+<span id="L556"><span class="lineNum">     556</span>                 :<span class="tlaGNC">           5 :             case StorageCategory::kString:</span></span>
+<span id="L557"><span class="lineNum">     557</span>                 :<span class="tlaGNC">           5 :                 new (&amp;storage_.str) std::string(other.storage_.str);</span></span>
+<span id="L558"><span class="lineNum">     558</span>                 :             :                 break;</span>
+<span id="L559"><span class="lineNum">     559</span>                 :<span class="tlaGNC">           1 :             case StorageCategory::kArray:</span></span>
+<span id="L560"><span class="lineNum">     560</span>                 :<span class="tlaGNC">           1 :                 new (&amp;storage_.array) ArrayStorage(other.storage_.array);</span></span>
+<span id="L561"><span class="lineNum">     561</span>                 :             :                 break;</span>
+<span id="L562"><span class="lineNum">     562</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             case StorageCategory::kMap:</span></span>
+<span id="L563"><span class="lineNum">     563</span>                 :<span class="tlaUNC">           0 :                 new (&amp;storage_.map) MapStorage(other.storage_.map);</span></span>
+<span id="L564"><span class="lineNum">     564</span>                 :             :                 break;</span>
+<span id="L565"><span class="lineNum">     565</span>                 :             :         }</span>
+<span id="L566"><span class="lineNum">     566</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         type_ = other.type_;  // Only set AFTER successful construction</span></span>
+<span id="L567"><span class="lineNum">     567</span>                 :<span class="tlaGNC">           7 :     }</span></span>
 <span id="L568"><span class="lineNum">     568</span>                 :             : </span>
-<span id="L569"><span class="lineNum">     569</span>                 :<span class="tlaGNC">          26 :     void move_from(Value&amp;&amp; other) noexcept {</span></span>
-<span id="L570"><span class="lineNum">     570</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :         type_ = other.type_;</span></span>
-<span id="L571"><span class="lineNum">     571</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          26 :         switch (storage_category_of(other.type_)) {</span></span>
+<span id="L569"><span class="lineNum">     569</span>                 :<span class="tlaGNC">          28 :     void move_from(Value&amp;&amp; other) noexcept {</span></span>
+<span id="L570"><span class="lineNum">     570</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          28 :         type_ = other.type_;</span></span>
+<span id="L571"><span class="lineNum">     571</span>   [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          28 :         switch (storage_category_of(other.type_)) {</span></span>
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 4 was not taken"> - </span>]
 <span id="L572"><span class="lineNum">     572</span>                 :             :             case StorageCategory::kNone:</span>
 <span id="L573"><span class="lineNum">     573</span>                 :             :                 break;</span>
-<span id="L574"><span class="lineNum">     574</span>                 :<span class="tlaGNC">          14 :             case StorageCategory::kInline:</span></span>
-<span id="L575"><span class="lineNum">     575</span>                 :<span class="tlaGNC">          14 :                 std::memcpy(&amp;storage_.inline_data, &amp;other.storage_.inline_data, kInlineCapacity);</span></span>
+<span id="L574"><span class="lineNum">     574</span>                 :<span class="tlaGNC">          15 :             case StorageCategory::kInline:</span></span>
+<span id="L575"><span class="lineNum">     575</span>                 :<span class="tlaGNC">          15 :                 std::memcpy(&amp;storage_.inline_data, &amp;other.storage_.inline_data, kInlineCapacity);</span></span>
 <span id="L576"><span class="lineNum">     576</span>                 :             :                 break;</span>
-<span id="L577"><span class="lineNum">     577</span>                 :<span class="tlaGNC">          10 :             case StorageCategory::kString:</span></span>
-<span id="L578"><span class="lineNum">     578</span>                 :<span class="tlaGNC">          10 :                 new (&amp;storage_.str) std::string(std::move(other.storage_.str));</span></span>
+<span id="L577"><span class="lineNum">     577</span>                 :<span class="tlaGNC">          11 :             case StorageCategory::kString:</span></span>
+<span id="L578"><span class="lineNum">     578</span>                 :<span class="tlaGNC">          11 :                 new (&amp;storage_.str) std::string(std::move(other.storage_.str));</span></span>
 <span id="L579"><span class="lineNum">     579</span>                 :             :                 other.storage_.str.~basic_string();</span>
 <span id="L580"><span class="lineNum">     580</span>                 :             :                 break;</span>
 <span id="L581"><span class="lineNum">     581</span>                 :<span class="tlaGNC">           2 :             case StorageCategory::kArray:</span></span>
@@ -690,8 +696,8 @@
 <span id="L587"><span class="lineNum">     587</span>                 :<span class="tlaUNC">           0 :                 other.storage_.map.~vector();</span></span>
 <span id="L588"><span class="lineNum">     588</span>                 :<span class="tlaUNC">           0 :                 break;</span></span>
 <span id="L589"><span class="lineNum">     589</span>                 :             :         }</span>
-<span id="L590"><span class="lineNum">     590</span>                 :<span class="tlaGNC tlaBgGNC">          26 :         other.type_ = DataType::kNone;</span></span>
-<span id="L591"><span class="lineNum">     591</span>                 :<span class="tlaGNC">          26 :     }</span></span>
+<span id="L590"><span class="lineNum">     590</span>                 :<span class="tlaGNC tlaBgGNC">          28 :         other.type_ = DataType::kNone;</span></span>
+<span id="L591"><span class="lineNum">     591</span>                 :<span class="tlaGNC">          28 :     }</span></span>
 <span id="L592"><span class="lineNum">     592</span>                 :             : </span>
 <span id="L593"><span class="lineNum">     593</span>                 :             :     // --- Visitor dispatch ---</span>
 <span id="L594"><span class="lineNum">     594</span>                 :             : </span>
