@@ -15,10 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/06/05 00:23
 
+#include <gtest/gtest.h>
+#include <memory>
+
 #include "cpp/pl/sstv2/types/internal_schema.h"
 #include "cpp/pl/sstv2/types/schema.h"
-
-#include <gtest/gtest.h>
 
 namespace pl::sstv2::types {
 namespace {
@@ -33,9 +34,9 @@ TEST(SchemaTest, EmptySchema) {
 }
 
 TEST(SchemaTest, BuilderSingleColumn) {
-    auto schema = SchemaBuilder()
-                      .add_column("user_id", DataType::kUint64)
-                      .build();
+    auto result = SchemaBuilder().add_column("user_id", DataType::kUint64).build();
+    ASSERT_TRUE(result.has_value());
+    auto& schema = *result;
     EXPECT_EQ(schema.row_key_column_count(), 1u);
     EXPECT_EQ(schema.column_name(0), "user_id");
     EXPECT_EQ(schema.column_type(0), DataType::kUint64);
@@ -43,11 +44,13 @@ TEST(SchemaTest, BuilderSingleColumn) {
 }
 
 TEST(SchemaTest, BuilderMultipleColumns) {
-    auto schema = SchemaBuilder()
+    auto result = SchemaBuilder()
                       .add_column("region", DataType::kString)
                       .add_column("timestamp", DataType::kInt64, SortOrder::kDescending)
                       .add_column("seq", DataType::kUint32)
                       .build();
+    ASSERT_TRUE(result.has_value());
+    auto& schema = *result;
     EXPECT_EQ(schema.row_key_column_count(), 3u);
 
     EXPECT_EQ(schema.column_name(0), "region");
@@ -62,12 +65,11 @@ TEST(SchemaTest, BuilderMultipleColumns) {
 }
 
 TEST(SchemaTest, RangeForIteration) {
-    auto schema = SchemaBuilder()
-                      .add_column("a", DataType::kBool)
-                      .add_column("b", DataType::kDouble)
-                      .build();
+    auto result =
+        SchemaBuilder().add_column("a", DataType::kBool).add_column("b", DataType::kDouble).build();
+    ASSERT_TRUE(result.has_value());
     size_t count = 0;
-    for (const auto& col : schema) {
+    for (const auto& col : *result) {
         (void)col;
         ++count;
     }
@@ -77,8 +79,8 @@ TEST(SchemaTest, RangeForIteration) {
 TEST(SchemaTest, BuilderRejectsEmptyName) {
     SchemaBuilder builder;
     builder.add_column("", DataType::kInt32);
-    auto schema = builder.build();
-    EXPECT_EQ(schema.row_key_column_count(), 0u);
+    auto result = builder.build();
+    EXPECT_FALSE(result.has_value());
     EXPECT_FALSE(builder.error().empty());
 }
 
@@ -86,24 +88,30 @@ TEST(SchemaTest, BuilderRejectsDuplicateName) {
     SchemaBuilder builder;
     builder.add_column("id", DataType::kUint64);
     builder.add_column("id", DataType::kInt32);
-    auto schema = builder.build();
-    EXPECT_EQ(schema.row_key_column_count(), 0u);
+    auto result = builder.build();
+    EXPECT_FALSE(result.has_value());
     EXPECT_FALSE(builder.error().empty());
 }
 
-TEST(SchemaTest, BuilderRejectsNonKeyType) {
-    SchemaBuilder builder;
-    builder.add_column("bad", DataType::kArray);
-    auto schema = builder.build();
-    EXPECT_EQ(schema.row_key_column_count(), 0u);
-    EXPECT_FALSE(builder.error().empty());
+TEST(SchemaTest, BuilderAcceptsArrayKey) {
+    auto result = SchemaBuilder().add_column("tags", DataType::kArray).build();
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->row_key_column_count(), 1u);
+    EXPECT_EQ(result->column_type(0), DataType::kArray);
+}
+
+TEST(SchemaTest, BuilderAcceptsMapKey) {
+    auto result = SchemaBuilder().add_column("attrs", DataType::kMap).build();
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->row_key_column_count(), 1u);
+    EXPECT_EQ(result->column_type(0), DataType::kMap);
 }
 
 TEST(SchemaTest, BuilderRejectsPrivateType) {
     SchemaBuilder builder;
     builder.add_column("bad", DataType::kDataBlock);
-    auto schema = builder.build();
-    EXPECT_EQ(schema.row_key_column_count(), 0u);
+    auto result = builder.build();
+    EXPECT_FALSE(result.has_value());
     EXPECT_FALSE(builder.error().empty());
 }
 
@@ -122,22 +130,24 @@ TEST(SchemaTest, DirectConstruction) {
 // =============================================================================
 
 TEST(InternalSchemaTest, ColumnCount) {
-    auto schema = SchemaBuilder()
-                      .add_column("k1", DataType::kInt64)
-                      .add_column("k2", DataType::kString)
-                      .build();
+    auto schema = std::make_shared<const Schema>(
+        *SchemaBuilder()
+             .add_column("k1", DataType::kInt64)
+             .add_column("k2", DataType::kString)
+             .build());
     InternalSchema is(schema);
 
     EXPECT_EQ(is.user_column_count(), 2u);
-    EXPECT_EQ(is.column_count(), 9u);        // 2 + 7
+    EXPECT_EQ(is.column_count(), 9u);          // 2 + 7
     EXPECT_EQ(is.sort_key_column_count(), 4u); // 2 + 2 (Version, OpType)
 }
 
 TEST(InternalSchemaTest, UserColumnsPassthrough) {
-    auto schema = SchemaBuilder()
-                      .add_column("region", DataType::kString, SortOrder::kAscending)
-                      .add_column("ts", DataType::kInt64, SortOrder::kDescending)
-                      .build();
+    auto schema = std::make_shared<const Schema>(
+        *SchemaBuilder()
+             .add_column("region", DataType::kString, SortOrder::kAscending)
+             .add_column("ts", DataType::kInt64, SortOrder::kDescending)
+             .build());
     InternalSchema is(schema);
 
     EXPECT_EQ(is.column_name(0), "region");
@@ -150,9 +160,8 @@ TEST(InternalSchemaTest, UserColumnsPassthrough) {
 }
 
 TEST(InternalSchemaTest, SystemColumns) {
-    auto schema = SchemaBuilder()
-                      .add_column("k", DataType::kUint64)
-                      .build();
+    auto schema = std::make_shared<const Schema>(
+        *SchemaBuilder().add_column("k", DataType::kUint64).build());
     InternalSchema is(schema);
 
     // M=1, system columns at indices 1..7
@@ -191,10 +200,11 @@ TEST(InternalSchemaTest, SystemColumns) {
 }
 
 TEST(InternalSchemaTest, IsSortColumn) {
-    auto schema = SchemaBuilder()
-                      .add_column("a", DataType::kUint32)
-                      .add_column("b", DataType::kString)
-                      .build();
+    auto schema = std::make_shared<const Schema>(
+        *SchemaBuilder()
+             .add_column("a", DataType::kUint32)
+             .add_column("b", DataType::kString)
+             .build());
     InternalSchema is(schema);
 
     // Sort columns: a(0), b(1), Version(2), OpType(3)
