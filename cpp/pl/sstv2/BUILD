@@ -87,3 +87,40 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "compress_test",
+    srcs = ["ut/compress/compress_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/compress",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "block_test",
+    srcs = ["ut/block/block_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/block",
+        "//cpp/pl/sstv2/types:column_flag",
+        "//cpp/pl/sstv2/types:internal_row",
+        "//cpp/pl/sstv2/types:op_type",
+        "//cpp/pl/sstv2/types:schema",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "bloom_test",
+    srcs = ["ut/bloom/bloom_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/bloom",
+        "//cpp/pl/sstv2/types:internal_row",
+        "//cpp/pl/sstv2/types:op_type",
+        "//cpp/pl/sstv2/types:schema",
+        "@googletest//:gtest_main",
+    ],
+)

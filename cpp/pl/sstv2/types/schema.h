@@ -135,6 +135,10 @@ public:
 
 private:
     bool validate() {
+        if (columns_.empty()) {
+            error_ = "schema must contain at least one row key column";
+            return false;
+        }
         for (size_t i = 0; i < columns_.size(); ++i) {
             const auto& col = columns_[i];
             if (col.name.empty()) {

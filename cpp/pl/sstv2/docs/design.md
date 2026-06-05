@@ -175,7 +175,7 @@ Offset  Size   Field                Description
 | Magic 值     | ASCII  | 含义             |
 |-------------|--------|------------------|
 | 0x4B425444  | "DTBK" | Data Block       |
-| 0x4B424958  | "IXBK" | Index Block      |
+| 0x4B425849  | "IXBK" | Index Block      |
 | 0x544F4F52  | "ROOT" | Root Index Block |
 
 ### 5.3 Flags 位定义（64 位无符号整数）

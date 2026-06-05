@@ -60,7 +60,7 @@ file/ (顶层)
 Index       Name        Type       SortOrder
 -----       ----        ----       ---------
 0..M-1      (user)      (user)     (user)
-M           Version     kUint64    kDescending
+M           Version     kVersion   kDescending
 M+1         OpType      kUint8     kAscending
 M+2         Flag        kUint64    (none)
 M+3         Filename    kString    (none)

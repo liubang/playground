@@ -28,9 +28,11 @@ namespace {
 // Schema (user-facing) tests.
 // =============================================================================
 
-TEST(SchemaTest, EmptySchema) {
-    Schema s;
-    EXPECT_EQ(s.row_key_column_count(), 0u);
+TEST(SchemaTest, BuilderRejectsEmptySchema) {
+    SchemaBuilder builder;
+    auto result = builder.build();
+    EXPECT_FALSE(result.has_value());
+    EXPECT_FALSE(builder.error().empty());
 }
 
 TEST(SchemaTest, BuilderSingleColumn) {
@@ -130,11 +132,10 @@ TEST(SchemaTest, DirectConstruction) {
 // =============================================================================
 
 TEST(InternalSchemaTest, ColumnCount) {
-    auto schema = std::make_shared<const Schema>(
-        *SchemaBuilder()
-             .add_column("k1", DataType::kInt64)
-             .add_column("k2", DataType::kString)
-             .build());
+    auto schema = std::make_shared<const Schema>(*SchemaBuilder()
+                                                      .add_column("k1", DataType::kInt64)
+                                                      .add_column("k2", DataType::kString)
+                                                      .build());
     InternalSchema is(schema);
 
     EXPECT_EQ(is.user_column_count(), 2u);
@@ -160,8 +161,8 @@ TEST(InternalSchemaTest, UserColumnsPassthrough) {
 }
 
 TEST(InternalSchemaTest, SystemColumns) {
-    auto schema = std::make_shared<const Schema>(
-        *SchemaBuilder().add_column("k", DataType::kUint64).build());
+    auto schema =
+        std::make_shared<const Schema>(*SchemaBuilder().add_column("k", DataType::kUint64).build());
     InternalSchema is(schema);
 
     // M=1, system columns at indices 1..7
@@ -175,7 +176,7 @@ TEST(InternalSchemaTest, SystemColumns) {
 
     // Version is descending, OpType is ascending.
     EXPECT_EQ(is.column_name(1), "Version");
-    EXPECT_EQ(is.column_type(1), DataType::kUint64);
+    EXPECT_EQ(is.column_type(1), DataType::kVersion);
     EXPECT_EQ(is.column_order(1), SortOrder::kDescending);
 
     EXPECT_EQ(is.column_name(2), "OpType");
@@ -200,11 +201,10 @@ TEST(InternalSchemaTest, SystemColumns) {
 }
 
 TEST(InternalSchemaTest, IsSortColumn) {
-    auto schema = std::make_shared<const Schema>(
-        *SchemaBuilder()
-             .add_column("a", DataType::kUint32)
-             .add_column("b", DataType::kString)
-             .build());
+    auto schema = std::make_shared<const Schema>(*SchemaBuilder()
+                                                      .add_column("a", DataType::kUint32)
+                                                      .add_column("b", DataType::kString)
+                                                      .build());
     InternalSchema is(schema);
 
     // Sort columns: a(0), b(1), Version(2), OpType(3)
