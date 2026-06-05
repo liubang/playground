@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include "cpp/pl/sstv2/types/data_type.h"
-
 #include <cstdint>
+
+#include "cpp/pl/sstv2/types/data_type.h"
 
 namespace pl::sstv2::types {
 
@@ -40,9 +40,9 @@ namespace pl::sstv2::types {
 class ColumnFlag {
 public:
     // Bit field constants.
-    static constexpr uint64_t kDtMask       = 0xFF;        // bits 0-7
-    static constexpr uint64_t kChecksumBit  = 1ULL << 8;   // bit 8
-    static constexpr uint64_t kBoolBit      = 1ULL << 9;   // bit 9
+    static constexpr uint64_t kDtMask = 0xFF;                     // bits 0-7
+    static constexpr uint64_t kChecksumBit = 1ULL << 8;           // bit 8
+    static constexpr uint64_t kBoolBit = 1ULL << 9;               // bit 9
     static constexpr uint64_t kReservedMask = ~uint64_t{0} << 10; // bits 10-63
 
     // =========================================================================
@@ -52,11 +52,12 @@ public:
     constexpr ColumnFlag() = default;
 
     // Construct a data flag for a value column.
-    static constexpr ColumnFlag for_value(DataType dt, bool checksum,
-                                          bool bool_val = false) {
+    static constexpr ColumnFlag for_value(DataType dt, bool checksum, bool bool_val = false) {
         uint64_t bits = static_cast<uint8_t>(dt);
-        if (checksum) bits |= kChecksumBit;
-        if (bool_val) bits |= kBoolBit;
+        if (checksum)
+            bits |= kChecksumBit;
+        if (bool_val)
+            bits |= kBoolBit;
         return ColumnFlag{bits};
     }
 
@@ -82,16 +83,14 @@ public:
     }
 
     [[nodiscard]] constexpr bool has_checksum() const { return (bits_ & kChecksumBit) != 0; }
-    [[nodiscard]] constexpr bool bool_value() const   { return (bits_ & kBoolBit) != 0; }
+    [[nodiscard]] constexpr bool bool_value() const { return (bits_ & kBoolBit) != 0; }
 
     // =========================================================================
     // Semantic queries.
     // =========================================================================
 
     // True if this flag represents an index entry (DataBlock or IndexBlock pointer).
-    [[nodiscard]] constexpr bool is_index_entry() const {
-        return is_private_type(data_type());
-    }
+    [[nodiscard]] constexpr bool is_index_entry() const { return is_private_type(data_type()); }
 
     // True if this flag points to a DataBlock (leaf of index tree).
     [[nodiscard]] constexpr bool is_data_block_ptr() const {
@@ -104,18 +103,19 @@ public:
     }
 
     // True if this flag represents a user value column (not an index entry).
-    [[nodiscard]] constexpr bool is_value_flag() const {
-        return !is_index_entry();
-    }
+    [[nodiscard]] constexpr bool is_value_flag() const { return !is_index_entry(); }
 
     // Validate invariants:
     // - Reserved bits must be zero.
     // - Index entries must have C=0 and B=0.
     // - B bit must be 0 when DT != Bool.
     [[nodiscard]] constexpr bool is_valid() const {
-        if ((bits_ & kReservedMask) != 0) return false;
-        if (is_index_entry() && (bits_ & (kChecksumBit | kBoolBit)) != 0) return false;
-        if (data_type() != DataType::kBool && bool_value()) return false;
+        if ((bits_ & kReservedMask) != 0)
+            return false;
+        if (is_index_entry() && (bits_ & (kChecksumBit | kBoolBit)) != 0)
+            return false;
+        if (data_type() != DataType::kBool && bool_value())
+            return false;
         return true;
     }
 

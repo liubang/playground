@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace pl::sstv2::codec {
 
@@ -35,6 +36,13 @@ size_t decode_varint(const uint8_t* src, size_t len, uint64_t* value);
 
 // Returns the number of bytes needed to encode value as a varint.
 size_t varint_length(uint64_t value);
+
+// Convenience: encode varint and append to string.
+inline void encode_varint(uint64_t value, std::string* dst) {
+    uint8_t buf[10];
+    size_t n = encode_varint(value, buf);
+    dst->append(reinterpret_cast<const char*>(buf), n);
+}
 
 // ZigZag encoding: maps signed integers to unsigned integers so that
 // values with small absolute value have small varint encodings.
