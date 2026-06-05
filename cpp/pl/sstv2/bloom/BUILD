@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/06/05 00:23
+# Created: 2026/06/05 22:09
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
@@ -25,40 +25,18 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "endian",
-    hdrs = ["endian.h"],
-    deps = ["//cpp/pl/bits"],
-)
-
-cc_library(
-    name = "fixed",
-    hdrs = ["fixed.h"],
-    deps = [":endian"],
-)
-
-cc_library(
-    name = "varint",
-    srcs = ["varint.cpp"],
-    hdrs = ["varint.h"],
+    name = "bloom",
+    srcs = ["bloom.cpp"],
+    hdrs = ["bloom.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
-)
-
-cc_library(
-    name = "comparable",
-    srcs = ["comparable.cpp"],
-    hdrs = ["comparable.h"],
-    copts = COPTS,
-    linkopts = LINKOPTS,
-)
-
-cc_library(
-    name = "value_comparable",
-    hdrs = ["value_comparable.h"],
     deps = [
-        ":comparable",
+        "//cpp/pl/bloom:bloom_filter",
+        "//cpp/pl/sstv2/codec:fixed",
+        "//cpp/pl/sstv2/codec:value_comparable",
         "//cpp/pl/sstv2/types:internal_row",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/hash",
+        "@abseil-cpp//absl/status:statusor",
+        "@crc32c",
     ],
 )
