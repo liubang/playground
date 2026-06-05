@@ -75,3 +75,15 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "pattern_test",
+    srcs = ["ut/pattern/pattern_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/codec:endian",
+        "//cpp/pl/sstv2/pattern:compound",
+        "//cpp/pl/sstv2/pattern:raw",
+        "@googletest//:gtest_main",
+    ],
+)
