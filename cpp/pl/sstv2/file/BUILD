@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/06/05 22:09
+# Created: 2026/06/06 14:16
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
@@ -25,21 +25,44 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "block",
-    srcs = ["block.cpp"],
-    hdrs = ["block.h"],
+    name = "value_codec",
+    srcs = ["value_codec.cpp"],
+    hdrs = ["value_codec.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        "//cpp/pl/sstv2/codec:checksum",
-        "//cpp/pl/sstv2/codec:endian",
         "//cpp/pl/sstv2/codec:fixed",
+        "//cpp/pl/sstv2/codec:varint",
+        "//cpp/pl/sstv2/types:value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "sstable",
+    srcs = ["sstable.cpp"],
+    hdrs = ["sstable.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":value_codec",
+        "//cpp/pl/sstv2/block",
+        "//cpp/pl/sstv2/bloom",
+        "//cpp/pl/sstv2/codec:checksum",
         "//cpp/pl/sstv2/codec:value_comparable",
-        "//cpp/pl/sstv2/compress:compress",
-        "//cpp/pl/sstv2/file:value_codec",
-        "//cpp/pl/sstv2/pattern:compound",
-        "//cpp/pl/sstv2/pattern:raw",
+        "//cpp/pl/sstv2/compress",
+        "//cpp/pl/sstv2/format:metadata",
+        "//cpp/pl/sstv2/format:section",
+        "//cpp/pl/sstv2/format:tail",
+        "//cpp/pl/sstv2/index",
+        "//cpp/pl/sstv2/types:column_flag",
         "//cpp/pl/sstv2/types:internal_row",
+        "//cpp/pl/sstv2/types:internal_schema",
+        "//cpp/pl/sstv2/types:row",
+        "//cpp/pl/sstv2/types:schema",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
     ],
