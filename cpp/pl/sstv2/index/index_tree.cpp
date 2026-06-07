@@ -54,7 +54,7 @@ absl::StatusOr<std::string_view> checked_slice(std::string_view bytes,
 
 absl::StatusOr<std::string> all_key_for(InternalSchema::ConstRef schema, const InternalRow& row) {
     std::string all_key;
-    auto status = codec::encode_all_key(row, *schema, &all_key);
+    auto status = codec::encode_all_key(row, schema, &all_key);
     if (!status.ok())
         return status;
     return all_key;
@@ -86,7 +86,7 @@ InternalRow make_index_row(InternalSchema::ConstRef schema,
                            BlockRef block,
                            uint64_t subtree_row_count,
                            ColumnFlag pointer_flag) {
-    InternalRow index = InternalRow::make(*schema);
+    InternalRow index = InternalRow::make(schema);
     for (size_t i = 0; i < schema->sort_key_column_count(); ++i) {
         index.columns[i] = fence.columns[i];
     }
@@ -102,7 +102,7 @@ InternalRow make_index_row(InternalSchema::ConstRef schema,
 uint64_t subtree_row_count(InternalSchema::ConstRef schema, const std::vector<InternalRow>& rows) {
     uint64_t count = 0;
     for (const auto& row : rows) {
-        count += row.checksum(*schema);
+        count += row.checksum(schema);
     }
     return count;
 }
@@ -127,8 +127,8 @@ absl::Status scan_node(std::string_view key_file,
         return node.status();
 
     for (const auto& entry : node->rows()) {
-        const ColumnFlag flag = entry.flag(*schema);
-        const BlockRef child{.offset = entry.offset(*schema), .length = entry.length(*schema)};
+        const ColumnFlag flag = entry.flag(schema);
+        const BlockRef child{.offset = entry.offset(schema), .length = entry.length(schema)};
         if (flag.is_data_block_ptr()) {
             data_blocks->push_back(child);
         } else if (flag.is_index_block_ptr()) {
@@ -158,8 +158,8 @@ absl::StatusOr<std::optional<BlockRef>> find_data_block_from_node(std::string_vi
         return std::optional<BlockRef>{};
     }
     const InternalRow& selected = node->rows()[*selected_index];
-    const ColumnFlag flag = selected.flag(*schema);
-    const BlockRef child{.offset = selected.offset(*schema), .length = selected.length(*schema)};
+    const ColumnFlag flag = selected.flag(schema);
+    const BlockRef child{.offset = selected.offset(schema), .length = selected.length(schema)};
     if (flag.is_data_block_ptr()) {
         return std::optional<BlockRef>{child};
     }

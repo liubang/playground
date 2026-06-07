@@ -47,22 +47,22 @@ Schema::ConstRef make_schema() {
     return std::make_shared<const Schema>(std::move(*schema));
 }
 
-InternalRow make_fence_row(const InternalSchema& schema, uint64_t id) {
+InternalRow make_fence_row(InternalSchema::ConstRef schema, uint64_t id) {
     InternalRow row = InternalRow::make(schema);
     row.columns[0] = Value::make<DataType::kUint64>(id);
-    row.columns[schema.version_index()] =
+    row.columns[schema->version_index()] =
         Value::make<DataType::kVersion>(Version{.major = 10, .minor = id});
-    row.columns[schema.op_type_index()] =
+    row.columns[schema->op_type_index()] =
         Value::make<DataType::kUint8>(static_cast<uint8_t>(OpType::kPut));
-    row.columns[schema.flag_index()] = Value::make<DataType::kUint64>(uint64_t{0});
-    row.columns[schema.filename_index()] = Value::make<DataType::kString>("@1");
-    row.columns[schema.offset_index()] = Value::make<DataType::kUint64>(uint64_t{0});
-    row.columns[schema.length_index()] = Value::make<DataType::kUint64>(uint64_t{0});
-    row.columns[schema.checksum_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema->flag_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema->filename_index()] = Value::make<DataType::kString>("@1");
+    row.columns[schema->offset_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema->length_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema->checksum_index()] = Value::make<DataType::kUint64>(uint64_t{0});
     return row;
 }
 
-std::string all_key_for(const InternalSchema& schema, const InternalRow& row) {
+std::string all_key_for(InternalSchema::ConstRef schema, const InternalRow& row) {
     std::string all_key;
     auto status = codec::encode_all_key(row, schema, &all_key);
     EXPECT_TRUE(status.ok()) << status;
@@ -83,7 +83,7 @@ TEST(IndexTreeTest, BuildsPostOrderTreeAndRoutesToDataBlock) {
     for (uint64_t i = 0; i < 4; ++i) {
         ASSERT_TRUE(builder.prepare_for_data_block().ok());
         ASSERT_TRUE(
-            builder.add_data_block(make_fence_row(*schema, i), BlockRef{i * 10, 10}, 2).ok());
+            builder.add_data_block(make_fence_row(schema, i), BlockRef{i * 10, 10}, 2).ok());
     }
 
     auto result = builder.finish();
@@ -106,7 +106,7 @@ TEST(IndexTreeTest, BuildsPostOrderTreeAndRoutesToDataBlock) {
     EXPECT_EQ(refs[3].offset, 30u);
 
     auto found = TreeReader::find_data_block(
-        key_file, schema, result->root, all_key_for(*schema, make_fence_row(*schema, 2)));
+        key_file, schema, result->root, all_key_for(schema, make_fence_row(schema, 2)));
     ASSERT_TRUE(found.ok()) << found.status();
     ASSERT_TRUE(found->has_value());
     EXPECT_EQ((*found)->offset, 20u);
