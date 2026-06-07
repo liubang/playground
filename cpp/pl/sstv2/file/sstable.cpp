@@ -94,7 +94,7 @@ InternalRow make_internal_row(types::InternalSchema::ConstRef schema,
                               uint64_t value_offset,
                               uint64_t value_length,
                               uint64_t value_checksum) {
-    InternalRow internal = InternalRow::make(*schema);
+    InternalRow internal = InternalRow::make(schema);
     for (size_t i = 0; i < row.key_columns.size(); ++i) {
         internal.columns[i] = row.key_columns[i];
     }
@@ -124,9 +124,10 @@ absl::StatusOr<std::string_view> checked_slice(std::string_view bytes,
     return bytes.substr(static_cast<size_t>(offset), static_cast<size_t>(length));
 }
 
-absl::StatusOr<std::string> all_key_for(types::InternalSchema::ConstRef schema, const InternalRow& row) {
+absl::StatusOr<std::string> all_key_for(types::InternalSchema::ConstRef schema,
+                                        const InternalRow& row) {
     std::string all_key;
-    auto status = codec::encode_all_key(row, *schema, &all_key);
+    auto status = codec::encode_all_key(row, schema, &all_key);
     if (!status.ok())
         return status;
     return all_key;
@@ -143,9 +144,9 @@ absl::StatusOr<Row> materialize_row(types::Schema::ConstRef schema,
     for (size_t i = 0; i < schema->row_key_column_count(); ++i) {
         row.key_columns.push_back(internal.columns[i]);
     }
-    row.version = internal.version(*internal_schema);
-    row.op_type = static_cast<OpType>(internal.op_type(*internal_schema));
-    const ColumnFlag value_flag = internal.flag(*internal_schema);
+    row.version = internal.version(internal_schema);
+    row.op_type = static_cast<OpType>(internal.op_type(internal_schema));
+    const ColumnFlag value_flag = internal.flag(internal_schema);
     const DataType value_type = value_flag.data_type();
     if (value_type == DataType::kNone) {
         return row;
@@ -156,16 +157,16 @@ absl::StatusOr<Row> materialize_row(types::Schema::ConstRef schema,
     }
 
     absl::StatusOr<std::string_view> value_bytes =
-        internal.location(*internal_schema) == types::ValueLocation::kEmbedded
+        internal.location(internal_schema) == types::ValueLocation::kEmbedded
             ? block.embedded_value(row_index, internal_schema)
             : checked_slice(value_file,
-                            internal.offset(*internal_schema),
-                            internal.length(*internal_schema),
+                            internal.offset(internal_schema),
+                            internal.length(internal_schema),
                             "value");
     if (!value_bytes.ok())
         return value_bytes.status();
     if (value_flag.has_checksum() &&
-        codec::crc32c_u64(*value_bytes) != internal.checksum(*internal_schema)) {
+        codec::crc32c_u64(*value_bytes) != internal.checksum(internal_schema)) {
         return absl::InvalidArgumentError("value checksum mismatch");
     }
     auto decoded = decode_value(value_type, *value_bytes);
@@ -196,11 +197,12 @@ absl::StatusOr<size_t> lower_bound_by_all_key(types::InternalSchema::ConstRef sc
     return first;
 }
 
-absl::StatusOr<std::optional<Row>> get_from_data_block(std::string_view value_file,
-                                                       types::Schema::ConstRef schema,
-                                                       types::InternalSchema::ConstRef internal_schema,
-                                                       const block::BlockReader& data,
-                                                       std::string_view target_key) {
+absl::StatusOr<std::optional<Row>> get_from_data_block(
+    std::string_view value_file,
+    types::Schema::ConstRef schema,
+    types::InternalSchema::ConstRef internal_schema,
+    const block::BlockReader& data,
+    std::string_view target_key) {
     auto row_index = lower_bound_by_all_key(internal_schema, data.rows(), target_key);
     if (!row_index.ok())
         return row_index.status();
@@ -593,7 +595,7 @@ absl::StatusOr<std::optional<Row>> Reader::get(const std::vector<Value>& key_col
     if (key_columns.size() != schema_->row_key_column_count()) {
         return absl::InvalidArgumentError("lookup key column count mismatch");
     }
-    InternalRow probe = InternalRow::make(*internal_schema_);
+    InternalRow probe = InternalRow::make(internal_schema_);
     for (size_t i = 0; i < key_columns.size(); ++i) {
         if (key_columns[i].type() != schema_->column_type(i)) {
             return absl::InvalidArgumentError(
