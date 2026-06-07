@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-07 18:16:26</td>
+            <td class="headerValue">2026-06-07 21:28:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">53.4&nbsp;%</td>
-            <td class="headerCovTableEntry">58</td>
-            <td class="headerCovTableEntry">31</td>
+            <td class="headerCovTableEntryLo">53.2&nbsp;%</td>
+            <td class="headerCovTableEntry">62</td>
+            <td class="headerCovTableEntry">33</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -132,7 +132,7 @@
 <span id="L61"><span class="lineNum">      61</span>                 :             : </span>
 <span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          39 : absl::Status Builder::add(const types::InternalRow&amp; row, types::InternalSchema::ConstRef schema) {</span></span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :     std::string all_key;</span>
-<span id="L64"><span class="lineNum">      64</span>         [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          39 :     auto status = codec::encode_all_key(row, *schema, &amp;all_key);</span></span>
+<span id="L64"><span class="lineNum">      64</span>   [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 39 times"> + </span>]:<span class="tlaGNC">          78 :     auto status = codec::encode_all_key(row, schema, &amp;all_key);</span></span>
 <span id="L65"><span class="lineNum">      65</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 39 times"> + </span>]:<span class="tlaGNC">          39 :     if (!status.ok())</span></span>
 <span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return status;</span></span>
 <span id="L67"><span class="lineNum">      67</span>         [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          39 :     return add_all_key(all_key);</span></span>
@@ -215,7 +215,7 @@
 <span id="L144"><span class="lineNum">     144</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 : absl::StatusOr&lt;bool&gt; Reader::may_contain(const types::InternalRow&amp; row,</span></span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :                                          types::InternalSchema::ConstRef schema) const {</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             :     std::string all_key;</span>
-<span id="L147"><span class="lineNum">     147</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto status = codec::encode_all_key(row, *schema, &amp;all_key);</span></span>
+<span id="L147"><span class="lineNum">     147</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">           2 :     auto status = codec::encode_all_key(row, schema, &amp;all_key);</span></span>
 <span id="L148"><span class="lineNum">     148</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (!status.ok())</span></span>
 <span id="L149"><span class="lineNum">     149</span>                 :             :         return status;</span>
 <span id="L150"><span class="lineNum">     150</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     return may_contain_all_key(all_key);</span></span>

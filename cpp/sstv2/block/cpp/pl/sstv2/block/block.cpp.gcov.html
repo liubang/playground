@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-07 18:16:26</td>
+            <td class="headerValue">2026-06-07 21:28:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">92.9&nbsp;%</td>
@@ -684,7 +684,7 @@
 <span id="L603"><span class="lineNum">     603</span>         [<span class="tlaGBC" title="Branch 0 was taken 55 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          55 :     reader.data_table_.assign(data_table);</span></span>
 <span id="L604"><span class="lineNum">     604</span>         [<span class="tlaGBC" title="Branch 0 was taken 55 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          55 :     reader.rows_.reserve(static_cast&lt;size_t&gt;(h.row_count));</span></span>
 <span id="L605"><span class="lineNum">     605</span>         [<span class="tlaGBC" title="Branch 0 was taken 94 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 55 times"> + </span>]:<span class="tlaGNC">         149 :     for (uint64_t i = 0; i &lt; h.row_count; ++i) {</span></span>
-<span id="L606"><span class="lineNum">     606</span>         [<span class="tlaGBC" title="Branch 0 was taken 94 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         188 :         reader.rows_.push_back(types::InternalRow::make(*schema));</span></span>
+<span id="L606"><span class="lineNum">     606</span>         [<span class="tlaGBC" title="Branch 0 was taken 94 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         188 :         reader.rows_.push_back(types::InternalRow::make(schema));</span></span>
 <span id="L607"><span class="lineNum">     607</span>                 :             :     }</span>
 <span id="L608"><span class="lineNum">     608</span>                 :             : </span>
 <span id="L609"><span class="lineNum">     609</span>         [<span class="tlaGBC" title="Branch 0 was taken 490 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 55 times"> + </span>]:<span class="tlaGNC">         545 :     for (size_t column = 0; column &lt; schema-&gt;column_count(); ++column) {</span></span>
@@ -714,8 +714,8 @@
 <span id="L631"><span class="lineNum">     631</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;embedded value row index out of range&quot;);</span></span>
 <span id="L632"><span class="lineNum">     632</span>                 :             :     }</span>
 <span id="L633"><span class="lineNum">     633</span>                 :             :     const auto&amp; row = rows_[row_index];</span>
-<span id="L634"><span class="lineNum">     634</span>                 :             :     const uint64_t offset = row.offset(*schema);</span>
-<span id="L635"><span class="lineNum">     635</span>                 :             :     const uint64_t length = row.length(*schema);</span>
+<span id="L634"><span class="lineNum">     634</span>                 :             :     const uint64_t offset = row.offset(schema);</span>
+<span id="L635"><span class="lineNum">     635</span>                 :             :     const uint64_t length = row.length(schema);</span>
 <span id="L636"><span class="lineNum">     636</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (offset &lt; Header::kSize) {</span></span>
 <span id="L637"><span class="lineNum">     637</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;embedded value offset is before block body&quot;);</span></span>
 <span id="L638"><span class="lineNum">     638</span>                 :             :     }</span>
