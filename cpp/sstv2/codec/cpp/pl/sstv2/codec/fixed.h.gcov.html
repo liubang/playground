@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">2</td>
-            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntryLo">63.6&nbsp;%</td>
+            <td class="headerCovTableEntry">11</td>
+            <td class="headerCovTableEntry">7</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-05 22:16:50</td>
+            <td class="headerValue">2026-06-07 09:05:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryHi">-</td>
-            <td class="headerCovTableEntry">0</td>
-            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntryLo">62.5&nbsp;%</td>
+            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntry">5</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -97,30 +97,40 @@
 <span id="L26"><span class="lineNum">      26</span>                 :             : namespace pl::sstv2::codec {</span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : inline void append_fixed8(std::string* dst, uint8_t value) {</span>
-<span id="L29"><span class="lineNum">      29</span>                 :             :     dst-&gt;push_back(static_cast&lt;char&gt;(value));</span>
-<span id="L30"><span class="lineNum">      30</span>                 :             : }</span>
+<span id="L29"><span class="lineNum">      29</span>         [<span class="tlaGBC" title="Branch 0 was taken 24 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         290 :     dst-&gt;push_back(static_cast&lt;char&gt;(value));</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">          24 : }</span></span>
 <span id="L31"><span class="lineNum">      31</span>                 :             : </span>
-<span id="L32"><span class="lineNum">      32</span>                 :             : inline void append_fixed32(std::string* dst, uint32_t value) {</span>
-<span id="L33"><span class="lineNum">      33</span>                 :             :     uint8_t buf[4];</span>
-<span id="L34"><span class="lineNum">      34</span>                 :             :     encode_fixed32(buf, value);</span>
-<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC tlaBgGNC">          12 :     dst-&gt;append(reinterpret_cast&lt;const char*&gt;(buf), sizeof(buf));</span></span>
-<span id="L36"><span class="lineNum">      36</span>                 :             : }</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : inline void append_fixed16(std::string* dst, uint16_t value) {</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :     uint8_t buf[2];</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :     encode_fixed16(buf, value);</span>
+<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     dst-&gt;append(reinterpret_cast&lt;const char*&gt;(buf), sizeof(buf));</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaUNC">           0 : }</span></span>
 <span id="L37"><span class="lineNum">      37</span>                 :             : </span>
-<span id="L38"><span class="lineNum">      38</span>                 :             : inline void append_fixed64(std::string* dst, uint64_t value) {</span>
-<span id="L39"><span class="lineNum">      39</span>                 :             :     uint8_t buf[8];</span>
-<span id="L40"><span class="lineNum">      40</span>                 :             :     encode_fixed64(buf, value);</span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          12 :     dst-&gt;append(reinterpret_cast&lt;const char*&gt;(buf), sizeof(buf));</span></span>
-<span id="L42"><span class="lineNum">      42</span>                 :             : }</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : inline void append_fixed32(std::string* dst, uint32_t value) {</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :     uint8_t buf[4];</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :     encode_fixed32(buf, value);</span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC tlaBgGNC">         262 :     dst-&gt;append(reinterpret_cast&lt;const char*&gt;(buf), sizeof(buf));</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : </span>
-<span id="L44"><span class="lineNum">      44</span>                 :             : [[nodiscard]] inline uint32_t read_fixed32(std::string_view input, size_t offset) {</span>
-<span id="L45"><span class="lineNum">      45</span>                 :             :     return decode_fixed32(reinterpret_cast&lt;const uint8_t*&gt;(input.data() + offset));</span>
-<span id="L46"><span class="lineNum">      46</span>                 :             : }</span>
-<span id="L47"><span class="lineNum">      47</span>                 :             : </span>
-<span id="L48"><span class="lineNum">      48</span>                 :             : [[nodiscard]] inline uint64_t read_fixed64(std::string_view input, size_t offset) {</span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     return decode_fixed64(reinterpret_cast&lt;const uint8_t*&gt;(input.data() + offset));</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             : }</span>
-<span id="L51"><span class="lineNum">      51</span>                 :             : </span>
-<span id="L52"><span class="lineNum">      52</span>                 :             : } // namespace pl::sstv2::codec</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : inline void append_fixed64(std::string* dst, uint64_t value) {</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :     uint8_t buf[8];</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :     encode_fixed64(buf, value);</span>
+<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC tlaBgGNC">         513 :     dst-&gt;append(reinterpret_cast&lt;const char*&gt;(buf), sizeof(buf));</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">         251 : }</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : </span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : [[nodiscard]] inline uint32_t read_fixed32(std::string_view input, size_t offset) {</span>
+<span id="L51"><span class="lineNum">      51</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 6 times"> + </span>]:<span class="tlaGNC">           9 :     return decode_fixed32(reinterpret_cast&lt;const uint8_t*&gt;(input.data() + offset));</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : }</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : </span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : [[nodiscard]] inline uint16_t read_fixed16(std::string_view input, size_t offset) {</span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     return decode_fixed16(reinterpret_cast&lt;const uint8_t*&gt;(input.data() + offset));</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : }</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : </span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : [[nodiscard]] inline uint64_t read_fixed64(std::string_view input, size_t offset) {</span>
+<span id="L59"><span class="lineNum">      59</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         177 :     return decode_fixed64(reinterpret_cast&lt;const uint8_t*&gt;(input.data() + offset));</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :             : }</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : </span>
+<span id="L62"><span class="lineNum">      62</span>                 :             : } // namespace pl::sstv2::codec</span>
         </pre>
               </td>
             </tr>

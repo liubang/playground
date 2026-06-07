@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-05 22:16:50</td>
+            <td class="headerValue">2026-06-07 09:05:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
@@ -184,7 +184,7 @@
 <span id="L113"><span class="lineNum">     113</span>                 :             : // Types valid for use in a user-defined row key schema.</span>
 <span id="L114"><span class="lineNum">     114</span>                 :             : constexpr bool is_key_compatible(DataType dt) {</span>
 <span id="L115"><span class="lineNum">     115</span>                 :             :     // None and private types cannot be key columns.</span>
-<span id="L116"><span class="lineNum">     116</span>   [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 22 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          23 :     return dt != DataType::kNone &amp;&amp; dt != DataType::kDataBlock &amp;&amp; dt != DataType::kIndexBlock;</span></span>
+<span id="L116"><span class="lineNum">     116</span>   [<span class="tlaGBC" title="Branch 0 was taken 55 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 55 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          56 :     return dt != DataType::kNone &amp;&amp; dt != DataType::kDataBlock &amp;&amp; dt != DataType::kIndexBlock;</span></span>
 <span id="L117"><span class="lineNum">     117</span>                 :             : }</span>
 <span id="L118"><span class="lineNum">     118</span>                 :             : </span>
 <span id="L119"><span class="lineNum">     119</span>                 :             : // Private types used only in index block entries.</span>
