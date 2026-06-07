@@ -39,25 +39,25 @@ Schema::ConstRef make_schema() {
     return std::make_shared<const Schema>(std::move(*schema));
 }
 
-InternalRow make_row(const InternalSchema& schema, std::string key, uint64_t version) {
+InternalRow make_row(InternalSchema::ConstRef schema, std::string key, uint64_t version) {
     auto row = InternalRow::make(schema);
     row.columns[0] = Value::make<DataType::kString>(std::move(key));
-    row.columns[schema.version_index()] =
+    row.columns[schema->version_index()] =
         Value::make<DataType::kVersion>(Version{.major = version, .minor = 0});
-    row.columns[schema.op_type_index()] =
+    row.columns[schema->op_type_index()] =
         Value::make<DataType::kUint8>(static_cast<uint8_t>(OpType::kPut));
-    row.columns[schema.flag_index()] = Value::make<DataType::kUint64>(uint64_t{0});
-    row.columns[schema.filename_index()] = Value::make<DataType::kString>("@1");
-    row.columns[schema.offset_index()] = Value::make<DataType::kUint64>(uint64_t{0});
-    row.columns[schema.length_index()] = Value::make<DataType::kUint64>(uint64_t{0});
-    row.columns[schema.checksum_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema->flag_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema->filename_index()] = Value::make<DataType::kString>("@1");
+    row.columns[schema->offset_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema->length_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema->checksum_index()] = Value::make<DataType::kUint64>(uint64_t{0});
     return row;
 }
 
 TEST(BloomTest, RoundTripMayContainInsertedRows) {
     auto schema = InternalSchema::make(make_schema());
     Builder builder(10);
-    const auto row = make_row(*schema, "alpha", 9);
+    const auto row = make_row(schema, "alpha", 9);
     ASSERT_TRUE(builder.add(row, schema).ok());
 
     const std::string section = builder.finish();
