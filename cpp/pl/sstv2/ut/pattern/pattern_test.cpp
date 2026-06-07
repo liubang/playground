@@ -14,15 +14,14 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/sstv2/pattern/compound.h"
-#include "cpp/pl/sstv2/pattern/raw.h"
+#include <cstring>
+#include <gtest/gtest.h>
+#include <limits>
 
 #include "cpp/pl/sstv2/codec/endian.h"
-
-#include <gtest/gtest.h>
-
-#include <cstring>
-#include <limits>
+#include "cpp/pl/sstv2/codec/varint.h"
+#include "cpp/pl/sstv2/pattern/compound.h"
+#include "cpp/pl/sstv2/pattern/raw.h"
 
 namespace pl::sstv2::pattern {
 namespace {
@@ -247,6 +246,41 @@ TEST(StringRefEncoderTest, RoundTrip) {
 
     EXPECT_EQ(dec.offset(2), 150u);
     EXPECT_EQ(dec.length(2), 200u);
+}
+
+TEST(StringRefEncoderTest, WritesCompoundTypeAndOffsetMetadata) {
+    StringRefEncoder enc;
+    enc.add(0, 100);
+    enc.add(100, 50);
+
+    auto result = enc.finish();
+    ASSERT_GE(result.data.size(), 6u);
+    EXPECT_EQ(static_cast<uint8_t>(result.data[0]), static_cast<uint8_t>(PatternId::kCompound));
+    EXPECT_EQ(static_cast<uint8_t>(result.data[1]), 2u);
+
+    size_t pos = 2;
+    EXPECT_EQ(static_cast<uint8_t>(result.data[pos++]), static_cast<uint8_t>(DataType::kUint64));
+    uint64_t first_offset = 0;
+    size_t consumed =
+        codec::decode_varint(reinterpret_cast<const uint8_t*>(result.data.data() + pos),
+                             result.data.size() - pos,
+                             &first_offset);
+    ASSERT_NE(consumed, 0u);
+    pos += consumed;
+    EXPECT_EQ(first_offset, 0u);
+
+    EXPECT_EQ(static_cast<uint8_t>(result.data[pos++]), static_cast<uint8_t>(DataType::kUint64));
+    uint64_t second_offset = 0;
+    consumed = codec::decode_varint(reinterpret_cast<const uint8_t*>(result.data.data() + pos),
+                                    result.data.size() - pos,
+                                    &second_offset);
+    ASSERT_NE(consumed, 0u);
+    EXPECT_GT(second_offset, first_offset);
+
+    std::string corrupted = result.data;
+    corrupted[2] = static_cast<char>(static_cast<uint8_t>(DataType::kString));
+    StringRefDecoder dec;
+    EXPECT_FALSE(dec.parse(corrupted));
 }
 
 TEST(StringRefEncoderTest, EmptyEncoder) {

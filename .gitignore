@@ -15,3 +15,5 @@
 
 # Maven build output
 **/target/
+
+.codegraph/
