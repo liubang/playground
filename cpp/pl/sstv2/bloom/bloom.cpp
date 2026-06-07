@@ -19,11 +19,11 @@
 
 #include <algorithm>
 #include <cmath>
-#include <crc32c/crc32c.h>
 
 #include "absl/hash/hash.h"
 #include "absl/status/status.h"
 #include "cpp/pl/bloom/bloom.h"
+#include "cpp/pl/sstv2/codec/checksum.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/value_comparable.h"
 
@@ -53,10 +53,6 @@ Header decode_header(std::string_view input) {
     h.row_count = codec::read_fixed64(input, 20);
     h.checksum = codec::read_fixed64(input, 28);
     return h;
-}
-
-uint64_t checksum(std::string_view section) {
-    return static_cast<uint64_t>(::crc32c::Crc32c(section));
 }
 
 } // namespace
@@ -97,7 +93,7 @@ std::string Builder::finish() const {
     std::string section;
     encode_header(h, &section);
     section.append(bits);
-    h.checksum = checksum(section);
+    h.checksum = codec::crc32c_u64(section);
 
     section.clear();
     encode_header(h, &section);
@@ -126,7 +122,7 @@ absl::StatusOr<Reader> Reader::open(std::string_view section) {
     std::string checksum_input;
     encode_header(zero, &checksum_input);
     checksum_input.append(section.substr(Header::kSize));
-    if (checksum(checksum_input) != h.checksum) {
+    if (codec::crc32c_u64(checksum_input) != h.checksum) {
         return absl::InvalidArgumentError("bloom checksum mismatch");
     }
 

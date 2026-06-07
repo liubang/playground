@@ -41,6 +41,7 @@ cc_test(
     copts = TEST_COPTS,
     deps = [
         "//cpp/pl/sstv2/codec:comparable",
+        "//cpp/pl/sstv2/codec:value_comparable",
         "@googletest//:gtest_main",
     ],
 )
@@ -119,6 +120,50 @@ cc_test(
     deps = [
         "//cpp/pl/sstv2/bloom",
         "//cpp/pl/sstv2/types:internal_row",
+        "//cpp/pl/sstv2/types:op_type",
+        "//cpp/pl/sstv2/types:schema",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "index_tree_test",
+    srcs = ["ut/index/index_tree_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/block",
+        "//cpp/pl/sstv2/codec:fixed",
+        "//cpp/pl/sstv2/codec:value_comparable",
+        "//cpp/pl/sstv2/index",
+        "//cpp/pl/sstv2/types:op_type",
+        "//cpp/pl/sstv2/types:schema",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "format_test",
+    srcs = ["ut/format/format_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/format:metadata",
+        "//cpp/pl/sstv2/format:section",
+        "//cpp/pl/sstv2/format:tail",
+        "//cpp/pl/sstv2/types:schema",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "sstable_test",
+    srcs = ["ut/file/sstable_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/block",
+        "//cpp/pl/sstv2/codec:fixed",
+        "//cpp/pl/sstv2/file:sstable",
+        "//cpp/pl/sstv2/format:section",
+        "//cpp/pl/sstv2/format:tail",
         "//cpp/pl/sstv2/types:op_type",
         "//cpp/pl/sstv2/types:schema",
         "@googletest//:gtest_main",
