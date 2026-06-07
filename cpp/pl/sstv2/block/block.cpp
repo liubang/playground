@@ -603,7 +603,7 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
     reader.data_table_.assign(data_table);
     reader.rows_.reserve(static_cast<size_t>(h.row_count));
     for (uint64_t i = 0; i < h.row_count; ++i) {
-        reader.rows_.push_back(types::InternalRow::make(*schema));
+        reader.rows_.push_back(types::InternalRow::make(schema));
     }
 
     for (size_t column = 0; column < schema->column_count(); ++column) {
@@ -631,8 +631,8 @@ absl::StatusOr<std::string_view> BlockReader::embedded_value(
         return absl::InvalidArgumentError("embedded value row index out of range");
     }
     const auto& row = rows_[row_index];
-    const uint64_t offset = row.offset(*schema);
-    const uint64_t length = row.length(*schema);
+    const uint64_t offset = row.offset(schema);
+    const uint64_t length = row.length(schema);
     if (offset < Header::kSize) {
         return absl::InvalidArgumentError("embedded value offset is before block body");
     }

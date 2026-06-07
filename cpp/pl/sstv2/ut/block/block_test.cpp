@@ -45,35 +45,34 @@ Schema::ConstRef make_schema() {
     return std::make_shared<const Schema>(std::move(*schema));
 }
 
-InternalRow make_row(const InternalSchema& schema,
+InternalRow make_row(InternalSchema::ConstRef schema,
                      std::string user,
                      uint32_t bucket,
                      Version version,
-                     std::string value) {
+                     std::string_view value) {
     auto row = InternalRow::make(schema);
     row.columns[0] = Value::make<DataType::kString>(std::move(user));
     row.columns[1] = Value::make<DataType::kUint32>(bucket);
-    row.columns[schema.version_index()] = Value::make<DataType::kVersion>(version);
-    row.columns[schema.op_type_index()] =
+    row.columns[schema->version_index()] = Value::make<DataType::kVersion>(version);
+    row.columns[schema->op_type_index()] =
         Value::make<DataType::kUint8>(static_cast<uint8_t>(OpType::kPut));
-    row.columns[schema.flag_index()] =
+    row.columns[schema->flag_index()] =
         Value::make<DataType::kUint64>(ColumnFlag::for_value(DataType::kString, true).raw());
-    row.columns[schema.filename_index()] = Value::make<DataType::kString>("@1");
-    row.columns[schema.offset_index()] = Value::make<DataType::kUint64>(uint64_t{0});
-    row.columns[schema.length_index()] = Value::make<DataType::kUint64>(value.size());
-    row.columns[schema.checksum_index()] = Value::make<DataType::kUint64>(uint64_t{123});
+    row.columns[schema->filename_index()] = Value::make<DataType::kString>("@1");
+    row.columns[schema->offset_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema->length_index()] = Value::make<DataType::kUint64>(value.size());
+    row.columns[schema->checksum_index()] = Value::make<DataType::kUint64>(uint64_t{123});
     return row;
 }
 
 TEST(BlockTest, DataBlockRoundTripNoCompression) {
     auto schema_ptr = InternalSchema::make(make_schema());
-    const InternalSchema& schema = *schema_ptr;
     BlockBuilder builder(schema_ptr, Options{.kind = Kind::kData});
 
     ASSERT_TRUE(
-        builder.add(make_row(schema, "alice", 7, Version{.major = 10, .minor = 1}, "v1")).ok());
+        builder.add(make_row(schema_ptr, "alice", 7, Version{.major = 10, .minor = 1}, "v1")).ok());
     ASSERT_TRUE(
-        builder.add(make_row(schema, "bob", 9, Version{.major = 8, .minor = 0}, "v2")).ok());
+        builder.add(make_row(schema_ptr, "bob", 9, Version{.major = 8, .minor = 0}, "v2")).ok());
 
     auto encoded = builder.finish();
     ASSERT_TRUE(encoded.ok()) << encoded.status();
@@ -83,8 +82,8 @@ TEST(BlockTest, DataBlockRoundTripNoCompression) {
     ASSERT_EQ(reader->rows().size(), 2u);
     EXPECT_EQ(reader->rows()[0].columns[0].as_string(), "alice");
     EXPECT_EQ(reader->rows()[0].columns[1].as_uint32(), 7u);
-    EXPECT_EQ(reader->rows()[0].version(schema).major, 10u);
-    EXPECT_EQ(reader->rows()[0].version(schema).minor, 1u);
+    EXPECT_EQ(reader->rows()[0].version(schema_ptr).major, 10u);
+    EXPECT_EQ(reader->rows()[0].version(schema_ptr).minor, 1u);
     EXPECT_EQ(reader->rows()[1].columns[0].as_string(), "bob");
     EXPECT_EQ(reader->header().magic, Kind::kData);
     EXPECT_EQ(reader->header().row_count, 2u);
@@ -92,14 +91,13 @@ TEST(BlockTest, DataBlockRoundTripNoCompression) {
 
 TEST(BlockTest, DataBlockRoundTripSnappy) {
     auto schema_ptr = InternalSchema::make(make_schema());
-    const InternalSchema& schema = *schema_ptr;
     Options options;
     options.kind = Kind::kData;
     options.compression.codec = compress::Codec::kSnappy;
     BlockBuilder builder(schema_ptr, options);
 
     ASSERT_TRUE(
-        builder.add(make_row(schema, "carol", 3, Version{.major = 2, .minor = 5}, "v")).ok());
+        builder.add(make_row(schema_ptr, "carol", 3, Version{.major = 2, .minor = 5}, "v")).ok());
 
     auto encoded = builder.finish();
     ASSERT_TRUE(encoded.ok()) << encoded.status();
@@ -116,10 +114,9 @@ TEST(BlockTest, ArrayAndMapColumnsRoundTrip) {
                            .build();
     ASSERT_TRUE(user_schema.has_value());
     auto schema_ptr = InternalSchema::make(std::make_shared<const Schema>(std::move(*user_schema)));
-    const InternalSchema& schema = *schema_ptr;
     BlockBuilder builder(schema_ptr, Options{.kind = Kind::kData});
 
-    InternalRow row = InternalRow::make(schema);
+    InternalRow row = InternalRow::make(schema_ptr);
     row.columns[0] = Value::make_array({
         Value::make<DataType::kString>("tenant"),
         Value::make<DataType::kUint64>(uint64_t{7}),
@@ -128,15 +125,15 @@ TEST(BlockTest, ArrayAndMapColumnsRoundTrip) {
         {Value::make<DataType::kString>("b"), Value::make<DataType::kUint64>(uint64_t{2})},
         {Value::make<DataType::kString>("a"), Value::make<DataType::kUint64>(uint64_t{1})},
     });
-    row.columns[schema.version_index()] = Value::make<DataType::kVersion>(Version{.major = 1});
-    row.columns[schema.op_type_index()] =
+    row.columns[schema_ptr->version_index()] = Value::make<DataType::kVersion>(Version{.major = 1});
+    row.columns[schema_ptr->op_type_index()] =
         Value::make<DataType::kUint8>(static_cast<uint8_t>(OpType::kPut));
-    row.columns[schema.flag_index()] =
+    row.columns[schema_ptr->flag_index()] =
         Value::make<DataType::kUint64>(ColumnFlag::for_value(DataType::kString, true).raw());
-    row.columns[schema.filename_index()] = Value::make<DataType::kString>("@1");
-    row.columns[schema.offset_index()] = Value::make<DataType::kUint64>(uint64_t{0});
-    row.columns[schema.length_index()] = Value::make<DataType::kUint64>(uint64_t{1});
-    row.columns[schema.checksum_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema_ptr->filename_index()] = Value::make<DataType::kString>("@1");
+    row.columns[schema_ptr->offset_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema_ptr->length_index()] = Value::make<DataType::kUint64>(uint64_t{1});
+    row.columns[schema_ptr->checksum_index()] = Value::make<DataType::kUint64>(uint64_t{0});
 
     ASSERT_TRUE(builder.add(std::move(row), "x").ok());
     auto encoded = builder.finish();
@@ -155,16 +152,17 @@ TEST(BlockTest, ArrayAndMapColumnsRoundTrip) {
 
 TEST(BlockTest, EnforcesConfiguredRowLimit) {
     auto schema_ptr = InternalSchema::make(make_schema());
-    const InternalSchema& schema = *schema_ptr;
 
     Options row_options;
     row_options.kind = Kind::kData;
     row_options.max_row_count = 1;
     BlockBuilder row_limited(schema_ptr, row_options);
     ASSERT_TRUE(
-        row_limited.add(make_row(schema, "alice", 7, Version{.major = 10, .minor = 1}, "v1")).ok());
+        row_limited.add(make_row(schema_ptr, "alice", 7, Version{.major = 10, .minor = 1}, "v1"))
+            .ok());
     EXPECT_FALSE(
-        row_limited.add(make_row(schema, "bob", 9, Version{.major = 8, .minor = 0}, "v2")).ok());
+        row_limited.add(make_row(schema_ptr, "bob", 9, Version{.major = 8, .minor = 0}, "v2"))
+            .ok());
 
     // Single-row blocks are allowed to exceed the hard size limit (PDF §6.1).
     Options size_options;
@@ -172,7 +170,8 @@ TEST(BlockTest, EnforcesConfiguredRowLimit) {
     size_options.max_block_size_hard_limit = Header::kSize;
     BlockBuilder size_limited(schema_ptr, size_options);
     ASSERT_TRUE(
-        size_limited.add(make_row(schema, "carol", 3, Version{.major = 2, .minor = 5}, "v")).ok());
+        size_limited.add(make_row(schema_ptr, "carol", 3, Version{.major = 2, .minor = 5}, "v"))
+            .ok());
     EXPECT_TRUE(size_limited.finish().ok());
 }
 
