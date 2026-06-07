@@ -50,11 +50,14 @@ struct Header {
 struct Options {
     Kind kind = Kind::kData;
     compress::Options compression;
+    uint64_t max_block_size_soft_limit = 64 * 1024;
+    uint64_t max_block_size_hard_limit = 128 * 1024;
+    uint64_t max_row_count = 4096;
 };
 
 class BlockBuilder {
 public:
-    BlockBuilder(types::InternalSchema::ConstPtr schema, Options options);
+    BlockBuilder(types::InternalSchema::ConstRef schema, Options options);
 
     [[nodiscard]] absl::Status add(types::InternalRow row);
     [[nodiscard]] absl::Status add(types::InternalRow row, std::string embedded_value);
@@ -63,7 +66,7 @@ public:
     [[nodiscard]] size_t row_count() const noexcept { return rows_.size(); }
 
 private:
-    types::InternalSchema::ConstPtr schema_;
+    types::InternalSchema::ConstRef schema_;
     Options options_;
     std::vector<types::InternalRow> rows_;
     std::vector<std::string> embedded_values_;
@@ -72,13 +75,13 @@ private:
 class BlockReader {
 public:
     [[nodiscard]] static absl::StatusOr<BlockReader> open(std::string_view block,
-                                                          const types::InternalSchema& schema,
+                                                          types::InternalSchema::ConstRef schema,
                                                           Kind expected);
 
     [[nodiscard]] const Header& header() const noexcept { return header_; }
     [[nodiscard]] const std::vector<types::InternalRow>& rows() const noexcept { return rows_; }
     [[nodiscard]] absl::StatusOr<std::string_view> embedded_value(
-        size_t row_index, const types::InternalSchema& schema) const;
+        size_t row_index, types::InternalSchema::ConstRef schema) const;
 
 private:
     Header header_;

@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -66,6 +67,9 @@ struct ColumnDef {
 
 class Schema {
 public:
+    using Ref = std::shared_ptr<Schema>;
+    using ConstRef = std::shared_ptr<const Schema>;
+
     // Default: empty schema (zero row key columns).
     Schema() = default;
 
