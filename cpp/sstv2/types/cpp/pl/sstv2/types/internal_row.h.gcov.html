@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-07 09:05:46</td>
+            <td class="headerValue">2026-06-07 18:16:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryMed">75.0&nbsp;%</td>
-            <td class="headerCovTableEntry">12</td>
-            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntryMed">78.6&nbsp;%</td>
+            <td class="headerCovTableEntry">14</td>
+            <td class="headerCovTableEntry">11</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -141,9 +141,10 @@
 <span id="L70"><span class="lineNum">      70</span>                 :             : // &quot;key side&quot; metadata. Value bytes flow through a separate channel.</span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : // =============================================================================</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : </span>
-<span id="L73"><span class="lineNum">      73</span>   [<span class="tlaGBC" title="Branch 0 was taken 104 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 26 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         782 : struct InternalRow {</span></span>
-<span id="L74"><span class="lineNum">      74</span>                 :             :     using Ptr = std::shared_ptr&lt;InternalRow&gt;;</span>
-<span id="L75"><span class="lineNum">      75</span>                 :             :     using ConstPtr = std::shared_ptr&lt;const InternalRow&gt;;</span>
+<span id="L73"><span class="lineNum">      73</span>   [<span class="tlaGBC" title="Branch 0 was taken 176 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 20 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 26 times"> + </span> :<span class="tlaGNC tlaBgGNC">        1173 : struct InternalRow {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 67 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L74"><span class="lineNum">      74</span>                 :             :     using Ref = std::shared_ptr&lt;InternalRow&gt;;</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :     using ConstRef = std::shared_ptr&lt;const InternalRow&gt;;</span>
 <span id="L76"><span class="lineNum">      76</span>                 :             : </span>
 <span id="L77"><span class="lineNum">      77</span>                 :             :     // All M+7 column values, indexed by InternalSchema column indices.</span>
 <span id="L78"><span class="lineNum">      78</span>                 :             :     std::vector&lt;Value&gt; columns;</span>
@@ -205,10 +206,10 @@
 <span id="L134"><span class="lineNum">     134</span>                 :             :     // Construction helper.</span>
 <span id="L135"><span class="lineNum">     135</span>                 :             :     // =========================================================================</span>
 <span id="L136"><span class="lineNum">     136</span>                 :             : </span>
-<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC tlaBgGNC">         209 :     static InternalRow make(const InternalSchema&amp; s) {</span></span>
-<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">         209 :         InternalRow row;</span></span>
-<span id="L139"><span class="lineNum">     139</span>         [<span class="tlaGBC" title="Branch 0 was taken 209 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         209 :         row.columns.resize(s.column_count());</span></span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">         209 :         return row;</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC tlaBgGNC">         229 :     static InternalRow make(const InternalSchema&amp; s) {</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">         229 :         InternalRow row;</span></span>
+<span id="L139"><span class="lineNum">     139</span>         [<span class="tlaGBC" title="Branch 0 was taken 229 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         229 :         row.columns.resize(s.column_count());</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">         229 :         return row;</span></span>
 <span id="L141"><span class="lineNum">     141</span>                 :             :     }</span>
 <span id="L142"><span class="lineNum">     142</span>                 :             : };</span>
 <span id="L143"><span class="lineNum">     143</span>                 :             : </span>

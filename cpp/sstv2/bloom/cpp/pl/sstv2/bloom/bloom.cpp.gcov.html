@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-07 09:05:46</td>
+            <td class="headerValue">2026-06-07 18:16:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -103,17 +103,17 @@
 <span id="L32"><span class="lineNum">      32</span>                 :             : namespace {</span>
 <span id="L33"><span class="lineNum">      33</span>                 :             : </span>
 <span id="L34"><span class="lineNum">      34</span>                 :             : uint32_t hash_key(std::string_view key) {</span>
-<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC tlaBgGNC">          40 :     return static_cast&lt;uint32_t&gt;(absl::Hash&lt;std::string_view&gt;{}(key));</span></span>
+<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC tlaBgGNC">          45 :     return static_cast&lt;uint32_t&gt;(absl::Hash&lt;std::string_view&gt;{}(key));</span></span>
 <span id="L36"><span class="lineNum">      36</span>                 :             : }</span>
 <span id="L37"><span class="lineNum">      37</span>                 :             : </span>
-<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">          22 : void encode_header(const Header&amp; header, std::string* dst) {</span></span>
-<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">          22 :     codec::append_fixed32(dst, header.magic);</span></span>
-<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">          22 :     codec::append_fixed32(dst, header.version);</span></span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          22 :     codec::append_fixed32(dst, header.hash_count);</span></span>
-<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          22 :     codec::append_fixed64(dst, header.bit_count);</span></span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          22 :     codec::append_fixed64(dst, header.row_count);</span></span>
-<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">          22 :     codec::append_fixed64(dst, header.checksum);</span></span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">          22 : }</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">          28 : void encode_header(const Header&amp; header, std::string* dst) {</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">          28 :     codec::append_fixed32(dst, header.magic);</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">          28 :     codec::append_fixed32(dst, header.version);</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          28 :     codec::append_fixed32(dst, header.hash_count);</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          28 :     codec::append_fixed64(dst, header.bit_count);</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          28 :     codec::append_fixed64(dst, header.row_count);</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">          28 :     codec::append_fixed64(dst, header.checksum);</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">          28 : }</span></span>
 <span id="L46"><span class="lineNum">      46</span>                 :             : </span>
 <span id="L47"><span class="lineNum">      47</span>                 :             : Header decode_header(std::string_view input) {</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             :     Header h;</span>
@@ -128,48 +128,48 @@
 <span id="L57"><span class="lineNum">      57</span>                 :             : </span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : } // namespace</span>
 <span id="L59"><span class="lineNum">      59</span>                 :             : </span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">           9 : Builder::Builder(int bits_per_key) : bits_per_key_(std::max(1, bits_per_key)) {}</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">          12 : Builder::Builder(int bits_per_key) : bits_per_key_(std::max(1, bits_per_key)) {}</span></span>
 <span id="L61"><span class="lineNum">      61</span>                 :             : </span>
-<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 34 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          34 : absl::Status Builder::add(const types::InternalRow&amp; row, const types::InternalSchema&amp; schema) {</span></span>
+<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          39 : absl::Status Builder::add(const types::InternalRow&amp; row, types::InternalSchema::ConstRef schema) {</span></span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :     std::string all_key;</span>
-<span id="L64"><span class="lineNum">      64</span>         [<span class="tlaGBC" title="Branch 0 was taken 34 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          34 :     auto status = codec::encode_all_key(row, schema, &amp;all_key);</span></span>
-<span id="L65"><span class="lineNum">      65</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 34 times"> + </span>]:<span class="tlaGNC">          34 :     if (!status.ok())</span></span>
+<span id="L64"><span class="lineNum">      64</span>         [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          39 :     auto status = codec::encode_all_key(row, *schema, &amp;all_key);</span></span>
+<span id="L65"><span class="lineNum">      65</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 39 times"> + </span>]:<span class="tlaGNC">          39 :     if (!status.ok())</span></span>
 <span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return status;</span></span>
-<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaGBC" title="Branch 0 was taken 34 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          34 :     return add_all_key(all_key);</span></span>
+<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          39 :     return add_all_key(all_key);</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :             : }</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : </span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          35 : absl::Status Builder::add_all_key(std::string_view all_key) {</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          35 :     hashes_.push_back(hash_key(all_key));</span></span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          35 :     return absl::OkStatus();</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          40 : absl::Status Builder::add_all_key(std::string_view all_key) {</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          40 :     hashes_.push_back(hash_key(all_key));</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          40 :     return absl::OkStatus();</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :             : }</span>
 <span id="L74"><span class="lineNum">      74</span>                 :             : </span>
-<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">           8 : std::string Builder::finish() const {</span></span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">           8 :     const uint64_t min_bits = 64;</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          11 : std::string Builder::finish() const {</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          11 :     const uint64_t min_bits = 64;</span></span>
 <span id="L77"><span class="lineNum">      77</span>                 :             :     const uint64_t bit_count = std::max&lt;uint64_t&gt;(</span>
-<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">           8 :         min_bits, static_cast&lt;uint64_t&gt;(hashes_.size()) * static_cast&lt;uint64_t&gt;(bits_per_key_));</span></span>
-<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">           8 :     const uint64_t byte_count = (bit_count + 7) / 8;</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          11 :         min_bits, static_cast&lt;uint64_t&gt;(hashes_.size()) * static_cast&lt;uint64_t&gt;(bits_per_key_));</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">          11 :     const uint64_t byte_count = (bit_count + 7) / 8;</span></span>
 <span id="L80"><span class="lineNum">      80</span>                 :             :     std::string bits(static_cast&lt;size_t&gt;(byte_count), '\0');</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             : </span>
-<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">           8 :     const int probes = pl::StandardBloomFilter::choose_num_probes(bits_per_key_);</span></span>
-<span id="L83"><span class="lineNum">      83</span>         [<span class="tlaGBC" title="Branch 0 was taken 34 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">          42 :     for (uint32_t h : hashes_) {</span></span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">          34 :         pl::StandardBloomFilter::add_hash(</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">          11 :     const int probes = pl::StandardBloomFilter::choose_num_probes(bits_per_key_);</span></span>
+<span id="L83"><span class="lineNum">      83</span>         [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          50 :     for (uint32_t h : hashes_) {</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">          39 :         pl::StandardBloomFilter::add_hash(</span></span>
 <span id="L85"><span class="lineNum">      85</span>                 :             :             h, static_cast&lt;uint32_t&gt;(byte_count * 8), probes, bits.data());</span>
 <span id="L86"><span class="lineNum">      86</span>                 :             :     }</span>
 <span id="L87"><span class="lineNum">      87</span>                 :             : </span>
-<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">           8 :     Header h;</span></span>
-<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">           8 :     h.hash_count = static_cast&lt;uint32_t&gt;(probes);</span></span>
-<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     h.bit_count = byte_count * 8;</span></span>
-<span id="L91"><span class="lineNum">      91</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     h.row_count = hashes_.size();</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">          11 :     Header h;</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">          11 :     h.hash_count = static_cast&lt;uint32_t&gt;(probes);</span></span>
+<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     h.bit_count = byte_count * 8;</span></span>
+<span id="L91"><span class="lineNum">      91</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     h.row_count = hashes_.size();</span></span>
 <span id="L92"><span class="lineNum">      92</span>                 :             : </span>
 <span id="L93"><span class="lineNum">      93</span>                 :             :     std::string section;</span>
-<span id="L94"><span class="lineNum">      94</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     encode_header(h, &amp;section);</span></span>
+<span id="L94"><span class="lineNum">      94</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     encode_header(h, &amp;section);</span></span>
 <span id="L95"><span class="lineNum">      95</span>                 :             :     section.append(bits);</span>
-<span id="L96"><span class="lineNum">      96</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     h.checksum = codec::crc32c_u64(section);</span></span>
+<span id="L96"><span class="lineNum">      96</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     h.checksum = codec::crc32c_u64(section);</span></span>
 <span id="L97"><span class="lineNum">      97</span>                 :             : </span>
 <span id="L98"><span class="lineNum">      98</span>                 :             :     section.clear();</span>
-<span id="L99"><span class="lineNum">      99</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     encode_header(h, &amp;section);</span></span>
+<span id="L99"><span class="lineNum">      99</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     encode_header(h, &amp;section);</span></span>
 <span id="L100"><span class="lineNum">     100</span>                 :             :     section.append(bits);</span>
-<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">           8 :     return section;</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">          11 :     return section;</span></span>
 <span id="L102"><span class="lineNum">     102</span>                 :             : }</span>
 <span id="L103"><span class="lineNum">     103</span>                 :             : </span>
 <span id="L104"><span class="lineNum">     104</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 : absl::StatusOr&lt;Reader&gt; Reader::open(std::string_view section) {</span></span>
@@ -213,9 +213,9 @@
 <span id="L142"><span class="lineNum">     142</span>                 :             : }</span>
 <span id="L143"><span class="lineNum">     143</span>                 :             : </span>
 <span id="L144"><span class="lineNum">     144</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 : absl::StatusOr&lt;bool&gt; Reader::may_contain(const types::InternalRow&amp; row,</span></span>
-<span id="L145"><span class="lineNum">     145</span>                 :             :                                          const types::InternalSchema&amp; schema) const {</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             :                                          types::InternalSchema::ConstRef schema) const {</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             :     std::string all_key;</span>
-<span id="L147"><span class="lineNum">     147</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto status = codec::encode_all_key(row, schema, &amp;all_key);</span></span>
+<span id="L147"><span class="lineNum">     147</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto status = codec::encode_all_key(row, *schema, &amp;all_key);</span></span>
 <span id="L148"><span class="lineNum">     148</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (!status.ok())</span></span>
 <span id="L149"><span class="lineNum">     149</span>                 :             :         return status;</span>
 <span id="L150"><span class="lineNum">     150</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     return may_contain_all_key(all_key);</span></span>
