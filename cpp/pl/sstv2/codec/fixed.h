@@ -29,6 +29,12 @@ inline void append_fixed8(std::string* dst, uint8_t value) {
     dst->push_back(static_cast<char>(value));
 }
 
+inline void append_fixed16(std::string* dst, uint16_t value) {
+    uint8_t buf[2];
+    encode_fixed16(buf, value);
+    dst->append(reinterpret_cast<const char*>(buf), sizeof(buf));
+}
+
 inline void append_fixed32(std::string* dst, uint32_t value) {
     uint8_t buf[4];
     encode_fixed32(buf, value);
@@ -43,6 +49,10 @@ inline void append_fixed64(std::string* dst, uint64_t value) {
 
 [[nodiscard]] inline uint32_t read_fixed32(std::string_view input, size_t offset) {
     return decode_fixed32(reinterpret_cast<const uint8_t*>(input.data() + offset));
+}
+
+[[nodiscard]] inline uint16_t read_fixed16(std::string_view input, size_t offset) {
+    return decode_fixed16(reinterpret_cast<const uint8_t*>(input.data() + offset));
 }
 
 [[nodiscard]] inline uint64_t read_fixed64(std::string_view input, size_t offset) {

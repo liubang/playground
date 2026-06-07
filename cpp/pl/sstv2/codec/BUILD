@@ -37,6 +37,12 @@ cc_library(
 )
 
 cc_library(
+    name = "checksum",
+    hdrs = ["checksum.h"],
+    deps = ["@crc32c"],
+)
+
+cc_library(
     name = "varint",
     srcs = ["varint.cpp"],
     hdrs = ["varint.h"],

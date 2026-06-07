@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "cpp/pl/sstv2/block/block.h"
 #include "cpp/pl/sstv2/types/op_type.h"
@@ -106,6 +107,50 @@ TEST(BlockTest, DataBlockRoundTripSnappy) {
     ASSERT_TRUE(reader.ok()) << reader.status();
     EXPECT_EQ(reader->rows()[0].columns[0].as_string(), "carol");
     EXPECT_EQ(compress::decode_block_flag(reader->header().flags), compress::Codec::kSnappy);
+}
+
+TEST(BlockTest, ArrayAndMapColumnsRoundTrip) {
+    auto user_schema = SchemaBuilder()
+                           .add_column("path", DataType::kArray)
+                           .add_column("attrs", DataType::kMap)
+                           .build();
+    ASSERT_TRUE(user_schema.has_value());
+    auto schema_ptr = InternalSchema::make(std::make_shared<const Schema>(std::move(*user_schema)));
+    const InternalSchema& schema = *schema_ptr;
+    BlockBuilder builder(schema_ptr, Options{.kind = Kind::kData});
+
+    InternalRow row = InternalRow::make(schema);
+    row.columns[0] = Value::make_array({
+        Value::make<DataType::kString>("tenant"),
+        Value::make<DataType::kUint64>(uint64_t{7}),
+    });
+    row.columns[1] = Value::make_map({
+        {Value::make<DataType::kString>("b"), Value::make<DataType::kUint64>(uint64_t{2})},
+        {Value::make<DataType::kString>("a"), Value::make<DataType::kUint64>(uint64_t{1})},
+    });
+    row.columns[schema.version_index()] = Value::make<DataType::kVersion>(Version{.major = 1});
+    row.columns[schema.op_type_index()] =
+        Value::make<DataType::kUint8>(static_cast<uint8_t>(OpType::kPut));
+    row.columns[schema.flag_index()] =
+        Value::make<DataType::kUint64>(ColumnFlag::for_value(DataType::kString, true).raw());
+    row.columns[schema.filename_index()] = Value::make<DataType::kString>("@1");
+    row.columns[schema.offset_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    row.columns[schema.length_index()] = Value::make<DataType::kUint64>(uint64_t{1});
+    row.columns[schema.checksum_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+
+    ASSERT_TRUE(builder.add(std::move(row), "x").ok());
+    auto encoded = builder.finish();
+    ASSERT_TRUE(encoded.ok()) << encoded.status();
+
+    auto reader = BlockReader::open(*encoded, schema, Kind::kData);
+    ASSERT_TRUE(reader.ok()) << reader.status();
+    ASSERT_EQ(reader->rows().size(), 1u);
+    ASSERT_EQ(reader->rows()[0].columns[0].as_array().size(), 2u);
+    EXPECT_EQ(reader->rows()[0].columns[0].as_array()[0].as_string(), "tenant");
+    EXPECT_EQ(reader->rows()[0].columns[0].as_array()[1].as_uint64(), 7u);
+    ASSERT_EQ(reader->rows()[0].columns[1].as_map().size(), 2u);
+    EXPECT_EQ(reader->rows()[0].columns[1].as_map()[0].first.as_string(), "a");
+    EXPECT_EQ(reader->rows()[0].columns[1].as_map()[1].first.as_string(), "b");
 }
 
 } // namespace
