@@ -204,12 +204,12 @@ inline absl::Status encode_value_comparable(const types::Value& value,
 }
 
 inline absl::Status encode_all_key(const types::InternalRow& row,
-                                   const types::InternalSchema& schema,
+                                   types::InternalSchema::ConstRef schema,
                                    std::string* dst) {
     dst->clear();
-    for (size_t i = 0; i < schema.sort_key_column_count(); ++i) {
+    for (size_t i = 0; i < schema->sort_key_column_count(); ++i) {
         auto status = encode_value_comparable(
-            row.columns[i], schema.column_type(i), schema.column_order(i), dst);
+            row.columns[i], schema->column_type(i), schema->column_order(i), dst);
         if (!status.ok())
             return status;
     }

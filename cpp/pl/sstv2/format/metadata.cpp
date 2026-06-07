@@ -206,9 +206,7 @@ SectionMap schema_entries(const types::Schema& schema) {
         kColumnCount,
         Value::make<DataType::kUint64>(user_columns + types::InternalSchema::kSystemColumnCount));
     add_entry(&entries, kRowKeyColumnCount, Value::make<DataType::kUint64>(user_columns));
-    add_entry(&entries,
-              kChecksumKey,
-              Value::make<DataType::kBinary>(std::string{}));
+    add_entry(&entries, kChecksumKey, Value::make<DataType::kBinary>(std::string{}));
     add_entry(&entries, kSplitKey, Value::make<DataType::kUint64>(uint64_t{0}));
     add_entry(&entries, kVersionKey, Value::make<DataType::kUint64>(user_columns));
     add_entry(&entries, kSystemKey, Value::make<DataType::kUint64>(uint64_t{2}));

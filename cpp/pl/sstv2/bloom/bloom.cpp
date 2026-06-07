@@ -61,7 +61,7 @@ Builder::Builder(int bits_per_key) : bits_per_key_(std::max(1, bits_per_key)) {}
 
 absl::Status Builder::add(const types::InternalRow& row, types::InternalSchema::ConstRef schema) {
     std::string all_key;
-    auto status = codec::encode_all_key(row, *schema, &all_key);
+    auto status = codec::encode_all_key(row, schema, &all_key);
     if (!status.ok())
         return status;
     return add_all_key(all_key);
@@ -144,7 +144,7 @@ bool Reader::may_contain_all_key(std::string_view all_key) const {
 absl::StatusOr<bool> Reader::may_contain(const types::InternalRow& row,
                                          types::InternalSchema::ConstRef schema) const {
     std::string all_key;
-    auto status = codec::encode_all_key(row, *schema, &all_key);
+    auto status = codec::encode_all_key(row, schema, &all_key);
     if (!status.ok())
         return status;
     return may_contain_all_key(all_key);
