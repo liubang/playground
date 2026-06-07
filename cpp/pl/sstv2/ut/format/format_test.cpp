@@ -95,6 +95,27 @@ TEST(MetadataTest, StrongSchemaRoundTrip) {
     EXPECT_EQ((*decoded)->column_name(0), "tenant");
     EXPECT_EQ((*decoded)->column_type(0), DataType::kString);
     EXPECT_EQ((*decoded)->column_order(1), SortOrder::kDescending);
+
+    auto section = decode_section(encoded, SectionMagic::kSchema);
+    ASSERT_TRUE(section.ok()) << section.status();
+    const Value* column_count = find_section_value(section->entries, "ColumnCount");
+    const Value* row_key_count = find_section_value(section->entries, "RowKeyColumnCount");
+    const Value* version_key = find_section_value(section->entries, "VersionKey");
+    const Value* system_key = find_section_value(section->entries, "SystemKey");
+    const Value* non_key = find_section_value(section->entries, "NonKey");
+    const Value* checksum_key = find_section_value(section->entries, "ChecksumKey");
+    ASSERT_NE(column_count, nullptr);
+    ASSERT_NE(row_key_count, nullptr);
+    ASSERT_NE(version_key, nullptr);
+    ASSERT_NE(system_key, nullptr);
+    ASSERT_NE(non_key, nullptr);
+    ASSERT_NE(checksum_key, nullptr);
+    EXPECT_EQ(column_count->as_uint64(), 9u);
+    EXPECT_EQ(row_key_count->as_uint64(), 2u);
+    EXPECT_EQ(version_key->as_uint64(), 2u);
+    EXPECT_EQ(system_key->as_uint64(), 2u);
+    EXPECT_EQ(non_key->as_uint64(), 4u);
+    EXPECT_EQ(checksum_key->type(), DataType::kBinary);
 }
 
 TEST(MetadataTest, ConfigurationAndStatisticsRoundTrip) {
@@ -103,11 +124,17 @@ TEST(MetadataTest, ConfigurationAndStatisticsRoundTrip) {
         .max_data_block_size_soft_limit = 4096,
         .max_data_block_size_hard_limit = 8192,
         .max_data_block_row_count = 99,
+        .max_index_block_size_soft_limit = 2048,
+        .max_index_block_size_hard_limit = 4096,
+        .max_index_block_row_count = 17,
     };
     auto decoded_configuration = decode_configuration(encode_configuration(configuration));
     ASSERT_TRUE(decoded_configuration.ok()) << decoded_configuration.status();
     EXPECT_EQ(decoded_configuration->max_embedded_value_size, 128u);
     EXPECT_EQ(decoded_configuration->max_data_block_row_count, 99u);
+    EXPECT_EQ(decoded_configuration->max_index_block_size_soft_limit, 2048u);
+    EXPECT_EQ(decoded_configuration->max_index_block_size_hard_limit, 4096u);
+    EXPECT_EQ(decoded_configuration->max_index_block_row_count, 17u);
 
     const Statistics statistics{
         .total_row_count = 5,

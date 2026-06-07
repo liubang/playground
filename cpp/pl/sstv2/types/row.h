@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <cstdint>
+#include <memory>
 #include <vector>
 
 #include "cpp/pl/sstv2/types/op_type.h"
@@ -41,6 +41,9 @@ namespace pl::sstv2::types {
 // =============================================================================
 
 struct Row {
+    using Ref = std::shared_ptr<Row>;
+    using ConstRef = std::shared_ptr<const Row>;
+
     std::vector<Value> key_columns; // RowKey[0..M-1], must match Schema.
     Version version;                // Version (sorted descending internally).
     OpType op_type = OpType::kPut;

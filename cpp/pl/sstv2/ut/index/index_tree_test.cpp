@@ -41,7 +41,7 @@ using types::SchemaBuilder;
 using types::Value;
 using types::Version;
 
-std::shared_ptr<const Schema> make_schema() {
+Schema::ConstRef make_schema() {
     auto schema = SchemaBuilder().add_column("id", DataType::kUint64).build();
     EXPECT_TRUE(schema.has_value());
     return std::make_shared<const Schema>(std::move(*schema));
@@ -78,7 +78,7 @@ uint64_t block_length(std::string_view key_file, uint64_t offset) {
 TEST(IndexTreeTest, BuildsPostOrderTreeAndRoutesToDataBlock) {
     auto schema = InternalSchema::make(make_schema());
     std::string key_file;
-    TreeBuilder builder(schema, 2, {}, &key_file);
+    TreeBuilder builder(schema, 2, 4096, 8192, {}, &key_file);
 
     for (uint64_t i = 0; i < 4; ++i) {
         ASSERT_TRUE(builder.prepare_for_data_block().ok());
@@ -100,13 +100,13 @@ TEST(IndexTreeTest, BuildsPostOrderTreeAndRoutesToDataBlock) {
               block::Kind::kRootIndex);
 
     std::vector<BlockRef> refs;
-    ASSERT_TRUE(TreeReader::scan_data_blocks(key_file, *schema, result->root, &refs).ok());
+    ASSERT_TRUE(TreeReader::scan_data_blocks(key_file, schema, result->root, &refs).ok());
     ASSERT_EQ(refs.size(), 4u);
     EXPECT_EQ(refs[0].offset, 0u);
     EXPECT_EQ(refs[3].offset, 30u);
 
     auto found = TreeReader::find_data_block(
-        key_file, *schema, result->root, all_key_for(*schema, make_fence_row(*schema, 2)));
+        key_file, schema, result->root, all_key_for(*schema, make_fence_row(*schema, 2)));
     ASSERT_TRUE(found.ok()) << found.status();
     ASSERT_TRUE(found->has_value());
     EXPECT_EQ((*found)->offset, 20u);

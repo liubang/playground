@@ -40,7 +40,7 @@ using types::SchemaBuilder;
 using types::Value;
 using types::Version;
 
-std::shared_ptr<const Schema> make_schema() {
+Schema::ConstRef make_schema() {
     auto schema = SchemaBuilder()
                       .add_column("tenant", DataType::kString)
                       .add_column("id", DataType::kUint64)
@@ -56,6 +56,16 @@ Row make_row(std::string tenant, uint64_t id, Version version, std::string value
     row.version = version;
     row.op_type = OpType::kPut;
     row.value = Value::make<DataType::kString>(std::move(value));
+    return row;
+}
+
+Row make_bool_row(std::string tenant, uint64_t id, Version version, bool value) {
+    Row row;
+    row.key_columns.push_back(Value::make<DataType::kString>(std::move(tenant)));
+    row.key_columns.push_back(Value::make<DataType::kUint64>(id));
+    row.version = version;
+    row.op_type = OpType::kPut;
+    row.value = Value::make<DataType::kBool>(value);
     return row;
 }
 
@@ -121,7 +131,7 @@ TEST(SSTableTest, BuildOpenAndScanSeparatedValues) {
 
     auto reader = Reader::open(files->key_file, files->value_file);
     ASSERT_TRUE(reader.ok()) << reader.status();
-    EXPECT_EQ(reader->schema().row_key_column_count(), 2u);
+    EXPECT_EQ(reader->schema()->row_key_column_count(), 2u);
     EXPECT_EQ(reader->statistics().total_row_count, 2u);
     EXPECT_EQ(reader->statistics().data_block_count, 2u);
     EXPECT_EQ(reader->statistics().index_block_count, 1u);
@@ -168,6 +178,23 @@ TEST(SSTableTest, BuildOpenAndScanEmbeddedValues) {
     ASSERT_TRUE(rows.ok()) << rows.status();
     ASSERT_EQ(rows->size(), 1u);
     EXPECT_EQ((*rows)[0].value.as_string(), "tiny");
+}
+
+TEST(SSTableTest, BoolValuesAreStoredInColumnFlagOnly) {
+    Builder builder(make_schema());
+
+    ASSERT_TRUE(builder.add(make_bool_row("a", 1, Version{.major = 10, .minor = 0}, true)).ok());
+    auto files = builder.finish();
+    ASSERT_TRUE(files.ok()) << files.status();
+    EXPECT_TRUE(files->value_file.empty());
+
+    auto reader = Reader::open(files->key_file, files->value_file);
+    ASSERT_TRUE(reader.ok()) << reader.status();
+    auto rows = reader->scan();
+    ASSERT_TRUE(rows.ok()) << rows.status();
+    ASSERT_EQ(rows->size(), 1u);
+    EXPECT_EQ((*rows)[0].value.type(), DataType::kBool);
+    EXPECT_TRUE((*rows)[0].value.as_bool());
 }
 
 TEST(SSTableTest, RejectsOutOfOrderRows) {
@@ -224,6 +251,7 @@ TEST(SSTableTest, BuildsAndReadsMultiLevelIndex) {
     BuilderOptions options;
     options.configuration.max_embedded_value_size = 0;
     options.configuration.max_data_block_row_count = 2;
+    options.configuration.max_index_block_row_count = 2;
     Builder builder(make_schema(), options);
 
     for (uint64_t i = 0; i < 18; ++i) {
@@ -256,10 +284,42 @@ TEST(SSTableTest, BuildsAndReadsMultiLevelIndex) {
     EXPECT_EQ((*found)->value.as_string(), "v13");
 }
 
+TEST(SSTableTest, DataBlockSoftLimitFlushesAndHardLimitAllowsSingleRow) {
+    BuilderOptions soft_options;
+    soft_options.configuration.max_embedded_value_size = 1024;
+    soft_options.configuration.max_data_block_size_soft_limit = block::Header::kSize;
+    soft_options.configuration.max_data_block_size_hard_limit = 1024 * 1024;
+    soft_options.configuration.max_data_block_row_count = 100;
+    Builder soft_builder(make_schema(), soft_options);
+
+    ASSERT_TRUE(soft_builder.add(make_row("a", 1, Version{.major = 10}, "one")).ok());
+    ASSERT_TRUE(soft_builder.add(make_row("b", 2, Version{.major = 10}, "two")).ok());
+    ASSERT_TRUE(soft_builder.add(make_row("c", 3, Version{.major = 10}, "three")).ok());
+    auto files = soft_builder.finish();
+    ASSERT_TRUE(files.ok()) << files.status();
+    auto reader = Reader::open(files->key_file, files->value_file);
+    ASSERT_TRUE(reader.ok()) << reader.status();
+    EXPECT_EQ(reader->statistics().data_block_count, 3u);
+
+    // PDF §6.1: a single row that exceeds the hard limit is allowed as an exception.
+    BuilderOptions hard_options;
+    hard_options.configuration.max_embedded_value_size = 1024;
+    hard_options.configuration.max_data_block_size_soft_limit = block::Header::kSize;
+    hard_options.configuration.max_data_block_size_hard_limit = block::Header::kSize;
+    Builder hard_builder(make_schema(), hard_options);
+    ASSERT_TRUE(hard_builder.add(make_row("a", 1, Version{.major = 10}, "too-large")).ok());
+    auto hard_files = hard_builder.finish();
+    ASSERT_TRUE(hard_files.ok()) << hard_files.status();
+    auto hard_reader = Reader::open(hard_files->key_file, hard_files->value_file);
+    ASSERT_TRUE(hard_reader.ok()) << hard_reader.status();
+    EXPECT_EQ(hard_reader->statistics().data_block_count, 1u);
+}
+
 TEST(SSTableTest, WritesIndexTreeInPostOrder) {
     BuilderOptions options;
     options.configuration.max_embedded_value_size = 0;
     options.configuration.max_data_block_row_count = 2;
+    options.configuration.max_index_block_row_count = 2;
     Builder builder(make_schema(), options);
 
     for (uint64_t i = 0; i < 8; ++i) {

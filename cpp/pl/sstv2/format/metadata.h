@@ -33,6 +33,9 @@ struct Configuration {
     uint64_t max_data_block_size_soft_limit = 64 * 1024;
     uint64_t max_data_block_size_hard_limit = 128 * 1024;
     uint64_t max_data_block_row_count = 4096;
+    uint64_t max_index_block_size_soft_limit = 64 * 1024;
+    uint64_t max_index_block_size_hard_limit = 128 * 1024;
+    uint64_t max_index_block_row_count = 4096;
 };
 
 struct Statistics {
@@ -47,7 +50,7 @@ struct Statistics {
 [[nodiscard]] absl::StatusOr<Configuration> configuration_from_entries(const SectionMap& entries);
 
 [[nodiscard]] SectionMap schema_entries(const types::Schema& schema);
-[[nodiscard]] absl::StatusOr<std::shared_ptr<const types::Schema>> schema_from_entries(
+[[nodiscard]] absl::StatusOr<types::Schema::ConstRef> schema_from_entries(
     const SectionMap& entries);
 
 [[nodiscard]] SectionMap statistics_entries(const Statistics& statistics);
@@ -58,8 +61,7 @@ struct Statistics {
 [[nodiscard]] std::string encode_statistics(const Statistics& statistics);
 
 [[nodiscard]] absl::StatusOr<Configuration> decode_configuration(std::string_view input);
-[[nodiscard]] absl::StatusOr<std::shared_ptr<const types::Schema>> decode_schema(
-    std::string_view input);
+[[nodiscard]] absl::StatusOr<types::Schema::ConstRef> decode_schema(std::string_view input);
 [[nodiscard]] absl::StatusOr<Statistics> decode_statistics(std::string_view input);
 
 } // namespace pl::sstv2::format

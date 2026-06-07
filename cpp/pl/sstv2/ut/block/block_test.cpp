@@ -36,7 +36,7 @@ using types::SchemaBuilder;
 using types::Value;
 using types::Version;
 
-std::shared_ptr<const Schema> make_schema() {
+Schema::ConstRef make_schema() {
     auto schema = SchemaBuilder()
                       .add_column("user", DataType::kString)
                       .add_column("bucket", DataType::kUint32)
@@ -78,7 +78,7 @@ TEST(BlockTest, DataBlockRoundTripNoCompression) {
     auto encoded = builder.finish();
     ASSERT_TRUE(encoded.ok()) << encoded.status();
 
-    auto reader = BlockReader::open(*encoded, schema, Kind::kData);
+    auto reader = BlockReader::open(*encoded, schema_ptr, Kind::kData);
     ASSERT_TRUE(reader.ok()) << reader.status();
     ASSERT_EQ(reader->rows().size(), 2u);
     EXPECT_EQ(reader->rows()[0].columns[0].as_string(), "alice");
@@ -103,7 +103,7 @@ TEST(BlockTest, DataBlockRoundTripSnappy) {
 
     auto encoded = builder.finish();
     ASSERT_TRUE(encoded.ok()) << encoded.status();
-    auto reader = BlockReader::open(*encoded, schema, Kind::kData);
+    auto reader = BlockReader::open(*encoded, schema_ptr, Kind::kData);
     ASSERT_TRUE(reader.ok()) << reader.status();
     EXPECT_EQ(reader->rows()[0].columns[0].as_string(), "carol");
     EXPECT_EQ(compress::decode_block_flag(reader->header().flags), compress::Codec::kSnappy);
@@ -142,7 +142,7 @@ TEST(BlockTest, ArrayAndMapColumnsRoundTrip) {
     auto encoded = builder.finish();
     ASSERT_TRUE(encoded.ok()) << encoded.status();
 
-    auto reader = BlockReader::open(*encoded, schema, Kind::kData);
+    auto reader = BlockReader::open(*encoded, schema_ptr, Kind::kData);
     ASSERT_TRUE(reader.ok()) << reader.status();
     ASSERT_EQ(reader->rows().size(), 1u);
     ASSERT_EQ(reader->rows()[0].columns[0].as_array().size(), 2u);
@@ -151,6 +151,29 @@ TEST(BlockTest, ArrayAndMapColumnsRoundTrip) {
     ASSERT_EQ(reader->rows()[0].columns[1].as_map().size(), 2u);
     EXPECT_EQ(reader->rows()[0].columns[1].as_map()[0].first.as_string(), "a");
     EXPECT_EQ(reader->rows()[0].columns[1].as_map()[1].first.as_string(), "b");
+}
+
+TEST(BlockTest, EnforcesConfiguredRowLimit) {
+    auto schema_ptr = InternalSchema::make(make_schema());
+    const InternalSchema& schema = *schema_ptr;
+
+    Options row_options;
+    row_options.kind = Kind::kData;
+    row_options.max_row_count = 1;
+    BlockBuilder row_limited(schema_ptr, row_options);
+    ASSERT_TRUE(
+        row_limited.add(make_row(schema, "alice", 7, Version{.major = 10, .minor = 1}, "v1")).ok());
+    EXPECT_FALSE(
+        row_limited.add(make_row(schema, "bob", 9, Version{.major = 8, .minor = 0}, "v2")).ok());
+
+    // Single-row blocks are allowed to exceed the hard size limit (PDF §6.1).
+    Options size_options;
+    size_options.kind = Kind::kData;
+    size_options.max_block_size_hard_limit = Header::kSize;
+    BlockBuilder size_limited(schema_ptr, size_options);
+    ASSERT_TRUE(
+        size_limited.add(make_row(schema, "carol", 3, Version{.major = 2, .minor = 5}, "v")).ok());
+    EXPECT_TRUE(size_limited.finish().ok());
 }
 
 } // namespace

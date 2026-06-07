@@ -19,6 +19,7 @@
 
 #include <cassert>
 #include <cstddef>
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -70,6 +71,9 @@ constexpr std::string_view kKeyFileFilename = "@2";
 // =============================================================================
 
 struct InternalRow {
+    using Ref = std::shared_ptr<InternalRow>;
+    using ConstRef = std::shared_ptr<const InternalRow>;
+
     // All M+7 column values, indexed by InternalSchema column indices.
     std::vector<Value> columns;
 
