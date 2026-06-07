@@ -22,6 +22,7 @@
 #include <string>
 
 #include "cpp/pl/sstv2/codec/comparable.h"
+#include "cpp/pl/sstv2/codec/value_comparable.h"
 
 namespace pl::sstv2::codec {
 namespace {
@@ -157,6 +158,29 @@ TEST(ComparableBytesTest, LongString) {
     EXPECT_LT(a, b);
 }
 
+TEST(ComparableMapTest, CanonicalInsertionOrder) {
+    using types::DataType;
+    using types::SortOrder;
+    using types::Value;
+
+    Value left = Value::make_map({
+        {Value::make<DataType::kString>("b"), Value::make<DataType::kInt64>(int64_t{2})},
+        {Value::make<DataType::kString>("a"), Value::make<DataType::kInt64>(int64_t{1})},
+    });
+    Value right = Value::make_map({
+        {Value::make<DataType::kString>("a"), Value::make<DataType::kInt64>(int64_t{1})},
+        {Value::make<DataType::kString>("b"), Value::make<DataType::kInt64>(int64_t{2})},
+    });
+
+    std::string left_key;
+    std::string right_key;
+    ASSERT_TRUE(
+        encode_value_comparable(left, DataType::kMap, SortOrder::kAscending, &left_key).ok());
+    ASSERT_TRUE(
+        encode_value_comparable(right, DataType::kMap, SortOrder::kAscending, &right_key).ok());
+    EXPECT_EQ(left_key, right_key);
+}
+
 // =============================================================================
 // Descending order tests.
 // =============================================================================
@@ -225,7 +249,8 @@ TEST(ComparableDecodeTest, Uint16Roundtrip) {
         std::string enc;
         encode_uint16(v, &enc);
         uint16_t decoded = 0;
-        size_t n = decode_uint16(reinterpret_cast<const uint8_t*>(enc.data()), enc.size(), &decoded);
+        size_t n =
+            decode_uint16(reinterpret_cast<const uint8_t*>(enc.data()), enc.size(), &decoded);
         EXPECT_EQ(n, 2u);
         EXPECT_EQ(decoded, v);
     }
@@ -236,7 +261,8 @@ TEST(ComparableDecodeTest, Uint32Roundtrip) {
         std::string enc;
         encode_uint32(v, &enc);
         uint32_t decoded = 0;
-        size_t n = decode_uint32(reinterpret_cast<const uint8_t*>(enc.data()), enc.size(), &decoded);
+        size_t n =
+            decode_uint32(reinterpret_cast<const uint8_t*>(enc.data()), enc.size(), &decoded);
         EXPECT_EQ(n, 4u);
         EXPECT_EQ(decoded, v);
     }
@@ -247,7 +273,8 @@ TEST(ComparableDecodeTest, Uint64Roundtrip) {
         std::string enc;
         encode_uint64(v, &enc);
         uint64_t decoded = 0;
-        size_t n = decode_uint64(reinterpret_cast<const uint8_t*>(enc.data()), enc.size(), &decoded);
+        size_t n =
+            decode_uint64(reinterpret_cast<const uint8_t*>(enc.data()), enc.size(), &decoded);
         EXPECT_EQ(n, 8u);
         EXPECT_EQ(decoded, v);
     }
@@ -298,7 +325,11 @@ TEST(ComparableDecodeTest, Int64Roundtrip) {
 }
 
 TEST(ComparableDecodeTest, FloatRoundtrip) {
-    for (float v : {-std::numeric_limits<float>::infinity(), -1.5f, -0.0f, 0.0f, 1.5f,
+    for (float v : {-std::numeric_limits<float>::infinity(),
+                    -1.5f,
+                    -0.0f,
+                    0.0f,
+                    1.5f,
                     std::numeric_limits<float>::infinity()}) {
         std::string enc;
         encode_float(v, &enc);
@@ -311,7 +342,10 @@ TEST(ComparableDecodeTest, FloatRoundtrip) {
 }
 
 TEST(ComparableDecodeTest, DoubleRoundtrip) {
-    for (double v : {-std::numeric_limits<double>::infinity(), -2.718, 0.0, 3.14,
+    for (double v : {-std::numeric_limits<double>::infinity(),
+                     -2.718,
+                     0.0,
+                     3.14,
                      std::numeric_limits<double>::infinity()}) {
         std::string enc;
         encode_double(v, &enc);
@@ -328,8 +362,7 @@ TEST(ComparableDecodeTest, BytesRoundtrip) {
         std::string enc;
         encode_bytes(sv, &enc);
         std::string decoded;
-        size_t n =
-            decode_bytes(reinterpret_cast<const uint8_t*>(enc.data()), enc.size(), &decoded);
+        size_t n = decode_bytes(reinterpret_cast<const uint8_t*>(enc.data()), enc.size(), &decoded);
         EXPECT_GT(n, 0u);
         EXPECT_EQ(decoded, sv);
     }

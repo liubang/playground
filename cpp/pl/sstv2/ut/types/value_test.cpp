@@ -166,6 +166,21 @@ TEST(ValueTest, Map) {
     EXPECT_EQ(v.as_map()[1].second.as_int64(), 200);
 }
 
+TEST(ValueTest, MapCanonicalizesByKey) {
+    std::vector<std::pair<Value, Value>> entries;
+    entries.emplace_back(Value::make<DataType::kString>("b"),
+                         Value::make<DataType::kInt64>(int64_t{2}));
+    entries.emplace_back(Value::make<DataType::kString>("a"),
+                         Value::make<DataType::kInt64>(int64_t{1}));
+
+    auto v = Value::make_map(std::move(entries));
+    ASSERT_EQ(v.as_map().size(), 2u);
+    EXPECT_EQ(v.as_map()[0].first.as_string(), "a");
+    EXPECT_EQ(v.as_map()[0].second.as_int64(), 1);
+    EXPECT_EQ(v.as_map()[1].first.as_string(), "b");
+    EXPECT_EQ(v.as_map()[1].second.as_int64(), 2);
+}
+
 TEST(ValueTest, TakeArray) {
     std::vector<Value> elems;
     elems.push_back(Value::make<DataType::kString>("a"));

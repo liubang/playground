@@ -17,7 +17,6 @@
 
 #include "cpp/pl/sstv2/block/block.h"
 
-#include <crc32c/crc32c.h>
 #include <cstring>
 #include <string>
 #include <type_traits>
@@ -25,10 +24,12 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/sstv2/codec/checksum.h"
 #include "cpp/pl/sstv2/codec/endian.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/value_comparable.h"
 #include "cpp/pl/sstv2/codec/varint.h"
+#include "cpp/pl/sstv2/file/value_codec.h"
 #include "cpp/pl/sstv2/pattern/compound.h"
 #include "cpp/pl/sstv2/pattern/raw.h"
 
@@ -66,10 +67,6 @@ Header decode_header(std::string_view input) {
     h.compressed_block_length = codec::read_fixed64(input, 36);
     h.checksum = codec::read_fixed64(input, 44);
     return h;
-}
-
-uint64_t crc64(std::string_view data) {
-    return static_cast<uint64_t>(::crc32c::Crc32c(data));
 }
 
 absl::Status verify_value_type(const Value& value, DataType type, std::string_view name) {
@@ -237,6 +234,22 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
                 const uint64_t offset = data_table->size();
                 data_table->append(bytes);
                 enc.add(offset, bytes.size());
+            }
+            return enc.finish().data;
+        }
+        case DataType::kArray:
+        case DataType::kMap: {
+            pattern::StringRefEncoder enc;
+            enc.reserve(rows.size());
+            for (const auto& row : rows) {
+                SSTV2_RETURN_IF_ERROR(
+                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                auto bytes = file::encode_value(row.columns[column]);
+                if (!bytes.ok())
+                    return bytes.status();
+                const uint64_t offset = data_table->size();
+                data_table->append(*bytes);
+                enc.add(offset, bytes->size());
             }
             return enc.finish().data;
         }
@@ -415,6 +428,25 @@ absl::Status decode_column(std::string_view unit,
             }
             return absl::OkStatus();
         }
+        case DataType::kArray:
+        case DataType::kMap: {
+            pattern::StringRefDecoder dec;
+            if (!dec.parse(unit))
+                return absl::InvalidArgumentError("bad variant-ref unit");
+            for (size_t i = 0; i < rows->size(); ++i) {
+                const uint64_t off = dec.offset(i);
+                const uint64_t len = dec.length(i);
+                if (off + len > data_table.size()) {
+                    return absl::InvalidArgumentError("variant-ref points outside data table");
+                }
+                auto value = file::decode_value(
+                    type, std::string_view(data_table.data() + off, static_cast<size_t>(len)));
+                if (!value.ok())
+                    return value.status();
+                (*rows)[i].columns[column] = std::move(*value);
+            }
+            return absl::OkStatus();
+        }
         default:
             return absl::UnimplementedError(absl::StrCat(
                 "block column type ", types::data_type_name(type), " is not implemented yet"));
@@ -427,6 +459,10 @@ BlockBuilder::BlockBuilder(types::InternalSchema::ConstPtr schema, Options optio
     : schema_(std::move(schema)), options_(options) {}
 
 absl::Status BlockBuilder::add(types::InternalRow row) {
+    return add(std::move(row), std::string{});
+}
+
+absl::Status BlockBuilder::add(types::InternalRow row, std::string embedded_value) {
     if (schema_ == nullptr) {
         return absl::InvalidArgumentError("block builder schema is null");
     }
@@ -434,6 +470,7 @@ absl::Status BlockBuilder::add(types::InternalRow row) {
         return absl::InvalidArgumentError("internal row column count mismatch");
     }
     rows_.push_back(std::move(row));
+    embedded_values_.push_back(std::move(embedded_value));
     return absl::OkStatus();
 }
 
@@ -441,8 +478,18 @@ absl::StatusOr<std::string> BlockBuilder::finish() const {
     std::string data_table;
     std::vector<std::string> units;
     units.reserve(schema_->column_count());
+    std::vector<types::InternalRow> rows = rows_;
     for (size_t column = 0; column < schema_->column_count(); ++column) {
-        auto unit = encode_column(rows_, *schema_, column, &data_table);
+        if (column == schema_->offset_index()) {
+            for (size_t row = 0; row < rows.size(); ++row) {
+                if (!embedded_values_[row].empty()) {
+                    rows[row].columns[schema_->offset_index()] =
+                        Value::make<DataType::kUint64>(Header::kSize + data_table.size());
+                    data_table.append(embedded_values_[row]);
+                }
+            }
+        }
+        auto unit = encode_column(rows, *schema_, column, &data_table);
         if (!unit.ok())
             return unit.status();
         units.push_back(std::move(*unit));
@@ -469,16 +516,17 @@ absl::StatusOr<std::string> BlockBuilder::finish() const {
     Header h;
     h.magic = options_.kind;
     h.flags = compress::encode_block_flag(options_.compression.codec);
-    h.row_count = rows_.size();
+    h.row_count = rows.size();
     h.offset_table_offset = offset_table_offset;
     h.uncompressed_block_length = Header::kSize + body.size();
-    h.compressed_block_length = Header::kSize + payload->size();
+    h.compressed_block_length =
+        options_.compression.codec == compress::Codec::kNone ? 0 : Header::kSize + payload->size();
 
     std::string header_zero;
     encode_header(h, &header_zero);
     std::string block = header_zero;
     block.append(*payload);
-    h.checksum = crc64(block);
+    h.checksum = codec::crc32c_u64(block);
 
     block.clear();
     encode_header(h, &block);
@@ -496,8 +544,11 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
     if (h.magic != expected) {
         return absl::InvalidArgumentError("block magic mismatch");
     }
-    if (h.compressed_block_length != block.size()) {
-        return absl::InvalidArgumentError("compressed block length mismatch");
+    const auto codec = compress::decode_block_flag(h.flags);
+    const uint64_t expected_block_length =
+        codec == compress::Codec::kNone ? h.uncompressed_block_length : h.compressed_block_length;
+    if (expected_block_length != block.size()) {
+        return absl::InvalidArgumentError("block length mismatch");
     }
 
     Header zero = h;
@@ -505,13 +556,12 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
     std::string checksum_input;
     encode_header(zero, &checksum_input);
     checksum_input.append(block.substr(Header::kSize));
-    if (crc64(checksum_input) != h.checksum) {
+    if (codec::crc32c_u64(checksum_input) != h.checksum) {
         return absl::InvalidArgumentError("block checksum mismatch");
     }
 
-    auto body = compress::uncompress(block.substr(Header::kSize),
-                                     compress::decode_block_flag(h.flags),
-                                     h.uncompressed_block_length - Header::kSize);
+    auto body = compress::uncompress(
+        block.substr(Header::kSize), codec, h.uncompressed_block_length - Header::kSize);
     if (!body.ok())
         return body.status();
 
@@ -519,7 +569,7 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
         h.offset_table_offset > h.uncompressed_block_length) {
         return absl::InvalidArgumentError("bad offset table offset");
     }
-    const size_t offset_table_body = static_cast<size_t>(h.offset_table_offset - Header::kSize);
+    const auto offset_table_body = static_cast<size_t>(h.offset_table_offset - Header::kSize);
     if (offset_table_body > body->size()) {
         return absl::InvalidArgumentError("offset table outside block body");
     }
@@ -538,7 +588,7 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
     }
     if (offsets.empty())
         return absl::InvalidArgumentError("empty column offset table");
-    const size_t data_table_len = static_cast<size_t>(offsets.front() - Header::kSize);
+    const auto data_table_len = static_cast<size_t>(offsets.front() - Header::kSize);
     if (data_table_len > offset_table_body) {
         return absl::InvalidArgumentError("bad data table length");
     }
@@ -546,13 +596,14 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
 
     BlockReader reader;
     reader.header_ = h;
+    reader.data_table_.assign(data_table);
     reader.rows_.reserve(static_cast<size_t>(h.row_count));
     for (uint64_t i = 0; i < h.row_count; ++i) {
         reader.rows_.push_back(types::InternalRow::make(schema));
     }
 
     for (size_t column = 0; column < schema.column_count(); ++column) {
-        const size_t begin = static_cast<size_t>(offsets[column] - Header::kSize);
+        const auto begin = static_cast<size_t>(offsets[column] - Header::kSize);
         const size_t end = column + 1 == schema.column_count()
                                ? offset_table_body
                                : static_cast<size_t>(offsets[column + 1] - Header::kSize);
@@ -568,6 +619,24 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
             return status;
     }
     return reader;
+}
+
+absl::StatusOr<std::string_view> BlockReader::embedded_value(
+    size_t row_index, const types::InternalSchema& schema) const {
+    if (row_index >= rows_.size()) {
+        return absl::InvalidArgumentError("embedded value row index out of range");
+    }
+    const auto& row = rows_[row_index];
+    const uint64_t offset = row.offset(schema);
+    const uint64_t length = row.length(schema);
+    if (offset < Header::kSize) {
+        return absl::InvalidArgumentError("embedded value offset is before block body");
+    }
+    const uint64_t data_table_offset = offset - Header::kSize;
+    if (data_table_offset > data_table_.size() || length > data_table_.size() - data_table_offset) {
+        return absl::InvalidArgumentError("embedded value points outside data table");
+    }
+    return std::string_view(data_table_.data() + data_table_offset, static_cast<size_t>(length));
 }
 
 } // namespace pl::sstv2::block
