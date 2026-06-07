@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <new>
@@ -700,6 +701,17 @@ template <typename T> inline int compare_scalar(const T& lhs, const T& rhs) {
     return 0;
 }
 
+template <typename T> inline int compare_floating(T lhs, T rhs) {
+    const bool lhs_nan = std::isnan(lhs);
+    const bool rhs_nan = std::isnan(rhs);
+    if (lhs_nan || rhs_nan) {
+        if (lhs_nan == rhs_nan)
+            return 0;
+        return lhs_nan ? -1 : 1;
+    }
+    return compare_scalar(lhs, rhs);
+}
+
 inline int compare_arrays(const ArrayStorage& lhs, const ArrayStorage& rhs) {
     const size_t n = std::min(lhs.size(), rhs.size());
     for (size_t i = 0; i < n; ++i) {
@@ -750,9 +762,9 @@ inline int compare_values(const Value& lhs, const Value& rhs) {
         case DataType::kUint64:
             return compare_scalar(lhs.as_uint64(), rhs.as_uint64());
         case DataType::kFloat:
-            return compare_scalar(lhs.as_float(), rhs.as_float());
+            return compare_floating(lhs.as_float(), rhs.as_float());
         case DataType::kDouble:
-            return compare_scalar(lhs.as_double(), rhs.as_double());
+            return compare_floating(lhs.as_double(), rhs.as_double());
         case DataType::kLongDouble:
             return compare_bytes(
                 std::string_view(reinterpret_cast<const char*>(lhs.as_long_double().data),
