@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">91.8&nbsp;%</td>
-            <td class="headerCovTableEntry">134</td>
-            <td class="headerCovTableEntry">123</td>
+            <td class="headerCovTableEntryHi">92.5&nbsp;%</td>
+            <td class="headerCovTableEntry">146</td>
+            <td class="headerCovTableEntry">135</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-07 09:05:46</td>
+            <td class="headerValue">2026-06-07 18:16:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">60.0&nbsp;%</td>
-            <td class="headerCovTableEntry">170</td>
-            <td class="headerCovTableEntry">102</td>
+            <td class="headerCovTableEntryLo">57.7&nbsp;%</td>
+            <td class="headerCovTableEntry">208</td>
+            <td class="headerCovTableEntry">120</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -113,33 +113,33 @@
 <span id="L42"><span class="lineNum">      42</span>                 :             : using types::InternalSchema;</span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : using types::Value;</span>
 <span id="L44"><span class="lineNum">      44</span>                 :             : </span>
-<span id="L45"><span class="lineNum">      45</span>         [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          29 : absl::StatusOr&lt;std::string_view&gt; checked_slice(std::string_view bytes,</span></span>
+<span id="L45"><span class="lineNum">      45</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          30 : absl::StatusOr&lt;std::string_view&gt; checked_slice(std::string_view bytes,</span></span>
 <span id="L46"><span class="lineNum">      46</span>                 :             :                                                uint64_t offset,</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             :                                                uint64_t length,</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             :                                                std::string_view label) {</span>
-<span id="L49"><span class="lineNum">      49</span>   [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 29 times"> + </span>]:<span class="tlaGNC">          29 :     if (offset &gt; bytes.size() || length &gt; bytes.size() - offset) {</span></span>
+<span id="L49"><span class="lineNum">      49</span>   [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 30 times"> + </span>]:<span class="tlaGNC">          30 :     if (offset &gt; bytes.size() || length &gt; bytes.size() - offset) {</span></span>
 <span id="L50"><span class="lineNum">      50</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(absl::StrCat(label, &quot; points outside file&quot;));</span></span>
 <span id="L51"><span class="lineNum">      51</span>                 :             :     }</span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC tlaBgGNC">          29 :     return bytes.substr(static_cast&lt;size_t&gt;(offset), static_cast&lt;size_t&gt;(length));</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC tlaBgGNC">          30 :     return bytes.substr(static_cast&lt;size_t&gt;(offset), static_cast&lt;size_t&gt;(length));</span></span>
 <span id="L53"><span class="lineNum">      53</span>                 :             : }</span>
 <span id="L54"><span class="lineNum">      54</span>                 :             : </span>
-<span id="L55"><span class="lineNum">      55</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          15 : absl::StatusOr&lt;std::string&gt; all_key_for(const InternalSchema&amp; schema, const InternalRow&amp; row) {</span></span>
+<span id="L55"><span class="lineNum">      55</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          15 : absl::StatusOr&lt;std::string&gt; all_key_for(InternalSchema::ConstRef schema, const InternalRow&amp; row) {</span></span>
 <span id="L56"><span class="lineNum">      56</span>                 :             :     std::string all_key;</span>
-<span id="L57"><span class="lineNum">      57</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          15 :     auto status = codec::encode_all_key(row, schema, &amp;all_key);</span></span>
+<span id="L57"><span class="lineNum">      57</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          15 :     auto status = codec::encode_all_key(row, *schema, &amp;all_key);</span></span>
 <span id="L58"><span class="lineNum">      58</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 :     if (!status.ok())</span></span>
 <span id="L59"><span class="lineNum">      59</span>                 :             :         return status;</span>
 <span id="L60"><span class="lineNum">      60</span>                 :             :     return all_key;</span>
 <span id="L61"><span class="lineNum">      61</span>                 :             : }</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             : </span>
-<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">           8 : absl::StatusOr&lt;size_t&gt; lower_bound_by_all_key(const InternalSchema&amp; schema,</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">           8 : absl::StatusOr&lt;size_t&gt; lower_bound_by_all_key(InternalSchema::ConstRef schema,</span></span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :                                               const std::vector&lt;InternalRow&gt;&amp; rows,</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             :                                               std::string_view target_key) {</span>
 <span id="L66"><span class="lineNum">      66</span>                 :             :     size_t first = 0;</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :     size_t count = rows.size();</span>
 <span id="L68"><span class="lineNum">      68</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">          23 :     while (count &gt; 0) {</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">          15 :         const size_t step = count / 2;</span></span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          15 :         const size_t it = first + step;</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          15 :         auto key = all_key_for(schema, rows[it]);</span></span>
+<span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          15 :         const size_t it = first + step;</span></span>
+<span id="L71"><span class="lineNum">      71</span>   [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 15 times"> + </span>]:<span class="tlaGNC">          30 :         auto key = all_key_for(schema, rows[it]);</span></span>
 <span id="L72"><span class="lineNum">      72</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 :         if (!key.ok())</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :             :             return key.status();</span>
 <span id="L74"><span class="lineNum">      74</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          15 :         if (*key &lt; target_key) {</span></span>
@@ -152,58 +152,58 @@
 <span id="L81"><span class="lineNum">      81</span>                 :             :     return first;</span>
 <span id="L82"><span class="lineNum">      82</span>                 :             : }</span>
 <span id="L83"><span class="lineNum">      83</span>                 :             : </span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">          36 : InternalRow make_index_row(const InternalSchema&amp; schema,</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">          41 : InternalRow make_index_row(InternalSchema::ConstRef schema,</span></span>
 <span id="L85"><span class="lineNum">      85</span>                 :             :                            const InternalRow&amp; fence,</span>
 <span id="L86"><span class="lineNum">      86</span>                 :             :                            BlockRef block,</span>
 <span id="L87"><span class="lineNum">      87</span>                 :             :                            uint64_t subtree_row_count,</span>
 <span id="L88"><span class="lineNum">      88</span>                 :             :                            ColumnFlag pointer_flag) {</span>
-<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">          36 :     InternalRow index = InternalRow::make(schema);</span></span>
-<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 138 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 36 times"> + </span>]:<span class="tlaGNC">         174 :     for (size_t i = 0; i &lt; schema.sort_key_column_count(); ++i) {</span></span>
-<span id="L91"><span class="lineNum">      91</span>         [<span class="tlaGBC" title="Branch 0 was taken 138 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         138 :         index.columns[i] = fence.columns[i];</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">          41 :     InternalRow index = InternalRow::make(*schema);</span></span>
+<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 158 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 41 times"> + </span>]:<span class="tlaGNC">         199 :     for (size_t i = 0; i &lt; schema-&gt;sort_key_column_count(); ++i) {</span></span>
+<span id="L91"><span class="lineNum">      91</span>         [<span class="tlaGBC" title="Branch 0 was taken 158 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         158 :         index.columns[i] = fence.columns[i];</span></span>
 <span id="L92"><span class="lineNum">      92</span>                 :             :     }</span>
-<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          36 :     index.columns[schema.flag_index()] = Value::make&lt;DataType::kUint64&gt;(pointer_flag.raw());</span></span>
-<span id="L94"><span class="lineNum">      94</span>                 :             :     index.columns[schema.filename_index()] =</span>
-<span id="L95"><span class="lineNum">      95</span>         [<span class="tlaGBC" title="Branch 0 was taken 36 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          36 :         Value::make&lt;DataType::kString&gt;(types::kKeyFileFilename);</span></span>
-<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          36 :     index.columns[schema.offset_index()] = Value::make&lt;DataType::kUint64&gt;(block.offset);</span></span>
-<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">          72 :     index.columns[schema.length_index()] = Value::make&lt;DataType::kUint64&gt;(block.length);</span></span>
-<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">          36 :     index.columns[schema.checksum_index()] = Value::make&lt;DataType::kUint64&gt;(subtree_row_count);</span></span>
-<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          36 :     return index;</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          41 :     index.columns[schema-&gt;flag_index()] = Value::make&lt;DataType::kUint64&gt;(pointer_flag.raw());</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :     index.columns[schema-&gt;filename_index()] =</span>
+<span id="L95"><span class="lineNum">      95</span>         [<span class="tlaGBC" title="Branch 0 was taken 41 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          41 :         Value::make&lt;DataType::kString&gt;(types::kKeyFileFilename);</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          41 :     index.columns[schema-&gt;offset_index()] = Value::make&lt;DataType::kUint64&gt;(block.offset);</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">          82 :     index.columns[schema-&gt;length_index()] = Value::make&lt;DataType::kUint64&gt;(block.length);</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">          41 :     index.columns[schema-&gt;checksum_index()] = Value::make&lt;DataType::kUint64&gt;(subtree_row_count);</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          41 :     return index;</span></span>
 <span id="L100"><span class="lineNum">     100</span>                 :             : }</span>
 <span id="L101"><span class="lineNum">     101</span>                 :             : </span>
-<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">          14 : uint64_t subtree_row_count(const InternalSchema&amp; schema, const std::vector&lt;InternalRow&gt;&amp; rows) {</span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">          14 : uint64_t subtree_row_count(InternalSchema::ConstRef schema, const std::vector&lt;InternalRow&gt;&amp; rows) {</span></span>
 <span id="L103"><span class="lineNum">     103</span>                 :             :     uint64_t count = 0;</span>
 <span id="L104"><span class="lineNum">     104</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          39 :     for (const auto&amp; row : rows) {</span></span>
-<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          25 :         count += row.checksum(schema);</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          25 :         count += row.checksum(*schema);</span></span>
 <span id="L106"><span class="lineNum">     106</span>                 :             :     }</span>
 <span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">          14 :     return count;</span></span>
 <span id="L108"><span class="lineNum">     108</span>                 :             : }</span>
 <span id="L109"><span class="lineNum">     109</span>                 :             : </span>
-<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">          29 : absl::StatusOr&lt;block::BlockReader&gt; open_index_node(std::string_view key_file,</span></span>
-<span id="L111"><span class="lineNum">     111</span>                 :             :                                                    const InternalSchema&amp; schema,</span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">          30 : absl::StatusOr&lt;block::BlockReader&gt; open_index_node(std::string_view key_file,</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :                                                    InternalSchema::ConstRef schema,</span>
 <span id="L112"><span class="lineNum">     112</span>                 :             :                                                    BlockRef ref,</span>
 <span id="L113"><span class="lineNum">     113</span>                 :             :                                                    block::Kind kind) {</span>
-<span id="L114"><span class="lineNum">     114</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 29 times"> + </span>]:<span class="tlaGNC">          29 :     auto bytes = checked_slice(key_file, ref.offset, ref.length, &quot;index node&quot;);</span></span>
-<span id="L115"><span class="lineNum">     115</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 29 times"> + </span>]:<span class="tlaGNC">          29 :     if (!bytes.ok())</span></span>
+<span id="L114"><span class="lineNum">     114</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">          30 :     auto bytes = checked_slice(key_file, ref.offset, ref.length, &quot;index node&quot;);</span></span>
+<span id="L115"><span class="lineNum">     115</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">          30 :     if (!bytes.ok())</span></span>
 <span id="L116"><span class="lineNum">     116</span>                 :             :         return bytes.status();</span>
-<span id="L117"><span class="lineNum">     117</span>         [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          29 :     return block::BlockReader::open(*bytes, schema, kind);</span></span>
+<span id="L117"><span class="lineNum">     117</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          60 :     return block::BlockReader::open(*bytes, schema, kind);</span></span>
 <span id="L118"><span class="lineNum">     118</span>                 :             : }</span>
 <span id="L119"><span class="lineNum">     119</span>                 :             : </span>
-<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">          21 : absl::Status scan_node(std::string_view key_file,</span></span>
-<span id="L121"><span class="lineNum">     121</span>                 :             :                        const InternalSchema&amp; schema,</span>
+<span id="L120"><span class="lineNum">     120</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          22 : absl::Status scan_node(std::string_view key_file,</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :                        InternalSchema::ConstRef schema,</span>
 <span id="L122"><span class="lineNum">     122</span>                 :             :                        BlockRef ref,</span>
 <span id="L123"><span class="lineNum">     123</span>                 :             :                        block::Kind kind,</span>
 <span id="L124"><span class="lineNum">     124</span>                 :             :                        std::vector&lt;BlockRef&gt;* data_blocks) {</span>
-<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">          21 :     auto node = open_index_node(key_file, schema, ref, kind);</span></span>
-<span id="L126"><span class="lineNum">     126</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC">          21 :     if (!node.ok())</span></span>
+<span id="L125"><span class="lineNum">     125</span>   [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 22 times"> + </span>]:<span class="tlaGNC">          44 :     auto node = open_index_node(key_file, schema, ref, kind);</span></span>
+<span id="L126"><span class="lineNum">     126</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC">          22 :     if (!node.ok())</span></span>
 <span id="L127"><span class="lineNum">     127</span>                 :             :         return node.status();</span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : </span>
-<span id="L129"><span class="lineNum">     129</span>         [<span class="tlaGBC" title="Branch 0 was taken 36 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC">          57 :     for (const auto&amp; entry : node-&gt;rows()) {</span></span>
-<span id="L130"><span class="lineNum">     130</span>                 :             :         const ColumnFlag flag = entry.flag(schema);</span>
-<span id="L131"><span class="lineNum">     131</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          36 :         const BlockRef child{.offset = entry.offset(schema), .length = entry.length(schema)};</span></span>
-<span id="L132"><span class="lineNum">     132</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          36 :         if (flag.is_data_block_ptr()) {</span></span>
-<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          22 :             data_blocks-&gt;push_back(child);</span></span>
+<span id="L129"><span class="lineNum">     129</span>         [<span class="tlaGBC" title="Branch 0 was taken 37 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC">          59 :     for (const auto&amp; entry : node-&gt;rows()) {</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :         const ColumnFlag flag = entry.flag(*schema);</span>
+<span id="L131"><span class="lineNum">     131</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          37 :         const BlockRef child{.offset = entry.offset(*schema), .length = entry.length(*schema)};</span></span>
+<span id="L132"><span class="lineNum">     132</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          37 :         if (flag.is_data_block_ptr()) {</span></span>
+<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 :             data_blocks-&gt;push_back(child);</span></span>
 <span id="L134"><span class="lineNum">     134</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :         } else if (flag.is_index_block_ptr()) {</span></span>
-<span id="L135"><span class="lineNum">     135</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :             auto status = scan_node(key_file, schema, child, block::Kind::kIndex, data_blocks);</span></span>
+<span id="L135"><span class="lineNum">     135</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 14 times"> + </span>]:<span class="tlaGNC">          28 :             auto status = scan_node(key_file, schema, child, block::Kind::kIndex, data_blocks);</span></span>
 <span id="L136"><span class="lineNum">     136</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :             if (!status.ok())</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :             :                 return status;</span>
 <span id="L138"><span class="lineNum">     138</span>                 :             :         } else {</span>
@@ -213,29 +213,29 @@
 <span id="L142"><span class="lineNum">     142</span>                 :             :     return absl::OkStatus();</span>
 <span id="L143"><span class="lineNum">     143</span>                 :             : }</span>
 <span id="L144"><span class="lineNum">     144</span>                 :             : </span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC tlaBgGNC">           8 : absl::StatusOr&lt;std::optional&lt;BlockRef&gt;&gt; find_data_block_from_node(std::string_view key_file,</span></span>
-<span id="L146"><span class="lineNum">     146</span>                 :             :                                                                   const InternalSchema&amp; schema,</span>
+<span id="L145"><span class="lineNum">     145</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           8 : absl::StatusOr&lt;std::optional&lt;BlockRef&gt;&gt; find_data_block_from_node(std::string_view key_file,</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :             :                                                                   InternalSchema::ConstRef schema,</span>
 <span id="L147"><span class="lineNum">     147</span>                 :             :                                                                   BlockRef ref,</span>
 <span id="L148"><span class="lineNum">     148</span>                 :             :                                                                   block::Kind kind,</span>
 <span id="L149"><span class="lineNum">     149</span>                 :             :                                                                   std::string_view target_all_key) {</span>
-<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">           8 :     auto node = open_index_node(key_file, schema, ref, kind);</span></span>
+<span id="L150"><span class="lineNum">     150</span>   [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 8 times"> + </span>]:<span class="tlaGNC">          16 :     auto node = open_index_node(key_file, schema, ref, kind);</span></span>
 <span id="L151"><span class="lineNum">     151</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :     if (!node.ok())</span></span>
 <span id="L152"><span class="lineNum">     152</span>                 :             :         return node.status();</span>
 <span id="L153"><span class="lineNum">     153</span>                 :             : </span>
-<span id="L154"><span class="lineNum">     154</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     auto selected_index = lower_bound_by_all_key(schema, node-&gt;rows(), target_all_key);</span></span>
+<span id="L154"><span class="lineNum">     154</span>   [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 8 times"> + </span>]:<span class="tlaGNC">          16 :     auto selected_index = lower_bound_by_all_key(schema, node-&gt;rows(), target_all_key);</span></span>
 <span id="L155"><span class="lineNum">     155</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :     if (!selected_index.ok())</span></span>
 <span id="L156"><span class="lineNum">     156</span>                 :             :         return selected_index.status();</span>
 <span id="L157"><span class="lineNum">     157</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :     if (*selected_index == node-&gt;rows().size()) {</span></span>
 <span id="L158"><span class="lineNum">     158</span>                 :             :         return std::optional&lt;BlockRef&gt;{};</span>
 <span id="L159"><span class="lineNum">     159</span>                 :             :     }</span>
 <span id="L160"><span class="lineNum">     160</span>                 :             :     const InternalRow&amp; selected = node-&gt;rows()[*selected_index];</span>
-<span id="L161"><span class="lineNum">     161</span>                 :             :     const ColumnFlag flag = selected.flag(schema);</span>
-<span id="L162"><span class="lineNum">     162</span>                 :             :     const BlockRef child{.offset = selected.offset(schema), .length = selected.length(schema)};</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             :     const ColumnFlag flag = selected.flag(*schema);</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             :     const BlockRef child{.offset = selected.offset(*schema), .length = selected.length(*schema)};</span>
 <span id="L163"><span class="lineNum">     163</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           8 :     if (flag.is_data_block_ptr()) {</span></span>
 <span id="L164"><span class="lineNum">     164</span>                 :             :         return std::optional&lt;BlockRef&gt;{child};</span>
 <span id="L165"><span class="lineNum">     165</span>                 :             :     }</span>
 <span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     if (flag.is_index_block_ptr()) {</span></span>
-<span id="L167"><span class="lineNum">     167</span>                 :             :         return find_data_block_from_node(</span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">           4 :         return find_data_block_from_node(</span></span>
 <span id="L168"><span class="lineNum">     168</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :             key_file, schema, child, block::Kind::kIndex, target_all_key);</span></span>
 <span id="L169"><span class="lineNum">     169</span>                 :             :     }</span>
 <span id="L170"><span class="lineNum">     170</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :     return absl::InvalidArgumentError(&quot;index node contains non-index entry&quot;);</span></span>
@@ -243,162 +243,174 @@
 <span id="L172"><span class="lineNum">     172</span>                 :             : </span>
 <span id="L173"><span class="lineNum">     173</span>                 :             : } // namespace</span>
 <span id="L174"><span class="lineNum">     174</span>                 :             : </span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC tlaBgGNC">           8 : TreeBuilder::TreeBuilder(types::InternalSchema::ConstPtr schema,</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC tlaBgGNC">          11 : TreeBuilder::TreeBuilder(types::InternalSchema::ConstRef schema,</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :             :                          uint64_t fanout,</span>
-<span id="L177"><span class="lineNum">     177</span>                 :             :                          compress::Options compression,</span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">           8 :                          std::string* key_file)</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :             :     : schema_(std::move(schema)),</span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">           8 :       fanout_(std::max&lt;uint64_t&gt;(2, fanout)),</span></span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">           8 :       compression_(compression),</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">           8 :       key_file_(key_file) {}</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :             : </span>
-<span id="L184"><span class="lineNum">     184</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC">          22 : absl::Status TreeBuilder::prepare_for_data_block() {</span></span>
-<span id="L185"><span class="lineNum">     185</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC">          22 :     if (schema_ == nullptr) {</span></span>
-<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
-<span id="L187"><span class="lineNum">     187</span>                 :             :     }</span>
-<span id="L188"><span class="lineNum">     188</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          22 :     if (key_file_ == nullptr) {</span></span>
-<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;key file is null&quot;);</span></span>
-<span id="L190"><span class="lineNum">     190</span>                 :             :     }</span>
-<span id="L191"><span class="lineNum">     191</span>   [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 9 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          22 :     if (!levels_.empty() &amp;&amp; levels_[0].size() == fanout_) {</span></span>
-<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">           6 :         auto status = flush_index_level(0);</span></span>
-<span id="L193"><span class="lineNum">     193</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :         if (!status.ok())</span></span>
-<span id="L194"><span class="lineNum">     194</span>                 :             :             return status;</span>
-<span id="L195"><span class="lineNum">     195</span>                 :             :     }</span>
-<span id="L196"><span class="lineNum">     196</span>                 :             :     return absl::OkStatus();</span>
-<span id="L197"><span class="lineNum">     197</span>                 :             : }</span>
-<span id="L198"><span class="lineNum">     198</span>                 :             : </span>
-<span id="L199"><span class="lineNum">     199</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC">          22 : absl::Status TreeBuilder::add_data_block(const InternalRow&amp; fence,</span></span>
-<span id="L200"><span class="lineNum">     200</span>                 :             :                                          BlockRef data_block,</span>
-<span id="L201"><span class="lineNum">     201</span>                 :             :                                          uint64_t row_count) {</span>
-<span id="L202"><span class="lineNum">     202</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC">          22 :     if (schema_ == nullptr) {</span></span>
-<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
-<span id="L204"><span class="lineNum">     204</span>                 :             :     }</span>
-<span id="L205"><span class="lineNum">     205</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          22 :     if (key_file_ == nullptr) {</span></span>
-<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;key file is null&quot;);</span></span>
-<span id="L207"><span class="lineNum">     207</span>                 :             :     }</span>
-<span id="L208"><span class="lineNum">     208</span>   [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 15 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          22 :     if (!levels_.empty() &amp;&amp; levels_[0].size() == fanout_) {</span></span>
-<span id="L209"><span class="lineNum">     209</span>                 :             :         return absl::FailedPreconditionError(</span>
-<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             &quot;prepare_for_data_block must be called before adding another data block&quot;);</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :             :                          uint64_t soft_limit,</span>
+<span id="L178"><span class="lineNum">     178</span>                 :             :                          uint64_t hard_limit,</span>
+<span id="L179"><span class="lineNum">     179</span>                 :             :                          compress::Options compression,</span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">          11 :                          std::string* key_file)</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :     : schema_(std::move(schema)),</span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          11 :       fanout_(std::max&lt;uint64_t&gt;(2, fanout)),</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          11 :       soft_limit_(std::max&lt;uint64_t&gt;(block::Header::kSize, soft_limit)),</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">          11 :       hard_limit_(std::max&lt;uint64_t&gt;(soft_limit_, hard_limit)),</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">          11 :       compression_(compression),</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">          11 :       key_file_(key_file) {}</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :             : </span>
+<span id="L188"><span class="lineNum">     188</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 : absl::Status TreeBuilder::prepare_for_data_block() {</span></span>
+<span id="L189"><span class="lineNum">     189</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 :     if (schema_ == nullptr) {</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :             :     }</span>
+<span id="L192"><span class="lineNum">     192</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          27 :     if (key_file_ == nullptr) {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;key file is null&quot;);</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :             :     }</span>
+<span id="L195"><span class="lineNum">     195</span>   [<span class="tlaGBC" title="Branch 0 was taken 17 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 11 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          27 :     if (!levels_.empty() &amp;&amp; levels_[0].size() == fanout_) {</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">           6 :         auto status = flush_index_level(0);</span></span>
+<span id="L197"><span class="lineNum">     197</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :         if (!status.ok())</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :             :             return status;</span>
+<span id="L199"><span class="lineNum">     199</span>                 :             :     }</span>
+<span id="L200"><span class="lineNum">     200</span>                 :             :     return absl::OkStatus();</span>
+<span id="L201"><span class="lineNum">     201</span>                 :             : }</span>
+<span id="L202"><span class="lineNum">     202</span>                 :             : </span>
+<span id="L203"><span class="lineNum">     203</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 : absl::Status TreeBuilder::add_data_block(const InternalRow&amp; fence,</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :             :                                          BlockRef data_block,</span>
+<span id="L205"><span class="lineNum">     205</span>                 :             :                                          uint64_t row_count) {</span>
+<span id="L206"><span class="lineNum">     206</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 :     if (schema_ == nullptr) {</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :     }</span>
+<span id="L209"><span class="lineNum">     209</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          27 :     if (key_file_ == nullptr) {</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;key file is null&quot;);</span></span>
 <span id="L211"><span class="lineNum">     211</span>                 :             :     }</span>
-<span id="L212"><span class="lineNum">     212</span>                 :             :     return add_index_entry(</span>
-<span id="L213"><span class="lineNum">     213</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          44 :         0, make_index_row(*schema_, fence, data_block, row_count, ColumnFlag::for_data_block()));</span></span>
-<span id="L214"><span class="lineNum">     214</span>                 :             : }</span>
-<span id="L215"><span class="lineNum">     215</span>                 :             : </span>
-<span id="L216"><span class="lineNum">     216</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span>]:<span class="tlaGNC">          36 : absl::Status TreeBuilder::add_index_entry(size_t level, InternalRow entry) {</span></span>
-<span id="L217"><span class="lineNum">     217</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span>]:<span class="tlaGNC">          36 :     if (levels_.size() &lt;= level) {</span></span>
-<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">          12 :         levels_.resize(level + 1);</span></span>
-<span id="L219"><span class="lineNum">     219</span>                 :             :     }</span>
-<span id="L220"><span class="lineNum">     220</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 11 times"> + </span>]:<span class="tlaGNC">          36 :     if (level &gt; 0 &amp;&amp; levels_[level].size() == fanout_) {</span></span>
-<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">           3 :         auto status = flush_index_level(level);</span></span>
-<span id="L222"><span class="lineNum">     222</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :         if (!status.ok())</span></span>
-<span id="L223"><span class="lineNum">     223</span>                 :             :             return status;</span>
-<span id="L224"><span class="lineNum">     224</span>                 :             :     }</span>
-<span id="L225"><span class="lineNum">     225</span>                 :             :     levels_[level].push_back(std::move(entry));</span>
-<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">          36 :     return absl::OkStatus();</span></span>
-<span id="L227"><span class="lineNum">     227</span>                 :             : }</span>
-<span id="L228"><span class="lineNum">     228</span>                 :             : </span>
-<span id="L229"><span class="lineNum">     229</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 : absl::Status TreeBuilder::flush_index_level(size_t level) {</span></span>
-<span id="L230"><span class="lineNum">     230</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :     if (level &gt;= levels_.size() || levels_[level].empty()) {</span></span>
-<span id="L231"><span class="lineNum">     231</span>                 :             :         return absl::OkStatus();</span>
-<span id="L232"><span class="lineNum">     232</span>                 :             :     }</span>
-<span id="L233"><span class="lineNum">     233</span>                 :             : </span>
-<span id="L234"><span class="lineNum">     234</span>                 :             :     block::Options options;</span>
-<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">          14 :     options.kind = block::Kind::kIndex;</span></span>
-<span id="L236"><span class="lineNum">     236</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :     options.compression = compression_;</span></span>
-<span id="L237"><span class="lineNum">     237</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :     block::BlockBuilder builder(schema_, options);</span></span>
-<span id="L238"><span class="lineNum">     238</span>                 :             :     auto parent = make_index_row(*schema_,</span>
-<span id="L239"><span class="lineNum">     239</span>                 :             :                                  levels_[level].back(),</span>
-<span id="L240"><span class="lineNum">     240</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :                                  BlockRef{.offset = key_file_-&gt;size(), .length = 0},</span></span>
-<span id="L241"><span class="lineNum">     241</span>                 :             :                                  subtree_row_count(*schema_, levels_[level]),</span>
-<span id="L242"><span class="lineNum">     242</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :                                  ColumnFlag::for_index_block());</span></span>
-<span id="L243"><span class="lineNum">     243</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          39 :     for (auto&amp; entry : levels_[level]) {</span></span>
-<span id="L244"><span class="lineNum">     244</span>   [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 25 times"> + </span>]:<span class="tlaGNC">          50 :         auto status = builder.add(std::move(entry));</span></span>
-<span id="L245"><span class="lineNum">     245</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 25 times"> + </span>]:<span class="tlaGNC">          25 :         if (!status.ok())</span></span>
-<span id="L246"><span class="lineNum">     246</span>                 :             :             return status;</span>
-<span id="L247"><span class="lineNum">     247</span>                 :             :     }</span>
-<span id="L248"><span class="lineNum">     248</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :     auto encoded = builder.finish();</span></span>
-<span id="L249"><span class="lineNum">     249</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :     if (!encoded.ok())</span></span>
-<span id="L250"><span class="lineNum">     250</span>                 :             :         return encoded.status();</span>
-<span id="L251"><span class="lineNum">     251</span>                 :             : </span>
-<span id="L252"><span class="lineNum">     252</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :     const BlockRef ref{.offset = key_file_-&gt;size(), .length = encoded-&gt;size()};</span></span>
-<span id="L253"><span class="lineNum">     253</span>                 :             :     key_file_-&gt;append(*encoded);</span>
-<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">          14 :     ++block_count_;</span></span>
-<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">          28 :     parent.columns[schema_-&gt;offset_index()] = Value::make&lt;DataType::kUint64&gt;(ref.offset);</span></span>
-<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">          28 :     parent.columns[schema_-&gt;length_index()] = Value::make&lt;DataType::kUint64&gt;(ref.length);</span></span>
-<span id="L257"><span class="lineNum">     257</span>                 :             :     levels_[level].clear();</span>
-<span id="L258"><span class="lineNum">     258</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          28 :     return add_index_entry(level + 1, std::move(parent));</span></span>
-<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          14 : }</span></span>
-<span id="L260"><span class="lineNum">     260</span>                 :             : </span>
-<span id="L261"><span class="lineNum">     261</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 : absl::StatusOr&lt;FinishResult&gt; TreeBuilder::finish() {</span></span>
-<span id="L262"><span class="lineNum">     262</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (schema_ == nullptr) {</span></span>
-<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
-<span id="L264"><span class="lineNum">     264</span>                 :             :     }</span>
-<span id="L265"><span class="lineNum">     265</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           7 :     if (key_file_ == nullptr) {</span></span>
-<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;key file is null&quot;);</span></span>
-<span id="L267"><span class="lineNum">     267</span>                 :             :     }</span>
-<span id="L268"><span class="lineNum">     268</span>                 :             : </span>
-<span id="L269"><span class="lineNum">     269</span>                 :             :     while (true) {</span>
-<span id="L270"><span class="lineNum">     270</span>                 :             :         size_t non_empty_count = 0;</span>
-<span id="L271"><span class="lineNum">     271</span>                 :             :         size_t only_non_empty_level = 0;</span>
-<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC tlaBgGNC">          12 :         size_t lowest_non_empty_level = levels_.size();</span></span>
-<span id="L273"><span class="lineNum">     273</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          38 :         for (size_t level = 0; level &lt; levels_.size(); ++level) {</span></span>
-<span id="L274"><span class="lineNum">     274</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 18 times"> + </span>]:<span class="tlaGNC">          26 :             if (levels_[level].empty()) {</span></span>
-<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">           8 :                 continue;</span></span>
-<span id="L276"><span class="lineNum">     276</span>                 :             :             }</span>
-<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">          18 :             ++non_empty_count;</span></span>
-<span id="L278"><span class="lineNum">     278</span>                 :             :             only_non_empty_level = level;</span>
-<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          18 :             lowest_non_empty_level = std::min(lowest_non_empty_level, level);</span></span>
-<span id="L280"><span class="lineNum">     280</span>                 :             :         }</span>
-<span id="L281"><span class="lineNum">     281</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">          12 :         if (non_empty_count &lt;= 1) {</span></span>
-<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">           7 :             std::vector&lt;InternalRow&gt; root_entries;</span></span>
-<span id="L283"><span class="lineNum">     283</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :             if (non_empty_count == 1) {</span></span>
-<span id="L284"><span class="lineNum">     284</span>                 :             :                 root_entries = std::move(levels_[only_non_empty_level]);</span>
-<span id="L285"><span class="lineNum">     285</span>                 :             :                 levels_[only_non_empty_level].clear();</span>
-<span id="L286"><span class="lineNum">     286</span>                 :             :             }</span>
-<span id="L287"><span class="lineNum">     287</span>                 :             :             block::Options options;</span>
-<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">           7 :             options.kind = block::Kind::kRootIndex;</span></span>
-<span id="L289"><span class="lineNum">     289</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :             options.compression = compression_;</span></span>
-<span id="L290"><span class="lineNum">     290</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :             block::BlockBuilder root_builder(schema_, options);</span></span>
-<span id="L291"><span class="lineNum">     291</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">          18 :             for (auto&amp; entry : root_entries) {</span></span>
-<span id="L292"><span class="lineNum">     292</span>   [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 11 times"> + </span>]:<span class="tlaGNC">          22 :                 auto status = root_builder.add(std::move(entry));</span></span>
-<span id="L293"><span class="lineNum">     293</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          11 :                 if (!status.ok())</span></span>
-<span id="L294"><span class="lineNum">     294</span>                 :             :                     return status;</span>
-<span id="L295"><span class="lineNum">     295</span>                 :             :             }</span>
-<span id="L296"><span class="lineNum">     296</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :             auto root = root_builder.finish();</span></span>
-<span id="L297"><span class="lineNum">     297</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :             if (!root.ok())</span></span>
-<span id="L298"><span class="lineNum">     298</span>                 :             :                 return root.status();</span>
-<span id="L299"><span class="lineNum">     299</span>                 :             : </span>
-<span id="L300"><span class="lineNum">     300</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :             const BlockRef root_ref{.offset = key_file_-&gt;size(), .length = root-&gt;size()};</span></span>
-<span id="L301"><span class="lineNum">     301</span>                 :             :             key_file_-&gt;append(*root);</span>
-<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaGNC">           7 :             ++block_count_;</span></span>
-<span id="L303"><span class="lineNum">     303</span>                 :             :             return FinishResult{.root = root_ref, .block_count = block_count_};</span>
-<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">           7 :         }</span></span>
-<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">           5 :         auto status = flush_index_level(lowest_non_empty_level);</span></span>
-<span id="L306"><span class="lineNum">     306</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :         if (!status.ok())</span></span>
-<span id="L307"><span class="lineNum">     307</span>                 :             :             return status;</span>
-<span id="L308"><span class="lineNum">     308</span>                 :             :     }</span>
-<span id="L309"><span class="lineNum">     309</span>                 :             : }</span>
-<span id="L310"><span class="lineNum">     310</span>                 :             : </span>
-<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">           7 : absl::Status TreeReader::scan_data_blocks(std::string_view key_file,</span></span>
-<span id="L312"><span class="lineNum">     312</span>                 :             :                                           const InternalSchema&amp; schema,</span>
-<span id="L313"><span class="lineNum">     313</span>                 :             :                                           BlockRef root,</span>
-<span id="L314"><span class="lineNum">     314</span>                 :             :                                           std::vector&lt;BlockRef&gt;* data_blocks) {</span>
-<span id="L315"><span class="lineNum">     315</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (data_blocks == nullptr) {</span></span>
-<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;data blocks output is null&quot;);</span></span>
-<span id="L317"><span class="lineNum">     317</span>                 :             :     }</span>
-<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC tlaBgGNC">           7 :     return scan_node(key_file, schema, root, block::Kind::kRootIndex, data_blocks);</span></span>
+<span id="L212"><span class="lineNum">     212</span>   [<span class="tlaGBC" title="Branch 0 was taken 17 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 17 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          27 :     if (!levels_.empty() &amp;&amp; levels_[0].size() == fanout_) {</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :             :         return absl::FailedPreconditionError(</span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             &quot;prepare_for_data_block must be called before adding another data block&quot;);</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :             :     }</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             :     return add_index_entry(</span>
+<span id="L217"><span class="lineNum">     217</span>   [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">          81 :         0, make_index_row(schema_, fence, data_block, row_count, ColumnFlag::for_data_block()));</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L218"><span class="lineNum">     218</span>                 :             : }</span>
+<span id="L219"><span class="lineNum">     219</span>                 :             : </span>
+<span id="L220"><span class="lineNum">     220</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC">          41 : absl::Status TreeBuilder::add_index_entry(size_t level, InternalRow entry) {</span></span>
+<span id="L221"><span class="lineNum">     221</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC">          41 :     if (levels_.size() &lt;= level) {</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">          15 :         levels_.resize(level + 1);</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :             :     }</span>
+<span id="L224"><span class="lineNum">     224</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 11 times"> + </span>]:<span class="tlaGNC">          41 :     if (level &gt; 0 &amp;&amp; levels_[level].size() == fanout_) {</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">           3 :         auto status = flush_index_level(level);</span></span>
+<span id="L226"><span class="lineNum">     226</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :         if (!status.ok())</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :             :             return status;</span>
+<span id="L228"><span class="lineNum">     228</span>                 :             :     }</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             :     levels_[level].push_back(std::move(entry));</span>
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          41 :     return absl::OkStatus();</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :             : }</span>
+<span id="L232"><span class="lineNum">     232</span>                 :             : </span>
+<span id="L233"><span class="lineNum">     233</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 : absl::Status TreeBuilder::flush_index_level(size_t level) {</span></span>
+<span id="L234"><span class="lineNum">     234</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :     if (level &gt;= levels_.size() || levels_[level].empty()) {</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :             :         return absl::OkStatus();</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             :     }</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : </span>
+<span id="L238"><span class="lineNum">     238</span>                 :             :     block::Options options;</span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          14 :     options.kind = block::Kind::kIndex;</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          14 :     options.compression = compression_;</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          14 :     options.max_block_size_soft_limit = soft_limit_;</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">          14 :     options.max_block_size_hard_limit = hard_limit_;</span></span>
+<span id="L243"><span class="lineNum">     243</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :     options.max_row_count = fanout_;</span></span>
+<span id="L244"><span class="lineNum">     244</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :     block::BlockBuilder builder(schema_, options);</span></span>
+<span id="L245"><span class="lineNum">     245</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          14 :     auto parent = make_index_row(schema_,</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :             :                                  levels_[level].back(),</span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">          14 :                                  BlockRef{.offset = key_file_-&gt;size(), .length = 0},</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">          14 :                                  subtree_row_count(schema_, levels_[level]),</span></span>
+<span id="L249"><span class="lineNum">     249</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          42 :                                  ColumnFlag::for_index_block());</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L250"><span class="lineNum">     250</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          39 :     for (auto&amp; entry : levels_[level]) {</span></span>
+<span id="L251"><span class="lineNum">     251</span>   [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 25 times"> + </span>]:<span class="tlaGNC">          50 :         auto status = builder.add(std::move(entry));</span></span>
+<span id="L252"><span class="lineNum">     252</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 25 times"> + </span>]:<span class="tlaGNC">          25 :         if (!status.ok())</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :             :             return status;</span>
+<span id="L254"><span class="lineNum">     254</span>                 :             :     }</span>
+<span id="L255"><span class="lineNum">     255</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :     auto encoded = builder.finish();</span></span>
+<span id="L256"><span class="lineNum">     256</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :     if (!encoded.ok())</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :             :         return encoded.status();</span>
+<span id="L258"><span class="lineNum">     258</span>                 :             : </span>
+<span id="L259"><span class="lineNum">     259</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :     const BlockRef ref{.offset = key_file_-&gt;size(), .length = encoded-&gt;size()};</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :             :     key_file_-&gt;append(*encoded);</span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">          14 :     ++block_count_;</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">          28 :     parent.columns[schema_-&gt;offset_index()] = Value::make&lt;DataType::kUint64&gt;(ref.offset);</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">          28 :     parent.columns[schema_-&gt;length_index()] = Value::make&lt;DataType::kUint64&gt;(ref.length);</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :             :     levels_[level].clear();</span>
+<span id="L265"><span class="lineNum">     265</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          28 :     return add_index_entry(level + 1, std::move(parent));</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">          14 : }</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :             : </span>
+<span id="L268"><span class="lineNum">     268</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 : absl::StatusOr&lt;FinishResult&gt; TreeBuilder::finish() {</span></span>
+<span id="L269"><span class="lineNum">     269</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :     if (schema_ == nullptr) {</span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :             :     }</span>
+<span id="L272"><span class="lineNum">     272</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          10 :     if (key_file_ == nullptr) {</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;key file is null&quot;);</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :             :     }</span>
+<span id="L275"><span class="lineNum">     275</span>                 :             : </span>
+<span id="L276"><span class="lineNum">     276</span>                 :             :     while (true) {</span>
+<span id="L277"><span class="lineNum">     277</span>                 :             :         size_t non_empty_count = 0;</span>
+<span id="L278"><span class="lineNum">     278</span>                 :             :         size_t only_non_empty_level = 0;</span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC tlaBgGNC">          15 :         size_t lowest_non_empty_level = levels_.size();</span></span>
+<span id="L280"><span class="lineNum">     280</span>         [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          44 :         for (size_t level = 0; level &lt; levels_.size(); ++level) {</span></span>
+<span id="L281"><span class="lineNum">     281</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC">          29 :             if (levels_[level].empty()) {</span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">           8 :                 continue;</span></span>
+<span id="L283"><span class="lineNum">     283</span>                 :             :             }</span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">          21 :             ++non_empty_count;</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :             :             only_non_empty_level = level;</span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">          21 :             lowest_non_empty_level = std::min(lowest_non_empty_level, level);</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :             :         }</span>
+<span id="L288"><span class="lineNum">     288</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">          15 :         if (non_empty_count &lt;= 1) {</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          10 :             std::vector&lt;InternalRow&gt; root_entries;</span></span>
+<span id="L290"><span class="lineNum">     290</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :             if (non_empty_count == 1) {</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :             :                 root_entries = std::move(levels_[only_non_empty_level]);</span>
+<span id="L292"><span class="lineNum">     292</span>                 :             :                 levels_[only_non_empty_level].clear();</span>
+<span id="L293"><span class="lineNum">     293</span>                 :             :             }</span>
+<span id="L294"><span class="lineNum">     294</span>                 :             :             block::Options options;</span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          10 :             options.kind = block::Kind::kRootIndex;</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          10 :             options.compression = compression_;</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">          10 :             options.max_block_size_soft_limit = soft_limit_;</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">          10 :             options.max_block_size_hard_limit = hard_limit_;</span></span>
+<span id="L299"><span class="lineNum">     299</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :             options.max_row_count = fanout_;</span></span>
+<span id="L300"><span class="lineNum">     300</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :             block::BlockBuilder root_builder(schema_, options);</span></span>
+<span id="L301"><span class="lineNum">     301</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          26 :             for (auto&amp; entry : root_entries) {</span></span>
+<span id="L302"><span class="lineNum">     302</span>   [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 16 times"> + </span>]:<span class="tlaGNC">          32 :                 auto status = root_builder.add(std::move(entry));</span></span>
+<span id="L303"><span class="lineNum">     303</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :                 if (!status.ok())</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :             :                     return status;</span>
+<span id="L305"><span class="lineNum">     305</span>                 :             :             }</span>
+<span id="L306"><span class="lineNum">     306</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :             auto root = root_builder.finish();</span></span>
+<span id="L307"><span class="lineNum">     307</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :             if (!root.ok())</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :             :                 return root.status();</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             : </span>
+<span id="L310"><span class="lineNum">     310</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :             const BlockRef root_ref{.offset = key_file_-&gt;size(), .length = root-&gt;size()};</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :             :             key_file_-&gt;append(*root);</span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">          10 :             ++block_count_;</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :             :             return FinishResult{.root = root_ref, .block_count = block_count_};</span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">          10 :         }</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">           5 :         auto status = flush_index_level(lowest_non_empty_level);</span></span>
+<span id="L316"><span class="lineNum">     316</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :         if (!status.ok())</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :             :             return status;</span>
+<span id="L318"><span class="lineNum">     318</span>                 :             :     }</span>
 <span id="L319"><span class="lineNum">     319</span>                 :             : }</span>
 <span id="L320"><span class="lineNum">     320</span>                 :             : </span>
-<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">           4 : absl::StatusOr&lt;std::optional&lt;BlockRef&gt;&gt; TreeReader::find_data_block(</span></span>
-<span id="L322"><span class="lineNum">     322</span>                 :             :     std::string_view key_file,</span>
-<span id="L323"><span class="lineNum">     323</span>                 :             :     const InternalSchema&amp; schema,</span>
-<span id="L324"><span class="lineNum">     324</span>                 :             :     BlockRef root,</span>
-<span id="L325"><span class="lineNum">     325</span>                 :             :     std::string_view target_all_key) {</span>
-<span id="L326"><span class="lineNum">     326</span>                 :             :     return find_data_block_from_node(</span>
-<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">           4 :         key_file, schema, root, block::Kind::kRootIndex, target_all_key);</span></span>
-<span id="L328"><span class="lineNum">     328</span>                 :             : }</span>
-<span id="L329"><span class="lineNum">     329</span>                 :             : </span>
-<span id="L330"><span class="lineNum">     330</span>                 :             : } // namespace pl::sstv2::index</span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">           8 : absl::Status TreeReader::scan_data_blocks(std::string_view key_file,</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :             :                                           InternalSchema::ConstRef schema,</span>
+<span id="L323"><span class="lineNum">     323</span>                 :             :                                           BlockRef root,</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             :                                           std::vector&lt;BlockRef&gt;* data_blocks) {</span>
+<span id="L325"><span class="lineNum">     325</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :     if (data_blocks == nullptr) {</span></span>
+<span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;data blocks output is null&quot;);</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :             :     }</span>
+<span id="L328"><span class="lineNum">     328</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          16 :     return scan_node(key_file, schema, root, block::Kind::kRootIndex, data_blocks);</span></span>
+<span id="L329"><span class="lineNum">     329</span>                 :             : }</span>
+<span id="L330"><span class="lineNum">     330</span>                 :             : </span>
+<span id="L331"><span class="lineNum">     331</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 : absl::StatusOr&lt;std::optional&lt;BlockRef&gt;&gt; TreeReader::find_data_block(</span></span>
+<span id="L332"><span class="lineNum">     332</span>                 :             :     std::string_view key_file,</span>
+<span id="L333"><span class="lineNum">     333</span>                 :             :     InternalSchema::ConstRef schema,</span>
+<span id="L334"><span class="lineNum">     334</span>                 :             :     BlockRef root,</span>
+<span id="L335"><span class="lineNum">     335</span>                 :             :     std::string_view target_all_key) {</span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">           4 :     return find_data_block_from_node(</span></span>
+<span id="L337"><span class="lineNum">     337</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :         key_file, schema, root, block::Kind::kRootIndex, target_all_key);</span></span>
+<span id="L338"><span class="lineNum">     338</span>                 :             : }</span>
+<span id="L339"><span class="lineNum">     339</span>                 :             : </span>
+<span id="L340"><span class="lineNum">     340</span>                 :             : } // namespace pl::sstv2::index</span>
         </pre>
               </td>
             </tr>

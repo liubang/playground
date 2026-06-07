@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-07 09:05:46</td>
+            <td class="headerValue">2026-06-07 18:16:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -113,12 +113,12 @@
 <span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaUNC">           0 :     codec::encode_varint(codec::zigzag_encode(value), dst);</span></span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : }</span>
 <span id="L44"><span class="lineNum">      44</span>                 :             : </span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC tlaBgGNC">          24 : absl::Status encode_variant(const Value&amp; value, std::string* dst) {</span></span>
-<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">          24 :     auto payload = encode_value(value);</span></span>
-<span id="L47"><span class="lineNum">      47</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span>]:<span class="tlaGNC">          24 :     if (!payload.ok())</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC tlaBgGNC">          42 : absl::Status encode_variant(const Value&amp; value, std::string* dst) {</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">          42 :     auto payload = encode_value(value);</span></span>
+<span id="L47"><span class="lineNum">      47</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 42 times"> + </span>]:<span class="tlaGNC">          42 :     if (!payload.ok())</span></span>
 <span id="L48"><span class="lineNum">      48</span>                 :             :         return payload.status();</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             :     codec::append_fixed8(dst, static_cast&lt;uint8_t&gt;(value.type()));</span>
-<span id="L50"><span class="lineNum">      50</span>         [<span class="tlaGBC" title="Branch 0 was taken 24 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          24 :     codec::encode_varint(payload-&gt;size(), dst);</span></span>
+<span id="L50"><span class="lineNum">      50</span>         [<span class="tlaGBC" title="Branch 0 was taken 42 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          42 :     codec::encode_varint(payload-&gt;size(), dst);</span></span>
 <span id="L51"><span class="lineNum">      51</span>                 :             :     dst-&gt;append(*payload);</span>
 <span id="L52"><span class="lineNum">      52</span>                 :             :     return absl::OkStatus();</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             : }</span>
@@ -159,15 +159,15 @@
 <span id="L88"><span class="lineNum">      88</span>                 :             : </span>
 <span id="L89"><span class="lineNum">      89</span>                 :             : } // namespace</span>
 <span id="L90"><span class="lineNum">      90</span>                 :             : </span>
-<span id="L91"><span class="lineNum">      91</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          65 : absl::Status encode_value(const Value&amp; value, std::string* dst) {</span></span>
+<span id="L91"><span class="lineNum">      91</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          93 : absl::Status encode_value(const Value&amp; value, std::string* dst) {</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 48 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 4 times"> + </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 64 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 7 times"> + </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 18 was not taken"> - </span>]
-<span id="L92"><span class="lineNum">      92</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          65 :     switch (value.type()) {</span></span>
+<span id="L92"><span class="lineNum">      92</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          93 :     switch (value.type()) {</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 48 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 4 times"> + </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 64 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 7 times"> + </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 18 was not taken"> - </span>]
 <span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case DataType::kNone:</span></span>
 <span id="L94"><span class="lineNum">      94</span>                 :             :             return absl::OkStatus();</span>
@@ -196,7 +196,7 @@
 <span id="L117"><span class="lineNum">     117</span>                 :             :             append_zigzag(value.as_int64(), dst);</span>
 <span id="L118"><span class="lineNum">     118</span>                 :             :             return absl::OkStatus();</span>
 <span id="L119"><span class="lineNum">     119</span>                 :             :         case DataType::kUint64:</span>
-<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC tlaBgGNC">           9 :             codec::encode_varint(value.as_uint64(), dst);</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC tlaBgGNC">          15 :             codec::encode_varint(value.as_uint64(), dst);</span></span>
 <span id="L121"><span class="lineNum">     121</span>                 :             :             return absl::OkStatus();</span>
 <span id="L122"><span class="lineNum">     122</span>                 :             :         case DataType::kFloat:</span>
 <span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             append_bits(dst, value.as_float());</span></span>
@@ -215,28 +215,28 @@
 <span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaUNC">           0 :             codec::encode_varint(value.as_version().major, dst);</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaUNC">           0 :             codec::encode_varint(value.as_version().minor, dst);</span></span>
 <span id="L138"><span class="lineNum">     138</span>                 :             :             return absl::OkStatus();</span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC tlaBgGNC">          48 :         case DataType::kString:</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC tlaBgGNC">          64 :         case DataType::kString:</span></span>
 <span id="L140"><span class="lineNum">     140</span>                 :             :         case DataType::kU16String:</span>
 <span id="L141"><span class="lineNum">     141</span>                 :             :         case DataType::kU32String:</span>
 <span id="L142"><span class="lineNum">     142</span>                 :             :         case DataType::kBinary:</span>
 <span id="L143"><span class="lineNum">     143</span>                 :             :             dst-&gt;append(value.as_string());</span>
 <span id="L144"><span class="lineNum">     144</span>                 :             :             return absl::OkStatus();</span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :         case DataType::kArray:</span>
-<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">           4 :             codec::encode_varint(value.as_array().size(), dst);</span></span>
-<span id="L147"><span class="lineNum">     147</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">          12 :             for (const auto&amp; element : value.as_array()) {</span></span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">           8 :                 auto status = encode_variant(element, dst);</span></span>
-<span id="L149"><span class="lineNum">     149</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :                 if (!status.ok())</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">           7 :             codec::encode_varint(value.as_array().size(), dst);</span></span>
+<span id="L147"><span class="lineNum">     147</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">          21 :             for (const auto&amp; element : value.as_array()) {</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          14 :                 auto status = encode_variant(element, dst);</span></span>
+<span id="L149"><span class="lineNum">     149</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :                 if (!status.ok())</span></span>
 <span id="L150"><span class="lineNum">     150</span>                 :             :                     return status;</span>
 <span id="L151"><span class="lineNum">     151</span>                 :             :             }</span>
 <span id="L152"><span class="lineNum">     152</span>                 :             :             return absl::OkStatus();</span>
 <span id="L153"><span class="lineNum">     153</span>                 :             :         case DataType::kMap:</span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">           4 :             codec::encode_varint(value.as_map().size(), dst);</span></span>
-<span id="L155"><span class="lineNum">     155</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">          12 :             for (const auto&amp; [key, item] : value.as_map()) {</span></span>
-<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">           8 :                 auto key_status = encode_variant(key, dst);</span></span>
-<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :                 if (!key_status.ok())</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">           7 :             codec::encode_varint(value.as_map().size(), dst);</span></span>
+<span id="L155"><span class="lineNum">     155</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">          21 :             for (const auto&amp; [key, item] : value.as_map()) {</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          14 :                 auto key_status = encode_variant(key, dst);</span></span>
+<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :                 if (!key_status.ok())</span></span>
 <span id="L158"><span class="lineNum">     158</span>                 :             :                     return key_status;</span>
-<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :                 auto value_status = encode_variant(item, dst);</span></span>
-<span id="L160"><span class="lineNum">     160</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :                 if (!value_status.ok())</span></span>
+<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :                 auto value_status = encode_variant(item, dst);</span></span>
+<span id="L160"><span class="lineNum">     160</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :                 if (!value_status.ok())</span></span>
 <span id="L161"><span class="lineNum">     161</span>                 :             :                     return value_status;</span>
 <span id="L162"><span class="lineNum">     162</span>                 :             :             }</span>
 <span id="L163"><span class="lineNum">     163</span>                 :             :             return absl::OkStatus();</span>
@@ -246,10 +246,10 @@
 <span id="L167"><span class="lineNum">     167</span>                 :             :     }</span>
 <span id="L168"><span class="lineNum">     168</span>                 :             : }</span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : </span>
-<span id="L170"><span class="lineNum">     170</span>         [<span class="tlaGBC" title="Branch 0 was taken 65 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          65 : absl::StatusOr&lt;std::string&gt; encode_value(const Value&amp; value) {</span></span>
+<span id="L170"><span class="lineNum">     170</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          93 : absl::StatusOr&lt;std::string&gt; encode_value(const Value&amp; value) {</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :             :     std::string encoded;</span>
-<span id="L172"><span class="lineNum">     172</span>         [<span class="tlaGBC" title="Branch 0 was taken 65 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          65 :     auto status = encode_value(value, &amp;encoded);</span></span>
-<span id="L173"><span class="lineNum">     173</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 65 times"> + </span>]:<span class="tlaGNC">          65 :     if (!status.ok())</span></span>
+<span id="L172"><span class="lineNum">     172</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          93 :     auto status = encode_value(value, &amp;encoded);</span></span>
+<span id="L173"><span class="lineNum">     173</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 93 times"> + </span>]:<span class="tlaGNC">          93 :     if (!status.ok())</span></span>
 <span id="L174"><span class="lineNum">     174</span>                 :             :         return status;</span>
 <span id="L175"><span class="lineNum">     175</span>                 :             :     return encoded;</span>
 <span id="L176"><span class="lineNum">     176</span>                 :             : }</span>
