@@ -57,6 +57,7 @@ public:
     BlockBuilder(types::InternalSchema::ConstPtr schema, Options options);
 
     [[nodiscard]] absl::Status add(types::InternalRow row);
+    [[nodiscard]] absl::Status add(types::InternalRow row, std::string embedded_value);
     [[nodiscard]] absl::StatusOr<std::string> finish() const;
 
     [[nodiscard]] size_t row_count() const noexcept { return rows_.size(); }
@@ -65,6 +66,7 @@ private:
     types::InternalSchema::ConstPtr schema_;
     Options options_;
     std::vector<types::InternalRow> rows_;
+    std::vector<std::string> embedded_values_;
 };
 
 class BlockReader {
@@ -75,10 +77,13 @@ public:
 
     [[nodiscard]] const Header& header() const noexcept { return header_; }
     [[nodiscard]] const std::vector<types::InternalRow>& rows() const noexcept { return rows_; }
+    [[nodiscard]] absl::StatusOr<std::string_view> embedded_value(
+        size_t row_index, const types::InternalSchema& schema) const;
 
 private:
     Header header_;
     std::vector<types::InternalRow> rows_;
+    std::string data_table_;
 };
 
 } // namespace pl::sstv2::block

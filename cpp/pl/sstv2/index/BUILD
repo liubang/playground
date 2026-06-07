@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/06/05 22:09
+# Created: 2026/06/07 00:00
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
@@ -25,21 +25,20 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "block",
-    srcs = ["block.cpp"],
-    hdrs = ["block.h"],
+    name = "index",
+    srcs = ["index_tree.cpp"],
+    hdrs = ["index_tree.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        "//cpp/pl/sstv2/codec:checksum",
-        "//cpp/pl/sstv2/codec:endian",
-        "//cpp/pl/sstv2/codec:fixed",
+        "//cpp/pl/sstv2/block",
         "//cpp/pl/sstv2/codec:value_comparable",
-        "//cpp/pl/sstv2/compress:compress",
-        "//cpp/pl/sstv2/file:value_codec",
-        "//cpp/pl/sstv2/pattern:compound",
-        "//cpp/pl/sstv2/pattern:raw",
+        "//cpp/pl/sstv2/compress",
+        "//cpp/pl/sstv2/types:column_flag",
         "//cpp/pl/sstv2/types:internal_row",
+        "//cpp/pl/sstv2/types:internal_schema",
+        "//cpp/pl/sstv2/types:value",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
     ],

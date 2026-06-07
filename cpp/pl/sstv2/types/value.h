@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -348,13 +349,9 @@ public:
         return val;
     }
 
-    // Map construction.
-    static Value make_map(std::vector<std::pair<Value, Value>> entries) {
-        Value val;
-        val.type_ = DataType::kMap;
-        new (&val.storage_.map) MapStorage(std::move(entries));
-        return val;
-    }
+    // Map construction. Entries are canonicalized by key so Map ordering is
+    // independent from insertion order.
+    static Value make_map(std::vector<std::pair<Value, Value>> entries);
 
     // --- Type query ---
 
@@ -365,13 +362,14 @@ public:
     // --- Equality ---
 
     bool operator==(const Value& rhs) const {
-        if (type_ != rhs.type_) return false;
+        if (type_ != rhs.type_)
+            return false;
         switch (storage_category_of(type_)) {
             case StorageCategory::kNone:
                 return true;
             case StorageCategory::kInline:
-                return std::memcmp(&storage_.inline_data, &rhs.storage_.inline_data,
-                                   kInlineCapacity) == 0;
+                return std::memcmp(
+                           &storage_.inline_data, &rhs.storage_.inline_data, kInlineCapacity) == 0;
             case StorageCategory::kString:
                 return storage_.str == rhs.storage_.str;
             case StorageCategory::kArray:
@@ -563,7 +561,7 @@ private:
                 new (&storage_.map) MapStorage(other.storage_.map);
                 break;
         }
-        type_ = other.type_;  // Only set AFTER successful construction
+        type_ = other.type_; // Only set AFTER successful construction
     }
 
     void move_from(Value&& other) noexcept {
@@ -682,6 +680,117 @@ private:
         }
     }
 };
+
+inline int compare_values(const Value& lhs, const Value& rhs);
+
+inline int compare_bytes(std::string_view lhs, std::string_view rhs) {
+    const int cmp = lhs.compare(rhs);
+    if (cmp < 0)
+        return -1;
+    if (cmp > 0)
+        return 1;
+    return 0;
+}
+
+template <typename T> inline int compare_scalar(const T& lhs, const T& rhs) {
+    if (lhs < rhs)
+        return -1;
+    if (rhs < lhs)
+        return 1;
+    return 0;
+}
+
+inline int compare_arrays(const ArrayStorage& lhs, const ArrayStorage& rhs) {
+    const size_t n = std::min(lhs.size(), rhs.size());
+    for (size_t i = 0; i < n; ++i) {
+        const int cmp = compare_values(lhs[i], rhs[i]);
+        if (cmp != 0)
+            return cmp;
+    }
+    return compare_scalar(lhs.size(), rhs.size());
+}
+
+inline int compare_maps(const MapStorage& lhs, const MapStorage& rhs) {
+    const size_t n = std::min(lhs.size(), rhs.size());
+    for (size_t i = 0; i < n; ++i) {
+        int cmp = compare_values(lhs[i].first, rhs[i].first);
+        if (cmp != 0)
+            return cmp;
+        cmp = compare_values(lhs[i].second, rhs[i].second);
+        if (cmp != 0)
+            return cmp;
+    }
+    return compare_scalar(lhs.size(), rhs.size());
+}
+
+inline int compare_values(const Value& lhs, const Value& rhs) {
+    if (lhs.type() != rhs.type()) {
+        return compare_scalar(static_cast<uint8_t>(lhs.type()), static_cast<uint8_t>(rhs.type()));
+    }
+
+    switch (lhs.type()) {
+        case DataType::kNone:
+            return 0;
+        case DataType::kBool:
+            return compare_scalar(lhs.as_bool(), rhs.as_bool());
+        case DataType::kInt8:
+            return compare_scalar(lhs.as_int8(), rhs.as_int8());
+        case DataType::kUint8:
+            return compare_scalar(lhs.as_uint8(), rhs.as_uint8());
+        case DataType::kInt16:
+            return compare_scalar(lhs.as_int16(), rhs.as_int16());
+        case DataType::kUint16:
+            return compare_scalar(lhs.as_uint16(), rhs.as_uint16());
+        case DataType::kInt32:
+            return compare_scalar(lhs.as_int32(), rhs.as_int32());
+        case DataType::kUint32:
+            return compare_scalar(lhs.as_uint32(), rhs.as_uint32());
+        case DataType::kInt64:
+            return compare_scalar(lhs.as_int64(), rhs.as_int64());
+        case DataType::kUint64:
+            return compare_scalar(lhs.as_uint64(), rhs.as_uint64());
+        case DataType::kFloat:
+            return compare_scalar(lhs.as_float(), rhs.as_float());
+        case DataType::kDouble:
+            return compare_scalar(lhs.as_double(), rhs.as_double());
+        case DataType::kLongDouble:
+            return compare_bytes(
+                std::string_view(reinterpret_cast<const char*>(lhs.as_long_double().data),
+                                 sizeof(lhs.as_long_double().data)),
+                std::string_view(reinterpret_cast<const char*>(rhs.as_long_double().data),
+                                 sizeof(rhs.as_long_double().data)));
+        case DataType::kTime: {
+            int cmp = compare_scalar(lhs.as_time().seconds, rhs.as_time().seconds);
+            return cmp != 0 ? cmp
+                            : compare_scalar(lhs.as_time().nanoseconds, rhs.as_time().nanoseconds);
+        }
+        case DataType::kVersion: {
+            int cmp = compare_scalar(lhs.as_version().major, rhs.as_version().major);
+            return cmp != 0 ? cmp : compare_scalar(lhs.as_version().minor, rhs.as_version().minor);
+        }
+        case DataType::kString:
+        case DataType::kU16String:
+        case DataType::kU32String:
+        case DataType::kBinary:
+            return compare_bytes(lhs.as_string(), rhs.as_string());
+        case DataType::kArray:
+            return compare_arrays(lhs.as_array(), rhs.as_array());
+        case DataType::kMap:
+            return compare_maps(lhs.as_map(), rhs.as_map());
+        default:
+            return 0;
+    }
+}
+
+inline Value Value::make_map(std::vector<std::pair<Value, Value>> entries) {
+    std::stable_sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
+        return compare_values(lhs.first, rhs.first) < 0;
+    });
+    Value val;
+    val.type_ = DataType::kMap;
+    new (&val.storage_.map) MapStorage(std::move(entries));
+    return val;
+}
 
 // =============================================================================
 // NativeTypeMapping: reverse mapping from C++ type to DataType.

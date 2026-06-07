@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/06/05 22:09
+# Created: 2026/06/06 14:11
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
@@ -25,21 +25,45 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "block",
-    srcs = ["block.cpp"],
-    hdrs = ["block.h"],
+    name = "tail",
+    srcs = ["tail.cpp"],
+    hdrs = ["tail.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/sstv2/codec:checksum",
-        "//cpp/pl/sstv2/codec:endian",
         "//cpp/pl/sstv2/codec:fixed",
-        "//cpp/pl/sstv2/codec:value_comparable",
-        "//cpp/pl/sstv2/compress:compress",
-        "//cpp/pl/sstv2/file:value_codec",
-        "//cpp/pl/sstv2/pattern:compound",
-        "//cpp/pl/sstv2/pattern:raw",
-        "//cpp/pl/sstv2/types:internal_row",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "section",
+    srcs = ["section.cpp"],
+    hdrs = ["section.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/sstv2/codec:checksum",
+        "//cpp/pl/sstv2/codec:fixed",
+        "//cpp/pl/sstv2/codec:varint",
+        "//cpp/pl/sstv2/types:value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "metadata",
+    srcs = ["metadata.cpp"],
+    hdrs = ["metadata.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":section",
+        "//cpp/pl/sstv2/types:schema",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
     ],
