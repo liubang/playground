@@ -33,7 +33,7 @@ using types::SchemaBuilder;
 using types::Value;
 using types::Version;
 
-std::shared_ptr<const Schema> make_schema() {
+Schema::ConstRef make_schema() {
     auto schema = SchemaBuilder().add_column("k", DataType::kString).build();
     EXPECT_TRUE(schema.has_value());
     return std::make_shared<const Schema>(std::move(*schema));
@@ -55,9 +55,9 @@ InternalRow make_row(const InternalSchema& schema, std::string key, uint64_t ver
 }
 
 TEST(BloomTest, RoundTripMayContainInsertedRows) {
-    InternalSchema schema(make_schema());
+    auto schema = InternalSchema::make(make_schema());
     Builder builder(10);
-    const auto row = make_row(schema, "alpha", 9);
+    const auto row = make_row(*schema, "alpha", 9);
     ASSERT_TRUE(builder.add(row, schema).ok());
 
     const std::string section = builder.finish();

@@ -85,7 +85,8 @@ template <size_t CellSize, typename T>
 void add_raw_cell(pattern::RawEncoder<CellSize>* encoder, T value) {
     uint8_t buf[CellSize];
     if constexpr (CellSize == 1) {
-        buf[0] = static_cast<uint8_t>(value);
+        static_assert(sizeof(value) == 1);
+        std::memcpy(buf, &value, sizeof(value));
     } else if constexpr (CellSize == 2) {
         codec::encode_fixed16(buf, static_cast<uint16_t>(value));
     } else if constexpr (CellSize == 4) {
@@ -109,17 +110,17 @@ void add_raw_cell(pattern::RawEncoder<CellSize>* encoder, T value) {
 }
 
 absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>& rows,
-                                          const types::InternalSchema& schema,
+                                          types::InternalSchema::ConstRef schema,
                                           size_t column,
                                           std::string* data_table) {
-    const DataType type = schema.column_type(column);
+    const DataType type = schema->column_type(column);
     switch (type) {
         case DataType::kBool: {
             pattern::RawEncoder<1> enc;
             enc.reserve(rows.size());
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
-                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                    verify_value_type(row.columns[column], type, schema->column_name(column)));
                 enc.add(static_cast<uint8_t>(row.columns[column].as_bool() ? 1 : 0));
             }
             return enc.finish().data;
@@ -130,7 +131,7 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
             enc.reserve(rows.size());
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
-                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                    verify_value_type(row.columns[column], type, schema->column_name(column)));
                 enc.add(type == DataType::kInt8
                             ? static_cast<uint8_t>(row.columns[column].as_int8())
                             : row.columns[column].as_uint8());
@@ -143,7 +144,7 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
             enc.reserve(rows.size());
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
-                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                    verify_value_type(row.columns[column], type, schema->column_name(column)));
                 add_raw_cell(&enc,
                              type == DataType::kInt16
                                  ? static_cast<uint16_t>(row.columns[column].as_int16())
@@ -158,7 +159,7 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
             enc.reserve(rows.size());
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
-                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                    verify_value_type(row.columns[column], type, schema->column_name(column)));
                 if (type == DataType::kFloat) {
                     add_raw_cell(&enc, row.columns[column].as_float());
                 } else {
@@ -177,7 +178,7 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
             enc.reserve(rows.size());
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
-                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                    verify_value_type(row.columns[column], type, schema->column_name(column)));
                 if (type == DataType::kDouble) {
                     add_raw_cell(&enc, row.columns[column].as_double());
                 } else {
@@ -194,7 +195,7 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
             enc.reserve(rows.size());
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
-                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                    verify_value_type(row.columns[column], type, schema->column_name(column)));
                 enc.add(row.columns[column].as_long_double().data);
             }
             return enc.finish().data;
@@ -204,7 +205,7 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
             enc.reserve(rows.size());
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
-                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                    verify_value_type(row.columns[column], type, schema->column_name(column)));
                 const auto& t = row.columns[column].as_time();
                 enc.add(t.seconds, t.nanoseconds);
             }
@@ -215,7 +216,7 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
             enc.reserve(rows.size());
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
-                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                    verify_value_type(row.columns[column], type, schema->column_name(column)));
                 const auto& v = row.columns[column].as_version();
                 enc.add(v.major, v.minor);
             }
@@ -229,7 +230,7 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
             enc.reserve(rows.size());
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
-                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                    verify_value_type(row.columns[column], type, schema->column_name(column)));
                 const std::string_view bytes = row.columns[column].as_string();
                 const uint64_t offset = data_table->size();
                 data_table->append(bytes);
@@ -243,7 +244,7 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
             enc.reserve(rows.size());
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
-                    verify_value_type(row.columns[column], type, schema.column_name(column)));
+                    verify_value_type(row.columns[column], type, schema->column_name(column)));
                 auto bytes = file::encode_value(row.columns[column]);
                 if (!bytes.ok())
                     return bytes.status();
@@ -284,10 +285,10 @@ template <typename T> Value make_inline(DataType type, T value) {
 
 absl::Status decode_column(std::string_view unit,
                            std::string_view data_table,
-                           const types::InternalSchema& schema,
+                           types::InternalSchema::ConstRef schema,
                            size_t column,
                            std::vector<types::InternalRow>* rows) {
-    const DataType type = schema.column_type(column);
+    const DataType type = schema->column_type(column);
     switch (type) {
         case DataType::kBool: {
             pattern::RawDecoder<1> dec;
@@ -455,7 +456,7 @@ absl::Status decode_column(std::string_view unit,
 
 } // namespace
 
-BlockBuilder::BlockBuilder(types::InternalSchema::ConstPtr schema, Options options)
+BlockBuilder::BlockBuilder(types::InternalSchema::ConstRef schema, Options options)
     : schema_(std::move(schema)), options_(options) {}
 
 absl::Status BlockBuilder::add(types::InternalRow row) {
@@ -465,6 +466,9 @@ absl::Status BlockBuilder::add(types::InternalRow row) {
 absl::Status BlockBuilder::add(types::InternalRow row, std::string embedded_value) {
     if (schema_ == nullptr) {
         return absl::InvalidArgumentError("block builder schema is null");
+    }
+    if (rows_.size() >= options_.max_row_count) {
+        return absl::ResourceExhaustedError("block row count limit exceeded");
     }
     if (row.columns.size() != schema_->column_count()) {
         return absl::InvalidArgumentError("internal row column count mismatch");
@@ -489,7 +493,7 @@ absl::StatusOr<std::string> BlockBuilder::finish() const {
                 }
             }
         }
-        auto unit = encode_column(rows, *schema_, column, &data_table);
+        auto unit = encode_column(rows, schema_, column, &data_table);
         if (!unit.ok())
             return unit.status();
         units.push_back(std::move(*unit));
@@ -535,7 +539,7 @@ absl::StatusOr<std::string> BlockBuilder::finish() const {
 }
 
 absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
-                                              const types::InternalSchema& schema,
+                                              types::InternalSchema::ConstRef schema,
                                               Kind expected) {
     if (block.size() < Header::kSize) {
         return absl::InvalidArgumentError("block is shorter than header");
@@ -575,9 +579,9 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
     }
 
     std::vector<uint64_t> offsets;
-    offsets.reserve(schema.column_count());
+    offsets.reserve(schema->column_count());
     size_t pos = offset_table_body;
-    for (size_t i = 0; i < schema.column_count(); ++i) {
+    for (size_t i = 0; i < schema->column_count(); ++i) {
         uint64_t off = 0;
         const size_t n = codec::decode_varint(
             reinterpret_cast<const uint8_t*>(body->data() + pos), body->size() - pos, &off);
@@ -599,12 +603,12 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
     reader.data_table_.assign(data_table);
     reader.rows_.reserve(static_cast<size_t>(h.row_count));
     for (uint64_t i = 0; i < h.row_count; ++i) {
-        reader.rows_.push_back(types::InternalRow::make(schema));
+        reader.rows_.push_back(types::InternalRow::make(*schema));
     }
 
-    for (size_t column = 0; column < schema.column_count(); ++column) {
+    for (size_t column = 0; column < schema->column_count(); ++column) {
         const auto begin = static_cast<size_t>(offsets[column] - Header::kSize);
-        const size_t end = column + 1 == schema.column_count()
+        const size_t end = column + 1 == schema->column_count()
                                ? offset_table_body
                                : static_cast<size_t>(offsets[column + 1] - Header::kSize);
         if (begin > end || end > offset_table_body) {
@@ -622,13 +626,13 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
 }
 
 absl::StatusOr<std::string_view> BlockReader::embedded_value(
-    size_t row_index, const types::InternalSchema& schema) const {
+    size_t row_index, types::InternalSchema::ConstRef schema) const {
     if (row_index >= rows_.size()) {
         return absl::InvalidArgumentError("embedded value row index out of range");
     }
     const auto& row = rows_[row_index];
-    const uint64_t offset = row.offset(schema);
-    const uint64_t length = row.length(schema);
+    const uint64_t offset = row.offset(*schema);
+    const uint64_t length = row.length(*schema);
     if (offset < Header::kSize) {
         return absl::InvalidArgumentError("embedded value offset is before block body");
     }

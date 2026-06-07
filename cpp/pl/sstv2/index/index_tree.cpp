@@ -52,15 +52,15 @@ absl::StatusOr<std::string_view> checked_slice(std::string_view bytes,
     return bytes.substr(static_cast<size_t>(offset), static_cast<size_t>(length));
 }
 
-absl::StatusOr<std::string> all_key_for(const InternalSchema& schema, const InternalRow& row) {
+absl::StatusOr<std::string> all_key_for(InternalSchema::ConstRef schema, const InternalRow& row) {
     std::string all_key;
-    auto status = codec::encode_all_key(row, schema, &all_key);
+    auto status = codec::encode_all_key(row, *schema, &all_key);
     if (!status.ok())
         return status;
     return all_key;
 }
 
-absl::StatusOr<size_t> lower_bound_by_all_key(const InternalSchema& schema,
+absl::StatusOr<size_t> lower_bound_by_all_key(InternalSchema::ConstRef schema,
                                               const std::vector<InternalRow>& rows,
                                               std::string_view target_key) {
     size_t first = 0;
@@ -81,34 +81,34 @@ absl::StatusOr<size_t> lower_bound_by_all_key(const InternalSchema& schema,
     return first;
 }
 
-InternalRow make_index_row(const InternalSchema& schema,
+InternalRow make_index_row(InternalSchema::ConstRef schema,
                            const InternalRow& fence,
                            BlockRef block,
                            uint64_t subtree_row_count,
                            ColumnFlag pointer_flag) {
-    InternalRow index = InternalRow::make(schema);
-    for (size_t i = 0; i < schema.sort_key_column_count(); ++i) {
+    InternalRow index = InternalRow::make(*schema);
+    for (size_t i = 0; i < schema->sort_key_column_count(); ++i) {
         index.columns[i] = fence.columns[i];
     }
-    index.columns[schema.flag_index()] = Value::make<DataType::kUint64>(pointer_flag.raw());
-    index.columns[schema.filename_index()] =
+    index.columns[schema->flag_index()] = Value::make<DataType::kUint64>(pointer_flag.raw());
+    index.columns[schema->filename_index()] =
         Value::make<DataType::kString>(types::kKeyFileFilename);
-    index.columns[schema.offset_index()] = Value::make<DataType::kUint64>(block.offset);
-    index.columns[schema.length_index()] = Value::make<DataType::kUint64>(block.length);
-    index.columns[schema.checksum_index()] = Value::make<DataType::kUint64>(subtree_row_count);
+    index.columns[schema->offset_index()] = Value::make<DataType::kUint64>(block.offset);
+    index.columns[schema->length_index()] = Value::make<DataType::kUint64>(block.length);
+    index.columns[schema->checksum_index()] = Value::make<DataType::kUint64>(subtree_row_count);
     return index;
 }
 
-uint64_t subtree_row_count(const InternalSchema& schema, const std::vector<InternalRow>& rows) {
+uint64_t subtree_row_count(InternalSchema::ConstRef schema, const std::vector<InternalRow>& rows) {
     uint64_t count = 0;
     for (const auto& row : rows) {
-        count += row.checksum(schema);
+        count += row.checksum(*schema);
     }
     return count;
 }
 
 absl::StatusOr<block::BlockReader> open_index_node(std::string_view key_file,
-                                                   const InternalSchema& schema,
+                                                   InternalSchema::ConstRef schema,
                                                    BlockRef ref,
                                                    block::Kind kind) {
     auto bytes = checked_slice(key_file, ref.offset, ref.length, "index node");
@@ -118,7 +118,7 @@ absl::StatusOr<block::BlockReader> open_index_node(std::string_view key_file,
 }
 
 absl::Status scan_node(std::string_view key_file,
-                       const InternalSchema& schema,
+                       InternalSchema::ConstRef schema,
                        BlockRef ref,
                        block::Kind kind,
                        std::vector<BlockRef>* data_blocks) {
@@ -127,8 +127,8 @@ absl::Status scan_node(std::string_view key_file,
         return node.status();
 
     for (const auto& entry : node->rows()) {
-        const ColumnFlag flag = entry.flag(schema);
-        const BlockRef child{.offset = entry.offset(schema), .length = entry.length(schema)};
+        const ColumnFlag flag = entry.flag(*schema);
+        const BlockRef child{.offset = entry.offset(*schema), .length = entry.length(*schema)};
         if (flag.is_data_block_ptr()) {
             data_blocks->push_back(child);
         } else if (flag.is_index_block_ptr()) {
@@ -143,7 +143,7 @@ absl::Status scan_node(std::string_view key_file,
 }
 
 absl::StatusOr<std::optional<BlockRef>> find_data_block_from_node(std::string_view key_file,
-                                                                  const InternalSchema& schema,
+                                                                  InternalSchema::ConstRef schema,
                                                                   BlockRef ref,
                                                                   block::Kind kind,
                                                                   std::string_view target_all_key) {
@@ -158,8 +158,8 @@ absl::StatusOr<std::optional<BlockRef>> find_data_block_from_node(std::string_vi
         return std::optional<BlockRef>{};
     }
     const InternalRow& selected = node->rows()[*selected_index];
-    const ColumnFlag flag = selected.flag(schema);
-    const BlockRef child{.offset = selected.offset(schema), .length = selected.length(schema)};
+    const ColumnFlag flag = selected.flag(*schema);
+    const BlockRef child{.offset = selected.offset(*schema), .length = selected.length(*schema)};
     if (flag.is_data_block_ptr()) {
         return std::optional<BlockRef>{child};
     }
@@ -172,12 +172,16 @@ absl::StatusOr<std::optional<BlockRef>> find_data_block_from_node(std::string_vi
 
 } // namespace
 
-TreeBuilder::TreeBuilder(types::InternalSchema::ConstPtr schema,
+TreeBuilder::TreeBuilder(types::InternalSchema::ConstRef schema,
                          uint64_t fanout,
+                         uint64_t soft_limit,
+                         uint64_t hard_limit,
                          compress::Options compression,
                          std::string* key_file)
     : schema_(std::move(schema)),
       fanout_(std::max<uint64_t>(2, fanout)),
+      soft_limit_(std::max<uint64_t>(block::Header::kSize, soft_limit)),
+      hard_limit_(std::max<uint64_t>(soft_limit_, hard_limit)),
       compression_(compression),
       key_file_(key_file) {}
 
@@ -210,7 +214,7 @@ absl::Status TreeBuilder::add_data_block(const InternalRow& fence,
             "prepare_for_data_block must be called before adding another data block");
     }
     return add_index_entry(
-        0, make_index_row(*schema_, fence, data_block, row_count, ColumnFlag::for_data_block()));
+        0, make_index_row(schema_, fence, data_block, row_count, ColumnFlag::for_data_block()));
 }
 
 absl::Status TreeBuilder::add_index_entry(size_t level, InternalRow entry) {
@@ -234,11 +238,14 @@ absl::Status TreeBuilder::flush_index_level(size_t level) {
     block::Options options;
     options.kind = block::Kind::kIndex;
     options.compression = compression_;
+    options.max_block_size_soft_limit = soft_limit_;
+    options.max_block_size_hard_limit = hard_limit_;
+    options.max_row_count = fanout_;
     block::BlockBuilder builder(schema_, options);
-    auto parent = make_index_row(*schema_,
+    auto parent = make_index_row(schema_,
                                  levels_[level].back(),
                                  BlockRef{.offset = key_file_->size(), .length = 0},
-                                 subtree_row_count(*schema_, levels_[level]),
+                                 subtree_row_count(schema_, levels_[level]),
                                  ColumnFlag::for_index_block());
     for (auto& entry : levels_[level]) {
         auto status = builder.add(std::move(entry));
@@ -287,6 +294,9 @@ absl::StatusOr<FinishResult> TreeBuilder::finish() {
             block::Options options;
             options.kind = block::Kind::kRootIndex;
             options.compression = compression_;
+            options.max_block_size_soft_limit = soft_limit_;
+            options.max_block_size_hard_limit = hard_limit_;
+            options.max_row_count = fanout_;
             block::BlockBuilder root_builder(schema_, options);
             for (auto& entry : root_entries) {
                 auto status = root_builder.add(std::move(entry));
@@ -309,7 +319,7 @@ absl::StatusOr<FinishResult> TreeBuilder::finish() {
 }
 
 absl::Status TreeReader::scan_data_blocks(std::string_view key_file,
-                                          const InternalSchema& schema,
+                                          InternalSchema::ConstRef schema,
                                           BlockRef root,
                                           std::vector<BlockRef>* data_blocks) {
     if (data_blocks == nullptr) {
@@ -320,7 +330,7 @@ absl::Status TreeReader::scan_data_blocks(std::string_view key_file,
 
 absl::StatusOr<std::optional<BlockRef>> TreeReader::find_data_block(
     std::string_view key_file,
-    const InternalSchema& schema,
+    InternalSchema::ConstRef schema,
     BlockRef root,
     std::string_view target_all_key) {
     return find_data_block_from_node(

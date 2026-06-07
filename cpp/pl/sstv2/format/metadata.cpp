@@ -17,12 +17,15 @@
 
 #include "cpp/pl/sstv2/format/metadata.h"
 
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/sstv2/codec/fixed.h"
+#include "cpp/pl/sstv2/types/internal_schema.h"
 
 namespace pl::sstv2::format {
 namespace {
@@ -36,8 +39,17 @@ constexpr std::string_view kMaxEmbeddedValueSize = "MaxEmbeddedValueSizeInByte";
 constexpr std::string_view kMaxDataBlockSoft = "MaxDataBlockSizeInByte_SoftLimit";
 constexpr std::string_view kMaxDataBlockHard = "MaxDataBlockSizeInByte_HardLimit";
 constexpr std::string_view kMaxDataBlockRows = "MaxDataBlockRowCount";
+constexpr std::string_view kMaxIndexBlockSoft = "MaxIndexBlockSizeInByte_SoftLimit";
+constexpr std::string_view kMaxIndexBlockHard = "MaxIndexBlockSizeInByte_HardLimit";
+constexpr std::string_view kMaxIndexBlockRows = "MaxIndexBlockRowCount";
 
+constexpr std::string_view kColumnCount = "ColumnCount";
 constexpr std::string_view kRowKeyColumnCount = "RowKeyColumnCount";
+constexpr std::string_view kChecksumKey = "ChecksumKey";
+constexpr std::string_view kSplitKey = "SplitKey";
+constexpr std::string_view kVersionKey = "VersionKey";
+constexpr std::string_view kSystemKey = "SystemKey";
+constexpr std::string_view kNonKey = "NonKey";
 constexpr std::string_view kTotalRowCount = "TotalRowCount";
 constexpr std::string_view kDataBlockCount = "DataBlockCount";
 constexpr std::string_view kIndexBlockCount = "IndexBlockCount";
@@ -75,6 +87,31 @@ absl::StatusOr<uint64_t> require_uint64(const SectionMap& entries, std::string_v
     return value->as_uint64();
 }
 
+absl::StatusOr<uint64_t> optional_uint64(const SectionMap& entries,
+                                         std::string_view key,
+                                         uint64_t fallback) {
+    const Value* value = find_section_value(entries, key);
+    if (value == nullptr) {
+        return fallback;
+    }
+    if (value->type() != DataType::kUint64) {
+        return absl::InvalidArgumentError(absl::StrCat("metadata key ", key, " must be Uint64"));
+    }
+    return value->as_uint64();
+}
+
+absl::Status validate_optional_uint64(const SectionMap& entries,
+                                      std::string_view key,
+                                      uint64_t expected) {
+    auto value = optional_uint64(entries, key, expected);
+    if (!value.ok())
+        return value.status();
+    if (*value != expected) {
+        return absl::InvalidArgumentError(absl::StrCat("metadata key ", key, " mismatch"));
+    }
+    return absl::OkStatus();
+}
+
 absl::StatusOr<std::string> optional_string(const SectionMap& entries,
                                             std::string_view key,
                                             std::string fallback) {
@@ -86,6 +123,15 @@ absl::StatusOr<std::string> optional_string(const SectionMap& entries,
         return absl::InvalidArgumentError(absl::StrCat("metadata key ", key, " must be String"));
     }
     return std::string(value->as_string());
+}
+
+std::string encode_uint64_vector(std::initializer_list<uint64_t> values) {
+    std::string bytes;
+    bytes.reserve(values.size() * sizeof(uint64_t));
+    for (uint64_t value : values) {
+        codec::append_fixed64(&bytes, value);
+    }
+    return bytes;
 }
 
 } // namespace
@@ -104,6 +150,15 @@ SectionMap configuration_entries(const Configuration& configuration) {
     add_entry(&entries,
               kMaxDataBlockRows,
               Value::make<DataType::kUint64>(configuration.max_data_block_row_count));
+    add_entry(&entries,
+              kMaxIndexBlockSoft,
+              Value::make<DataType::kUint64>(configuration.max_index_block_size_soft_limit));
+    add_entry(&entries,
+              kMaxIndexBlockHard,
+              Value::make<DataType::kUint64>(configuration.max_index_block_size_hard_limit));
+    add_entry(&entries,
+              kMaxIndexBlockRows,
+              Value::make<DataType::kUint64>(configuration.max_index_block_row_count));
     return make_section_map(std::move(entries));
 }
 
@@ -121,19 +176,44 @@ absl::StatusOr<Configuration> configuration_from_entries(const SectionMap& entri
     auto rows = require_uint64(entries, kMaxDataBlockRows);
     if (!rows.ok())
         return rows.status();
+    auto index_soft =
+        optional_uint64(entries, kMaxIndexBlockSoft, configuration.max_index_block_size_soft_limit);
+    if (!index_soft.ok())
+        return index_soft.status();
+    auto index_hard =
+        optional_uint64(entries, kMaxIndexBlockHard, configuration.max_index_block_size_hard_limit);
+    if (!index_hard.ok())
+        return index_hard.status();
+    auto index_rows =
+        optional_uint64(entries, kMaxIndexBlockRows, configuration.max_index_block_row_count);
+    if (!index_rows.ok())
+        return index_rows.status();
     configuration.max_embedded_value_size = *embedded;
     configuration.max_data_block_size_soft_limit = *soft;
     configuration.max_data_block_size_hard_limit = *hard;
     configuration.max_data_block_row_count = *rows;
+    configuration.max_index_block_size_soft_limit = *index_soft;
+    configuration.max_index_block_size_hard_limit = *index_hard;
+    configuration.max_index_block_row_count = *index_rows;
     return configuration;
 }
 
 SectionMap schema_entries(const types::Schema& schema) {
     SectionEntries entries;
+    const uint64_t user_columns = schema.row_key_column_count();
+    add_entry(
+        &entries,
+        kColumnCount,
+        Value::make<DataType::kUint64>(user_columns + types::InternalSchema::kSystemColumnCount));
+    add_entry(&entries, kRowKeyColumnCount, Value::make<DataType::kUint64>(user_columns));
     add_entry(&entries,
-              kRowKeyColumnCount,
-              Value::make<DataType::kUint64>(schema.row_key_column_count()));
-    for (uint64_t i = 0; i < schema.row_key_column_count(); ++i) {
+              kChecksumKey,
+              Value::make<DataType::kBinary>(std::string{}));
+    add_entry(&entries, kSplitKey, Value::make<DataType::kUint64>(uint64_t{0}));
+    add_entry(&entries, kVersionKey, Value::make<DataType::kUint64>(user_columns));
+    add_entry(&entries, kSystemKey, Value::make<DataType::kUint64>(uint64_t{2}));
+    add_entry(&entries, kNonKey, Value::make<DataType::kUint64>(user_columns + 2));
+    for (uint64_t i = 0; i < user_columns; ++i) {
         add_entry(&entries,
                   row_key_type_key(i),
                   Value::make<DataType::kUint64>(static_cast<uint8_t>(schema.column_type(i))));
@@ -146,11 +226,26 @@ SectionMap schema_entries(const types::Schema& schema) {
     return make_section_map(std::move(entries));
 }
 
-absl::StatusOr<std::shared_ptr<const types::Schema>> schema_from_entries(
-    const SectionMap& entries) {
+absl::StatusOr<types::Schema::ConstRef> schema_from_entries(const SectionMap& entries) {
     auto count = require_uint64(entries, kRowKeyColumnCount);
     if (!count.ok())
         return count.status();
+    auto column_count =
+        optional_uint64(entries, kColumnCount, *count + types::InternalSchema::kSystemColumnCount);
+    if (!column_count.ok())
+        return column_count.status();
+    if (*column_count != *count + types::InternalSchema::kSystemColumnCount) {
+        return absl::InvalidArgumentError("schema column count mismatch");
+    }
+    auto status = validate_optional_uint64(entries, kVersionKey, *count);
+    if (!status.ok())
+        return status;
+    status = validate_optional_uint64(entries, kSystemKey, 2);
+    if (!status.ok())
+        return status;
+    status = validate_optional_uint64(entries, kNonKey, *count + 2);
+    if (!status.ok())
+        return status;
 
     SchemaBuilder builder;
     for (uint64_t i = 0; i < *count; ++i) {
@@ -232,7 +327,7 @@ absl::StatusOr<Configuration> decode_configuration(std::string_view input) {
     return configuration_from_entries(section->entries);
 }
 
-absl::StatusOr<std::shared_ptr<const types::Schema>> decode_schema(std::string_view input) {
+absl::StatusOr<types::Schema::ConstRef> decode_schema(std::string_view input) {
     auto section = decode_section(input, SectionMagic::kSchema);
     if (!section.ok())
         return section.status();

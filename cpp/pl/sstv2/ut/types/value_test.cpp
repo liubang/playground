@@ -16,6 +16,7 @@
 // Created: 2026/06/05 00:23
 
 #include <gtest/gtest.h>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -179,6 +180,16 @@ TEST(ValueTest, MapCanonicalizesByKey) {
     EXPECT_EQ(v.as_map()[0].second.as_int64(), 1);
     EXPECT_EQ(v.as_map()[1].first.as_string(), "b");
     EXPECT_EQ(v.as_map()[1].second.as_int64(), 2);
+}
+
+TEST(ValueTest, FloatingComparisonDefinesNanOrder) {
+    const auto nan = Value::make<DataType::kDouble>(std::numeric_limits<double>::quiet_NaN());
+    const auto one = Value::make<DataType::kDouble>(1.0);
+    const auto another_nan =
+        Value::make<DataType::kDouble>(std::numeric_limits<double>::quiet_NaN());
+
+    EXPECT_LT(compare_values(nan, one), 0);
+    EXPECT_EQ(compare_values(nan, another_nan), 0);
 }
 
 TEST(ValueTest, TakeArray) {

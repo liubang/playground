@@ -17,11 +17,13 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "cpp/pl/sstv2/codec/varint.h"
 #include "cpp/pl/sstv2/pattern/pattern.h"
@@ -43,8 +45,24 @@ inline void write_compound_header(size_t sub_count, std::string* dst) {
     codec::encode_varint(sub_count, dst);
 }
 
+template <size_t N>
+inline void write_compound_units(const std::array<std::pair<DataType, std::string_view>, N>& units,
+                                 std::string* dst) {
+    write_compound_header(N, dst);
+    uint64_t offset = 0;
+    for (const auto& [type, unit] : units) {
+        dst->push_back(static_cast<char>(static_cast<uint8_t>(type)));
+        codec::encode_varint(offset, dst);
+        offset += unit.size();
+    }
+    for (const auto& [_, unit] : units) {
+        dst->append(unit.data(), unit.size());
+    }
+}
+
 // Parse compound header. Returns false on mismatch. Advances pos past header.
-[[nodiscard]] inline bool parse_compound_header(const uint8_t* src, size_t len,
+[[nodiscard]] inline bool parse_compound_header(const uint8_t* src,
+                                                size_t len,
                                                 size_t expected_sub_count,
                                                 size_t* pos) noexcept {
     if (len < 1 || src[0] != static_cast<uint8_t>(PatternId::kCompound))
@@ -59,6 +77,45 @@ inline void write_compound_header(size_t sub_count, std::string* dst) {
     return true;
 }
 
+template <size_t N>
+[[nodiscard]] inline bool parse_compound_units(std::string_view input,
+                                               const std::array<DataType, N>& expected_types,
+                                               std::array<std::string_view, N>* units,
+                                               size_t* bytes_consumed) noexcept {
+    const auto* src = reinterpret_cast<const uint8_t*>(input.data());
+    const size_t len = input.size();
+    size_t pos = 0;
+    if (!parse_compound_header(src, len, N, &pos))
+        return false;
+
+    std::array<uint64_t, N> offsets{};
+    for (size_t i = 0; i < N; ++i) {
+        if (pos >= len || src[pos] != static_cast<uint8_t>(expected_types[i]))
+            return false;
+        ++pos;
+        uint64_t offset = 0;
+        const size_t n = codec::decode_varint(src + pos, len - pos, &offset);
+        if (n == 0)
+            return false;
+        pos += n;
+        if (i > 0 && offset < offsets[i - 1])
+            return false;
+        offsets[i] = offset;
+    }
+
+    const size_t data_start = pos;
+    for (size_t i = 0; i < N; ++i) {
+        const uint64_t begin = offsets[i];
+        const uint64_t end = i + 1 == N ? len - data_start : offsets[i + 1];
+        if (begin > end || end > len - data_start)
+            return false;
+        (*units)[i] =
+            input.substr(data_start + static_cast<size_t>(begin), static_cast<size_t>(end - begin));
+    }
+    *bytes_consumed = len;
+    return true;
+}
+
 } // namespace detail
 
 // =============================================================================
@@ -66,11 +123,9 @@ inline void write_compound_header(size_t sub_count, std::string* dst) {
 // Only valid DataType specializations can be instantiated.
 // =============================================================================
 
-template <DataType DT>
-class CompoundEncoder;
+template <DataType DT> class CompoundEncoder;
 
-template <DataType DT>
-class CompoundDecoder;
+template <DataType DT> class CompoundDecoder;
 
 // =============================================================================
 // CompoundEncoder<DataType::kString>
@@ -80,8 +135,7 @@ class CompoundDecoder;
 // Also used for kBinary, kU16String, kU32String.
 // =============================================================================
 
-template <>
-class CompoundEncoder<DataType::kString> {
+template <> class CompoundEncoder<DataType::kString> {
 public:
     CompoundEncoder() = default;
 
@@ -105,9 +159,10 @@ public:
     [[nodiscard]] size_t row_count() const noexcept { return row_count_; }
 
     void finish_into(std::string* dst) const {
-        detail::write_compound_header(2, dst);
-        offsets_.finish_into(dst);
-        lengths_.finish_into(dst);
+        const std::string offsets = offsets_.finish().data;
+        const std::string lengths = lengths_.finish().data;
+        detail::write_compound_units<2>(
+            {{{DataType::kUint64, offsets}, {DataType::kUint64, lengths}}}, dst);
     }
 
     [[nodiscard]] EncodeResult finish() const {
@@ -127,34 +182,27 @@ private:
 // CompoundDecoder<DataType::kString>
 // =============================================================================
 
-template <>
-class CompoundDecoder<DataType::kString> {
+template <> class CompoundDecoder<DataType::kString> {
 public:
     CompoundDecoder() = default;
 
     [[nodiscard]] bool parse(std::string_view input) noexcept {
-        const auto* src = reinterpret_cast<const uint8_t*>(input.data());
-        const size_t len = input.size();
-        size_t pos = 0;
-
-        if (!detail::parse_compound_header(src, len, 2, &pos))
+        std::array<std::string_view, 2> units;
+        if (!detail::parse_compound_units<2>(
+                input, {DataType::kUint64, DataType::kUint64}, &units, &bytes_consumed_))
             return false;
-
-        std::string_view remaining(input.data() + pos, len - pos);
-        if (!offsets_.parse(remaining))
+        if (!offsets_.parse(units[0]))
             return false;
-        pos += offsets_.bytes_consumed();
-
-        remaining = std::string_view(input.data() + pos, len - pos);
-        if (!lengths_.parse(remaining))
+        if (!lengths_.parse(units[1]))
             return false;
-        pos += lengths_.bytes_consumed();
+        if (offsets_.bytes_consumed() != units[0].size())
+            return false;
+        bytes_consumed_ = bytes_consumed_ - units[1].size() + lengths_.bytes_consumed();
 
         if (offsets_.row_count() != lengths_.row_count())
             return false;
 
         row_count_ = offsets_.row_count();
-        bytes_consumed_ = pos;
         return true;
     }
 
@@ -177,8 +225,7 @@ private:
 // Encodes Time as (seconds: i64 bit-cast to u64, nanoseconds: u32).
 // =============================================================================
 
-template <>
-class CompoundEncoder<DataType::kTime> {
+template <> class CompoundEncoder<DataType::kTime> {
 public:
     CompoundEncoder() = default;
 
@@ -204,9 +251,10 @@ public:
     [[nodiscard]] size_t row_count() const noexcept { return row_count_; }
 
     void finish_into(std::string* dst) const {
-        detail::write_compound_header(2, dst);
-        seconds_.finish_into(dst);
-        nanoseconds_.finish_into(dst);
+        const std::string seconds = seconds_.finish().data;
+        const std::string nanoseconds = nanoseconds_.finish().data;
+        detail::write_compound_units<2>(
+            {{{DataType::kInt64, seconds}, {DataType::kUint32, nanoseconds}}}, dst);
     }
 
     [[nodiscard]] EncodeResult finish() const {
@@ -226,34 +274,27 @@ private:
 // CompoundDecoder<DataType::kTime>
 // =============================================================================
 
-template <>
-class CompoundDecoder<DataType::kTime> {
+template <> class CompoundDecoder<DataType::kTime> {
 public:
     CompoundDecoder() = default;
 
     [[nodiscard]] bool parse(std::string_view input) noexcept {
-        const auto* src = reinterpret_cast<const uint8_t*>(input.data());
-        const size_t len = input.size();
-        size_t pos = 0;
-
-        if (!detail::parse_compound_header(src, len, 2, &pos))
+        std::array<std::string_view, 2> units;
+        if (!detail::parse_compound_units<2>(
+                input, {DataType::kInt64, DataType::kUint32}, &units, &bytes_consumed_))
             return false;
-
-        std::string_view remaining(input.data() + pos, len - pos);
-        if (!seconds_.parse(remaining))
+        if (!seconds_.parse(units[0]))
             return false;
-        pos += seconds_.bytes_consumed();
-
-        remaining = std::string_view(input.data() + pos, len - pos);
-        if (!nanoseconds_.parse(remaining))
+        if (!nanoseconds_.parse(units[1]))
             return false;
-        pos += nanoseconds_.bytes_consumed();
+        if (seconds_.bytes_consumed() != units[0].size())
+            return false;
+        bytes_consumed_ = bytes_consumed_ - units[1].size() + nanoseconds_.bytes_consumed();
 
         if (seconds_.row_count() != nanoseconds_.row_count())
             return false;
 
         row_count_ = seconds_.row_count();
-        bytes_consumed_ = pos;
         return true;
     }
 
@@ -267,9 +308,7 @@ public:
         return result;
     }
 
-    [[nodiscard]] uint32_t nanoseconds(size_t i) const noexcept {
-        return nanoseconds_.get(i);
-    }
+    [[nodiscard]] uint32_t nanoseconds(size_t i) const noexcept { return nanoseconds_.get(i); }
 
 private:
     RawDecoder<8> seconds_;
@@ -284,8 +323,7 @@ private:
 // Encodes Version as (major: u64, minor: u64).
 // =============================================================================
 
-template <>
-class CompoundEncoder<DataType::kVersion> {
+template <> class CompoundEncoder<DataType::kVersion> {
 public:
     CompoundEncoder() = default;
 
@@ -309,9 +347,10 @@ public:
     [[nodiscard]] size_t row_count() const noexcept { return row_count_; }
 
     void finish_into(std::string* dst) const {
-        detail::write_compound_header(2, dst);
-        major_.finish_into(dst);
-        minor_.finish_into(dst);
+        const std::string major = major_.finish().data;
+        const std::string minor = minor_.finish().data;
+        detail::write_compound_units<2>({{{DataType::kUint64, major}, {DataType::kUint64, minor}}},
+                                        dst);
     }
 
     [[nodiscard]] EncodeResult finish() const {
@@ -331,34 +370,27 @@ private:
 // CompoundDecoder<DataType::kVersion>
 // =============================================================================
 
-template <>
-class CompoundDecoder<DataType::kVersion> {
+template <> class CompoundDecoder<DataType::kVersion> {
 public:
     CompoundDecoder() = default;
 
     [[nodiscard]] bool parse(std::string_view input) noexcept {
-        const auto* src = reinterpret_cast<const uint8_t*>(input.data());
-        const size_t len = input.size();
-        size_t pos = 0;
-
-        if (!detail::parse_compound_header(src, len, 2, &pos))
+        std::array<std::string_view, 2> units;
+        if (!detail::parse_compound_units<2>(
+                input, {DataType::kUint64, DataType::kUint64}, &units, &bytes_consumed_))
             return false;
-
-        std::string_view remaining(input.data() + pos, len - pos);
-        if (!major_.parse(remaining))
+        if (!major_.parse(units[0]))
             return false;
-        pos += major_.bytes_consumed();
-
-        remaining = std::string_view(input.data() + pos, len - pos);
-        if (!minor_.parse(remaining))
+        if (!minor_.parse(units[1]))
             return false;
-        pos += minor_.bytes_consumed();
+        if (major_.bytes_consumed() != units[0].size())
+            return false;
+        bytes_consumed_ = bytes_consumed_ - units[1].size() + minor_.bytes_consumed();
 
         if (major_.row_count() != minor_.row_count())
             return false;
 
         row_count_ = major_.row_count();
-        bytes_consumed_ = pos;
         return true;
     }
 
@@ -381,9 +413,9 @@ private:
 
 using StringRefEncoder = CompoundEncoder<DataType::kString>;
 using StringRefDecoder = CompoundDecoder<DataType::kString>;
-using TimeEncoder      = CompoundEncoder<DataType::kTime>;
-using TimeDecoder      = CompoundDecoder<DataType::kTime>;
-using VersionEncoder   = CompoundEncoder<DataType::kVersion>;
-using VersionDecoder   = CompoundDecoder<DataType::kVersion>;
+using TimeEncoder = CompoundEncoder<DataType::kTime>;
+using TimeDecoder = CompoundDecoder<DataType::kTime>;
+using VersionEncoder = CompoundEncoder<DataType::kVersion>;
+using VersionDecoder = CompoundDecoder<DataType::kVersion>;
 
 } // namespace pl::sstv2::pattern
