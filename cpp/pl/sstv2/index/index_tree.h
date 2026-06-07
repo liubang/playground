@@ -44,8 +44,10 @@ struct FinishResult {
 
 class TreeBuilder {
 public:
-    TreeBuilder(types::InternalSchema::ConstPtr schema,
+    TreeBuilder(types::InternalSchema::ConstRef schema,
                 uint64_t fanout,
+                uint64_t soft_limit,
+                uint64_t hard_limit,
                 compress::Options compression,
                 std::string* key_file);
 
@@ -59,8 +61,10 @@ private:
     [[nodiscard]] absl::Status add_index_entry(size_t level, types::InternalRow entry);
     [[nodiscard]] absl::Status flush_index_level(size_t level);
 
-    types::InternalSchema::ConstPtr schema_;
+    types::InternalSchema::ConstRef schema_;
     uint64_t fanout_ = 2;
+    uint64_t soft_limit_ = 64 * 1024;
+    uint64_t hard_limit_ = 128 * 1024;
     compress::Options compression_;
     std::string* key_file_ = nullptr;
     std::vector<std::vector<types::InternalRow>> levels_;
@@ -70,13 +74,13 @@ private:
 class TreeReader {
 public:
     [[nodiscard]] static absl::Status scan_data_blocks(std::string_view key_file,
-                                                       const types::InternalSchema& schema,
+                                                       types::InternalSchema::ConstRef schema,
                                                        BlockRef root,
                                                        std::vector<BlockRef>* data_blocks);
 
     [[nodiscard]] static absl::StatusOr<std::optional<BlockRef>> find_data_block(
         std::string_view key_file,
-        const types::InternalSchema& schema,
+        types::InternalSchema::ConstRef schema,
         BlockRef root,
         std::string_view target_all_key);
 };

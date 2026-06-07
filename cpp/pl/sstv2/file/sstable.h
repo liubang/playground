@@ -26,6 +26,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "cpp/pl/sstv2/block/block.h"
 #include "cpp/pl/sstv2/bloom/bloom.h"
 #include "cpp/pl/sstv2/compress/compress.h"
 #include "cpp/pl/sstv2/format/metadata.h"
@@ -50,7 +51,7 @@ struct Files {
 
 class Builder {
 public:
-    Builder(std::shared_ptr<const types::Schema> schema, BuilderOptions options = {});
+    Builder(types::Schema::ConstRef schema, BuilderOptions options = {});
 
     [[nodiscard]] absl::Status add(types::Row row);
     [[nodiscard]] absl::StatusOr<Files> finish();
@@ -58,10 +59,13 @@ public:
 private:
     [[nodiscard]] uint64_t max_data_block_rows() const noexcept;
     [[nodiscard]] uint64_t index_fanout() const noexcept;
+    [[nodiscard]] block::Options data_block_options() const noexcept;
+    [[nodiscard]] absl::StatusOr<size_t> encoded_data_block_size_with(
+        const types::InternalRow& candidate, std::string_view candidate_embedded) const;
     [[nodiscard]] absl::Status flush_data_block();
 
-    std::shared_ptr<const types::Schema> schema_;
-    types::InternalSchema::ConstPtr internal_schema_;
+    types::Schema::ConstRef schema_;
+    types::InternalSchema::ConstRef internal_schema_;
     BuilderOptions options_;
     Files files_;
     std::unique_ptr<index::TreeBuilder> index_builder_;
@@ -79,7 +83,7 @@ public:
     [[nodiscard]] static absl::StatusOr<Reader> open(std::string_view key_file,
                                                      std::string_view value_file);
 
-    [[nodiscard]] const types::Schema& schema() const { return *schema_; }
+    [[nodiscard]] types::Schema::ConstRef schema() const { return schema_; }
     [[nodiscard]] const format::Configuration& configuration() const { return configuration_; }
     [[nodiscard]] const format::Statistics& statistics() const { return statistics_; }
     [[nodiscard]] absl::StatusOr<std::vector<types::Row>> scan() const;
@@ -89,7 +93,8 @@ public:
         types::OpType op_type = types::OpType::kPut) const;
 
 private:
-    std::shared_ptr<const types::Schema> schema_;
+    types::Schema::ConstRef schema_;
+    types::InternalSchema::ConstRef internal_schema_;
     format::Configuration configuration_;
     format::Statistics statistics_;
     std::string key_file_;

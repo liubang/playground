@@ -46,20 +46,19 @@ namespace pl::sstv2::types {
 // all_key sort order. The remaining 5 columns (Flag..Checksum) are payload
 // columns that do not participate in sorting.
 //
-// InternalSchema holds a shared_ptr<const Schema> for safe shared ownership.
+// InternalSchema holds a Schema::ConstRef for safe shared ownership.
 // =============================================================================
 
 class InternalSchema {
 public:
-    using Ptr = std::shared_ptr<InternalSchema>;
-    using ConstPtr = std::shared_ptr<const InternalSchema>;
+    using Ref = std::shared_ptr<InternalSchema>;
+    using ConstRef = std::shared_ptr<const InternalSchema>;
 
-    explicit InternalSchema(std::shared_ptr<const Schema> user_schema)
-        : user_schema_(std::move(user_schema)) {
+    explicit InternalSchema(Schema::ConstRef user_schema) : user_schema_(std::move(user_schema)) {
         assert(user_schema_ != nullptr);
     }
 
-    [[nodiscard]] static ConstPtr make(std::shared_ptr<const Schema> user_schema) {
+    [[nodiscard]] static ConstRef make(Schema::ConstRef user_schema) {
         return std::make_shared<const InternalSchema>(std::move(user_schema));
     }
 
@@ -139,8 +138,7 @@ public:
     // Access to the underlying user schema.
     // =========================================================================
 
-    [[nodiscard]] const Schema& user_schema() const { return *user_schema_; }
-    [[nodiscard]] std::shared_ptr<const Schema> user_schema_ptr() const { return user_schema_; }
+    [[nodiscard]] Schema::ConstRef user_schema() const { return user_schema_; }
 
     // =========================================================================
     // Constants.
@@ -149,7 +147,7 @@ public:
     static constexpr size_t kSystemColumnCount = 7;
 
 private:
-    std::shared_ptr<const Schema> user_schema_;
+    Schema::ConstRef user_schema_;
 
     // Constexpr system column descriptor (avoids dynamic initialization).
     struct SystemColumnDef {

@@ -62,6 +62,8 @@ cc_library(
     linkopts = LINKOPTS,
     deps = [
         ":section",
+        "//cpp/pl/sstv2/codec:fixed",
+        "//cpp/pl/sstv2/types:internal_schema",
         "//cpp/pl/sstv2/types:schema",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
