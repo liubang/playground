@@ -16,6 +16,11 @@
 # Created: 2026/06/05 00:23
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "COPTS",
+    "LINKOPTS",
+)
 
 package(default_visibility = ["//visibility:public"])
 
@@ -63,12 +68,61 @@ cc_library(
 )
 
 cc_library(
+    name = "key_tags",
+    hdrs = ["key_tags.h"],
+)
+
+cc_library(
+    name = "key_prefix",
+    hdrs = ["key_prefix.h"],
+    deps = [
+        ":op_type",
+        ":schema",
+        ":value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "key_comparator",
+    hdrs = ["key_comparator.h"],
+    deps = [
+        ":internal_schema",
+        ":key_tags",
+        ":value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
     name = "key",
     hdrs = ["key.h"],
     deps = [
         ":internal_row",
         ":internal_schema",
+        ":key_prefix",
+        ":key_tags",
         ":op_type",
+        ":schema",
+        ":value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "key_factory",
+    hdrs = ["key_factory.h"],
+    deps = [
+        ":internal_row",
+        ":internal_schema",
+        ":key",
+        ":key_comparator",
+        ":key_prefix",
         ":schema",
         ":value",
         "@abseil-cpp//absl/status",
@@ -84,5 +138,21 @@ cc_library(
         ":column_flag",
         ":internal_schema",
         ":value",
+    ],
+)
+
+cc_library(
+    name = "value_codec",
+    srcs = ["value_codec.cpp"],
+    hdrs = ["value_codec.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/sstv2/codec:fixed",
+        "//cpp/pl/sstv2/codec:varint",
+        ":value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
     ],
 )

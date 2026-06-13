@@ -15,7 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/06/06 14:16
 
-#include "cpp/pl/sstv2/file/value_codec.h"
+#include "cpp/pl/sstv2/types/value_codec.h"
 
 #include <cstring>
 #include <string>
@@ -26,7 +26,7 @@
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/varint.h"
 
-namespace pl::sstv2::file {
+namespace pl::sstv2::types {
 namespace {
 
 using types::ArrayStorage;
@@ -337,4 +337,4 @@ absl::StatusOr<Value> decode_value(DataType type, std::string_view bytes) {
     }
 }
 
-} // namespace pl::sstv2::file
+} // namespace pl::sstv2::types

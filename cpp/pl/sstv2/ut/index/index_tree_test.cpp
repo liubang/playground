@@ -27,6 +27,7 @@
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/index/index_tree.h"
 #include "cpp/pl/sstv2/types/key.h"
+#include "cpp/pl/sstv2/types/key_factory.h"
 #include "cpp/pl/sstv2/types/op_type.h"
 #include "cpp/pl/sstv2/types/schema.h"
 
@@ -48,7 +49,7 @@ Schema::ConstRef make_schema() {
     return std::make_shared<const Schema>(std::move(*schema));
 }
 
-InternalRow make_fence_row(InternalSchema::ConstRef schema, uint64_t id) {
+InternalRow make_fence_row(const InternalSchema::ConstRef& schema, uint64_t id) {
     InternalRow row = InternalRow::make(schema);
     row.columns[0] = Value::make<DataType::kUint64>(id);
     row.columns[schema->version_index()] =
@@ -63,15 +64,15 @@ InternalRow make_fence_row(InternalSchema::ConstRef schema, uint64_t id) {
     return row;
 }
 
-types::AllKey all_key_for(InternalSchema::ConstRef schema, const InternalRow& row) {
+types::AllKey all_key_for(const InternalSchema::ConstRef& schema, const InternalRow& row) {
     auto all_key = types::make_all_key(row, schema);
     EXPECT_TRUE(all_key.ok()) << all_key.status();
     return std::move(*all_key);
 }
 
-types::PrefixKey prefix_key_for(InternalSchema::ConstRef schema, uint64_t id) {
+types::PrefixKey prefix_key_for(const InternalSchema::ConstRef& schema, uint64_t id) {
     auto prefix = types::make_prefix_key(
-        types::KeyPrefix{.key_columns = {Value::make<DataType::kUint64>(id)}},
+        types::KeyPrefix{.key_columns = {Value::make<DataType::kUint64>(id)}, .version = std::nullopt, .op_type = std::nullopt},
         schema->user_schema(),
         schema);
     EXPECT_TRUE(prefix.ok()) << prefix.status();
