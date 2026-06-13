@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-13 19:52:34</td>
+            <td class="headerValue">2026-06-14 00:07:12</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -124,7 +124,7 @@
 <span id="L53"><span class="lineNum">      53</span>                 :             : </span>
 <span id="L54"><span class="lineNum">      54</span>                 :             : private:</span>
 <span id="L55"><span class="lineNum">      55</span>                 :             :     int bits_per_key_;</span>
-<span id="L56"><span class="lineNum">      56</span>                 :             :     std::vector&lt;uint32_t&gt; hashes_;</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :     std::vector&lt;uint64_t&gt; hashes_;</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : };</span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : </span>
 <span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">          51 : class Reader {</span></span>
@@ -132,8 +132,8 @@
 <span id="L61"><span class="lineNum">      61</span>                 :             :     [[nodiscard]] static absl::StatusOr&lt;Reader&gt; open(std::string_view section);</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             : </span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :     [[nodiscard]] bool may_contain_all_key(const types::EncodedAllKey&amp; all_key) const;</span>
-<span id="L64"><span class="lineNum">      64</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;bool&gt; may_contain(const types::InternalRow&amp; row,</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             :                                                    const types::InternalSchema::ConstRef&amp; schema) const;</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;bool&gt; may_contain(</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :         const types::InternalRow&amp; row, const types::InternalSchema::ConstRef&amp; schema) const;</span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : </span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :     [[nodiscard]] const Header&amp; header() const noexcept { return header_; }</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             : </span>
