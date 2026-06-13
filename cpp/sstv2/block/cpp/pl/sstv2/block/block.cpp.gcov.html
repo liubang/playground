@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-13 18:10:12</td>
+            <td class="headerValue">2026-06-13 19:00:49</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">92.9&nbsp;%</td>
@@ -99,7 +99,7 @@
 <span id="L28"><span class="lineNum">      28</span>                 :             : #include &quot;cpp/pl/sstv2/codec/endian.h&quot;</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : #include &quot;cpp/pl/sstv2/codec/fixed.h&quot;</span>
 <span id="L30"><span class="lineNum">      30</span>                 :             : #include &quot;cpp/pl/sstv2/codec/varint.h&quot;</span>
-<span id="L31"><span class="lineNum">      31</span>                 :             : #include &quot;cpp/pl/sstv2/file/value_codec.h&quot;</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : #include &quot;cpp/pl/sstv2/types/value_codec.h&quot;</span>
 <span id="L32"><span class="lineNum">      32</span>                 :             : #include &quot;cpp/pl/sstv2/pattern/compound.h&quot;</span>
 <span id="L33"><span class="lineNum">      33</span>                 :             : #include &quot;cpp/pl/sstv2/pattern/raw.h&quot;</span>
 <span id="L34"><span class="lineNum">      34</span>                 :             : </span>
@@ -319,7 +319,7 @@
 <span id="L244"><span class="lineNum">     244</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          24 :             for (const auto&amp; row : rows) {</span></span>
 <span id="L245"><span class="lineNum">     245</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :                 SSTV2_RETURN_IF_ERROR(</span></span>
 <span id="L246"><span class="lineNum">     246</span>                 :             :                     verify_value_type(row.columns[column], type, schema-&gt;column_name(column)));</span>
-<span id="L247"><span class="lineNum">     247</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :                 auto bytes = file::encode_value(row.columns[column]);</span></span>
+<span id="L247"><span class="lineNum">     247</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :                 auto bytes = types::encode_value(row.columns[column]);</span></span>
 <span id="L248"><span class="lineNum">     248</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :                 if (!bytes.ok())</span></span>
 <span id="L249"><span class="lineNum">     249</span>                 :             :                     return bytes.status();</span>
 <span id="L250"><span class="lineNum">     250</span>                 :             :                 const uint64_t offset = data_table-&gt;size();</span>
@@ -520,7 +520,7 @@
 <span id="L439"><span class="lineNum">     439</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :                 if (off + len &gt; data_table.size()) {</span></span>
 <span id="L440"><span class="lineNum">     440</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                     return absl::InvalidArgumentError(&quot;variant-ref points outside data table&quot;);</span></span>
 <span id="L441"><span class="lineNum">     441</span>                 :             :                 }</span>
-<span id="L442"><span class="lineNum">     442</span>                 :             :                 auto value = file::decode_value(</span>
+<span id="L442"><span class="lineNum">     442</span>                 :             :                 auto value = types::decode_value(</span>
 <span id="L443"><span class="lineNum">     443</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          16 :                     type, std::string_view(data_table.data() + off, static_cast&lt;size_t&gt;(len)));</span></span>
 <span id="L444"><span class="lineNum">     444</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :                 if (!value.ok())</span></span>
 <span id="L445"><span class="lineNum">     445</span>                 :             :                     return value.status();</span>
