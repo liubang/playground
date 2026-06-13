@@ -25,29 +25,12 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "value_codec",
-    srcs = ["value_codec.cpp"],
-    hdrs = ["value_codec.h"],
-    copts = COPTS,
-    linkopts = LINKOPTS,
-    deps = [
-        "//cpp/pl/sstv2/codec:fixed",
-        "//cpp/pl/sstv2/codec:varint",
-        "//cpp/pl/sstv2/types:value",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-    ],
-)
-
-cc_library(
     name = "sstable",
     srcs = ["sstable.cpp"],
     hdrs = ["sstable.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        ":value_codec",
         "//cpp/pl/sstv2/block",
         "//cpp/pl/sstv2/bloom",
         "//cpp/pl/sstv2/codec:checksum",
@@ -61,8 +44,11 @@ cc_library(
         "//cpp/pl/sstv2/types:internal_row",
         "//cpp/pl/sstv2/types:internal_schema",
         "//cpp/pl/sstv2/types:key",
+        "//cpp/pl/sstv2/types:key_comparator",
+        "//cpp/pl/sstv2/types:key_factory",
         "//cpp/pl/sstv2/types:row",
         "//cpp/pl/sstv2/types:schema",
+        "//cpp/pl/sstv2/types:value_codec",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",

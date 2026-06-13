@@ -15,7 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/06/05 00:23
 
-#include "cpp/pl/sstv2/codec/comparable.h"
+#include "cpp/pl/sstv2/codec/scalar_comparable.h"
 
 #include <cstring>
 
@@ -65,7 +65,7 @@ uint8_t read_be8(const uint8_t* src) {
 }
 
 uint16_t read_be16(const uint8_t* src) {
-    return (static_cast<uint16_t>(src[0]) << 8) | static_cast<uint16_t>(src[1]);
+    return static_cast<uint16_t>((static_cast<uint16_t>(src[0]) << 8) | static_cast<uint16_t>(src[1]));
 }
 
 uint32_t read_be32(const uint8_t* src) {
@@ -151,7 +151,7 @@ void invert_tail(std::string* dst, size_t n) {
 // Invert a buffer in-place.
 void invert_buf(uint8_t* buf, size_t n) {
     for (size_t i = 0; i < n; ++i) {
-        buf[i] = ~buf[i];
+        buf[i] = static_cast<uint8_t>(~buf[i]);
     }
 }
 
@@ -537,7 +537,7 @@ size_t decode_bytes_desc(const uint8_t* src, size_t len, std::string* value) {
         // After inversion, marker 0xFF means non-final. In desc encoding,
         // the inverted 0xFF is 0x00. So in the src, 0x00 at position offset+8
         // means non-final group.
-        uint8_t inv_marker = ~src[offset + 8];
+        auto inv_marker = static_cast<uint8_t>(~src[offset + 8]);
         if (inv_marker == 0xFF) {
             offset += 9;
         } else {

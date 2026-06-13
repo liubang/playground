@@ -31,6 +31,8 @@
 #include "cpp/pl/sstv2/block/block.h"
 #include "cpp/pl/sstv2/types/column_flag.h"
 #include "cpp/pl/sstv2/types/internal_row.h"
+#include "cpp/pl/sstv2/types/key_comparator.h"
+#include "cpp/pl/sstv2/types/key_factory.h"
 #include "cpp/pl/sstv2/types/value.h"
 
 namespace pl::sstv2::index {
@@ -52,9 +54,9 @@ absl::StatusOr<std::string_view> checked_slice(std::string_view bytes,
     return bytes.substr(static_cast<size_t>(offset), static_cast<size_t>(length));
 }
 
-absl::StatusOr<types::AllKeyView> all_key_for(InternalSchema::ConstRef schema,
+absl::StatusOr<types::AllKeyView> all_key_for(const InternalSchema::ConstRef& schema,
                                               const InternalRow& row) {
-    return types::make_all_key_view(row, std::move(schema));
+    return types::make_all_key_view(row, schema);
 }
 
 template <typename KeyTag>

@@ -37,6 +37,8 @@ cc_library(
         "//cpp/pl/sstv2/types:internal_row",
         "//cpp/pl/sstv2/types:internal_schema",
         "//cpp/pl/sstv2/types:key",
+        "//cpp/pl/sstv2/types:key_comparator",
+        "//cpp/pl/sstv2/types:key_factory",
         "//cpp/pl/sstv2/types:value",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

@@ -51,9 +51,9 @@ cc_library(
 )
 
 cc_library(
-    name = "comparable",
-    srcs = ["comparable.cpp"],
-    hdrs = ["comparable.h"],
+    name = "scalar_comparable",
+    srcs = ["scalar_comparable.cpp"],
+    hdrs = ["scalar_comparable.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
 )
@@ -62,7 +62,7 @@ cc_library(
     name = "value_comparable",
     hdrs = ["value_comparable.h"],
     deps = [
-        ":comparable",
+        ":scalar_comparable",
         "//cpp/pl/sstv2/types:internal_row",
         "//cpp/pl/sstv2/types:key",
         "@abseil-cpp//absl/status",
