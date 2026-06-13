@@ -63,6 +63,21 @@ cc_library(
 )
 
 cc_library(
+    name = "key",
+    hdrs = ["key.h"],
+    deps = [
+        ":internal_row",
+        ":internal_schema",
+        ":op_type",
+        ":schema",
+        ":value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
     name = "internal_row",
     hdrs = ["internal_row.h"],
     deps = [

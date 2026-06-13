@@ -33,10 +33,13 @@
 #include "cpp/pl/sstv2/index/index_tree.h"
 #include "cpp/pl/sstv2/types/internal_row.h"
 #include "cpp/pl/sstv2/types/internal_schema.h"
+#include "cpp/pl/sstv2/types/key.h"
 #include "cpp/pl/sstv2/types/row.h"
 #include "cpp/pl/sstv2/types/schema.h"
 
 namespace pl::sstv2::file {
+
+using KeyPrefix = types::KeyPrefix;
 
 struct BuilderOptions {
     format::Configuration configuration;
@@ -47,6 +50,11 @@ struct BuilderOptions {
 struct Files {
     std::string key_file;
     std::string value_file;
+};
+
+struct ScanOptions {
+    std::optional<KeyPrefix> start;
+    std::optional<KeyPrefix> limit;
 };
 
 class Builder {
@@ -72,7 +80,7 @@ private:
     std::vector<types::InternalRow> pending_rows_;
     std::vector<std::string> pending_embedded_values_;
     bloom::Builder bloom_builder_;
-    std::string last_all_key_;
+    std::optional<types::AllKey> last_all_key_;
     uint64_t total_row_count_ = 0;
     uint64_t data_block_count_ = 0;
     bool finished_ = false;
@@ -87,6 +95,7 @@ public:
     [[nodiscard]] const format::Configuration& configuration() const { return configuration_; }
     [[nodiscard]] const format::Statistics& statistics() const { return statistics_; }
     [[nodiscard]] absl::StatusOr<std::vector<types::Row>> scan() const;
+    [[nodiscard]] absl::StatusOr<std::vector<types::Row>> scan(const ScanOptions& options) const;
     [[nodiscard]] absl::StatusOr<std::optional<types::Row>> get(
         const std::vector<types::Value>& key_columns,
         types::Version version,
@@ -99,10 +108,9 @@ private:
     format::Statistics statistics_;
     std::string key_file_;
     std::string value_file_;
+    bloom::Reader bloom_;
     uint64_t root_index_offset_ = 0;
     uint64_t root_index_length_ = 0;
-    uint64_t bloom_offset_ = 0;
-    uint64_t bloom_length_ = 0;
 };
 
 } // namespace pl::sstv2::file
