@@ -22,6 +22,8 @@
 
 #include "cpp/pl/sstv2/codec/value_comparable.h"
 #include "cpp/pl/sstv2/types/key.h"
+#include "cpp/pl/sstv2/types/key_comparator.h"
+#include "cpp/pl/sstv2/types/key_factory.h"
 #include "cpp/pl/sstv2/types/op_type.h"
 #include "cpp/pl/sstv2/types/schema.h"
 
@@ -37,7 +39,7 @@ Schema::ConstRef make_schema() {
     return std::make_shared<const Schema>(std::move(*schema));
 }
 
-InternalRow make_row(InternalSchema::ConstRef schema,
+InternalRow make_row(const InternalSchema::ConstRef& schema,
                      std::string tenant,
                      uint64_t score,
                      Version version = Version{.major = 10}) {
@@ -91,7 +93,7 @@ TEST(KeyTest, LogicalCompareMatchesMemComparableEncoding) {
 
 TEST(KeyTest, PrefixBoundaryMatchesAllKeysWithSamePrefix) {
     auto schema = InternalSchema::make(make_schema());
-    auto prefix = make_prefix_key(KeyPrefix{.key_columns = {Value::make<DataType::kString>("b")}},
+    auto prefix = make_prefix_key(KeyPrefix{.key_columns = {Value::make<DataType::kString>("b")}, .version = std::nullopt, .op_type = std::nullopt},
                                   schema->user_schema(),
                                   schema);
     auto before = make_all_key(make_row(schema, "a", 1), schema);

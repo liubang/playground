@@ -13,22 +13,16 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/06/06 14:16
+// Created: 2026/06/13 18:35
 
 #pragma once
 
-#include <string>
-#include <string_view>
+namespace pl::sstv2::types {
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "cpp/pl/sstv2/types/value.h"
+// Key type tags — distinguish between the three key scopes at compile time.
 
-namespace pl::sstv2::file {
+struct RowKeyTag {};
+struct AllKeyTag {};
+struct PrefixKeyTag {};
 
-[[nodiscard]] absl::Status encode_value(const types::Value& value, std::string* dst);
-[[nodiscard]] absl::StatusOr<std::string> encode_value(const types::Value& value);
-[[nodiscard]] absl::StatusOr<types::Value> decode_value(types::DataType type,
-                                                        std::string_view bytes);
-
-} // namespace pl::sstv2::file
+} // namespace pl::sstv2::types
