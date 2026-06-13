@@ -138,23 +138,4 @@ template <Codec C>
 [[nodiscard]] absl::StatusOr<std::string> uncompress(std::string_view input,
                                                      Codec codec,
                                                      uint64_t uncompressed_size);
-
-namespace block_flags {
-
-static constexpr uint64_t kPatternStore = 1ULL << 0;
-static constexpr uint64_t kRowKeyBitmap = 1ULL << 1;
-static constexpr uint8_t kCompressShift = 2;
-static constexpr uint64_t kCompressMask = 0xFFULL << kCompressShift;
-
-} // namespace block_flags
-
-[[nodiscard]] constexpr uint64_t encode_block_flag(Codec codec) {
-    return block_flags::kPatternStore |
-           (static_cast<uint64_t>(codec) << block_flags::kCompressShift);
-}
-
-[[nodiscard]] constexpr Codec decode_block_flag(uint64_t flags) {
-    return static_cast<Codec>((flags & block_flags::kCompressMask) >> block_flags::kCompressShift);
-}
-
 } // namespace pl::sstv2::compress

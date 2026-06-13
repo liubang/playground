@@ -53,7 +53,7 @@ public:
 
 private:
     int bits_per_key_;
-    std::vector<uint32_t> hashes_;
+    std::vector<uint64_t> hashes_;
 };
 
 class Reader {
@@ -61,8 +61,8 @@ public:
     [[nodiscard]] static absl::StatusOr<Reader> open(std::string_view section);
 
     [[nodiscard]] bool may_contain_all_key(const types::EncodedAllKey& all_key) const;
-    [[nodiscard]] absl::StatusOr<bool> may_contain(const types::InternalRow& row,
-                                                   const types::InternalSchema::ConstRef& schema) const;
+    [[nodiscard]] absl::StatusOr<bool> may_contain(
+        const types::InternalRow& row, const types::InternalSchema::ConstRef& schema) const;
 
     [[nodiscard]] const Header& header() const noexcept { return header_; }
 

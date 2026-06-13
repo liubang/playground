@@ -25,6 +25,16 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
+    name = "block_flags",
+    hdrs = ["block_flags.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/sstv2/compress:compress",
+    ],
+)
+
+cc_library(
     name = "tail",
     srcs = ["tail.cpp"],
     hdrs = ["tail.h"],

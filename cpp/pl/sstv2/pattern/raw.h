@@ -103,7 +103,8 @@ public:
 
     // Scalar overload (CellSize <= 8): accepts the native unsigned integer type.
     // On LE platforms this compiles to a single memcpy; on BE it byte-swaps first.
-    template <size_t S = CellSize, std::enable_if_t<(S <= 8), int> = 0>
+    template <size_t S = CellSize>
+        requires(S <= 8)
     void add(detail::cell_type_t<S> v) noexcept {
         if constexpr (CellSize == 1) {
             buf_.push_back(v);
@@ -190,7 +191,8 @@ public:
     }
 
     // Typed accessor (CellSize <= 8): returns host-order scalar.
-    template <size_t S = CellSize, std::enable_if_t<(S <= 8), int> = 0>
+    template <size_t S = CellSize>
+        requires(S <= 8)
     [[nodiscard]] detail::cell_type_t<S> get(size_t i) const noexcept {
         if constexpr (CellSize == 1) {
             return cell(i)[0];
@@ -202,7 +204,8 @@ public:
     }
 
     // 16-byte accessor: copies into caller-provided buffer.
-    template <size_t S = CellSize, std::enable_if_t<(S == 16), int> = 0>
+    template <size_t S = CellSize>
+        requires(S == 16)
     void get(size_t i, uint8_t (&out)[16]) const noexcept {
         std::memcpy(out, cell(i), 16);
     }

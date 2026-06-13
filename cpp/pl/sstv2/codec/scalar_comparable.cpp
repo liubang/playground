@@ -65,7 +65,8 @@ uint8_t read_be8(const uint8_t* src) {
 }
 
 uint16_t read_be16(const uint8_t* src) {
-    return static_cast<uint16_t>((static_cast<uint16_t>(src[0]) << 8) | static_cast<uint16_t>(src[1]));
+    return static_cast<uint16_t>((static_cast<uint16_t>(src[0]) << 8) |
+                                 static_cast<uint16_t>(src[1]));
 }
 
 uint32_t read_be32(const uint8_t* src) {
