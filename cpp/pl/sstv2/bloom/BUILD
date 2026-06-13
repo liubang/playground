@@ -36,6 +36,7 @@ cc_library(
         "//cpp/pl/sstv2/codec:fixed",
         "//cpp/pl/sstv2/codec:value_comparable",
         "//cpp/pl/sstv2/types:internal_row",
+        "//cpp/pl/sstv2/types:key",
         "@abseil-cpp//absl/hash",
         "@abseil-cpp//absl/status:statusor",
     ],

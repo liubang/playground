@@ -17,14 +17,12 @@
 
 #include "cpp/pl/sstv2/format/metadata.h"
 
-#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/types/internal_schema.h"
 
 namespace pl::sstv2::format {
@@ -123,15 +121,6 @@ absl::StatusOr<std::string> optional_string(const SectionMap& entries,
         return absl::InvalidArgumentError(absl::StrCat("metadata key ", key, " must be String"));
     }
     return std::string(value->as_string());
-}
-
-std::string encode_uint64_vector(std::initializer_list<uint64_t> values) {
-    std::string bytes;
-    bytes.reserve(values.size() * sizeof(uint64_t));
-    for (uint64_t value : values) {
-        codec::append_fixed64(&bytes, value);
-    }
-    return bytes;
 }
 
 } // namespace

@@ -64,7 +64,9 @@ cc_library(
     deps = [
         ":comparable",
         "//cpp/pl/sstv2/types:internal_row",
+        "//cpp/pl/sstv2/types:key",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/status:statusor",
     ],
 )
