@@ -284,13 +284,13 @@ class Value {
 public:
     // --- Construction / Destruction ---
 
-    Value() noexcept : type_(DataType::kNone) {}
+    Value() noexcept = default;
 
     ~Value() { destroy(); }
 
-    Value(const Value& other) : type_(DataType::kNone) { copy_from(other); }
+    Value(const Value& other) { copy_from(other); }
 
-    Value(Value&& other) noexcept : type_(DataType::kNone) { move_from(std::move(other)); }
+    Value(Value&& other) noexcept { move_from(std::move(other)); }
 
     Value& operator=(const Value& other) {
         if (this != &other) {
@@ -310,8 +310,8 @@ public:
 
     // --- Static factory: compile-time typed construction ---
 
-    template <DataType DT,
-              std::enable_if_t<TypeTraits<DT>::category == StorageCategory::kInline, int> = 0>
+    template <DataType DT>
+        requires(TypeTraits<DT>::category == StorageCategory::kInline)
     static Value make(native_type_t<DT> v) {
         Value val;
         val.type_ = DT;
@@ -319,8 +319,8 @@ public:
         return val;
     }
 
-    template <DataType DT,
-              std::enable_if_t<TypeTraits<DT>::category == StorageCategory::kString, int> = 0>
+    template <DataType DT>
+        requires(TypeTraits<DT>::category == StorageCategory::kString)
     static Value make(std::string v) {
         Value val;
         val.type_ = DT;
@@ -329,15 +329,15 @@ public:
     }
 
     // String-like from string_view (copies).
-    template <DataType DT,
-              std::enable_if_t<TypeTraits<DT>::category == StorageCategory::kString, int> = 0>
+    template <DataType DT>
+        requires(TypeTraits<DT>::category == StorageCategory::kString)
     static Value make(std::string_view sv) {
         return make<DT>(std::string(sv));
     }
 
     // String-like from const char* (copies).
-    template <DataType DT,
-              std::enable_if_t<TypeTraits<DT>::category == StorageCategory::kString, int> = 0>
+    template <DataType DT>
+        requires(TypeTraits<DT>::category == StorageCategory::kString)
     static Value make(const char* s) {
         return make<DT>(std::string(s));
     }
@@ -385,35 +385,35 @@ public:
 
     // --- Typed access (compile-time checked) ---
 
-    template <DataType DT,
-              std::enable_if_t<TypeTraits<DT>::category == StorageCategory::kInline, int> = 0>
+    template <DataType DT>
+        requires(TypeTraits<DT>::category == StorageCategory::kInline)
     [[nodiscard]] const native_type_t<DT>& ref() const {
         assert(type_ == DT);
         return *reinterpret_cast<const native_type_t<DT>*>(&storage_.inline_data);
     }
 
-    template <DataType DT,
-              std::enable_if_t<TypeTraits<DT>::category == StorageCategory::kInline, int> = 0>
+    template <DataType DT>
+        requires(TypeTraits<DT>::category == StorageCategory::kInline)
     [[nodiscard]] native_type_t<DT> get() const {
         return ref<DT>();
     }
 
-    template <DataType DT,
-              std::enable_if_t<TypeTraits<DT>::category == StorageCategory::kString, int> = 0>
+    template <DataType DT>
+        requires(TypeTraits<DT>::category == StorageCategory::kString)
     [[nodiscard]] const std::string& ref() const {
         assert(storage_category_of(type_) == StorageCategory::kString);
         return storage_.str;
     }
 
-    template <DataType DT,
-              std::enable_if_t<TypeTraits<DT>::category == StorageCategory::kString, int> = 0>
+    template <DataType DT>
+        requires(TypeTraits<DT>::category == StorageCategory::kString)
     [[nodiscard]] std::string get() const {
         return ref<DT>();
     }
 
     // Move out the stored value.
-    template <DataType DT,
-              std::enable_if_t<TypeTraits<DT>::category == StorageCategory::kInline, int> = 0>
+    template <DataType DT>
+        requires(TypeTraits<DT>::category == StorageCategory::kInline)
     native_type_t<DT> take() {
         assert(type_ == DT);
         auto v = std::move(*reinterpret_cast<native_type_t<DT>*>(&storage_.inline_data));
@@ -421,8 +421,8 @@ public:
         return v;
     }
 
-    template <DataType DT,
-              std::enable_if_t<TypeTraits<DT>::category == StorageCategory::kString, int> = 0>
+    template <DataType DT>
+        requires(TypeTraits<DT>::category == StorageCategory::kString)
     std::string take() {
         assert(storage_category_of(type_) == StorageCategory::kString);
         auto v = std::move(storage_.str);
@@ -522,7 +522,7 @@ private:
         MapStorage map;
     };
 
-    DataType type_;
+    DataType type_ = DataType::kNone;
     Storage storage_;
 
     // --- Lifecycle helpers ---
@@ -795,7 +795,7 @@ inline int compare_values(const Value& lhs, const Value& rhs) {
 }
 
 inline Value Value::make_map(std::vector<std::pair<Value, Value>> entries) {
-    std::stable_sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
+    std::ranges::stable_sort(entries, [](const auto& lhs, const auto& rhs) {
         return compare_values(lhs.first, rhs.first) < 0;
     });
     Value val;
@@ -833,11 +833,10 @@ template <> struct NativeTypeMapping<Version>     { static constexpr DataType va
 } // namespace detail
 
 // make_value: construct a Value from a native scalar, inferring DataType.
-template <typename T,
-          std::enable_if_t<!std::is_same_v<std::decay_t<T>, std::string> &&
-                               !std::is_same_v<std::decay_t<T>, const char*> &&
-                               !std::is_same_v<std::decay_t<T>, std::string_view>,
-                           int> = 0>
+template <typename T>
+    requires(!std::is_same_v<std::decay_t<T>, std::string> &&
+             !std::is_same_v<std::decay_t<T>, const char*> &&
+             !std::is_same_v<std::decay_t<T>, std::string_view>)
 Value make_value(T v) {
     constexpr DataType dt = detail::NativeTypeMapping<std::decay_t<T>>::value;
     return Value::make<dt>(std::move(v));

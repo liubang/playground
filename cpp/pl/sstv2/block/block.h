@@ -60,7 +60,7 @@ public:
 
     [[nodiscard]] absl::Status add(types::InternalRow row);
     [[nodiscard]] absl::Status add(types::InternalRow row, std::string embedded_value);
-    [[nodiscard]] absl::StatusOr<std::string> finish() const;
+    [[nodiscard]] absl::StatusOr<std::string> finish();
 
     [[nodiscard]] size_t row_count() const noexcept { return rows_.size(); }
 

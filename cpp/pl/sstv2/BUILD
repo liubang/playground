@@ -110,6 +110,7 @@ cc_test(
     copts = TEST_COPTS,
     deps = [
         "//cpp/pl/sstv2/compress",
+        "//cpp/pl/sstv2/format:block_flags",
         "@googletest//:gtest_main",
     ],
 )
@@ -120,6 +121,7 @@ cc_test(
     copts = TEST_COPTS,
     deps = [
         "//cpp/pl/sstv2/block",
+        "//cpp/pl/sstv2/format:block_flags",
         "//cpp/pl/sstv2/types:column_flag",
         "//cpp/pl/sstv2/types:internal_row",
         "//cpp/pl/sstv2/types:op_type",
