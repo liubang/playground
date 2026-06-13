@@ -54,11 +54,11 @@ absl::StatusOr<std::string_view> checked_slice(std::string_view bytes,
 
 absl::StatusOr<types::AllKeyView> all_key_for(InternalSchema::ConstRef schema,
                                               const InternalRow& row) {
-    return types::make_all_key_view(row, schema);
+    return types::make_all_key_view(row, std::move(schema));
 }
 
 template <typename KeyTag>
-absl::StatusOr<size_t> lower_bound_by_key(InternalSchema::ConstRef schema,
+absl::StatusOr<size_t> lower_bound_by_key(const InternalSchema::ConstRef& schema,
                                           const std::vector<InternalRow>& rows,
                                           const types::LogicalKey<KeyTag>& target_key) {
     types::KeyComparator comparator(schema);
@@ -88,7 +88,7 @@ absl::StatusOr<size_t> lower_bound_by_key(InternalSchema::ConstRef schema,
     return first;
 }
 
-InternalRow make_index_row(InternalSchema::ConstRef schema,
+InternalRow make_index_row(const InternalSchema::ConstRef& schema,
                            const InternalRow& fence,
                            BlockRef block,
                            uint64_t subtree_row_count,
@@ -106,7 +106,8 @@ InternalRow make_index_row(InternalSchema::ConstRef schema,
     return index;
 }
 
-uint64_t subtree_row_count(InternalSchema::ConstRef schema, const std::vector<InternalRow>& rows) {
+uint64_t subtree_row_count(const InternalSchema::ConstRef& schema,
+                           const std::vector<InternalRow>& rows) {
     uint64_t count = 0;
     for (const auto& row : rows) {
         count += row.checksum(schema);
@@ -115,7 +116,7 @@ uint64_t subtree_row_count(InternalSchema::ConstRef schema, const std::vector<In
 }
 
 absl::StatusOr<block::BlockReader> open_index_node(std::string_view key_file,
-                                                   InternalSchema::ConstRef schema,
+                                                   const InternalSchema::ConstRef& schema,
                                                    BlockRef ref,
                                                    block::Kind kind) {
     auto bytes = checked_slice(key_file, ref.offset, ref.length, "index node");
@@ -125,7 +126,7 @@ absl::StatusOr<block::BlockReader> open_index_node(std::string_view key_file,
 }
 
 absl::Status scan_node(std::string_view key_file,
-                       InternalSchema::ConstRef schema,
+                       const InternalSchema::ConstRef& schema,
                        BlockRef ref,
                        block::Kind kind,
                        std::vector<BlockRef>* data_blocks) {
@@ -150,7 +151,7 @@ absl::Status scan_node(std::string_view key_file,
 }
 
 absl::Status scan_node_range(std::string_view key_file,
-                             InternalSchema::ConstRef schema,
+                             const InternalSchema::ConstRef& schema,
                              BlockRef ref,
                              block::Kind kind,
                              const std::optional<types::PrefixKey>& start_key,
@@ -201,11 +202,12 @@ absl::Status scan_node_range(std::string_view key_file,
     return absl::OkStatus();
 }
 
-absl::StatusOr<std::optional<BlockRef>> find_data_block_from_node(std::string_view key_file,
-                                                                  InternalSchema::ConstRef schema,
-                                                                  BlockRef ref,
-                                                                  block::Kind kind,
-                                                                  const types::AllKey& target_key) {
+absl::StatusOr<std::optional<BlockRef>> find_data_block_from_node(
+    std::string_view key_file,
+    const InternalSchema::ConstRef& schema,
+    BlockRef ref,
+    block::Kind kind,
+    const types::AllKey& target_key) {
     auto node = open_index_node(key_file, schema, ref, kind);
     if (!node.ok())
         return node.status();
@@ -377,7 +379,7 @@ absl::StatusOr<FinishResult> TreeBuilder::finish() {
 }
 
 absl::Status TreeReader::scan_data_blocks(std::string_view key_file,
-                                          InternalSchema::ConstRef schema,
+                                          const InternalSchema::ConstRef& schema,
                                           BlockRef root,
                                           std::vector<BlockRef>* data_blocks) {
     if (data_blocks == nullptr) {
@@ -387,7 +389,7 @@ absl::Status TreeReader::scan_data_blocks(std::string_view key_file,
 }
 
 absl::Status TreeReader::scan_data_blocks_from(std::string_view key_file,
-                                               InternalSchema::ConstRef schema,
+                                               const InternalSchema::ConstRef& schema,
                                                BlockRef root,
                                                const types::PrefixKey& start_key,
                                                std::vector<BlockRef>* data_blocks) {
@@ -395,7 +397,7 @@ absl::Status TreeReader::scan_data_blocks_from(std::string_view key_file,
 }
 
 absl::Status TreeReader::scan_data_blocks_in_range(std::string_view key_file,
-                                                   InternalSchema::ConstRef schema,
+                                                   const InternalSchema::ConstRef& schema,
                                                    BlockRef root,
                                                    const std::optional<types::PrefixKey>& start_key,
                                                    const std::optional<types::PrefixKey>& limit_key,
@@ -409,7 +411,7 @@ absl::Status TreeReader::scan_data_blocks_in_range(std::string_view key_file,
 
 absl::StatusOr<std::optional<BlockRef>> TreeReader::find_data_block(
     std::string_view key_file,
-    InternalSchema::ConstRef schema,
+    const InternalSchema::ConstRef& schema,
     BlockRef root,
     const types::AllKey& target_key) {
     return find_data_block_from_node(key_file, schema, root, block::Kind::kRootIndex, target_key);

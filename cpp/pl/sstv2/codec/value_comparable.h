@@ -206,7 +206,7 @@ inline absl::Status encode_value_comparable(const types::Value& value,
 }
 
 inline absl::Status encode_all_key(const types::InternalRow& row,
-                                   types::InternalSchema::ConstRef schema,
+                                   const types::InternalSchema::ConstRef& schema,
                                    std::string* dst) {
     dst->clear();
     for (size_t i = 0; i < schema->sort_key_column_count(); ++i) {
@@ -219,7 +219,7 @@ inline absl::Status encode_all_key(const types::InternalRow& row,
 }
 
 inline absl::StatusOr<types::EncodedAllKey> make_encoded_all_key(
-    const types::InternalRow& row, types::InternalSchema::ConstRef schema) {
+    const types::InternalRow& row, const types::InternalSchema::ConstRef& schema) {
     std::string encoded;
     auto status = encode_all_key(row, schema, &encoded);
     if (!status.ok())
@@ -228,7 +228,7 @@ inline absl::StatusOr<types::EncodedAllKey> make_encoded_all_key(
 }
 
 inline absl::Status encode_row_key(const std::vector<types::Value>& columns,
-                                   types::Schema::ConstRef schema,
+                                   const types::Schema::ConstRef& schema,
                                    std::string* dst) {
     dst->clear();
     if (columns.size() != schema->row_key_column_count()) {
@@ -244,7 +244,7 @@ inline absl::Status encode_row_key(const std::vector<types::Value>& columns,
 }
 
 inline absl::StatusOr<types::EncodedRowKey> make_encoded_row_key(
-    const std::vector<types::Value>& columns, types::Schema::ConstRef schema) {
+    const std::vector<types::Value>& columns, const types::Schema::ConstRef& schema) {
     std::string encoded;
     auto status = encode_row_key(columns, schema, &encoded);
     if (!status.ok())
@@ -254,8 +254,8 @@ inline absl::StatusOr<types::EncodedRowKey> make_encoded_row_key(
 
 inline absl::StatusOr<types::EncodedPrefixKey> make_encoded_prefix_key(
     const types::KeyPrefix& prefix,
-    types::Schema::ConstRef schema,
-    types::InternalSchema::ConstRef internal_schema) {
+    const types::Schema::ConstRef& schema,
+    const types::InternalSchema::ConstRef& internal_schema) {
     if (internal_schema == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }

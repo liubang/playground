@@ -61,7 +61,7 @@ class Builder {
 public:
     Builder(types::Schema::ConstRef schema, BuilderOptions options = {});
 
-    [[nodiscard]] absl::Status add(types::Row row);
+    [[nodiscard]] absl::Status add(const types::Row& row);
     [[nodiscard]] absl::StatusOr<Files> finish();
 
 private:

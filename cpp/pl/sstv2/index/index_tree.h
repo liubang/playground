@@ -74,20 +74,22 @@ private:
 
 class TreeReader {
 public:
-    [[nodiscard]] static absl::Status scan_data_blocks(std::string_view key_file,
-                                                       types::InternalSchema::ConstRef schema,
-                                                       BlockRef root,
-                                                       std::vector<BlockRef>* data_blocks);
+    [[nodiscard]] static absl::Status scan_data_blocks(
+        std::string_view key_file,
+        const types::InternalSchema::ConstRef& schema,
+        BlockRef root,
+        std::vector<BlockRef>* data_blocks);
 
-    [[nodiscard]] static absl::Status scan_data_blocks_from(std::string_view key_file,
-                                                            types::InternalSchema::ConstRef schema,
-                                                            BlockRef root,
-                                                            const types::PrefixKey& start_key,
-                                                            std::vector<BlockRef>* data_blocks);
+    [[nodiscard]] static absl::Status scan_data_blocks_from(
+        std::string_view key_file,
+        const types::InternalSchema::ConstRef& schema,
+        BlockRef root,
+        const types::PrefixKey& start_key,
+        std::vector<BlockRef>* data_blocks);
 
     [[nodiscard]] static absl::Status scan_data_blocks_in_range(
         std::string_view key_file,
-        types::InternalSchema::ConstRef schema,
+        const types::InternalSchema::ConstRef& schema,
         BlockRef root,
         const std::optional<types::PrefixKey>& start_key,
         const std::optional<types::PrefixKey>& limit_key,
@@ -95,7 +97,7 @@ public:
 
     [[nodiscard]] static absl::StatusOr<std::optional<BlockRef>> find_data_block(
         std::string_view key_file,
-        types::InternalSchema::ConstRef schema,
+        const types::InternalSchema::ConstRef& schema,
         BlockRef root,
         const types::AllKey& target_key);
 };

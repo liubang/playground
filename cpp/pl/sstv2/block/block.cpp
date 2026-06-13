@@ -27,7 +27,6 @@
 #include "cpp/pl/sstv2/codec/checksum.h"
 #include "cpp/pl/sstv2/codec/endian.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
-#include "cpp/pl/sstv2/codec/value_comparable.h"
 #include "cpp/pl/sstv2/codec/varint.h"
 #include "cpp/pl/sstv2/file/value_codec.h"
 #include "cpp/pl/sstv2/pattern/compound.h"
@@ -110,7 +109,7 @@ void add_raw_cell(pattern::RawEncoder<CellSize>* encoder, T value) {
 }
 
 absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>& rows,
-                                          types::InternalSchema::ConstRef schema,
+                                          const types::InternalSchema::ConstRef& schema,
                                           size_t column,
                                           std::string* data_table) {
     const DataType type = schema->column_type(column);
@@ -285,7 +284,7 @@ template <typename T> Value make_inline(DataType type, T value) {
 
 absl::Status decode_column(std::string_view unit,
                            std::string_view data_table,
-                           types::InternalSchema::ConstRef schema,
+                           const types::InternalSchema::ConstRef& schema,
                            size_t column,
                            std::vector<types::InternalRow>* rows) {
     const DataType type = schema->column_type(column);
@@ -539,7 +538,7 @@ absl::StatusOr<std::string> BlockBuilder::finish() const {
 }
 
 absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
-                                              types::InternalSchema::ConstRef schema,
+                                              const types::InternalSchema::ConstRef& schema,
                                               Kind expected) {
     if (block.size() < Header::kSize) {
         return absl::InvalidArgumentError("block is shorter than header");
@@ -626,7 +625,7 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
 }
 
 absl::StatusOr<std::string_view> BlockReader::embedded_value(
-    size_t row_index, types::InternalSchema::ConstRef schema) const {
+    size_t row_index, const types::InternalSchema::ConstRef& schema) const {
     if (row_index >= rows_.size()) {
         return absl::InvalidArgumentError("embedded value row index out of range");
     }
