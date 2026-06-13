@@ -18,7 +18,6 @@
 #include "cpp/pl/sstv2/bloom/bloom.h"
 
 #include <algorithm>
-#include <cmath>
 
 #include "absl/hash/hash.h"
 #include "absl/status/status.h"
@@ -59,7 +58,8 @@ Header decode_header(std::string_view input) {
 
 Builder::Builder(int bits_per_key) : bits_per_key_(std::max(1, bits_per_key)) {}
 
-absl::Status Builder::add(const types::InternalRow& row, types::InternalSchema::ConstRef schema) {
+absl::Status Builder::add(const types::InternalRow& row,
+                          const types::InternalSchema::ConstRef& schema) {
     auto all_key = codec::make_encoded_all_key(row, schema);
     if (!all_key.ok())
         return all_key.status();
@@ -111,7 +111,7 @@ absl::StatusOr<Reader> Reader::open(std::string_view section) {
     if (h.version != Header::kVersion) {
         return absl::InvalidArgumentError("unsupported bloom version");
     }
-    const size_t bytes = static_cast<size_t>((h.bit_count + 7) / 8);
+    const auto bytes = static_cast<size_t>((h.bit_count + 7) / 8);
     if (section.size() != Header::kSize + bytes) {
         return absl::InvalidArgumentError("bloom section length mismatch");
     }
@@ -141,7 +141,7 @@ bool Reader::may_contain_all_key(const types::EncodedAllKey& all_key) const {
 }
 
 absl::StatusOr<bool> Reader::may_contain(const types::InternalRow& row,
-                                         types::InternalSchema::ConstRef schema) const {
+                                         const types::InternalSchema::ConstRef& schema) const {
     auto all_key = codec::make_encoded_all_key(row, schema);
     if (!all_key.ok())
         return all_key.status();
