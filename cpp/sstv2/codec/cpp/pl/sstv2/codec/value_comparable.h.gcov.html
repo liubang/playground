@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-13 11:11:02</td>
+            <td class="headerValue">2026-06-13 18:10:12</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">38.3&nbsp;%</td>
-            <td class="headerCovTableEntry">94</td>
-            <td class="headerCovTableEntry">36</td>
+            <td class="headerCovTableEntryLo">38.0&nbsp;%</td>
+            <td class="headerCovTableEntry">92</td>
+            <td class="headerCovTableEntry">35</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -281,7 +281,7 @@
 <span id="L206"><span class="lineNum">     206</span>                 :             : }</span>
 <span id="L207"><span class="lineNum">     207</span>                 :             : </span>
 <span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC tlaBgGNC">          65 : inline absl::Status encode_all_key(const types::InternalRow&amp; row,</span></span>
-<span id="L209"><span class="lineNum">     209</span>                 :             :                                    types::InternalSchema::ConstRef schema,</span>
+<span id="L209"><span class="lineNum">     209</span>                 :             :                                    const types::InternalSchema::ConstRef&amp; schema,</span>
 <span id="L210"><span class="lineNum">     210</span>                 :             :                                    std::string* dst) {</span>
 <span id="L211"><span class="lineNum">     211</span>                 :             :     dst-&gt;clear();</span>
 <span id="L212"><span class="lineNum">     212</span>         [<span class="tlaGBC" title="Branch 0 was taken 258 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 65 times"> + </span>]:<span class="tlaGNC">         323 :     for (size_t i = 0; i &lt; schema-&gt;sort_key_column_count(); ++i) {</span></span>
@@ -294,16 +294,16 @@
 <span id="L219"><span class="lineNum">     219</span>                 :             : }</span>
 <span id="L220"><span class="lineNum">     220</span>                 :             : </span>
 <span id="L221"><span class="lineNum">     221</span>         [<span class="tlaGBC" title="Branch 0 was taken 65 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          65 : inline absl::StatusOr&lt;types::EncodedAllKey&gt; make_encoded_all_key(</span></span>
-<span id="L222"><span class="lineNum">     222</span>                 :             :     const types::InternalRow&amp; row, types::InternalSchema::ConstRef schema) {</span>
+<span id="L222"><span class="lineNum">     222</span>                 :             :     const types::InternalRow&amp; row, const types::InternalSchema::ConstRef&amp; schema) {</span>
 <span id="L223"><span class="lineNum">     223</span>                 :             :     std::string encoded;</span>
-<span id="L224"><span class="lineNum">     224</span>   [<span class="tlaGBC" title="Branch 0 was taken 65 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 65 times"> + </span>]:<span class="tlaGNC">         130 :     auto status = encode_all_key(row, schema, &amp;encoded);</span></span>
+<span id="L224"><span class="lineNum">     224</span>         [<span class="tlaGBC" title="Branch 0 was taken 65 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          65 :     auto status = encode_all_key(row, schema, &amp;encoded);</span></span>
 <span id="L225"><span class="lineNum">     225</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 65 times"> + </span>]:<span class="tlaGNC">          65 :     if (!status.ok())</span></span>
 <span id="L226"><span class="lineNum">     226</span>                 :             :         return status;</span>
 <span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">         130 :     return types::EncodedAllKey::from_encoded_bytes(std::move(encoded));</span></span>
 <span id="L228"><span class="lineNum">     228</span>                 :             : }</span>
 <span id="L229"><span class="lineNum">     229</span>                 :             : </span>
 <span id="L230"><span class="lineNum">     230</span>                 :             : inline absl::Status encode_row_key(const std::vector&lt;types::Value&gt;&amp; columns,</span>
-<span id="L231"><span class="lineNum">     231</span>                 :             :                                    types::Schema::ConstRef schema,</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             :                                    const types::Schema::ConstRef&amp; schema,</span>
 <span id="L232"><span class="lineNum">     232</span>                 :             :                                    std::string* dst) {</span>
 <span id="L233"><span class="lineNum">     233</span>                 :             :     dst-&gt;clear();</span>
 <span id="L234"><span class="lineNum">     234</span>                 :             :     if (columns.size() != schema-&gt;row_key_column_count()) {</span>
@@ -319,7 +319,7 @@
 <span id="L244"><span class="lineNum">     244</span>                 :             : }</span>
 <span id="L245"><span class="lineNum">     245</span>                 :             : </span>
 <span id="L246"><span class="lineNum">     246</span>                 :             : inline absl::StatusOr&lt;types::EncodedRowKey&gt; make_encoded_row_key(</span>
-<span id="L247"><span class="lineNum">     247</span>                 :             :     const std::vector&lt;types::Value&gt;&amp; columns, types::Schema::ConstRef schema) {</span>
+<span id="L247"><span class="lineNum">     247</span>                 :             :     const std::vector&lt;types::Value&gt;&amp; columns, const types::Schema::ConstRef&amp; schema) {</span>
 <span id="L248"><span class="lineNum">     248</span>                 :             :     std::string encoded;</span>
 <span id="L249"><span class="lineNum">     249</span>                 :             :     auto status = encode_row_key(columns, schema, &amp;encoded);</span>
 <span id="L250"><span class="lineNum">     250</span>                 :             :     if (!status.ok())</span>
@@ -329,8 +329,8 @@
 <span id="L254"><span class="lineNum">     254</span>                 :             : </span>
 <span id="L255"><span class="lineNum">     255</span>                 :             : inline absl::StatusOr&lt;types::EncodedPrefixKey&gt; make_encoded_prefix_key(</span>
 <span id="L256"><span class="lineNum">     256</span>                 :             :     const types::KeyPrefix&amp; prefix,</span>
-<span id="L257"><span class="lineNum">     257</span>                 :             :     types::Schema::ConstRef schema,</span>
-<span id="L258"><span class="lineNum">     258</span>                 :             :     types::InternalSchema::ConstRef internal_schema) {</span>
+<span id="L257"><span class="lineNum">     257</span>                 :             :     const types::Schema::ConstRef&amp; schema,</span>
+<span id="L258"><span class="lineNum">     258</span>                 :             :     const types::InternalSchema::ConstRef&amp; internal_schema) {</span>
 <span id="L259"><span class="lineNum">     259</span>                 :             :     if (internal_schema == nullptr) {</span>
 <span id="L260"><span class="lineNum">     260</span>                 :             :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span>
 <span id="L261"><span class="lineNum">     261</span>                 :             :     }</span>
