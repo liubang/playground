@@ -28,7 +28,7 @@
 #include "cpp/pl/sstv2/codec/endian.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/varint.h"
-#include "cpp/pl/sstv2/file/value_codec.h"
+#include "cpp/pl/sstv2/types/value_codec.h"
 #include "cpp/pl/sstv2/pattern/compound.h"
 #include "cpp/pl/sstv2/pattern/raw.h"
 
@@ -244,7 +244,7 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
             for (const auto& row : rows) {
                 SSTV2_RETURN_IF_ERROR(
                     verify_value_type(row.columns[column], type, schema->column_name(column)));
-                auto bytes = file::encode_value(row.columns[column]);
+                auto bytes = types::encode_value(row.columns[column]);
                 if (!bytes.ok())
                     return bytes.status();
                 const uint64_t offset = data_table->size();
@@ -439,7 +439,7 @@ absl::Status decode_column(std::string_view unit,
                 if (off + len > data_table.size()) {
                     return absl::InvalidArgumentError("variant-ref points outside data table");
                 }
-                auto value = file::decode_value(
+                auto value = types::decode_value(
                     type, std::string_view(data_table.data() + off, static_cast<size_t>(len)));
                 if (!value.ok())
                     return value.status();

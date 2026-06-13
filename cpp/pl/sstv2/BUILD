@@ -40,7 +40,7 @@ cc_test(
     srcs = ["ut/codec/comparable_test.cpp"],
     copts = TEST_COPTS,
     deps = [
-        "//cpp/pl/sstv2/codec:comparable",
+        "//cpp/pl/sstv2/codec:scalar_comparable",
         "//cpp/pl/sstv2/codec:value_comparable",
         "@googletest//:gtest_main",
     ],
@@ -74,6 +74,8 @@ cc_test(
     deps = [
         "//cpp/pl/sstv2/codec:value_comparable",
         "//cpp/pl/sstv2/types:key",
+        "//cpp/pl/sstv2/types:key_comparator",
+        "//cpp/pl/sstv2/types:key_factory",
         "//cpp/pl/sstv2/types:op_type",
         "//cpp/pl/sstv2/types:schema",
         "@googletest//:gtest_main",
@@ -148,6 +150,8 @@ cc_test(
         "//cpp/pl/sstv2/codec:fixed",
         "//cpp/pl/sstv2/index",
         "//cpp/pl/sstv2/types:key",
+        "//cpp/pl/sstv2/types:key_comparator",
+        "//cpp/pl/sstv2/types:key_factory",
         "//cpp/pl/sstv2/types:op_type",
         "//cpp/pl/sstv2/types:schema",
         "@googletest//:gtest_main",

@@ -22,7 +22,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "cpp/pl/sstv2/codec/comparable.h"
+#include "cpp/pl/sstv2/codec/scalar_comparable.h"
 #include "cpp/pl/sstv2/types/internal_row.h"
 #include "cpp/pl/sstv2/types/key.h"
 #include "cpp/pl/sstv2/types/schema.h"

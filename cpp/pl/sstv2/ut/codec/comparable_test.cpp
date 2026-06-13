@@ -19,9 +19,10 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <limits>
+#include <numbers>
 #include <string>
 
-#include "cpp/pl/sstv2/codec/comparable.h"
+#include "cpp/pl/sstv2/codec/scalar_comparable.h"
 #include "cpp/pl/sstv2/codec/value_comparable.h"
 
 namespace pl::sstv2::codec {
@@ -125,7 +126,7 @@ TEST(ComparableFloatTest, OrderPreserving) {
 TEST(ComparableDoubleTest, OrderPreserving) {
     std::string neg_inf, neg, zero, pos, pos_inf;
     encode_double(-std::numeric_limits<double>::infinity(), &neg_inf);
-    encode_double(-2.718, &neg);
+    encode_double(-std::numbers::e, &neg);
     encode_double(0.0, &zero);
     encode_double(3.14, &pos);
     encode_double(std::numeric_limits<double>::infinity(), &pos_inf);
@@ -343,7 +344,7 @@ TEST(ComparableDecodeTest, FloatRoundtrip) {
 
 TEST(ComparableDecodeTest, DoubleRoundtrip) {
     for (double v : {-std::numeric_limits<double>::infinity(),
-                     -2.718,
+                     -std::numbers::e,
                      0.0,
                      3.14,
                      std::numeric_limits<double>::infinity()}) {
@@ -420,7 +421,7 @@ TEST(ComparableDescDecodeTest, FloatRoundtrip) {
 }
 
 TEST(ComparableDescDecodeTest, DoubleRoundtrip) {
-    for (double v : {-3.14, 0.0, 2.718}) {
+    for (double v : {-3.14, 0.0, std::numbers::e}) {
         std::string enc;
         encode_double_desc(v, &enc);
         double decoded = 0;
