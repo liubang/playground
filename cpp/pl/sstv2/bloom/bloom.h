@@ -22,8 +22,10 @@
 #include <string_view>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "cpp/pl/sstv2/types/internal_row.h"
+#include "cpp/pl/sstv2/types/key.h"
 
 namespace pl::sstv2::bloom {
 
@@ -46,7 +48,7 @@ public:
 
     [[nodiscard]] absl::Status add(const types::InternalRow& row,
                                    types::InternalSchema::ConstRef schema);
-    [[nodiscard]] absl::Status add_all_key(std::string_view all_key);
+    [[nodiscard]] absl::Status add_all_key(const types::EncodedAllKey& all_key);
     [[nodiscard]] std::string finish() const;
 
 private:
@@ -58,7 +60,7 @@ class Reader {
 public:
     [[nodiscard]] static absl::StatusOr<Reader> open(std::string_view section);
 
-    [[nodiscard]] bool may_contain_all_key(std::string_view all_key) const;
+    [[nodiscard]] bool may_contain_all_key(const types::EncodedAllKey& all_key) const;
     [[nodiscard]] absl::StatusOr<bool> may_contain(const types::InternalRow& row,
                                                    types::InternalSchema::ConstRef schema) const;
 

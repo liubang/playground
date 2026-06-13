@@ -68,6 +68,19 @@ cc_test(
 )
 
 cc_test(
+    name = "key_test",
+    srcs = ["ut/types/key_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/codec:value_comparable",
+        "//cpp/pl/sstv2/types:key",
+        "//cpp/pl/sstv2/types:op_type",
+        "//cpp/pl/sstv2/types:schema",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "column_flag_test",
     srcs = ["ut/types/column_flag_test.cpp"],
     copts = TEST_COPTS,
@@ -133,8 +146,8 @@ cc_test(
     deps = [
         "//cpp/pl/sstv2/block",
         "//cpp/pl/sstv2/codec:fixed",
-        "//cpp/pl/sstv2/codec:value_comparable",
         "//cpp/pl/sstv2/index",
+        "//cpp/pl/sstv2/types:key",
         "//cpp/pl/sstv2/types:op_type",
         "//cpp/pl/sstv2/types:schema",
         "@googletest//:gtest_main",

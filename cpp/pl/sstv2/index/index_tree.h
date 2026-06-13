@@ -29,6 +29,7 @@
 #include "cpp/pl/sstv2/compress/compress.h"
 #include "cpp/pl/sstv2/types/internal_row.h"
 #include "cpp/pl/sstv2/types/internal_schema.h"
+#include "cpp/pl/sstv2/types/key.h"
 
 namespace pl::sstv2::index {
 
@@ -78,11 +79,25 @@ public:
                                                        BlockRef root,
                                                        std::vector<BlockRef>* data_blocks);
 
+    [[nodiscard]] static absl::Status scan_data_blocks_from(std::string_view key_file,
+                                                            types::InternalSchema::ConstRef schema,
+                                                            BlockRef root,
+                                                            const types::PrefixKey& start_key,
+                                                            std::vector<BlockRef>* data_blocks);
+
+    [[nodiscard]] static absl::Status scan_data_blocks_in_range(
+        std::string_view key_file,
+        types::InternalSchema::ConstRef schema,
+        BlockRef root,
+        const std::optional<types::PrefixKey>& start_key,
+        const std::optional<types::PrefixKey>& limit_key,
+        std::vector<BlockRef>* data_blocks);
+
     [[nodiscard]] static absl::StatusOr<std::optional<BlockRef>> find_data_block(
         std::string_view key_file,
         types::InternalSchema::ConstRef schema,
         BlockRef root,
-        std::string_view target_all_key);
+        const types::AllKey& target_key);
 };
 
 } // namespace pl::sstv2::index

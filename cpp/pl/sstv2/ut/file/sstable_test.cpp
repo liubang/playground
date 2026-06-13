@@ -22,6 +22,7 @@
 #include <string_view>
 #include <vector>
 
+#include "absl/strings/str_cat.h"
 #include "cpp/pl/sstv2/block/block.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/file/sstable.h"
@@ -85,7 +86,7 @@ Row make_complex_row(uint64_t id, std::string value) {
     return row;
 }
 
-uint64_t root_index_offset(std::string_view key_file) {
+uint64_t locator_uint64(std::string_view key_file, std::string_view name) {
     auto tail = format::decode_tail(key_file.substr(key_file.size() - format::Tail::kSize));
     EXPECT_TRUE(tail.ok()) << tail.status();
     auto locator =
@@ -93,10 +94,14 @@ uint64_t root_index_offset(std::string_view key_file) {
                                                static_cast<size_t>(tail->locator_length)),
                                format::SectionMagic::kLocator);
     EXPECT_TRUE(locator.ok()) << locator.status();
-    const Value* value = format::find_section_value(locator->entries, "RootIndex_Offset");
+    const Value* value = format::find_section_value(locator->entries, name);
     EXPECT_NE(value, nullptr);
     EXPECT_EQ(value->type(), DataType::kUint64);
     return value->as_uint64();
+}
+
+uint64_t root_index_offset(std::string_view key_file) {
+    return locator_uint64(key_file, "RootIndex_Offset");
 }
 
 std::vector<block::Kind> block_kinds_before_root(std::string_view key_file, uint64_t root_offset) {
@@ -215,6 +220,37 @@ TEST(SSTableTest, ScanRejectsValueChecksumMismatch) {
     EXPECT_FALSE(reader->scan().ok());
 }
 
+TEST(SSTableTest, OpenRejectsStatisticsFileSizeMismatch) {
+    BuilderOptions options;
+    options.configuration.max_embedded_value_size = 0;
+    Builder builder(make_schema(), options);
+    ASSERT_TRUE(builder.add(make_row("a", 1, Version{.major = 10}, "first")).ok());
+
+    auto files = builder.finish();
+    ASSERT_TRUE(files.ok()) << files.status();
+    EXPECT_FALSE(Reader::open(files->key_file, files->value_file + "!").ok());
+}
+
+TEST(SSTableTest, OpenRejectsCorruptRootIndexAndBloom) {
+    Builder builder(make_schema());
+    ASSERT_TRUE(builder.add(make_row("a", 1, Version{.major = 10}, "first")).ok());
+
+    auto files = builder.finish();
+    ASSERT_TRUE(files.ok()) << files.status();
+
+    std::string corrupt_root = files->key_file;
+    corrupt_root[static_cast<size_t>(root_index_offset(corrupt_root) + block::Header::kSize)] ^=
+        0x01;
+    EXPECT_FALSE(Reader::open(corrupt_root, files->value_file).ok());
+
+    std::string corrupt_bloom = files->key_file;
+    const uint64_t bloom_offset = locator_uint64(corrupt_bloom, "BloomFilter0_Offset");
+    const uint64_t bloom_length = locator_uint64(corrupt_bloom, "BloomFilter0_Length");
+    ASSERT_GT(bloom_length, 0u);
+    corrupt_bloom[static_cast<size_t>(bloom_offset + bloom_length - 1)] ^= 0x01;
+    EXPECT_FALSE(Reader::open(corrupt_bloom, files->value_file).ok());
+}
+
 TEST(SSTableTest, ArrayAndMapKeysRoundTrip) {
     auto schema = SchemaBuilder()
                       .add_column("path", DataType::kArray)
@@ -245,6 +281,136 @@ TEST(SSTableTest, ArrayAndMapKeysRoundTrip) {
     ASSERT_TRUE(found.ok()) << found.status();
     ASSERT_TRUE(found->has_value());
     EXPECT_EQ((*found)->value.as_string(), "two");
+}
+
+TEST(SSTableTest, PrefixRangeScanAcrossBlocks) {
+    BuilderOptions options;
+    options.configuration.max_embedded_value_size = 0;
+    options.configuration.max_data_block_row_count = 2;
+    options.configuration.max_index_block_row_count = 2;
+    Builder builder(make_schema(), options);
+
+    ASSERT_TRUE(builder.add(make_row("a", 1, Version{.major = 10}, "a1")).ok());
+    ASSERT_TRUE(builder.add(make_row("a", 2, Version{.major = 10}, "a2")).ok());
+    ASSERT_TRUE(builder.add(make_row("b", 1, Version{.major = 10}, "b1")).ok());
+    ASSERT_TRUE(builder.add(make_row("b", 2, Version{.major = 10}, "b2")).ok());
+    ASSERT_TRUE(builder.add(make_row("c", 1, Version{.major = 10}, "c1")).ok());
+
+    auto files = builder.finish();
+    ASSERT_TRUE(files.ok()) << files.status();
+    auto reader = Reader::open(files->key_file, files->value_file);
+    ASSERT_TRUE(reader.ok()) << reader.status();
+
+    auto rows = reader->scan(ScanOptions{
+        .start = KeyPrefix{.key_columns = {Value::make<DataType::kString>("b")}},
+        .limit = KeyPrefix{.key_columns = {Value::make<DataType::kString>("c")}},
+    });
+    ASSERT_TRUE(rows.ok()) << rows.status();
+    ASSERT_EQ(rows->size(), 2u);
+    EXPECT_EQ((*rows)[0].value.as_string(), "b1");
+    EXPECT_EQ((*rows)[1].value.as_string(), "b2");
+}
+
+TEST(SSTableTest, PrefixRangeScanWithFullRowKeyAndVersionPrefix) {
+    BuilderOptions options;
+    options.configuration.max_embedded_value_size = 0;
+    options.configuration.max_data_block_row_count = 2;
+    Builder builder(make_schema(), options);
+
+    for (uint64_t i = 1; i <= 5; ++i) {
+        ASSERT_TRUE(
+            builder.add(make_row("tenant", i, Version{.major = 10}, absl::StrCat("v", i))).ok());
+    }
+
+    auto versioned = make_row("tenant", 6, Version{.major = 10}, "v10");
+    ASSERT_TRUE(builder.add(std::move(versioned)).ok());
+    ASSERT_TRUE(builder.add(make_row("tenant", 6, Version{.major = 9}, "v9")).ok());
+    ASSERT_TRUE(builder.add(make_row("tenant", 6, Version{.major = 8}, "v8")).ok());
+    ASSERT_TRUE(builder.add(make_row("tenant", 7, Version{.major = 10}, "put")).ok());
+    Row merge = make_row("tenant", 7, Version{.major = 10}, "merge");
+    merge.op_type = OpType::kMerge;
+    ASSERT_TRUE(builder.add(std::move(merge)).ok());
+    Row deletion;
+    deletion.key_columns.push_back(Value::make<DataType::kString>("tenant"));
+    deletion.key_columns.push_back(Value::make<DataType::kUint64>(uint64_t{7}));
+    deletion.version = Version{.major = 10};
+    deletion.op_type = OpType::kDelete;
+    ASSERT_TRUE(builder.add(std::move(deletion)).ok());
+
+    auto files = builder.finish();
+    ASSERT_TRUE(files.ok()) << files.status();
+    auto reader = Reader::open(files->key_file, files->value_file);
+    ASSERT_TRUE(reader.ok()) << reader.status();
+
+    auto rowkey_rows = reader->scan(ScanOptions{
+        .start = KeyPrefix{.key_columns = {Value::make<DataType::kString>("tenant"),
+                                           Value::make<DataType::kUint64>(uint64_t{2})}},
+        .limit = KeyPrefix{.key_columns = {Value::make<DataType::kString>("tenant"),
+                                           Value::make<DataType::kUint64>(uint64_t{4})}},
+    });
+    ASSERT_TRUE(rowkey_rows.ok()) << rowkey_rows.status();
+    ASSERT_EQ(rowkey_rows->size(), 2u);
+    EXPECT_EQ((*rowkey_rows)[0].key_columns[1].as_uint64(), 2u);
+    EXPECT_EQ((*rowkey_rows)[1].key_columns[1].as_uint64(), 3u);
+
+    auto version_rows = reader->scan(ScanOptions{
+        .start = KeyPrefix{.key_columns = {Value::make<DataType::kString>("tenant"),
+                                           Value::make<DataType::kUint64>(uint64_t{6})},
+                           .version = Version{.major = 9}},
+        .limit = KeyPrefix{.key_columns = {Value::make<DataType::kString>("tenant"),
+                                           Value::make<DataType::kUint64>(uint64_t{6})},
+                           .version = Version{.major = 8}},
+    });
+    ASSERT_TRUE(version_rows.ok()) << version_rows.status();
+    ASSERT_EQ(version_rows->size(), 1u);
+    EXPECT_EQ((*version_rows)[0].version.major, 9u);
+    EXPECT_EQ((*version_rows)[0].value.as_string(), "v9");
+
+    auto op_rows = reader->scan(ScanOptions{
+        .start = KeyPrefix{.key_columns = {Value::make<DataType::kString>("tenant"),
+                                           Value::make<DataType::kUint64>(uint64_t{7})},
+                           .version = Version{.major = 10},
+                           .op_type = OpType::kMerge},
+        .limit = KeyPrefix{.key_columns = {Value::make<DataType::kString>("tenant"),
+                                           Value::make<DataType::kUint64>(uint64_t{7})},
+                           .version = Version{.major = 10},
+                           .op_type = OpType::kDelete},
+    });
+    ASSERT_TRUE(op_rows.ok()) << op_rows.status();
+    ASSERT_EQ(op_rows->size(), 1u);
+    EXPECT_EQ((*op_rows)[0].op_type, OpType::kMerge);
+    EXPECT_EQ((*op_rows)[0].value.as_string(), "merge");
+}
+
+TEST(SSTableTest, PrefixRangeScanRejectsInvalidPrefixAndEmptyRange) {
+    Builder builder(make_schema());
+    ASSERT_TRUE(builder.add(make_row("a", 1, Version{.major = 10}, "a1")).ok());
+    auto files = builder.finish();
+    ASSERT_TRUE(files.ok()) << files.status();
+    auto reader = Reader::open(files->key_file, files->value_file);
+    ASSERT_TRUE(reader.ok()) << reader.status();
+
+    EXPECT_FALSE(reader
+                     ->scan(ScanOptions{
+                         .start =
+                             KeyPrefix{
+                                 .key_columns = {Value::make<DataType::kString>("a")},
+                                 .version = Version{.major = 10},
+                             },
+                     })
+                     .ok());
+    EXPECT_FALSE(reader
+                     ->scan(ScanOptions{
+                         .start = KeyPrefix{.op_type = OpType::kPut},
+                     })
+                     .ok());
+
+    auto empty = reader->scan(ScanOptions{
+        .start = KeyPrefix{.key_columns = {Value::make<DataType::kString>("b")}},
+        .limit = KeyPrefix{.key_columns = {Value::make<DataType::kString>("a")}},
+    });
+    ASSERT_TRUE(empty.ok()) << empty.status();
+    EXPECT_TRUE(empty->empty());
 }
 
 TEST(SSTableTest, BuildsAndReadsMultiLevelIndex) {
