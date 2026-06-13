@@ -32,7 +32,6 @@
 #include "cpp/pl/sstv2/bloom/bloom.h"
 #include "cpp/pl/sstv2/codec/checksum.h"
 #include "cpp/pl/sstv2/codec/value_comparable.h"
-#include "cpp/pl/sstv2/types/value_codec.h"
 #include "cpp/pl/sstv2/format/section.h"
 #include "cpp/pl/sstv2/format/tail.h"
 #include "cpp/pl/sstv2/index/index_tree.h"
@@ -41,6 +40,7 @@
 #include "cpp/pl/sstv2/types/internal_schema.h"
 #include "cpp/pl/sstv2/types/key_comparator.h"
 #include "cpp/pl/sstv2/types/key_factory.h"
+#include "cpp/pl/sstv2/types/value_codec.h"
 
 namespace pl::sstv2::file {
 namespace {
@@ -48,13 +48,13 @@ namespace {
 using std::move;
 using types::ColumnFlag;
 using types::DataType;
+using types::decode_value;
+using types::encode_value;
 using types::InternalRow;
 using types::InternalSchema;
 using types::OpType;
 using types::Row;
 using types::Value;
-using types::decode_value;
-using types::encode_value;
 
 constexpr std::string_view kRootIndexOffset = "RootIndex_Offset";
 constexpr std::string_view kRootIndexLength = "RootIndex_Length";
@@ -484,8 +484,12 @@ absl::StatusOr<Files> Builder::finish() {
     std::string locator =
         format::encode_section(format::SectionMagic::kLocator,
                                format::make_section_map(format::SectionEntries(locator_entries)));
+    // Fixed-point iteration to resolve statistics.key_file_size.
+    // Monotonic convergence is guaranteed because key_file_size only grows
+    // (never shrinks) as the statistics section serialization grows with
+    // larger numbers. The 128-iteration cap is a safety valve.
     bool converged = false;
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < 128; ++i) {
         for (auto& [key, value] : locator_entries) {
             if (key == kStatisticsLength) {
                 value = Value::make<DataType::kUint64>(statistics_section.size());

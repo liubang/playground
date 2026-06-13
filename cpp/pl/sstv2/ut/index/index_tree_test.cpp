@@ -71,10 +71,12 @@ types::AllKey all_key_for(const InternalSchema::ConstRef& schema, const Internal
 }
 
 types::PrefixKey prefix_key_for(const InternalSchema::ConstRef& schema, uint64_t id) {
-    auto prefix = types::make_prefix_key(
-        types::KeyPrefix{.key_columns = {Value::make<DataType::kUint64>(id)}, .version = std::nullopt, .op_type = std::nullopt},
-        schema->user_schema(),
-        schema);
+    auto prefix =
+        types::make_prefix_key(types::KeyPrefix{.key_columns = {Value::make<DataType::kUint64>(id)},
+                                                .version = std::nullopt,
+                                                .op_type = std::nullopt},
+                               schema->user_schema(),
+                               schema);
     EXPECT_TRUE(prefix.ok()) << prefix.status();
     return std::move(*prefix);
 }

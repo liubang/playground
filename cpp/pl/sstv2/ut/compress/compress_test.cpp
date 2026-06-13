@@ -19,6 +19,7 @@
 #include <string>
 
 #include "cpp/pl/sstv2/compress/compress.h"
+#include "cpp/pl/sstv2/format/block_flags.h"
 
 namespace pl::sstv2::compress {
 namespace {
@@ -73,12 +74,12 @@ TEST(CompressTest, CompileTimeCodecStrategy) {
 }
 
 TEST(CompressTest, BlockFlagRoundTrip) {
-    const uint64_t flags = encode_block_flag(Codec::kZstd);
-    EXPECT_NE(flags & block_flags::kPatternStore, 0u);
-    EXPECT_EQ(flags & block_flags::kRowKeyBitmap, 0u);
-    EXPECT_EQ(flags & block_flags::kCompressMask,
-              static_cast<uint64_t>(Codec::kZstd) << block_flags::kCompressShift);
-    EXPECT_EQ(decode_block_flag(flags), Codec::kZstd);
+    const uint64_t flags = format::encode_block_flag(Codec::kZstd);
+    EXPECT_NE(flags & format::block_flags::kPatternStore, 0u);
+    EXPECT_EQ(flags & format::block_flags::kRowKeyBitmap, 0u);
+    EXPECT_EQ(flags & format::block_flags::kCompressMask,
+              static_cast<uint64_t>(Codec::kZstd) << format::block_flags::kCompressShift);
+    EXPECT_EQ(format::decode_block_flag(flags), Codec::kZstd);
 }
 
 } // namespace

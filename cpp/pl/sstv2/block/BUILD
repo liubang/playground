@@ -36,6 +36,7 @@ cc_library(
         "//cpp/pl/sstv2/codec:fixed",
         "//cpp/pl/sstv2/codec:value_comparable",
         "//cpp/pl/sstv2/compress:compress",
+        "//cpp/pl/sstv2/format:block_flags",
         "//cpp/pl/sstv2/types:value_codec",
         "//cpp/pl/sstv2/pattern:compound",
         "//cpp/pl/sstv2/pattern:raw",

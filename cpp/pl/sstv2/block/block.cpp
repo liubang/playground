@@ -28,9 +28,10 @@
 #include "cpp/pl/sstv2/codec/endian.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/varint.h"
-#include "cpp/pl/sstv2/types/value_codec.h"
+#include "cpp/pl/sstv2/format/block_flags.h"
 #include "cpp/pl/sstv2/pattern/compound.h"
 #include "cpp/pl/sstv2/pattern/raw.h"
+#include "cpp/pl/sstv2/types/value_codec.h"
 
 namespace pl::sstv2::block {
 
@@ -477,18 +478,21 @@ absl::Status BlockBuilder::add(types::InternalRow row, std::string embedded_valu
     return absl::OkStatus();
 }
 
-absl::StatusOr<std::string> BlockBuilder::finish() const {
+absl::StatusOr<std::string> BlockBuilder::finish() {
+    // Take ownership of internal buffers — after finish() the builder is consumed.
+    std::vector<types::InternalRow> rows = std::move(rows_);
+    std::vector<std::string> embedded_values = std::move(embedded_values_);
+
     std::string data_table;
     std::vector<std::string> units;
     units.reserve(schema_->column_count());
-    std::vector<types::InternalRow> rows = rows_;
     for (size_t column = 0; column < schema_->column_count(); ++column) {
         if (column == schema_->offset_index()) {
             for (size_t row = 0; row < rows.size(); ++row) {
-                if (!embedded_values_[row].empty()) {
+                if (!embedded_values[row].empty()) {
                     rows[row].columns[schema_->offset_index()] =
                         Value::make<DataType::kUint64>(Header::kSize + data_table.size());
-                    data_table.append(embedded_values_[row]);
+                    data_table.append(embedded_values[row]);
                 }
             }
         }
@@ -518,7 +522,7 @@ absl::StatusOr<std::string> BlockBuilder::finish() const {
 
     Header h;
     h.magic = options_.kind;
-    h.flags = compress::encode_block_flag(options_.compression.codec);
+    h.flags = format::encode_block_flag(options_.compression.codec);
     h.row_count = rows.size();
     h.offset_table_offset = offset_table_offset;
     h.uncompressed_block_length = Header::kSize + body.size();
@@ -547,7 +551,7 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
     if (h.magic != expected) {
         return absl::InvalidArgumentError("block magic mismatch");
     }
-    const auto codec = compress::decode_block_flag(h.flags);
+    const auto codec = format::decode_block_flag(h.flags);
     const uint64_t expected_block_length =
         codec == compress::Codec::kNone ? h.uncompressed_block_length : h.compressed_block_length;
     if (expected_block_length != block.size()) {
