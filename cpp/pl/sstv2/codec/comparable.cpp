@@ -92,7 +92,7 @@ uint64_t read_be64(const uint8_t* src) {
 uint32_t float_to_ordered(float v) {
     uint32_t bits;
     std::memcpy(&bits, &v, sizeof(bits));
-    if (bits & (uint32_t{1} << 31)) {
+    if ((bits & (uint32_t{1} << 31)) != 0u) {
         // Negative: flip all bits.
         bits = ~bits;
     } else {
@@ -103,7 +103,7 @@ uint32_t float_to_ordered(float v) {
 }
 
 float ordered_to_float(uint32_t bits) {
-    if (bits & (uint32_t{1} << 31)) {
+    if ((bits & (uint32_t{1} << 31)) != 0u) {
         // Was positive: flip sign bit back.
         bits ^= (uint32_t{1} << 31);
     } else {
@@ -118,7 +118,7 @@ float ordered_to_float(uint32_t bits) {
 uint64_t double_to_ordered(double v) {
     uint64_t bits;
     std::memcpy(&bits, &v, sizeof(bits));
-    if (bits & (uint64_t{1} << 63)) {
+    if ((bits & (uint64_t{1} << 63)) != 0u) {
         bits = ~bits;
     } else {
         bits ^= (uint64_t{1} << 63);
@@ -127,7 +127,7 @@ uint64_t double_to_ordered(double v) {
 }
 
 double ordered_to_double(uint64_t bits) {
-    if (bits & (uint64_t{1} << 63)) {
+    if ((bits & (uint64_t{1} << 63)) != 0u) {
         bits ^= (uint64_t{1} << 63);
     } else {
         bits = ~bits;

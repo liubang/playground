@@ -81,31 +81,31 @@ struct InternalRow {
     // Typed accessors (convenience, require InternalSchema for index lookup).
     // =========================================================================
 
-    [[nodiscard]] const Version& version(InternalSchema::ConstRef s) const {
+    [[nodiscard]] const Version& version(const InternalSchema::ConstRef& s) const {
         return columns[s->version_index()].ref<DataType::kVersion>();
     }
 
-    [[nodiscard]] uint8_t op_type(InternalSchema::ConstRef s) const {
+    [[nodiscard]] uint8_t op_type(const InternalSchema::ConstRef& s) const {
         return columns[s->op_type_index()].get<DataType::kUint8>();
     }
 
-    [[nodiscard]] ColumnFlag flag(InternalSchema::ConstRef s) const {
+    [[nodiscard]] ColumnFlag flag(const InternalSchema::ConstRef& s) const {
         return ColumnFlag::from_raw(columns[s->flag_index()].get<DataType::kUint64>());
     }
 
-    [[nodiscard]] std::string_view filename(InternalSchema::ConstRef s) const {
+    [[nodiscard]] std::string_view filename(const InternalSchema::ConstRef& s) const {
         return columns[s->filename_index()].ref<DataType::kString>();
     }
 
-    [[nodiscard]] uint64_t offset(InternalSchema::ConstRef s) const {
+    [[nodiscard]] uint64_t offset(const InternalSchema::ConstRef& s) const {
         return columns[s->offset_index()].get<DataType::kUint64>();
     }
 
-    [[nodiscard]] uint64_t length(InternalSchema::ConstRef s) const {
+    [[nodiscard]] uint64_t length(const InternalSchema::ConstRef& s) const {
         return columns[s->length_index()].get<DataType::kUint64>();
     }
 
-    [[nodiscard]] uint64_t checksum(InternalSchema::ConstRef s) const {
+    [[nodiscard]] uint64_t checksum(const InternalSchema::ConstRef& s) const {
         return columns[s->checksum_index()].get<DataType::kUint64>();
     }
 
@@ -113,7 +113,7 @@ struct InternalRow {
     // Semantic queries.
     // =========================================================================
 
-    [[nodiscard]] ValueLocation location(InternalSchema::ConstRef s) const {
+    [[nodiscard]] ValueLocation location(const InternalSchema::ConstRef& s) const {
         auto fn = filename(s);
         if (fn == kEmbeddedFilename)
             return ValueLocation::kEmbedded;
@@ -122,11 +122,11 @@ struct InternalRow {
         return ValueLocation::kValueFile;
     }
 
-    [[nodiscard]] bool is_embedded(InternalSchema::ConstRef s) const {
+    [[nodiscard]] bool is_embedded(const InternalSchema::ConstRef& s) const {
         return location(s) == ValueLocation::kEmbedded;
     }
 
-    [[nodiscard]] bool is_index_entry(InternalSchema::ConstRef s) const {
+    [[nodiscard]] bool is_index_entry(const InternalSchema::ConstRef& s) const {
         return flag(s).is_index_entry();
     }
 
@@ -134,7 +134,7 @@ struct InternalRow {
     // Construction helper.
     // =========================================================================
 
-    static InternalRow make(InternalSchema::ConstRef s) {
+    static InternalRow make(const InternalSchema::ConstRef& s) {
         InternalRow row;
         row.columns.resize(s->column_count());
         return row;

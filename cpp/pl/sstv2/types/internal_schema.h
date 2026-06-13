@@ -157,13 +157,13 @@ private:
     };
 
     static constexpr SystemColumnDef kSystemDefs[kSystemColumnCount] = {
-        {"Version", DataType::kVersion, SortOrder::kDescending},
-        {"OpType", DataType::kUint8, SortOrder::kAscending},
-        {"Flag", DataType::kUint64, SortOrder::kAscending},
-        {"Filename", DataType::kString, SortOrder::kAscending},
-        {"Offset", DataType::kUint64, SortOrder::kAscending},
-        {"Length", DataType::kUint64, SortOrder::kAscending},
-        {"Checksum", DataType::kUint64, SortOrder::kAscending},
+        {.name = "Version", .type = DataType::kVersion, .order = SortOrder::kDescending},
+        {.name = "OpType", .type = DataType::kUint8, .order = SortOrder::kAscending},
+        {.name = "Flag", .type = DataType::kUint64, .order = SortOrder::kAscending},
+        {.name = "Filename", .type = DataType::kString, .order = SortOrder::kAscending},
+        {.name = "Offset", .type = DataType::kUint64, .order = SortOrder::kAscending},
+        {.name = "Length", .type = DataType::kUint64, .order = SortOrder::kAscending},
+        {.name = "Checksum", .type = DataType::kUint64, .order = SortOrder::kAscending},
     };
 };
 
