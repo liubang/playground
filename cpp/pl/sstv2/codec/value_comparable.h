@@ -20,9 +20,11 @@
 #include <string>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/sstv2/codec/comparable.h"
 #include "cpp/pl/sstv2/types/internal_row.h"
+#include "cpp/pl/sstv2/types/key.h"
 #include "cpp/pl/sstv2/types/schema.h"
 #include "cpp/pl/sstv2/types/value.h"
 
@@ -214,6 +216,79 @@ inline absl::Status encode_all_key(const types::InternalRow& row,
             return status;
     }
     return absl::OkStatus();
+}
+
+inline absl::StatusOr<types::EncodedAllKey> make_encoded_all_key(
+    const types::InternalRow& row, types::InternalSchema::ConstRef schema) {
+    std::string encoded;
+    auto status = encode_all_key(row, schema, &encoded);
+    if (!status.ok())
+        return status;
+    return types::EncodedAllKey::from_encoded_bytes(std::move(encoded));
+}
+
+inline absl::Status encode_row_key(const std::vector<types::Value>& columns,
+                                   types::Schema::ConstRef schema,
+                                   std::string* dst) {
+    dst->clear();
+    if (columns.size() != schema->row_key_column_count()) {
+        return absl::InvalidArgumentError("row key column count mismatch");
+    }
+    for (size_t i = 0; i < columns.size(); ++i) {
+        auto status = encode_value_comparable(
+            columns[i], schema->column_type(i), schema->column_order(i), dst);
+        if (!status.ok())
+            return status;
+    }
+    return absl::OkStatus();
+}
+
+inline absl::StatusOr<types::EncodedRowKey> make_encoded_row_key(
+    const std::vector<types::Value>& columns, types::Schema::ConstRef schema) {
+    std::string encoded;
+    auto status = encode_row_key(columns, schema, &encoded);
+    if (!status.ok())
+        return status;
+    return types::EncodedRowKey::from_encoded_bytes(std::move(encoded));
+}
+
+inline absl::StatusOr<types::EncodedPrefixKey> make_encoded_prefix_key(
+    const types::KeyPrefix& prefix,
+    types::Schema::ConstRef schema,
+    types::InternalSchema::ConstRef internal_schema) {
+    if (internal_schema == nullptr) {
+        return absl::InvalidArgumentError("schema is null");
+    }
+    auto prefix_status = types::validate_key_prefix_shape(prefix, schema);
+    if (!prefix_status.ok())
+        return prefix_status;
+
+    std::string encoded;
+    for (size_t i = 0; i < prefix.key_columns.size(); ++i) {
+        auto status = encode_value_comparable(
+            prefix.key_columns[i], schema->column_type(i), schema->column_order(i), &encoded);
+        if (!status.ok())
+            return status;
+    }
+    if (prefix.version.has_value()) {
+        auto status =
+            encode_value_comparable(types::Value::make<types::DataType::kVersion>(*prefix.version),
+                                    internal_schema->column_type(internal_schema->version_index()),
+                                    internal_schema->column_order(internal_schema->version_index()),
+                                    &encoded);
+        if (!status.ok())
+            return status;
+    }
+    if (prefix.op_type.has_value()) {
+        auto status = encode_value_comparable(
+            types::Value::make<types::DataType::kUint8>(static_cast<uint8_t>(*prefix.op_type)),
+            internal_schema->column_type(internal_schema->op_type_index()),
+            internal_schema->column_order(internal_schema->op_type_index()),
+            &encoded);
+        if (!status.ok())
+            return status;
+    }
+    return types::EncodedPrefixKey::from_encoded_bytes(std::move(encoded));
 }
 
 } // namespace pl::sstv2::codec

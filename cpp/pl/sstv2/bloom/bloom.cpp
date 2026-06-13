@@ -60,15 +60,14 @@ Header decode_header(std::string_view input) {
 Builder::Builder(int bits_per_key) : bits_per_key_(std::max(1, bits_per_key)) {}
 
 absl::Status Builder::add(const types::InternalRow& row, types::InternalSchema::ConstRef schema) {
-    std::string all_key;
-    auto status = codec::encode_all_key(row, schema, &all_key);
-    if (!status.ok())
-        return status;
-    return add_all_key(all_key);
+    auto all_key = codec::make_encoded_all_key(row, schema);
+    if (!all_key.ok())
+        return all_key.status();
+    return add_all_key(*all_key);
 }
 
-absl::Status Builder::add_all_key(std::string_view all_key) {
-    hashes_.push_back(hash_key(all_key));
+absl::Status Builder::add_all_key(const types::EncodedAllKey& all_key) {
+    hashes_.push_back(hash_key(all_key.bytes()));
     return absl::OkStatus();
 }
 
@@ -132,10 +131,10 @@ absl::StatusOr<Reader> Reader::open(std::string_view section) {
     return reader;
 }
 
-bool Reader::may_contain_all_key(std::string_view all_key) const {
+bool Reader::may_contain_all_key(const types::EncodedAllKey& all_key) const {
     if (bits_.empty() || header_.hash_count == 0)
         return false;
-    return pl::StandardBloomFilter::hash_may_match(hash_key(all_key),
+    return pl::StandardBloomFilter::hash_may_match(hash_key(all_key.bytes()),
                                                    static_cast<uint32_t>(header_.bit_count),
                                                    static_cast<int>(header_.hash_count),
                                                    bits_.data());
@@ -143,11 +142,10 @@ bool Reader::may_contain_all_key(std::string_view all_key) const {
 
 absl::StatusOr<bool> Reader::may_contain(const types::InternalRow& row,
                                          types::InternalSchema::ConstRef schema) const {
-    std::string all_key;
-    auto status = codec::encode_all_key(row, schema, &all_key);
-    if (!status.ok())
-        return status;
-    return may_contain_all_key(all_key);
+    auto all_key = codec::make_encoded_all_key(row, schema);
+    if (!all_key.ok())
+        return all_key.status();
+    return may_contain_all_key(*all_key);
 }
 
 } // namespace pl::sstv2::bloom

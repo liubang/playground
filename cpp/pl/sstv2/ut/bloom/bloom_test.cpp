@@ -73,7 +73,8 @@ TEST(BloomTest, RoundTripMayContainInsertedRows) {
 
 TEST(BloomTest, RejectsCorruptChecksum) {
     Builder builder(10);
-    ASSERT_TRUE(builder.add_all_key("abc").ok());
+    ASSERT_TRUE(
+        builder.add_all_key(types::EncodedAllKey::from_encoded_bytes(std::string("abc"))).ok());
     std::string section = builder.finish();
     section.back() ^= 0x01;
 
