@@ -18,14 +18,15 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "cpp/pl/sstv2/block/block.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
-#include "cpp/pl/sstv2/codec/value_comparable.h"
 #include "cpp/pl/sstv2/index/index_tree.h"
+#include "cpp/pl/sstv2/types/key.h"
 #include "cpp/pl/sstv2/types/op_type.h"
 #include "cpp/pl/sstv2/types/schema.h"
 
@@ -62,11 +63,19 @@ InternalRow make_fence_row(InternalSchema::ConstRef schema, uint64_t id) {
     return row;
 }
 
-std::string all_key_for(InternalSchema::ConstRef schema, const InternalRow& row) {
-    std::string all_key;
-    auto status = codec::encode_all_key(row, schema, &all_key);
-    EXPECT_TRUE(status.ok()) << status;
-    return all_key;
+types::AllKey all_key_for(InternalSchema::ConstRef schema, const InternalRow& row) {
+    auto all_key = types::make_all_key(row, schema);
+    EXPECT_TRUE(all_key.ok()) << all_key.status();
+    return std::move(*all_key);
+}
+
+types::PrefixKey prefix_key_for(InternalSchema::ConstRef schema, uint64_t id) {
+    auto prefix = types::make_prefix_key(
+        types::KeyPrefix{.key_columns = {Value::make<DataType::kUint64>(id)}},
+        schema->user_schema(),
+        schema);
+    EXPECT_TRUE(prefix.ok()) << prefix.status();
+    return std::move(*prefix);
 }
 
 uint64_t block_length(std::string_view key_file, uint64_t offset) {
@@ -111,6 +120,48 @@ TEST(IndexTreeTest, BuildsPostOrderTreeAndRoutesToDataBlock) {
     ASSERT_TRUE(found->has_value());
     EXPECT_EQ((*found)->offset, 20u);
     EXPECT_EQ((*found)->length, 10u);
+}
+
+TEST(IndexTreeTest, RangeScanPrunesBlocksAfterLimitFence) {
+    auto schema = InternalSchema::make(make_schema());
+    std::string key_file;
+    TreeBuilder builder(schema, 2, 4096, 8192, {}, &key_file);
+
+    for (uint64_t i = 0; i < 4; ++i) {
+        ASSERT_TRUE(builder.prepare_for_data_block().ok());
+        ASSERT_TRUE(
+            builder.add_data_block(make_fence_row(schema, i), BlockRef{i * 10, 10}, 2).ok());
+    }
+
+    auto result = builder.finish();
+    ASSERT_TRUE(result.ok()) << result.status();
+
+    std::vector<BlockRef> refs;
+    const auto limit = prefix_key_for(schema, 2);
+    ASSERT_TRUE(TreeReader::scan_data_blocks_in_range(key_file,
+                                                      schema,
+                                                      result->root,
+                                                      std::nullopt,
+                                                      std::optional<types::PrefixKey>{limit},
+                                                      &refs)
+                    .ok());
+    ASSERT_EQ(refs.size(), 3u);
+    EXPECT_EQ(refs[0].offset, 0u);
+    EXPECT_EQ(refs[1].offset, 10u);
+    EXPECT_EQ(refs[2].offset, 20u);
+
+    refs.clear();
+    const auto start = prefix_key_for(schema, 1);
+    ASSERT_TRUE(TreeReader::scan_data_blocks_in_range(key_file,
+                                                      schema,
+                                                      result->root,
+                                                      std::optional<types::PrefixKey>{start},
+                                                      std::optional<types::PrefixKey>{limit},
+                                                      &refs)
+                    .ok());
+    ASSERT_EQ(refs.size(), 2u);
+    EXPECT_EQ(refs[0].offset, 10u);
+    EXPECT_EQ(refs[1].offset, 20u);
 }
 
 } // namespace

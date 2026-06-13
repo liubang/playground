@@ -22,13 +22,13 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/sstv2/block/block.h"
-#include "cpp/pl/sstv2/codec/value_comparable.h"
 #include "cpp/pl/sstv2/types/column_flag.h"
 #include "cpp/pl/sstv2/types/internal_row.h"
 #include "cpp/pl/sstv2/types/value.h"
@@ -52,17 +52,16 @@ absl::StatusOr<std::string_view> checked_slice(std::string_view bytes,
     return bytes.substr(static_cast<size_t>(offset), static_cast<size_t>(length));
 }
 
-absl::StatusOr<std::string> all_key_for(InternalSchema::ConstRef schema, const InternalRow& row) {
-    std::string all_key;
-    auto status = codec::encode_all_key(row, schema, &all_key);
-    if (!status.ok())
-        return status;
-    return all_key;
+absl::StatusOr<types::AllKeyView> all_key_for(InternalSchema::ConstRef schema,
+                                              const InternalRow& row) {
+    return types::make_all_key_view(row, schema);
 }
 
-absl::StatusOr<size_t> lower_bound_by_all_key(InternalSchema::ConstRef schema,
-                                              const std::vector<InternalRow>& rows,
-                                              std::string_view target_key) {
+template <typename KeyTag>
+absl::StatusOr<size_t> lower_bound_by_key(InternalSchema::ConstRef schema,
+                                          const std::vector<InternalRow>& rows,
+                                          const types::LogicalKey<KeyTag>& target_key) {
+    types::KeyComparator comparator(schema);
     size_t first = 0;
     size_t count = rows.size();
     while (count > 0) {
@@ -71,7 +70,15 @@ absl::StatusOr<size_t> lower_bound_by_all_key(InternalSchema::ConstRef schema,
         auto key = all_key_for(schema, rows[it]);
         if (!key.ok())
             return key.status();
-        if (*key < target_key) {
+        absl::StatusOr<bool> less;
+        if constexpr (std::is_same_v<KeyTag, types::PrefixKeyTag>) {
+            less = comparator.all_key_less_than_prefix(*key, target_key);
+        } else {
+            less = comparator.all_key_less(*key, target_key);
+        }
+        if (!less.ok())
+            return less.status();
+        if (*less) {
             first = it + 1;
             count -= step + 1;
         } else {
@@ -142,16 +149,68 @@ absl::Status scan_node(std::string_view key_file,
     return absl::OkStatus();
 }
 
-absl::StatusOr<std::optional<BlockRef>> find_data_block_from_node(std::string_view key_file,
-                                                                  InternalSchema::ConstRef schema,
-                                                                  BlockRef ref,
-                                                                  block::Kind kind,
-                                                                  std::string_view target_all_key) {
+absl::Status scan_node_range(std::string_view key_file,
+                             InternalSchema::ConstRef schema,
+                             BlockRef ref,
+                             block::Kind kind,
+                             const std::optional<types::PrefixKey>& start_key,
+                             const std::optional<types::PrefixKey>& limit_key,
+                             std::vector<BlockRef>* data_blocks) {
     auto node = open_index_node(key_file, schema, ref, kind);
     if (!node.ok())
         return node.status();
 
-    auto selected_index = lower_bound_by_all_key(schema, node->rows(), target_all_key);
+    types::KeyComparator comparator(schema);
+    for (const auto& entry : node->rows()) {
+        auto fence = all_key_for(schema, entry);
+        if (!fence.ok())
+            return fence.status();
+        if (start_key.has_value()) {
+            auto less = comparator.all_key_less_than_prefix(*fence, *start_key);
+            if (!less.ok())
+                return less.status();
+            if (*less) {
+                continue;
+            }
+        }
+
+        bool stop_after_child = false;
+        if (limit_key.has_value()) {
+            auto cmp = comparator.compare_all_key_to_prefix(*fence, *limit_key);
+            if (!cmp.ok())
+                return cmp.status();
+            stop_after_child = *cmp >= 0;
+        }
+
+        const ColumnFlag flag = entry.flag(schema);
+        const BlockRef child{.offset = entry.offset(schema), .length = entry.length(schema)};
+        if (flag.is_data_block_ptr()) {
+            data_blocks->push_back(child);
+        } else if (flag.is_index_block_ptr()) {
+            auto status = scan_node_range(
+                key_file, schema, child, block::Kind::kIndex, start_key, limit_key, data_blocks);
+            if (!status.ok())
+                return status;
+        } else {
+            return absl::InvalidArgumentError("index node contains non-index entry");
+        }
+        if (stop_after_child) {
+            break;
+        }
+    }
+    return absl::OkStatus();
+}
+
+absl::StatusOr<std::optional<BlockRef>> find_data_block_from_node(std::string_view key_file,
+                                                                  InternalSchema::ConstRef schema,
+                                                                  BlockRef ref,
+                                                                  block::Kind kind,
+                                                                  const types::AllKey& target_key) {
+    auto node = open_index_node(key_file, schema, ref, kind);
+    if (!node.ok())
+        return node.status();
+
+    auto selected_index = lower_bound_by_key(schema, node->rows(), target_key);
     if (!selected_index.ok())
         return selected_index.status();
     if (*selected_index == node->rows().size()) {
@@ -164,8 +223,7 @@ absl::StatusOr<std::optional<BlockRef>> find_data_block_from_node(std::string_vi
         return std::optional<BlockRef>{child};
     }
     if (flag.is_index_block_ptr()) {
-        return find_data_block_from_node(
-            key_file, schema, child, block::Kind::kIndex, target_all_key);
+        return find_data_block_from_node(key_file, schema, child, block::Kind::kIndex, target_key);
     }
     return absl::InvalidArgumentError("index node contains non-index entry");
 }
@@ -328,13 +386,33 @@ absl::Status TreeReader::scan_data_blocks(std::string_view key_file,
     return scan_node(key_file, schema, root, block::Kind::kRootIndex, data_blocks);
 }
 
+absl::Status TreeReader::scan_data_blocks_from(std::string_view key_file,
+                                               InternalSchema::ConstRef schema,
+                                               BlockRef root,
+                                               const types::PrefixKey& start_key,
+                                               std::vector<BlockRef>* data_blocks) {
+    return scan_data_blocks_in_range(key_file, schema, root, start_key, std::nullopt, data_blocks);
+}
+
+absl::Status TreeReader::scan_data_blocks_in_range(std::string_view key_file,
+                                                   InternalSchema::ConstRef schema,
+                                                   BlockRef root,
+                                                   const std::optional<types::PrefixKey>& start_key,
+                                                   const std::optional<types::PrefixKey>& limit_key,
+                                                   std::vector<BlockRef>* data_blocks) {
+    if (data_blocks == nullptr) {
+        return absl::InvalidArgumentError("data blocks output is null");
+    }
+    return scan_node_range(
+        key_file, schema, root, block::Kind::kRootIndex, start_key, limit_key, data_blocks);
+}
+
 absl::StatusOr<std::optional<BlockRef>> TreeReader::find_data_block(
     std::string_view key_file,
     InternalSchema::ConstRef schema,
     BlockRef root,
-    std::string_view target_all_key) {
-    return find_data_block_from_node(
-        key_file, schema, root, block::Kind::kRootIndex, target_all_key);
+    const types::AllKey& target_key) {
+    return find_data_block_from_node(key_file, schema, root, block::Kind::kRootIndex, target_key);
 }
 
 } // namespace pl::sstv2::index
