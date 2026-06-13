@@ -43,6 +43,7 @@
 namespace pl::sstv2::file {
 namespace {
 
+using std::move;
 using types::ColumnFlag;
 using types::DataType;
 using types::InternalRow;
@@ -89,7 +90,7 @@ absl::Status validate_row(const types::Schema& schema, const Row& row) {
     return absl::OkStatus();
 }
 
-InternalRow make_internal_row(types::InternalSchema::ConstRef schema,
+InternalRow make_internal_row(const types::InternalSchema::ConstRef& schema,
                               const Row& row,
                               std::string_view filename,
                               uint64_t value_offset,
@@ -127,16 +128,16 @@ absl::StatusOr<std::string_view> checked_slice(std::string_view bytes,
 
 absl::StatusOr<types::AllKey> all_key_for(types::InternalSchema::ConstRef schema,
                                           const InternalRow& row) {
-    return types::make_all_key(row, schema);
+    return types::make_all_key(row, std::move(schema));
 }
 
 absl::StatusOr<types::AllKeyView> all_key_view_for(types::InternalSchema::ConstRef schema,
                                                    const InternalRow& row) {
-    return types::make_all_key_view(row, schema);
+    return types::make_all_key_view(row, std::move(schema));
 }
 
-absl::StatusOr<Row> materialize_row(types::Schema::ConstRef schema,
-                                    types::InternalSchema::ConstRef internal_schema,
+absl::StatusOr<Row> materialize_row(const types::Schema::ConstRef& schema,
+                                    const types::InternalSchema::ConstRef& internal_schema,
                                     const block::BlockReader& block,
                                     size_t row_index,
                                     std::string_view value_file) {
@@ -179,7 +180,7 @@ absl::StatusOr<Row> materialize_row(types::Schema::ConstRef schema,
 }
 
 template <typename KeyTag>
-absl::StatusOr<size_t> lower_bound_by_key(types::InternalSchema::ConstRef schema,
+absl::StatusOr<size_t> lower_bound_by_key(const types::InternalSchema::ConstRef& schema,
                                           const std::vector<InternalRow>& rows,
                                           const types::LogicalKey<KeyTag>& target_key) {
     types::KeyComparator comparator(schema);
@@ -211,8 +212,8 @@ absl::StatusOr<size_t> lower_bound_by_key(types::InternalSchema::ConstRef schema
 
 absl::StatusOr<std::optional<Row>> get_from_data_block(
     std::string_view value_file,
-    types::Schema::ConstRef schema,
-    types::InternalSchema::ConstRef internal_schema,
+    const types::Schema::ConstRef& schema,
+    const types::InternalSchema::ConstRef& internal_schema,
     const block::BlockReader& data,
     const types::AllKey& target_key) {
     auto row_index = lower_bound_by_key(internal_schema, data.rows(), target_key);
@@ -302,7 +303,7 @@ absl::StatusOr<size_t> Builder::encoded_data_block_size_with(
     return encoded->size();
 }
 
-absl::Status Builder::add(Row row) {
+absl::Status Builder::add(const Row& row) {
     if (finished_) {
         return absl::FailedPreconditionError("builder is already finished");
     }

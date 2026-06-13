@@ -149,7 +149,7 @@ struct KeyPrefix {
 };
 
 [[nodiscard]] inline absl::Status validate_key_prefix_shape(const KeyPrefix& prefix,
-                                                            Schema::ConstRef schema) {
+                                                            const Schema::ConstRef& schema) {
     if (schema == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }
@@ -295,7 +295,7 @@ private:
 };
 
 [[nodiscard]] inline absl::StatusOr<RowKey> make_row_key(std::vector<Value> columns,
-                                                         Schema::ConstRef schema) {
+                                                         const Schema::ConstRef& schema) {
     if (schema == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }
@@ -311,7 +311,7 @@ private:
 }
 
 [[nodiscard]] inline absl::StatusOr<AllKey> make_all_key(const InternalRow& row,
-                                                         InternalSchema::ConstRef schema) {
+                                                         const InternalSchema::ConstRef& schema) {
     if (schema == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }
@@ -330,8 +330,8 @@ private:
     return AllKey::from_columns(std::move(columns));
 }
 
-[[nodiscard]] inline absl::StatusOr<AllKeyView> make_all_key_view(const InternalRow& row,
-                                                                  InternalSchema::ConstRef schema) {
+[[nodiscard]] inline absl::StatusOr<AllKeyView> make_all_key_view(
+    const InternalRow& row, const InternalSchema::ConstRef& schema) {
     if (schema == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }
@@ -348,7 +348,9 @@ private:
 }
 
 [[nodiscard]] inline absl::StatusOr<PrefixKey> make_prefix_key(
-    const KeyPrefix& prefix, Schema::ConstRef schema, InternalSchema::ConstRef internal_schema) {
+    const KeyPrefix& prefix,
+    const Schema::ConstRef& schema,
+    const InternalSchema::ConstRef& internal_schema) {
     if (internal_schema == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }
