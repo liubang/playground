@@ -32,13 +32,15 @@
 #include "cpp/pl/sstv2/bloom/bloom.h"
 #include "cpp/pl/sstv2/codec/checksum.h"
 #include "cpp/pl/sstv2/codec/value_comparable.h"
-#include "cpp/pl/sstv2/file/value_codec.h"
+#include "cpp/pl/sstv2/types/value_codec.h"
 #include "cpp/pl/sstv2/format/section.h"
 #include "cpp/pl/sstv2/format/tail.h"
 #include "cpp/pl/sstv2/index/index_tree.h"
 #include "cpp/pl/sstv2/types/column_flag.h"
 #include "cpp/pl/sstv2/types/internal_row.h"
 #include "cpp/pl/sstv2/types/internal_schema.h"
+#include "cpp/pl/sstv2/types/key_comparator.h"
+#include "cpp/pl/sstv2/types/key_factory.h"
 
 namespace pl::sstv2::file {
 namespace {
@@ -51,6 +53,8 @@ using types::InternalSchema;
 using types::OpType;
 using types::Row;
 using types::Value;
+using types::decode_value;
+using types::encode_value;
 
 constexpr std::string_view kRootIndexOffset = "RootIndex_Offset";
 constexpr std::string_view kRootIndexLength = "RootIndex_Length";
@@ -126,14 +130,14 @@ absl::StatusOr<std::string_view> checked_slice(std::string_view bytes,
     return bytes.substr(static_cast<size_t>(offset), static_cast<size_t>(length));
 }
 
-absl::StatusOr<types::AllKey> all_key_for(types::InternalSchema::ConstRef schema,
+absl::StatusOr<types::AllKey> all_key_for(const types::InternalSchema::ConstRef& schema,
                                           const InternalRow& row) {
-    return types::make_all_key(row, std::move(schema));
+    return types::make_all_key(row, schema);
 }
 
-absl::StatusOr<types::AllKeyView> all_key_view_for(types::InternalSchema::ConstRef schema,
+absl::StatusOr<types::AllKeyView> all_key_view_for(const types::InternalSchema::ConstRef& schema,
                                                    const InternalRow& row) {
-    return types::make_all_key_view(row, std::move(schema));
+    return types::make_all_key_view(row, schema);
 }
 
 absl::StatusOr<Row> materialize_row(const types::Schema::ConstRef& schema,
