@@ -45,6 +45,7 @@
 | [MiniDFS](cpp/pl/minidfs/) | 类 HDFS 的分布式文件系统，包含 NameNode、DataNode 和 Client，支持块存储、副本管理、心跳与块汇报、MySQL 元数据存储及 Docker 部署。 | C++20, brpc, protobuf, Boost.MySQL, ISA-L/crc32c, zstd |
 | [Flux](cpp/pl/flux/) | Flux 查询语言子集解释器，覆盖词法分析、语法分析、AST、语义分析、规则与代价优化、物理执行、SQLite/MySQL Connector，并提供 LSP 和 REPL。 | C++20, Abseil, simdjson, SQLite, MySQL |
 | [SSTable](cpp/pl/sst/) | LSM-Tree 存储引擎组件，包含 Block 编解码、布隆过滤器、zstd/snappy 压缩、迭代器、版本管理和 CLI 工具。 | C++20, zstd, snappy |
+| [SSTable v2](cpp/pl/sstv2/) | SSTable 完全重写版本。模块化架构：类型化键系统（C++20 concept）、memcomparable 编码、多级索引树、列存储 Block、布隆过滤器。 | C++20, Abseil, zstd, snappy, lz4, xxHash |
 | [Braft Counter](cpp/pl/braft/) | 基于 braft 的 Raft 状态机示例，演示日志复制、快照、Leader 选举和集群部署。 | C++20, braft, brpc, protobuf |
 | [Meta](cpp/meta/) | C++20 模板元编程实验，包括 Type List、Expression Template、Pattern Matching 和 Tuple Iteration。 | C++20 |
 | [Recall](cpp/pl/recall/) | 基于 FAISS 的向量召回服务，提供 gRPC 接口。 | C++20, FAISS, OpenBLAS, gRPC, protobuf |
