@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-13 11:11:02</td>
+            <td class="headerValue">2026-06-13 18:10:12</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -118,7 +118,7 @@
 <span id="L47"><span class="lineNum">      47</span>                 :             :     explicit Builder(int bits_per_key = 10);</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : </span>
 <span id="L49"><span class="lineNum">      49</span>                 :             :     [[nodiscard]] absl::Status add(const types::InternalRow&amp; row,</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :                                    types::InternalSchema::ConstRef schema);</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :                                    const types::InternalSchema::ConstRef&amp; schema);</span>
 <span id="L51"><span class="lineNum">      51</span>                 :             :     [[nodiscard]] absl::Status add_all_key(const types::EncodedAllKey&amp; all_key);</span>
 <span id="L52"><span class="lineNum">      52</span>                 :             :     [[nodiscard]] std::string finish() const;</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             : </span>
@@ -133,7 +133,7 @@
 <span id="L62"><span class="lineNum">      62</span>                 :             : </span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :     [[nodiscard]] bool may_contain_all_key(const types::EncodedAllKey&amp; all_key) const;</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;bool&gt; may_contain(const types::InternalRow&amp; row,</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             :                                                    types::InternalSchema::ConstRef schema) const;</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :                                                    const types::InternalSchema::ConstRef&amp; schema) const;</span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : </span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :     [[nodiscard]] const Header&amp; header() const noexcept { return header_; }</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             : </span>

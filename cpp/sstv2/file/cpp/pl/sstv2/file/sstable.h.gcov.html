@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-13 11:11:02</td>
+            <td class="headerValue">2026-06-13 18:10:12</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -137,7 +137,7 @@
 <span id="L61"><span class="lineNum">      61</span>                 :             : public:</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :     Builder(types::Schema::ConstRef schema, BuilderOptions options = {});</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             : </span>
-<span id="L64"><span class="lineNum">      64</span>                 :             :     [[nodiscard]] absl::Status add(types::Row row);</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :     [[nodiscard]] absl::Status add(const types::Row&amp; row);</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;Files&gt; finish();</span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : </span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : private:</span>
