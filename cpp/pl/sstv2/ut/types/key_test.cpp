@@ -93,7 +93,9 @@ TEST(KeyTest, LogicalCompareMatchesMemComparableEncoding) {
 
 TEST(KeyTest, PrefixBoundaryMatchesAllKeysWithSamePrefix) {
     auto schema = InternalSchema::make(make_schema());
-    auto prefix = make_prefix_key(KeyPrefix{.key_columns = {Value::make<DataType::kString>("b")}, .version = std::nullopt, .op_type = std::nullopt},
+    auto prefix = make_prefix_key(KeyPrefix{.key_columns = {Value::make<DataType::kString>("b")},
+                                            .version = std::nullopt,
+                                            .op_type = std::nullopt},
                                   schema->user_schema(),
                                   schema);
     auto before = make_all_key(make_row(schema, "a", 1), schema);
