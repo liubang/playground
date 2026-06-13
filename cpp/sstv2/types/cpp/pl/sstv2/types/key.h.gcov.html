@@ -31,27 +31,27 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryMed">85.4&nbsp;%</td>
-            <td class="headerCovTableEntry">103</td>
-            <td class="headerCovTableEntry">88</td>
+            <td class="headerCovTableEntryMed">85.7&nbsp;%</td>
+            <td class="headerCovTableEntry">14</td>
+            <td class="headerCovTableEntry">12</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-13 18:10:12</td>
+            <td class="headerValue">2026-06-13 19:00:49</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">18</td>
-            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntry">4</td>
+            <td class="headerCovTableEntry">4</td>
           </tr>
           <tr>
             <td></td>
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">59.2&nbsp;%</td>
-            <td class="headerCovTableEntry">174</td>
-            <td class="headerCovTableEntry">103</td>
+            <td class="headerCovTableEntryLo">55.0&nbsp;%</td>
+            <td class="headerCovTableEntry">20</td>
+            <td class="headerCovTableEntry">11</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -88,379 +88,157 @@
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : #pragma once</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;algorithm&gt;</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;concepts&gt;</span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;cstddef&gt;</span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : #include &lt;cstdint&gt;</span>
-<span id="L24"><span class="lineNum">      24</span>                 :             : #include &lt;memory&gt;</span>
-<span id="L25"><span class="lineNum">      25</span>                 :             : #include &lt;optional&gt;</span>
-<span id="L26"><span class="lineNum">      26</span>                 :             : #include &lt;string&gt;</span>
-<span id="L27"><span class="lineNum">      27</span>                 :             : #include &lt;string_view&gt;</span>
-<span id="L28"><span class="lineNum">      28</span>                 :             : #include &lt;utility&gt;</span>
-<span id="L29"><span class="lineNum">      29</span>                 :             : #include &lt;vector&gt;</span>
-<span id="L30"><span class="lineNum">      30</span>                 :             : </span>
-<span id="L31"><span class="lineNum">      31</span>                 :             : #include &quot;absl/status/status.h&quot;</span>
-<span id="L32"><span class="lineNum">      32</span>                 :             : #include &quot;absl/status/statusor.h&quot;</span>
-<span id="L33"><span class="lineNum">      33</span>                 :             : #include &quot;absl/strings/str_cat.h&quot;</span>
-<span id="L34"><span class="lineNum">      34</span>                 :             : #include &quot;cpp/pl/sstv2/types/internal_row.h&quot;</span>
-<span id="L35"><span class="lineNum">      35</span>                 :             : #include &quot;cpp/pl/sstv2/types/internal_schema.h&quot;</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;cstddef&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;cstdint&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;memory&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : #include &lt;optional&gt;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : #include &lt;string&gt;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : #include &lt;string_view&gt;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : #include &lt;utility&gt;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : #include &lt;vector&gt;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : #include &quot;absl/status/status.h&quot;</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : #include &quot;absl/status/statusor.h&quot;</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : #include &quot;absl/strings/str_cat.h&quot;</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : #include &quot;cpp/pl/sstv2/types/internal_row.h&quot;</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : #include &quot;cpp/pl/sstv2/types/internal_schema.h&quot;</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : #include &quot;cpp/pl/sstv2/types/key_prefix.h&quot;</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : #include &quot;cpp/pl/sstv2/types/key_tags.h&quot;</span>
 <span id="L36"><span class="lineNum">      36</span>                 :             : #include &quot;cpp/pl/sstv2/types/op_type.h&quot;</span>
 <span id="L37"><span class="lineNum">      37</span>                 :             : #include &quot;cpp/pl/sstv2/types/schema.h&quot;</span>
 <span id="L38"><span class="lineNum">      38</span>                 :             : #include &quot;cpp/pl/sstv2/types/value.h&quot;</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             : </span>
 <span id="L40"><span class="lineNum">      40</span>                 :             : namespace pl::sstv2::types {</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             : </span>
-<span id="L42"><span class="lineNum">      42</span>                 :             : struct RowKeyTag {};</span>
-<span id="L43"><span class="lineNum">      43</span>                 :             : struct AllKeyTag {};</span>
-<span id="L44"><span class="lineNum">      44</span>                 :             : struct PrefixKeyTag {};</span>
-<span id="L45"><span class="lineNum">      45</span>                 :             : </span>
-<span id="L46"><span class="lineNum">      46</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">         238 : template &lt;typename Tag&gt; class LogicalKey {</span></span>
-<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
-<span id="L47"><span class="lineNum">      47</span>                 :             : public:</span>
-<span id="L48"><span class="lineNum">      48</span>                 :             :     using tag = Tag;</span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     using Ref = std::shared_ptr&lt;LogicalKey&gt;;</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :     using ConstRef = std::shared_ptr&lt;const LogicalKey&gt;;</span>
-<span id="L51"><span class="lineNum">      51</span>                 :             : </span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     LogicalKey() = default;</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             : </span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">          82 :     [[nodiscard]] static LogicalKey from_columns(std::vector&lt;Value&gt; columns) {</span></span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          82 :         return LogicalKey(std::move(columns));</span></span>
-<span id="L56"><span class="lineNum">      56</span>                 :             :     }</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : // =============================================================================</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : // LogicalKey&lt;Tag&gt;: a key composed of typed Value columns.</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : //</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : // Each column stores the full Value (type + payload). This is the primary</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : // key representation used during comparison and for AllKey construction.</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : // =============================================================================</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : </span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : template &lt;typename Tag&gt;</span>
+<span id="L50"><span class="lineNum">      50</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">         238 : class LogicalKey {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L51"><span class="lineNum">      51</span>                 :             : public:</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :     using tag = Tag;</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :     using Ref = std::shared_ptr&lt;LogicalKey&gt;;</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :     using ConstRef = std::shared_ptr&lt;const LogicalKey&gt;;</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : </span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :     LogicalKey() = default;</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : </span>
-<span id="L58"><span class="lineNum">      58</span>                 :             :     [[nodiscard]] size_t column_count() const noexcept { return columns_.size(); }</span>
-<span id="L59"><span class="lineNum">      59</span>                 :             :     [[nodiscard]] bool empty() const noexcept { return columns_.empty(); }</span>
-<span id="L60"><span class="lineNum">      60</span>                 :             :     [[nodiscard]] const Value&amp; column(size_t index) const { return columns_[index]; }</span>
-<span id="L61"><span class="lineNum">      61</span>                 :             :     [[nodiscard]] const std::vector&lt;Value&gt;&amp; columns() const noexcept { return columns_; }</span>
-<span id="L62"><span class="lineNum">      62</span>                 :             : </span>
-<span id="L63"><span class="lineNum">      63</span>                 :             : private:</span>
-<span id="L64"><span class="lineNum">      64</span>                 :             :     explicit LogicalKey(std::vector&lt;Value&gt; columns) : columns_(std::move(columns)) {}</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             : </span>
-<span id="L66"><span class="lineNum">      66</span>                 :             :     std::vector&lt;Value&gt; columns_;</span>
-<span id="L67"><span class="lineNum">      67</span>                 :             : };</span>
-<span id="L68"><span class="lineNum">      68</span>                 :             : </span>
-<span id="L69"><span class="lineNum">      69</span>                 :             : template &lt;typename Tag&gt; class KeyView {</span>
-<span id="L70"><span class="lineNum">      70</span>                 :             : public:</span>
-<span id="L71"><span class="lineNum">      71</span>                 :             :     using tag = Tag;</span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          82 :     [[nodiscard]] static LogicalKey from_columns(std::vector&lt;Value&gt; columns) {</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">          82 :         return LogicalKey(std::move(columns));</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :     }</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : </span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :     [[nodiscard]] size_t column_count() const noexcept { return columns_.size(); }</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :     [[nodiscard]] bool empty() const noexcept { return columns_.empty(); }</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :     [[nodiscard]] const Value&amp; column(size_t index) const { return columns_[index]; }</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :     [[nodiscard]] const std::vector&lt;Value&gt;&amp; columns() const noexcept { return columns_; }</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : </span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : private:</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :     explicit LogicalKey(std::vector&lt;Value&gt; columns) : columns_(std::move(columns)) {}</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : </span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :     std::vector&lt;Value&gt; columns_;</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : };</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : </span>
-<span id="L73"><span class="lineNum">      73</span>                 :             :     KeyView() = default;</span>
-<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
-<span id="L75"><span class="lineNum">      75</span>                 :             :     [[nodiscard]] static KeyView from_columns(const Value* columns, size_t column_count) {</span>
-<span id="L76"><span class="lineNum">      76</span>                 :             :         return KeyView(columns, column_count);</span>
-<span id="L77"><span class="lineNum">      77</span>                 :             :     }</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : // =============================================================================</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : // KeyView&lt;Tag&gt;: a zero-copy view into a LogicalKey's columns.</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : //</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : // Holds a pointer into the parent key — caller must keep the parent alive.</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : // =============================================================================</span>
 <span id="L78"><span class="lineNum">      78</span>                 :             : </span>
-<span id="L79"><span class="lineNum">      79</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 4 times"> + </span>]:<span class="tlaGNC">         117 :     [[nodiscard]] size_t column_count() const noexcept { return column_count_; }</span></span>
-<span id="L80"><span class="lineNum">      80</span>                 :             :     [[nodiscard]] bool empty() const noexcept { return column_count_ == 0; }</span>
-<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">         360 :     [[nodiscard]] const Value&amp; column(size_t index) const { return columns_[index]; }</span></span>
-<span id="L82"><span class="lineNum">      82</span>                 :             : </span>
-<span id="L83"><span class="lineNum">      83</span>                 :             : private:</span>
-<span id="L84"><span class="lineNum">      84</span>                 :             :     KeyView(const Value* columns, size_t column_count)</span>
-<span id="L85"><span class="lineNum">      85</span>                 :             :         : columns_(columns), column_count_(column_count) {}</span>
-<span id="L86"><span class="lineNum">      86</span>                 :             : </span>
-<span id="L87"><span class="lineNum">      87</span>                 :             :     const Value* columns_ = nullptr;</span>
-<span id="L88"><span class="lineNum">      88</span>                 :             :     size_t column_count_ = 0;</span>
-<span id="L89"><span class="lineNum">      89</span>                 :             : };</span>
-<span id="L90"><span class="lineNum">      90</span>                 :             : </span>
-<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">         196 : template &lt;typename Tag&gt; class EncodedKey {</span></span>
-<span id="L92"><span class="lineNum">      92</span>                 :             : public:</span>
-<span id="L93"><span class="lineNum">      93</span>                 :             :     using tag = Tag;</span>
-<span id="L94"><span class="lineNum">      94</span>                 :             :     using Ref = std::shared_ptr&lt;EncodedKey&gt;;</span>
-<span id="L95"><span class="lineNum">      95</span>                 :             :     using ConstRef = std::shared_ptr&lt;const EncodedKey&gt;;</span>
-<span id="L96"><span class="lineNum">      96</span>                 :             : </span>
-<span id="L97"><span class="lineNum">      97</span>                 :             :     EncodedKey() = default;</span>
-<span id="L98"><span class="lineNum">      98</span>                 :             : </span>
-<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          66 :     [[nodiscard]] static EncodedKey from_encoded_bytes(std::string bytes) {</span></span>
-<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">          66 :         return EncodedKey(std::move(bytes));</span></span>
-<span id="L101"><span class="lineNum">     101</span>                 :             :     }</span>
-<span id="L102"><span class="lineNum">     102</span>                 :             : </span>
-<span id="L103"><span class="lineNum">     103</span>                 :             :     [[nodiscard]] std::string_view bytes() const noexcept { return bytes_; }</span>
-<span id="L104"><span class="lineNum">     104</span>                 :             :     [[nodiscard]] const std::string&amp; owned_bytes() const noexcept { return bytes_; }</span>
-<span id="L105"><span class="lineNum">     105</span>                 :             :     [[nodiscard]] bool empty() const noexcept { return bytes_.empty(); }</span>
-<span id="L106"><span class="lineNum">     106</span>                 :             : </span>
-<span id="L107"><span class="lineNum">     107</span>                 :             : private:</span>
-<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">          66 :     explicit EncodedKey(std::string bytes) : bytes_(std::move(bytes)) {}</span></span>
-<span id="L109"><span class="lineNum">     109</span>                 :             : </span>
-<span id="L110"><span class="lineNum">     110</span>                 :             :     std::string bytes_;</span>
-<span id="L111"><span class="lineNum">     111</span>                 :             : };</span>
-<span id="L112"><span class="lineNum">     112</span>                 :             : </span>
-<span id="L113"><span class="lineNum">     113</span>                 :             : using RowKey = LogicalKey&lt;RowKeyTag&gt;;</span>
-<span id="L114"><span class="lineNum">     114</span>                 :             : using AllKey = LogicalKey&lt;AllKeyTag&gt;;</span>
-<span id="L115"><span class="lineNum">     115</span>                 :             : using PrefixKey = LogicalKey&lt;PrefixKeyTag&gt;;</span>
-<span id="L116"><span class="lineNum">     116</span>                 :             : </span>
-<span id="L117"><span class="lineNum">     117</span>                 :             : using RowKeyView = KeyView&lt;RowKeyTag&gt;;</span>
-<span id="L118"><span class="lineNum">     118</span>                 :             : using AllKeyView = KeyView&lt;AllKeyTag&gt;;</span>
-<span id="L119"><span class="lineNum">     119</span>                 :             : using PrefixKeyView = KeyView&lt;PrefixKeyTag&gt;;</span>
-<span id="L120"><span class="lineNum">     120</span>                 :             : </span>
-<span id="L121"><span class="lineNum">     121</span>                 :             : using EncodedRowKey = EncodedKey&lt;RowKeyTag&gt;;</span>
-<span id="L122"><span class="lineNum">     122</span>                 :             : using EncodedAllKey = EncodedKey&lt;AllKeyTag&gt;;</span>
-<span id="L123"><span class="lineNum">     123</span>                 :             : using EncodedPrefixKey = EncodedKey&lt;PrefixKeyTag&gt;;</span>
-<span id="L124"><span class="lineNum">     124</span>                 :             : </span>
-<span id="L125"><span class="lineNum">     125</span>                 :             : template &lt;typename LhsTag, typename RhsTag&gt;</span>
-<span id="L126"><span class="lineNum">     126</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 : [[nodiscard]] inline int compare_encoded_bytes(const EncodedKey&lt;LhsTag&gt;&amp; lhs,</span></span>
-<span id="L127"><span class="lineNum">     127</span>                 :             :                                                const EncodedKey&lt;RhsTag&gt;&amp; rhs) noexcept {</span>
-<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC">           1 :     const int cmp = lhs.bytes().compare(rhs.bytes());</span></span>
-<span id="L129"><span class="lineNum">     129</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (cmp &lt; 0)</span></span>
-<span id="L130"><span class="lineNum">     130</span>                 :             :         return -1;</span>
-<span id="L131"><span class="lineNum">     131</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :     if (cmp &gt; 0)</span></span>
-<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaUNC">           0 :         return 1;</span></span>
-<span id="L133"><span class="lineNum">     133</span>                 :             :     return 0;</span>
-<span id="L134"><span class="lineNum">     134</span>                 :             : }</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             : template &lt;typename Tag&gt;</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : class KeyView {</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : public:</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :     using tag = Tag;</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : </span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :     KeyView() = default;</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             : </span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :     [[nodiscard]] static KeyView from_columns(const Value* columns, size_t column_count) {</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :         return KeyView(columns, column_count);</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     }</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             : </span>
+<span id="L90"><span class="lineNum">      90</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 4 times"> + </span>]:<span class="tlaGNC">         117 :     [[nodiscard]] size_t column_count() const noexcept { return column_count_; }</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :     [[nodiscard]] bool empty() const noexcept { return column_count_ == 0; }</span>
+<span id="L92"><span class="lineNum">      92</span>   [<span class="tlaGBC" title="Branch 0 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 68 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         360 :     [[nodiscard]] const Value&amp; column(size_t index) const { return columns_[index]; }</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : </span>
+<span id="L94"><span class="lineNum">      94</span>                 :             : private:</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :     KeyView(const Value* columns, size_t column_count)</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :         : columns_(columns), column_count_(column_count) {}</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : </span>
+<span id="L98"><span class="lineNum">      98</span>                 :             :     const Value* columns_ = nullptr;</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :     size_t column_count_ = 0;</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             : };</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : </span>
+<span id="L102"><span class="lineNum">     102</span>                 :             : // =============================================================================</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : // EncodedKey&lt;Tag&gt;: a pre-computed memcomparable encoding of a LogicalKey.</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             : //</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : // Stores the comparable-encoded bytes (see codec/value_comparable.h) for</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : // efficient comparison and use as bloom filter keys.</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             : // =============================================================================</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             : </span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : template &lt;typename Tag&gt;</span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">         196 : class EncodedKey {</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :             : public:</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :     using tag = Tag;</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :     using Ref = std::shared_ptr&lt;EncodedKey&gt;;</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :     using ConstRef = std::shared_ptr&lt;const EncodedKey&gt;;</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : </span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :     EncodedKey() = default;</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             : </span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">          66 :     [[nodiscard]] static EncodedKey from_encoded_bytes(std::string bytes) {</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">          66 :         return EncodedKey(std::move(bytes));</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :     }</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             : </span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :     [[nodiscard]] std::string_view bytes() const noexcept { return bytes_; }</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :     [[nodiscard]] const std::string&amp; owned_bytes() const noexcept { return bytes_; }</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :     [[nodiscard]] bool empty() const noexcept { return bytes_.empty(); }</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             : </span>
+<span id="L126"><span class="lineNum">     126</span>                 :             : private:</span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">          66 :     explicit EncodedKey(std::string bytes) : bytes_(std::move(bytes)) {}</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :             : </span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :     std::string bytes_;</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : };</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             : </span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : // =============================================================================</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : // Type aliases — the three key scopes, each with three representations.</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             : // =============================================================================</span>
 <span id="L135"><span class="lineNum">     135</span>                 :             : </span>
-<span id="L136"><span class="lineNum">     136</span>                 :             : template &lt;typename LhsTag, typename RhsTag&gt;</span>
-<span id="L137"><span class="lineNum">     137</span>                 :             : [[nodiscard]] inline bool encoded_bytes_less(const EncodedKey&lt;LhsTag&gt;&amp; lhs,</span>
-<span id="L138"><span class="lineNum">     138</span>                 :             :                                              const EncodedKey&lt;RhsTag&gt;&amp; rhs) noexcept {</span>
-<span id="L139"><span class="lineNum">     139</span>                 :             :     return compare_encoded_bytes(lhs, rhs) &lt; 0;</span>
-<span id="L140"><span class="lineNum">     140</span>                 :             : }</span>
-<span id="L141"><span class="lineNum">     141</span>                 :             : </span>
-<span id="L142"><span class="lineNum">     142</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">          37 : struct KeyPrefix {</span></span>
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
-<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span>]
-<span id="L143"><span class="lineNum">     143</span>                 :             :     using Ref = std::shared_ptr&lt;KeyPrefix&gt;;</span>
-<span id="L144"><span class="lineNum">     144</span>                 :             :     using ConstRef = std::shared_ptr&lt;const KeyPrefix&gt;;</span>
-<span id="L145"><span class="lineNum">     145</span>                 :             : </span>
-<span id="L146"><span class="lineNum">     146</span>                 :             :     std::vector&lt;Value&gt; key_columns;</span>
-<span id="L147"><span class="lineNum">     147</span>                 :             :     std::optional&lt;Version&gt; version;</span>
-<span id="L148"><span class="lineNum">     148</span>                 :             :     std::optional&lt;OpType&gt; op_type;</span>
-<span id="L149"><span class="lineNum">     149</span>                 :             : };</span>
-<span id="L150"><span class="lineNum">     150</span>                 :             : </span>
-<span id="L151"><span class="lineNum">     151</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 : [[nodiscard]] inline absl::Status validate_key_prefix_shape(const KeyPrefix&amp; prefix,</span></span>
-<span id="L152"><span class="lineNum">     152</span>                 :             :                                                             const Schema::ConstRef&amp; schema) {</span>
-<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 :     if (schema == nullptr) {</span></span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
-<span id="L155"><span class="lineNum">     155</span>                 :             :     }</span>
-<span id="L156"><span class="lineNum">     156</span>                 :             :     const size_t row_key_count = schema-&gt;row_key_column_count();</span>
-<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          15 :     if (prefix.key_columns.size() &gt; row_key_count) {</span></span>
-<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;key prefix column count exceeds row key column count&quot;);</span></span>
-<span id="L159"><span class="lineNum">     159</span>                 :             :     }</span>
-<span id="L160"><span class="lineNum">     160</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 4 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          15 :     if (prefix.version.has_value() &amp;&amp; prefix.key_columns.size() != row_key_count) {</span></span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">           1 :         return absl::InvalidArgumentError(&quot;version prefix requires a complete row key prefix&quot;);</span></span>
-<span id="L162"><span class="lineNum">     162</span>                 :             :     }</span>
-<span id="L163"><span class="lineNum">     163</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">          14 :     if (prefix.op_type.has_value() &amp;&amp; !prefix.version.has_value()) {</span></span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">           1 :         return absl::InvalidArgumentError(&quot;op type prefix requires a version prefix&quot;);</span></span>
-<span id="L165"><span class="lineNum">     165</span>                 :             :     }</span>
-<span id="L166"><span class="lineNum">     166</span>                 :             :     return absl::OkStatus();</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : using RowKey = LogicalKey&lt;RowKeyTag&gt;;</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             : using AllKey = LogicalKey&lt;AllKeyTag&gt;;</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             : using PrefixKey = LogicalKey&lt;PrefixKeyTag&gt;;</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             : </span>
+<span id="L140"><span class="lineNum">     140</span>                 :             : using RowKeyView = KeyView&lt;RowKeyTag&gt;;</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : using AllKeyView = KeyView&lt;AllKeyTag&gt;;</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : using PrefixKeyView = KeyView&lt;PrefixKeyTag&gt;;</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : </span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : using EncodedRowKey = EncodedKey&lt;RowKeyTag&gt;;</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             : using EncodedAllKey = EncodedKey&lt;AllKeyTag&gt;;</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             : using EncodedPrefixKey = EncodedKey&lt;PrefixKeyTag&gt;;</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : </span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : // =============================================================================</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : // Encoded key comparison helpers.</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             : // =============================================================================</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             : </span>
+<span id="L152"><span class="lineNum">     152</span>                 :             : template &lt;typename LhsTag, typename RhsTag&gt;</span>
+<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 : [[nodiscard]] inline int compare_encoded_bytes(const EncodedKey&lt;LhsTag&gt;&amp; lhs,</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :             :                                                const EncodedKey&lt;RhsTag&gt;&amp; rhs) noexcept {</span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           1 :     const int cmp = lhs.bytes().compare(rhs.bytes());</span></span>
+<span id="L156"><span class="lineNum">     156</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (cmp &lt; 0)</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :         return -1;</span>
+<span id="L158"><span class="lineNum">     158</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :     if (cmp &gt; 0)</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaUNC">           0 :         return 1;</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :     return 0;</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             : }</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             : </span>
+<span id="L163"><span class="lineNum">     163</span>                 :             : template &lt;typename LhsTag, typename RhsTag&gt;</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             : [[nodiscard]] inline bool encoded_bytes_less(const EncodedKey&lt;LhsTag&gt;&amp; lhs,</span>
+<span id="L165"><span class="lineNum">     165</span>                 :             :                                              const EncodedKey&lt;RhsTag&gt;&amp; rhs) noexcept {</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             :     return compare_encoded_bytes(lhs, rhs) &lt; 0;</span>
 <span id="L167"><span class="lineNum">     167</span>                 :             : }</span>
 <span id="L168"><span class="lineNum">     168</span>                 :             : </span>
-<span id="L169"><span class="lineNum">     169</span>                 :             : template &lt;typename Key&gt;</span>
-<span id="L170"><span class="lineNum">     170</span>                 :             : concept KeyLike = requires(const Key&amp; key, size_t index) {</span>
-<span id="L171"><span class="lineNum">     171</span>                 :             :     typename Key::tag;</span>
-<span id="L172"><span class="lineNum">     172</span>                 :             :     { key.column_count() } -&gt; std::convertible_to&lt;size_t&gt;;</span>
-<span id="L173"><span class="lineNum">     173</span>                 :             :     { key.column(index) } -&gt; std::same_as&lt;const Value&amp;&gt;;</span>
-<span id="L174"><span class="lineNum">     174</span>                 :             : };</span>
-<span id="L175"><span class="lineNum">     175</span>                 :             : </span>
-<span id="L176"><span class="lineNum">     176</span>                 :             : template &lt;typename Key, typename Tag&gt;</span>
-<span id="L177"><span class="lineNum">     177</span>                 :             : concept KeyWithTag = KeyLike&lt;Key&gt; &amp;&amp; std::same_as&lt;typename Key::tag, Tag&gt;;</span>
-<span id="L178"><span class="lineNum">     178</span>                 :             : </span>
-<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">         196 : class KeyComparator {</span></span>
-<span id="L180"><span class="lineNum">     180</span>                 :             : public:</span>
-<span id="L181"><span class="lineNum">     181</span>                 :             :     explicit KeyComparator(InternalSchema::ConstRef schema) : schema_(std::move(schema)) {}</span>
-<span id="L182"><span class="lineNum">     182</span>                 :             : </span>
-<span id="L183"><span class="lineNum">     183</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1270 times"> + </span>]:<span class="tlaGNC">        1270 :     [[nodiscard]] absl::Status validate_sort_key_column(size_t index, const Value&amp; value) const {</span></span>
-<span id="L184"><span class="lineNum">     184</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1270 times"> + </span>]:<span class="tlaGNC">        1270 :         if (schema_ == nullptr) {</span></span>
-<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
-<span id="L186"><span class="lineNum">     186</span>                 :             :         }</span>
-<span id="L187"><span class="lineNum">     187</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1270 times"> + </span>]:<span class="tlaGNC tlaBgGNC">        1270 :         if (index &gt;= schema_-&gt;sort_key_column_count()) {</span></span>
-<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;key column index exceeds all-key column count&quot;);</span></span>
-<span id="L189"><span class="lineNum">     189</span>                 :             :         }</span>
-<span id="L190"><span class="lineNum">     190</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1270 times"> + </span>]:<span class="tlaGNC tlaBgGNC">        1270 :         const DataType expected = schema_-&gt;column_type(index);</span></span>
-<span id="L191"><span class="lineNum">     191</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1270 times"> + </span>]:<span class="tlaGNC">        1270 :         if (value.type() != expected) {</span></span>
-<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(absl::StrCat(&quot;key column &quot;,</span></span>
-<span id="L193"><span class="lineNum">     193</span>                 :             :                                                            index,</span>
-<span id="L194"><span class="lineNum">     194</span>                 :             :                                                            &quot; type mismatch: expected &quot;,</span>
-<span id="L195"><span class="lineNum">     195</span>                 :             :                                                            data_type_name(expected),</span>
-<span id="L196"><span class="lineNum">     196</span>                 :             :                                                            &quot;, got &quot;,</span>
-<span id="L197"><span class="lineNum">     197</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                                                            data_type_name(value.type())));</span></span>
-<span id="L198"><span class="lineNum">     198</span>                 :             :         }</span>
-<span id="L199"><span class="lineNum">     199</span>                 :             :         return absl::OkStatus();</span>
-<span id="L200"><span class="lineNum">     200</span>                 :             :     }</span>
-<span id="L201"><span class="lineNum">     201</span>                 :             : </span>
-<span id="L202"><span class="lineNum">     202</span>                 :             :     template &lt;KeyLike Lhs, KeyLike Rhs&gt;</span>
-<span id="L203"><span class="lineNum">     203</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;int&gt; compare_exact(const Lhs&amp; lhs, const Rhs&amp; rhs) const {</span>
-<span id="L204"><span class="lineNum">     204</span>                 :             :         return compare_impl(lhs, rhs, PrefixMatchMode::kExactBoundary);</span>
-<span id="L205"><span class="lineNum">     205</span>                 :             :     }</span>
-<span id="L206"><span class="lineNum">     206</span>                 :             : </span>
-<span id="L207"><span class="lineNum">     207</span>                 :             :     template &lt;typename Lhs, typename Rhs&gt;</span>
-<span id="L208"><span class="lineNum">     208</span>                 :             :         requires KeyWithTag&lt;Lhs, AllKeyTag&gt; &amp;&amp; KeyWithTag&lt;Rhs, AllKeyTag&gt;</span>
-<span id="L209"><span class="lineNum">     209</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;int&gt; compare_all_key(const Lhs&amp; lhs, const Rhs&amp; rhs) const {</span>
-<span id="L210"><span class="lineNum">     210</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          20 :         return compare_impl(lhs, rhs, PrefixMatchMode::kExactBoundary);</span></span>
-<span id="L211"><span class="lineNum">     211</span>                 :             :     }</span>
-<span id="L212"><span class="lineNum">     212</span>                 :             : </span>
-<span id="L213"><span class="lineNum">     213</span>                 :             :     template &lt;typename Lhs, typename Rhs&gt;</span>
-<span id="L214"><span class="lineNum">     214</span>                 :             :         requires KeyWithTag&lt;Lhs, AllKeyTag&gt; &amp;&amp; KeyWithTag&lt;Rhs, PrefixKeyTag&gt;</span>
-<span id="L215"><span class="lineNum">     215</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;int&gt; compare_all_key_to_prefix(const Lhs&amp; lhs,</span>
-<span id="L216"><span class="lineNum">     216</span>                 :             :                                                                 const Rhs&amp; rhs) const {</span>
-<span id="L217"><span class="lineNum">     217</span>   [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          30 :         return compare_impl(lhs, rhs, PrefixMatchMode::kPrefixMatches);</span></span>
-<span id="L218"><span class="lineNum">     218</span>                 :             :     }</span>
-<span id="L219"><span class="lineNum">     219</span>                 :             : </span>
-<span id="L220"><span class="lineNum">     220</span>                 :             :     template &lt;typename Lhs, typename Rhs&gt;</span>
-<span id="L221"><span class="lineNum">     221</span>                 :             :         requires KeyWithTag&lt;Lhs, PrefixKeyTag&gt; &amp;&amp; KeyWithTag&lt;Rhs, PrefixKeyTag&gt;</span>
-<span id="L222"><span class="lineNum">     222</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;int&gt; compare_prefix_boundary(const Lhs&amp; lhs,</span>
-<span id="L223"><span class="lineNum">     223</span>                 :             :                                                               const Rhs&amp; rhs) const {</span>
-<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">           5 :         return compare_impl(lhs, rhs, PrefixMatchMode::kExactBoundary);</span></span>
-<span id="L225"><span class="lineNum">     225</span>                 :             :     }</span>
-<span id="L226"><span class="lineNum">     226</span>                 :             : </span>
-<span id="L227"><span class="lineNum">     227</span>                 :             :     template &lt;typename Lhs, typename Rhs&gt;</span>
-<span id="L228"><span class="lineNum">     228</span>                 :             :         requires KeyWithTag&lt;Lhs, AllKeyTag&gt; &amp;&amp; KeyWithTag&lt;Rhs, AllKeyTag&gt;</span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          63 :     [[nodiscard]] absl::StatusOr&lt;bool&gt; all_key_less(const Lhs&amp; lhs, const Rhs&amp; rhs) const {</span></span>
-<span id="L230"><span class="lineNum">     230</span>                 :             :         auto cmp = compare_all_key(lhs, rhs);</span>
-<span id="L231"><span class="lineNum">     231</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 63 times"> + </span>]:<span class="tlaGNC">          63 :         if (!cmp.ok())</span></span>
-<span id="L232"><span class="lineNum">     232</span>                 :             :             return cmp.status();</span>
-<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">          63 :         return *cmp &lt; 0;</span></span>
-<span id="L234"><span class="lineNum">     234</span>                 :             :     }</span>
-<span id="L235"><span class="lineNum">     235</span>                 :             : </span>
-<span id="L236"><span class="lineNum">     236</span>                 :             :     template &lt;typename Lhs, typename Rhs&gt;</span>
-<span id="L237"><span class="lineNum">     237</span>                 :             :         requires KeyWithTag&lt;Lhs, AllKeyTag&gt; &amp;&amp; KeyWithTag&lt;Rhs, PrefixKeyTag&gt;</span>
-<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">          34 :     [[nodiscard]] absl::StatusOr&lt;bool&gt; all_key_less_than_prefix(const Lhs&amp; lhs,</span></span>
-<span id="L239"><span class="lineNum">     239</span>                 :             :                                                                 const Rhs&amp; rhs) const {</span>
-<span id="L240"><span class="lineNum">     240</span>                 :             :         auto cmp = compare_all_key_to_prefix(lhs, rhs);</span>
-<span id="L241"><span class="lineNum">     241</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 34 times"> + </span>]:<span class="tlaGNC">          34 :         if (!cmp.ok())</span></span>
-<span id="L242"><span class="lineNum">     242</span>                 :             :             return cmp.status();</span>
-<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">          34 :         return *cmp &lt; 0;</span></span>
-<span id="L244"><span class="lineNum">     244</span>                 :             :     }</span>
-<span id="L245"><span class="lineNum">     245</span>                 :             : </span>
-<span id="L246"><span class="lineNum">     246</span>                 :             :     template &lt;typename Lhs, typename Rhs&gt;</span>
-<span id="L247"><span class="lineNum">     247</span>                 :             :         requires KeyWithTag&lt;Lhs, PrefixKeyTag&gt; &amp;&amp; KeyWithTag&lt;Rhs, PrefixKeyTag&gt;</span>
-<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">           5 :     [[nodiscard]] absl::StatusOr&lt;bool&gt; prefix_less(const Lhs&amp; lhs, const Rhs&amp; rhs) const {</span></span>
-<span id="L249"><span class="lineNum">     249</span>                 :             :         auto cmp = compare_prefix_boundary(lhs, rhs);</span>
-<span id="L250"><span class="lineNum">     250</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :         if (!cmp.ok())</span></span>
-<span id="L251"><span class="lineNum">     251</span>                 :             :             return cmp.status();</span>
-<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">          10 :         return *cmp &lt; 0;</span></span>
-<span id="L253"><span class="lineNum">     253</span>                 :             :     }</span>
-<span id="L254"><span class="lineNum">     254</span>                 :             : </span>
-<span id="L255"><span class="lineNum">     255</span>                 :             : private:</span>
-<span id="L256"><span class="lineNum">     256</span>                 :             :     enum class PrefixMatchMode : uint8_t {</span>
-<span id="L257"><span class="lineNum">     257</span>                 :             :         kExactBoundary,</span>
-<span id="L258"><span class="lineNum">     258</span>                 :             :         kPrefixMatches,</span>
-<span id="L259"><span class="lineNum">     259</span>                 :             :     };</span>
-<span id="L260"><span class="lineNum">     260</span>                 :             : </span>
-<span id="L261"><span class="lineNum">     261</span>                 :             :     template &lt;KeyLike Lhs, KeyLike Rhs&gt;</span>
-<span id="L262"><span class="lineNum">     262</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 137 times"> + </span>]:<span class="tlaGNC">         137 :     [[nodiscard]] absl::StatusOr&lt;int&gt; compare_impl(const Lhs&amp; lhs,</span></span>
-<span id="L263"><span class="lineNum">     263</span>                 :             :                                                    const Rhs&amp; rhs,</span>
-<span id="L264"><span class="lineNum">     264</span>                 :             :                                                    PrefixMatchMode mode) const {</span>
-<span id="L265"><span class="lineNum">     265</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 137 times"> + </span>]:<span class="tlaGNC">         137 :         if (schema_ == nullptr) {</span></span>
-<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
-<span id="L267"><span class="lineNum">     267</span>                 :             :         }</span>
-<span id="L268"><span class="lineNum">     268</span>                 :             : </span>
-<span id="L269"><span class="lineNum">     269</span>                 :             :         const size_t common = std::min(lhs.column_count(), rhs.column_count());</span>
-<span id="L270"><span class="lineNum">     270</span>         [<span class="tlaGBC" title="Branch 0 was taken 282 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 33 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         315 :         for (size_t i = 0; i &lt; common; ++i) {</span></span>
-<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">         282 :             auto status = validate_sort_key_column(i, lhs.column(i));</span></span>
-<span id="L272"><span class="lineNum">     272</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 282 times"> + </span>]:<span class="tlaGNC">         282 :             if (!status.ok())</span></span>
-<span id="L273"><span class="lineNum">     273</span>                 :             :                 return status;</span>
-<span id="L274"><span class="lineNum">     274</span>   [<span class="tlaGBC" title="Branch 0 was taken 282 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 282 times"> + </span> :<span class="tlaGNC">         564 :             status = validate_sort_key_column(i, rhs.column(i));</span></span>
-<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
-<span id="L275"><span class="lineNum">     275</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 282 times"> + </span>]:<span class="tlaGNC">         282 :             if (!status.ok())</span></span>
-<span id="L276"><span class="lineNum">     276</span>                 :             :                 return status;</span>
-<span id="L277"><span class="lineNum">     277</span>         [<span class="tlaGBC" title="Branch 0 was taken 282 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         282 :             int cmp = compare_values(lhs.column(i), rhs.column(i));</span></span>
-<span id="L278"><span class="lineNum">     278</span>         [<span class="tlaGBC" title="Branch 0 was taken 34 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 248 times"> + </span>]:<span class="tlaGNC">         282 :             if (schema_-&gt;column_order(i) == SortOrder::kDescending) {</span></span>
-<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          34 :                 cmp = -cmp;</span></span>
-<span id="L280"><span class="lineNum">     280</span>                 :             :             }</span>
-<span id="L281"><span class="lineNum">     281</span>         [<span class="tlaGBC" title="Branch 0 was taken 104 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 178 times"> + </span>]:<span class="tlaGNC">         282 :             if (cmp != 0)</span></span>
-<span id="L282"><span class="lineNum">     282</span>                 :             :                 return cmp;</span>
-<span id="L283"><span class="lineNum">     283</span>                 :             :         }</span>
-<span id="L284"><span class="lineNum">     284</span>                 :             : </span>
-<span id="L285"><span class="lineNum">     285</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">          33 :         if (lhs.column_count() == rhs.column_count()) {</span></span>
-<span id="L286"><span class="lineNum">     286</span>                 :             :             return 0;</span>
-<span id="L287"><span class="lineNum">     287</span>                 :             :         }</span>
-<span id="L288"><span class="lineNum">     288</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          19 :         if (mode == PrefixMatchMode::kPrefixMatches) {</span></span>
-<span id="L289"><span class="lineNum">     289</span>                 :             :             return 0;</span>
-<span id="L290"><span class="lineNum">     290</span>                 :             :         }</span>
-<span id="L291"><span class="lineNum">     291</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return lhs.column_count() &lt; rhs.column_count() ? -1 : 1;</span></span>
-<span id="L292"><span class="lineNum">     292</span>                 :             :     }</span>
-<span id="L293"><span class="lineNum">     293</span>                 :             : </span>
-<span id="L294"><span class="lineNum">     294</span>                 :             :     InternalSchema::ConstRef schema_;</span>
-<span id="L295"><span class="lineNum">     295</span>                 :             : };</span>
-<span id="L296"><span class="lineNum">     296</span>                 :             : </span>
-<span id="L297"><span class="lineNum">     297</span>                 :             : [[nodiscard]] inline absl::StatusOr&lt;RowKey&gt; make_row_key(std::vector&lt;Value&gt; columns,</span>
-<span id="L298"><span class="lineNum">     298</span>                 :             :                                                          const Schema::ConstRef&amp; schema) {</span>
-<span id="L299"><span class="lineNum">     299</span>                 :             :     if (schema == nullptr) {</span>
-<span id="L300"><span class="lineNum">     300</span>                 :             :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span>
-<span id="L301"><span class="lineNum">     301</span>                 :             :     }</span>
-<span id="L302"><span class="lineNum">     302</span>                 :             :     if (columns.size() != schema-&gt;row_key_column_count()) {</span>
-<span id="L303"><span class="lineNum">     303</span>                 :             :         return absl::InvalidArgumentError(&quot;row key column count mismatch&quot;);</span>
-<span id="L304"><span class="lineNum">     304</span>                 :             :     }</span>
-<span id="L305"><span class="lineNum">     305</span>                 :             :     for (size_t i = 0; i &lt; columns.size(); ++i) {</span>
-<span id="L306"><span class="lineNum">     306</span>                 :             :         if (columns[i].type() != schema-&gt;column_type(i)) {</span>
-<span id="L307"><span class="lineNum">     307</span>                 :             :             return absl::InvalidArgumentError(absl::StrCat(&quot;row key column &quot;, i, &quot; type mismatch&quot;));</span>
-<span id="L308"><span class="lineNum">     308</span>                 :             :         }</span>
-<span id="L309"><span class="lineNum">     309</span>                 :             :     }</span>
-<span id="L310"><span class="lineNum">     310</span>                 :             :     return RowKey::from_columns(std::move(columns));</span>
-<span id="L311"><span class="lineNum">     311</span>                 :             : }</span>
-<span id="L312"><span class="lineNum">     312</span>                 :             : </span>
-<span id="L313"><span class="lineNum">     313</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 69 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          69 : [[nodiscard]] inline absl::StatusOr&lt;AllKey&gt; make_all_key(const InternalRow&amp; row,</span></span>
-<span id="L314"><span class="lineNum">     314</span>                 :             :                                                          const InternalSchema::ConstRef&amp; schema) {</span>
-<span id="L315"><span class="lineNum">     315</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 69 times"> + </span>]:<span class="tlaGNC">          69 :     if (schema == nullptr) {</span></span>
-<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
-<span id="L317"><span class="lineNum">     317</span>                 :             :     }</span>
-<span id="L318"><span class="lineNum">     318</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 69 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          69 :     if (row.columns.size() &lt; schema-&gt;sort_key_column_count()) {</span></span>
-<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;internal row has fewer columns than all-key&quot;);</span></span>
-<span id="L320"><span class="lineNum">     320</span>                 :             :     }</span>
-<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC tlaBgGNC">          69 :     std::vector&lt;Value&gt; columns;</span></span>
-<span id="L322"><span class="lineNum">     322</span>         [<span class="tlaGBC" title="Branch 0 was taken 69 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          69 :     columns.reserve(schema-&gt;sort_key_column_count());</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :             :     KeyComparator comparator(schema);</span>
-<span id="L324"><span class="lineNum">     324</span>         [<span class="tlaGBC" title="Branch 0 was taken 275 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 69 times"> + </span>]:<span class="tlaGNC">         344 :     for (size_t i = 0; i &lt; schema-&gt;sort_key_column_count(); ++i) {</span></span>
-<span id="L325"><span class="lineNum">     325</span>         [<span class="tlaGBC" title="Branch 0 was taken 275 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         275 :         auto status = comparator.validate_sort_key_column(i, row.columns[i]);</span></span>
-<span id="L326"><span class="lineNum">     326</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 275 times"> + </span>]:<span class="tlaGNC">         275 :         if (!status.ok())</span></span>
-<span id="L327"><span class="lineNum">     327</span>                 :             :             return status;</span>
-<span id="L328"><span class="lineNum">     328</span>         [<span class="tlaGBC" title="Branch 0 was taken 275 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         275 :         columns.push_back(row.columns[i]);</span></span>
-<span id="L329"><span class="lineNum">     329</span>                 :             :     }</span>
-<span id="L330"><span class="lineNum">     330</span>                 :<span class="tlaGNC">         138 :     return AllKey::from_columns(std::move(columns));</span></span>
-<span id="L331"><span class="lineNum">     331</span>                 :<span class="tlaGNC">          69 : }</span></span>
-<span id="L332"><span class="lineNum">     332</span>                 :             : </span>
-<span id="L333"><span class="lineNum">     333</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 105 times"> + </span>]:<span class="tlaGNC">         105 : [[nodiscard]] inline absl::StatusOr&lt;AllKeyView&gt; make_all_key_view(</span></span>
-<span id="L334"><span class="lineNum">     334</span>                 :             :     const InternalRow&amp; row, const InternalSchema::ConstRef&amp; schema) {</span>
-<span id="L335"><span class="lineNum">     335</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 105 times"> + </span>]:<span class="tlaGNC">         105 :     if (schema == nullptr) {</span></span>
-<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
-<span id="L337"><span class="lineNum">     337</span>                 :             :     }</span>
-<span id="L338"><span class="lineNum">     338</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 105 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         105 :     if (row.columns.size() &lt; schema-&gt;sort_key_column_count()) {</span></span>
-<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;internal row has fewer columns than all-key&quot;);</span></span>
-<span id="L340"><span class="lineNum">     340</span>                 :             :     }</span>
-<span id="L341"><span class="lineNum">     341</span>                 :             :     KeyComparator comparator(schema);</span>
-<span id="L342"><span class="lineNum">     342</span>         [<span class="tlaGBC" title="Branch 0 was taken 406 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 105 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         511 :     for (size_t i = 0; i &lt; schema-&gt;sort_key_column_count(); ++i) {</span></span>
-<span id="L343"><span class="lineNum">     343</span>         [<span class="tlaGBC" title="Branch 0 was taken 406 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         406 :         auto status = comparator.validate_sort_key_column(i, row.columns[i]);</span></span>
-<span id="L344"><span class="lineNum">     344</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 406 times"> + </span>]:<span class="tlaGNC">         406 :         if (!status.ok())</span></span>
-<span id="L345"><span class="lineNum">     345</span>                 :             :             return status;</span>
-<span id="L346"><span class="lineNum">     346</span>                 :             :     }</span>
-<span id="L347"><span class="lineNum">     347</span>                 :             :     return AllKeyView::from_columns(row.columns.data(), schema-&gt;sort_key_column_count());</span>
-<span id="L348"><span class="lineNum">     348</span>                 :             : }</span>
-<span id="L349"><span class="lineNum">     349</span>                 :             : </span>
-<span id="L350"><span class="lineNum">     350</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 : [[nodiscard]] inline absl::StatusOr&lt;PrefixKey&gt; make_prefix_key(</span></span>
-<span id="L351"><span class="lineNum">     351</span>                 :             :     const KeyPrefix&amp; prefix,</span>
-<span id="L352"><span class="lineNum">     352</span>                 :             :     const Schema::ConstRef&amp; schema,</span>
-<span id="L353"><span class="lineNum">     353</span>                 :             :     const InternalSchema::ConstRef&amp; internal_schema) {</span>
-<span id="L354"><span class="lineNum">     354</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 :     if (internal_schema == nullptr) {</span></span>
-<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;schema is null&quot;);</span></span>
-<span id="L356"><span class="lineNum">     356</span>                 :             :     }</span>
-<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC tlaBgGNC">          15 :     auto shape_status = validate_key_prefix_shape(prefix, schema);</span></span>
-<span id="L358"><span class="lineNum">     358</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          15 :     if (!shape_status.ok())</span></span>
-<span id="L359"><span class="lineNum">     359</span>                 :             :         return shape_status;</span>
-<span id="L360"><span class="lineNum">     360</span>                 :             : </span>
-<span id="L361"><span class="lineNum">     361</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">          13 :     std::vector&lt;Value&gt; columns;</span></span>
-<span id="L362"><span class="lineNum">     362</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span> :<span class="tlaGNC">          33 :     columns.reserve(prefix.key_columns.size() + (prefix.version.has_value() ? 1 : 0) +</span></span>
-<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
-<span id="L363"><span class="lineNum">     363</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">          13 :                     (prefix.op_type.has_value() ? 1 : 0));</span></span>
-<span id="L364"><span class="lineNum">     364</span>                 :             :     KeyComparator comparator(internal_schema);</span>
-<span id="L365"><span class="lineNum">     365</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          32 :     for (size_t i = 0; i &lt; prefix.key_columns.size(); ++i) {</span></span>
-<span id="L366"><span class="lineNum">     366</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          19 :         auto status = comparator.validate_sort_key_column(i, prefix.key_columns[i]);</span></span>
-<span id="L367"><span class="lineNum">     367</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">          19 :         if (!status.ok())</span></span>
-<span id="L368"><span class="lineNum">     368</span>                 :             :             return status;</span>
-<span id="L369"><span class="lineNum">     369</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          19 :         columns.push_back(prefix.key_columns[i]);</span></span>
-<span id="L370"><span class="lineNum">     370</span>                 :             :     }</span>
-<span id="L371"><span class="lineNum">     371</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">          13 :     if (prefix.version.has_value()) {</span></span>
-<span id="L372"><span class="lineNum">     372</span>                 :<span class="tlaGNC">           4 :         columns.push_back(Value::make&lt;DataType::kVersion&gt;(*prefix.version));</span></span>
-<span id="L373"><span class="lineNum">     373</span>                 :             :     }</span>
-<span id="L374"><span class="lineNum">     374</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          13 :     if (prefix.op_type.has_value()) {</span></span>
-<span id="L375"><span class="lineNum">     375</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           4 :         columns.push_back(Value::make&lt;DataType::kUint8&gt;(static_cast&lt;uint8_t&gt;(*prefix.op_type)));</span></span>
-<span id="L376"><span class="lineNum">     376</span>                 :             :     }</span>
-<span id="L377"><span class="lineNum">     377</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          19 :     for (size_t i = prefix.key_columns.size(); i &lt; columns.size(); ++i) {</span></span>
-<span id="L378"><span class="lineNum">     378</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :         auto status = comparator.validate_sort_key_column(i, columns[i]);</span></span>
-<span id="L379"><span class="lineNum">     379</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :         if (!status.ok())</span></span>
-<span id="L380"><span class="lineNum">     380</span>                 :             :             return status;</span>
-<span id="L381"><span class="lineNum">     381</span>                 :             :     }</span>
-<span id="L382"><span class="lineNum">     382</span>                 :<span class="tlaGNC">          26 :     return PrefixKey::from_columns(std::move(columns));</span></span>
-<span id="L383"><span class="lineNum">     383</span>                 :<span class="tlaGNC">          13 : }</span></span>
-<span id="L384"><span class="lineNum">     384</span>                 :             : </span>
-<span id="L385"><span class="lineNum">     385</span>                 :             : } // namespace pl::sstv2::types</span>
+<span id="L169"><span class="lineNum">     169</span>                 :             : } // namespace pl::sstv2::types</span>
         </pre>
               </td>
             </tr>
