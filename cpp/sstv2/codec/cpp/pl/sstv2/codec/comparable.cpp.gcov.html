@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-11 00:05:20</td>
+            <td class="headerValue">2026-06-13 11:11:02</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">77.6&nbsp;%</td>
@@ -99,7 +99,7 @@
 <span id="L28"><span class="lineNum">      28</span>                 :             : // =============================================================================</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : </span>
 <span id="L30"><span class="lineNum">      30</span>                 :             : void put_be8(uint8_t v, std::string* dst) {</span>
-<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC tlaBgGNC">         186 :     dst-&gt;push_back(static_cast&lt;char&gt;(v));</span></span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC tlaBgGNC">         108 :     dst-&gt;push_back(static_cast&lt;char&gt;(v));</span></span>
 <span id="L32"><span class="lineNum">      32</span>                 :             : }</span>
 <span id="L33"><span class="lineNum">      33</span>                 :             : </span>
 <span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">          13 : void put_be16(uint16_t v, std::string* dst) {</span></span>
@@ -118,18 +118,18 @@
 <span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">          31 :     dst-&gt;append(buf, 4);</span></span>
 <span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">          31 : }</span></span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : </span>
-<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">         398 : void put_be64(uint64_t v, std::string* dst) {</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">         254 : void put_be64(uint64_t v, std::string* dst) {</span></span>
 <span id="L51"><span class="lineNum">      51</span>                 :             :     char buf[8];</span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         398 :     buf[0] = static_cast&lt;char&gt;(v &gt;&gt; 56);</span></span>
-<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         398 :     buf[1] = static_cast&lt;char&gt;(v &gt;&gt; 48);</span></span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         398 :     buf[2] = static_cast&lt;char&gt;(v &gt;&gt; 40);</span></span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">         398 :     buf[3] = static_cast&lt;char&gt;(v &gt;&gt; 32);</span></span>
-<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">         398 :     buf[4] = static_cast&lt;char&gt;(v &gt;&gt; 24);</span></span>
-<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">         398 :     buf[5] = static_cast&lt;char&gt;(v &gt;&gt; 16);</span></span>
-<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">         398 :     buf[6] = static_cast&lt;char&gt;(v &gt;&gt; 8);</span></span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         398 :     buf[7] = static_cast&lt;char&gt;(v);</span></span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         398 :     dst-&gt;append(buf, 8);</span></span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">         398 : }</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         254 :     buf[0] = static_cast&lt;char&gt;(v &gt;&gt; 56);</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         254 :     buf[1] = static_cast&lt;char&gt;(v &gt;&gt; 48);</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         254 :     buf[2] = static_cast&lt;char&gt;(v &gt;&gt; 40);</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">         254 :     buf[3] = static_cast&lt;char&gt;(v &gt;&gt; 32);</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">         254 :     buf[4] = static_cast&lt;char&gt;(v &gt;&gt; 24);</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">         254 :     buf[5] = static_cast&lt;char&gt;(v &gt;&gt; 16);</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">         254 :     buf[6] = static_cast&lt;char&gt;(v &gt;&gt; 8);</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         254 :     buf[7] = static_cast&lt;char&gt;(v);</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         254 :     dst-&gt;append(buf, 8);</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">         254 : }</span></span>
 <span id="L62"><span class="lineNum">      62</span>                 :             : </span>
 <span id="L63"><span class="lineNum">      63</span>                 :             : uint8_t read_be8(const uint8_t* src) {</span>
 <span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">           9 :     return src[0];</span></span>
@@ -212,12 +212,12 @@
 <span id="L141"><span class="lineNum">     141</span>                 :             : // Bitwise invert helpers.</span>
 <span id="L142"><span class="lineNum">     142</span>                 :             : // =============================================================================</span>
 <span id="L143"><span class="lineNum">     143</span>                 :             : </span>
-<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">         244 : void invert_tail(std::string* dst, size_t n) {</span></span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">         244 :     size_t start = dst-&gt;size() - n;</span></span>
-<span id="L146"><span class="lineNum">     146</span>         [<span class="tlaGBC" title="Branch 0 was taken 1932 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 244 times"> + </span>]:<span class="tlaGNC">        2176 :     for (size_t i = start; i &lt; dst-&gt;size(); ++i) {</span></span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">        1932 :         (*dst)[i] = static_cast&lt;char&gt;(~static_cast&lt;unsigned char&gt;((*dst)[i]));</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">         162 : void invert_tail(std::string* dst, size_t n) {</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">         162 :     size_t start = dst-&gt;size() - n;</span></span>
+<span id="L146"><span class="lineNum">     146</span>         [<span class="tlaGBC" title="Branch 0 was taken 1276 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 162 times"> + </span>]:<span class="tlaGNC">        1438 :     for (size_t i = start; i &lt; dst-&gt;size(); ++i) {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">        1276 :         (*dst)[i] = static_cast&lt;char&gt;(~static_cast&lt;unsigned char&gt;((*dst)[i]));</span></span>
 <span id="L148"><span class="lineNum">     148</span>                 :             :     }</span>
-<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">         244 : }</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">         162 : }</span></span>
 <span id="L150"><span class="lineNum">     150</span>                 :             : </span>
 <span id="L151"><span class="lineNum">     151</span>                 :             : // Invert a buffer in-place.</span>
 <span id="L152"><span class="lineNum">     152</span>                 :             : void invert_buf(uint8_t* buf, size_t n) {</span>
@@ -235,18 +235,18 @@
 <span id="L161"><span class="lineNum">     161</span>                 :             : // Encode: unsigned integers.</span>
 <span id="L162"><span class="lineNum">     162</span>                 :             : // =============================================================================</span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : </span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">         178 : void encode_uint8(uint8_t v, std::string* dst) {</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">         100 : void encode_uint8(uint8_t v, std::string* dst) {</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :             :     put_be8(v, dst);</span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">         178 : }</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">         100 : }</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">           6 : void encode_uint16(uint16_t v, std::string* dst) {</span></span>
 <span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">           6 :     put_be16(v, dst);</span></span>
 <span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">           6 : }</span></span>
 <span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">           6 : void encode_uint32(uint32_t v, std::string* dst) {</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">           6 :     put_be32(v, dst);</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">           6 : }</span></span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         361 : void encode_uint64(uint64_t v, std::string* dst) {</span></span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         361 :     put_be64(v, dst);</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         361 : }</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         217 : void encode_uint64(uint64_t v, std::string* dst) {</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         217 :     put_be64(v, dst);</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         217 : }</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :             : </span>
 <span id="L177"><span class="lineNum">     177</span>                 :             : // =============================================================================</span>
 <span id="L178"><span class="lineNum">     178</span>                 :             : // Encode: signed integers (flip sign bit).</span>
@@ -293,13 +293,13 @@
 <span id="L219"><span class="lineNum">     219</span>                 :             : // Empty input: marker = 0 (8 zero bytes + 0x00)</span>
 <span id="L220"><span class="lineNum">     220</span>                 :             : // =============================================================================</span>
 <span id="L221"><span class="lineNum">     221</span>                 :             : </span>
-<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">         152 : void encode_bytes(std::string_view data, std::string* dst) {</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">          97 : void encode_bytes(std::string_view data, std::string* dst) {</span></span>
 <span id="L223"><span class="lineNum">     223</span>                 :             :     const size_t len = data.size();</span>
 <span id="L224"><span class="lineNum">     224</span>                 :             :     size_t offset = 0;</span>
 <span id="L225"><span class="lineNum">     225</span>                 :             : </span>
-<span id="L226"><span class="lineNum">     226</span>         [<span class="tlaGBC" title="Branch 0 was taken 154 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">         157 :     while (offset &lt; len) {</span></span>
-<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">         154 :         size_t remaining = len - offset;</span></span>
-<span id="L228"><span class="lineNum">     228</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 147 times"> + </span>]:<span class="tlaGNC">         154 :         if (remaining &gt;= 8) {</span></span>
+<span id="L226"><span class="lineNum">     226</span>         [<span class="tlaGBC" title="Branch 0 was taken 99 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">         102 :     while (offset &lt; len) {</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">          99 :         size_t remaining = len - offset;</span></span>
+<span id="L228"><span class="lineNum">     228</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 92 times"> + </span>]:<span class="tlaGNC">          99 :         if (remaining &gt;= 8) {</span></span>
 <span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">           7 :             dst-&gt;append(data.data() + offset, 8);</span></span>
 <span id="L230"><span class="lineNum">     230</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           7 :             if (remaining == 8) {</span></span>
 <span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">           2 :                 dst-&gt;push_back(static_cast&lt;char&gt;(8));</span></span>
@@ -308,10 +308,10 @@
 <span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">           5 :             dst-&gt;push_back(static_cast&lt;char&gt;(0xFF));</span></span>
 <span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">           5 :             offset += 8;</span></span>
 <span id="L236"><span class="lineNum">     236</span>                 :             :         } else {</span>
-<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">         147 :             dst-&gt;append(data.data() + offset, remaining);</span></span>
-<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">         147 :             dst-&gt;append(8 - remaining, '\0');</span></span>
-<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">         147 :             dst-&gt;push_back(static_cast&lt;char&gt;(remaining));</span></span>
-<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">         147 :             return;</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">          92 :             dst-&gt;append(data.data() + offset, remaining);</span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">          92 :             dst-&gt;append(8 - remaining, '\0');</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          92 :             dst-&gt;push_back(static_cast&lt;char&gt;(remaining));</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          92 :             return;</span></span>
 <span id="L241"><span class="lineNum">     241</span>                 :             :         }</span>
 <span id="L242"><span class="lineNum">     242</span>                 :             :     }</span>
 <span id="L243"><span class="lineNum">     243</span>                 :             : </span>
@@ -342,11 +342,11 @@
 <span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaUNC">           0 :     invert_tail(dst, dst-&gt;size() - start);</span></span>
 <span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaUNC">           0 : }</span></span>
 <span id="L270"><span class="lineNum">     270</span>                 :             : </span>
-<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC tlaBgGNC">         219 : void encode_uint64_desc(uint64_t v, std::string* dst) {</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC tlaBgGNC">         137 : void encode_uint64_desc(uint64_t v, std::string* dst) {</span></span>
 <span id="L272"><span class="lineNum">     272</span>                 :             :     size_t start = dst-&gt;size();</span>
-<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">         219 :     encode_uint64(v, dst);</span></span>
-<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">         219 :     invert_tail(dst, dst-&gt;size() - start);</span></span>
-<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">         219 : }</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">         137 :     encode_uint64(v, dst);</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">         137 :     invert_tail(dst, dst-&gt;size() - start);</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">         137 : }</span></span>
 <span id="L276"><span class="lineNum">     276</span>                 :             : </span>
 <span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaUNC tlaBgUNC">           0 : void encode_int8_desc(int8_t v, std::string* dst) {</span></span>
 <span id="L278"><span class="lineNum">     278</span>                 :             :     size_t start = dst-&gt;size();</span>
