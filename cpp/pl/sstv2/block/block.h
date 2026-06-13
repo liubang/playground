@@ -18,7 +18,6 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -74,14 +73,13 @@ private:
 
 class BlockReader {
 public:
-    [[nodiscard]] static absl::StatusOr<BlockReader> open(std::string_view block,
-                                                          types::InternalSchema::ConstRef schema,
-                                                          Kind expected);
+    [[nodiscard]] static absl::StatusOr<BlockReader> open(
+        std::string_view block, const types::InternalSchema::ConstRef& schema, Kind expected);
 
     [[nodiscard]] const Header& header() const noexcept { return header_; }
     [[nodiscard]] const std::vector<types::InternalRow>& rows() const noexcept { return rows_; }
     [[nodiscard]] absl::StatusOr<std::string_view> embedded_value(
-        size_t row_index, types::InternalSchema::ConstRef schema) const;
+        size_t row_index, const types::InternalSchema::ConstRef& schema) const;
 
 private:
     Header header_;

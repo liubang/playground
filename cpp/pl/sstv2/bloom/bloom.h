@@ -47,7 +47,7 @@ public:
     explicit Builder(int bits_per_key = 10);
 
     [[nodiscard]] absl::Status add(const types::InternalRow& row,
-                                   types::InternalSchema::ConstRef schema);
+                                   const types::InternalSchema::ConstRef& schema);
     [[nodiscard]] absl::Status add_all_key(const types::EncodedAllKey& all_key);
     [[nodiscard]] std::string finish() const;
 
@@ -62,7 +62,7 @@ public:
 
     [[nodiscard]] bool may_contain_all_key(const types::EncodedAllKey& all_key) const;
     [[nodiscard]] absl::StatusOr<bool> may_contain(const types::InternalRow& row,
-                                                   types::InternalSchema::ConstRef schema) const;
+                                                   const types::InternalSchema::ConstRef& schema) const;
 
     [[nodiscard]] const Header& header() const noexcept { return header_; }
 
