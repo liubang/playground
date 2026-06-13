@@ -60,6 +60,7 @@ cc_library(
         "//cpp/pl/sstv2/types:column_flag",
         "//cpp/pl/sstv2/types:internal_row",
         "//cpp/pl/sstv2/types:internal_schema",
+        "//cpp/pl/sstv2/types:key",
         "//cpp/pl/sstv2/types:row",
         "//cpp/pl/sstv2/types:schema",
         "@abseil-cpp//absl/status",
