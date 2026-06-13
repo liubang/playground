@@ -46,8 +46,7 @@ namespace pl::sstv2::types {
 // key representation used during comparison and for AllKey construction.
 // =============================================================================
 
-template <typename Tag>
-class LogicalKey {
+template <typename Tag> class LogicalKey {
 public:
     using tag = Tag;
     using Ref = std::shared_ptr<LogicalKey>;
@@ -76,8 +75,7 @@ private:
 // Holds a pointer into the parent key — caller must keep the parent alive.
 // =============================================================================
 
-template <typename Tag>
-class KeyView {
+template <typename Tag> class KeyView {
 public:
     using tag = Tag;
 
@@ -106,8 +104,7 @@ private:
 // efficient comparison and use as bloom filter keys.
 // =============================================================================
 
-template <typename Tag>
-class EncodedKey {
+template <typename Tag> class EncodedKey {
 public:
     using tag = Tag;
     using Ref = std::shared_ptr<EncodedKey>;

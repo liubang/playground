@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "cpp/pl/sstv2/block/block.h"
+#include "cpp/pl/sstv2/format/block_flags.h"
 #include "cpp/pl/sstv2/types/op_type.h"
 
 namespace pl::sstv2::block {
@@ -104,7 +105,7 @@ TEST(BlockTest, DataBlockRoundTripSnappy) {
     auto reader = BlockReader::open(*encoded, schema_ptr, Kind::kData);
     ASSERT_TRUE(reader.ok()) << reader.status();
     EXPECT_EQ(reader->rows()[0].columns[0].as_string(), "carol");
-    EXPECT_EQ(compress::decode_block_flag(reader->header().flags), compress::Codec::kSnappy);
+    EXPECT_EQ(format::decode_block_flag(reader->header().flags), compress::Codec::kSnappy);
 }
 
 TEST(BlockTest, ArrayAndMapColumnsRoundTrip) {

@@ -30,8 +30,10 @@ namespace pl::sstv2::bloom {
 
 namespace {
 
-uint32_t hash_key(std::string_view key) {
-    return static_cast<uint32_t>(absl::Hash<std::string_view>{}(key));
+uint64_t hash_key(std::string_view key) {
+    // absl::Hash returns uint64_t — keep full entropy in storage,
+    // XOR-fold to 32 bits only when calling StandardBloomFilter.
+    return absl::Hash<std::string_view>{}(key);
 }
 
 void encode_header(const Header& header, std::string* dst) {
@@ -73,15 +75,20 @@ absl::Status Builder::add_all_key(const types::EncodedAllKey& all_key) {
 
 std::string Builder::finish() const {
     const uint64_t min_bits = 64;
-    const uint64_t bit_count = std::max<uint64_t>(
-        min_bits, static_cast<uint64_t>(hashes_.size()) * static_cast<uint64_t>(bits_per_key_));
+    // Guard against overflow: cap at UINT64_MAX / bits_per_key_ rows.
+    constexpr uint64_t kMaxRows = UINT64_MAX / 256; // bits_per_key ≤ 256 in practice
+    const uint64_t safe_rows = std::min<uint64_t>(hashes_.size(), kMaxRows);
+    const uint64_t bit_count =
+        std::max<uint64_t>(min_bits, safe_rows * static_cast<uint64_t>(bits_per_key_));
     const uint64_t byte_count = (bit_count + 7) / 8;
     std::string bits(static_cast<size_t>(byte_count), '\0');
 
     const int probes = pl::StandardBloomFilter::choose_num_probes(bits_per_key_);
-    for (uint32_t h : hashes_) {
+    for (uint64_t h64 : hashes_) {
+        // XOR-fold full 64-bit hash → 32 bits to preserve entropy from both halves.
+        const auto h32 = static_cast<uint32_t>(h64 ^ (h64 >> 32));
         pl::StandardBloomFilter::add_hash(
-            h, static_cast<uint32_t>(byte_count * 8), probes, bits.data());
+            h32, static_cast<uint32_t>(byte_count * 8), probes, bits.data());
     }
 
     Header h;
@@ -134,7 +141,9 @@ absl::StatusOr<Reader> Reader::open(std::string_view section) {
 bool Reader::may_contain_all_key(const types::EncodedAllKey& all_key) const {
     if (bits_.empty() || header_.hash_count == 0)
         return false;
-    return pl::StandardBloomFilter::hash_may_match(hash_key(all_key.bytes()),
+    const uint64_t h64 = hash_key(all_key.bytes());
+    const auto h32 = static_cast<uint32_t>(h64 ^ (h64 >> 32));
+    return pl::StandardBloomFilter::hash_may_match(h32,
                                                    static_cast<uint32_t>(header_.bit_count),
                                                    static_cast<int>(header_.hash_count),
                                                    bits_.data());
