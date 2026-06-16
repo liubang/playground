@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">11</td>
-            <td class="headerCovTableEntry">11</td>
+            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">3</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-11 00:04:00</td>
+            <td class="headerValue">2026-06-17 01:17:54</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -88,23 +88,12 @@
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : package terminal</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;syscall&quot;</span>
-<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;unsafe&quot;</span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : )</span>
-<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
-<span id="L25"><span class="lineNum">      25</span>                 :             : // Isatty returns true if the file descriptor is a terminal.</span>
-<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC tlaBgGNC">           8 : func Isatty(fd uintptr) bool {</span></span>
-<span id="L27"><span class="lineNum">      27</span>                 :<span class="tlaGNC">           8 :         var termios Termios</span></span>
-<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">           8 :         _, _, err := syscall.Syscall6(</span></span>
-<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">           8 :                 ioctlSyscall,</span></span>
-<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">           8 :                 fd,</span></span>
-<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">           8 :                 uintptr(ioctlReadTermios),</span></span>
-<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">           8 :                 uintptr(unsafe.Pointer(&amp;termios)),</span></span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">           8 :                 0, 0, 0,</span></span>
-<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">           8 :         )</span></span>
-<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">           8 :         return err == 0</span></span>
-<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">           8 : }</span></span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import &quot;golang.org/x/term&quot;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : </span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : // Isatty returns true if the file descriptor is a terminal.</span>
+<span id="L23"><span class="lineNum">      23</span>                 :<span class="tlaGNC tlaBgGNC">          24 : func Isatty(fd uintptr) bool {</span></span>
+<span id="L24"><span class="lineNum">      24</span>                 :<span class="tlaGNC">          24 :         return term.IsTerminal(int(fd))</span></span>
+<span id="L25"><span class="lineNum">      25</span>                 :<span class="tlaGNC">          24 : }</span></span>
         </pre>
               </td>
             </tr>
