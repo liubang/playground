@@ -15,8 +15,17 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2025/07/27 22:22
 
+// Ascii-table rendering with a pipeline API.
+//
+//   auto t = header("Name", "Age")
+//          | row("alice",  "30")
+//          | row("bob",    "25")
+//          | sep('-')
+//          | row("charlie","35");
+//   std::cout << t << '\n';
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <iosfwd>
 #include <string>
@@ -25,73 +34,132 @@
 
 namespace pl::pretty {
 
-enum class CellType : uint8_t {
-    CT_NONE = 0,
-    CT_STRING = 1,
-    CT_SEP = 2,
+// ---------------------------------------------------------------------------
+// Forward declarations
+// ---------------------------------------------------------------------------
+
+class Table;
+
+// ---------------------------------------------------------------------------
+// Lightweight tag types — zero overhead carriers
+// ---------------------------------------------------------------------------
+
+struct Header {
+    std::vector<std::string> cols;
 };
 
-struct Cell {
-    Cell() = default;
-    Cell(CellType type, std::string value) : t(type), val(std::move(value)) {}
-
-    [[nodiscard]] bool valid() const { return t != CellType::CT_NONE; }
-
-    CellType t{CellType::CT_NONE};
-    std::string val;
+struct DataRow {
+    std::vector<std::string> cols;
 };
 
-using Row = std::vector<Cell>;
+struct SepLine {
+    char32_t c;
+};
 
-class Pretty {
+// ---------------------------------------------------------------------------
+// Factory functions (CTAD-style: types are deduced, no angle brackets)
+// ---------------------------------------------------------------------------
+
+template <typename... Args> auto header(Args&&... args) -> Header {
+    return {{std::string(std::forward<Args>(args))...}};
+}
+
+template <typename... Args> auto row(Args&&... args) -> DataRow {
+    return {{std::string(std::forward<Args>(args))...}};
+}
+
+inline auto sep(char32_t c = U'-') -> SepLine {
+    return {c};
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline operators — the "pipe" composes tags into a Table
+// ---------------------------------------------------------------------------
+
+/// Start a table: Header | DataRow → Table
+Table operator|(Header h, DataRow r);
+
+/// Start a table with a separator right after the header (rare)
+Table operator|(Header h, SepLine s);
+
+/// Append a data row to an existing table (rvalue — moves)
+Table operator|(Table&& t, DataRow r);
+
+/// Append a separator to an existing table (rvalue — moves)
+Table operator|(Table&& t, SepLine s);
+
+/// Append a data row (lvalue — copies the table)
+Table operator|(const Table& t, DataRow r);
+
+/// Append a separator (lvalue — copies the table)
+Table operator|(const Table& t, SepLine s);
+
+// ---------------------------------------------------------------------------
+// Table
+// ---------------------------------------------------------------------------
+
+class Table {
 public:
-    explicit Pretty(const std::vector<std::string>& headers);
+    Table() = default;
 
-    Pretty(const Pretty&) = delete;
-    Pretty(Pretty&&) = default;
-    Pretty& operator=(const Pretty&) = delete;
-    Pretty& operator=(Pretty&&) = default;
+    // ---- imperative API (alternative to the pipeline) ----
 
-    Pretty& next();
+    auto header(std::vector<std::string> cols) -> Table&;
+    auto data(std::vector<std::string> cols) -> Table&;
+    auto sep(char32_t c = U'-') -> Table&;
 
-    /**
-     * @brief add sep line
-     *
-     * @param sep string
-     * @return Pretty&
-     */
-    Pretty& add_sep(const std::string& sep);
-
-    Pretty& add_row(const std::vector<std::string>& row);
-
-    Pretty& set_show_sep(bool show_sep) {
-        show_sep_ = show_sep;
+    /// Control borders.  Default is auto-detect from TTY.
+    auto borders(bool on) -> Table& {
+        borders_ = on;
+        bordersExplicit_ = true;
         return *this;
     }
 
-    void render() const;
+    // ---- output ----
+
+    /// Render to an arbitrary ostream.
     void render(std::ostream& out) const;
-    [[nodiscard]] std::string str() const;
+
+    /// Render to std::cout.
+    void render() const;
+
+    /// Return the rendered table as a string.
+    [[nodiscard]] auto str() const -> std::string;
+
+    /// Convenience: std::cout << t;
+    friend auto operator<<(std::ostream& os, const Table& t) -> std::ostream& {
+        t.render(os);
+        return os;
+    }
 
 private:
-    Pretty& add_cell(CellType t, const std::string& val);
+    enum class RowKind : uint8_t { kData, kSep };
 
-    void print_header(std::ostream& out, uint32_t len, char sep) const;
+    struct Row {
+        std::vector<std::string> cols;
+        RowKind kind = RowKind::kData;
+        char32_t sepChar = U'-';
+    };
 
-    void print_header_line(std::ostream& out, uint32_t len, char sep) const;
+    std::vector<Row> rows_;
+    std::size_t maxCols_ = 0;
+    bool borders_ = true;
+    bool bordersExplicit_ = false;
 
-    void print_line(std::ostream& out, const Row& cells) const;
+    // internal helpers
+    void pushHeader(std::vector<std::string> cols);
+    void pushData(std::vector<std::string> cols);
+    void pushSep(char32_t c);
 
-    [[nodiscard]] std::string pad_right(const std::string& input,
-                                        size_t total_length,
-                                        char pad_char = ' ') const;
+    [[nodiscard]] auto colWidths() const -> std::vector<std::size_t>;
+    [[nodiscard]] static auto totalWidth(const std::vector<std::size_t>& widths,
+                                         std::size_t maxCols) -> std::size_t;
 
-private:
-    std::vector<Row> lines_;                // 行信息
-    std::vector<uint32_t> cell_max_length_; // 每一列最大长度
-    uint32_t maxcell_per_line_{0};          // 每一行最多有多少列
-    uint32_t cell_idx_{0};                  // 当前列的下标
-    bool show_sep_{true};                   // 是否显示分隔符
+    static void printBorder(std::ostream& out, std::size_t total, char32_t ch);
+    void printData(std::ostream& out,
+                   const std::vector<std::string>& cols,
+                   const std::vector<std::size_t>& widths) const;
+    static auto padRight(std::string s, std::size_t width, char pad = ' ') -> std::string;
 };
 
 } // namespace pl::pretty
