@@ -22,7 +22,7 @@ go_library(
     srcs = [
         "string.go",
     ],
-    importpath = "github.com/playground/go/tools/string",
+    importpath = "github.com/liubang/playground/go/tools/string",
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_mattn_go_runewidth//:go-runewidth",
