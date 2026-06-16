@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-14 00:07:12</td>
+            <td class="headerValue">2026-06-17 01:19:05</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">95.7&nbsp;%</td>
@@ -463,15 +463,15 @@
 <span id="L385"><span class="lineNum">     385</span>         [<span class="tlaGBC" title="Branch 0 was taken 129 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">         159 :                     if (table.bucket.empty()) {</span></span>
 <span id="L386"><span class="lineNum">     386</span>         [<span class="tlaGBC" title="Branch 0 was taken 129 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         129 :                         table.bucket = next.bucket;</span></span>
 <span id="L387"><span class="lineNum">     387</span>                 :             :                     }</span>
-<span id="L388"><span class="lineNum">     388</span>         [<span class="tlaGBC" title="Branch 0 was taken 159 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         159 :                     table.tables.insert(table.tables.end(),</span></span>
+<span id="L388"><span class="lineNum">     388</span>         [<span class="tlaGBC" title="Branch 0 was taken 158 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         159 :                     table.tables.insert(table.tables.end(),</span></span>
 <span id="L389"><span class="lineNum">     389</span>                 :             :                                         std::make_move_iterator(next.tables.begin()),</span>
 <span id="L390"><span class="lineNum">     390</span>                 :             :                                         std::make_move_iterator(next.tables.end()));</span>
-<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 159 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         159 :                     table.rows.insert(table.rows.end(),</span></span>
+<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 158 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         158 :                     table.rows.insert(table.rows.end(),</span></span>
 <span id="L392"><span class="lineNum">     392</span>                 :             :                                       std::make_move_iterator(next.rows.begin()),</span>
 <span id="L393"><span class="lineNum">     393</span>                 :             :                                       std::make_move_iterator(next.rows.end()));</span>
-<span id="L394"><span class="lineNum">     394</span>                 :<span class="tlaGNC">         159 :                     table.plan = next.plan;</span></span>
+<span id="L394"><span class="lineNum">     394</span>                 :<span class="tlaGNC">         158 :                     table.plan = next.plan;</span></span>
 <span id="L395"><span class="lineNum">     395</span>                 :             :                     return absl::OkStatus();</span>
-<span id="L396"><span class="lineNum">     396</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         651 :                 });</span></span>
+<span id="L396"><span class="lineNum">     396</span>         [<span class="tlaGBC" title="Branch 0 was taken 492 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         650 :                 });</span></span>
 <span id="L397"><span class="lineNum">     397</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 489 times"> + </span>]:<span class="tlaGNC">         492 :             if (!status.ok()) {</span></span>
 <span id="L398"><span class="lineNum">     398</span>                 :             :                 return status;</span>
 <span id="L399"><span class="lineNum">     399</span>                 :             :             }</span>
