@@ -44,6 +44,7 @@ namespace {
 using pl::minidfs::DfsClient;
 using pl::minidfs::DfsClientConfig;
 using pl::minidfs::FileStatus;
+using namespace pl::pretty;
 
 /// Generate a unique client_id.
 std::string generate_client_id() {
@@ -168,8 +169,8 @@ void print_ls_entries(const std::vector<FileStatus>& entries, const LsOptions& o
         std::reverse(sorted.begin(), sorted.end());
     }
 
-    pl::pretty::Pretty table(
-        {"Type", "Perm", "Repl", "Owner", "Group", "Size", "Modified", "Name"});
+    pl::pretty::Table t;
+    t.header({"Type", "Perm", "Repl", "Owner", "Group", "Size", "Modified", "Name"});
     for (const auto& entry : sorted) {
         std::string size_str;
         if (entry.is_dir) {
@@ -179,7 +180,7 @@ void print_ls_entries(const std::vector<FileStatus>& entries, const LsOptions& o
         } else {
             size_str = format_size_raw(entry.length);
         }
-        table.add_row({
+        t.data({
             entry.is_dir ? "d" : "-",
             format_permission(entry.permission),
             std::to_string(entry.replication),
@@ -190,7 +191,7 @@ void print_ls_entries(const std::vector<FileStatus>& entries, const LsOptions& o
             entry.path,
         });
     }
-    table.render();
+    t.render();
 }
 
 /// Recursively list directory contents.
@@ -316,18 +317,20 @@ int cmd_stat(DfsClient* client, int argc, char* argv[]) {
     }
 
     const auto& fs = result.value();
-    pl::pretty::Pretty table({"Property", "Value"});
-    table.add_row({"Path", fs.path});
-    table.add_row({"Type", fs.is_dir ? "directory" : "file"});
-    table.add_row({"Inode ID", std::to_string(fs.inode_id)});
-    table.add_row({"Size", format_size(fs.length)});
-    table.add_row({"Replication", std::to_string(fs.replication)});
-    table.add_row({"Block Size", format_size(fs.block_size)});
-    table.add_row({"Owner", fs.owner});
-    table.add_row({"Group", fs.group});
-    table.add_row({"Permission", format_permission(fs.permission)});
-    table.add_row({"Modified", format_time(fs.mtime_ms)});
-    table.render();
+    // clang-format off
+    auto t = header("Property", "Value")
+           | row("Path",       fs.path)
+           | row("Type",       fs.is_dir ? "directory" : "file")
+           | row("Inode ID",   std::to_string(fs.inode_id))
+           | row("Size",       format_size(fs.length))
+           | row("Replication", std::to_string(fs.replication))
+           | row("Block Size", format_size(fs.block_size))
+           | row("Owner",      fs.owner)
+           | row("Group",      fs.group)
+           | row("Permission", format_permission(fs.permission))
+           | row("Modified",   format_time(fs.mtime_ms));
+    // clang-format on
+    t.render();
     return 0;
 }
 
@@ -463,17 +466,19 @@ int cmd_fsinfo(DfsClient* client, int /*argc*/, char* /*argv*/[]) {
     }
 
     const auto& info = result.value();
-    pl::pretty::Pretty table({"Property", "Value"});
-    table.add_row({"Total Capacity", format_size(info.total_capacity_bytes)});
-    table.add_row({"Used", format_size(info.used_bytes)});
-    table.add_row({"Free", format_size(info.free_bytes)});
-    table.add_row({"Live DataNodes", std::to_string(info.live_datanodes)});
-    table.add_row({"Dead DataNodes", std::to_string(info.dead_datanodes)});
-    table.add_row({"Total Blocks", std::to_string(info.total_blocks)});
-    table.add_row({"Total Files", std::to_string(info.total_files)});
-    table.add_row({"Total Directories", std::to_string(info.total_directories)});
-    table.add_row({"Under-Replicated Blocks", std::to_string(info.under_replicated_blocks)});
-    table.render();
+    // clang-format off
+    auto t = header("Property",              "Value")
+           | row("Total Capacity",           format_size(info.total_capacity_bytes))
+           | row("Used",                     format_size(info.used_bytes))
+           | row("Free",                     format_size(info.free_bytes))
+           | row("Live DataNodes",           std::to_string(info.live_datanodes))
+           | row("Dead DataNodes",           std::to_string(info.dead_datanodes))
+           | row("Total Blocks",             std::to_string(info.total_blocks))
+           | row("Total Files",              std::to_string(info.total_files))
+           | row("Total Directories",        std::to_string(info.total_directories))
+           | row("Under-Replicated Blocks",  std::to_string(info.under_replicated_blocks));
+    // clang-format on
+    t.render();
     return 0;
 }
 
@@ -495,20 +500,21 @@ int cmd_datanodes(DfsClient* client, int argc, char* argv[]) {
         return 0;
     }
 
-    pl::pretty::Pretty table({"ID",
-                              "Hostname",
-                              "IP",
-                              "RPC Port",
-                              "Data Port",
-                              "Rack",
-                              "State",
-                              "Capacity",
-                              "Used",
-                              "Free",
-                              "Blocks",
-                              "Last HB"});
+    pl::pretty::Table t;
+    t.header({"ID",
+              "Hostname",
+              "IP",
+              "RPC Port",
+              "Data Port",
+              "Rack",
+              "State",
+              "Capacity",
+              "Used",
+              "Free",
+              "Blocks",
+              "Last HB"});
     for (const auto& dn : dns) {
-        table.add_row({
+        t.data({
             std::to_string(dn.datanode_id),
             dn.hostname,
             dn.ip,
@@ -523,7 +529,7 @@ int cmd_datanodes(DfsClient* client, int argc, char* argv[]) {
             format_time(dn.last_heartbeat_ms),
         });
     }
-    table.render();
+    t.render();
     return 0;
 }
 
@@ -541,21 +547,23 @@ int cmd_datanode(DfsClient* client, int argc, char* argv[]) {
     }
 
     const auto& dn = result.value();
-    pl::pretty::Pretty table({"Property", "Value"});
-    table.add_row({"DataNode ID", std::to_string(dn.datanode_id)});
-    table.add_row({"UUID", dn.uuid});
-    table.add_row({"Hostname", dn.hostname});
-    table.add_row({"IP", dn.ip});
-    table.add_row({"RPC Port", std::to_string(dn.rpc_port)});
-    table.add_row({"Data Port", std::to_string(dn.data_port)});
-    table.add_row({"Rack", dn.rack});
-    table.add_row({"State", dn.state});
-    table.add_row({"Capacity", format_size(dn.capacity_bytes)});
-    table.add_row({"Used", format_size(dn.used_bytes)});
-    table.add_row({"Free", format_size(dn.free_bytes)});
-    table.add_row({"Block Count", std::to_string(dn.block_count)});
-    table.add_row({"Last Heartbeat", format_time(dn.last_heartbeat_ms)});
-    table.render();
+    // clang-format off
+    auto t = header("Property",       "Value")
+           | row("DataNode ID",       std::to_string(dn.datanode_id))
+           | row("UUID",              dn.uuid)
+           | row("Hostname",          dn.hostname)
+           | row("IP",                dn.ip)
+           | row("RPC Port",          std::to_string(dn.rpc_port))
+           | row("Data Port",         std::to_string(dn.data_port))
+           | row("Rack",              dn.rack)
+           | row("State",             dn.state)
+           | row("Capacity",          format_size(dn.capacity_bytes))
+           | row("Used",              format_size(dn.used_bytes))
+           | row("Free",              format_size(dn.free_bytes))
+           | row("Block Count",       std::to_string(dn.block_count))
+           | row("Last Heartbeat",    format_time(dn.last_heartbeat_ms));
+    // clang-format on
+    t.render();
     return 0;
 }
 
@@ -576,26 +584,28 @@ int cmd_inode(DfsClient* client, int argc, char* argv[]) {
     }
 
     const auto& inode = result.value();
-    pl::pretty::Pretty table({"Property", "Value"});
-    table.add_row({"Inode ID", std::to_string(inode.inode_id)});
-    table.add_row({"Type", inode.type});
-    table.add_row({"Parent ID", std::to_string(inode.parent_id)});
-    table.add_row({"Name", inode.name});
-    table.add_row({"Owner", inode.owner});
-    table.add_row({"Group", inode.group});
-    table.add_row({"Permission", format_permission(inode.permission)});
-    table.add_row({"Length", format_size(inode.length)});
-    table.add_row({"Replication", std::to_string(inode.replication)});
-    table.add_row({"Block Size", format_size(inode.block_size)});
-    table.add_row({"State", inode.state});
-    table.add_row({"Created", format_time(inode.ctime_ms)});
-    table.add_row({"Modified", format_time(inode.mtime_ms)});
+    // clang-format off
+    auto t = header("Property",   "Value")
+           | row("Inode ID",     std::to_string(inode.inode_id))
+           | row("Type",         inode.type)
+           | row("Parent ID",    std::to_string(inode.parent_id))
+           | row("Name",         inode.name)
+           | row("Owner",        inode.owner)
+           | row("Group",        inode.group)
+           | row("Permission",   format_permission(inode.permission))
+           | row("Length",       format_size(inode.length))
+           | row("Replication",  std::to_string(inode.replication))
+           | row("Block Size",   format_size(inode.block_size))
+           | row("State",        inode.state)
+           | row("Created",      format_time(inode.ctime_ms))
+           | row("Modified",     format_time(inode.mtime_ms));
     if (inode.type == "file") {
-        table.add_row({"Block Count", std::to_string(inode.block_count)});
+        t = t | row("Block Count", std::to_string(inode.block_count));
     } else {
-        table.add_row({"Child Count", std::to_string(inode.child_count)});
+        t = t | row("Child Count", std::to_string(inode.child_count));
     }
-    table.render();
+    // clang-format on
+    t.render();
     return 0;
 }
 
@@ -620,8 +630,8 @@ int cmd_blocks(DfsClient* client, int argc, char* argv[]) {
         return 0;
     }
 
-    pl::pretty::Pretty table(
-        {"Block ID", "Index", "GenStamp", "Length", "State", "Desired", "Actual", "Locations"});
+    pl::pretty::Table t;
+    t.header({"Block ID", "Index", "GenStamp", "Length", "State", "Desired", "Actual", "Locations"});
     for (const auto& b : blocks) {
         std::string locs;
         for (size_t i = 0; i < b.locations.size(); ++i) {
@@ -629,7 +639,7 @@ int cmd_blocks(DfsClient* client, int argc, char* argv[]) {
                 locs += ", ";
             locs += b.locations[i].host + ":" + std::to_string(b.locations[i].data_port);
         }
-        table.add_row({
+        t.data({
             std::to_string(b.block_id),
             std::to_string(b.block_index),
             std::to_string(b.generation_stamp),
@@ -640,7 +650,7 @@ int cmd_blocks(DfsClient* client, int argc, char* argv[]) {
             locs,
         });
     }
-    table.render();
+    t.render();
     return 0;
 }
 
@@ -658,22 +668,24 @@ int cmd_block(DfsClient* client, int argc, char* argv[]) {
     }
 
     const auto& block = result.value();
-    pl::pretty::Pretty table({"Property", "Value"});
-    table.add_row({"Block ID", std::to_string(block.block_id)});
-    table.add_row({"Inode ID", std::to_string(block.inode_id)});
-    table.add_row({"Block Index", std::to_string(block.block_index)});
-    table.add_row({"Generation Stamp", std::to_string(block.generation_stamp)});
-    table.add_row({"Length", format_size(block.length)});
-    table.add_row({"State", block.state});
-    table.add_row({"Desired Replicas", std::to_string(block.desired_replicas)});
-    table.render();
+    // clang-format off
+    auto t = header("Property",          "Value")
+           | row("Block ID",            std::to_string(block.block_id))
+           | row("Inode ID",            std::to_string(block.inode_id))
+           | row("Block Index",         std::to_string(block.block_index))
+           | row("Generation Stamp",    std::to_string(block.generation_stamp))
+           | row("Length",              format_size(block.length))
+           | row("State",               block.state)
+           | row("Desired Replicas",    std::to_string(block.desired_replicas));
+    // clang-format on
+    t.render();
 
     if (!block.replicas.empty()) {
         std::cout << "\nReplicas:\n";
-        pl::pretty::Pretty rep_table(
-            {"DataNode ID", "Hostname", "State", "Length", "GenStamp", "Report Time"});
+        pl::pretty::Table rep_table;
+        rep_table.header({"DataNode ID", "Hostname", "State", "Length", "GenStamp", "Report Time"});
         for (const auto& r : block.replicas) {
-            rep_table.add_row({
+            rep_table.data({
                 std::to_string(r.datanode_id),
                 r.hostname,
                 r.state,
