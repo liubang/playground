@@ -20,12 +20,11 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "pretty_lib",
     srcs = ["pretty.go"],
-    importpath = "github.com/playground/go/tools/pretty",
+    importpath = "github.com/liubang/playground/go/tools/pretty",
     visibility = ["//visibility:public"],
     deps = [
         "//go/tools/string:string_lib",
         "//go/tools/terminal:terminal_lib",
-        "@com_github_sirupsen_logrus//:logrus",
     ],
 )
 

@@ -880,8 +880,9 @@ void append_table_result(const runtime::NamedResult& result,
             }
             continue;
         }
-        pretty::Pretty pretty_table(columns);
-        pretty_table.set_show_sep(options.table_borders);
+        pretty::Table t;
+        t.header(columns);
+        t.borders(options.table_borders);
         for (const auto& row : chunk.rows) {
             std::vector<std::string> cells;
             cells.reserve(columns.size());
@@ -894,9 +895,9 @@ void append_table_result(const runtime::NamedResult& result,
                 }
                 cells.push_back(std::move(cell));
             }
-            pretty_table.add_row(cells);
+            t.data(std::move(cells));
         }
-        out << pretty_table.str();
+        out << t.str();
         if (chunk_index + 1 < table.tables.size()) {
             out << '\n';
         }
