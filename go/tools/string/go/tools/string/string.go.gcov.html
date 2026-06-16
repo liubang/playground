@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-11 00:04:00</td>
+            <td class="headerValue">2026-06-17 01:17:54</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -93,15 +93,15 @@
 <span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;github.com/rivo/uniseg&quot;</span>
 <span id="L23"><span class="lineNum">      23</span>                 :             : )</span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : </span>
-<span id="L25"><span class="lineNum">      25</span>                 :<span class="tlaGNC tlaBgGNC">          94 : func StrPrintLenInTerm(text string) uint64 {</span></span>
-<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">          94 :         gr := uniseg.NewGraphemes(text)</span></span>
-<span id="L27"><span class="lineNum">      27</span>                 :<span class="tlaGNC">          94 :         var totalWidth uint64 = 0</span></span>
-<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">         320 :         for gr.Next() {</span></span>
-<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">         320 :                 cluster := gr.Str()</span></span>
-<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">         320 :                 width := runewidth.StringWidth(cluster)</span></span>
-<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">         320 :                 totalWidth += uint64(width)</span></span>
-<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">         320 :         }</span></span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">          94 :         return totalWidth</span></span>
+<span id="L25"><span class="lineNum">      25</span>                 :<span class="tlaGNC tlaBgGNC">          50 : func StrPrintLenInTerm(text string) uint64 {</span></span>
+<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">          50 :         gr := uniseg.NewGraphemes(text)</span></span>
+<span id="L27"><span class="lineNum">      27</span>                 :<span class="tlaGNC">          50 :         var totalWidth uint64 = 0</span></span>
+<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">         135 :         for gr.Next() {</span></span>
+<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">         135 :                 cluster := gr.Str()</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">         135 :                 width := runewidth.StringWidth(cluster)</span></span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">         135 :                 totalWidth += uint64(width)</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">         135 :         }</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">          50 :         return totalWidth</span></span>
 <span id="L34"><span class="lineNum">      34</span>                 :             : }</span>
         </pre>
               </td>
