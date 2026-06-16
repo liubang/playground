@@ -19,172 +19,203 @@ package pretty
 
 import (
 	"bytes"
-	"io"
-	"os"
 	"strings"
 	"testing"
 )
 
-// captureStdout captures stdout output from a function call.
-func captureStdout(f func()) string {
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+func TestTableZeroValue(t *testing.T) {
+	var tbl Table
+	// zero value should be safe to render
+	out := tbl.String()
+	if out != "" {
+		t.Errorf("empty table String() = %q, want \"\"", out)
+	}
+}
 
-	f()
+func TestTableBasic(t *testing.T) {
+	var tbl Table
+	tbl.Add("Name", "Age").
+		Add("Alice", "30")
 
-	w.Close()
-	os.Stdout = old
+	if tbl.maxCols != 2 {
+		t.Errorf("maxCols = %d, want 2", tbl.maxCols)
+	}
+	if len(tbl.rows) != 2 {
+		t.Errorf("rows = %d, want 2", len(tbl.rows))
+	}
+}
+
+func TestTableRender(t *testing.T) {
+	var tbl Table
+	tbl.Add("Name", "Age").
+		Add("Alice", "30")
+
+	out := tbl.String()
+	if !strings.Contains(out, "Alice") {
+		t.Error("output should contain 'Alice'")
+	}
+	if !strings.Contains(out, "30") {
+		t.Error("output should contain '30'")
+	}
+}
+
+func TestTableHeaderIsFirstRow(t *testing.T) {
+	var tbl Table
+	tbl.Add("Header1", "Header2").
+		Add("data1", "data2")
+
+	if tbl.rows[0].cols[0] != "Header1" {
+		t.Error("first row should be header")
+	}
+	if tbl.rows[0].kind != rowData {
+		t.Error("header row kind should be rowData")
+	}
+}
+
+func TestTableSeparator(t *testing.T) {
+	var tbl Table
+	tbl.Add("Col1", "Col2").
+		Add("a", "b").
+		Add("─").
+		Add("c", "d")
+
+	out := tbl.String()
+	if !strings.Contains(out, "a") {
+		t.Error("should contain 'a'")
+	}
+	if !strings.Contains(out, "c") {
+		t.Error("should contain 'c'")
+	}
+
+	// verify the separator row was detected
+	if tbl.rows[2].kind != rowSep {
+		t.Error("'─' row should be detected as separator")
+	}
+}
+
+func TestTableSeparatorVariants(t *testing.T) {
+	tests := []string{"─", "━", "---", "===", "***", "___", "———", "···"}
+	for _, sep := range tests {
+		var tbl Table
+		tbl.Add("A", "B").Add(sep)
+		if tbl.rows[1].kind != rowSep {
+			t.Errorf("%q should be detected as separator", sep)
+		}
+	}
+}
+
+func TestTableSeparatorNotDetectedForAlnum(t *testing.T) {
+	tests := []string{"a", "1", "abc", "123"}
+	for _, s := range tests {
+		var tbl Table
+		tbl.Add("A", "B").Add(s)
+		if tbl.rows[1].kind == rowSep {
+			t.Errorf("%q should NOT be detected as separator", s)
+		}
+	}
+}
+
+func TestTableSingleColumn(t *testing.T) {
+	// Single-column tables don't have separators (no spanning needed)
+	var tbl Table
+	tbl.Add("Col").Add("data").Add("─")
+	if tbl.rows[2].kind == rowSep {
+		t.Error("single-column '─' should not be a separator")
+	}
+}
+
+func TestTableColumnAutoExpand(t *testing.T) {
+	var tbl Table
+	tbl.Add("A"). // 1 column
+			Add("B", "C").     // 2 columns — maxCols should grow
+			Add("D", "E", "F") // 3 columns
+
+	if tbl.maxCols != 3 {
+		t.Errorf("maxCols = %d, want 3", tbl.maxCols)
+	}
+}
+
+func TestTableRenderTo(t *testing.T) {
+	var tbl Table
+	tbl.Add("K", "V").Add("key1", "value1")
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	return buf.String()
-}
+	tbl.RenderTo(&buf)
+	out := buf.String()
 
-func TestNewPretty(t *testing.T) {
-	headers := []string{"Name", "Age", "City"}
-	p := NewPretty(headers)
-	if p == nil {
-		t.Fatal("NewPretty returned nil")
-	}
-	if p.maxcell_per_line != 3 {
-		t.Errorf("maxcell_per_line = %d, want 3", p.maxcell_per_line)
-	}
-	if len(p.lines) != 1 {
-		t.Errorf("lines count = %d, want 1 (header row)", len(p.lines))
-	}
-	if len(p.cell_max_length) != 3 {
-		t.Errorf("cell_max_length len = %d, want 3", len(p.cell_max_length))
+	if !strings.Contains(out, "key1") {
+		t.Error("RenderTo output should contain 'key1'")
 	}
 }
 
-func TestAddRow(t *testing.T) {
-	headers := []string{"Name", "Age"}
-	p := NewPretty(headers)
-	p.AddRow([]string{"Alice", "30"})
-	p.AddRow([]string{"Bob", "25"})
-
-	// header + 2 data rows = 3 lines
-	if len(p.lines) != 3 {
-		t.Errorf("lines count = %d, want 3", len(p.lines))
+func TestTableAddEmpty(t *testing.T) {
+	var tbl Table
+	tbl.Add() // no-op
+	if len(tbl.rows) != 0 {
+		t.Error("Add() with no args should be a no-op")
 	}
 }
 
-func TestReset(t *testing.T) {
-	headers := []string{"A", "B"}
-	p := NewPretty(headers)
-	p.AddRow([]string{"1", "2"})
+func TestTableRenderNilWriter(t *testing.T) {
+	var tbl Table
+	tbl.Add("A").Add("1")
+	// RenderTo(nil) should not panic
+	tbl.RenderTo(nil)
+}
 
-	newHeaders := []string{"X", "Y", "Z"}
-	p.Reset(newHeaders)
+func TestTableString(t *testing.T) {
+	var tbl Table
+	tbl.Add("Col").Add("data")
 
-	if p.maxcell_per_line != 3 {
-		t.Errorf("after Reset, maxcell_per_line = %d, want 3", p.maxcell_per_line)
-	}
-	if len(p.lines) != 1 {
-		t.Errorf("after Reset, lines count = %d, want 1", len(p.lines))
+	out := tbl.String()
+	// In non-TTY mode, header is skipped, only data rows printed
+	if !strings.Contains(out, "data") {
+		t.Error("String() should contain 'data'")
 	}
 }
 
-func TestCellMaxLength(t *testing.T) {
-	headers := []string{"Name", "Value"}
-	p := NewPretty(headers)
-	p.AddRow([]string{"LongName", "x"})
-	p.AddRow([]string{"A", "LongValue"})
+func TestTableChineseChars(t *testing.T) {
+	var tbl Table
+	tbl.Add("姓名", "年龄").
+		Add("张三", "25")
 
-	// "LongName" has length 8, which is > "Name" (4)
-	if p.cell_max_length[0] < 8 {
-		t.Errorf("cell_max_length[0] = %d, want >= 8", p.cell_max_length[0])
+	out := tbl.String()
+	if !strings.Contains(out, "张三") {
+		t.Error("output should contain '张三'")
 	}
-	// "LongValue" has length 9, which is > "Value" (5)
-	if p.cell_max_length[1] < 9 {
-		t.Errorf("cell_max_length[1] = %d, want >= 9", p.cell_max_length[1])
+	if !strings.Contains(out, "25") {
+		t.Error("output should contain '25'")
 	}
 }
 
-func TestRender(t *testing.T) {
-	headers := []string{"Name", "Age"}
-	p := NewPretty(headers)
-	p.AddRow([]string{"Alice", "30"})
-
-	output := captureStdout(func() {
-		p.Render()
-	})
-
-	// In non-tty (test sandbox), header is skipped, only data rows are rendered
-	if !strings.Contains(output, "Alice") {
-		t.Error("Render output should contain 'Alice'")
-	}
-	if !strings.Contains(output, "30") {
-		t.Error("Render output should contain '30'")
-	}
-}
-
-func TestRenderWithSep(t *testing.T) {
-	headers := []string{"Col1", "Col2"}
-	p := NewPretty(headers)
-	p.AddRow([]string{"a", "b"})
-	p.Next()
-	p.AddSep("-").AddSep("-")
-	p.AddRow([]string{"c", "d"})
-
-	output := captureStdout(func() {
-		p.Render()
-	})
-
-	if !strings.Contains(output, "a") {
-		t.Error("Render output should contain 'a'")
-	}
-	if !strings.Contains(output, "d") {
-		t.Error("Render output should contain 'd'")
-	}
-}
-
-func TestRenderChineseChars(t *testing.T) {
-	headers := []string{"姓名", "年龄"}
-	p := NewPretty(headers)
-	p.AddRow([]string{"张三", "25"})
-
-	output := captureStdout(func() {
-		p.Render()
-	})
-
-	// In non-tty (test sandbox), header is skipped, only data rows are rendered
-	if !strings.Contains(output, "张三") {
-		t.Error("Render output should contain '张三'")
-	}
-	if !strings.Contains(output, "25") {
-		t.Error("Render output should contain '25'")
-	}
-}
-
-func TestPadRight(t *testing.T) {
-	p := &Pretty{}
-	result := p.padRight("hi", 5, ' ')
+func TestTablePadRight(t *testing.T) {
+	result := padRight("hi", 5, ' ')
 	if len(result) < 5 {
 		t.Errorf("padRight result length = %d, want >= 5", len(result))
 	}
 	if result[:2] != "hi" {
-		t.Errorf("padRight should preserve original string prefix, got %q", result)
+		t.Errorf("padRight should preserve original prefix, got %q", result)
 	}
 }
 
-func TestAddStr(t *testing.T) {
-	headers := []string{"A"}
-	p := NewPretty(headers)
-	p.Next()
-	p.AddStr("test")
+func TestTableEmptyRows(t *testing.T) {
+	var tbl Table
+	tbl.Add("A").Add("1").Add("")
 
-	if len(p.lines) != 2 {
-		t.Errorf("lines count = %d, want 2", len(p.lines))
+	out := tbl.String()
+	// Empty string cells should not cause issues
+	if !strings.Contains(out, "1") {
+		t.Error("output should contain '1'")
 	}
-	if p.lines[1][0] == nil {
-		t.Fatal("cell should not be nil")
-	}
-	if p.lines[1][0].val != "test" {
-		t.Errorf("cell val = %q, want %q", p.lines[1][0].val, "test")
-	}
-	if p.lines[1][0].t != CT_STRING {
-		t.Errorf("cell type = %d, want CT_STRING(%d)", p.lines[1][0].t, CT_STRING)
+}
+
+func TestTableMethodChaining(t *testing.T) {
+	var tbl Table
+	tbl.Add("A", "B").
+		Add("1", "2").
+		Add("3", "4")
+
+	if len(tbl.rows) != 3 {
+		t.Errorf("expected 3 rows, got %d", len(tbl.rows))
 	}
 }

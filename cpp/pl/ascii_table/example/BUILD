@@ -1,4 +1,4 @@
-# Copyright (c) 2025 The Authors. All rights reserved.
+# Copyright (c) 2026 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,31 +13,21 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2025/05/25 23:16
+# Created: 2025/07/27 22:22
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",
     "LINKOPTS",
 )
 
-cc_library(
-    name = "pretty",
-    srcs = ["pretty.cpp"],
-    hdrs = ["pretty.h"],
-    copts = COPTS,
-    linkopts = LINKOPTS,
-    visibility = ["//visibility:public"],
-)
-
-cc_test(
-    name = "pretty_test",
-    srcs = ["pretty_test.cpp"],
+cc_binary(
+    name = "main",
+    srcs = ["main.cpp"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        ":pretty",
-        "@googletest//:gtest_main",
+        "//cpp/pl/ascii_table:pretty",
     ],
 )

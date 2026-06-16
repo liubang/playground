@@ -15,11 +15,11 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2025/11/19 17:20
 
-load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("@rules_go//go:def.bzl", "go_binary")
 
 go_binary(
-    name = "pretty_test",
-    srcs = ["pretty_test.go"],
+    name = "main",
+    srcs = ["main.go"],
     visibility = ["//visibility:public"],
     deps = ["//go/tools/pretty:pretty_lib"],
 )

@@ -21,10 +21,10 @@ go_library(
     name = "terminal_lib",
     srcs = [
         "isatty.go",
-        "term_darwin.go",
-        "term_linux.go",
-        "term_unix.go",
     ],
-    importpath = "github.com/playground/go/tools/terminal",
+    importpath = "github.com/liubang/playground/go/tools/terminal",
     visibility = ["//visibility:public"],
+    deps = [
+        "@org_golang_x_term//:term",
+    ],
 )
