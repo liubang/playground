@@ -44,7 +44,7 @@ joblib==1.5.1
 jsonschema==4.24.1
 jsonschema-specifications==2025.4.1
 lark==1.2.2
-litellm==1.74.4
+litellm==1.84.0
 lxml==5.4.0
 markdown-it-py==3.0.0
 markupsafe==3.0.2
