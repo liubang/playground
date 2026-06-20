@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-17 01:19:05</td>
+            <td class="headerValue">2026-06-20 23:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">96.8&nbsp;%</td>
@@ -100,13 +100,13 @@
 <span id="L29"><span class="lineNum">      29</span>                 :             : namespace {</span>
 <span id="L30"><span class="lineNum">      30</span>                 :             : </span>
 <span id="L31"><span class="lineNum">      31</span>                 :             : template &lt;typename T&gt;</span>
-<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC tlaBgGNC">    11245225 : const T&amp; checked_get(const Value::Storage&amp; storage, Value::Type actual, Value::Type expected) {</span></span>
-<span id="L33"><span class="lineNum">      33</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 11245224 times"> + </span>]:<span class="tlaGNC">    11245225 :     if (actual != expected) {</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC tlaBgGNC">    11245229 : const T&amp; checked_get(const Value::Storage&amp; storage, Value::Type actual, Value::Type expected) {</span></span>
+<span id="L33"><span class="lineNum">      33</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 11245228 times"> + </span>]:<span class="tlaGNC">    11245229 :     if (actual != expected) {</span></span>
 <span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">           1 :         std::stringstream ss;</span></span>
 <span id="L35"><span class="lineNum">      35</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         ss &lt;&lt; &quot;unexpected value type&quot;;</span></span>
 <span id="L36"><span class="lineNum">      36</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :         throw std::logic_error(ss.str());</span></span>
 <span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">           1 :     }</span></span>
-<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">    11245224 :     return std::get&lt;T&gt;(storage);</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">    11245228 :     return std::get&lt;T&gt;(storage);</span></span>
 <span id="L39"><span class="lineNum">      39</span>                 :             : }</span>
 <span id="L40"><span class="lineNum">      40</span>                 :             : </span>
 <span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">     4331795 : std::string quote_string(const std::string&amp; value) {</span></span>
@@ -308,12 +308,12 @@
 <span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">          17 :     return checked_get&lt;uint64_t&gt;(storage_, type_, Type::UInt);</span></span>
 <span id="L237"><span class="lineNum">     237</span>                 :             : }</span>
 <span id="L238"><span class="lineNum">     238</span>                 :             : </span>
-<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">     1178054 : const double&amp; Value::as_float() const {</span></span>
-<span id="L240"><span class="lineNum">     240</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">     1178057 :     return checked_get&lt;double&gt;(storage_, type_, Type::Float);</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">     1178056 : const double&amp; Value::as_float() const {</span></span>
+<span id="L240"><span class="lineNum">     240</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">     1178059 :     return checked_get&lt;double&gt;(storage_, type_, Type::Float);</span></span>
 <span id="L241"><span class="lineNum">     241</span>                 :             : }</span>
 <span id="L242"><span class="lineNum">     242</span>                 :             : </span>
-<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">     7423084 : const std::string&amp; Value::as_string() const {</span></span>
-<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">     7423164 :     return checked_get&lt;std::string&gt;(storage_, type_, Type::String);</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">     7423085 : const std::string&amp; Value::as_string() const {</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">     7423165 :     return checked_get&lt;std::string&gt;(storage_, type_, Type::String);</span></span>
 <span id="L245"><span class="lineNum">     245</span>                 :             : }</span>
 <span id="L246"><span class="lineNum">     246</span>                 :             : </span>
 <span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">         212 : const DurationValue&amp; Value::as_duration() const {</span></span>
@@ -459,9 +459,9 @@
 <span id="L380"><span class="lineNum">     380</span>                 :<span class="tlaGNC">           2 :     return properties == other.properties;</span></span>
 <span id="L381"><span class="lineNum">     381</span>                 :             : }</span>
 <span id="L382"><span class="lineNum">     382</span>                 :             : </span>
-<span id="L383"><span class="lineNum">     383</span>                 :<span class="tlaGNC">    10906841 : const Value* ObjectValue::lookup(const std::string&amp; key) const {</span></span>
-<span id="L384"><span class="lineNum">     384</span>         [<span class="tlaGBC" title="Branch 0 was taken 18607511 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 541845 times"> + </span>]:<span class="tlaGNC">    19149356 :     for (const auto&amp; [name, value] : properties) {</span></span>
-<span id="L385"><span class="lineNum">     385</span>         [<span class="tlaGBC" title="Branch 0 was taken 8242515 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10364996 times"> + </span>]:<span class="tlaGNC">    18607511 :         if (name == key) {</span></span>
+<span id="L383"><span class="lineNum">     383</span>                 :<span class="tlaGNC">    10906843 : const Value* ObjectValue::lookup(const std::string&amp; key) const {</span></span>
+<span id="L384"><span class="lineNum">     384</span>         [<span class="tlaGBC" title="Branch 0 was taken 18607519 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 541845 times"> + </span>]:<span class="tlaGNC">    19149364 :     for (const auto&amp; [name, value] : properties) {</span></span>
+<span id="L385"><span class="lineNum">     385</span>         [<span class="tlaGBC" title="Branch 0 was taken 8242521 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10364998 times"> + </span>]:<span class="tlaGNC">    18607519 :         if (name == key) {</span></span>
 <span id="L386"><span class="lineNum">     386</span>                 :             :             return &amp;value;</span>
 <span id="L387"><span class="lineNum">     387</span>                 :             :         }</span>
 <span id="L388"><span class="lineNum">     388</span>                 :             :     }</span>

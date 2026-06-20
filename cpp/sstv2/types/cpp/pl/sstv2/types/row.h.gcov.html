@@ -32,17 +32,17 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">1</td>
-            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">7</td>
+            <td class="headerCovTableEntry">7</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-17 01:19:05</td>
+            <td class="headerValue">2026-06-20 23:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryHi">-</td>
-            <td class="headerCovTableEntry">0</td>
-            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">1</td>
           </tr>
           <tr>
             <td></td>
@@ -50,8 +50,8 @@
             <td></td>
             <td class="headerItem">Branches:</td>
             <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
-            <td class="headerCovTableEntry">4</td>
-            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntry">3</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -89,42 +89,76 @@
 <span id="L18"><span class="lineNum">      18</span>                 :             : #pragma once</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
 <span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;memory&gt;</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;vector&gt;</span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : </span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &quot;cpp/pl/sstv2/types/key.h&quot;</span>
 <span id="L23"><span class="lineNum">      23</span>                 :             : #include &quot;cpp/pl/sstv2/types/op_type.h&quot;</span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : #include &quot;cpp/pl/sstv2/types/value.h&quot;</span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : </span>
 <span id="L26"><span class="lineNum">      26</span>                 :             : namespace pl::sstv2::types {</span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : // =============================================================================</span>
-<span id="L29"><span class="lineNum">      29</span>                 :             : // Row: the user-facing input structure for SSTableBuilder::add().</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : // Row = AllKey + Value</span>
 <span id="L30"><span class="lineNum">      30</span>                 :             : //</span>
-<span id="L31"><span class="lineNum">      31</span>                 :             : // Users construct a Row with their key column values, version, operation type,</span>
-<span id="L32"><span class="lineNum">      32</span>                 :             : // and a typed value. SSTableBuilder is responsible for converting this into an</span>
-<span id="L33"><span class="lineNum">      33</span>                 :             : // InternalRow (serializing the value, encoding all-key, deciding</span>
-<span id="L34"><span class="lineNum">      34</span>                 :             : // embedded/separated, computing checksum, etc.).</span>
-<span id="L35"><span class="lineNum">      35</span>                 :             : //</span>
-<span id="L36"><span class="lineNum">      36</span>                 :             : // Invariants (enforced by SSTableBuilder, not by Row itself):</span>
-<span id="L37"><span class="lineNum">      37</span>                 :             : //   - key_columns.size() == schema.row_key_column_count()</span>
-<span id="L38"><span class="lineNum">      38</span>                 :             : //   - key_columns[i].type() matches schema.column_type(i)</span>
-<span id="L39"><span class="lineNum">      39</span>                 :             : //   - Rows must be added in strictly increasing all-key order.</span>
-<span id="L40"><span class="lineNum">      40</span>                 :             : //   - For delete tombstones, value should be default (null).</span>
-<span id="L41"><span class="lineNum">      41</span>                 :             : // =============================================================================</span>
-<span id="L42"><span class="lineNum">      42</span>                 :             : </span>
-<span id="L43"><span class="lineNum">      43</span>   [<span class="tlaGBC" title="Branch 0 was taken 43 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         285 : struct Row {</span></span>
-<span id="L44"><span class="lineNum">      44</span>                 :             :     using Ref = std::shared_ptr&lt;Row&gt;;</span>
-<span id="L45"><span class="lineNum">      45</span>                 :             :     using ConstRef = std::shared_ptr&lt;const Row&gt;;</span>
-<span id="L46"><span class="lineNum">      46</span>                 :             : </span>
-<span id="L47"><span class="lineNum">      47</span>                 :             :     std::vector&lt;Value&gt; key_columns; // RowKey[0..M-1], must match Schema.</span>
-<span id="L48"><span class="lineNum">      48</span>                 :             :     Version version;                // Version (sorted descending internally).</span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     OpType op_type = OpType::kPut;</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             : </span>
-<span id="L51"><span class="lineNum">      51</span>                 :             :     // The value payload. SSTableBuilder serializes it according to value.type().</span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     // Default-constructed Value (type=kNone) means no value (e.g., for deletes).</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : // Row maps directly to the SSTableV2 spec: one user-table row consists of a</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : // complete all-key (RowKey + SystemKey) and a single value column.</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : //</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : // Multi-column values are supported by encoding them into a single Value via</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : // Array/Map, or by using the ColumnName-in-RowKey normalization technique</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : // described in the SSTableV2 spec §2.1.</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : //</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : // SSTableBuilder is responsible for converting this into an InternalRow</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : // (serializing the value, computing checksum, deciding embedded/separated).</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : //</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : // Invariants (enforced by SSTableBuilder, not by Row itself):</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : //   - all_key.row_key_view().column_count() == schema.row_key_column_count()</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : //   - all_key.row_key_view().column(i).type() matches schema.column_type(i)</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : //   - Rows must be added in strictly increasing all-key order.</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : //   - For delete tombstones, value should be default (null).</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : // =============================================================================</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : </span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC tlaBgGNC">         264 : struct Row {</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     using Ref = std::shared_ptr&lt;Row&gt;;</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :     using ConstRef = std::shared_ptr&lt;const Row&gt;;</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : </span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :     AllKey all_key;</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             :     Value value;</span>
-<span id="L54"><span class="lineNum">      54</span>                 :             : };</span>
-<span id="L55"><span class="lineNum">      55</span>                 :             : </span>
-<span id="L56"><span class="lineNum">      56</span>                 :             : } // namespace pl::sstv2::types</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : </span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :     // -------------------------------------------------------------------------</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :     // Factory: create a Row from its spec-level components.</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :     // -------------------------------------------------------------------------</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :     // This is the primary user-facing construction API: caller provides a RowKey</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :     // (user key columns), SystemKey (version + op_type), and a Value.</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :     // The factory merges them into a single AllKey internally.</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : </span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :     // Takes RowKey by rvalue-ref — moves the column vector out directly,</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :     // avoiding a deep copy. The typical call site is:</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :     //   Row::create(RowKey::from_columns({...}), SystemKey{...}, Value::make&lt;...&gt;(...))</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :     // where RowKey::from_columns returns a temporary.</span>
+<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaGBC" title="Branch 0 was taken 58 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          58 :     [[nodiscard]] static Row create(RowKey&amp;&amp; row_key, SystemKey system_key, Value value = {}) {</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :         std::vector&lt;Value&gt; all_key_cols = std::move(row_key).release_columns();</span>
+<span id="L68"><span class="lineNum">      68</span>         [<span class="tlaGBC" title="Branch 0 was taken 58 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          58 :         all_key_cols.reserve(all_key_cols.size() + SystemKey::kColumnCount);</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">          58 :         all_key_cols.push_back(Value::make&lt;DataType::kVersion&gt;(system_key.version));</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :         all_key_cols.push_back(</span>
+<span id="L71"><span class="lineNum">      71</span>         [<span class="tlaGBC" title="Branch 0 was taken 58 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         116 :             Value::make&lt;DataType::kUint8&gt;(static_cast&lt;uint8_t&gt;(system_key.op_type)));</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">         116 :         return Row{AllKey::from_columns(std::move(all_key_cols)), std::move(value)};</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          58 :     }</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :     // -------------------------------------------------------------------------</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :     // Factory: create a Row from a pre-built AllKey (internal / deserialization).</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :     // -------------------------------------------------------------------------</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :     [[nodiscard]] static Row from_all_key(AllKey all_key, Value value = {}) {</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :         return Row{std::move(all_key), std::move(value)};</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :     }</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : </span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :     // -------------------------------------------------------------------------</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :     // Convenience accessors — delegate to AllKey components.</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :     // -------------------------------------------------------------------------</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             : </span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :     [[nodiscard]] RowKeyView row_key() const { return all_key.row_key_view(); }</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :     [[nodiscard]] SystemKey system_key() const { return all_key.system_key(); }</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             : };</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             : </span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : } // namespace pl::sstv2::types</span>
         </pre>
               </td>
             </tr>
