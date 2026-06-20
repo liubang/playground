@@ -96,10 +96,9 @@ public:
     [[nodiscard]] const format::Statistics& statistics() const { return statistics_; }
     [[nodiscard]] absl::StatusOr<std::vector<types::Row>> scan() const;
     [[nodiscard]] absl::StatusOr<std::vector<types::Row>> scan(const ScanOptions& options) const;
-    [[nodiscard]] absl::StatusOr<std::optional<types::Row>> get(
-        const std::vector<types::Value>& key_columns,
-        types::Version version,
-        types::OpType op_type = types::OpType::kPut) const;
+    [[nodiscard]] absl::StatusOr<std::optional<types::Row>> get(const types::AllKey& all_key) const;
+    [[nodiscard]] absl::StatusOr<std::optional<types::Row>> get(const types::RowKey& row_key,
+                                                                types::SystemKey system_key) const;
 
 private:
     types::Schema::ConstRef schema_;

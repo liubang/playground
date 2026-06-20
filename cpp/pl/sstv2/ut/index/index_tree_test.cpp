@@ -28,7 +28,7 @@
 #include "cpp/pl/sstv2/index/index_tree.h"
 #include "cpp/pl/sstv2/types/key.h"
 #include "cpp/pl/sstv2/types/key_factory.h"
-#include "cpp/pl/sstv2/types/op_type.h"
+#include "cpp/pl/sstv2/types/row.h"
 #include "cpp/pl/sstv2/types/schema.h"
 
 namespace pl::sstv2::index {

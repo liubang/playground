@@ -22,13 +22,14 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <new>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "cpp/pl/sstv2/types/data_type.h"
 
 namespace pl::sstv2::types {
@@ -363,8 +364,9 @@ public:
     // --- Equality ---
 
     bool operator==(const Value& rhs) const {
-        if (type_ != rhs.type_)
+        if (type_ != rhs.type_) {
             return false;
+        }
         switch (storage_category_of(type_)) {
             case StorageCategory::kNone:
                 return true;
@@ -686,18 +688,22 @@ inline int compare_values(const Value& lhs, const Value& rhs);
 
 inline int compare_bytes(std::string_view lhs, std::string_view rhs) {
     const int cmp = lhs.compare(rhs);
-    if (cmp < 0)
+    if (cmp < 0) {
         return -1;
-    if (cmp > 0)
+    }
+    if (cmp > 0) {
         return 1;
+    }
     return 0;
 }
 
 template <typename T> inline int compare_scalar(const T& lhs, const T& rhs) {
-    if (lhs < rhs)
+    if (lhs < rhs) {
         return -1;
-    if (rhs < lhs)
+    }
+    if (rhs < lhs) {
         return 1;
+    }
     return 0;
 }
 
@@ -705,8 +711,9 @@ template <typename T> inline int compare_floating(T lhs, T rhs) {
     const bool lhs_nan = std::isnan(lhs);
     const bool rhs_nan = std::isnan(rhs);
     if (lhs_nan || rhs_nan) {
-        if (lhs_nan == rhs_nan)
+        if (lhs_nan == rhs_nan) {
             return 0;
+        }
         return lhs_nan ? -1 : 1;
     }
     return compare_scalar(lhs, rhs);
@@ -716,8 +723,9 @@ inline int compare_arrays(const ArrayStorage& lhs, const ArrayStorage& rhs) {
     const size_t n = std::min(lhs.size(), rhs.size());
     for (size_t i = 0; i < n; ++i) {
         const int cmp = compare_values(lhs[i], rhs[i]);
-        if (cmp != 0)
+        if (cmp != 0) {
             return cmp;
+        }
     }
     return compare_scalar(lhs.size(), rhs.size());
 }
@@ -726,11 +734,13 @@ inline int compare_maps(const MapStorage& lhs, const MapStorage& rhs) {
     const size_t n = std::min(lhs.size(), rhs.size());
     for (size_t i = 0; i < n; ++i) {
         int cmp = compare_values(lhs[i].first, rhs[i].first);
-        if (cmp != 0)
+        if (cmp != 0) {
             return cmp;
+        }
         cmp = compare_values(lhs[i].second, rhs[i].second);
-        if (cmp != 0)
+        if (cmp != 0) {
             return cmp;
+        }
     }
     return compare_scalar(lhs.size(), rhs.size());
 }
@@ -841,5 +851,14 @@ Value make_value(T v) {
     constexpr DataType dt = detail::NativeTypeMapping<std::decay_t<T>>::value;
     return Value::make<dt>(std::move(v));
 }
+
+// Value serialization.
+// Implementation detail: these are free functions (not member functions) to keep
+// value.h a pure data-structure header and avoid pulling codec dependencies into
+// every translation unit that includes value.h.
+
+[[nodiscard]] absl::Status encode_value(const Value& value, std::string* dst);
+[[nodiscard]] absl::StatusOr<std::string> encode_value(const Value& value);
+[[nodiscard]] absl::StatusOr<Value> decode_value(DataType type, std::string_view bytes);
 
 } // namespace pl::sstv2::types

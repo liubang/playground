@@ -19,7 +19,7 @@
 #include <memory>
 
 #include "cpp/pl/sstv2/bloom/bloom.h"
-#include "cpp/pl/sstv2/types/op_type.h"
+#include "cpp/pl/sstv2/types/row.h"
 
 namespace pl::sstv2::bloom {
 namespace {

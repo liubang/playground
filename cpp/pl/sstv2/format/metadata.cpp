@@ -102,8 +102,9 @@ absl::Status validate_optional_uint64(const SectionMap& entries,
                                       std::string_view key,
                                       uint64_t expected) {
     auto value = optional_uint64(entries, key, expected);
-    if (!value.ok())
+    if (!value.ok()) {
         return value.status();
+    }
     if (*value != expected) {
         return absl::InvalidArgumentError(absl::StrCat("metadata key ", key, " mismatch"));
     }
@@ -154,29 +155,36 @@ SectionMap configuration_entries(const Configuration& configuration) {
 absl::StatusOr<Configuration> configuration_from_entries(const SectionMap& entries) {
     Configuration configuration;
     auto embedded = require_uint64(entries, kMaxEmbeddedValueSize);
-    if (!embedded.ok())
+    if (!embedded.ok()) {
         return embedded.status();
+    }
     auto soft = require_uint64(entries, kMaxDataBlockSoft);
-    if (!soft.ok())
+    if (!soft.ok()) {
         return soft.status();
+    }
     auto hard = require_uint64(entries, kMaxDataBlockHard);
-    if (!hard.ok())
+    if (!hard.ok()) {
         return hard.status();
+    }
     auto rows = require_uint64(entries, kMaxDataBlockRows);
-    if (!rows.ok())
+    if (!rows.ok()) {
         return rows.status();
+    }
     auto index_soft =
         optional_uint64(entries, kMaxIndexBlockSoft, configuration.max_index_block_size_soft_limit);
-    if (!index_soft.ok())
+    if (!index_soft.ok()) {
         return index_soft.status();
+    }
     auto index_hard =
         optional_uint64(entries, kMaxIndexBlockHard, configuration.max_index_block_size_hard_limit);
-    if (!index_hard.ok())
+    if (!index_hard.ok()) {
         return index_hard.status();
+    }
     auto index_rows =
         optional_uint64(entries, kMaxIndexBlockRows, configuration.max_index_block_row_count);
-    if (!index_rows.ok())
+    if (!index_rows.ok()) {
         return index_rows.status();
+    }
     configuration.max_embedded_value_size = *embedded;
     configuration.max_data_block_size_soft_limit = *soft;
     configuration.max_data_block_size_hard_limit = *hard;
@@ -215,36 +223,44 @@ SectionMap schema_entries(const types::Schema& schema) {
 
 absl::StatusOr<types::Schema::ConstRef> schema_from_entries(const SectionMap& entries) {
     auto count = require_uint64(entries, kRowKeyColumnCount);
-    if (!count.ok())
+    if (!count.ok()) {
         return count.status();
+    }
     auto column_count =
         optional_uint64(entries, kColumnCount, *count + types::InternalSchema::kSystemColumnCount);
-    if (!column_count.ok())
+    if (!column_count.ok()) {
         return column_count.status();
+    }
     if (*column_count != *count + types::InternalSchema::kSystemColumnCount) {
         return absl::InvalidArgumentError("schema column count mismatch");
     }
     auto status = validate_optional_uint64(entries, kVersionKey, *count);
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
     status = validate_optional_uint64(entries, kSystemKey, 2);
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
     status = validate_optional_uint64(entries, kNonKey, *count + 2);
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
 
     SchemaBuilder builder;
     for (uint64_t i = 0; i < *count; ++i) {
         auto type = require_uint64(entries, row_key_type_key(i));
-        if (!type.ok())
+        if (!type.ok()) {
             return type.status();
+        }
         auto order = require_uint64(entries, row_key_order_key(i));
-        if (!order.ok())
+        if (!order.ok()) {
             return order.status();
+        }
         auto name = optional_string(entries, row_key_name_key(i), absl::StrCat("RowKey", i));
-        if (!name.ok())
+        if (!name.ok()) {
             return name.status();
+        }
 
         builder.add_column(std::move(*name),
                            static_cast<DataType>(static_cast<uint8_t>(*type)),
@@ -273,20 +289,25 @@ SectionMap statistics_entries(const Statistics& statistics) {
 absl::StatusOr<Statistics> statistics_from_entries(const SectionMap& entries) {
     Statistics statistics;
     auto rows = require_uint64(entries, kTotalRowCount);
-    if (!rows.ok())
+    if (!rows.ok()) {
         return rows.status();
+    }
     auto data_blocks = require_uint64(entries, kDataBlockCount);
-    if (!data_blocks.ok())
+    if (!data_blocks.ok()) {
         return data_blocks.status();
+    }
     auto index_blocks = require_uint64(entries, kIndexBlockCount);
-    if (!index_blocks.ok())
+    if (!index_blocks.ok()) {
         return index_blocks.status();
+    }
     auto key_size = require_uint64(entries, kKeyFileSize);
-    if (!key_size.ok())
+    if (!key_size.ok()) {
         return key_size.status();
+    }
     auto value_size = require_uint64(entries, kValueFileSize);
-    if (!value_size.ok())
+    if (!value_size.ok()) {
         return value_size.status();
+    }
     statistics.total_row_count = *rows;
     statistics.data_block_count = *data_blocks;
     statistics.index_block_count = *index_blocks;
@@ -309,22 +330,25 @@ std::string encode_statistics(const Statistics& statistics) {
 
 absl::StatusOr<Configuration> decode_configuration(std::string_view input) {
     auto section = decode_section(input, SectionMagic::kConfiguration);
-    if (!section.ok())
+    if (!section.ok()) {
         return section.status();
+    }
     return configuration_from_entries(section->entries);
 }
 
 absl::StatusOr<types::Schema::ConstRef> decode_schema(std::string_view input) {
     auto section = decode_section(input, SectionMagic::kSchema);
-    if (!section.ok())
+    if (!section.ok()) {
         return section.status();
+    }
     return schema_from_entries(section->entries);
 }
 
 absl::StatusOr<Statistics> decode_statistics(std::string_view input) {
     auto section = decode_section(input, SectionMagic::kStatistics);
-    if (!section.ok())
+    if (!section.ok()) {
         return section.status();
+    }
     return statistics_from_entries(section->entries);
 }
 

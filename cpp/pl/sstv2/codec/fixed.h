@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <crc32c/crc32c.h>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -57,6 +58,22 @@ inline void append_fixed64(std::string* dst, uint64_t value) {
 
 [[nodiscard]] inline uint64_t read_fixed64(std::string_view input, size_t offset) {
     return decode_fixed64(reinterpret_cast<const uint8_t*>(input.data() + offset));
+}
+
+// ===========================================================================
+// CRC32C checksum utilities — thin wrappers over the crc32c library.
+// ===========================================================================
+
+[[nodiscard]] inline uint64_t crc32c_u64(std::string_view bytes) noexcept {
+    return static_cast<uint64_t>(crc32c::Crc32c(bytes));
+}
+
+[[nodiscard]] inline uint64_t crc32c_u64_with_zeroed_range(std::string_view bytes,
+                                                           size_t offset,
+                                                           size_t length) {
+    std::string copy(bytes);
+    copy.replace(offset, length, length, '\0');
+    return crc32c_u64(copy);
 }
 
 } // namespace pl::sstv2::codec

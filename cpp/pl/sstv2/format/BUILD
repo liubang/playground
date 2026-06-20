@@ -25,23 +25,12 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "block_flags",
-    hdrs = ["block_flags.h"],
-    copts = COPTS,
-    linkopts = LINKOPTS,
-    deps = [
-        "//cpp/pl/sstv2/compress:compress",
-    ],
-)
-
-cc_library(
     name = "tail",
     srcs = ["tail.cpp"],
     hdrs = ["tail.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        "//cpp/pl/sstv2/codec:checksum",
         "//cpp/pl/sstv2/codec:fixed",
         "@abseil-cpp//absl/status:statusor",
     ],
@@ -54,7 +43,6 @@ cc_library(
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        "//cpp/pl/sstv2/codec:checksum",
         "//cpp/pl/sstv2/codec:fixed",
         "//cpp/pl/sstv2/codec:varint",
         "//cpp/pl/sstv2/types:value",

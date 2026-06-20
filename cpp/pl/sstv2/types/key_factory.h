@@ -18,7 +18,6 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <utility>
 #include <vector>
 
@@ -28,7 +27,6 @@
 #include "cpp/pl/sstv2/types/internal_row.h"
 #include "cpp/pl/sstv2/types/internal_schema.h"
 #include "cpp/pl/sstv2/types/key.h"
-#include "cpp/pl/sstv2/types/key_comparator.h"
 #include "cpp/pl/sstv2/types/key_prefix.h"
 #include "cpp/pl/sstv2/types/schema.h"
 #include "cpp/pl/sstv2/types/value.h"
@@ -38,10 +36,14 @@ namespace pl::sstv2::types {
 // =============================================================================
 // Key factory functions.
 //
-// These construct LogicalKey instances from higher-level inputs (Value vectors,
-// InternalRows, KeyPrefixes), performing type validation against the schema.
-// They depend on KeyComparator and are separated from key.h to avoid circular
-// dependencies between key.h and key_comparator.h.
+// Each factory has two overloads:
+//   - const& : copies column Values from the source (safe when source is reused)
+//   - &&     : moves column Values from the source (zero-copy when source is a
+//              temporary, e.g. make_all_key(std::move(row), schema))
+//
+// Type validation is inlined rather than delegated to KeyComparator's
+// per-column validate_sort_key_column, avoiding repeated null/bounds checks
+// in the hot loop.
 // =============================================================================
 
 [[nodiscard]] inline absl::StatusOr<RowKey> make_row_key(std::vector<Value> columns,
@@ -60,8 +62,12 @@ namespace pl::sstv2::types {
     return RowKey::from_columns(std::move(columns));
 }
 
-[[nodiscard]] inline absl::StatusOr<AllKey> make_all_key(const InternalRow& row,
-                                                         const InternalSchema::ConstRef& schema) {
+// ── make_all_key ──────────────────────────────────────────────────────────
+
+namespace detail {
+
+template <typename Row>
+absl::StatusOr<AllKey> make_all_key_impl(Row&& row, const InternalSchema::ConstRef& schema) {
     if (schema == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }
@@ -70,15 +76,34 @@ namespace pl::sstv2::types {
     }
     std::vector<Value> columns;
     columns.reserve(schema->sort_key_column_count());
-    KeyComparator comparator(schema);
     for (size_t i = 0; i < schema->sort_key_column_count(); ++i) {
-        auto status = comparator.validate_sort_key_column(i, row.columns[i]);
-        if (!status.ok())
-            return status;
-        columns.push_back(row.columns[i]);
+        const DataType expected = schema->column_type(i);
+        if (row.columns[i].type() != expected) {
+            return absl::InvalidArgumentError(absl::StrCat("column ",
+                                                           i,
+                                                           " type mismatch: expected ",
+                                                           data_type_name(expected),
+                                                           ", got ",
+                                                           data_type_name(row.columns[i].type())));
+        }
+        columns.push_back(std::forward<decltype(row.columns[i])>(row.columns[i]));
     }
     return AllKey::from_columns(std::move(columns));
 }
+
+} // namespace detail
+
+[[nodiscard]] inline absl::StatusOr<AllKey> make_all_key(const InternalRow& row,
+                                                         const InternalSchema::ConstRef& schema) {
+    return detail::make_all_key_impl(row, schema); // copies
+}
+
+[[nodiscard]] inline absl::StatusOr<AllKey> make_all_key(InternalRow&& row,
+                                                         const InternalSchema::ConstRef& schema) {
+    return detail::make_all_key_impl(std::move(row), schema); // moves
+}
+
+// ── make_all_key_view ─────────────────────────────────────────────────────
 
 [[nodiscard]] inline absl::StatusOr<AllKeyView> make_all_key_view(
     const InternalRow& row, const InternalSchema::ConstRef& schema) {
@@ -88,35 +113,49 @@ namespace pl::sstv2::types {
     if (row.columns.size() < schema->sort_key_column_count()) {
         return absl::InvalidArgumentError("internal row has fewer columns than all-key");
     }
-    KeyComparator comparator(schema);
     for (size_t i = 0; i < schema->sort_key_column_count(); ++i) {
-        auto status = comparator.validate_sort_key_column(i, row.columns[i]);
-        if (!status.ok())
-            return status;
+        if (row.columns[i].type() != schema->column_type(i)) {
+            return absl::InvalidArgumentError(absl::StrCat("column ",
+                                                           i,
+                                                           " type mismatch: expected ",
+                                                           data_type_name(schema->column_type(i)),
+                                                           ", got ",
+                                                           data_type_name(row.columns[i].type())));
+        }
     }
     return AllKeyView::from_columns(row.columns.data(), schema->sort_key_column_count());
 }
 
-[[nodiscard]] inline absl::StatusOr<PrefixKey> make_prefix_key(
-    const KeyPrefix& prefix,
-    const Schema::ConstRef& schema,
-    const InternalSchema::ConstRef& internal_schema) {
+// ── make_prefix_key ───────────────────────────────────────────────────────
+
+namespace detail {
+
+template <typename Prefix>
+absl::StatusOr<PrefixKey> make_prefix_key_impl(Prefix&& prefix,
+                                               const Schema::ConstRef& schema,
+                                               const InternalSchema::ConstRef& internal_schema) {
     if (internal_schema == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }
     auto shape_status = validate_key_prefix_shape(prefix, schema);
-    if (!shape_status.ok())
+    if (!shape_status.ok()) {
         return shape_status;
+    }
 
     std::vector<Value> columns;
     columns.reserve(prefix.key_columns.size() + (prefix.version.has_value() ? 1 : 0) +
                     (prefix.op_type.has_value() ? 1 : 0));
-    KeyComparator comparator(internal_schema);
     for (size_t i = 0; i < prefix.key_columns.size(); ++i) {
-        auto status = comparator.validate_sort_key_column(i, prefix.key_columns[i]);
-        if (!status.ok())
-            return status;
-        columns.push_back(prefix.key_columns[i]);
+        const DataType expected = internal_schema->column_type(i);
+        if (prefix.key_columns[i].type() != expected) {
+            return absl::InvalidArgumentError(absl::StrCat("prefix column ",
+                                                           i,
+                                                           " type mismatch: expected ",
+                                                           data_type_name(expected),
+                                                           ", got ",
+                                                           data_type_name(prefix.key_columns[i].type())));
+        }
+        columns.push_back(std::forward<decltype(prefix.key_columns[i])>(prefix.key_columns[i]));
     }
     if (prefix.version.has_value()) {
         columns.push_back(Value::make<DataType::kVersion>(*prefix.version));
@@ -125,11 +164,33 @@ namespace pl::sstv2::types {
         columns.push_back(Value::make<DataType::kUint8>(static_cast<uint8_t>(*prefix.op_type)));
     }
     for (size_t i = prefix.key_columns.size(); i < columns.size(); ++i) {
-        auto status = comparator.validate_sort_key_column(i, columns[i]);
-        if (!status.ok())
-            return status;
+        const DataType expected = internal_schema->column_type(i);
+        if (columns[i].type() != expected) {
+            return absl::InvalidArgumentError(absl::StrCat("prefix column ",
+                                                           i,
+                                                           " type mismatch: expected ",
+                                                           data_type_name(expected),
+                                                           ", got ",
+                                                           data_type_name(columns[i].type())));
+        }
     }
     return PrefixKey::from_columns(std::move(columns));
+}
+
+} // namespace detail
+
+[[nodiscard]] inline absl::StatusOr<PrefixKey> make_prefix_key(
+    const KeyPrefix& prefix,
+    const Schema::ConstRef& schema,
+    const InternalSchema::ConstRef& internal_schema) {
+    return detail::make_prefix_key_impl(prefix, schema, internal_schema); // copies
+}
+
+[[nodiscard]] inline absl::StatusOr<PrefixKey> make_prefix_key(
+    KeyPrefix&& prefix,
+    const Schema::ConstRef& schema,
+    const InternalSchema::ConstRef& internal_schema) {
+    return detail::make_prefix_key_impl(std::move(prefix), schema, internal_schema); // moves
 }
 
 } // namespace pl::sstv2::types

@@ -32,7 +32,6 @@ cc_library(
     linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/bloom:bloom_filter",
-        "//cpp/pl/sstv2/codec:checksum",
         "//cpp/pl/sstv2/codec:fixed",
         "//cpp/pl/sstv2/codec:value_comparable",
         "//cpp/pl/sstv2/types:internal_row",
