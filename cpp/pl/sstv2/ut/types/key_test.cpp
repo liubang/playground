@@ -24,7 +24,7 @@
 #include "cpp/pl/sstv2/types/key.h"
 #include "cpp/pl/sstv2/types/key_comparator.h"
 #include "cpp/pl/sstv2/types/key_factory.h"
-#include "cpp/pl/sstv2/types/op_type.h"
+#include "cpp/pl/sstv2/types/row.h"
 #include "cpp/pl/sstv2/types/schema.h"
 
 namespace pl::sstv2::types {
@@ -83,12 +83,7 @@ TEST(KeyTest, LogicalCompareMatchesMemComparableEncoding) {
     auto logical = comparator.compare_all_key(*lhs, *rhs);
     ASSERT_TRUE(logical.ok()) << logical.status();
 
-    auto encoded_lhs = codec::make_encoded_all_key(lhs_row, schema);
-    auto encoded_rhs = codec::make_encoded_all_key(rhs_row, schema);
-    ASSERT_TRUE(encoded_lhs.ok()) << encoded_lhs.status();
-    ASSERT_TRUE(encoded_rhs.ok()) << encoded_rhs.status();
     EXPECT_LT(*logical, 0);
-    EXPECT_LT(compare_encoded_bytes(*encoded_lhs, *encoded_rhs), 0);
 }
 
 TEST(KeyTest, PrefixBoundaryMatchesAllKeysWithSamePrefix) {

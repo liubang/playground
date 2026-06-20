@@ -86,8 +86,9 @@ public:
     [[nodiscard]] static absl::StatusOr<Buffer> compress(std::string_view input,
                                                          const Options& options = {}) {
         auto bytes = compress_bytes(input, options.zstd_level);
-        if (!bytes.ok())
+        if (!bytes.ok()) {
             return bytes.status();
+        }
         return Buffer{
             .bytes = std::move(*bytes),
             .codec = C,

@@ -32,47 +32,33 @@
 #include "cpp/pl/sstv2/types/internal_row.h"
 #include "cpp/pl/sstv2/types/internal_schema.h"
 #include "cpp/pl/sstv2/types/key_prefix.h"
-#include "cpp/pl/sstv2/types/key_tags.h"
 #include "cpp/pl/sstv2/types/op_type.h"
 #include "cpp/pl/sstv2/types/schema.h"
 #include "cpp/pl/sstv2/types/value.h"
 
 namespace pl::sstv2::types {
 
+// Key type tags — distinguish between the three key scopes at compile time.
+struct RowKeyTag {};
+struct AllKeyTag {};
+struct PrefixKeyTag {};
+
 // =============================================================================
-// LogicalKey<Tag>: a key composed of typed Value columns.
-//
-// Each column stores the full Value (type + payload). This is the primary
-// key representation used during comparison and for AllKey construction.
+// SystemKey: the system-managed portion of the all-key.
 // =============================================================================
 
-template <typename Tag> class LogicalKey {
-public:
-    using tag = Tag;
-    using Ref = std::shared_ptr<LogicalKey>;
-    using ConstRef = std::shared_ptr<const LogicalKey>;
-
-    LogicalKey() = default;
-
-    [[nodiscard]] static LogicalKey from_columns(std::vector<Value> columns) {
-        return LogicalKey(std::move(columns));
-    }
-
-    [[nodiscard]] size_t column_count() const noexcept { return columns_.size(); }
-    [[nodiscard]] bool empty() const noexcept { return columns_.empty(); }
-    [[nodiscard]] const Value& column(size_t index) const { return columns_[index]; }
-    [[nodiscard]] const std::vector<Value>& columns() const noexcept { return columns_; }
-
-private:
-    explicit LogicalKey(std::vector<Value> columns) : columns_(std::move(columns)) {}
-
-    std::vector<Value> columns_;
+struct SystemKey {
+    static constexpr size_t kColumnCount = 2; // Version + OpType
+    Version version;
+    OpType op_type = OpType::kPut;
+    bool operator==(const SystemKey&) const = default;
 };
 
 // =============================================================================
 // KeyView<Tag>: a zero-copy view into a LogicalKey's columns.
 //
-// Holds a pointer into the parent key — caller must keep the parent alive.
+// Defined before LogicalKey so that LogicalKey's AllKey-specific accessors
+// can return KeyView<RowKeyTag>.
 // =============================================================================
 
 template <typename Tag> class KeyView {
@@ -92,16 +78,72 @@ public:
 private:
     KeyView(const Value* columns, size_t column_count)
         : columns_(columns), column_count_(column_count) {}
-
     const Value* columns_ = nullptr;
     size_t column_count_ = 0;
 };
 
 // =============================================================================
-// EncodedKey<Tag>: a pre-computed memcomparable encoding of a LogicalKey.
+// LogicalKey<Tag>: a key composed of typed Value columns.
 //
-// Stores the comparable-encoded bytes (see codec/value_comparable.h) for
-// efficient comparison and use as bloom filter keys.
+// Each column stores a full Value. The Tag parameter enables compile-time
+// dispatch: RowKeyTag / AllKeyTag / PrefixKeyTag.
+//
+// AllKeyTag adds spec-level accessors (row_key_view, system_key) via
+// requires-clauses — zero overhead for RowKey / PrefixKey instantiations.
+// =============================================================================
+
+template <typename Tag> class LogicalKey {
+public:
+    using tag = Tag;
+    using Ref = std::shared_ptr<LogicalKey>;
+    using ConstRef = std::shared_ptr<const LogicalKey>;
+
+    LogicalKey() = default;
+
+    [[nodiscard]] static LogicalKey from_columns(std::vector<Value> columns) {
+        return LogicalKey(std::move(columns));
+    }
+
+    [[nodiscard]] size_t column_count() const noexcept { return columns_.size(); }
+    [[nodiscard]] bool empty() const noexcept { return columns_.empty(); }
+    [[nodiscard]] const Value& column(size_t index) const { return columns_[index]; }
+    [[nodiscard]] const std::vector<Value>& columns() const noexcept { return columns_; }
+
+    // Move the column vector out — enables zero-copy composition in Row::create().
+    [[nodiscard]] std::vector<Value> release_columns() && { return std::move(columns_); }
+
+    // ── AllKey-specific accessors ──────────────────────────────────────
+    // Only available on LogicalKey<AllKeyTag>.  The requires-clause
+    // rejects RowKey / PrefixKey at compile time with a clear message.
+
+    // Zero-copy view over the RowKey portion: columns [0, N-2).
+    [[nodiscard]] KeyView<RowKeyTag> row_key_view() const
+        requires std::same_as<Tag, AllKeyTag>
+    {
+        const size_t n = columns_.size();
+        assert(n >= SystemKey::kColumnCount);
+        return KeyView<RowKeyTag>::from_columns(columns_.data(), n - SystemKey::kColumnCount);
+    }
+
+    // Extract SystemKey from the last 2 columns.
+    [[nodiscard]] SystemKey system_key() const
+        requires std::same_as<Tag, AllKeyTag>
+    {
+        const size_t n = columns_.size();
+        assert(n >= SystemKey::kColumnCount);
+        return SystemKey{
+            .version = columns_[n - 2].template ref<DataType::kVersion>(),
+            .op_type = static_cast<OpType>(columns_[n - 1].template get<DataType::kUint8>()),
+        };
+    }
+
+private:
+    explicit LogicalKey(std::vector<Value> columns) : columns_(std::move(columns)) {}
+    std::vector<Value> columns_;
+};
+
+// =============================================================================
+// EncodedKey<Tag>: pre-computed memcomparable encoding of a LogicalKey.
 // =============================================================================
 
 template <typename Tag> class EncodedKey {
@@ -122,12 +164,11 @@ public:
 
 private:
     explicit EncodedKey(std::string bytes) : bytes_(std::move(bytes)) {}
-
     std::string bytes_;
 };
 
 // =============================================================================
-// Type aliases — the three key scopes, each with three representations.
+// Type aliases — three key scopes × three representations.
 // =============================================================================
 
 using RowKey = LogicalKey<RowKeyTag>;
@@ -141,26 +182,5 @@ using PrefixKeyView = KeyView<PrefixKeyTag>;
 using EncodedRowKey = EncodedKey<RowKeyTag>;
 using EncodedAllKey = EncodedKey<AllKeyTag>;
 using EncodedPrefixKey = EncodedKey<PrefixKeyTag>;
-
-// =============================================================================
-// Encoded key comparison helpers.
-// =============================================================================
-
-template <typename LhsTag, typename RhsTag>
-[[nodiscard]] inline int compare_encoded_bytes(const EncodedKey<LhsTag>& lhs,
-                                               const EncodedKey<RhsTag>& rhs) noexcept {
-    const int cmp = lhs.bytes().compare(rhs.bytes());
-    if (cmp < 0)
-        return -1;
-    if (cmp > 0)
-        return 1;
-    return 0;
-}
-
-template <typename LhsTag, typename RhsTag>
-[[nodiscard]] inline bool encoded_bytes_less(const EncodedKey<LhsTag>& lhs,
-                                             const EncodedKey<RhsTag>& rhs) noexcept {
-    return compare_encoded_bytes(lhs, rhs) < 0;
-}
 
 } // namespace pl::sstv2::types

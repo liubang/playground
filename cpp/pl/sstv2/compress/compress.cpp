@@ -104,8 +104,9 @@ absl::StatusOr<Buffer> compress_to_buffer(std::string_view input, const Options&
 
 absl::StatusOr<std::string> compress(std::string_view input, const Options& options) {
     auto buffer = compress_to_buffer(input, options);
-    if (!buffer.ok())
+    if (!buffer.ok()) {
         return buffer.status();
+    }
     return std::move(buffer->bytes);
 }
 

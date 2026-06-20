@@ -28,16 +28,19 @@
 #include "cpp/pl/sstv2/file/sstable.h"
 #include "cpp/pl/sstv2/format/section.h"
 #include "cpp/pl/sstv2/format/tail.h"
-#include "cpp/pl/sstv2/types/op_type.h"
+#include "cpp/pl/sstv2/types/row.h"
 
 namespace pl::sstv2::file {
 namespace {
 
+using types::AllKey;
 using types::DataType;
 using types::OpType;
 using types::Row;
+using types::RowKey;
 using types::Schema;
 using types::SchemaBuilder;
+using types::SystemKey;
 using types::Value;
 using types::Version;
 
@@ -51,39 +54,37 @@ Schema::ConstRef make_schema() {
 }
 
 Row make_row(std::string tenant, uint64_t id, Version version, std::string value) {
-    Row row;
-    row.key_columns.push_back(Value::make<DataType::kString>(std::move(tenant)));
-    row.key_columns.push_back(Value::make<DataType::kUint64>(id));
-    row.version = version;
-    row.op_type = OpType::kPut;
-    row.value = Value::make<DataType::kString>(std::move(value));
-    return row;
+    return Row::create(RowKey::from_columns({
+                           Value::make<DataType::kString>(std::move(tenant)),
+                           Value::make<DataType::kUint64>(id),
+                       }),
+                       SystemKey{version, OpType::kPut},
+                       Value::make<DataType::kString>(std::move(value)));
 }
 
 Row make_bool_row(std::string tenant, uint64_t id, Version version, bool value) {
-    Row row;
-    row.key_columns.push_back(Value::make<DataType::kString>(std::move(tenant)));
-    row.key_columns.push_back(Value::make<DataType::kUint64>(id));
-    row.version = version;
-    row.op_type = OpType::kPut;
-    row.value = Value::make<DataType::kBool>(value);
-    return row;
+    return Row::create(RowKey::from_columns({
+                           Value::make<DataType::kString>(std::move(tenant)),
+                           Value::make<DataType::kUint64>(id),
+                       }),
+                       SystemKey{version, OpType::kPut},
+                       Value::make<DataType::kBool>(value));
 }
 
 Row make_complex_row(uint64_t id, std::string value) {
-    Row row;
-    row.key_columns.push_back(Value::make_array({
-        Value::make<DataType::kString>("tenant"),
-        Value::make<DataType::kUint64>(id),
-    }));
-    row.key_columns.push_back(Value::make_map({
-        {Value::make<DataType::kString>("id"), Value::make<DataType::kUint64>(id)},
-        {Value::make<DataType::kString>("kind"), Value::make<DataType::kString>("event")},
-    }));
-    row.version = Version{.major = 10, .minor = id};
-    row.op_type = OpType::kPut;
-    row.value = Value::make<DataType::kString>(std::move(value));
-    return row;
+    return Row::create(
+        RowKey::from_columns({
+            Value::make_array({
+                Value::make<DataType::kString>("tenant"),
+                Value::make<DataType::kUint64>(id),
+            }),
+            Value::make_map({
+                {Value::make<DataType::kString>("id"), Value::make<DataType::kUint64>(id)},
+                {Value::make<DataType::kString>("kind"), Value::make<DataType::kString>("event")},
+            }),
+        }),
+        SystemKey{Version{.major = 10, .minor = id}, OpType::kPut},
+        Value::make<DataType::kString>(std::move(value)));
 }
 
 uint64_t locator_uint64(std::string_view key_file, std::string_view name) {
@@ -146,23 +147,27 @@ TEST(SSTableTest, BuildOpenAndScanSeparatedValues) {
     auto rows = reader->scan();
     ASSERT_TRUE(rows.ok()) << rows.status();
     ASSERT_EQ(rows->size(), 2u);
-    EXPECT_EQ((*rows)[0].key_columns[0].as_string(), "a");
-    EXPECT_EQ((*rows)[0].key_columns[1].as_uint64(), 1u);
-    EXPECT_EQ((*rows)[0].version.major, 10u);
+    EXPECT_EQ((*rows)[0].all_key.column(0).as_string(), "a");
+    EXPECT_EQ((*rows)[0].all_key.column(1).as_uint64(), 1u);
+    EXPECT_EQ((*rows)[0].system_key().version.major, 10u);
     EXPECT_EQ((*rows)[0].value.as_string(), "first");
-    EXPECT_EQ((*rows)[1].key_columns[0].as_string(), "b");
+    EXPECT_EQ((*rows)[1].all_key.column(0).as_string(), "b");
     EXPECT_EQ((*rows)[1].value.as_string(), "second");
 
-    auto found =
-        reader->get({Value::make<DataType::kString>("b"), Value::make<DataType::kUint64>(2)},
-                    Version{.major = 9, .minor = 0});
+    auto found = reader->get(RowKey::from_columns({
+                                 Value::make<DataType::kString>("b"),
+                                 Value::make<DataType::kUint64>(2),
+                             }),
+                             SystemKey{Version{.major = 9, .minor = 0}});
     ASSERT_TRUE(found.ok()) << found.status();
     ASSERT_TRUE(found->has_value());
     EXPECT_EQ((*found)->value.as_string(), "second");
 
-    auto missing =
-        reader->get({Value::make<DataType::kString>("z"), Value::make<DataType::kUint64>(9)},
-                    Version{.major = 1, .minor = 0});
+    auto missing = reader->get(RowKey::from_columns({
+                                   Value::make<DataType::kString>("z"),
+                                   Value::make<DataType::kUint64>(9),
+                               }),
+                               SystemKey{Version{.major = 1, .minor = 0}});
     ASSERT_TRUE(missing.ok()) << missing.status();
     EXPECT_FALSE(missing->has_value());
 }
@@ -272,12 +277,22 @@ TEST(SSTableTest, ArrayAndMapKeysRoundTrip) {
     auto rows = reader->scan();
     ASSERT_TRUE(rows.ok()) << rows.status();
     ASSERT_EQ(rows->size(), 2u);
-    EXPECT_EQ((*rows)[0].key_columns[0].as_array()[1].as_uint64(), 1u);
-    EXPECT_EQ((*rows)[1].key_columns[1].as_map()[0].first.as_string(), "id");
+    EXPECT_EQ((*rows)[0].all_key.column(0).as_array()[1].as_uint64(), 1u);
+    EXPECT_EQ((*rows)[1].all_key.column(1).as_map()[0].first.as_string(), "id");
     EXPECT_EQ((*rows)[1].value.as_string(), "two");
 
-    Row probe = make_complex_row(2, "");
-    auto found = reader->get(probe.key_columns, Version{.major = 10, .minor = 2});
+    auto found = reader->get(
+        RowKey::from_columns({
+            Value::make_array({
+                Value::make<DataType::kString>("tenant"),
+                Value::make<DataType::kUint64>(uint64_t{2}),
+            }),
+            Value::make_map({
+                {Value::make<DataType::kString>("id"), Value::make<DataType::kUint64>(uint64_t{2})},
+                {Value::make<DataType::kString>("kind"), Value::make<DataType::kString>("event")},
+            }),
+        }),
+        SystemKey{Version{.major = 10, .minor = 2}});
     ASSERT_TRUE(found.ok()) << found.status();
     ASSERT_TRUE(found->has_value());
     EXPECT_EQ((*found)->value.as_string(), "two");
@@ -327,15 +342,21 @@ TEST(SSTableTest, PrefixRangeScanWithFullRowKeyAndVersionPrefix) {
     ASSERT_TRUE(builder.add(make_row("tenant", 6, Version{.major = 9}, "v9")).ok());
     ASSERT_TRUE(builder.add(make_row("tenant", 6, Version{.major = 8}, "v8")).ok());
     ASSERT_TRUE(builder.add(make_row("tenant", 7, Version{.major = 10}, "put")).ok());
-    Row merge = make_row("tenant", 7, Version{.major = 10}, "merge");
-    merge.op_type = OpType::kMerge;
-    ASSERT_TRUE(builder.add(std::move(merge)).ok());
-    Row deletion;
-    deletion.key_columns.push_back(Value::make<DataType::kString>("tenant"));
-    deletion.key_columns.push_back(Value::make<DataType::kUint64>(uint64_t{7}));
-    deletion.version = Version{.major = 10};
-    deletion.op_type = OpType::kDelete;
-    ASSERT_TRUE(builder.add(std::move(deletion)).ok());
+    ASSERT_TRUE(builder
+                    .add(Row::create(RowKey::from_columns({
+                                         Value::make<DataType::kString>("tenant"),
+                                         Value::make<DataType::kUint64>(uint64_t{7}),
+                                     }),
+                                     SystemKey{Version{.major = 10}, OpType::kMerge},
+                                     Value::make<DataType::kString>("merge")))
+                    .ok());
+    ASSERT_TRUE(builder
+                    .add(Row::create(RowKey::from_columns({
+                                         Value::make<DataType::kString>("tenant"),
+                                         Value::make<DataType::kUint64>(uint64_t{7}),
+                                     }),
+                                     SystemKey{Version{.major = 10}, OpType::kDelete}))
+                    .ok());
 
     auto files = builder.finish();
     ASSERT_TRUE(files.ok()) << files.status();
@@ -350,8 +371,8 @@ TEST(SSTableTest, PrefixRangeScanWithFullRowKeyAndVersionPrefix) {
     });
     ASSERT_TRUE(rowkey_rows.ok()) << rowkey_rows.status();
     ASSERT_EQ(rowkey_rows->size(), 2u);
-    EXPECT_EQ((*rowkey_rows)[0].key_columns[1].as_uint64(), 2u);
-    EXPECT_EQ((*rowkey_rows)[1].key_columns[1].as_uint64(), 3u);
+    EXPECT_EQ((*rowkey_rows)[0].all_key.column(1).as_uint64(), 2u);
+    EXPECT_EQ((*rowkey_rows)[1].all_key.column(1).as_uint64(), 3u);
 
     auto version_rows = reader->scan(ScanOptions{
         .start = KeyPrefix{.key_columns = {Value::make<DataType::kString>("tenant"),
@@ -363,7 +384,7 @@ TEST(SSTableTest, PrefixRangeScanWithFullRowKeyAndVersionPrefix) {
     });
     ASSERT_TRUE(version_rows.ok()) << version_rows.status();
     ASSERT_EQ(version_rows->size(), 1u);
-    EXPECT_EQ((*version_rows)[0].version.major, 9u);
+    EXPECT_EQ((*version_rows)[0].system_key().version.major, 9u);
     EXPECT_EQ((*version_rows)[0].value.as_string(), "v9");
 
     auto op_rows = reader->scan(ScanOptions{
@@ -378,7 +399,7 @@ TEST(SSTableTest, PrefixRangeScanWithFullRowKeyAndVersionPrefix) {
     });
     ASSERT_TRUE(op_rows.ok()) << op_rows.status();
     ASSERT_EQ(op_rows->size(), 1u);
-    EXPECT_EQ((*op_rows)[0].op_type, OpType::kMerge);
+    EXPECT_EQ((*op_rows)[0].system_key().op_type, OpType::kMerge);
     EXPECT_EQ((*op_rows)[0].value.as_string(), "merge");
 }
 
@@ -442,9 +463,11 @@ TEST(SSTableTest, BuildsAndReadsMultiLevelIndex) {
     EXPECT_EQ(rows->front().value.as_string(), "v0");
     EXPECT_EQ(rows->back().value.as_string(), "v17");
 
-    auto found =
-        reader->get({Value::make<DataType::kString>("tenant"), Value::make<DataType::kUint64>(13)},
-                    Version{.major = 10, .minor = 13});
+    auto found = reader->get(RowKey::from_columns({
+                                 Value::make<DataType::kString>("tenant"),
+                                 Value::make<DataType::kUint64>(uint64_t{13}),
+                             }),
+                             SystemKey{Version{.major = 10, .minor = 13}});
     ASSERT_TRUE(found.ok()) << found.status();
     ASSERT_TRUE(found->has_value());
     EXPECT_EQ((*found)->value.as_string(), "v13");

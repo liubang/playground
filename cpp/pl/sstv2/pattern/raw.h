@@ -27,9 +27,34 @@
 
 #include "cpp/pl/bits/bits.h"
 #include "cpp/pl/sstv2/codec/varint.h"
-#include "cpp/pl/sstv2/pattern/pattern.h"
 
 namespace pl::sstv2::pattern {
+
+// =============================================================================
+// PatternId: identifies the encoding pattern for a Column-Store Unit.
+//
+// Phase 1 implements Pattern 0 (raw) and Pattern 100 (compound).
+// Patterns 1-5 are reserved for future phases.
+// =============================================================================
+
+enum class PatternId : uint8_t {
+    kRaw = 0,         // Fixed-size cells, no encoding.
+    kStreamVByte = 1, // Stream VByte (Phase 2).
+    kPfor = 2,        // Patched Frame of Reference (Phase 3).
+    kDictionary = 3,  // Dictionary encoding (Phase 3).
+    kConstantInc = 4, // Constant stride increment (Phase 2).
+    kConstantDec = 5, // Constant stride decrement (Phase 2).
+    kCompound = 100,  // Compound: splits variable-length/composite columns into sub-columns.
+};
+
+// =============================================================================
+// EncodeResult: output of a pattern encoder.
+// =============================================================================
+
+struct EncodeResult {
+    std::string data; // Encoded bytes (includes pattern_id + row_count header).
+    size_t row_count; // Number of rows encoded.
+};
 
 // =============================================================================
 // CellTraits<CellSize>: maps byte width to the natural unsigned integer type.
@@ -160,19 +185,22 @@ public:
         const auto* src = reinterpret_cast<const uint8_t*>(input.data());
         const size_t len = input.size();
 
-        if (len < 1 || src[0] != static_cast<uint8_t>(PatternId::kRaw))
+        if (len < 1 || src[0] != static_cast<uint8_t>(PatternId::kRaw)) {
             return false;
+        }
         size_t pos = 1;
 
         uint64_t rc = 0;
         const size_t n = codec::decode_varint(src + pos, len - pos, &rc);
-        if (n == 0)
+        if (n == 0) {
             return false;
+        }
         pos += n;
 
         const size_t payload = static_cast<size_t>(rc) * CellSize;
-        if (pos + payload > len)
+        if (pos + payload > len) {
             return false;
+        }
 
         cells_ = src + pos;
         row_count_ = static_cast<size_t>(rc);

@@ -33,13 +33,10 @@ cc_library(
 cc_library(
     name = "fixed",
     hdrs = ["fixed.h"],
-    deps = [":endian"],
-)
-
-cc_library(
-    name = "checksum",
-    hdrs = ["checksum.h"],
-    deps = ["@crc32c"],
+    deps = [
+        ":endian",
+        "@crc32c",
+    ],
 )
 
 cc_library(
@@ -66,7 +63,7 @@ cc_library(
         "//cpp/pl/sstv2/types:internal_row",
         "//cpp/pl/sstv2/types:key",
         "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
     ],
 )

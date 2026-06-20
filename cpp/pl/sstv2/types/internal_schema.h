@@ -92,24 +92,27 @@ public:
 
     [[nodiscard]] DataType column_type(size_t index) const {
         size_t m = user_schema_->row_key_column_count();
-        if (index < m)
+        if (index < m) {
             return user_schema_->column(index).type;
+        }
         assert(index < m + kSystemColumnCount);
         return kSystemDefs[index - m].type;
     }
 
     [[nodiscard]] SortOrder column_order(size_t index) const {
         size_t m = user_schema_->row_key_column_count();
-        if (index < m)
+        if (index < m) {
             return user_schema_->column(index).order;
+        }
         assert(index < m + kSystemColumnCount);
         return kSystemDefs[index - m].order;
     }
 
     [[nodiscard]] std::string_view column_name(size_t index) const {
         size_t m = user_schema_->row_key_column_count();
-        if (index < m)
+        if (index < m) {
             return user_schema_->column(index).name;
+        }
         assert(index < m + kSystemColumnCount);
         return kSystemDefs[index - m].name;
     }
