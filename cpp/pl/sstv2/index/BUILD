@@ -33,12 +33,9 @@ cc_library(
     deps = [
         "//cpp/pl/sstv2/block",
         "//cpp/pl/sstv2/compress",
-        "//cpp/pl/sstv2/types:column_flag",
         "//cpp/pl/sstv2/types:internal_row",
         "//cpp/pl/sstv2/types:internal_schema",
         "//cpp/pl/sstv2/types:key",
-        "//cpp/pl/sstv2/types:key_comparator",
-        "//cpp/pl/sstv2/types:key_factory",
         "//cpp/pl/sstv2/types:value",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

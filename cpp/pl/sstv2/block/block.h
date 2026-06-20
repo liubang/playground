@@ -28,6 +28,35 @@
 
 namespace pl::sstv2::block {
 
+// =============================================================================
+// Block flags: bitfield stored in block::Header::flags.
+//
+// Bit layout:
+//   Bit  0    [P]  Pattern Store: always set in v2 blocks.
+//   Bit  1    [R]  Row Key Bitmap: reserved for future use.
+//   Bits 2-9  [C]  Compression codec (Codec enum, 0-255).
+//   Bits 10-63     Reserved (must be 0).
+// =============================================================================
+
+namespace block_flags {
+
+static constexpr uint64_t kPatternStore = 1ULL << 0;
+static constexpr uint64_t kRowKeyBitmap = 1ULL << 1;
+static constexpr uint8_t kCompressShift = 2;
+static constexpr uint64_t kCompressMask = 0xFFULL << kCompressShift;
+
+} // namespace block_flags
+
+[[nodiscard]] constexpr uint64_t encode_block_flag(compress::Codec codec) {
+    return block_flags::kPatternStore |
+           (static_cast<uint64_t>(codec) << block_flags::kCompressShift);
+}
+
+[[nodiscard]] constexpr compress::Codec decode_block_flag(uint64_t flags) {
+    return static_cast<compress::Codec>((flags & block_flags::kCompressMask) >>
+                                        block_flags::kCompressShift);
+}
+
 enum class Kind : uint32_t {
     kData = 0x4B425444,      // DTBK
     kIndex = 0x4B425849,     // IXBK

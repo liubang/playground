@@ -54,10 +54,12 @@ public:
     // Construct a data flag for a value column.
     static constexpr ColumnFlag for_value(DataType dt, bool checksum, bool bool_val = false) {
         uint64_t bits = static_cast<uint8_t>(dt);
-        if (checksum)
+        if (checksum) {
             bits |= kChecksumBit;
-        if (bool_val)
+        }
+        if (bool_val) {
             bits |= kBoolBit;
+        }
         return ColumnFlag{bits};
     }
 
@@ -110,12 +112,15 @@ public:
     // - Index entries must have C=0 and B=0.
     // - B bit must be 0 when DT != Bool.
     [[nodiscard]] constexpr bool is_valid() const {
-        if ((bits_ & kReservedMask) != 0)
+        if ((bits_ & kReservedMask) != 0) {
             return false;
-        if (is_index_entry() && (bits_ & (kChecksumBit | kBoolBit)) != 0)
+        }
+        if (is_index_entry() && (bits_ & (kChecksumBit | kBoolBit)) != 0) {
             return false;
-        if (data_type() != DataType::kBool && bool_value())
+        }
+        if (data_type() != DataType::kBool && bool_value()) {
             return false;
+        }
         return true;
     }
 

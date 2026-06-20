@@ -90,8 +90,9 @@ inline absl::Status encode_array_comparable(const types::ArrayStorage& values,
                                               desc ? types::SortOrder::kDescending
                                                    : types::SortOrder::kAscending,
                                               dst);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     return absl::OkStatus();
 }
@@ -107,16 +108,18 @@ inline absl::Status encode_map_comparable(const types::MapStorage& entries,
                                               desc ? types::SortOrder::kDescending
                                                    : types::SortOrder::kAscending,
                                               dst);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
         detail::encode_unsigned(static_cast<uint8_t>(value.type()), sizeof(uint8_t), desc, dst);
         status = encode_value_comparable(value,
                                          value.type(),
                                          desc ? types::SortOrder::kDescending
                                               : types::SortOrder::kAscending,
                                          dst);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     return absl::OkStatus();
 }
@@ -212,8 +215,9 @@ inline absl::Status encode_all_key(const types::InternalRow& row,
     for (size_t i = 0; i < schema->sort_key_column_count(); ++i) {
         auto status = encode_value_comparable(
             row.columns[i], schema->column_type(i), schema->column_order(i), dst);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     return absl::OkStatus();
 }
@@ -222,8 +226,9 @@ inline absl::StatusOr<types::EncodedAllKey> make_encoded_all_key(
     const types::InternalRow& row, const types::InternalSchema::ConstRef& schema) {
     std::string encoded;
     auto status = encode_all_key(row, schema, &encoded);
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
     return types::EncodedAllKey::from_encoded_bytes(std::move(encoded));
 }
 
@@ -237,8 +242,9 @@ inline absl::Status encode_row_key(const std::vector<types::Value>& columns,
     for (size_t i = 0; i < columns.size(); ++i) {
         auto status = encode_value_comparable(
             columns[i], schema->column_type(i), schema->column_order(i), dst);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     return absl::OkStatus();
 }
@@ -247,8 +253,9 @@ inline absl::StatusOr<types::EncodedRowKey> make_encoded_row_key(
     const std::vector<types::Value>& columns, const types::Schema::ConstRef& schema) {
     std::string encoded;
     auto status = encode_row_key(columns, schema, &encoded);
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
     return types::EncodedRowKey::from_encoded_bytes(std::move(encoded));
 }
 
@@ -260,15 +267,17 @@ inline absl::StatusOr<types::EncodedPrefixKey> make_encoded_prefix_key(
         return absl::InvalidArgumentError("schema is null");
     }
     auto prefix_status = types::validate_key_prefix_shape(prefix, schema);
-    if (!prefix_status.ok())
+    if (!prefix_status.ok()) {
         return prefix_status;
+    }
 
     std::string encoded;
     for (size_t i = 0; i < prefix.key_columns.size(); ++i) {
         auto status = encode_value_comparable(
             prefix.key_columns[i], schema->column_type(i), schema->column_order(i), &encoded);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     if (prefix.version.has_value()) {
         auto status =
@@ -276,8 +285,9 @@ inline absl::StatusOr<types::EncodedPrefixKey> make_encoded_prefix_key(
                                     internal_schema->column_type(internal_schema->version_index()),
                                     internal_schema->column_order(internal_schema->version_index()),
                                     &encoded);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     if (prefix.op_type.has_value()) {
         auto status = encode_value_comparable(
@@ -285,8 +295,9 @@ inline absl::StatusOr<types::EncodedPrefixKey> make_encoded_prefix_key(
             internal_schema->column_type(internal_schema->op_type_index()),
             internal_schema->column_order(internal_schema->op_type_index()),
             &encoded);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     return types::EncodedPrefixKey::from_encoded_bytes(std::move(encoded));
 }
