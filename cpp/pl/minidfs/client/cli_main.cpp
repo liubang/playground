@@ -631,7 +631,8 @@ int cmd_blocks(DfsClient* client, int argc, char* argv[]) {
     }
 
     pl::pretty::Table t;
-    t.header({"Block ID", "Index", "GenStamp", "Length", "State", "Desired", "Actual", "Locations"});
+    t.header(
+        {"Block ID", "Index", "GenStamp", "Length", "State", "Desired", "Actual", "Locations"});
     for (const auto& b : blocks) {
         std::string locs;
         for (size_t i = 0; i < b.locations.size(); ++i) {

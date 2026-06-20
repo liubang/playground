@@ -115,10 +115,12 @@ struct InternalRow {
 
     [[nodiscard]] ValueLocation location(const InternalSchema::ConstRef& s) const {
         auto fn = filename(s);
-        if (fn == kEmbeddedFilename)
+        if (fn == kEmbeddedFilename) {
             return ValueLocation::kEmbedded;
-        if (fn == kKeyFileFilename)
+        }
+        if (fn == kKeyFileFilename) {
             return ValueLocation::kKeyFile;
+        }
         return ValueLocation::kValueFile;
     }
 

@@ -26,7 +26,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/sstv2/types/internal_schema.h"
-#include "cpp/pl/sstv2/types/key_tags.h"
+#include "cpp/pl/sstv2/types/key.h"
 #include "cpp/pl/sstv2/types/value.h"
 
 namespace pl::sstv2::types {
@@ -110,8 +110,9 @@ public:
         requires KeyWithTag<Lhs, AllKeyTag> && KeyWithTag<Rhs, AllKeyTag>
     [[nodiscard]] absl::StatusOr<bool> all_key_less(const Lhs& lhs, const Rhs& rhs) const {
         auto cmp = compare_all_key(lhs, rhs);
-        if (!cmp.ok())
+        if (!cmp.ok()) {
             return cmp.status();
+        }
         return *cmp < 0;
     }
 
@@ -120,8 +121,9 @@ public:
     [[nodiscard]] absl::StatusOr<bool> all_key_less_than_prefix(const Lhs& lhs,
                                                                 const Rhs& rhs) const {
         auto cmp = compare_all_key_to_prefix(lhs, rhs);
-        if (!cmp.ok())
+        if (!cmp.ok()) {
             return cmp.status();
+        }
         return *cmp < 0;
     }
 
@@ -129,8 +131,9 @@ public:
         requires KeyWithTag<Lhs, PrefixKeyTag> && KeyWithTag<Rhs, PrefixKeyTag>
     [[nodiscard]] absl::StatusOr<bool> prefix_less(const Lhs& lhs, const Rhs& rhs) const {
         auto cmp = compare_prefix_boundary(lhs, rhs);
-        if (!cmp.ok())
+        if (!cmp.ok()) {
             return cmp.status();
+        }
         return *cmp < 0;
     }
 
@@ -150,18 +153,20 @@ private:
 
         const size_t common = std::min(lhs.column_count(), rhs.column_count());
         for (size_t i = 0; i < common; ++i) {
-            auto status = validate_sort_key_column(i, lhs.column(i));
-            if (!status.ok())
-                return status;
-            status = validate_sort_key_column(i, rhs.column(i));
-            if (!status.ok())
-                return status;
+            const DataType expected = schema_->column_type(i);
+            if (lhs.column(i).type() != expected || rhs.column(i).type() != expected) {
+                return absl::InvalidArgumentError(absl::StrCat("key column ",
+                                                               i,
+                                                               " type mismatch: expected ",
+                                                               data_type_name(expected)));
+            }
             int cmp = compare_values(lhs.column(i), rhs.column(i));
             if (schema_->column_order(i) == SortOrder::kDescending) {
                 cmp = -cmp;
             }
-            if (cmp != 0)
+            if (cmp != 0) {
                 return cmp;
+            }
         }
 
         if (lhs.column_count() == rhs.column_count()) {

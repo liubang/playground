@@ -20,15 +20,9 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "pattern",
-    hdrs = ["pattern.h"],
-)
-
-cc_library(
     name = "raw",
     hdrs = ["raw.h"],
     deps = [
-        ":pattern",
         "//cpp/pl/bits",
         "//cpp/pl/sstv2/codec:varint",
     ],
@@ -38,7 +32,6 @@ cc_library(
     name = "compound",
     hdrs = ["compound.h"],
     deps = [
-        ":pattern",
         ":raw",
         "//cpp/pl/sstv2/codec:varint",
         "//cpp/pl/sstv2/types:data_type",

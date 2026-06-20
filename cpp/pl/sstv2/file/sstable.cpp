@@ -30,7 +30,7 @@
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/sstv2/block/block.h"
 #include "cpp/pl/sstv2/bloom/bloom.h"
-#include "cpp/pl/sstv2/codec/checksum.h"
+#include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/value_comparable.h"
 #include "cpp/pl/sstv2/format/section.h"
 #include "cpp/pl/sstv2/format/tail.h"
@@ -40,7 +40,7 @@
 #include "cpp/pl/sstv2/types/internal_schema.h"
 #include "cpp/pl/sstv2/types/key_comparator.h"
 #include "cpp/pl/sstv2/types/key_factory.h"
-#include "cpp/pl/sstv2/types/value_codec.h"
+#include "cpp/pl/sstv2/types/value.h"
 
 namespace pl::sstv2::file {
 namespace {
@@ -83,11 +83,12 @@ void add_locator_entry(format::SectionEntries* entries, std::string_view key, ui
 }
 
 absl::Status validate_row(const types::Schema& schema, const Row& row) {
-    if (row.key_columns.size() != schema.row_key_column_count()) {
+    const auto rk = row.row_key();
+    if (rk.column_count() != schema.row_key_column_count()) {
         return absl::InvalidArgumentError("row key column count mismatch");
     }
-    for (size_t i = 0; i < row.key_columns.size(); ++i) {
-        if (row.key_columns[i].type() != schema.column_type(i)) {
+    for (size_t i = 0; i < rk.column_count(); ++i) {
+        if (rk.column(i).type() != schema.column_type(i)) {
             return absl::InvalidArgumentError(absl::StrCat("row key column ", i, " type mismatch"));
         }
     }
@@ -101,12 +102,10 @@ InternalRow make_internal_row(const types::InternalSchema::ConstRef& schema,
                               uint64_t value_length,
                               uint64_t value_checksum) {
     InternalRow internal = InternalRow::make(schema);
-    for (size_t i = 0; i < row.key_columns.size(); ++i) {
-        internal.columns[i] = row.key_columns[i];
+    const auto& all_key_cols = row.all_key.columns();
+    for (size_t i = 0; i < schema->sort_key_column_count(); ++i) {
+        internal.columns[i] = all_key_cols[i];
     }
-    internal.columns[schema->version_index()] = Value::make<DataType::kVersion>(row.version);
-    internal.columns[schema->op_type_index()] =
-        Value::make<DataType::kUint8>(static_cast<uint8_t>(row.op_type));
     const bool has_value = row.value.type() != DataType::kNone;
     const bool has_payload = has_value && row.value.type() != DataType::kBool;
     const bool bool_value = row.value.type() == DataType::kBool && row.value.as_bool();
@@ -130,29 +129,22 @@ absl::StatusOr<std::string_view> checked_slice(std::string_view bytes,
     return bytes.substr(static_cast<size_t>(offset), static_cast<size_t>(length));
 }
 
-absl::StatusOr<types::AllKey> all_key_for(const types::InternalSchema::ConstRef& schema,
-                                          const InternalRow& row) {
-    return types::make_all_key(row, schema);
-}
-
 absl::StatusOr<types::AllKeyView> all_key_view_for(const types::InternalSchema::ConstRef& schema,
                                                    const InternalRow& row) {
     return types::make_all_key_view(row, schema);
 }
 
-absl::StatusOr<Row> materialize_row(const types::Schema::ConstRef& schema,
-                                    const types::InternalSchema::ConstRef& internal_schema,
+absl::StatusOr<Row> materialize_row(const types::InternalSchema::ConstRef& internal_schema,
                                     const block::BlockReader& block,
                                     size_t row_index,
                                     std::string_view value_file) {
     const auto& internal = block.rows()[row_index];
-    Row row;
-    row.key_columns.reserve(schema->row_key_column_count());
-    for (size_t i = 0; i < schema->row_key_column_count(); ++i) {
-        row.key_columns.push_back(internal.columns[i]);
+    std::vector<Value> all_key_cols;
+    all_key_cols.reserve(internal_schema->sort_key_column_count());
+    for (size_t i = 0; i < internal_schema->sort_key_column_count(); ++i) {
+        all_key_cols.push_back(internal.columns[i]);
     }
-    row.version = internal.version(internal_schema);
-    row.op_type = static_cast<OpType>(internal.op_type(internal_schema));
+    Row row = Row::from_all_key(types::AllKey::from_columns(std::move(all_key_cols)));
     const ColumnFlag value_flag = internal.flag(internal_schema);
     const DataType value_type = value_flag.data_type();
     if (value_type == DataType::kNone) {
@@ -170,23 +162,25 @@ absl::StatusOr<Row> materialize_row(const types::Schema::ConstRef& schema,
                             internal.offset(internal_schema),
                             internal.length(internal_schema),
                             "value");
-    if (!value_bytes.ok())
+    if (!value_bytes.ok()) {
         return value_bytes.status();
+    }
     if (value_flag.has_checksum() &&
         codec::crc32c_u64(*value_bytes) != internal.checksum(internal_schema)) {
         return absl::InvalidArgumentError("value checksum mismatch");
     }
     auto decoded = decode_value(value_type, *value_bytes);
-    if (!decoded.ok())
+    if (!decoded.ok()) {
         return decoded.status();
+    }
     row.value = std::move(*decoded);
     return row;
 }
 
-template <typename KeyTag>
+template <typename Key>
 absl::StatusOr<size_t> lower_bound_by_key(const types::InternalSchema::ConstRef& schema,
                                           const std::vector<InternalRow>& rows,
-                                          const types::LogicalKey<KeyTag>& target_key) {
+                                          const Key& target_key) {
     types::KeyComparator comparator(schema);
     size_t first = 0;
     size_t count = rows.size();
@@ -194,16 +188,18 @@ absl::StatusOr<size_t> lower_bound_by_key(const types::InternalSchema::ConstRef&
         const size_t step = count / 2;
         const size_t it = first + step;
         auto key = all_key_view_for(schema, rows[it]);
-        if (!key.ok())
+        if (!key.ok()) {
             return key.status();
+        }
         absl::StatusOr<bool> less;
-        if constexpr (std::is_same_v<KeyTag, types::PrefixKeyTag>) {
+        if constexpr (std::is_same_v<typename Key::tag, types::PrefixKeyTag>) {
             less = comparator.all_key_less_than_prefix(*key, target_key);
         } else {
             less = comparator.all_key_less(*key, target_key);
         }
-        if (!less.ok())
+        if (!less.ok()) {
             return less.status();
+        }
         if (*less) {
             first = it + 1;
             count -= step + 1;
@@ -216,27 +212,30 @@ absl::StatusOr<size_t> lower_bound_by_key(const types::InternalSchema::ConstRef&
 
 absl::StatusOr<std::optional<Row>> get_from_data_block(
     std::string_view value_file,
-    const types::Schema::ConstRef& schema,
     const types::InternalSchema::ConstRef& internal_schema,
     const block::BlockReader& data,
     const types::AllKey& target_key) {
     auto row_index = lower_bound_by_key(internal_schema, data.rows(), target_key);
-    if (!row_index.ok())
+    if (!row_index.ok()) {
         return row_index.status();
+    }
     if (*row_index == data.rows().size()) {
         return std::optional<Row>{};
     }
     auto key = all_key_view_for(internal_schema, data.rows()[*row_index]);
-    if (!key.ok())
+    if (!key.ok()) {
         return key.status();
+    }
     types::KeyComparator comparator(internal_schema);
     auto cmp = comparator.compare_all_key(*key, target_key);
-    if (!cmp.ok())
+    if (!cmp.ok()) {
         return cmp.status();
+    }
     if (*cmp == 0) {
-        auto row = materialize_row(schema, internal_schema, data, *row_index, value_file);
-        if (!row.ok())
+        auto row = materialize_row(internal_schema, data, *row_index, value_file);
+        if (!row.ok()) {
             return row.status();
+        }
         return std::optional<Row>{std::move(*row)};
     }
     return std::optional<Row>{};
@@ -295,15 +294,18 @@ absl::StatusOr<size_t> Builder::encoded_data_block_size_with(
     block::BlockBuilder builder(internal_schema_, data_block_options());
     for (size_t i = 0; i < pending_rows_.size(); ++i) {
         auto status = builder.add(pending_rows_[i], pending_embedded_values_[i]);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     auto status = builder.add(candidate, std::string(candidate_embedded));
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
     auto encoded = builder.finish();
-    if (!encoded.ok())
+    if (!encoded.ok()) {
         return encoded.status();
+    }
     return encoded->size();
 }
 
@@ -315,18 +317,16 @@ absl::Status Builder::add(const Row& row) {
         return absl::InvalidArgumentError("schema is null");
     }
     auto status = validate_row(*schema_, row);
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
 
-    InternalRow order_probe = make_internal_row(internal_schema_, row, "", 0, 0, 0);
-    auto all_key = all_key_for(internal_schema_, order_probe);
-    if (!all_key.ok())
-        return all_key.status();
     if (last_all_key_.has_value()) {
         types::KeyComparator comparator(internal_schema_);
-        auto less = comparator.all_key_less(*last_all_key_, *all_key);
-        if (!less.ok())
+        auto less = comparator.all_key_less(*last_all_key_, row.all_key);
+        if (!less.ok()) {
             return less.status();
+        }
         if (!*less) {
             return absl::InvalidArgumentError(
                 "rows must be added in strictly increasing all-key order");
@@ -338,8 +338,9 @@ absl::Status Builder::add(const Row& row) {
     std::string encoded_payload;
     if (has_payload) {
         auto encoded_value = encode_value(row.value);
-        if (!encoded_value.ok())
+        if (!encoded_value.ok()) {
             return encoded_value.status();
+        }
         encoded_payload = std::move(*encoded_value);
     }
     const bool embedded =
@@ -360,24 +361,28 @@ absl::Status Builder::add(const Row& row) {
     const block::Options block_options = data_block_options();
     if (!pending_rows_.empty() && pending_rows_.size() >= block_options.max_row_count) {
         status = flush_data_block();
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     if (!pending_rows_.empty()) {
         auto candidate_size = encoded_data_block_size_with(internal, embedded_value);
-        if (!candidate_size.ok())
+        if (!candidate_size.ok()) {
             return candidate_size.status();
+        }
         if (*candidate_size > block_options.max_block_size_soft_limit ||
             *candidate_size > block_options.max_block_size_hard_limit) {
             status = flush_data_block();
-            if (!status.ok())
+            if (!status.ok()) {
                 return status;
+            }
         }
     }
     if (pending_rows_.empty()) {
         auto single_size = encoded_data_block_size_with(internal, embedded_value);
-        if (!single_size.ok())
+        if (!single_size.ok()) {
             return single_size.status();
+        }
         // PDF §6.1: a single row that exceeds the hard limit is allowed as an exception.
         // The block will contain only this one row, even though it exceeds the limit.
     }
@@ -385,11 +390,12 @@ absl::Status Builder::add(const Row& row) {
         files_.value_file.append(encoded_payload);
     }
     status = bloom_builder_.add(internal, internal_schema_);
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
     pending_rows_.push_back(std::move(internal));
     pending_embedded_values_.push_back(std::move(embedded_value));
-    last_all_key_ = std::move(*all_key);
+    last_all_key_ = row.all_key;
     ++total_row_count_;
     if (pending_rows_.size() >= max_data_block_rows()) {
         return flush_data_block();
@@ -402,18 +408,21 @@ absl::Status Builder::flush_data_block() {
         return absl::OkStatus();
     }
     auto status = index_builder_->prepare_for_data_block();
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
 
     block::BlockBuilder block_builder(internal_schema_, data_block_options());
     for (size_t i = 0; i < pending_rows_.size(); ++i) {
         status = block_builder.add(pending_rows_[i], std::move(pending_embedded_values_[i]));
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     auto encoded_block = block_builder.finish();
-    if (!encoded_block.ok())
+    if (!encoded_block.ok()) {
         return encoded_block.status();
+    }
     const uint64_t offset = files_.key_file.size();
     const uint64_t length = encoded_block->size();
     files_.key_file.append(*encoded_block);
@@ -422,8 +431,9 @@ absl::Status Builder::flush_data_block() {
     status = index_builder_->add_data_block(pending_rows_.back(),
                                             index::BlockRef{.offset = offset, .length = length},
                                             pending_rows_.size());
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
     pending_rows_.clear();
     pending_embedded_values_.clear();
     return absl::OkStatus();
@@ -439,11 +449,13 @@ absl::StatusOr<Files> Builder::finish() {
     }
 
     auto status = flush_data_block();
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
     auto index = index_builder_->finish();
-    if (!index.ok())
+    if (!index.ok()) {
         return index.status();
+    }
     const uint64_t root_offset = index->root.offset;
     const uint64_t root_length = index->root.length;
 
@@ -525,88 +537,112 @@ absl::StatusOr<Reader> Reader::open(std::string_view key_file, std::string_view 
         return absl::InvalidArgumentError("key file is shorter than tail");
     }
     auto tail = format::decode_tail(key_file.substr(key_file.size() - format::Tail::kSize));
-    if (!tail.ok())
+    if (!tail.ok()) {
         return tail.status();
+    }
     auto locator_bytes =
         checked_slice(key_file, tail->locator_offset, tail->locator_length, "locator");
-    if (!locator_bytes.ok())
+    if (!locator_bytes.ok()) {
         return locator_bytes.status();
+    }
     auto locator = format::decode_section(*locator_bytes, format::SectionMagic::kLocator);
-    if (!locator.ok())
+    if (!locator.ok()) {
         return locator.status();
+    }
 
     auto schema_offset = locator_uint64(locator->entries, kSchemaOffset);
-    if (!schema_offset.ok())
+    if (!schema_offset.ok()) {
         return schema_offset.status();
+    }
     auto schema_length = locator_uint64(locator->entries, kSchemaLength);
-    if (!schema_length.ok())
+    if (!schema_length.ok()) {
         return schema_length.status();
+    }
     auto schema_bytes = checked_slice(key_file, *schema_offset, *schema_length, "schema");
-    if (!schema_bytes.ok())
+    if (!schema_bytes.ok()) {
         return schema_bytes.status();
+    }
     auto schema = format::decode_schema(*schema_bytes);
-    if (!schema.ok())
+    if (!schema.ok()) {
         return schema.status();
+    }
 
     auto configuration_offset = locator_uint64(locator->entries, kConfigurationOffset);
-    if (!configuration_offset.ok())
+    if (!configuration_offset.ok()) {
         return configuration_offset.status();
+    }
     auto configuration_length = locator_uint64(locator->entries, kConfigurationLength);
-    if (!configuration_length.ok())
+    if (!configuration_length.ok()) {
         return configuration_length.status();
+    }
     auto configuration_bytes =
         checked_slice(key_file, *configuration_offset, *configuration_length, "configuration");
-    if (!configuration_bytes.ok())
+    if (!configuration_bytes.ok()) {
         return configuration_bytes.status();
+    }
     auto configuration = format::decode_configuration(*configuration_bytes);
-    if (!configuration.ok())
+    if (!configuration.ok()) {
         return configuration.status();
+    }
 
     auto statistics_offset = locator_uint64(locator->entries, kStatisticsOffset);
-    if (!statistics_offset.ok())
+    if (!statistics_offset.ok()) {
         return statistics_offset.status();
+    }
     auto statistics_length = locator_uint64(locator->entries, kStatisticsLength);
-    if (!statistics_length.ok())
+    if (!statistics_length.ok()) {
         return statistics_length.status();
+    }
     auto statistics_bytes =
         checked_slice(key_file, *statistics_offset, *statistics_length, "statistics");
-    if (!statistics_bytes.ok())
+    if (!statistics_bytes.ok()) {
         return statistics_bytes.status();
+    }
     auto statistics = format::decode_statistics(*statistics_bytes);
-    if (!statistics.ok())
+    if (!statistics.ok()) {
         return statistics.status();
+    }
 
     auto root_offset = locator_uint64(locator->entries, kRootIndexOffset);
-    if (!root_offset.ok())
+    if (!root_offset.ok()) {
         return root_offset.status();
+    }
     auto root_length = locator_uint64(locator->entries, kRootIndexLength);
-    if (!root_length.ok())
+    if (!root_length.ok()) {
         return root_length.status();
+    }
     auto bloom_offset = locator_uint64(locator->entries, kBloomOffset);
-    if (!bloom_offset.ok())
+    if (!bloom_offset.ok()) {
         return bloom_offset.status();
+    }
     auto bloom_length = locator_uint64(locator->entries, kBloomLength);
-    if (!bloom_length.ok())
+    if (!bloom_length.ok()) {
         return bloom_length.status();
+    }
 
     auto status = validate_statistics(*statistics, key_file, value_file);
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
 
     auto internal_schema = InternalSchema::make(*schema);
     auto root_bytes = checked_slice(key_file, *root_offset, *root_length, "root index");
-    if (!root_bytes.ok())
+    if (!root_bytes.ok()) {
         return root_bytes.status();
+    }
     auto root = block::BlockReader::open(*root_bytes, internal_schema, block::Kind::kRootIndex);
-    if (!root.ok())
+    if (!root.ok()) {
         return root.status();
+    }
 
     auto bloom_bytes = checked_slice(key_file, *bloom_offset, *bloom_length, "bloom");
-    if (!bloom_bytes.ok())
+    if (!bloom_bytes.ok()) {
         return bloom_bytes.status();
+    }
     auto bloom = bloom::Reader::open(*bloom_bytes);
-    if (!bloom.ok())
+    if (!bloom.ok()) {
         return bloom.status();
+    }
     if (bloom->header().row_count != statistics->total_row_count) {
         return absl::InvalidArgumentError("bloom row count mismatch");
     }
@@ -632,22 +668,25 @@ absl::StatusOr<std::vector<Row>> Reader::scan(const ScanOptions& options) const 
     std::optional<types::PrefixKey> start_key;
     if (options.start.has_value()) {
         auto key = types::make_prefix_key(*options.start, schema_, internal_schema_);
-        if (!key.ok())
+        if (!key.ok()) {
             return key.status();
+        }
         start_key = std::move(*key);
     }
     std::optional<types::PrefixKey> limit_key;
     if (options.limit.has_value()) {
         auto key = types::make_prefix_key(*options.limit, schema_, internal_schema_);
-        if (!key.ok())
+        if (!key.ok()) {
             return key.status();
+        }
         limit_key = std::move(*key);
     }
     types::KeyComparator comparator(internal_schema_);
     if (start_key.has_value() && limit_key.has_value()) {
         auto less = comparator.prefix_less(*start_key, *limit_key);
-        if (!less.ok())
+        if (!less.ok()) {
             return less.status();
+        }
         if (!*less) {
             return std::vector<Row>{};
         }
@@ -668,63 +707,72 @@ absl::StatusOr<std::vector<Row>> Reader::scan(const ScanOptions& options) const 
                   internal_schema_,
                   index::BlockRef{.offset = root_index_offset_, .length = root_index_length_},
                   &data_blocks);
-    if (!status.ok())
+    if (!status.ok()) {
         return status;
+    }
 
     std::vector<Row> rows;
     rows.reserve(static_cast<size_t>(statistics_.total_row_count));
     for (const index::BlockRef& ref : data_blocks) {
         auto data_bytes = checked_slice(key_file_, ref.offset, ref.length, "data block");
-        if (!data_bytes.ok())
+        if (!data_bytes.ok()) {
             return data_bytes.status();
+        }
         auto data = block::BlockReader::open(*data_bytes, internal_schema_, block::Kind::kData);
-        if (!data.ok())
+        if (!data.ok()) {
             return data.status();
+        }
         size_t row_index = 0;
         if (start_key.has_value()) {
             auto lower = lower_bound_by_key(internal_schema_, data->rows(), *start_key);
-            if (!lower.ok())
+            if (!lower.ok()) {
                 return lower.status();
+            }
             row_index = *lower;
         }
         for (; row_index < data->rows().size(); ++row_index) {
             auto row_all_key = all_key_view_for(internal_schema_, data->rows()[row_index]);
-            if (!row_all_key.ok())
+            if (!row_all_key.ok()) {
                 return row_all_key.status();
+            }
             if (limit_key.has_value()) {
                 auto cmp = comparator.compare_all_key_to_prefix(*row_all_key, *limit_key);
-                if (!cmp.ok())
+                if (!cmp.ok()) {
                     return cmp.status();
+                }
                 if (*cmp >= 0) {
                     return rows;
                 }
             }
-            auto row = materialize_row(schema_, internal_schema_, *data, row_index, value_file_);
-            if (!row.ok())
+            auto row = materialize_row(internal_schema_, *data, row_index, value_file_);
+            if (!row.ok()) {
                 return row.status();
+            }
             rows.push_back(std::move(*row));
         }
     }
     return rows;
 }
 
-absl::StatusOr<std::optional<Row>> Reader::get(const std::vector<Value>& key_columns,
-                                               types::Version version,
-                                               OpType op_type) const {
-    if (key_columns.size() != schema_->row_key_column_count()) {
+absl::StatusOr<std::optional<Row>> Reader::get(const types::AllKey& all_key) const {
+    // Validate row key portion against schema.
+    const auto rk = all_key.row_key_view();
+    if (rk.column_count() != schema_->row_key_column_count()) {
         return absl::InvalidArgumentError("lookup key column count mismatch");
     }
-    InternalRow probe = InternalRow::make(internal_schema_);
-    for (size_t i = 0; i < key_columns.size(); ++i) {
-        if (key_columns[i].type() != schema_->column_type(i)) {
+    for (size_t i = 0; i < rk.column_count(); ++i) {
+        if (rk.column(i).type() != schema_->column_type(i)) {
             return absl::InvalidArgumentError(
                 absl::StrCat("lookup key column ", i, " type mismatch"));
         }
-        probe.columns[i] = key_columns[i];
     }
-    probe.columns[internal_schema_->version_index()] = Value::make<DataType::kVersion>(version);
-    probe.columns[internal_schema_->op_type_index()] =
-        Value::make<DataType::kUint8>(static_cast<uint8_t>(op_type));
+
+    // Build a probe InternalRow for bloom filter + encoded key generation.
+    InternalRow probe = InternalRow::make(internal_schema_);
+    const auto& all_key_cols = all_key.columns();
+    for (size_t i = 0; i < internal_schema_->sort_key_column_count(); ++i) {
+        probe.columns[i] = all_key_cols[i];
+    }
     probe.columns[internal_schema_->flag_index()] =
         Value::make<DataType::kUint64>(ColumnFlag::for_value(DataType::kNone, false).raw());
     probe.columns[internal_schema_->filename_index()] = Value::make<DataType::kString>("");
@@ -732,12 +780,10 @@ absl::StatusOr<std::optional<Row>> Reader::get(const std::vector<Value>& key_col
     probe.columns[internal_schema_->length_index()] = Value::make<DataType::kUint64>(uint64_t{0});
     probe.columns[internal_schema_->checksum_index()] = Value::make<DataType::kUint64>(uint64_t{0});
 
-    auto target_key = all_key_for(internal_schema_, probe);
-    if (!target_key.ok())
-        return target_key.status();
     auto encoded_target_key = codec::make_encoded_all_key(probe, internal_schema_);
-    if (!encoded_target_key.ok())
+    if (!encoded_target_key.ok()) {
         return encoded_target_key.status();
+    }
 
     if (!bloom_.may_contain_all_key(*encoded_target_key)) {
         return std::optional<Row>{};
@@ -747,20 +793,35 @@ absl::StatusOr<std::optional<Row>> Reader::get(const std::vector<Value>& key_col
         key_file_,
         internal_schema_,
         index::BlockRef{.offset = root_index_offset_, .length = root_index_length_},
-        *target_key);
-    if (!data_ref.ok())
+        all_key);
+    if (!data_ref.ok()) {
         return data_ref.status();
+    }
     if (!data_ref->has_value()) {
         return std::optional<Row>{};
     }
     auto data_bytes =
         checked_slice(key_file_, (*data_ref)->offset, (*data_ref)->length, "data block");
-    if (!data_bytes.ok())
+    if (!data_bytes.ok()) {
         return data_bytes.status();
+    }
     auto data = block::BlockReader::open(*data_bytes, internal_schema_, block::Kind::kData);
-    if (!data.ok())
+    if (!data.ok()) {
         return data.status();
-    return get_from_data_block(value_file_, schema_, internal_schema_, *data, *target_key);
+    }
+    return get_from_data_block(value_file_, internal_schema_, *data, all_key);
+}
+
+absl::StatusOr<std::optional<Row>> Reader::get(const types::RowKey& row_key,
+                                               types::SystemKey system_key) const {
+    std::vector<Value> all_key_cols;
+    all_key_cols.reserve(row_key.column_count() + types::SystemKey::kColumnCount);
+    for (size_t i = 0; i < row_key.column_count(); ++i) {
+        all_key_cols.push_back(row_key.column(i));
+    }
+    all_key_cols.push_back(Value::make<DataType::kVersion>(system_key.version));
+    all_key_cols.push_back(Value::make<DataType::kUint8>(static_cast<uint8_t>(system_key.op_type)));
+    return get(types::AllKey::from_columns(std::move(all_key_cols)));
 }
 
 } // namespace pl::sstv2::file

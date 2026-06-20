@@ -322,29 +322,33 @@ void encode_bytes_desc(std::string_view data, std::string* dst) {
 // =============================================================================
 
 size_t decode_uint8(const uint8_t* src, size_t len, uint8_t* value) {
-    if (len < 1)
+    if (len < 1) {
         return 0;
+    }
     *value = read_be8(src);
     return 1;
 }
 
 size_t decode_uint16(const uint8_t* src, size_t len, uint16_t* value) {
-    if (len < 2)
+    if (len < 2) {
         return 0;
+    }
     *value = read_be16(src);
     return 2;
 }
 
 size_t decode_uint32(const uint8_t* src, size_t len, uint32_t* value) {
-    if (len < 4)
+    if (len < 4) {
         return 0;
+    }
     *value = read_be32(src);
     return 4;
 }
 
 size_t decode_uint64(const uint8_t* src, size_t len, uint64_t* value) {
-    if (len < 8)
+    if (len < 8) {
         return 0;
+    }
     *value = read_be64(src);
     return 8;
 }
@@ -354,32 +358,36 @@ size_t decode_uint64(const uint8_t* src, size_t len, uint64_t* value) {
 // =============================================================================
 
 size_t decode_int8(const uint8_t* src, size_t len, int8_t* value) {
-    if (len < 1)
+    if (len < 1) {
         return 0;
+    }
     uint8_t u = read_be8(src) ^ (uint8_t{1} << 7);
     *value = static_cast<int8_t>(u);
     return 1;
 }
 
 size_t decode_int16(const uint8_t* src, size_t len, int16_t* value) {
-    if (len < 2)
+    if (len < 2) {
         return 0;
+    }
     uint16_t u = read_be16(src) ^ (uint16_t{1} << 15);
     *value = static_cast<int16_t>(u);
     return 2;
 }
 
 size_t decode_int32(const uint8_t* src, size_t len, int32_t* value) {
-    if (len < 4)
+    if (len < 4) {
         return 0;
+    }
     uint32_t u = read_be32(src) ^ (uint32_t{1} << 31);
     *value = static_cast<int32_t>(u);
     return 4;
 }
 
 size_t decode_int64(const uint8_t* src, size_t len, int64_t* value) {
-    if (len < 8)
+    if (len < 8) {
         return 0;
+    }
     uint64_t u = read_be64(src) ^ (uint64_t{1} << 63);
     *value = static_cast<int64_t>(u);
     return 8;
@@ -390,16 +398,18 @@ size_t decode_int64(const uint8_t* src, size_t len, int64_t* value) {
 // =============================================================================
 
 size_t decode_float(const uint8_t* src, size_t len, float* value) {
-    if (len < 4)
+    if (len < 4) {
         return 0;
+    }
     uint32_t bits = read_be32(src);
     *value = ordered_to_float(bits);
     return 4;
 }
 
 size_t decode_double(const uint8_t* src, size_t len, double* value) {
-    if (len < 8)
+    if (len < 8) {
         return 0;
+    }
     uint64_t bits = read_be64(src);
     *value = ordered_to_double(bits);
     return 8;
@@ -415,8 +425,9 @@ size_t decode_bytes(const uint8_t* src, size_t len, std::string* value) {
 
     while (true) {
         // Each group is 9 bytes: 8 data + 1 marker.
-        if (offset + 9 > len)
+        if (offset + 9 > len) {
             return 0;
+        }
 
         uint8_t marker = src[offset + 8];
         if (marker == 0xFF) {
@@ -441,15 +452,17 @@ size_t decode_bytes(const uint8_t* src, size_t len, std::string* value) {
 // =============================================================================
 
 size_t decode_uint8_desc(const uint8_t* src, size_t len, uint8_t* value) {
-    if (len < 1)
+    if (len < 1) {
         return 0;
+    }
     uint8_t buf[1] = {static_cast<uint8_t>(~src[0])};
     return decode_uint8(buf, 1, value);
 }
 
 size_t decode_uint16_desc(const uint8_t* src, size_t len, uint16_t* value) {
-    if (len < 2)
+    if (len < 2) {
         return 0;
+    }
     uint8_t buf[2];
     std::memcpy(buf, src, 2);
     invert_buf(buf, 2);
@@ -457,8 +470,9 @@ size_t decode_uint16_desc(const uint8_t* src, size_t len, uint16_t* value) {
 }
 
 size_t decode_uint32_desc(const uint8_t* src, size_t len, uint32_t* value) {
-    if (len < 4)
+    if (len < 4) {
         return 0;
+    }
     uint8_t buf[4];
     std::memcpy(buf, src, 4);
     invert_buf(buf, 4);
@@ -466,8 +480,9 @@ size_t decode_uint32_desc(const uint8_t* src, size_t len, uint32_t* value) {
 }
 
 size_t decode_uint64_desc(const uint8_t* src, size_t len, uint64_t* value) {
-    if (len < 8)
+    if (len < 8) {
         return 0;
+    }
     uint8_t buf[8];
     std::memcpy(buf, src, 8);
     invert_buf(buf, 8);
@@ -475,15 +490,17 @@ size_t decode_uint64_desc(const uint8_t* src, size_t len, uint64_t* value) {
 }
 
 size_t decode_int8_desc(const uint8_t* src, size_t len, int8_t* value) {
-    if (len < 1)
+    if (len < 1) {
         return 0;
+    }
     uint8_t buf[1] = {static_cast<uint8_t>(~src[0])};
     return decode_int8(buf, 1, value);
 }
 
 size_t decode_int16_desc(const uint8_t* src, size_t len, int16_t* value) {
-    if (len < 2)
+    if (len < 2) {
         return 0;
+    }
     uint8_t buf[2];
     std::memcpy(buf, src, 2);
     invert_buf(buf, 2);
@@ -491,8 +508,9 @@ size_t decode_int16_desc(const uint8_t* src, size_t len, int16_t* value) {
 }
 
 size_t decode_int32_desc(const uint8_t* src, size_t len, int32_t* value) {
-    if (len < 4)
+    if (len < 4) {
         return 0;
+    }
     uint8_t buf[4];
     std::memcpy(buf, src, 4);
     invert_buf(buf, 4);
@@ -500,8 +518,9 @@ size_t decode_int32_desc(const uint8_t* src, size_t len, int32_t* value) {
 }
 
 size_t decode_int64_desc(const uint8_t* src, size_t len, int64_t* value) {
-    if (len < 8)
+    if (len < 8) {
         return 0;
+    }
     uint8_t buf[8];
     std::memcpy(buf, src, 8);
     invert_buf(buf, 8);
@@ -509,8 +528,9 @@ size_t decode_int64_desc(const uint8_t* src, size_t len, int64_t* value) {
 }
 
 size_t decode_float_desc(const uint8_t* src, size_t len, float* value) {
-    if (len < 4)
+    if (len < 4) {
         return 0;
+    }
     uint8_t buf[4];
     std::memcpy(buf, src, 4);
     invert_buf(buf, 4);
@@ -518,8 +538,9 @@ size_t decode_float_desc(const uint8_t* src, size_t len, float* value) {
 }
 
 size_t decode_double_desc(const uint8_t* src, size_t len, double* value) {
-    if (len < 8)
+    if (len < 8) {
         return 0;
+    }
     uint8_t buf[8];
     std::memcpy(buf, src, 8);
     invert_buf(buf, 8);
@@ -533,8 +554,9 @@ size_t decode_bytes_desc(const uint8_t* src, size_t len, std::string* value) {
     // But we don't know the length upfront. Scan group by group.
     size_t offset = 0;
     while (true) {
-        if (offset + 9 > len)
+        if (offset + 9 > len) {
             return 0;
+        }
         // After inversion, marker 0xFF means non-final. In desc encoding,
         // the inverted 0xFF is 0x00. So in the src, 0x00 at position offset+8
         // means non-final group.

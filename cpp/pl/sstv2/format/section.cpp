@@ -22,7 +22,6 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "cpp/pl/sstv2/codec/checksum.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/varint.h"
 
@@ -138,73 +137,87 @@ absl::StatusOr<Value> read_value(std::string_view input, size_t* pos) {
 
     switch (type) {
         case DataType::kBool:
-            if (auto status = need(1); !status.ok())
+            if (auto status = need(1); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kBool>(input[(*pos)++] != 0);
         case DataType::kInt8:
-            if (auto status = need(1); !status.ok())
+            if (auto status = need(1); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kInt8>(static_cast<int8_t>(input[(*pos)++]));
         case DataType::kUint8:
-            if (auto status = need(1); !status.ok())
+            if (auto status = need(1); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kUint8>(static_cast<uint8_t>(input[(*pos)++]));
         case DataType::kInt16:
-            if (auto status = need(2); !status.ok())
+            if (auto status = need(2); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kInt16>(static_cast<int16_t>(read16()));
         case DataType::kUint16:
-            if (auto status = need(2); !status.ok())
+            if (auto status = need(2); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kUint16>(read16());
         case DataType::kInt32:
-            if (auto status = need(4); !status.ok())
+            if (auto status = need(4); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kInt32>(static_cast<int32_t>(read32()));
         case DataType::kUint32:
-            if (auto status = need(4); !status.ok())
+            if (auto status = need(4); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kUint32>(read32());
         case DataType::kInt64:
-            if (auto status = need(8); !status.ok())
+            if (auto status = need(8); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kInt64>(static_cast<int64_t>(read64()));
         case DataType::kUint64:
-            if (auto status = need(8); !status.ok())
+            if (auto status = need(8); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kUint64>(read64());
         case DataType::kFloat: {
-            if (auto status = need(4); !status.ok())
+            if (auto status = need(4); !status.ok()) {
                 return status;
+            }
             const uint32_t bits = read32();
             float value;
             std::memcpy(&value, &bits, sizeof(value));
             return Value::make<DataType::kFloat>(value);
         }
         case DataType::kDouble: {
-            if (auto status = need(8); !status.ok())
+            if (auto status = need(8); !status.ok()) {
                 return status;
+            }
             const uint64_t bits = read64();
             double value;
             std::memcpy(&value, &bits, sizeof(value));
             return Value::make<DataType::kDouble>(value);
         }
         case DataType::kLongDouble: {
-            if (auto status = need(16); !status.ok())
+            if (auto status = need(16); !status.ok()) {
                 return status;
+            }
             types::LongDouble value;
             std::memcpy(value.data, input.data() + *pos, sizeof(value.data));
             *pos += sizeof(value.data);
             return Value::make<DataType::kLongDouble>(value);
         }
         case DataType::kTime:
-            if (auto status = need(12); !status.ok())
+            if (auto status = need(12); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kTime>(
                 types::Time{.seconds = static_cast<int64_t>(read64()), .nanoseconds = read32()});
         case DataType::kVersion:
-            if (auto status = need(16); !status.ok())
+            if (auto status = need(16); !status.ok()) {
                 return status;
+            }
             return Value::make<DataType::kVersion>(
                 types::Version{.major = read64(), .minor = read64()});
         case DataType::kString:

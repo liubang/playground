@@ -59,10 +59,10 @@ absl::StatusOr<types::AllKeyView> all_key_for(const InternalSchema::ConstRef& sc
     return types::make_all_key_view(row, schema);
 }
 
-template <typename KeyTag>
+template <typename Key>
 absl::StatusOr<size_t> lower_bound_by_key(const InternalSchema::ConstRef& schema,
                                           const std::vector<InternalRow>& rows,
-                                          const types::LogicalKey<KeyTag>& target_key) {
+                                          const Key& target_key) {
     types::KeyComparator comparator(schema);
     size_t first = 0;
     size_t count = rows.size();
@@ -70,16 +70,18 @@ absl::StatusOr<size_t> lower_bound_by_key(const InternalSchema::ConstRef& schema
         const size_t step = count / 2;
         const size_t it = first + step;
         auto key = all_key_for(schema, rows[it]);
-        if (!key.ok())
+        if (!key.ok()) {
             return key.status();
+        }
         absl::StatusOr<bool> less;
-        if constexpr (std::is_same_v<KeyTag, types::PrefixKeyTag>) {
+        if constexpr (std::is_same_v<typename Key::tag, types::PrefixKeyTag>) {
             less = comparator.all_key_less_than_prefix(*key, target_key);
         } else {
             less = comparator.all_key_less(*key, target_key);
         }
-        if (!less.ok())
+        if (!less.ok()) {
             return less.status();
+        }
         if (*less) {
             first = it + 1;
             count -= step + 1;
@@ -122,8 +124,9 @@ absl::StatusOr<block::BlockReader> open_index_node(std::string_view key_file,
                                                    BlockRef ref,
                                                    block::Kind kind) {
     auto bytes = checked_slice(key_file, ref.offset, ref.length, "index node");
-    if (!bytes.ok())
+    if (!bytes.ok()) {
         return bytes.status();
+    }
     return block::BlockReader::open(*bytes, schema, kind);
 }
 
@@ -133,8 +136,9 @@ absl::Status scan_node(std::string_view key_file,
                        block::Kind kind,
                        std::vector<BlockRef>* data_blocks) {
     auto node = open_index_node(key_file, schema, ref, kind);
-    if (!node.ok())
+    if (!node.ok()) {
         return node.status();
+    }
 
     for (const auto& entry : node->rows()) {
         const ColumnFlag flag = entry.flag(schema);
@@ -143,8 +147,9 @@ absl::Status scan_node(std::string_view key_file,
             data_blocks->push_back(child);
         } else if (flag.is_index_block_ptr()) {
             auto status = scan_node(key_file, schema, child, block::Kind::kIndex, data_blocks);
-            if (!status.ok())
+            if (!status.ok()) {
                 return status;
+            }
         } else {
             return absl::InvalidArgumentError("index node contains non-index entry");
         }
@@ -160,18 +165,21 @@ absl::Status scan_node_range(std::string_view key_file,
                              const std::optional<types::PrefixKey>& limit_key,
                              std::vector<BlockRef>* data_blocks) {
     auto node = open_index_node(key_file, schema, ref, kind);
-    if (!node.ok())
+    if (!node.ok()) {
         return node.status();
+    }
 
     types::KeyComparator comparator(schema);
     for (const auto& entry : node->rows()) {
         auto fence = all_key_for(schema, entry);
-        if (!fence.ok())
+        if (!fence.ok()) {
             return fence.status();
+        }
         if (start_key.has_value()) {
             auto less = comparator.all_key_less_than_prefix(*fence, *start_key);
-            if (!less.ok())
+            if (!less.ok()) {
                 return less.status();
+            }
             if (*less) {
                 continue;
             }
@@ -180,8 +188,9 @@ absl::Status scan_node_range(std::string_view key_file,
         bool stop_after_child = false;
         if (limit_key.has_value()) {
             auto cmp = comparator.compare_all_key_to_prefix(*fence, *limit_key);
-            if (!cmp.ok())
+            if (!cmp.ok()) {
                 return cmp.status();
+            }
             stop_after_child = *cmp >= 0;
         }
 
@@ -192,8 +201,9 @@ absl::Status scan_node_range(std::string_view key_file,
         } else if (flag.is_index_block_ptr()) {
             auto status = scan_node_range(
                 key_file, schema, child, block::Kind::kIndex, start_key, limit_key, data_blocks);
-            if (!status.ok())
+            if (!status.ok()) {
                 return status;
+            }
         } else {
             return absl::InvalidArgumentError("index node contains non-index entry");
         }
@@ -211,12 +221,14 @@ absl::StatusOr<std::optional<BlockRef>> find_data_block_from_node(
     block::Kind kind,
     const types::AllKey& target_key) {
     auto node = open_index_node(key_file, schema, ref, kind);
-    if (!node.ok())
+    if (!node.ok()) {
         return node.status();
+    }
 
     auto selected_index = lower_bound_by_key(schema, node->rows(), target_key);
-    if (!selected_index.ok())
+    if (!selected_index.ok()) {
         return selected_index.status();
+    }
     if (*selected_index == node->rows().size()) {
         return std::optional<BlockRef>{};
     }
@@ -256,8 +268,9 @@ absl::Status TreeBuilder::prepare_for_data_block() {
     }
     if (!levels_.empty() && levels_[0].size() == fanout_) {
         auto status = flush_index_level(0);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     return absl::OkStatus();
 }
@@ -285,8 +298,9 @@ absl::Status TreeBuilder::add_index_entry(size_t level, InternalRow entry) {
     }
     if (level > 0 && levels_[level].size() == fanout_) {
         auto status = flush_index_level(level);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     levels_[level].push_back(std::move(entry));
     return absl::OkStatus();
@@ -311,12 +325,14 @@ absl::Status TreeBuilder::flush_index_level(size_t level) {
                                  ColumnFlag::for_index_block());
     for (auto& entry : levels_[level]) {
         auto status = builder.add(std::move(entry));
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     auto encoded = builder.finish();
-    if (!encoded.ok())
+    if (!encoded.ok()) {
         return encoded.status();
+    }
 
     const BlockRef ref{.offset = key_file_->size(), .length = encoded->size()};
     key_file_->append(*encoded);
@@ -362,12 +378,14 @@ absl::StatusOr<FinishResult> TreeBuilder::finish() {
             block::BlockBuilder root_builder(schema_, options);
             for (auto& entry : root_entries) {
                 auto status = root_builder.add(std::move(entry));
-                if (!status.ok())
+                if (!status.ok()) {
                     return status;
+                }
             }
             auto root = root_builder.finish();
-            if (!root.ok())
+            if (!root.ok()) {
                 return root.status();
+            }
 
             const BlockRef root_ref{.offset = key_file_->size(), .length = root->size()};
             key_file_->append(*root);
@@ -375,8 +393,9 @@ absl::StatusOr<FinishResult> TreeBuilder::finish() {
             return FinishResult{.root = root_ref, .block_count = block_count_};
         }
         auto status = flush_index_level(lowest_non_empty_level);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
 }
 

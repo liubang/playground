@@ -18,7 +18,6 @@
 #include "cpp/pl/sstv2/format/tail.h"
 
 #include "absl/status/status.h"
-#include "cpp/pl/sstv2/codec/checksum.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
 
 namespace pl::sstv2::format {
