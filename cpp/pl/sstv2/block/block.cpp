@@ -24,14 +24,12 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "cpp/pl/sstv2/codec/checksum.h"
 #include "cpp/pl/sstv2/codec/endian.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/varint.h"
-#include "cpp/pl/sstv2/format/block_flags.h"
 #include "cpp/pl/sstv2/pattern/compound.h"
 #include "cpp/pl/sstv2/pattern/raw.h"
-#include "cpp/pl/sstv2/types/value_codec.h"
+#include "cpp/pl/sstv2/types/value.h"
 
 namespace pl::sstv2::block {
 
@@ -246,8 +244,9 @@ absl::StatusOr<std::string> encode_column(const std::vector<types::InternalRow>&
                 SSTV2_RETURN_IF_ERROR(
                     verify_value_type(row.columns[column], type, schema->column_name(column)));
                 auto bytes = types::encode_value(row.columns[column]);
-                if (!bytes.ok())
+                if (!bytes.ok()) {
                     return bytes.status();
+                }
                 const uint64_t offset = data_table->size();
                 data_table->append(*bytes);
                 enc.add(offset, bytes->size());
@@ -292,8 +291,9 @@ absl::Status decode_column(std::string_view unit,
     switch (type) {
         case DataType::kBool: {
             pattern::RawDecoder<1> dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad bool raw unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 (*rows)[i].columns[column] = Value::make<DataType::kBool>(dec.get(i) != 0);
             }
@@ -302,8 +302,9 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kInt8:
         case DataType::kUint8: {
             pattern::RawDecoder<1> dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad 1-byte raw unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 (*rows)[i].columns[column] = make_inline(type, dec.get(i));
             }
@@ -312,8 +313,9 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kInt16:
         case DataType::kUint16: {
             pattern::RawDecoder<2> dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad 2-byte raw unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 (*rows)[i].columns[column] = make_inline(type, dec.get(i));
             }
@@ -322,8 +324,9 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kInt32:
         case DataType::kUint32: {
             pattern::RawDecoder<4> dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad 4-byte raw unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 (*rows)[i].columns[column] = make_inline(type, dec.get(i));
             }
@@ -331,8 +334,9 @@ absl::Status decode_column(std::string_view unit,
         }
         case DataType::kFloat: {
             pattern::RawDecoder<4> dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad float raw unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 uint32_t bits = dec.get(i);
                 float f;
@@ -344,8 +348,9 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kInt64:
         case DataType::kUint64: {
             pattern::RawDecoder<8> dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad 8-byte raw unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 (*rows)[i].columns[column] = make_inline(type, dec.get(i));
             }
@@ -353,8 +358,9 @@ absl::Status decode_column(std::string_view unit,
         }
         case DataType::kDouble: {
             pattern::RawDecoder<8> dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad double raw unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 uint64_t bits = dec.get(i);
                 double d;
@@ -365,8 +371,9 @@ absl::Status decode_column(std::string_view unit,
         }
         case DataType::kLongDouble: {
             pattern::RawDecoder<16> dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad long double raw unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 types::LongDouble value;
                 dec.get(i, value.data);
@@ -376,8 +383,9 @@ absl::Status decode_column(std::string_view unit,
         }
         case DataType::kTime: {
             pattern::TimeDecoder dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad time unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 (*rows)[i].columns[column] = Value::make<DataType::kTime>(
                     types::Time{.seconds = dec.seconds(i), .nanoseconds = dec.nanoseconds(i)});
@@ -386,8 +394,9 @@ absl::Status decode_column(std::string_view unit,
         }
         case DataType::kVersion: {
             pattern::VersionDecoder dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad version unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 (*rows)[i].columns[column] = Value::make<DataType::kVersion>(
                     types::Version{.major = dec.major(i), .minor = dec.minor(i)});
@@ -399,8 +408,9 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kU32String:
         case DataType::kBinary: {
             pattern::StringRefDecoder dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad string-ref unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 const uint64_t off = dec.offset(i);
                 const uint64_t len = dec.length(i);
@@ -432,8 +442,9 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kArray:
         case DataType::kMap: {
             pattern::StringRefDecoder dec;
-            if (!dec.parse(unit))
+            if (!dec.parse(unit)) {
                 return absl::InvalidArgumentError("bad variant-ref unit");
+            }
             for (size_t i = 0; i < rows->size(); ++i) {
                 const uint64_t off = dec.offset(i);
                 const uint64_t len = dec.length(i);
@@ -442,8 +453,9 @@ absl::Status decode_column(std::string_view unit,
                 }
                 auto value = types::decode_value(
                     type, std::string_view(data_table.data() + off, static_cast<size_t>(len)));
-                if (!value.ok())
+                if (!value.ok()) {
                     return value.status();
+                }
                 (*rows)[i].columns[column] = std::move(*value);
             }
             return absl::OkStatus();
@@ -497,8 +509,9 @@ absl::StatusOr<std::string> BlockBuilder::finish() {
             }
         }
         auto unit = encode_column(rows, schema_, column, &data_table);
-        if (!unit.ok())
+        if (!unit.ok()) {
             return unit.status();
+        }
         units.push_back(std::move(*unit));
     }
 
@@ -517,12 +530,13 @@ absl::StatusOr<std::string> BlockBuilder::finish() {
     }
 
     auto payload = compress::compress(body, options_.compression);
-    if (!payload.ok())
+    if (!payload.ok()) {
         return payload.status();
+    }
 
     Header h;
     h.magic = options_.kind;
-    h.flags = format::encode_block_flag(options_.compression.codec);
+    h.flags = encode_block_flag(options_.compression.codec);
     h.row_count = rows.size();
     h.offset_table_offset = offset_table_offset;
     h.uncompressed_block_length = Header::kSize + body.size();
@@ -551,7 +565,7 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
     if (h.magic != expected) {
         return absl::InvalidArgumentError("block magic mismatch");
     }
-    const auto codec = format::decode_block_flag(h.flags);
+    const auto codec = decode_block_flag(h.flags);
     const uint64_t expected_block_length =
         codec == compress::Codec::kNone ? h.uncompressed_block_length : h.compressed_block_length;
     if (expected_block_length != block.size()) {
@@ -569,8 +583,9 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
 
     auto body = compress::uncompress(
         block.substr(Header::kSize), codec, h.uncompressed_block_length - Header::kSize);
-    if (!body.ok())
+    if (!body.ok()) {
         return body.status();
+    }
 
     if (h.offset_table_offset < Header::kSize ||
         h.offset_table_offset > h.uncompressed_block_length) {
@@ -588,13 +603,15 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
         uint64_t off = 0;
         const size_t n = codec::decode_varint(
             reinterpret_cast<const uint8_t*>(body->data() + pos), body->size() - pos, &off);
-        if (n == 0)
+        if (n == 0) {
             return absl::InvalidArgumentError("bad column offset table");
+        }
         offsets.push_back(off);
         pos += n;
     }
-    if (offsets.empty())
+    if (offsets.empty()) {
         return absl::InvalidArgumentError("empty column offset table");
+    }
     const auto data_table_len = static_cast<size_t>(offsets.front() - Header::kSize);
     if (data_table_len > offset_table_body) {
         return absl::InvalidArgumentError("bad data table length");
@@ -622,8 +639,9 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
                                     schema,
                                     column,
                                     &reader.rows_);
-        if (!status.ok())
+        if (!status.ok()) {
             return status;
+        }
     }
     return reader;
 }

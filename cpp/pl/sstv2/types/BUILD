@@ -35,15 +35,19 @@ cc_library(
 )
 
 cc_library(
-    name = "column_flag",
-    hdrs = ["column_flag.h"],
-    deps = [":data_type"],
-)
-
-cc_library(
     name = "value",
+    srcs = ["value.cpp"],
     hdrs = ["value.h"],
-    deps = [":data_type"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":data_type",
+        "//cpp/pl/sstv2/codec:fixed",
+        "//cpp/pl/sstv2/codec:varint",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
 )
 
 cc_library(
@@ -62,94 +66,29 @@ cc_library(
     name = "row",
     hdrs = ["row.h"],
     deps = [
-        ":op_type",
-        ":value",
-    ],
-)
-
-cc_library(
-    name = "key_tags",
-    hdrs = ["key_tags.h"],
-)
-
-cc_library(
-    name = "key_prefix",
-    hdrs = ["key_prefix.h"],
-    deps = [
-        ":op_type",
-        ":schema",
-        ":value",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/strings",
-    ],
-)
-
-cc_library(
-    name = "key_comparator",
-    hdrs = ["key_comparator.h"],
-    deps = [
-        ":internal_schema",
-        ":key_tags",
-        ":value",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-    ],
-)
-
-cc_library(
-    name = "key",
-    hdrs = ["key.h"],
-    deps = [
-        ":internal_row",
-        ":internal_schema",
-        ":key_prefix",
-        ":key_tags",
-        ":op_type",
-        ":schema",
-        ":value",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-    ],
-)
-
-cc_library(
-    name = "key_factory",
-    hdrs = ["key_factory.h"],
-    deps = [
-        ":internal_row",
-        ":internal_schema",
         ":key",
-        ":key_comparator",
-        ":key_prefix",
-        ":schema",
+        ":op_type",
         ":value",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
     ],
 )
 
 cc_library(
     name = "internal_row",
-    hdrs = ["internal_row.h"],
+    hdrs = ["internal_row.h", "column_flag.h"],
     deps = [
-        ":column_flag",
         ":internal_schema",
         ":value",
     ],
 )
 
 cc_library(
-    name = "value_codec",
-    srcs = ["value_codec.cpp"],
-    hdrs = ["value_codec.h"],
-    copts = COPTS,
-    linkopts = LINKOPTS,
+    name = "key",
+    hdrs = ["key.h", "key_comparator.h", "key_factory.h", "key_prefix.h"],
     deps = [
-        "//cpp/pl/sstv2/codec:fixed",
-        "//cpp/pl/sstv2/codec:varint",
+        ":internal_row",
+        ":internal_schema",
+        ":op_type",
+        ":schema",
         ":value",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

@@ -26,7 +26,6 @@
 #include <utility>
 
 #include "cpp/pl/sstv2/codec/varint.h"
-#include "cpp/pl/sstv2/pattern/pattern.h"
 #include "cpp/pl/sstv2/pattern/raw.h"
 #include "cpp/pl/sstv2/types/data_type.h"
 
@@ -65,14 +64,16 @@ inline void write_compound_units(const std::array<std::pair<DataType, std::strin
                                                 size_t len,
                                                 size_t expected_sub_count,
                                                 size_t* pos) noexcept {
-    if (len < 1 || src[0] != static_cast<uint8_t>(PatternId::kCompound))
+    if (len < 1 || src[0] != static_cast<uint8_t>(PatternId::kCompound)) {
         return false;
+    }
     *pos = 1;
 
     uint64_t sub_count = 0;
     size_t n = codec::decode_varint(src + *pos, len - *pos, &sub_count);
-    if (n == 0 || sub_count != expected_sub_count)
+    if (n == 0 || sub_count != expected_sub_count) {
         return false;
+    }
     *pos += n;
     return true;
 }
@@ -85,21 +86,25 @@ template <size_t N>
     const auto* src = reinterpret_cast<const uint8_t*>(input.data());
     const size_t len = input.size();
     size_t pos = 0;
-    if (!parse_compound_header(src, len, N, &pos))
+    if (!parse_compound_header(src, len, N, &pos)) {
         return false;
+    }
 
     std::array<uint64_t, N> offsets{};
     for (size_t i = 0; i < N; ++i) {
-        if (pos >= len || src[pos] != static_cast<uint8_t>(expected_types[i]))
+        if (pos >= len || src[pos] != static_cast<uint8_t>(expected_types[i])) {
             return false;
+        }
         ++pos;
         uint64_t offset = 0;
         const size_t n = codec::decode_varint(src + pos, len - pos, &offset);
-        if (n == 0)
+        if (n == 0) {
             return false;
+        }
         pos += n;
-        if (i > 0 && offset < offsets[i - 1])
+        if (i > 0 && offset < offsets[i - 1]) {
             return false;
+        }
         offsets[i] = offset;
     }
 
@@ -107,8 +112,9 @@ template <size_t N>
     for (size_t i = 0; i < N; ++i) {
         const uint64_t begin = offsets[i];
         const uint64_t end = i + 1 == N ? len - data_start : offsets[i + 1];
-        if (begin > end || end > len - data_start)
+        if (begin > end || end > len - data_start) {
             return false;
+        }
         (*units)[i] =
             input.substr(data_start + static_cast<size_t>(begin), static_cast<size_t>(end - begin));
     }
@@ -191,16 +197,20 @@ public:
         if (!detail::parse_compound_units<2>(
                 input, {DataType::kUint64, DataType::kUint64}, &units, &bytes_consumed_))
             return false;
-        if (!offsets_.parse(units[0]))
+        if (!offsets_.parse(units[0])) {
             return false;
-        if (!lengths_.parse(units[1]))
+        }
+        if (!lengths_.parse(units[1])) {
             return false;
-        if (offsets_.bytes_consumed() != units[0].size())
+        }
+        if (offsets_.bytes_consumed() != units[0].size()) {
             return false;
+        }
         bytes_consumed_ = bytes_consumed_ - units[1].size() + lengths_.bytes_consumed();
 
-        if (offsets_.row_count() != lengths_.row_count())
+        if (offsets_.row_count() != lengths_.row_count()) {
             return false;
+        }
 
         row_count_ = offsets_.row_count();
         return true;
@@ -283,16 +293,20 @@ public:
         if (!detail::parse_compound_units<2>(
                 input, {DataType::kInt64, DataType::kUint32}, &units, &bytes_consumed_))
             return false;
-        if (!seconds_.parse(units[0]))
+        if (!seconds_.parse(units[0])) {
             return false;
-        if (!nanoseconds_.parse(units[1]))
+        }
+        if (!nanoseconds_.parse(units[1])) {
             return false;
-        if (seconds_.bytes_consumed() != units[0].size())
+        }
+        if (seconds_.bytes_consumed() != units[0].size()) {
             return false;
+        }
         bytes_consumed_ = bytes_consumed_ - units[1].size() + nanoseconds_.bytes_consumed();
 
-        if (seconds_.row_count() != nanoseconds_.row_count())
+        if (seconds_.row_count() != nanoseconds_.row_count()) {
             return false;
+        }
 
         row_count_ = seconds_.row_count();
         return true;
@@ -379,16 +393,20 @@ public:
         if (!detail::parse_compound_units<2>(
                 input, {DataType::kUint64, DataType::kUint64}, &units, &bytes_consumed_))
             return false;
-        if (!major_.parse(units[0]))
+        if (!major_.parse(units[0])) {
             return false;
-        if (!minor_.parse(units[1]))
+        }
+        if (!minor_.parse(units[1])) {
             return false;
-        if (major_.bytes_consumed() != units[0].size())
+        }
+        if (major_.bytes_consumed() != units[0].size()) {
             return false;
+        }
         bytes_consumed_ = bytes_consumed_ - units[1].size() + minor_.bytes_consumed();
 
-        if (major_.row_count() != minor_.row_count())
+        if (major_.row_count() != minor_.row_count()) {
             return false;
+        }
 
         row_count_ = major_.row_count();
         return true;
