@@ -18,24 +18,29 @@
 #pragma once
 
 #include <memory>
-#include <vector>
 
+#include "cpp/pl/sstv2/types/key.h"
 #include "cpp/pl/sstv2/types/op_type.h"
 #include "cpp/pl/sstv2/types/value.h"
 
 namespace pl::sstv2::types {
 
 // =============================================================================
-// Row: the user-facing input structure for SSTableBuilder::add().
+// Row = AllKey + Value
 //
-// Users construct a Row with their key column values, version, operation type,
-// and a typed value. SSTableBuilder is responsible for converting this into an
-// InternalRow (serializing the value, encoding all-key, deciding
-// embedded/separated, computing checksum, etc.).
+// Row maps directly to the SSTableV2 spec: one user-table row consists of a
+// complete all-key (RowKey + SystemKey) and a single value column.
+//
+// Multi-column values are supported by encoding them into a single Value via
+// Array/Map, or by using the ColumnName-in-RowKey normalization technique
+// described in the SSTableV2 spec §2.1.
+//
+// SSTableBuilder is responsible for converting this into an InternalRow
+// (serializing the value, computing checksum, deciding embedded/separated).
 //
 // Invariants (enforced by SSTableBuilder, not by Row itself):
-//   - key_columns.size() == schema.row_key_column_count()
-//   - key_columns[i].type() matches schema.column_type(i)
+//   - all_key.row_key_view().column_count() == schema.row_key_column_count()
+//   - all_key.row_key_view().column(i).type() matches schema.column_type(i)
 //   - Rows must be added in strictly increasing all-key order.
 //   - For delete tombstones, value should be default (null).
 // =============================================================================
@@ -44,13 +49,42 @@ struct Row {
     using Ref = std::shared_ptr<Row>;
     using ConstRef = std::shared_ptr<const Row>;
 
-    std::vector<Value> key_columns; // RowKey[0..M-1], must match Schema.
-    Version version;                // Version (sorted descending internally).
-    OpType op_type = OpType::kPut;
-
-    // The value payload. SSTableBuilder serializes it according to value.type().
-    // Default-constructed Value (type=kNone) means no value (e.g., for deletes).
+    AllKey all_key;
     Value value;
+
+    // -------------------------------------------------------------------------
+    // Factory: create a Row from its spec-level components.
+    // -------------------------------------------------------------------------
+    // This is the primary user-facing construction API: caller provides a RowKey
+    // (user key columns), SystemKey (version + op_type), and a Value.
+    // The factory merges them into a single AllKey internally.
+
+    // Takes RowKey by rvalue-ref — moves the column vector out directly,
+    // avoiding a deep copy. The typical call site is:
+    //   Row::create(RowKey::from_columns({...}), SystemKey{...}, Value::make<...>(...))
+    // where RowKey::from_columns returns a temporary.
+    [[nodiscard]] static Row create(RowKey&& row_key, SystemKey system_key, Value value = {}) {
+        std::vector<Value> all_key_cols = std::move(row_key).release_columns();
+        all_key_cols.reserve(all_key_cols.size() + SystemKey::kColumnCount);
+        all_key_cols.push_back(Value::make<DataType::kVersion>(system_key.version));
+        all_key_cols.push_back(
+            Value::make<DataType::kUint8>(static_cast<uint8_t>(system_key.op_type)));
+        return Row{AllKey::from_columns(std::move(all_key_cols)), std::move(value)};
+    }
+
+    // -------------------------------------------------------------------------
+    // Factory: create a Row from a pre-built AllKey (internal / deserialization).
+    // -------------------------------------------------------------------------
+    [[nodiscard]] static Row from_all_key(AllKey all_key, Value value = {}) {
+        return Row{std::move(all_key), std::move(value)};
+    }
+
+    // -------------------------------------------------------------------------
+    // Convenience accessors — delegate to AllKey components.
+    // -------------------------------------------------------------------------
+
+    [[nodiscard]] RowKeyView row_key() const { return all_key.row_key_view(); }
+    [[nodiscard]] SystemKey system_key() const { return all_key.system_key(); }
 };
 
 } // namespace pl::sstv2::types

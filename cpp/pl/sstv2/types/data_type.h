@@ -31,32 +31,34 @@ namespace pl::sstv2::types {
 // Values 21-22 are private types used only in index block entries.
 // =============================================================================
 
+// clang-format off
 enum class DataType : uint8_t {
-    kNone = 0,
-    kBool = 1,
-    kInt8 = 2,
-    kUint8 = 3,
-    kInt16 = 4,
-    kUint16 = 5,
-    kInt32 = 6,
-    kUint32 = 7,
-    kInt64 = 8,
-    kUint64 = 9,
-    kFloat = 10,
-    kDouble = 11,
+    kNone       = 0,
+    kBool       = 1,
+    kInt8       = 2,
+    kUint8      = 3,
+    kInt16      = 4,
+    kUint16     = 5,
+    kInt32      = 6,
+    kUint32     = 7,
+    kInt64      = 8,
+    kUint64     = 9,
+    kFloat      = 10,
+    kDouble     = 11,
     kLongDouble = 12,
-    kTime = 13,
-    kVersion = 14,
-    kString = 15,
-    kU16String = 16,
-    kU32String = 17,
-    kBinary = 18,
-    kArray = 19,
-    kMap = 20,
+    kTime       = 13,
+    kVersion    = 14,
+    kString     = 15,
+    kU16String  = 16,
+    kU32String  = 17,
+    kBinary     = 18,
+    kArray      = 19,
+    kMap        = 20,
     // Private types for index block Flag field.
-    kDataBlock = 21,
+    kDataBlock  = 21,
     kIndexBlock = 22,
 };
+// clang-format on
 
 // =============================================================================
 // Compile-time type classification traits.
@@ -126,85 +128,61 @@ constexpr bool is_private_type(DataType dt) {
 // Returns 0 for variable-length and compound types.
 // =============================================================================
 
+// clang-format off
 constexpr size_t fixed_size_of(DataType dt) {
     switch (dt) {
-        case DataType::kBool:
-        case DataType::kInt8:
-        case DataType::kUint8:
-            return 1;
-        case DataType::kInt16:
-        case DataType::kUint16:
-            return 2;
-        case DataType::kInt32:
-        case DataType::kUint32:
-        case DataType::kFloat:
-            return 4;
-        case DataType::kInt64:
-        case DataType::kUint64:
-        case DataType::kDouble:
-            return 8;
-        case DataType::kLongDouble:
-            return 16;
-        default:
-            return 0;
+    case DataType::kBool:
+    case DataType::kInt8:
+    case DataType::kUint8:       return 1;
+    case DataType::kInt16:
+    case DataType::kUint16:      return 2;
+    case DataType::kInt32:
+    case DataType::kUint32:
+    case DataType::kFloat:       return 4;
+    case DataType::kInt64:
+    case DataType::kUint64:
+    case DataType::kDouble:      return 8;
+    case DataType::kLongDouble:  return 16;
+    default:                     return 0;
     }
 }
+// clang-format on
 
 // =============================================================================
 // String representation (constexpr in C++17 via string_view).
 // =============================================================================
 
+// clang-format off
 constexpr std::string_view data_type_name(DataType dt) {
     switch (dt) {
-        case DataType::kNone:
-            return "None";
-        case DataType::kBool:
-            return "Bool";
-        case DataType::kInt8:
-            return "Int8";
-        case DataType::kUint8:
-            return "Uint8";
-        case DataType::kInt16:
-            return "Int16";
-        case DataType::kUint16:
-            return "Uint16";
-        case DataType::kInt32:
-            return "Int32";
-        case DataType::kUint32:
-            return "Uint32";
-        case DataType::kInt64:
-            return "Int64";
-        case DataType::kUint64:
-            return "Uint64";
-        case DataType::kFloat:
-            return "Float";
-        case DataType::kDouble:
-            return "Double";
-        case DataType::kLongDouble:
-            return "LongDouble";
-        case DataType::kTime:
-            return "Time";
-        case DataType::kVersion:
-            return "Version";
-        case DataType::kString:
-            return "String";
-        case DataType::kU16String:
-            return "U16String";
-        case DataType::kU32String:
-            return "U32String";
-        case DataType::kBinary:
-            return "Binary";
-        case DataType::kArray:
-            return "Array";
-        case DataType::kMap:
-            return "Map";
-        case DataType::kDataBlock:
-            return "DataBlock";
-        case DataType::kIndexBlock:
-            return "IndexBlock";
+    case DataType::kNone:       return "None";
+    case DataType::kBool:       return "Bool";
+    case DataType::kInt8:       return "Int8";
+    case DataType::kUint8:      return "Uint8";
+    case DataType::kInt16:      return "Int16";
+    case DataType::kUint16:     return "Uint16";
+    case DataType::kInt32:      return "Int32";
+    case DataType::kUint32:     return "Uint32";
+    case DataType::kInt64:      return "Int64";
+    case DataType::kUint64:     return "Uint64";
+    case DataType::kFloat:      return "Float";
+    case DataType::kDouble:     return "Double";
+    case DataType::kLongDouble: return "LongDouble";
+    case DataType::kTime:       return "Time";
+    case DataType::kVersion:    return "Version";
+    case DataType::kString:     return "String";
+    case DataType::kU16String:  return "U16String";
+    case DataType::kU32String:  return "U32String";
+    case DataType::kBinary:     return "Binary";
+    case DataType::kArray:      return "Array";
+    case DataType::kMap:        return "Map";
+    case DataType::kDataBlock:  return "DataBlock";
+    case DataType::kIndexBlock: return "IndexBlock";
+    default:                    return "?";
     }
     return "Unknown";
 }
+// clang-format on
 
 // Stream output for diagnostics and test failure messages.
 inline std::ostream& operator<<(std::ostream& os, DataType dt) {

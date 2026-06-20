@@ -22,7 +22,6 @@
 #include "absl/hash/hash.h"
 #include "absl/status/status.h"
 #include "cpp/pl/bloom/bloom.h"
-#include "cpp/pl/sstv2/codec/checksum.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/value_comparable.h"
 
@@ -63,8 +62,9 @@ Builder::Builder(int bits_per_key) : bits_per_key_(std::max(1, bits_per_key)) {}
 absl::Status Builder::add(const types::InternalRow& row,
                           const types::InternalSchema::ConstRef& schema) {
     auto all_key = codec::make_encoded_all_key(row, schema);
-    if (!all_key.ok())
+    if (!all_key.ok()) {
         return all_key.status();
+    }
     return add_all_key(*all_key);
 }
 
@@ -139,8 +139,9 @@ absl::StatusOr<Reader> Reader::open(std::string_view section) {
 }
 
 bool Reader::may_contain_all_key(const types::EncodedAllKey& all_key) const {
-    if (bits_.empty() || header_.hash_count == 0)
+    if (bits_.empty() || header_.hash_count == 0) {
         return false;
+    }
     const uint64_t h64 = hash_key(all_key.bytes());
     const auto h32 = static_cast<uint32_t>(h64 ^ (h64 >> 32));
     return pl::StandardBloomFilter::hash_may_match(h32,
@@ -152,8 +153,9 @@ bool Reader::may_contain_all_key(const types::EncodedAllKey& all_key) const {
 absl::StatusOr<bool> Reader::may_contain(const types::InternalRow& row,
                                          const types::InternalSchema::ConstRef& schema) const {
     auto all_key = codec::make_encoded_all_key(row, schema);
-    if (!all_key.ok())
+    if (!all_key.ok()) {
         return all_key.status();
+    }
     return may_contain_all_key(*all_key);
 }
 
