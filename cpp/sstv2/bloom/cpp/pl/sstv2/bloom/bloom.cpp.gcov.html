@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-17 01:19:05</td>
+            <td class="headerValue">2026-06-20 23:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -93,49 +93,49 @@
 <span id="L22"><span class="lineNum">      22</span>                 :             : #include &quot;absl/hash/hash.h&quot;</span>
 <span id="L23"><span class="lineNum">      23</span>                 :             : #include &quot;absl/status/status.h&quot;</span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : #include &quot;cpp/pl/bloom/bloom.h&quot;</span>
-<span id="L25"><span class="lineNum">      25</span>                 :             : #include &quot;cpp/pl/sstv2/codec/checksum.h&quot;</span>
-<span id="L26"><span class="lineNum">      26</span>                 :             : #include &quot;cpp/pl/sstv2/codec/fixed.h&quot;</span>
-<span id="L27"><span class="lineNum">      27</span>                 :             : #include &quot;cpp/pl/sstv2/codec/value_comparable.h&quot;</span>
-<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
-<span id="L29"><span class="lineNum">      29</span>                 :             : namespace pl::sstv2::bloom {</span>
-<span id="L30"><span class="lineNum">      30</span>                 :             : </span>
-<span id="L31"><span class="lineNum">      31</span>                 :             : namespace {</span>
-<span id="L32"><span class="lineNum">      32</span>                 :             : </span>
-<span id="L33"><span class="lineNum">      33</span>                 :             : uint64_t hash_key(std::string_view key) {</span>
-<span id="L34"><span class="lineNum">      34</span>                 :             :     // absl::Hash returns uint64_t — keep full entropy in storage,</span>
-<span id="L35"><span class="lineNum">      35</span>                 :             :     // XOR-fold to 32 bits only when calling StandardBloomFilter.</span>
-<span id="L36"><span class="lineNum">      36</span>                 :             :     return absl::Hash&lt;std::string_view&gt;{}(key);</span>
-<span id="L37"><span class="lineNum">      37</span>                 :             : }</span>
-<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
-<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC tlaBgGNC">          47 : void encode_header(const Header&amp; header, std::string* dst) {</span></span>
-<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed32(dst, header.magic);</span></span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed32(dst, header.version);</span></span>
-<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed32(dst, header.hash_count);</span></span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed64(dst, header.bit_count);</span></span>
-<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed64(dst, header.row_count);</span></span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed64(dst, header.checksum);</span></span>
-<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">          47 : }</span></span>
-<span id="L47"><span class="lineNum">      47</span>                 :             : </span>
-<span id="L48"><span class="lineNum">      48</span>                 :             : Header decode_header(std::string_view input) {</span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     Header h;</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :     h.magic = codec::read_fixed32(input, 0);</span>
-<span id="L51"><span class="lineNum">      51</span>                 :             :     h.version = codec::read_fixed32(input, 4);</span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     h.hash_count = codec::read_fixed32(input, 8);</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             :     h.bit_count = codec::read_fixed64(input, 12);</span>
-<span id="L54"><span class="lineNum">      54</span>                 :             :     h.row_count = codec::read_fixed64(input, 20);</span>
-<span id="L55"><span class="lineNum">      55</span>                 :             :     h.checksum = codec::read_fixed64(input, 28);</span>
-<span id="L56"><span class="lineNum">      56</span>                 :             :     return h;</span>
-<span id="L57"><span class="lineNum">      57</span>                 :             : }</span>
-<span id="L58"><span class="lineNum">      58</span>                 :             : </span>
-<span id="L59"><span class="lineNum">      59</span>                 :             : } // namespace</span>
-<span id="L60"><span class="lineNum">      60</span>                 :             : </span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          17 : Builder::Builder(int bits_per_key) : bits_per_key_(std::max(1, bits_per_key)) {}</span></span>
-<span id="L62"><span class="lineNum">      62</span>                 :             : </span>
-<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">          58 : absl::Status Builder::add(const types::InternalRow&amp; row,</span></span>
-<span id="L64"><span class="lineNum">      64</span>                 :             :                           const types::InternalSchema::ConstRef&amp; schema) {</span>
-<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">          58 :     auto all_key = codec::make_encoded_all_key(row, schema);</span></span>
-<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 58 times"> + </span>]:<span class="tlaGNC">          58 :     if (!all_key.ok())</span></span>
-<span id="L67"><span class="lineNum">      67</span>                 :             :         return all_key.status();</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : #include &quot;cpp/pl/sstv2/codec/fixed.h&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : #include &quot;cpp/pl/sstv2/codec/value_comparable.h&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : namespace pl::sstv2::bloom {</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : namespace {</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : </span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : uint64_t hash_key(std::string_view key) {</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :     // absl::Hash returns uint64_t — keep full entropy in storage,</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :     // XOR-fold to 32 bits only when calling StandardBloomFilter.</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :     return absl::Hash&lt;std::string_view&gt;{}(key);</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : }</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : </span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC tlaBgGNC">          47 : void encode_header(const Header&amp; header, std::string* dst) {</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed32(dst, header.magic);</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed32(dst, header.version);</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed32(dst, header.hash_count);</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed64(dst, header.bit_count);</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed64(dst, header.row_count);</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">          47 :     codec::append_fixed64(dst, header.checksum);</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">          47 : }</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : </span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : Header decode_header(std::string_view input) {</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :     Header h;</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     h.magic = codec::read_fixed32(input, 0);</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :     h.version = codec::read_fixed32(input, 4);</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :     h.hash_count = codec::read_fixed32(input, 8);</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :     h.bit_count = codec::read_fixed64(input, 12);</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :     h.row_count = codec::read_fixed64(input, 20);</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :     h.checksum = codec::read_fixed64(input, 28);</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :     return h;</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : }</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : </span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : } // namespace</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : </span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">          17 : Builder::Builder(int bits_per_key) : bits_per_key_(std::max(1, bits_per_key)) {}</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : </span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">          58 : absl::Status Builder::add(const types::InternalRow&amp; row,</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :                           const types::InternalSchema::ConstRef&amp; schema) {</span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">          58 :     auto all_key = codec::make_encoded_all_key(row, schema);</span></span>
+<span id="L65"><span class="lineNum">      65</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 58 times"> + </span>]:<span class="tlaGNC">          58 :     if (!all_key.ok()) {</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :         return all_key.status();</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :     }</span>
 <span id="L68"><span class="lineNum">      68</span>         [<span class="tlaGBC" title="Branch 0 was taken 58 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          58 :     return add_all_key(*all_key);</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : }</span>
 <span id="L70"><span class="lineNum">      70</span>                 :             : </span>
@@ -210,25 +210,27 @@
 <span id="L139"><span class="lineNum">     139</span>                 :             : }</span>
 <span id="L140"><span class="lineNum">     140</span>                 :             : </span>
 <span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 : bool Reader::may_contain_all_key(const types::EncodedAllKey&amp; all_key) const {</span></span>
-<span id="L142"><span class="lineNum">     142</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           5 :     if (bits_.empty() || header_.hash_count == 0)</span></span>
+<span id="L142"><span class="lineNum">     142</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           5 :     if (bits_.empty() || header_.hash_count == 0) {</span></span>
 <span id="L143"><span class="lineNum">     143</span>                 :             :         return false;</span>
-<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">           5 :     const uint64_t h64 = hash_key(all_key.bytes());</span></span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">           5 :     const auto h32 = static_cast&lt;uint32_t&gt;(h64 ^ (h64 &gt;&gt; 32));</span></span>
-<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">           5 :     return pl::StandardBloomFilter::hash_may_match(h32,</span></span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">           5 :                                                    static_cast&lt;uint32_t&gt;(header_.bit_count),</span></span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">           5 :                                                    static_cast&lt;int&gt;(header_.hash_count),</span></span>
-<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">           5 :                                                    bits_.data());</span></span>
-<span id="L150"><span class="lineNum">     150</span>                 :             : }</span>
-<span id="L151"><span class="lineNum">     151</span>                 :             : </span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">           1 : absl::StatusOr&lt;bool&gt; Reader::may_contain(const types::InternalRow&amp; row,</span></span>
-<span id="L153"><span class="lineNum">     153</span>                 :             :                                          const types::InternalSchema::ConstRef&amp; schema) const {</span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">           1 :     auto all_key = codec::make_encoded_all_key(row, schema);</span></span>
-<span id="L155"><span class="lineNum">     155</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (!all_key.ok())</span></span>
-<span id="L156"><span class="lineNum">     156</span>                 :             :         return all_key.status();</span>
-<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     return may_contain_all_key(*all_key);</span></span>
-<span id="L158"><span class="lineNum">     158</span>                 :             : }</span>
-<span id="L159"><span class="lineNum">     159</span>                 :             : </span>
-<span id="L160"><span class="lineNum">     160</span>                 :             : } // namespace pl::sstv2::bloom</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             :     }</span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">           5 :     const uint64_t h64 = hash_key(all_key.bytes());</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">           5 :     const auto h32 = static_cast&lt;uint32_t&gt;(h64 ^ (h64 &gt;&gt; 32));</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">           5 :     return pl::StandardBloomFilter::hash_may_match(h32,</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">           5 :                                                    static_cast&lt;uint32_t&gt;(header_.bit_count),</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">           5 :                                                    static_cast&lt;int&gt;(header_.hash_count),</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">           5 :                                                    bits_.data());</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :             : }</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             : </span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">           1 : absl::StatusOr&lt;bool&gt; Reader::may_contain(const types::InternalRow&amp; row,</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :             :                                          const types::InternalSchema::ConstRef&amp; schema) const {</span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           1 :     auto all_key = codec::make_encoded_all_key(row, schema);</span></span>
+<span id="L156"><span class="lineNum">     156</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (!all_key.ok()) {</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :         return all_key.status();</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :     }</span>
+<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     return may_contain_all_key(*all_key);</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :             : }</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             : </span>
+<span id="L162"><span class="lineNum">     162</span>                 :             : } // namespace pl::sstv2::bloom</span>
         </pre>
               </td>
             </tr>

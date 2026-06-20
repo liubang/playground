@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-17 01:19:05</td>
+            <td class="headerValue">2026-06-20 23:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">91.8&nbsp;%</td>
@@ -51,7 +51,7 @@
             <td class="headerItem">Branches:</td>
             <td class="headerCovTableEntryLo">50.4&nbsp;%</td>
             <td class="headerCovTableEntry">3044</td>
-            <td class="headerCovTableEntry">1535</td>
+            <td class="headerCovTableEntry">1534</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -244,17 +244,17 @@
 <span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">        2407 :     stats-&gt;page_build_time_ms = source.page_build_time_ms;</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :             : }</span>
 <span id="L173"><span class="lineNum">     173</span>                 :             : </span>
-<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaGBC" title="Branch 0 was taken 66722 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       66722 : bool page_row_less(const std::shared_ptr&lt;runtime::ObjectValue&gt;&amp; lhs,</span></span>
+<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaGBC" title="Branch 0 was taken 66723 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       66723 : bool page_row_less(const std::shared_ptr&lt;runtime::ObjectValue&gt;&amp; lhs,</span></span>
 <span id="L175"><span class="lineNum">     175</span>                 :             :                    const std::shared_ptr&lt;runtime::ObjectValue&gt;&amp; rhs,</span>
 <span id="L176"><span class="lineNum">     176</span>                 :             :                    const std::vector&lt;plan::SortKey&gt;&amp; keys) {</span>
-<span id="L177"><span class="lineNum">     177</span>   [<span class="tlaGBC" title="Branch 0 was taken 66722 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 66722 times"> + </span>]:<span class="tlaGNC">       66722 :     if (lhs == nullptr || rhs == nullptr) {</span></span>
+<span id="L177"><span class="lineNum">     177</span>   [<span class="tlaGBC" title="Branch 0 was taken 66723 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 66723 times"> + </span>]:<span class="tlaGNC">       66723 :     if (lhs == nullptr || rhs == nullptr) {</span></span>
 <span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return lhs != nullptr;</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :             :     }</span>
-<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 66722 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC tlaBgGNC">       66724 :     for (const auto&amp; key : keys) {</span></span>
+<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 66723 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC tlaBgGNC">       66725 :     for (const auto&amp; key : keys) {</span></span>
 <span id="L181"><span class="lineNum">     181</span>                 :             :         const int cmp =</span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">       66722 :             runtime::detail::compare_values(lhs-&gt;lookup(key.column), rhs-&gt;lookup(key.column));</span></span>
-<span id="L183"><span class="lineNum">     183</span>         [<span class="tlaGBC" title="Branch 0 was taken 66720 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">       66722 :         if (cmp != 0) {</span></span>
-<span id="L184"><span class="lineNum">     184</span>         [<span class="tlaGBC" title="Branch 0 was taken 66720 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       66720 :             return key.desc ? cmp &gt; 0 : cmp &lt; 0;</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">       66723 :             runtime::detail::compare_values(lhs-&gt;lookup(key.column), rhs-&gt;lookup(key.column));</span></span>
+<span id="L183"><span class="lineNum">     183</span>         [<span class="tlaGBC" title="Branch 0 was taken 66721 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">       66723 :         if (cmp != 0) {</span></span>
+<span id="L184"><span class="lineNum">     184</span>         [<span class="tlaGBC" title="Branch 0 was taken 66721 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       66721 :             return key.desc ? cmp &gt; 0 : cmp &lt; 0;</span></span>
 <span id="L185"><span class="lineNum">     185</span>                 :             :         }</span>
 <span id="L186"><span class="lineNum">     186</span>                 :             :     }</span>
 <span id="L187"><span class="lineNum">     187</span>                 :             :     return false;</span>
@@ -275,7 +275,7 @@
 <span id="L202"><span class="lineNum">     202</span>                 :             :                                               const std::shared_ptr&lt;plan::PlanNode&gt;&amp; plan) {</span>
 <span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           6 :     auto rows = rows_from_page(input);</span></span>
 <span id="L204"><span class="lineNum">     204</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     std::ranges::stable_sort(rows, [&amp;](const auto&amp; lhs, const auto&amp; rhs) {</span></span>
-<span id="L205"><span class="lineNum">     205</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 66716 times"> + </span>]:<span class="tlaGNC">       66716 :         return page_row_less(lhs, rhs, plan-&gt;sort().keys);</span></span>
+<span id="L205"><span class="lineNum">     205</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 66717 times"> + </span>]:<span class="tlaGNC">       66717 :         return page_row_less(lhs, rhs, plan-&gt;sort().keys);</span></span>
 <span id="L206"><span class="lineNum">     206</span>                 :             :     });</span>
 <span id="L207"><span class="lineNum">     207</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          12 :     runtime::Page output = runtime::PageFromRows(input.bucket, std::move(rows));</span></span>
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
@@ -1078,20 +1078,20 @@
 <span id="L994"><span class="lineNum">     994</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             connector::ConnectorSplitStats current = *current_split_stats_;</span></span>
 <span id="L995"><span class="lineNum">     995</span>                 :<span class="tlaUNC">           0 :             current.wall_time_ms = elapsed_ms(current_split_started_);</span></span>
 <span id="L996"><span class="lineNum">     996</span>                 :<span class="tlaUNC">           0 :             out-&gt;push_back(current);</span></span>
-<span id="L997"><span class="lineNum">     997</span>         [<span class="tlaGBC" title="Branch 0 was taken 358 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">         359 :         } else if (split_stats_.finished) {</span></span>
-<span id="L998"><span class="lineNum">     998</span>                 :<span class="tlaGNC">         358 :             out-&gt;push_back(split_stats_);</span></span>
+<span id="L997"><span class="lineNum">     997</span>         [<span class="tlaGBC" title="Branch 0 was taken 359 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         359 :         } else if (split_stats_.finished) {</span></span>
+<span id="L998"><span class="lineNum">     998</span>                 :<span class="tlaGNC">         359 :             out-&gt;push_back(split_stats_);</span></span>
 <span id="L999"><span class="lineNum">     999</span>                 :             :         }</span>
 <span id="L1000"><span class="lineNum">    1000</span>                 :             :     }</span>
 <span id="L1001"><span class="lineNum">    1001</span>                 :             : </span>
 <span id="L1002"><span class="lineNum">    1002</span>                 :<span class="tlaGNC">        2347 :     absl::StatusOr&lt;std::optional&lt;runtime::Page&gt;&gt; NextPage() override {</span></span>
 <span id="L1003"><span class="lineNum">    1003</span>         [<span class="tlaGBC" title="Branch 0 was taken 363 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1984 times"> + </span>]:<span class="tlaGNC">        2347 :         if (!initialized_) {</span></span>
 <span id="L1004"><span class="lineNum">    1004</span>                 :<span class="tlaGNC">         363 :             auto runtime_or = connector::ConnectorRegistry::Global().CreateRuntime(</span></span>
-<span id="L1005"><span class="lineNum">    1005</span>   [<span class="tlaGBC" title="Branch 0 was taken 362 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 361 times"> + </span>]:<span class="tlaGNC">         363 :                 source_spec_from_split(split_));</span></span>
-<span id="L1006"><span class="lineNum">    1006</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 361 times"> + </span>]:<span class="tlaGNC">         361 :             if (!runtime_or.ok()) {</span></span>
+<span id="L1005"><span class="lineNum">    1005</span>   [<span class="tlaGBC" title="Branch 0 was taken 362 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 362 times"> + </span>]:<span class="tlaGNC">         363 :                 source_spec_from_split(split_));</span></span>
+<span id="L1006"><span class="lineNum">    1006</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 362 times"> + </span>]:<span class="tlaGNC">         362 :             if (!runtime_or.ok()) {</span></span>
 <span id="L1007"><span class="lineNum">    1007</span>                 :             :                 return runtime_or.status();</span>
 <span id="L1008"><span class="lineNum">    1008</span>                 :             :             }</span>
 <span id="L1009"><span class="lineNum">    1009</span>                 :             :             runtime_ = std::move(*runtime_or);</span>
-<span id="L1010"><span class="lineNum">    1010</span>         [<span class="tlaGBC" title="Branch 0 was taken 363 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         358 :             auto page_source_or = runtime_-&gt;page_source_provider-&gt;CreatePageSource(split_);</span></span>
+<span id="L1010"><span class="lineNum">    1010</span>         [<span class="tlaGBC" title="Branch 0 was taken 363 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         357 :             auto page_source_or = runtime_-&gt;page_source_provider-&gt;CreatePageSource(split_);</span></span>
 <span id="L1011"><span class="lineNum">    1011</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 363 times"> + </span>]:<span class="tlaGNC">         363 :             if (!page_source_or.ok()) {</span></span>
 <span id="L1012"><span class="lineNum">    1012</span>                 :             :                 return page_source_or.status();</span>
 <span id="L1013"><span class="lineNum">    1013</span>                 :             :             }</span>
@@ -1104,7 +1104,7 @@
 <span id="L1020"><span class="lineNum">    1020</span>                 :<span class="tlaGNC">         361 :             current_split_started_ = Clock::now();</span></span>
 <span id="L1021"><span class="lineNum">    1021</span>                 :<span class="tlaGNC">         361 :             initialized_ = true;</span></span>
 <span id="L1022"><span class="lineNum">    1022</span>                 :             :         }</span>
-<span id="L1023"><span class="lineNum">    1023</span>                 :<span class="tlaGNC">        2344 :         auto page_or = page_source_-&gt;NextPage();</span></span>
+<span id="L1023"><span class="lineNum">    1023</span>                 :<span class="tlaGNC">        2345 :         auto page_or = page_source_-&gt;NextPage();</span></span>
 <span id="L1024"><span class="lineNum">    1024</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2346 times"> + </span>]:<span class="tlaGNC">        2346 :         if (!page_or.ok()) {</span></span>
 <span id="L1025"><span class="lineNum">    1025</span>                 :             :             return page_or.status();</span>
 <span id="L1026"><span class="lineNum">    1026</span>                 :             :         }</span>
@@ -1161,8 +1161,8 @@
 <span id="L1076"><span class="lineNum">    1076</span>         [<span class="tlaGBC" title="Branch 0 was taken 1993 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1993 :         cv_.wait(lock, [this, page_bytes]() {</span></span>
 <span id="L1077"><span class="lineNum">    1077</span>   [<span class="tlaGBC" title="Branch 0 was taken 1993 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1993 times"> + </span> :<span class="tlaGNC">        1995 :             return closed_ || finished_ || error_.has_value() ||</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 1993 times"> + </span>]
-<span id="L1078"><span class="lineNum">    1078</span>   [<span class="tlaGBC" title="Branch 0 was taken 1991 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 493 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1498 times"> + </span>]:<span class="tlaGNC">        1993 :                    (pages_.size() &lt; max_pages_ &amp;&amp;</span></span>
-<span id="L1079"><span class="lineNum">    1079</span>         [<span class="tlaGBC" title="Branch 0 was taken 1498 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1498 :                     (pages_.empty() || buffered_bytes_ + page_bytes &lt;= max_buffered_bytes_));</span></span>
+<span id="L1078"><span class="lineNum">    1078</span>   [<span class="tlaGBC" title="Branch 0 was taken 1991 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 485 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1506 times"> + </span>]:<span class="tlaGNC">        1993 :                    (pages_.size() &lt; max_pages_ &amp;&amp;</span></span>
+<span id="L1079"><span class="lineNum">    1079</span>         [<span class="tlaGBC" title="Branch 0 was taken 1506 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1506 :                     (pages_.empty() || buffered_bytes_ + page_bytes &lt;= max_buffered_bytes_));</span></span>
 <span id="L1080"><span class="lineNum">    1080</span>                 :             :         });</span>
 <span id="L1081"><span class="lineNum">    1081</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1991 times"> + </span>]:<span class="tlaGNC">        1993 :         if (closed_) {</span></span>
 <span id="L1082"><span class="lineNum">    1082</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             return absl::FailedPreconditionError(&quot;exchange buffer is closed&quot;);</span></span>
@@ -1183,7 +1183,7 @@
 <span id="L1097"><span class="lineNum">    1097</span>                 :             : </span>
 <span id="L1098"><span class="lineNum">    1098</span>                 :<span class="tlaGNC">        1117 :     absl::StatusOr&lt;std::optional&lt;runtime::Page&gt;&gt; PopPage() {</span></span>
 <span id="L1099"><span class="lineNum">    1099</span>                 :<span class="tlaGNC">        1117 :         std::unique_lock&lt;std::mutex&gt; lock(mu_);</span></span>
-<span id="L1100"><span class="lineNum">    1100</span>   [<span class="tlaGBC" title="Branch 0 was taken 784 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 965 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 632 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 152 times"> + </span> :<span class="tlaGNC">        2866 :         cv_.wait(lock, [this]() { return !pages_.empty() || finished_ || error_.has_value(); });</span></span>
+<span id="L1100"><span class="lineNum">    1100</span>   [<span class="tlaGBC" title="Branch 0 was taken 776 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 965 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 624 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 152 times"> + </span> :<span class="tlaGNC">        2858 :         cv_.wait(lock, [this]() { return !pages_.empty() || finished_ || error_.has_value(); });</span></span>
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1117 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L1101"><span class="lineNum">    1101</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1117 times"> + </span>]:<span class="tlaGNC">        1117 :         if (error_.has_value()) {</span></span>
 <span id="L1102"><span class="lineNum">    1102</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             return absl::FailedPreconditionError(*error_);</span></span>
