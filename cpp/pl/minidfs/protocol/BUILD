@@ -15,8 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2025/06/30 00:47
 
-load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
-load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@rules_proto_grpc_cpp//:defs.bzl", "cpp_proto_library")
 
 package(default_visibility = ["//cpp/pl/minidfs:__subpackages__"])
 
@@ -25,7 +24,7 @@ proto_library(
     srcs = ["minidfs.proto"],
 )
 
-cc_proto_library(
+cpp_proto_library(
     name = "minidfs_cc_proto",
-    deps = [":minidfs_proto"],
+    protos = [":minidfs_proto"],
 )
