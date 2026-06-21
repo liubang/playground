@@ -16,8 +16,17 @@
 // Created: 2026/06/21
 
 // brpc-compatible proto for the echo service.
-// Message definitions are wire-compatible with proto/echo/echo.proto.
-// Only unary RPCs are defined — brpc does not support streaming.
+//
+// Why a separate file instead of importing proto/echo/echo.proto?
+//   - brpc requires cc_generic_services = true for codegen.
+//   - gRPC's C++ plugin rejects cc_generic_services = true.
+//   - The two options cannot coexist in the same .proto file.
+//   - Using proto "import" would be ideal, but rules_proto_grpc_cpp's
+//     cpp_proto_library does not automatically wire transitive cc deps
+//     for imported proto_library targets, causing include path errors.
+//
+// The message definitions below are wire-compatible with proto/echo/echo.proto:
+// field numbers, types, and enum ordinals match exactly.
 
 syntax = "proto3";
 
