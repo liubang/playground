@@ -49,6 +49,7 @@
 | [Braft Counter](cpp/pl/braft/) | 基于 braft 的 Raft 状态机示例，演示日志复制、快照、Leader 选举和集群部署。                                                             | C++20, braft, brpc, protobuf                           |
 | [Meta](cpp/meta/)              | C++20 模板元编程实验，包括 Type List、Expression Template、Pattern Matching 和 Tuple Iteration。                                       | C++20                                                  |
 | [Recall](cpp/pl/recall/)       | 基于 FAISS 的向量召回服务，提供 gRPC 接口。                                                                                            | C++20, FAISS, OpenBLAS, gRPC, protobuf                 |
+| [Echo Service](proto/echo/)    | 多语言 gRPC Echo 服务示例。共享 proto 定义，C++ / Java / Python / Go 四语言各自实现 server + client，支持跨语言互操作。                  | gRPC, protobuf, C++20, Java 21, Python 3.13, Go       |
 
 此外，仓库还包含 [Skip List](cpp/pl/skiplist/)、[Bloom Filter](cpp/pl/bloom/)、[Arena Allocator](cpp/pl/arena/)、[Thread Pool](cpp/pl/thread/)、[Geohash](cpp/pl/geohash/)、[Brainfuck Interpreter](cpp/pl/bf/) 和 [HTTP Server](cpp/pl/http/) 等小型实现。
 
@@ -57,10 +58,10 @@
 | 目录        | 说明                                                                    | 技术栈                                |
 | ----------- | ----------------------------------------------------------------------- | ------------------------------------- |
 | `cpp/`      | C++20 项目，包括分布式系统、存储引擎、查询语言、模板元编程和 RPC 示例。 | C++20, Clang/GCC, folly, brpc, Abseil |
-| `java/`     | Java 项目，包括 Spring Boot 示例。                                      | Java 21, Spring Boot 3.5              |
-| `go/`       | Go 项目，包括工具库和多种 cgo 调用方式。                                | Go 1.24, cgo                          |
-| `python/`   | Python 项目，包括 pybind11 绑定和 Manim 动画。                          | Python 3.13, pybind11, Manim          |
-| `proto/`    | 跨语言共享的 Protobuf 定义。                                            | protobuf                              |
+| `java/`     | Java 项目：Spring Boot 示例 + gRPC Echo 服务（Maven + Bazel 双构建）。  | Java 21, Spring Boot 3.5, gRPC        |
+| `go/`       | Go 项目：工具库、cgo 示例 + gRPC Echo 服务。                            | Go 1.25, cgo, gRPC                    |
+| `python/`   | Python 项目：pybind11 绑定、Manim 动画 + gRPC Echo 服务。               | Python 3.13, pybind11, gRPC           |
+| `proto/`    | 跨语言共享的 Protobuf 定义，含多语言 Echo 服务定义。                    | protobuf, gRPC                        |
 | `tla/`      | TLA+ 形式化规约。                                                       | TLA+                                  |
 | `registry/` | Bazel 本地模块注册表，包括 OpenBLAS、ISA-L 等模块。                     | Bazel bzlmod                          |
 | `php/`      | PHP Router 示例。                                                       | PHP                                   |
@@ -133,10 +134,38 @@ bazel build //cpp/... --config=llvm      # 使用自定义 LLVM 路径
 | `--config=macos`   | macOS 默认，Homebrew LLVM + libc++             |
 | `--config=linux`   | Linux 默认，等同于 `--config=gcc`              |
 
-Java Maven 依赖变更后，运行以下命令重新生成锁文件：
+Java 同时支持 Bazel 和 Maven 构建：
+
+```bash
+# Maven
+cd java && mvn compile && mvn test
+
+# Bazel
+bazel build //java/...
+```
+
+Maven 依赖变更后，运行以下命令重新生成锁文件：
 
 ```bash
 REPIN=1 bazel run @maven//:pin
+```
+
+### 运行 Echo 服务
+
+跨语言 gRPC Echo 服务支持四语言任意互操作：
+
+```bash
+# 启动任意语言的 server（任选一个）
+bazel run //cpp/pl/grpc/echo:echo_server    # C++
+bazel run //java/pl/grpc/echo:echo_server   # Java
+bazel run //python/pl/grpc/echo:echo_server # Python
+bazel run //go/pl/grpc/echo/server          # Go
+
+# 用任意语言的 client 连接（可与 server 语言不同）
+bazel run //cpp/pl/grpc/echo:echo_client    # C++
+bazel run //java/pl/grpc/echo:echo_client   # Java
+bazel run //python/pl/grpc/echo:echo_client # Python
+bazel run //go/pl/grpc/echo/client          # Go
 ```
 
 ### Bazel 自动管理的工具链与依赖
@@ -146,10 +175,12 @@ REPIN=1 bazel run @maven//:pin
 | 类别          | 版本          |
 | ------------- | ------------- |
 | JDK           | 21            |
-| Go SDK        | 1.24.12       |
+| Go SDK        | 1.26.4        |
 | Python        | 3.13          |
 | protobuf      | 31.1          |
-| gRPC          | 1.74.1        |
+| gRPC (C++)    | 1.74.1        |
+| gRPC (Java)   | 1.74.0        |
+| gRPC (Go)     | 1.81.1        |
 | Abseil C++    | 20250127.1    |
 | folly         | 2025.01.13    |
 | brpc          | 1.16.0        |
