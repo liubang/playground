@@ -32,7 +32,7 @@ go_library(
         "demo5.go",
     ],
     cgo = True,
-    importpath = "github.com/playground/go/cgo",
+    importpath = "github.com/liubang/playground/go/cgo",
     visibility = ["//visibility:public"],
 )
 
