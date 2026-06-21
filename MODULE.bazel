@@ -228,6 +228,7 @@ maven.install(
         "org.junit.jupiter:junit-jupiter-engine:5.12.2",
         "org.junit.platform:junit-platform-launcher:1.12.2",
         "org.junit.platform:junit-platform-reporting:1.12.2",
+        "com.baidu.cloud:starlight-all:2022.2.0",
     ],
     known_contributing_modules = [
         "protobuf",
