@@ -15,8 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2026/05/07 13:46
 
-load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
-load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@rules_proto_grpc_cpp//:defs.bzl", "cpp_proto_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -25,7 +24,7 @@ proto_library(
     srcs = ["counter.proto"],
 )
 
-cc_proto_library(
+cpp_proto_library(
     name = "counter_cc_proto",
-    deps = [":counter_proto"],
+    protos = [":counter_proto"],
 )
