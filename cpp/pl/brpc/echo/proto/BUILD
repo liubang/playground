@@ -13,7 +13,18 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/05/06 21:10
+# Created: 2026/06/21
 
-# The brpc echo server/client have been moved to cpp/pl/brpc/echo/
-# and now use the shared proto from proto/echo/.
+load("@rules_proto_grpc_cpp//:defs.bzl", "cpp_proto_library")
+
+package(default_visibility = ["//visibility:public"])
+
+proto_library(
+    name = "echo_proto",
+    srcs = ["echo.proto"],
+)
+
+cpp_proto_library(
+    name = "echo_cc_proto",
+    protos = [":echo_proto"],
+)
