@@ -1,4 +1,4 @@
-# Copyright (c) 2025 The Authors. All rights reserved.
+# Copyright (c) 2026 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,26 +13,22 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2025/06/22 10:51
+# Created: 2026/06/21 00:00
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-load(
-    "//cpp:copts/configure_copts.bzl",
-    "COPTS",
-    "LINKOPTS",
-)
+load("//cpp:copts/configure_copts.bzl", "COPTS", "LINKOPTS")
 
 cc_binary(
-    name = "echo_service",
+    name = "echo_server",
     srcs = [
-        "echo_service.cpp",
+        "echo_server.cpp",
         "echo_service_impl.cpp",
         "echo_service_impl.h",
     ],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        "//cpp/pl/grpc/proto:grpc_echo_pb",
+        "//proto/echo:echo_cc_grpc",
+        "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/log:initialize",
         "@grpc//:grpc++",
@@ -48,7 +44,8 @@ cc_binary(
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        "//cpp/pl/grpc/proto:grpc_echo_pb",
+        "//proto/echo:echo_cc_grpc",
+        "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/log:initialize",
         "@grpc//:grpc++",

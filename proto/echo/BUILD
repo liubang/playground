@@ -13,9 +13,12 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/05/06 21:10
+# Created: 2026/06/21 00:00
 
-load("@rules_proto_grpc_cpp//:defs.bzl", "cpp_proto_library")
+load("@protobuf//bazel:java_proto_library.bzl", "java_proto_library")
+load("@rules_proto_grpc_cpp//:defs.bzl", "cpp_grpc_library")
+load("@rules_proto_grpc_java//:defs.bzl", "java_grpc_library")
+load("@rules_proto_grpc_python//:defs.bzl", "python_grpc_library", "python_proto_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -24,7 +27,30 @@ proto_library(
     srcs = ["echo.proto"],
 )
 
-cpp_proto_library(
-    name = "echo_cc_proto",
+# C++
+cpp_grpc_library(
+    name = "echo_cc_grpc",
+    protos = [":echo_proto"],
+)
+
+# Java
+java_proto_library(
+    name = "echo_java_proto",
+    deps = [":echo_proto"],
+)
+
+java_grpc_library(
+    name = "echo_java_grpc",
+    protos = [":echo_proto"],
+)
+
+# Python
+python_proto_library(
+    name = "echo_py_proto",
+    protos = [":echo_proto"],
+)
+
+python_grpc_library(
+    name = "echo_py_grpc",
     protos = [":echo_proto"],
 )
