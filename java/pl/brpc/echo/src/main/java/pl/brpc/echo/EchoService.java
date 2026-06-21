@@ -13,22 +13,20 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/05/06 21:10
+// Created: 2026/06/21
 
-syntax = "proto3";
+package pl.brpc.echo;
 
-package pl.brpc.proto;
+import pl.grpc.proto.EchoRequest;
+import pl.grpc.proto.EchoResponse;
+import pl.grpc.proto.HealthRequest;
+import pl.grpc.proto.HealthResponse;
 
-option cc_generic_services = true;
-
-message EchoRequest {
-  string message = 1;
-}
-
-message EchoResponse {
-  string message = 1;
-}
-
-service EchoService {
-  rpc Echo(EchoRequest) returns (EchoResponse);
+/**
+ * Java interface for the EchoService, consumed by Starlight.
+ * Method names MUST match the proto RPC names exactly for brpc cross-language interop.
+ */
+public interface EchoService {
+    EchoResponse Echo(EchoRequest request);
+    HealthResponse HealthCheck(HealthRequest request);
 }

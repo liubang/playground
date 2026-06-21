@@ -13,18 +13,33 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/05/06 21:10
+# Created: 2026/06/21
 
-load("@rules_proto_grpc_cpp//:defs.bzl", "cpp_proto_library")
-
-package(default_visibility = ["//visibility:public"])
-
-proto_library(
-    name = "echo_proto",
-    srcs = ["echo.proto"],
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "COPTS",
+    "LINKOPTS",
 )
 
-cpp_proto_library(
-    name = "echo_cc_proto",
-    protos = [":echo_proto"],
+cc_binary(
+    name = "echo_server",
+    srcs = ["echo_server.cpp"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/brpc/echo/proto:echo_cc_proto",
+        "@brpc",
+    ],
+)
+
+cc_binary(
+    name = "echo_client",
+    srcs = ["echo_client.cpp"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/brpc/echo/proto:echo_cc_proto",
+        "@brpc",
+    ],
 )
