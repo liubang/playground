@@ -32,10 +32,12 @@ namespace pl::sstv2::types {
 // the key — compaction can discard earlier Merge/Put below it).
 // =============================================================================
 
+// clang-format off
 enum class OpType : uint8_t {
-    kPut = 0,    // Full value write (base).
-    kMerge = 1,  // Incremental update, resolved by MergeOperator during compaction/read.
+    kPut    = 0,    // Full value write (base).
+    kMerge  = 1,  // Incremental update, resolved by MergeOperator during compaction/read.
     kDelete = 2, // Tombstone (logical deletion).
 };
+// clang-format on
 
 } // namespace pl::sstv2::types

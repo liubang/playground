@@ -34,10 +34,12 @@ namespace pl::sstv2::types {
 // SortOrder: the ordering direction for a row key column.
 // =============================================================================
 
+// clang-format off
 enum class SortOrder : uint8_t {
-    kAscending = 0,
+    kAscending  = 0,
     kDescending = 1,
 };
+// clang-format on
 
 // =============================================================================
 // ColumnDef: definition of a single column.

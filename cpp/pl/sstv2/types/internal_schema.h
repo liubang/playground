@@ -159,15 +159,17 @@ private:
         SortOrder order;
     };
 
+    // clang-format off
     static constexpr SystemColumnDef kSystemDefs[kSystemColumnCount] = {
-        {.name = "Version", .type = DataType::kVersion, .order = SortOrder::kDescending},
-        {.name = "OpType", .type = DataType::kUint8, .order = SortOrder::kAscending},
-        {.name = "Flag", .type = DataType::kUint64, .order = SortOrder::kAscending},
-        {.name = "Filename", .type = DataType::kString, .order = SortOrder::kAscending},
-        {.name = "Offset", .type = DataType::kUint64, .order = SortOrder::kAscending},
-        {.name = "Length", .type = DataType::kUint64, .order = SortOrder::kAscending},
-        {.name = "Checksum", .type = DataType::kUint64, .order = SortOrder::kAscending},
+        {.name = "Version",  .type = DataType::kVersion, .order = SortOrder::kDescending},
+        {.name = "OpType",   .type = DataType::kUint8,   .order = SortOrder::kAscending},
+        {.name = "Flag",     .type = DataType::kUint64,  .order = SortOrder::kAscending},
+        {.name = "Filename", .type = DataType::kString,  .order = SortOrder::kAscending},
+        {.name = "Offset",   .type = DataType::kUint64,  .order = SortOrder::kAscending},
+        {.name = "Length",   .type = DataType::kUint64,  .order = SortOrder::kAscending},
+        {.name = "Checksum", .type = DataType::kUint64,  .order = SortOrder::kAscending},
     };
+    // clang-format on
 };
 
 } // namespace pl::sstv2::types
