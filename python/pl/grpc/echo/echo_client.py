@@ -23,7 +23,7 @@ import time
 
 import grpc
 
-from pl.grpc.proto.echo_pb2 import (
+from proto.echo.echo_pb2 import (
     ChatMessage,
     EchoRequest,
     EchoResponse,
@@ -33,7 +33,7 @@ from pl.grpc.proto.echo_pb2 import (
     ServerStreamRequest,
     StreamItem,
 )
-from pl.grpc.proto.echo_pb2_grpc import EchoServiceStub
+from proto.echo.echo_pb2_grpc import EchoServiceStub
 
 
 class EchoClient:
