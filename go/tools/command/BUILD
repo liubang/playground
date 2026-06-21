@@ -20,7 +20,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "command_lib",
     srcs = ["command.go"],
-    importpath = "github.com/playground/go/tools/command",
+    importpath = "github.com/liubang/playground/go/tools/command",
     visibility = ["//visibility:public"],
 )
 

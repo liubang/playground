@@ -20,7 +20,7 @@ load("@rules_go//go:def.bzl", "go_binary", "go_library")
 go_library(
     name = "ssh_lib",
     srcs = ["ssh.go"],
-    importpath = "github.com/playground/go/tools/ssh",
+    importpath = "github.com/liubang/playground/go/tools/ssh",
     visibility = ["//visibility:public"],
     deps = [
         "//go/tools/command:command_lib",
