@@ -1,4 +1,4 @@
-# Copyright (c) 2025 The Authors. All rights reserved.
+# Copyright (c) 2026 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,19 +13,24 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2025/06/22 10:51
+# Created: 2026/06/21
 
-load("@grpc//bazel:grpc_build_system.bzl", "grpc_proto_library")
-load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@rules_python//python:defs.bzl", "py_binary")
 
-package(default_visibility = ["//visibility:public"])
-
-proto_library(
-    name = "echo_pb",
-    srcs = ["echo.proto"],
+py_binary(
+    name = "echo_server",
+    srcs = ["echo_server.py"],
+    main = "echo_server.py",
+    deps = [
+        "//proto/echo:echo_py_grpc",
+    ],
 )
 
-grpc_proto_library(
-    name = "grpc_echo_pb",
-    srcs = ["echo.proto"],
+py_binary(
+    name = "echo_client",
+    srcs = ["echo_client.py"],
+    main = "echo_client.py",
+    deps = [
+        "//proto/echo:echo_py_grpc",
+    ],
 )
