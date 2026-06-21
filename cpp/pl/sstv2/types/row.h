@@ -69,14 +69,15 @@ struct Row {
         all_key_cols.push_back(Value::make<DataType::kVersion>(system_key.version));
         all_key_cols.push_back(
             Value::make<DataType::kUint8>(static_cast<uint8_t>(system_key.op_type)));
-        return Row{AllKey::from_columns(std::move(all_key_cols)), std::move(value)};
+        return Row{.all_key = AllKey::from_columns(std::move(all_key_cols)),
+                   .value = std::move(value)};
     }
 
     // -------------------------------------------------------------------------
     // Factory: create a Row from a pre-built AllKey (internal / deserialization).
     // -------------------------------------------------------------------------
     [[nodiscard]] static Row from_all_key(AllKey all_key, Value value = {}) {
-        return Row{std::move(all_key), std::move(value)};
+        return Row{.all_key = std::move(all_key), .value = std::move(value)};
     }
 
     // -------------------------------------------------------------------------
