@@ -15,16 +15,16 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/06/21
 
+#include <brpc/server.h>
 #include <chrono>
+#include <gflags/gflags.h>
 #include <memory>
 #include <string>
-
-#include <brpc/server.h>
-#include <gflags/gflags.h>
 
 #include "cpp/pl/brpc/echo/proto/echo.pb.h"
 
 DEFINE_int32(port, 8000, "TCP Port of this server");
+DEFINE_string(server_id, "cpp-brpc-server", "Unique server identifier");
 DEFINE_int32(idle_timeout_s,
              -1,
              "Connection will be closed if there is no "
@@ -45,9 +45,8 @@ public:
         ::brpc::ClosureGuard done_guard(done);
         auto* cntl = static_cast<::brpc::Controller*>(cntl_base);
 
-        LOG(INFO) << "Echo request[log_id=" << cntl->log_id()
-                  << "] from " << cntl->remote_side() << " to "
-                  << cntl->local_side() << ": " << request->message();
+        LOG(INFO) << "Echo request[log_id=" << cntl->log_id() << "] from " << cntl->remote_side()
+                  << " to " << cntl->local_side() << ": " << request->message();
 
         auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
@@ -56,7 +55,7 @@ public:
         response->set_message(request->message());
         response->set_original_timestamp(request->timestamp_us());
         response->set_server_timestamp(now_us);
-        response->set_server_id("cpp-brpc-server");
+        response->set_server_id(FLAGS_server_id);
     }
 
     void HealthCheck(::google::protobuf::RpcController* cntl_base,
@@ -70,11 +69,11 @@ public:
                               std::chrono::steady_clock::now() - start_time_)
                               .count();
 
-        LOG(INFO) << "HealthCheck request[log_id=" << cntl->log_id()
-                  << "] from " << cntl->remote_side();
+        LOG(INFO) << "HealthCheck request[log_id=" << cntl->log_id() << "] from "
+                  << cntl->remote_side();
 
         response->set_status(::pl::brpc::echo::HealthResponse::SERVING);
-        response->set_server_id("cpp-brpc-server");
+        response->set_server_id(FLAGS_server_id);
         response->set_version("1.0.0");
         response->set_uptime_seconds(uptime_sec);
     }
@@ -92,8 +91,7 @@ int main(int argc, char* argv[]) {
 
     pl::brpc_echo::EchoServiceImpl echo_service_impl;
 
-    if (server.AddService(&echo_service_impl,
-                          ::brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+    if (server.AddService(&echo_service_impl, ::brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
         LOG(ERROR) << "Fail to add service";
         return -1;
     }
@@ -107,7 +105,7 @@ int main(int argc, char* argv[]) {
     }
 
     LOG(INFO) << "[C++ brpc EchoServer] Listening on port " << FLAGS_port
-              << " (server_id: cpp-brpc-server)";
+              << " (server_id: " << FLAGS_server_id << ")";
 
     server.RunUntilAskedToQuit();
     return 0;

@@ -31,6 +31,11 @@ import (
 	pb "github.com/liubang/playground/go/pl/grpc/echo/pb"
 )
 
+var (
+	addr    = flag.String("addr", "localhost:50051", "Server address to connect to")
+	timeout = flag.Duration("timeout", 5*time.Second, "Default RPC timeout (unary)")
+)
+
 type echoClient struct {
 	conn *grpc.ClientConn
 	stub pb.EchoServiceClient
@@ -47,23 +52,30 @@ func newEchoClient(addr string) (*echoClient, error) {
 func (c *echoClient) close() { c.conn.Close() }
 
 func (c *echoClient) doEcho(message string) {
-	now := time.Now().UnixMicro()
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+
+	sentUs := time.Now().UnixMicro()
 	req := &pb.EchoRequest{
 		Message:     message,
-		TimestampUs: now,
+		TimestampUs: sentUs,
 		Headers:     map[string]string{"client": "go"},
 	}
-	resp, err := c.stub.Echo(context.Background(), req)
+	resp, err := c.stub.Echo(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[Echo] RPC failed: %v\n", err)
 		return
 	}
+	rttUs := time.Now().UnixMicro() - sentUs // client-local RTT
 	fmt.Printf("[Echo] response: %s | rtt_us=%d | server=%s\n",
-		resp.Message, resp.ServerTimestamp-now, resp.ServerId)
+		resp.Message, rttUs, resp.ServerId)
 }
 
 func (c *echoClient) doServerStream(pattern string, maxResponses int32) {
-	stream, err := c.stub.ServerStream(context.Background(), &pb.ServerStreamRequest{
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	stream, err := c.stub.ServerStream(ctx, &pb.ServerStreamRequest{
 		Pattern:      pattern,
 		MaxResponses: maxResponses,
 	})
@@ -86,7 +98,10 @@ func (c *echoClient) doServerStream(pattern string, maxResponses int32) {
 }
 
 func (c *echoClient) doClientStream(messages []string) {
-	stream, err := c.stub.ClientStream(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	stream, err := c.stub.ClientStream(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[ClientStream] RPC failed: %v\n", err)
 		return
@@ -109,12 +124,15 @@ func (c *echoClient) doClientStream(messages []string) {
 }
 
 func (c *echoClient) doChat(messages []string) {
-	stream, err := c.stub.Chat(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	stream, err := c.stub.Chat(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[Chat] RPC failed: %v\n", err)
 		return
 	}
-	// Start receiver goroutine
+
 	errCh := make(chan error, 1)
 	go func() {
 		for {
@@ -130,24 +148,34 @@ func (c *echoClient) doChat(messages []string) {
 			fmt.Printf("  %s → %s\n", msg.Sender, msg.Content)
 		}
 	}()
-	// Send messages
+
 	fmt.Println("[Chat] round-trip:")
 	for _, content := range messages {
-		msg := &pb.ChatMessage{Sender: "go-client", Content: content, TimestampUs: time.Now().UnixMicro()}
+		msg := &pb.ChatMessage{
+			Sender:      "go-client",
+			Content:     content,
+			TimestampUs: time.Now().UnixMicro(),
+		}
 		if err := stream.Send(msg); err != nil {
 			fmt.Fprintf(os.Stderr, "[Chat] send failed: %v\n", err)
-			return
+			_ = stream.CloseSend()
+			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	stream.CloseSend()
+	if err := stream.CloseSend(); err != nil {
+		fmt.Fprintf(os.Stderr, "[Chat] close send failed: %v\n", err)
+	}
 	if err := <-errCh; err != nil {
 		fmt.Fprintf(os.Stderr, "[Chat] RPC failed: %v\n", err)
 	}
 }
 
 func (c *echoClient) doHealthCheck() {
-	resp, err := c.stub.HealthCheck(context.Background(), &pb.HealthRequest{})
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+
+	resp, err := c.stub.HealthCheck(ctx, &pb.HealthRequest{})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[HealthCheck] RPC failed: %v\n", err)
 		return
@@ -157,12 +185,8 @@ func (c *echoClient) doHealthCheck() {
 }
 
 func main() {
-	addr := "localhost:50051"
 	flag.Parse()
-	if len(flag.Args()) > 0 {
-		addr = flag.Arg(0)
-	}
-	client, err := newEchoClient(addr)
+	client, err := newEchoClient(*addr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "client error: %v\n", err)
 		os.Exit(1)

@@ -49,6 +49,9 @@ public class EchoServer {
             this.startTime = Instant.now();
         }
 
+        // NOTE: Java timestamps use System.currentTimeMillis()*1000 which has
+        // millisecond (not microsecond) granularity. The field type (int64) is
+        // compatible but precision is lower than the C++/Go implementations.
         @Override
         public void echo(EchoRequest req, StreamObserver<EchoResponse> observer) {
             long now = System.currentTimeMillis() * 1000;
@@ -84,7 +87,10 @@ public class EchoServer {
                 final EchoSummary.Builder summary = EchoSummary.newBuilder();
                 int count;
                 @Override public void onNext(EchoRequest req) { summary.addMessages(req.getMessage()); count++; }
-                @Override public void onError(Throwable t) { logger.warning("ClientStream: " + t); }
+                @Override public void onError(Throwable t) {
+                    logger.warning("ClientStream error: " + t);
+                    observer.onError(t); // propagate to client
+                }
                 @Override public void onCompleted() {
                     long now = System.currentTimeMillis() * 1000;
                     summary.setMessageCount(count).setServerTimestamp(now).setServerId(serverId);
@@ -98,7 +104,10 @@ public class EchoServer {
         public StreamObserver<ChatMessage> chat(StreamObserver<ChatMessage> observer) {
             return new StreamObserver<>() {
                 @Override public void onNext(ChatMessage msg) { observer.onNext(msg); }
-                @Override public void onError(Throwable t) { logger.warning("Chat: " + t); }
+                @Override public void onError(Throwable t) {
+                    logger.warning("Chat error: " + t);
+                    observer.onError(t); // propagate to client
+                }
                 @Override public void onCompleted() { observer.onCompleted(); }
             };
         }

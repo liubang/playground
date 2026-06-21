@@ -21,7 +21,6 @@ import re
 import sys
 import time
 from concurrent import futures
-from datetime import datetime, timezone
 
 import grpc
 
@@ -37,7 +36,6 @@ from proto.echo.echo_pb2 import (
 )
 from proto.echo.echo_pb2_grpc import (
     EchoServiceServicer,
-    EchoServiceStub,
     add_EchoServiceServicer_to_server,
 )
 
@@ -72,7 +70,6 @@ class EchoService(EchoServiceServicer):
                 pattern = re.compile(request.pattern, re.IGNORECASE)
             except re.error:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Invalid regex pattern")
-                return
 
         limit = request.max_responses if request.max_responses > 0 else len(self.ITEMS)
         count = 0

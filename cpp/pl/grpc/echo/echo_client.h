@@ -19,6 +19,7 @@
 
 #include <chrono>
 #include <grpcpp/grpcpp.h>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <thread>
@@ -28,6 +29,14 @@
 
 namespace pl {
 
+// Returns current timestamp in microseconds since epoch. All RTT measurements
+// use client-local time (not server time) to avoid clock-skew errors.
+inline int64_t NowUs() {
+    return std::chrono::duration_cast<std::chrono::microseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
 class EchoServiceClient {
 public:
     explicit EchoServiceClient(std::shared_ptr<::grpc::Channel> channel)
@@ -36,20 +45,18 @@ public:
     // --- Unary Echo ---
     void DoEcho(const std::string& message) {
         ::grpc::ClientContext context;
-        auto now = std::chrono::duration_cast<std::chrono::microseconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
-                       .count();
+        int64_t sent_us = NowUs();
 
         ::pl::grpc::proto::EchoRequest req;
         req.set_message(message);
-        req.set_timestamp_us(now);
+        req.set_timestamp_us(sent_us);
         (*req.mutable_headers())["client"] = "cpp";
 
         ::pl::grpc::proto::EchoResponse resp;
         ::grpc::Status status = stub_->Echo(&context, req, &resp);
         if (status.ok()) {
-            std::cout << "[Echo] response: " << resp.message()
-                      << " | rtt_us=" << (resp.server_timestamp() - now)
+            int64_t rtt_us = NowUs() - sent_us; // client-local RTT, no clock skew
+            std::cout << "[Echo] response: " << resp.message() << " | rtt_us=" << rtt_us
                       << " | server=" << resp.server_id() << std::endl;
         } else {
             std::cout << "[Echo] RPC failed: " << status.error_message() << std::endl;
@@ -115,10 +122,10 @@ public:
                 ::pl::grpc::proto::ChatMessage msg;
                 msg.set_sender("cpp-client");
                 msg.set_content(content);
-                msg.set_timestamp_us(std::chrono::duration_cast<std::chrono::microseconds>(
-                                         std::chrono::system_clock::now().time_since_epoch())
-                                         .count());
-                stream->Write(msg);
+                msg.set_timestamp_us(NowUs());
+                if (!stream->Write(msg)) {
+                    break; // stream broken, stop writing
+                }
             }
             stream->WritesDone();
         });
