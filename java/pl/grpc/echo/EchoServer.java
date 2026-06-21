@@ -21,6 +21,8 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import pl.grpc.proto.EchoServiceGrpc;
+import pl.grpc.proto.StreamServiceGrpc;
 import pl.grpc.proto.*;
 
 import java.io.IOException;
@@ -40,6 +42,7 @@ public class EchoServer {
             "Alpha", "Bravo", "Charlie", "Delta", "Echo",
             "Foxtrot", "Golf", "Hotel", "India", "Juliet");
 
+    // Unary RPCs: Echo + HealthCheck
     static class EchoServiceImpl extends EchoServiceGrpc.EchoServiceImplBase {
         private final String serverId;
         private final Instant startTime;
@@ -50,8 +53,7 @@ public class EchoServer {
         }
 
         // NOTE: Java timestamps use System.currentTimeMillis()*1000 which has
-        // millisecond (not microsecond) granularity. The field type (int64) is
-        // compatible but precision is lower than the C++/Go implementations.
+        // millisecond (not microsecond) granularity.
         @Override
         public void echo(EchoRequest req, StreamObserver<EchoResponse> observer) {
             long now = System.currentTimeMillis() * 1000;
@@ -59,6 +61,23 @@ public class EchoServer {
                     .setOriginalTimestamp(req.getTimestampUs()).setServerTimestamp(now)
                     .setServerId(serverId).build());
             observer.onCompleted();
+        }
+
+        @Override
+        public void healthCheck(HealthRequest req, StreamObserver<HealthResponse> observer) {
+            long uptime = Duration.between(startTime, Instant.now()).getSeconds();
+            observer.onNext(HealthResponse.newBuilder().setStatus(HealthResponse.Status.SERVING)
+                    .setServerId(serverId).setVersion(VERSION).setUptimeSeconds(uptime).build());
+            observer.onCompleted();
+        }
+    }
+
+    // Streaming RPCs: ServerStream + ClientStream + Chat
+    static class StreamServiceImpl extends StreamServiceGrpc.StreamServiceImplBase {
+        private final String serverId;
+
+        StreamServiceImpl(String serverId) {
+            this.serverId = serverId;
         }
 
         @Override
@@ -89,7 +108,7 @@ public class EchoServer {
                 @Override public void onNext(EchoRequest req) { summary.addMessages(req.getMessage()); count++; }
                 @Override public void onError(Throwable t) {
                     logger.warning("ClientStream error: " + t);
-                    observer.onError(t); // propagate to client
+                    observer.onError(t);
                 }
                 @Override public void onCompleted() {
                     long now = System.currentTimeMillis() * 1000;
@@ -106,18 +125,10 @@ public class EchoServer {
                 @Override public void onNext(ChatMessage msg) { observer.onNext(msg); }
                 @Override public void onError(Throwable t) {
                     logger.warning("Chat error: " + t);
-                    observer.onError(t); // propagate to client
+                    observer.onError(t);
                 }
                 @Override public void onCompleted() { observer.onCompleted(); }
             };
-        }
-
-        @Override
-        public void healthCheck(HealthRequest req, StreamObserver<HealthResponse> observer) {
-            long uptime = Duration.between(startTime, Instant.now()).getSeconds();
-            observer.onNext(HealthResponse.newBuilder().setStatus(HealthResponse.Status.SERVING)
-                    .setServerId(serverId).setVersion(VERSION).setUptimeSeconds(uptime).build());
-            observer.onCompleted();
         }
     }
 
@@ -125,7 +136,8 @@ public class EchoServer {
 
     public EchoServer(int port, String serverId) throws IOException {
         server = ServerBuilder.forPort(port)
-                .addService(new EchoServiceImpl(serverId)).build().start();
+                .addService(new EchoServiceImpl(serverId))
+                .addService(new StreamServiceImpl(serverId)).build().start();
         logger.info("[Java EchoServer] Listening on port " + port + " (id: " + serverId + ")");
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try { server.shutdown().awaitTermination(5, TimeUnit.SECONDS); }

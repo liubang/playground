@@ -28,6 +28,7 @@ cc_binary(
     linkopts = LINKOPTS,
     deps = [
         "//proto/echo:echo_cc_grpc",
+        "//proto/echo:stream_cc_grpc",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/log:initialize",
@@ -45,6 +46,7 @@ cc_binary(
     linkopts = LINKOPTS,
     deps = [
         "//proto/echo:echo_cc_grpc",
+        "//proto/echo:stream_cc_grpc",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/log:initialize",

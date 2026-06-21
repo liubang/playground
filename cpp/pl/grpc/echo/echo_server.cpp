@@ -28,11 +28,13 @@ ABSL_FLAG(std::string, server_id, "cpp-server", "Unique server identifier");
 
 void RunServer() {
     std::string server_address = "0.0.0.0:" + absl::GetFlag(FLAGS_port);
-    pl::EchoServiceImpl service(absl::GetFlag(FLAGS_server_id));
+    pl::EchoServiceImpl echo_service(absl::GetFlag(FLAGS_server_id));
+    pl::StreamServiceImpl stream_service(absl::GetFlag(FLAGS_server_id));
 
     grpc::ServerBuilder builder;
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-    builder.RegisterService(&service);
+    builder.RegisterService(&echo_service);
+    builder.RegisterService(&stream_service);
     std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
     if (!server) {
         std::cerr << "Failed to start server on " << server_address << std::endl;

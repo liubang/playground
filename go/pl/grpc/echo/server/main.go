@@ -58,7 +58,23 @@ func (s *echoServer) Echo(_ context.Context, req *pb.EchoRequest) (*pb.EchoRespo
 	}, nil
 }
 
-func (s *echoServer) ServerStream(req *pb.ServerStreamRequest, stream grpc.ServerStreamingServer[pb.StreamItem]) error {
+func (s *echoServer) HealthCheck(_ context.Context, _ *pb.HealthRequest) (*pb.HealthResponse, error) {
+	return &pb.HealthResponse{
+		Status:        pb.HealthResponse_SERVING,
+		ServerId:      s.serverID,
+		Version:       "1.0.0",
+		UptimeSeconds: int64(time.Since(s.startTime).Seconds()),
+	}, nil
+}
+
+// --- StreamService ---
+
+type streamServer struct {
+	pb.UnimplementedStreamServiceServer
+	serverID string
+}
+
+func (s *streamServer) ServerStream(req *pb.ServerStreamRequest, stream grpc.ServerStreamingServer[pb.StreamItem]) error {
 	var pattern *regexp.Regexp
 	if req.Pattern != "" {
 		var err error
@@ -80,14 +96,14 @@ func (s *echoServer) ServerStream(req *pb.ServerStreamRequest, stream grpc.Serve
 			continue
 		}
 		if err := stream.Send(&pb.StreamItem{Index: int32(i), Content: content}); err != nil {
-			return err // client disconnected
+			return err
 		}
 		count++
 	}
 	return nil
 }
 
-func (s *echoServer) ClientStream(stream grpc.ClientStreamingServer[pb.EchoRequest, pb.EchoSummary]) error {
+func (s *streamServer) ClientStream(stream grpc.ClientStreamingServer[pb.EchoRequest, pb.EchoSummary]) error {
 	var messages []string
 	for {
 		req, err := stream.Recv()
@@ -107,7 +123,7 @@ func (s *echoServer) ClientStream(stream grpc.ClientStreamingServer[pb.EchoReque
 	}
 }
 
-func (s *echoServer) Chat(stream grpc.BidiStreamingServer[pb.ChatMessage, pb.ChatMessage]) error {
+func (s *streamServer) Chat(stream grpc.BidiStreamingServer[pb.ChatMessage, pb.ChatMessage]) error {
 	for {
 		msg, err := stream.Recv()
 		if err == io.EOF {
@@ -122,15 +138,6 @@ func (s *echoServer) Chat(stream grpc.BidiStreamingServer[pb.ChatMessage, pb.Cha
 	}
 }
 
-func (s *echoServer) HealthCheck(_ context.Context, _ *pb.HealthRequest) (*pb.HealthResponse, error) {
-	return &pb.HealthResponse{
-		Status:        pb.HealthResponse_SERVING,
-		ServerId:      s.serverID,
-		Version:       "1.0.0",
-		UptimeSeconds: int64(time.Since(s.startTime).Seconds()),
-	}, nil
-}
-
 func runServer(port int, serverID string) error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -138,6 +145,7 @@ func runServer(port int, serverID string) error {
 	}
 	s := grpc.NewServer()
 	pb.RegisterEchoServiceServer(s, &echoServer{serverID: serverID, startTime: time.Now()})
+	pb.RegisterStreamServiceServer(s, &streamServer{serverID: serverID})
 	fmt.Printf("[Go EchoServer] Listening on port %d (id: %s)\n", port, serverID)
 	return s.Serve(lis)
 }
