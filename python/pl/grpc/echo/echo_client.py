@@ -18,7 +18,6 @@
 """Python gRPC echo client — tests all 5 RPCs against a server."""
 
 import sys
-import threading
 import time
 
 import grpc
@@ -26,12 +25,9 @@ import grpc
 from proto.echo.echo_pb2 import (
     ChatMessage,
     EchoRequest,
-    EchoResponse,
-    EchoSummary,
     HealthRequest,
     HealthResponse,
     ServerStreamRequest,
-    StreamItem,
 )
 from proto.echo.echo_pb2_grpc import EchoServiceStub
 

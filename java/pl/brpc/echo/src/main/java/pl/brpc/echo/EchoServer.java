@@ -36,7 +36,12 @@ import pl.grpc.proto.HealthResponse;
  */
 public class EchoServer {
 
-    /** The service implementation. */
+    /**
+     * The service implementation.
+     * NOTE: Java timestamps use System.currentTimeMillis()*1000 which has
+     * millisecond (not microsecond) granularity. The field type (int64) is
+     * wire-compatible with the C++ brpc server which uses true microseconds.
+     */
     public static class EchoServiceImpl implements EchoService {
         private final long startTimeMs = System.currentTimeMillis();
 
@@ -68,20 +73,39 @@ public class EchoServer {
 
         TransportConfig transportConfig = new TransportConfig();
         StarlightServer server = new DefaultStarlightServer(host, port, transportConfig);
-        server.init();
 
-        ServiceConfig serviceConfig = new ServiceConfig();
-        server.export(EchoService.class, new EchoServiceImpl(), serviceConfig);
-        server.serve();
+        try {
+            server.init();
 
-        System.out.println("[Java Starlight EchoServer] Listening on " + host + ":"
-                + port + " (server_id: java-starlight-server)");
+            ServiceConfig serviceConfig = new ServiceConfig();
+            server.export(EchoService.class, new EchoServiceImpl(), serviceConfig);
+            server.serve();
 
-        synchronized (EchoServer.class) {
-            try {
-                EchoServer.class.wait();
-            } catch (InterruptedException ignored) {
+            System.out.println("[Java Starlight EchoServer] Listening on " + host + ":"
+                    + port + " (server_id: java-starlight-server)");
+
+            // Graceful shutdown on SIGTERM / Ctrl-C
+            StarlightServer finalServer = server;
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                System.out.println("[Java Starlight EchoServer] Shutting down...");
+                try {
+                    finalServer.destroy();
+                } catch (Exception e) {
+                    System.err.println("Error during shutdown: " + e.getMessage());
+                }
+            }));
+
+            synchronized (EchoServer.class) {
+                try {
+                    EchoServer.class.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
+        } catch (Exception e) {
+            System.err.println("[Java Starlight EchoServer] Failed to start: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
         }
     }
 }
