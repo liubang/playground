@@ -29,7 +29,7 @@ from proto.echo.echo_pb2 import (
     HealthResponse,
     ServerStreamRequest,
 )
-from proto.echo.echo_pb2_grpc import EchoServiceStub
+from proto.echo.echo_pb2_grpc import EchoServiceStub, StreamServiceStub
 
 
 class EchoClient:
@@ -38,6 +38,7 @@ class EchoClient:
     def __init__(self, host: str = "localhost", port: int = 50051):
         self.channel = grpc.insecure_channel(f"{host}:{port}")
         self.stub = EchoServiceStub(self.channel)
+        self.stream_stub = StreamServiceStub(self.channel)
 
     def close(self):
         self.channel.close()
@@ -66,7 +67,7 @@ class EchoClient:
             print(
                 f"[ServerStream] receiving items (pattern='{pattern}', limit={max_responses}):"
             )
-            for item in self.stub.ServerStream(request, timeout=10):
+            for item in self.stream_stub.ServerStream(request, timeout=10):
                 print(f"  [{item.index}] {item.content}")
         except grpc.RpcError as e:
             print(f"[ServerStream] RPC failed: {e.code()} {e.details()}")
@@ -77,7 +78,7 @@ class EchoClient:
                 yield EchoRequest(message=msg)
 
         try:
-            response = self.stub.ClientStream(generate(), timeout=10)
+            response = self.stream_stub.ClientStream(generate(), timeout=10)
             print(
                 f"[ClientStream] summary: count={response.message_count}"
                 f" | server={response.server_id}"
@@ -100,7 +101,7 @@ class EchoClient:
 
         try:
             print("[Chat] round-trip:")
-            for response in self.stub.Chat(generate(), timeout=15):
+            for response in self.stream_stub.Chat(generate(), timeout=15):
                 print(f"  {response.sender} → {response.content}")
         except grpc.RpcError as e:
             print(f"[Chat] RPC failed: {e.code()} {e.details()}")

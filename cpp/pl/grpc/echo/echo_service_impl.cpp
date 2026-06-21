@@ -22,6 +22,10 @@
 
 namespace pl {
 
+// ===================================================================
+// EchoServiceImpl — unary RPCs
+// ===================================================================
+
 EchoServiceImpl::EchoServiceImpl(std::string server_id)
     : server_id_(std::move(server_id)), start_time_(std::chrono::steady_clock::now()) {}
 
@@ -38,13 +42,32 @@ EchoServiceImpl::EchoServiceImpl(std::string server_id)
     return ::grpc::Status::OK;
 }
 
-::grpc::Status EchoServiceImpl::ServerStream(
+::grpc::Status EchoServiceImpl::HealthCheck(::grpc::ServerContext* context,
+                                            const ::pl::grpc::proto::HealthRequest* request,
+                                            ::pl::grpc::proto::HealthResponse* response) {
+    std::ignore = context;
+    std::ignore = request;
+    response->set_status(::pl::grpc::proto::HealthResponse::SERVING);
+    response->set_server_id(server_id_);
+    response->set_version("1.0.0");
+    auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - start_time_);
+    response->set_uptime_seconds(static_cast<int64_t>(uptime.count()));
+    return ::grpc::Status::OK;
+}
+
+// ===================================================================
+// StreamServiceImpl — streaming RPCs
+// ===================================================================
+
+StreamServiceImpl::StreamServiceImpl(std::string server_id) : server_id_(std::move(server_id)) {}
+
+::grpc::Status StreamServiceImpl::ServerStream(
     ::grpc::ServerContext* context,
     const ::pl::grpc::proto::ServerStreamRequest* request,
     ::grpc::ServerWriter<::pl::grpc::proto::StreamItem>* writer) {
     std::ignore = context;
 
-    // Build a canned list of items to stream
     static const std::vector<std::string> kItems = {
         "Alpha",
         "Bravo",
@@ -82,14 +105,14 @@ EchoServiceImpl::EchoServiceImpl(std::string server_id)
         item.set_index(i);
         item.set_content(kItems[i]);
         if (!writer->Write(item)) {
-            break; // client disconnected
+            break;
         }
         ++count;
     }
     return ::grpc::Status::OK;
 }
 
-::grpc::Status EchoServiceImpl::ClientStream(
+::grpc::Status StreamServiceImpl::ClientStream(
     ::grpc::ServerContext* context,
     ::grpc::ServerReader<::pl::grpc::proto::EchoRequest>* reader,
     ::pl::grpc::proto::EchoSummary* summary) {
@@ -109,7 +132,7 @@ EchoServiceImpl::EchoServiceImpl(std::string server_id)
     return ::grpc::Status::OK;
 }
 
-::grpc::Status EchoServiceImpl::Chat(
+::grpc::Status StreamServiceImpl::Chat(
     ::grpc::ServerContext* context,
     ::grpc::ServerReaderWriter<::pl::grpc::proto::ChatMessage, ::pl::grpc::proto::ChatMessage>*
         stream) {
@@ -118,20 +141,6 @@ EchoServiceImpl::EchoServiceImpl(std::string server_id)
     while (stream->Read(&msg)) {
         stream->Write(msg);
     }
-    return ::grpc::Status::OK;
-}
-
-::grpc::Status EchoServiceImpl::HealthCheck(::grpc::ServerContext* context,
-                                            const ::pl::grpc::proto::HealthRequest* request,
-                                            ::pl::grpc::proto::HealthResponse* response) {
-    std::ignore = context;
-    std::ignore = request;
-    response->set_status(::pl::grpc::proto::HealthResponse::SERVING);
-    response->set_server_id(server_id_);
-    response->set_version("1.0.0");
-    auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::steady_clock::now() - start_time_);
-    response->set_uptime_seconds(static_cast<int64_t>(uptime.count()));
     return ::grpc::Status::OK;
 }
 

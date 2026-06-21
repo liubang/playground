@@ -13,20 +13,21 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/06/21 00:00
+// Created: 2026/06/21
 
-// EchoService — unary RPCs. Messages from message.proto.
+// brpc EchoService (unary only). Messages imported from message.proto.
+// cc_generic_services = true is required for brpc codegen but incompatible
+// with the gRPC C++ plugin, so the brpc service lives in its own file.
 
 syntax = "proto3";
 
-package pl.grpc.proto;
+package pl.brpc.echo;
 
-option java_multiple_files = true;
-option go_package = "github.com/liubang/playground/go/pl/grpc/echo/pb;pb";
+option cc_generic_services = true;
 
 import "proto/echo/message.proto";
 
 service EchoService {
-  rpc Echo(EchoRequest) returns (EchoResponse);
-  rpc HealthCheck(HealthRequest) returns (HealthResponse);
+  rpc Echo(pl.grpc.proto.EchoRequest) returns (pl.grpc.proto.EchoResponse);
+  rpc HealthCheck(pl.grpc.proto.HealthRequest) returns (pl.grpc.proto.HealthResponse);
 }

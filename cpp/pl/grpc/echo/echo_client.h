@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "proto/echo/echo.grpc.pb.h"
+#include "proto/echo/stream.grpc.pb.h"
 
 namespace pl {
 
@@ -40,7 +41,8 @@ inline int64_t NowUs() {
 class EchoServiceClient {
 public:
     explicit EchoServiceClient(std::shared_ptr<::grpc::Channel> channel)
-        : stub_(::pl::grpc::proto::EchoService::NewStub(channel)) {}
+        : stub_(::pl::grpc::proto::EchoService::NewStub(channel)),
+          stream_stub_(::pl::grpc::proto::StreamService::NewStub(channel)) {}
 
     // --- Unary Echo ---
     void DoEcho(const std::string& message) {
@@ -71,7 +73,7 @@ public:
         req.set_max_responses(max_responses);
 
         std::unique_ptr<::grpc::ClientReader<::pl::grpc::proto::StreamItem>> reader(
-            stub_->ServerStream(&context, req));
+            stream_stub_->ServerStream(&context, req));
         ::pl::grpc::proto::StreamItem item;
         std::cout << "[ServerStream] receiving items (pattern='" << pattern
                   << "', limit=" << max_responses << "):" << std::endl;
@@ -89,7 +91,7 @@ public:
         ::grpc::ClientContext context;
         ::pl::grpc::proto::EchoSummary summary;
         std::unique_ptr<::grpc::ClientWriter<::pl::grpc::proto::EchoRequest>> writer(
-            stub_->ClientStream(&context, &summary));
+            stream_stub_->ClientStream(&context, &summary));
 
         for (const auto& msg : messages) {
             ::pl::grpc::proto::EchoRequest req;
@@ -114,7 +116,7 @@ public:
     // --- Bidirectional Chat ---
     void DoChat(const std::vector<std::string>& messages_to_send) {
         ::grpc::ClientContext context;
-        auto stream = stub_->Chat(&context);
+        auto stream = stream_stub_->Chat(&context);
 
         // Writer thread
         std::thread writer([&stream, &messages_to_send]() {
@@ -162,6 +164,7 @@ public:
 
 private:
     std::unique_ptr<::pl::grpc::proto::EchoService::Stub> stub_;
+    std::unique_ptr<::pl::grpc::proto::StreamService::Stub> stream_stub_;
 };
 
 } // namespace pl

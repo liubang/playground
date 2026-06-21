@@ -20,7 +20,7 @@
 #include <gflags/gflags.h>
 #include <string>
 
-#include "cpp/pl/brpc/echo/proto/echo.pb.h"
+#include "proto/echo/echo_brpc.pb.h"
 
 DEFINE_string(server, "0.0.0.0:8000", "IP Address of server");
 DEFINE_string(load_balancer, "", "The algorithm for load balancing");
@@ -50,8 +50,8 @@ int main(int argc, char* argv[]) {
 
     // --- Unary Echo ---
     {
-        ::pl::brpc::echo::EchoRequest request;
-        ::pl::brpc::echo::EchoResponse response;
+        ::pl::grpc::proto::EchoRequest request;
+        ::pl::grpc::proto::EchoResponse response;
         ::brpc::Controller cntl;
 
         int64_t sent_us = now_us();
@@ -73,14 +73,14 @@ int main(int argc, char* argv[]) {
 
     // --- HealthCheck ---
     {
-        ::pl::brpc::echo::HealthRequest request;
-        ::pl::brpc::echo::HealthResponse response;
+        ::pl::grpc::proto::HealthRequest request;
+        ::pl::grpc::proto::HealthResponse response;
         ::brpc::Controller cntl;
 
         stub.HealthCheck(&cntl, &request, &response, nullptr);
 
         if (!cntl.Failed()) {
-            auto status_name = ::pl::brpc::echo::HealthResponse_Status_Name(response.status());
+            auto status_name = ::pl::grpc::proto::HealthResponse_Status_Name(response.status());
             LOG(INFO) << "[HealthCheck] status=" << status_name
                       << " | server=" << response.server_id() << " | version=" << response.version()
                       << " | uptime=" << response.uptime_seconds() << "s";
