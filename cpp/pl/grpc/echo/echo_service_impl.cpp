@@ -18,6 +18,7 @@
 #include "echo_service_impl.h"
 
 #include <chrono>
+#include <regex>
 
 namespace pl {
 
@@ -80,7 +81,9 @@ EchoServiceImpl::EchoServiceImpl(std::string server_id)
         ::pl::grpc::proto::StreamItem item;
         item.set_index(i);
         item.set_content(kItems[i]);
-        writer->Write(item);
+        if (!writer->Write(item)) {
+            break; // client disconnected
+        }
         ++count;
     }
     return ::grpc::Status::OK;

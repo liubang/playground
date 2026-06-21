@@ -17,8 +17,8 @@
 
 #pragma once
 
+#include <chrono>
 #include <grpcpp/grpcpp.h>
-#include <regex>
 #include <string>
 
 #include "proto/echo/echo.grpc.pb.h"
