@@ -17,6 +17,7 @@
 
 load("@protobuf//bazel:java_proto_library.bzl", "java_proto_library")
 load("@rules_proto_grpc_cpp//:defs.bzl", "cpp_grpc_library")
+load("@rules_proto_grpc_go//:defs.bzl", "go_grpc_library")
 load("@rules_proto_grpc_java//:defs.bzl", "java_grpc_library")
 load("@rules_proto_grpc_python//:defs.bzl", "python_grpc_library", "python_proto_library")
 
@@ -52,5 +53,12 @@ python_proto_library(
 
 python_grpc_library(
     name = "echo_py_grpc",
+    protos = [":echo_proto"],
+)
+
+# Go
+go_grpc_library(
+    name = "echo_go_grpc",
+    importpath = "github.com/liubang/playground/go/pl/grpc/echo/pb",
     protos = [":echo_proto"],
 )
