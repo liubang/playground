@@ -16,11 +16,11 @@
 // Created: 2026/06/21 00:00
 
 #include <grpcpp/security/server_credentials.h>
+#include <iostream>
 #include <string>
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
-#include "absl/log/initialize.h"
 #include "echo_service_impl.h"
 
 ABSL_FLAG(std::string, port, "50051", "Server port to listen on");
@@ -34,6 +34,10 @@ void RunServer() {
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+    if (!server) {
+        std::cerr << "Failed to start server on " << server_address << std::endl;
+        exit(1);
+    }
     std::cout << "[C++ EchoServer] Listening on " << server_address
               << " (id: " << absl::GetFlag(FLAGS_server_id) << ")" << std::endl;
     server->Wait();
@@ -41,7 +45,6 @@ void RunServer() {
 
 int main(int argc, char* argv[]) {
     absl::ParseCommandLine(argc, argv);
-    absl::InitializeLog();
     RunServer();
     return 0;
 }

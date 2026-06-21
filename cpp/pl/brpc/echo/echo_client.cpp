@@ -15,11 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/06/21
 
-#include <chrono>
-#include <string>
-
 #include <brpc/channel.h>
+#include <chrono>
 #include <gflags/gflags.h>
+#include <string>
 
 #include "cpp/pl/brpc/echo/proto/echo.pb.h"
 
@@ -42,8 +41,7 @@ int main(int argc, char* argv[]) {
     options.timeout_ms = FLAGS_timeout_ms;
     options.max_retry = FLAGS_max_retry;
 
-    if (channel.Init(FLAGS_server.c_str(), FLAGS_load_balancer.c_str(),
-                     &options) != 0) {
+    if (channel.Init(FLAGS_server.c_str(), FLAGS_load_balancer.c_str(), &options) != 0) {
         LOG(ERROR) << "Fail to initialize channel";
         return -1;
     }
@@ -65,10 +63,9 @@ int main(int argc, char* argv[]) {
 
         if (!cntl.Failed()) {
             int64_t rtt_us = now_us() - sent_us;
-            LOG(INFO) << "[Echo] response: " << response.message()
-                      << " | rtt_us=" << rtt_us
-                      << " | server=" << response.server_id()
-                      << " | latency=" << cntl.latency_us() << "us";
+            LOG(INFO) << "[Echo] response: " << response.message() << " | rtt_us=" << rtt_us
+                      << " | server=" << response.server_id() << " | latency=" << cntl.latency_us()
+                      << "us";
         } else {
             LOG(WARNING) << "[Echo] RPC failed: " << cntl.ErrorText();
         }
@@ -83,11 +80,9 @@ int main(int argc, char* argv[]) {
         stub.HealthCheck(&cntl, &request, &response, nullptr);
 
         if (!cntl.Failed()) {
-            auto status_name =
-                ::pl::brpc::echo::HealthResponse_Status_Name(response.status());
+            auto status_name = ::pl::brpc::echo::HealthResponse_Status_Name(response.status());
             LOG(INFO) << "[HealthCheck] status=" << status_name
-                      << " | server=" << response.server_id()
-                      << " | version=" << response.version()
+                      << " | server=" << response.server_id() << " | version=" << response.version()
                       << " | uptime=" << response.uptime_seconds() << "s";
         } else {
             LOG(WARNING) << "[HealthCheck] RPC failed: " << cntl.ErrorText();

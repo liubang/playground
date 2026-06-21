@@ -32,6 +32,11 @@ import (
 	pb "github.com/liubang/playground/go/pl/grpc/echo/pb"
 )
 
+var (
+	port     = flag.Int("port", 50051, "Server port to listen on")
+	serverID = flag.String("id", "go-server", "Unique server identifier")
+)
+
 var items = []string{
 	"Alpha", "Bravo", "Charlie", "Delta", "Echo",
 	"Foxtrot", "Golf", "Hotel", "India", "Juliet",
@@ -74,7 +79,9 @@ func (s *echoServer) ServerStream(req *pb.ServerStreamRequest, stream grpc.Serve
 		if pattern != nil && !pattern.MatchString(content) {
 			continue
 		}
-		stream.Send(&pb.StreamItem{Index: int32(i), Content: content})
+		if err := stream.Send(&pb.StreamItem{Index: int32(i), Content: content}); err != nil {
+			return err // client disconnected
+		}
 		count++
 	}
 	return nil
@@ -136,16 +143,8 @@ func runServer(port int, serverID string) error {
 }
 
 func main() {
-	port := 50051
-	serverID := "go-server"
 	flag.Parse()
-	if len(flag.Args()) > 0 {
-		fmt.Sscanf(flag.Arg(0), "%d", &port)
-	}
-	if len(flag.Args()) > 1 {
-		serverID = flag.Arg(1)
-	}
-	if err := runServer(port, serverID); err != nil {
+	if err := runServer(*port, *serverID); err != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
