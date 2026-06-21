@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 
 import grpc
 
-from pl.grpc.proto.echo_pb2 import (
+from proto.echo.echo_pb2 import (
     ChatMessage,
     EchoRequest,
     EchoResponse,
@@ -35,7 +35,7 @@ from pl.grpc.proto.echo_pb2 import (
     ServerStreamRequest,
     StreamItem,
 )
-from pl.grpc.proto.echo_pb2_grpc import (
+from proto.echo.echo_pb2_grpc import (
     EchoServiceServicer,
     EchoServiceStub,
     add_EchoServiceServicer_to_server,
