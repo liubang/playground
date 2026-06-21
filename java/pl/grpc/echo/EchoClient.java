@@ -21,6 +21,8 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
+import pl.grpc.proto.EchoServiceGrpc;
+import pl.grpc.proto.StreamServiceGrpc;
 import pl.grpc.proto.*;
 
 import java.util.Iterator;
@@ -32,12 +34,14 @@ import java.util.concurrent.TimeUnit;
 public class EchoClient {
     private final ManagedChannel channel;
     private final EchoServiceGrpc.EchoServiceBlockingStub blockingStub;
-    private final EchoServiceGrpc.EchoServiceStub asyncStub;
+    private final StreamServiceGrpc.StreamServiceBlockingStub streamBlockingStub;
+    private final StreamServiceGrpc.StreamServiceStub streamAsyncStub;
 
     public EchoClient(String host, int port) {
         channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
         blockingStub = EchoServiceGrpc.newBlockingStub(channel);
-        asyncStub = EchoServiceGrpc.newStub(channel);
+        streamBlockingStub = StreamServiceGrpc.newBlockingStub(channel);
+        streamAsyncStub = StreamServiceGrpc.newStub(channel);
     }
 
     public void shutdown() throws InterruptedException {
@@ -62,7 +66,7 @@ public class EchoClient {
         ServerStreamRequest req = ServerStreamRequest.newBuilder()
                 .setPattern(pattern).setMaxResponses(maxResponses).build();
         try {
-            Iterator<StreamItem> items = blockingStub.serverStream(req);
+            Iterator<StreamItem> items = streamBlockingStub.serverStream(req);
             System.out.println("[ServerStream] receiving items (pattern='" + pattern
                     + "', limit=" + maxResponses + "):");
             while (items.hasNext()) {
@@ -76,7 +80,7 @@ public class EchoClient {
 
     public void doClientStream(List<String> messages) throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
-        StreamObserver<EchoRequest> requestObserver = asyncStub.clientStream(
+        StreamObserver<EchoRequest> requestObserver = streamAsyncStub.clientStream(
                 new StreamObserver<>() {
                     @Override public void onNext(EchoSummary summary) {
                         System.out.println("[ClientStream] summary: count=" + summary.getMessageCount()
@@ -98,7 +102,7 @@ public class EchoClient {
 
     public void doChat(List<String> messagesToSend) throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
-        StreamObserver<ChatMessage> requestObserver = asyncStub.chat(
+        StreamObserver<ChatMessage> requestObserver = streamAsyncStub.chat(
                 new StreamObserver<>() {
                     @Override public void onNext(ChatMessage msg) {
                         System.out.println("  " + msg.getSender() + " → " + msg.getContent());

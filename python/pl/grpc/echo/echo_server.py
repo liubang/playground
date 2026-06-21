@@ -36,17 +36,20 @@ from proto.echo.echo_pb2 import (
 )
 from proto.echo.echo_pb2_grpc import (
     EchoServiceServicer,
+    StreamServiceServicer,
     add_EchoServiceServicer_to_server,
+    add_StreamServiceServicer_to_server,
 )
 
 
-class EchoService(EchoServiceServicer):
-    """Implementation of EchoService for all 5 RPCs."""
+ITEMS = [
+    "Alpha", "Bravo", "Charlie", "Delta", "Echo",
+    "Foxtrot", "Golf", "Hotel", "India", "Juliet",
+]
 
-    ITEMS = [
-        "Alpha", "Bravo", "Charlie", "Delta", "Echo",
-        "Foxtrot", "Golf", "Hotel", "India", "Juliet",
-    ]
+
+class EchoService(EchoServiceServicer):
+    """Unary RPCs: Echo + HealthCheck."""
 
     def __init__(self, server_id: str):
         self.server_id = server_id
@@ -61,6 +64,24 @@ class EchoService(EchoServiceServicer):
             server_id=self.server_id,
         )
 
+    def HealthCheck(
+        self, request: HealthRequest, context: grpc.ServicerContext
+    ) -> HealthResponse:
+        uptime = int(time.monotonic() - self.start_time)
+        return HealthResponse(
+            status=HealthResponse.SERVING,
+            server_id=self.server_id,
+            version="1.0.0",
+            uptime_seconds=uptime,
+        )
+
+
+class StreamService(StreamServiceServicer):
+    """Streaming RPCs: ServerStream + ClientStream + Chat."""
+
+    def __init__(self, server_id: str):
+        self.server_id = server_id
+
     def ServerStream(
         self, request: ServerStreamRequest, context: grpc.ServicerContext
     ):
@@ -71,9 +92,9 @@ class EchoService(EchoServiceServicer):
             except re.error:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Invalid regex pattern")
 
-        limit = request.max_responses if request.max_responses > 0 else len(self.ITEMS)
+        limit = request.max_responses if request.max_responses > 0 else len(ITEMS)
         count = 0
-        for i, content in enumerate(self.ITEMS):
+        for i, content in enumerate(ITEMS):
             if count >= limit:
                 break
             if pattern and not pattern.search(content):
@@ -99,21 +120,11 @@ class EchoService(EchoServiceServicer):
         for msg in request_iterator:
             yield msg
 
-    def HealthCheck(
-        self, request: HealthRequest, context: grpc.ServicerContext
-    ) -> HealthResponse:
-        uptime = int(time.monotonic() - self.start_time)
-        return HealthResponse(
-            status=HealthResponse.SERVING,
-            server_id=self.server_id,
-            version="1.0.0",
-            uptime_seconds=uptime,
-        )
-
 
 def serve(port: int, server_id: str):
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     add_EchoServiceServicer_to_server(EchoService(server_id), server)
+    add_StreamServiceServicer_to_server(StreamService(server_id), server)
     server.add_insecure_port(f"0.0.0.0:{port}")
     server.start()
     print(f"[Python EchoServer] Listening on port {port} (id: {server_id})")
