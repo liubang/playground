@@ -2,10 +2,10 @@
 
 共享 Protobuf 定义：[`echo.proto`](echo.proto)
 
-| 协议 | 传输层 | RPC 数量 | 实现语言 |
-|------|--------|----------|----------|
-| **gRPC** | HTTP/2 | 5 个（含 3 个流式） | C++ / Go / Java / Python |
-| **brpc** | TCP 二进制 | 2 个（仅 unary） | C++ (brpc) / Java (Starlight) |
+| 协议     | 传输层     | RPC 数量            | 实现语言                      |
+| -------- | ---------- | ------------------- | ----------------------------- |
+| **gRPC** | HTTP/2     | 5 个（含 3 个流式） | C++ / Go / Java / Python      |
+| **brpc** | TCP 二进制 | 2 个（仅 unary）    | C++ (brpc) / Java (Starlight) |
 
 ---
 
@@ -69,14 +69,14 @@ bazel run //java/pl/brpc/echo:echo_client -- localhost 8000           # → C++ 
 
 ## 互通性矩阵
 
-| Client ↓ / Server → | C++ gRPC | Go gRPC | Java gRPC | Py gRPC | C++ brpc | Java Starlight |
-|---------------------|:--------:|:-------:|:---------:|:-------:|:--------:|:--------------:|
-| C++ gRPC            | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Go gRPC             | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Java gRPC           | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Python gRPC         | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| C++ brpc            | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Java Starlight      | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Client \\ Server        | C++ gRPC | Go gRPC | Java gRPC | Py gRPC | C++ brpc | Java Starlight |
+| ----------------------- | :------: | :-----: | :-------: | :-----: | :------: | :------------: |
+| C++ gRPC                |    Y     |    Y    |     Y     |    Y    |    -     |       -        |
+| Go gRPC                 |    Y     |    Y    |     Y     |    Y    |    -     |       -        |
+| Java gRPC               |    Y     |    Y    |     Y     |    Y    |    -     |       -        |
+| Python gRPC             |    Y     |    Y    |     Y     |    Y    |    -     |       -        |
+| C++ brpc                |    -     |    -    |     -     |    -    |    Y     |       Y        |
+| Java Starlight          |    -     |    -    |     -     |    -    |    Y     |       Y        |
 
 - **gRPC** 生态内全语言互通（HTTP/2 + gRPC 协议），支持全部 5 个 RPC
 - **brpc / Starlight** 之间互通（TCP + brpc 二进制协议），支持 2 个 unary RPC
@@ -84,13 +84,13 @@ bazel run //java/pl/brpc/echo:echo_client -- localhost 8000           # → C++ 
 
 ## RPC 覆盖
 
-| RPC 方法 | gRPC | brpc / Starlight |
-|----------|:----:|:----------------:|
-| `Echo` (unary) | ✅ | ✅ |
-| `ServerStream` (server streaming) | ✅ | ❌ |
-| `ClientStream` (client streaming) | ✅ | ❌ |
-| `Chat` (bidi streaming) | ✅ | ❌ |
-| `HealthCheck` (unary) | ✅ | ✅ |
+| RPC 方法                           | gRPC | brpc / Starlight |
+| ---------------------------------- | :--: | :--------------: |
+| `Echo` (unary)                     |  Y   |        Y         |
+| `ServerStream` (server streaming)  |  Y   |        -         |
+| `ClientStream` (client streaming)  |  Y   |        -         |
+| `Chat` (bidi streaming)            |  Y   |        -         |
+| `HealthCheck` (unary)              |  Y   |        Y         |
 
 ---
 
