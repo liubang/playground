@@ -22,9 +22,11 @@
 #include <string>
 
 #include "proto/echo/echo.grpc.pb.h"
+#include "proto/echo/stream.grpc.pb.h"
 
 namespace pl {
 
+// Unary RPCs: Echo + HealthCheck
 class EchoServiceImpl : public ::pl::grpc::proto::EchoService::Service {
 public:
     explicit EchoServiceImpl(std::string server_id);
@@ -32,6 +34,20 @@ public:
     ::grpc::Status Echo(::grpc::ServerContext* context,
                         const ::pl::grpc::proto::EchoRequest* request,
                         ::pl::grpc::proto::EchoResponse* response) override;
+
+    ::grpc::Status HealthCheck(::grpc::ServerContext* context,
+                               const ::pl::grpc::proto::HealthRequest* request,
+                               ::pl::grpc::proto::HealthResponse* response) override;
+
+private:
+    std::string server_id_;
+    std::chrono::steady_clock::time_point start_time_;
+};
+
+// Streaming RPCs: ServerStream + ClientStream + Chat
+class StreamServiceImpl : public ::pl::grpc::proto::StreamService::Service {
+public:
+    explicit StreamServiceImpl(std::string server_id);
 
     ::grpc::Status ServerStream(
         ::grpc::ServerContext* context,
@@ -47,13 +63,8 @@ public:
         ::grpc::ServerReaderWriter<::pl::grpc::proto::ChatMessage, ::pl::grpc::proto::ChatMessage>*
             stream) override;
 
-    ::grpc::Status HealthCheck(::grpc::ServerContext* context,
-                               const ::pl::grpc::proto::HealthRequest* request,
-                               ::pl::grpc::proto::HealthResponse* response) override;
-
 private:
     std::string server_id_;
-    std::chrono::steady_clock::time_point start_time_;
 };
 
 } // namespace pl

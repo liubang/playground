@@ -37,8 +37,9 @@ var (
 )
 
 type echoClient struct {
-	conn *grpc.ClientConn
-	stub pb.EchoServiceClient
+	conn       *grpc.ClientConn
+	stub       pb.EchoServiceClient
+	streamStub pb.StreamServiceClient
 }
 
 func newEchoClient(addr string) (*echoClient, error) {
@@ -46,7 +47,11 @@ func newEchoClient(addr string) (*echoClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &echoClient{conn: conn, stub: pb.NewEchoServiceClient(conn)}, nil
+	return &echoClient{
+		conn:       conn,
+		stub:       pb.NewEchoServiceClient(conn),
+		streamStub: pb.NewStreamServiceClient(conn),
+	}, nil
 }
 
 func (c *echoClient) close() { c.conn.Close() }
@@ -75,7 +80,7 @@ func (c *echoClient) doServerStream(pattern string, maxResponses int32) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	stream, err := c.stub.ServerStream(ctx, &pb.ServerStreamRequest{
+	stream, err := c.streamStub.ServerStream(ctx, &pb.ServerStreamRequest{
 		Pattern:      pattern,
 		MaxResponses: maxResponses,
 	})
@@ -101,7 +106,7 @@ func (c *echoClient) doClientStream(messages []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	stream, err := c.stub.ClientStream(ctx)
+	stream, err := c.streamStub.ClientStream(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[ClientStream] RPC failed: %v\n", err)
 		return
@@ -127,7 +132,7 @@ func (c *echoClient) doChat(messages []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	stream, err := c.stub.Chat(ctx)
+	stream, err := c.streamStub.Chat(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[Chat] RPC failed: %v\n", err)
 		return

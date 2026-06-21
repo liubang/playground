@@ -21,7 +21,7 @@
 #include <memory>
 #include <string>
 
-#include "cpp/pl/brpc/echo/proto/echo.pb.h"
+#include "proto/echo/echo_brpc.pb.h"
 
 DEFINE_int32(port, 8000, "TCP Port of this server");
 DEFINE_string(server_id, "cpp-brpc-server", "Unique server identifier");
@@ -39,8 +39,8 @@ public:
     ~EchoServiceImpl() override = default;
 
     void Echo(::google::protobuf::RpcController* cntl_base,
-              const ::pl::brpc::echo::EchoRequest* request,
-              ::pl::brpc::echo::EchoResponse* response,
+              const ::pl::grpc::proto::EchoRequest* request,
+              ::pl::grpc::proto::EchoResponse* response,
               ::google::protobuf::Closure* done) override {
         ::brpc::ClosureGuard done_guard(done);
         auto* cntl = static_cast<::brpc::Controller*>(cntl_base);
@@ -59,8 +59,8 @@ public:
     }
 
     void HealthCheck(::google::protobuf::RpcController* cntl_base,
-                     const ::pl::brpc::echo::HealthRequest* /*request*/,
-                     ::pl::brpc::echo::HealthResponse* response,
+                     const ::pl::grpc::proto::HealthRequest* /*request*/,
+                     ::pl::grpc::proto::HealthResponse* response,
                      ::google::protobuf::Closure* done) override {
         ::brpc::ClosureGuard done_guard(done);
         auto* cntl = static_cast<::brpc::Controller*>(cntl_base);
@@ -72,7 +72,7 @@ public:
         LOG(INFO) << "HealthCheck request[log_id=" << cntl->log_id() << "] from "
                   << cntl->remote_side();
 
-        response->set_status(::pl::brpc::echo::HealthResponse::SERVING);
+        response->set_status(::pl::grpc::proto::HealthResponse::SERVING);
         response->set_server_id(FLAGS_server_id);
         response->set_version("1.0.0");
         response->set_uptime_seconds(uptime_sec);

@@ -15,7 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/06/21 00:00
 
-// EchoService — unary RPCs. Messages from message.proto.
+// StreamService — streaming RPCs. Messages from message.proto.
 
 syntax = "proto3";
 
@@ -26,7 +26,8 @@ option go_package = "github.com/liubang/playground/go/pl/grpc/echo/pb;pb";
 
 import "proto/echo/message.proto";
 
-service EchoService {
-  rpc Echo(EchoRequest) returns (EchoResponse);
-  rpc HealthCheck(HealthRequest) returns (HealthResponse);
+service StreamService {
+  rpc ServerStream(ServerStreamRequest) returns (stream StreamItem);
+  rpc ClientStream(stream EchoRequest) returns (EchoSummary);
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage);
 }

@@ -13,26 +13,17 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/06/21
+// Created: 2026/06/21 00:00
 
-// brpc-compatible proto for the echo service.
-//
-// Why a separate file instead of importing proto/echo/echo.proto?
-//   - brpc requires cc_generic_services = true for codegen.
-//   - gRPC's C++ plugin rejects cc_generic_services = true.
-//   - The two options cannot coexist in the same .proto file.
-//   - Using proto "import" would be ideal, but rules_proto_grpc_cpp's
-//     cpp_proto_library does not automatically wire transitive cc deps
-//     for imported proto_library targets, causing include path errors.
-//
-// The message definitions below are wire-compatible with proto/echo/echo.proto:
-// field numbers, types, and enum ordinals match exactly.
+// Shared message types — no services, no cc_generic_services.
+// Imported by echo.proto (gRPC), stream.proto (gRPC), and echo_brpc.proto (brpc).
 
 syntax = "proto3";
 
-package pl.brpc.echo;
+package pl.grpc.proto;
 
-option cc_generic_services = true;
+option java_multiple_files = true;
+option go_package = "github.com/liubang/playground/go/pl/grpc/echo/pb;pb";
 
 // --- Echo ---
 
@@ -47,6 +38,35 @@ message EchoResponse {
   int64 original_timestamp = 2;
   int64 server_timestamp = 3;
   string server_id = 4;
+}
+
+// --- Server Streaming ---
+
+message ServerStreamRequest {
+  string pattern = 1;      // Regex filter
+  int32 max_responses = 2; // Max number of responses
+}
+
+message StreamItem {
+  int32 index = 1;
+  string content = 2;
+}
+
+// --- Client Streaming ---
+
+message EchoSummary {
+  int32 message_count = 1;
+  repeated string messages = 2;
+  int64 server_timestamp = 3;
+  string server_id = 4;
+}
+
+// --- Bidirectional Chat ---
+
+message ChatMessage {
+  string sender = 1;
+  string content = 2;
+  int64 timestamp_us = 3;
 }
 
 // --- Health Check ---
@@ -65,11 +85,4 @@ message HealthResponse {
   string server_id = 2;
   string version = 3;
   int64 uptime_seconds = 4;
-}
-
-// --- Service ---
-
-service EchoService {
-  rpc Echo(EchoRequest) returns (EchoResponse);
-  rpc HealthCheck(HealthRequest) returns (HealthResponse);
 }
