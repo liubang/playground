@@ -64,6 +64,7 @@ bazel_dep(name = "rules_proto_grpc", version = "5.8.0")
 bazel_dep(name = "rules_proto_grpc_cpp", version = "5.8.0")
 bazel_dep(name = "rules_proto_grpc_python", version = "5.8.0")
 bazel_dep(name = "rules_proto_grpc_java", version = "5.8.0")
+bazel_dep(name = "rules_proto_grpc_go", version = "5.8.0")
 bazel_dep(name = "grpc-java", version = "1.74.0")
 bazel_dep(name = "protobuf", version = "31.1")
 bazel_dep(name = "grpc", version = "1.74.1")
@@ -259,6 +260,8 @@ use_repo(
     "com_github_onsi_gomega",
     "com_github_rivo_uniseg",
     "com_github_sirupsen_logrus",
+    "org_golang_google_grpc",
+    "org_golang_google_protobuf",
     "org_golang_x_term",
 )
 

@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/playground/go/tools/command"
+	"github.com/liubang/playground/go/tools/command"
 	log "github.com/sirupsen/logrus"
 )
 
