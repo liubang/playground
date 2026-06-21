@@ -15,12 +15,12 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/25 00:51
 
-load("@protobuf//bazel:py_proto_library.bzl", "py_proto_library")
+load("@rules_proto_grpc_python//:defs.bzl", "python_proto_library")
 load("@rules_python//python:defs.bzl", "py_binary")
 
-py_proto_library(
+python_proto_library(
     name = "py_sensor_proto",
-    deps = [
+    protos = [
         "//proto/test:sensor",
     ],
 )
