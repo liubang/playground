@@ -65,7 +65,12 @@
                 <artifactId>protobuf-maven-plugin</artifactId>
                 <version>${protobuf-maven-plugin.version}</version>
                 <configuration>
-                    <protoSourceRoot>${project.basedir}/../../../../proto/echo</protoSourceRoot>
+                    <!-- Point to workspace root so "proto/echo/..." imports resolve;
+                         <includes> limits scanning to echo proto files only. -->
+                    <protoSourceRoot>${project.basedir}/../../../../</protoSourceRoot>
+                    <includes>
+                        <include>proto/echo/*.proto</include>
+                    </includes>
                     <protocArtifact>
                         com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
                     <!-- Only message classes; no gRPC stubs needed for Starlight -->
