@@ -148,12 +148,13 @@ absl::StatusOr<PrefixKey> make_prefix_key_impl(Prefix&& prefix,
     for (size_t i = 0; i < prefix.key_columns.size(); ++i) {
         const DataType expected = internal_schema->column_type(i);
         if (prefix.key_columns[i].type() != expected) {
-            return absl::InvalidArgumentError(absl::StrCat("prefix column ",
-                                                           i,
-                                                           " type mismatch: expected ",
-                                                           data_type_name(expected),
-                                                           ", got ",
-                                                           data_type_name(prefix.key_columns[i].type())));
+            return absl::InvalidArgumentError(
+                absl::StrCat("prefix column ",
+                             i,
+                             " type mismatch: expected ",
+                             data_type_name(expected),
+                             ", got ",
+                             data_type_name(prefix.key_columns[i].type())));
         }
         columns.push_back(std::forward<decltype(prefix.key_columns[i])>(prefix.key_columns[i]));
     }
