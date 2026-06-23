@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-23 00:34:21</td>
+            <td class="headerValue">2026-06-24 01:13:31</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -90,11 +90,11 @@
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
 <span id="L20"><span class="lineNum">      20</span>                 :             : namespace pl {</span>
 <span id="L21"><span class="lineNum">      21</span>                 :             : </span>
-<span id="L22"><span class="lineNum">      22</span>         [<span class="tlaGBC" title="Branch 0 was taken 12586 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">       12586 : void LogStream::write(std::string_view data) {</span></span>
-<span id="L23"><span class="lineNum">      23</span>   [<span class="tlaGBC" title="Branch 0 was taken 12586 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 12586 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       12586 :     if (buffer_.full() || data.size() == 0) {</span></span>
+<span id="L22"><span class="lineNum">      22</span>         [<span class="tlaGBC" title="Branch 0 was taken 766 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         766 : void LogStream::write(std::string_view data) {</span></span>
+<span id="L23"><span class="lineNum">      23</span>   [<span class="tlaGBC" title="Branch 0 was taken 766 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 766 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         766 :     if (buffer_.full() || data.size() == 0) {</span></span>
 <span id="L24"><span class="lineNum">      24</span>                 :             :         return;</span>
 <span id="L25"><span class="lineNum">      25</span>                 :             :     }</span>
-<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">       12586 :     buffer_.append(data);</span></span>
+<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">         766 :     buffer_.append(data);</span></span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : }</span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : </span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : } // namespace pl</span>
