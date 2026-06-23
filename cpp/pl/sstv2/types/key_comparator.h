@@ -155,10 +155,8 @@ private:
         for (size_t i = 0; i < common; ++i) {
             const DataType expected = schema_->column_type(i);
             if (lhs.column(i).type() != expected || rhs.column(i).type() != expected) {
-                return absl::InvalidArgumentError(absl::StrCat("key column ",
-                                                               i,
-                                                               " type mismatch: expected ",
-                                                               data_type_name(expected)));
+                return absl::InvalidArgumentError(absl::StrCat(
+                    "key column ", i, " type mismatch: expected ", data_type_name(expected)));
             }
             int cmp = compare_values(lhs.column(i), rhs.column(i));
             if (schema_->column_order(i) == SortOrder::kDescending) {
