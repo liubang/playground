@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryMed">75.5&nbsp;%</td>
-            <td class="headerCovTableEntry">53</td>
+            <td class="headerCovTableEntryLo">74.1&nbsp;%</td>
+            <td class="headerCovTableEntry">54</td>
             <td class="headerCovTableEntry">40</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-23 00:34:21</td>
+            <td class="headerValue">2026-06-24 01:13:31</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -222,54 +222,54 @@
 <span id="L148"><span class="lineNum">     148</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          32 :     for (size_t i = 0; i &lt; prefix.key_columns.size(); ++i) {</span></span>
 <span id="L149"><span class="lineNum">     149</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">          19 :         const DataType expected = internal_schema-&gt;column_type(i);</span></span>
 <span id="L150"><span class="lineNum">     150</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">          19 :         if (prefix.key_columns[i].type() != expected) {</span></span>
-<span id="L151"><span class="lineNum">     151</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(absl::StrCat(&quot;prefix column &quot;,</span></span>
+<span id="L151"><span class="lineNum">     151</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(</span></span>
+<span id="L152"><span class="lineNum">     152</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :                 absl::StrCat(&quot;prefix column &quot;,</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :             :                              i,</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             :                              &quot; type mismatch: expected &quot;,</span>
+<span id="L155"><span class="lineNum">     155</span>                 :             :                              data_type_name(expected),</span>
+<span id="L156"><span class="lineNum">     156</span>                 :             :                              &quot;, got &quot;,</span>
+<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                              data_type_name(prefix.key_columns[i].type())));</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :         }</span>
+<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          19 :         columns.push_back(std::forward&lt;decltype(prefix.key_columns[i])&gt;(prefix.key_columns[i]));</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :     }</span>
+<span id="L161"><span class="lineNum">     161</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">          13 :     if (prefix.version.has_value()) {</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">           4 :         columns.push_back(Value::make&lt;DataType::kVersion&gt;(*prefix.version));</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :             :     }</span>
+<span id="L164"><span class="lineNum">     164</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          13 :     if (prefix.op_type.has_value()) {</span></span>
+<span id="L165"><span class="lineNum">     165</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         columns.push_back(Value::make&lt;DataType::kUint8&gt;(static_cast&lt;uint8_t&gt;(*prefix.op_type)));</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :             :     }</span>
+<span id="L167"><span class="lineNum">     167</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          19 :     for (size_t i = prefix.key_columns.size(); i &lt; columns.size(); ++i) {</span></span>
+<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :         const DataType expected = internal_schema-&gt;column_type(i);</span></span>
+<span id="L169"><span class="lineNum">     169</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :         if (columns[i].type() != expected) {</span></span>
+<span id="L170"><span class="lineNum">     170</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(absl::StrCat(&quot;prefix column &quot;,</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
-<span id="L152"><span class="lineNum">     152</span>                 :             :                                                            i,</span>
-<span id="L153"><span class="lineNum">     153</span>                 :             :                                                            &quot; type mismatch: expected &quot;,</span>
-<span id="L154"><span class="lineNum">     154</span>                 :             :                                                            data_type_name(expected),</span>
-<span id="L155"><span class="lineNum">     155</span>                 :             :                                                            &quot;, got &quot;,</span>
-<span id="L156"><span class="lineNum">     156</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                                                            data_type_name(prefix.key_columns[i].type())));</span></span>
-<span id="L157"><span class="lineNum">     157</span>                 :             :         }</span>
-<span id="L158"><span class="lineNum">     158</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          19 :         columns.push_back(std::forward&lt;decltype(prefix.key_columns[i])&gt;(prefix.key_columns[i]));</span></span>
-<span id="L159"><span class="lineNum">     159</span>                 :             :     }</span>
-<span id="L160"><span class="lineNum">     160</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">          13 :     if (prefix.version.has_value()) {</span></span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">           4 :         columns.push_back(Value::make&lt;DataType::kVersion&gt;(*prefix.version));</span></span>
-<span id="L162"><span class="lineNum">     162</span>                 :             :     }</span>
-<span id="L163"><span class="lineNum">     163</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          13 :     if (prefix.op_type.has_value()) {</span></span>
-<span id="L164"><span class="lineNum">     164</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         columns.push_back(Value::make&lt;DataType::kUint8&gt;(static_cast&lt;uint8_t&gt;(*prefix.op_type)));</span></span>
-<span id="L165"><span class="lineNum">     165</span>                 :             :     }</span>
-<span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          19 :     for (size_t i = prefix.key_columns.size(); i &lt; columns.size(); ++i) {</span></span>
-<span id="L167"><span class="lineNum">     167</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :         const DataType expected = internal_schema-&gt;column_type(i);</span></span>
-<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :         if (columns[i].type() != expected) {</span></span>
-<span id="L169"><span class="lineNum">     169</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(absl::StrCat(&quot;prefix column &quot;,</span></span>
-<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
-<span id="L170"><span class="lineNum">     170</span>                 :             :                                                            i,</span>
-<span id="L171"><span class="lineNum">     171</span>                 :             :                                                            &quot; type mismatch: expected &quot;,</span>
-<span id="L172"><span class="lineNum">     172</span>                 :             :                                                            data_type_name(expected),</span>
-<span id="L173"><span class="lineNum">     173</span>                 :             :                                                            &quot;, got &quot;,</span>
-<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                                                            data_type_name(columns[i].type())));</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :             :         }</span>
-<span id="L176"><span class="lineNum">     176</span>                 :             :     }</span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC tlaBgGNC">          26 :     return PrefixKey::from_columns(std::move(columns));</span></span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          13 : }</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :             : </span>
-<span id="L180"><span class="lineNum">     180</span>                 :             : } // namespace detail</span>
-<span id="L181"><span class="lineNum">     181</span>                 :             : </span>
-<span id="L182"><span class="lineNum">     182</span>                 :             : [[nodiscard]] inline absl::StatusOr&lt;PrefixKey&gt; make_prefix_key(</span>
-<span id="L183"><span class="lineNum">     183</span>                 :             :     const KeyPrefix&amp; prefix,</span>
-<span id="L184"><span class="lineNum">     184</span>                 :             :     const Schema::ConstRef&amp; schema,</span>
-<span id="L185"><span class="lineNum">     185</span>                 :             :     const InternalSchema::ConstRef&amp; internal_schema) {</span>
-<span id="L186"><span class="lineNum">     186</span>   [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          12 :     return detail::make_prefix_key_impl(prefix, schema, internal_schema); // copies</span></span>
-<span id="L187"><span class="lineNum">     187</span>                 :             : }</span>
-<span id="L188"><span class="lineNum">     188</span>                 :             : </span>
-<span id="L189"><span class="lineNum">     189</span>                 :             : [[nodiscard]] inline absl::StatusOr&lt;PrefixKey&gt; make_prefix_key(</span>
-<span id="L190"><span class="lineNum">     190</span>                 :             :     KeyPrefix&amp;&amp; prefix,</span>
-<span id="L191"><span class="lineNum">     191</span>                 :             :     const Schema::ConstRef&amp; schema,</span>
-<span id="L192"><span class="lineNum">     192</span>                 :             :     const InternalSchema::ConstRef&amp; internal_schema) {</span>
-<span id="L193"><span class="lineNum">     193</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     return detail::make_prefix_key_impl(std::move(prefix), schema, internal_schema); // moves</span></span>
-<span id="L194"><span class="lineNum">     194</span>                 :             : }</span>
-<span id="L195"><span class="lineNum">     195</span>                 :             : </span>
-<span id="L196"><span class="lineNum">     196</span>                 :             : } // namespace pl::sstv2::types</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :                                                            i,</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             :                                                            &quot; type mismatch: expected &quot;,</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             :                                                            data_type_name(expected),</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             :                                                            &quot;, got &quot;,</span>
+<span id="L175"><span class="lineNum">     175</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                                                            data_type_name(columns[i].type())));</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :             :         }</span>
+<span id="L177"><span class="lineNum">     177</span>                 :             :     }</span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC tlaBgGNC">          26 :     return PrefixKey::from_columns(std::move(columns));</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          13 : }</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :             : </span>
+<span id="L181"><span class="lineNum">     181</span>                 :             : } // namespace detail</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             : </span>
+<span id="L183"><span class="lineNum">     183</span>                 :             : [[nodiscard]] inline absl::StatusOr&lt;PrefixKey&gt; make_prefix_key(</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :     const KeyPrefix&amp; prefix,</span>
+<span id="L185"><span class="lineNum">     185</span>                 :             :     const Schema::ConstRef&amp; schema,</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :     const InternalSchema::ConstRef&amp; internal_schema) {</span>
+<span id="L187"><span class="lineNum">     187</span>   [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          12 :     return detail::make_prefix_key_impl(prefix, schema, internal_schema); // copies</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :             : }</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             : </span>
+<span id="L190"><span class="lineNum">     190</span>                 :             : [[nodiscard]] inline absl::StatusOr&lt;PrefixKey&gt; make_prefix_key(</span>
+<span id="L191"><span class="lineNum">     191</span>                 :             :     KeyPrefix&amp;&amp; prefix,</span>
+<span id="L192"><span class="lineNum">     192</span>                 :             :     const Schema::ConstRef&amp; schema,</span>
+<span id="L193"><span class="lineNum">     193</span>                 :             :     const InternalSchema::ConstRef&amp; internal_schema) {</span>
+<span id="L194"><span class="lineNum">     194</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     return detail::make_prefix_key_impl(std::move(prefix), schema, internal_schema); // moves</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :             : }</span>
+<span id="L196"><span class="lineNum">     196</span>                 :             : </span>
+<span id="L197"><span class="lineNum">     197</span>                 :             : } // namespace pl::sstv2::types</span>
         </pre>
               </td>
             </tr>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-23 00:34:21</td>
+            <td class="headerValue">2026-06-24 01:13:31</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -226,33 +226,31 @@
 <span id="L155"><span class="lineNum">     155</span>         [<span class="tlaGBC" title="Branch 0 was taken 282 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 33 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         315 :         for (size_t i = 0; i &lt; common; ++i) {</span></span>
 <span id="L156"><span class="lineNum">     156</span>         [<span class="tlaGBC" title="Branch 0 was taken 282 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         282 :             const DataType expected = schema_-&gt;column_type(i);</span></span>
 <span id="L157"><span class="lineNum">     157</span>   [<span class="tlaGBC" title="Branch 0 was taken 282 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 282 times"> + </span>]:<span class="tlaGNC">         282 :             if (lhs.column(i).type() != expected || rhs.column(i).type() != expected) {</span></span>
-<span id="L158"><span class="lineNum">     158</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 return absl::InvalidArgumentError(absl::StrCat(&quot;key column &quot;,</span></span>
-<span id="L159"><span class="lineNum">     159</span>                 :             :                                                                i,</span>
-<span id="L160"><span class="lineNum">     160</span>                 :             :                                                                &quot; type mismatch: expected &quot;,</span>
-<span id="L161"><span class="lineNum">     161</span>                 :             :                                                                data_type_name(expected)));</span>
-<span id="L162"><span class="lineNum">     162</span>                 :             :             }</span>
-<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC tlaBgGNC">         282 :             int cmp = compare_values(lhs.column(i), rhs.column(i));</span></span>
-<span id="L164"><span class="lineNum">     164</span>         [<span class="tlaGBC" title="Branch 0 was taken 34 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 248 times"> + </span>]:<span class="tlaGNC">         282 :             if (schema_-&gt;column_order(i) == SortOrder::kDescending) {</span></span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">          34 :                 cmp = -cmp;</span></span>
-<span id="L166"><span class="lineNum">     166</span>                 :             :             }</span>
-<span id="L167"><span class="lineNum">     167</span>         [<span class="tlaGBC" title="Branch 0 was taken 104 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 178 times"> + </span>]:<span class="tlaGNC">         282 :             if (cmp != 0) {</span></span>
-<span id="L168"><span class="lineNum">     168</span>                 :             :                 return cmp;</span>
-<span id="L169"><span class="lineNum">     169</span>                 :             :             }</span>
-<span id="L170"><span class="lineNum">     170</span>                 :             :         }</span>
-<span id="L171"><span class="lineNum">     171</span>                 :             : </span>
-<span id="L172"><span class="lineNum">     172</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">          33 :         if (lhs.column_count() == rhs.column_count()) {</span></span>
-<span id="L173"><span class="lineNum">     173</span>                 :             :             return 0;</span>
-<span id="L174"><span class="lineNum">     174</span>                 :             :         }</span>
-<span id="L175"><span class="lineNum">     175</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          19 :         if (mode == PrefixMatchMode::kPrefixMatches) {</span></span>
-<span id="L176"><span class="lineNum">     176</span>                 :             :             return 0;</span>
-<span id="L177"><span class="lineNum">     177</span>                 :             :         }</span>
-<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return lhs.column_count() &lt; rhs.column_count() ? -1 : 1;</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :             :     }</span>
-<span id="L180"><span class="lineNum">     180</span>                 :             : </span>
-<span id="L181"><span class="lineNum">     181</span>                 :             :     InternalSchema::ConstRef schema_;</span>
-<span id="L182"><span class="lineNum">     182</span>                 :             : };</span>
-<span id="L183"><span class="lineNum">     183</span>                 :             : </span>
-<span id="L184"><span class="lineNum">     184</span>                 :             : } // namespace pl::sstv2::types</span>
+<span id="L158"><span class="lineNum">     158</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 return absl::InvalidArgumentError(absl::StrCat(</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :                     &quot;key column &quot;, i, &quot; type mismatch: expected &quot;, data_type_name(expected)));</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :             }</span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC tlaBgGNC">         282 :             int cmp = compare_values(lhs.column(i), rhs.column(i));</span></span>
+<span id="L162"><span class="lineNum">     162</span>         [<span class="tlaGBC" title="Branch 0 was taken 34 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 248 times"> + </span>]:<span class="tlaGNC">         282 :             if (schema_-&gt;column_order(i) == SortOrder::kDescending) {</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">          34 :                 cmp = -cmp;</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :             }</span>
+<span id="L165"><span class="lineNum">     165</span>         [<span class="tlaGBC" title="Branch 0 was taken 104 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 178 times"> + </span>]:<span class="tlaGNC">         282 :             if (cmp != 0) {</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :             :                 return cmp;</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             :             }</span>
+<span id="L168"><span class="lineNum">     168</span>                 :             :         }</span>
+<span id="L169"><span class="lineNum">     169</span>                 :             : </span>
+<span id="L170"><span class="lineNum">     170</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">          33 :         if (lhs.column_count() == rhs.column_count()) {</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :             return 0;</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             :         }</span>
+<span id="L173"><span class="lineNum">     173</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          19 :         if (mode == PrefixMatchMode::kPrefixMatches) {</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :             :             return 0;</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             :         }</span>
+<span id="L176"><span class="lineNum">     176</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return lhs.column_count() &lt; rhs.column_count() ? -1 : 1;</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :             :     }</span>
+<span id="L178"><span class="lineNum">     178</span>                 :             : </span>
+<span id="L179"><span class="lineNum">     179</span>                 :             :     InternalSchema::ConstRef schema_;</span>
+<span id="L180"><span class="lineNum">     180</span>                 :             : };</span>
+<span id="L181"><span class="lineNum">     181</span>                 :             : </span>
+<span id="L182"><span class="lineNum">     182</span>                 :             : } // namespace pl::sstv2::types</span>
         </pre>
               </td>
             </tr>
