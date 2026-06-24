@@ -45,7 +45,6 @@ cc_test(
     linkopts = LINKOPTS,
     deps = [
         ":thread_pool",
-        "//cpp/pl/log:logger",
         "@googletest//:gtest_main",
     ],
 )
