@@ -16,129 +16,113 @@
 
 syntax = "proto3";
 
-package pl.minitable.master.proto;
+package pl.minitable.proto;
+
+import "cpp/pl/minitable/proto/common.proto";
 
 option cc_generic_services = true;
 
 // =========================================================================
-// MasterService — 客户端接口: DDL + 路由查询
+// MasterService — 客户端接口
 // =========================================================================
 
 service MasterService {
-    // DDL — 客户端负责 SQL/JSON → TableSchema 转换
+    // DDL
     rpc CreateTable(CreateTableRequest) returns (CreateTableResponse);
+    rpc UpdateTable(UpdateTableRequest) returns (UpdateTableResponse);
     rpc DropTable(DropTableRequest) returns (DropTableResponse);
+    rpc GetTable(GetTableRequest) returns (GetTableResponse);
+    rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
 
-    // 分片查询: row_key 非空 → 定位单个 Slice; 空 → 返回所有 Slice
+    // 分片
     rpc GetSlice(GetSliceRequest) returns (GetSliceResponse);
 }
 
 // =========================================================================
-// 共享类型
-// =========================================================================
-
-enum DataType {
-    STRING = 0;
-    INT64 = 1;
-    UINT64 = 2;
-    INT32 = 3;
-    UINT32 = 4;
-    BOOL = 5;
-    DOUBLE = 6;
-    FLOAT = 7;
-    BYTES = 8;
-    ARRAY = 9;   // 仅 ColumnDef 可用, RowKeyColumn 不可用
-    MAP = 10;     // 仅 ColumnDef 可用
-}
-
-enum PartitionType {
-    HASH = 0;
-    GLOBAL_ORDER = 1;
-}
-
-// =========================================================================
-// DDL
+// CreateTable
 // =========================================================================
 
 message CreateTableRequest {
-    string namespace = 1;          // 逻辑隔离, 默认 ""
-    string table_name = 2;
-    string region = 3;             // 所属 Region
-    TableSchema schema = 4;
-    PartitionSpec partition = 5;
-    uint32 replicas = 6;           // 默认 3
-}
-
-message TableSchema {
-    repeated RowKeyColumn row_keys = 1;
-    repeated LocalityGroup locality_groups = 2;
-}
-
-message RowKeyColumn {
-    string name = 1;
-    DataType type = 2;             // 不可为 ARRAY/MAP
-    bool partition_key = 3;        // 前缀连续: 若为 true, 前面的列也必须为 true
-}
-
-message LocalityGroup {
-    string name = 1;               // e.g. "default", "meta"
-    repeated ColumnDef columns = 2;
-}
-
-message ColumnDef {
-    string name = 1;               // e.g. "cf1:name"
-    DataType type = 2;
-    bool optional = 3;             // 默认 false
-}
-
-message PartitionSpec {
-    PartitionType type = 1;
-    uint32 slice_count = 2;        // HASH 时有效, GLOBAL_ORDER 时忽略
+    string        namespace  = 1;
+    string        table_name = 2;
+    string        region     = 3;  // 所属 Region
+    TableSchema   schema     = 4;
+    PartitionSpec partition  = 5;
+    uint32        replicas   = 6;  // 默认 3
 }
 
 message CreateTableResponse {
-    int32 error_code = 1;
-    string error_msg = 2;
-    uint64 table_id = 3;
+    Status    status = 1;
+    TableInfo table  = 2;  // 包含分配的 table_id 和初始 version
 }
 
+// =========================================================================
+// UpdateTable — 修改表定义 (加列/删列/加 LG 等)
+// =========================================================================
+
+message UpdateTableRequest {
+    string        namespace        = 1;
+    string        table_name       = 2;
+    TableSchema   schema           = 3;  // 新的完整 schema
+    uint64        expected_version = 4;  // 乐观锁: 仅当当前版本匹配时才执行
+}
+
+message UpdateTableResponse {
+    Status    status = 1;
+    TableInfo table  = 2;  // 更新后的完整信息 (含新 version)
+}
+
+// =========================================================================
+// DropTable
+// =========================================================================
+
 message DropTableRequest {
-    string namespace = 1;
+    string namespace  = 1;
     string table_name = 2;
 }
 
 message DropTableResponse {
-    int32 error_code = 1;
-    string error_msg = 2;
+    Status status = 1;
 }
 
 // =========================================================================
-// Slice
+// GetTable — 查询表定义
+// =========================================================================
+
+message GetTableRequest {
+    string namespace  = 1;
+    string table_name = 2;
+}
+
+message GetTableResponse {
+    Status    status = 1;
+    TableInfo table  = 2;
+}
+
+// =========================================================================
+// ListTables
+// =========================================================================
+
+message ListTablesRequest {
+    string namespace = 1;  // 空 = 列出所有 namespace 下的表
+}
+
+message ListTablesResponse {
+    Status status = 1;
+    repeated TableInfo tables = 2;
+}
+
+// =========================================================================
+// GetSlice — 分片查询
 // =========================================================================
 
 message GetSliceRequest {
-    string namespace = 1;
+    string namespace  = 1;
     string table_name = 2;
-    bytes row_key = 3;             // 非空: 定位单个 Slice; 空: 返回所有 Slice
-}
-
-message SliceInfo {
-    uint64 slice_id = 1;
-    bytes start_key = 2;
-    bytes end_key = 3;
-    repeated ReplicaEndpoint replicas = 4;
-}
-
-message ReplicaEndpoint {
-    uint32 replica_id = 1;
-    uint64 us_id = 2;
-    string host = 3;
-    uint32 port = 4;
-    int32 role = 5;                // 0=LEADER, 1=FOLLOWER, 2=OFFLINE
+    RowKey row_key    = 3;  // 非空: 定位单个 Slice; 空: 返回所有 Slice
 }
 
 message GetSliceResponse {
-    int32 error_code = 1;
-    string error_msg = 2;
-    repeated SliceInfo slices = 3; // row_key 非空时返回 1 个, 空时返回全部
+    Status status = 1;
+    repeated SliceInfo slices = 2;
 }

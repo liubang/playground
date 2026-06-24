@@ -1,0 +1,170 @@
+// Copyright (c) 2025 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+
+syntax = "proto3";
+
+package pl.minitable.proto;
+
+// =========================================================================
+// 通用类型 — 被所有 service 引用
+// =========================================================================
+
+// 统一状态码
+message Status {
+    int32 code = 1;      // 0 = OK
+    string msg = 2;
+}
+
+// =========================================================================
+// RowKey — 结构化行键
+// =========================================================================
+// 客户端按 TableSchema.row_keys 的顺序填充 values[].
+// 服务端根据 schema 校验类型并编码为 memcomparable bytes.
+
+message RowKey {
+    repeated bytes values = 1;  // values[i] 对应 row_keys[i], 客户端负责序列化
+}
+
+// 数据类型
+enum DataType {
+    STRING   = 0;
+    INT64    = 1;
+    UINT64   = 2;
+    INT32    = 3;
+    UINT32   = 4;
+    BOOL     = 5;
+    DOUBLE   = 6;
+    FLOAT    = 7;
+    BYTES    = 8;
+    ARRAY    = 9;   // 仅 ColumnDef, RowKeyColumn 不可用
+    MAP      = 10;  // 仅 ColumnDef
+}
+
+// 分区方式
+enum PartitionType {
+    HASH          = 0;
+    GLOBAL_ORDER  = 1;
+}
+
+// 副本角色
+enum ReplicaRole {
+    PRIMARY   = 0;
+    SECONDARY = 1;
+    OFFLINE   = 2;
+}
+
+// =========================================================================
+// Table Schema
+// =========================================================================
+
+message TableSchema {
+    repeated RowKeyColumn row_keys = 1;
+    repeated LocalityGroup locality_groups = 2;
+}
+
+message RowKeyColumn {
+    string   name           = 1;
+    DataType type           = 2;  // 不可 ARRAY/MAP
+    bool     partition_key  = 3;  // 前缀连续: 为 true 时前面的列也必须为 true
+}
+
+message ColumnDef {
+    string   name     = 1;  // e.g. "cf1:name"
+    DataType type     = 2;
+    bool     optional = 3;
+}
+
+message LocalityGroup {
+    string   name    = 1;  // e.g. "default", "meta"
+    repeated ColumnDef columns = 2;
+}
+
+message PartitionSpec {
+    PartitionType type        = 1;
+    uint32        slice_count = 2;  // HASH 时有效
+}
+
+// =========================================================================
+// TableInfo — 表的完整元信息
+// =========================================================================
+// Master 内部维护此结构, 也在 RPC 响应中返回给客户端
+
+enum TableState {
+    ENABLED  = 0;  // 正常读写
+    DISABLED = 1;  // 禁止访问
+    DROPPED  = 2;  // 待清理
+}
+
+message TableInfo {
+    uint64        table_id  = 1;
+    uint64        version   = 2;  // 最后修改时间戳 (微秒), 并发控制 / 版本跟踪
+    string        namespace = 3;
+    string        name      = 4;
+    string        region    = 5;
+    TableSchema   schema    = 6;
+    PartitionSpec partition = 7;
+    uint32        replicas  = 8;
+    TableState    state     = 9;
+}
+
+// =========================================================================
+// Region / UnitServer
+// =========================================================================
+
+enum RegionState {
+    REGION_ACTIVE   = 0;
+    REGION_DRAINING = 1;
+    REGION_OFFLINE  = 2;
+}
+
+message RegionInfo {
+    string      name  = 1;
+    RegionState state = 2;
+}
+
+enum UnitServerState {
+    US_LIVE  = 0;
+    US_STALE = 1;
+    US_DEAD  = 2;
+}
+
+message UnitServerInfo {
+    uint64           us_id    = 1;
+    string           host     = 2;
+    uint32           port     = 3;
+    string           region   = 4;
+    int64            capacity = 5;
+    UnitServerState  state    = 6;  // 临时状态, 不持久化
+}
+
+// =========================================================================
+// Slice / Replica
+// =========================================================================
+
+message ReplicaEndpoint {
+    uint32      replica_id = 1;
+    uint64      us_id      = 2;  // UnitServer id
+    string      host       = 3;
+    uint32      port       = 4;
+    ReplicaRole role       = 5;
+}
+
+message SliceInfo {
+    uint64 slice_id  = 1;
+    bytes  start_key = 2;
+    bytes  end_key   = 3;
+    repeated ReplicaEndpoint replicas = 4;
+}
