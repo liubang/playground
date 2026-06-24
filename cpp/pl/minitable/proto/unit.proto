@@ -16,7 +16,9 @@
 
 syntax = "proto3";
 
-package pl.minitable.master.proto;
+package pl.minitable.proto;
+
+import "cpp/pl/minitable/proto/common.proto";
 
 option cc_generic_services = true;
 
@@ -30,46 +32,50 @@ service UnitService {
 }
 
 // =========================================================================
-
-message HeartbeatRequest {
-    uint64 us_id = 1;
-    string host = 2;
-    uint32 port = 3;
-    int64 capacity = 4;
-    // 携带当前 US 上的 Slice 列表 (用于 Master 校验)
-    repeated SliceReport slices = 5;
-}
+// Heartbeat
+// =========================================================================
 
 message SliceReport {
-    uint64 slice_id = 1;
-    bool is_leader = 2;
-}
-
-message HeartbeatResponse {
-    int32 error_code = 1;
-    // Master 可能携带指令
-    repeated SliceCommand commands = 2;
+    uint64 slice_id   = 1;
+    bool   is_primary = 2;  // 当前 US 在该 Slice 的 Raft 组中是否为 Leader
 }
 
 message SliceCommand {
-    enum CommandType {
-        NONE = 0;
-        START_SLICE = 1;     // 启动指定 Slice 的副本
-        STOP_SLICE = 2;      // 停止指定 Slice 的副本
+    enum Type {
+        NONE        = 0;
+        START_SLICE = 1;  // 启动指定 Slice 的副本
+        STOP_SLICE  = 2;  // 停止指定 Slice 的副本
     }
-    CommandType type = 1;
+    Type   type     = 1;
     uint64 slice_id = 2;
 }
 
+message HeartbeatRequest {
+    uint64 us_id    = 1;
+    string host     = 2;
+    uint32 port     = 3;
+    int64  capacity = 4;
+    repeated SliceReport slices = 5;
+}
+
+message HeartbeatResponse {
+    Status status = 1;
+    repeated SliceCommand commands = 2;
+}
+
+// =========================================================================
+// RegisterUnitServer
+// =========================================================================
+
 message RegisterUnitServerRequest {
-    string host = 1;
-    uint32 port = 2;
-    int64 capacity = 3;
-    string region = 4;
+    uint64 us_id    = 1;  // 0 = 新注册; >0 = 重启后重新注册 (保留原 id)
+    string host     = 2;
+    uint32 port     = 3;
+    int64  capacity = 4;
+    string region   = 5;
 }
 
 message RegisterUnitServerResponse {
-    int32 error_code = 1;
-    string error_msg = 2;
-    uint64 us_id = 3;
+    Status status = 1;
+    uint64 us_id  = 2;  // 分配或确认的 UnitServer id
 }

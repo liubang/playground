@@ -27,8 +27,6 @@
 #include <thread>
 #include <vector>
 
-#include "cpp/pl/log/logger.h"
-
 namespace pl {
 
 class ThreadPool {
@@ -116,7 +114,6 @@ private:
                 std::unique_lock<std::mutex> lk(queue_mutex_);
                 condition_.wait(lk, [this] { return stop_ || !tasks_.empty(); });
                 if (stop_ && tasks_.empty()) {
-                    LOG_DEBUG << "thread stopped";
                     break;
                 }
                 task = std::move(tasks_.front());

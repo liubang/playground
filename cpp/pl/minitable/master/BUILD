@@ -28,57 +28,21 @@ load(
 # =========================================================================
 
 cc_library(
-    name = "bounded_task_queue",
-    hdrs = ["bounded_task_queue.h"],
+    name = "metadata",
+    hdrs = ["metadata.h"],
     visibility = ["//visibility:public"],
     deps = [
+        "//cpp/pl/thread:thread_pool",
         "//cpp/pl/utility",
     ],
 )
 
 cc_library(
-    name = "route_table",
-    hdrs = ["route_table.h"],
+    name = "us_manager",
+    hdrs = ["us_manager.h"],
     visibility = ["//visibility:public"],
     deps = [
-        "//cpp/pl/utility",
-    ],
-)
-
-cc_library(
-    name = "schema_service",
-    hdrs = ["schema_service.h"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":bounded_task_queue",
-        "//cpp/pl/utility",
-    ],
-)
-
-cc_library(
-    name = "region_service",
-    hdrs = ["region_service.h"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":bounded_task_queue",
-        "//cpp/pl/utility",
-    ],
-)
-
-cc_library(
-    name = "heartbeat_monitor",
-    hdrs = ["heartbeat_monitor.h"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//cpp/pl/utility",
-    ],
-)
-
-cc_library(
-    name = "snapshot_manager",
-    hdrs = ["snapshot_manager.h"],
-    visibility = ["//visibility:public"],
-    deps = [
+        "//cpp/pl/thread:thread_pool",
         "//cpp/pl/utility",
     ],
 )
@@ -94,31 +58,54 @@ cc_library(
     copts = COPTS,
     visibility = ["//visibility:public"],
     deps = [
-        ":heartbeat_monitor",
-        ":region_service",
-        ":route_table",
-        ":schema_service",
-        ":snapshot_manager",
-        "//cpp/pl/utility",
+        ":metadata",
+        ":us_manager",
         "@braft//:braft",
     ],
 )
 
 # =========================================================================
-# Master brpc Service
+# brpc Service 实现 — 三个独立 service, 各自可绑定不同端口
 # =========================================================================
 
 cc_library(
     name = "master_service",
-    srcs = ["master.cpp"],
-    hdrs = ["master.h"],
+    srcs = ["master_service_impl.cpp"],
+    hdrs = ["master_service_impl.h"],
     copts = COPTS,
     visibility = ["//visibility:public"],
     deps = [
         ":master_sm",
-        ":route_table",
-        "//cpp/pl/minitable/proto:admin_cc_proto",
+        ":metadata",
+        "//cpp/pl/minitable/proto:common_cc_proto",
         "//cpp/pl/minitable/proto:master_cc_proto",
+        "@brpc//:brpc",
+    ],
+)
+
+cc_library(
+    name = "admin_service",
+    srcs = ["admin_service_impl.cpp"],
+    hdrs = ["admin_service_impl.h"],
+    copts = COPTS,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":master_sm",
+        "//cpp/pl/minitable/proto:admin_cc_proto",
+        "//cpp/pl/minitable/proto:common_cc_proto",
+        "@brpc//:brpc",
+    ],
+)
+
+cc_library(
+    name = "unit_service",
+    srcs = ["unit_service_impl.cpp"],
+    hdrs = ["unit_service_impl.h"],
+    copts = COPTS,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":master_sm",
+        "//cpp/pl/minitable/proto:common_cc_proto",
         "//cpp/pl/minitable/proto:unit_cc_proto",
         "@brpc//:brpc",
     ],
@@ -135,8 +122,10 @@ cc_binary(
     linkopts = LINKOPTS,
     visibility = ["//visibility:public"],
     deps = [
+        ":admin_service",
         ":master_service",
         ":master_sm",
+        ":unit_service",
         "@brpc//:brpc",
         "@gflags",
     ],
