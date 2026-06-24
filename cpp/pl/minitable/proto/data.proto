@@ -1,0 +1,144 @@
+// Copyright (c) 2025 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+
+syntax = "proto3";
+
+package pl.minitable.proto;
+
+import "cpp/pl/minitable/proto/common.proto";
+
+option cc_generic_services = true;
+
+// =========================================================================
+// DataService — 客户端 → UnitServer 数据操作
+// =========================================================================
+
+service DataService {
+    rpc Get(GetRequest) returns (GetResponse);
+    rpc Put(PutRequest) returns (PutResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
+    rpc Scan(ScanRequest) returns (stream ScanResponse);
+}
+
+// =========================================================================
+// Cell — 单个 cell 的值, 用于 Put 和 Get
+// =========================================================================
+
+message Cell {
+    string column  = 1;
+    bytes  value   = 2;  // 空 = tombstone (Delete操作的结果)
+    uint64 version = 3;  // 微秒时间戳, 服务端分配
+}
+
+// =========================================================================
+// Get — 单行查询
+// =========================================================================
+
+message GetRequest {
+    string   namespace  = 1;
+    string   table_name = 2;
+    RowKey   row_key    = 3;
+    repeated string columns = 4;  // 指定列, 空 = 所有列
+    uint32   max_versions = 5;   // 每列最多返回的版本数, 默认 1
+}
+
+message GetResponse {
+    Status status = 1;
+    RowKey row_key = 2;
+    repeated Cell cells = 3;  // 按 (column, version desc) 排列
+}
+
+// =========================================================================
+// Put — 单行写入 (跨列跨 LG 原子)
+// =========================================================================
+
+message PutRequest {
+    string   namespace  = 1;
+    string   table_name = 2;
+    RowKey   row_key    = 3;
+    repeated ColumnValue columns = 4;
+}
+
+message ColumnValue {
+    string column = 1;
+    bytes  value  = 2;
+}
+
+message PutResponse {
+    Status status = 1;
+}
+
+// =========================================================================
+// Delete — 逻辑删除 (追加 tombstone)
+// =========================================================================
+
+message DeleteRequest {
+    string   namespace  = 1;
+    string   table_name = 2;
+    RowKey   row_key    = 3;
+    // 删除范围: 二选一
+    oneof target {
+        string column   = 4;  // 删除指定列的最新版本
+        bool   row       = 5;  // 删除整行
+    }
+}
+
+message DeleteResponse {
+    Status status = 1;
+}
+
+// =========================================================================
+// Scan — 范围扫描
+// =========================================================================
+
+message ScanRequest {
+    string   namespace  = 1;
+    string   table_name = 2;
+    RowKey   start_key  = 3;  // inclusive
+    RowKey   stop_key   = 4;  // exclusive
+    repeated string columns = 5;  // 空 = 所有列
+    uint32   max_versions = 6;   // 默认 1
+
+    // 过滤条件 (可选)
+    ScanFilter filter = 7;
+
+    uint32 limit = 8;  // 最多返回行数, 0 = 不限
+}
+
+message ScanFilter {
+    string column     = 1;
+    bytes  value      = 2;
+    Op     op         = 3;  // 比较操作
+    enum Op {
+        EQ  = 0;
+        NE  = 1;
+        GT  = 2;
+        GTE = 3;
+        LT  = 4;
+        LTE = 5;
+    }
+}
+
+message ScanResponse {
+    Status status = 1;
+    RowKey next_start_key = 2;  // 下一页起始, values 空 = 扫描完毕
+    repeated RowResult rows = 3;
+}
+
+message RowResult {
+    RowKey row_key = 1;
+    repeated Cell cells = 2;
+}

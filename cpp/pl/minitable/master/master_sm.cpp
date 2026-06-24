@@ -21,14 +21,8 @@
 #include <braft/util.h>
 #include <butil/logging.h>
 #include <butil/time.h>
-#include <memory>
 
 namespace pl::minitable::master {
-
-MasterSM::MasterSM() = default;
-MasterSM::~MasterSM() {
-    shutdown();
-}
 
 // =========================================================================
 // braft Node 生命周期
@@ -44,9 +38,8 @@ int MasterSM::init(std::string_view group_id, std::string_view peer_id, std::str
     ::braft::NodeOptions options;
     options.election_timeout_ms = 3000;
     options.fsm = this;
-    options.snapshot_interval_s = 600;
+    options.snapshot_interval_s = 600;  // braft 内置 snapshot, 不需要 Checkpointer
 
-    // 解析 initial configuration
     if (!conf.empty() && options.initial_conf.parse_from(std::string(conf)) != 0) {
         LOG(ERROR) << "Failed to parse initial_conf: " << conf;
         return -1;
@@ -59,33 +52,22 @@ int MasterSM::init(std::string_view group_id, std::string_view peer_id, std::str
         node_ = nullptr;
         return -1;
     }
-
     return 0;
 }
 
-int MasterSM::start() {
-    // braft Node 已经在 init 时通过 init(options) 启动
-    (void)this;
-    return 0;
-}
+int MasterSM::start() { return 0; }
 
 void MasterSM::shutdown() {
-    stop_background_threads();
-
+    us_manager_.stop_detector();
     if (node_) {
         node_->shutdown(nullptr);
         node_->join();
         delete node_;
         node_ = nullptr;
     }
-
-    schema_service_.shutdown();
-    region_service_.shutdown();
 }
 
-bool MasterSM::is_leader() const {
-    return node_ != nullptr && node_->is_leader();
-}
+bool MasterSM::is_leader() const { return node_ != nullptr && node_->is_leader(); }
 
 // =========================================================================
 // on_apply
@@ -93,40 +75,39 @@ bool MasterSM::is_leader() const {
 
 void MasterSM::on_apply(::braft::Iterator& iter) {
     for (; iter.valid(); iter.next()) {
-        // Phase 1: stub — parse and apply mutation from iter.data()
-        if (iter.done()) {
-            iter.done()->Run();
-        }
+        // Phase 1: parse and apply mutation from iter.data()
+        if (iter.done()) iter.done()->Run();
     }
 }
 
 void MasterSM::on_snapshot_save(::braft::SnapshotWriter* writer, ::braft::Closure* done) {
     ::braft::AsyncClosureGuard done_guard(done);
     (void)writer;
-    // Phase 1 stub: serialize ClusterMeta → writer->add_file("cluster_meta")
 }
 
 int MasterSM::on_snapshot_load(::braft::SnapshotReader* reader) {
     (void)reader;
-    // Phase 1 stub: deserialize ClusterMeta
     return 0;
 }
 
 void MasterSM::on_leader_start(int64_t term) {
     leader_term_.store(term, butil::memory_order_release);
     LOG(INFO) << "Master becomes leader, term=" << term;
-    start_background_threads();
+    us_manager_.start_detector([](uint64_t us_id) {
+        LOG(WARNING) << "UnitServer " << us_id << " DEAD, triggering failover";
+        // TODO: braft::apply failover task
+    });
 }
 
 void MasterSM::on_leader_stop(const butil::Status& status) {
     leader_term_.store(-1, butil::memory_order_release);
     LOG(INFO) << "Master leader stop: " << status;
-    stop_background_threads();
+    us_manager_.stop_detector();
 }
 
 void MasterSM::on_shutdown() {
     LOG(INFO) << "MasterSM::on_shutdown";
-    stop_background_threads();
+    us_manager_.stop_detector();
 }
 
 void MasterSM::on_error(const ::braft::Error& e) {
@@ -139,7 +120,8 @@ void MasterSM::on_configuration_committed(const ::braft::Configuration& conf, in
 }
 
 void MasterSM::on_start_following(const ::braft::LeaderChangeContext& ctx) {
-    LOG(INFO) << "MasterSM start following leader=" << ctx.leader_id() << " term=" << ctx.term();
+    LOG(INFO) << "MasterSM start following leader=" << ctx.leader_id()
+              << " term=" << ctx.term();
 }
 
 void MasterSM::on_stop_following(const ::braft::LeaderChangeContext& ctx) {
@@ -147,50 +129,4 @@ void MasterSM::on_stop_following(const ::braft::LeaderChangeContext& ctx) {
               << " status=" << ctx.status();
 }
 
-// =========================================================================
-// 后台线程
-// =========================================================================
-
-void MasterSM::start_background_threads() {
-    heartbeat_monitor_ = std::make_unique<HeartbeatMonitor>(
-        10'000'000, // stale_threshold: 10s
-        30'000'000, // dead_threshold: 30s
-        1'000'000,  // check_interval: 1s
-        [this]() -> std::vector<HeartbeatMonitor::HbStatus> {
-            auto hbs = region_service_.get_all_heartbeats();
-            std::vector<HeartbeatMonitor::HbStatus> statuses;
-            statuses.reserve(hbs.size());
-            for (const auto& hb : hbs) {
-                statuses.push_back(HeartbeatMonitor::HbStatus{
-                    hb.us_id, hb.last_hb_us, static_cast<int32_t>(hb.state)});
-            }
-            return statuses;
-        },
-        [this](uint64_t us_id, int32_t state) {
-            region_service_.set_state(us_id, static_cast<RegionService::UnitServerState>(state));
-        },
-        [](uint64_t us_id) {
-            LOG(WARNING) << "UnitServer " << us_id << " DEAD, triggering failover";
-            (void)us_id;
-            // TODO: braft::apply failover task
-        });
-    heartbeat_monitor_->start();
-
-    snapshot_manager_ =
-        std::make_unique<SnapshotManager>(600'000'000, // 10min
-                                          []() { LOG(INFO) << "SnapshotManager: tick"; });
-    snapshot_manager_->start();
-}
-
-void MasterSM::stop_background_threads() {
-    if (heartbeat_monitor_) {
-        heartbeat_monitor_->stop();
-        heartbeat_monitor_.reset();
-    }
-    if (snapshot_manager_) {
-        snapshot_manager_->stop();
-        snapshot_manager_.reset();
-    }
-}
-
-} // namespace pl::minitable::master
+}  // namespace pl::minitable::master
