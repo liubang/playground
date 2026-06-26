@@ -1,44 +1,44 @@
-# MiniDFS TLA+ Formal Verification
+# MiniDFS TLA+ 形式化验证
 
-TLA+ formal specifications for verifying the correctness of key state machines in MiniDFS.
+TLA+ 形式化规格，用于验证 MiniDFS 中关键状态机的正确性。
 
-## Directory Structure
+## 目录结构
 
 ```
 cpp/pl/minidfs/tla/
-├── README.md              # This file
-├── DatanodeState.tla      # DataNode heartbeat/lifecycle state machine
-├── DatanodeState.cfg      # TLC model config
-├── BlockReplicaState.tla  # Block + Replica joint state machine
-├── BlockReplicaState.cfg  # TLC model config
-├── FileLeaseState.tla     # File (inode) + Lease state machine
-├── FileLeaseState.cfg     # TLC model config
-├── WriteProtocol.tla      # Full pipeline write protocol
-└── WriteProtocol.cfg      # TLC model config
+├── README.md              # 本文件
+├── DatanodeState.tla      # DataNode 心跳/生命周期状态机
+├── DatanodeState.cfg      # TLC 模型配置
+├── BlockReplicaState.tla  # Block + Replica 联合状态机
+├── BlockReplicaState.cfg  # TLC 模型配置
+├── FileLeaseState.tla     # File + Lease 状态机
+├── FileLeaseState.cfg     # TLC 模型配置
+├── WriteProtocol.tla      # 完整 Pipeline 写协议
+└── WriteProtocol.cfg      # TLC 模型配置
 ```
 
-## Prerequisites
+## 前置条件
 
-Install the TLA+ tools:
+安装 TLA+ 工具链：
 
 ```bash
 # macOS
 brew install tla-plus-toolbox
 
-# Or download tla2tools.jar from:
+# 或者直接下载 tla2tools.jar
 # https://lamport.azurewebsites.net/tla/toolbox.html
 ```
 
-Required tools:
+所需工具：
 
-- **SANY** (TLA+ Parser) — syntax and type checking
-- **TLC** (TLA+ Model Checker) — exhaustive state-space exploration
-- _(Optional)_ **Apalache** — symbolic model checker for larger models
-- _(Optional)_ **TLAPS** — interactive proof system
+- **SANY** (TLA+ Parser) — 语法和类型检查
+- **TLC** (TLA+ Model Checker) — 穷举状态空间探索
+- *(可选)* **Apalache** — 符号模型检查器，适合更大规模验证
+- *(可选)* **TLAPS** — 交互式证明系统
 
-## Quick Start
+## 快速开始
 
-### Syntax Check (SANY)
+### 语法检查 (SANY)
 
 ```bash
 TLA2=/path/to/tla2tools.jar
@@ -50,7 +50,7 @@ for f in *.tla; do
 done
 ```
 
-### Model Checking (TLC)
+### 模型检查 (TLC)
 
 ```bash
 cd cpp/pl/minidfs/tla
@@ -62,47 +62,46 @@ for cfg in *.cfg; do
 done
 ```
 
-### Model Checking Results (current configs)
+### 模型检查结果（当前配置）
 
-| Specification     | States Generated | Distinct States | Model Size                     | Result |
-| ----------------- | ---------------- | --------------- | ------------------------------ | ------ |
-| DatanodeState     | 363,518          | 53,361          | 3 DNs, max time 20             | PASS   |
-| BlockReplicaState | 2,267,173        | 181,476         | 2 blocks, 6 replicas, 3 DNs    | PASS   |
-| FileLeaseState    | 46,437           | 8,676           | 2 files, 2 clients, max time 6 | PASS   |
-| WriteProtocol     | 4,851,717        | 556,378         | 1 file, 3 DNs, 3 blocks        | PASS   |
+| 规格 | 生成状态数 | 不同状态数 | 模型规模 | 结果 |
+|------|-----------|-----------|---------|------|
+| DatanodeState | 363,518 | 53,361 | 3 个 DN, 最大时间 20 | 通过 |
+| BlockReplicaState | 2,267,173 | 181,476 | 2 个 block, 6 个 replica, 3 个 DN | 通过 |
+| FileLeaseState | 46,437 | 8,676 | 2 个文件, 2 个客户端, 最大时间 6 | 通过 |
+| WriteProtocol | 4,851,717 | 556,378 | 1 个文件, 3 个 DN, 3 个 block | 通过 |
 
-All models complete exhaustive state-space exploration (0 states left on queue) with no invariant violations.
+所有模型均完成穷举状态空间探索（队列剩余状态数为 0），无不变量违反。
 
-## Specifications
+## 规格说明
 
-### 1. DatanodeState — DataNode Lifecycle
+### 1. DatanodeState — DataNode 生命周期
 
-**Verified code paths:** `namenode/datanode_manager.cpp`
+**验证的代码路径:** `namenode/datanode_manager.cpp`
 
 ```
-State transitions:
+状态转换:
   (new) --> Live --> Stale --> Dead
             ^         |         |
             +--- heartbeat -------+
 ```
 
-Every `TickAndScan` step advances time non-deterministically and updates all DataNode states based on elapsed time since last heartbeat. A `Heartbeat` action resets the node to Live.
+每次 `TickAndScan` 步骤非确定性推进时间，并根据距上次心跳的间隔更新所有 DataNode 状态。`Heartbeat` 动作将节点重置为 Live。
 
-**Verified invariants:**
+**验证的不变量:**
 
-| Invariant                     | Description                                                         |
-| ----------------------------- | ------------------------------------------------------------------- |
-| `TypeOK`                      | All state values are within the valid enum set                      |
-| `LiveImpliesFreshHeartbeat`   | Live nodes must have heartbeat within `StaleTimeoutMs`              |
-| `StaleImpliesAgedHeartbeat`   | Stale nodes have heartbeat age in `[StaleTimeoutMs, DeadTimeoutMs)` |
-| `DeadImpliesExpiredHeartbeat` | Dead nodes have heartbeat age >= `DeadTimeoutMs`                    |
+| 不变量 | 含义 |
+|--------|------|
+| `TypeOK` | 所有状态值在合法枚举范围内 |
+| `LiveImpliesFreshHeartbeat` | Live 节点心跳间隔必须小于 `StaleTimeoutMs` |
+| `StaleImpliesAgedHeartbeat` | Stale 节点心跳间隔在 `[StaleTimeoutMs, DeadTimeoutMs)` 区间 |
+| `DeadImpliesExpiredHeartbeat` | Dead 节点心跳间隔 >= `DeadTimeoutMs` |
 
-**Design observation:**
+**设计发现:**
 
-`handle_heartbeat()` unconditionally sets `dn.state = DataNodeState::kLive` (line 99 of `datanode_manager.cpp`), which allows a Dead node to be revived by a heartbeat. This differs from HDFS where a Dead DataNode requires explicit re-registration.
+`handle_heartbeat()` 无条件设置 `dn.state = DataNodeState::kLive`（`datanode_manager.cpp` 第 99 行），允许已 Dead 的节点被心跳复活。这与 HDFS 不同——HDFS 中 Dead DataNode 需要显式重新注册。
 
-**Configuration (`DatanodeState.cfg`):**
-
+**模型配置 (`DatanodeState.cfg`):**
 ```tla
 SPECIFICATION Spec
 CONSTANTS
@@ -113,9 +112,9 @@ CONSTANTS
 INVARIANTS TypeOK StateConsistency
 ```
 
-### 2. BlockReplicaState — Block + Replica Joint State Machine
+### 2. BlockReplicaState — Block + Replica 联合状态机
 
-**Verified code paths:** `namenode/block_manager.cpp`
+**验证的代码路径:** `namenode/block_manager.cpp`
 
 ```
 Block:   Allocating --> Committed --> Corrupt
@@ -131,22 +130,21 @@ Replica: Writing --> Finalized --> Stale
                     Corrupt --> Deleting --> Deleted
 ```
 
-**Verified invariants:**
+**验证的不变量:**
 
-| Invariant                                    | Description                                                     |
-| -------------------------------------------- | --------------------------------------------------------------- |
-| `TypeOK`                                     | All state values within valid enum sets                         |
-| `AllocatingBlockReplicasAreWritingOrCorrupt` | Replicas of Allocating blocks are only Writing or Corrupt       |
-| `DeletedBlockHasNoActiveReplicas`            | Deleted blocks have no Writing/Finalized/Corrupt/Stale replicas |
+| 不变量 | 含义 |
+|--------|------|
+| `TypeOK` | 所有状态值在合法枚举范围内 |
+| `AllocatingBlockReplicasAreWritingOrCorrupt` | Allocating 状态 block 的 replica 只能是 Writing 或 Corrupt |
+| `DeletedBlockHasNoActiveReplicas` | 已删除 block 不能有 Writing/Finalized/Corrupt/Stale 状态的 replica |
 
-**Design observation:**
+**设计发现:**
 
-`commit_block()` has an idempotency path (`already_committed` check at line 147-148 of `block_manager.cpp`). When a duplicate commit request arrives with the same `generation_stamp`, the block state update is skipped but replica states are still iterated. Since Finalized-to-Finalized is idempotent, this is safe in practice, but the model confirms that the block-level consistency is maintained regardless of retry order.
+`commit_block()` 存在幂等路径（`block_manager.cpp` 第 147-148 行的 `already_committed` 检查）。当重复提交请求携带相同的 `generation_stamp` 时，block 状态更新被跳过，但仍遍历所有 replica。由于 Finalized-to-Finalized 是幂等的，这在实践中是安全的。模型确认了无论重试顺序如何，block 级别的一致性均得以保持。
 
-The `CommittedBlockHasMinReplicas` property (requiring >= MinWriteReplica healthy replicas) is a fault-tolerance liveness concern handled by `ReplicationManager`, not a safety invariant. Cascading DataNode failures can temporarily reduce the replica count below `MinWriteReplica`.
+`CommittedBlockHasMinReplicas` 属性（要求 >= MinWriteReplica 个健康 replica）是由 `ReplicationManager` 处理的容错活性属性，而非安全不变量。级联 DataNode 故障可临时将 replica 数降至 `MinWriteReplica` 以下。
 
-**Configuration (`BlockReplicaState.cfg`):**
-
+**模型配置 (`BlockReplicaState.cfg`):**
 ```tla
 SPECIFICATION Spec
 CONSTANTS
@@ -157,9 +155,9 @@ CONSTANTS
 INVARIANTS BlockReplicaInvariants
 ```
 
-### 3. FileLeaseState — File + Lease Mutual Exclusion
+### 3. FileLeaseState — File + Lease 互斥验证
 
-**Verified code paths:** `namenode/namespace_manager.cpp` + `namenode/lease_manager.cpp`
+**验证的代码路径:** `namenode/namespace_manager.cpp` + `namenode/lease_manager.cpp`
 
 ```
 File:  Normal <--> UnderConstruction --> Deleted
@@ -169,25 +167,24 @@ File:  Normal <--> UnderConstruction --> Deleted
 
 Lease: (None) --> Active --> Closed
                    |
-                   +-- (renew extends expiry)
+                   +-- (renew 延长过期时间)
 ```
 
-**Verified invariants:**
+**验证的不变量:**
 
-| Invariant                     | Description                                                           |
-| ----------------------------- | --------------------------------------------------------------------- |
-| `TypeOK`                      | All state values within valid enum sets                               |
-| `OnlyUCFileHasActiveLease`    | Only UnderConstruction files can hold an active lease                 |
-| `DeletedFileHasNoActiveLease` | Deleted files must not have an active lease                           |
-| `ActiveLeaseHasFutureExpiry`  | Active leases have `expire_time >= now` and `<= now + LeaseTimeoutMs` |
-| `NormalFileLeaseConsistency`  | Normal files have no active lease (None or Closed)                    |
+| 不变量 | 含义 |
+|--------|------|
+| `TypeOK` | 所有状态值在合法枚举范围内 |
+| `OnlyUCFileHasActiveLease` | 只有 UnderConstruction 文件可以有 Active lease |
+| `DeletedFileHasNoActiveLease` | 已删除文件不能有 Active lease |
+| `ActiveLeaseHasFutureExpiry` | Active lease 满足 `expire_time >= now` 且 `<= now + LeaseTimeoutMs` |
+| `NormalFileLeaseConsistency` | Normal 文件没有 Active lease（None 或 Closed） |
 
-**Design observation:**
+**设计发现:**
 
-`expire_stale_leases()` (line 101 of `lease_manager.cpp`) closes expired leases but does NOT transition the file from UnderConstruction back to Normal. This means a client crash during writing leaves the file permanently in UnderConstruction state — an "orphan file" that requires administrator intervention or a future `NameNodeMaintenance` cleanup routine.
+`expire_stale_leases()`（`lease_manager.cpp` 第 101 行）关闭过期 lease 但不会将文件从 UnderConstruction 恢复为 Normal。这意味着客户端在写入过程中崩溃会导致文件永久停留在 UnderConstruction 状态——一个"孤儿文件"，需要管理员手动干预或未来在 `NameNodeMaintenance` 中添加清理逻辑。
 
-**Configuration (`FileLeaseState.cfg`):**
-
+**模型配置 (`FileLeaseState.cfg`):**
 ```tla
 SPECIFICATION Spec
 CONSTANTS
@@ -198,34 +195,33 @@ CONSTANTS
 INVARIANTS FileLeaseInvariants
 ```
 
-### 4. WriteProtocol — Full Pipeline Write Protocol
+### 4. WriteProtocol — 完整 Pipeline 写协议
 
-**Verified code paths:** The entire write flow spanning `namespace_manager.cpp`, `block_manager.cpp`, and `lease_manager.cpp`
+**验证的代码路径:** 完整写入流程，横跨 `namespace_manager.cpp`、`block_manager.cpp` 和 `lease_manager.cpp`
 
-This is the most critical specification, modeling the complete lifecycle:
+这是最核心的规格，建模了完整的写入生命周期：
 
-1. `CreateFile` — file enters UnderConstruction with an exclusive lease
-2. `AllocateBlock` — NameNode selects DataNodes and creates replicas in Writing state
-3. `CommitBlock` — confirmed replicas transition to Finalized, block becomes Committed
-4. `CompleteFile` — all blocks committed, file transitions to Completed
-5. `DataNodeFailure` — fault injection: DN failure corrupts all its replicas
-6. `LeaseExpire` — client crash simulation
+1. `CreateFile` — 文件进入 UnderConstruction，获取排他 lease
+2. `AllocateBlock` — NameNode 选择 DataNode，创建 Writing 状态的 replica
+3. `CommitBlock` — 确认的 replica 转为 Finalized，block 转为 Committed
+4. `CompleteFile` — 所有 block 已提交，文件转为 Completed
+5. `DataNodeFailure` — 故障注入：DN 故障使其上所有 replica 变为 Corrupt
+6. `LeaseExpire` — 客户端崩溃模拟
 
-**Verified invariants:**
+**验证的不变量:**
 
-| Invariant                         | Description                                                      |
-| --------------------------------- | ---------------------------------------------------------------- |
-| `TypeOK`                          | All state values within valid enum sets                          |
-| `CompletedFileBlocksAreCommitted` | Every block of a Completed file is in Committed state            |
-| `UnallocatedBlockHasNoReplicas`   | Unallocated blocks have zero replicas on any DataNode            |
-| `OnlyUCFileHasLease`              | Only UnderConstruction files can hold a lease (mutual exclusion) |
+| 不变量 | 含义 |
+|--------|------|
+| `TypeOK` | 所有状态值在合法枚举范围内 |
+| `CompletedFileBlocksAreCommitted` | Completed 文件的每个 block 必须是 Committed 状态 |
+| `UnallocatedBlockHasNoReplicas` | 未分配的 block 在任何 DataNode 上没有 replica |
+| `OnlyUCFileHasLease` | 只有 UnderConstruction 文件可以持有 lease（写互斥） |
 
-**Fault tolerance note:**
+**容错说明:**
 
-The `CompletedFileHasAtLeastOneReplica` property (requiring at least 1 Finalized replica per block after completion) is a fault-tolerance liveness concern. The model correctly demonstrates that cascading DataNode failures can destroy all replicas of a block. In production, the `ReplicationManager` periodic scan detects under-replicated blocks and triggers re-replication before additional failures occur. Modeling the `ReplicationManager` repair loop would strengthen this property to a temporal guarantee.
+`CompletedFileHasAtLeastOneReplica` 属性（要求完成后每个 block 至少 1 个 Finalized replica）是容错活性关注点。模型正确地展示了级联 DataNode 故障可以摧毁一个 block 的所有 replica。在生产环境中，`ReplicationManager` 定期扫描会检测副本不足的 block，并在额外故障发生前触发重新复制。将 `ReplicationManager` 修复循环建模后，可将此属性强化为时序保证。
 
-**Configuration (`WriteProtocol.cfg`):**
-
+**模型配置 (`WriteProtocol.cfg`):**
 ```tla
 SPECIFICATION Spec
 CONSTANTS
@@ -237,78 +233,77 @@ CONSTANTS
 INVARIANTS WriteProtocolInvariants
 ```
 
-## Design Principles
+## 设计原理
 
-### Bounded vs. Unbounded Models
+### 有限模型 vs 无限模型
 
-All specifications use bounded (finite-state) models with small constant sets, because:
+所有规格使用有限（bounded）模型和小型常量集合，原因是：
+- 分布式协议的安全 bug 通常在小规模配置中就会暴露
+- TLC 对状态空间做穷举枚举，在给定边界内提供证明级别的确定性
+- 对于无界验证，需要使用 TLAPS（证明系统）或 Apalache（符号模型检查器）
 
-- Safety bugs in distributed protocols typically manifest in small configurations
-- TLC performs exhaustive enumeration of the state space, providing proof-level certainty for the given bound
-- For unbounded verification, TLAPS (proof system) or Apalache (symbolic model checker) would be needed
+### 命名约定
 
-### Naming Convention
+规格中的标识符与 C++ 源码中的枚举值保持一致：
 
-Specification identifiers match the C++ source code enumeration values:
-
-| C++ enum value                  | TLA+ string           |
-| ------------------------------- | --------------------- |
-| `DataNodeState::kLive`          | `"Live"`              |
-| `BlockState::kAllocating`       | `"Allocating"`        |
-| `ReplicaState::kWriting`        | `"Writing"`           |
+| C++ 枚举值 | TLA+ 字符串 |
+|-----------|-------------|
+| `DataNodeState::kLive` | `"Live"` |
+| `BlockState::kAllocating` | `"Allocating"` |
+| `ReplicaState::kWriting` | `"Writing"` |
 | `FileState::kUnderConstruction` | `"UnderConstruction"` |
-| `LeaseState::kActive`           | `"Active"`            |
+| `LeaseState::kActive` | `"Active"` |
 
-Each `.tla` file header documents the corresponding `.cpp` source files and function names.
+每个 `.tla` 文件头部注释标注了对应的 `.cpp` 源文件和函数名。
 
-### Curried Functions
+### 柯里化函数
 
-The `WriteProtocol` specification uses curried function representations (`[A -> [B -> C]]`) rather than flat tuple-keyed functions (`[A \X B -> C]`). This is required because TLC's `EXCEPT` syntax (`![key] = value`) operates on the outer function level; for nested updates like `![block_id][datanode_id] = value`, the outer domain must be a single key, not a tuple.
+`WriteProtocol` 规格使用柯里化函数表示（`[A -> [B -> C]]`）而非扁平的元组键函数（`[A \X B -> C]`）。这是因为 TLC 的 `EXCEPT` 语法（`![key] = value`）在外层函数上操作；对于形如 `![block_id][datanode_id] = value` 的嵌套更新，外层域必须是单键而非元组。
 
-### TLC Intermediate Files
+### TLC 中间文件
 
-TLC generates trace files (`*_TTrace_*.tla`) and a state queue directory (`states/`) during model checking. These are excluded from version control via `.gitignore`. To inspect a counterexample trace, run TLC without cleaning and open the generated `_TTrace_*.tla` file in the TLA+ Toolbox.
+TLC 在模型检查过程中生成 trace 文件（`*_TTrace_*.tla`）和状态队列目录（`states/`）。这些文件已通过 `.gitignore` 排除。如需查看反例 trace，运行 TLC 后不要清理，在 TLA+ Toolbox 中打开生成的 `_TTrace_*.tla` 文件即可。
 
-## Verification Roadmap
+## 验证路线图
 
-| Priority | Specification        | Status   | Notes                                                                                    |
-| -------- | -------------------- | -------- | ---------------------------------------------------------------------------------------- |
-| P0       | WriteProtocol        | Complete | Core write protocol; most complex and critical                                           |
-| P1       | FileLeaseState       | Complete | Lease mutual exclusion; identified orphan file issue                                     |
-| P1       | BlockReplicaState    | Complete | Block/replica consistency during allocation and commit                                   |
-| P2       | DatanodeState        | Complete | Heartbeat state machine; verified basic correctness                                      |
-| P3       | ReplicationRepair    | Planned  | Under/over-replicated block detection and repair by ReplicationManager                   |
-| P3       | DecommissionProtocol | Planned  | DataNode decommissioning state transitions (currently skipped in `check_stale_and_dead`) |
+| 优先级 | 规格 | 状态 | 说明 |
+|--------|------|------|------|
+| P0 | WriteProtocol | 已完成 | 核心写协议，最复杂也最关键 |
+| P1 | FileLeaseState | 已完成 | Lease 互斥，发现孤儿文件问题 |
+| P1 | BlockReplicaState | 已完成 | Block/replica 在分配和提交期间的一致性 |
+| P2 | DatanodeState | 已完成 | 心跳状态机，验证基本正确性 |
+| P3 | ReplicationRepair | 规划中 | ReplicationManager 的副本不足/过量 block 检测与修复 |
+| P3 | DecommissionProtocol | 规划中 | DataNode 下线状态转换（当前在 `check_stale_and_dead` 中被跳过） |
 
-## Issues Identified Through Specification Analysis
+## 通过规格分析发现的问题
 
-### 1. Dead Node Revival by Heartbeat
+### 1. Dead 节点可被心跳复活
 
-**Location:** `datanode_manager.cpp:99` — `handle_heartbeat()` unconditionally sets `dn.state = DataNodeState::kLive`
+**位置:** `datanode_manager.cpp:99` — `handle_heartbeat()` 无条件设置 `dn.state = DataNodeState::kLive`
 
-**Impact:** If a DataNode recovers after being marked Dead (>10 min without heartbeat), its next heartbeat immediately revives it. This differs from HDFS semantics where Dead nodes require explicit administrative re-registration. For MiniDFS this may be intentional since there is no decommission protocol.
+**影响:** 如果 DataNode 在被标记为 Dead（超过 10 分钟无心跳）后恢复，其下一次心跳会立即将其复活。这与 HDFS 语义不同——HDFS 中 Dead 节点需要管理员显式重新注册。对 MiniDFS 而言这可能是有意为之，因为没有下线协议。
 
-**Severity:** Low (intentional design choice for simplicity)
+**严重程度:** 低（简化设计的有意选择）
 
-### 2. Orphan UnderConstruction Files
+### 2. 孤儿 UnderConstruction 文件
 
-**Location:** `lease_manager.cpp:101` — `expire_stale_leases()` closes the lease but does not restore the file from `UnderConstruction` to `Normal`
+**位置:** `lease_manager.cpp:101` — `expire_stale_leases()` 关闭 lease 但不将文件从 `UnderConstruction` 恢复为 `Normal`
 
-**Impact:** If a client crashes while holding a write lease, the file remains permanently in `UnderConstruction` state after lease expiry. The file cannot be read or written by other clients. No automated mechanism currently recovers from this state.
+**影响:** 如果客户端在持有写 lease 时崩溃，lease 过期后文件永久停留在 `UnderConstruction` 状态。该文件无法被其他客户端读取或写入。当前没有自动化机制从此状态恢复。
 
-**Severity:** Medium (requires either manual intervention or a `NameNodeMaintenance` cleanup routine)
+**严重程度:** 中（需要手动干预或在 `NameNodeMaintenance` 中添加清理逻辑）
 
-### 3. CommitBlock Idempotency with Partial Replica State
+### 3. CommitBlock 幂等性与部分 Replica 状态
 
-**Location:** `block_manager.cpp:147-196` — the `already_committed` branch skips block state update but still iterates over all replicas, transitioning Writing replicas in the `finalized_datanode_ids` set to Finalized.
+**位置:** `block_manager.cpp:147-196` — `already_committed` 分支跳过 block 状态更新，但仍遍历所有 replica，将 `finalized_datanode_ids` 中的 Writing replica 转为 Finalized。
 
-**Impact:** If two concurrent commit requests arrive with different `finalized_datanode_ids` sets, the second request may transition additional replicas to Finalized. Since Finalized-to-Finalized is idempotent, this is safe. However, the model reveals that if a `generation_stamp` mismatch occurs, the replica state transitions could theoretically be applied to replicas of a new allocation — though this requires a `generation_stamp` collision, which is prevented by the monotonic ID allocator.
+**影响:** 如果两个并发的提交请求携带不同的 `finalized_datanode_ids` 集合，第二个请求可能将额外的 replica 转为 Finalized。由于 Finalized-to-Finalized 是幂等的，这是安全的。然而，模型揭示如果 `generation_stamp` 不匹配，replica 状态转换理论上可能作用于新分配的 replica——尽管这需要 `generation_stamp` 碰撞，而单调 ID 分配器可防止此情况。
 
-**Severity:** Low (safe due to idempotency and monotonic generation stamps)
+**严重程度:** 低（由于幂等性和单调 generation stamp 而安全）
 
-## References
+## 参考资料
 
-- [TLA+ Home Page](https://lamport.azurewebsites.net/tla/tla.html)
-- [TLA+ Tutorial (PlusCal)](https://lamport.azurewebsites.net/tla/tutorial/home.html)
+- [TLA+ 主页](https://lamport.azurewebsites.net/tla/tla.html)
+- [TLA+ 教程 (PlusCal)](https://lamport.azurewebsites.net/tla/tutorial/home.html)
 - [Specifying Systems (Lamport)](https://lamport.azurewebsites.net/tla/book.html)
-- [HDFS Architecture Guide](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html)
+- [HDFS 架构指南](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html)
