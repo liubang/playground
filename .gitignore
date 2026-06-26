@@ -17,3 +17,8 @@
 **/target/
 
 .codegraph/
+
+# TLC model checker outputs
+**/tla/states/
+**/tla/*_TTrace_*.tla
+**/tla/*_TTrace_*.bin
