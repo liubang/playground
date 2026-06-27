@@ -1,24 +1,96 @@
-### Automatically added by Hedron's Bazel Compile Commands Extractor: https://github.com/hedronvision/bazel-compile-commands-extractor
-# Ignore the `external` link (that is added by `bazel-compile-commands-extractor`). The link differs between macOS/Linux and Windows, so it shouldn't be checked in. The pattern must not end with a trailing `/` because it's a symlink on macOS/Linux.
-/external
-# Ignore links to Bazel's output. The pattern needs the `*` because people can change the name of the directory into which your repository is cloned (changing the `bazel-<workspace_name>` symlink), and must not end with a trailing `/` because it's a symlink on macOS/Linux.
+# ==============================================================================
+# Bazel
+# ==============================================================================
+# Bazel symlinks (workspace name may vary, so use wildcard)
 /bazel-*
-# Ignore generated output. Although valuable (after all, the primary purpose of `bazel-compile-commands-extractor` is to produce `compile_commands.json`!), it should not be checked in.
+# Bazel compile commands extractor: external symlink
+/external
+# Generated compile_commands.json for clangd
 /compile_commands.json
-# Ignore the directory in which `clangd` stores its local index.
-/.cache/
+
+# ==============================================================================
+# IDE / Editor
+# ==============================================================================
+# JetBrains (IntelliJ, GoLand, CLion, etc.)
+.idea/
+# Eclipse
 **/.classpath
 **/.project
-**/.settings/**
-**/*.toolbox/**
-**/*.old
+**/.settings/
+# VS Code
+.vscode/
+# Toolbox
+**/*.toolbox/
 
+# ==============================================================================
+# OS generated files
+# ==============================================================================
+.DS_Store
+Thumbs.db
+
+# ==============================================================================
+# C / C++
+# ==============================================================================
+# clangd index cache
+/.cache/
+# Compiled objects
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+
+# ==============================================================================
+# Java
+# ==============================================================================
 # Maven build output
 **/target/
+# Compiled classes
+*.class
 
-.codegraph/
+# ==============================================================================
+# Go
+# ==============================================================================
+go/vendor/*
+!go/vendor/.gitkeep
+*.out
 
-# TLC model checker outputs
+# ==============================================================================
+# Python
+# ==============================================================================
+python/.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# ==============================================================================
+# Python / Manim
+# ==============================================================================
+python/manim/manimations/media/
+
+# ==============================================================================
+# LaTeX
+# ==============================================================================
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.synctex.gz
+*.xdv
+
+# ==============================================================================
+# TLA+ / TLC model checker
+# ==============================================================================
 **/tla/states/
 **/tla/*_TTrace_*.tla
 **/tla/*_TTrace_*.bin
+**/tla/*.pdf
+
+# ==============================================================================
+# Misc
+# ==============================================================================
+*.old
+.codegraph/
