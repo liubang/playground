@@ -23,10 +23,10 @@ import "cpp/pl/minitable/proto/common.proto";
 option cc_generic_services = true;
 
 // =========================================================================
-// UnitService — Master ↔ UnitServer 内部通信
+// UnitServerService — Master ↔ UnitServer 内部通信
 // =========================================================================
 
-service UnitService {
+service UnitServerService {
     rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
     rpc RegisterUnitServer(RegisterUnitServerRequest) returns (RegisterUnitServerResponse);
 }
@@ -51,10 +51,10 @@ message SliceCommand {
 }
 
 message HeartbeatRequest {
-    uint64 us_id    = 1;
-    string host     = 2;
-    uint32 port     = 3;
-    int64  capacity = 4;
+    uint64 unit_server_id = 1;
+    string host           = 2;
+    uint32 port           = 3;
+    int64  capacity       = 4;
     repeated SliceReport slices = 5;
 }
 
@@ -68,14 +68,14 @@ message HeartbeatResponse {
 // =========================================================================
 
 message RegisterUnitServerRequest {
-    uint64 us_id    = 1;  // 0 = 新注册; >0 = 重启后重新注册 (保留原 id)
-    string host     = 2;
-    uint32 port     = 3;
-    int64  capacity = 4;
-    string region   = 5;
+    uint64 unit_server_id = 1;  // 0 = 新注册; >0 = 重启后重新注册 (保留原 id)
+    string host           = 2;
+    uint32 port           = 3;
+    int64  capacity       = 4;
+    string region         = 5;
 }
 
 message RegisterUnitServerResponse {
-    Status status = 1;
-    uint64 us_id  = 2;  // 分配或确认的 UnitServer id
+    Status status         = 1;
+    uint64 unit_server_id = 2;  // 分配或确认的 UnitServer id
 }

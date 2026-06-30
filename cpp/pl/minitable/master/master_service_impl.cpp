@@ -29,36 +29,12 @@ namespace pb = pl::minitable::proto;
 
 namespace {
 
-using pb::Status;
-
-void set_status(Status* s, int code, const std::string& msg) {
+void set_status(pb::Status* s, int code, const std::string& msg) {
     s->set_code(code);
     s->set_msg(msg);
 }
 
-void set_ok(Status* s) { s->set_code(0); }
-
-pb::ReplicaRole to_proto_role(master::ReplicaRole r) {
-    switch (r) {
-    case master::ReplicaRole::kPrimary:   return pb::PRIMARY;
-    case master::ReplicaRole::kSecondary: return pb::SECONDARY;
-    default:                              return pb::OFFLINE;
-    }
-}
-
-void fill_slice_info(pb::SliceInfo* info, const SliceRoute& route) {
-    info->set_slice_id(route.slice_id);
-    info->set_start_key(route.start_key);
-    info->set_end_key(route.end_key);
-    for (const auto& r : route.replicas) {
-        auto* ep = info->add_replicas();
-        ep->set_replica_id(r.replica_id);
-        ep->set_us_id(r.us_id);
-        ep->set_host(r.host);
-        ep->set_port(r.port);
-        ep->set_role(to_proto_role(r.role));
-    }
-}
+void set_ok(pb::Status* s) { s->set_code(0); }
 
 }  // namespace
 
@@ -73,28 +49,40 @@ void MasterServiceImpl::GetSlice(google::protobuf::RpcController* cntl,
     brpc::ClosureGuard done_guard(done);
     (void)cntl;
 
-    if (req->namespace_().empty() || req->table_name().empty()) {
-        set_status(resp->mutable_status(), 1, "namespace and table_name required");
+    if (req->namespace_().empty() || req->name().empty()) {
+        set_status(resp->mutable_status(), 1, "namespace and name required");
         return;
     }
 
     if (req->row_key().values_size() > 0) {
+        // TODO: encode typed RowKeyValue to memcomparable bytes for lookup
         std::string encoded;
-        for (const auto& v : req->row_key().values()) encoded.append(v);
-        auto route = sm_->metadata().lookup(req->namespace_(), req->table_name(), encoded);
+        // Phase 1: simple concatenation of string values
+        for (const auto& v : req->row_key().values()) {
+            switch (v.value_case()) {
+            case pb::RowKeyValue::kStrVal:   encoded.append(v.str_val()); break;
+            case pb::RowKeyValue::kIntVal:   encoded.append(std::to_string(v.int_val())); break;
+            case pb::RowKeyValue::kUintVal:  encoded.append(std::to_string(v.uint_val())); break;
+            case pb::RowKeyValue::kInt32Val: encoded.append(std::to_string(v.int32_val())); break;
+            case pb::RowKeyValue::kUint32Val:encoded.append(std::to_string(v.uint32_val())); break;
+            case pb::RowKeyValue::kBytesVal: encoded.append(v.bytes_val()); break;
+            default: break;
+            }
+        }
+        auto route = sm_->metadata().lookup(req->namespace_(), req->name(), encoded);
         if (!route.has_value()) {
             set_status(resp->mutable_status(), 2, "table not found or key out of range");
             return;
         }
-        fill_slice_info(resp->add_slices(), *route);
+        *resp->add_slices() = *route;
     } else {
-        auto routes = sm_->metadata().list_slices(req->namespace_(), req->table_name());
+        auto routes = sm_->metadata().list_slices(req->namespace_(), req->name());
         if (!routes.has_value()) {
             set_status(resp->mutable_status(), 2, "table not found");
             return;
         }
         for (const auto& route : *routes) {
-            fill_slice_info(resp->add_slices(), route);
+            *resp->add_slices() = route;
         }
     }
     set_ok(resp->mutable_status());
@@ -110,9 +98,9 @@ void MasterServiceImpl::CreateTable(google::protobuf::RpcController* cntl,
                                      google::protobuf::Closure* done) {
     (void)cntl;
 
-    if (req->table_name().empty() || !req->has_schema()) {
+    if (req->name().empty() || !req->has_schema()) {
         brpc::ClosureGuard done_guard(done);
-        set_status(resp->mutable_status(), 1, "table_name and schema required");
+        set_status(resp->mutable_status(), 1, "name and schema required");
         return;
     }
     if (!sm_->is_leader()) {
@@ -167,14 +155,12 @@ void MasterServiceImpl::GetTable(google::protobuf::RpcController* cntl,
                                   google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
     (void)cntl;
-    auto tr = sm_->metadata().get_table_route(req->namespace_(), req->table_name());
-    if (!tr.has_value()) {
+    auto info = sm_->metadata().get_table(req->namespace_(), req->name());
+    if (!info.has_value()) {
         set_status(resp->mutable_status(), 2, "table not found");
         return;
     }
-    resp->mutable_table()->set_table_id(tr->table_id);
-    resp->mutable_table()->set_namespace_(tr->ns);
-    resp->mutable_table()->set_name(tr->name);
+    *resp->mutable_table() = *info;
     set_ok(resp->mutable_status());
 }
 
