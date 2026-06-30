@@ -58,7 +58,7 @@ int MasterSM::init(std::string_view group_id, std::string_view peer_id, std::str
 int MasterSM::start() { return 0; }
 
 void MasterSM::shutdown() {
-    us_manager_.stop_detector();
+    unit_server_manager_.stop_detector();
     if (node_) {
         node_->shutdown(nullptr);
         node_->join();
@@ -93,7 +93,7 @@ int MasterSM::on_snapshot_load(::braft::SnapshotReader* reader) {
 void MasterSM::on_leader_start(int64_t term) {
     leader_term_.store(term, butil::memory_order_release);
     LOG(INFO) << "Master becomes leader, term=" << term;
-    us_manager_.start_detector([](uint64_t us_id) {
+    unit_server_manager_.start_detector([](uint64_t us_id) {
         LOG(WARNING) << "UnitServer " << us_id << " DEAD, triggering failover";
         // TODO: braft::apply failover task
     });
@@ -102,12 +102,12 @@ void MasterSM::on_leader_start(int64_t term) {
 void MasterSM::on_leader_stop(const butil::Status& status) {
     leader_term_.store(-1, butil::memory_order_release);
     LOG(INFO) << "Master leader stop: " << status;
-    us_manager_.stop_detector();
+    unit_server_manager_.stop_detector();
 }
 
 void MasterSM::on_shutdown() {
     LOG(INFO) << "MasterSM::on_shutdown";
-    us_manager_.stop_detector();
+    unit_server_manager_.stop_detector();
 }
 
 void MasterSM::on_error(const ::braft::Error& e) {

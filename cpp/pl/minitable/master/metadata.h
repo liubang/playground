@@ -27,53 +27,35 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cpp/pl/minitable/proto/common.pb.h"
 #include "cpp/pl/thread/thread_pool.h"
 #include "cpp/pl/utility/utility.h"
 
 namespace pl::minitable::master {
 
+namespace pb = pl::minitable::proto;
+
 // =========================================================================
-// 数据类型 — 与 protobuf 对齐
+// TableEntry — TableInfo + Slice 组合, proto 中没有现成等价物
 // =========================================================================
 
-enum class PartitionType : uint8_t { kHash = 0, kGlobalOrder = 1 };
+struct TableEntry {
+    pb::TableInfo info;
+    std::vector<pb::SliceInfo> slices;
 
-enum class ReplicaRole : uint8_t { kPrimary = 0, kSecondary = 1, kOffline = 2 };
-
-struct ReplicaInfo {
-    uint32_t replica_id;
-    uint64_t us_id;
-    std::string host;
-    uint32_t port;
-    ReplicaRole role;
-};
-
-struct SliceRoute {
-    uint64_t slice_id;
-    std::string start_key;
-    std::string end_key;
-    std::vector<ReplicaInfo> replicas;
-
-    [[nodiscard]] const ReplicaInfo* primary() const {
-        for (const auto& r : replicas) {
-            if (r.role == ReplicaRole::kPrimary) return &r;
+    [[nodiscard]] const pb::ReplicaEndpoint* primary() const {
+        for (const auto& s : slices) {
+            for (const auto& r : s.replicas()) {
+                if (r.role() == pb::ReplicaRole::PRIMARY) return &r;
+            }
         }
         return nullptr;
     }
 };
 
-struct TableRoute {
-    uint64_t table_id;
-    std::string ns;
-    std::string name;
-    PartitionType partition_type;
-    uint32_t slice_count{0};
-    std::vector<SliceRoute> slices;
-};
-
 // 不可变只读视图 — shared_ptr 快照, 多读者无锁访问
 struct ClusterView {
-    std::unordered_map<uint64_t, TableRoute> by_table_id;
+    std::unordered_map<uint64_t, std::shared_ptr<const TableEntry>> by_table_id;
     std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> by_name;
     std::unordered_map<uint64_t, std::vector<uint64_t>> by_unitserver;
 };
@@ -92,17 +74,17 @@ public:
 
     // ---- 状态查询 (多线程安全) ----
 
-    [[nodiscard]] std::optional<SliceRoute> lookup(const std::string& ns,
-                                                    const std::string& table,
-                                                    const std::string& key) const;
+    [[nodiscard]] std::optional<pb::SliceInfo> lookup(const std::string& ns,
+                                                       const std::string& table,
+                                                       const std::string& key) const;
 
-    [[nodiscard]] std::optional<std::vector<SliceRoute>> list_slices(const std::string& ns,
-                                                                      const std::string& table) const;
+    [[nodiscard]] std::optional<std::vector<pb::SliceInfo>> list_slices(
+        const std::string& ns, const std::string& table) const;
 
-    [[nodiscard]] std::optional<TableRoute> get_table_route(const std::string& ns,
-                                                             const std::string& table) const;
+    [[nodiscard]] std::optional<pb::TableInfo> get_table(const std::string& ns,
+                                                          const std::string& table) const;
 
-    [[nodiscard]] std::vector<uint64_t> get_slices_by_us(uint64_t us_id) const;
+    [[nodiscard]] std::vector<uint64_t> get_slices_by_us(uint64_t unit_server_id) const;
 
     [[nodiscard]] std::shared_ptr<const ClusterView> snapshot() const {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -142,9 +124,9 @@ private:
 // 实现
 // =========================================================================
 
-inline std::optional<SliceRoute> Metadata::lookup(const std::string& ns,
-                                                   const std::string& table,
-                                                   const std::string& key) const {
+inline std::optional<pb::SliceInfo> Metadata::lookup(const std::string& ns,
+                                                      const std::string& table,
+                                                      const std::string& key) const {
     auto view = snapshot();
     auto ns_it = view->by_name.find(ns);
     if (ns_it == view->by_name.end()) return std::nullopt;
@@ -153,24 +135,26 @@ inline std::optional<SliceRoute> Metadata::lookup(const std::string& ns,
     auto route_it = view->by_table_id.find(tbl_it->second);
     if (route_it == view->by_table_id.end()) return std::nullopt;
 
-    const auto& tr = route_it->second;
-    switch (tr.partition_type) {
-    case PartitionType::kHash:
-        if (tr.slices.empty()) return std::nullopt;
-        return tr.slices[hash_key(key, tr.slice_count) % tr.slice_count];
-    case PartitionType::kGlobalOrder: {
-        auto it = std::lower_bound(tr.slices.begin(), tr.slices.end(), key,
-                                    [](const SliceRoute& s, const std::string& k) {
-                                        return s.end_key < k;
+    const auto& entry = *route_it->second;
+    switch (entry.info.partition().type()) {
+    case pb::PartitionType::HASH:
+        if (entry.slices.empty()) return std::nullopt;
+        return entry.slices[hash_key(key, entry.info.partition().slice_count()) %
+                            entry.info.partition().slice_count()];
+    case pb::PartitionType::GLOBAL_ORDER: {
+        auto it = std::lower_bound(entry.slices.begin(), entry.slices.end(), key,
+                                    [](const pb::SliceInfo& s, const std::string& k) {
+                                        return s.end_key() < k;
                                     });
-        if (it != tr.slices.end()) return *it;
+        if (it != entry.slices.end()) return *it;
         return std::nullopt;
     }
+    default:
+        return std::nullopt;
     }
-    return std::nullopt;
 }
 
-inline std::optional<std::vector<SliceRoute>> Metadata::list_slices(
+inline std::optional<std::vector<pb::SliceInfo>> Metadata::list_slices(
     const std::string& ns, const std::string& table) const {
     auto view = snapshot();
     auto ns_it = view->by_name.find(ns);
@@ -179,11 +163,11 @@ inline std::optional<std::vector<SliceRoute>> Metadata::list_slices(
     if (tbl_it == ns_it->second.end()) return std::nullopt;
     auto route_it = view->by_table_id.find(tbl_it->second);
     if (route_it == view->by_table_id.end()) return std::nullopt;
-    return route_it->second.slices;
+    return route_it->second->slices;
 }
 
-inline std::optional<TableRoute> Metadata::get_table_route(const std::string& ns,
-                                                            const std::string& table) const {
+inline std::optional<pb::TableInfo> Metadata::get_table(const std::string& ns,
+                                                         const std::string& table) const {
     auto view = snapshot();
     auto ns_it = view->by_name.find(ns);
     if (ns_it == view->by_name.end()) return std::nullopt;
@@ -191,12 +175,12 @@ inline std::optional<TableRoute> Metadata::get_table_route(const std::string& ns
     if (tbl_it == ns_it->second.end()) return std::nullopt;
     auto route_it = view->by_table_id.find(tbl_it->second);
     if (route_it == view->by_table_id.end()) return std::nullopt;
-    return route_it->second;
+    return route_it->second->info;
 }
 
-inline std::vector<uint64_t> Metadata::get_slices_by_us(uint64_t us_id) const {
+inline std::vector<uint64_t> Metadata::get_slices_by_us(uint64_t unit_server_id) const {
     auto view = snapshot();
-    auto it = view->by_unitserver.find(us_id);
+    auto it = view->by_unitserver.find(unit_server_id);
     if (it != view->by_unitserver.end()) return it->second;
     return {};
 }
