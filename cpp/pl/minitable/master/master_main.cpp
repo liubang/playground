@@ -27,7 +27,7 @@
 #include "cpp/pl/minitable/master/admin_service_impl.h"
 #include "cpp/pl/minitable/master/master_service_impl.h"
 #include "cpp/pl/minitable/master/master_sm.h"
-#include "cpp/pl/minitable/master/unit_service_impl.h"
+#include "cpp/pl/minitable/master/unit_server_service_impl.h"
 
 DEFINE_string(group_id, "minitable_master", "braft group id");
 DEFINE_string(
@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
     namespace mm = pl::minitable::master;
     mm::MasterServiceImpl master_svc(sm.get());
     mm::AdminServiceImpl  admin_svc(sm.get());
-    mm::UnitServiceImpl   unit_svc(sm.get());
+    mm::UnitServerServiceImpl unit_svc(sm.get());
 
     // Phase 1: 共用 brpc Server, 后续可各自绑定独立端口
     brpc::Server server;

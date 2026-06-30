@@ -44,7 +44,7 @@ service MasterService {
 
 message CreateTableRequest {
     string        namespace  = 1;
-    string        table_name = 2;
+    string        name       = 2;
     string        region     = 3;  // 所属 Region
     TableSchema   schema     = 4;
     PartitionSpec partition  = 5;
@@ -62,7 +62,7 @@ message CreateTableResponse {
 
 message UpdateTableRequest {
     string        namespace        = 1;
-    string        table_name       = 2;
+    string        name             = 2;
     TableSchema   schema           = 3;  // 新的完整 schema
     uint64        expected_version = 4;  // 乐观锁: 仅当当前版本匹配时才执行
 }
@@ -77,8 +77,8 @@ message UpdateTableResponse {
 // =========================================================================
 
 message DropTableRequest {
-    string namespace  = 1;
-    string table_name = 2;
+    string namespace = 1;
+    string name      = 2;
 }
 
 message DropTableResponse {
@@ -90,8 +90,8 @@ message DropTableResponse {
 // =========================================================================
 
 message GetTableRequest {
-    string namespace  = 1;
-    string table_name = 2;
+    string namespace = 1;
+    string name      = 2;
 }
 
 message GetTableResponse {
@@ -117,9 +117,9 @@ message ListTablesResponse {
 // =========================================================================
 
 message GetSliceRequest {
-    string namespace  = 1;
-    string table_name = 2;
-    RowKey row_key    = 3;  // 非空: 定位单个 Slice; 空: 返回所有 Slice
+    string namespace = 1;
+    string name      = 2;
+    RowKey row_key   = 3;  // 非空: 定位单个 Slice; 空: 返回所有 Slice
 }
 
 message GetSliceResponse {

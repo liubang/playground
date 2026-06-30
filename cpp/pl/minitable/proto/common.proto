@@ -34,8 +34,22 @@ message Status {
 // 客户端按 TableSchema.row_keys 的顺序填充 values[].
 // 服务端根据 schema 校验类型并编码为 memcomparable bytes.
 
+message RowKeyValue {
+    oneof value {
+        string str_val    = 1;
+        int64  int_val    = 2;
+        uint64 uint_val   = 3;
+        int32  int32_val  = 4;
+        uint32 uint32_val = 5;
+        bool   bool_val   = 6;
+        double double_val = 7;
+        float  float_val  = 8;
+        bytes  bytes_val  = 9;
+    }
+}
+
 message RowKey {
-    repeated bytes values = 1;  // values[i] 对应 row_keys[i], 客户端负责序列化
+    repeated RowKeyValue values = 1;  // values[i] 对应 row_keys[i]
 }
 
 // 数据类型
@@ -102,13 +116,13 @@ message PartitionSpec {
 // =========================================================================
 // Master 内部维护此结构, 也在 RPC 响应中返回给客户端
 
-enum TableState {
-    ENABLED  = 0;  // 正常读写
-    DISABLED = 1;  // 禁止访问
-    DROPPED  = 2;  // 待清理
-}
-
 message TableInfo {
+    enum State {
+        ENABLED  = 0;  // 正常读写
+        DISABLED = 1;  // 禁止访问
+        DROPPED  = 2;  // 待清理
+    }
+
     uint64        table_id  = 1;
     uint64        version   = 2;  // 最后修改时间戳 (微秒), 并发控制 / 版本跟踪
     string        namespace = 3;
@@ -117,37 +131,37 @@ message TableInfo {
     TableSchema   schema    = 6;
     PartitionSpec partition = 7;
     uint32        replicas  = 8;
-    TableState    state     = 9;
+    State         state     = 9;
 }
 
 // =========================================================================
 // Region / UnitServer
 // =========================================================================
 
-enum RegionState {
-    REGION_ACTIVE   = 0;
-    REGION_DRAINING = 1;
-    REGION_OFFLINE  = 2;
-}
-
 message RegionInfo {
-    string      name  = 1;
-    RegionState state = 2;
-}
+    enum State {
+        ACTIVE   = 0;
+        DRAINING = 1;
+        OFFLINE  = 2;
+    }
 
-enum UnitServerState {
-    US_LIVE  = 0;
-    US_STALE = 1;
-    US_DEAD  = 2;
+    string name  = 1;
+    State  state = 2;
 }
 
 message UnitServerInfo {
-    uint64           us_id    = 1;
-    string           host     = 2;
-    uint32           port     = 3;
-    string           region   = 4;
-    int64            capacity = 5;
-    UnitServerState  state    = 6;  // 临时状态, 不持久化
+    enum State {
+        LIVE  = 0;
+        STALE = 1;
+        DEAD  = 2;
+    }
+
+    uint64 unit_server_id = 1;
+    string host           = 2;
+    uint32 port           = 3;
+    string region         = 4;
+    int64  capacity       = 5;  // 可用存储容量 (bytes), 用于负载均衡分配决策
+    State  state          = 6;  // 临时状态, 不持久化
 }
 
 // =========================================================================
@@ -155,11 +169,11 @@ message UnitServerInfo {
 // =========================================================================
 
 message ReplicaEndpoint {
-    uint32      replica_id = 1;
-    uint64      us_id      = 2;  // UnitServer id
-    string      host       = 3;
-    uint32      port       = 4;
-    ReplicaRole role       = 5;
+    uint32      replica_id       = 1;
+    uint64      unit_server_id   = 2;  // UnitServer id
+    string      host             = 3;
+    uint32      port             = 4;
+    ReplicaRole role             = 5;
 }
 
 message SliceInfo {

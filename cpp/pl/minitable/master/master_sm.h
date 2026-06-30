@@ -22,7 +22,7 @@
 #include <string_view>
 
 #include "cpp/pl/minitable/master/metadata.h"
-#include "cpp/pl/minitable/master/us_manager.h"
+#include "cpp/pl/minitable/master/unit_server_manager.h"
 
 namespace pl::minitable::master {
 
@@ -30,8 +30,8 @@ namespace pl::minitable::master {
 // MasterSM — Master braft::StateMachine
 // ---------------------------------------------------------------------------
 // 持有:
-//   - Metadata   — 集群元信息 + DDL 执行
-//   - USManager  — UnitServer 生命周期
+//   - Metadata          — 集群元信息 + DDL 执行
+//   - UnitServerManager — UnitServer 生命周期
 
 class MasterSM : public ::braft::StateMachine {
 public:
@@ -46,7 +46,7 @@ public:
     void shutdown();
 
     Metadata& metadata() { return metadata_; }
-    USManager& us_manager() { return us_manager_; }
+    UnitServerManager& unit_server_manager() { return unit_server_manager_; }
     [[nodiscard]] bool is_leader() const;
 
     // braft overrides
@@ -65,7 +65,7 @@ private:
     ::braft::Node* node_{nullptr};
     butil::atomic<int64_t> leader_term_{-1};
     Metadata metadata_;
-    USManager us_manager_;
+    UnitServerManager unit_server_manager_;
 };
 
 }  // namespace pl::minitable::master

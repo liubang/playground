@@ -15,7 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/06/25 00:01
 
-#include "cpp/pl/minitable/master/unit_service_impl.h"
+#include "cpp/pl/minitable/master/unit_server_service_impl.h"
 
 #include <brpc/closure_guard.h>
 
@@ -42,10 +42,10 @@ void set_ok(pb::Status* s) { s->set_code(0); }
 
 }  // namespace
 
-void UnitServiceImpl::Heartbeat(google::protobuf::RpcController* cntl,
-                                 const pb::HeartbeatRequest* req,
-                                 pb::HeartbeatResponse* resp,
-                                 google::protobuf::Closure* done) {
+void UnitServerServiceImpl::Heartbeat(google::protobuf::RpcController* cntl,
+                                       const pb::HeartbeatRequest* req,
+                                       pb::HeartbeatResponse* resp,
+                                       google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
     (void)cntl;
 
@@ -54,24 +54,24 @@ void UnitServiceImpl::Heartbeat(google::protobuf::RpcController* cntl,
         return;
     }
 
-    uint64_t us_id = req->us_id();
+    uint64_t us_id = req->unit_server_id();
     std::string host = req->host();
     uint32_t port = req->port();
     int64_t capacity = req->capacity();
     int64_t ts = now_us();
 
-    auto* region_svc = &sm_->us_manager();
-    (void)region_svc->try_enqueue_heartbeat([region_svc, us_id, host, port, capacity, ts]() {
-        region_svc->update_heartbeat(us_id, host, port, capacity, ts);
+    auto* mgr = &sm_->unit_server_manager();
+    (void)mgr->try_enqueue_heartbeat([mgr, us_id, host, port, capacity, ts]() {
+        mgr->update_heartbeat(us_id, host, port, capacity, ts);
     });
 
     set_ok(resp->mutable_status());
 }
 
-void UnitServiceImpl::RegisterUnitServer(google::protobuf::RpcController* cntl,
-                                          const pb::RegisterUnitServerRequest* req,
-                                          pb::RegisterUnitServerResponse* resp,
-                                          google::protobuf::Closure* done) {
+void UnitServerServiceImpl::RegisterUnitServer(google::protobuf::RpcController* cntl,
+                                                const pb::RegisterUnitServerRequest* req,
+                                                pb::RegisterUnitServerResponse* resp,
+                                                google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
     (void)cntl; (void)req;
     if (!sm_->is_leader()) {
