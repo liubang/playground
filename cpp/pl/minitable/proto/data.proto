@@ -48,9 +48,9 @@ message Cell {
 // =========================================================================
 
 message GetRequest {
-    string   namespace  = 1;
-    string   table_name = 2;
-    RowKey   row_key    = 3;
+    string   namespace    = 1;
+    string   name         = 2;
+    RowKey   row_key      = 3;
     repeated string columns = 4;  // 指定列, 空 = 所有列
     uint32   max_versions = 5;   // 每列最多返回的版本数, 默认 1
 }
@@ -66,9 +66,9 @@ message GetResponse {
 // =========================================================================
 
 message PutRequest {
-    string   namespace  = 1;
-    string   table_name = 2;
-    RowKey   row_key    = 3;
+    string   namespace    = 1;
+    string   name         = 2;
+    RowKey   row_key      = 3;
     repeated ColumnValue columns = 4;
 }
 
@@ -86,9 +86,9 @@ message PutResponse {
 // =========================================================================
 
 message DeleteRequest {
-    string   namespace  = 1;
-    string   table_name = 2;
-    RowKey   row_key    = 3;
+    string   namespace = 1;
+    string   name      = 2;
+    RowKey   row_key   = 3;
     // 删除范围: 二选一
     oneof target {
         string column   = 4;  // 删除指定列的最新版本
@@ -105,10 +105,10 @@ message DeleteResponse {
 // =========================================================================
 
 message ScanRequest {
-    string   namespace  = 1;
-    string   table_name = 2;
-    RowKey   start_key  = 3;  // inclusive
-    RowKey   stop_key   = 4;  // exclusive
+    string   namespace    = 1;
+    string   name         = 2;
+    RowKey   start_key    = 3;  // inclusive
+    RowKey   stop_key     = 4;  // exclusive
     repeated string columns = 5;  // 空 = 所有列
     uint32   max_versions = 6;   // 默认 1
 
@@ -134,8 +134,9 @@ message ScanFilter {
 
 message ScanResponse {
     Status status = 1;
-    RowKey next_start_key = 2;  // 下一页起始, values 空 = 扫描完毕
+    RowKey next_start_key = 2;  // 下一页起始
     repeated RowResult rows = 3;
+    bool has_more = 4;  // false = 扫描完毕
 }
 
 message RowResult {

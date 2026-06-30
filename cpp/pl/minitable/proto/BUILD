@@ -39,16 +39,16 @@ cpp_proto_library(
 )
 
 proto_library(
-    name = "unit_proto",
+    name = "unit_server_proto",
     srcs = [
-        "unit.proto",
+        "unit_server.proto",
         "common.proto",
     ],
 )
 
 cpp_proto_library(
-    name = "unit_cc_proto",
-    protos = [":unit_proto"],
+    name = "unit_server_cc_proto",
+    protos = [":unit_server_proto"],
 )
 
 proto_library(
