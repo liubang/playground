@@ -32,14 +32,15 @@ cc_library(
     hdrs = ["metadata.h"],
     visibility = ["//visibility:public"],
     deps = [
+        "//cpp/pl/minitable/proto:common_cc_proto",
         "//cpp/pl/thread:thread_pool",
         "//cpp/pl/utility",
     ],
 )
 
 cc_library(
-    name = "us_manager",
-    hdrs = ["us_manager.h"],
+    name = "unit_server_manager",
+    hdrs = ["unit_server_manager.h"],
     visibility = ["//visibility:public"],
     deps = [
         "//cpp/pl/thread:thread_pool",
@@ -59,7 +60,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":metadata",
-        ":us_manager",
+        ":unit_server_manager",
         "@braft//:braft",
     ],
 )
@@ -98,15 +99,15 @@ cc_library(
 )
 
 cc_library(
-    name = "unit_service",
-    srcs = ["unit_service_impl.cpp"],
-    hdrs = ["unit_service_impl.h"],
+    name = "unit_server_service",
+    srcs = ["unit_server_service_impl.cpp"],
+    hdrs = ["unit_server_service_impl.h"],
     copts = COPTS,
     visibility = ["//visibility:public"],
     deps = [
         ":master_sm",
         "//cpp/pl/minitable/proto:common_cc_proto",
-        "//cpp/pl/minitable/proto:unit_cc_proto",
+        "//cpp/pl/minitable/proto:unit_server_cc_proto",
         "@brpc//:brpc",
     ],
 )
@@ -125,7 +126,7 @@ cc_binary(
         ":admin_service",
         ":master_service",
         ":master_sm",
-        ":unit_service",
+        ":unit_server_service",
         "@brpc//:brpc",
         "@gflags",
     ],

@@ -35,7 +35,7 @@
 namespace pl::minitable::master {
 
 // =========================================================================
-// USManager — UnitServer 生命周期管理
+// UnitServerManager — UnitServer 生命周期管理
 // =========================================================================
 //
 // 职责:
@@ -43,7 +43,7 @@ namespace pl::minitable::master {
 //   - 存活状态追踪 (纯内存, 不持久化)
 //   - 故障检测 (后台线程, 周期扫描, 触发 failover)
 
-class USManager final : public DisableCopyAndMove {
+class UnitServerManager final : public DisableCopyAndMove {
 public:
     enum class State : uint8_t { kLive = 0, kStale = 1, kDead = 2 };
 
@@ -58,7 +58,7 @@ public:
 
     using FailoverFn = std::function<void(uint64_t us_id)>;
 
-    explicit USManager(size_t queue_capacity = 4096,
+    explicit UnitServerManager(size_t queue_capacity = 4096,
                         int64_t stale_threshold_us = 10'000'000,
                         int64_t dead_threshold_us  = 30'000'000,
                         int64_t check_interval_us  = 1'000'000)
@@ -67,7 +67,7 @@ public:
           dead_threshold_us_(dead_threshold_us),
           check_interval_us_(check_interval_us) {}
 
-    ~USManager() { stop_detector(); }
+    ~UnitServerManager() { stop_detector(); }
 
     // ---- 心跳处理 ----
 
@@ -111,7 +111,7 @@ private:
 // 实现
 // =========================================================================
 
-inline void USManager::update_heartbeat(uint64_t us_id, const std::string& host,
+inline void UnitServerManager::update_heartbeat(uint64_t us_id, const std::string& host,
                                          uint32_t port, int64_t capacity, int64_t now_us) {
     std::lock_guard<std::mutex> lock(hb_mutex_);
     auto [it, inserted] = heartbeats_.try_emplace(us_id);
@@ -128,7 +128,7 @@ inline void USManager::update_heartbeat(uint64_t us_id, const std::string& host,
     }
 }
 
-inline std::vector<USManager::Heartbeat> USManager::get_all_heartbeats() const {
+inline std::vector<UnitServerManager::Heartbeat> UnitServerManager::get_all_heartbeats() const {
     std::lock_guard<std::mutex> lock(hb_mutex_);
     std::vector<Heartbeat> result;
     result.reserve(heartbeats_.size());
@@ -136,18 +136,18 @@ inline std::vector<USManager::Heartbeat> USManager::get_all_heartbeats() const {
     return result;
 }
 
-inline void USManager::set_state(uint64_t us_id, State state) {
+inline void UnitServerManager::set_state(uint64_t us_id, State state) {
     std::lock_guard<std::mutex> lock(hb_mutex_);
     auto it = heartbeats_.find(us_id);
     if (it != heartbeats_.end()) it->second.state = state;
 }
 
-inline void USManager::remove_heartbeat(uint64_t us_id) {
+inline void UnitServerManager::remove_heartbeat(uint64_t us_id) {
     std::lock_guard<std::mutex> lock(hb_mutex_);
     heartbeats_.erase(us_id);
 }
 
-inline void USManager::start_detector(FailoverFn on_failover) {
+inline void UnitServerManager::start_detector(FailoverFn on_failover) {
     if (detector_running_.exchange(true)) return;
     detector_thread_ = std::thread([this, fn = std::move(on_failover)] {
         while (detector_running_.load(std::memory_order_relaxed)) {
@@ -171,7 +171,7 @@ inline void USManager::start_detector(FailoverFn on_failover) {
     });
 }
 
-inline void USManager::stop_detector() {
+inline void UnitServerManager::stop_detector() {
     if (!detector_running_.exchange(false)) return;
     if (detector_thread_.joinable()) detector_thread_.join();
 }

@@ -22,7 +22,7 @@
 
 #include "cpp/pl/minitable/master/master_sm.h"
 #include "cpp/pl/minitable/proto/common.pb.h"
-#include "cpp/pl/minitable/proto/unit.pb.h"
+#include "cpp/pl/minitable/proto/unit_server.pb.h"
 
 namespace pl::minitable {
 
@@ -31,12 +31,12 @@ namespace pb = pl::minitable::proto;
 namespace master {
 
 // ---------------------------------------------------------------------------
-// UnitServiceImpl — Master ↔ UnitServer 内部通信
+// UnitServerServiceImpl — Master ↔ UnitServer 内部通信
 // ---------------------------------------------------------------------------
 
-class UnitServiceImpl final : public pb::UnitService {
+class UnitServerServiceImpl final : public pb::UnitServerService {
 public:
-    explicit UnitServiceImpl(MasterSM* sm) : sm_(sm) {}
+    explicit UnitServerServiceImpl(MasterSM* sm) : sm_(sm) {}
 
     void Heartbeat(google::protobuf::RpcController* cntl,
                    const pb::HeartbeatRequest* req,
