@@ -262,9 +262,14 @@ absl::StatusOr<types::Schema::ConstRef> schema_from_entries(const SectionMap& en
             return name.status();
         }
 
-        builder.add_column(std::move(*name),
-                           static_cast<DataType>(static_cast<uint8_t>(*type)),
-                           static_cast<SortOrder>(static_cast<uint8_t>(*order)));
+        if (*type > static_cast<uint8_t>(DataType::kMap)) {
+            return absl::InvalidArgumentError("schema column has invalid data type");
+        }
+        if (*order > static_cast<uint8_t>(SortOrder::kDescending)) {
+            return absl::InvalidArgumentError("schema column has invalid sort order");
+        }
+        builder.add_column(
+            std::move(*name), static_cast<DataType>(*type), static_cast<SortOrder>(*order));
     }
 
     std::optional<types::Schema> schema = builder.build();

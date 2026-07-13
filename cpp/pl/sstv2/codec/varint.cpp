@@ -30,6 +30,9 @@ size_t encode_varint(uint64_t value, uint8_t* dst) noexcept {
 }
 
 size_t decode_varint(const uint8_t* src, size_t len, uint64_t* value) noexcept {
+    if (value == nullptr || (src == nullptr && len != 0)) {
+        return 0;
+    }
     uint64_t result = 0;
     for (size_t i = 0; i < len && i < 10; ++i) {
         uint64_t byte = src[i];
