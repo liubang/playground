@@ -16,11 +16,14 @@
 // Created: 2026/06/05 22:09
 
 #include <gtest/gtest.h>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "cpp/pl/sstv2/block/block.h"
+#include "cpp/pl/sstv2/codec/fixed.h"
+#include "cpp/pl/sstv2/codec/varint.h"
 #include "cpp/pl/sstv2/types/row.h"
 
 namespace pl::sstv2::block {
@@ -43,6 +46,51 @@ Schema::ConstRef make_schema() {
                       .build();
     EXPECT_TRUE(schema.has_value());
     return std::make_shared<const Schema>(std::move(*schema));
+}
+
+void write_fixed64(std::string* bytes, size_t offset, uint64_t value) {
+    uint8_t encoded[8];
+    codec::encode_fixed64(encoded, value);
+    bytes->replace(
+        offset, sizeof(encoded), reinterpret_cast<const char*>(encoded), sizeof(encoded));
+}
+
+void refresh_block_checksum(std::string* block) {
+    write_fixed64(block, 44, 0);
+    write_fixed64(block, 44, codec::crc32c_u64(*block));
+}
+
+std::vector<uint64_t> read_column_offsets(std::string_view block,
+                                          const InternalSchema::ConstRef& schema,
+                                          std::vector<size_t>* positions = nullptr,
+                                          std::vector<size_t>* lengths = nullptr) {
+    const size_t table = static_cast<size_t>(codec::read_fixed64(block, 20));
+    size_t pos = table;
+    std::vector<uint64_t> offsets;
+    for (size_t i = 0; i < schema->column_count(); ++i) {
+        uint64_t value = 0;
+        const size_t n = codec::decode_varint(
+            reinterpret_cast<const uint8_t*>(block.data() + pos), block.size() - pos, &value);
+        EXPECT_NE(n, 0u);
+        if (positions != nullptr)
+            positions->push_back(pos);
+        if (lengths != nullptr)
+            lengths->push_back(n);
+        offsets.push_back(value);
+        pos += n;
+    }
+    return offsets;
+}
+
+void write_varint_with_size(std::string* bytes, size_t pos, size_t size, uint64_t value) {
+    std::string encoded;
+    codec::encode_varint(value, &encoded);
+    ASSERT_LE(encoded.size(), size);
+    while (encoded.size() < size) {
+        encoded.back() = static_cast<char>(static_cast<uint8_t>(encoded.back()) | 0x80);
+        encoded.push_back(0);
+    }
+    bytes->replace(pos, size, encoded);
 }
 
 InternalRow make_row(InternalSchema::ConstRef schema,
@@ -148,6 +196,110 @@ TEST(BlockTest, ArrayAndMapColumnsRoundTrip) {
     ASSERT_EQ(reader->rows()[0].columns[1].as_map().size(), 2u);
     EXPECT_EQ(reader->rows()[0].columns[1].as_map()[0].first.as_string(), "a");
     EXPECT_EQ(reader->rows()[0].columns[1].as_map()[1].first.as_string(), "b");
+}
+
+TEST(BlockTest, RejectsColumnRowCountMismatch) {
+    auto schema = InternalSchema::make(make_schema());
+    BlockBuilder builder(schema, Options{.kind = Kind::kData});
+    ASSERT_TRUE(builder.add(make_row(schema, "alice", 7, Version{.major = 1}, "v")).ok());
+    auto encoded = builder.finish();
+    ASSERT_TRUE(encoded.ok()) << encoded.status();
+
+    write_fixed64(&*encoded, 12, 2);
+    refresh_block_checksum(&*encoded);
+    EXPECT_FALSE(BlockReader::open(*encoded, schema, Kind::kData).ok());
+}
+
+TEST(BlockTest, RejectsStringReferenceOverflow) {
+    auto schema = InternalSchema::make(make_schema());
+    BlockBuilder builder(schema, Options{.kind = Kind::kData});
+    ASSERT_TRUE(builder.add(make_row(schema, "alice", 7, Version{.major = 1}, "v")).ok());
+    auto encoded = builder.finish();
+    ASSERT_TRUE(encoded.ok()) << encoded.status();
+
+    const auto offsets = read_column_offsets(*encoded, schema);
+    size_t pos = static_cast<size_t>(offsets[0]);
+    ASSERT_EQ(static_cast<uint8_t>((*encoded)[pos++]), 100u);
+    uint64_t sub_count = 0;
+    pos += codec::decode_varint(
+        reinterpret_cast<const uint8_t*>(encoded->data() + pos), encoded->size() - pos, &sub_count);
+    ASSERT_EQ(sub_count, 2u);
+    ASSERT_EQ(static_cast<uint8_t>((*encoded)[pos++]), static_cast<uint8_t>(DataType::kUint64));
+    uint64_t raw_offset = 0;
+    pos += codec::decode_varint(reinterpret_cast<const uint8_t*>(encoded->data() + pos),
+                                encoded->size() - pos,
+                                &raw_offset);
+    ASSERT_EQ(raw_offset, 0u);
+    ASSERT_EQ(static_cast<uint8_t>((*encoded)[pos++]), static_cast<uint8_t>(DataType::kUint64));
+    uint64_t length_unit_offset = 0;
+    pos += codec::decode_varint(reinterpret_cast<const uint8_t*>(encoded->data() + pos),
+                                encoded->size() - pos,
+                                &length_unit_offset);
+    const size_t offset_cell = pos + 2;
+    write_fixed64(&*encoded, offset_cell, std::numeric_limits<uint64_t>::max());
+    refresh_block_checksum(&*encoded);
+    EXPECT_FALSE(BlockReader::open(*encoded, schema, Kind::kData).ok());
+}
+
+TEST(BlockTest, RejectsInvalidAndNonMonotonicColumnOffsets) {
+    auto schema = InternalSchema::make(make_schema());
+    BlockBuilder builder(schema, Options{.kind = Kind::kData});
+    ASSERT_TRUE(builder.add(make_row(schema, "alice", 7, Version{.major = 1}, "v")).ok());
+    auto encoded = builder.finish();
+    ASSERT_TRUE(encoded.ok()) << encoded.status();
+
+    std::vector<size_t> positions;
+    std::vector<size_t> lengths;
+    const auto offsets = read_column_offsets(*encoded, schema, &positions, &lengths);
+    std::string below_header = *encoded;
+    write_varint_with_size(&below_header, positions[0], lengths[0], Header::kSize - 1);
+    refresh_block_checksum(&below_header);
+    EXPECT_FALSE(BlockReader::open(below_header, schema, Kind::kData).ok());
+
+    std::string non_monotonic = *encoded;
+    write_varint_with_size(&non_monotonic, positions[1], lengths[1], offsets[0] - 1);
+    refresh_block_checksum(&non_monotonic);
+    EXPECT_FALSE(BlockReader::open(non_monotonic, schema, Kind::kData).ok());
+}
+
+TEST(BlockTest, RejectsInvalidColumnFlag) {
+    auto schema = InternalSchema::make(make_schema());
+    auto row = make_row(schema, "alice", 7, Version{.major = 1}, "v");
+    row.columns[schema->flag_index()] = Value::make<DataType::kUint64>(1ULL << 10);
+    BlockBuilder builder(schema, Options{.kind = Kind::kData});
+    ASSERT_TRUE(builder.add(std::move(row)).ok());
+    auto encoded = builder.finish();
+    ASSERT_TRUE(encoded.ok()) << encoded.status();
+    EXPECT_FALSE(BlockReader::open(*encoded, schema, Kind::kData).ok());
+}
+
+TEST(BlockTest, RejectsExcessiveHeaderRowCountBeforeAllocating) {
+    auto schema = InternalSchema::make(make_schema());
+    BlockBuilder builder(schema, Options{.kind = Kind::kData});
+    ASSERT_TRUE(builder.add(make_row(schema, "alice", 7, Version{.major = 1}, "v")).ok());
+    auto encoded = builder.finish();
+    ASSERT_TRUE(encoded.ok()) << encoded.status();
+    write_fixed64(&*encoded, 12, std::numeric_limits<uint64_t>::max());
+    refresh_block_checksum(&*encoded);
+    EXPECT_FALSE(BlockReader::open(*encoded, schema, Kind::kData).ok());
+}
+
+TEST(BlockTest, RejectsUnknownFlagsAndCodec) {
+    auto schema = InternalSchema::make(make_schema());
+    BlockBuilder builder(schema, Options{.kind = Kind::kData});
+    ASSERT_TRUE(builder.add(make_row(schema, "alice", 7, Version{.major = 1}, "v")).ok());
+    auto encoded = builder.finish();
+    ASSERT_TRUE(encoded.ok()) << encoded.status();
+
+    std::string reserved = *encoded;
+    write_fixed64(&reserved, 4, codec::read_fixed64(reserved, 4) | (1ULL << 10));
+    refresh_block_checksum(&reserved);
+    EXPECT_FALSE(BlockReader::open(reserved, schema, Kind::kData).ok());
+
+    std::string unknown_codec = *encoded;
+    write_fixed64(&unknown_codec, 4, encode_block_flag(static_cast<compress::Codec>(255)));
+    refresh_block_checksum(&unknown_codec);
+    EXPECT_FALSE(BlockReader::open(unknown_codec, schema, Kind::kData).ok());
 }
 
 TEST(BlockTest, EnforcesConfiguredRowLimit) {

@@ -16,6 +16,7 @@
 // Created: 2026/06/06 14:11
 
 #include <gtest/gtest.h>
+#include <limits>
 #include <string>
 
 #include "cpp/pl/sstv2/format/metadata.h"
@@ -118,6 +119,26 @@ TEST(MetadataTest, StrongSchemaRoundTrip) {
     EXPECT_EQ(checksum_key->type(), DataType::kBinary);
 }
 
+TEST(MetadataTest, RejectsInvalidSchemaEnums) {
+    auto schema = SchemaBuilder().add_column("key", DataType::kString).build();
+    ASSERT_TRUE(schema.has_value());
+
+    auto replace_entry = [](const SectionMap& source, std::string_view key, uint64_t value) {
+        SectionEntries entries;
+        for (const auto& entry : source.as_map()) {
+            entries.emplace_back(entry.first.as_string(),
+                                 entry.first.as_string() == key
+                                     ? Value::make<DataType::kUint64>(value)
+                                     : entry.second);
+        }
+        return make_section_map(std::move(entries));
+    };
+
+    const SectionMap entries = schema_entries(*schema);
+    EXPECT_FALSE(schema_from_entries(replace_entry(entries, "RowKeyColumn0_Type", 255)).ok());
+    EXPECT_FALSE(schema_from_entries(replace_entry(entries, "RowKeyColumn0_Order", 2)).ok());
+}
+
 TEST(MetadataTest, ConfigurationAndStatisticsRoundTrip) {
     const Configuration configuration{
         .max_embedded_value_size = 128,
@@ -148,6 +169,12 @@ TEST(MetadataTest, ConfigurationAndStatisticsRoundTrip) {
     EXPECT_EQ(decoded_statistics->total_row_count, 5u);
     EXPECT_EQ(decoded_statistics->data_block_count, 2u);
     EXPECT_EQ(decoded_statistics->index_block_count, 1u);
+
+    Statistics huge = statistics;
+    huge.total_row_count = std::numeric_limits<uint64_t>::max();
+    auto decoded_huge = decode_statistics(encode_statistics(huge));
+    ASSERT_TRUE(decoded_huge.ok()) << decoded_huge.status();
+    EXPECT_EQ(decoded_huge->total_row_count, std::numeric_limits<uint64_t>::max());
 }
 
 } // namespace

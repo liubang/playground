@@ -112,10 +112,14 @@ constexpr bool is_compound(DataType dt) {
            dt == DataType::kMap;
 }
 
+constexpr bool is_valid_data_type(DataType dt) {
+    return static_cast<uint8_t>(dt) <= static_cast<uint8_t>(DataType::kIndexBlock);
+}
+
 // Types valid for use in a user-defined row key schema.
 constexpr bool is_key_compatible(DataType dt) {
-    // None and private types cannot be key columns.
-    return dt != DataType::kNone && dt != DataType::kDataBlock && dt != DataType::kIndexBlock;
+    return is_valid_data_type(dt) && dt != DataType::kNone && dt != DataType::kDataBlock &&
+           dt != DataType::kIndexBlock;
 }
 
 // Private types used only in index block entries.

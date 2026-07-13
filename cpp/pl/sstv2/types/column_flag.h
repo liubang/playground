@@ -112,7 +112,7 @@ public:
     // - Index entries must have C=0 and B=0.
     // - B bit must be 0 when DT != Bool.
     [[nodiscard]] constexpr bool is_valid() const {
-        if ((bits_ & kReservedMask) != 0) {
+        if ((bits_ & kReservedMask) != 0 || !is_valid_data_type(data_type())) {
             return false;
         }
         if (is_index_entry() && (bits_ & (kChecksumBit | kBoolBit)) != 0) {
