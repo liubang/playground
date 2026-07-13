@@ -18,6 +18,7 @@
 #include "cpp/pl/sstv2/bloom/bloom.h"
 
 #include <algorithm>
+#include <limits>
 
 #include "absl/hash/hash.h"
 #include "absl/status/status.h"
@@ -118,8 +119,13 @@ absl::StatusOr<Reader> Reader::open(std::string_view section) {
     if (h.version != Header::kVersion) {
         return absl::InvalidArgumentError("unsupported bloom version");
     }
-    const auto bytes = static_cast<size_t>((h.bit_count + 7) / 8);
-    if (section.size() != Header::kSize + bytes) {
+    if (h.bit_count < 64 || h.bit_count % 8 != 0 ||
+        h.bit_count > std::numeric_limits<uint32_t>::max() || h.hash_count == 0 ||
+        h.hash_count > 30) {
+        return absl::InvalidArgumentError("invalid bloom parameters");
+    }
+    const auto bytes = static_cast<size_t>(h.bit_count / 8);
+    if (bytes > section.size() - Header::kSize || section.size() != Header::kSize + bytes) {
         return absl::InvalidArgumentError("bloom section length mismatch");
     }
 

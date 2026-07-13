@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "cpp/pl/sstv2/bloom/bloom.h"
+#include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/types/row.h"
 
 namespace pl::sstv2::bloom {
@@ -69,6 +70,17 @@ TEST(BloomTest, RoundTripMayContainInsertedRows) {
     auto may_contain = reader->may_contain(row, schema);
     ASSERT_TRUE(may_contain.ok()) << may_contain.status();
     EXPECT_TRUE(*may_contain);
+}
+
+TEST(BloomTest, RejectsInvalidParameters) {
+    std::string section;
+    codec::append_fixed32(&section, Header::kMagic);
+    codec::append_fixed32(&section, Header::kVersion);
+    codec::append_fixed32(&section, 1);
+    codec::append_fixed64(&section, 0);
+    codec::append_fixed64(&section, 0);
+    codec::append_fixed64(&section, 0);
+    EXPECT_FALSE(Reader::open(section).ok());
 }
 
 TEST(BloomTest, RejectsCorruptChecksum) {

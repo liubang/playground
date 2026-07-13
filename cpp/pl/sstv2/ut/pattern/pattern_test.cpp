@@ -209,6 +209,14 @@ TEST(RawDecoderTest, RejectsWrongPatternId) {
     EXPECT_FALSE(dec.parse(bad));
 }
 
+TEST(RawDecoderTest, RejectsOverflowingRowCount) {
+    std::string encoded(1, static_cast<char>(PatternId::kRaw));
+    codec::encode_varint(std::numeric_limits<uint64_t>::max(), &encoded);
+
+    RawDecoder<16> dec;
+    EXPECT_FALSE(dec.parse(encoded));
+}
+
 TEST(RawDecoderTest, RejectsTruncatedInput) {
     RawEncoder<8> enc;
     enc.add(uint64_t{42});
