@@ -146,6 +146,9 @@ absl::StatusOr<Row> materialize_row(const types::InternalSchema::ConstRef& inter
     }
     Row row = Row::from_all_key(types::AllKey::from_columns(std::move(all_key_cols)));
     const ColumnFlag value_flag = internal.flag(internal_schema);
+    if (!value_flag.is_valid() || value_flag.is_index_entry()) {
+        return absl::InvalidArgumentError("invalid value column flag");
+    }
     const DataType value_type = value_flag.data_type();
     if (value_type == DataType::kNone) {
         return row;
@@ -249,6 +252,9 @@ absl::Status validate_statistics(const format::Statistics& statistics,
     }
     if (statistics.value_file_size != value_file.size()) {
         return absl::InvalidArgumentError("statistics value file size mismatch");
+    }
+    if (statistics.total_row_count > key_file.size()) {
+        return absl::InvalidArgumentError("statistics row count is not plausible");
     }
     return absl::OkStatus();
 }
@@ -712,7 +718,6 @@ absl::StatusOr<std::vector<Row>> Reader::scan(const ScanOptions& options) const 
     }
 
     std::vector<Row> rows;
-    rows.reserve(static_cast<size_t>(statistics_.total_row_count));
     for (const index::BlockRef& ref : data_blocks) {
         auto data_bytes = checked_slice(key_file_, ref.offset, ref.length, "data block");
         if (!data_bytes.ok()) {

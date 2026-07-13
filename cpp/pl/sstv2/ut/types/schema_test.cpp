@@ -117,6 +117,12 @@ TEST(SchemaTest, BuilderRejectsPrivateType) {
     EXPECT_FALSE(builder.error().empty());
 }
 
+TEST(SchemaTest, BuilderRejectsUnknownType) {
+    SchemaBuilder builder;
+    builder.add_column("bad", static_cast<DataType>(255));
+    EXPECT_FALSE(builder.build().has_value());
+}
+
 TEST(SchemaTest, DirectConstruction) {
     Schema s({
         ColumnDef{"x", DataType::kUint64, SortOrder::kAscending},
