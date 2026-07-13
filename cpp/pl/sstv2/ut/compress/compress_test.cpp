@@ -16,6 +16,7 @@
 // Created: 2026/06/05 22:09
 
 #include <gtest/gtest.h>
+#include <limits>
 #include <string>
 
 #include "cpp/pl/sstv2/block/block.h"
@@ -58,6 +59,12 @@ TEST(CompressTest, ZstdRoundTrip) {
     auto decoded = uncompress(*encoded, Codec::kZstd, input.size());
     ASSERT_TRUE(decoded.ok()) << decoded.status();
     EXPECT_EQ(*decoded, input);
+}
+
+TEST(CompressTest, RejectsOversizedDecompressionBeforeAllocating) {
+    const uint64_t huge = std::numeric_limits<uint64_t>::max();
+    EXPECT_FALSE(uncompress("", Codec::kSnappy, huge).ok());
+    EXPECT_FALSE(uncompress("", Codec::kZstd, huge).ok());
 }
 
 TEST(CompressTest, CompileTimeCodecStrategy) {

@@ -197,13 +197,15 @@ public:
         }
         pos += n;
 
-        const size_t payload = static_cast<size_t>(rc) * CellSize;
-        if (pos + payload > len) {
+        if (rc > std::numeric_limits<size_t>::max() ||
+            static_cast<size_t>(rc) > (len - pos) / CellSize) {
             return false;
         }
+        const size_t row_count = static_cast<size_t>(rc);
+        const size_t payload = row_count * CellSize;
 
         cells_ = src + pos;
-        row_count_ = static_cast<size_t>(rc);
+        row_count_ = row_count;
         bytes_consumed_ = pos + payload;
         return true;
     }
