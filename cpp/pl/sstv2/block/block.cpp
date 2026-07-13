@@ -18,6 +18,7 @@
 #include "cpp/pl/sstv2/block/block.h"
 
 #include <cstring>
+#include <limits>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -291,7 +292,8 @@ absl::Status decode_column(std::string_view unit,
     switch (type) {
         case DataType::kBool: {
             pattern::RawDecoder<1> dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad bool raw unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
@@ -302,7 +304,8 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kInt8:
         case DataType::kUint8: {
             pattern::RawDecoder<1> dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad 1-byte raw unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
@@ -313,7 +316,8 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kInt16:
         case DataType::kUint16: {
             pattern::RawDecoder<2> dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad 2-byte raw unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
@@ -324,7 +328,8 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kInt32:
         case DataType::kUint32: {
             pattern::RawDecoder<4> dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad 4-byte raw unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
@@ -334,7 +339,8 @@ absl::Status decode_column(std::string_view unit,
         }
         case DataType::kFloat: {
             pattern::RawDecoder<4> dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad float raw unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
@@ -348,7 +354,8 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kInt64:
         case DataType::kUint64: {
             pattern::RawDecoder<8> dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad 8-byte raw unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
@@ -358,7 +365,8 @@ absl::Status decode_column(std::string_view unit,
         }
         case DataType::kDouble: {
             pattern::RawDecoder<8> dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad double raw unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
@@ -371,7 +379,8 @@ absl::Status decode_column(std::string_view unit,
         }
         case DataType::kLongDouble: {
             pattern::RawDecoder<16> dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad long double raw unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
@@ -383,7 +392,8 @@ absl::Status decode_column(std::string_view unit,
         }
         case DataType::kTime: {
             pattern::TimeDecoder dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad time unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
@@ -394,7 +404,8 @@ absl::Status decode_column(std::string_view unit,
         }
         case DataType::kVersion: {
             pattern::VersionDecoder dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad version unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
@@ -408,13 +419,14 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kU32String:
         case DataType::kBinary: {
             pattern::StringRefDecoder dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad string-ref unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
                 const uint64_t off = dec.offset(i);
                 const uint64_t len = dec.length(i);
-                if (off + len > data_table.size()) {
+                if (off > data_table.size() || len > data_table.size() - off) {
                     return absl::InvalidArgumentError("string-ref points outside data table");
                 }
                 std::string bytes(data_table.data() + off, static_cast<size_t>(len));
@@ -442,13 +454,14 @@ absl::Status decode_column(std::string_view unit,
         case DataType::kArray:
         case DataType::kMap: {
             pattern::StringRefDecoder dec;
-            if (!dec.parse(unit)) {
+            if (!dec.parse(unit) || dec.row_count() != rows->size() ||
+                dec.bytes_consumed() != unit.size()) {
                 return absl::InvalidArgumentError("bad variant-ref unit");
             }
             for (size_t i = 0; i < rows->size(); ++i) {
                 const uint64_t off = dec.offset(i);
                 const uint64_t len = dec.length(i);
-                if (off + len > data_table.size()) {
+                if (off > data_table.size() || len > data_table.size() - off) {
                     return absl::InvalidArgumentError("variant-ref points outside data table");
                 }
                 auto value = types::decode_value(
@@ -561,11 +574,31 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
     if (block.size() < Header::kSize) {
         return absl::InvalidArgumentError("block is shorter than header");
     }
+    if (schema == nullptr || schema->column_count() == 0) {
+        return absl::InvalidArgumentError("block reader schema is null or empty");
+    }
     Header h = decode_header(block.substr(0, Header::kSize));
     if (h.magic != expected) {
         return absl::InvalidArgumentError("block magic mismatch");
     }
+    constexpr uint64_t kKnownFlags = block_flags::kPatternStore | block_flags::kRowKeyBitmap |
+                                     block_flags::kCompressMask;
+    if ((h.flags & block_flags::kPatternStore) == 0 || (h.flags & ~kKnownFlags) != 0 ||
+        (h.flags & block_flags::kRowKeyBitmap) != 0) {
+        return absl::InvalidArgumentError("invalid block flags");
+    }
     const auto codec = decode_block_flag(h.flags);
+    if (codec != compress::Codec::kNone && codec != compress::Codec::kSnappy &&
+        codec != compress::Codec::kZstd) {
+        return absl::InvalidArgumentError("invalid block compression codec");
+    }
+    if (h.uncompressed_block_length < Header::kSize) {
+        return absl::InvalidArgumentError("invalid uncompressed block length");
+    }
+    constexpr uint64_t kMaxDecodedRowCount = 1ULL << 20;
+    if (h.row_count > kMaxDecodedRowCount || h.row_count > std::numeric_limits<size_t>::max()) {
+        return absl::ResourceExhaustedError("block row count exceeds limit");
+    }
     const uint64_t expected_block_length =
         codec == compress::Codec::kNone ? h.uncompressed_block_length : h.compressed_block_length;
     if (expected_block_length != block.size()) {
@@ -596,17 +629,20 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
         return absl::InvalidArgumentError("offset table outside block body");
     }
 
-    std::vector<uint64_t> offsets;
-    offsets.reserve(schema->column_count());
+    std::vector<uint64_t> offsets(schema->column_count());
     size_t pos = offset_table_body;
-    for (size_t i = 0; i < schema->column_count(); ++i) {
+    for (size_t i = 0; i < offsets.size(); ++i) {
         uint64_t off = 0;
         const size_t n = codec::decode_varint(
             reinterpret_cast<const uint8_t*>(body->data() + pos), body->size() - pos, &off);
         if (n == 0) {
             return absl::InvalidArgumentError("bad column offset table");
         }
-        offsets.push_back(off);
+        if (off < Header::kSize || off > h.offset_table_offset ||
+            (i > 0 && off < offsets[i - 1])) {
+            return absl::InvalidArgumentError("invalid column offset");
+        }
+        offsets[i] = off;
         pos += n;
     }
     if (offsets.empty()) {
@@ -641,6 +677,13 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
                                     &reader.rows_);
         if (!status.ok()) {
             return status;
+        }
+    }
+    for (const auto& row : reader.rows_) {
+        const auto flag = row.flag(schema);
+        if (!flag.is_valid() ||
+            (expected == Kind::kData ? flag.is_index_entry() : !flag.is_index_entry())) {
+            return absl::InvalidArgumentError("invalid column flag for block kind");
         }
     }
     return reader;

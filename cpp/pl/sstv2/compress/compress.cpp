@@ -17,6 +17,7 @@
 
 #include "cpp/pl/sstv2/compress/compress.h"
 
+#include <limits>
 #include <zstd.h>
 
 #include "absl/status/status.h"
@@ -26,6 +27,16 @@
 namespace pl::sstv2::compress {
 
 namespace detail {
+
+constexpr uint64_t kMaxUncompressedSize = 1ULL << 30;
+
+absl::Status validate_uncompressed_size(uint64_t uncompressed_size) {
+    if (uncompressed_size > kMaxUncompressedSize ||
+        uncompressed_size > std::numeric_limits<size_t>::max()) {
+        return absl::ResourceExhaustedError("uncompressed size exceeds limit");
+    }
+    return absl::OkStatus();
+}
 
 absl::StatusOr<std::string> compress_none(std::string_view input, int /*level*/) {
     return std::string(input);
@@ -60,6 +71,9 @@ absl::StatusOr<std::string> uncompress_none(std::string_view input, uint64_t unc
 }
 
 absl::StatusOr<std::string> uncompress_snappy(std::string_view input, uint64_t uncompressed_size) {
+    if (auto status = validate_uncompressed_size(uncompressed_size); !status.ok()) {
+        return status;
+    }
     size_t actual = 0;
     if (!snappy::GetUncompressedLength(input.data(), input.size(), &actual)) {
         return absl::InvalidArgumentError("invalid snappy stream");
@@ -76,6 +90,9 @@ absl::StatusOr<std::string> uncompress_snappy(std::string_view input, uint64_t u
 }
 
 absl::StatusOr<std::string> uncompress_zstd(std::string_view input, uint64_t uncompressed_size) {
+    if (auto status = validate_uncompressed_size(uncompressed_size); !status.ok()) {
+        return status;
+    }
     std::string out(static_cast<size_t>(uncompressed_size), '\0');
     const size_t n = ZSTD_decompress(out.data(), out.size(), input.data(), input.size());
     if (ZSTD_isError(n) != 0) {

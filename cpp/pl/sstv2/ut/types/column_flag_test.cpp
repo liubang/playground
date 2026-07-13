@@ -120,6 +120,15 @@ TEST(ColumnFlagTest, ValidationRejectsBoolBitOnNonBool) {
     EXPECT_FALSE(bad.is_valid());
 }
 
+TEST(ColumnFlagTest, ValidationRejectsUnknownDataType) {
+    EXPECT_FALSE(ColumnFlag::from_raw(255).is_valid());
+}
+
+TEST(ColumnFlagTest, ValidationRejectsIndexEntryWithBoolBit) {
+    const uint64_t raw = static_cast<uint8_t>(DataType::kIndexBlock) | ColumnFlag::kBoolBit;
+    EXPECT_FALSE(ColumnFlag::from_raw(raw).is_valid());
+}
+
 TEST(ColumnFlagTest, ConstexprUsable) {
     // Verify constexpr construction works at compile time.
     constexpr auto flag = ColumnFlag::for_value(DataType::kDouble, false);

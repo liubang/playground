@@ -85,6 +85,14 @@ TEST(VarintTest, DecodeEmptyBuffer) {
     EXPECT_EQ(decoded, 42u); // value unchanged on failure
 }
 
+TEST(VarintTest, DecodeRejectsNullPointers) {
+    const uint8_t byte = 1;
+    uint64_t decoded = 42;
+    EXPECT_EQ(decode_varint(nullptr, 1, &decoded), 0u);
+    EXPECT_EQ(decoded, 42u);
+    EXPECT_EQ(decode_varint(&byte, 1, nullptr), 0u);
+}
+
 TEST(VarintTest, DecodeOverflow10thByte) {
     // A valid 10-byte varint for UINT64_MAX: 9 bytes of 0xFF + final byte 0x01.
     uint8_t valid_max[10] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01};
