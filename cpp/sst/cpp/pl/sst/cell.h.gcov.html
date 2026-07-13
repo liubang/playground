@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-01 01:29:22</td>
+            <td class="headerValue">2026-07-13 11:53:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -159,50 +159,50 @@
 <span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">      199798 :         return result;</span></span>
 <span id="L87"><span class="lineNum">      87</span>                 :             :     }</span>
 <span id="L88"><span class="lineNum">      88</span>                 :             : </span>
-<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">     2198521 :     Result&lt;Void&gt; decode(std::string_view encoded, uint32_t rowkey_len) {</span></span>
-<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2198516 times"> + </span>]:<span class="tlaGNC">     2198521 :         if (encoded.size() &lt; rowkey_len + sizeof(uint64_t) + sizeof(uint8_t) + 2) {</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">     2223726 :     Result&lt;Void&gt; decode(std::string_view encoded, uint32_t rowkey_len) {</span></span>
+<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2223721 times"> + </span>]:<span class="tlaGNC">     2223726 :         if (encoded.size() &lt; rowkey_len + sizeof(uint64_t) + sizeof(uint8_t) + 2) {</span></span>
 <span id="L91"><span class="lineNum">      91</span>                 :             :             // 错误处理，数据长度不足</span>
 <span id="L92"><span class="lineNum">      92</span>                 :             :             reset();</span>
 <span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          10 :             return makeError(StatusCode::kInvalidCell);</span></span>
 <span id="L94"><span class="lineNum">      94</span>                 :             :         }</span>
 <span id="L95"><span class="lineNum">      95</span>                 :             :         const char* data = encoded.data();</span>
-<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">     2198516 :         const char* end = data + encoded.size();</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">     2223721 :         const char* end = data + encoded.size();</span></span>
 <span id="L97"><span class="lineNum">      97</span>                 :             : </span>
 <span id="L98"><span class="lineNum">      98</span>                 :             :         // decode rowkey</span>
-<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">     2198516 :         rowkey = std::string_view(data, rowkey_len);</span></span>
-<span id="L100"><span class="lineNum">     100</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2198515 times"> + </span>]:<span class="tlaGNC">     2198516 :         data += rowkey_len;</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">     2223721 :         rowkey = std::string_view(data, rowkey_len);</span></span>
+<span id="L100"><span class="lineNum">     100</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2223720 times"> + </span>]:<span class="tlaGNC">     2223721 :         data += rowkey_len;</span></span>
 <span id="L101"><span class="lineNum">     101</span>                 :             : </span>
 <span id="L102"><span class="lineNum">     102</span>                 :             :         // decode cf</span>
 <span id="L103"><span class="lineNum">     103</span>                 :             :         const char* cf_start = data;</span>
 <span id="L104"><span class="lineNum">     104</span>                 :             :         const char* cf_end = static_cast&lt;const char*&gt;(std::memchr(cf_start, '\0', end - cf_start));</span>
-<span id="L105"><span class="lineNum">     105</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2198515 times"> + </span>]:<span class="tlaGNC">     2198516 :         if (UNLIKELY(cf_end == nullptr)) {</span></span>
+<span id="L105"><span class="lineNum">     105</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2223720 times"> + </span>]:<span class="tlaGNC">     2223721 :         if (UNLIKELY(cf_end == nullptr)) {</span></span>
 <span id="L106"><span class="lineNum">     106</span>                 :             :             reset();</span>
 <span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">           2 :             return makeError(StatusCode::kInvalidCell);</span></span>
 <span id="L108"><span class="lineNum">     108</span>                 :             :         }</span>
-<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">     2198515 :         cf = std::string_view(cf_start, cf_end - cf_start);</span></span>
-<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">     2198515 :         data = cf_end + 1;</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">     2223720 :         cf = std::string_view(cf_start, cf_end - cf_start);</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">     2223720 :         data = cf_end + 1;</span></span>
 <span id="L111"><span class="lineNum">     111</span>                 :             : </span>
 <span id="L112"><span class="lineNum">     112</span>                 :             :         // decode col</span>
 <span id="L113"><span class="lineNum">     113</span>                 :             :         const char* col_start = data;</span>
 <span id="L114"><span class="lineNum">     114</span>                 :             :         const char* col_end =</span>
-<span id="L115"><span class="lineNum">     115</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2198514 times"> + </span>]:<span class="tlaGNC">     2198515 :             static_cast&lt;const char*&gt;(std::memchr(col_start, '\0', end - col_start));</span></span>
-<span id="L116"><span class="lineNum">     116</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2198514 times"> + </span>]:<span class="tlaGNC">     2198515 :         if (col_end == nullptr) {</span></span>
+<span id="L115"><span class="lineNum">     115</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2223719 times"> + </span>]:<span class="tlaGNC">     2223720 :             static_cast&lt;const char*&gt;(std::memchr(col_start, '\0', end - col_start));</span></span>
+<span id="L116"><span class="lineNum">     116</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2223719 times"> + </span>]:<span class="tlaGNC">     2223720 :         if (col_end == nullptr) {</span></span>
 <span id="L117"><span class="lineNum">     117</span>                 :             :             reset();</span>
 <span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">           2 :             return makeError(StatusCode::kInvalidCell);</span></span>
 <span id="L119"><span class="lineNum">     119</span>                 :             :         }</span>
-<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">     2198514 :         col = std::string_view(col_start, col_end - col_start);</span></span>
-<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">     2198514 :         data = col_end + 1;</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">     2223719 :         col = std::string_view(col_start, col_end - col_start);</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">     2223719 :         data = col_end + 1;</span></span>
 <span id="L122"><span class="lineNum">     122</span>                 :             : </span>
 <span id="L123"><span class="lineNum">     123</span>                 :             :         // decode timestamp</span>
-<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2198514 times"> + </span>]:<span class="tlaGNC">     2198514 :         if (end - data &lt; static_cast&lt;ptrdiff_t&gt;(sizeof(uint64_t) + sizeof(uint8_t))) {</span></span>
+<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2223719 times"> + </span>]:<span class="tlaGNC">     2223719 :         if (end - data &lt; static_cast&lt;ptrdiff_t&gt;(sizeof(uint64_t) + sizeof(uint8_t))) {</span></span>
 <span id="L125"><span class="lineNum">     125</span>                 :             :             reset();</span>
 <span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return makeError(StatusCode::kInvalidCell);</span></span>
 <span id="L127"><span class="lineNum">     127</span>                 :             :         }</span>
-<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC tlaBgGNC">     2198514 :         timestamp = decodeInt&lt;uint64_t&gt;(data);</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC tlaBgGNC">     2223719 :         timestamp = decodeInt&lt;uint64_t&gt;(data);</span></span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :         data += sizeof(uint64_t);</span>
 <span id="L130"><span class="lineNum">     130</span>                 :             : </span>
 <span id="L131"><span class="lineNum">     131</span>                 :             :         // decode celltype</span>
-<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">     2198514 :         cell_type = static_cast&lt;CellType&gt;(*data);</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">     2223719 :         cell_type = static_cast&lt;CellType&gt;(*data);</span></span>
 <span id="L133"><span class="lineNum">     133</span>                 :             : </span>
 <span id="L134"><span class="lineNum">     134</span>                 :             :         RETURN_VOID;</span>
 <span id="L135"><span class="lineNum">     135</span>                 :             :     }</span>
@@ -260,10 +260,10 @@
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 14 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span>]
 <span id="L185"><span class="lineNum">     185</span>                 :             : </span>
-<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">     2198503 :     Cell(std::string_view cell_key, uint32_t rowkey_size, std::string_view val) {</span></span>
-<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">     2198503 :         cell_key_.decode(cell_key, rowkey_size);</span></span>
-<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">     2198503 :         value_ = val;</span></span>
-<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">     2198503 :     }</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">     2223708 :     Cell(std::string_view cell_key, uint32_t rowkey_size, std::string_view val) {</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">     2223708 :         cell_key_.decode(cell_key, rowkey_size);</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">     2223708 :         value_ = val;</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">     2223708 :     }</span></span>
 <span id="L190"><span class="lineNum">     190</span>                 :             : </span>
 <span id="L191"><span class="lineNum">     191</span>                 :             :     // 移动构造函数和赋值运算符</span>
 <span id="L192"><span class="lineNum">     192</span>                 :             :     Cell(Cell&amp;&amp;) noexcept = default;</span>
@@ -320,7 +320,7 @@
 <span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">        5333 :     }</span></span>
 <span id="L244"><span class="lineNum">     244</span>                 :             : </span>
 <span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">      199787 :     [[nodiscard]] const CellKey&amp; cellKey() const { return cell_key_; }</span></span>
-<span id="L246"><span class="lineNum">     246</span>   [<span class="tlaGBC" title="Branch 0 was taken 196950 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5232 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">     2815701 :     [[nodiscard]] std::string_view rowkey() const { return cell_key_.rowkey; }</span></span>
+<span id="L246"><span class="lineNum">     246</span>   [<span class="tlaGBC" title="Branch 0 was taken 196950 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5250 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">     2840528 :     [[nodiscard]] std::string_view rowkey() const { return cell_key_.rowkey; }</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 5333 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 2 times"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 21 times"> + </span><span class="tlaGBC" title="Branch 13 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
@@ -328,14 +328,14 @@
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span><span class="tlaGBC" title="Branch 26 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 27 was not taken"> - </span><span class="tlaGBC" title="Branch 28 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 29 was not taken"> - </span><span class="tlaGBC" title="Branch 30 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 31 was not taken"> - </span><span class="tlaGBC" title="Branch 32 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 33 was not taken"> - </span> 
 <span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 34 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 35 was not taken"> - </span><span class="tlaGBC" title="Branch 36 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 37 was not taken"> - </span>]
-<span id="L247"><span class="lineNum">     247</span>   [<span class="tlaGBC" title="Branch 0 was taken 5332 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">      150026 :     [[nodiscard]] std::string_view cf() const { return cell_key_.cf; }</span></span>
+<span id="L247"><span class="lineNum">     247</span>   [<span class="tlaGBC" title="Branch 0 was taken 5332 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">      174218 :     [[nodiscard]] std::string_view cf() const { return cell_key_.cf; }</span></span>
 <span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
-<span id="L248"><span class="lineNum">     248</span>   [<span class="tlaGBC" title="Branch 0 was taken 5333 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">      150028 :     [[nodiscard]] std::string_view col() const { return cell_key_.col; }</span></span>
+<span id="L248"><span class="lineNum">     248</span>   [<span class="tlaGBC" title="Branch 0 was taken 5333 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">      174220 :     [[nodiscard]] std::string_view col() const { return cell_key_.col; }</span></span>
 <span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
-<span id="L249"><span class="lineNum">     249</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">      346635 :     [[nodiscard]] uint64_t timestamp() const { return cell_key_.timestamp; }</span></span>
-<span id="L250"><span class="lineNum">     250</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5330 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">      150027 :     [[nodiscard]] CellType cell_type() const { return cell_key_.cell_type; }</span></span>
+<span id="L249"><span class="lineNum">     249</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">      370827 :     [[nodiscard]] uint64_t timestamp() const { return cell_key_.timestamp; }</span></span>
+<span id="L250"><span class="lineNum">     250</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5330 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">      174219 :     [[nodiscard]] CellType cell_type() const { return cell_key_.cell_type; }</span></span>
 <span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
-<span id="L251"><span class="lineNum">     251</span>   [<span class="tlaGBC" title="Branch 0 was taken 390158 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9432 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 5330 times"> + </span> :<span class="tlaGNC">      410279 :     [[nodiscard]] std::string_view value() const { return value_; }</span></span>
+<span id="L251"><span class="lineNum">     251</span>   [<span class="tlaGBC" title="Branch 0 was taken 390536 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9432 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 5330 times"> + </span> :<span class="tlaGNC">      410657 :     [[nodiscard]] std::string_view value() const { return value_; }</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 5332 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 7 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
 <span class="lineNum">        </span>             <span class="tlaGBC" title="Branch 9 was taken 1 time"> + </span>]
 <span id="L252"><span class="lineNum">     252</span>                 :             : </span>

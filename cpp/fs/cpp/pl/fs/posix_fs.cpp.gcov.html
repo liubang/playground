@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-01 01:29:22</td>
+            <td class="headerValue">2026-07-13 11:53:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
@@ -189,17 +189,17 @@
 <span id="L118"><span class="lineNum">     118</span>                 :             :     RETURN_VOID;</span>
 <span id="L119"><span class="lineNum">     119</span>                 :             : }</span>
 <span id="L120"><span class="lineNum">     120</span>                 :             : </span>
-<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC tlaBgGNC">        5636 : Result&lt;Void&gt; PosixFileSystem::pread(const FileDescriptorRef&amp; fd,</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC tlaBgGNC">        6014 : Result&lt;Void&gt; PosixFileSystem::pread(const FileDescriptorRef&amp; fd,</span></span>
 <span id="L122"><span class="lineNum">     122</span>                 :             :                                     uint64_t offset,</span>
 <span id="L123"><span class="lineNum">     123</span>                 :             :                                     std::size_t n,</span>
 <span id="L124"><span class="lineNum">     124</span>                 :             :                                     const char* buffer,</span>
 <span id="L125"><span class="lineNum">     125</span>                 :             :                                     std::string_view* result) {</span>
 <span id="L126"><span class="lineNum">     126</span>                 :             :     auto* posix_fd = static_cast&lt;PosixFileDescriptor*&gt;(fd.get());</span>
 <span id="L127"><span class="lineNum">     127</span>                 :             :     uint64_t read_count = 0;</span>
-<span id="L128"><span class="lineNum">     128</span>         [<span class="tlaGBC" title="Branch 0 was taken 5637 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5635 times"> + </span>]:<span class="tlaGNC">       11272 :     while (read_count &lt; n) {</span></span>
-<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">        5637 :         ssize_t len = ::pread(</span></span>
-<span id="L130"><span class="lineNum">     130</span>         [<span class="tlaGBC" title="Branch 0 was taken 5637 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5637 :             posix_fd-&gt;fd_, (void*)(buffer + read_count), n - read_count, offset + read_count);</span></span>
-<span id="L131"><span class="lineNum">     131</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5637 times"> + </span>]:<span class="tlaGNC">        5637 :         if (len == -1) {</span></span>
+<span id="L128"><span class="lineNum">     128</span>         [<span class="tlaGBC" title="Branch 0 was taken 6015 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6013 times"> + </span>]:<span class="tlaGNC">       12028 :     while (read_count &lt; n) {</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">        6015 :         ssize_t len = ::pread(</span></span>
+<span id="L130"><span class="lineNum">     130</span>         [<span class="tlaGBC" title="Branch 0 was taken 6015 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        6015 :             posix_fd-&gt;fd_, (void*)(buffer + read_count), n - read_count, offset + read_count);</span></span>
+<span id="L131"><span class="lineNum">     131</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6015 times"> + </span>]:<span class="tlaGNC">        6015 :         if (len == -1) {</span></span>
 <span id="L132"><span class="lineNum">     132</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             XLOGF(WARN,</span></span>
 <span id="L133"><span class="lineNum">     133</span>                 :             :                   &quot;pread failed, fd: {}, file: {}, errno: {}, message: {}&quot;,</span>
 <span id="L134"><span class="lineNum">     134</span>                 :             :                   posix_fd-&gt;fd_,</span>
@@ -208,12 +208,12 @@
 <span id="L137"><span class="lineNum">     137</span>                 :             :                   std::strerror(errno));</span>
 <span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaUNC">           0 :             return makeError(StatusCode::kIOError);</span></span>
 <span id="L139"><span class="lineNum">     139</span>                 :             :         }</span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC tlaBgGNC">        5637 :         read_count += len;</span></span>
-<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 5636 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">        5637 :         if (len == 0) {</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC tlaBgGNC">        6015 :         read_count += len;</span></span>
+<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 6014 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">        6015 :         if (len == 0) {</span></span>
 <span id="L142"><span class="lineNum">     142</span>                 :             :             break;</span>
 <span id="L143"><span class="lineNum">     143</span>                 :             :         }</span>
 <span id="L144"><span class="lineNum">     144</span>                 :             :     }</span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">        5636 :     *result = std::string_view(buffer, read_count);</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">        6014 :     *result = std::string_view(buffer, read_count);</span></span>
 <span id="L146"><span class="lineNum">     146</span>                 :             :     RETURN_VOID;</span>
 <span id="L147"><span class="lineNum">     147</span>                 :             : }</span>
 <span id="L148"><span class="lineNum">     148</span>                 :             : </span>
