@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">16.7&nbsp;%</td>
+            <td class="headerCovTableEntryLo">20.0&nbsp;%</td>
             <td class="headerCovTableEntry">30</td>
-            <td class="headerCovTableEntry">5</td>
+            <td class="headerCovTableEntry">6</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-01 01:29:22</td>
+            <td class="headerValue">2026-07-13 11:53:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">20.0&nbsp;%</td>
-            <td class="headerCovTableEntry">30</td>
-            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntryLo">33.3&nbsp;%</td>
+            <td class="headerCovTableEntry">36</td>
+            <td class="headerCovTableEntry">12</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -183,89 +183,95 @@
 <span id="L112"><span class="lineNum">     112</span>                 :             :            dt == DataType::kMap;</span>
 <span id="L113"><span class="lineNum">     113</span>                 :             : }</span>
 <span id="L114"><span class="lineNum">     114</span>                 :             : </span>
-<span id="L115"><span class="lineNum">     115</span>                 :             : // Types valid for use in a user-defined row key schema.</span>
-<span id="L116"><span class="lineNum">     116</span>                 :             : constexpr bool is_key_compatible(DataType dt) {</span>
-<span id="L117"><span class="lineNum">     117</span>                 :             :     // None and private types cannot be key columns.</span>
-<span id="L118"><span class="lineNum">     118</span>   [<span class="tlaGBC" title="Branch 0 was taken 98 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 98 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          99 :     return dt != DataType::kNone &amp;&amp; dt != DataType::kDataBlock &amp;&amp; dt != DataType::kIndexBlock;</span></span>
-<span id="L119"><span class="lineNum">     119</span>                 :             : }</span>
-<span id="L120"><span class="lineNum">     120</span>                 :             : </span>
-<span id="L121"><span class="lineNum">     121</span>                 :             : // Private types used only in index block entries.</span>
-<span id="L122"><span class="lineNum">     122</span>                 :             : constexpr bool is_private_type(DataType dt) {</span>
-<span id="L123"><span class="lineNum">     123</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           7 :     return dt == DataType::kDataBlock || dt == DataType::kIndexBlock;</span></span>
-<span id="L124"><span class="lineNum">     124</span>                 :             : }</span>
-<span id="L125"><span class="lineNum">     125</span>                 :             : </span>
-<span id="L126"><span class="lineNum">     126</span>                 :             : // =============================================================================</span>
-<span id="L127"><span class="lineNum">     127</span>                 :             : // Wire size: the fixed byte count for fixed-size types.</span>
-<span id="L128"><span class="lineNum">     128</span>                 :             : // Returns 0 for variable-length and compound types.</span>
-<span id="L129"><span class="lineNum">     129</span>                 :             : // =============================================================================</span>
-<span id="L130"><span class="lineNum">     130</span>                 :             : </span>
-<span id="L131"><span class="lineNum">     131</span>                 :             : // clang-format off</span>
-<span id="L132"><span class="lineNum">     132</span>                 :             : constexpr size_t fixed_size_of(DataType dt) {</span>
-<span id="L133"><span class="lineNum">     133</span>                 :             :     switch (dt) {</span>
-<span id="L134"><span class="lineNum">     134</span>                 :             :     case DataType::kBool:</span>
-<span id="L135"><span class="lineNum">     135</span>                 :             :     case DataType::kInt8:</span>
-<span id="L136"><span class="lineNum">     136</span>                 :             :     case DataType::kUint8:       return 1;</span>
-<span id="L137"><span class="lineNum">     137</span>                 :             :     case DataType::kInt16:</span>
-<span id="L138"><span class="lineNum">     138</span>                 :             :     case DataType::kUint16:      return 2;</span>
-<span id="L139"><span class="lineNum">     139</span>                 :             :     case DataType::kInt32:</span>
-<span id="L140"><span class="lineNum">     140</span>                 :             :     case DataType::kUint32:</span>
-<span id="L141"><span class="lineNum">     141</span>                 :             :     case DataType::kFloat:       return 4;</span>
-<span id="L142"><span class="lineNum">     142</span>                 :             :     case DataType::kInt64:</span>
-<span id="L143"><span class="lineNum">     143</span>                 :             :     case DataType::kUint64:</span>
-<span id="L144"><span class="lineNum">     144</span>                 :             :     case DataType::kDouble:      return 8;</span>
-<span id="L145"><span class="lineNum">     145</span>                 :             :     case DataType::kLongDouble:  return 16;</span>
-<span id="L146"><span class="lineNum">     146</span>                 :             :     default:                     return 0;</span>
-<span id="L147"><span class="lineNum">     147</span>                 :             :     }</span>
-<span id="L148"><span class="lineNum">     148</span>                 :             : }</span>
-<span id="L149"><span class="lineNum">     149</span>                 :             : // clang-format on</span>
-<span id="L150"><span class="lineNum">     150</span>                 :             : </span>
-<span id="L151"><span class="lineNum">     151</span>                 :             : // =============================================================================</span>
-<span id="L152"><span class="lineNum">     152</span>                 :             : // String representation (constexpr in C++17 via string_view).</span>
-<span id="L153"><span class="lineNum">     153</span>                 :             : // =============================================================================</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : constexpr bool is_valid_data_type(DataType dt) {</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :     return static_cast&lt;uint8_t&gt;(dt) &lt;= static_cast&lt;uint8_t&gt;(DataType::kIndexBlock);</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             : }</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             : </span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : // Types valid for use in a user-defined row key schema.</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             : constexpr bool is_key_compatible(DataType dt) {</span>
+<span id="L121"><span class="lineNum">     121</span>   [<span class="tlaGBC" title="Branch 0 was taken 112 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 111 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC tlaBgGNC">         113 :     return is_valid_data_type(dt) &amp;&amp; dt != DataType::kNone &amp;&amp; dt != DataType::kDataBlock &amp;&amp;</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 111 times"> + </span>]
+<span id="L122"><span class="lineNum">     122</span>                 :             :            dt != DataType::kIndexBlock;</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             : }</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             : </span>
+<span id="L125"><span class="lineNum">     125</span>                 :             : // Private types used only in index block entries.</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             : constexpr bool is_private_type(DataType dt) {</span>
+<span id="L127"><span class="lineNum">     127</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 100 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 153 times"> + </span> :<span class="tlaGNC">         421 :     return dt == DataType::kDataBlock || dt == DataType::kIndexBlock;</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 111 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 54 times"> + </span>]
+<span id="L128"><span class="lineNum">     128</span>                 :             : }</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : </span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : // =============================================================================</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             : // Wire size: the fixed byte count for fixed-size types.</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : // Returns 0 for variable-length and compound types.</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : // =============================================================================</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             : </span>
+<span id="L135"><span class="lineNum">     135</span>                 :             : // clang-format off</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : constexpr size_t fixed_size_of(DataType dt) {</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :     switch (dt) {</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :     case DataType::kBool:</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :     case DataType::kInt8:</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :     case DataType::kUint8:       return 1;</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :     case DataType::kInt16:</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             :     case DataType::kUint16:      return 2;</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             :     case DataType::kInt32:</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             :     case DataType::kUint32:</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             :     case DataType::kFloat:       return 4;</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             :     case DataType::kInt64:</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             :     case DataType::kUint64:</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             :     case DataType::kDouble:      return 8;</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             :     case DataType::kLongDouble:  return 16;</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :     default:                     return 0;</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             :     }</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             : }</span>
+<span id="L153"><span class="lineNum">     153</span>                 :             : // clang-format on</span>
 <span id="L154"><span class="lineNum">     154</span>                 :             : </span>
-<span id="L155"><span class="lineNum">     155</span>                 :             : // clang-format off</span>
-<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">           1 : constexpr std::string_view data_type_name(DataType dt) {</span></span>
-<span id="L157"><span class="lineNum">     157</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           1 :     switch (dt) {</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :             : // =============================================================================</span>
+<span id="L156"><span class="lineNum">     156</span>                 :             : // String representation (constexpr in C++17 via string_view).</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             : // =============================================================================</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             : </span>
+<span id="L159"><span class="lineNum">     159</span>                 :             : // clang-format off</span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">           2 : constexpr std::string_view data_type_name(DataType dt) {</span></span>
+<span id="L161"><span class="lineNum">     161</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           2 :     switch (dt) {</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaUNC" title="Branch 16 was not taken"> - </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaUNC" title="Branch 18 was not taken"> - </span> 
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaUNC" title="Branch 20 was not taken"> - </span><span class="tlaGBC" title="Branch 21 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 22 was not taken"> - </span> 
-<span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 23 was not taken"> - </span>]
-<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     case DataType::kNone:       return &quot;None&quot;;</span></span>
-<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaUNC">           0 :     case DataType::kBool:       return &quot;Bool&quot;;</span></span>
-<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaUNC">           0 :     case DataType::kInt8:       return &quot;Int8&quot;;</span></span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaUNC">           0 :     case DataType::kUint8:      return &quot;Uint8&quot;;</span></span>
-<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaUNC">           0 :     case DataType::kInt16:      return &quot;Int16&quot;;</span></span>
-<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaUNC">           0 :     case DataType::kUint16:     return &quot;Uint16&quot;;</span></span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaUNC">           0 :     case DataType::kInt32:      return &quot;Int32&quot;;</span></span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaUNC">           0 :     case DataType::kUint32:     return &quot;Uint32&quot;;</span></span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaUNC">           0 :     case DataType::kInt64:      return &quot;Int64&quot;;</span></span>
-<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaUNC">           0 :     case DataType::kUint64:     return &quot;Uint64&quot;;</span></span>
-<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaUNC">           0 :     case DataType::kFloat:      return &quot;Float&quot;;</span></span>
-<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaUNC">           0 :     case DataType::kDouble:     return &quot;Double&quot;;</span></span>
-<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaUNC">           0 :     case DataType::kLongDouble: return &quot;LongDouble&quot;;</span></span>
-<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaUNC">           0 :     case DataType::kTime:       return &quot;Time&quot;;</span></span>
-<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaUNC">           0 :     case DataType::kVersion:    return &quot;Version&quot;;</span></span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaUNC">           0 :     case DataType::kString:     return &quot;String&quot;;</span></span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaUNC">           0 :     case DataType::kU16String:  return &quot;U16String&quot;;</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaUNC">           0 :     case DataType::kU32String:  return &quot;U32String&quot;;</span></span>
-<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaUNC">           0 :     case DataType::kBinary:     return &quot;Binary&quot;;</span></span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaUNC">           0 :     case DataType::kArray:      return &quot;Array&quot;;</span></span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaUNC">           0 :     case DataType::kMap:        return &quot;Map&quot;;</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC tlaBgGNC">           1 :     case DataType::kDataBlock:  return &quot;DataBlock&quot;;</span></span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     case DataType::kIndexBlock: return &quot;IndexBlock&quot;;</span></span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaUNC">           0 :     default:                    return &quot;?&quot;;</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :             :     }</span>
-<span id="L183"><span class="lineNum">     183</span>                 :             :     return &quot;Unknown&quot;;</span>
-<span id="L184"><span class="lineNum">     184</span>                 :             : }</span>
-<span id="L185"><span class="lineNum">     185</span>                 :             : // clang-format on</span>
-<span id="L186"><span class="lineNum">     186</span>                 :             : </span>
-<span id="L187"><span class="lineNum">     187</span>                 :             : // Stream output for diagnostics and test failure messages.</span>
-<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaUNC">           0 : inline std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, DataType dt) {</span></span>
-<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaUNC">           0 :     return os &lt;&lt; data_type_name(dt);</span></span>
-<span id="L190"><span class="lineNum">     190</span>                 :             : }</span>
-<span id="L191"><span class="lineNum">     191</span>                 :             : </span>
-<span id="L192"><span class="lineNum">     192</span>                 :             : } // namespace pl::sstv2::types</span>
+<span class="lineNum">        </span>             <span class="tlaGBC" title="Branch 23 was taken 1 time"> + </span>]
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     case DataType::kNone:       return &quot;None&quot;;</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaUNC">           0 :     case DataType::kBool:       return &quot;Bool&quot;;</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaUNC">           0 :     case DataType::kInt8:       return &quot;Int8&quot;;</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaUNC">           0 :     case DataType::kUint8:      return &quot;Uint8&quot;;</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaUNC">           0 :     case DataType::kInt16:      return &quot;Int16&quot;;</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaUNC">           0 :     case DataType::kUint16:     return &quot;Uint16&quot;;</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaUNC">           0 :     case DataType::kInt32:      return &quot;Int32&quot;;</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaUNC">           0 :     case DataType::kUint32:     return &quot;Uint32&quot;;</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaUNC">           0 :     case DataType::kInt64:      return &quot;Int64&quot;;</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaUNC">           0 :     case DataType::kUint64:     return &quot;Uint64&quot;;</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaUNC">           0 :     case DataType::kFloat:      return &quot;Float&quot;;</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaUNC">           0 :     case DataType::kDouble:     return &quot;Double&quot;;</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaUNC">           0 :     case DataType::kLongDouble: return &quot;LongDouble&quot;;</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaUNC">           0 :     case DataType::kTime:       return &quot;Time&quot;;</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaUNC">           0 :     case DataType::kVersion:    return &quot;Version&quot;;</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaUNC">           0 :     case DataType::kString:     return &quot;String&quot;;</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaUNC">           0 :     case DataType::kU16String:  return &quot;U16String&quot;;</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaUNC">           0 :     case DataType::kU32String:  return &quot;U32String&quot;;</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC">           0 :     case DataType::kBinary:     return &quot;Binary&quot;;</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaUNC">           0 :     case DataType::kArray:      return &quot;Array&quot;;</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaUNC">           0 :     case DataType::kMap:        return &quot;Map&quot;;</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC tlaBgGNC">           1 :     case DataType::kDataBlock:  return &quot;DataBlock&quot;;</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     case DataType::kIndexBlock: return &quot;IndexBlock&quot;;</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC tlaBgGNC">           1 :     default:                    return &quot;?&quot;;</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :     }</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             :     return &quot;Unknown&quot;;</span>
+<span id="L188"><span class="lineNum">     188</span>                 :             : }</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             : // clang-format on</span>
+<span id="L190"><span class="lineNum">     190</span>                 :             : </span>
+<span id="L191"><span class="lineNum">     191</span>                 :             : // Stream output for diagnostics and test failure messages.</span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaUNC tlaBgUNC">           0 : inline std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, DataType dt) {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaUNC">           0 :     return os &lt;&lt; data_type_name(dt);</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :             : }</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             : </span>
+<span id="L196"><span class="lineNum">     196</span>                 :             : } // namespace pl::sstv2::types</span>
         </pre>
               </td>
             </tr>

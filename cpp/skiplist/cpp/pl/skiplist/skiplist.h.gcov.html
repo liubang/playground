@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-01 01:29:22</td>
+            <td class="headerValue">2026-07-13 11:53:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -155,19 +155,19 @@
 <span id="L84"><span class="lineNum">      84</span>                 :             :         // 查找每一层的前驱节点 (&lt;= 保证 FIFO: 新节点在等值 key 之后)</span>
 <span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">       15884 :         Node* cur = head_;</span></span>
 <span id="L86"><span class="lineNum">      86</span>         [<span class="tlaGBC" title="Branch 0 was taken 270028 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15884 times"> + </span>]:<span class="tlaGNC">      285912 :         for (int i = MAX_HEIGHT; i &gt;= 0; --i) {</span></span>
-<span id="L87"><span class="lineNum">      87</span>   [<span class="tlaGBC" title="Branch 0 was taken 273052 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 168098 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 10 times"> + </span>]:<span class="tlaGNC">      441150 :             while (cur-&gt;next[i] != nullptr &amp;&amp; cmp_.compare(cur-&gt;next[i]-&gt;key, key) &lt;= 0) {</span></span>
+<span id="L87"><span class="lineNum">      87</span>   [<span class="tlaGBC" title="Branch 0 was taken 286027 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 141078 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 10 times"> + </span>]:<span class="tlaGNC">      427105 :             while (cur-&gt;next[i] != nullptr &amp;&amp; cmp_.compare(cur-&gt;next[i]-&gt;key, key) &lt;= 0) {</span></span>
 <span id="L88"><span class="lineNum">      88</span>                 :             :                 cur = cur-&gt;next[i];</span>
 <span id="L89"><span class="lineNum">      89</span>                 :             :             }</span>
-<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 31750 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 238278 times"> + </span>]:<span class="tlaGNC">      270028 :             if (i &lt;= height) {</span></span>
-<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">       31750 :                 prev_[i] = cur;</span></span>
+<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 31765 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 238263 times"> + </span>]:<span class="tlaGNC">      270028 :             if (i &lt;= height) {</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">       31765 :                 prev_[i] = cur;</span></span>
 <span id="L92"><span class="lineNum">      92</span>                 :             :             }</span>
 <span id="L93"><span class="lineNum">      93</span>                 :             :         }</span>
 <span id="L94"><span class="lineNum">      94</span>                 :             : </span>
 <span id="L95"><span class="lineNum">      95</span>                 :             :         // 构建节点 + 从下到上发布 (先 level 0, 保证读者从任意高层回落时能找到)</span>
 <span id="L96"><span class="lineNum">      96</span>         [<span class="tlaGBC" title="Branch 0 was taken 15884 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       15884 :         auto* node = new Node(key, value, height);</span></span>
-<span id="L97"><span class="lineNum">      97</span>         [<span class="tlaGBC" title="Branch 0 was taken 31750 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15884 times"> + </span>]:<span class="tlaGNC">       47634 :         for (int i = 0; i &lt;= height; ++i) {</span></span>
-<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">       31750 :             node-&gt;next[i] = prev_[i]-&gt;next[i];</span></span>
-<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">       31750 :             prev_[i]-&gt;next[i] = node;</span></span>
+<span id="L97"><span class="lineNum">      97</span>         [<span class="tlaGBC" title="Branch 0 was taken 31765 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15884 times"> + </span>]:<span class="tlaGNC">       47649 :         for (int i = 0; i &lt;= height; ++i) {</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">       31765 :             node-&gt;next[i] = prev_[i]-&gt;next[i];</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">       31765 :             prev_[i]-&gt;next[i] = node;</span></span>
 <span id="L100"><span class="lineNum">     100</span>                 :             :         }</span>
 <span id="L101"><span class="lineNum">     101</span>                 :             : </span>
 <span id="L102"><span class="lineNum">     102</span>                 :             :         size_.fetch_add(1, std::memory_order_relaxed);</span>
@@ -181,11 +181,11 @@
 <span id="L110"><span class="lineNum">     110</span>                 :             :         bool found = false;</span>
 <span id="L111"><span class="lineNum">     111</span>                 :             : </span>
 <span id="L112"><span class="lineNum">     112</span>         [<span class="tlaGBC" title="Branch 0 was taken 935 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 55 times"> + </span>]:<span class="tlaGNC">         990 :         for (int i = MAX_HEIGHT; i &gt;= 0; --i) {</span></span>
-<span id="L113"><span class="lineNum">     113</span>         [<span class="tlaGBC" title="Branch 0 was taken 187 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 762 times"> + </span>]:<span class="tlaGNC">         949 :             while (cur-&gt;next[i] != nullptr &amp;&amp; cmp_.compare(cur-&gt;next[i]-&gt;key, key) &lt; 0) {</span></span>
+<span id="L113"><span class="lineNum">     113</span>         [<span class="tlaGBC" title="Branch 0 was taken 258 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 690 times"> + </span>]:<span class="tlaGNC">         948 :             while (cur-&gt;next[i] != nullptr &amp;&amp; cmp_.compare(cur-&gt;next[i]-&gt;key, key) &lt; 0) {</span></span>
 <span id="L114"><span class="lineNum">     114</span>                 :             :                 cur = cur-&gt;next[i];</span>
 <span id="L115"><span class="lineNum">     115</span>                 :             :             }</span>
 <span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">         935 :             prev_[i] = cur;</span></span>
-<span id="L117"><span class="lineNum">     117</span>         [<span class="tlaGBC" title="Branch 0 was taken 173 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 762 times"> + </span>]:<span class="tlaGNC">         935 :             if (cur-&gt;next[i] != nullptr &amp;&amp; cmp_.compare(cur-&gt;next[i]-&gt;key, key) == 0) {</span></span>
+<span id="L117"><span class="lineNum">     117</span>         [<span class="tlaGBC" title="Branch 0 was taken 245 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 690 times"> + </span>]:<span class="tlaGNC">         935 :             if (cur-&gt;next[i] != nullptr &amp;&amp; cmp_.compare(cur-&gt;next[i]-&gt;key, key) == 0) {</span></span>
 <span id="L118"><span class="lineNum">     118</span>                 :             :                 found = true;</span>
 <span id="L119"><span class="lineNum">     119</span>                 :             :             }</span>
 <span id="L120"><span class="lineNum">     120</span>                 :             :         }</span>
@@ -197,9 +197,9 @@
 <span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">          54 :         Node* target = prev_[0]-&gt;next[0];</span></span>
 <span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">          54 :         int target_height = static_cast&lt;int&gt;(target-&gt;next.size()) - 1;</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : </span>
-<span id="L129"><span class="lineNum">     129</span>         [<span class="tlaGBC" title="Branch 0 was taken 94 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 54 times"> + </span>]:<span class="tlaGNC">         148 :         for (int i = target_height; i &gt;= 0; --i) {</span></span>
-<span id="L130"><span class="lineNum">     130</span>         [<span class="tlaGBC" title="Branch 0 was taken 94 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          94 :             if (prev_[i]-&gt;next[i] == target) {</span></span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          94 :                 prev_[i]-&gt;next[i] = target-&gt;next[i];</span></span>
+<span id="L129"><span class="lineNum">     129</span>         [<span class="tlaGBC" title="Branch 0 was taken 108 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 54 times"> + </span>]:<span class="tlaGNC">         162 :         for (int i = target_height; i &gt;= 0; --i) {</span></span>
+<span id="L130"><span class="lineNum">     130</span>         [<span class="tlaGBC" title="Branch 0 was taken 108 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         108 :             if (prev_[i]-&gt;next[i] == target) {</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">         108 :                 prev_[i]-&gt;next[i] = target-&gt;next[i];</span></span>
 <span id="L132"><span class="lineNum">     132</span>                 :             :             }</span>
 <span id="L133"><span class="lineNum">     133</span>                 :             :         }</span>
 <span id="L134"><span class="lineNum">     134</span>                 :             : </span>
@@ -214,14 +214,14 @@
 <span id="L143"><span class="lineNum">     143</span>                 :             :     // -----------------------------------------------------------------------</span>
 <span id="L144"><span class="lineNum">     144</span>                 :             : </span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :     // 返回 key &gt;= search_key 的第一个节点, 未找到返回 nullptr</span>
-<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">    55037839 :     [[nodiscard]] const Node* find_first_gte(const Key&amp; search_key) const {</span></span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">    55037839 :         Node* cur = head_;</span></span>
-<span id="L148"><span class="lineNum">     148</span>         [<span class="tlaGBC" title="Branch 0 was taken 575435805 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 55037839 times"> + </span>]:<span class="tlaGNC">   630473644 :         for (int i = MAX_HEIGHT; i &gt;= 0; --i) {</span></span>
-<span id="L149"><span class="lineNum">     149</span>   [<span class="tlaGBC" title="Branch 0 was taken 663752074 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 197287119 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 8 times"> + </span>]:<span class="tlaGNC">   861039193 :             while (cur-&gt;next[i] != nullptr &amp;&amp; cmp_.compare(cur-&gt;next[i]-&gt;key, search_key) &lt; 0) {</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">    15039125 :     [[nodiscard]] const Node* find_first_gte(const Key&amp; search_key) const {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">    15039125 :         Node* cur = head_;</span></span>
+<span id="L148"><span class="lineNum">     148</span>         [<span class="tlaGBC" title="Branch 0 was taken 102202759 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15039125 times"> + </span>]:<span class="tlaGNC">   117241884 :         for (int i = MAX_HEIGHT; i &gt;= 0; --i) {</span></span>
+<span id="L149"><span class="lineNum">     149</span>   [<span class="tlaGBC" title="Branch 0 was taken 104338328 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 55079022 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 6 times"> + </span>]:<span class="tlaGNC">   159417350 :             while (cur-&gt;next[i] != nullptr &amp;&amp; cmp_.compare(cur-&gt;next[i]-&gt;key, search_key) &lt; 0) {</span></span>
 <span id="L150"><span class="lineNum">     150</span>                 :             :                 cur = cur-&gt;next[i];</span>
 <span id="L151"><span class="lineNum">     151</span>                 :             :             }</span>
 <span id="L152"><span class="lineNum">     152</span>                 :             :         }</span>
-<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">    55037839 :         return cur-&gt;next[0];</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">    15039125 :         return cur-&gt;next[0];</span></span>
 <span id="L154"><span class="lineNum">     154</span>                 :             :     }</span>
 <span id="L155"><span class="lineNum">     155</span>                 :             : </span>
 <span id="L156"><span class="lineNum">     156</span>                 :             :     // 返回 key &gt; search_key 的第一个节点, 未找到返回 nullptr</span>
@@ -294,7 +294,7 @@
 <span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">           7 :     [[nodiscard]] ConstIterator lower_bound(const Key&amp; search_key) const {</span></span>
 <span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">           7 :         Node* cur = head_;</span></span>
 <span id="L224"><span class="lineNum">     224</span>         [<span class="tlaGBC" title="Branch 0 was taken 119 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">         126 :         for (int i = MAX_HEIGHT; i &gt;= 0; --i) {</span></span>
-<span id="L225"><span class="lineNum">     225</span>         [<span class="tlaGBC" title="Branch 0 was taken 36 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 91 times"> + </span>]:<span class="tlaGNC">         127 :             while (cur-&gt;next[i] != nullptr &amp;&amp; cmp_.compare(cur-&gt;next[i]-&gt;key, search_key) &lt; 0) {</span></span>
+<span id="L225"><span class="lineNum">     225</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 106 times"> + </span>]:<span class="tlaGNC">         131 :             while (cur-&gt;next[i] != nullptr &amp;&amp; cmp_.compare(cur-&gt;next[i]-&gt;key, search_key) &lt; 0) {</span></span>
 <span id="L226"><span class="lineNum">     226</span>                 :             :                 cur = cur-&gt;next[i];</span>
 <span id="L227"><span class="lineNum">     227</span>                 :             :             }</span>
 <span id="L228"><span class="lineNum">     228</span>                 :             :         }</span>
@@ -315,8 +315,8 @@
 <span id="L242"><span class="lineNum">     242</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15882 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       15884 :         static std::uniform_int_distribution&lt;int&gt; dist(0, 1);</span></span>
 <span id="L243"><span class="lineNum">     243</span>                 :             : </span>
 <span id="L244"><span class="lineNum">     244</span>                 :             :         int height = 0;</span>
-<span id="L245"><span class="lineNum">     245</span>   [<span class="tlaGBC" title="Branch 0 was taken 31750 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 15866 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 15884 times"> + </span>]:<span class="tlaGNC">       63500 :         while (height &lt; MAX_HEIGHT &amp;&amp; dist(rng) == 0) {</span></span>
-<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">       15866 :             ++height;</span></span>
+<span id="L245"><span class="lineNum">     245</span>   [<span class="tlaGBC" title="Branch 0 was taken 31765 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 15881 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 15884 times"> + </span>]:<span class="tlaGNC">       63530 :         while (height &lt; MAX_HEIGHT &amp;&amp; dist(rng) == 0) {</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">       15881 :             ++height;</span></span>
 <span id="L247"><span class="lineNum">     247</span>                 :             :         }</span>
 <span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">       15884 :         return height;</span></span>
 <span id="L249"><span class="lineNum">     249</span>                 :             :     }</span>

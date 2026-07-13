@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-01 01:29:22</td>
+            <td class="headerValue">2026-07-13 11:53:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">91.7&nbsp;%</td>
@@ -98,15 +98,15 @@
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : namespace pl {</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : </span>
-<span id="L30"><span class="lineNum">      30</span>   [<span class="tlaGBC" title="Branch 0 was taken 6611 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC tlaBgGNC">       17787 : class [[nodiscard]] Status {</span></span>
+<span id="L30"><span class="lineNum">      30</span>   [<span class="tlaGBC" title="Branch 0 was taken 6989 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC tlaBgGNC">       19659 : class [[nodiscard]] Status {</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 1 time"> + </span>]
 <span id="L31"><span class="lineNum">      31</span>                 :             :     struct status_ok_t {};</span>
 <span id="L32"><span class="lineNum">      32</span>                 :             : </span>
 <span id="L33"><span class="lineNum">      33</span>                 :             : public:</span>
 <span id="L34"><span class="lineNum">      34</span>                 :             :     Status() = delete;</span>
-<span id="L35"><span class="lineNum">      35</span>   [<span class="tlaGBC" title="Branch 0 was taken 6621 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        9610 :     explicit Status(status_code_t code) : data_(construct(code, nullptr)) {}</span></span>
+<span id="L35"><span class="lineNum">      35</span>   [<span class="tlaGBC" title="Branch 0 was taken 6999 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       10348 :     explicit Status(status_code_t code) : data_(construct(code, nullptr)) {}</span></span>
 <span id="L36"><span class="lineNum">      36</span>                 :             : </span>
-<span id="L37"><span class="lineNum">      37</span>         [<span class="tlaGBC" title="Branch 0 was taken 6584 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        6584 :     Status(const Status&amp; other) { *this = other; }</span></span>
+<span id="L37"><span class="lineNum">      37</span>         [<span class="tlaGBC" title="Branch 0 was taken 7718 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        7718 :     Status(const Status&amp; other) { *this = other; }</span></span>
 <span id="L38"><span class="lineNum">      38</span>                 :             :     Status(Status&amp;&amp; other) = default;</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             : </span>
 <span id="L40"><span class="lineNum">      40</span>                 :             :     constexpr static status_ok_t OK{};</span>
@@ -131,13 +131,13 @@
 <span id="L59"><span class="lineNum">      59</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         setPayload(std::forward&lt;T&gt;(payload));</span></span>
 <span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">           1 :     }</span></span>
 <span id="L61"><span class="lineNum">      61</span>                 :             : </span>
-<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">        6584 :     Status&amp; operator=(const Status&amp; other) {</span></span>
-<span id="L63"><span class="lineNum">      63</span>         [<span class="tlaGBC" title="Branch 0 was taken 6584 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        6584 :         if (std::addressof(other) != this) {</span></span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">        6584 :             data_ = construct(other.code(),</span></span>
-<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">        6584 :                               (other.rep() != nullptr) ? std::make_unique&lt;StatusRep&gt;(*other.rep())</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">        7718 :     Status&amp; operator=(const Status&amp; other) {</span></span>
+<span id="L63"><span class="lineNum">      63</span>         [<span class="tlaGBC" title="Branch 0 was taken 7718 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        7718 :         if (std::addressof(other) != this) {</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">        7718 :             data_ = construct(other.code(),</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">        7718 :                               (other.rep() != nullptr) ? std::make_unique&lt;StatusRep&gt;(*other.rep())</span></span>
 <span id="L66"><span class="lineNum">      66</span>                 :             :                                                        : nullptr);</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :         }</span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">        6584 :         return *this;</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">        7718 :         return *this;</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :     }</span>
 <span id="L70"><span class="lineNum">      70</span>                 :             :     Status&amp; operator=(Status&amp;&amp; other) = default;</span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : </span>
@@ -150,8 +150,8 @@
 <span id="L78"><span class="lineNum">      78</span>                 :             :     std::ostream&amp; operator=(std::ostream&amp; os) const { return os &lt;&lt; describe(); }</span>
 <span id="L79"><span class="lineNum">      79</span>                 :             : </span>
 <span id="L80"><span class="lineNum">      80</span>                 :             :     [[nodiscard]] status_code_t code() const {</span>
-<span id="L81"><span class="lineNum">      81</span>   [<span class="tlaGBC" title="Branch 0 was taken 2860 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2192 times"> + </span> :<span class="tlaGNC">       16054 :         return reinterpret_cast&lt;uintptr_t&gt;(data_.get()) &gt;&gt; kPtrBits;</span></span>
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 380 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 1817 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 7 was taken 2187 times"> + </span><span class="tlaGBC" title="Branch 8 was taken 4 times"> + </span> 
+<span id="L81"><span class="lineNum">      81</span>   [<span class="tlaGBC" title="Branch 0 was taken 3238 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2570 times"> + </span> :<span class="tlaGNC">       18700 :         return reinterpret_cast&lt;uintptr_t&gt;(data_.get()) &gt;&gt; kPtrBits;</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 851 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 1724 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 7 was taken 2565 times"> + </span><span class="tlaGBC" title="Branch 8 was taken 4 times"> + </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 10 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 11 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 12 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaGBC" title="Branch 22 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
@@ -202,12 +202,12 @@
 <span id="L123"><span class="lineNum">     123</span>                 :             :     using StatusPtr = std::unique_ptr&lt;StatusRep, StatusRepDeleter&gt;;</span>
 <span id="L124"><span class="lineNum">     124</span>                 :             : </span>
 <span id="L125"><span class="lineNum">     125</span>                 :             :     static StatusPtr construct(status_code_t code, std::unique_ptr&lt;StatusRep&gt; rep) {</span>
-<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">        6652 :         return StatusPtr(reinterpret_cast&lt;StatusRep*&gt;(reinterpret_cast&lt;uintptr_t&gt;(rep.release()) |</span></span>
-<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">        7335 :                                                       (uintptr_t(code) &lt;&lt; kPtrBits)));</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">        7786 :         return StatusPtr(reinterpret_cast&lt;StatusRep*&gt;(reinterpret_cast&lt;uintptr_t&gt;(rep.release()) |</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">        8469 :                                                       (uintptr_t(code) &lt;&lt; kPtrBits)));</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :             :     }</span>
 <span id="L129"><span class="lineNum">     129</span>                 :             : </span>
 <span id="L130"><span class="lineNum">     130</span>                 :             :     static StatusRep* extractPtr(StatusRep* rep) {</span>
-<span id="L131"><span class="lineNum">     131</span>   [<span class="tlaGBC" title="Branch 0 was taken 79 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7731 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 6557 times"> + </span> :<span class="tlaGNC">       14412 :         return reinterpret_cast&lt;StatusRep*&gt;(reinterpret_cast&lt;uintptr_t&gt;(rep) &amp; kPtrMask);</span></span>
+<span id="L131"><span class="lineNum">     131</span>   [<span class="tlaGBC" title="Branch 0 was taken 79 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9318 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 7691 times"> + </span> :<span class="tlaGNC">       17133 :         return reinterpret_cast&lt;StatusRep*&gt;(reinterpret_cast&lt;uintptr_t&gt;(rep) &amp; kPtrMask);</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaGBC" title="Branch 11 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 12 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 14 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span>]

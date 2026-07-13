@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">95.3&nbsp;%</td>
-            <td class="headerCovTableEntry">43</td>
-            <td class="headerCovTableEntry">41</td>
+            <td class="headerCovTableEntryHi">95.5&nbsp;%</td>
+            <td class="headerCovTableEntry">44</td>
+            <td class="headerCovTableEntry">42</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-01 01:29:22</td>
+            <td class="headerValue">2026-07-13 11:53:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">91.3&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">53.0&nbsp;%</td>
-            <td class="headerCovTableEntry">132</td>
-            <td class="headerCovTableEntry">70</td>
+            <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
+            <td class="headerCovTableEntry">142</td>
+            <td class="headerCovTableEntry">71</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -122,9 +122,9 @@
 <span id="L51"><span class="lineNum">      51</span>                 :             : // EncodeResult: output of a pattern encoder.</span>
 <span id="L52"><span class="lineNum">      52</span>                 :             : // =============================================================================</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             : </span>
-<span id="L54"><span class="lineNum">      54</span>   [<span class="tlaGBC" title="Branch 0 was taken 135 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 135 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">        2006 : struct EncodeResult {</span></span>
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 267 times"> + </span> 
-<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 267 times"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span>]
+<span id="L54"><span class="lineNum">      54</span>   [<span class="tlaGBC" title="Branch 0 was taken 141 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 141 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">        2096 : struct EncodeResult {</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 279 times"> + </span> 
+<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 279 times"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span>]
 <span id="L55"><span class="lineNum">      55</span>                 :             :     std::string data; // Encoded bytes (includes pattern_id + row_count header).</span>
 <span id="L56"><span class="lineNum">      56</span>                 :             :     size_t row_count; // Number of rows encoded.</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : };</span>
@@ -176,7 +176,7 @@
 <span id="L103"><span class="lineNum">     103</span>                 :             : //   - On LE platforms, scalar add is a single memcpy (no intermediate encode).</span>
 <span id="L104"><span class="lineNum">     104</span>                 :             : // =============================================================================</span>
 <span id="L105"><span class="lineNum">     105</span>                 :             : </span>
-<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">        1203 : template &lt;size_t CellSize&gt; class RawEncoder {</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">        1257 : template &lt;size_t CellSize&gt; class RawEncoder {</span></span>
 <span id="L107"><span class="lineNum">     107</span>                 :             :     static_assert(CellSize == 1 || CellSize == 2 || CellSize == 4 || CellSize == 8 ||</span>
 <span id="L108"><span class="lineNum">     108</span>                 :             :                       CellSize == 16,</span>
 <span id="L109"><span class="lineNum">     109</span>                 :             :                   &quot;CellSize must be 1, 2, 4, 8, or 16&quot;);</span>
@@ -191,48 +191,48 @@
 <span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">           1 :         row_count_ = 0;</span></span>
 <span id="L119"><span class="lineNum">     119</span>                 :             :     }</span>
 <span id="L120"><span class="lineNum">     120</span>                 :             : </span>
-<span id="L121"><span class="lineNum">     121</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 132 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        1184 :     void reserve(size_t expected_rows) { buf_.reserve(expected_rows * CellSize); }</span></span>
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 652 times"> + </span> 
+<span id="L121"><span class="lineNum">     121</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 138 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        1238 :     void reserve(size_t expected_rows) { buf_.reserve(expected_rows * CellSize); }</span></span>
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 676 times"> + </span> 
 <span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span>]
 <span id="L122"><span class="lineNum">     122</span>                 :             : </span>
 <span id="L123"><span class="lineNum">     123</span>                 :             :     // Primary: append raw bytes. Caller guarantees LE layout and exactly CellSize bytes.</span>
-<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">        1019 :     void add(const uint8_t* cell_bytes) noexcept {</span></span>
-<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">        1019 :         buf_.insert(buf_.end(), cell_bytes, cell_bytes + CellSize);</span></span>
-<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">        1019 :         ++row_count_;</span></span>
-<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">        1019 :     }</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">        1049 :     void add(const uint8_t* cell_bytes) noexcept {</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">        1049 :         buf_.insert(buf_.end(), cell_bytes, cell_bytes + CellSize);</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">        1049 :         ++row_count_;</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">        1049 :     }</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : </span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :     // Scalar overload (CellSize &lt;= 8): accepts the native unsigned integer type.</span>
 <span id="L130"><span class="lineNum">     130</span>                 :             :     // On LE platforms this compiles to a single memcpy; on BE it byte-swaps first.</span>
 <span id="L131"><span class="lineNum">     131</span>                 :             :     template &lt;size_t S = CellSize&gt;</span>
 <span id="L132"><span class="lineNum">     132</span>                 :             :         requires(S &lt;= 8)</span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">       14256 :     void add(detail::cell_type_t&lt;S&gt; v) noexcept {</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">       14292 :     void add(detail::cell_type_t&lt;S&gt; v) noexcept {</span></span>
 <span id="L134"><span class="lineNum">     134</span>                 :             :         if constexpr (CellSize == 1) {</span>
-<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">         205 :             buf_.push_back(v);</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">         211 :             buf_.push_back(v);</span></span>
 <span id="L136"><span class="lineNum">     136</span>                 :             :         } else {</span>
-<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">       14256 :             auto le = Endian::little(v);</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">       14292 :             auto le = Endian::little(v);</span></span>
 <span id="L138"><span class="lineNum">     138</span>                 :             :             const auto* p = reinterpret_cast&lt;const uint8_t*&gt;(&amp;le);</span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">       14256 :             buf_.insert(buf_.end(), p, p + CellSize);</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">       14292 :             buf_.insert(buf_.end(), p, p + CellSize);</span></span>
 <span id="L140"><span class="lineNum">     140</span>                 :             :         }</span>
-<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       14461 :         ++row_count_;</span></span>
-<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">       14256 :     }</span></span>
+<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       14503 :         ++row_count_;</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">       14292 :     }</span></span>
 <span id="L143"><span class="lineNum">     143</span>                 :             : </span>
 <span id="L144"><span class="lineNum">     144</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     [[nodiscard]] size_t row_count() const noexcept { return row_count_; }</span></span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :     [[nodiscard]] static constexpr size_t cell_size() noexcept { return CellSize; }</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             : </span>
 <span id="L147"><span class="lineNum">     147</span>                 :             :     // Serialize into an existing buffer (zero intermediate allocation).</span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">        1605 :     void finish_into(std::string* dst) const {</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">        1677 :     void finish_into(std::string* dst) const {</span></span>
 <span id="L149"><span class="lineNum">     149</span>                 :             :         const size_t header_max = 1 + 10; // pattern_id + varint</span>
-<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">        1605 :         dst-&gt;reserve(dst-&gt;size() + header_max + buf_.size());</span></span>
-<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">        1605 :         dst-&gt;push_back(static_cast&lt;char&gt;(static_cast&lt;uint8_t&gt;(PatternId::kRaw)));</span></span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">        1605 :         codec::encode_varint(row_count_, dst);</span></span>
-<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">        1605 :         dst-&gt;append(reinterpret_cast&lt;const char*&gt;(buf_.data()), buf_.size());</span></span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">        1605 :     }</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">        1677 :         dst-&gt;reserve(dst-&gt;size() + header_max + buf_.size());</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">        1677 :         dst-&gt;push_back(static_cast&lt;char&gt;(static_cast&lt;uint8_t&gt;(PatternId::kRaw)));</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">        1677 :         codec::encode_varint(row_count_, dst);</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">        1677 :         dst-&gt;append(reinterpret_cast&lt;const char*&gt;(buf_.data()), buf_.size());</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">        1677 :     }</span></span>
 <span id="L155"><span class="lineNum">     155</span>                 :             : </span>
-<span id="L156"><span class="lineNum">     156</span>         [<span class="tlaGBC" title="Branch 0 was taken 1604 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1604 :     [[nodiscard]] EncodeResult finish() const {</span></span>
+<span id="L156"><span class="lineNum">     156</span>         [<span class="tlaGBC" title="Branch 0 was taken 1676 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1676 :     [[nodiscard]] EncodeResult finish() const {</span></span>
 <span id="L157"><span class="lineNum">     157</span>                 :             :         EncodeResult r;</span>
-<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">        1604 :         r.row_count = row_count_;</span></span>
-<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 1604 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1604 :         finish_into(&amp;r.data);</span></span>
-<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">        1604 :         return r;</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">        1676 :         r.row_count = row_count_;</span></span>
+<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 1676 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1676 :         finish_into(&amp;r.data);</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">        1676 :         return r;</span></span>
 <span id="L161"><span class="lineNum">     161</span>                 :             :     }</span>
 <span id="L162"><span class="lineNum">     162</span>                 :             : </span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : private:</span>
@@ -256,48 +256,52 @@
 <span id="L181"><span class="lineNum">     181</span>                 :             : </span>
 <span id="L182"><span class="lineNum">     182</span>                 :             :     RawDecoder() = default;</span>
 <span id="L183"><span class="lineNum">     183</span>                 :             : </span>
-<span id="L184"><span class="lineNum">     184</span>         [<span class="tlaGBC" title="Branch 0 was taken 1055 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1055 :     [[nodiscard]] bool parse(std::string_view input) noexcept {</span></span>
+<span id="L184"><span class="lineNum">     184</span>         [<span class="tlaGBC" title="Branch 0 was taken 1072 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1072 :     [[nodiscard]] bool parse(std::string_view input) noexcept {</span></span>
 <span id="L185"><span class="lineNum">     185</span>                 :             :         const auto* src = reinterpret_cast&lt;const uint8_t*&gt;(input.data());</span>
 <span id="L186"><span class="lineNum">     186</span>                 :             :         const size_t len = input.size();</span>
 <span id="L187"><span class="lineNum">     187</span>                 :             : </span>
-<span id="L188"><span class="lineNum">     188</span>   [<span class="tlaGBC" title="Branch 0 was taken 1055 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 1054 times"> + </span>]:<span class="tlaGNC">        1055 :         if (len &lt; 1 || src[0] != static_cast&lt;uint8_t&gt;(PatternId::kRaw)) {</span></span>
+<span id="L188"><span class="lineNum">     188</span>   [<span class="tlaGBC" title="Branch 0 was taken 1072 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 1071 times"> + </span>]:<span class="tlaGNC">        1072 :         if (len &lt; 1 || src[0] != static_cast&lt;uint8_t&gt;(PatternId::kRaw)) {</span></span>
 <span id="L189"><span class="lineNum">     189</span>                 :             :             return false;</span>
 <span id="L190"><span class="lineNum">     190</span>                 :             :         }</span>
 <span id="L191"><span class="lineNum">     191</span>                 :             :         size_t pos = 1;</span>
 <span id="L192"><span class="lineNum">     192</span>                 :             : </span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">        1054 :         uint64_t rc = 0;</span></span>
-<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">        1054 :         const size_t n = codec::decode_varint(src + pos, len - pos, &amp;rc);</span></span>
-<span id="L195"><span class="lineNum">     195</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1054 times"> + </span>]:<span class="tlaGNC">        1054 :         if (n == 0) {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">        1071 :         uint64_t rc = 0;</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">        1071 :         const size_t n = codec::decode_varint(src + pos, len - pos, &amp;rc);</span></span>
+<span id="L195"><span class="lineNum">     195</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1071 times"> + </span>]:<span class="tlaGNC">        1071 :         if (n == 0) {</span></span>
 <span id="L196"><span class="lineNum">     196</span>                 :             :             return false;</span>
 <span id="L197"><span class="lineNum">     197</span>                 :             :         }</span>
-<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">        1054 :         pos += n;</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">        1071 :         pos += n;</span></span>
 <span id="L199"><span class="lineNum">     199</span>                 :             : </span>
-<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">        1054 :         const size_t payload = static_cast&lt;size_t&gt;(rc) * CellSize;</span></span>
-<span id="L201"><span class="lineNum">     201</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1053 times"> + </span>]:<span class="tlaGNC">        1054 :         if (pos + payload &gt; len) {</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">        1071 :         if (rc &gt; std::numeric_limits&lt;size_t&gt;::max() ||</span></span>
+<span id="L201"><span class="lineNum">     201</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1069 times"> + </span>]:<span class="tlaGNC">        1071 :             static_cast&lt;size_t&gt;(rc) &gt; (len - pos) / CellSize) {</span></span>
 <span id="L202"><span class="lineNum">     202</span>                 :             :             return false;</span>
 <span id="L203"><span class="lineNum">     203</span>                 :             :         }</span>
-<span id="L204"><span class="lineNum">     204</span>                 :             : </span>
-<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">        1053 :         cells_ = src + pos;</span></span>
-<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">        1053 :         row_count_ = static_cast&lt;size_t&gt;(rc);</span></span>
-<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">        1053 :         bytes_consumed_ = pos + payload;</span></span>
-<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">        1053 :         return true;</span></span>
-<span id="L209"><span class="lineNum">     209</span>                 :             :     }</span>
-<span id="L210"><span class="lineNum">     210</span>                 :             : </span>
-<span id="L211"><span class="lineNum">     211</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         267 :     [[nodiscard]] size_t row_count() const noexcept { return row_count_; }</span></span>
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
+<span id="L204"><span class="lineNum">     204</span>                 :             :         const size_t row_count = static_cast&lt;size_t&gt;(rc);</span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">         980 :         const size_t payload = row_count * CellSize;</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :             : </span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">        1069 :         cells_ = src + pos;</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">        1069 :         row_count_ = row_count;</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">        1069 :         bytes_consumed_ = pos + payload;</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">        1069 :         return true;</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :             :     }</span>
+<span id="L212"><span class="lineNum">     212</span>                 :             : </span>
+<span id="L213"><span class="lineNum">     213</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 89 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         533 :     [[nodiscard]] size_t row_count() const noexcept { return row_count_; }</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 432 times"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
 <span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span>]
-<span id="L212"><span class="lineNum">     212</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 87 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 87 times"> + </span> :<span class="tlaGNC">         265 :     [[nodiscard]] size_t bytes_consumed() const noexcept { return bytes_consumed_; }</span></span>
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 170 times"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaGBC" title="Branch 11 was taken 170 times"> + </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaGBC" title="Branch 13 was taken 172 times"> + </span> 
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 16 was not taken"> - </span><span class="tlaGBC" title="Branch 17 was taken 3 times"> + </span>]
-<span id="L213"><span class="lineNum">     213</span>                 :             :     [[nodiscard]] static constexpr size_t cell_size() noexcept { return CellSize; }</span>
-<span id="L214"><span class="lineNum">     214</span>                 :             : </span>
-<span id="L215"><span class="lineNum">     215</span>                 :             :     // Raw pointer to i-th cell (LE bytes).</span>
-<span id="L216"><span class="lineNum">     216</span>                 :             :     [[nodiscard]] const uint8_t* cell(size_t i) const noexcept {</span>
-<span id="L217"><span class="lineNum">     217</span>                 :             :         assert(i &lt; row_count_);</span>
-<span id="L218"><span class="lineNum">     218</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 300 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 16 times"> + </span> :<span class="tlaGNC">       13320 :         return cells_ + i * CellSize;</span></span>
+<span id="L214"><span class="lineNum">     214</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 88 times"> + </span> :<span class="tlaGNC">         792 :     [[nodiscard]] size_t bytes_consumed() const noexcept { return bytes_consumed_; }</span></span>
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaGBC" title="Branch 11 was taken 432 times"> + </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaGBC" title="Branch 13 was taken 3 times"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 16 was not taken"> - </span><span class="tlaGBC" title="Branch 17 was taken 88 times"> + </span><span class="tlaUNC" title="Branch 18 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 19 was taken 88 times"> + </span><span class="tlaUNC" title="Branch 20 was not taken"> - </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaUNC" title="Branch 22 was not taken"> - </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 24 was not taken"> - </span><span class="tlaGBC" title="Branch 25 was taken 173 times"> + </span><span class="tlaUNC" title="Branch 26 was not taken"> - </span><span class="tlaGBC" title="Branch 27 was taken 173 times"> + </span>]
+<span id="L215"><span class="lineNum">     215</span>                 :             :     [[nodiscard]] static constexpr size_t cell_size() noexcept { return CellSize; }</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             : </span>
+<span id="L217"><span class="lineNum">     217</span>                 :             :     // Raw pointer to i-th cell (LE bytes).</span>
+<span id="L218"><span class="lineNum">     218</span>                 :             :     [[nodiscard]] const uint8_t* cell(size_t i) const noexcept {</span>
+<span id="L219"><span class="lineNum">     219</span>                 :             :         assert(i &lt; row_count_);</span>
+<span id="L220"><span class="lineNum">     220</span>   [<span class="tlaGBC" title="Branch 0 was taken 303 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 17 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">       13329 :         return cells_ + i * CellSize;</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 10000 times"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1000 times"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 1000 times"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
@@ -307,36 +311,36 @@
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 34 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 35 was not taken"> - </span><span class="tlaGBC" title="Branch 36 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 37 was not taken"> - </span><span class="tlaGBC" title="Branch 38 was taken 1 time"> + </span> 
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 39 was not taken"> - </span><span class="tlaGBC" title="Branch 40 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 41 was not taken"> - </span><span class="tlaGBC" title="Branch 42 was taken 1 time"> + </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 43 was not taken"> - </span>]
-<span id="L219"><span class="lineNum">     219</span>                 :             :     }</span>
-<span id="L220"><span class="lineNum">     220</span>                 :             : </span>
-<span id="L221"><span class="lineNum">     221</span>                 :             :     // Typed accessor (CellSize &lt;= 8): returns host-order scalar.</span>
-<span id="L222"><span class="lineNum">     222</span>                 :             :     template &lt;size_t S = CellSize&gt;</span>
-<span id="L223"><span class="lineNum">     223</span>                 :             :         requires(S &lt;= 8)</span>
-<span id="L224"><span class="lineNum">     224</span>                 :             :     [[nodiscard]] detail::cell_type_t&lt;S&gt; get(size_t i) const noexcept {</span>
-<span id="L225"><span class="lineNum">     225</span>                 :             :         if constexpr (CellSize == 1) {</span>
-<span id="L226"><span class="lineNum">     226</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         168 :             return cell(i)[0];</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :             :     }</span>
+<span id="L222"><span class="lineNum">     222</span>                 :             : </span>
+<span id="L223"><span class="lineNum">     223</span>                 :             :     // Typed accessor (CellSize &lt;= 8): returns host-order scalar.</span>
+<span id="L224"><span class="lineNum">     224</span>                 :             :     template &lt;size_t S = CellSize&gt;</span>
+<span id="L225"><span class="lineNum">     225</span>                 :             :         requires(S &lt;= 8)</span>
+<span id="L226"><span class="lineNum">     226</span>                 :             :     [[nodiscard]] detail::cell_type_t&lt;S&gt; get(size_t i) const noexcept {</span>
+<span id="L227"><span class="lineNum">     227</span>                 :             :         if constexpr (CellSize == 1) {</span>
+<span id="L228"><span class="lineNum">     228</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         169 :             return cell(i)[0];</span></span>
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
-<span id="L227"><span class="lineNum">     227</span>                 :             :         } else {</span>
-<span id="L228"><span class="lineNum">     228</span>                 :             :             detail::cell_type_t&lt;S&gt; le;</span>
-<span id="L229"><span class="lineNum">     229</span>                 :             :             std::memcpy(&amp;le, cell(i), CellSize);</span>
-<span id="L230"><span class="lineNum">     230</span>                 :             :             return Endian::little(le);</span>
-<span id="L231"><span class="lineNum">     231</span>                 :             :         }</span>
-<span id="L232"><span class="lineNum">     232</span>                 :             :     }</span>
-<span id="L233"><span class="lineNum">     233</span>                 :             : </span>
-<span id="L234"><span class="lineNum">     234</span>                 :             :     // 16-byte accessor: copies into caller-provided buffer.</span>
-<span id="L235"><span class="lineNum">     235</span>                 :             :     template &lt;size_t S = CellSize&gt;</span>
-<span id="L236"><span class="lineNum">     236</span>                 :             :         requires(S == 16)</span>
-<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     void get(size_t i, uint8_t (&amp;out)[16]) const noexcept {</span></span>
-<span id="L238"><span class="lineNum">     238</span>                 :             :         std::memcpy(out, cell(i), 16);</span>
-<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaUNC">           0 :     }</span></span>
-<span id="L240"><span class="lineNum">     240</span>                 :             : </span>
-<span id="L241"><span class="lineNum">     241</span>                 :             : private:</span>
-<span id="L242"><span class="lineNum">     242</span>                 :             :     const uint8_t* cells_ = nullptr;</span>
-<span id="L243"><span class="lineNum">     243</span>                 :             :     size_t row_count_ = 0;</span>
-<span id="L244"><span class="lineNum">     244</span>                 :             :     size_t bytes_consumed_ = 0;</span>
-<span id="L245"><span class="lineNum">     245</span>                 :             : };</span>
-<span id="L246"><span class="lineNum">     246</span>                 :             : </span>
-<span id="L247"><span class="lineNum">     247</span>                 :             : } // namespace pl::sstv2::pattern</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             :         } else {</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             :             detail::cell_type_t&lt;S&gt; le;</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             :             std::memcpy(&amp;le, cell(i), CellSize);</span>
+<span id="L232"><span class="lineNum">     232</span>                 :             :             return Endian::little(le);</span>
+<span id="L233"><span class="lineNum">     233</span>                 :             :         }</span>
+<span id="L234"><span class="lineNum">     234</span>                 :             :     }</span>
+<span id="L235"><span class="lineNum">     235</span>                 :             : </span>
+<span id="L236"><span class="lineNum">     236</span>                 :             :     // 16-byte accessor: copies into caller-provided buffer.</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             :     template &lt;size_t S = CellSize&gt;</span>
+<span id="L238"><span class="lineNum">     238</span>                 :             :         requires(S == 16)</span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     void get(size_t i, uint8_t (&amp;out)[16]) const noexcept {</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :             :         std::memcpy(out, cell(i), 16);</span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaUNC">           0 :     }</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :             : </span>
+<span id="L243"><span class="lineNum">     243</span>                 :             : private:</span>
+<span id="L244"><span class="lineNum">     244</span>                 :             :     const uint8_t* cells_ = nullptr;</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             :     size_t row_count_ = 0;</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             :     size_t bytes_consumed_ = 0;</span>
+<span id="L247"><span class="lineNum">     247</span>                 :             : };</span>
+<span id="L248"><span class="lineNum">     248</span>                 :             : </span>
+<span id="L249"><span class="lineNum">     249</span>                 :             : } // namespace pl::sstv2::pattern</span>
         </pre>
               </td>
             </tr>

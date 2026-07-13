@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-01 01:29:22</td>
+            <td class="headerValue">2026-07-13 11:53:46</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">95.5&nbsp;%</td>
@@ -429,7 +429,7 @@
 <span id="L350"><span class="lineNum">     350</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          25 :         conn.connect(params);</span></span>
 <span id="L351"><span class="lineNum">     351</span>                 :             :         conn.set_meta_mode(mysql::metadata_mode::full);</span>
 <span id="L352"><span class="lineNum">     352</span>                 :             :         mysql::results result;</span>
-<span id="L353"><span class="lineNum">     353</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          24 :         conn.execute(&quot;SET time_zone = '+00:00'&quot;, result);</span></span>
+<span id="L353"><span class="lineNum">     353</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          25 :         conn.execute(&quot;SET time_zone = '+00:00'&quot;, result);</span></span>
 <span id="L354"><span class="lineNum">     354</span>                 :             :         return conn;</span>
 <span id="L355"><span class="lineNum">     355</span>      [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :     } catch (const mysql::error_with_diagnostics&amp; err) {</span></span>
 <span id="L356"><span class="lineNum">     356</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return absl::InvalidArgumentError(</span></span>
