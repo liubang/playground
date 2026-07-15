@@ -1,0 +1,264 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0.
+
+syntax = "proto3";
+
+package pl.minitable.proto.v2;
+
+// Common contracts shared by public and internal services.
+
+message RequestContext {
+    // UUID or another globally unique opaque identifier. Required for mutations.
+    string request_id = 1;
+    // Stable logical client identity. Together with request_id forms the dedup key.
+    string client_id = 2;
+    // End-to-end deadline. Zero means the transport deadline is authoritative.
+    uint64 deadline_unix_ms = 3;
+    // Used only for observability and must never affect replicated state.
+    string trace_id = 4;
+}
+
+enum ErrorCode {
+    ERROR_CODE_UNSPECIFIED = 0;
+    INVALID_ARGUMENT = 1;
+    NOT_FOUND = 2;
+    ALREADY_EXISTS = 3;
+    NOT_LEADER = 4;
+    NOT_PRIMARY = 5;
+    OVERLOADED = 6;
+    UNAVAILABLE = 7;
+    DEADLINE_EXCEEDED = 8;
+    INTERNAL = 9;
+    UNIMPLEMENTED = 10;
+    VERSION_CONFLICT = 11;
+    SCHEMA_VERSION_STALE = 12;
+    ROUTE_EPOCH_STALE = 13;
+    KEY_OUT_OF_RANGE = 14;
+    SLICE_MOVED = 15;
+    IDEMPOTENCY_CONFLICT = 16;
+    INVALID_PAGE_TOKEN = 17;
+    EXPIRED_PAGE_TOKEN = 18;
+    FAILED_PRECONDITION = 19;
+}
+
+enum RetryAction {
+    RETRY_ACTION_UNSPECIFIED = 0;
+    DO_NOT_RETRY = 1;
+    RETRY_SAME_ENDPOINT = 2;
+    RETRY_NEW_LEADER = 3;
+    REFRESH_ROUTE = 4;
+    REFRESH_SCHEMA = 5;
+}
+
+message Endpoint {
+    string host = 1;
+    uint32 port = 2;
+}
+
+message ErrorDetail {
+    ErrorCode code = 1;
+    // Human-readable text; clients must not branch on it.
+    string message = 2;
+    RetryAction retry_action = 3;
+    uint32 retry_after_ms = 4;
+    optional Endpoint leader_hint = 5;
+    optional uint64 schema_version_hint = 6;
+    optional uint64 route_epoch_hint = 7;
+    optional uint64 slice_id_hint = 8;
+    // Stable field path for validation errors, e.g. "schema.row_key[1].type".
+    string field_path = 9;
+}
+
+message Status {
+    // Absence means success. A present error always means failure.
+    optional ErrorDetail error = 1;
+    string trace_id = 2;
+}
+
+enum TypeKind {
+    TYPE_KIND_UNSPECIFIED = 0;
+    BOOL = 1;
+    INT32 = 2;
+    UINT32 = 3;
+    INT64 = 4;
+    UINT64 = 5;
+    FLOAT = 6;
+    DOUBLE = 7;
+    STRING = 8;
+    BYTES = 9;
+    ARRAY = 10;
+    MAP = 11;
+}
+
+enum SortOrder {
+    SORT_ORDER_UNSPECIFIED = 0;
+    ASCENDING = 1;
+    DESCENDING = 2;
+}
+
+// ARRAY and MAP are dynamically typed by default, matching sstv2::Value.
+// Constraints, when present, recursively restrict values accepted by minitable.
+message TypeDescriptor {
+    TypeKind kind = 1;
+    // ARRAY only. Absence allows heterogeneous element types.
+    optional TypeDescriptor element_type = 2;
+    // MAP only. Absence allows any scalar key supported by sstv2::Value.
+    optional TypeDescriptor key_type = 3;
+    // MAP only. Absence allows heterogeneous value types.
+    optional TypeDescriptor value_type = 4;
+}
+
+message NullValue {}
+
+message ArrayValue {
+    repeated Value elements = 1;
+}
+
+message MapEntry {
+    Value key = 1;
+    Value value = 2;
+}
+
+message MapValue {
+    // The server canonicalizes entries by the sstv2 comparable key ordering.
+    // Duplicate keys after canonicalization are invalid.
+    repeated MapEntry entries = 1;
+}
+
+message Value {
+    oneof kind {
+        NullValue null_value = 1;
+        bool bool_value = 2;
+        int32 int32_value = 3;
+        uint32 uint32_value = 4;
+        int64 int64_value = 5;
+        uint64 uint64_value = 6;
+        float float_value = 7;
+        double double_value = 8;
+        string string_value = 9;
+        bytes bytes_value = 10;
+        ArrayValue array_value = 11;
+        MapValue map_value = 12;
+    }
+}
+
+message RowKeyColumn {
+    // Immutable numeric identity within a table. Never reused after deletion.
+    uint32 column_id = 1;
+    string name = 2;
+    TypeDescriptor type = 3;
+    SortOrder sort_order = 4;
+    // Partition columns must form a non-empty row-key prefix.
+    bool partition_key = 5;
+}
+
+message ColumnDef {
+    // Immutable numeric identity within a table. Names may change; IDs may not.
+    uint32 column_id = 1;
+    string name = 2;
+    TypeDescriptor type = 3;
+    bool nullable = 4;
+}
+
+message LocalityGroup {
+    uint32 locality_group_id = 1;
+    string name = 2;
+    repeated ColumnDef columns = 3;
+}
+
+message TableSchema {
+    // Row-key shape, IDs, types and ordering are immutable after table creation.
+    repeated RowKeyColumn row_key = 1;
+    repeated LocalityGroup locality_groups = 2;
+}
+
+message RowKey {
+    // Exactly one non-null scalar value per schema row-key column, in schema order.
+    repeated Value values = 1;
+}
+
+enum PartitionType {
+    PARTITION_TYPE_UNSPECIFIED = 0;
+    HASH = 1;
+    GLOBAL_ORDER = 2;
+}
+
+message PartitionSpec {
+    PartitionType type = 1;
+    // Required and greater than zero for HASH; ignored for GLOBAL_ORDER.
+    uint32 initial_slice_count = 2;
+    // Fixed stable hash algorithm identifier. Currently only "xxh3_64_v1".
+    string hash_algorithm = 3;
+}
+
+enum TableState {
+    TABLE_STATE_UNSPECIFIED = 0;
+    CREATING = 1;
+    ENABLED = 2;
+    DISABLED = 3;
+    DROPPING = 4;
+    DROPPED = 5;
+}
+
+message TableRef {
+    // table_id is authoritative when non-zero. Namespace/name are required when zero.
+    uint64 table_id = 1;
+    string namespace = 2;
+    string name = 3;
+}
+
+message TableInfo {
+    uint64 table_id = 1;
+    string namespace = 2;
+    string name = 3;
+    string region = 4;
+    uint64 schema_version = 5;
+    uint64 route_epoch = 6;
+    TableSchema schema = 7;
+    PartitionSpec partition = 8;
+    uint32 replica_count = 9;
+    TableState state = 10;
+}
+
+enum ReplicaRole {
+    REPLICA_ROLE_UNSPECIFIED = 0;
+    PRIMARY = 1;
+    SECONDARY = 2;
+    OFFLINE = 3;
+}
+
+message ReplicaEndpoint {
+    uint32 replica_id = 1;
+    uint64 unit_server_id = 2;
+    Endpoint endpoint = 3;
+    ReplicaRole role = 4;
+    uint64 raft_term = 5;
+}
+
+message SliceRoute {
+    uint64 slice_id = 1;
+    // Encoded with sstv2 memcomparable row-key encoding. Empty means unbounded.
+    bytes start_key = 2;
+    bytes end_key = 3;
+    repeated ReplicaEndpoint replicas = 4;
+}
+
+message RouteInfo {
+    uint64 table_id = 1;
+    uint64 schema_version = 2;
+    uint64 route_epoch = 3;
+    repeated SliceRoute slices = 4;
+}
+
+enum ReadConsistency {
+    READ_CONSISTENCY_UNSPECIFIED = 0;
+    STRONG = 1;
+    EVENTUAL = 2;
+    BOUNDED_STALENESS = 3;
+}
+
+message ReadPolicy {
+    ReadConsistency consistency = 1;
+    // Valid only for BOUNDED_STALENESS.
+    uint64 max_staleness_ms = 2;
+}
