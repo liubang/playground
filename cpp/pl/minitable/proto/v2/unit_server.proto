@@ -1,0 +1,104 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0.
+
+syntax = "proto3";
+
+package pl.minitable.proto.v2;
+
+import "cpp/pl/minitable/proto/v2/common.proto";
+
+option cc_generic_services = true;
+
+service UnitServerService {
+    rpc Register(RegisterUnitServerRequest) returns (RegisterUnitServerResponse);
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+message RegisterUnitServerRequest {
+    RequestContext context = 1;
+    // Persistent installation identity; generated once and stored locally.
+    string node_uuid = 2;
+    // Unique process incarnation identity; regenerated on every restart.
+    string boot_id = 3;
+    optional uint64 previous_unit_server_id = 4;
+    Endpoint endpoint = 5;
+    string region = 6;
+    int64 capacity_bytes = 7;
+}
+
+message RegisterUnitServerResponse {
+    Status status = 1;
+    uint64 unit_server_id = 2;
+    // Monotonic fencing token. Every internal command and report carries it.
+    uint64 registration_epoch = 3;
+    uint32 heartbeat_interval_ms = 4;
+}
+
+enum ReplicaState {
+    REPLICA_STATE_UNSPECIFIED = 0;
+    STARTING = 1;
+    SERVING = 2;
+    STOPPING = 3;
+    FAILED = 4;
+}
+
+message ReplicaReport {
+    uint64 table_id = 1;
+    uint64 slice_id = 2;
+    uint32 replica_id = 3;
+    ReplicaState state = 4;
+    bool is_raft_leader = 5;
+    uint64 raft_term = 6;
+    uint64 applied_index = 7;
+    uint64 schema_version = 8;
+    uint64 route_epoch = 9;
+}
+
+message HeartbeatRequest {
+    RequestContext context = 1;
+    uint64 unit_server_id = 2;
+    string node_uuid = 3;
+    string boot_id = 4;
+    uint64 registration_epoch = 5;
+    Endpoint endpoint = 6;
+    int64 capacity_bytes = 7;
+    int64 available_bytes = 8;
+    repeated ReplicaReport replicas = 9;
+    // Last command sequence durably accepted by this process incarnation.
+    uint64 acknowledged_command_seq = 10;
+}
+
+enum SliceCommandType {
+    SLICE_COMMAND_TYPE_UNSPECIFIED = 0;
+    START_REPLICA = 1;
+    STOP_REPLICA = 2;
+    UPDATE_SCHEMA = 3;
+    CREATE_SNAPSHOT = 4;
+}
+
+message StartReplicaCommand {
+    TableInfo table = 1;
+    SliceRoute slice = 2;
+    uint32 replica_id = 3;
+}
+message StopReplicaCommand { uint64 slice_id = 1; uint32 replica_id = 2; }
+message UpdateSchemaCommand { TableInfo table = 1; }
+message CreateSnapshotCommand { uint64 slice_id = 1; uint64 target_applied_index = 2; }
+
+message SliceCommand {
+    uint64 command_seq = 1;
+    uint64 registration_epoch = 2;
+    SliceCommandType type = 3;
+    oneof command {
+        StartReplicaCommand start_replica = 4;
+        StopReplicaCommand stop_replica = 5;
+        UpdateSchemaCommand update_schema = 6;
+        CreateSnapshotCommand create_snapshot = 7;
+    }
+}
+
+message HeartbeatResponse {
+    Status status = 1;
+    uint32 next_heartbeat_ms = 2;
+    repeated SliceCommand commands = 3;
+}
