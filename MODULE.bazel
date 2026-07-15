@@ -23,6 +23,7 @@ bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_license", version = "1.0.0")
 bazel_dep(name = "rules_shell", version = "0.8.0")
+bazel_dep(name = "rules_pkg", version = "1.1.0")
 
 # Hedron's Compile Commands Extractor for Bazel
 # https://github.com/hedronvision/bazel-compile-commands-extractor
@@ -229,6 +230,10 @@ maven.install(
         "org.junit.platform:junit-platform-launcher:1.12.2",
         "org.junit.platform:junit-platform-reporting:1.12.2",
         "com.baidu.cloud:starlight-all:2022.2.0",
+        "org.apache.spark:spark-sql_2.13:4.0.2",
+        "org.apache.spark:spark-hive_2.13:4.0.2",
+        "io.trino:trino-spi:468",
+        "io.airlift:slice:2.3",
     ],
     known_contributing_modules = [
         "protobuf",
