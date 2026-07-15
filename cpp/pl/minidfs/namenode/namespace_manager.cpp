@@ -303,7 +303,6 @@ pl::Result<Inode> NamespaceManager::begin_append(std::string_view path) {
     auto file = std::move(inode.value());
     file.state = FileState::kUnderConstruction;
     file.mtime_ms = now_ms();
-    ++file.version;
     auto update = store_->update_inode(file);
     if (update.hasError()) {
         return folly::makeUnexpected(update.error());
@@ -543,7 +542,6 @@ pl::Result<pl::Void> NamespaceManager::set_file_length(uint64_t inode_id, uint64
     }
     inode.length = length;
     inode.mtime_ms = now_ms();
-    ++inode.version;
     return store_->update_inode(inode);
 }
 
@@ -563,7 +561,6 @@ pl::Result<pl::Void> NamespaceManager::set_replication(uint64_t inode_id, uint32
     }
     inode.replication = replication;
     inode.mtime_ms = now_ms();
-    ++inode.version;
     return store_->update_inode(inode);
 }
 

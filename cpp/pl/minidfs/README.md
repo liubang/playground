@@ -69,10 +69,7 @@ cpp/pl/minidfs/
 │   └── tests/       # namenode 单元测试（6 个 target）
 ├── datanode/        # DataNode 存储引擎及服务
 │   └── tests/       # datanode 单元测试（5 个 target）
-├── master/          # NameNode 启动入口
 ├── client/          # CLI 工具及 DfsClient SDK
-├── docker-compose.yml
-├── Dockerfile
 └── docs/            # 项目文档
     ├── architecture.md  # 架构概览
     ├── spec.md          # 实现规格
@@ -131,21 +128,21 @@ curl -fSL https://github.com/bazelbuild/bazelisk/releases/latest/download/bazeli
 bazel build //cpp/pl/minidfs/...
 
 # 单独构建各组件
-bazel build //cpp/pl/minidfs/master:namenode       # NameNode 服务
-bazel build //cpp/pl/minidfs/client:datanode       # DataNode 服务
+bazel build //cpp/pl/minidfs/namenode:namenode     # NameNode 服务
+bazel build //cpp/pl/minidfs/datanode:datanode     # DataNode 服务
 bazel build //cpp/pl/minidfs/client:minidfs        # CLI 客户端
 
 # 优化构建（推荐用于部署）
-bazel build -c opt //cpp/pl/minidfs/master:namenode
-bazel build -c opt //cpp/pl/minidfs/client:datanode
-bazel build -c opt //cpp/pl/minidfs/client:minidfs
+bazel build --config=release //cpp/pl/minidfs/namenode:namenode
+bazel build --config=release //cpp/pl/minidfs/datanode:datanode
+bazel build --config=release //cpp/pl/minidfs/client:minidfs
 ```
 
 构建产物位于：
 
 ```
-bazel-bin/cpp/pl/minidfs/master/namenode      # NameNode 二进制
-bazel-bin/cpp/pl/minidfs/client/datanode      # DataNode 二进制
+bazel-bin/cpp/pl/minidfs/namenode/namenode    # NameNode 二进制
+bazel-bin/cpp/pl/minidfs/datanode/datanode    # DataNode 二进制
 bazel-bin/cpp/pl/minidfs/client/minidfs       # CLI 二进制
 ```
 
@@ -227,41 +224,25 @@ FLUSH PRIVILEGES;
 
 ## Docker 部署
 
-使用 docker compose 一键启动完整集群（1 NameNode + 3 DataNode + MySQL）：
+Docker 环境统一位于仓库的 `docker/minidfs/`，可一键启动完整集群（1 NameNode + 3 DataNode + MySQL）：
 
 ```bash
-cd cpp/pl/minidfs
+cd docker/minidfs
+./bootstrap.sh
 
-# 创建 .env 文件配置密码（可选，有默认值）
-cat > .env <<EOF
-MYSQL_USER=minidfs
-MYSQL_PASSWORD=your_password
-MYSQL_ROOT_PASSWORD=your_root_password
-EOF
+# 自动运行 Bazel 单元测试、构建镜像、启动集群并执行 E2E
+./tests/e2e.sh all
 
-# 启动集群
-docker compose up -d
-
-# 查看状态
+# 查看状态和日志
 docker compose ps
+docker compose logs -f namenode datanode1 datanode2 datanode3
 
-# 查看日志
-docker compose logs -f namenode
-docker compose logs -f datanode1
-
-# 销毁环境（含数据卷）
-docker compose down -v
+# 停止集群，或连同数据卷一起重置
+./tests/e2e.sh down
+./tests/e2e.sh reset
 ```
 
-端口映射：
-
-| 服务      | 容器端口 | 宿主端口 |
-| --------- | -------- | -------- |
-| MySQL     | 3306     | 13306    |
-| NameNode  | 8000     | 18000    |
-| DataNode1 | 9000/9001| 19000/19001 |
-| DataNode2 | 9000/9001| 19010/19011 |
-| DataNode3 | 9000/9001| 19020/19021 |
+默认仅向本机映射 MySQL `13306` 和 NameNode `19000`；DataNode 端口只在 Compose 网络内开放。E2E 失败时会保留容器和数据卷，便于检查日志。
 
 ## 支持的操作
 
