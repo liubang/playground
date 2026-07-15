@@ -55,11 +55,7 @@ build:llvm --cxxopt=-stdlib=libc++
 build:llvm --cxxopt=-Wno-error=unused-but-set-variable
 build:llvm --cxxopt=-Wno-error=unused-but-set-parameter
 
-# for gcc
-build:gcc --linkopt=-fuse-ld=gold
-
-# default linux using gcc
-build:linux --config=gcc
+# default linux: auto-detected toolchain (gcc + lld)
 
 # default macos
 build:macos --action_env=CC=/opt/homebrew/opt/llvm/bin/clang
