@@ -90,6 +90,34 @@ python/manim/manimations/media/
 **/tla/*.pdf
 
 # ==============================================================================
+# Docker development environments
+# ==============================================================================
+# Generated secrets and local settings (keep .env.example files)
+/docker/**/.env
+/docker/**/.env.local
+/docker/**/*.pem
+/docker/**/*.key
+/docker/**/secrets.yaml
+/docker/**/password.db
+
+# Hermes runtime state, caches, sessions, downloaded skills, and databases
+/docker/hermes/data/
+
+# Dependencies downloaded by bootstrap.sh
+/docker/bigdata/hive/lib/*.jar
+/docker/bigdata/spark/jars/*.jar
+
+# Extension deployment artifacts built from java/pl/bigdata
+/docker/bigdata/extensions/spark/jars/*.jar
+/docker/bigdata/extensions/trino/plugins/*/
+
+# Local third-party source checkout
+/docker/openclaw/
+
+# Local-only tool settings
+/docker/.claude/settings.local.json
+
+# ==============================================================================
 # Misc
 # ==============================================================================
 *.old

@@ -43,6 +43,7 @@
         <module>pl/spring</module>
         <module>pl/grpc/echo</module>
         <module>pl/brpc/echo</module>
+        <module>pl/bigdata</module>
     </modules>
 
     <dependencyManagement>

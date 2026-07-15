@@ -1,0 +1,20 @@
+services:
+  mysql:
+    image: mysql:8.3
+    container_name: standalone-mysql
+    restart: unless-stopped
+    ports:
+      - "${PUBLIC_BIND_ADDR:-127.0.0.1}:3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Run ./bootstrap.sh to generate .env}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$${MYSQL_ROOT_PASSWORD} mysqladmin ping -h localhost -u root --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  mysql-data:

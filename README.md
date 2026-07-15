@@ -40,32 +40,34 @@
 
 ## 主要项目
 
-| 项目                           | 说明                                                                                                                                   | 技术栈                                                 |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| [MiniDFS](cpp/pl/minidfs/)     | 类 HDFS 的分布式文件系统，包含 NameNode、DataNode 和 Client，支持块存储、副本管理、心跳与块汇报、MySQL 元数据存储及 Docker 部署。      | C++20, brpc, protobuf, Boost.MySQL, ISA-L/crc32c, zstd |
-| [Flux](cpp/pl/flux/)           | Flux 查询语言子集解释器，覆盖词法分析、语法分析、AST、语义分析、规则与代价优化、物理执行、SQLite/MySQL Connector，并提供 LSP 和 REPL。 | C++20, Abseil, simdjson, SQLite, MySQL                 |
-| [SSTable](cpp/pl/sst/)         | LSM-Tree 存储引擎组件，包含 Block 编解码、布隆过滤器、zstd/snappy 压缩、迭代器、版本管理和 CLI 工具。                                  | C++20, zstd, snappy                                    |
-| [SSTable v2](cpp/pl/sstv2/)    | SSTable 完全重写版本。模块化架构：类型化键系统（C++20 concept）、memcomparable 编码、多级索引树、列存储 Block、布隆过滤器。            | C++20, Abseil, zstd, snappy, lz4, xxHash               |
-| [Braft Counter](cpp/pl/braft/) | 基于 braft 的 Raft 状态机示例，演示日志复制、快照、Leader 选举和集群部署。                                                             | C++20, braft, brpc, protobuf                           |
-| [Meta](cpp/meta/)              | C++20 模板元编程实验，包括 Type List、Expression Template、Pattern Matching 和 Tuple Iteration。                                       | C++20                                                  |
-| [Recall](cpp/pl/recall/)       | 基于 FAISS 的向量召回服务，提供 gRPC 接口。                                                                                            | C++20, FAISS, OpenBLAS, gRPC, protobuf                 |
-| [Echo Service](proto/echo/)    | 多语言 gRPC Echo 服务示例。共享 proto 定义，C++ / Java / Python / Go 四语言各自实现 server + client，支持跨语言互操作。                  | gRPC, protobuf, C++20, Java 21, Python 3.13, Go       |
+| 项目                            | 说明                                                                                                                                   | 技术栈                                                 |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [MiniDFS](cpp/pl/minidfs/)      | 类 HDFS 的分布式文件系统，包含 NameNode、DataNode 和 Client，支持块存储、副本管理、心跳与块汇报、MySQL 元数据存储及 Docker 部署。      | C++20, brpc, protobuf, Boost.MySQL, ISA-L/crc32c, zstd |
+| [Flux](cpp/pl/flux/)            | Flux 查询语言子集解释器，覆盖词法分析、语法分析、AST、语义分析、规则与代价优化、物理执行、SQLite/MySQL Connector，并提供 LSP 和 REPL。 | C++20, Abseil, simdjson, SQLite, MySQL                 |
+| [SSTable](cpp/pl/sst/)          | LSM-Tree 存储引擎组件，包含 Block 编解码、布隆过滤器、zstd/snappy 压缩、迭代器、版本管理和 CLI 工具。                                  | C++20, zstd, snappy                                    |
+| [SSTable v2](cpp/pl/sstv2/)     | SSTable 完全重写版本。模块化架构：类型化键系统（C++20 concept）、memcomparable 编码、多级索引树、列存储 Block、布隆过滤器。            | C++20, Abseil, zstd, snappy, lz4, xxHash               |
+| [Braft Counter](cpp/pl/braft/)  | 基于 braft 的 Raft 状态机示例，演示日志复制、快照、Leader 选举和集群部署。                                                             | C++20, braft, brpc, protobuf                           |
+| [Meta](cpp/meta/)               | C++20 模板元编程实验，包括 Type List、Expression Template、Pattern Matching 和 Tuple Iteration。                                       | C++20                                                  |
+| [Recall](cpp/pl/recall/)        | 基于 FAISS 的向量召回服务，提供 gRPC 接口。                                                                                            | C++20, FAISS, OpenBLAS, gRPC, protobuf                 |
+| [Echo Service](proto/echo/)     | 多语言 gRPC Echo 服务示例。共享 proto 定义，C++ / Java / Python / Go 四语言各自实现 server + client，支持跨语言互操作。                | gRPC, protobuf, C++20, Java 21, Python 3.13, Go        |
+| [Big Data Lab](docker/bigdata/) | HDFS、Hive、Spark、Trino、Iceberg 与 MySQL 集群；支持从 Java 扩展源码构建到 Docker SQL 断言的一体化 E2E。                              | Spark 4.0.2, Trino 468, Hive 4, Iceberg, Docker        |
 
 此外，仓库还包含 [Skip List](cpp/pl/skiplist/)、[Bloom Filter](cpp/pl/bloom/)、[Arena Allocator](cpp/pl/arena/)、[Thread Pool](cpp/pl/thread/)、[Geohash](cpp/pl/geohash/)、[Brainfuck Interpreter](cpp/pl/bf/) 和 [HTTP Server](cpp/pl/http/) 等小型实现。
 
 ## 仓库结构
 
-| 目录        | 说明                                                                    | 技术栈                                |
-| ----------- | ----------------------------------------------------------------------- | ------------------------------------- |
-| `cpp/`      | C++20 项目，包括分布式系统、存储引擎、查询语言、模板元编程和 RPC 示例。 | C++20, Clang/GCC, folly, brpc, Abseil |
-| `java/`     | Java 项目：Spring Boot 示例 + gRPC Echo 服务（Maven + Bazel 双构建）。  | Java 21, Spring Boot 3.5, gRPC        |
-| `go/`       | Go 项目：工具库、cgo 示例 + gRPC Echo 服务。                            | Go 1.25, cgo, gRPC                    |
-| `python/`   | Python 项目：pybind11 绑定、Manim 动画 + gRPC Echo 服务。               | Python 3.13, pybind11, gRPC           |
-| `proto/`    | 跨语言共享的 Protobuf 定义，含多语言 Echo 服务定义。                    | protobuf, gRPC                        |
-| `tla/`      | TLA+ 形式化规约。                                                       | TLA+                                  |
-| `registry/` | Bazel 本地模块注册表，包括 OpenBLAS、ISA-L 等模块。                     | Bazel bzlmod                          |
-| `php/`      | PHP Router 示例。                                                       | PHP                                   |
-| `bash/`     | Shell 脚本示例。                                                        | Bash                                  |
+| 目录        | 说明                                                                                       | 技术栈                                         |
+| ----------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| `cpp/`      | C++20 项目，包括分布式系统、存储引擎、查询语言、模板元编程和 RPC 示例。                    | C++20, Clang/GCC, folly, brpc, Abseil          |
+| `java/`     | Java 项目：Spring Boot、gRPC Echo，以及 Spark/Trino 扩展；以 Bazel 为主并支持 Maven 构建。 | Java 17/21/23, Spark, Trino, Spring Boot, gRPC |
+| `go/`       | Go 项目：工具库、cgo 示例 + gRPC Echo 服务。                                               | Go 1.25, cgo, gRPC                             |
+| `python/`   | Python 项目：pybind11 绑定、Manim 动画 + gRPC Echo 服务。                                  | Python 3.13, pybind11, gRPC                    |
+| `proto/`    | 跨语言共享的 Protobuf 定义，含多语言 Echo 服务定义。                                       | protobuf, gRPC                                 |
+| `tla/`      | TLA+ 形式化规约。                                                                          | TLA+                                           |
+| `registry/` | Bazel 本地模块注册表，包括 OpenBLAS、ISA-L 等模块。                                        | Bazel bzlmod                                   |
+| `php/`      | PHP Router 示例。                                                                          | PHP                                            |
+| `bash/`     | Shell 脚本示例。                                                                           | Bash                                           |
+| `docker/`   | 本地实验集群：Big Data、Doris、Hermes、Prometheus/Grafana 和 MySQL。                       | Docker Compose                                 |
 
 ## 构建
 
@@ -80,6 +82,7 @@
 | nasm                                               | 2.15+                | 仅 Linux，ISA-L 汇编优化需要                                  |
 | libomp                                             | —                    | OpenMP 支持，macOS 和 Linux 均需要                            |
 | pkg-config                                         | —                    | 仅 macOS                                                      |
+| Docker + Compose                                   | Docker 24+           | 仅容器实验环境和 Big Data E2E 需要                            |
 
 ### macOS 安装
 
@@ -144,6 +147,24 @@ cd java && mvn compile && mvn test
 bazel build //java/...
 ```
 
+Big Data Java 扩展以 Bazel 为主构建系统。Spark 扩展输出 Java 17 bytecode，Trino Plugin 使用 `rules_pkg` 生成保留插件目录结构的 ZIP：
+
+```bash
+# 单元测试与发布产物
+bazel test //java/pl/bigdata:tests
+bazel build \
+  //java/pl/bigdata:spark_extension_jar \
+  //java/pl/bigdata:trino_plugin_zip
+
+# 构建扩展、启动 Docker 集群、执行 SQL 断言并清理测试产物
+./docker/bigdata/tests/e2e.sh all
+
+# 可选：使用 Maven/JDK 23 容器验证备用构建路径
+BUILD_SYSTEM=maven ./docker/bigdata/tests/e2e.sh all
+```
+
+详细的集群配置和测试说明见 [`docker/README.md`](docker/README.md) 与 [`docker/bigdata/TESTING.md`](docker/bigdata/TESTING.md)。
+
 Maven 依赖变更后，运行以下命令重新生成锁文件：
 
 ```bash
@@ -172,23 +193,26 @@ bazel run //go/pl/grpc/echo/client          # Go
 
 以下工具链和库无需手动安装，由 `MODULE.bazel` 声明并在首次构建时自动下载：
 
-| 类别          | 版本          |
-| ------------- | ------------- |
-| JDK           | 21            |
-| Go SDK        | 1.26.4        |
-| Python        | 3.13          |
-| protobuf      | 31.1          |
-| gRPC (C++)    | 1.74.1        |
-| gRPC (Java)   | 1.74.0        |
-| gRPC (Go)     | 1.81.1        |
-| Abseil C++    | 20250127.1    |
-| folly         | 2025.01.13    |
-| brpc          | 1.16.0        |
-| Boost         | 1.90.0        |
-| FAISS         | 1.14.1        |
-| fmt           | 12.1.0        |
-| zstd / snappy | 1.5.6 / 1.2.1 |
-| GoogleTest    | 1.17          |
+| 类别          | 版本               |
+| ------------- | ------------------ |
+| JDK           | 21                 |
+| Go SDK        | 1.26.4             |
+| Python        | 3.13               |
+| protobuf      | 31.1               |
+| gRPC (C++)    | 1.74.1             |
+| gRPC (Java)   | 1.74.0             |
+| gRPC (Go)     | 1.81.1             |
+| Abseil C++    | 20250127.1         |
+| folly         | 2025.01.13         |
+| brpc          | 1.16.0             |
+| Boost         | 1.90.0             |
+| FAISS         | 1.14.1             |
+| fmt           | 12.1.0             |
+| zstd / snappy | 1.5.6 / 1.2.1      |
+| GoogleTest    | 1.17               |
+| Spark         | 4.0.2 / Scala 2.13 |
+| Trino SPI     | 468                |
+| rules_pkg     | 1.1.0              |
 
 完整依赖列表见 [`MODULE.bazel`](MODULE.bazel)。构建依赖通过 `.bazelversion`、`MODULE.bazel.lock` 和 `maven_install.json` 固定版本，确保可复现。
 
