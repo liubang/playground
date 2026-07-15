@@ -39,10 +39,12 @@ enum class ChecksumType : uint8_t {
 /// Compute CRC32C checksum over a byte range.
 [[nodiscard]] inline uint32_t compute_crc32c(const void* data, size_t size) {
 #if defined(__linux__)
-    // ISA-L: crc32_iscsi uses the same polynomial as CRC32C (iSCSI polynomial)
-    return ::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
-                         static_cast<int>(size),
-                         0);
+    // ISA-L exposes the raw iSCSI CRC state, while Google crc32c exposes the standard
+    // finalized CRC32C value. Complement both input and output to keep wire checksums
+    // identical across Linux and macOS.
+    return ~::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
+                          static_cast<int>(size),
+                          ~uint32_t{0});
 #elif defined(__APPLE__)
     // Google crc32c: uses hardware CRC32 instructions on ARM64 macOS
     return ::crc32c_value(reinterpret_cast<const uint8_t*>(data), size);
@@ -59,9 +61,9 @@ enum class ChecksumType : uint8_t {
 /// Extend an existing CRC32C checksum with additional data.
 [[nodiscard]] inline uint32_t extend_crc32c(uint32_t crc, const void* data, size_t size) {
 #if defined(__linux__)
-    return ::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
-                         static_cast<int>(size),
-                         crc);
+    return ~::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
+                          static_cast<int>(size),
+                          ~crc);
 #elif defined(__APPLE__)
     return ::crc32c_extend(crc, reinterpret_cast<const uint8_t*>(data), size);
 #else
