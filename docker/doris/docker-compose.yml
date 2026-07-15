@@ -1,0 +1,100 @@
+services:
+  fe:
+    image: apache/doris:fe-${DORIS_VERSION:-4.0.6}
+    container_name: doris-fe
+    hostname: fe
+    restart: unless-stopped
+    environment:
+      # ELECTION 模式：FE_SERVERS 声明所有 FE 节点，FE_ID=1 即为 master
+      - FE_SERVERS=fe1:172.28.10.10:9010
+      - FE_ID=1
+    ports:
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:8030:8030"   # HTTP 页面 / API（部分端点无需认证，仅本机）
+      - "${PUBLIC_BIND_ADDR:-127.0.0.1}:9030:9030"     # MySQL 协议查询端口（root 密码认证）
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:9010:9010"   # edit_log_port（FE 间选举通信）
+    volumes:
+      - fe-meta:/opt/apache-doris/fe/doris-meta
+      - fe-log:/opt/apache-doris/fe/log
+    networks:
+      doris:
+        ipv4_address: 172.28.10.10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8030/api/bootstrap"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2'
+
+  be1:
+    image: apache/doris:be-${DORIS_VERSION:-4.0.6}
+    container_name: doris-be1
+    hostname: be1
+    restart: unless-stopped
+    depends_on:
+      fe:
+        condition: service_healthy
+    environment:
+      # FE_SERVERS 用于定位 master FE 地址；BE_ADDR 为自身的 心跳端口 地址，供 FE 反向注册
+      - FE_SERVERS=fe1:172.28.10.10:9010
+      - BE_ADDR=172.28.10.11:9050
+    ports:
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:8040:8040"   # webserver_port
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:9050:9050"   # heartbeat_service_port
+    volumes:
+      - be1-storage:/opt/apache-doris/be/storage
+      - be1-log:/opt/apache-doris/be/log
+      # 仅需在第一个 BE 上挂载初始化脚本，容器启动约 15s 后自动执行一次
+      - ./init-sql:/docker-entrypoint-initdb.d:ro
+    networks:
+      doris:
+        ipv4_address: 172.28.10.11
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2'
+
+  be2:
+    image: apache/doris:be-${DORIS_VERSION:-4.0.6}
+    container_name: doris-be2
+    hostname: be2
+    restart: unless-stopped
+    depends_on:
+      fe:
+        condition: service_healthy
+    environment:
+      - FE_SERVERS=fe1:172.28.10.10:9010
+      - BE_ADDR=172.28.10.12:9050
+    ports:
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:8041:8040"
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:9051:9050"
+    volumes:
+      - be2-storage:/opt/apache-doris/be/storage
+      - be2-log:/opt/apache-doris/be/log
+    networks:
+      doris:
+        ipv4_address: 172.28.10.12
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2'
+
+volumes:
+  fe-meta:
+  fe-log:
+  be1-storage:
+  be1-log:
+  be2-storage:
+  be2-log:
+
+networks:
+  doris:
+    ipam:
+      config:
+        - subnet: 172.28.10.0/24
