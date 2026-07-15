@@ -16,11 +16,13 @@ RUN --mount=type=cache,id=minidfs-bazel-repository,target=/root/.cache/bazel/rep
         //cpp/pl/minidfs/namenode:format \
         //cpp/pl/minidfs/datanode:datanode \
         //cpp/pl/minidfs/client:minidfs \
+        //cpp/pl/minidfs/e2e:dfs_client_e2e \
     && bazel_bin="$(bazel --batch --output_user_root=/root/.cache/bazel/output info --config=release bazel-bin)" \
     && install -D -m 0755 "$bazel_bin/cpp/pl/minidfs/namenode/namenode" /out/minidfs-namenode \
     && install -D -m 0755 "$bazel_bin/cpp/pl/minidfs/namenode/format" /out/minidfs-format \
     && install -D -m 0755 "$bazel_bin/cpp/pl/minidfs/datanode/datanode" /out/minidfs-datanode \
-    && install -D -m 0755 "$bazel_bin/cpp/pl/minidfs/client/minidfs" /out/minidfs
+    && install -D -m 0755 "$bazel_bin/cpp/pl/minidfs/client/minidfs" /out/minidfs \
+    && install -D -m 0755 "$bazel_bin/cpp/pl/minidfs/e2e/dfs_client_e2e" /out/minidfs-api-e2e
 
 FROM ubuntu:24.04 AS runtime
 ENV DEBIAN_FRONTEND=noninteractive

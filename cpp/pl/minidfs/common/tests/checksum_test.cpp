@@ -29,6 +29,11 @@ TEST(ChecksumTest, EmptyData) {
     EXPECT_EQ(crc, 0u);
 }
 
+TEST(ChecksumTest, StandardCheckValue) {
+    constexpr std::string_view data = "123456789";
+    EXPECT_EQ(compute_crc32c(data), 0xE3069283u);
+}
+
 TEST(ChecksumTest, Deterministic) {
     std::string data = "hello";
     uint32_t crc1 = compute_crc32c(data.data(), data.size());
