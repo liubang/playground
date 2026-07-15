@@ -84,6 +84,8 @@ build_builder_image() {
 build_and_test() {
     log "Running all MiniDFS Bazel tests"
     (cd "$REPO_ROOT" && bazel test //cpp/pl/minidfs/... --test_output=errors)
+    log "Building the standalone DfsClient API E2E binary"
+    (cd "$REPO_ROOT" && bazel build //cpp/pl/minidfs/e2e:dfs_client_e2e)
     build_builder_image
     log "Building MiniDFS Linux runtime image with persistent Bazel caches"
     BUILDER_IMAGE="$BUILDER_IMAGE" compose build namenode
@@ -116,6 +118,16 @@ assert_before() {
     first_line="$(grep -n "$first" <<<"$output" | head -1 | cut -d: -f1)"
     second_line="$(grep -n "$second" <<<"$output" | head -1 | cut -d: -f1)"
     [[ -n "$first_line" && -n "$second_line" && "$first_line" -lt "$second_line" ]]
+}
+
+run_api_tests() {
+    log "Testing the DfsClient API through the standalone cc_binary"
+    compose run --rm -T --no-deps --entrypoint minidfs-api-e2e cli \
+        --namenode=namenode:9000 \
+        --work_dir=/tmp \
+        --dfs_root=/api-e2e \
+        --block_size=1048576 \
+        --replication=3
 }
 
 run_tests() {
@@ -238,10 +250,11 @@ run_tests() {
     fi
 
     log "All MiniDFS CLI and file-size E2E assertions passed"
+    run_api_tests
 }
 
 usage() {
-    echo "Usage: $0 {all|build|start|test|down|reset}"
+    echo "Usage: $0 {all|build|start|test|api-test|down|reset}"
 }
 
 main() {
@@ -256,6 +269,7 @@ main() {
         build) build_and_test ;;
         start) start_cluster ;;
         test) run_tests ;;
+        api-test) run_api_tests ;;
         down) compose down ;;
         reset) compose down -v --remove-orphans ;;
         *) usage; exit 2 ;;
