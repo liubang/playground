@@ -1,0 +1,35 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.13.0
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - monitor
+
+  grafana:
+    image: grafana/grafana:13.1.0
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "${PUBLIC_BIND_ADDR:-127.0.0.1}:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?Run ./bootstrap.sh to generate .env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Run ./bootstrap.sh to generate .env}
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - monitor
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  monitor:

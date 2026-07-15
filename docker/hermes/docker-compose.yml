@@ -1,0 +1,24 @@
+services:
+  hermes:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes
+    restart: unless-stopped
+    command: gateway run
+    ports:
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:8642:8642" # gateway API
+      - "${PUBLIC_BIND_ADDR:-127.0.0.1}:9119:9119" # dashboard（仅在 HERMES_DASHBOARD=1 时生效）
+    volumes:
+      - ./data:/opt/data
+    environment:
+      - TZ=Asia/Shanghai
+      - HERMES_DASHBOARD=1
+      # - HERMES_DASHBOARD_HOST=127.0.0.1
+      - HERMES_DASHBOARD_INSECURE=1
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${HERMES_DASHBOARD_BASIC_AUTH_USERNAME:?Run ./bootstrap.sh to generate .env}
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD:?Run ./bootstrap.sh to generate .env}
+      - HERMES_DASHBOARD_BASIC_AUTH_SECRET=${HERMES_DASHBOARD_BASIC_AUTH_SECRET:?Run ./bootstrap.sh to generate .env}
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
