@@ -1,0 +1,141 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0.
+
+syntax = "proto3";
+
+package pl.minitable.proto.v2.internal;
+
+import "cpp/pl/minitable/proto/v2/admin.proto";
+import "cpp/pl/minitable/proto/v2/common.proto";
+import "cpp/pl/minitable/proto/v2/data.proto";
+import "cpp/pl/minitable/proto/v2/master.proto";
+
+// Internal messages are persisted. Existing field numbers must never be reused.
+
+message MutationIdentity {
+    string client_id = 1;
+    string request_id = 2;
+    // Hash of the canonical serialized operation. Detects request-id reuse.
+    fixed64 payload_hash = 3;
+}
+
+message CreateTableMutation { pl.minitable.proto.v2.CreateTableRequest request = 1; }
+message AlterTableMutation { pl.minitable.proto.v2.AlterTableRequest request = 1; }
+message DropTableMutation { pl.minitable.proto.v2.DropTableRequest request = 1; }
+message CreateRegionMutation { pl.minitable.proto.v2.CreateRegionRequest request = 1; }
+message DropRegionMutation { pl.minitable.proto.v2.DropRegionRequest request = 1; }
+
+message RegisterUnitServerMutation {
+    string node_uuid = 1;
+    string boot_id = 2;
+    uint64 assigned_unit_server_id = 3;
+    uint64 registration_epoch = 4;
+    pl.minitable.proto.v2.Endpoint endpoint = 5;
+    string region = 6;
+    int64 capacity_bytes = 7;
+}
+
+message RouteMutation {
+    uint64 table_id = 1;
+    uint64 expected_route_epoch = 2;
+    uint64 new_route_epoch = 3;
+    repeated pl.minitable.proto.v2.SliceRoute slices = 4;
+}
+
+message MasterMutation {
+    uint32 format_version = 1;
+    MutationIdentity identity = 2;
+    // All allocated IDs and versions are embedded in the operation before append.
+    oneof operation {
+        CreateTableMutation create_table = 10;
+        AlterTableMutation alter_table = 11;
+        DropTableMutation drop_table = 12;
+        CreateRegionMutation create_region = 13;
+        DropRegionMutation drop_region = 14;
+        RegisterUnitServerMutation register_unit_server = 15;
+        RouteMutation update_route = 16;
+    }
+}
+
+message IdAllocatorState {
+    string name = 1;
+    uint64 next_id = 2;
+}
+
+message DedupeRecord {
+    MutationIdentity identity = 1;
+    bytes serialized_response = 2;
+    uint64 applied_index = 3;
+}
+
+message MasterSnapshot {
+    uint32 format_version = 1;
+    uint64 last_included_index = 2;
+    uint64 last_included_term = 3;
+    repeated pl.minitable.proto.v2.TableInfo tables = 4;
+    repeated pl.minitable.proto.v2.RouteInfo routes = 5;
+    repeated pl.minitable.proto.v2.RegionInfo regions = 6;
+    repeated pl.minitable.proto.v2.UnitServerInfo unit_servers = 7;
+    repeated IdAllocatorState allocators = 8;
+    repeated DedupeRecord dedupe_records = 9;
+}
+
+message LgPatch {
+    uint32 locality_group_id = 1;
+    repeated pl.minitable.proto.v2.CellMutation cells = 2;
+}
+
+message RowTransaction {
+    bytes encoded_row_key = 1;
+    uint64 commit_version = 2;
+    bool delete_row = 3;
+    repeated LgPatch locality_groups = 4;
+}
+
+message SliceMutation {
+    uint32 format_version = 1;
+    MutationIdentity identity = 2;
+    uint64 table_id = 3;
+    uint64 slice_id = 4;
+    uint64 schema_version = 5;
+    uint64 route_epoch = 6;
+    oneof operation {
+        RowTransaction row_transaction = 10;
+    }
+}
+
+message SstObject {
+    uint64 sst_id = 1;
+    uint32 level = 2;
+    string key_file = 3;
+    string value_file = 4;
+    uint64 key_file_size = 5;
+    uint64 value_file_size = 6;
+    fixed64 key_checksum = 7;
+    fixed64 value_checksum = 8;
+    bytes min_key = 9;
+    bytes max_key = 10;
+    uint64 row_count = 11;
+}
+
+message LocalityGroupManifest {
+    uint32 locality_group_id = 1;
+    uint64 manifest_generation = 2;
+    // Every mutation through this index is represented by these SSTs or replayed WAL.
+    uint64 flushed_applied_index = 3;
+    repeated SstObject ssts = 4;
+}
+
+message SliceSnapshot {
+    uint32 format_version = 1;
+    uint64 last_included_index = 2;
+    uint64 last_included_term = 3;
+    uint64 table_id = 4;
+    uint64 slice_id = 5;
+    uint64 schema_version = 6;
+    uint64 route_epoch = 7;
+    bytes start_key = 8;
+    bytes end_key = 9;
+    repeated LocalityGroupManifest locality_groups = 10;
+    repeated DedupeRecord dedupe_records = 11;
+}

@@ -1,0 +1,90 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0.
+
+syntax = "proto3";
+
+package pl.minitable.proto.v2;
+
+import "cpp/pl/minitable/proto/v2/common.proto";
+
+option cc_generic_services = true;
+
+service AdminService {
+    rpc CreateRegion(CreateRegionRequest) returns (CreateRegionResponse);
+    rpc DropRegion(DropRegionRequest) returns (DropRegionResponse);
+    rpc GetRegion(GetRegionRequest) returns (GetRegionResponse);
+    rpc ListRegions(ListRegionsRequest) returns (ListRegionsResponse);
+    rpc ListUnitServers(ListUnitServersRequest) returns (ListUnitServersResponse);
+}
+
+enum RegionState {
+    REGION_STATE_UNSPECIFIED = 0;
+    REGION_ACTIVE = 1;
+    REGION_DRAINING = 2;
+    REGION_OFFLINE = 3;
+}
+
+message RegionConfig {
+    uint32 max_tables = 1;
+    uint32 max_slices = 2;
+    string dfs_root = 3;
+}
+
+message RegionInfo {
+    string name = 1;
+    RegionState state = 2;
+    RegionConfig config = 3;
+    uint64 version = 4;
+}
+
+message UnitServerInfo {
+    uint64 unit_server_id = 1;
+    string node_uuid = 2;
+    string boot_id = 3;
+    Endpoint endpoint = 4;
+    string region = 5;
+    int64 capacity_bytes = 6;
+    int64 available_bytes = 7;
+    uint64 last_heartbeat_unix_ms = 8;
+    bool live = 9;
+}
+
+message CreateRegionRequest {
+    RequestContext context = 1;
+    string name = 2;
+    RegionConfig config = 3;
+}
+message CreateRegionResponse { Status status = 1; optional RegionInfo region = 2; }
+
+message DropRegionRequest {
+    RequestContext context = 1;
+    string name = 2;
+    optional uint64 expected_version = 3;
+}
+message DropRegionResponse { Status status = 1; }
+
+message GetRegionRequest { RequestContext context = 1; string name = 2; }
+message GetRegionResponse { Status status = 1; optional RegionInfo region = 2; }
+
+message ListRegionsRequest {
+    RequestContext context = 1;
+    uint32 page_size = 2;
+    bytes page_token = 3;
+}
+message ListRegionsResponse {
+    Status status = 1;
+    repeated RegionInfo regions = 2;
+    bytes next_page_token = 3;
+}
+
+message ListUnitServersRequest {
+    RequestContext context = 1;
+    string region = 2;
+    uint32 page_size = 3;
+    bytes page_token = 4;
+}
+message ListUnitServersResponse {
+    Status status = 1;
+    repeated UnitServerInfo unit_servers = 2;
+    bytes next_page_token = 3;
+}

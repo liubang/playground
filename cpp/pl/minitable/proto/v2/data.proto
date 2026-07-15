@@ -1,0 +1,157 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0.
+
+syntax = "proto3";
+
+package pl.minitable.proto.v2;
+
+import "cpp/pl/minitable/proto/v2/common.proto";
+
+option cc_generic_services = true;
+
+service DataService {
+    rpc Get(GetRequest) returns (GetResponse);
+    rpc Put(PutRequest) returns (PutResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
+    // Application-level pagination is used instead of protobuf streaming so a scan
+    // can resume across slice movement, server restart and load balancers.
+    rpc Scan(ScanRequest) returns (ScanResponse);
+}
+
+message DataRequestHeader {
+    RequestContext context = 1;
+    uint64 table_id = 2;
+    uint64 slice_id = 3;
+    uint64 schema_version = 4;
+    uint64 route_epoch = 5;
+}
+
+message ColumnSelector {
+    // Empty selects all columns. IDs are stable across rename operations.
+    repeated uint32 column_ids = 1;
+}
+
+message CellVersion {
+    uint32 column_id = 1;
+    Value value = 2;
+    // Hybrid/logical commit version assigned by the primary before Raft append.
+    uint64 version = 3;
+}
+
+message RowResult {
+    RowKey row_key = 1;
+    repeated CellVersion cells = 2;
+}
+
+message GetRequest {
+    DataRequestHeader header = 1;
+    RowKey row_key = 2;
+    ColumnSelector projection = 3;
+    uint32 max_versions = 4;
+    ReadPolicy read_policy = 5;
+}
+
+message GetResponse {
+    Status status = 1;
+    optional RowResult row = 2;
+    uint64 served_schema_version = 3;
+    uint64 served_route_epoch = 4;
+}
+
+enum CellMutationType {
+    CELL_MUTATION_TYPE_UNSPECIFIED = 0;
+    SET = 1;
+    SET_NULL = 2;
+    DELETE_COLUMN = 3;
+}
+
+message CellMutation {
+    uint32 column_id = 1;
+    CellMutationType type = 2;
+    // Required only for SET. SET_NULL is distinct from an empty value and deletion.
+    optional Value value = 3;
+}
+
+message PutRequest {
+    DataRequestHeader header = 1;
+    RowKey row_key = 2;
+    // A single request is one row transaction across all locality groups.
+    repeated CellMutation mutations = 3;
+}
+
+message PutResponse {
+    Status status = 1;
+    // Stable across retries with the same request_id and payload.
+    uint64 commit_version = 2;
+}
+
+enum DeleteScope {
+    DELETE_SCOPE_UNSPECIFIED = 0;
+    ROW = 1;
+    COLUMNS = 2;
+}
+
+message DeleteRequest {
+    DataRequestHeader header = 1;
+    RowKey row_key = 2;
+    DeleteScope scope = 3;
+    // Required and non-empty only for COLUMNS.
+    repeated uint32 column_ids = 4;
+}
+
+message DeleteResponse {
+    Status status = 1;
+    uint64 commit_version = 2;
+}
+
+message ScanRange {
+    optional RowKey start_key = 1;
+    bool start_exclusive = 2;
+    optional RowKey end_key = 3;
+    // End is exclusive by default; this flag exists for explicit administrative scans.
+    bool end_inclusive = 4;
+}
+
+enum CompareOp {
+    COMPARE_OP_UNSPECIFIED = 0;
+    EQUAL = 1;
+    NOT_EQUAL = 2;
+    LESS = 3;
+    LESS_OR_EQUAL = 4;
+    GREATER = 5;
+    GREATER_OR_EQUAL = 6;
+}
+
+message ColumnPredicate {
+    uint32 column_id = 1;
+    CompareOp op = 2;
+    Value operand = 3;
+}
+
+message ScanSpec {
+    DataRequestHeader header = 1;
+    ScanRange range = 2;
+    ColumnSelector projection = 3;
+    repeated ColumnPredicate predicates = 4;
+    uint32 max_versions = 5;
+    ReadPolicy read_policy = 6;
+    uint32 page_size = 7;
+}
+
+message ScanRequest {
+    RequestContext context = 1;
+    oneof continuation {
+        ScanSpec first_page = 2;
+        // Opaque, authenticated token. All first-page fields are bound into it.
+        bytes page_token = 3;
+    }
+}
+
+message ScanResponse {
+    Status status = 1;
+    repeated RowResult rows = 2;
+    bytes next_page_token = 3;
+    bool has_more = 4;
+    uint64 served_schema_version = 5;
+    uint64 served_route_epoch = 6;
+}

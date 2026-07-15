@@ -1,0 +1,148 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0.
+
+syntax = "proto3";
+
+package pl.minitable.proto.v2;
+
+import "cpp/pl/minitable/proto/v2/common.proto";
+
+option cc_generic_services = true;
+
+service MasterService {
+    rpc CreateTable(CreateTableRequest) returns (CreateTableResponse);
+    rpc AlterTable(AlterTableRequest) returns (AlterTableResponse);
+    rpc DropTable(DropTableRequest) returns (DropTableResponse);
+    rpc GetTable(GetTableRequest) returns (GetTableResponse);
+    rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
+    rpc GetRoute(GetRouteRequest) returns (GetRouteResponse);
+}
+
+message CreateTableRequest {
+    RequestContext context = 1;
+    string namespace = 2;
+    string name = 3;
+    string region = 4;
+    TableSchema schema = 5;
+    PartitionSpec partition = 6;
+    uint32 replica_count = 7;
+}
+
+message CreateTableResponse {
+    Status status = 1;
+    optional TableInfo table = 2;
+    optional RouteInfo route = 3;
+}
+
+enum AlterOperationType {
+    ALTER_OPERATION_TYPE_UNSPECIFIED = 0;
+    ADD_COLUMN = 1;
+    RENAME_COLUMN = 2;
+    DROP_COLUMN = 3;
+    ADD_LOCALITY_GROUP = 4;
+    RENAME_LOCALITY_GROUP = 5;
+    SET_TABLE_STATE = 6;
+}
+
+message AddColumn {
+    uint32 locality_group_id = 1;
+    ColumnDef column = 2;
+}
+
+message RenameColumn {
+    uint32 column_id = 1;
+    string new_name = 2;
+}
+
+message DropColumn {
+    uint32 column_id = 1;
+}
+
+message AddLocalityGroup {
+    LocalityGroup locality_group = 1;
+}
+
+message RenameLocalityGroup {
+    uint32 locality_group_id = 1;
+    string new_name = 2;
+}
+
+message SetTableState {
+    TableState state = 1;
+}
+
+message AlterOperation {
+    AlterOperationType type = 1;
+    oneof operation {
+        AddColumn add_column = 2;
+        RenameColumn rename_column = 3;
+        DropColumn drop_column = 4;
+        AddLocalityGroup add_locality_group = 5;
+        RenameLocalityGroup rename_locality_group = 6;
+        SetTableState set_table_state = 7;
+    }
+}
+
+message AlterTableRequest {
+    RequestContext context = 1;
+    TableRef table = 2;
+    // Required CAS guard; zero is invalid.
+    uint64 expected_schema_version = 3;
+    repeated AlterOperation operations = 4;
+}
+
+message AlterTableResponse {
+    Status status = 1;
+    optional TableInfo table = 2;
+}
+
+message DropTableRequest {
+    RequestContext context = 1;
+    TableRef table = 2;
+    // Optional CAS guard. Absence means unconditional idempotent drop.
+    optional uint64 expected_schema_version = 3;
+}
+
+message DropTableResponse {
+    Status status = 1;
+    optional TableInfo table = 2;
+}
+
+message GetTableRequest {
+    RequestContext context = 1;
+    TableRef table = 2;
+}
+
+message GetTableResponse {
+    Status status = 1;
+    optional TableInfo table = 2;
+}
+
+message ListTablesRequest {
+    RequestContext context = 1;
+    // Empty namespace lists all namespaces visible to the caller.
+    string namespace = 2;
+    uint32 page_size = 3;
+    bytes page_token = 4;
+}
+
+message ListTablesResponse {
+    Status status = 1;
+    repeated TableInfo tables = 2;
+    bytes next_page_token = 3;
+}
+
+message GetRouteRequest {
+    RequestContext context = 1;
+    TableRef table = 2;
+    // When present, return only the containing slice. Otherwise return all slices.
+    optional RowKey row_key = 3;
+    // If equal to the current epoch, an empty unchanged response is returned.
+    optional uint64 known_route_epoch = 4;
+}
+
+message GetRouteResponse {
+    Status status = 1;
+    optional RouteInfo route = 2;
+    bool unchanged = 3;
+}
