@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-15 18:45:00</td>
+            <td class="headerValue">2026-07-15 20:55:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">88.2&nbsp;%</td>
@@ -432,8 +432,8 @@
 <span id="L354"><span class="lineNum">     354</span>                 :<span class="tlaGNC">           5 :     }</span></span>
 <span id="L355"><span class="lineNum">     355</span>                 :             : </span>
 <span id="L356"><span class="lineNum">     356</span>                 :             :     // ID Allocation</span>
-<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC">        1014 :     pl::Result&lt;uint64_t&gt; alloc_id(std::string_view name, uint64_t count = 1) override {</span></span>
-<span id="L358"><span class="lineNum">     358</span>                 :<span class="tlaGNC">        1014 :         std::lock_guard lock(mu_);</span></span>
+<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC">        1013 :     pl::Result&lt;uint64_t&gt; alloc_id(std::string_view name, uint64_t count = 1) override {</span></span>
+<span id="L358"><span class="lineNum">     358</span>                 :<span class="tlaGNC">        1013 :         std::lock_guard lock(mu_);</span></span>
 <span id="L359"><span class="lineNum">     359</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         auto key = std::string(name);</span></span>
 <span id="L360"><span class="lineNum">     360</span>   [<span class="tlaGBC" title="Branch 0 was taken 995 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1014 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        2009 :         uint64_t initial_id = key == &quot;generation_stamp&quot; ? 1000 : 0;</span></span>
 <span id="L361"><span class="lineNum">     361</span>                 :             :         auto [it, inserted] = id_counters_.emplace(key, initial_id);</span>
