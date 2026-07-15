@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryMed">84.1&nbsp;%</td>
-            <td class="headerCovTableEntry">309</td>
-            <td class="headerCovTableEntry">260</td>
+            <td class="headerCovTableEntryMed">84.0&nbsp;%</td>
+            <td class="headerCovTableEntry">306</td>
+            <td class="headerCovTableEntry">257</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-15 13:37:27</td>
+            <td class="headerValue">2026-07-15 18:45:00</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -374,274 +374,271 @@
 <span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">           1 :     auto file = std::move(inode.value());</span></span>
 <span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">           1 :     file.state = FileState::kUnderConstruction;</span></span>
 <span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">           1 :     file.mtime_ms = now_ms();</span></span>
-<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">           1 :     ++file.version;</span></span>
-<span id="L307"><span class="lineNum">     307</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto update = store_-&gt;update_inode(file);</span></span>
-<span id="L308"><span class="lineNum">     308</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (update.hasError()) {</span></span>
-<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(update.error());</span></span>
-<span id="L310"><span class="lineNum">     310</span>                 :             :     }</span>
-<span id="L311"><span class="lineNum">     311</span>                 :             :     return file;</span>
-<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC tlaBgGNC">           1 : }</span></span>
-<span id="L313"><span class="lineNum">     313</span>                 :             : </span>
-<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">           7 : pl::Result&lt;Inode&gt; NamespaceManager::remove(std::string_view path, bool recursive) {</span></span>
-<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">           7 :     auto valid = validate_path(path);</span></span>
-<span id="L316"><span class="lineNum">     316</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (valid.hasError()) {</span></span>
-<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(valid.error());</span></span>
-<span id="L318"><span class="lineNum">     318</span>                 :             :     }</span>
-<span id="L319"><span class="lineNum">     319</span>                 :             : </span>
-<span id="L320"><span class="lineNum">     320</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           7 :     auto components = split_path(path);</span></span>
-<span id="L321"><span class="lineNum">     321</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           7 :     if (components.empty()) {</span></span>
-<span id="L322"><span class="lineNum">     322</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidPath),</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :             :                              &quot;cannot remove root directory&quot;);</span>
-<span id="L324"><span class="lineNum">     324</span>                 :             :     }</span>
-<span id="L325"><span class="lineNum">     325</span>                 :             : </span>
-<span id="L326"><span class="lineNum">     326</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     auto inode_result = walk_path(components);</span></span>
-<span id="L327"><span class="lineNum">     327</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :     if (inode_result.hasError()) {</span></span>
-<span id="L328"><span class="lineNum">     328</span>                 :             :         return inode_result;</span>
-<span id="L329"><span class="lineNum">     329</span>                 :             :     }</span>
-<span id="L330"><span class="lineNum">     330</span>                 :             :     auto&amp; inode = inode_result.value();</span>
-<span id="L331"><span class="lineNum">     331</span>                 :             : </span>
-<span id="L332"><span class="lineNum">     332</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           6 :     if (inode.type == InodeType::kDirectory) {</span></span>
-<span id="L333"><span class="lineNum">     333</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         auto children = store_-&gt;list_children(inode.inode_id);</span></span>
-<span id="L334"><span class="lineNum">     334</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :         if (children.hasError()) {</span></span>
-<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return folly::makeUnexpected(children.error());</span></span>
-<span id="L336"><span class="lineNum">     336</span>                 :             :         }</span>
-<span id="L337"><span class="lineNum">     337</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           4 :         if (!children.value().empty() &amp;&amp; !recursive) {</span></span>
-<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">           1 :             return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kDirectoryNotEmpty),</span></span>
-<span id="L339"><span class="lineNum">     339</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                                  fmt::format(&quot;directory '{}' is not empty&quot;, inode.name));</span></span>
-<span id="L340"><span class="lineNum">     340</span>                 :             :         }</span>
-<span id="L341"><span class="lineNum">     341</span>                 :             :         // Recursive delete: remove all children using iterative DFS.</span>
-<span id="L342"><span class="lineNum">     342</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           3 :         if (recursive) {</span></span>
-<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">           2 :             std::vector&lt;uint64_t&gt; delete_stack;</span></span>
-<span id="L344"><span class="lineNum">     344</span>                 :             :             // Collect all descendant inodes in post-order (children before parents).</span>
-<span id="L345"><span class="lineNum">     345</span>                 :<span class="tlaGNC">           2 :             std::vector&lt;uint64_t&gt; to_delete;</span></span>
-<span id="L346"><span class="lineNum">     346</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             delete_stack.push_back(inode.inode_id);</span></span>
-<span id="L347"><span class="lineNum">     347</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           7 :             while (!delete_stack.empty()) {</span></span>
-<span id="L348"><span class="lineNum">     348</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :                 uint64_t cur = delete_stack.back();</span></span>
-<span id="L349"><span class="lineNum">     349</span>                 :             :                 delete_stack.pop_back();</span>
-<span id="L350"><span class="lineNum">     350</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :                 auto cur_children = store_-&gt;list_children(cur);</span></span>
-<span id="L351"><span class="lineNum">     351</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :                 if (cur_children.hasError()) {</span></span>
-<span id="L352"><span class="lineNum">     352</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                     return folly::makeUnexpected(cur_children.error());</span></span>
-<span id="L353"><span class="lineNum">     353</span>                 :             :                 }</span>
-<span id="L354"><span class="lineNum">     354</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           9 :                 for (const auto&amp; child : cur_children.value()) {</span></span>
-<span id="L355"><span class="lineNum">     355</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :                     to_delete.push_back(child.inode_id);</span></span>
-<span id="L356"><span class="lineNum">     356</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           4 :                     if (child.type == InodeType::kDirectory) {</span></span>
-<span id="L357"><span class="lineNum">     357</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :                         delete_stack.push_back(child.inode_id);</span></span>
-<span id="L358"><span class="lineNum">     358</span>                 :             :                     }</span>
-<span id="L359"><span class="lineNum">     359</span>                 :             :                 }</span>
-<span id="L360"><span class="lineNum">     360</span>                 :             :             }</span>
-<span id="L361"><span class="lineNum">     361</span>                 :             :             // Delete in reverse order (deepest first) to respect FK constraints.</span>
-<span id="L362"><span class="lineNum">     362</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           6 :             for (auto it = to_delete.rbegin(); it != to_delete.rend(); ++it) {</span></span>
-<span id="L363"><span class="lineNum">     363</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :                 auto del = store_-&gt;delete_inode(*it);</span></span>
-<span id="L364"><span class="lineNum">     364</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :                 if (del.hasError()) {</span></span>
-<span id="L365"><span class="lineNum">     365</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                     return folly::makeUnexpected(del.error());</span></span>
-<span id="L366"><span class="lineNum">     366</span>                 :             :                 }</span>
-<span id="L367"><span class="lineNum">     367</span>                 :             :             }</span>
-<span id="L368"><span class="lineNum">     368</span>                 :             :         }</span>
-<span id="L369"><span class="lineNum">     369</span>                 :             :     }</span>
-<span id="L370"><span class="lineNum">     370</span>                 :             : </span>
-<span id="L371"><span class="lineNum">     371</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           5 :     auto del = store_-&gt;delete_inode(inode.inode_id);</span></span>
-<span id="L372"><span class="lineNum">     372</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :     if (del.hasError()) {</span></span>
-<span id="L373"><span class="lineNum">     373</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(del.error());</span></span>
-<span id="L374"><span class="lineNum">     374</span>                 :             :     }</span>
-<span id="L375"><span class="lineNum">     375</span>                 :             :     return inode;</span>
-<span id="L376"><span class="lineNum">     376</span>                 :             : }</span>
-<span id="L377"><span class="lineNum">     377</span>                 :             : </span>
-<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC tlaBgGNC">           3 : pl::Result&lt;pl::Void&gt; NamespaceManager::rename(std::string_view src, std::string_view dst) {</span></span>
-<span id="L379"><span class="lineNum">     379</span>                 :<span class="tlaGNC">           3 :     auto src_valid = validate_path(src);</span></span>
-<span id="L380"><span class="lineNum">     380</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (src_valid.hasError()) {</span></span>
-<span id="L381"><span class="lineNum">     381</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return src_valid;</span></span>
-<span id="L382"><span class="lineNum">     382</span>                 :             :     }</span>
-<span id="L383"><span class="lineNum">     383</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           3 :     auto dst_valid = validate_path(dst);</span></span>
-<span id="L384"><span class="lineNum">     384</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (dst_valid.hasError()) {</span></span>
-<span id="L385"><span class="lineNum">     385</span>                 :             :         return dst_valid;</span>
-<span id="L386"><span class="lineNum">     386</span>                 :             :     }</span>
-<span id="L387"><span class="lineNum">     387</span>                 :             : </span>
-<span id="L388"><span class="lineNum">     388</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     auto src_components = split_path(src);</span></span>
-<span id="L389"><span class="lineNum">     389</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     auto dst_components = split_path(dst);</span></span>
-<span id="L390"><span class="lineNum">     390</span>                 :             : </span>
-<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (src_components.empty()) {</span></span>
-<span id="L392"><span class="lineNum">     392</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidPath),</span></span>
-<span id="L393"><span class="lineNum">     393</span>                 :             :                              &quot;cannot rename root&quot;);</span>
-<span id="L394"><span class="lineNum">     394</span>                 :             :     }</span>
-<span id="L395"><span class="lineNum">     395</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           3 :     if (dst_components.empty()) {</span></span>
-<span id="L396"><span class="lineNum">     396</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidPath),</span></span>
-<span id="L397"><span class="lineNum">     397</span>                 :             :                              &quot;cannot rename to root&quot;);</span>
-<span id="L398"><span class="lineNum">     398</span>                 :             :     }</span>
-<span id="L399"><span class="lineNum">     399</span>                 :             : </span>
-<span id="L400"><span class="lineNum">     400</span>                 :             :     // Resolve source.</span>
-<span id="L401"><span class="lineNum">     401</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           3 :     auto src_inode = walk_path(src_components);</span></span>
-<span id="L402"><span class="lineNum">     402</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 :     if (src_inode.hasError()) {</span></span>
-<span id="L403"><span class="lineNum">     403</span>                 :<span class="tlaGNC">           1 :         return folly::makeUnexpected(src_inode.error());</span></span>
-<span id="L404"><span class="lineNum">     404</span>                 :             :     }</span>
-<span id="L405"><span class="lineNum">     405</span>                 :             : </span>
-<span id="L406"><span class="lineNum">     406</span>                 :             :     // Resolve destination parent.</span>
-<span id="L407"><span class="lineNum">     407</span>                 :             :     auto dst_parent_components =</span>
-<span id="L408"><span class="lineNum">     408</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         std::vector&lt;std::string_view&gt;(dst_components.begin(), dst_components.end() - 1);</span></span>
-<span id="L409"><span class="lineNum">     409</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     auto dst_parent = walk_path(dst_parent_components);</span></span>
-<span id="L410"><span class="lineNum">     410</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (dst_parent.hasError()) {</span></span>
-<span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(dst_parent.error());</span></span>
-<span id="L412"><span class="lineNum">     412</span>                 :             :     }</span>
-<span id="L413"><span class="lineNum">     413</span>                 :             : </span>
-<span id="L414"><span class="lineNum">     414</span>                 :             :     // Check destination doesn't already exist.</span>
-<span id="L415"><span class="lineNum">     415</span>                 :             :     auto&amp; dst_name = dst_components.back();</span>
-<span id="L416"><span class="lineNum">     416</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           2 :     auto existing = store_-&gt;get_child(dst_parent.value().inode_id, dst_name);</span></span>
-<span id="L417"><span class="lineNum">     417</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (existing.hasError()) {</span></span>
-<span id="L418"><span class="lineNum">     418</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(existing.error());</span></span>
-<span id="L419"><span class="lineNum">     419</span>                 :             :     }</span>
-<span id="L420"><span class="lineNum">     420</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           2 :     if (existing.value().has_value()) {</span></span>
-<span id="L421"><span class="lineNum">     421</span>                 :<span class="tlaGNC">           1 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kAlreadyExists),</span></span>
-<span id="L422"><span class="lineNum">     422</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                              fmt::format(&quot;destination '{}' already exists&quot;, dst_name));</span></span>
-<span id="L423"><span class="lineNum">     423</span>                 :             :     }</span>
-<span id="L424"><span class="lineNum">     424</span>                 :             : </span>
-<span id="L425"><span class="lineNum">     425</span>                 :             :     // Update inode: change parent_id and name.</span>
-<span id="L426"><span class="lineNum">     426</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     Inode updated = src_inode.value();</span></span>
-<span id="L427"><span class="lineNum">     427</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     updated.parent_id = dst_parent.value().inode_id;</span></span>
-<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaGNC">           2 :     updated.name = std::string(dst_name);</span></span>
-<span id="L429"><span class="lineNum">     429</span>                 :<span class="tlaGNC">           1 :     updated.mtime_ms = now_ms();</span></span>
-<span id="L430"><span class="lineNum">     430</span>                 :             : </span>
-<span id="L431"><span class="lineNum">     431</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     return store_-&gt;update_inode(updated);</span></span>
-<span id="L432"><span class="lineNum">     432</span>                 :<span class="tlaGNC">           1 : }</span></span>
-<span id="L433"><span class="lineNum">     433</span>                 :             : </span>
-<span id="L434"><span class="lineNum">     434</span>                 :             : // Query operations</span>
-<span id="L435"><span class="lineNum">     435</span>                 :<span class="tlaGNC">          12 : pl::Result&lt;FileStatus&gt; NamespaceManager::get_file_status(std::string_view path) {</span></span>
-<span id="L436"><span class="lineNum">     436</span>                 :<span class="tlaGNC">          12 :     auto valid = validate_path(path);</span></span>
-<span id="L437"><span class="lineNum">     437</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          12 :     if (valid.hasError()) {</span></span>
-<span id="L438"><span class="lineNum">     438</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(valid.error());</span></span>
-<span id="L439"><span class="lineNum">     439</span>                 :             :     }</span>
-<span id="L440"><span class="lineNum">     440</span>                 :             : </span>
-<span id="L441"><span class="lineNum">     441</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          12 :     auto components = split_path(path);</span></span>
-<span id="L442"><span class="lineNum">     442</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     auto inode_result = walk_path(components);</span></span>
-<span id="L443"><span class="lineNum">     443</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">          12 :     if (inode_result.hasError()) {</span></span>
-<span id="L444"><span class="lineNum">     444</span>                 :<span class="tlaGNC">           4 :         return folly::makeUnexpected(inode_result.error());</span></span>
-<span id="L445"><span class="lineNum">     445</span>                 :             :     }</span>
-<span id="L446"><span class="lineNum">     446</span>                 :             :     auto&amp; inode = inode_result.value();</span>
-<span id="L447"><span class="lineNum">     447</span>                 :             : </span>
-<span id="L448"><span class="lineNum">     448</span>                 :             :     FileStatus status;</span>
-<span id="L449"><span class="lineNum">     449</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     status.inode_id = inode.inode_id;</span></span>
-<span id="L450"><span class="lineNum">     450</span>                 :<span class="tlaGNC">           8 :     status.path = std::string(path);</span></span>
-<span id="L451"><span class="lineNum">     451</span>                 :<span class="tlaGNC">           8 :     status.is_dir = (inode.type == InodeType::kDirectory);</span></span>
-<span id="L452"><span class="lineNum">     452</span>                 :<span class="tlaGNC">           8 :     status.length = inode.length;</span></span>
-<span id="L453"><span class="lineNum">     453</span>                 :<span class="tlaGNC">           8 :     status.replication = inode.replication;</span></span>
-<span id="L454"><span class="lineNum">     454</span>                 :<span class="tlaGNC">           8 :     status.block_size = inode.block_size;</span></span>
-<span id="L455"><span class="lineNum">     455</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     status.mtime_ms = inode.mtime_ms;</span></span>
-<span id="L456"><span class="lineNum">     456</span>                 :             :     status.owner = inode.owner;</span>
-<span id="L457"><span class="lineNum">     457</span>                 :             :     status.group = inode.group;</span>
-<span id="L458"><span class="lineNum">     458</span>                 :<span class="tlaGNC">           8 :     status.permission = inode.permission;</span></span>
-<span id="L459"><span class="lineNum">     459</span>                 :             :     return status;</span>
-<span id="L460"><span class="lineNum">     460</span>                 :<span class="tlaGNC">           8 : }</span></span>
-<span id="L461"><span class="lineNum">     461</span>                 :             : </span>
-<span id="L462"><span class="lineNum">     462</span>                 :<span class="tlaGNC">           2 : pl::Result&lt;std::vector&lt;FileStatus&gt;&gt; NamespaceManager::list_status(std::string_view path) {</span></span>
-<span id="L463"><span class="lineNum">     463</span>                 :<span class="tlaGNC">           2 :     auto valid = validate_path(path);</span></span>
-<span id="L464"><span class="lineNum">     464</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (valid.hasError()) {</span></span>
-<span id="L465"><span class="lineNum">     465</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(valid.error());</span></span>
-<span id="L466"><span class="lineNum">     466</span>                 :             :     }</span>
-<span id="L467"><span class="lineNum">     467</span>                 :             : </span>
-<span id="L468"><span class="lineNum">     468</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           2 :     auto components = split_path(path);</span></span>
-<span id="L469"><span class="lineNum">     469</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     auto inode_result = walk_path(components);</span></span>
-<span id="L470"><span class="lineNum">     470</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (inode_result.hasError()) {</span></span>
-<span id="L471"><span class="lineNum">     471</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(inode_result.error());</span></span>
-<span id="L472"><span class="lineNum">     472</span>                 :             :     }</span>
-<span id="L473"><span class="lineNum">     473</span>                 :             :     auto&amp; inode = inode_result.value();</span>
-<span id="L474"><span class="lineNum">     474</span>                 :             : </span>
-<span id="L475"><span class="lineNum">     475</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           2 :     if (inode.type != InodeType::kDirectory) {</span></span>
-<span id="L476"><span class="lineNum">     476</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kNotDirectory),</span></span>
-<span id="L477"><span class="lineNum">     477</span>                 :             :                              &quot;path is not a directory&quot;);</span>
-<span id="L478"><span class="lineNum">     478</span>                 :             :     }</span>
-<span id="L479"><span class="lineNum">     479</span>                 :             : </span>
-<span id="L480"><span class="lineNum">     480</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto children = store_-&gt;list_children(inode.inode_id);</span></span>
-<span id="L481"><span class="lineNum">     481</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (children.hasError()) {</span></span>
-<span id="L482"><span class="lineNum">     482</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(children.error());</span></span>
-<span id="L483"><span class="lineNum">     483</span>                 :             :     }</span>
-<span id="L484"><span class="lineNum">     484</span>                 :             : </span>
-<span id="L485"><span class="lineNum">     485</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     std::vector&lt;FileStatus&gt; result;</span></span>
-<span id="L486"><span class="lineNum">     486</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     result.reserve(children.value().size());</span></span>
-<span id="L487"><span class="lineNum">     487</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           3 :     for (const auto&amp; child : children.value()) {</span></span>
-<span id="L488"><span class="lineNum">     488</span>                 :             :         FileStatus fs;</span>
-<span id="L489"><span class="lineNum">     489</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         fs.inode_id = child.inode_id;</span></span>
-<span id="L490"><span class="lineNum">     490</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           4 :         fs.path = (path == &quot;/&quot;) ? (&quot;/&quot; + child.name) : (std::string(path) + &quot;/&quot; + child.name);</span></span>
+<span id="L306"><span class="lineNum">     306</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto update = store_-&gt;update_inode(file);</span></span>
+<span id="L307"><span class="lineNum">     307</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (update.hasError()) {</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(update.error());</span></span>
+<span id="L309"><span class="lineNum">     309</span>                 :             :     }</span>
+<span id="L310"><span class="lineNum">     310</span>                 :             :     return file;</span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC tlaBgGNC">           1 : }</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :             : </span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">           7 : pl::Result&lt;Inode&gt; NamespaceManager::remove(std::string_view path, bool recursive) {</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">           7 :     auto valid = validate_path(path);</span></span>
+<span id="L315"><span class="lineNum">     315</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (valid.hasError()) {</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(valid.error());</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :             :     }</span>
+<span id="L318"><span class="lineNum">     318</span>                 :             : </span>
+<span id="L319"><span class="lineNum">     319</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           7 :     auto components = split_path(path);</span></span>
+<span id="L320"><span class="lineNum">     320</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           7 :     if (components.empty()) {</span></span>
+<span id="L321"><span class="lineNum">     321</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidPath),</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :             :                              &quot;cannot remove root directory&quot;);</span>
+<span id="L323"><span class="lineNum">     323</span>                 :             :     }</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             : </span>
+<span id="L325"><span class="lineNum">     325</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     auto inode_result = walk_path(components);</span></span>
+<span id="L326"><span class="lineNum">     326</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :     if (inode_result.hasError()) {</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :             :         return inode_result;</span>
+<span id="L328"><span class="lineNum">     328</span>                 :             :     }</span>
+<span id="L329"><span class="lineNum">     329</span>                 :             :     auto&amp; inode = inode_result.value();</span>
+<span id="L330"><span class="lineNum">     330</span>                 :             : </span>
+<span id="L331"><span class="lineNum">     331</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           6 :     if (inode.type == InodeType::kDirectory) {</span></span>
+<span id="L332"><span class="lineNum">     332</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         auto children = store_-&gt;list_children(inode.inode_id);</span></span>
+<span id="L333"><span class="lineNum">     333</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :         if (children.hasError()) {</span></span>
+<span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return folly::makeUnexpected(children.error());</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :             :         }</span>
+<span id="L336"><span class="lineNum">     336</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           4 :         if (!children.value().empty() &amp;&amp; !recursive) {</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC">           1 :             return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kDirectoryNotEmpty),</span></span>
+<span id="L338"><span class="lineNum">     338</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                                  fmt::format(&quot;directory '{}' is not empty&quot;, inode.name));</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :             :         }</span>
+<span id="L340"><span class="lineNum">     340</span>                 :             :         // Recursive delete: remove all children using iterative DFS.</span>
+<span id="L341"><span class="lineNum">     341</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           3 :         if (recursive) {</span></span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">           2 :             std::vector&lt;uint64_t&gt; delete_stack;</span></span>
+<span id="L343"><span class="lineNum">     343</span>                 :             :             // Collect all descendant inodes in post-order (children before parents).</span>
+<span id="L344"><span class="lineNum">     344</span>                 :<span class="tlaGNC">           2 :             std::vector&lt;uint64_t&gt; to_delete;</span></span>
+<span id="L345"><span class="lineNum">     345</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             delete_stack.push_back(inode.inode_id);</span></span>
+<span id="L346"><span class="lineNum">     346</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           7 :             while (!delete_stack.empty()) {</span></span>
+<span id="L347"><span class="lineNum">     347</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :                 uint64_t cur = delete_stack.back();</span></span>
+<span id="L348"><span class="lineNum">     348</span>                 :             :                 delete_stack.pop_back();</span>
+<span id="L349"><span class="lineNum">     349</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :                 auto cur_children = store_-&gt;list_children(cur);</span></span>
+<span id="L350"><span class="lineNum">     350</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :                 if (cur_children.hasError()) {</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                     return folly::makeUnexpected(cur_children.error());</span></span>
+<span id="L352"><span class="lineNum">     352</span>                 :             :                 }</span>
+<span id="L353"><span class="lineNum">     353</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           9 :                 for (const auto&amp; child : cur_children.value()) {</span></span>
+<span id="L354"><span class="lineNum">     354</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :                     to_delete.push_back(child.inode_id);</span></span>
+<span id="L355"><span class="lineNum">     355</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           4 :                     if (child.type == InodeType::kDirectory) {</span></span>
+<span id="L356"><span class="lineNum">     356</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :                         delete_stack.push_back(child.inode_id);</span></span>
+<span id="L357"><span class="lineNum">     357</span>                 :             :                     }</span>
+<span id="L358"><span class="lineNum">     358</span>                 :             :                 }</span>
+<span id="L359"><span class="lineNum">     359</span>                 :             :             }</span>
+<span id="L360"><span class="lineNum">     360</span>                 :             :             // Delete in reverse order (deepest first) to respect FK constraints.</span>
+<span id="L361"><span class="lineNum">     361</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           6 :             for (auto it = to_delete.rbegin(); it != to_delete.rend(); ++it) {</span></span>
+<span id="L362"><span class="lineNum">     362</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :                 auto del = store_-&gt;delete_inode(*it);</span></span>
+<span id="L363"><span class="lineNum">     363</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :                 if (del.hasError()) {</span></span>
+<span id="L364"><span class="lineNum">     364</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                     return folly::makeUnexpected(del.error());</span></span>
+<span id="L365"><span class="lineNum">     365</span>                 :             :                 }</span>
+<span id="L366"><span class="lineNum">     366</span>                 :             :             }</span>
+<span id="L367"><span class="lineNum">     367</span>                 :             :         }</span>
+<span id="L368"><span class="lineNum">     368</span>                 :             :     }</span>
+<span id="L369"><span class="lineNum">     369</span>                 :             : </span>
+<span id="L370"><span class="lineNum">     370</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           5 :     auto del = store_-&gt;delete_inode(inode.inode_id);</span></span>
+<span id="L371"><span class="lineNum">     371</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :     if (del.hasError()) {</span></span>
+<span id="L372"><span class="lineNum">     372</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(del.error());</span></span>
+<span id="L373"><span class="lineNum">     373</span>                 :             :     }</span>
+<span id="L374"><span class="lineNum">     374</span>                 :             :     return inode;</span>
+<span id="L375"><span class="lineNum">     375</span>                 :             : }</span>
+<span id="L376"><span class="lineNum">     376</span>                 :             : </span>
+<span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaGNC tlaBgGNC">           3 : pl::Result&lt;pl::Void&gt; NamespaceManager::rename(std::string_view src, std::string_view dst) {</span></span>
+<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC">           3 :     auto src_valid = validate_path(src);</span></span>
+<span id="L379"><span class="lineNum">     379</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (src_valid.hasError()) {</span></span>
+<span id="L380"><span class="lineNum">     380</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return src_valid;</span></span>
+<span id="L381"><span class="lineNum">     381</span>                 :             :     }</span>
+<span id="L382"><span class="lineNum">     382</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           3 :     auto dst_valid = validate_path(dst);</span></span>
+<span id="L383"><span class="lineNum">     383</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (dst_valid.hasError()) {</span></span>
+<span id="L384"><span class="lineNum">     384</span>                 :             :         return dst_valid;</span>
+<span id="L385"><span class="lineNum">     385</span>                 :             :     }</span>
+<span id="L386"><span class="lineNum">     386</span>                 :             : </span>
+<span id="L387"><span class="lineNum">     387</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     auto src_components = split_path(src);</span></span>
+<span id="L388"><span class="lineNum">     388</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     auto dst_components = split_path(dst);</span></span>
+<span id="L389"><span class="lineNum">     389</span>                 :             : </span>
+<span id="L390"><span class="lineNum">     390</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (src_components.empty()) {</span></span>
+<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidPath),</span></span>
+<span id="L392"><span class="lineNum">     392</span>                 :             :                              &quot;cannot rename root&quot;);</span>
+<span id="L393"><span class="lineNum">     393</span>                 :             :     }</span>
+<span id="L394"><span class="lineNum">     394</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           3 :     if (dst_components.empty()) {</span></span>
+<span id="L395"><span class="lineNum">     395</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidPath),</span></span>
+<span id="L396"><span class="lineNum">     396</span>                 :             :                              &quot;cannot rename to root&quot;);</span>
+<span id="L397"><span class="lineNum">     397</span>                 :             :     }</span>
+<span id="L398"><span class="lineNum">     398</span>                 :             : </span>
+<span id="L399"><span class="lineNum">     399</span>                 :             :     // Resolve source.</span>
+<span id="L400"><span class="lineNum">     400</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           3 :     auto src_inode = walk_path(src_components);</span></span>
+<span id="L401"><span class="lineNum">     401</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 :     if (src_inode.hasError()) {</span></span>
+<span id="L402"><span class="lineNum">     402</span>                 :<span class="tlaGNC">           1 :         return folly::makeUnexpected(src_inode.error());</span></span>
+<span id="L403"><span class="lineNum">     403</span>                 :             :     }</span>
+<span id="L404"><span class="lineNum">     404</span>                 :             : </span>
+<span id="L405"><span class="lineNum">     405</span>                 :             :     // Resolve destination parent.</span>
+<span id="L406"><span class="lineNum">     406</span>                 :             :     auto dst_parent_components =</span>
+<span id="L407"><span class="lineNum">     407</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         std::vector&lt;std::string_view&gt;(dst_components.begin(), dst_components.end() - 1);</span></span>
+<span id="L408"><span class="lineNum">     408</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     auto dst_parent = walk_path(dst_parent_components);</span></span>
+<span id="L409"><span class="lineNum">     409</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (dst_parent.hasError()) {</span></span>
+<span id="L410"><span class="lineNum">     410</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(dst_parent.error());</span></span>
+<span id="L411"><span class="lineNum">     411</span>                 :             :     }</span>
+<span id="L412"><span class="lineNum">     412</span>                 :             : </span>
+<span id="L413"><span class="lineNum">     413</span>                 :             :     // Check destination doesn't already exist.</span>
+<span id="L414"><span class="lineNum">     414</span>                 :             :     auto&amp; dst_name = dst_components.back();</span>
+<span id="L415"><span class="lineNum">     415</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           2 :     auto existing = store_-&gt;get_child(dst_parent.value().inode_id, dst_name);</span></span>
+<span id="L416"><span class="lineNum">     416</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (existing.hasError()) {</span></span>
+<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(existing.error());</span></span>
+<span id="L418"><span class="lineNum">     418</span>                 :             :     }</span>
+<span id="L419"><span class="lineNum">     419</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           2 :     if (existing.value().has_value()) {</span></span>
+<span id="L420"><span class="lineNum">     420</span>                 :<span class="tlaGNC">           1 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kAlreadyExists),</span></span>
+<span id="L421"><span class="lineNum">     421</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                              fmt::format(&quot;destination '{}' already exists&quot;, dst_name));</span></span>
+<span id="L422"><span class="lineNum">     422</span>                 :             :     }</span>
+<span id="L423"><span class="lineNum">     423</span>                 :             : </span>
+<span id="L424"><span class="lineNum">     424</span>                 :             :     // Update inode: change parent_id and name.</span>
+<span id="L425"><span class="lineNum">     425</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     Inode updated = src_inode.value();</span></span>
+<span id="L426"><span class="lineNum">     426</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     updated.parent_id = dst_parent.value().inode_id;</span></span>
+<span id="L427"><span class="lineNum">     427</span>                 :<span class="tlaGNC">           2 :     updated.name = std::string(dst_name);</span></span>
+<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaGNC">           1 :     updated.mtime_ms = now_ms();</span></span>
+<span id="L429"><span class="lineNum">     429</span>                 :             : </span>
+<span id="L430"><span class="lineNum">     430</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     return store_-&gt;update_inode(updated);</span></span>
+<span id="L431"><span class="lineNum">     431</span>                 :<span class="tlaGNC">           1 : }</span></span>
+<span id="L432"><span class="lineNum">     432</span>                 :             : </span>
+<span id="L433"><span class="lineNum">     433</span>                 :             : // Query operations</span>
+<span id="L434"><span class="lineNum">     434</span>                 :<span class="tlaGNC">          12 : pl::Result&lt;FileStatus&gt; NamespaceManager::get_file_status(std::string_view path) {</span></span>
+<span id="L435"><span class="lineNum">     435</span>                 :<span class="tlaGNC">          12 :     auto valid = validate_path(path);</span></span>
+<span id="L436"><span class="lineNum">     436</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          12 :     if (valid.hasError()) {</span></span>
+<span id="L437"><span class="lineNum">     437</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(valid.error());</span></span>
+<span id="L438"><span class="lineNum">     438</span>                 :             :     }</span>
+<span id="L439"><span class="lineNum">     439</span>                 :             : </span>
+<span id="L440"><span class="lineNum">     440</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          12 :     auto components = split_path(path);</span></span>
+<span id="L441"><span class="lineNum">     441</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     auto inode_result = walk_path(components);</span></span>
+<span id="L442"><span class="lineNum">     442</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">          12 :     if (inode_result.hasError()) {</span></span>
+<span id="L443"><span class="lineNum">     443</span>                 :<span class="tlaGNC">           4 :         return folly::makeUnexpected(inode_result.error());</span></span>
+<span id="L444"><span class="lineNum">     444</span>                 :             :     }</span>
+<span id="L445"><span class="lineNum">     445</span>                 :             :     auto&amp; inode = inode_result.value();</span>
+<span id="L446"><span class="lineNum">     446</span>                 :             : </span>
+<span id="L447"><span class="lineNum">     447</span>                 :             :     FileStatus status;</span>
+<span id="L448"><span class="lineNum">     448</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     status.inode_id = inode.inode_id;</span></span>
+<span id="L449"><span class="lineNum">     449</span>                 :<span class="tlaGNC">           8 :     status.path = std::string(path);</span></span>
+<span id="L450"><span class="lineNum">     450</span>                 :<span class="tlaGNC">           8 :     status.is_dir = (inode.type == InodeType::kDirectory);</span></span>
+<span id="L451"><span class="lineNum">     451</span>                 :<span class="tlaGNC">           8 :     status.length = inode.length;</span></span>
+<span id="L452"><span class="lineNum">     452</span>                 :<span class="tlaGNC">           8 :     status.replication = inode.replication;</span></span>
+<span id="L453"><span class="lineNum">     453</span>                 :<span class="tlaGNC">           8 :     status.block_size = inode.block_size;</span></span>
+<span id="L454"><span class="lineNum">     454</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     status.mtime_ms = inode.mtime_ms;</span></span>
+<span id="L455"><span class="lineNum">     455</span>                 :             :     status.owner = inode.owner;</span>
+<span id="L456"><span class="lineNum">     456</span>                 :             :     status.group = inode.group;</span>
+<span id="L457"><span class="lineNum">     457</span>                 :<span class="tlaGNC">           8 :     status.permission = inode.permission;</span></span>
+<span id="L458"><span class="lineNum">     458</span>                 :             :     return status;</span>
+<span id="L459"><span class="lineNum">     459</span>                 :<span class="tlaGNC">           8 : }</span></span>
+<span id="L460"><span class="lineNum">     460</span>                 :             : </span>
+<span id="L461"><span class="lineNum">     461</span>                 :<span class="tlaGNC">           2 : pl::Result&lt;std::vector&lt;FileStatus&gt;&gt; NamespaceManager::list_status(std::string_view path) {</span></span>
+<span id="L462"><span class="lineNum">     462</span>                 :<span class="tlaGNC">           2 :     auto valid = validate_path(path);</span></span>
+<span id="L463"><span class="lineNum">     463</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (valid.hasError()) {</span></span>
+<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(valid.error());</span></span>
+<span id="L465"><span class="lineNum">     465</span>                 :             :     }</span>
+<span id="L466"><span class="lineNum">     466</span>                 :             : </span>
+<span id="L467"><span class="lineNum">     467</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           2 :     auto components = split_path(path);</span></span>
+<span id="L468"><span class="lineNum">     468</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     auto inode_result = walk_path(components);</span></span>
+<span id="L469"><span class="lineNum">     469</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (inode_result.hasError()) {</span></span>
+<span id="L470"><span class="lineNum">     470</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(inode_result.error());</span></span>
+<span id="L471"><span class="lineNum">     471</span>                 :             :     }</span>
+<span id="L472"><span class="lineNum">     472</span>                 :             :     auto&amp; inode = inode_result.value();</span>
+<span id="L473"><span class="lineNum">     473</span>                 :             : </span>
+<span id="L474"><span class="lineNum">     474</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           2 :     if (inode.type != InodeType::kDirectory) {</span></span>
+<span id="L475"><span class="lineNum">     475</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kNotDirectory),</span></span>
+<span id="L476"><span class="lineNum">     476</span>                 :             :                              &quot;path is not a directory&quot;);</span>
+<span id="L477"><span class="lineNum">     477</span>                 :             :     }</span>
+<span id="L478"><span class="lineNum">     478</span>                 :             : </span>
+<span id="L479"><span class="lineNum">     479</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto children = store_-&gt;list_children(inode.inode_id);</span></span>
+<span id="L480"><span class="lineNum">     480</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (children.hasError()) {</span></span>
+<span id="L481"><span class="lineNum">     481</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(children.error());</span></span>
+<span id="L482"><span class="lineNum">     482</span>                 :             :     }</span>
+<span id="L483"><span class="lineNum">     483</span>                 :             : </span>
+<span id="L484"><span class="lineNum">     484</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     std::vector&lt;FileStatus&gt; result;</span></span>
+<span id="L485"><span class="lineNum">     485</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     result.reserve(children.value().size());</span></span>
+<span id="L486"><span class="lineNum">     486</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           3 :     for (const auto&amp; child : children.value()) {</span></span>
+<span id="L487"><span class="lineNum">     487</span>                 :             :         FileStatus fs;</span>
+<span id="L488"><span class="lineNum">     488</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         fs.inode_id = child.inode_id;</span></span>
+<span id="L489"><span class="lineNum">     489</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           4 :         fs.path = (path == &quot;/&quot;) ? (&quot;/&quot; + child.name) : (std::string(path) + &quot;/&quot; + child.name);</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaGBC" title="Branch 11 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span>]
-<span id="L491"><span class="lineNum">     491</span>                 :<span class="tlaGNC">           2 :         fs.is_dir = (child.type == InodeType::kDirectory);</span></span>
-<span id="L492"><span class="lineNum">     492</span>                 :<span class="tlaGNC">           2 :         fs.length = child.length;</span></span>
-<span id="L493"><span class="lineNum">     493</span>                 :<span class="tlaGNC">           2 :         fs.replication = child.replication;</span></span>
-<span id="L494"><span class="lineNum">     494</span>                 :<span class="tlaGNC">           2 :         fs.block_size = child.block_size;</span></span>
-<span id="L495"><span class="lineNum">     495</span>                 :<span class="tlaGNC">           2 :         fs.mtime_ms = child.mtime_ms;</span></span>
-<span id="L496"><span class="lineNum">     496</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         fs.owner = child.owner;</span></span>
-<span id="L497"><span class="lineNum">     497</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         fs.group = child.group;</span></span>
-<span id="L498"><span class="lineNum">     498</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         fs.permission = child.permission;</span></span>
-<span id="L499"><span class="lineNum">     499</span>                 :             :         result.push_back(std::move(fs));</span>
-<span id="L500"><span class="lineNum">     500</span>                 :<span class="tlaGNC">           2 :     }</span></span>
-<span id="L501"><span class="lineNum">     501</span>                 :             :     return result;</span>
-<span id="L502"><span class="lineNum">     502</span>                 :<span class="tlaGNC">           1 : }</span></span>
-<span id="L503"><span class="lineNum">     503</span>                 :             : </span>
-<span id="L504"><span class="lineNum">     504</span>                 :<span class="tlaGNC">           6 : pl::Result&lt;Inode&gt; NamespaceManager::resolve_path(std::string_view path) {</span></span>
-<span id="L505"><span class="lineNum">     505</span>                 :<span class="tlaGNC">           6 :     auto valid = validate_path(path);</span></span>
-<span id="L506"><span class="lineNum">     506</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :     if (valid.hasError()) {</span></span>
-<span id="L507"><span class="lineNum">     507</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(valid.error());</span></span>
-<span id="L508"><span class="lineNum">     508</span>                 :             :     }</span>
-<span id="L509"><span class="lineNum">     509</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          12 :     return walk_path(split_path(path));</span></span>
-<span id="L510"><span class="lineNum">     510</span>                 :             : }</span>
-<span id="L511"><span class="lineNum">     511</span>                 :             : </span>
-<span id="L512"><span class="lineNum">     512</span>                 :<span class="tlaGNC">           5 : pl::Result&lt;pl::Void&gt; NamespaceManager::complete_file(uint64_t inode_id, uint64_t final_length) {</span></span>
-<span id="L513"><span class="lineNum">     513</span>                 :<span class="tlaGNC">           5 :     auto inode_result = store_-&gt;get_inode(inode_id);</span></span>
-<span id="L514"><span class="lineNum">     514</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :     if (inode_result.hasError()) {</span></span>
-<span id="L515"><span class="lineNum">     515</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(inode_result.error());</span></span>
-<span id="L516"><span class="lineNum">     516</span>                 :             :     }</span>
-<span id="L517"><span class="lineNum">     517</span>                 :             :     auto&amp; inode = inode_result.value();</span>
-<span id="L518"><span class="lineNum">     518</span>                 :             : </span>
-<span id="L519"><span class="lineNum">     519</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           5 :     if (inode.type != InodeType::kFile) {</span></span>
-<span id="L520"><span class="lineNum">     520</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kIsDirectory),</span></span>
-<span id="L521"><span class="lineNum">     521</span>                 :             :                              &quot;cannot complete a directory&quot;);</span>
-<span id="L522"><span class="lineNum">     522</span>                 :             :     }</span>
-<span id="L523"><span class="lineNum">     523</span>                 :             : </span>
-<span id="L524"><span class="lineNum">     524</span>                 :<span class="tlaGNC">           4 :     inode.state = FileState::kNormal;</span></span>
-<span id="L525"><span class="lineNum">     525</span>                 :<span class="tlaGNC">           4 :     inode.length = final_length;</span></span>
-<span id="L526"><span class="lineNum">     526</span>                 :<span class="tlaGNC">           4 :     inode.mtime_ms = now_ms();</span></span>
-<span id="L527"><span class="lineNum">     527</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     return store_-&gt;update_inode(inode);</span></span>
-<span id="L528"><span class="lineNum">     528</span>                 :             : }</span>
-<span id="L529"><span class="lineNum">     529</span>                 :             : </span>
-<span id="L530"><span class="lineNum">     530</span>                 :<span class="tlaGNC">           2 : pl::Result&lt;pl::Void&gt; NamespaceManager::set_file_length(uint64_t inode_id, uint64_t length) {</span></span>
-<span id="L531"><span class="lineNum">     531</span>                 :<span class="tlaGNC">           2 :     auto inode_result = store_-&gt;get_inode(inode_id);</span></span>
-<span id="L532"><span class="lineNum">     532</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (inode_result.hasError()) {</span></span>
-<span id="L533"><span class="lineNum">     533</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(inode_result.error());</span></span>
-<span id="L534"><span class="lineNum">     534</span>                 :             :     }</span>
-<span id="L535"><span class="lineNum">     535</span>                 :             :     auto&amp; inode = inode_result.value();</span>
-<span id="L536"><span class="lineNum">     536</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           2 :     if (inode.type != InodeType::kFile) {</span></span>
-<span id="L537"><span class="lineNum">     537</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kIsDirectory),</span></span>
-<span id="L538"><span class="lineNum">     538</span>                 :             :                              &quot;cannot truncate a directory&quot;);</span>
-<span id="L539"><span class="lineNum">     539</span>                 :             :     }</span>
-<span id="L540"><span class="lineNum">     540</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           2 :     if (inode.state != FileState::kNormal) {</span></span>
-<span id="L541"><span class="lineNum">     541</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kFileUnderConstruction),</span></span>
-<span id="L542"><span class="lineNum">     542</span>                 :             :                              &quot;cannot truncate a file under construction&quot;);</span>
-<span id="L543"><span class="lineNum">     543</span>                 :             :     }</span>
-<span id="L544"><span class="lineNum">     544</span>                 :<span class="tlaGNC">           1 :     inode.length = length;</span></span>
-<span id="L545"><span class="lineNum">     545</span>                 :<span class="tlaGNC">           1 :     inode.mtime_ms = now_ms();</span></span>
-<span id="L546"><span class="lineNum">     546</span>                 :<span class="tlaGNC">           1 :     ++inode.version;</span></span>
-<span id="L547"><span class="lineNum">     547</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     return store_-&gt;update_inode(inode);</span></span>
-<span id="L548"><span class="lineNum">     548</span>                 :             : }</span>
-<span id="L549"><span class="lineNum">     549</span>                 :             : </span>
-<span id="L550"><span class="lineNum">     550</span>                 :<span class="tlaGNC">           1 : pl::Result&lt;pl::Void&gt; NamespaceManager::set_replication(uint64_t inode_id, uint32_t replication) {</span></span>
-<span id="L551"><span class="lineNum">     551</span>                 :<span class="tlaGNC">           1 :     auto inode_result = store_-&gt;get_inode(inode_id);</span></span>
-<span id="L552"><span class="lineNum">     552</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (inode_result.hasError()) {</span></span>
-<span id="L553"><span class="lineNum">     553</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(inode_result.error());</span></span>
-<span id="L554"><span class="lineNum">     554</span>                 :             :     }</span>
-<span id="L555"><span class="lineNum">     555</span>                 :             :     auto&amp; inode = inode_result.value();</span>
-<span id="L556"><span class="lineNum">     556</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (inode.type != InodeType::kFile) {</span></span>
-<span id="L557"><span class="lineNum">     557</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kIsDirectory),</span></span>
-<span id="L558"><span class="lineNum">     558</span>                 :             :                              &quot;cannot set replication on a directory&quot;);</span>
-<span id="L559"><span class="lineNum">     559</span>                 :             :     }</span>
-<span id="L560"><span class="lineNum">     560</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (inode.state != FileState::kNormal) {</span></span>
-<span id="L561"><span class="lineNum">     561</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kFileUnderConstruction),</span></span>
-<span id="L562"><span class="lineNum">     562</span>                 :             :                              &quot;cannot set replication on a file under construction&quot;);</span>
-<span id="L563"><span class="lineNum">     563</span>                 :             :     }</span>
-<span id="L564"><span class="lineNum">     564</span>                 :<span class="tlaGNC tlaBgGNC">           1 :     inode.replication = replication;</span></span>
-<span id="L565"><span class="lineNum">     565</span>                 :<span class="tlaGNC">           1 :     inode.mtime_ms = now_ms();</span></span>
-<span id="L566"><span class="lineNum">     566</span>                 :<span class="tlaGNC">           1 :     ++inode.version;</span></span>
-<span id="L567"><span class="lineNum">     567</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     return store_-&gt;update_inode(inode);</span></span>
-<span id="L568"><span class="lineNum">     568</span>                 :             : }</span>
-<span id="L569"><span class="lineNum">     569</span>                 :             : </span>
-<span id="L570"><span class="lineNum">     570</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L490"><span class="lineNum">     490</span>                 :<span class="tlaGNC">           2 :         fs.is_dir = (child.type == InodeType::kDirectory);</span></span>
+<span id="L491"><span class="lineNum">     491</span>                 :<span class="tlaGNC">           2 :         fs.length = child.length;</span></span>
+<span id="L492"><span class="lineNum">     492</span>                 :<span class="tlaGNC">           2 :         fs.replication = child.replication;</span></span>
+<span id="L493"><span class="lineNum">     493</span>                 :<span class="tlaGNC">           2 :         fs.block_size = child.block_size;</span></span>
+<span id="L494"><span class="lineNum">     494</span>                 :<span class="tlaGNC">           2 :         fs.mtime_ms = child.mtime_ms;</span></span>
+<span id="L495"><span class="lineNum">     495</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         fs.owner = child.owner;</span></span>
+<span id="L496"><span class="lineNum">     496</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         fs.group = child.group;</span></span>
+<span id="L497"><span class="lineNum">     497</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         fs.permission = child.permission;</span></span>
+<span id="L498"><span class="lineNum">     498</span>                 :             :         result.push_back(std::move(fs));</span>
+<span id="L499"><span class="lineNum">     499</span>                 :<span class="tlaGNC">           2 :     }</span></span>
+<span id="L500"><span class="lineNum">     500</span>                 :             :     return result;</span>
+<span id="L501"><span class="lineNum">     501</span>                 :<span class="tlaGNC">           1 : }</span></span>
+<span id="L502"><span class="lineNum">     502</span>                 :             : </span>
+<span id="L503"><span class="lineNum">     503</span>                 :<span class="tlaGNC">           6 : pl::Result&lt;Inode&gt; NamespaceManager::resolve_path(std::string_view path) {</span></span>
+<span id="L504"><span class="lineNum">     504</span>                 :<span class="tlaGNC">           6 :     auto valid = validate_path(path);</span></span>
+<span id="L505"><span class="lineNum">     505</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :     if (valid.hasError()) {</span></span>
+<span id="L506"><span class="lineNum">     506</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(valid.error());</span></span>
+<span id="L507"><span class="lineNum">     507</span>                 :             :     }</span>
+<span id="L508"><span class="lineNum">     508</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          12 :     return walk_path(split_path(path));</span></span>
+<span id="L509"><span class="lineNum">     509</span>                 :             : }</span>
+<span id="L510"><span class="lineNum">     510</span>                 :             : </span>
+<span id="L511"><span class="lineNum">     511</span>                 :<span class="tlaGNC">           5 : pl::Result&lt;pl::Void&gt; NamespaceManager::complete_file(uint64_t inode_id, uint64_t final_length) {</span></span>
+<span id="L512"><span class="lineNum">     512</span>                 :<span class="tlaGNC">           5 :     auto inode_result = store_-&gt;get_inode(inode_id);</span></span>
+<span id="L513"><span class="lineNum">     513</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :     if (inode_result.hasError()) {</span></span>
+<span id="L514"><span class="lineNum">     514</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(inode_result.error());</span></span>
+<span id="L515"><span class="lineNum">     515</span>                 :             :     }</span>
+<span id="L516"><span class="lineNum">     516</span>                 :             :     auto&amp; inode = inode_result.value();</span>
+<span id="L517"><span class="lineNum">     517</span>                 :             : </span>
+<span id="L518"><span class="lineNum">     518</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           5 :     if (inode.type != InodeType::kFile) {</span></span>
+<span id="L519"><span class="lineNum">     519</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kIsDirectory),</span></span>
+<span id="L520"><span class="lineNum">     520</span>                 :             :                              &quot;cannot complete a directory&quot;);</span>
+<span id="L521"><span class="lineNum">     521</span>                 :             :     }</span>
+<span id="L522"><span class="lineNum">     522</span>                 :             : </span>
+<span id="L523"><span class="lineNum">     523</span>                 :<span class="tlaGNC">           4 :     inode.state = FileState::kNormal;</span></span>
+<span id="L524"><span class="lineNum">     524</span>                 :<span class="tlaGNC">           4 :     inode.length = final_length;</span></span>
+<span id="L525"><span class="lineNum">     525</span>                 :<span class="tlaGNC">           4 :     inode.mtime_ms = now_ms();</span></span>
+<span id="L526"><span class="lineNum">     526</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     return store_-&gt;update_inode(inode);</span></span>
+<span id="L527"><span class="lineNum">     527</span>                 :             : }</span>
+<span id="L528"><span class="lineNum">     528</span>                 :             : </span>
+<span id="L529"><span class="lineNum">     529</span>                 :<span class="tlaGNC">           2 : pl::Result&lt;pl::Void&gt; NamespaceManager::set_file_length(uint64_t inode_id, uint64_t length) {</span></span>
+<span id="L530"><span class="lineNum">     530</span>                 :<span class="tlaGNC">           2 :     auto inode_result = store_-&gt;get_inode(inode_id);</span></span>
+<span id="L531"><span class="lineNum">     531</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (inode_result.hasError()) {</span></span>
+<span id="L532"><span class="lineNum">     532</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(inode_result.error());</span></span>
+<span id="L533"><span class="lineNum">     533</span>                 :             :     }</span>
+<span id="L534"><span class="lineNum">     534</span>                 :             :     auto&amp; inode = inode_result.value();</span>
+<span id="L535"><span class="lineNum">     535</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           2 :     if (inode.type != InodeType::kFile) {</span></span>
+<span id="L536"><span class="lineNum">     536</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kIsDirectory),</span></span>
+<span id="L537"><span class="lineNum">     537</span>                 :             :                              &quot;cannot truncate a directory&quot;);</span>
+<span id="L538"><span class="lineNum">     538</span>                 :             :     }</span>
+<span id="L539"><span class="lineNum">     539</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           2 :     if (inode.state != FileState::kNormal) {</span></span>
+<span id="L540"><span class="lineNum">     540</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kFileUnderConstruction),</span></span>
+<span id="L541"><span class="lineNum">     541</span>                 :             :                              &quot;cannot truncate a file under construction&quot;);</span>
+<span id="L542"><span class="lineNum">     542</span>                 :             :     }</span>
+<span id="L543"><span class="lineNum">     543</span>                 :<span class="tlaGNC">           1 :     inode.length = length;</span></span>
+<span id="L544"><span class="lineNum">     544</span>                 :<span class="tlaGNC">           1 :     inode.mtime_ms = now_ms();</span></span>
+<span id="L545"><span class="lineNum">     545</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     return store_-&gt;update_inode(inode);</span></span>
+<span id="L546"><span class="lineNum">     546</span>                 :             : }</span>
+<span id="L547"><span class="lineNum">     547</span>                 :             : </span>
+<span id="L548"><span class="lineNum">     548</span>                 :<span class="tlaGNC">           1 : pl::Result&lt;pl::Void&gt; NamespaceManager::set_replication(uint64_t inode_id, uint32_t replication) {</span></span>
+<span id="L549"><span class="lineNum">     549</span>                 :<span class="tlaGNC">           1 :     auto inode_result = store_-&gt;get_inode(inode_id);</span></span>
+<span id="L550"><span class="lineNum">     550</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (inode_result.hasError()) {</span></span>
+<span id="L551"><span class="lineNum">     551</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(inode_result.error());</span></span>
+<span id="L552"><span class="lineNum">     552</span>                 :             :     }</span>
+<span id="L553"><span class="lineNum">     553</span>                 :             :     auto&amp; inode = inode_result.value();</span>
+<span id="L554"><span class="lineNum">     554</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (inode.type != InodeType::kFile) {</span></span>
+<span id="L555"><span class="lineNum">     555</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kIsDirectory),</span></span>
+<span id="L556"><span class="lineNum">     556</span>                 :             :                              &quot;cannot set replication on a directory&quot;);</span>
+<span id="L557"><span class="lineNum">     557</span>                 :             :     }</span>
+<span id="L558"><span class="lineNum">     558</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (inode.state != FileState::kNormal) {</span></span>
+<span id="L559"><span class="lineNum">     559</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kFileUnderConstruction),</span></span>
+<span id="L560"><span class="lineNum">     560</span>                 :             :                              &quot;cannot set replication on a file under construction&quot;);</span>
+<span id="L561"><span class="lineNum">     561</span>                 :             :     }</span>
+<span id="L562"><span class="lineNum">     562</span>                 :<span class="tlaGNC tlaBgGNC">           1 :     inode.replication = replication;</span></span>
+<span id="L563"><span class="lineNum">     563</span>                 :<span class="tlaGNC">           1 :     inode.mtime_ms = now_ms();</span></span>
+<span id="L564"><span class="lineNum">     564</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     return store_-&gt;update_inode(inode);</span></span>
+<span id="L565"><span class="lineNum">     565</span>                 :             : }</span>
+<span id="L566"><span class="lineNum">     566</span>                 :             : </span>
+<span id="L567"><span class="lineNum">     567</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>
