@@ -1,0 +1,140 @@
+name: playground-minidfs
+
+x-minidfs-image: &minidfs-image
+  image: liubang/minidfs:local
+  build:
+    context: ../..
+    dockerfile: docker/minidfs/Dockerfile
+    args:
+      BUILDER_IMAGE: ${BUILDER_IMAGE:-liubang/bazel-builder:8.7.0}
+
+x-datanode: &datanode
+  <<: *minidfs-image
+  restart: "no"
+  depends_on:
+    namenode:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9100/status"]
+    interval: 3s
+    timeout: 2s
+    retries: 20
+    start_period: 5s
+  networks:
+    - minidfs
+
+services:
+  mysql:
+    image: mysql:8.3
+    restart: "no"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-minidfs_root}
+      MYSQL_DATABASE: minidfs
+      MYSQL_USER: ${MYSQL_USER:-minidfs}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-minidfs}
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${MYSQL_PORT:-13306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../../cpp/pl/minidfs/metadata/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    networks:
+      - minidfs
+
+  namenode:
+    <<: *minidfs-image
+    restart: "no"
+    command:
+      - minidfs-namenode
+      - --port=9000
+      - --mysql_host=mysql
+      - --mysql_port=3306
+      - --mysql_user=${MYSQL_USER:-minidfs}
+      - --mysql_password=${MYSQL_PASSWORD:-minidfs}
+      - --mysql_database=minidfs
+      - --datanode_scan_interval_ms=1000
+      - --replication_scan_interval_ms=1000
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${NAMENODE_PORT:-19000}:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/status"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    networks:
+      - minidfs
+
+  datanode1:
+    <<: *datanode
+    command:
+      - minidfs-datanode
+      - --namenode_addr=namenode:9000
+      - --hostname=datanode1
+      - --ip=datanode1
+      - --uuid=minidfs-datanode1
+      - --port=9100
+      - --rpc_port=9100
+      - --storage_root=/data/minidfs
+      - --block_report_interval_ms=3000
+    volumes:
+      - datanode1-data:/data/minidfs
+
+  datanode2:
+    <<: *datanode
+    command:
+      - minidfs-datanode
+      - --namenode_addr=namenode:9000
+      - --hostname=datanode2
+      - --ip=datanode2
+      - --uuid=minidfs-datanode2
+      - --port=9100
+      - --rpc_port=9100
+      - --storage_root=/data/minidfs
+      - --block_report_interval_ms=3000
+    volumes:
+      - datanode2-data:/data/minidfs
+
+  datanode3:
+    <<: *datanode
+    command:
+      - minidfs-datanode
+      - --namenode_addr=namenode:9000
+      - --hostname=datanode3
+      - --ip=datanode3
+      - --uuid=minidfs-datanode3
+      - --port=9100
+      - --rpc_port=9100
+      - --storage_root=/data/minidfs
+      - --block_report_interval_ms=3000
+    volumes:
+      - datanode3-data:/data/minidfs
+
+  cli:
+    <<: *minidfs-image
+    profiles: ["tools"]
+    entrypoint: ["minidfs"]
+    command: ["--help"]
+    depends_on:
+      namenode:
+        condition: service_healthy
+    networks:
+      - minidfs
+
+volumes:
+  mysql-data:
+  datanode1-data:
+  datanode2-data:
+  datanode3-data:
+
+networks:
+  minidfs:
+    driver: bridge

@@ -13,6 +13,7 @@
 | [`hermes/`](./hermes)   | Hermes Agent 网关 + Dashboard                             | `cd hermes && ./bootstrap.sh`  |
 | [`monitor/`](./monitor) | Prometheus + Grafana 监控栈                               | `cd monitor && ./bootstrap.sh` |
 | [`mysql/`](./mysql)     | 轻量独立 MySQL（快速实验用）                              | `cd mysql && ./bootstrap.sh`   |
+| [`minidfs/`](./minidfs) | MiniDFS：1 NameNode + 3 DataNode + MySQL，含自动 E2E      | `cd minidfs && ./bootstrap.sh` |
 
 每个模块都提供基于 `scripts/bootstrap-common.sh` 的 `bootstrap.sh` 一键引导脚本，统一处理依赖检查、随机凭证生成、端口绑定模式、幂等启动和重置。首次运行会按模块需要提示设置密码（直接回车即使用随机生成值，非交互环境下自动使用随机值）；生成的 `.env` 权限为 `600`，后续重复执行不会覆盖。通用参数：
 
@@ -32,6 +33,24 @@
 `PUBLIC_BIND_ADDR` 对应 MySQL、Doris SQL、Grafana、Hermes Dashboard 等有认证入口；`INTERNAL_BIND_ADDR` 对应 HDFS/Hive/Spark/Trino、Doris 内部端口、Prometheus、Hermes Gateway 等无认证或内部入口。独立 `mysql/` 只有 `PUBLIC_BIND_ADDR`。
 
 如需修改模式，编辑对应模块的 `.env` 后运行 `docker compose up -d` 重新应用。即使接口有密码，当前环境仍未启用 TLS，不建议直接暴露到公网。
+
+---
+
+## minidfs/
+
+MiniDFS 的容器化集成环境。镜像从 `cpp/pl/minidfs/` 源码使用 Bazel 构建，Compose 启动 1 个 NameNode、3 个 DataNode 和 MySQL。
+
+```bash
+cd minidfs
+./bootstrap.sh
+
+# Bazel 单元测试 + 镜像构建 + 集群启动 + 文件读写 E2E
+./tests/e2e.sh all
+```
+
+E2E 覆盖三节点注册、命名空间操作、多块三副本上传、下载内容校验、追加、截断、覆盖、调整副本数和递归删除。失败时保留容器及数据卷；可使用 `./tests/e2e.sh down` 停止集群，或使用 `./tests/e2e.sh reset` 删除数据卷。
+
+默认仅在 `127.0.0.1` 暴露 MySQL `13306` 和 NameNode `19000`，DataNode 只在 Compose 网络内通信。
 
 ---
 
