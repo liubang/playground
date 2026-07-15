@@ -1,0 +1,2 @@
+# Optional Bazel distdir archives downloaded for offline container builds.
+*.tar.xz
