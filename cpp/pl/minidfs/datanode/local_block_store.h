@@ -70,6 +70,8 @@ public:
         std::string storage_root;
         uint64_t reserved_bytes = 1 * kGB; // reserved space, refuse writes if below
         uint64_t tmp_cleanup_stale_after_ms = kDefaultTmpCleanupStaleAfterMs;
+        // Test hook: return true to fail a matching persistence sync operation.
+        std::function<bool(std::string_view)> sync_failure_injector;
     };
 
     explicit LocalBlockStore(Config config);
@@ -117,7 +119,7 @@ public:
     /// Permanently remove all files in trash/.
     pl::Result<uint32_t> purge_trash();
 
-    /// Remove stale temporary block files from tmp/.
+    /// Quarantine stale temporary block files from tmp/. A later create retry restores them.
     /// Active tmp block can be protected from cleanup via excluded_active.
     pl::Result<uint32_t> cleanup_stale_tmp_blocks(
         std::optional<std::pair<uint64_t, uint64_t>> excluded_active = std::nullopt);
@@ -165,9 +167,16 @@ private:
     pl::Result<pl::Void> write_header(const std::filesystem::path& path,
                                       const BlockHeader& header) const;
 
+    pl::Result<pl::Void> sync_file(const std::filesystem::path& path,
+                                   bool data_only,
+                                   std::string_view operation) const;
+    pl::Result<pl::Void> sync_directory(const std::filesystem::path& path,
+                                        std::string_view operation) const;
+
     Config config_;
     std::filesystem::path root_path_;
     std::filesystem::path tmp_path_;
+    std::filesystem::path recovery_path_;
     std::filesystem::path current_path_;
     std::filesystem::path trash_path_;
     mutable std::mutex mu_;
