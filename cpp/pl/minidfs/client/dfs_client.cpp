@@ -29,6 +29,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/common/checksum.h"
 #include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/common/error_code.h"
@@ -448,8 +449,30 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
                             local_path);
     }
 
-    // 4. Read each block
-    for (const auto& block_proto : resp.blocks()) {
+    // 4. Read each block. Refresh the complete located-block snapshot before a token
+    // expires; all tokens in one snapshot are normally issued at nearly the same time.
+    for (int block_pos = 0; block_pos < resp.blocks_size(); ++block_pos) {
+        if (block_token_needs_refresh(resp.blocks(block_pos).block_token(), now_ms(), 1000)) {
+            brpc::Controller refresh_cntl;
+            protocol::GetLocatedBlocksResponse refreshed;
+            stub.GetLocatedBlocks(&refresh_cntl, &req, &refreshed, nullptr);
+            if (refresh_cntl.Failed()) {
+                return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                                    "GetLocatedBlocks token refresh failed: {}",
+                                    refresh_cntl.ErrorText());
+            }
+            if (refreshed.status().code() != 0) {
+                return pl::makeError(static_cast<status_code_t>(refreshed.status().code()),
+                                     refreshed.status().message());
+            }
+            resp = std::move(refreshed);
+            if (block_pos >= resp.blocks_size()) {
+                return pl::makeError(static_cast<status_code_t>(ErrorCode::kBlockNotFound),
+                                     "file block layout changed during token refresh");
+            }
+        }
+
+        const auto& block_proto = resp.blocks(block_pos);
         LocatedBlock block{
             .block_id = block_proto.block_id(),
             .generation_stamp = block_proto.generation_stamp(),

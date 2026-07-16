@@ -40,7 +40,7 @@ public:
         if (!committed_) {
             rollback();
         }
-        store_->unbind_connection();
+        store_->unbind_connection(&conn_);
     }
 
     pl::Result<pl::Void> commit() override {
@@ -218,14 +218,24 @@ pl::Result<std::unique_ptr<MySQLMetadataStore>> MySQLMetadataStore::create(
 
 // Transaction management
 
-thread_local PooledConnection* MySQLMetadataStore::bound_conn_ = nullptr;
+thread_local MySQLMetadataStore::ConnectionBinding MySQLMetadataStore::binding_{};
 
-void MySQLMetadataStore::bind_connection(PooledConnection* conn) {
-    bound_conn_ = conn;
+bool MySQLMetadataStore::has_active_transaction() const {
+    return binding_.store == this && binding_.connection != nullptr;
 }
 
-void MySQLMetadataStore::unbind_connection() {
-    bound_conn_ = nullptr;
+PooledConnection* MySQLMetadataStore::active_bound_connection() {
+    return has_active_transaction() ? binding_.connection : nullptr;
+}
+
+void MySQLMetadataStore::bind_connection(PooledConnection* conn) {
+    binding_ = ConnectionBinding{.store = this, .connection = conn};
+}
+
+void MySQLMetadataStore::unbind_connection(PooledConnection* conn) {
+    if (binding_.store == this && binding_.connection == conn) {
+        binding_ = {};
+    }
 }
 
 pl::Result<PooledConnection> MySQLMetadataStore::acquire_connection() {
@@ -233,10 +243,16 @@ pl::Result<PooledConnection> MySQLMetadataStore::acquire_connection() {
 }
 
 PooledConnection* MySQLMetadataStore::get_active_conn(PooledConnection& owned) {
-    return bound_conn_ ? bound_conn_ : &owned;
+    auto* bound = active_bound_connection();
+    return bound != nullptr ? bound : &owned;
 }
 
 pl::Result<std::unique_ptr<Transaction>> MySQLMetadataStore::begin_transaction() {
+    if (binding_.connection != nullptr) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kMySQLTxnFailed),
+                             "a transaction is already active on this thread");
+    }
+
     auto conn_result = pool_->acquire();
     if (conn_result.hasError()) {
         return folly::makeUnexpected(conn_result.error());
@@ -253,7 +269,7 @@ pl::Result<std::unique_ptr<Transaction>> MySQLMetadataStore::begin_transaction()
 
 pl::Result<Inode> MySQLMetadataStore::get_inode(uint64_t inode_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -283,7 +299,7 @@ pl::Result<Inode> MySQLMetadataStore::get_inode(uint64_t inode_id) {
 pl::Result<std::optional<Inode>> MySQLMetadataStore::get_child(uint64_t parent_id,
                                                                std::string_view name) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -312,7 +328,7 @@ pl::Result<std::optional<Inode>> MySQLMetadataStore::get_child(uint64_t parent_i
 
 pl::Result<std::vector<Inode>> MySQLMetadataStore::list_children(uint64_t parent_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -342,7 +358,7 @@ pl::Result<std::vector<Inode>> MySQLMetadataStore::list_children(uint64_t parent
 
 pl::Result<pl::Void> MySQLMetadataStore::create_inode(const Inode& inode) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -379,7 +395,7 @@ pl::Result<pl::Void> MySQLMetadataStore::create_inode(const Inode& inode) {
 
 pl::Result<pl::Void> MySQLMetadataStore::update_inode(const Inode& inode) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -423,7 +439,7 @@ pl::Result<pl::Void> MySQLMetadataStore::update_inode(const Inode& inode) {
 
 pl::Result<pl::Void> MySQLMetadataStore::delete_inode(uint64_t inode_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -444,7 +460,7 @@ pl::Result<pl::Void> MySQLMetadataStore::delete_inode(uint64_t inode_id) {
 
 pl::Result<BlockMeta> MySQLMetadataStore::get_block(uint64_t block_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -473,7 +489,7 @@ pl::Result<BlockMeta> MySQLMetadataStore::get_block(uint64_t block_id) {
 
 pl::Result<std::vector<BlockMeta>> MySQLMetadataStore::get_blocks_by_inode(uint64_t inode_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -503,7 +519,7 @@ pl::Result<std::vector<BlockMeta>> MySQLMetadataStore::get_blocks_by_inode(uint6
 
 pl::Result<pl::Void> MySQLMetadataStore::create_block(const BlockMeta& block) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -534,7 +550,7 @@ pl::Result<pl::Void> MySQLMetadataStore::create_block(const BlockMeta& block) {
 
 pl::Result<pl::Void> MySQLMetadataStore::delete_block(uint64_t block_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -553,7 +569,7 @@ pl::Result<pl::Void> MySQLMetadataStore::delete_block(uint64_t block_id) {
 
 pl::Result<pl::Void> MySQLMetadataStore::update_block(const BlockMeta& block) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -582,7 +598,7 @@ pl::Result<pl::Void> MySQLMetadataStore::update_block(const BlockMeta& block) {
 
 pl::Result<std::vector<BlockMeta>> MySQLMetadataStore::get_blocks_by_state(BlockState state) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -614,7 +630,7 @@ pl::Result<std::vector<BlockMeta>> MySQLMetadataStore::get_blocks_by_state(Block
 
 pl::Result<std::vector<BlockReplica>> MySQLMetadataStore::get_replicas(uint64_t block_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -645,7 +661,7 @@ pl::Result<std::vector<BlockReplica>> MySQLMetadataStore::get_replicas(uint64_t 
 pl::Result<std::vector<BlockReplica>> MySQLMetadataStore::get_replicas_by_datanode(
     uint64_t datanode_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -675,7 +691,7 @@ pl::Result<std::vector<BlockReplica>> MySQLMetadataStore::get_replicas_by_datano
 
 pl::Result<pl::Void> MySQLMetadataStore::upsert_replica(const BlockReplica& replica) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -710,7 +726,7 @@ pl::Result<pl::Void> MySQLMetadataStore::upsert_replica(const BlockReplica& repl
 
 pl::Result<pl::Void> MySQLMetadataStore::delete_replicas_by_block(uint64_t block_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -731,7 +747,7 @@ pl::Result<pl::Void> MySQLMetadataStore::update_replica_state(uint64_t block_id,
                                                               uint64_t datanode_id,
                                                               ReplicaState new_state) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -757,7 +773,7 @@ pl::Result<pl::Void> MySQLMetadataStore::update_replica_state(uint64_t block_id,
 
 pl::Result<DataNodeInfo> MySQLMetadataStore::get_datanode(uint64_t datanode_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -787,7 +803,7 @@ pl::Result<DataNodeInfo> MySQLMetadataStore::get_datanode(uint64_t datanode_id) 
 pl::Result<std::optional<DataNodeInfo>> MySQLMetadataStore::get_datanode_by_uuid(
     std::string_view uuid) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -816,7 +832,7 @@ pl::Result<std::optional<DataNodeInfo>> MySQLMetadataStore::get_datanode_by_uuid
 pl::Result<std::vector<DataNodeInfo>> MySQLMetadataStore::list_datanodes_by_state(
     DataNodeState state) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -846,7 +862,7 @@ pl::Result<std::vector<DataNodeInfo>> MySQLMetadataStore::list_datanodes_by_stat
 
 pl::Result<std::vector<DataNodeInfo>> MySQLMetadataStore::list_all_datanodes() {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -873,7 +889,7 @@ pl::Result<std::vector<DataNodeInfo>> MySQLMetadataStore::list_all_datanodes() {
 
 pl::Result<pl::Void> MySQLMetadataStore::upsert_datanode(const DataNodeInfo& info) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -923,7 +939,7 @@ pl::Result<pl::Void> MySQLMetadataStore::upsert_datanode(const DataNodeInfo& inf
 
 pl::Result<pl::Void> MySQLMetadataStore::create_lease(const Lease& lease) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -952,7 +968,7 @@ pl::Result<pl::Void> MySQLMetadataStore::create_lease(const Lease& lease) {
 
 pl::Result<std::optional<Lease>> MySQLMetadataStore::get_active_lease(uint64_t inode_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -980,7 +996,7 @@ pl::Result<std::optional<Lease>> MySQLMetadataStore::get_active_lease(uint64_t i
 
 pl::Result<pl::Void> MySQLMetadataStore::renew_lease(uint64_t inode_id, uint64_t new_expire_ms) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -1003,7 +1019,7 @@ pl::Result<pl::Void> MySQLMetadataStore::renew_lease(uint64_t inode_id, uint64_t
 
 pl::Result<pl::Void> MySQLMetadataStore::close_lease(uint64_t inode_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -1024,7 +1040,7 @@ pl::Result<pl::Void> MySQLMetadataStore::close_lease(uint64_t inode_id) {
 
 pl::Result<uint64_t> MySQLMetadataStore::expire_leases(uint64_t now_ms) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -1045,7 +1061,7 @@ pl::Result<uint64_t> MySQLMetadataStore::expire_leases(uint64_t now_ms) {
 
 pl::Result<std::vector<Lease>> MySQLMetadataStore::list_expired_leases(uint64_t now_ms) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -1077,7 +1093,7 @@ pl::Result<std::vector<Lease>> MySQLMetadataStore::list_expired_leases(uint64_t 
 
 pl::Result<uint64_t> MySQLMetadataStore::alloc_id(std::string_view name, uint64_t count) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -1132,7 +1148,7 @@ pl::Result<pl::Void> MySQLMetadataStore::write_oplog(std::string_view op_type,
                                                      std::string_view request_id,
                                                      std::string_view payload_json) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -1159,7 +1175,7 @@ pl::Result<pl::Void> MySQLMetadataStore::write_oplog(std::string_view op_type,
 pl::Result<std::optional<OplogEntry>> MySQLMetadataStore::get_oplog_by_request_id(
     std::string_view request_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());
@@ -1193,7 +1209,7 @@ pl::Result<std::optional<OplogEntry>> MySQLMetadataStore::get_oplog_by_request_i
 
 pl::Result<bool> MySQLMetadataStore::check_request_id(std::string_view request_id) {
     PooledConnection owned;
-    if (!bound_conn_) {
+    if (active_bound_connection() == nullptr) {
         auto conn_result = pool_->acquire();
         if (conn_result.hasError()) {
             return folly::makeUnexpected(conn_result.error());

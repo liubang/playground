@@ -18,6 +18,7 @@
 #pragma once
 
 #include <algorithm>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
@@ -28,11 +29,29 @@
 
 namespace pl::minidfs::testing {
 
-// MockTransaction — no-op transaction for in-memory store.
 class MockTransaction final : public Transaction {
 public:
-    pl::Result<pl::Void> commit() override { return pl::Void{}; }
-    void rollback() override {}
+    explicit MockTransaction(std::function<void()> rollback) : rollback_(std::move(rollback)) {}
+    ~MockTransaction() override {
+        if (!finished_) {
+            rollback();
+        }
+    }
+
+    pl::Result<pl::Void> commit() override {
+        finished_ = true;
+        return pl::Void{};
+    }
+    void rollback() override {
+        if (!finished_) {
+            rollback_();
+            finished_ = true;
+        }
+    }
+
+private:
+    std::function<void()> rollback_;
+    bool finished_ = false;
 };
 
 // MockMetadataStore — thread-safe in-memory MetadataStore for unit tests.
@@ -65,7 +84,32 @@ public:
 
     // Transaction
     pl::Result<std::unique_ptr<Transaction>> begin_transaction() override {
-        return std::unique_ptr<Transaction>(std::make_unique<MockTransaction>());
+        std::lock_guard lock(mu_);
+        auto inodes = inodes_;
+        auto blocks = blocks_;
+        auto replicas = replicas_;
+        auto datanodes = datanodes_;
+        auto leases = leases_;
+        auto id_counters = id_counters_;
+        auto oplogs = oplogs_;
+        auto rollback = [this,
+                         inodes = std::move(inodes),
+                         blocks = std::move(blocks),
+                         replicas = std::move(replicas),
+                         datanodes = std::move(datanodes),
+                         leases = std::move(leases),
+                         id_counters = std::move(id_counters),
+                         oplogs = std::move(oplogs)]() mutable {
+            std::lock_guard rollback_lock(mu_);
+            inodes_ = std::move(inodes);
+            blocks_ = std::move(blocks);
+            replicas_ = std::move(replicas);
+            datanodes_ = std::move(datanodes);
+            leases_ = std::move(leases);
+            id_counters_ = std::move(id_counters);
+            oplogs_ = std::move(oplogs);
+        };
+        return std::unique_ptr<Transaction>(std::make_unique<MockTransaction>(std::move(rollback)));
     }
 
     // Inode operations

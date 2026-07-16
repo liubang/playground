@@ -175,6 +175,7 @@ LocalBlockStore::LocalBlockStore(Config config)
     : config_(std::move(config)),
       root_path_(config_.storage_root),
       tmp_path_(root_path_ / "tmp"),
+      recovery_path_(root_path_ / "recovery"),
       current_path_(root_path_ / "current"),
       trash_path_(root_path_ / "trash") {}
 
@@ -185,6 +186,11 @@ pl::Result<pl::Void> LocalBlockStore::init(
     if (ec) {
         return pl::makeError(
             make_io_error(fmt::format("failed to create tmp directory: {}", ec.message())));
+    }
+    fs::create_directories(recovery_path_, ec);
+    if (ec) {
+        return pl::makeError(
+            make_io_error(fmt::format("failed to create recovery directory: {}", ec.message())));
     }
     fs::create_directories(current_path_, ec);
     if (ec) {
@@ -261,6 +267,25 @@ pl::Result<pl::Void> LocalBlockStore::write_header(const fs::path& path,
     RETURN_VOID;
 }
 
+pl::Result<pl::Void> LocalBlockStore::sync_file(const fs::path& path,
+                                                 bool data_only,
+                                                 std::string_view operation) const {
+    if (config_.sync_failure_injector && config_.sync_failure_injector(operation)) {
+        return pl::makeError(
+            make_io_error(fmt::format("injected sync failure during {}", operation)));
+    }
+    return sync_file_path(path, data_only);
+}
+
+pl::Result<pl::Void> LocalBlockStore::sync_directory(const fs::path& path,
+                                                      std::string_view operation) const {
+    if (config_.sync_failure_injector && config_.sync_failure_injector(operation)) {
+        return pl::makeError(
+            make_io_error(fmt::format("injected sync failure during {}", operation)));
+    }
+    return sync_directory_path(path);
+}
+
 // Block Lifecycle
 
 pl::Result<pl::Void> LocalBlockStore::create_block(uint64_t block_id,
@@ -270,6 +295,34 @@ pl::Result<pl::Void> LocalBlockStore::create_block(uint64_t block_id,
     std::lock_guard lock(mu_);
 
     auto path = block_path("tmp", block_id, generation_stamp);
+    auto recovery = recovery_path_ / path.filename();
+    if (!fs::exists(path) && fs::exists(recovery)) {
+        auto recovered_header = read_header(recovery);
+        if (recovered_header.hasError()) {
+            return pl::makeError(std::move(recovered_header.error()));
+        }
+        const auto& header = recovered_header.value();
+        if (header.block_id != block_id || header.inode_id != inode_id ||
+            header.block_index != block_index || header.generation_stamp != generation_stamp) {
+            return pl::makeError(pl::Status(
+                static_cast<pl::status_code_t>(ErrorCode::kAlreadyExists),
+                fmt::format("recovery block exists with different identity: {}", recovery.string())));
+        }
+        std::error_code restore_ec;
+        fs::rename(recovery, path, restore_ec);
+        if (restore_ec) {
+            return pl::makeError(make_io_error(
+                fmt::format("failed to restore recoverable tmp block: {}", restore_ec.message())));
+        }
+        auto sync_tmp = sync_directory(tmp_path_, "restore_tmp_directory");
+        if (sync_tmp.hasError()) {
+            return pl::makeError(std::move(sync_tmp.error()));
+        }
+        auto sync_recovery = sync_directory(recovery_path_, "restore_recovery_directory");
+        if (sync_recovery.hasError()) {
+            return pl::makeError(std::move(sync_recovery.error()));
+        }
+    }
     if (fs::exists(path)) {
         auto header_result = read_header(path);
         if (header_result.hasError()) {
@@ -320,11 +373,11 @@ pl::Result<pl::Void> LocalBlockStore::create_block(uint64_t block_id,
     ofs.flush();
     ofs.close();
 
-    auto sync = sync_file_path(path, false);
+    auto sync = sync_file(path, false, "create_file");
     if (sync.hasError()) {
         return pl::makeError(std::move(sync.error()));
     }
-    auto sync_tmp = sync_directory_path(tmp_path_);
+    auto sync_tmp = sync_directory(tmp_path_, "create_tmp_directory");
     if (sync_tmp.hasError()) {
         return pl::makeError(std::move(sync_tmp.error()));
     }
@@ -418,6 +471,10 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
         if (restore_header.hasError()) {
             return pl::makeError(std::move(restore_header.error()));
         }
+        auto persist_rollback = sync_file(path, false, "append_rollback");
+        if (persist_rollback.hasError()) {
+            return pl::makeError(std::move(persist_rollback.error()));
+        }
         RETURN_VOID;
     };
 
@@ -471,7 +528,7 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
     }
     fs_file.close();
 
-    auto sync = sync_file_path(path, true);
+    auto sync = sync_file(path, true, "append_file");
     if (sync.hasError()) {
         auto rollback = rollback_append();
         if (rollback.hasError()) {
@@ -500,6 +557,19 @@ pl::Result<pl::Void> LocalBlockStore::finalize_block(uint64_t block_id, uint64_t
                 return pl::makeError(make_checksum_error(
                     fmt::format("finalized block checksum mismatch: {}", current.string())));
             }
+            auto sync_current_file = sync_file(current, false, "finalize_current_file");
+            if (sync_current_file.hasError()) {
+                return pl::makeError(std::move(sync_current_file.error()));
+            }
+            auto sync_current_dir =
+                sync_directory(current_path_, "finalize_current_directory");
+            if (sync_current_dir.hasError()) {
+                return pl::makeError(std::move(sync_current_dir.error()));
+            }
+            auto sync_tmp_dir = sync_directory(tmp_path_, "finalize_tmp_directory");
+            if (sync_tmp_dir.hasError()) {
+                return pl::makeError(std::move(sync_tmp_dir.error()));
+            }
             RETURN_VOID;
         }
         return pl::makeError(make_not_found(fmt::format("tmp block not found: {}", src.string())));
@@ -514,7 +584,7 @@ pl::Result<pl::Void> LocalBlockStore::finalize_block(uint64_t block_id, uint64_t
             make_checksum_error(fmt::format("tmp block checksum mismatch: {}", src.string())));
     }
 
-    auto pre_sync = sync_file_path(src, false);
+    auto pre_sync = sync_file(src, false, "finalize_tmp_file");
     if (pre_sync.hasError()) {
         return pl::makeError(std::move(pre_sync.error()));
     }
@@ -527,16 +597,16 @@ pl::Result<pl::Void> LocalBlockStore::finalize_block(uint64_t block_id, uint64_t
             make_io_error(fmt::format("failed to finalize block: {}", ec.message())));
     }
 
-    auto sync_new_file = sync_file_path(dst, false);
+    auto sync_new_file = sync_file(dst, false, "finalize_current_file");
     if (sync_new_file.hasError()) {
         return pl::makeError(std::move(sync_new_file.error()));
     }
 
-    auto sync_current_dir = sync_directory_path(current_path_);
+    auto sync_current_dir = sync_directory(current_path_, "finalize_current_directory");
     if (sync_current_dir.hasError()) {
         return pl::makeError(std::move(sync_current_dir.error()));
     }
-    auto sync_tmp_dir = sync_directory_path(tmp_path_);
+    auto sync_tmp_dir = sync_directory(tmp_path_, "finalize_tmp_directory");
     if (sync_tmp_dir.hasError()) {
         return pl::makeError(std::move(sync_tmp_dir.error()));
     }
@@ -719,26 +789,33 @@ pl::Result<uint32_t> LocalBlockStore::cleanup_stale_tmp_blocks(
         mtime += std::chrono::duration_cast<std::chrono::system_clock::duration>(
             std::chrono::nanoseconds(st.st_mtim.tv_nsec));
 #endif
-        auto age_ms = static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now() - mtime)
-                .count());
+        auto now = std::chrono::system_clock::now();
+        auto age_ms = mtime > now
+                          ? uint64_t{0}
+                          : static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                      now - mtime)
+                                                      .count());
         bool stale = config_.tmp_cleanup_stale_after_ms == 0 ||
                      age_ms >= config_.tmp_cleanup_stale_after_ms;
         if (!stale) {
             continue;
         }
 
-        fs::remove(entry.path(), ec);
+        auto quarantine = recovery_path_ / entry.path().filename();
+        fs::rename(entry.path(), quarantine, ec);
         if (ec) {
             return pl::makeError(make_io_error(
-                fmt::format("failed to remove stale tmp block {}: {}", filename, ec.message())));
+                fmt::format("failed to quarantine stale tmp block {}: {}", filename, ec.message())));
         }
         ++removed;
     }
 
     if (removed > 0) {
-        auto sync_tmp = sync_directory_path(tmp_path_);
+        auto sync_recovery = sync_directory(recovery_path_, "cleanup_recovery_directory");
+        if (sync_recovery.hasError()) {
+            return pl::makeError(std::move(sync_recovery.error()));
+        }
+        auto sync_tmp = sync_directory(tmp_path_, "cleanup_tmp_directory");
         if (sync_tmp.hasError()) {
             return pl::makeError(std::move(sync_tmp.error()));
         }

@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <mutex>
 #include <string>
 
 #include "cpp/pl/minidfs/metadata/metadata_store.h"
@@ -129,6 +130,9 @@ private:
                                                 uint32_t block_index,
                                                 uint32_t permissions) const;
 
+    // A single NameNode serializes rename transactions so ancestry validation and the
+    // committed namespace update observe one consistent ordering.
+    std::mutex rename_mu_;
     NamespaceManager* ns_mgr_;
     BlockManager* block_mgr_;
     LeaseManager* lease_mgr_;

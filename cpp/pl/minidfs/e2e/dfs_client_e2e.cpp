@@ -16,10 +16,15 @@
 // Created: 2026/07/15 18:53
 
 #include <algorithm>
+#include <array>
+#include <barrier>
+#include <brpc/channel.h>
+#include <brpc/controller.h>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <gflags/gflags.h>
 #include <iostream>
 #include <memory>
@@ -28,9 +33,14 @@
 #include <string_view>
 #include <system_error>
 #include <unistd.h>
+#include <unordered_set>
 #include <vector>
 
 #include "cpp/pl/minidfs/client/dfs_client.h"
+#include "cpp/pl/minidfs/common/block_token.h"
+#include "cpp/pl/minidfs/common/checksum.h"
+#include "cpp/pl/minidfs/common/error_code.h"
+#include "cpp/pl/minidfs/protocol/minidfs.pb.h"
 
 DEFINE_string(namenode, "127.0.0.1:19000", "NameNode address");
 DEFINE_string(work_dir, "/tmp", "Parent directory for local E2E files");
@@ -141,6 +151,33 @@ bool contains_path(const std::vector<FileStatus>& entries, std::string_view path
                                [path](const FileStatus& entry) { return entry.path == path; });
 }
 
+std::string unique_id(std::string_view prefix) {
+    static uint64_t sequence = 0;
+    return std::string(prefix) + "-" + std::to_string(::getpid()) + "-" +
+           std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "-" +
+           std::to_string(++sequence);
+}
+
+void initialize_channel(brpc::Channel* channel, std::string_view address) {
+    brpc::ChannelOptions options;
+    options.timeout_ms = 10000;
+    options.max_retry = 0;
+    require(channel->Init(std::string(address).c_str(), &options) == 0,
+            "failed to initialize brpc channel for " + std::string(address));
+}
+
+void require_rpc_ok(const brpc::Controller& controller, std::string_view operation) {
+    require(!controller.Failed(),
+            std::string(operation) + " RPC failed: " + controller.ErrorText());
+}
+
+void set_header(protocol::RequestHeader* header,
+                std::string_view client_id,
+                std::string_view request_id) {
+    header->set_client_id(std::string(client_id));
+    header->set_request_id(std::string(request_id));
+}
+
 class DfsClientE2E final {
 public:
     DfsClientE2E() : temp_dir_(FLAGS_work_dir), root_(FLAGS_dfs_root) {
@@ -155,8 +192,10 @@ public:
         config.client_id = "api-e2e-" + std::to_string(::getpid());
         config.replication = FLAGS_replication;
         config.block_size = FLAGS_block_size;
+        client_id_ = config.client_id;
         client_ = DfsClient::create(std::move(config));
         require(client_ != nullptr, "DfsClient::create returned nullptr");
+        initialize_channel(&namenode_channel_, FLAGS_namenode);
     }
 
     void run() {
@@ -165,6 +204,9 @@ public:
             verify_cluster_and_datanodes();
             verify_namespace();
             verify_file_sizes_and_diagnostics();
+            verify_read_block_tokens();
+            verify_allocate_block_semantics();
+            verify_rename_safety();
             verify_mutations_and_errors();
             cleanup();
         } catch (...) {
@@ -282,6 +324,317 @@ private:
         }
     }
 
+    void verify_read_block_tokens() {
+        std::cout << "[API E2E] direct ReadBlock token authorization\n";
+        const auto path = root_ + "/level1/level2/data/exact-block.bin";
+        const auto inode =
+            require_value(client_->get_inode_info_by_path(path), "lookup token file");
+
+        protocol::NameNodeService_Stub namenode(&namenode_channel_);
+        protocol::GetLocatedBlocksRequest located_request;
+        located_request.set_inode_id(inode.inode_id);
+        protocol::GetLocatedBlocksResponse located_response;
+        brpc::Controller located_controller;
+        namenode.GetLocatedBlocks(
+            &located_controller, &located_request, &located_response, nullptr);
+        require_rpc_ok(located_controller, "GetLocatedBlocks for token test");
+        require(located_response.status().code() == 0,
+                "GetLocatedBlocks failed: " + located_response.status().message());
+        require(located_response.blocks_size() == 1, "token test file must have one block");
+
+        const auto& block = located_response.blocks(0);
+        require(block.locations_size() > 0, "token test block has no live location");
+        require(
+            has_token_permission(block.block_token().permissions(), BlockTokenPermission::kRead),
+            "NameNode did not issue a read token");
+        const auto& location = block.locations(0);
+        brpc::Channel datanode_channel;
+        initialize_channel(&datanode_channel,
+                           location.host() + ":" + std::to_string(location.data_port()));
+        protocol::DataTransferService_Stub datanode(&datanode_channel);
+
+        auto read = [&](const protocol::BlockTokenProto& token) {
+            protocol::ReadBlockRequest request;
+            request.set_block_id(block.block_id());
+            request.set_generation_stamp(block.generation_stamp());
+            request.set_offset(0);
+            request.set_length(0);
+            *request.mutable_block_token() = token;
+            protocol::ReadBlockResponse response;
+            brpc::Controller controller;
+            datanode.ReadBlock(&controller, &request, &response, nullptr);
+            require_rpc_ok(controller, "direct ReadBlock");
+            return response;
+        };
+
+        auto valid = read(block.block_token());
+        require(valid.status().code() == 0, "valid ReadBlock token was rejected");
+        require(valid.length() == FLAGS_block_size, "direct ReadBlock returned wrong length");
+
+        auto tampered_signature = block.block_token();
+        require(!tampered_signature.signature().empty(), "read token signature is empty");
+        auto signature = tampered_signature.signature();
+        signature.front() = static_cast<char>(signature.front() ^ 0x01);
+        tampered_signature.set_signature(signature);
+
+        auto no_permissions = block.block_token();
+        no_permissions.set_permissions(0);
+        auto expired = block.block_token();
+        expired.set_expires_at_ms(1);
+        for (const auto& [name, response] :
+             std::array<std::pair<std::string_view, protocol::ReadBlockResponse>, 3>{
+                 {{"tampered signature", read(tampered_signature)},
+                  {"permissions=0", read(no_permissions)},
+                  {"expires_at_ms=1", read(expired)}}}) {
+            require(response.status().code() ==
+                        static_cast<uint32_t>(ErrorCode::kInvalidBlockToken),
+                    std::string(name) + " did not return kInvalidBlockToken");
+        }
+    }
+
+    protocol::CreateFileResponse create_raw_file(std::string_view path,
+                                                 std::string_view client_id,
+                                                 std::string_view request_id) {
+        protocol::CreateFileRequest request;
+        request.set_path(std::string(path));
+        request.set_owner("api-e2e");
+        request.set_group("api-e2e");
+        request.set_permission(0644);
+        request.set_replication(FLAGS_replication);
+        request.set_block_size(FLAGS_block_size);
+        request.set_client_id(std::string(client_id));
+        set_header(request.mutable_header(), client_id, request_id);
+        protocol::CreateFileResponse response;
+        brpc::Controller controller;
+        protocol::NameNodeService_Stub stub(&namenode_channel_);
+        stub.CreateFile(&controller, &request, &response, nullptr);
+        require_rpc_ok(controller, "CreateFile");
+        return response;
+    }
+
+    static protocol::AllocateBlockResponse allocate_raw(brpc::Channel* channel,
+                                                        uint64_t inode_id,
+                                                        std::string_view client_id,
+                                                        std::string_view request_id) {
+        protocol::AllocateBlockRequest request;
+        request.set_inode_id(inode_id);
+        request.set_block_index(0);
+        request.set_replication(FLAGS_replication);
+        request.set_client_id(std::string(client_id));
+        set_header(request.mutable_header(), client_id, request_id);
+        protocol::AllocateBlockResponse response;
+        brpc::Controller controller;
+        protocol::NameNodeService_Stub stub(channel);
+        stub.AllocateBlock(&controller, &request, &response, nullptr);
+        require_rpc_ok(controller, "AllocateBlock");
+        return response;
+    }
+
+    void verify_write_only_token(const protocol::LocatedBlockProto& block,
+                                 uint64_t inode_id,
+                                 std::string_view operation) {
+        const auto& token = block.block_token();
+        require(token.block_id() == block.block_id() &&
+                    token.generation_stamp() == block.generation_stamp() &&
+                    token.inode_id() == inode_id && token.block_index() == 0,
+                std::string(operation) + " returned a token bound to the wrong block");
+        require(token.expires_at_ms() > 1 && !token.signature().empty(),
+                std::string(operation) + " returned an invalid token");
+        require(token.permissions() == kBlockTokenPermissionWrite,
+                std::string(operation) + " token is not write-only");
+    }
+
+    void commit_raw_block(const protocol::LocatedBlockProto& block, uint64_t inode_id) {
+        require(block.locations_size() > 0, "allocated block has no DataNode locations");
+        const std::string payload = "e2e";
+        protocol::WriteBlockRequest write_request;
+        write_request.set_block_id(block.block_id());
+        write_request.set_inode_id(inode_id);
+        write_request.set_block_index(0);
+        write_request.set_generation_stamp(block.generation_stamp());
+        for (int index = 1; index < block.locations_size(); ++index) {
+            *write_request.add_pipeline() = block.locations(index);
+        }
+        write_request.set_data(payload);
+        write_request.set_chunk_index(0);
+        write_request.set_checksum(compute_crc32c(payload.data(), payload.size()));
+        write_request.set_is_last_chunk(true);
+        *write_request.mutable_block_token() = block.block_token();
+
+        const auto& primary = block.locations(0);
+        brpc::Channel datanode_channel;
+        initialize_channel(&datanode_channel,
+                           primary.host() + ":" + std::to_string(primary.data_port()));
+        protocol::DataTransferService_Stub datanode(&datanode_channel);
+        protocol::WriteBlockResponse write_response;
+        brpc::Controller write_controller;
+        datanode.WriteBlock(&write_controller, &write_request, &write_response, nullptr);
+        require_rpc_ok(write_controller, "WriteBlock for lease release");
+        require(write_response.status().code() == 0,
+                "WriteBlock for lease release failed: " + write_response.status().message());
+
+        protocol::CommitBlockRequest commit_request;
+        commit_request.set_block_id(block.block_id());
+        commit_request.set_length(payload.size());
+        commit_request.set_generation_stamp(block.generation_stamp());
+        for (const auto& location : block.locations()) {
+            commit_request.add_finalized_datanode_ids(location.datanode_id());
+        }
+        protocol::CommitBlockResponse commit_response;
+        brpc::Controller commit_controller;
+        protocol::DataNodeProtocolService_Stub namenode(&namenode_channel_);
+        namenode.CommitBlock(&commit_controller, &commit_request, &commit_response, nullptr);
+        require_rpc_ok(commit_controller, "CommitBlock for lease release");
+        require(commit_response.status().code() == 0,
+                "CommitBlock for lease release failed: " + commit_response.status().message());
+    }
+
+    void complete_raw_file(uint64_t inode_id, std::string_view client_id) {
+        protocol::CompleteFileRequest request;
+        request.set_inode_id(inode_id);
+        request.set_client_id(std::string(client_id));
+        set_header(request.mutable_header(), client_id, unique_id("complete-file"));
+        protocol::CompleteFileResponse response;
+        brpc::Controller controller;
+        protocol::NameNodeService_Stub stub(&namenode_channel_);
+        stub.CompleteFile(&controller, &request, &response, nullptr);
+        require_rpc_ok(controller, "CompleteFile");
+        require(response.status().code() == 0,
+                "CompleteFile failed: " + response.status().message());
+    }
+
+    void verify_allocate_block_semantics() {
+        std::cout << "[API E2E] direct AllocateBlock idempotency and concurrency\n";
+        const auto data_dir = root_ + "/level1/level2/data";
+
+        const auto replay_client = unique_id("allocate-replay-client");
+        const auto replay_request = unique_id("allocate-replay-request");
+        const auto replay_path = data_dir + "/allocate-replay.bin";
+        auto created = create_raw_file(replay_path, replay_client, unique_id("create-replay"));
+        require(created.status().code() == 0, "raw replay file creation failed");
+        auto first =
+            allocate_raw(&namenode_channel_, created.inode_id(), replay_client, replay_request);
+        require(first.status().code() == 0 && first.has_block(), "first allocation failed");
+        verify_write_only_token(first.block(), created.inode_id(), "first allocation");
+        auto replay =
+            allocate_raw(&namenode_channel_, created.inode_id(), replay_client, replay_request);
+        require(replay.status().code() == 0 && replay.has_block(), "allocation replay failed");
+        require(replay.block().block_id() == first.block().block_id(),
+                "allocation replay returned a different block_id");
+        verify_write_only_token(replay.block(), created.inode_id(), "allocation replay");
+
+        const auto race_client = unique_id("allocate-race-client");
+        const auto race_path = data_dir + "/allocate-race.bin";
+        auto race_file = create_raw_file(race_path, race_client, unique_id("create-race"));
+        require(race_file.status().code() == 0, "raw race file creation failed");
+        std::barrier start(3);
+        auto contender = [&](std::string request_id) {
+            brpc::Channel channel;
+            initialize_channel(&channel, FLAGS_namenode);
+            start.arrive_and_wait();
+            return allocate_raw(&channel, race_file.inode_id(), race_client, request_id);
+        };
+        auto left = std::async(std::launch::async, contender, unique_id("allocate-left"));
+        auto right = std::async(std::launch::async, contender, unique_id("allocate-right"));
+        start.arrive_and_wait();
+        auto left_response = left.get();
+        auto right_response = right.get();
+        const auto success_count = static_cast<int>(left_response.status().code() == 0) +
+                                   static_cast<int>(right_response.status().code() == 0);
+        require(success_count == 1, "concurrent allocations did not produce exactly one winner");
+        const auto& winner = left_response.status().code() == 0 ? left_response : right_response;
+        verify_write_only_token(winner.block(), race_file.inode_id(), "concurrent allocation");
+
+        commit_raw_block(first.block(), created.inode_id());
+        complete_raw_file(created.inode_id(), replay_client);
+        auto replay_after_complete =
+            allocate_raw(&namenode_channel_, created.inode_id(), replay_client, replay_request);
+        require(replay_after_complete.status().code() != 0,
+                "successful AllocateBlock request replay succeeded after lease release");
+    }
+
+    protocol::RenameResponse rename_raw(std::string_view src,
+                                        std::string_view dst,
+                                        std::string_view request_id) {
+        protocol::RenameRequest request;
+        request.set_src(std::string(src));
+        request.set_dst(std::string(dst));
+        set_header(request.mutable_header(), client_id_, request_id);
+        protocol::RenameResponse response;
+        brpc::Controller controller;
+        protocol::NameNodeService_Stub stub(&namenode_channel_);
+        stub.Rename(&controller, &request, &response, nullptr);
+        require_rpc_ok(controller, "Rename");
+        return response;
+    }
+
+    void require_acyclic_tree(std::string_view root) {
+        std::vector<std::string> pending = {std::string(root)};
+        std::unordered_set<uint64_t> visited;
+        size_t traversed = 0;
+        while (!pending.empty()) {
+            auto path = std::move(pending.back());
+            pending.pop_back();
+            const auto inode =
+                require_value(client_->get_inode_info_by_path(path), "traverse " + path);
+            require(visited.insert(inode.inode_id).second,
+                    "namespace traversal visited an inode twice (cycle detected)");
+            require(++traversed <= 3, "namespace traversal exceeded expected directory count");
+            for (const auto& child : require_value(client_->ls(path), "list " + path)) {
+                require(child.is_dir, "rename safety tree unexpectedly contains a file");
+                pending.push_back(child.path);
+            }
+        }
+        require(traversed == 3, "rename safety traversal lost a directory");
+    }
+
+    void verify_rename_safety() {
+        std::cout << "[API E2E] rename cycle prevention and concurrent cross rename\n";
+        const auto base = root_ + "/rename-safety";
+        require_ok(client_->mkdir(base + "/self/child/grandchild"), "create self-move tree");
+        require(
+            rename_raw(base + "/self", base + "/self", unique_id("rename-self")).status().code() !=
+                0,
+            "moving a directory to itself succeeded");
+        require(rename_raw(base + "/self",
+                           base + "/self/child/grandchild/self",
+                           unique_id("rename-descendant"))
+                        .status()
+                        .code() != 0,
+                "moving a directory below its descendant succeeded");
+
+        const auto race = base + "/race";
+        require_ok(client_->mkdir(race + "/a"), "create rename race a");
+        require_ok(client_->mkdir(race + "/b"), "create rename race b");
+        std::barrier start(3);
+        auto contender = [&](std::string src, std::string dst, std::string request_id) {
+            brpc::Channel channel;
+            initialize_channel(&channel, FLAGS_namenode);
+            protocol::RenameRequest request;
+            request.set_src(std::move(src));
+            request.set_dst(std::move(dst));
+            set_header(request.mutable_header(), client_id_, request_id);
+            start.arrive_and_wait();
+            protocol::RenameResponse response;
+            brpc::Controller controller;
+            protocol::NameNodeService_Stub stub(&channel);
+            stub.Rename(&controller, &request, &response, nullptr);
+            require_rpc_ok(controller, "concurrent Rename");
+            return response;
+        };
+        auto left = std::async(
+            std::launch::async, contender, race + "/a", race + "/b/a", unique_id("rename-left"));
+        auto right = std::async(
+            std::launch::async, contender, race + "/b", race + "/a/b", unique_id("rename-right"));
+        start.arrive_and_wait();
+        const auto left_response = left.get();
+        const auto right_response = right.get();
+        const auto success_count = static_cast<int>(left_response.status().code() == 0) +
+                                   static_cast<int>(right_response.status().code() == 0);
+        require(success_count == 1, "cross rename did not produce exactly one winner");
+        require_acyclic_tree(race);
+    }
+
     void verify_mutations_and_errors() {
         std::cout << "[API E2E] append, truncate, overwrite, setrep, mv, rm, and errors\n";
         const auto data_dir = root_ + "/level1/level2/data";
@@ -336,7 +689,9 @@ private:
 private:
     TempDirectory temp_dir_;
     std::string root_;
+    std::string client_id_;
     std::unique_ptr<DfsClient> client_;
+    brpc::Channel namenode_channel_;
 };
 
 } // namespace

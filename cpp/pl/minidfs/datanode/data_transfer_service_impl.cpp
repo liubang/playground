@@ -54,7 +54,9 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
     if (!authorize_token(request->block_token(),
                          BlockTokenPermission::kWrite,
                          request->block_id(),
-                         request->generation_stamp())) {
+                         request->generation_stamp(),
+                         request->inode_id(),
+                         request->block_index())) {
         fill_status(response->mutable_status(),
                     static_cast<uint32_t>(ErrorCode::kInvalidBlockToken),
                     "block token verification failed for WriteBlock");
@@ -210,7 +212,9 @@ void DataTransferServiceImpl::ReadBlock(google::protobuf::RpcController* /*contr
     if (!authorize_token(request->block_token(),
                          BlockTokenPermission::kRead,
                          request->block_id(),
-                         request->generation_stamp())) {
+                         request->generation_stamp(),
+                         request->block_token().inode_id(),
+                         request->block_token().block_index())) {
         fill_status(response->mutable_status(),
                     static_cast<uint32_t>(ErrorCode::kInvalidBlockToken),
                     "block token verification failed for ReadBlock");
@@ -259,7 +263,9 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
     if (!authorize_token(request->block_token(),
                          BlockTokenPermission::kTransfer,
                          request->block_id(),
-                         request->generation_stamp())) {
+                         request->generation_stamp(),
+                         request->inode_id(),
+                         request->block_index())) {
         fill_status(response->mutable_status(),
                     static_cast<uint32_t>(ErrorCode::kInvalidBlockToken),
                     "block token verification failed for TransferBlock");
@@ -325,7 +331,9 @@ void DataTransferServiceImpl::TruncateBlock(google::protobuf::RpcController* /*c
     if (!authorize_token(request->block_token(),
                          BlockTokenPermission::kTruncate,
                          request->block_id(),
-                         request->generation_stamp())) {
+                         request->generation_stamp(),
+                         request->block_token().inode_id(),
+                         request->block_token().block_index())) {
         fill_status(response->mutable_status(),
                     static_cast<uint32_t>(ErrorCode::kInvalidBlockToken),
                     "block token verification failed for TruncateBlock");
@@ -349,14 +357,16 @@ void DataTransferServiceImpl::TruncateBlock(google::protobuf::RpcController* /*c
 bool DataTransferServiceImpl::authorize_token(const protocol::BlockTokenProto& token,
                                               BlockTokenPermission required_permission,
                                               uint64_t expected_block_id,
-                                              uint64_t expected_generation_stamp) const {
+                                              uint64_t expected_generation_stamp,
+                                              uint64_t expected_inode_id,
+                                              uint32_t expected_block_index) const {
     return verify_block_token(token,
                              block_token_secret_,
                              required_permission,
                              expected_block_id,
                              expected_generation_stamp,
-                             /*expected_inode_id=*/token.inode_id(),
-                             /*expected_block_index=*/token.block_index());
+                             expected_inode_id,
+                             expected_block_index);
 }
 
 } // namespace pl::minidfs

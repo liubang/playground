@@ -29,6 +29,9 @@ cc_binary(
     linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/client:dfs_client",
+        "//cpp/pl/minidfs/common",
+        "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
+        "@brpc",
         "@gflags",
     ],
 )

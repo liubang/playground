@@ -85,15 +85,20 @@ int main(int argc, char* argv[]) {
     }
     auto& metadata_store = *store_result.value();
 
-    const std::string block_token_secret = FLAGS_block_token_secret.empty()
-                                               ? pl::minidfs::default_block_token_secret()
-                                               : FLAGS_block_token_secret;
+    const std::string block_token_secret =
+        pl::minidfs::configured_block_token_secret(FLAGS_block_token_secret);
+    if (block_token_secret.empty()) {
+        LOG(FATAL) << "block token secret must be provided via --block_token_secret or "
+                      "MINIDFS_BLOCK_TOKEN_SECRET";
+        return 1;
+    }
 
     // Create managers
     pl::minidfs::NamespaceManager ns_mgr(&metadata_store);
     pl::minidfs::DataNodeManager dn_mgr(&metadata_store);
     pl::minidfs::PlacementManager placement_mgr(&dn_mgr);
-    pl::minidfs::BlockManager block_mgr(&metadata_store, &placement_mgr, block_token_secret);
+    pl::minidfs::BlockManager block_mgr(
+        &metadata_store, &placement_mgr, block_token_secret, FLAGS_block_token_ttl_ms);
     pl::minidfs::LeaseManager lease_mgr(&metadata_store);
     pl::minidfs::ReplicationManager replication_mgr(
         &metadata_store, &placement_mgr, block_token_secret);

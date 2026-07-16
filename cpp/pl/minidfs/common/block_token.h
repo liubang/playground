@@ -52,12 +52,12 @@ inline uint64_t default_block_token_ttl_ms() {
     return 5 * 60 * 1000; // 5 minutes
 }
 
-inline std::string default_block_token_secret() {
-    const char* env = std::getenv("MINIDFS_BLOCK_TOKEN_SECRET");
-    if (env != nullptr && env[0] != '\0') {
-        return std::string(env);
+inline std::string configured_block_token_secret(std::string_view flag_value = {}) {
+    if (!flag_value.empty()) {
+        return std::string(flag_value);
     }
-    return "minidfs-block-token-default-secret-v1";
+    const char* env = std::getenv("MINIDFS_BLOCK_TOKEN_SECRET");
+    return env != nullptr ? std::string(env) : std::string{};
 }
 
 inline bool has_token_permission(uint32_t permissions, BlockTokenPermission permission) {
@@ -131,6 +131,12 @@ inline protocol::BlockTokenProto issue_block_token(uint64_t block_id,
                                               permissions,
                                               token.expires_at_ms()));
     return token;
+}
+
+inline bool block_token_needs_refresh(const protocol::BlockTokenProto& token,
+                                      uint64_t now,
+                                      uint64_t refresh_window_ms) {
+    return token.expires_at_ms() <= now || token.expires_at_ms() - now <= refresh_window_ms;
 }
 
 inline bool constant_time_equals(std::string_view lhs, std::string_view rhs) {

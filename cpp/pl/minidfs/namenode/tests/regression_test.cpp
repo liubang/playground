@@ -20,6 +20,9 @@
 // Tests are expected to FAIL against the current (buggy) code and PASS after fixes.
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <future>
 #include <gtest/gtest.h>
 #include <mutex>
 #include <thread>
@@ -39,6 +42,29 @@
 
 namespace pl::minidfs {
 namespace {
+
+class FirstInodeUpdateBlockingStore : public testing::MockMetadataStore {
+public:
+    void arm() { armed_.store(true); }
+
+    void wait_for_first_update() { first_update_entered_.get_future().wait(); }
+
+    void release_first_update() { release_first_update_.set_value(); }
+
+    pl::Result<pl::Void> update_inode(const Inode& inode) override {
+        if (armed_.load() && !first_update_blocked_.exchange(true)) {
+            first_update_entered_.set_value();
+            release_first_update_.get_future().wait();
+        }
+        return testing::MockMetadataStore::update_inode(inode);
+    }
+
+private:
+    std::atomic<bool> armed_ = false;
+    std::atomic<bool> first_update_blocked_ = false;
+    std::promise<void> first_update_entered_;
+    std::promise<void> release_first_update_;
+};
 
 class ListChildrenFailingStore : public testing::MockMetadataStore {
 public:
@@ -351,6 +377,62 @@ TEST_F(RegressionNameNodeTest, P1_DeleteFileLeavesBlockMetadata) {
         << "FIX VERIFIED: missing block report confirms the DataNode deleted the replica";
 }
 
+TEST(RegressionNameNodeRenameTest, ConcurrentCrossRenameCannotCreateNamespaceCycle) {
+    auto store = std::make_unique<FirstInodeUpdateBlockingStore>();
+    auto ns_mgr = std::make_unique<NamespaceManager>(store.get());
+    auto dn_mgr = std::make_unique<DataNodeManager>(store.get());
+    auto placement = std::make_unique<PlacementManager>(dn_mgr.get());
+    auto block_mgr =
+        std::make_unique<BlockManager>(store.get(), placement.get(), "test-secret");
+    auto lease_mgr = std::make_unique<LeaseManager>(store.get());
+    NameNodeServiceImpl service(ns_mgr.get(), block_mgr.get(), lease_mgr.get(), store.get(),
+                                "test-secret", 3600000);
+
+    ASSERT_TRUE(ns_mgr->mkdir("/a", "user", "grp", 0755).hasValue());
+    ASSERT_TRUE(ns_mgr->mkdir("/b", "user", "grp", 0755).hasValue());
+    store->arm();
+
+    protocol::RenameRequest first_request;
+    first_request.set_src("/a");
+    first_request.set_dst("/b/a");
+    protocol::RenameResponse first_response;
+    auto first = std::async(std::launch::async, [&] {
+        service.Rename(nullptr, &first_request, &first_response, nullptr);
+    });
+
+    // Hold the first rename immediately before its inode update. Without NameNode-level
+    // serialization, the inverse rename can validate against the same old tree and succeed.
+    store->wait_for_first_update();
+
+    protocol::RenameRequest second_request;
+    second_request.set_src("/b");
+    second_request.set_dst("/a/b");
+    protocol::RenameResponse second_response;
+    std::promise<void> second_started;
+    auto second = std::async(std::launch::async, [&] {
+        second_started.set_value();
+        service.Rename(nullptr, &second_request, &second_response, nullptr);
+    });
+    second_started.get_future().wait();
+
+    // The second RPC must remain outside the protected rename transaction until the first
+    // update and commit complete. The gate makes the vulnerable interleaving reproducible.
+    EXPECT_EQ(second.wait_for(std::chrono::milliseconds(100)), std::future_status::timeout);
+    store->release_first_update();
+    first.get();
+    second.get();
+
+    const int successes = (first_response.status().code() == 0 ? 1 : 0) +
+                          (second_response.status().code() == 0 ? 1 : 0);
+    EXPECT_EQ(successes, 1);
+
+    auto a = store->get_child(1, "a");
+    auto b = store->get_child(1, "b");
+    ASSERT_TRUE(a.hasValue());
+    ASSERT_TRUE(b.hasValue());
+    EXPECT_NE(a.value().has_value(), b.value().has_value());
+}
+
 TEST(RegressionNameNodeDeleteTest, RecursiveDeleteListChildrenErrorMustAbort) {
     auto store = std::make_unique<ListChildrenFailingStore>();
     auto ns_mgr = std::make_unique<NamespaceManager>(store.get());
@@ -592,6 +674,63 @@ TEST_F(RegressionNameNodeTest, P0_IdempotentCreateFileReplay) {
         << "Duplicate CreateFile must return the same inode_id";
     EXPECT_EQ(resp2.lease_id(), first_lease_id)
         << "Duplicate CreateFile must return the same lease_id";
+}
+
+TEST_F(RegressionNameNodeTest, AllocateBlockReplayReissuesToken) {
+    constexpr uint64_t kTokenTtlMs = 3600000;
+    NameNodeServiceImpl service(ns_mgr_.get(),
+                                block_mgr_.get(),
+                                lease_mgr_.get(),
+                                store_raw(),
+                                "test-secret",
+                                kTokenTtlMs);
+    auto file = ns_mgr_->create_file("/idem_block.dat", "user", "grp", 0644, 3, 128 * kMB);
+    ASSERT_TRUE(file.hasValue());
+    ASSERT_TRUE(lease_mgr_->acquire_lease(file.value().inode_id, "client").hasValue());
+
+    protocol::AllocateBlockRequest request;
+    request.set_inode_id(file.value().inode_id);
+    request.set_block_index(0);
+    request.set_replication(3);
+    request.set_client_id("client");
+    request.mutable_header()->set_request_id("idem-allocate-001");
+    request.mutable_header()->set_client_id("client");
+
+    protocol::AllocateBlockResponse first;
+    service.AllocateBlock(nullptr, &request, &first, nullptr);
+    ASSERT_EQ(first.status().code(), 0u);
+    ASSERT_TRUE(first.has_block());
+    EXPECT_TRUE(verify_block_token(first.block().block_token(),
+                                   "test-secret",
+                                   BlockTokenPermission::kWrite,
+                                   first.block().block_id(),
+                                   first.block().generation_stamp(),
+                                   file.value().inode_id,
+                                   0));
+
+    protocol::AllocateBlockResponse replay;
+    service.AllocateBlock(nullptr, &request, &replay, nullptr);
+    ASSERT_EQ(replay.status().code(), 0u);
+    EXPECT_EQ(replay.block().block_id(), first.block().block_id());
+    EXPECT_EQ(replay.block().generation_stamp(), first.block().generation_stamp());
+    EXPECT_TRUE(verify_block_token(replay.block().block_token(),
+                                   "test-secret",
+                                   BlockTokenPermission::kWrite,
+                                   replay.block().block_id(),
+                                   replay.block().generation_stamp(),
+                                   file.value().inode_id,
+                                   0));
+    EXPECT_GE(replay.block().block_token().expires_at_ms(),
+              first.block().block_token().expires_at_ms());
+    EXPECT_FALSE(has_token_permission(replay.block().block_token().permissions(),
+                                      BlockTokenPermission::kTruncate));
+    EXPECT_FALSE(has_token_permission(replay.block().block_token().permissions(),
+                                      BlockTokenPermission::kTransfer));
+
+    ASSERT_TRUE(lease_mgr_->release_lease(file.value().inode_id, "client").hasValue());
+    protocol::AllocateBlockResponse replay_without_lease;
+    service.AllocateBlock(nullptr, &request, &replay_without_lease, nullptr);
+    EXPECT_NE(replay_without_lease.status().code(), 0u);
 }
 
 // P0: Idempotent replay — duplicate Delete request returns success without side effects

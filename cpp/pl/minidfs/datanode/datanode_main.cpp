@@ -41,6 +41,9 @@ DEFINE_string(rack, "/default-rack", "DataNode rack location");
 DEFINE_int32(heartbeat_interval_ms, 3000, "Heartbeat interval in milliseconds");
 DEFINE_int32(block_report_interval_ms, 600000, "Block report interval in milliseconds");
 DEFINE_int32(replication_threads, 4, "Number of replication worker threads");
+DEFINE_string(block_token_secret,
+              "",
+              "Shared secret used for DataNode block token verification");
 DEFINE_int64(tmp_cleanup_stale_after_ms,
              static_cast<int64_t>(pl::minidfs::kDefaultTmpCleanupStaleAfterMs),
              "Cleanup tmp block files older than this threshold at startup (0 means cleanup all)");
@@ -66,6 +69,14 @@ int main(int argc, char* argv[]) {
     }
     if (FLAGS_tmp_cleanup_stale_after_ms < 0) {
         LOG(FATAL) << "--tmp_cleanup_stale_after_ms must be >= 0";
+        return 1;
+    }
+
+    const std::string block_token_secret =
+        pl::minidfs::configured_block_token_secret(FLAGS_block_token_secret);
+    if (block_token_secret.empty()) {
+        LOG(FATAL) << "block token secret must be provided via --block_token_secret or "
+                      "MINIDFS_BLOCK_TOKEN_SECRET";
         return 1;
     }
 
@@ -306,8 +317,8 @@ int main(int argc, char* argv[]) {
     pl::minidfs::BlockReporter block_reporter(br_config, &store, report_func, delete_func);
 
     // Create data transfer service
-    std::string block_token_secret = pl::minidfs::default_block_token_secret();
-    pl::minidfs::DataTransferServiceImpl data_transfer_service(&store, &block_reporter, block_token_secret);
+    pl::minidfs::DataTransferServiceImpl data_transfer_service(
+        &store, &block_reporter, block_token_secret);
 
     // Start brpc server
     brpc::Server server;

@@ -11,6 +11,8 @@ x-minidfs-image: &minidfs-image
 x-datanode: &datanode
   <<: *minidfs-image
   restart: "no"
+  environment:
+    MINIDFS_BLOCK_TOKEN_SECRET: ${MINIDFS_BLOCK_TOKEN_SECRET:?MINIDFS_BLOCK_TOKEN_SECRET must be set}
   depends_on:
     namenode:
       condition: service_healthy
@@ -49,6 +51,8 @@ services:
   namenode:
     <<: *minidfs-image
     restart: "no"
+    environment:
+      MINIDFS_BLOCK_TOKEN_SECRET: ${MINIDFS_BLOCK_TOKEN_SECRET:?MINIDFS_BLOCK_TOKEN_SECRET must be set}
     command:
       - minidfs-namenode
       - --port=9000
