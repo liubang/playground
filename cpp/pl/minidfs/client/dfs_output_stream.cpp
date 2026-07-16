@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <brpc/controller.h>
 #include <cstring>
+#include <fmt/core.h>
 #include <utility>
 
 #include "cpp/pl/minidfs/common/checksum.h"
@@ -53,6 +54,11 @@ DfsOutputStream::DfsOutputStream(brpc::Channel* namenode_channel,
 
 DfsOutputStream::~DfsOutputStream() = default;
 
+std::string DfsOutputStream::next_request_id(std::string_view op_suffix) {
+    const auto seq = ++request_seq_;
+    return fmt::format("{}-{}-{}", options_.request_id_prefix, op_suffix, seq);
+}
+
 DfsOutputStream::DfsOutputStream(DfsOutputStream&& other) noexcept
     : namenode_channel_(std::exchange(other.namenode_channel_, nullptr)),
       inode_id_(std::exchange(other.inode_id_, 0)),
@@ -61,6 +67,7 @@ DfsOutputStream::DfsOutputStream(DfsOutputStream&& other) noexcept
       buffer_(std::move(other.buffer_)),
       current_block_index_(std::exchange(other.current_block_index_, 0)),
       total_bytes_written_(std::exchange(other.total_bytes_written_, 0)),
+      request_seq_(std::exchange(other.request_seq_, 0)),
       closed_(std::exchange(other.closed_, true)) {}
 
 pl::Result<DfsOutputStream> DfsOutputStream::create(brpc::Channel* namenode_channel,
@@ -71,6 +78,9 @@ pl::Result<DfsOutputStream> DfsOutputStream::create(brpc::Channel* namenode_chan
         options.chunk_size == 0 || options.replication == 0 || options.rpc_timeout_ms <= 0) {
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
                              "invalid output stream configuration");
+    }
+    if (options.request_id_prefix.empty()) {
+        options.request_id_prefix = std::string(client_id);
     }
     return DfsOutputStream(namenode_channel, inode_id, std::string(client_id), options);
 }
@@ -115,6 +125,9 @@ pl::Result<pl::Void> DfsOutputStream::renew_lease() {
     protocol::RenewLeaseRequest request;
     request.set_inode_id(inode_id_);
     request.set_client_id(client_id_);
+    auto* header = request.mutable_header();
+    header->set_request_id(next_request_id("renew"));
+    header->set_client_id(client_id_);
     protocol::RenewLeaseResponse response;
     stub.RenewLease(&controller, &request, &response, nullptr);
     if (controller.Failed()) {
@@ -132,25 +145,17 @@ pl::Result<pl::Void> DfsOutputStream::flush_block() {
     if (renewed.hasError()) {
         return renewed;
     }
-    auto result = write_block_pipeline(current_block_index_, buffer_.data(), buffer_.size());
-    if (result.hasError()) {
-        return result;
-    }
-    buffer_.clear();
-    ++current_block_index_;
-    return pl::Void{};
-}
 
-pl::Result<pl::Void> DfsOutputStream::write_block_pipeline(uint32_t block_index,
-                                                           const void* data,
-                                                           uint64_t len) {
     protocol::NameNodeService_Stub namenode(namenode_channel_);
     brpc::Controller controller;
     protocol::AllocateBlockRequest allocate;
     allocate.set_inode_id(inode_id_);
-    allocate.set_block_index(block_index);
+    allocate.set_block_index(current_block_index_);
     allocate.set_replication(options_.replication);
     allocate.set_client_id(client_id_);
+    auto* header = allocate.mutable_header();
+    header->set_request_id(next_request_id("allocate"));
+    header->set_client_id(client_id_);
     protocol::AllocateBlockResponse allocated;
     namenode.AllocateBlock(&controller, &allocate, &allocated, nullptr);
     if (controller.Failed()) {
@@ -161,7 +166,21 @@ pl::Result<pl::Void> DfsOutputStream::write_block_pipeline(uint32_t block_index,
     if (status.hasError()) {
         return status;
     }
-    const auto& block = allocated.block();
+
+    auto result =
+        write_block_pipeline(allocated.block(), current_block_index_, buffer_.data(), buffer_.size());
+    if (result.hasError()) {
+        return result;
+    }
+    buffer_.clear();
+    ++current_block_index_;
+    return pl::Void{};
+}
+
+pl::Result<pl::Void> DfsOutputStream::write_block_pipeline(const protocol::LocatedBlockProto& block,
+                                                           uint32_t block_index,
+                                                           const void* data,
+                                                           uint64_t len) {
     if (block.locations().empty()) {
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kNoAvailableDataNode),
                              "no DataNode available for block");
@@ -198,6 +217,7 @@ pl::Result<pl::Void> DfsOutputStream::write_block_pipeline(uint32_t block_index,
         request.set_chunk_index(chunk_index);
         request.set_checksum(compute_crc32c(bytes + offset, size));
         request.set_is_last_chunk(offset + size == len);
+        *request.mutable_block_token() = block.block_token();
         protocol::WriteBlockResponse response;
         datanode.WriteBlock(&write_controller, &request, &response, nullptr);
         if (write_controller.Failed()) {
@@ -212,7 +232,7 @@ pl::Result<pl::Void> DfsOutputStream::write_block_pipeline(uint32_t block_index,
         ++chunk_index;
     }
 
-    controller.Reset();
+    brpc::Controller controller;
     protocol::DataNodeProtocolService_Stub datanode_protocol(namenode_channel_);
     protocol::CommitBlockRequest commit;
     commit.set_block_id(block.block_id());
@@ -243,6 +263,9 @@ pl::Result<pl::Void> DfsOutputStream::close() {
     protocol::CompleteFileRequest request;
     request.set_inode_id(inode_id_);
     request.set_client_id(client_id_);
+    auto* header = request.mutable_header();
+    header->set_request_id(next_request_id("complete"));
+    header->set_client_id(client_id_);
     protocol::CompleteFileResponse response;
     stub.CompleteFile(&controller, &request, &response, nullptr);
     if (controller.Failed()) {

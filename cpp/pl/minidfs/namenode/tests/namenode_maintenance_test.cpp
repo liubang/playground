@@ -39,9 +39,10 @@ protected:
         namespace_manager_ = std::make_unique<NamespaceManager>(store_.get());
         datanode_manager_ = std::make_unique<DataNodeManager>(store_.get());
         placement_manager_ = std::make_unique<PlacementManager>(datanode_manager_.get());
-        block_manager_ = std::make_unique<BlockManager>(store_.get(), placement_manager_.get());
+        block_manager_ = std::make_unique<BlockManager>(
+            store_.get(), placement_manager_.get(), "test-secret");
         replication_manager_ =
-            std::make_unique<ReplicationManager>(store_.get(), placement_manager_.get());
+            std::make_unique<ReplicationManager>(store_.get(), placement_manager_.get(), "test-secret");
         maintenance_ = std::make_unique<NameNodeMaintenance>(NameNodeMaintenance::Config{},
                                                              store_.get(),
                                                              namespace_manager_.get(),

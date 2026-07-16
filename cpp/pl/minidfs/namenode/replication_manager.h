@@ -18,8 +18,10 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/metadata/metadata_store.h"
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
 #include "cpp/pl/status/result.h"
@@ -34,6 +36,7 @@ struct ReplicationTask {
     uint64_t inode_id = 0;
     uint32_t block_index = 0;
     uint64_t generation_stamp = 0;
+    BlockToken block_token;
     bool is_deletion = false;
 };
 
@@ -45,7 +48,9 @@ struct ReplicationTask {
 //   - Corrupt replicas: invalidates and schedules re-replication
 class ReplicationManager {
 public:
-    ReplicationManager(MetadataStore* store, PlacementManager* placement);
+    ReplicationManager(MetadataStore* store,
+                       PlacementManager* placement,
+                       std::string block_token_secret);
     ~ReplicationManager() = default;
 
     ReplicationManager(const ReplicationManager&) = delete;
@@ -58,6 +63,7 @@ public:
 private:
     MetadataStore* store_;
     PlacementManager* placement_;
+    std::string block_token_secret_;
 };
 
 } // namespace pl::minidfs

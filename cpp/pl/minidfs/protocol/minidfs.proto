@@ -39,12 +39,23 @@ message DataNodeEndpointProto {
     uint32 data_port = 3;
 }
 
+message BlockTokenProto {
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+    uint64 inode_id = 3;
+    uint32 block_index = 4;
+    uint32 permissions = 5;
+    uint64 expires_at_ms = 6;
+    bytes signature = 7;
+}
+
 message LocatedBlockProto {
     uint64 block_id = 1;
     uint64 generation_stamp = 2;
     uint64 offset = 3;
     uint64 length = 4;
     repeated DataNodeEndpointProto locations = 5;
+    BlockTokenProto block_token = 6;
 }
 
 message FileStatusProto {
@@ -186,6 +197,7 @@ message RenameResponse {
 message RenewLeaseRequest {
     uint64 inode_id = 1;
     string client_id = 2;
+    RequestHeader header = 15;
 }
 
 message RenewLeaseResponse {
@@ -195,6 +207,7 @@ message RenewLeaseResponse {
 message TruncateFileRequest {
     string path = 1;
     uint64 length = 2;
+    RequestHeader header = 15;
 }
 
 message TruncateFileResponse {
@@ -204,6 +217,7 @@ message TruncateFileResponse {
 message SetReplicationRequest {
     string path = 1;
     uint32 replication = 2;
+    RequestHeader header = 15;
 }
 
 message SetReplicationResponse {
@@ -248,6 +262,7 @@ message DataNodeCommand {
     uint32 target_port = 5;
     uint64 inode_id = 6;
     uint32 block_index = 7;
+    BlockTokenProto block_token = 8;
 }
 
 message HeartbeatResponse {
@@ -261,9 +276,14 @@ message BlockReportRequest {
     bool full_report = 3;
 }
 
+message BlockDeletionProto {
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+}
+
 message BlockReportResponse {
     StatusProto status = 1;
-    repeated uint64 blocks_to_delete = 2;
+    repeated BlockDeletionProto blocks_to_delete = 2;
 }
 
 message CommitBlockRequest {
@@ -338,6 +358,7 @@ message WriteBlockRequest {
     uint32 chunk_index = 7;
     uint32 checksum = 8;                          // CRC32C of data
     bool is_last_chunk = 9;                       // signals finalization
+    BlockTokenProto block_token = 10;
 }
 
 message WriteBlockResponse {
@@ -350,6 +371,7 @@ message ReadBlockRequest {
     uint64 generation_stamp = 2;
     uint64 offset = 3;        // byte offset within block
     uint64 length = 4;        // bytes to read (0 = entire block)
+    BlockTokenProto block_token = 5;
 }
 
 message ReadBlockResponse {
@@ -366,6 +388,7 @@ message TransferBlockRequest {
     DataNodeEndpointProto target = 4;
     uint64 inode_id = 5;
     uint32 block_index = 6;
+    BlockTokenProto block_token = 7;
 }
 
 message TransferBlockResponse {
@@ -376,6 +399,7 @@ message TruncateBlockRequest {
     uint64 block_id = 1;
     uint64 generation_stamp = 2;
     uint64 length = 3;
+    BlockTokenProto block_token = 4;
 }
 
 message TruncateBlockResponse {

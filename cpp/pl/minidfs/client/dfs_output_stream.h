@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/common/types.h"
 #include "cpp/pl/status/result.h"
 
@@ -32,6 +33,7 @@ struct DfsOutputStreamOptions {
     uint32_t replication = 0;
     int32_t rpc_timeout_ms = 0;
     uint32_t starting_block_index = 0;
+    std::string request_id_prefix;
 };
 
 // DfsOutputStream — 流式写入 DFS 文件
@@ -84,7 +86,12 @@ private:
     pl::Result<pl::Void> renew_lease();
 
     /// 通过 pipeline 写入一个 block 的数据到 DataNode
-    pl::Result<pl::Void> write_block_pipeline(uint32_t block_index, const void* data, uint64_t len);
+    pl::Result<pl::Void> write_block_pipeline(const protocol::LocatedBlockProto& block,
+                                              uint32_t block_index,
+                                              const void* data,
+                                              uint64_t len);
+
+    [[nodiscard]] std::string next_request_id(std::string_view op_suffix);
 
     brpc::Channel* namenode_channel_ = nullptr;
     uint64_t inode_id_ = 0;
@@ -94,6 +101,7 @@ private:
     std::string buffer_; // 当前 block 的数据缓冲区
     uint32_t current_block_index_ = 0;
     uint64_t total_bytes_written_ = 0;
+    uint64_t request_seq_ = 0;
     bool closed_ = false;
 };
 

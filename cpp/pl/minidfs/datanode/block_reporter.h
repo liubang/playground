@@ -33,8 +33,13 @@ namespace pl::minidfs {
 
 // The NameNode may instruct the DN to delete stale replicas
 // or re-replicate under-replicated blocks.
+struct BlockDeleteCommand {
+    uint64_t block_id = 0;
+    uint64_t generation_stamp = 0;
+};
+
 struct BlockReportResponse {
-    std::vector<uint64_t> blocks_to_delete; // block_ids the NN wants removed
+    std::vector<BlockDeleteCommand> blocks_to_delete;
 };
 
 struct BlockReport {
@@ -49,7 +54,8 @@ struct BlockReport {
 using BlockReportFunc =
     std::function<pl::Result<BlockReportResponse>(uint64_t datanode_id, const BlockReport& report)>;
 
-using DeleteBlockFunc = std::function<void(uint64_t block_id, uint64_t generation_stamp)>;
+using DeleteBlockFunc =
+    std::function<pl::Result<pl::Void>(uint64_t block_id, uint64_t generation_stamp)>;
 
 class BlockReporter {
 public:

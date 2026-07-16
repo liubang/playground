@@ -23,6 +23,7 @@
 #include <thread>
 #include <vector>
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/datanode/replication_worker.h"
 
 namespace pl::minidfs {
@@ -80,6 +81,7 @@ TEST_F(ReplicationWorkerTest, CopyTaskSuccess) {
                              uint64_t gs,
                              uint64_t,
                              uint32_t,
+                             const BlockToken&,
                              const std::string& data,
                              const std::string& host,
                              uint32_t port) -> Result<Void> {
@@ -114,13 +116,75 @@ TEST_F(ReplicationWorkerTest, CopyTaskSuccess) {
     EXPECT_EQ(copies[0].port, 9001u);
 }
 
+TEST_F(ReplicationWorkerTest, CopyTaskPassesBlockToken) {
+    create_finalized_block(150, 5500, "token-aware copy");
+
+    std::vector<BlockToken> observed_tokens;
+    std::mutex mu;
+    CopyFunc copy_func = [&](uint64_t,
+                             uint64_t,
+                             uint64_t,
+                             uint32_t,
+                             const BlockToken& token,
+                             const std::string&,
+                             const std::string&,
+                             uint32_t) -> Result<Void> {
+        std::lock_guard lock(mu);
+        observed_tokens.push_back(token);
+        RETURN_VOID;
+    };
+
+    ReplicationWorker::Config cfg;
+    cfg.max_concurrent_tasks = 1;
+    ReplicationWorker worker(cfg, store_.get(), copy_func);
+    worker.start();
+
+    BlockToken token{
+        .block_id = 150,
+        .generation_stamp = 5500,
+        .inode_id = 12,
+        .block_index = 7,
+        .permissions = kBlockTokenPermissionTransfer,
+        .expires_at_ms = 123456789,
+        .signature = "sig",
+    };
+
+    worker.enqueue(DataNodeTask{
+        .kind = TaskKind::kCopy,
+        .block_id = 150,
+        .generation_stamp = 5500,
+        .inode_id = 12,
+        .block_index = 7,
+        .target_host = "dn2",
+        .target_port = 9102,
+        .block_token = token,
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    worker.stop();
+
+    ASSERT_EQ(observed_tokens.size(), 1u);
+    EXPECT_EQ(observed_tokens[0].block_id, token.block_id);
+    EXPECT_EQ(observed_tokens[0].generation_stamp, token.generation_stamp);
+    EXPECT_EQ(observed_tokens[0].inode_id, token.inode_id);
+    EXPECT_EQ(observed_tokens[0].block_index, token.block_index);
+    EXPECT_EQ(observed_tokens[0].permissions, token.permissions);
+    EXPECT_EQ(observed_tokens[0].expires_at_ms, token.expires_at_ms);
+    EXPECT_EQ(observed_tokens[0].signature, token.signature);
+}
+
 TEST_F(ReplicationWorkerTest, DeleteTaskSuccess) {
     create_finalized_block(200, 6000, "delete me");
     EXPECT_TRUE(store_->has_block(200, 6000));
 
-    CopyFunc copy_func =
-        [](uint64_t, uint64_t, uint64_t, uint32_t, const std::string&, const std::string&, uint32_t)
-        -> Result<Void> {
+    CopyFunc copy_func = [](uint64_t,
+                            uint64_t,
+                            uint64_t,
+                            uint32_t,
+                            const BlockToken&,
+                            const std::string&,
+                            const std::string&,
+                            uint32_t) -> Result<Void> {
         RETURN_VOID;
     };
 
@@ -152,6 +216,7 @@ TEST_F(ReplicationWorkerTest, MultipleTasks) {
                              uint64_t,
                              uint64_t,
                              uint32_t,
+                             const BlockToken&,
                              const std::string&,
                              const std::string&,
                              uint32_t) -> Result<Void> {
@@ -192,6 +257,7 @@ TEST_F(ReplicationWorkerTest, CopyBlockNotFound) {
                              uint64_t,
                              uint64_t,
                              uint32_t,
+                             const BlockToken&,
                              const std::string&,
                              const std::string&,
                              uint32_t) -> Result<Void> {
@@ -220,9 +286,14 @@ TEST_F(ReplicationWorkerTest, CopyBlockNotFound) {
 }
 
 TEST_F(ReplicationWorkerTest, PendingCount) {
-    CopyFunc copy_func =
-        [](uint64_t, uint64_t, uint64_t, uint32_t, const std::string&, const std::string&, uint32_t)
-        -> Result<Void> {
+    CopyFunc copy_func = [](uint64_t,
+                            uint64_t,
+                            uint64_t,
+                            uint32_t,
+                            const BlockToken&,
+                            const std::string&,
+                            const std::string&,
+                            uint32_t) -> Result<Void> {
         // Slow task
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         RETURN_VOID;
@@ -262,6 +333,7 @@ TEST_F(ReplicationWorkerTest, StopDrainsQueue) {
                              uint64_t,
                              uint64_t,
                              uint32_t,
+                             const BlockToken&,
                              const std::string&,
                              const std::string&,
                              uint32_t) -> Result<Void> {

@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -68,6 +69,7 @@ public:
     struct Config {
         std::string storage_root;
         uint64_t reserved_bytes = 1 * kGB; // reserved space, refuse writes if below
+        uint64_t tmp_cleanup_stale_after_ms = kDefaultTmpCleanupStaleAfterMs;
     };
 
     explicit LocalBlockStore(Config config);
@@ -77,7 +79,9 @@ public:
     LocalBlockStore& operator=(const LocalBlockStore&) = delete;
 
     /// Initialize storage directories. Must be called once before use.
-    pl::Result<pl::Void> init();
+    /// Optionally keep the currently active tmp block from startup cleanup.
+    pl::Result<pl::Void> init(std::optional<std::pair<uint64_t, uint64_t>> active_tmp_block =
+                                  std::nullopt);
 
     /// Create a new block in tmp/ and write the initial header.
     /// The block enters the "writing" state.
@@ -112,6 +116,11 @@ public:
 
     /// Permanently remove all files in trash/.
     pl::Result<uint32_t> purge_trash();
+
+    /// Remove stale temporary block files from tmp/.
+    /// Active tmp block can be protected from cleanup via excluded_active.
+    pl::Result<uint32_t> cleanup_stale_tmp_blocks(
+        std::optional<std::pair<uint64_t, uint64_t>> excluded_active = std::nullopt);
 
     /// Read the full data region of a finalized block.
     /// Returns raw bytes (header excluded).

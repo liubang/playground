@@ -19,14 +19,50 @@
 
 #include <algorithm>
 #include <unordered_set>
+#include <utility>
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/common/time_util.h"
 
 namespace pl::minidfs {
 
-ReplicationManager::ReplicationManager(MetadataStore* store, PlacementManager* placement)
-    : store_(store), placement_(placement) {}
+namespace {
+
+protocol::BlockTokenProto make_replication_token(uint64_t block_id,
+                                                 uint64_t generation_stamp,
+                                                 uint64_t inode_id,
+                                                 uint32_t block_index,
+                                                 const std::string& secret) {
+    return issue_block_token(block_id,
+                             generation_stamp,
+                             inode_id,
+                             block_index,
+                             kBlockTokenPermissionTransfer,
+                             default_block_token_ttl_ms(),
+                             secret);
+}
+
+BlockToken from_proto_token(const protocol::BlockTokenProto& token) {
+    return BlockToken{
+        .block_id = token.block_id(),
+        .generation_stamp = token.generation_stamp(),
+        .inode_id = token.inode_id(),
+        .block_index = token.block_index(),
+        .permissions = token.permissions(),
+        .expires_at_ms = token.expires_at_ms(),
+        .signature = token.signature(),
+    };
+}
+
+} // namespace
+
+ReplicationManager::ReplicationManager(MetadataStore* store,
+                                       PlacementManager* placement,
+                                       std::string block_token_secret)
+    : store_(store),
+      placement_(placement),
+      block_token_secret_(std::move(block_token_secret)) {}
 
 pl::Result<std::vector<ReplicationTask>> ReplicationManager::scan() {
     // Get all committed blocks.
@@ -131,6 +167,11 @@ pl::Result<std::vector<ReplicationTask>> ReplicationManager::scan() {
             if (task_count >= kDefaultMaxReplicationTasksPerRound) {
                 break;
             }
+            auto token = make_replication_token(block.block_id,
+                                                block.generation_stamp,
+                                                block.inode_id,
+                                                block.block_index,
+                                                block_token_secret_);
             tasks.push_back(ReplicationTask{
                 .block_id = block.block_id,
                 .source_datanode = healthy_sources.front(),
@@ -138,6 +179,7 @@ pl::Result<std::vector<ReplicationTask>> ReplicationManager::scan() {
                 .inode_id = block.inode_id,
                 .block_index = block.block_index,
                 .generation_stamp = block.generation_stamp,
+                .block_token = from_proto_token(token),
                 .is_deletion = false,
             });
             ++task_count;
