@@ -36,8 +36,10 @@ void DataTransferServiceImpl::fill_status(protocol::StatusProto* proto,
     }
 }
 
-DataTransferServiceImpl::DataTransferServiceImpl(LocalBlockStore* store, BlockReporter* reporter)
-    : store_(store), reporter_(reporter) {}
+DataTransferServiceImpl::DataTransferServiceImpl(LocalBlockStore* store,
+                                                   BlockReporter* reporter,
+                                                   std::string block_token_secret)
+    : store_(store), reporter_(reporter), block_token_secret_(std::move(block_token_secret)) {}
 
 // WriteBlock — pipeline write handling.
 // First call for a block creates it in tmp/. Subsequent calls append chunks.
@@ -47,6 +49,18 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
                                          protocol::WriteBlockResponse* response,
                                          google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
+
+    // Authorize block token — requires kWrite permission
+    if (!authorize_token(request->block_token(),
+                         BlockTokenPermission::kWrite,
+                         request->block_id(),
+                         request->generation_stamp())) {
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kInvalidBlockToken),
+                    "block token verification failed for WriteBlock");
+        response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+        return;
+    }
 
     uint64_t block_id = request->block_id();
     uint64_t generation_stamp = request->generation_stamp();
@@ -59,7 +73,12 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
             fill_status(response->mutable_status(),
                         create_result.error().code(),
                         create_result.error().message());
-            response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+            auto code = create_result.error().code();
+            if (code == static_cast<pl::status_code_t>(ErrorCode::kDiskFull)) {
+                response->set_ack_status(static_cast<uint32_t>(AckStatus::kDiskFull));
+            } else {
+                response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+            }
             return;
         }
     }
@@ -85,7 +104,12 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
         fill_status(response->mutable_status(),
                     append_result.error().code(),
                     append_result.error().message());
-        response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+        auto code = append_result.error().code();
+        if (code == static_cast<pl::status_code_t>(ErrorCode::kDiskFull)) {
+            response->set_ack_status(static_cast<uint32_t>(AckStatus::kDiskFull));
+        } else {
+            response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+        }
         return;
     }
 
@@ -103,7 +127,7 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
             fill_status(response->mutable_status(),
                         static_cast<uint32_t>(ErrorCode::kRPCConnectFailed),
                         "Cannot connect to downstream DN: " + next_addr);
-            response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+            response->set_ack_status(static_cast<uint32_t>(AckStatus::kDownstreamError));
             return;
         }
 
@@ -129,6 +153,9 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
             t->set_data_port(request->pipeline(i).data_port());
         }
 
+        // Forward the block token to downstream DataNode
+        *fwd_req.mutable_block_token() = request->block_token();
+
         protocol::WriteBlockResponse fwd_resp;
         downstream_stub.WriteBlock(&fwd_cntl, &fwd_req, &fwd_resp, nullptr);
 
@@ -138,7 +165,7 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
             fill_status(response->mutable_status(),
                         static_cast<uint32_t>(ErrorCode::kPipelineError),
                         "Pipeline forwarding failed to " + next_addr + ": " + err_msg);
-            response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+            response->set_ack_status(static_cast<uint32_t>(AckStatus::kDownstreamError));
             return;
         }
     }
@@ -150,7 +177,12 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
             fill_status(response->mutable_status(),
                         finalize_result.error().code(),
                         finalize_result.error().message());
-            response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+            auto code = finalize_result.error().code();
+            if (code == static_cast<pl::status_code_t>(ErrorCode::kDiskFull)) {
+                response->set_ack_status(static_cast<uint32_t>(AckStatus::kDiskFull));
+            } else {
+                response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+            }
             return;
         }
 
@@ -173,6 +205,17 @@ void DataTransferServiceImpl::ReadBlock(google::protobuf::RpcController* /*contr
                                         protocol::ReadBlockResponse* response,
                                         google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
+
+    // Authorize block token — requires kRead permission
+    if (!authorize_token(request->block_token(),
+                         BlockTokenPermission::kRead,
+                         request->block_id(),
+                         request->generation_stamp())) {
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kInvalidBlockToken),
+                    "block token verification failed for ReadBlock");
+        return;
+    }
 
     uint64_t block_id = request->block_id();
     uint64_t generation_stamp = request->generation_stamp();
@@ -211,6 +254,17 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
                                             protocol::TransferBlockResponse* response,
                                             google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
+
+    // Authorize block token — requires kTransfer permission
+    if (!authorize_token(request->block_token(),
+                         BlockTokenPermission::kTransfer,
+                         request->block_id(),
+                         request->generation_stamp())) {
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kInvalidBlockToken),
+                    "block token verification failed for TransferBlock");
+        return;
+    }
 
     uint64_t block_id = request->block_id();
     uint64_t generation_stamp = request->generation_stamp();
@@ -266,6 +320,18 @@ void DataTransferServiceImpl::TruncateBlock(google::protobuf::RpcController* /*c
                                             protocol::TruncateBlockResponse* response,
                                             google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
+
+    // Authorize block token — requires kTruncate permission
+    if (!authorize_token(request->block_token(),
+                         BlockTokenPermission::kTruncate,
+                         request->block_id(),
+                         request->generation_stamp())) {
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kInvalidBlockToken),
+                    "block token verification failed for TruncateBlock");
+        return;
+    }
+
     auto truncate =
         store_->truncate_block(request->block_id(), request->generation_stamp(), request->length());
     if (truncate.hasError()) {
@@ -278,6 +344,19 @@ void DataTransferServiceImpl::TruncateBlock(google::protobuf::RpcController* /*c
         (void)reporter_->send_incremental_report();
     }
     fill_status(response->mutable_status(), 0);
+}
+
+bool DataTransferServiceImpl::authorize_token(const protocol::BlockTokenProto& token,
+                                              BlockTokenPermission required_permission,
+                                              uint64_t expected_block_id,
+                                              uint64_t expected_generation_stamp) const {
+    return verify_block_token(token,
+                             block_token_secret_,
+                             required_permission,
+                             expected_block_id,
+                             expected_generation_stamp,
+                             /*expected_inode_id=*/token.inode_id(),
+                             /*expected_block_index=*/token.block_index());
 }
 
 } // namespace pl::minidfs

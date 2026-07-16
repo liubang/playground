@@ -27,15 +27,34 @@
 #include <vector>
 
 #include "cpp/pl/minidfs/common/constants.h"
+#include "cpp/pl/minidfs/common/error_code.h"
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 #include "cpp/pl/minidfs/namenode/datanode_manager.h"
 #include "cpp/pl/minidfs/namenode/lease_manager.h"
 #include "cpp/pl/minidfs/namenode/namespace_manager.h"
+#include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
 #include "cpp/pl/minidfs/namenode/tests/mock_metadata_store.h"
+#include "cpp/pl/minidfs/protocol/minidfs.pb.h"
 
 namespace pl::minidfs {
 namespace {
+
+class ListChildrenFailingStore : public testing::MockMetadataStore {
+public:
+    void set_fail_parent(uint64_t parent_id) { fail_parent_ = parent_id; }
+
+    pl::Result<std::vector<Inode>> list_children(uint64_t parent_id) override {
+        if (fail_parent_.has_value() && fail_parent_.value() == parent_id) {
+            return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kMySQLQueryFailed),
+                                 "injected list_children failure");
+        }
+        return testing::MockMetadataStore::list_children(parent_id);
+    }
+
+private:
+    std::optional<uint64_t> fail_parent_;
+};
 
 // Fixture: NameNode-side components with MockMetadataStore
 
@@ -46,7 +65,8 @@ protected:
         ns_mgr_ = std::make_unique<NamespaceManager>(store_.get());
         dn_mgr_ = std::make_unique<DataNodeManager>(store_.get());
         placement_ = std::make_unique<PlacementManager>(dn_mgr_.get());
-        block_mgr_ = std::make_unique<BlockManager>(store_.get(), placement_.get());
+        block_mgr_ =
+            std::make_unique<BlockManager>(store_.get(), placement_.get(), "test-secret");
         lease_mgr_ = std::make_unique<LeaseManager>(store_.get());
 
         // Register 3 datanodes so placement can succeed.
@@ -148,16 +168,19 @@ TEST_F(RegressionNameNodeTest, P0_PipelineReplicationCommitOnlyFinalizesAckedRep
         EXPECT_EQ(r.state, ReplicaState::kWriting);
     }
 
-    ASSERT_FALSE(alloc.value().locations.empty());
-    uint64_t acked_dn = alloc.value().locations[0].datanode_id;
-    auto commit = block_mgr_->commit_block(
-        alloc.value().block_id, 1 * kMB, alloc.value().generation_stamp, {acked_dn});
+    ASSERT_GE(alloc.value().locations.size(), 2u);
+    uint64_t acked_dn_1 = alloc.value().locations[0].datanode_id;
+    uint64_t acked_dn_2 = alloc.value().locations[1].datanode_id;
+    auto commit = block_mgr_->commit_block(alloc.value().block_id,
+                                           1 * kMB,
+                                           alloc.value().generation_stamp,
+                                           {acked_dn_1, acked_dn_2});
     ASSERT_TRUE(commit.hasValue());
 
     auto after_commit = store_raw()->get_replicas(alloc.value().block_id);
     ASSERT_TRUE(after_commit.hasValue());
     for (const auto& r : after_commit.value()) {
-        if (r.datanode_id == acked_dn) {
+        if (r.datanode_id == acked_dn_1 || r.datanode_id == acked_dn_2) {
             EXPECT_EQ(r.state, ReplicaState::kFinalized);
         } else {
             EXPECT_EQ(r.state, ReplicaState::kWriting)
@@ -328,6 +351,33 @@ TEST_F(RegressionNameNodeTest, P1_DeleteFileLeavesBlockMetadata) {
         << "FIX VERIFIED: missing block report confirms the DataNode deleted the replica";
 }
 
+TEST(RegressionNameNodeDeleteTest, RecursiveDeleteListChildrenErrorMustAbort) {
+    auto store = std::make_unique<ListChildrenFailingStore>();
+    auto ns_mgr = std::make_unique<NamespaceManager>(store.get());
+    auto dn_mgr = std::make_unique<DataNodeManager>(store.get());
+    auto placement = std::make_unique<PlacementManager>(dn_mgr.get());
+    auto block_mgr =
+        std::make_unique<BlockManager>(store.get(), placement.get(), "test-secret");
+    auto lease_mgr = std::make_unique<LeaseManager>(store.get());
+    NameNodeServiceImpl service(ns_mgr.get(), block_mgr.get(), lease_mgr.get(), store.get(),
+                            "test-secret", 3600000);
+
+    ASSERT_TRUE(ns_mgr->mkdir("/a/b", "user", "grp", 0755, true).hasValue());
+    auto child = ns_mgr->resolve_path("/a/b");
+    ASSERT_TRUE(child.hasValue());
+    store->set_fail_parent(child.value().inode_id);
+
+    protocol::DeleteRequest request;
+    request.set_path("/a");
+    request.set_recursive(true);
+    protocol::DeleteResponse response;
+    service.Delete(nullptr, &request, &response, nullptr);
+
+    EXPECT_NE(response.status().code(), 0u);
+    auto root = ns_mgr->get_file_status("/a");
+    EXPECT_TRUE(root.hasValue()) << "delete should abort and keep namespace intact";
+}
+
 // P0: Transaction binding — operations within begin_transaction()/commit()
 //     should execute as a coherent unit.
 //
@@ -464,6 +514,229 @@ TEST_F(RegressionNameNodeTest, P1_CapacityAwarePlacementPrefersHighFreeNodes) {
 //
 // Bug: first call returns 0, second call returns `count` from first call,
 //   leaving a gap [0, first_count).
+
+// P0: Idempotent replay — duplicate Mkdir request returns equivalent response
+//
+// Scenario: Client sends Mkdir with the same request_id twice.
+//   1st call: succeeds, returns inode_id.
+//   2nd call: should replay the same inode_id without creating a duplicate inode.
+TEST_F(RegressionNameNodeTest, P0_IdempotentMkdirReplay) {
+    NameNodeServiceImpl service(ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(),
+                                "test-secret", 3600000);
+    const std::string req_id = "idem-mkdir-001";
+
+    protocol::MkdirRequest req1;
+    req1.set_path("/idem_dir");
+    req1.set_owner("user");
+    req1.set_group("grp");
+    req1.set_permission(0755);
+    req1.mutable_header()->set_request_id(req_id);
+    req1.mutable_header()->set_client_id("test-client");
+    protocol::MkdirResponse resp1;
+    service.Mkdir(nullptr, &req1, &resp1, nullptr);
+    ASSERT_EQ(resp1.status().code(), 0u);
+    const uint64_t first_inode_id = resp1.inode_id();
+
+    // Replay with same request_id
+    protocol::MkdirRequest req2;
+    req2.set_path("/idem_dir");
+    req2.set_owner("user");
+    req2.set_group("grp");
+    req2.set_permission(0755);
+    req2.mutable_header()->set_request_id(req_id);
+    req2.mutable_header()->set_client_id("test-client");
+    protocol::MkdirResponse resp2;
+    service.Mkdir(nullptr, &req2, &resp2, nullptr);
+    EXPECT_EQ(resp2.status().code(), 0u) << "Duplicate Mkdir should succeed";
+    EXPECT_EQ(resp2.inode_id(), first_inode_id)
+        << "Duplicate Mkdir must return the same inode_id";
+}
+
+// P0: Idempotent replay — duplicate CreateFile request returns equivalent response
+TEST_F(RegressionNameNodeTest, P0_IdempotentCreateFileReplay) {
+    NameNodeServiceImpl service(ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(),
+                                "test-secret", 3600000);
+    const std::string req_id = "idem-create-001";
+
+    protocol::CreateFileRequest req1;
+    req1.set_path("/idem_file.dat");
+    req1.set_owner("user");
+    req1.set_group("grp");
+    req1.set_permission(0644);
+    req1.set_replication(3);
+    req1.set_block_size(128 * kMB);
+    req1.set_client_id("test-client");
+    req1.mutable_header()->set_request_id(req_id);
+    req1.mutable_header()->set_client_id("test-client");
+    protocol::CreateFileResponse resp1;
+    service.CreateFile(nullptr, &req1, &resp1, nullptr);
+    ASSERT_EQ(resp1.status().code(), 0u);
+    const uint64_t first_inode_id = resp1.inode_id();
+    const uint64_t first_lease_id = resp1.lease_id();
+
+    // Replay with same request_id
+    protocol::CreateFileRequest req2;
+    req2.set_path("/idem_file.dat");
+    req2.set_owner("user");
+    req2.set_group("grp");
+    req2.set_permission(0644);
+    req2.set_replication(3);
+    req2.set_block_size(128 * kMB);
+    req2.set_client_id("test-client");
+    req2.mutable_header()->set_request_id(req_id);
+    req2.mutable_header()->set_client_id("test-client");
+    protocol::CreateFileResponse resp2;
+    service.CreateFile(nullptr, &req2, &resp2, nullptr);
+    EXPECT_EQ(resp2.status().code(), 0u) << "Duplicate CreateFile should succeed";
+    EXPECT_EQ(resp2.inode_id(), first_inode_id)
+        << "Duplicate CreateFile must return the same inode_id";
+    EXPECT_EQ(resp2.lease_id(), first_lease_id)
+        << "Duplicate CreateFile must return the same lease_id";
+}
+
+// P0: Idempotent replay — duplicate Delete request returns success without side effects
+TEST_F(RegressionNameNodeTest, P0_IdempotentDeleteReplay) {
+    NameNodeServiceImpl service(ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(),
+                                "test-secret", 3600000);
+    const std::string req_id = "idem-delete-001";
+
+    // Create a file first
+    auto file = ns_mgr_->create_file("/idem_del.dat", "user", "grp", 0644, 3, 128 * kMB);
+    ASSERT_TRUE(file.hasValue());
+
+    protocol::DeleteRequest req1;
+    req1.set_path("/idem_del.dat");
+    req1.set_recursive(false);
+    req1.mutable_header()->set_request_id(req_id);
+    req1.mutable_header()->set_client_id("test-client");
+    protocol::DeleteResponse resp1;
+    service.Delete(nullptr, &req1, &resp1, nullptr);
+    ASSERT_EQ(resp1.status().code(), 0u);
+
+    // File should be gone
+    auto stat = ns_mgr_->get_file_status("/idem_del.dat");
+    EXPECT_TRUE(stat.hasError());
+
+    // Replay with same request_id — should succeed without error
+    protocol::DeleteRequest req2;
+    req2.set_path("/idem_del.dat");
+    req2.set_recursive(false);
+    req2.mutable_header()->set_request_id(req_id);
+    req2.mutable_header()->set_client_id("test-client");
+    protocol::DeleteResponse resp2;
+    service.Delete(nullptr, &req2, &resp2, nullptr);
+    EXPECT_EQ(resp2.status().code(), 0u) << "Duplicate Delete should succeed";
+}
+
+// P0: Idempotent replay — duplicate Rename request returns success
+TEST_F(RegressionNameNodeTest, P0_IdempotentRenameReplay) {
+    NameNodeServiceImpl service(ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(),
+                                "test-secret", 3600000);
+    const std::string req_id = "idem-rename-001";
+
+    // Create a file first
+    auto file = ns_mgr_->create_file("/idem_rename_src.dat", "user", "grp", 0644, 3, 128 * kMB);
+    ASSERT_TRUE(file.hasValue());
+
+    protocol::RenameRequest req1;
+    req1.set_src("/idem_rename_src.dat");
+    req1.set_dst("/idem_rename_dst.dat");
+    req1.mutable_header()->set_request_id(req_id);
+    req1.mutable_header()->set_client_id("test-client");
+    protocol::RenameResponse resp1;
+    service.Rename(nullptr, &req1, &resp1, nullptr);
+    ASSERT_EQ(resp1.status().code(), 0u);
+
+    // Replay with same request_id
+    protocol::RenameRequest req2;
+    req2.set_src("/idem_rename_src.dat");
+    req2.set_dst("/idem_rename_dst.dat");
+    req2.mutable_header()->set_request_id(req_id);
+    req2.mutable_header()->set_client_id("test-client");
+    protocol::RenameResponse resp2;
+    service.Rename(nullptr, &req2, &resp2, nullptr);
+    EXPECT_EQ(resp2.status().code(), 0u) << "Duplicate Rename should succeed";
+}
+
+// P0: Oplog atomicity — write_oplog failure should not leave orphaned state
+//
+// Scenario: If write_oplog fails (e.g., duplicate key), the service should
+// fall back to replaying from the existing oplog entry rather than returning
+// an error to the client. This test uses a custom store that fails write_oplog
+// after the first call.
+class OplogFailingStore : public testing::MockMetadataStore {
+public:
+    void set_fail_oplog(bool fail) { fail_oplog_ = fail; }
+
+    pl::Result<pl::Void> write_oplog(std::string_view op_type,
+                                     uint64_t target_inode_id,
+                                     std::string_view request_id,
+                                     std::string_view payload_json) override {
+        if (fail_oplog_) {
+            return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kMySQLQueryFailed),
+                                 "injected write_oplog failure");
+        }
+        return testing::MockMetadataStore::write_oplog(op_type, target_inode_id, request_id, payload_json);
+    }
+
+private:
+    bool fail_oplog_ = false;
+};
+
+TEST(RegressionNameNodeIdempotencyTest, P0_WriteOplogFailureFallsBackToReplay) {
+    auto store = std::make_unique<OplogFailingStore>();
+    auto ns_mgr = std::make_unique<NamespaceManager>(store.get());
+    auto dn_mgr = std::make_unique<DataNodeManager>(store.get());
+    auto placement = std::make_unique<PlacementManager>(dn_mgr.get());
+    auto block_mgr =
+        std::make_unique<BlockManager>(store.get(), placement.get(), "test-secret");
+    auto lease_mgr = std::make_unique<LeaseManager>(store.get());
+
+    // Register datanodes for placement
+    dn_mgr->register_datanode("dn-1", "host1", "10.0.0.1", 9000, 9100, "/rack1", 1000 * kGB);
+    dn_mgr->register_datanode("dn-2", "host2", "10.0.0.2", 9000, 9100, "/rack2", 1000 * kGB);
+    dn_mgr->register_datanode("dn-3", "host3", "10.0.0.3", 9000, 9100, "/rack3", 1000 * kGB);
+
+    NameNodeServiceImpl service(ns_mgr.get(), block_mgr.get(), lease_mgr.get(), store.get(),
+                                "test-secret", 3600000);
+    const std::string req_id = "idem-atomic-001";
+
+    // First request: succeeds, oplog written
+    protocol::CreateFileRequest req1;
+    req1.set_path("/atomic_file.dat");
+    req1.set_owner("user");
+    req1.set_group("grp");
+    req1.set_permission(0644);
+    req1.set_replication(3);
+    req1.set_block_size(128 * kMB);
+    req1.set_client_id("test-client");
+    req1.mutable_header()->set_request_id(req_id);
+    req1.mutable_header()->set_client_id("test-client");
+    protocol::CreateFileResponse resp1;
+    service.CreateFile(nullptr, &req1, &resp1, nullptr);
+    ASSERT_EQ(resp1.status().code(), 0u);
+    const uint64_t inode_id = resp1.inode_id();
+
+    // Now fail oplog writes and send the same request again
+    store->set_fail_oplog(true);
+    protocol::CreateFileRequest req2;
+    req2.set_path("/atomic_file.dat");
+    req2.set_owner("user");
+    req2.set_group("grp");
+    req2.set_permission(0644);
+    req2.set_replication(3);
+    req2.set_block_size(128 * kMB);
+    req2.set_client_id("test-client");
+    req2.mutable_header()->set_request_id(req_id);
+    req2.mutable_header()->set_client_id("test-client");
+    protocol::CreateFileResponse resp2;
+    service.CreateFile(nullptr, &req2, &resp2, nullptr);
+    // Should fall back to existing oplog entry and return success
+    EXPECT_EQ(resp2.status().code(), 0u)
+        << "Duplicate CreateFile with write_oplog failure should fall back to replay";
+    EXPECT_EQ(resp2.inode_id(), inode_id)
+        << "Fell-back CreateFile should return same inode_id";
+}
 
 TEST_F(RegressionNameNodeTest, P0_AllocIdFirstInsertContiguity) {
     // Use a fresh name that has never been allocated.

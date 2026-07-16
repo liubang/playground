@@ -18,6 +18,9 @@
 #include "cpp/pl/minidfs/datanode/local_block_store.h"
 
 #include <algorithm>
+#include <charconv>
+#include <chrono>
+#include <cerrno>
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
@@ -47,6 +50,123 @@ inline pl::Status make_checksum_error(std::string_view msg) {
     return pl::Status(static_cast<pl::status_code_t>(ErrorCode::kChecksumMismatch), msg);
 }
 
+bool parse_decimal_u64(std::string_view text, uint64_t* out) {
+    uint64_t value = 0;
+    auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (ec != std::errc() || ptr != text.data() + text.size()) {
+        return false;
+    }
+    *out = value;
+    return true;
+}
+
+bool parse_block_filename(std::string_view filename, uint64_t* block_id, uint64_t* generation_stamp) {
+    if (!filename.starts_with("blk_") || !filename.ends_with(".blk")) {
+        return false;
+    }
+    auto body = filename.substr(4, filename.size() - 8);
+    auto sep = body.find('_');
+    if (sep == std::string_view::npos || sep == 0 || sep + 1 >= body.size()) {
+        return false;
+    }
+    uint64_t parsed_block_id = 0;
+    uint64_t parsed_generation_stamp = 0;
+    if (!parse_decimal_u64(body.substr(0, sep), &parsed_block_id) ||
+        !parse_decimal_u64(body.substr(sep + 1), &parsed_generation_stamp)) {
+        return false;
+    }
+    *block_id = parsed_block_id;
+    *generation_stamp = parsed_generation_stamp;
+    return true;
+}
+
+pl::Result<pl::Void> sync_file_descriptor(int fd, bool data_only) {
+    int rc = 0;
+    if (data_only) {
+#if defined(__APPLE__)
+#ifdef F_FULLFSYNC
+        rc = ::fcntl(fd, F_FULLFSYNC, 0);
+        if (rc != 0 && errno == EINVAL) {
+            rc = ::fsync(fd);
+        }
+#else
+        rc = ::fsync(fd);
+#endif
+#elif defined(_POSIX_SYNCHRONIZED_IO)
+        rc = ::fdatasync(fd);
+        if (rc != 0 && errno == EINVAL) {
+            rc = ::fsync(fd);
+        }
+#else
+        rc = ::fsync(fd);
+#endif
+    } else {
+        rc = ::fsync(fd);
+    }
+    if (rc != 0) {
+        return pl::makeError(
+            make_io_error(fmt::format("sync failed: {}", std::strerror(errno))));
+    }
+    RETURN_VOID;
+}
+
+pl::Result<pl::Void> sync_file_path(const fs::path& path, bool data_only) {
+    int fd = ::open(path.c_str(), O_RDWR);
+    if (fd < 0) {
+        return pl::makeError(
+            make_io_error(fmt::format("failed to open file for sync {}: {}",
+                                      path.string(),
+                                      std::strerror(errno))));
+    }
+    auto sync = sync_file_descriptor(fd, data_only);
+    int close_rc = ::close(fd);
+    if (sync.hasError()) {
+        return pl::makeError(std::move(sync.error()));
+    }
+    if (close_rc != 0) {
+        return pl::makeError(make_io_error(
+            fmt::format("failed to close synced file {}: {}", path.string(), std::strerror(errno))));
+    }
+    RETURN_VOID;
+}
+
+pl::Result<pl::Void> sync_directory_path(const fs::path& path) {
+    int flags = O_RDONLY;
+#ifdef O_DIRECTORY
+    flags |= O_DIRECTORY;
+#endif
+    int fd = ::open(path.c_str(), flags);
+    if (fd < 0) {
+        return pl::makeError(
+            make_io_error(fmt::format("failed to open directory for sync {}: {}",
+                                      path.string(),
+                                      std::strerror(errno))));
+    }
+
+    int rc = ::fsync(fd);
+    int sync_errno = errno;
+    int close_rc = ::close(fd);
+
+#if defined(__APPLE__)
+    if (rc != 0 && sync_errno == EINVAL) {
+        rc = 0;
+    }
+#endif
+
+    if (rc != 0) {
+        return pl::makeError(make_io_error(fmt::format("failed to sync directory {}: {}",
+                                                        path.string(),
+                                                        std::strerror(sync_errno))));
+    }
+    if (close_rc != 0) {
+        return pl::makeError(
+            make_io_error(fmt::format("failed to close directory {}: {}",
+                                      path.string(),
+                                      std::strerror(errno))));
+    }
+    RETURN_VOID;
+}
+
 } // namespace
 
 // Construction & Initialization
@@ -58,7 +178,8 @@ LocalBlockStore::LocalBlockStore(Config config)
       current_path_(root_path_ / "current"),
       trash_path_(root_path_ / "trash") {}
 
-pl::Result<pl::Void> LocalBlockStore::init() {
+pl::Result<pl::Void> LocalBlockStore::init(
+    std::optional<std::pair<uint64_t, uint64_t>> active_tmp_block) {
     std::error_code ec;
     fs::create_directories(tmp_path_, ec);
     if (ec) {
@@ -74,6 +195,11 @@ pl::Result<pl::Void> LocalBlockStore::init() {
     if (ec) {
         return pl::makeError(
             make_io_error(fmt::format("failed to create trash directory: {}", ec.message())));
+    }
+
+    auto cleanup = cleanup_stale_tmp_blocks(active_tmp_block);
+    if (cleanup.hasError()) {
+        return pl::makeError(std::move(cleanup.error()));
     }
     RETURN_VOID;
 }
@@ -192,6 +318,17 @@ pl::Result<pl::Void> LocalBlockStore::create_block(uint64_t block_id,
             make_io_error(fmt::format("failed to write initial header: {}", path.string())));
     }
     ofs.flush();
+    ofs.close();
+
+    auto sync = sync_file_path(path, false);
+    if (sync.hasError()) {
+        return pl::makeError(std::move(sync.error()));
+    }
+    auto sync_tmp = sync_directory_path(tmp_path_);
+    if (sync_tmp.hasError()) {
+        return pl::makeError(std::move(sync_tmp.error()));
+    }
+
     RETURN_VOID;
 }
 
@@ -259,12 +396,40 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
             make_io_error(fmt::format("cannot open tmp block for append: {}", path.string())));
     }
 
-    auto file_size = static_cast<uint64_t>(fs_file.tellp());
-    uint32_t data_offset = static_cast<uint32_t>(file_size - kBlockHeaderSize);
+    auto original_file_size = static_cast<uint64_t>(fs_file.tellp());
+    if (original_file_size < kBlockHeaderSize) {
+        return pl::makeError(make_io_error("tmp block is smaller than header"));
+    }
+    uint32_t data_offset = static_cast<uint32_t>(original_file_size - kBlockHeaderSize);
+    const BlockHeader original_header = header;
+
+    auto rollback_append = [&]() -> pl::Result<pl::Void> {
+        if (fs_file.is_open()) {
+            fs_file.clear();
+            fs_file.close();
+        }
+        std::error_code resize_ec;
+        fs::resize_file(path, original_file_size, resize_ec);
+        if (resize_ec) {
+            return pl::makeError(make_io_error(
+                fmt::format("failed to rollback appended data: {}", resize_ec.message())));
+        }
+        auto restore_header = write_header(path, original_header);
+        if (restore_header.hasError()) {
+            return pl::makeError(std::move(restore_header.error()));
+        }
+        RETURN_VOID;
+    };
 
     // Write chunk data at end of file
     fs_file.write(reinterpret_cast<const char*>(data), size);
     if (!fs_file.good()) {
+        auto rollback = rollback_append();
+        if (rollback.hasError()) {
+            return pl::makeError(make_io_error(
+                fmt::format("failed to append chunk data and rollback failed: {}",
+                            rollback.error().message())));
+        }
         return pl::makeError(make_io_error("failed to append chunk data"));
     }
 
@@ -286,9 +451,36 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
     fs_file.seekp(0);
     fs_file.write(reinterpret_cast<const char*>(&header), sizeof(BlockHeader));
     if (!fs_file.good()) {
+        auto rollback = rollback_append();
+        if (rollback.hasError()) {
+            return pl::makeError(make_io_error(
+                fmt::format("failed to update header after append and rollback failed: {}",
+                            rollback.error().message())));
+        }
         return pl::makeError(make_io_error("failed to update header after append"));
     }
     fs_file.flush();
+    if (!fs_file.good()) {
+        auto rollback = rollback_append();
+        if (rollback.hasError()) {
+            return pl::makeError(make_io_error(
+                fmt::format("failed to flush appended chunk and rollback failed: {}",
+                            rollback.error().message())));
+        }
+        return pl::makeError(make_io_error("failed to flush appended chunk"));
+    }
+    fs_file.close();
+
+    auto sync = sync_file_path(path, true);
+    if (sync.hasError()) {
+        auto rollback = rollback_append();
+        if (rollback.hasError()) {
+            return pl::makeError(make_io_error(
+                fmt::format("failed to sync appended chunk and rollback failed: {}",
+                            rollback.error().message())));
+        }
+        return pl::makeError(std::move(sync.error()));
+    }
 
     return header.data_length;
 }
@@ -322,6 +514,11 @@ pl::Result<pl::Void> LocalBlockStore::finalize_block(uint64_t block_id, uint64_t
             make_checksum_error(fmt::format("tmp block checksum mismatch: {}", src.string())));
     }
 
+    auto pre_sync = sync_file_path(src, false);
+    if (pre_sync.hasError()) {
+        return pl::makeError(std::move(pre_sync.error()));
+    }
+
     auto dst = block_path("current", block_id, generation_stamp);
     std::error_code ec;
     fs::rename(src, dst, ec);
@@ -329,6 +526,21 @@ pl::Result<pl::Void> LocalBlockStore::finalize_block(uint64_t block_id, uint64_t
         return pl::makeError(
             make_io_error(fmt::format("failed to finalize block: {}", ec.message())));
     }
+
+    auto sync_new_file = sync_file_path(dst, false);
+    if (sync_new_file.hasError()) {
+        return pl::makeError(std::move(sync_new_file.error()));
+    }
+
+    auto sync_current_dir = sync_directory_path(current_path_);
+    if (sync_current_dir.hasError()) {
+        return pl::makeError(std::move(sync_current_dir.error()));
+    }
+    auto sync_tmp_dir = sync_directory_path(tmp_path_);
+    if (sync_tmp_dir.hasError()) {
+        return pl::makeError(std::move(sync_tmp_dir.error()));
+    }
+
     RETURN_VOID;
 }
 
@@ -348,6 +560,21 @@ pl::Result<pl::Void> LocalBlockStore::delete_block(uint64_t block_id, uint64_t g
         return pl::makeError(
             make_io_error(fmt::format("failed to move block to trash: {}", ec.message())));
     }
+
+    auto sync_trash_file = sync_file_path(dst, false);
+    if (sync_trash_file.hasError()) {
+        return pl::makeError(std::move(sync_trash_file.error()));
+    }
+
+    auto sync_current_dir = sync_directory_path(current_path_);
+    if (sync_current_dir.hasError()) {
+        return pl::makeError(std::move(sync_current_dir.error()));
+    }
+    auto sync_trash_dir = sync_directory_path(trash_path_);
+    if (sync_trash_dir.hasError()) {
+        return pl::makeError(std::move(sync_trash_dir.error()));
+    }
+
     RETURN_VOID;
 }
 
@@ -446,6 +673,78 @@ pl::Result<uint32_t> LocalBlockStore::purge_trash() {
         }
     }
     return count;
+}
+
+pl::Result<uint32_t> LocalBlockStore::cleanup_stale_tmp_blocks(
+    std::optional<std::pair<uint64_t, uint64_t>> excluded_active) {
+    std::lock_guard lock(mu_);
+
+    uint32_t removed = 0;
+    std::error_code ec;
+    for (auto& entry : fs::directory_iterator(tmp_path_, ec)) {
+        if (ec) {
+            return pl::makeError(
+                make_io_error(fmt::format("failed to iterate tmp directory: {}", ec.message())));
+        }
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+
+        uint64_t block_id = 0;
+        uint64_t generation_stamp = 0;
+        auto filename = entry.path().filename().string();
+        if (!parse_block_filename(filename, &block_id, &generation_stamp)) {
+            continue;
+        }
+
+        if (excluded_active.has_value() && excluded_active->first == block_id &&
+            excluded_active->second == generation_stamp) {
+            continue;
+        }
+
+        // Use stat() + system_clock to avoid platform-specific
+        // file_time_type::clock vs system_clock mismatch.
+        struct stat st {};
+        if (::stat(entry.path().c_str(), &st) != 0) {
+            ec = std::error_code(errno, std::system_category());
+            return pl::makeError(make_io_error(
+                fmt::format("failed to stat tmp block {}: {}", filename, ec.message())));
+        }
+        auto mtime = std::chrono::system_clock::from_time_t(st.st_mtime);
+        // Add sub-second precision if available
+#if defined(__APPLE__) || defined(__BSD__)
+        mtime += std::chrono::duration_cast<std::chrono::system_clock::duration>(
+            std::chrono::nanoseconds(st.st_mtimespec.tv_nsec));
+#else
+        mtime += std::chrono::duration_cast<std::chrono::system_clock::duration>(
+            std::chrono::nanoseconds(st.st_mtim.tv_nsec));
+#endif
+        auto age_ms = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now() - mtime)
+                .count());
+        bool stale = config_.tmp_cleanup_stale_after_ms == 0 ||
+                     age_ms >= config_.tmp_cleanup_stale_after_ms;
+        if (!stale) {
+            continue;
+        }
+
+        fs::remove(entry.path(), ec);
+        if (ec) {
+            return pl::makeError(make_io_error(
+                fmt::format("failed to remove stale tmp block {}: {}", filename, ec.message())));
+        }
+        ++removed;
+    }
+
+    if (removed > 0) {
+        auto sync_tmp = sync_directory_path(tmp_path_);
+        if (sync_tmp.hasError()) {
+            return pl::makeError(std::move(sync_tmp.error()));
+        }
+    }
+
+    return removed;
 }
 
 // Block Reading

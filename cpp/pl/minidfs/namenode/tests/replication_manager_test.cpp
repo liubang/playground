@@ -32,7 +32,7 @@ protected:
         store_ = std::make_unique<testing::MockMetadataStore>();
         dn_mgr_ = std::make_unique<DataNodeManager>(store_.get());
         placement_ = std::make_unique<PlacementManager>(dn_mgr_.get());
-        repl_mgr_ = std::make_unique<ReplicationManager>(store_.get(), placement_.get());
+        repl_mgr_ = std::make_unique<ReplicationManager>(store_.get(), placement_.get(), "test-secret");
 
         // Register 5 datanodes for placement flexibility.
         dn_mgr_->register_datanode("dn-1", "host1", "10.0.0.1", 9000, 9100, "/rack1", 1000 * kGB);

@@ -41,7 +41,8 @@ protected:
         store_ = std::make_unique<testing::MockMetadataStore>();
         dn_mgr_ = std::make_unique<DataNodeManager>(store_.get());
         placement_ = std::make_unique<PlacementManager>(dn_mgr_.get());
-        block_mgr_ = std::make_unique<BlockManager>(store_.get(), placement_.get());
+        block_mgr_ =
+            std::make_unique<BlockManager>(store_.get(), placement_.get(), "test-secret");
 
         Inode file;
         file.inode_id = 100;
@@ -174,20 +175,48 @@ TEST_F(BlockManagerTest, CommitBlockOnlyFinalizesReportedReplicas) {
     ASSERT_TRUE(alloc.hasValue());
     ASSERT_GE(alloc.value().locations.size(), 2u);
 
-    uint64_t only_successful_dn = alloc.value().locations[0].datanode_id;
+    std::vector<uint64_t> finalized = {
+        alloc.value().locations[0].datanode_id,
+        alloc.value().locations[1].datanode_id,
+    };
     auto result = block_mgr_->commit_block(
-        alloc.value().block_id, 128 * kMB, alloc.value().generation_stamp, {only_successful_dn});
+        alloc.value().block_id, 128 * kMB, alloc.value().generation_stamp, finalized);
     ASSERT_TRUE(result.hasValue());
 
     auto replicas = store_->get_replicas(alloc.value().block_id);
     ASSERT_TRUE(replicas.hasValue());
     for (const auto& replica : replicas.value()) {
-        if (replica.datanode_id == only_successful_dn) {
+        if (replica.datanode_id == finalized[0] || replica.datanode_id == finalized[1]) {
             EXPECT_EQ(replica.state, ReplicaState::kFinalized);
         } else {
             EXPECT_EQ(replica.state, ReplicaState::kWriting);
         }
     }
+}
+
+TEST_F(BlockManagerTest, CommitBlockRejectsBelowMinWriteReplica) {
+    auto alloc = block_mgr_->allocate_block(/*inode_id=*/100, /*block_index=*/0, /*replication=*/3);
+    ASSERT_TRUE(alloc.hasValue());
+
+    auto result = block_mgr_->commit_block(alloc.value().block_id,
+                                           128 * kMB,
+                                           alloc.value().generation_stamp,
+                                           {alloc.value().locations[0].datanode_id});
+    ASSERT_TRUE(result.hasError());
+    EXPECT_EQ(result.error().code(),
+              static_cast<pl::status_code_t>(ErrorCode::kInsufficientReplicas));
+}
+
+TEST_F(BlockManagerTest, CommitBlockAllowsSingleReplicaWhenDesiredOne) {
+    auto alloc = block_mgr_->allocate_block(/*inode_id=*/100, /*block_index=*/0, /*replication=*/1);
+    ASSERT_TRUE(alloc.hasValue());
+    ASSERT_EQ(alloc.value().locations.size(), 1u);
+
+    auto result = block_mgr_->commit_block(alloc.value().block_id,
+                                           32 * kMB,
+                                           alloc.value().generation_stamp,
+                                           {alloc.value().locations[0].datanode_id});
+    ASSERT_TRUE(result.hasValue());
 }
 
 TEST_F(BlockManagerTest, GenerationStampMonotonic) {
@@ -204,6 +233,27 @@ TEST_F(BlockManagerTest, GenerationStampMonotonic) {
 TEST_F(BlockManagerTest, AllocateBlockRejectsDuplicateIndex) {
     ASSERT_TRUE(block_mgr_->allocate_block(100, 0, 3).hasValue());
     EXPECT_TRUE(block_mgr_->allocate_block(100, 0, 3).hasError());
+}
+
+TEST_F(BlockManagerTest, AllocateBlockLeavesNoGhostWhenPlacementFails) {
+    auto failing_store = std::make_unique<testing::MockMetadataStore>();
+    auto failing_dn_mgr = std::make_unique<DataNodeManager>(failing_store.get());
+    auto failing_placement = std::make_unique<PlacementManager>(failing_dn_mgr.get());
+    auto failing_block_mgr = std::make_unique<BlockManager>(
+        failing_store.get(), failing_placement.get(), "test-secret");
+
+    Inode file;
+    file.inode_id = 200;
+    file.type = InodeType::kFile;
+    file.state = FileState::kUnderConstruction;
+    ASSERT_TRUE(failing_store->create_inode(file).hasValue());
+
+    auto result = failing_block_mgr->allocate_block(200, 0, 3);
+    ASSERT_TRUE(result.hasError());
+
+    auto blocks = failing_store->get_blocks_by_inode(200);
+    ASSERT_TRUE(blocks.hasValue());
+    EXPECT_TRUE(blocks.value().empty());
 }
 
 TEST_F(BlockManagerTest, TruncateFileShrinksLastRetainedBlockAndInvalidatesTail) {

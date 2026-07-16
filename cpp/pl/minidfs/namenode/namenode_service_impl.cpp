@@ -21,7 +21,11 @@
 #include <brpc/channel.h>
 #include <brpc/closure_guard.h>
 #include <brpc/controller.h>
+#include <cstdlib>
+#include <cstring>
+#include <fmt/format.h>
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
@@ -36,6 +40,7 @@ void set_status(protocol::StatusProto* proto, uint32_t code, std::string_view ms
 }
 
 pl::Result<pl::Void> truncate_replica(MetadataStore* store,
+                                      const protocol::BlockTokenProto& block_token,
                                       const BlockReplica& replica,
                                       uint64_t length) {
     auto datanode = store->get_datanode(replica.datanode_id);
@@ -65,6 +70,7 @@ pl::Result<pl::Void> truncate_replica(MetadataStore* store,
     request.set_block_id(replica.block_id);
     request.set_generation_stamp(replica.generation_stamp);
     request.set_length(length);
+    *request.mutable_block_token() = block_token;
     protocol::TruncateBlockResponse response;
     stub.TruncateBlock(&controller, &request, &response, nullptr);
     if (controller.Failed()) {
@@ -76,6 +82,356 @@ pl::Result<pl::Void> truncate_replica(MetadataStore* store,
                              response.status().message());
     }
     return pl::Void{};
+}
+
+std::string escape_json(std::string_view input) {
+    std::string out;
+    out.reserve(input.size() + input.size() / 8);
+    for (char c : input) {
+        switch (c) {
+            case '\\':
+                out += "\\\\";
+                break;
+            case '"':
+                out += "\\\"";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                out.push_back(c);
+                break;
+        }
+    }
+    return out;
+}
+
+std::string make_oplog_payload(const protocol::RequestHeader& header,
+                               std::string_view op_type,
+                               uint64_t target_inode_id,
+                               uint32_t status_code,
+                               std::string_view status_message,
+                               std::string_view response_payload_json) {
+    return fmt::format(
+        "{{\"request_id\":\"{}\",\"client_id\":\"{}\",\"user\":\"{}\","
+        "\"op_type\":\"{}\",\"target_inode_id\":{},\"status_code\":{},"
+        "\"status_message\":\"{}\",\"response\":{}}}",
+        escape_json(header.request_id()),
+        escape_json(header.client_id()),
+        escape_json(header.user()),
+        escape_json(op_type),
+        target_inode_id,
+        status_code,
+        escape_json(status_message),
+        response_payload_json);
+}
+
+bool parse_json_u64(std::string_view json, std::string_view key, uint64_t* value) {
+    const std::string pattern = std::string("\"") + std::string(key) + "\":";
+    size_t pos = json.find(pattern);
+    if (pos == std::string_view::npos) {
+        return false;
+    }
+    pos += pattern.size();
+    while (pos < json.size() && json[pos] == ' ') {
+        ++pos;
+    }
+    size_t end = pos;
+    while (end < json.size() && json[end] >= '0' && json[end] <= '9') {
+        ++end;
+    }
+    if (end == pos) {
+        return false;
+    }
+    *value = std::strtoull(std::string(json.substr(pos, end - pos)).c_str(), nullptr, 10);
+    return true;
+}
+
+bool parse_json_string(std::string_view json, std::string_view key, std::string* value) {
+    const std::string pattern = std::string("\"") + std::string(key) + "\":\"";
+    size_t pos = json.find(pattern);
+    if (pos == std::string_view::npos) {
+        return false;
+    }
+    pos += pattern.size();
+    std::string out;
+    out.reserve(32);
+    while (pos < json.size()) {
+        char c = json[pos++];
+        if (c == '\\') {
+            if (pos >= json.size()) {
+                return false;
+            }
+            char esc = json[pos++];
+            switch (esc) {
+                case 'n':
+                    out.push_back('\n');
+                    break;
+                case 'r':
+                    out.push_back('\r');
+                    break;
+                case 't':
+                    out.push_back('\t');
+                    break;
+                case '"':
+                    out.push_back('"');
+                    break;
+                case '\\':
+                    out.push_back('\\');
+                    break;
+                default:
+                    out.push_back(esc);
+                    break;
+            }
+            continue;
+        }
+        if (c == '"') {
+            *value = std::move(out);
+            return true;
+        }
+        out.push_back(c);
+    }
+    return false;
+}
+
+bool extract_json_object(std::string_view json,
+                         std::string_view key,
+                         std::string* object_json,
+                         char open = '{',
+                         char close = '}') {
+    const std::string pattern = std::string("\"") + std::string(key) + "\":";
+    size_t pos = json.find(pattern);
+    if (pos == std::string_view::npos) {
+        return false;
+    }
+    pos += pattern.size();
+    while (pos < json.size() && json[pos] == ' ') {
+        ++pos;
+    }
+    if (pos >= json.size() || json[pos] != open) {
+        return false;
+    }
+    int depth = 0;
+    bool in_string = false;
+    bool escaped = false;
+    size_t start = pos;
+    for (; pos < json.size(); ++pos) {
+        char c = json[pos];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            in_string = true;
+            continue;
+        }
+        if (c == open) {
+            ++depth;
+            continue;
+        }
+        if (c == close) {
+            --depth;
+            if (depth == 0) {
+                *object_json = std::string(json.substr(start, pos - start + 1));
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool parse_response_status(const OplogEntry& entry,
+                           std::string_view expected_op,
+                           uint32_t* status_code,
+                           std::string* status_message,
+                           uint64_t* target_inode_id,
+                           std::string* response_json) {
+    if (entry.op_type != expected_op) {
+        return false;
+    }
+    uint64_t status_code_u64 = 0;
+    if (!parse_json_u64(entry.payload_json, "status_code", &status_code_u64)) {
+        return false;
+    }
+    if (!parse_json_u64(entry.payload_json, "target_inode_id", target_inode_id)) {
+        return false;
+    }
+    if (!parse_json_string(entry.payload_json, "status_message", status_message)) {
+        status_message->clear();
+    }
+    if (!extract_json_object(entry.payload_json, "response", response_json)) {
+        return false;
+    }
+    *status_code = static_cast<uint32_t>(status_code_u64);
+    return true;
+}
+
+bool parse_located_block(std::string_view response_json, protocol::LocatedBlockProto* block) {
+    std::string block_json;
+    if (!extract_json_object(response_json, "block", &block_json)) {
+        return false;
+    }
+
+    uint64_t block_id = 0;
+    uint64_t generation_stamp = 0;
+    uint64_t offset = 0;
+    uint64_t length = 0;
+    if (!parse_json_u64(block_json, "block_id", &block_id) ||
+        !parse_json_u64(block_json, "generation_stamp", &generation_stamp) ||
+        !parse_json_u64(block_json, "offset", &offset) ||
+        !parse_json_u64(block_json, "length", &length)) {
+        return false;
+    }
+
+    block->set_block_id(block_id);
+    block->set_generation_stamp(generation_stamp);
+    block->set_offset(offset);
+    block->set_length(length);
+
+    std::string locations_json;
+    if (!extract_json_object(block_json, "locations", &locations_json, '[', ']')) {
+        return true;
+    }
+
+    size_t pos = 1;
+    while (pos < locations_json.size()) {
+        while (pos < locations_json.size() &&
+               (locations_json[pos] == ' ' || locations_json[pos] == ',')) {
+            ++pos;
+        }
+        if (pos >= locations_json.size() || locations_json[pos] == ']') {
+            break;
+        }
+        if (locations_json[pos] != '{') {
+            return false;
+        }
+
+        int depth = 0;
+        bool in_string = false;
+        bool escaped = false;
+        size_t start = pos;
+        for (; pos < locations_json.size(); ++pos) {
+            char c = locations_json[pos];
+            if (in_string) {
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    in_string = false;
+                }
+                continue;
+            }
+            if (c == '"') {
+                in_string = true;
+                continue;
+            }
+            if (c == '{') {
+                ++depth;
+                continue;
+            }
+            if (c == '}') {
+                --depth;
+                if (depth == 0) {
+                    std::string_view loc_json(locations_json.data() + start, pos - start + 1);
+                    uint64_t datanode_id = 0;
+                    uint64_t data_port = 0;
+                    std::string host;
+                    if (!parse_json_u64(loc_json, "datanode_id", &datanode_id) ||
+                        !parse_json_u64(loc_json, "data_port", &data_port) ||
+                        !parse_json_string(loc_json, "host", &host)) {
+                        return false;
+                    }
+                    auto* location = block->add_locations();
+                    location->set_datanode_id(datanode_id);
+                    location->set_data_port(static_cast<uint32_t>(data_port));
+                    location->set_host(host);
+                    ++pos;
+                    break;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+std::string located_block_to_json(const LocatedBlock& block) {
+    std::string locations = "[";
+    for (size_t i = 0; i < block.locations.size(); ++i) {
+        if (i > 0) {
+            locations += ",";
+        }
+        locations += fmt::format("{{\"datanode_id\":{},\"host\":\"{}\",\"data_port\":{}}}",
+                                 block.locations[i].datanode_id,
+                                 escape_json(block.locations[i].host),
+                                 block.locations[i].data_port);
+    }
+    locations += "]";
+    return fmt::format(
+        "{{\"block\":{{\"block_id\":{},\"generation_stamp\":{},\"offset\":{},"
+        "\"length\":{},\"locations\":{}}}}}",
+        block.block_id,
+        block.generation_stamp,
+        block.offset,
+        block.length,
+        locations);
+}
+
+bool rebuild_allocate_block_from_metadata(MetadataStore* store,
+                                          uint64_t inode_id,
+                                          uint32_t block_index,
+                                          LocatedBlock* out) {
+    auto blocks = store->get_blocks_by_inode(inode_id);
+    if (blocks.hasError()) {
+        return false;
+    }
+
+    for (const auto& block : blocks.value()) {
+        if (block.block_index != block_index || block.state == BlockState::kDeleted) {
+            continue;
+        }
+
+        out->block_id = block.block_id;
+        out->generation_stamp = block.generation_stamp;
+        out->offset = 0;
+        out->length = block.length;
+        out->locations.clear();
+
+        auto replicas = store->get_replicas(block.block_id);
+        if (replicas.hasError()) {
+            return false;
+        }
+        for (const auto& replica : replicas.value()) {
+            if (replica.state == ReplicaState::kDeleted || replica.state == ReplicaState::kCorrupt) {
+                continue;
+            }
+            auto datanode = store->get_datanode(replica.datanode_id);
+            if (datanode.hasError()) {
+                continue;
+            }
+            out->locations.push_back(DataNodeEndpoint{
+                .datanode_id = datanode.value().datanode_id,
+                .host = datanode.value().ip.empty() ? datanode.value().hostname : datanode.value().ip,
+                .data_port = datanode.value().data_port,
+            });
+        }
+        return !out->locations.empty();
+    }
+
+    return false;
 }
 
 } // namespace
@@ -112,16 +468,42 @@ void NameNodeServiceImpl::fill_located_block(protocol::LocatedBlockProto* proto,
         ep->set_host(loc.host);
         ep->set_data_port(loc.data_port);
     }
+    auto* token = proto->mutable_block_token();
+    token->set_block_id(lb.block_token.block_id);
+    token->set_generation_stamp(lb.block_token.generation_stamp);
+    token->set_inode_id(lb.block_token.inode_id);
+    token->set_block_index(lb.block_token.block_index);
+    token->set_permissions(lb.block_token.permissions);
+    token->set_expires_at_ms(lb.block_token.expires_at_ms);
+    token->set_signature(lb.block_token.signature);
 }
 
 NameNodeServiceImpl::NameNodeServiceImpl(NamespaceManager* ns_mgr,
                                          BlockManager* block_mgr,
                                          LeaseManager* lease_mgr,
-                                         MetadataStore* metadata_store)
+                                         MetadataStore* metadata_store,
+                                         std::string block_token_secret,
+                                         uint64_t block_token_ttl_ms)
     : ns_mgr_(ns_mgr),
       block_mgr_(block_mgr),
       lease_mgr_(lease_mgr),
-      metadata_store_(metadata_store) {}
+      metadata_store_(metadata_store),
+      block_token_secret_(std::move(block_token_secret)),
+      block_token_ttl_ms_(block_token_ttl_ms) {}
+
+protocol::BlockTokenProto NameNodeServiceImpl::issue_block_token(uint64_t block_id,
+                                                                  uint64_t generation_stamp,
+                                                                  uint64_t inode_id,
+                                                                  uint32_t block_index,
+                                                                  uint32_t permissions) const {
+    return pl::minidfs::issue_block_token(block_id,
+                                          generation_stamp,
+                                          inode_id,
+                                          block_index,
+                                          permissions,
+                                          block_token_ttl_ms_,
+                                          block_token_secret_);
+}
 
 bool NameNodeServiceImpl::check_idempotent(const protocol::RequestHeader& header,
                                            protocol::StatusProto* status) {
@@ -130,24 +512,24 @@ bool NameNodeServiceImpl::check_idempotent(const protocol::RequestHeader& header
     }
     auto result = metadata_store_->check_request_id(header.request_id());
     if (result.hasError()) {
-        return false;
+        fill_status(status, result.error().code(), result.error().message());
+        return true;
     }
     if (result.value()) {
-        // Already processed, return success directly
         fill_status(status, 0);
         return true;
     }
     return false;
 }
 
-void NameNodeServiceImpl::write_oplog(std::string_view op_type,
-                                      uint64_t target_inode_id,
-                                      const protocol::RequestHeader& header) {
+pl::Result<pl::Void> NameNodeServiceImpl::write_oplog(std::string_view op_type,
+                                                    uint64_t target_inode_id,
+                                                    const protocol::RequestHeader& header,
+                                                    std::string_view payload_json) {
     if (header.request_id().empty()) {
-        return;
+        return pl::Void{};
     }
-    // Best-effort: write failure does not affect the main flow
-    (void)metadata_store_->write_oplog(op_type, target_inode_id, header.request_id(), "{}");
+    return metadata_store_->write_oplog(op_type, target_inode_id, header.request_id(), payload_json);
 }
 
 // Namespace Operations
@@ -157,7 +539,41 @@ void NameNodeServiceImpl::Mkdir(google::protobuf::RpcController* /*controller*/,
                                 google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
-    if (request->has_header() && check_idempotent(request->header(), response->mutable_status())) {
+    if (request->has_header() && !request->header().request_id().empty()) {
+        auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+        if (existing.hasError()) {
+            fill_status(response->mutable_status(), existing.error().code(), existing.error().message());
+            return;
+        }
+        if (existing.value().has_value()) {
+            uint32_t status_code = 0;
+            uint64_t target_inode_id = 0;
+            std::string status_message;
+            std::string response_json;
+            if (!parse_response_status(existing.value().value(),
+                                       "mkdir",
+                                       &status_code,
+                                       &status_message,
+                                       &target_inode_id,
+                                       &response_json)) {
+                fill_status(response->mutable_status(),
+                            static_cast<uint32_t>(ErrorCode::kInternalError),
+                            "invalid mkdir idempotency payload");
+                return;
+            }
+            fill_status(response->mutable_status(), status_code, status_message);
+            if (status_code == 0) {
+                uint64_t inode_id = target_inode_id;
+                (void)parse_json_u64(response_json, "inode_id", &inode_id);
+                response->set_inode_id(inode_id);
+            }
+            return;
+        }
+    }
+
+    auto txn = metadata_store_->begin_transaction();
+    if (txn.hasError()) {
+        fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
         return;
     }
 
@@ -167,13 +583,53 @@ void NameNodeServiceImpl::Mkdir(google::protobuf::RpcController* /*controller*/,
                                  request->permission(),
                                  /*create_parent=*/true);
     if (result.hasError()) {
+        if (request->has_header() && !request->header().request_id().empty()) {
+            auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+            if (existing.hasValue() && existing.value().has_value()) {
+                uint32_t status_code = 0;
+                uint64_t target_inode_id = 0;
+                std::string status_message;
+                std::string response_json;
+                if (parse_response_status(existing.value().value(),
+                                          "mkdir",
+                                          &status_code,
+                                          &status_message,
+                                          &target_inode_id,
+                                          &response_json)) {
+                    fill_status(response->mutable_status(), status_code, status_message);
+                    if (status_code == 0) {
+                        uint64_t inode_id = target_inode_id;
+                        (void)parse_json_u64(response_json, "inode_id", &inode_id);
+                        response->set_inode_id(inode_id);
+                    }
+                    return;
+                }
+            }
+        }
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
     }
 
-    if (request->has_header()) {
-        write_oplog("mkdir", result.value().inode_id, request->header());
+    if (request->has_header() && !request->header().request_id().empty()) {
+        auto payload = make_oplog_payload(request->header(),
+                                          "mkdir",
+                                          result.value().inode_id,
+                                          0,
+                                          "",
+                                          fmt::format("{{\"inode_id\":{}}}", result.value().inode_id));
+        auto log = write_oplog("mkdir", result.value().inode_id, request->header(), payload);
+        if (log.hasError()) {
+            fill_status(response->mutable_status(), log.error().code(), log.error().message());
+            return;
+        }
     }
+
+    auto commit = txn.value()->commit();
+    if (commit.hasError()) {
+        fill_status(response->mutable_status(), commit.error().code(), commit.error().message());
+        return;
+    }
+
     fill_status(response->mutable_status(), 0);
     response->set_inode_id(result.value().inode_id);
 }
@@ -184,8 +640,39 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
                                      google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
-    if (request->has_header() && check_idempotent(request->header(), response->mutable_status())) {
-        return;
+    if (request->has_header() && !request->header().request_id().empty()) {
+        auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+        if (existing.hasError()) {
+            fill_status(response->mutable_status(), existing.error().code(), existing.error().message());
+            return;
+        }
+        if (existing.value().has_value()) {
+            uint32_t status_code = 0;
+            uint64_t target_inode_id = 0;
+            std::string status_message;
+            std::string response_json;
+            if (!parse_response_status(existing.value().value(),
+                                       "create_file",
+                                       &status_code,
+                                       &status_message,
+                                       &target_inode_id,
+                                       &response_json)) {
+                fill_status(response->mutable_status(),
+                            static_cast<uint32_t>(ErrorCode::kInternalError),
+                            "invalid create_file idempotency payload");
+                return;
+            }
+            fill_status(response->mutable_status(), status_code, status_message);
+            if (status_code == 0) {
+                uint64_t inode_id = target_inode_id;
+                uint64_t lease_id = 0;
+                (void)parse_json_u64(response_json, "inode_id", &inode_id);
+                (void)parse_json_u64(response_json, "lease_id", &lease_id);
+                response->set_inode_id(inode_id);
+                response->set_lease_id(lease_id);
+            }
+            return;
+        }
     }
 
     uint32_t replication =
@@ -241,19 +728,84 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
                                        replication,
                                        block_size);
     if (result.hasError()) {
+        if (request->has_header() && !request->header().request_id().empty()) {
+            auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+            if (existing.hasValue() && existing.value().has_value()) {
+                uint32_t status_code = 0;
+                uint64_t target_inode_id = 0;
+                std::string status_message;
+                std::string response_json;
+                if (parse_response_status(existing.value().value(),
+                                          "create_file",
+                                          &status_code,
+                                          &status_message,
+                                          &target_inode_id,
+                                          &response_json)) {
+                    fill_status(response->mutable_status(), status_code, status_message);
+                    if (status_code == 0) {
+                        uint64_t inode_id = target_inode_id;
+                        uint64_t lease_id = 0;
+                        (void)parse_json_u64(response_json, "inode_id", &inode_id);
+                        (void)parse_json_u64(response_json, "lease_id", &lease_id);
+                        response->set_inode_id(inode_id);
+                        response->set_lease_id(lease_id);
+                    }
+                    return;
+                }
+            }
+        }
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
     }
 
-    // Acquire lease for the client
     auto lease_result = lease_mgr_->acquire_lease(result.value().inode_id, request->client_id());
     if (lease_result.hasError()) {
-        // Compensate: remove the inode we just created to avoid orphans.
         (void)ns_mgr_->remove(request->path());
         fill_status(response->mutable_status(),
                     lease_result.error().code(),
                     lease_result.error().message());
         return;
+    }
+
+    if (request->has_header() && !request->header().request_id().empty()) {
+        auto payload = make_oplog_payload(
+            request->header(),
+            "create_file",
+            result.value().inode_id,
+            0,
+            "",
+            fmt::format("{{\"inode_id\":{},\"lease_id\":{}}}",
+                        result.value().inode_id,
+                        lease_result.value().lease_id));
+        auto log = write_oplog("create_file", result.value().inode_id, request->header(), payload);
+        if (log.hasError()) {
+            auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+            if (existing.hasValue() && existing.value().has_value()) {
+                uint32_t status_code = 0;
+                uint64_t target_inode_id = 0;
+                std::string status_message;
+                std::string response_json;
+                if (parse_response_status(existing.value().value(),
+                                          "create_file",
+                                          &status_code,
+                                          &status_message,
+                                          &target_inode_id,
+                                          &response_json)) {
+                    fill_status(response->mutable_status(), status_code, status_message);
+                    if (status_code == 0) {
+                        uint64_t inode_id = target_inode_id;
+                        uint64_t lease_id = 0;
+                        (void)parse_json_u64(response_json, "inode_id", &inode_id);
+                        (void)parse_json_u64(response_json, "lease_id", &lease_id);
+                        response->set_inode_id(inode_id);
+                        response->set_lease_id(lease_id);
+                    }
+                    return;
+                }
+            }
+            fill_status(response->mutable_status(), log.error().code(), log.error().message());
+            return;
+        }
     }
 
     auto commit_result = txn.value()->commit();
@@ -264,9 +816,6 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
         return;
     }
 
-    if (request->has_header()) {
-        write_oplog("create_file", result.value().inode_id, request->header());
-    }
     fill_status(response->mutable_status(), 0);
     response->set_inode_id(result.value().inode_id);
     response->set_lease_id(lease_result.value().lease_id);
@@ -422,14 +971,12 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
         return;
     }
 
-    // Resolve the target to clean up blocks before namespace removal.
     auto target = ns_mgr_->resolve_path(request->path());
     if (target.hasError()) {
         fill_status(response->mutable_status(), target.error().code(), target.error().message());
         return;
     }
 
-    // Invalidate blocks for file inodes that will be deleted.
     if (target.value().type == InodeType::kFile) {
         auto invalidate = block_mgr_->invalidate_blocks(target.value().inode_id);
         if (invalidate.hasError()) {
@@ -439,15 +986,16 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
             return;
         }
     } else if (request->recursive()) {
-        // For recursive directory delete, walk children and invalidate file blocks.
-        // Uses a stack-based DFS to handle arbitrary depth.
         std::vector<uint64_t> dir_stack = {target.value().inode_id};
         while (!dir_stack.empty()) {
             uint64_t dir_id = dir_stack.back();
             dir_stack.pop_back();
             auto children = metadata_store_->list_children(dir_id);
             if (children.hasError()) {
-                continue;
+                fill_status(response->mutable_status(),
+                            children.error().code(),
+                            children.error().message());
+                return;
             }
             for (const auto& child : children.value()) {
                 if (child.type == InodeType::kFile) {
@@ -471,6 +1019,20 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
         return;
     }
 
+    if (request->has_header() && !request->header().request_id().empty()) {
+        auto payload = make_oplog_payload(request->header(),
+                                          "delete",
+                                          result.value().inode_id,
+                                          0,
+                                          "",
+                                          "{}");
+        auto log = write_oplog("delete", result.value().inode_id, request->header(), payload);
+        if (log.hasError()) {
+            fill_status(response->mutable_status(), log.error().code(), log.error().message());
+            return;
+        }
+    }
+
     auto commit_result = txn.value()->commit();
     if (commit_result.hasError()) {
         fill_status(response->mutable_status(),
@@ -479,9 +1041,6 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
         return;
     }
 
-    if (request->has_header()) {
-        write_oplog("delete", result.value().inode_id, request->header());
-    }
     fill_status(response->mutable_status(), 0);
 }
 
@@ -495,15 +1054,33 @@ void NameNodeServiceImpl::Rename(google::protobuf::RpcController* /*controller*/
         return;
     }
 
+    auto txn = metadata_store_->begin_transaction();
+    if (txn.hasError()) {
+        fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
+        return;
+    }
+
     auto result = ns_mgr_->rename(request->src(), request->dst());
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
     }
 
-    if (request->has_header()) {
-        write_oplog("rename", 0, request->header());
+    if (request->has_header() && !request->header().request_id().empty()) {
+        auto payload = make_oplog_payload(request->header(), "rename", 0, 0, "", "{}");
+        auto log = write_oplog("rename", 0, request->header(), payload);
+        if (log.hasError()) {
+            fill_status(response->mutable_status(), log.error().code(), log.error().message());
+            return;
+        }
     }
+
+    auto commit = txn.value()->commit();
+    if (commit.hasError()) {
+        fill_status(response->mutable_status(), commit.error().code(), commit.error().message());
+        return;
+    }
+
     fill_status(response->mutable_status(), 0);
 }
 
@@ -527,7 +1104,12 @@ void NameNodeServiceImpl::TruncateFile(google::protobuf::RpcController* /*contro
         block_mgr_->truncate_file(inode.value().inode_id,
                                   request->length(),
                                   [this](const BlockReplica& replica, uint64_t length) {
-                                      return truncate_replica(metadata_store_, replica, length);
+                                      auto token = issue_block_token(replica.block_id,
+                                                                     replica.generation_stamp,
+                                                                     0,
+                                                                     0,
+                                                                     kBlockTokenPermissionTruncate);
+                                      return truncate_replica(metadata_store_, token, replica, length);
                                   });
     if (truncate.hasError()) {
         fill_status(
@@ -594,8 +1176,46 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
                                         google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
-    if (request->has_header() && check_idempotent(request->header(), response->mutable_status())) {
-        return;
+    if (request->has_header() && !request->header().request_id().empty()) {
+        auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+        if (existing.hasError()) {
+            fill_status(response->mutable_status(), existing.error().code(), existing.error().message());
+            return;
+        }
+        if (existing.value().has_value()) {
+            uint32_t status_code = 0;
+            uint64_t target_inode_id = 0;
+            std::string status_message;
+            std::string response_json;
+            if (!parse_response_status(existing.value().value(),
+                                       "allocate_block",
+                                       &status_code,
+                                       &status_message,
+                                       &target_inode_id,
+                                       &response_json)) {
+                fill_status(response->mutable_status(),
+                            static_cast<uint32_t>(ErrorCode::kInternalError),
+                            "invalid allocate_block idempotency payload");
+                return;
+            }
+            fill_status(response->mutable_status(), status_code, status_message);
+            if (status_code == 0) {
+                if (!parse_located_block(response_json, response->mutable_block())) {
+                    auto rebuilt = LocatedBlock{};
+                    if (!rebuild_allocate_block_from_metadata(metadata_store_,
+                                                              request->inode_id(),
+                                                              request->block_index(),
+                                                              &rebuilt)) {
+                        fill_status(response->mutable_status(),
+                                    static_cast<uint32_t>(ErrorCode::kInternalError),
+                                    "failed to rebuild allocate_block response");
+                        return;
+                    }
+                    fill_located_block(response->mutable_block(), rebuilt);
+                }
+            }
+            return;
+        }
     }
 
     uint32_t replication =
@@ -605,16 +1225,103 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
         fill_status(response->mutable_status(), lease.error().code(), lease.error().message());
         return;
     }
-    auto result =
-        block_mgr_->allocate_block(request->inode_id(), request->block_index(), replication);
+
+    auto txn = metadata_store_->begin_transaction();
+    if (txn.hasError()) {
+        fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
+        return;
+    }
+
+    auto result = block_mgr_->allocate_block(request->inode_id(), request->block_index(), replication);
     if (result.hasError()) {
+        if (request->has_header() && !request->header().request_id().empty()) {
+            auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+            if (existing.hasValue() && existing.value().has_value()) {
+                uint32_t status_code = 0;
+                uint64_t target_inode_id = 0;
+                std::string status_message;
+                std::string response_json;
+                if (parse_response_status(existing.value().value(),
+                                          "allocate_block",
+                                          &status_code,
+                                          &status_message,
+                                          &target_inode_id,
+                                          &response_json)) {
+                    fill_status(response->mutable_status(), status_code, status_message);
+                    if (status_code == 0) {
+                        if (!parse_located_block(response_json, response->mutable_block())) {
+                            auto rebuilt = LocatedBlock{};
+                            if (!rebuild_allocate_block_from_metadata(metadata_store_,
+                                                                      request->inode_id(),
+                                                                      request->block_index(),
+                                                                      &rebuilt)) {
+                                fill_status(response->mutable_status(),
+                                            static_cast<uint32_t>(ErrorCode::kInternalError),
+                                            "failed to rebuild allocate_block response");
+                                return;
+                            }
+                            fill_located_block(response->mutable_block(), rebuilt);
+                        }
+                    }
+                    return;
+                }
+            }
+        }
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
     }
 
-    if (request->has_header()) {
-        write_oplog("allocate_block", request->inode_id(), request->header());
+    if (request->has_header() && !request->header().request_id().empty()) {
+        auto payload = make_oplog_payload(request->header(),
+                                          "allocate_block",
+                                          request->inode_id(),
+                                          0,
+                                          "",
+                                          located_block_to_json(result.value()));
+        auto log = write_oplog("allocate_block", request->inode_id(), request->header(), payload);
+        if (log.hasError()) {
+            auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+            if (existing.hasValue() && existing.value().has_value()) {
+                uint32_t status_code = 0;
+                uint64_t target_inode_id = 0;
+                std::string status_message;
+                std::string response_json;
+                if (parse_response_status(existing.value().value(),
+                                          "allocate_block",
+                                          &status_code,
+                                          &status_message,
+                                          &target_inode_id,
+                                          &response_json)) {
+                    fill_status(response->mutable_status(), status_code, status_message);
+                    if (status_code == 0) {
+                        if (!parse_located_block(response_json, response->mutable_block())) {
+                            auto rebuilt = LocatedBlock{};
+                            if (!rebuild_allocate_block_from_metadata(metadata_store_,
+                                                                      request->inode_id(),
+                                                                      request->block_index(),
+                                                                      &rebuilt)) {
+                                fill_status(response->mutable_status(),
+                                            static_cast<uint32_t>(ErrorCode::kInternalError),
+                                            "failed to rebuild allocate_block response");
+                                return;
+                            }
+                            fill_located_block(response->mutable_block(), rebuilt);
+                        }
+                    }
+                    return;
+                }
+            }
+            fill_status(response->mutable_status(), log.error().code(), log.error().message());
+            return;
+        }
     }
+
+    auto commit = txn.value()->commit();
+    if (commit.hasError()) {
+        fill_status(response->mutable_status(), commit.error().code(), commit.error().message());
+        return;
+    }
+
     fill_status(response->mutable_status(), 0);
     fill_located_block(response->mutable_block(), result.value());
 }
@@ -659,10 +1366,30 @@ void DataNodeProtocolServiceImpl::fill_status(protocol::StatusProto* proto,
     set_status(proto, code, msg);
 }
 
+protocol::BlockTokenProto DataNodeProtocolServiceImpl::issue_block_token(uint64_t block_id,
+                                                                           uint64_t generation_stamp,
+                                                                           uint64_t inode_id,
+                                                                           uint32_t block_index,
+                                                                           uint32_t permissions) const {
+    return pl::minidfs::issue_block_token(block_id,
+                                          generation_stamp,
+                                          inode_id,
+                                          block_index,
+                                          permissions,
+                                          block_token_ttl_ms_,
+                                          block_token_secret_);
+}
+
 DataNodeProtocolServiceImpl::DataNodeProtocolServiceImpl(DataNodeManager* dn_mgr,
                                                          BlockManager* block_mgr,
-                                                         NameNodeMaintenance* maintenance)
-    : dn_mgr_(dn_mgr), block_mgr_(block_mgr), maintenance_(maintenance) {}
+                                                         NameNodeMaintenance* maintenance,
+                                                         std::string block_token_secret,
+                                                         uint64_t block_token_ttl_ms)
+    : dn_mgr_(dn_mgr),
+      block_mgr_(block_mgr),
+      maintenance_(maintenance),
+      block_token_secret_(std::move(block_token_secret)),
+      block_token_ttl_ms_(block_token_ttl_ms) {}
 
 void DataNodeProtocolServiceImpl::RegisterDataNode(google::protobuf::RpcController* /*controller*/,
                                                    const protocol::RegisterDataNodeRequest* request,
@@ -731,6 +1458,14 @@ void DataNodeProtocolServiceImpl::Heartbeat(google::protobuf::RpcController* /*c
         command->set_target_host(target.value().ip.empty() ? target.value().hostname
                                                            : target.value().ip);
         command->set_target_port(target.value().data_port);
+
+        auto token = issue_block_token(task.block_id,
+                                       task.generation_stamp,
+                                       task.inode_id,
+                                       task.block_index,
+                                       kBlockTokenPermissionTransfer);
+        auto* cmd_token = command->mutable_block_token();
+        cmd_token->CopyFrom(token);
     }
 }
 
@@ -757,7 +1492,20 @@ void DataNodeProtocolServiceImpl::BlockReport(google::protobuf::RpcController* /
             response->mutable_status(), reconcile.error().code(), reconcile.error().message());
         return;
     }
+
+    auto deletions = block_mgr_->get_blocks_to_delete(request->datanode_id());
+    if (deletions.hasError()) {
+        fill_status(
+            response->mutable_status(), deletions.error().code(), deletions.error().message());
+        return;
+    }
+
     fill_status(response->mutable_status(), 0);
+    for (const auto& block : deletions.value()) {
+        auto* deletion = response->add_blocks_to_delete();
+        deletion->set_block_id(block.block_id);
+        deletion->set_generation_stamp(block.generation_stamp);
+    }
 }
 
 void DataNodeProtocolServiceImpl::CommitBlock(google::protobuf::RpcController* /*controller*/,

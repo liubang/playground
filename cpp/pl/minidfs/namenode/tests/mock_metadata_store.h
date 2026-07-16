@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -38,7 +39,7 @@ public:
 //
 // Provides a fully functional implementation backed by std::unordered_map,
 // enabling all Manager tests to run without MySQL.
-class MockMetadataStore final : public MetadataStore {
+class MockMetadataStore : public MetadataStore {
 public:
     MockMetadataStore() {
         // Initialize root inode.
@@ -156,7 +157,19 @@ public:
 
     pl::Result<pl::Void> create_block(const BlockMeta& block) override {
         std::lock_guard lock(mu_);
+        for (const auto& [_, existing] : blocks_) {
+            if (existing.inode_id == block.inode_id && existing.block_index == block.block_index) {
+                return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kAlreadyExists),
+                                     "block already exists");
+            }
+        }
         blocks_[block.block_id] = block;
+        return pl::Void{};
+    }
+
+    pl::Result<pl::Void> delete_block(uint64_t block_id) override {
+        std::lock_guard lock(mu_);
+        blocks_.erase(block_id);
         return pl::Void{};
     }
 
@@ -365,18 +378,34 @@ public:
     }
 
     // Operation Log
-    pl::Result<pl::Void> write_oplog(std::string_view /*op_type*/,
-                                     uint64_t /*target_inode_id*/,
+    pl::Result<pl::Void> write_oplog(std::string_view op_type,
+                                     uint64_t target_inode_id,
                                      std::string_view request_id,
-                                     std::string_view /*payload_json*/) override {
+                                     std::string_view payload_json) override {
         std::lock_guard lock(mu_);
-        request_ids_.emplace(request_id);
+        auto id = std::string(request_id);
+        oplogs_[id] = OplogEntry{
+            .op_type = std::string(op_type),
+            .target_inode_id = target_inode_id,
+            .request_id = id,
+            .payload_json = std::string(payload_json),
+        };
         return pl::Void{};
     }
 
     pl::Result<bool> check_request_id(std::string_view request_id) override {
         std::lock_guard lock(mu_);
-        return request_ids_.count(std::string(request_id)) > 0;
+        return oplogs_.count(std::string(request_id)) > 0;
+    }
+
+    pl::Result<std::optional<OplogEntry>> get_oplog_by_request_id(
+        std::string_view request_id) override {
+        std::lock_guard lock(mu_);
+        auto it = oplogs_.find(std::string(request_id));
+        if (it == oplogs_.end()) {
+            return std::optional<OplogEntry>(std::nullopt);
+        }
+        return std::optional<OplogEntry>(it->second);
     }
 
 private:
@@ -387,7 +416,7 @@ private:
     std::unordered_map<uint64_t, DataNodeInfo> datanodes_;
     std::vector<Lease> leases_;
     std::unordered_map<std::string, uint64_t> id_counters_;
-    std::unordered_set<std::string> request_ids_;
+    std::unordered_map<std::string, OplogEntry> oplogs_;
 };
 
 } // namespace pl::minidfs::testing

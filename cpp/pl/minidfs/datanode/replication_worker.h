@@ -26,6 +26,7 @@
 #include <string>
 #include <thread>
 
+#include "cpp/pl/minidfs/common/types.h"
 #include "cpp/pl/minidfs/datanode/local_block_store.h"
 #include "cpp/pl/status/result.h"
 
@@ -44,6 +45,7 @@ struct DataNodeTask {
     uint32_t block_index = 0;
     std::string target_host;  // For copy: destination DN host
     uint32_t target_port = 0; // For copy: destination DN data port
+    BlockToken block_token;
 };
 
 // ReplicationWorker — executes block replication and deletion tasks.
@@ -53,6 +55,7 @@ using CopyFunc = std::function<pl::Result<pl::Void>(uint64_t block_id,
                                                     uint64_t generation_stamp,
                                                     uint64_t inode_id,
                                                     uint32_t block_index,
+                                                    const BlockToken& block_token,
                                                     const std::string& data,
                                                     const std::string& target_host,
                                                     uint32_t target_port)>;

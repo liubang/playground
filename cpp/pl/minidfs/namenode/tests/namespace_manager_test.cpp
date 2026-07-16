@@ -182,6 +182,26 @@ TEST_F(NamespaceManagerTest, RenameSrcNotFound) {
     ASSERT_TRUE(result.hasError());
 }
 
+TEST_F(NamespaceManagerTest, RenameDirectoryToSelfFails) {
+    ASSERT_TRUE(mgr_->mkdir("/dir", "user1", "grp1", 0755).hasValue());
+
+    auto result = mgr_->rename("/dir", "/dir");
+    ASSERT_TRUE(result.hasError());
+    EXPECT_EQ(result.error().code(), static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument));
+}
+
+TEST_F(NamespaceManagerTest, RenameDirectoryToDescendantFails) {
+    ASSERT_TRUE(mgr_->mkdir("/src/child", "user1", "grp1", 0755, true).hasValue());
+
+    auto result = mgr_->rename("/src", "/src/child/new-src");
+    ASSERT_TRUE(result.hasError());
+    EXPECT_EQ(result.error().code(), static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument));
+
+    auto still_exists = mgr_->get_file_status("/src");
+    ASSERT_TRUE(still_exists.hasValue());
+    EXPECT_TRUE(still_exists.value().is_dir);
+}
+
 // get_file_status / list_status tests
 TEST_F(NamespaceManagerTest, GetFileStatus) {
     mgr_->create_file("/status.txt", "owner1", "grp1", 0644, 2, 64 * kMB);

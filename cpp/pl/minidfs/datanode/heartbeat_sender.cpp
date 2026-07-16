@@ -70,14 +70,16 @@ pl::Result<std::vector<HeartbeatCommand>> HeartbeatSender::send_once() {
         return pl::makeError(std::move(result.error()));
     }
 
+    auto commands = std::move(result.value());
+
     // Dispatch received commands
-    for (const auto& cmd : result.value()) {
+    for (const auto& cmd : commands) {
         if (cmd.type != CommandType::kNone && command_handler_) {
             command_handler_(cmd);
         }
     }
 
-    return std::move(result.value());
+    return commands;
 }
 
 void HeartbeatSender::run_loop() {

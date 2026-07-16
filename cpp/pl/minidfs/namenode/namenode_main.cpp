@@ -19,6 +19,7 @@
 #include <butil/logging.h>
 #include <gflags/gflags.h>
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/metadata/mysql_connection_pool.h"
 #include "cpp/pl/minidfs/metadata/mysql_metadata_store.h"
 #include "cpp/pl/minidfs/namenode/admin_service_impl.h"
@@ -41,6 +42,10 @@ DEFINE_int32(mysql_pool_size, 8, "MySQL connection pool size");
 DEFINE_int64(lease_recovery_interval_ms, 1000, "Lease recovery scan interval");
 DEFINE_int64(datanode_scan_interval_ms, 3000, "DataNode liveness scan interval");
 DEFINE_int64(replication_scan_interval_ms, 30000, "Replica repair scan interval");
+DEFINE_string(block_token_secret,
+              "",
+              "Shared secret used for DataNode block token signing/verification");
+DEFINE_uint64(block_token_ttl_ms, 300000, "Block token TTL in milliseconds");
 
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -48,6 +53,10 @@ int main(int argc, char* argv[]) {
     if (FLAGS_lease_recovery_interval_ms <= 0 || FLAGS_datanode_scan_interval_ms <= 0 ||
         FLAGS_replication_scan_interval_ms <= 0) {
         LOG(FATAL) << "NameNode maintenance intervals must be positive";
+        return 1;
+    }
+    if (FLAGS_block_token_ttl_ms == 0) {
+        LOG(FATAL) << "block token ttl must be positive";
         return 1;
     }
 
@@ -76,13 +85,18 @@ int main(int argc, char* argv[]) {
     }
     auto& metadata_store = *store_result.value();
 
+    const std::string block_token_secret = FLAGS_block_token_secret.empty()
+                                               ? pl::minidfs::default_block_token_secret()
+                                               : FLAGS_block_token_secret;
+
     // Create managers
     pl::minidfs::NamespaceManager ns_mgr(&metadata_store);
     pl::minidfs::DataNodeManager dn_mgr(&metadata_store);
     pl::minidfs::PlacementManager placement_mgr(&dn_mgr);
-    pl::minidfs::BlockManager block_mgr(&metadata_store, &placement_mgr);
+    pl::minidfs::BlockManager block_mgr(&metadata_store, &placement_mgr, block_token_secret);
     pl::minidfs::LeaseManager lease_mgr(&metadata_store);
-    pl::minidfs::ReplicationManager replication_mgr(&metadata_store, &placement_mgr);
+    pl::minidfs::ReplicationManager replication_mgr(
+        &metadata_store, &placement_mgr, block_token_secret);
     pl::minidfs::NameNodeMaintenance maintenance(
         {
             .lease_recovery_interval_ms = static_cast<uint64_t>(FLAGS_lease_recovery_interval_ms),
@@ -98,9 +112,18 @@ int main(int argc, char* argv[]) {
 
     // Create service implementations
     pl::minidfs::NameNodeServiceImpl namenode_service(
-        &ns_mgr, &block_mgr, &lease_mgr, &metadata_store);
+        &ns_mgr,
+        &block_mgr,
+        &lease_mgr,
+        &metadata_store,
+        block_token_secret,
+        FLAGS_block_token_ttl_ms);
     pl::minidfs::DataNodeProtocolServiceImpl datanode_protocol_service(
-        &dn_mgr, &block_mgr, &maintenance);
+        &dn_mgr,
+        &block_mgr,
+        &maintenance,
+        block_token_secret,
+        FLAGS_block_token_ttl_ms);
     pl::minidfs::AdminServiceImpl admin_service(&ns_mgr, &dn_mgr, &metadata_store);
 
     // Start brpc server

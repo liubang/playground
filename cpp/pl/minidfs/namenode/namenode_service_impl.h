@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "cpp/pl/minidfs/metadata/metadata_store.h"
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 #include "cpp/pl/minidfs/namenode/datanode_manager.h"
@@ -37,7 +39,9 @@ public:
     NameNodeServiceImpl(NamespaceManager* ns_mgr,
                         BlockManager* block_mgr,
                         LeaseManager* lease_mgr,
-                        MetadataStore* metadata_store);
+                        MetadataStore* metadata_store,
+                        std::string block_token_secret,
+                        uint64_t block_token_ttl_ms);
     ~NameNodeServiceImpl() override = default;
 
     void Mkdir(google::protobuf::RpcController* controller,
@@ -110,19 +114,27 @@ private:
     static void fill_file_status(protocol::FileStatusProto* proto, const FileStatus& fs);
     static void fill_located_block(protocol::LocatedBlockProto* proto, const LocatedBlock& lb);
 
-    // Idempotency check: returns true if request_id was already processed (caller should return
-    // success)
+    // Generic status-only idempotency check used by RPCs without payload replay.
     bool check_idempotent(const protocol::RequestHeader& header, protocol::StatusProto* status);
 
-    // Write oplog (idempotency record)
-    void write_oplog(std::string_view op_type,
-                     uint64_t target_inode_id,
-                     const protocol::RequestHeader& header);
+    // Write oplog (idempotency record).
+    pl::Result<pl::Void> write_oplog(std::string_view op_type,
+                                     uint64_t target_inode_id,
+                                     const protocol::RequestHeader& header,
+                                     std::string_view payload_json);
+
+    protocol::BlockTokenProto issue_block_token(uint64_t block_id,
+                                                uint64_t generation_stamp,
+                                                uint64_t inode_id,
+                                                uint32_t block_index,
+                                                uint32_t permissions) const;
 
     NamespaceManager* ns_mgr_;
     BlockManager* block_mgr_;
     LeaseManager* lease_mgr_;
     MetadataStore* metadata_store_;
+    std::string block_token_secret_;
+    uint64_t block_token_ttl_ms_ = 0;
 };
 
 // DataNodeProtocolServiceImpl — brpc service for DataNode-facing RPCs.
@@ -131,7 +143,9 @@ class DataNodeProtocolServiceImpl : public protocol::DataNodeProtocolService {
 public:
     DataNodeProtocolServiceImpl(DataNodeManager* dn_mgr,
                                 BlockManager* block_mgr,
-                                NameNodeMaintenance* maintenance);
+                                NameNodeMaintenance* maintenance,
+                                std::string block_token_secret,
+                                uint64_t block_token_ttl_ms);
     ~DataNodeProtocolServiceImpl() override = default;
 
     void RegisterDataNode(google::protobuf::RpcController* controller,
@@ -157,9 +171,17 @@ public:
 private:
     static void fill_status(protocol::StatusProto* proto, uint32_t code, std::string_view msg = {});
 
+    protocol::BlockTokenProto issue_block_token(uint64_t block_id,
+                                                uint64_t generation_stamp,
+                                                uint64_t inode_id,
+                                                uint32_t block_index,
+                                                uint32_t permissions) const;
+
     DataNodeManager* dn_mgr_;
     BlockManager* block_mgr_;
     NameNodeMaintenance* maintenance_;
+    std::string block_token_secret_;
+    uint64_t block_token_ttl_ms_ = 0;
 };
 
 } // namespace pl::minidfs

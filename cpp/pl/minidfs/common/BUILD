@@ -22,6 +22,7 @@ package(default_visibility = ["//cpp/pl/minidfs:__subpackages__"])
 cc_library(
     name = "common",
     hdrs = [
+        "block_token.h",
         "checksum.h",
         "common.h",
         "constants.h",
@@ -33,7 +34,10 @@ cc_library(
         "//:linux": ["@isa-l"],
         "//:darwin": ["@crc32c"],
         "//conditions:default": ["@crc32c"],
-    }),
+    }) + [
+        "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
+        "@openssl//:crypto",
+    ],
 )
 
 cc_library(

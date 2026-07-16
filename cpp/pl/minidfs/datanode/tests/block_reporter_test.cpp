@@ -72,7 +72,8 @@ TEST_F(BlockReporterTest, SendFullReportEmpty) {
         return BlockReportResponse{};
     };
 
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) -> Result<Void> {
+        RETURN_VOID;
     };
 
     BlockReporter::Config cfg;
@@ -95,7 +96,8 @@ TEST_F(BlockReporterTest, SendFullReportWithBlocks) {
         reported_blocks = report.blocks;
         return BlockReportResponse{};
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) -> Result<Void> {
+        RETURN_VOID;
     };
 
     BlockReporter::Config cfg;
@@ -114,11 +116,15 @@ TEST_F(BlockReporterTest, ReportResponseDeletesBlocks) {
     std::vector<std::pair<uint64_t, uint64_t>> deleted;
     BlockReportFunc report_func = [](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
         BlockReportResponse resp;
-        resp.blocks_to_delete = {200}; // NN says delete block 200
+        resp.blocks_to_delete = {{
+            .block_id = 200,
+            .generation_stamp = 6000,
+        }};
         return resp;
     };
-    DeleteBlockFunc delete_func = [&](uint64_t block_id, uint64_t gs) {
+    DeleteBlockFunc delete_func = [&](uint64_t block_id, uint64_t gs) -> Result<Void> {
         deleted.emplace_back(block_id, gs);
+        RETURN_VOID;
     };
 
     BlockReporter::Config cfg;
@@ -129,13 +135,15 @@ TEST_F(BlockReporterTest, ReportResponseDeletesBlocks) {
     ASSERT_TRUE(result.hasValue());
     ASSERT_EQ(deleted.size(), 1u);
     EXPECT_EQ(deleted[0].first, 200u);
+    EXPECT_EQ(deleted[0].second, 6000u);
 }
 
 TEST_F(BlockReporterTest, NotifyBlockFinalized) {
     BlockReportFunc report_func = [](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
         return BlockReportResponse{};
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) -> Result<Void> {
+        RETURN_VOID;
     };
 
     BlockReporter::Config cfg;
@@ -151,7 +159,8 @@ TEST_F(BlockReporterTest, NotifyBlockDeleted) {
     BlockReportFunc report_func = [](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
         return BlockReportResponse{};
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) -> Result<Void> {
+        RETURN_VOID;
     };
 
     BlockReporter::Config cfg;
@@ -171,7 +180,8 @@ TEST_F(BlockReporterTest, SendIncrementalReportWithFinalizedBlock) {
         reported = report;
         return Result<BlockReportResponse>(BlockReportResponse{});
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) -> Result<Void> {
+        RETURN_VOID;
     };
 
     BlockReporter::Config cfg;
@@ -193,7 +203,8 @@ TEST_F(BlockReporterTest, StartAndStop) {
         report_count++;
         return BlockReportResponse{};
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) -> Result<Void> {
+        RETURN_VOID;
     };
 
     BlockReporter::Config cfg;
@@ -218,7 +229,8 @@ TEST_F(BlockReporterTest, ReportRPCFailure) {
     BlockReportFunc report_func = [](uint64_t, const BlockReport&) -> Result<BlockReportResponse> {
         return pl::makeError(pl::Status(5000, "RPC failed"));
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) -> Result<Void> {
+        RETURN_VOID;
     };
 
     BlockReporter::Config cfg;

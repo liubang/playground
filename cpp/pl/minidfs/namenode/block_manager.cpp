@@ -20,15 +20,33 @@
 #include <fmt/format.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
+#include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/common/error_code.h"
 #include "cpp/pl/minidfs/common/time_util.h"
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
 
 namespace pl::minidfs {
 
-BlockManager::BlockManager(MetadataStore* store, PlacementManager* placement)
-    : store_(store), placement_(placement) {}
+BlockManager::BlockManager(MetadataStore* store,
+                           PlacementManager* placement,
+                           std::string token_secret)
+    : store_(store), placement_(placement), token_secret_(std::move(token_secret)) {}
+
+protocol::BlockTokenProto BlockManager::issue_block_token(uint64_t block_id,
+                                                           uint64_t generation_stamp,
+                                                           uint64_t inode_id,
+                                                           uint32_t block_index,
+                                                           uint32_t permissions) const {
+    return pl::minidfs::issue_block_token(block_id,
+                                          generation_stamp,
+                                          inode_id,
+                                          block_index,
+                                          permissions,
+                                          default_block_token_ttl_ms(),
+                                          token_secret_);
+}
 
 pl::Result<uint64_t> BlockManager::next_generation_stamp() {
     return store_->alloc_id("generation_stamp");
@@ -37,6 +55,11 @@ pl::Result<uint64_t> BlockManager::next_generation_stamp() {
 pl::Result<LocatedBlock> BlockManager::allocate_block(uint64_t inode_id,
                                                       uint32_t block_index,
                                                       uint32_t replication) {
+    auto txn = store_->begin_transaction();
+    if (txn.hasError()) {
+        return folly::makeUnexpected(txn.error());
+    }
+
     auto inode = store_->get_inode(inode_id);
     if (inode.hasError()) {
         return folly::makeUnexpected(inode.error());
@@ -46,6 +69,7 @@ pl::Result<LocatedBlock> BlockManager::allocate_block(uint64_t inode_id,
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kFileUnderConstruction),
                              "blocks can only be allocated for files under construction");
     }
+
     auto existing_blocks = store_->get_blocks_by_inode(inode_id);
     if (existing_blocks.hasError()) {
         return folly::makeUnexpected(existing_blocks.error());
@@ -57,7 +81,6 @@ pl::Result<LocatedBlock> BlockManager::allocate_block(uint64_t inode_id,
         }
     }
 
-    // Allocate a block ID.
     auto id_result = store_->alloc_id("block");
     if (id_result.hasError()) {
         return folly::makeUnexpected(id_result.error());
@@ -71,8 +94,20 @@ pl::Result<LocatedBlock> BlockManager::allocate_block(uint64_t inode_id,
     uint64_t block_id = id_result.value();
     uint64_t gen = generation_stamp.value();
     uint64_t ts = now_ms();
+    bool block_created = false;
 
-    // Create block metadata entry (state = Allocating).
+    auto cleanup_ghost_block = [&]() -> pl::Result<pl::Void> {
+        auto del_replicas = store_->delete_replicas_by_block(block_id);
+        if (del_replicas.hasError()) {
+            return folly::makeUnexpected(del_replicas.error());
+        }
+        auto del_block = store_->delete_block(block_id);
+        if (del_block.hasError()) {
+            return folly::makeUnexpected(del_block.error());
+        }
+        return pl::Void{};
+    };
+
     BlockMeta block;
     block.block_id = block_id;
     block.inode_id = inode_id;
@@ -86,16 +121,28 @@ pl::Result<LocatedBlock> BlockManager::allocate_block(uint64_t inode_id,
 
     auto create_res = store_->create_block(block);
     if (create_res.hasError()) {
+        const auto code = create_res.error().code();
+        const auto msg = std::string(create_res.error().message());
+        const bool duplicate =
+            code == static_cast<pl::status_code_t>(ErrorCode::kAlreadyExists) ||
+            (code == static_cast<pl::status_code_t>(ErrorCode::kMySQLQueryFailed) &&
+             msg.find("Duplicate entry") != std::string::npos);
+        if (duplicate) {
+            return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kAlreadyExists),
+                                 fmt::format("block index {} already exists", block_index));
+        }
         return folly::makeUnexpected(create_res.error());
     }
+    block_created = true;
 
-    // Select datanodes for placement.
     auto targets = placement_->choose_targets(replication, std::nullopt);
     if (targets.hasError()) {
+        if (block_created) {
+            (void)cleanup_ghost_block();
+        }
         return folly::makeUnexpected(targets.error());
     }
 
-    // Register replicas (state = Writing).
     for (const auto& dn : targets.value()) {
         BlockReplica replica;
         replica.block_id = block_id;
@@ -108,16 +155,35 @@ pl::Result<LocatedBlock> BlockManager::allocate_block(uint64_t inode_id,
 
         auto upsert_res = store_->upsert_replica(replica);
         if (upsert_res.hasError()) {
+            if (block_created) {
+                (void)cleanup_ghost_block();
+            }
             return folly::makeUnexpected(upsert_res.error());
         }
     }
 
-    // Build LocatedBlock response.
+    auto commit = txn.value()->commit();
+    if (commit.hasError()) {
+        if (block_created) {
+            (void)cleanup_ghost_block();
+        }
+        return folly::makeUnexpected(commit.error());
+    }
+
     LocatedBlock located;
     located.block_id = block_id;
     located.generation_stamp = gen;
-    located.offset = 0; // caller will set actual offset
+    located.offset = 0;
     located.length = 0;
+    located.block_token = {
+        .block_id = block_id,
+        .generation_stamp = gen,
+        .inode_id = inode_id,
+        .block_index = block_index,
+        .permissions = all_data_plane_permissions(),
+        .expires_at_ms = 0,
+        .signature = "",
+    };
     for (const auto& dn : targets.value()) {
         located.locations.push_back(DataNodeEndpoint{
             .datanode_id = dn.datanode_id,
@@ -133,11 +199,6 @@ pl::Result<pl::Void> BlockManager::commit_block(
     uint64_t length,
     uint64_t generation_stamp,
     const std::vector<uint64_t>& finalized_datanode_ids) {
-    if (finalized_datanode_ids.empty()) {
-        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInsufficientReplicas),
-                             fmt::format("no finalized replicas reported for block {}", block_id));
-    }
-
     auto block_result = store_->get_block(block_id);
     if (block_result.hasError()) {
         return folly::makeUnexpected(block_result.error());
@@ -167,9 +228,14 @@ pl::Result<pl::Void> BlockManager::commit_block(
             ++finalized_count;
         }
     }
-    if (finalized_count == 0) {
-        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInsufficientReplicas),
-                             fmt::format("no matching replicas finalized for block {}", block_id));
+    uint32_t required_finalized = std::min<uint32_t>(kMinWriteReplica, block.desired_replica);
+    if (finalized_count < required_finalized) {
+        return pl::makeError(
+            static_cast<pl::status_code_t>(ErrorCode::kInsufficientReplicas),
+            fmt::format("block {} requires {} finalized replicas, only {} matched",
+                        block_id,
+                        required_finalized,
+                        finalized_count));
     }
 
     if (!already_committed) {
@@ -240,6 +306,20 @@ pl::Result<std::vector<LocatedBlock>> BlockManager::get_located_blocks(uint64_t 
         }
 
         if (!lb.locations.empty()) {
+            auto token = issue_block_token(block.block_id,
+                                           block.generation_stamp,
+                                           block.inode_id,
+                                           block.block_index,
+                                           kBlockTokenPermissionRead);
+            lb.block_token = {
+                .block_id = token.block_id(),
+                .generation_stamp = token.generation_stamp(),
+                .inode_id = token.inode_id(),
+                .block_index = token.block_index(),
+                .permissions = token.permissions(),
+                .expires_at_ms = token.expires_at_ms(),
+                .signature = token.signature(),
+            };
             located_blocks.push_back(std::move(lb));
         }
         offset += block.length;

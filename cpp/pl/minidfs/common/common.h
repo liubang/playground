@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/common/checksum.h"
 #include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/common/error_code.h"

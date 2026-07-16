@@ -21,6 +21,7 @@
 #include <brpc/channel.h>
 #include <brpc/controller.h>
 #include <butil/logging.h>
+#include <chrono>
 #include <cstdint>
 #include <fcntl.h>
 #include <fmt/core.h>
@@ -116,6 +117,14 @@ DfsClient::DfsClient(DfsClientConfig config) : config_(std::move(config)) {}
 
 DfsClient::~DfsClient() = default;
 
+std::string DfsClient::next_request_id() {
+    const auto seq = request_seq_.fetch_add(1, std::memory_order_relaxed) + 1;
+    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::system_clock::now().time_since_epoch())
+                            .count();
+    return fmt::format("{}-{}-{}", config_.client_id, now_ms, seq);
+}
+
 bool DfsClient::init() {
     brpc::ChannelOptions options;
     options.timeout_ms = config_.rpc_timeout_ms;
@@ -138,6 +147,9 @@ Result<Void> DfsClient::mkdir(std::string_view path) {
     request.set_owner("dfs");
     request.set_group("dfs");
     request.set_permission(kDefaultPermission);
+    auto* header = request.mutable_header();
+    header->set_request_id(next_request_id());
+    header->set_client_id(config_.client_id);
 
     protocol::MkdirResponse response;
     stub.Mkdir(&cntl, &request, &response, nullptr);
@@ -207,6 +219,9 @@ Result<Void> DfsClient::rm(std::string_view path, bool recursive) {
     protocol::DeleteRequest request;
     request.set_path(std::string(path));
     request.set_recursive(recursive);
+    auto* header = request.mutable_header();
+    header->set_request_id(next_request_id());
+    header->set_client_id(config_.client_id);
 
     protocol::DeleteResponse response;
     stub.Delete(&cntl, &request, &response, nullptr);
@@ -226,6 +241,9 @@ Result<Void> DfsClient::mv(std::string_view src, std::string_view dst) {
     protocol::RenameRequest request;
     request.set_src(std::string(src));
     request.set_dst(std::string(dst));
+    auto* header = request.mutable_header();
+    header->set_request_id(next_request_id());
+    header->set_client_id(config_.client_id);
 
     protocol::RenameResponse response;
     stub.Rename(&cntl, &request, &response, nullptr);
@@ -270,6 +288,9 @@ Result<Void> DfsClient::put(std::string_view local_path,
     create_req.set_block_size(config_.block_size);
     create_req.set_client_id(config_.client_id);
     create_req.set_overwrite(overwrite);
+    auto* create_header = create_req.mutable_header();
+    create_header->set_request_id(next_request_id());
+    create_header->set_client_id(config_.client_id);
 
     protocol::CreateFileResponse create_resp;
     stub.CreateFile(&cntl, &create_req, &create_resp, nullptr);
@@ -293,6 +314,7 @@ Result<Void> DfsClient::put(std::string_view local_path,
                                               .chunk_size = config_.chunk_size,
                                               .replication = config_.replication,
                                               .rpc_timeout_ms = config_.rpc_timeout_ms,
+                                              .request_id_prefix = create_header->request_id(),
                                           });
     if (stream.hasError()) {
         return folly::makeUnexpected(stream.error());
@@ -313,6 +335,9 @@ Result<Void> DfsClient::append(std::string_view local_path, std::string_view dfs
     protocol::AppendFileRequest request;
     request.set_path(std::string(dfs_path));
     request.set_client_id(config_.client_id);
+    auto* header = request.mutable_header();
+    header->set_request_id(next_request_id());
+    header->set_client_id(config_.client_id);
     protocol::AppendFileResponse response;
     stub.AppendFile(&controller, &request, &response, nullptr);
     if (controller.Failed()) {
@@ -334,6 +359,7 @@ Result<Void> DfsClient::append(std::string_view local_path, std::string_view dfs
                                               .replication = response.replication(),
                                               .rpc_timeout_ms = config_.rpc_timeout_ms,
                                               .starting_block_index = response.next_block_index(),
+                                              .request_id_prefix = header->request_id(),
                                           });
     if (stream.hasError()) {
         return folly::makeUnexpected(stream.error());
@@ -347,6 +373,9 @@ Result<Void> DfsClient::truncate(std::string_view dfs_path, uint64_t length) {
     protocol::TruncateFileRequest request;
     request.set_path(std::string(dfs_path));
     request.set_length(length);
+    auto* header = request.mutable_header();
+    header->set_request_id(next_request_id());
+    header->set_client_id(config_.client_id);
     protocol::TruncateFileResponse response;
     stub.TruncateFile(&controller, &request, &response, nullptr);
     if (controller.Failed()) {
@@ -363,6 +392,9 @@ Result<Void> DfsClient::setrep(std::string_view dfs_path, uint32_t replication) 
     protocol::SetReplicationRequest request;
     request.set_path(std::string(dfs_path));
     request.set_replication(replication);
+    auto* header = request.mutable_header();
+    header->set_request_id(next_request_id());
+    header->set_client_id(config_.client_id);
     protocol::SetReplicationResponse response;
     stub.SetReplication(&controller, &request, &response, nullptr);
     if (controller.Failed()) {
@@ -430,6 +462,18 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
                 .host = loc.host(),
                 .data_port = loc.data_port(),
             });
+        }
+        // Copy block token from NameNode response
+        if (block_proto.has_block_token()) {
+            block.block_token = {
+                .block_id = block_proto.block_token().block_id(),
+                .generation_stamp = block_proto.block_token().generation_stamp(),
+                .inode_id = block_proto.block_token().inode_id(),
+                .block_index = block_proto.block_token().block_index(),
+                .permissions = block_proto.block_token().permissions(),
+                .expires_at_ms = block_proto.block_token().expires_at_ms(),
+                .signature = block_proto.block_token().signature(),
+            };
         }
 
         auto data_result = read_block(block);
@@ -808,6 +852,16 @@ Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
         req.set_generation_stamp(block.generation_stamp);
         req.set_offset(0);
         req.set_length(0); // 0 = read entire block
+
+        // Attach block token for DataNode authorization
+        auto* token = req.mutable_block_token();
+        token->set_block_id(block.block_token.block_id);
+        token->set_generation_stamp(block.block_token.generation_stamp);
+        token->set_inode_id(block.block_token.inode_id);
+        token->set_block_index(block.block_token.block_index);
+        token->set_permissions(block.block_token.permissions);
+        token->set_expires_at_ms(block.block_token.expires_at_ms);
+        token->set_signature(block.block_token.signature);
 
         protocol::ReadBlockResponse resp;
         dn_stub.ReadBlock(&cntl, &req, &resp, nullptr);

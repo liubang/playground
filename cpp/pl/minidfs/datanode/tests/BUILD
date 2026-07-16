@@ -92,3 +92,19 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "block_token_auth_test",
+    srcs = ["block_token_auth_test.cpp"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/minidfs/common",
+        "//cpp/pl/minidfs/datanode:block_reporter",
+        "//cpp/pl/minidfs/datanode:data_transfer_service_impl",
+        "//cpp/pl/minidfs/datanode:local_block_store",
+        "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
+        "@brpc",
+        "@googletest//:gtest_main",
+    ],
+)

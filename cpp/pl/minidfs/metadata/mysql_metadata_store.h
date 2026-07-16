@@ -54,6 +54,7 @@ public:
     pl::Result<BlockMeta> get_block(uint64_t block_id) override;
     pl::Result<std::vector<BlockMeta>> get_blocks_by_inode(uint64_t inode_id) override;
     pl::Result<pl::Void> create_block(const BlockMeta& block) override;
+    pl::Result<pl::Void> delete_block(uint64_t block_id) override;
     pl::Result<pl::Void> update_block(const BlockMeta& block) override;
     pl::Result<std::vector<BlockMeta>> get_blocks_by_state(BlockState state) override;
 
@@ -95,6 +96,8 @@ public:
                                      std::string_view request_id,
                                      std::string_view payload_json) override;
     pl::Result<bool> check_request_id(std::string_view request_id) override;
+    pl::Result<std::optional<OplogEntry>> get_oplog_by_request_id(
+        std::string_view request_id) override;
 
     /// Bind a connection to the current thread (used by transactions).
     /// While bound, all store operations use this connection instead of acquiring from pool.

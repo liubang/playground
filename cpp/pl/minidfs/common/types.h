@@ -139,11 +139,28 @@ struct Lease {
     uint64_t mtime_ms = 0;
 };
 
+struct OplogEntry {
+    std::string op_type;
+    uint64_t target_inode_id = 0;
+    std::string request_id;
+    std::string payload_json;
+};
+
 // Located Block (used in client-facing responses)
 struct DataNodeEndpoint {
     uint64_t datanode_id = 0;
     std::string host;
     uint32_t data_port = 0;
+};
+
+struct BlockToken {
+    uint64_t block_id = 0;
+    uint64_t generation_stamp = 0;
+    uint64_t inode_id = 0;
+    uint32_t block_index = 0;
+    uint32_t permissions = 0;
+    uint64_t expires_at_ms = 0;
+    std::string signature;
 };
 
 struct LocatedBlock {
@@ -152,6 +169,7 @@ struct LocatedBlock {
     uint64_t offset = 0;
     uint64_t length = 0;
     std::vector<DataNodeEndpoint> locations;
+    BlockToken block_token;
 };
 
 // File Status (used in list/stat responses)

@@ -383,6 +383,10 @@ pl::Result<pl::Void> NamespaceManager::rename(std::string_view src, std::string_
     if (dst_valid.hasError()) {
         return dst_valid;
     }
+    if (src == dst) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+                             "source and destination are identical");
+    }
 
     auto src_components = split_path(src);
     auto dst_components = split_path(dst);
@@ -408,6 +412,23 @@ pl::Result<pl::Void> NamespaceManager::rename(std::string_view src, std::string_
     auto dst_parent = walk_path(dst_parent_components);
     if (dst_parent.hasError()) {
         return folly::makeUnexpected(dst_parent.error());
+    }
+
+    if (src_inode.value().type == InodeType::kDirectory) {
+        // Prevent moving a directory into itself or one of its descendants.
+        uint64_t ancestor_id = dst_parent.value().inode_id;
+        while (ancestor_id != 0) {
+            if (ancestor_id == src_inode.value().inode_id) {
+                return pl::makeError(
+                    static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+                    "cannot move a directory into itself or its descendant");
+            }
+            auto ancestor = store_->get_inode(ancestor_id);
+            if (ancestor.hasError()) {
+                return folly::makeUnexpected(ancestor.error());
+            }
+            ancestor_id = ancestor.value().parent_id;
+        }
     }
 
     // Check destination doesn't already exist.

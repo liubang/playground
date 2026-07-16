@@ -21,6 +21,7 @@
 #include <fmt/format.h>
 #include <gflags/gflags.h>
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/common/error_code.h"
 #include "cpp/pl/minidfs/datanode/block_reporter.h"
 #include "cpp/pl/minidfs/datanode/data_transfer_service_impl.h"
@@ -40,6 +41,9 @@ DEFINE_string(rack, "/default-rack", "DataNode rack location");
 DEFINE_int32(heartbeat_interval_ms, 3000, "Heartbeat interval in milliseconds");
 DEFINE_int32(block_report_interval_ms, 600000, "Block report interval in milliseconds");
 DEFINE_int32(replication_threads, 4, "Number of replication worker threads");
+DEFINE_int64(tmp_cleanup_stale_after_ms,
+             static_cast<int64_t>(pl::minidfs::kDefaultTmpCleanupStaleAfterMs),
+             "Cleanup tmp block files older than this threshold at startup (0 means cleanup all)");
 
 namespace {
 
@@ -60,12 +64,17 @@ int main(int argc, char* argv[]) {
         LOG(FATAL) << "DataNode report intervals must be positive";
         return 1;
     }
+    if (FLAGS_tmp_cleanup_stale_after_ms < 0) {
+        LOG(FATAL) << "--tmp_cleanup_stale_after_ms must be >= 0";
+        return 1;
+    }
 
     std::string uuid = FLAGS_uuid.empty() ? generate_uuid() : FLAGS_uuid;
 
     // Initialize local block store
     pl::minidfs::LocalBlockStore::Config store_config{
         .storage_root = FLAGS_storage_root,
+        .tmp_cleanup_stale_after_ms = static_cast<uint64_t>(FLAGS_tmp_cleanup_stale_after_ms),
     };
     pl::minidfs::LocalBlockStore store(store_config);
     auto init_result = store.init();
@@ -132,6 +141,10 @@ int main(int argc, char* argv[]) {
             return pl::makeError(static_cast<pl::status_code_t>(pl::minidfs::ErrorCode::kRPCError),
                                  std::string(cntl.ErrorText()));
         }
+        if (resp.status().code() != 0) {
+            return pl::makeError(static_cast<pl::status_code_t>(resp.status().code()),
+                                 resp.status().message());
+        }
 
         std::vector<pl::minidfs::HeartbeatCommand> commands;
         for (const auto& cmd_proto : resp.commands()) {
@@ -143,6 +156,15 @@ int main(int argc, char* argv[]) {
             cmd.block_index = cmd_proto.block_index();
             cmd.target_host = cmd_proto.target_host();
             cmd.target_port = cmd_proto.target_port();
+            cmd.block_token = {
+                .block_id = cmd_proto.block_token().block_id(),
+                .generation_stamp = cmd_proto.block_token().generation_stamp(),
+                .inode_id = cmd_proto.block_token().inode_id(),
+                .block_index = cmd_proto.block_token().block_index(),
+                .permissions = cmd_proto.block_token().permissions(),
+                .expires_at_ms = cmd_proto.block_token().expires_at_ms(),
+                .signature = cmd_proto.block_token().signature(),
+            };
             commands.push_back(std::move(cmd));
         }
         return commands;
@@ -153,6 +175,7 @@ int main(int argc, char* argv[]) {
                                          uint64_t generation_stamp,
                                          uint64_t inode_id,
                                          uint32_t block_index,
+                                         const pl::minidfs::BlockToken& block_token,
                                          const std::string& data,
                                          const std::string& target_host,
                                          uint32_t target_port) -> pl::Result<pl::Void> {
@@ -174,6 +197,14 @@ int main(int argc, char* argv[]) {
         req.set_inode_id(inode_id);
         req.set_block_index(block_index);
         req.set_data(data);
+        auto* token = req.mutable_block_token();
+        token->set_block_id(block_token.block_id);
+        token->set_generation_stamp(block_token.generation_stamp);
+        token->set_inode_id(block_token.inode_id);
+        token->set_block_index(block_token.block_index);
+        token->set_permissions(block_token.permissions);
+        token->set_expires_at_ms(block_token.expires_at_ms);
+        token->set_signature(block_token.signature);
 
         pl::minidfs::protocol::TransferBlockResponse resp;
         brpc::Controller cntl;
@@ -204,6 +235,7 @@ int main(int argc, char* argv[]) {
             task.block_index = cmd.block_index;
             task.target_host = cmd.target_host;
             task.target_port = cmd.target_port;
+            task.block_token = cmd.block_token;
             switch (cmd.type) {
                 case pl::minidfs::CommandType::kReplicate:
                     task.kind = pl::minidfs::TaskKind::kCopy;
@@ -248,17 +280,24 @@ int main(int argc, char* argv[]) {
                                  std::string(cntl.ErrorText()));
         }
 
+        if (resp.status().code() != 0) {
+            return pl::makeError(static_cast<pl::status_code_t>(resp.status().code()),
+                                 resp.status().message());
+        }
+
         pl::minidfs::BlockReportResponse result;
-        for (uint64_t bid : resp.blocks_to_delete()) {
-            result.blocks_to_delete.push_back(bid);
+        for (const auto& deletion : resp.blocks_to_delete()) {
+            result.blocks_to_delete.push_back({
+                .block_id = deletion.block_id(),
+                .generation_stamp = deletion.generation_stamp(),
+            });
         }
         return result;
     };
 
     pl::minidfs::DeleteBlockFunc delete_func = [&store](uint64_t block_id,
-                                                        uint64_t generation_stamp) {
-        store.delete_block(block_id, generation_stamp);
-    };
+                                                        uint64_t generation_stamp)
+        -> pl::Result<pl::Void> { return store.delete_block(block_id, generation_stamp); };
 
     pl::minidfs::BlockReporter::Config br_config{
         .datanode_id = datanode_id,
@@ -267,7 +306,8 @@ int main(int argc, char* argv[]) {
     pl::minidfs::BlockReporter block_reporter(br_config, &store, report_func, delete_func);
 
     // Create data transfer service
-    pl::minidfs::DataTransferServiceImpl data_transfer_service(&store, &block_reporter);
+    std::string block_token_secret = pl::minidfs::default_block_token_secret();
+    pl::minidfs::DataTransferServiceImpl data_transfer_service(&store, &block_reporter, block_token_secret);
 
     // Start brpc server
     brpc::Server server;

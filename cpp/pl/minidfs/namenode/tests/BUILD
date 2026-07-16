@@ -119,8 +119,10 @@ cc_test(
         "//cpp/pl/minidfs/namenode:block_manager",
         "//cpp/pl/minidfs/namenode:datanode_manager",
         "//cpp/pl/minidfs/namenode:lease_manager",
+        "//cpp/pl/minidfs/namenode:namenode_service_impl",
         "//cpp/pl/minidfs/namenode:namespace_manager",
         "//cpp/pl/minidfs/namenode:placement_manager",
+        "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
         "@googletest//:gtest_main",
     ],
 )
