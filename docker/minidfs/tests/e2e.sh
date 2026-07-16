@@ -105,12 +105,50 @@ start_cluster() {
     wait_for "three registered DataNodes" three_datanodes_ready
 }
 
+ensure_work_dir() {
+    if [[ -z "$WORK_DIR" ]]; then
+        WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/minidfs-e2e.XXXXXX")"
+    fi
+}
+
 make_test_file() {
     local path="$1" size="$2"
-    dd if=/dev/zero of="$path" bs=1 count="$size" status=none
-    if ((size > 0)); then
-        printf '\x5a' | dd of="$path" bs=1 seek=$((size - 1)) conv=notrunc status=none
+    if ((size == 0)); then
+        : >"$path"
+        return
     fi
+    dd if=/dev/zero of="$path" bs="$size" count=1 status=none
+    printf '\x5a' | dd of="$path" bs=1 seek=$((size - 1)) conv=notrunc status=none
+}
+
+work_file_visible_with_size() {
+    local path="$1" expected_size="$2"
+    compose run --rm -T --no-deps -v "$WORK_DIR:/work" --entrypoint sh cli \
+        -c '[ "$(wc -c <"$1")" = "$2" ]' sh "$path" "$expected_size" \
+        >/dev/null 2>&1
+}
+
+wait_for_work_file() {
+    local path="$1" expected_size="$2"
+    wait_for "$path to be fully visible in Docker ($expected_size bytes)" \
+        work_file_visible_with_size "$path" "$expected_size"
+}
+
+assert_three_finalized_replicas() {
+    local block_id="$1" detail node
+    detail="$(cli block "$block_id")"
+    grep -q 'Replicas:' <<<"$detail"
+    [[ "$(grep -c 'finalized' <<<"$detail")" -eq 3 ]]
+    for node in datanode1 datanode2 datanode3; do
+        grep -q "$node" <<<"$detail"
+    done
+}
+
+datanode1_replica_finalized() {
+    local block_id="$1" detail row
+    detail="$(cli block "$block_id" 2>/dev/null)" || return 1
+    row="$(grep 'datanode1' <<<"$detail")"
+    [[ "$row" == *finalized* ]]
 }
 
 assert_before() {
@@ -131,7 +169,7 @@ run_api_tests() {
 }
 
 run_tests() {
-    WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/minidfs-e2e.XXXXXX")"
+    ensure_work_dir
     local block_size=1048576
     local -a size_cases=(
         "empty:0"
@@ -147,6 +185,7 @@ run_tests() {
         case_name="${case_spec%%:*}"
         case_size="${case_spec##*:}"
         make_test_file "$WORK_DIR/$case_name.bin" "$case_size"
+        wait_for_work_file "/work/$case_name.bin" "$case_size"
     done
     printf 'appended payload\n' >"$WORK_DIR/append.txt"
     printf 'replacement\n' >"$WORK_DIR/replacement.txt"
@@ -253,8 +292,75 @@ run_tests() {
     run_api_tests
 }
 
+run_recovery_test() {
+    ensure_work_dir
+    local target_path=/e2e-recovery/three-replica.bin
+    local source_file="$WORK_DIR/recovery-source.bin"
+    local download_file="$WORK_DIR/recovery-download.bin"
+    local blocks_output block_id block_detail_before datanodes
+    local datanode1_id datanode1_row_before block_id_csv
+    local -a block_ids=()
+
+    log "Testing finalized-block persistence and startup block reporting across a DataNode restart"
+    if cli stat /e2e-recovery >/dev/null 2>&1; then
+        cli -- rm -r /e2e-recovery
+    fi
+    local source_size=$((1048576 + 4097))
+    make_test_file "$source_file" "$source_size"
+    wait_for_work_file /work/recovery-source.bin "$source_size"
+    cli mkdir /e2e-recovery
+    cli --block_size=1048576 --replication=3 put /work/recovery-source.bin "$target_path"
+    cli get "$target_path" /work/recovery-download.bin
+    cmp "$source_file" "$download_file"
+
+    blocks_output="$(cli blocks "$target_path")"
+    while IFS= read -r block_id; do
+        [[ -n "$block_id" ]] && block_ids+=("$block_id")
+    done < <(awk '$1 ~ /^[0-9]+$/ {print $1}' <<<"$blocks_output")
+    [[ "${#block_ids[@]}" -eq 2 ]]
+    for block_id in "${block_ids[@]}"; do
+        assert_three_finalized_replicas "$block_id"
+    done
+
+    block_detail_before="$(cli block "${block_ids[0]}")"
+    datanode1_row_before="$(grep 'datanode1' <<<"$block_detail_before")"
+    [[ -n "$datanode1_row_before" ]]
+    datanodes="$(cli datanodes)"
+    datanode1_id="$(awk '$2 == "datanode1" {print $1; exit}' <<<"$datanodes")"
+    [[ "$datanode1_id" =~ ^[0-9]+$ ]]
+    block_id_csv="$(IFS=,; echo "${block_ids[*]}")"
+
+    log "Stopping and starting datanode1 while preserving its named volume"
+    compose stop datanode1
+    # Fault-inject stale metadata only; the finalized block files in the named volume remain intact.
+    # The startup full block report must reconcile these replicas back to finalized.
+    compose exec -T mysql sh -c \
+        'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" minidfs -e "$1"' -- \
+        "UPDATE block_replicas SET state=3 WHERE datanode_id=$datanode1_id AND block_id IN ($block_id_csv)"
+    grep -q 'stale' <<<"$(cli block "${block_ids[0]}")"
+    compose start datanode1
+    wait_for "datanode1 to become healthy after restart" service_healthy datanode1
+    wait_for "three registered DataNodes after datanode1 restart" three_datanodes_ready
+
+    wait_for "datanode1 startup block report to reconcile its replica" \
+        datanode1_replica_finalized "${block_ids[0]}"
+    cli get "$target_path" /work/recovery-download.bin
+    cmp "$source_file" "$download_file"
+    for block_id in "${block_ids[@]}"; do
+        wait_for "three finalized replicas for block $block_id" \
+            assert_three_finalized_replicas "$block_id"
+    done
+
+    # There is no public CLI/RPC that leaves an allocated write in progress and retries that
+    # exact write session. Copying or editing a block file would only forge the binary format,
+    # so tmp quarantine/resume remains covered by LocalBlockStore fault-injection unit tests.
+    log "Tmp-block quarantine/resume is covered by the LocalBlockStore fault-injection unit tests"
+    cli -- rm -r /e2e-recovery
+    log "DataNode restart, finalized-block persistence, and startup block-report assertions passed"
+}
+
 usage() {
-    echo "Usage: $0 {all|build|start|test|api-test|down|reset}"
+    echo "Usage: $0 {all|build|start|test|api-test|recovery-test|down|reset}"
 }
 
 main() {
@@ -265,11 +371,13 @@ main() {
             build_and_test
             start_cluster
             run_tests
+            run_recovery_test
             ;;
         build) build_and_test ;;
         start) start_cluster ;;
         test) run_tests ;;
         api-test) run_api_tests ;;
+        recovery-test) run_recovery_test ;;
         down) compose down ;;
         reset) compose down -v --remove-orphans ;;
         *) usage; exit 2 ;;
