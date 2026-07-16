@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS blocks (
     desired_replica INT UNSIGNED NOT NULL DEFAULT 3,
     ctime_ms        BIGINT UNSIGNED NOT NULL DEFAULT 0,
     mtime_ms        BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_inode_block_index (inode_id, block_index),
     KEY idx_inode (inode_id, block_index),
     KEY idx_state (state)
 ) ENGINE=InnoDB;

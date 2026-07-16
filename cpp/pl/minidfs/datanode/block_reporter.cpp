@@ -138,12 +138,17 @@ void BlockReporter::notify_block_deleted(uint64_t block_id) {
 }
 
 void BlockReporter::process_response(const BlockReportResponse& response) {
-    for (uint64_t block_id : response.blocks_to_delete) {
-        if (delete_func_) {
-            // We don't have the generation_stamp from the response here,
-            // so the delete_func should handle lookup by block_id.
-            delete_func_(block_id, 0);
+    for (const auto& cmd : response.blocks_to_delete) {
+        if (!delete_func_) {
+            continue;
         }
+        auto deleted = delete_func_(cmd.block_id, cmd.generation_stamp);
+        if (deleted.hasError()) {
+            LOG(WARNING) << "failed to apply NN delete command for block " << cmd.block_id << ":"
+                         << cmd.generation_stamp << ": " << deleted.error().describe();
+            continue;
+        }
+        notify_block_deleted(cmd.block_id);
     }
 }
 

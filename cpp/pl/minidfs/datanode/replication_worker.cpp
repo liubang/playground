@@ -108,6 +108,7 @@ void ReplicationWorker::execute_copy(const DataNodeTask& task) {
                                   task.generation_stamp,
                                   task.inode_id,
                                   task.block_index,
+                                  task.block_token,
                                   data_result.value(),
                                   task.target_host,
                                   task.target_port);

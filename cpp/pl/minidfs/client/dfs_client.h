@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <brpc/channel.h>
 #include <cstdint>
 #include <memory>
@@ -202,9 +203,13 @@ private:
     /// Read one block from a DataNode.
     [[nodiscard]] Result<std::string> read_block(const LocatedBlock& block);
 
+    /// Generate a stable per-logical-call request ID.
+    [[nodiscard]] std::string next_request_id();
+
 private:
     DfsClientConfig config_;
     brpc::Channel namenode_channel_;
+    std::atomic<uint64_t> request_seq_{0};
 };
 
 } // namespace pl::minidfs
