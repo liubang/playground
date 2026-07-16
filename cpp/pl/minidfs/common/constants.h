@@ -45,6 +45,7 @@ inline constexpr uint64_t kDefaultHeartbeatIntervalMs = 3000;
 inline constexpr uint64_t kDefaultStaleTimeoutMs = 30000;
 inline constexpr uint64_t kDefaultDeadTimeoutMs = 600000;
 inline constexpr uint64_t kDefaultBlockReportIntervalMs = 600000;
+inline constexpr uint64_t kDefaultTmpCleanupStaleAfterMs = 30 * 60 * 1000;
 
 // Replication
 inline constexpr uint64_t kDefaultReplicationScanIntervalMs = 30000;

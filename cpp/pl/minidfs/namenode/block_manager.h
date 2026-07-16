@@ -21,6 +21,7 @@
 #include <functional>
 #include <vector>
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/common/types.h"
 #include "cpp/pl/minidfs/metadata/metadata_store.h"
 #include "cpp/pl/status/result.h"
@@ -49,7 +50,7 @@ using TruncateReplicaFunc =
 
 class BlockManager {
 public:
-    BlockManager(MetadataStore* store, PlacementManager* placement);
+    BlockManager(MetadataStore* store, PlacementManager* placement, std::string token_secret);
     ~BlockManager() = default;
 
     BlockManager(const BlockManager&) = delete;
@@ -103,9 +104,15 @@ public:
 
 private:
     pl::Result<pl::Void> invalidate_block(BlockMeta* block);
+    protocol::BlockTokenProto issue_block_token(uint64_t block_id,
+                                                uint64_t generation_stamp,
+                                                uint64_t inode_id,
+                                                uint32_t block_index,
+                                                uint32_t permissions) const;
 
     MetadataStore* store_;
     PlacementManager* placement_;
+    std::string token_secret_;
 };
 
 } // namespace pl::minidfs

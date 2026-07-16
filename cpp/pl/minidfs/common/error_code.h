@@ -61,6 +61,7 @@ enum class ErrorCode : uint16_t {
     kChecksumMismatch = 3004,
     kBlockAlreadyCommitted = 3005,
     kInsufficientReplicas = 3006,
+    kInvalidBlockToken = 3007,
 
     // MySQL errors
     kMySQLError = 4000,
@@ -129,6 +130,8 @@ constexpr std::string_view error_code_name(ErrorCode code) {
             return "BlockAlreadyCommitted";
         case ErrorCode::kInsufficientReplicas:
             return "InsufficientReplicas";
+        case ErrorCode::kInvalidBlockToken:
+            return "InvalidBlockToken";
         case ErrorCode::kMySQLError:
             return "MySQLError";
         case ErrorCode::kMySQLConnectFailed:

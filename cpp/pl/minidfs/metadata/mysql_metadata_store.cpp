@@ -532,6 +532,25 @@ pl::Result<pl::Void> MySQLMetadataStore::create_block(const BlockMeta& block) {
     return pl::Void{};
 }
 
+pl::Result<pl::Void> MySQLMetadataStore::delete_block(uint64_t block_id) {
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
+    }
+    auto* conn = get_active_conn(owned);
+
+    auto sql = fmt::format("DELETE FROM blocks WHERE block_id = {}", block_id);
+    auto res = conn->execute(sql);
+    if (res.hasError()) {
+        return folly::makeUnexpected(res.error());
+    }
+    return pl::Void{};
+}
+
 pl::Result<pl::Void> MySQLMetadataStore::update_block(const BlockMeta& block) {
     PooledConnection owned;
     if (!bound_conn_) {
@@ -1135,6 +1154,41 @@ pl::Result<pl::Void> MySQLMetadataStore::write_oplog(std::string_view op_type,
         return folly::makeUnexpected(res.error());
     }
     return pl::Void{};
+}
+
+pl::Result<std::optional<OplogEntry>> MySQLMetadataStore::get_oplog_by_request_id(
+    std::string_view request_id) {
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
+    }
+    auto* conn = get_active_conn(owned);
+
+    auto sql =
+        fmt::format("SELECT op_type, target_inode_id, request_id, payload_json "
+                    "FROM op_log WHERE request_id = '{}' LIMIT 1",
+                    escape_sql(request_id));
+
+    auto res = conn->execute(sql);
+    if (res.hasError()) {
+        return folly::makeUnexpected(res.error());
+    }
+
+    auto rows = res.value().rows();
+    if (rows.empty()) {
+        return std::optional<OplogEntry>(std::nullopt);
+    }
+
+    OplogEntry entry;
+    entry.op_type = to_str(rows[0][0]);
+    entry.target_inode_id = to_u64(rows[0][1]);
+    entry.request_id = to_str(rows[0][2]);
+    entry.payload_json = to_str(rows[0][3]);
+    return std::optional<OplogEntry>(std::move(entry));
 }
 
 pl::Result<bool> MySQLMetadataStore::check_request_id(std::string_view request_id) {

@@ -389,5 +389,59 @@ TEST_F(LocalBlockStoreTest, FullLifecycle) {
     EXPECT_EQ(purge.value(), 1u);
 }
 
+// cleanup_stale_tmp_blocks tests
+TEST_F(LocalBlockStoreTest, CleanupStaleTmpBlocks) {
+    // Create a block in tmp/ but do NOT finalize it
+    store_->create_block(1200, 1, 0, 16000);
+    EXPECT_TRUE(fs::exists(test_dir_ / "tmp" / "blk_1200_16000.blk"));
+
+    // Create a second store with a very short stale threshold
+    LocalBlockStore::Config cfg;
+    cfg.storage_root = test_dir_.string();
+    cfg.reserved_bytes = 0;
+    cfg.tmp_cleanup_stale_after_ms = 0; // 0 means clean up all tmp blocks
+    LocalBlockStore stale_store(std::move(cfg));
+    auto init_result = stale_store.init();
+    ASSERT_TRUE(init_result.hasValue()) << "init failed";
+
+    // The stale tmp block should have been cleaned up during init
+    EXPECT_FALSE(fs::exists(test_dir_ / "tmp" / "blk_1200_16000.blk"));
+}
+
+TEST_F(LocalBlockStoreTest, CleanupRespectsExclusion) {
+    store_->create_block(1201, 1, 0, 16001);
+    EXPECT_TRUE(fs::exists(test_dir_ / "tmp" / "blk_1201_16001.blk"));
+
+    LocalBlockStore::Config cfg;
+    cfg.storage_root = test_dir_.string();
+    cfg.reserved_bytes = 0;
+    cfg.tmp_cleanup_stale_after_ms = 0; // 0 means clean up all tmp blocks
+    LocalBlockStore stale_store(std::move(cfg));
+    auto init_result = stale_store.init(/*active_tmp_block=*/std::make_pair(1201ULL, 16001ULL));
+    ASSERT_TRUE(init_result.hasValue());
+
+    // The excluded block should NOT have been removed
+    EXPECT_TRUE(fs::exists(test_dir_ / "tmp" / "blk_1201_16001.blk"));
+}
+
+TEST_F(LocalBlockStoreTest, CleanupSkipsFreshBlocks) {
+    // Create a store with a very long stale threshold
+    LocalBlockStore::Config cfg;
+    cfg.storage_root = test_dir_.string();
+    cfg.reserved_bytes = 0;
+    cfg.tmp_cleanup_stale_after_ms = 3600000; // 1 hour — nothing is stale
+    LocalBlockStore fresh_store(std::move(cfg));
+    auto init_result = fresh_store.init();
+    ASSERT_TRUE(init_result.hasValue());
+
+    fresh_store.create_block(1202, 1, 0, 16002);
+    EXPECT_TRUE(fs::exists(test_dir_ / "tmp" / "blk_1202_16002.blk"));
+
+    // Re-init: the fresh block should still be there
+    auto reinit = fresh_store.init();
+    ASSERT_TRUE(reinit.hasValue());
+    EXPECT_TRUE(fs::exists(test_dir_ / "tmp" / "blk_1202_16002.blk"));
+}
+
 } // namespace
 } // namespace pl::minidfs

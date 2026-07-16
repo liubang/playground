@@ -63,7 +63,8 @@ public:
                        google::protobuf::Closure* done) override {
         brpc::ClosureGuard guard(done);
         allocated_indices.push_back(request->block_index());
-        allocated_client_ids.push_back(request->client_id());
+        allocated_client_ids.push_back(request->header().client_id());
+        allocated_request_ids.push_back(request->header().request_id());
 
         response->mutable_status()->set_code(0);
         auto* block = response->mutable_block();
@@ -106,6 +107,7 @@ public:
 
     std::vector<uint32_t> allocated_indices;
     std::vector<std::string> allocated_client_ids;
+    std::vector<std::string> allocated_request_ids;
     std::vector<std::string> renewed_client_ids;
     std::vector<std::string> completed_client_ids;
     std::vector<uint64_t> committed_lengths;
@@ -189,6 +191,9 @@ TEST_F(DfsOutputStreamTest, WritesMultipleBlocksAndCompletes) {
     EXPECT_TRUE(stream.value().closed());
     EXPECT_EQ(stream.value().bytes_written(), 8u);
     EXPECT_EQ(namenode_.allocated_indices, (std::vector<uint32_t>{0, 1}));
+    EXPECT_EQ(namenode_.allocated_client_ids, (std::vector<std::string>{"client-a", "client-a"}));
+    ASSERT_EQ(namenode_.allocated_request_ids.size(), 2u);
+    EXPECT_NE(namenode_.allocated_request_ids[0], namenode_.allocated_request_ids[1]);
     EXPECT_EQ(namenode_.committed_lengths, (std::vector<uint64_t>{5, 3}));
     EXPECT_EQ(namenode_.renew_count, 2u);
     EXPECT_EQ(namenode_.complete_count, 1u);
@@ -212,6 +217,7 @@ TEST_F(DfsOutputStreamTest, AppendStartsAtRequestedBlockIndex) {
     ASSERT_TRUE(stream.value().close().hasValue());
 
     EXPECT_EQ(namenode_.allocated_indices, (std::vector<uint32_t>{3}));
+    EXPECT_EQ(namenode_.allocated_client_ids, (std::vector<std::string>{"client-a"}));
     EXPECT_EQ(namenode_.committed_lengths, (std::vector<uint64_t>{2}));
     EXPECT_EQ(datanode_.blocks.at(1003), "xy");
 }
