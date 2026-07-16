@@ -17,6 +17,9 @@
 
 #pragma once
 
+#include <string>
+
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/datanode/block_reporter.h"
 #include "cpp/pl/minidfs/datanode/local_block_store.h"
 #include "cpp/pl/minidfs/datanode/pipeline_receiver.h"
@@ -26,9 +29,12 @@ namespace pl::minidfs {
 
 // DataTransferServiceImpl — brpc service for DN-to-DN block transfers.
 // Handles WriteBlock (pipeline write) and TransferBlock (full-block replication).
+// All data-plane operations require a valid block token signed by the NameNode.
 class DataTransferServiceImpl : public protocol::DataTransferService {
 public:
-    DataTransferServiceImpl(LocalBlockStore* store, BlockReporter* reporter);
+    DataTransferServiceImpl(LocalBlockStore* store,
+                            BlockReporter* reporter,
+                            std::string block_token_secret);
     ~DataTransferServiceImpl() override = default;
 
     void WriteBlock(google::protobuf::RpcController* controller,
@@ -54,8 +60,14 @@ public:
 private:
     static void fill_status(protocol::StatusProto* proto, uint32_t code, std::string_view msg = {});
 
+    bool authorize_token(const protocol::BlockTokenProto& token,
+                         BlockTokenPermission required_permission,
+                         uint64_t expected_block_id,
+                         uint64_t expected_generation_stamp) const;
+
     LocalBlockStore* store_;
     BlockReporter* reporter_;
+    std::string block_token_secret_;
 };
 
 } // namespace pl::minidfs

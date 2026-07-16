@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "cpp/pl/minidfs/common/constants.h"
+#include "cpp/pl/minidfs/common/types.h"
 #include "cpp/pl/minidfs/datanode/local_block_store.h"
 #include "cpp/pl/status/result.h"
 
@@ -46,6 +47,7 @@ struct HeartbeatCommand {
     uint32_t block_index = 0;
     std::string target_host; // For replication: destination DN
     uint32_t target_port = 0;
+    BlockToken block_token;
 };
 
 // HeartbeatSender — periodically sends heartbeats to the NameNode.

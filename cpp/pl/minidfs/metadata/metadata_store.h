@@ -103,6 +103,9 @@ public:
     /// Create a new block metadata entry.
     virtual pl::Result<pl::Void> create_block(const BlockMeta& block) = 0;
 
+    /// Delete a block metadata entry by block_id.
+    virtual pl::Result<pl::Void> delete_block(uint64_t block_id) = 0;
+
     /// Update an existing block metadata entry (matched by block_id).
     virtual pl::Result<pl::Void> update_block(const BlockMeta& block) = 0;
 
@@ -182,6 +185,10 @@ public:
 
     /// Check if a request_id has already been processed (for idempotency).
     virtual pl::Result<bool> check_request_id(std::string_view request_id) = 0;
+
+    /// Fetch oplog entry by request_id. Returns nullopt when not found.
+    virtual pl::Result<std::optional<OplogEntry>> get_oplog_by_request_id(
+        std::string_view request_id) = 0;
 
     // Lifecycle
     MetadataStore(const MetadataStore&) = delete;
