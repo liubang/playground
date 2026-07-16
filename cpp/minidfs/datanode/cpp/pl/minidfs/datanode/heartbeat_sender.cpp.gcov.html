@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">39</td>
-            <td class="headerCovTableEntry">39</td>
+            <td class="headerCovTableEntry">40</td>
+            <td class="headerCovTableEntry">40</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-16 00:59:18</td>
+            <td class="headerValue">2026-07-16 08:17:52</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -143,31 +143,33 @@
 <span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">           2 :         return pl::makeError(std::move(result.error()));</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :             :     }</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : </span>
-<span id="L73"><span class="lineNum">      73</span>                 :             :     // Dispatch received commands</span>
-<span id="L74"><span class="lineNum">      74</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           9 :     for (const auto&amp; cmd : result.value()) {</span></span>
-<span id="L75"><span class="lineNum">      75</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           3 :         if (cmd.type != CommandType::kNone &amp;&amp; command_handler_) {</span></span>
-<span id="L76"><span class="lineNum">      76</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             command_handler_(cmd);</span></span>
-<span id="L77"><span class="lineNum">      77</span>                 :             :         }</span>
-<span id="L78"><span class="lineNum">      78</span>                 :             :     }</span>
-<span id="L79"><span class="lineNum">      79</span>                 :             : </span>
-<span id="L80"><span class="lineNum">      80</span>                 :             :     return std::move(result.value());</span>
-<span id="L81"><span class="lineNum">      81</span>                 :             : }</span>
-<span id="L82"><span class="lineNum">      82</span>                 :             : </span>
-<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">           2 : void HeartbeatSender::run_loop() {</span></span>
-<span id="L84"><span class="lineNum">      84</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           5 :     while (running_.load(std::memory_order_relaxed)) {</span></span>
-<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">           6 :         send_once(); // Ignore errors in background loop; logged inside send_once.</span></span>
-<span id="L86"><span class="lineNum">      86</span>                 :             : </span>
-<span id="L87"><span class="lineNum">      87</span>                 :             :         // Sleep with periodic wake-up check for faster shutdown</span>
-<span id="L88"><span class="lineNum">      88</span>                 :             :         auto deadline =</span>
-<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">           3 :             std::chrono::steady_clock::now() + std::chrono::milliseconds(config_.interval_ms);</span></span>
-<span id="L90"><span class="lineNum">      90</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">          10 :         while (running_.load(std::memory_order_relaxed) &amp;&amp;</span></span>
-<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">          10 :                std::chrono::steady_clock::now() &lt; deadline) {</span></span>
-<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">           3 :             std::this_thread::sleep_for(std::chrono::milliseconds(100));</span></span>
-<span id="L93"><span class="lineNum">      93</span>                 :             :         }</span>
-<span id="L94"><span class="lineNum">      94</span>                 :             :     }</span>
-<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">           2 : }</span></span>
-<span id="L96"><span class="lineNum">      96</span>                 :             : </span>
-<span id="L97"><span class="lineNum">      97</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             :     auto commands = std::move(result.value());</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :     // Dispatch received commands</span>
+<span id="L76"><span class="lineNum">      76</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           9 :     for (const auto&amp; cmd : commands) {</span></span>
+<span id="L77"><span class="lineNum">      77</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           3 :         if (cmd.type != CommandType::kNone &amp;&amp; command_handler_) {</span></span>
+<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             command_handler_(cmd);</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :         }</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :     }</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : </span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :     return commands;</span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">           6 : }</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :             : </span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">           2 : void HeartbeatSender::run_loop() {</span></span>
+<span id="L86"><span class="lineNum">      86</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           5 :     while (running_.load(std::memory_order_relaxed)) {</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">           6 :         send_once(); // Ignore errors in background loop; logged inside send_once.</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :             : </span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :         // Sleep with periodic wake-up check for faster shutdown</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :         auto deadline =</span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">           3 :             std::chrono::steady_clock::now() + std::chrono::milliseconds(config_.interval_ms);</span></span>
+<span id="L92"><span class="lineNum">      92</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">          10 :         while (running_.load(std::memory_order_relaxed) &amp;&amp;</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          10 :                std::chrono::steady_clock::now() &lt; deadline) {</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">           3 :             std::this_thread::sleep_for(std::chrono::milliseconds(100));</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :         }</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :     }</span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">           2 : }</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :             : </span>
+<span id="L99"><span class="lineNum">      99</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>
