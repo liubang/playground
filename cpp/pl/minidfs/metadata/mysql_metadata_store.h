@@ -99,12 +99,15 @@ public:
     pl::Result<std::optional<OplogEntry>> get_oplog_by_request_id(
         std::string_view request_id) override;
 
+    /// Whether this store already owns the transaction connection on this thread.
+    [[nodiscard]] bool has_active_transaction() const;
+
     /// Bind a connection to the current thread (used by transactions).
     /// While bound, all store operations use this connection instead of acquiring from pool.
     void bind_connection(PooledConnection* conn);
 
-    /// Unbind the thread-local connection.
-    void unbind_connection();
+    /// Unbind only the connection owned by the transaction being destroyed.
+    void unbind_connection(PooledConnection* conn);
 
 private:
     explicit MySQLMetadataStore(std::shared_ptr<MySQLConnectionPool> pool);
@@ -112,11 +115,18 @@ private:
     /// Acquire a fresh connection from pool (when not in a transaction).
     pl::Result<PooledConnection> acquire_connection();
 
+    /// Return this store's transaction connection, if one is bound on this thread.
+    PooledConnection* active_bound_connection();
+
     /// Get the connection to use: bound (in-transaction) or the owned one.
     PooledConnection* get_active_conn(PooledConnection& owned);
 
     std::shared_ptr<MySQLConnectionPool> pool_;
-    static thread_local PooledConnection* bound_conn_;
+    struct ConnectionBinding {
+        MySQLMetadataStore* store = nullptr;
+        PooledConnection* connection = nullptr;
+    };
+    static thread_local ConnectionBinding binding_;
 };
 
 } // namespace pl::minidfs

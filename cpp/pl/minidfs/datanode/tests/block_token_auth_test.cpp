@@ -24,7 +24,9 @@
 #include <brpc/server.h>
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <string>
 
 #include "cpp/pl/minidfs/common/block_token.h"
@@ -331,6 +333,33 @@ TEST_F(BlockTokenAuthTest, WriteBlockWithValidTokenSucceeds) {
     EXPECT_EQ(resp.ack_status(), static_cast<uint32_t>(AckStatus::kSuccess));
 }
 
+TEST_F(BlockTokenAuthTest, WriteBlockRejectsTokenBoundToDifferentInodeOrIndex) {
+    auto token = issue_token(kBlockTokenPermissionWrite);
+
+    protocol::WriteBlockRequest req;
+    req.set_block_id(kBlockId);
+    req.set_inode_id(kInodeId + 1);
+    req.set_block_index(kBlockIndex);
+    req.set_generation_stamp(kGenerationStamp);
+    req.set_data("hello");
+    req.set_chunk_index(0);
+    req.set_checksum(compute_crc32c("hello", 5));
+    req.set_is_last_chunk(true);
+    *req.mutable_block_token() = token;
+
+    brpc::Controller cntl;
+    protocol::WriteBlockResponse resp;
+    stub_->WriteBlock(&cntl, &req, &resp, nullptr);
+    EXPECT_EQ(resp.status().code(), static_cast<uint32_t>(ErrorCode::kInvalidBlockToken));
+
+    req.set_inode_id(kInodeId);
+    req.set_block_index(kBlockIndex + 1);
+    resp.Clear();
+    cntl.Reset();
+    stub_->WriteBlock(&cntl, &req, &resp, nullptr);
+    EXPECT_EQ(resp.status().code(), static_cast<uint32_t>(ErrorCode::kInvalidBlockToken));
+}
+
 TEST_F(BlockTokenAuthTest, WriteBlockWithoutTokenFails) {
     brpc::Controller cntl;
     protocol::WriteBlockRequest req;
@@ -392,6 +421,30 @@ TEST_F(BlockTokenAuthTest, TransferBlockWithValidTokenSucceeds) {
 
     ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
     EXPECT_EQ(resp.status().code(), 0);
+}
+
+TEST_F(BlockTokenAuthTest, TransferBlockRejectsTokenBoundToDifferentInodeOrIndex) {
+    auto token = issue_token(kBlockTokenPermissionTransfer);
+
+    protocol::TransferBlockRequest req;
+    req.set_block_id(kBlockId);
+    req.set_generation_stamp(kGenerationStamp);
+    req.set_inode_id(kInodeId + 1);
+    req.set_block_index(kBlockIndex);
+    req.set_data("transfer data");
+    *req.mutable_block_token() = token;
+
+    brpc::Controller cntl;
+    protocol::TransferBlockResponse resp;
+    stub_->TransferBlock(&cntl, &req, &resp, nullptr);
+    EXPECT_EQ(resp.status().code(), static_cast<uint32_t>(ErrorCode::kInvalidBlockToken));
+
+    req.set_inode_id(kInodeId);
+    req.set_block_index(kBlockIndex + 1);
+    resp.Clear();
+    cntl.Reset();
+    stub_->TransferBlock(&cntl, &req, &resp, nullptr);
+    EXPECT_EQ(resp.status().code(), static_cast<uint32_t>(ErrorCode::kInvalidBlockToken));
 }
 
 TEST_F(BlockTokenAuthTest, TransferBlockWithoutTokenFails) {
@@ -503,6 +556,32 @@ TEST_F(BlockTokenAuthTest, TruncateBlockWithReadTokenFails) {
 }
 
 // ========== Block Token Primitive Tests ==========
+
+TEST(BlockTokenPrimitiveTest, RefreshesExpiredAndNearlyExpiredTokens) {
+    protocol::BlockTokenProto token;
+    token.set_expires_at_ms(2000);
+    EXPECT_TRUE(block_token_needs_refresh(token, 2000, 100));
+    EXPECT_TRUE(block_token_needs_refresh(token, 1950, 100));
+    EXPECT_FALSE(block_token_needs_refresh(token, 1800, 100));
+}
+
+TEST(BlockTokenPrimitiveTest, RequiresExplicitConfiguredSecret) {
+    EXPECT_EQ(configured_block_token_secret("explicit-secret"), "explicit-secret");
+
+    const char* original = std::getenv("MINIDFS_BLOCK_TOKEN_SECRET");
+    const std::optional<std::string> saved = original == nullptr
+                                                 ? std::nullopt
+                                                 : std::optional<std::string>(original);
+    ASSERT_EQ(setenv("MINIDFS_BLOCK_TOKEN_SECRET", "environment-secret", 1), 0);
+    EXPECT_EQ(configured_block_token_secret(), "environment-secret");
+    if (saved.has_value()) {
+        ASSERT_EQ(setenv("MINIDFS_BLOCK_TOKEN_SECRET", saved->c_str(), 1), 0);
+    } else {
+        ASSERT_EQ(unsetenv("MINIDFS_BLOCK_TOKEN_SECRET"), 0);
+        EXPECT_TRUE(configured_block_token_secret().empty());
+    }
+    EXPECT_EQ(configured_block_token_secret("explicit-secret"), "explicit-secret");
+}
 
 TEST(BlockTokenPrimitiveTest, ConstantTimeEqualsRejectsDifferentLengths) {
     EXPECT_FALSE(constant_time_equals("abc", "abcd"));

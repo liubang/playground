@@ -50,17 +50,27 @@ using TruncateReplicaFunc =
 
 class BlockManager {
 public:
-    BlockManager(MetadataStore* store, PlacementManager* placement, std::string token_secret);
+    BlockManager(MetadataStore* store,
+                 PlacementManager* placement,
+                 std::string token_secret,
+                 uint64_t block_token_ttl_ms = default_block_token_ttl_ms());
     ~BlockManager() = default;
 
     BlockManager(const BlockManager&) = delete;
     BlockManager& operator=(const BlockManager&) = delete;
 
-    /// Allocate a new block for an inode. Selects datanodes via PlacementManager.
+    /// Allocate a new block for an inode. Owns and commits a transaction.
     /// Returns the allocated LocatedBlock with target datanode locations.
     pl::Result<LocatedBlock> allocate_block(uint64_t inode_id,
                                             uint32_t block_index,
                                             uint32_t replication);
+
+    /// Allocate a block using the caller's active transaction. The caller must
+    /// commit only after any accompanying metadata (for example, an oplog row)
+    /// has been written successfully.
+    pl::Result<LocatedBlock> allocate_block_in_transaction(uint64_t inode_id,
+                                                           uint32_t block_index,
+                                                           uint32_t replication);
 
     /// Commit a block after successful write. Updates length and state.
     pl::Result<pl::Void> commit_block(uint64_t block_id,
@@ -113,6 +123,7 @@ private:
     MetadataStore* store_;
     PlacementManager* placement_;
     std::string token_secret_;
+    uint64_t block_token_ttl_ms_;
 };
 
 } // namespace pl::minidfs

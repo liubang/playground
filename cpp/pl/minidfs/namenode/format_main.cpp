@@ -173,7 +173,6 @@ int main(int argc, char* argv[]) {
             ++executed;
         }
     }
-
     std::cout << "\n";
     std::cout << "Format complete:\n";
     std::cout << "  Statements executed: " << executed << "\n";

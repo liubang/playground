@@ -14,6 +14,7 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -57,6 +58,7 @@ protected:
 // init tests
 TEST_F(LocalBlockStoreTest, InitCreatesDirectories) {
     EXPECT_TRUE(fs::exists(test_dir_ / "tmp"));
+    EXPECT_TRUE(fs::exists(test_dir_ / "recovery"));
     EXPECT_TRUE(fs::exists(test_dir_ / "current"));
     EXPECT_TRUE(fs::exists(test_dir_ / "trash"));
 }
@@ -117,6 +119,36 @@ TEST_F(LocalBlockStoreTest, AppendChunkToNonexistent) {
     EXPECT_TRUE(result.hasError());
 }
 
+TEST_F(LocalBlockStoreTest, AppendSyncFailurePersistsRollback) {
+    store_.reset();
+    bool fail_append_sync = true;
+    LocalBlockStore::Config cfg;
+    cfg.storage_root = test_dir_.string();
+    cfg.reserved_bytes = 0;
+    cfg.sync_failure_injector = [&fail_append_sync](std::string_view operation) {
+        if (operation == "append_file" && fail_append_sync) {
+            fail_append_sync = false;
+            return true;
+        }
+        return false;
+    };
+    store_ = std::make_unique<LocalBlockStore>(std::move(cfg));
+    ASSERT_TRUE(store_->init().hasValue());
+    ASSERT_TRUE(store_->create_block(202, 1, 0, 6002).hasValue());
+
+    std::string data = "durable rollback";
+    EXPECT_TRUE(store_->append_chunk(202, 6002, data.data(), data.size(), 0).hasError());
+    EXPECT_EQ(fs::file_size(test_dir_ / "tmp" / "blk_202_6002.blk"), kBlockHeaderSize);
+
+    auto retry = store_->append_chunk(202, 6002, data.data(), data.size(), 0);
+    ASSERT_TRUE(retry.hasValue());
+    EXPECT_EQ(retry.value(), data.size());
+    ASSERT_TRUE(store_->finalize_block(202, 6002).hasValue());
+    auto read = store_->read_block_data(202, 6002);
+    ASSERT_TRUE(read.hasValue());
+    EXPECT_EQ(read.value(), data);
+}
+
 // finalize_block tests
 TEST_F(LocalBlockStoreTest, FinalizeBlock) {
     store_->create_block(300, 1, 0, 7000);
@@ -135,6 +167,34 @@ TEST_F(LocalBlockStoreTest, FinalizeBlock) {
 TEST_F(LocalBlockStoreTest, FinalizeBlockNotFound) {
     auto result = store_->finalize_block(999, 1);
     EXPECT_TRUE(result.hasError());
+}
+
+TEST_F(LocalBlockStoreTest, FinalizeRetryCompletesSyncAfterRename) {
+    store_.reset();
+    bool fail_current_dir_sync = true;
+    LocalBlockStore::Config cfg;
+    cfg.storage_root = test_dir_.string();
+    cfg.reserved_bytes = 0;
+    cfg.sync_failure_injector = [&fail_current_dir_sync](std::string_view operation) {
+        if (operation == "finalize_current_directory" && fail_current_dir_sync) {
+            fail_current_dir_sync = false;
+            return true;
+        }
+        return false;
+    };
+    store_ = std::make_unique<LocalBlockStore>(std::move(cfg));
+    ASSERT_TRUE(store_->init().hasValue());
+    ASSERT_TRUE(store_->create_block(301, 1, 0, 7001).hasValue());
+    ASSERT_TRUE(store_->append_chunk(301, 7001, "data", 4, 0).hasValue());
+
+    EXPECT_TRUE(store_->finalize_block(301, 7001).hasError());
+    EXPECT_FALSE(fs::exists(test_dir_ / "tmp" / "blk_301_7001.blk"));
+    EXPECT_TRUE(fs::exists(test_dir_ / "current" / "blk_301_7001.blk"));
+
+    EXPECT_TRUE(store_->finalize_block(301, 7001).hasValue());
+    auto read = store_->read_block_data(301, 7001);
+    ASSERT_TRUE(read.hasValue());
+    EXPECT_EQ(read.value(), "data");
 }
 
 // delete_block tests
@@ -404,8 +464,9 @@ TEST_F(LocalBlockStoreTest, CleanupStaleTmpBlocks) {
     auto init_result = stale_store.init();
     ASSERT_TRUE(init_result.hasValue()) << "init failed";
 
-    // The stale tmp block should have been cleaned up during init
+    // The stale tmp block should be quarantined, not irreversibly deleted.
     EXPECT_FALSE(fs::exists(test_dir_ / "tmp" / "blk_1200_16000.blk"));
+    EXPECT_TRUE(fs::exists(test_dir_ / "recovery" / "blk_1200_16000.blk"));
 }
 
 TEST_F(LocalBlockStoreTest, CleanupRespectsExclusion) {
@@ -422,6 +483,44 @@ TEST_F(LocalBlockStoreTest, CleanupRespectsExclusion) {
 
     // The excluded block should NOT have been removed
     EXPECT_TRUE(fs::exists(test_dir_ / "tmp" / "blk_1201_16001.blk"));
+}
+
+TEST_F(LocalBlockStoreTest, CleanupQuarantineCanResumeActiveNameNodeWrite) {
+    ASSERT_TRUE(store_->create_block(1202, 1, 0, 16002).hasValue());
+    ASSERT_TRUE(store_->append_chunk(1202, 16002, "first", 5, 0).hasValue());
+
+    LocalBlockStore::Config cfg;
+    cfg.storage_root = test_dir_.string();
+    cfg.reserved_bytes = 0;
+    cfg.tmp_cleanup_stale_after_ms = 0;
+    LocalBlockStore restarted_store(std::move(cfg));
+    ASSERT_TRUE(restarted_store.init().hasValue());
+    ASSERT_TRUE(fs::exists(test_dir_ / "recovery" / "blk_1202_16002.blk"));
+
+    // A retry from an active NameNode session restores the quarantined block and continues it.
+    ASSERT_TRUE(restarted_store.create_block(1202, 1, 0, 16002).hasValue());
+    ASSERT_TRUE(restarted_store.append_chunk(1202, 16002, "second", 6, 1).hasValue());
+    ASSERT_TRUE(restarted_store.finalize_block(1202, 16002).hasValue());
+    auto data = restarted_store.read_block_data(1202, 16002);
+    ASSERT_TRUE(data.hasValue());
+    EXPECT_EQ(data.value(), "firstsecond");
+}
+
+TEST_F(LocalBlockStoreTest, CleanupTreatsFutureMtimeAsZeroAge) {
+    LocalBlockStore::Config cfg;
+    cfg.storage_root = test_dir_.string();
+    cfg.reserved_bytes = 0;
+    cfg.tmp_cleanup_stale_after_ms = 1;
+    LocalBlockStore future_store(std::move(cfg));
+    ASSERT_TRUE(future_store.init().hasValue());
+    ASSERT_TRUE(future_store.create_block(1203, 1, 0, 16003).hasValue());
+    auto path = test_dir_ / "tmp" / "blk_1203_16003.blk";
+    fs::last_write_time(path, fs::file_time_type::clock::now() + std::chrono::hours(1));
+
+    auto cleanup = future_store.cleanup_stale_tmp_blocks();
+    ASSERT_TRUE(cleanup.hasValue());
+    EXPECT_EQ(cleanup.value(), 0u);
+    EXPECT_TRUE(fs::exists(path));
 }
 
 TEST_F(LocalBlockStoreTest, CleanupSkipsFreshBlocks) {

@@ -17,7 +17,9 @@
 
 #include <gtest/gtest.h>
 
+#include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/common/constants.h"
+#include "cpp/pl/minidfs/common/time_util.h"
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 #include "cpp/pl/minidfs/namenode/datanode_manager.h"
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
@@ -71,12 +73,50 @@ TEST_F(BlockManagerTest, AllocateBlock) {
     EXPECT_GT(lb.block_id, 0u);
     EXPECT_GT(lb.generation_stamp, 0u);
     EXPECT_EQ(lb.locations.size(), 3u);
+    protocol::BlockTokenProto token;
+    token.set_block_id(lb.block_token.block_id);
+    token.set_generation_stamp(lb.block_token.generation_stamp);
+    token.set_inode_id(lb.block_token.inode_id);
+    token.set_block_index(lb.block_token.block_index);
+    token.set_permissions(lb.block_token.permissions);
+    token.set_expires_at_ms(lb.block_token.expires_at_ms);
+    token.set_signature(lb.block_token.signature);
+    EXPECT_TRUE(verify_block_token(token,
+                                   "test-secret",
+                                   BlockTokenPermission::kWrite,
+                                   lb.block_id,
+                                   lb.generation_stamp,
+                                   100,
+                                   0));
 
     // Verify the block was persisted in the store.
     auto block = store_->get_block(lb.block_id);
     ASSERT_TRUE(block.hasValue());
     EXPECT_EQ(block.value().state, BlockState::kAllocating);
     EXPECT_EQ(block.value().inode_id, 100u);
+}
+
+TEST_F(BlockManagerTest, AllocateAndReadTokensUseConfiguredTtl) {
+    constexpr uint64_t kTtlMs = 12345;
+    BlockManager configured(store_.get(), placement_.get(), "ttl-secret", kTtlMs);
+    const uint64_t before_allocate = now_ms();
+    auto allocated = configured.allocate_block(100, 0, 3);
+    ASSERT_TRUE(allocated.hasValue());
+    EXPECT_GE(allocated.value().block_token.expires_at_ms, before_allocate + kTtlMs);
+    EXPECT_LE(allocated.value().block_token.expires_at_ms, now_ms() + kTtlMs);
+
+    ASSERT_TRUE(configured
+                    .commit_block(allocated.value().block_id,
+                                  16,
+                                  allocated.value().generation_stamp,
+                                  datanode_ids(allocated.value()))
+                    .hasValue());
+    const uint64_t before_read = now_ms();
+    auto located = configured.get_located_blocks(100);
+    ASSERT_TRUE(located.hasValue());
+    ASSERT_EQ(located.value().size(), 1u);
+    EXPECT_GE(located.value()[0].block_token.expires_at_ms, before_read + kTtlMs);
+    EXPECT_LE(located.value()[0].block_token.expires_at_ms, now_ms() + kTtlMs);
 }
 
 TEST_F(BlockManagerTest, CommitBlock) {
@@ -233,6 +273,20 @@ TEST_F(BlockManagerTest, GenerationStampMonotonic) {
 TEST_F(BlockManagerTest, AllocateBlockRejectsDuplicateIndex) {
     ASSERT_TRUE(block_mgr_->allocate_block(100, 0, 3).hasValue());
     EXPECT_TRUE(block_mgr_->allocate_block(100, 0, 3).hasError());
+}
+
+TEST_F(BlockManagerTest, CallerOwnedTransactionRollsBackAllocation) {
+    auto txn = store_->begin_transaction();
+    ASSERT_TRUE(txn.hasValue());
+    auto allocation = block_mgr_->allocate_block_in_transaction(100, 0, 3);
+    ASSERT_TRUE(allocation.hasValue());
+    auto replicas = store_->get_replicas(allocation.value().block_id);
+    ASSERT_TRUE(replicas.hasValue());
+    ASSERT_EQ(replicas.value().size(), 3u);
+
+    txn.value()->rollback();
+    EXPECT_TRUE(store_->get_block(allocation.value().block_id).hasError());
+    EXPECT_TRUE(store_->get_replicas(allocation.value().block_id).value().empty());
 }
 
 TEST_F(BlockManagerTest, AllocateBlockLeavesNoGhostWhenPlacementFails) {
