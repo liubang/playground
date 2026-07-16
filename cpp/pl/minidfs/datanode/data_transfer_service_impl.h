@@ -63,7 +63,9 @@ private:
     bool authorize_token(const protocol::BlockTokenProto& token,
                          BlockTokenPermission required_permission,
                          uint64_t expected_block_id,
-                         uint64_t expected_generation_stamp) const;
+                         uint64_t expected_generation_stamp,
+                         uint64_t expected_inode_id,
+                         uint32_t expected_block_index) const;
 
     LocalBlockStore* store_;
     BlockReporter* reporter_;

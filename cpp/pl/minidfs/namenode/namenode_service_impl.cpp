@@ -1050,6 +1050,8 @@ void NameNodeServiceImpl::Rename(google::protobuf::RpcController* /*controller*/
                                  google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
+    std::lock_guard rename_lock(rename_mu_);
+
     if (request->has_header() && check_idempotent(request->header(), response->mutable_status())) {
         return;
     }
@@ -1176,6 +1178,14 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
                                         google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
+    // Replays may mint a fresh short-lived write token, so they must still prove
+    // ownership of the active file lease before consulting the idempotency log.
+    auto lease = lease_mgr_->validate_lease(request->inode_id(), request->client_id());
+    if (lease.hasError()) {
+        fill_status(response->mutable_status(), lease.error().code(), lease.error().message());
+        return;
+    }
+
     if (request->has_header() && !request->header().request_id().empty()) {
         auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
         if (existing.hasError()) {
@@ -1213,6 +1223,12 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
                     }
                     fill_located_block(response->mutable_block(), rebuilt);
                 }
+                *response->mutable_block()->mutable_block_token() =
+                    issue_block_token(response->block().block_id(),
+                                      response->block().generation_stamp(),
+                                      request->inode_id(),
+                                      request->block_index(),
+                                      kBlockTokenPermissionWrite);
             }
             return;
         }
@@ -1220,11 +1236,6 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
 
     uint32_t replication =
         request->replication() > 0 ? request->replication() : kDefaultReplication;
-    auto lease = lease_mgr_->validate_lease(request->inode_id(), request->client_id());
-    if (lease.hasError()) {
-        fill_status(response->mutable_status(), lease.error().code(), lease.error().message());
-        return;
-    }
 
     auto txn = metadata_store_->begin_transaction();
     if (txn.hasError()) {
@@ -1232,7 +1243,8 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
         return;
     }
 
-    auto result = block_mgr_->allocate_block(request->inode_id(), request->block_index(), replication);
+    auto result = block_mgr_->allocate_block_in_transaction(
+        request->inode_id(), request->block_index(), replication);
     if (result.hasError()) {
         if (request->has_header() && !request->header().request_id().empty()) {
             auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
@@ -1262,6 +1274,12 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
                             }
                             fill_located_block(response->mutable_block(), rebuilt);
                         }
+                        *response->mutable_block()->mutable_block_token() =
+                            issue_block_token(response->block().block_id(),
+                                              response->block().generation_stamp(),
+                                              request->inode_id(),
+                                              request->block_index(),
+                                              all_data_plane_permissions());
                     }
                     return;
                 }
@@ -1307,6 +1325,12 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
                             }
                             fill_located_block(response->mutable_block(), rebuilt);
                         }
+                        *response->mutable_block()->mutable_block_token() =
+                            issue_block_token(response->block().block_id(),
+                                              response->block().generation_stamp(),
+                                              request->inode_id(),
+                                              request->block_index(),
+                                              all_data_plane_permissions());
                     }
                     return;
                 }
