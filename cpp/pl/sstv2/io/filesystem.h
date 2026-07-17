@@ -54,6 +54,18 @@ struct CreateOptions {
     bool overwrite = false;
 };
 
+// Immutable identity returned when a writable file is successfully published.
+// Backends that provide content-addressed reads must populate generation and checksum.
+struct FileIdentity {
+    uint64_t file_id = 0;
+    uint64_t content_generation = 0;
+    uint64_t length = 0;
+    uint64_t checksum = 0;
+    bool checksum_valid = false;
+
+    bool operator==(const FileIdentity&) const = default;
+};
+
 // Complete filesystem boundary used by SSTv2. Handles are backend-owned.
 // close() always consumes a valid handle, including when it reports a late
 // close or publication error; callers must not retry or reuse that handle.
@@ -72,7 +84,7 @@ public:
                                                uint64_t offset,
                                                std::span<std::byte> destination) = 0;
     [[nodiscard]] virtual absl::StatusOr<uint64_t> size(FileHandle handle) = 0;
-    [[nodiscard]] virtual absl::Status close(FileHandle handle) = 0;
+    [[nodiscard]] virtual absl::StatusOr<FileIdentity> close(FileHandle handle) = 0;
     [[nodiscard]] virtual absl::Status remove(std::string_view path) = 0;
     [[nodiscard]] virtual absl::Status rename(std::string_view source,
                                               std::string_view destination) = 0;

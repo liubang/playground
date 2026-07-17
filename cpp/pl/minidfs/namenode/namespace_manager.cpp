@@ -632,8 +632,8 @@ pl::Result<FileIdentity> NamespaceManager::get_file_identity(uint64_t inode_id) 
 }
 
 pl::Result<pl::Void> NamespaceManager::set_file_length(uint64_t inode_id,
-                                                      uint64_t length,
-                                                      std::optional<uint32_t> checksum) {
+                                                       uint64_t length,
+                                                       std::optional<uint32_t> checksum) {
     auto inode_result = store_->get_inode(inode_id);
     if (inode_result.hasError()) {
         return folly::makeUnexpected(inode_result.error());
