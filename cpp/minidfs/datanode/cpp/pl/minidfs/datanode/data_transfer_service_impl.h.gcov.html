@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-16 08:17:52</td>
+            <td class="headerValue">2026-07-17 09:36:47</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -106,7 +106,7 @@
 <span id="L35"><span class="lineNum">      35</span>                 :             :     DataTransferServiceImpl(LocalBlockStore* store,</span>
 <span id="L36"><span class="lineNum">      36</span>                 :             :                             BlockReporter* reporter,</span>
 <span id="L37"><span class="lineNum">      37</span>                 :             :                             std::string block_token_secret);</span>
-<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC tlaBgGNC">          30 :     ~DataTransferServiceImpl() override = default;</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC tlaBgGNC">          34 :     ~DataTransferServiceImpl() override = default;</span></span>
 <span id="L39"><span class="lineNum">      39</span>                 :             : </span>
 <span id="L40"><span class="lineNum">      40</span>                 :             :     void WriteBlock(google::protobuf::RpcController* controller,</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             :                     const protocol::WriteBlockRequest* request,</span>
@@ -134,14 +134,16 @@
 <span id="L63"><span class="lineNum">      63</span>                 :             :     bool authorize_token(const protocol::BlockTokenProto&amp; token,</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :                          BlockTokenPermission required_permission,</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             :                          uint64_t expected_block_id,</span>
-<span id="L66"><span class="lineNum">      66</span>                 :             :                          uint64_t expected_generation_stamp) const;</span>
-<span id="L67"><span class="lineNum">      67</span>                 :             : </span>
-<span id="L68"><span class="lineNum">      68</span>                 :             :     LocalBlockStore* store_;</span>
-<span id="L69"><span class="lineNum">      69</span>                 :             :     BlockReporter* reporter_;</span>
-<span id="L70"><span class="lineNum">      70</span>                 :             :     std::string block_token_secret_;</span>
-<span id="L71"><span class="lineNum">      71</span>                 :             : };</span>
-<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
-<span id="L73"><span class="lineNum">      73</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :                          uint64_t expected_generation_stamp,</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :                          uint64_t expected_inode_id,</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :                          uint32_t expected_block_index) const;</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : </span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :     LocalBlockStore* store_;</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :     BlockReporter* reporter_;</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :     std::string block_token_secret_;</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : };</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>
