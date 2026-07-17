@@ -1172,10 +1172,15 @@ minidfs 改造只有在满足以下条件后才算完成：
 
 ### Phase 0：底层契约
 
-- sstv2 streaming iterator/seek 和稳定 codec；
-- minidfs immutable publish、range read、durability 契约；
-- MemTable arena/freeze；
-- 完成 proto v2 数据模型。
+已完成的不可变文件 I/O 子阶段：
+
+- sstv2 提供统一 `FileSystem` 与强类型 `FileHandle` 抽象，Builder 通过 append-only handle 将 key/value 文件增量写入外部 sink，Reader 通过精确 `pread` 随机读取；
+- sstv2 Reader 基于随机读打开文件，正向 Iterator 支持 `SeekToFirst` / `Seek` / `Next`，索引 `ForwardCursor` 只保留根到当前叶子的路径，内存为 O(tree height)；
+- minidfs 提供 immutable-after-complete 文件、`FileIdentity(inode_id, content_generation, length, checksum)` 原子发布和身份绑定的 `read_exact`；
+- minidfs DataNode 使用 positional read，只读取并校验与请求范围相交的落盘 chunk；Client 支持跨 Block 和副本回退；
+- `MiniDfsFileSystem` 已通过 `create/append/close` 与 `open/read_at` 打通 sstv2 key/value 双文件的流式构建和随机读取；单文件 close/complete 原子，双文件可见性仍由后续 minitable Manifest/Raft edit 统一发布。
+
+Phase 0 仍待完成：反向 Iterator、稳定 codec 的跨平台补强、vectored/async read、MemTable arena/freeze，以及 minitable proto v2 数据模型。
 
 ### Phase 1：单 Slice 正确闭环
 

@@ -37,8 +37,8 @@ void DataTransferServiceImpl::fill_status(protocol::StatusProto* proto,
 }
 
 DataTransferServiceImpl::DataTransferServiceImpl(LocalBlockStore* store,
-                                                   BlockReporter* reporter,
-                                                   std::string block_token_secret)
+                                                 BlockReporter* reporter,
+                                                 std::string block_token_secret)
     : store_(store), reporter_(reporter), block_token_secret_(std::move(block_token_secret)) {}
 
 // WriteBlock — pipeline write handling.
@@ -226,28 +226,24 @@ void DataTransferServiceImpl::ReadBlock(google::protobuf::RpcController* /*contr
     uint64_t offset = request->offset();
     uint64_t length = request->length();
 
-    auto data_result = store_->read_block_data(block_id, generation_stamp);
+    auto data_result = store_->read_block_range(block_id, generation_stamp, offset, length);
     if (data_result.hasError()) {
         fill_status(
             response->mutable_status(), data_result.error().code(), data_result.error().message());
         return;
     }
 
-    const auto& block_data = data_result.value();
-
-    // Handle offset and length
-    if (offset >= block_data.size()) {
-        fill_status(response->mutable_status(), 0);
-        response->set_length(0);
+    const auto& data = data_result.value();
+    if (length > 0 && data.size() != length) {
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kIOError),
+                    "short range read is not allowed");
         return;
     }
 
-    uint64_t available = block_data.size() - offset;
-    uint64_t to_return = (length == 0) ? available : std::min(length, available);
-
-    response->set_data(block_data.data() + offset, to_return);
-    response->set_length(to_return);
-    response->set_checksum(compute_crc32c(block_data.data() + offset, to_return));
+    response->set_data(data);
+    response->set_length(data.size());
+    response->set_checksum(compute_crc32c(data.data(), data.size()));
     fill_status(response->mutable_status(), 0);
 }
 
@@ -361,12 +357,12 @@ bool DataTransferServiceImpl::authorize_token(const protocol::BlockTokenProto& t
                                               uint64_t expected_inode_id,
                                               uint32_t expected_block_index) const {
     return verify_block_token(token,
-                             block_token_secret_,
-                             required_permission,
-                             expected_block_id,
-                             expected_generation_stamp,
-                             expected_inode_id,
-                             expected_block_index);
+                              block_token_secret_,
+                              required_permission,
+                              expected_block_id,
+                              expected_generation_stamp,
+                              expected_inode_id,
+                              expected_block_index);
 }
 
 } // namespace pl::minidfs

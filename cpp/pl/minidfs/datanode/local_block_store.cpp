@@ -18,15 +18,16 @@
 #include "cpp/pl/minidfs/datanode/local_block_store.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <charconv>
 #include <chrono>
-#include <cerrno>
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
 #include <fmt/format.h>
 #include <fstream>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "cpp/pl/minidfs/common/checksum.h"
@@ -60,7 +61,9 @@ bool parse_decimal_u64(std::string_view text, uint64_t* out) {
     return true;
 }
 
-bool parse_block_filename(std::string_view filename, uint64_t* block_id, uint64_t* generation_stamp) {
+bool parse_block_filename(std::string_view filename,
+                          uint64_t* block_id,
+                          uint64_t* generation_stamp) {
     if (!filename.starts_with("blk_") || !filename.ends_with(".blk")) {
         return false;
     }
@@ -104,8 +107,7 @@ pl::Result<pl::Void> sync_file_descriptor(int fd, bool data_only) {
         rc = ::fsync(fd);
     }
     if (rc != 0) {
-        return pl::makeError(
-            make_io_error(fmt::format("sync failed: {}", std::strerror(errno))));
+        return pl::makeError(make_io_error(fmt::format("sync failed: {}", std::strerror(errno))));
     }
     RETURN_VOID;
 }
@@ -113,10 +115,8 @@ pl::Result<pl::Void> sync_file_descriptor(int fd, bool data_only) {
 pl::Result<pl::Void> sync_file_path(const fs::path& path, bool data_only) {
     int fd = ::open(path.c_str(), O_RDWR);
     if (fd < 0) {
-        return pl::makeError(
-            make_io_error(fmt::format("failed to open file for sync {}: {}",
-                                      path.string(),
-                                      std::strerror(errno))));
+        return pl::makeError(make_io_error(fmt::format(
+            "failed to open file for sync {}: {}", path.string(), std::strerror(errno))));
     }
     auto sync = sync_file_descriptor(fd, data_only);
     int close_rc = ::close(fd);
@@ -124,8 +124,8 @@ pl::Result<pl::Void> sync_file_path(const fs::path& path, bool data_only) {
         return pl::makeError(std::move(sync.error()));
     }
     if (close_rc != 0) {
-        return pl::makeError(make_io_error(
-            fmt::format("failed to close synced file {}: {}", path.string(), std::strerror(errno))));
+        return pl::makeError(make_io_error(fmt::format(
+            "failed to close synced file {}: {}", path.string(), std::strerror(errno))));
     }
     RETURN_VOID;
 }
@@ -137,10 +137,8 @@ pl::Result<pl::Void> sync_directory_path(const fs::path& path) {
 #endif
     int fd = ::open(path.c_str(), flags);
     if (fd < 0) {
-        return pl::makeError(
-            make_io_error(fmt::format("failed to open directory for sync {}: {}",
-                                      path.string(),
-                                      std::strerror(errno))));
+        return pl::makeError(make_io_error(fmt::format(
+            "failed to open directory for sync {}: {}", path.string(), std::strerror(errno))));
     }
 
     int rc = ::fsync(fd);
@@ -154,15 +152,12 @@ pl::Result<pl::Void> sync_directory_path(const fs::path& path) {
 #endif
 
     if (rc != 0) {
-        return pl::makeError(make_io_error(fmt::format("failed to sync directory {}: {}",
-                                                        path.string(),
-                                                        std::strerror(sync_errno))));
+        return pl::makeError(make_io_error(fmt::format(
+            "failed to sync directory {}: {}", path.string(), std::strerror(sync_errno))));
     }
     if (close_rc != 0) {
-        return pl::makeError(
-            make_io_error(fmt::format("failed to close directory {}: {}",
-                                      path.string(),
-                                      std::strerror(errno))));
+        return pl::makeError(make_io_error(
+            fmt::format("failed to close directory {}: {}", path.string(), std::strerror(errno))));
     }
     RETURN_VOID;
 }
@@ -268,8 +263,8 @@ pl::Result<pl::Void> LocalBlockStore::write_header(const fs::path& path,
 }
 
 pl::Result<pl::Void> LocalBlockStore::sync_file(const fs::path& path,
-                                                 bool data_only,
-                                                 std::string_view operation) const {
+                                                bool data_only,
+                                                std::string_view operation) const {
     if (config_.sync_failure_injector && config_.sync_failure_injector(operation)) {
         return pl::makeError(
             make_io_error(fmt::format("injected sync failure during {}", operation)));
@@ -278,7 +273,7 @@ pl::Result<pl::Void> LocalBlockStore::sync_file(const fs::path& path,
 }
 
 pl::Result<pl::Void> LocalBlockStore::sync_directory(const fs::path& path,
-                                                      std::string_view operation) const {
+                                                     std::string_view operation) const {
     if (config_.sync_failure_injector && config_.sync_failure_injector(operation)) {
         return pl::makeError(
             make_io_error(fmt::format("injected sync failure during {}", operation)));
@@ -304,9 +299,10 @@ pl::Result<pl::Void> LocalBlockStore::create_block(uint64_t block_id,
         const auto& header = recovered_header.value();
         if (header.block_id != block_id || header.inode_id != inode_id ||
             header.block_index != block_index || header.generation_stamp != generation_stamp) {
-            return pl::makeError(pl::Status(
-                static_cast<pl::status_code_t>(ErrorCode::kAlreadyExists),
-                fmt::format("recovery block exists with different identity: {}", recovery.string())));
+            return pl::makeError(
+                pl::Status(static_cast<pl::status_code_t>(ErrorCode::kAlreadyExists),
+                           fmt::format("recovery block exists with different identity: {}",
+                                       recovery.string())));
         }
         std::error_code restore_ec;
         fs::rename(recovery, path, restore_ec);
@@ -483,9 +479,9 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
     if (!fs_file.good()) {
         auto rollback = rollback_append();
         if (rollback.hasError()) {
-            return pl::makeError(make_io_error(
-                fmt::format("failed to append chunk data and rollback failed: {}",
-                            rollback.error().message())));
+            return pl::makeError(
+                make_io_error(fmt::format("failed to append chunk data and rollback failed: {}",
+                                          rollback.error().message())));
         }
         return pl::makeError(make_io_error("failed to append chunk data"));
     }
@@ -520,9 +516,9 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
     if (!fs_file.good()) {
         auto rollback = rollback_append();
         if (rollback.hasError()) {
-            return pl::makeError(make_io_error(
-                fmt::format("failed to flush appended chunk and rollback failed: {}",
-                            rollback.error().message())));
+            return pl::makeError(
+                make_io_error(fmt::format("failed to flush appended chunk and rollback failed: {}",
+                                          rollback.error().message())));
         }
         return pl::makeError(make_io_error("failed to flush appended chunk"));
     }
@@ -532,9 +528,9 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
     if (sync.hasError()) {
         auto rollback = rollback_append();
         if (rollback.hasError()) {
-            return pl::makeError(make_io_error(
-                fmt::format("failed to sync appended chunk and rollback failed: {}",
-                            rollback.error().message())));
+            return pl::makeError(
+                make_io_error(fmt::format("failed to sync appended chunk and rollback failed: {}",
+                                          rollback.error().message())));
         }
         return pl::makeError(std::move(sync.error()));
     }
@@ -561,8 +557,7 @@ pl::Result<pl::Void> LocalBlockStore::finalize_block(uint64_t block_id, uint64_t
             if (sync_current_file.hasError()) {
                 return pl::makeError(std::move(sync_current_file.error()));
             }
-            auto sync_current_dir =
-                sync_directory(current_path_, "finalize_current_directory");
+            auto sync_current_dir = sync_directory(current_path_, "finalize_current_directory");
             if (sync_current_dir.hasError()) {
                 return pl::makeError(std::move(sync_current_dir.error()));
             }
@@ -774,7 +769,7 @@ pl::Result<uint32_t> LocalBlockStore::cleanup_stale_tmp_blocks(
 
         // Use stat() + system_clock to avoid platform-specific
         // file_time_type::clock vs system_clock mismatch.
-        struct stat st {};
+        struct stat st{};
         if (::stat(entry.path().c_str(), &st) != 0) {
             ec = std::error_code(errno, std::system_category());
             return pl::makeError(make_io_error(
@@ -790,13 +785,13 @@ pl::Result<uint32_t> LocalBlockStore::cleanup_stale_tmp_blocks(
             std::chrono::nanoseconds(st.st_mtim.tv_nsec));
 #endif
         auto now = std::chrono::system_clock::now();
-        auto age_ms = mtime > now
-                          ? uint64_t{0}
-                          : static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                      now - mtime)
-                                                      .count());
-        bool stale = config_.tmp_cleanup_stale_after_ms == 0 ||
-                     age_ms >= config_.tmp_cleanup_stale_after_ms;
+        auto age_ms =
+            mtime > now
+                ? uint64_t{0}
+                : static_cast<uint64_t>(
+                      std::chrono::duration_cast<std::chrono::milliseconds>(now - mtime).count());
+        bool stale =
+            config_.tmp_cleanup_stale_after_ms == 0 || age_ms >= config_.tmp_cleanup_stale_after_ms;
         if (!stale) {
             continue;
         }
@@ -804,8 +799,8 @@ pl::Result<uint32_t> LocalBlockStore::cleanup_stale_tmp_blocks(
         auto quarantine = recovery_path_ / entry.path().filename();
         fs::rename(entry.path(), quarantine, ec);
         if (ec) {
-            return pl::makeError(make_io_error(
-                fmt::format("failed to quarantine stale tmp block {}: {}", filename, ec.message())));
+            return pl::makeError(make_io_error(fmt::format(
+                "failed to quarantine stale tmp block {}: {}", filename, ec.message())));
         }
         ++removed;
     }
@@ -828,6 +823,20 @@ pl::Result<uint32_t> LocalBlockStore::cleanup_stale_tmp_blocks(
 
 pl::Result<std::string> LocalBlockStore::read_block_data(uint64_t block_id,
                                                          uint64_t generation_stamp) {
+    auto verified = verify_block(block_id, generation_stamp);
+    if (verified.hasError()) {
+        return folly::makeUnexpected(verified.error());
+    }
+    if (!verified.value()) {
+        return pl::makeError(make_checksum_error("block verification failed before full read"));
+    }
+    return read_block_range(block_id, generation_stamp, 0, 0);
+}
+
+pl::Result<std::string> LocalBlockStore::read_block_range(uint64_t block_id,
+                                                          uint64_t generation_stamp,
+                                                          uint64_t offset,
+                                                          uint64_t length) {
     auto path = block_path("current", block_id, generation_stamp);
     auto header_result = read_header(path);
     if (header_result.hasError()) {
@@ -835,65 +844,114 @@ pl::Result<std::string> LocalBlockStore::read_block_data(uint64_t block_id,
     }
 
     const auto& header = header_result.value();
-    if (header.chunk_count == 0) {
+    if (header.compression_type != static_cast<uint32_t>(CompressionType::kNone)) {
+        return pl::makeError(
+            static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+            fmt::format("range read does not support compression type {}", header.compression_type));
+    }
+    if (header.chunk_count > kMaxChunkCount) {
+        return pl::makeError(make_io_error("invalid chunk count in block header"));
+    }
+    if (offset > header.data_length) {
+        return pl::makeError(make_io_error("read offset exceeds block length"));
+    }
+
+    uint64_t available = header.data_length - offset;
+    uint64_t to_read = length == 0 ? available : std::min<uint64_t>(length, available);
+    if (to_read == 0) {
         return std::string{};
     }
 
-    std::ifstream ifs(path, std::ios::binary);
-    if (!ifs.is_open()) {
+    if (header.chunk_count == 0) {
+        return pl::makeError(make_io_error("invalid block header: non-empty range without chunks"));
+    }
+    if (header.chunk_offsets[0] != 0) {
+        return pl::makeError(make_io_error("invalid block header: first chunk must start at offset 0"));
+    }
+
+    int fd = ::open(path.c_str(), O_RDONLY);
+    if (fd < 0) {
         return pl::makeError(make_not_found(path.string()));
     }
 
-    // Seek past header to data region
-    ifs.seekg(kBlockHeaderSize);
+    auto close_fd = [&]() {
+        if (fd >= 0) {
+            ::close(fd);
+            fd = -1;
+        }
+    };
 
-    // Calculate total data region size on disk
-    // = file_size - header_size
-    ifs.seekg(0, std::ios::end);
-    auto file_size = static_cast<uint64_t>(ifs.tellg());
-    if (file_size < kBlockHeaderSize) {
-        return pl::makeError(make_io_error("block file is smaller than header"));
-    }
-    uint64_t data_region_size = file_size - kBlockHeaderSize;
+    auto read_chunk_exact = [&](uint64_t chunk_offset,
+                                uint64_t chunk_size,
+                                std::string* out) -> pl::Result<pl::Void> {
+        out->assign(chunk_size, '\0');
+        uint64_t done = 0;
+        while (done < chunk_size) {
+            ssize_t nread = ::pread(fd,
+                                    out->data() + done,
+                                    static_cast<size_t>(chunk_size - done),
+                                    static_cast<off_t>(kBlockHeaderSize + chunk_offset + done));
+            if (nread < 0 && errno == EINTR) {
+                continue;
+            }
+            if (nread <= 0) {
+                if (nread < 0) {
+                    return pl::makeError(make_io_error(
+                        fmt::format("pread failed: {}", std::strerror(errno))));
+                }
+                return pl::makeError(make_io_error(
+                    fmt::format("short pread: expected {} bytes, got {}", chunk_size, done)));
+            }
+            done += static_cast<uint64_t>(nread);
+        }
+        RETURN_VOID;
+    };
 
-    ifs.seekg(kBlockHeaderSize);
-    std::string data(data_region_size, '\0');
-    ifs.read(data.data(), static_cast<std::streamsize>(data_region_size));
-    if (!ifs.good()) {
-        return pl::makeError(make_io_error("failed to read block data"));
-    }
-
-    if (data_region_size != header.data_length) {
-        return pl::makeError(
-            make_io_error(fmt::format("block data length mismatch: header={}, file={}",
-                                      header.data_length,
-                                      data_region_size)));
-    }
+    std::string data;
+    data.reserve(to_read);
+    uint64_t range_begin = offset;
+    uint64_t range_end = offset + to_read;
 
     for (uint32_t i = 0; i < header.chunk_count; ++i) {
-        uint32_t offset = header.chunk_offsets[i];
-        uint32_t end = (i + 1 < header.chunk_count) ? header.chunk_offsets[i + 1]
-                                                    : static_cast<uint32_t>(data.size());
-        if (end < offset || end > data.size()) {
-            return pl::makeError(
-                make_io_error(fmt::format("invalid chunk offsets for chunk {}", i)));
+        uint64_t chunk_begin = header.chunk_offsets[i];
+        uint64_t chunk_end =
+            i + 1 < header.chunk_count ? header.chunk_offsets[i + 1] : header.data_length;
+        if (chunk_end < chunk_begin || chunk_end > header.data_length) {
+            close_fd();
+            return pl::makeError(make_io_error("invalid chunk offsets in block header"));
         }
-        uint32_t crc = compute_crc32c(data.data() + offset, end - offset);
+        if (chunk_end <= range_begin || chunk_begin >= range_end) {
+            continue;
+        }
+
+        std::string chunk_data;
+        auto read_chunk = read_chunk_exact(chunk_begin, chunk_end - chunk_begin, &chunk_data);
+        if (read_chunk.hasError()) {
+            close_fd();
+            return pl::makeError(std::move(read_chunk.error()));
+        }
+
+        uint32_t crc = compute_crc32c(chunk_data.data(), chunk_data.size());
         if (crc != header.chunk_checksums[i]) {
-            return pl::makeError(
-                make_checksum_error(fmt::format("chunk {} CRC mismatch: expected={:#x}, got={:#x}",
-                                                i,
-                                                header.chunk_checksums[i],
-                                                crc)));
+            close_fd();
+            return pl::makeError(make_checksum_error(
+                fmt::format("chunk {} CRC mismatch: expected={:#x}, got={:#x}",
+                            i,
+                            header.chunk_checksums[i],
+                            crc)));
         }
+
+        uint64_t overlap_begin = std::max<uint64_t>(chunk_begin, range_begin);
+        uint64_t overlap_end = std::min<uint64_t>(chunk_end, range_end);
+        data.append(chunk_data.data() + (overlap_begin - chunk_begin),
+                    overlap_end - overlap_begin);
     }
 
-    uint32_t block_crc = compute_crc32c(data.data(), data.size());
-    if (block_crc != header.block_checksum) {
-        return pl::makeError(make_checksum_error(fmt::format(
-            "block CRC mismatch: expected={:#x}, got={:#x}", header.block_checksum, block_crc)));
+    close_fd();
+    if (data.size() != to_read) {
+        return pl::makeError(make_io_error(
+            fmt::format("short range read: expected {} bytes, got {}", to_read, data.size())));
     }
-
     return data;
 }
 

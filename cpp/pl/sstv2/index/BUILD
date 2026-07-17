@@ -32,7 +32,9 @@ cc_library(
     linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/sstv2/block",
+        "//cpp/pl/sstv2/buffer",
         "//cpp/pl/sstv2/compress",
+        "//cpp/pl/sstv2/io:filesystem",
         "//cpp/pl/sstv2/types:internal_row",
         "//cpp/pl/sstv2/types:internal_schema",
         "//cpp/pl/sstv2/types:key",
