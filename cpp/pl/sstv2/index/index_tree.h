@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -26,7 +27,9 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "cpp/pl/sstv2/block/block.h"
 #include "cpp/pl/sstv2/compress/compress.h"
+#include "cpp/pl/sstv2/io/filesystem.h"
 #include "cpp/pl/sstv2/types/internal_row.h"
 #include "cpp/pl/sstv2/types/internal_schema.h"
 #include "cpp/pl/sstv2/types/key.h"
@@ -50,7 +53,8 @@ public:
                 uint64_t soft_limit,
                 uint64_t hard_limit,
                 compress::Options compression,
-                std::string* key_file);
+                std::shared_ptr<io::FileSystem> filesystem,
+                io::FileHandle key_file);
 
     [[nodiscard]] absl::Status prepare_for_data_block();
     [[nodiscard]] absl::Status add_data_block(const types::InternalRow& fence,
@@ -67,28 +71,70 @@ private:
     uint64_t soft_limit_ = 64 * 1024;
     uint64_t hard_limit_ = 128 * 1024;
     compress::Options compression_;
-    std::string* key_file_ = nullptr;
+    std::shared_ptr<io::FileSystem> filesystem_;
+    io::FileHandle key_file_ = io::kInvalidFileHandle;
     std::vector<std::vector<types::InternalRow>> levels_;
     uint64_t block_count_ = 0;
+};
+
+class ForwardCursor {
+public:
+    [[nodiscard]] static absl::StatusOr<ForwardCursor> open(
+        const std::shared_ptr<io::FileSystem>& filesystem,
+        io::FileHandle key_file,
+        const types::InternalSchema::ConstRef& schema,
+        BlockRef root,
+        const std::optional<types::PrefixKey>& start_key,
+        const std::optional<types::PrefixKey>& limit_key);
+
+    [[nodiscard]] bool valid() const { return status_.ok() && current_.has_value(); }
+    [[nodiscard]] const BlockRef& current() const { return *current_; }
+    [[nodiscard]] const absl::Status& status() const { return status_; }
+    [[nodiscard]] absl::Status next();
+
+    [[nodiscard]] size_t state_slots_for_test() const { return stack_.size(); }
+
+private:
+    struct Frame {
+        block::BlockReader node;
+        size_t next_entry = 0;
+    };
+
+    [[nodiscard]] absl::Status init();
+    [[nodiscard]] absl::Status descend_to_data(const std::optional<types::PrefixKey>& start_key);
+    [[nodiscard]] absl::Status advance_after_current();
+
+    std::shared_ptr<io::FileSystem> filesystem_;
+    io::FileHandle key_file_ = io::kInvalidFileHandle;
+    types::InternalSchema::ConstRef schema_;
+    std::optional<types::PrefixKey> start_key_;
+    std::optional<types::PrefixKey> limit_key_;
+    BlockRef root_;
+    std::vector<Frame> stack_;
+    std::optional<BlockRef> current_;
+    absl::Status status_;
 };
 
 class TreeReader {
 public:
     [[nodiscard]] static absl::Status scan_data_blocks(
-        std::string_view key_file,
+        const std::shared_ptr<io::FileSystem>& filesystem,
+        io::FileHandle key_file,
         const types::InternalSchema::ConstRef& schema,
         BlockRef root,
         std::vector<BlockRef>* data_blocks);
 
     [[nodiscard]] static absl::Status scan_data_blocks_from(
-        std::string_view key_file,
+        const std::shared_ptr<io::FileSystem>& filesystem,
+        io::FileHandle key_file,
         const types::InternalSchema::ConstRef& schema,
         BlockRef root,
         const types::PrefixKey& start_key,
         std::vector<BlockRef>* data_blocks);
 
     [[nodiscard]] static absl::Status scan_data_blocks_in_range(
-        std::string_view key_file,
+        const std::shared_ptr<io::FileSystem>& filesystem,
+        io::FileHandle key_file,
         const types::InternalSchema::ConstRef& schema,
         BlockRef root,
         const std::optional<types::PrefixKey>& start_key,
@@ -96,7 +142,8 @@ public:
         std::vector<BlockRef>* data_blocks);
 
     [[nodiscard]] static absl::StatusOr<std::optional<BlockRef>> find_data_block(
-        std::string_view key_file,
+        const std::shared_ptr<io::FileSystem>& filesystem,
+        io::FileHandle key_file,
         const types::InternalSchema::ConstRef& schema,
         BlockRef root,
         const types::AllKey& target_key);

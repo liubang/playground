@@ -13,32 +13,55 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/15 18:53
+# Created: 2026/07/16
 
-load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",
     "LINKOPTS",
 )
 
-cc_binary(
-    name = "dfs_client_e2e",
-    srcs = ["dfs_client_e2e.cpp"],
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "filesystem",
+    hdrs = ["filesystem.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        "//cpp/pl/minidfs/client:dfs_client",
-        "//cpp/pl/minidfs/common",
-        "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
-        "//cpp/pl/sstv2/file:sstable",
-        "//cpp/pl/sstv2/io:minidfs_filesystem",
-        "//cpp/pl/sstv2/types:row",
-        "//cpp/pl/sstv2/types:schema",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "local_filesystem",
+    srcs = ["local_filesystem.cpp"],
+    hdrs = ["local_filesystem.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":filesystem",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
-        "@brpc",
-        "@gflags",
+    ],
+)
+
+cc_library(
+    name = "minidfs_filesystem",
+    srcs = ["minidfs_filesystem.cpp"],
+    hdrs = ["minidfs_filesystem.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":filesystem",
+        "//cpp/pl/minidfs/client:dfs_client",
+        "//cpp/pl/minidfs/common",
+        "//cpp/pl/status",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
     ],
 )

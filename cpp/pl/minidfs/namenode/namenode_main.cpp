@@ -116,19 +116,14 @@ int main(int argc, char* argv[]) {
         &replication_mgr);
 
     // Create service implementations
-    pl::minidfs::NameNodeServiceImpl namenode_service(
-        &ns_mgr,
-        &block_mgr,
-        &lease_mgr,
-        &metadata_store,
-        block_token_secret,
-        FLAGS_block_token_ttl_ms);
+    pl::minidfs::NameNodeServiceImpl namenode_service(&ns_mgr,
+                                                      &block_mgr,
+                                                      &lease_mgr,
+                                                      &metadata_store,
+                                                      block_token_secret,
+                                                      FLAGS_block_token_ttl_ms);
     pl::minidfs::DataNodeProtocolServiceImpl datanode_protocol_service(
-        &dn_mgr,
-        &block_mgr,
-        &maintenance,
-        block_token_secret,
-        FLAGS_block_token_ttl_ms);
+        &dn_mgr, &block_mgr, &maintenance, block_token_secret, FLAGS_block_token_ttl_ms);
     pl::minidfs::AdminServiceImpl admin_service(&ns_mgr, &dn_mgr, &metadata_store);
 
     // Start brpc server
