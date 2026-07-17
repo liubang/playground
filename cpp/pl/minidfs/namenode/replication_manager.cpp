@@ -60,9 +60,7 @@ BlockToken from_proto_token(const protocol::BlockTokenProto& token) {
 ReplicationManager::ReplicationManager(MetadataStore* store,
                                        PlacementManager* placement,
                                        std::string block_token_secret)
-    : store_(store),
-      placement_(placement),
-      block_token_secret_(std::move(block_token_secret)) {}
+    : store_(store), placement_(placement), block_token_secret_(std::move(block_token_secret)) {}
 
 pl::Result<std::vector<ReplicationTask>> ReplicationManager::scan() {
     // Get all committed blocks.

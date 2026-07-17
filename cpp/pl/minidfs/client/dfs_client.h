@@ -75,6 +75,12 @@ public:
 
     // File read/write operations
 
+    /// Create an immutable-after-complete output stream.
+    /// Existing closed files may be replaced when overwrite=true.
+    [[nodiscard]] Result<DfsOutputStream> create_immutable_output_stream(
+        std::string_view dfs_path,
+        bool overwrite = false);
+
     /// Write a local file to DFS using pipeline replication.
     /// Existing closed files may be replaced when overwrite=true.
     [[nodiscard]] Result<Void> put(std::string_view local_path,
@@ -92,6 +98,17 @@ public:
 
     /// Read a DFS file to a local path.
     [[nodiscard]] Result<Void> get(std::string_view dfs_path, std::string_view local_path);
+
+    /// Exact positional read bound to the latest published identity from stat().
+    [[nodiscard]] Result<std::string> read_exact(std::string_view dfs_path,
+                                                 uint64_t offset,
+                                                 uint64_t length);
+
+    /// Exact positional read bound to a caller-provided published identity.
+    [[nodiscard]] Result<std::string> read_exact(std::string_view dfs_path,
+                                                 uint64_t offset,
+                                                 uint64_t length,
+                                                 const FileIdentity& expected_identity);
 
     // Admin / diagnostic operations
 
@@ -200,11 +217,23 @@ private:
     /// Initialize the brpc channel to NameNode.
     [[nodiscard]] bool init();
 
-    /// Read one block from a DataNode.
-    [[nodiscard]] Result<std::string> read_block(const LocatedBlock& block);
+    /// Read one exact byte range from a located block with replica fallback.
+    [[nodiscard]] Result<std::string> read_block(const LocatedBlock& block,
+                                                 uint64_t offset,
+                                                 uint64_t length);
 
     /// Generate a stable per-logical-call request ID.
     [[nodiscard]] std::string next_request_id();
+
+    [[nodiscard]] Result<std::string> read_exact_with_status(std::string_view dfs_path,
+                                                             uint64_t offset,
+                                                             uint64_t length,
+                                                             const FileStatus& fs,
+                                                             const FileIdentity& expected_identity);
+
+    [[nodiscard]] Result<DfsOutputStream> create_output_stream(std::string_view dfs_path,
+                                                               bool overwrite,
+                                                               FileAppendMode file_append_mode);
 
 private:
     DfsClientConfig config_;

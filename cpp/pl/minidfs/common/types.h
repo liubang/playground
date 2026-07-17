@@ -38,6 +38,19 @@ enum class FileState : uint8_t {
     kDeleted = 2,
 };
 
+enum class FileAppendMode : uint8_t {
+    kAppendable = 0,
+    kImmutableAfterComplete = 1,
+};
+
+struct FileIdentity {
+    uint64_t inode_id = 0;
+    uint64_t content_generation = 0;
+    uint64_t length = 0;
+    uint32_t checksum = 0;
+    bool checksum_valid = false;
+};
+
 struct Inode {
     uint64_t inode_id = 0;
     InodeType type = InodeType::kDirectory;
@@ -51,6 +64,10 @@ struct Inode {
     uint64_t length = 0;
     uint32_t replication = kDefaultReplication;
     uint64_t block_size = kDefaultBlockSize;
+    FileAppendMode file_append_mode = FileAppendMode::kAppendable;
+    uint64_t content_generation = 0;
+    uint32_t checksum = 0;
+    bool checksum_valid = false;
 
     FileState state = FileState::kNormal;
 
@@ -161,6 +178,7 @@ struct BlockToken {
     uint32_t permissions = 0;
     uint64_t expires_at_ms = 0;
     std::string signature;
+    std::optional<FileIdentity> file_identity;
 };
 
 struct LocatedBlock {
@@ -184,6 +202,8 @@ struct FileStatus {
     std::string owner;
     std::string group;
     uint32_t permission = 0;
+    FileAppendMode file_append_mode = FileAppendMode::kAppendable;
+    FileIdentity published_identity;
 };
 
 } // namespace pl::minidfs

@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 #include <string>
 
+#include "cpp/pl/minidfs/common/error_code.h"
 #include "cpp/pl/minidfs/datanode/local_block_store.h"
 
 namespace pl::minidfs {
@@ -292,6 +293,77 @@ TEST_F(LocalBlockStoreTest, ReadBlockDataMultipleChunks) {
     auto result = store_->read_block_data(601, 10001);
     ASSERT_TRUE(result.hasValue());
     EXPECT_EQ(result.value(), "AAAABBBB");
+}
+
+TEST_F(LocalBlockStoreTest, ReadBlockRangeUsesExactOffsets) {
+    ASSERT_TRUE(store_->create_block(602, 1, 0, 10002).hasValue());
+    ASSERT_TRUE(store_->append_chunk(602, 10002, "abcd", 4, 0).hasValue());
+    ASSERT_TRUE(store_->append_chunk(602, 10002, "efgh", 4, 1).hasValue());
+    ASSERT_TRUE(store_->finalize_block(602, 10002).hasValue());
+
+    auto middle = store_->read_block_range(602, 10002, 2, 4);
+    ASSERT_TRUE(middle.hasValue());
+    EXPECT_EQ(middle.value(), "cdef");
+
+    auto suffix = store_->read_block_range(602, 10002, 6, 0);
+    ASSERT_TRUE(suffix.hasValue());
+    EXPECT_EQ(suffix.value(), "gh");
+
+    auto clipped = store_->read_block_range(602, 10002, 6, 10);
+    ASSERT_TRUE(clipped.hasValue());
+    EXPECT_EQ(clipped.value(), "gh");
+    EXPECT_TRUE(store_->read_block_range(602, 10002, 9, 1).hasError());
+}
+
+TEST_F(LocalBlockStoreTest, ReadBlockRangeDetectsCorruptionInIntersectingChunk) {
+    ASSERT_TRUE(store_->create_block(603, 1, 0, 10003).hasValue());
+    ASSERT_TRUE(store_->append_chunk(603, 10003, "abcd", 4, 0).hasValue());
+    ASSERT_TRUE(store_->append_chunk(603, 10003, "efgh", 4, 1).hasValue());
+    ASSERT_TRUE(store_->finalize_block(603, 10003).hasValue());
+
+    // Corrupt the first chunk only.
+    auto path = test_dir_ / "current" / "blk_603_10003.blk";
+    {
+        std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
+        ASSERT_TRUE(file.is_open());
+        file.seekp(static_cast<std::streamoff>(sizeof(BlockHeader) + 1));
+        char bad = 'X';
+        file.write(&bad, 1);
+    }
+
+    // Reading a range fully inside the second chunk should still succeed.
+    auto second_chunk_only = store_->read_block_range(603, 10003, 4, 4);
+    ASSERT_TRUE(second_chunk_only.hasValue());
+    EXPECT_EQ(second_chunk_only.value(), "efgh");
+
+    // Reading a range touching the corrupted first chunk must fail.
+    auto intersects_first = store_->read_block_range(603, 10003, 2, 4);
+    EXPECT_TRUE(intersects_first.hasError());
+    EXPECT_EQ(intersects_first.error().code(),
+              static_cast<pl::status_code_t>(ErrorCode::kChecksumMismatch));
+}
+
+TEST_F(LocalBlockStoreTest, ReadBlockRangeRejectsCompressedHeader) {
+    ASSERT_TRUE(store_->create_block(604, 1, 0, 10004).hasValue());
+    ASSERT_TRUE(store_->append_chunk(604, 10004, "abcdef", 6, 0).hasValue());
+    ASSERT_TRUE(store_->finalize_block(604, 10004).hasValue());
+
+    auto path = test_dir_ / "current" / "blk_604_10004.blk";
+    {
+        std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
+        ASSERT_TRUE(file.is_open());
+        BlockHeader header{};
+        file.read(reinterpret_cast<char*>(&header), sizeof(header));
+        ASSERT_TRUE(file.good());
+        header.compression_type = static_cast<uint32_t>(CompressionType::kSnappy);
+        file.seekp(0);
+        file.write(reinterpret_cast<const char*>(&header), sizeof(header));
+        ASSERT_TRUE(file.good());
+    }
+
+    auto result = store_->read_block_range(604, 10004, 0, 1);
+    EXPECT_TRUE(result.hasError());
+    EXPECT_EQ(result.error().code(), static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument));
 }
 
 TEST_F(LocalBlockStoreTest, ReadBlockDataNotFound) {

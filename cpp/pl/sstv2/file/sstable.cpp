@@ -30,6 +30,7 @@
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/sstv2/block/block.h"
 #include "cpp/pl/sstv2/bloom/bloom.h"
+#include "cpp/pl/sstv2/buffer/buffer_writer.h"
 #include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/value_comparable.h"
 #include "cpp/pl/sstv2/format/section.h"
@@ -66,6 +67,14 @@ constexpr std::string_view kStatisticsOffset = "Statistics_Offset";
 constexpr std::string_view kStatisticsLength = "Statistics_Length";
 constexpr std::string_view kBloomOffset = "BloomFilter0_Offset";
 constexpr std::string_view kBloomLength = "BloomFilter0_Length";
+
+absl::Status ensure_sinks_valid(const Sinks& sinks) {
+    if (sinks.filesystem == nullptr || sinks.key == io::kInvalidFileHandle ||
+        sinks.value == io::kInvalidFileHandle) {
+        return absl::InvalidArgumentError("builder sinks must not be null");
+    }
+    return absl::OkStatus();
+}
 
 absl::StatusOr<uint64_t> locator_uint64(const format::SectionMap& entries, std::string_view key) {
     const Value* value = format::find_section_value(entries, key);
@@ -119,14 +128,20 @@ InternalRow make_internal_row(const types::InternalSchema::ConstRef& schema,
     return internal;
 }
 
-absl::StatusOr<std::string_view> checked_slice(std::string_view bytes,
-                                               uint64_t offset,
-                                               uint64_t length,
-                                               std::string_view label) {
-    if (offset > bytes.size() || length > bytes.size() - offset) {
-        return absl::InvalidArgumentError(absl::StrCat(label, " points outside file"));
+absl::StatusOr<std::string> read_range(const std::shared_ptr<io::FileSystem>& filesystem,
+                                       io::FileHandle file,
+                                       uint64_t offset,
+                                       uint64_t length) {
+    if (filesystem == nullptr || file == io::kInvalidFileHandle) {
+        return absl::InvalidArgumentError("file is invalid");
     }
-    return bytes.substr(static_cast<size_t>(offset), static_cast<size_t>(length));
+    buffer::BufferWriter result(static_cast<size_t>(length));
+    auto status =
+        filesystem->read_at(file, offset, result.append_space(static_cast<size_t>(length)));
+    if (!status.ok()) {
+        return status;
+    }
+    return std::move(result).release();
 }
 
 absl::StatusOr<types::AllKeyView> all_key_view_for(const types::InternalSchema::ConstRef& schema,
@@ -137,7 +152,8 @@ absl::StatusOr<types::AllKeyView> all_key_view_for(const types::InternalSchema::
 absl::StatusOr<Row> materialize_row(const types::InternalSchema::ConstRef& internal_schema,
                                     const block::BlockReader& block,
                                     size_t row_index,
-                                    std::string_view value_file) {
+                                    const std::shared_ptr<io::FileSystem>& filesystem,
+                                    io::FileHandle value_file) {
     const auto& internal = block.rows()[row_index];
     std::vector<Value> all_key_cols;
     all_key_cols.reserve(internal_schema->sort_key_column_count());
@@ -158,13 +174,19 @@ absl::StatusOr<Row> materialize_row(const types::InternalSchema::ConstRef& inter
         return row;
     }
 
-    absl::StatusOr<std::string_view> value_bytes =
-        internal.location(internal_schema) == types::ValueLocation::kEmbedded
-            ? block.embedded_value(row_index, internal_schema)
-            : checked_slice(value_file,
-                            internal.offset(internal_schema),
-                            internal.length(internal_schema),
-                            "value");
+    absl::StatusOr<std::string> value_bytes;
+    if (internal.location(internal_schema) == types::ValueLocation::kEmbedded) {
+        auto embedded = block.embedded_value(row_index, internal_schema);
+        if (!embedded.ok()) {
+            return embedded.status();
+        }
+        value_bytes = std::string(*embedded);
+    } else {
+        value_bytes = read_range(filesystem,
+                                 value_file,
+                                 internal.offset(internal_schema),
+                                 internal.length(internal_schema));
+    }
     if (!value_bytes.ok()) {
         return value_bytes.status();
     }
@@ -214,7 +236,8 @@ absl::StatusOr<size_t> lower_bound_by_key(const types::InternalSchema::ConstRef&
 }
 
 absl::StatusOr<std::optional<Row>> get_from_data_block(
-    std::string_view value_file,
+    const std::shared_ptr<io::FileSystem>& filesystem,
+    io::FileHandle value_file,
     const types::InternalSchema::ConstRef& internal_schema,
     const block::BlockReader& data,
     const types::AllKey& target_key) {
@@ -235,7 +258,7 @@ absl::StatusOr<std::optional<Row>> get_from_data_block(
         return cmp.status();
     }
     if (*cmp == 0) {
-        auto row = materialize_row(internal_schema, data, *row_index, value_file);
+        auto row = materialize_row(internal_schema, data, *row_index, filesystem, value_file);
         if (!row.ok()) {
             return row.status();
         }
@@ -245,15 +268,15 @@ absl::StatusOr<std::optional<Row>> get_from_data_block(
 }
 
 absl::Status validate_statistics(const format::Statistics& statistics,
-                                 std::string_view key_file,
-                                 std::string_view value_file) {
-    if (statistics.key_file_size != key_file.size()) {
+                                 uint64_t key_file_size,
+                                 uint64_t value_file_size) {
+    if (statistics.key_file_size != key_file_size) {
         return absl::InvalidArgumentError("statistics key file size mismatch");
     }
-    if (statistics.value_file_size != value_file.size()) {
+    if (statistics.value_file_size != value_file_size) {
         return absl::InvalidArgumentError("statistics value file size mismatch");
     }
-    if (statistics.total_row_count > key_file.size()) {
+    if (statistics.total_row_count > key_file_size) {
         return absl::InvalidArgumentError("statistics row count is not plausible");
     }
     return absl::OkStatus();
@@ -261,11 +284,13 @@ absl::Status validate_statistics(const format::Statistics& statistics,
 
 } // namespace
 
-Builder::Builder(types::Schema::ConstRef schema, BuilderOptions options)
+Builder::Builder(types::Schema::ConstRef schema, Sinks sinks, BuilderOptions options)
     : schema_(std::move(schema)),
       internal_schema_(schema_ == nullptr ? nullptr : InternalSchema::make(schema_)),
       options_(std::move(options)),
-      index_builder_(internal_schema_ == nullptr
+      sinks_(std::move(sinks)),
+      index_builder_(internal_schema_ == nullptr || sinks_.filesystem == nullptr ||
+                             sinks_.key == io::kInvalidFileHandle
                          ? nullptr
                          : std::make_unique<index::TreeBuilder>(
                                internal_schema_,
@@ -273,7 +298,8 @@ Builder::Builder(types::Schema::ConstRef schema, BuilderOptions options)
                                options_.configuration.max_index_block_size_soft_limit,
                                options_.configuration.max_index_block_size_hard_limit,
                                options_.block_compression,
-                               &files_.key_file)) {}
+                               sinks_.filesystem,
+                               sinks_.key)) {}
 
 uint64_t Builder::max_data_block_rows() const noexcept {
     return std::max<uint64_t>(1, options_.configuration.max_data_block_row_count);
@@ -322,7 +348,14 @@ absl::Status Builder::add(const Row& row) {
     if (schema_ == nullptr || internal_schema_ == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }
-    auto status = validate_row(*schema_, row);
+    if (index_builder_ == nullptr) {
+        return absl::InvalidArgumentError("index builder is null");
+    }
+    auto status = ensure_sinks_valid(sinks_);
+    if (!status.ok()) {
+        return status;
+    }
+    status = validate_row(*schema_, row);
     if (!status.ok()) {
         return status;
     }
@@ -351,7 +384,7 @@ absl::Status Builder::add(const Row& row) {
     }
     const bool embedded =
         has_payload && encoded_payload.size() <= options_.configuration.max_embedded_value_size;
-    const uint64_t offset = embedded ? 0 : files_.value_file.size();
+    const uint64_t offset = embedded ? 0 : *sinks_.filesystem->size(sinks_.value);
     const uint64_t length = encoded_payload.size();
     const uint64_t checksum = has_payload ? codec::crc32c_u64(encoded_payload) : 0;
     std::string embedded_value = embedded ? encoded_payload : std::string{};
@@ -393,7 +426,10 @@ absl::Status Builder::add(const Row& row) {
         // The block will contain only this one row, even though it exceeds the limit.
     }
     if (has_payload && !embedded) {
-        files_.value_file.append(encoded_payload);
+        status = sinks_.filesystem->append(sinks_.value, std::as_bytes(std::span(encoded_payload)));
+        if (!status.ok()) {
+            return status;
+        }
     }
     status = bloom_builder_.add(internal, internal_schema_);
     if (!status.ok()) {
@@ -413,6 +449,9 @@ absl::Status Builder::flush_data_block() {
     if (pending_rows_.empty()) {
         return absl::OkStatus();
     }
+    if (index_builder_ == nullptr) {
+        return absl::InvalidArgumentError("index builder is null");
+    }
     auto status = index_builder_->prepare_for_data_block();
     if (!status.ok()) {
         return status;
@@ -429,9 +468,12 @@ absl::Status Builder::flush_data_block() {
     if (!encoded_block.ok()) {
         return encoded_block.status();
     }
-    const uint64_t offset = files_.key_file.size();
+    const uint64_t offset = *sinks_.filesystem->size(sinks_.key);
     const uint64_t length = encoded_block->size();
-    files_.key_file.append(*encoded_block);
+    status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(*encoded_block)));
+    if (!status.ok()) {
+        return status;
+    }
     ++data_block_count_;
 
     status = index_builder_->add_data_block(pending_rows_.back(),
@@ -445,7 +487,7 @@ absl::Status Builder::flush_data_block() {
     return absl::OkStatus();
 }
 
-absl::StatusOr<Files> Builder::finish() {
+absl::StatusOr<FinishResult> Builder::finish_result() {
     if (finished_) {
         return absl::FailedPreconditionError("builder is already finished");
     }
@@ -453,8 +495,15 @@ absl::StatusOr<Files> Builder::finish() {
     if (schema_ == nullptr || internal_schema_ == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }
+    if (index_builder_ == nullptr) {
+        return absl::InvalidArgumentError("index builder is null");
+    }
+    auto status = ensure_sinks_valid(sinks_);
+    if (!status.ok()) {
+        return status;
+    }
 
-    auto status = flush_data_block();
+    status = flush_data_block();
     if (!status.ok()) {
         return status;
     }
@@ -466,25 +515,34 @@ absl::StatusOr<Files> Builder::finish() {
     const uint64_t root_length = index->root.length;
 
     std::string bloom = bloom_builder_.finish();
-    const uint64_t bloom_offset = files_.key_file.size();
+    const uint64_t bloom_offset = *sinks_.filesystem->size(sinks_.key);
     const uint64_t bloom_length = bloom.size();
-    files_.key_file.append(bloom);
+    status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(bloom)));
+    if (!status.ok()) {
+        return status;
+    }
 
-    const uint64_t configuration_offset = files_.key_file.size();
+    const uint64_t configuration_offset = *sinks_.filesystem->size(sinks_.key);
     const std::string configuration = format::encode_configuration(options_.configuration);
-    files_.key_file.append(configuration);
-    const uint64_t schema_offset = files_.key_file.size();
+    status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(configuration)));
+    if (!status.ok()) {
+        return status;
+    }
+    const uint64_t schema_offset = *sinks_.filesystem->size(sinks_.key);
     const std::string schema = format::encode_schema(*schema_);
-    files_.key_file.append(schema);
+    status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(schema)));
+    if (!status.ok()) {
+        return status;
+    }
 
     format::Statistics statistics{
         .total_row_count = total_row_count_,
         .data_block_count = data_block_count_,
         .index_block_count = index->block_count,
         .key_file_size = 0,
-        .value_file_size = files_.value_file.size(),
+        .value_file_size = *sinks_.filesystem->size(sinks_.value),
     };
-    const uint64_t statistics_offset = files_.key_file.size();
+    const uint64_t statistics_offset = *sinks_.filesystem->size(sinks_.key);
     std::string statistics_section = format::encode_statistics(statistics);
 
     format::SectionEntries locator_entries;
@@ -502,10 +560,6 @@ absl::StatusOr<Files> Builder::finish() {
     std::string locator =
         format::encode_section(format::SectionMagic::kLocator,
                                format::make_section_map(format::SectionEntries(locator_entries)));
-    // Fixed-point iteration to resolve statistics.key_file_size.
-    // Monotonic convergence is guaranteed because key_file_size only grows
-    // (never shrinks) as the statistics section serialization grows with
-    // larger numbers. The 128-iteration cap is a safety valve.
     bool converged = false;
     for (int i = 0; i < 128; ++i) {
         for (auto& [key, value] : locator_entries) {
@@ -517,8 +571,9 @@ absl::StatusOr<Files> Builder::finish() {
         locator = format::encode_section(
             format::SectionMagic::kLocator,
             format::make_section_map(format::SectionEntries(locator_entries)));
-        const uint64_t key_file_size = files_.key_file.size() + statistics_section.size() +
-                                       locator.size() + format::Tail::kSize;
+        const uint64_t key_file_size = *sinks_.filesystem->size(sinks_.key) +
+                                       statistics_section.size() + locator.size() +
+                                       format::Tail::kSize;
         if (statistics.key_file_size == key_file_size) {
             converged = true;
             break;
@@ -530,24 +585,71 @@ absl::StatusOr<Files> Builder::finish() {
         return absl::InternalError("statistics section size failed to converge");
     }
 
-    files_.key_file.append(statistics_section);
-    const uint64_t locator_offset = files_.key_file.size();
-    files_.key_file.append(locator);
-    files_.key_file.append(format::encode_tail(
-        format::Tail{.locator_offset = locator_offset, .locator_length = locator.size()}));
-    return files_;
+    status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(statistics_section)));
+    if (!status.ok()) {
+        return status;
+    }
+    const uint64_t locator_offset = *sinks_.filesystem->size(sinks_.key);
+    status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(locator)));
+    if (!status.ok()) {
+        return status;
+    }
+    const std::string tail = format::encode_tail(
+        format::Tail{.locator_offset = locator_offset, .locator_length = locator.size()});
+    status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(tail)));
+    if (!status.ok()) {
+        return status;
+    }
+
+    return FinishResult{
+        .key_file_size = *sinks_.filesystem->size(sinks_.key),
+        .value_file_size = *sinks_.filesystem->size(sinks_.value),
+    };
 }
 
-absl::StatusOr<Reader> Reader::open(std::string_view key_file, std::string_view value_file) {
-    if (key_file.size() < format::Tail::kSize) {
+absl::StatusOr<FinishResult> Builder::finish_to_sinks(types::Schema::ConstRef schema,
+                                                      Sinks sinks,
+                                                      BuilderOptions options,
+                                                      const std::vector<types::Row>& rows) {
+    Builder builder(std::move(schema), std::move(sinks), std::move(options));
+    for (const auto& row : rows) {
+        auto status = builder.add(row);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    auto result = builder.finish_result();
+    if (!result.ok()) {
+        return result.status();
+    }
+    return result;
+}
+
+absl::StatusOr<Reader> Reader::open(std::shared_ptr<io::FileSystem> filesystem,
+                                    io::FileHandle key_file,
+                                    io::FileHandle value_file) {
+    if (filesystem == nullptr || key_file == io::kInvalidFileHandle ||
+        value_file == io::kInvalidFileHandle) {
+        return absl::InvalidArgumentError("reader files must not be null");
+    }
+    if (*filesystem->size(key_file) < format::Tail::kSize) {
         return absl::InvalidArgumentError("key file is shorter than tail");
     }
-    auto tail = format::decode_tail(key_file.substr(key_file.size() - format::Tail::kSize));
+
+    auto tail_bytes = read_range(filesystem,
+                                 key_file,
+                                 *filesystem->size(key_file) - format::Tail::kSize,
+                                 format::Tail::kSize);
+    if (!tail_bytes.ok()) {
+        return tail_bytes.status();
+    }
+    auto tail = format::decode_tail(*tail_bytes);
     if (!tail.ok()) {
         return tail.status();
     }
+
     auto locator_bytes =
-        checked_slice(key_file, tail->locator_offset, tail->locator_length, "locator");
+        read_range(filesystem, key_file, tail->locator_offset, tail->locator_length);
     if (!locator_bytes.ok()) {
         return locator_bytes.status();
     }
@@ -564,7 +666,7 @@ absl::StatusOr<Reader> Reader::open(std::string_view key_file, std::string_view 
     if (!schema_length.ok()) {
         return schema_length.status();
     }
-    auto schema_bytes = checked_slice(key_file, *schema_offset, *schema_length, "schema");
+    auto schema_bytes = read_range(filesystem, key_file, *schema_offset, *schema_length);
     if (!schema_bytes.ok()) {
         return schema_bytes.status();
     }
@@ -582,7 +684,7 @@ absl::StatusOr<Reader> Reader::open(std::string_view key_file, std::string_view 
         return configuration_length.status();
     }
     auto configuration_bytes =
-        checked_slice(key_file, *configuration_offset, *configuration_length, "configuration");
+        read_range(filesystem, key_file, *configuration_offset, *configuration_length);
     if (!configuration_bytes.ok()) {
         return configuration_bytes.status();
     }
@@ -600,7 +702,7 @@ absl::StatusOr<Reader> Reader::open(std::string_view key_file, std::string_view 
         return statistics_length.status();
     }
     auto statistics_bytes =
-        checked_slice(key_file, *statistics_offset, *statistics_length, "statistics");
+        read_range(filesystem, key_file, *statistics_offset, *statistics_length);
     if (!statistics_bytes.ok()) {
         return statistics_bytes.status();
     }
@@ -626,13 +728,14 @@ absl::StatusOr<Reader> Reader::open(std::string_view key_file, std::string_view 
         return bloom_length.status();
     }
 
-    auto status = validate_statistics(*statistics, key_file, value_file);
+    auto status = validate_statistics(
+        *statistics, *filesystem->size(key_file), *filesystem->size(value_file));
     if (!status.ok()) {
         return status;
     }
 
     auto internal_schema = InternalSchema::make(*schema);
-    auto root_bytes = checked_slice(key_file, *root_offset, *root_length, "root index");
+    auto root_bytes = read_range(filesystem, key_file, *root_offset, *root_length);
     if (!root_bytes.ok()) {
         return root_bytes.status();
     }
@@ -641,7 +744,7 @@ absl::StatusOr<Reader> Reader::open(std::string_view key_file, std::string_view 
         return root.status();
     }
 
-    auto bloom_bytes = checked_slice(key_file, *bloom_offset, *bloom_length, "bloom");
+    auto bloom_bytes = read_range(filesystem, key_file, *bloom_offset, *bloom_length);
     if (!bloom_bytes.ok()) {
         return bloom_bytes.status();
     }
@@ -653,27 +756,44 @@ absl::StatusOr<Reader> Reader::open(std::string_view key_file, std::string_view 
         return absl::InvalidArgumentError("bloom row count mismatch");
     }
 
+    auto state = std::make_shared<ReaderState>();
+    state->schema = *schema;
+    state->internal_schema = std::move(internal_schema);
+    state->configuration = *configuration;
+    state->statistics = *statistics;
+    state->filesystem = std::move(filesystem);
+    state->key_file = key_file;
+    state->value_file = value_file;
+    state->bloom = std::move(*bloom);
+    state->root = index::BlockRef{.offset = *root_offset, .length = *root_length};
+
     Reader reader;
-    reader.schema_ = *schema;
-    reader.internal_schema_ = std::move(internal_schema);
-    reader.configuration_ = *configuration;
-    reader.statistics_ = *statistics;
-    reader.key_file_ = std::string(key_file);
-    reader.value_file_ = std::string(value_file);
-    reader.bloom_ = std::move(*bloom);
-    reader.root_index_offset_ = *root_offset;
-    reader.root_index_length_ = *root_length;
+    reader.state_ = std::move(state);
     return reader;
 }
 
-absl::StatusOr<std::vector<Row>> Reader::scan() const {
-    return scan(ScanOptions{});
+absl::StatusOr<std::string> Reader::read_key_range(uint64_t offset, uint64_t length) const {
+    if (state_ == nullptr) {
+        return absl::FailedPreconditionError("reader state is null");
+    }
+    return read_range(state_->filesystem, state_->key_file, offset, length);
 }
 
-absl::StatusOr<std::vector<Row>> Reader::scan(const ScanOptions& options) const {
+absl::StatusOr<std::string> Reader::read_value_range(uint64_t offset, uint64_t length) const {
+    if (state_ == nullptr) {
+        return absl::FailedPreconditionError("reader state is null");
+    }
+    return read_range(state_->filesystem, state_->value_file, offset, length);
+}
+
+absl::StatusOr<Reader::Iterator> Reader::new_iterator(const ScanOptions& options) const {
+    if (state_ == nullptr) {
+        return absl::FailedPreconditionError("reader state is null");
+    }
+
     std::optional<types::PrefixKey> start_key;
     if (options.start.has_value()) {
-        auto key = types::make_prefix_key(*options.start, schema_, internal_schema_);
+        auto key = types::make_prefix_key(*options.start, state_->schema, state_->internal_schema);
         if (!key.ok()) {
             return key.status();
         }
@@ -681,140 +801,121 @@ absl::StatusOr<std::vector<Row>> Reader::scan(const ScanOptions& options) const 
     }
     std::optional<types::PrefixKey> limit_key;
     if (options.limit.has_value()) {
-        auto key = types::make_prefix_key(*options.limit, schema_, internal_schema_);
+        auto key = types::make_prefix_key(*options.limit, state_->schema, state_->internal_schema);
         if (!key.ok()) {
             return key.status();
         }
         limit_key = std::move(*key);
     }
-    types::KeyComparator comparator(internal_schema_);
+    types::KeyComparator comparator(state_->internal_schema);
     if (start_key.has_value() && limit_key.has_value()) {
         auto less = comparator.prefix_less(*start_key, *limit_key);
         if (!less.ok()) {
             return less.status();
         }
         if (!*less) {
-            return std::vector<Row>{};
+            return Iterator(state_, std::move(start_key), std::move(limit_key));
         }
     }
+    return Iterator(state_, std::move(start_key), std::move(limit_key));
+}
 
-    std::vector<index::BlockRef> data_blocks;
-    absl::Status status =
-        start_key.has_value() || limit_key.has_value()
-            ? index::TreeReader::scan_data_blocks_in_range(
-                  key_file_,
-                  internal_schema_,
-                  index::BlockRef{.offset = root_index_offset_, .length = root_index_length_},
-                  start_key,
-                  limit_key,
-                  &data_blocks)
-            : index::TreeReader::scan_data_blocks(
-                  key_file_,
-                  internal_schema_,
-                  index::BlockRef{.offset = root_index_offset_, .length = root_index_length_},
-                  &data_blocks);
+types::Schema::ConstRef Reader::schema() const {
+    return state_ == nullptr ? nullptr : state_->schema;
+}
+
+const format::Configuration& Reader::configuration() const {
+    static const format::Configuration kEmpty;
+    return state_ == nullptr ? kEmpty : state_->configuration;
+}
+
+const format::Statistics& Reader::statistics() const {
+    static const format::Statistics kEmpty;
+    return state_ == nullptr ? kEmpty : state_->statistics;
+}
+
+absl::StatusOr<std::vector<Row>> Reader::scan() const {
+    return scan(ScanOptions{});
+}
+
+absl::StatusOr<std::vector<Row>> Reader::scan(const ScanOptions& options) const {
+    auto it = new_iterator(options);
+    if (!it.ok()) {
+        return it.status();
+    }
+    auto status = it->SeekToFirst();
     if (!status.ok()) {
         return status;
     }
-
     std::vector<Row> rows;
-    for (const index::BlockRef& ref : data_blocks) {
-        auto data_bytes = checked_slice(key_file_, ref.offset, ref.length, "data block");
-        if (!data_bytes.ok()) {
-            return data_bytes.status();
-        }
-        auto data = block::BlockReader::open(*data_bytes, internal_schema_, block::Kind::kData);
-        if (!data.ok()) {
-            return data.status();
-        }
-        size_t row_index = 0;
-        if (start_key.has_value()) {
-            auto lower = lower_bound_by_key(internal_schema_, data->rows(), *start_key);
-            if (!lower.ok()) {
-                return lower.status();
-            }
-            row_index = *lower;
-        }
-        for (; row_index < data->rows().size(); ++row_index) {
-            auto row_all_key = all_key_view_for(internal_schema_, data->rows()[row_index]);
-            if (!row_all_key.ok()) {
-                return row_all_key.status();
-            }
-            if (limit_key.has_value()) {
-                auto cmp = comparator.compare_all_key_to_prefix(*row_all_key, *limit_key);
-                if (!cmp.ok()) {
-                    return cmp.status();
-                }
-                if (*cmp >= 0) {
-                    return rows;
-                }
-            }
-            auto row = materialize_row(internal_schema_, *data, row_index, value_file_);
-            if (!row.ok()) {
-                return row.status();
-            }
-            rows.push_back(std::move(*row));
+    while (it->Valid()) {
+        rows.push_back(it->row());
+        status = it->Next();
+        if (!status.ok()) {
+            return status;
         }
     }
     return rows;
 }
 
 absl::StatusOr<std::optional<Row>> Reader::get(const types::AllKey& all_key) const {
-    // Validate row key portion against schema.
+    if (state_ == nullptr) {
+        return absl::FailedPreconditionError("reader state is null");
+    }
+
     const auto rk = all_key.row_key_view();
-    if (rk.column_count() != schema_->row_key_column_count()) {
+    if (rk.column_count() != state_->schema->row_key_column_count()) {
         return absl::InvalidArgumentError("lookup key column count mismatch");
     }
     for (size_t i = 0; i < rk.column_count(); ++i) {
-        if (rk.column(i).type() != schema_->column_type(i)) {
+        if (rk.column(i).type() != state_->schema->column_type(i)) {
             return absl::InvalidArgumentError(
                 absl::StrCat("lookup key column ", i, " type mismatch"));
         }
     }
 
-    // Build a probe InternalRow for bloom filter + encoded key generation.
-    InternalRow probe = InternalRow::make(internal_schema_);
+    InternalRow probe = InternalRow::make(state_->internal_schema);
     const auto& all_key_cols = all_key.columns();
-    for (size_t i = 0; i < internal_schema_->sort_key_column_count(); ++i) {
+    for (size_t i = 0; i < state_->internal_schema->sort_key_column_count(); ++i) {
         probe.columns[i] = all_key_cols[i];
     }
-    probe.columns[internal_schema_->flag_index()] =
+    probe.columns[state_->internal_schema->flag_index()] =
         Value::make<DataType::kUint64>(ColumnFlag::for_value(DataType::kNone, false).raw());
-    probe.columns[internal_schema_->filename_index()] = Value::make<DataType::kString>("");
-    probe.columns[internal_schema_->offset_index()] = Value::make<DataType::kUint64>(uint64_t{0});
-    probe.columns[internal_schema_->length_index()] = Value::make<DataType::kUint64>(uint64_t{0});
-    probe.columns[internal_schema_->checksum_index()] = Value::make<DataType::kUint64>(uint64_t{0});
+    probe.columns[state_->internal_schema->filename_index()] = Value::make<DataType::kString>("");
+    probe.columns[state_->internal_schema->offset_index()] =
+        Value::make<DataType::kUint64>(uint64_t{0});
+    probe.columns[state_->internal_schema->length_index()] =
+        Value::make<DataType::kUint64>(uint64_t{0});
+    probe.columns[state_->internal_schema->checksum_index()] =
+        Value::make<DataType::kUint64>(uint64_t{0});
 
-    auto encoded_target_key = codec::make_encoded_all_key(probe, internal_schema_);
+    auto encoded_target_key = codec::make_encoded_all_key(probe, state_->internal_schema);
     if (!encoded_target_key.ok()) {
         return encoded_target_key.status();
     }
 
-    if (!bloom_.may_contain_all_key(*encoded_target_key)) {
+    if (!state_->bloom.may_contain_all_key(*encoded_target_key)) {
         return std::optional<Row>{};
     }
 
     auto data_ref = index::TreeReader::find_data_block(
-        key_file_,
-        internal_schema_,
-        index::BlockRef{.offset = root_index_offset_, .length = root_index_length_},
-        all_key);
+        state_->filesystem, state_->key_file, state_->internal_schema, state_->root, all_key);
     if (!data_ref.ok()) {
         return data_ref.status();
     }
     if (!data_ref->has_value()) {
         return std::optional<Row>{};
     }
-    auto data_bytes =
-        checked_slice(key_file_, (*data_ref)->offset, (*data_ref)->length, "data block");
+    auto data_bytes = read_key_range((*data_ref)->offset, (*data_ref)->length);
     if (!data_bytes.ok()) {
         return data_bytes.status();
     }
-    auto data = block::BlockReader::open(*data_bytes, internal_schema_, block::Kind::kData);
+    auto data = block::BlockReader::open(*data_bytes, state_->internal_schema, block::Kind::kData);
     if (!data.ok()) {
         return data.status();
     }
-    return get_from_data_block(value_file_, internal_schema_, *data, all_key);
+    return get_from_data_block(
+        state_->filesystem, state_->value_file, state_->internal_schema, *data, all_key);
 }
 
 absl::StatusOr<std::optional<Row>> Reader::get(const types::RowKey& row_key,
@@ -827,6 +928,191 @@ absl::StatusOr<std::optional<Row>> Reader::get(const types::RowKey& row_key,
     all_key_cols.push_back(Value::make<DataType::kVersion>(system_key.version));
     all_key_cols.push_back(Value::make<DataType::kUint8>(static_cast<uint8_t>(system_key.op_type)));
     return get(types::AllKey::from_columns(std::move(all_key_cols)));
+}
+
+Reader::Iterator::Iterator(std::shared_ptr<const ReaderState> state,
+                           std::optional<types::PrefixKey> start_key,
+                           std::optional<types::PrefixKey> limit_key)
+    : state_(std::move(state)),
+      start_key_(std::move(start_key)),
+      limit_key_(std::move(limit_key)),
+      status_(absl::OkStatus()) {}
+
+absl::Status Reader::Iterator::SeekToFirst() {
+    return seek_impl(start_key_);
+}
+
+absl::Status Reader::Iterator::Seek(const KeyPrefix& target) {
+    if (state_ == nullptr) {
+        status_ = absl::FailedPreconditionError("iterator is detached");
+        return status_;
+    }
+    auto key = types::make_prefix_key(target, state_->schema, state_->internal_schema);
+    if (!key.ok()) {
+        status_ = key.status();
+        return status_;
+    }
+    return seek_impl(std::optional<types::PrefixKey>{std::move(*key)});
+}
+
+absl::Status Reader::Iterator::seek_impl(const std::optional<types::PrefixKey>& start_key) {
+    if (state_ == nullptr) {
+        status_ = absl::FailedPreconditionError("iterator is detached");
+        return status_;
+    }
+
+    status_ = absl::OkStatus();
+    valid_ = false;
+    current_key_bytes_.clear();
+    block_.reset();
+    row_index_ = 0;
+
+    auto cursor = index::ForwardCursor::open(state_->filesystem,
+                                             state_->key_file,
+                                             state_->internal_schema,
+                                             state_->root,
+                                             start_key,
+                                             limit_key_);
+    if (!cursor.ok()) {
+        status_ = cursor.status();
+        return status_;
+    }
+    cursor_ = std::move(*cursor);
+
+    status_ = load_current_block(start_key, true);
+    if (!status_.ok()) {
+        return status_;
+    }
+    status_ = advance_to_next_valid();
+    return status_;
+}
+
+absl::Status Reader::Iterator::load_current_block(const std::optional<types::PrefixKey>& start_key,
+                                                  bool apply_start_key) {
+    if (!cursor_.has_value()) {
+        block_.reset();
+        return absl::OkStatus();
+    }
+
+    bool apply_start = apply_start_key;
+    while (cursor_->valid()) {
+        const auto ref = cursor_->current();
+
+        auto data_bytes = read_range(state_->filesystem, state_->key_file, ref.offset, ref.length);
+        if (!data_bytes.ok()) {
+            return data_bytes.status();
+        }
+        auto data =
+            block::BlockReader::open(*data_bytes, state_->internal_schema, block::Kind::kData);
+        if (!data.ok()) {
+            return data.status();
+        }
+
+        block_ = std::move(*data);
+        row_index_ = 0;
+        if (apply_start && start_key.has_value()) {
+            auto lower = lower_bound_by_key(state_->internal_schema, block_->rows(), *start_key);
+            if (!lower.ok()) {
+                return lower.status();
+            }
+            row_index_ = *lower;
+        }
+        if (row_index_ < block_->rows().size()) {
+            return absl::OkStatus();
+        }
+
+        apply_start = false;
+        auto status = cursor_->next();
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    if (!cursor_->status().ok()) {
+        return cursor_->status();
+    }
+    block_.reset();
+    return absl::OkStatus();
+}
+
+absl::Status Reader::Iterator::advance_to_next_valid() {
+    if (state_ == nullptr) {
+        return absl::FailedPreconditionError("iterator is detached");
+    }
+
+    types::KeyComparator comparator(state_->internal_schema);
+    while (true) {
+        if (!block_.has_value() || row_index_ >= block_->rows().size()) {
+            if (cursor_.has_value() && cursor_->valid()) {
+                auto status = cursor_->next();
+                if (!status.ok()) {
+                    valid_ = false;
+                    return status;
+                }
+            }
+            auto status = load_current_block(std::nullopt, false);
+            if (!status.ok()) {
+                valid_ = false;
+                return status;
+            }
+            if (!block_.has_value() || row_index_ >= block_->rows().size()) {
+                valid_ = false;
+                return absl::OkStatus();
+            }
+        }
+
+        auto row_all_key = all_key_view_for(state_->internal_schema, block_->rows()[row_index_]);
+        if (!row_all_key.ok()) {
+            valid_ = false;
+            return row_all_key.status();
+        }
+        if (limit_key_.has_value()) {
+            auto cmp = comparator.compare_all_key_to_prefix(*row_all_key, *limit_key_);
+            if (!cmp.ok()) {
+                valid_ = false;
+                return cmp.status();
+            }
+            if (*cmp >= 0) {
+                valid_ = false;
+                return absl::OkStatus();
+            }
+        }
+
+        auto row = materialize_row(
+            state_->internal_schema, *block_, row_index_, state_->filesystem, state_->value_file);
+        if (!row.ok()) {
+            valid_ = false;
+            return row.status();
+        }
+        auto encoded_key =
+            codec::make_encoded_all_key(block_->rows()[row_index_], state_->internal_schema);
+        if (!encoded_key.ok()) {
+            valid_ = false;
+            return encoded_key.status();
+        }
+        current_row_ = std::move(*row);
+        current_key_bytes_ = std::string(encoded_key->bytes());
+        valid_ = true;
+        return absl::OkStatus();
+    }
+}
+
+absl::Status Reader::Iterator::Next() {
+    if (!status_.ok()) {
+        return status_;
+    }
+    if (!valid_) {
+        return status_;
+    }
+    ++row_index_;
+    status_ = advance_to_next_valid();
+    return status_;
+}
+
+size_t Reader::Iterator::state_slots_for_test() const {
+    if (!cursor_.has_value()) {
+        return 0;
+    }
+    return cursor_->state_slots_for_test();
 }
 
 } // namespace pl::sstv2::file

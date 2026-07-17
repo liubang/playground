@@ -6,8 +6,9 @@ SSTable v2 是 LSM-tree SSTable 存储引擎的完全重写版本。采用模块
 ## 架构总览
 
 ```
-file/        -- I/O Layer (Builder: writes key+value; Reader: get+scan)
+file/        -- SST Layer (streaming Builder; random-access Reader; forward Iterator)
   |
+  +-- io/        -- FileSystem/FileHandle contracts and local, memory, MiniDFS backends
   +-- block/     -- Block encode/decode (BlockBuilder, BlockReader)
   +-- index/     -- Multi-level index tree (TreeBuilder, TreeReader)
   +-- bloom/     -- Bloom filter (Builder, Reader)
@@ -202,9 +203,14 @@ Key File (*.sstv2):                   Value File (*.sstv2):
 
 | 类            | 用途                                                                    |
 | ------------- | ----------------------------------------------------------------------- |
-| `Builder`     | 接受 `Row`，分区为数据块，构建索引树与布隆过滤器，写入 key+value 文件。 |
-| `Reader`      | 打开 key+value 文件，校验各 section，提供 `scan()` 和 `get()` 操作。    |
-| `ScanOptions` | 范围扫描配置：`start`（下界前缀）、`limit`（上界前缀）。                |
+| `Builder`     | 接受 `Row`，通过 `Sinks{filesystem, key, value}` 向 append-only `FileHandle` 增量写入，构建数据块、索引树和 Bloom。 |
+| `Reader`      | 通过 `FileSystem` 与只读 `FileHandle` 打开 key/value 文件，使用调用方缓冲区的精确 `read_at`，提供 `get()`、兼容 `scan()` 和流式 Iterator。 |
+| `Iterator`    | 正向有界迭代器：`SeekToFirst()`、`Seek()`、`Next()`、`Valid()`；索引状态为 O(tree height)。 |
+| `ScanOptions` | 范围扫描配置：`start`（下界前缀）、`limit`（上界前缀）。 |
+
+### `io/` — 文件 I/O 契约
+
+`FileSystem` 统一提供 `create/open/append/read_at/size/close/remove/rename`，二进制读写使用 `std::span<std::byte>`，避免接口层额外分配和字符串语义泄漏；`FileHandle` 是不可由整数隐式构造的强类型。`create` 返回 append-only 写句柄，`open` 返回随机读句柄，`read_at` 必须精确填满调用方缓冲区；`close` 总会消费句柄。`LocalFileSystem` 提供 POSIX 本地实现并用于正常单元测试，故障注入由测试内的 mock/wrapper 完成；`MiniDfsFileSystem` 通过独立 target 接入并共享持有 `DfsClient`，避免 sstv2 与具体分布式文件系统绑定。内存编解码使用非 owning `BufferReader` 与 owning、可复用的 `BufferWriter`，不再通过生产 `MemoryFileSystem` 模拟文件。
 
 ## 用法示例
 
