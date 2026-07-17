@@ -72,5 +72,5 @@ private:
     MasterSM* sm_;
 };
 
-}  // namespace master
-}  // namespace pl::minitable
+} // namespace master
+} // namespace pl::minitable

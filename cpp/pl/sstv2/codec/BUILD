@@ -48,6 +48,14 @@ cc_library(
 )
 
 cc_library(
+    name = "ordered_uint",
+    srcs = ["ordered_uint.cpp"],
+    hdrs = ["ordered_uint.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+)
+
+cc_library(
     name = "scalar_comparable",
     srcs = ["scalar_comparable.cpp"],
     hdrs = ["scalar_comparable.h"],

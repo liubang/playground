@@ -38,7 +38,7 @@ int MasterSM::init(std::string_view group_id, std::string_view peer_id, std::str
     ::braft::NodeOptions options;
     options.election_timeout_ms = 3000;
     options.fsm = this;
-    options.snapshot_interval_s = 600;  // braft 内置 snapshot, 不需要 Checkpointer
+    options.snapshot_interval_s = 600; // braft 内置 snapshot, 不需要 Checkpointer
 
     if (!conf.empty() && options.initial_conf.parse_from(std::string(conf)) != 0) {
         LOG(ERROR) << "Failed to parse initial_conf: " << conf;
@@ -55,7 +55,9 @@ int MasterSM::init(std::string_view group_id, std::string_view peer_id, std::str
     return 0;
 }
 
-int MasterSM::start() { return 0; }
+int MasterSM::start() {
+    return 0;
+}
 
 void MasterSM::shutdown() {
     unit_server_manager_.stop_detector();
@@ -67,7 +69,9 @@ void MasterSM::shutdown() {
     }
 }
 
-bool MasterSM::is_leader() const { return node_ != nullptr && node_->is_leader(); }
+bool MasterSM::is_leader() const {
+    return node_ != nullptr && node_->is_leader();
+}
 
 // =========================================================================
 // on_apply
@@ -76,7 +80,8 @@ bool MasterSM::is_leader() const { return node_ != nullptr && node_->is_leader()
 void MasterSM::on_apply(::braft::Iterator& iter) {
     for (; iter.valid(); iter.next()) {
         // Phase 1: parse and apply mutation from iter.data()
-        if (iter.done()) iter.done()->Run();
+        if (iter.done())
+            iter.done()->Run();
     }
 }
 
@@ -120,8 +125,7 @@ void MasterSM::on_configuration_committed(const ::braft::Configuration& conf, in
 }
 
 void MasterSM::on_start_following(const ::braft::LeaderChangeContext& ctx) {
-    LOG(INFO) << "MasterSM start following leader=" << ctx.leader_id()
-              << " term=" << ctx.term();
+    LOG(INFO) << "MasterSM start following leader=" << ctx.leader_id() << " term=" << ctx.term();
 }
 
 void MasterSM::on_stop_following(const ::braft::LeaderChangeContext& ctx) {
@@ -129,4 +133,4 @@ void MasterSM::on_stop_following(const ::braft::LeaderChangeContext& ctx) {
               << " status=" << ctx.status();
 }
 
-}  // namespace pl::minitable::master
+} // namespace pl::minitable::master

@@ -26,16 +26,23 @@ message DataRequestHeader {
     uint64 route_epoch = 5;
 }
 
+message ColumnSelection {
+    oneof target {
+        uint32 column_family_id = 1;
+        CellRef cell = 2;
+    }
+}
+
 message ColumnSelector {
-    // Empty selects all columns. IDs are stable across rename operations.
-    repeated uint32 column_ids = 1;
+    // Empty selects all cells. IDs are stable across rename operations.
+    repeated ColumnSelection columns = 1;
 }
 
 message CellVersion {
-    uint32 column_id = 1;
+    CellRef cell = 1;
     Value value = 2;
-    // Hybrid/logical commit version assigned by the primary before Raft append.
-    uint64 version = 3;
+    Timestamp commit_ts = 3;
+    uint32 mutation_seq = 4;
 }
 
 message RowResult {
@@ -66,7 +73,7 @@ enum CellMutationType {
 }
 
 message CellMutation {
-    uint32 column_id = 1;
+    CellRef cell = 1;
     CellMutationType type = 2;
     // Required only for SET. SET_NULL is distinct from an empty value and deletion.
     optional Value value = 3;
@@ -82,26 +89,28 @@ message PutRequest {
 message PutResponse {
     Status status = 1;
     // Stable across retries with the same request_id and payload.
-    uint64 commit_version = 2;
+    Timestamp commit_ts = 2;
 }
 
-enum DeleteScope {
-    DELETE_SCOPE_UNSPECIFIED = 0;
-    ROW = 1;
-    COLUMNS = 2;
+message DeleteTarget {
+    oneof target {
+        // Must be true. It is represented as a field to make the target explicit.
+        bool row = 1;
+        uint32 column_family_id = 2;
+        CellRef cell = 3;
+    }
 }
 
 message DeleteRequest {
     DataRequestHeader header = 1;
     RowKey row_key = 2;
-    DeleteScope scope = 3;
-    // Required and non-empty only for COLUMNS.
-    repeated uint32 column_ids = 4;
+    // Required and non-empty. A row target must be the only target.
+    repeated DeleteTarget targets = 3;
 }
 
 message DeleteResponse {
     Status status = 1;
-    uint64 commit_version = 2;
+    Timestamp commit_ts = 2;
 }
 
 message ScanRange {
@@ -123,7 +132,7 @@ enum CompareOp {
 }
 
 message ColumnPredicate {
-    uint32 column_id = 1;
+    CellRef cell = 1;
     CompareOp op = 2;
     Value operand = 3;
 }

@@ -18,7 +18,6 @@
 #include "cpp/pl/minitable/master/unit_server_service_impl.h"
 
 #include <brpc/closure_guard.h>
-
 #include <chrono>
 
 namespace pl::minitable::master {
@@ -38,14 +37,16 @@ void set_status(pb::Status* s, int code, const std::string& msg) {
     s->set_msg(msg);
 }
 
-void set_ok(pb::Status* s) { s->set_code(0); }
+void set_ok(pb::Status* s) {
+    s->set_code(0);
+}
 
-}  // namespace
+} // namespace
 
 void UnitServerServiceImpl::Heartbeat(google::protobuf::RpcController* cntl,
-                                       const pb::HeartbeatRequest* req,
-                                       pb::HeartbeatResponse* resp,
-                                       google::protobuf::Closure* done) {
+                                      const pb::HeartbeatRequest* req,
+                                      pb::HeartbeatResponse* resp,
+                                      google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
     (void)cntl;
 
@@ -69,11 +70,12 @@ void UnitServerServiceImpl::Heartbeat(google::protobuf::RpcController* cntl,
 }
 
 void UnitServerServiceImpl::RegisterUnitServer(google::protobuf::RpcController* cntl,
-                                                const pb::RegisterUnitServerRequest* req,
-                                                pb::RegisterUnitServerResponse* resp,
-                                                google::protobuf::Closure* done) {
+                                               const pb::RegisterUnitServerRequest* req,
+                                               pb::RegisterUnitServerResponse* resp,
+                                               google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
-    (void)cntl; (void)req;
+    (void)cntl;
+    (void)req;
     if (!sm_->is_leader()) {
         set_status(resp->mutable_status(), 4, "not primary master");
         return;
@@ -81,4 +83,4 @@ void UnitServerServiceImpl::RegisterUnitServer(google::protobuf::RpcController* 
     set_ok(resp->mutable_status());
 }
 
-}  // namespace pl::minitable::master
+} // namespace pl::minitable::master

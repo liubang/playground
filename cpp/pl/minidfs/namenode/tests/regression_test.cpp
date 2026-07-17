@@ -1010,7 +1010,8 @@ TEST_F(RegressionNameNodeTest, GetLocatedBlocksIgnoresChecksumValueWhenChecksumI
     NameNodeServiceImpl service(
         ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", 3600000);
 
-    auto file = ns_mgr_->create_file("/unknown-checksum-located.dat", "user", "grp", 0644, 3, 128 * kMB);
+    auto file =
+        ns_mgr_->create_file("/unknown-checksum-located.dat", "user", "grp", 0644, 3, 128 * kMB);
     ASSERT_TRUE(file.hasValue());
 
     auto block = block_mgr_->allocate_block(file.value().inode_id, 0, 3);
