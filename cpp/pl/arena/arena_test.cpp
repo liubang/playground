@@ -119,6 +119,36 @@ TEST(ArenaTest, Reset) {
     ASSERT_EQ(1024, stats.total_allocated);
 }
 
+TEST(ArenaTest, CheckpointRewindRestoresUsageAndDropsNewBlocks) {
+    pl::Arena arena(64);
+    ASSERT_NE(arena.allocate(16, 1), nullptr);
+    const auto checkpoint = arena.checkpoint();
+    const auto used_before = arena.get_stats().total_used;
+
+    ASSERT_NE(arena.allocate(128, 1), nullptr);
+    ASSERT_EQ(arena.get_stats().block_count, 2U);
+    EXPECT_TRUE(arena.rewind(checkpoint));
+
+    const auto stats = arena.get_stats();
+    EXPECT_EQ(stats.block_count, 1U);
+    EXPECT_EQ(stats.total_used, used_before);
+    EXPECT_EQ(arena.available_in_current_block(), 48U);
+}
+
+TEST(ArenaTest, RejectsCrossArenaAndStaleCheckpoints) {
+    pl::Arena first(64);
+    pl::Arena second(64);
+    const auto first_checkpoint = first.checkpoint();
+    ASSERT_NE(first.allocate(16, 1), nullptr);
+    EXPECT_FALSE(second.rewind(first_checkpoint));
+    EXPECT_TRUE(first.commit(first_checkpoint));
+    EXPECT_FALSE(first.rewind(first_checkpoint));
+
+    const auto stale = first.checkpoint();
+    first.reset();
+    EXPECT_FALSE(first.rewind(stale));
+}
+
 TEST(ArenaTest, AvailableInCurrentBlock) {
     pl::Arena arena(1024);
     ASSERT_EQ(1024, arena.available_in_current_block());
@@ -145,6 +175,13 @@ TEST(ArenaTest, FragmentationRatio) {
 TEST(ArenaTest, AllocateObjectThrowsOnConstruction) {
     pl::Arena arena(1024);
     ASSERT_THROW(arena.allocate_object<ThrowingObject>(), std::runtime_error);
+}
+
+TEST(ArenaTest, RejectsInvalidAlignmentAndOverflow) {
+    pl::Arena arena(64);
+    EXPECT_EQ(arena.allocate(1, 0), nullptr);
+    EXPECT_EQ(arena.allocate(1, 3), nullptr);
+    EXPECT_EQ(arena.allocate(std::numeric_limits<std::size_t>::max(), 16), nullptr);
 }
 
 TEST(ArenaTest, MultipleAllocationsAlignment) {

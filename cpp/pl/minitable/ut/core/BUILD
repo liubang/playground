@@ -13,32 +13,19 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/17 22:28
+# Created: 2026/07/18 00:36
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//cpp:copts/configure_copts.bzl", "COPTS", "LINKOPTS")
+load("@rules_cc//cc:defs.bzl", "cc_test")
+load("//cpp:copts/configure_copts.bzl", "LINKOPTS", "TEST_COPTS")
 
-package(default_visibility = ["//cpp/pl/minitable:__subpackages__"])
-
-cc_library(
-    name = "slice_store",
-    srcs = ["slice_store.cpp"],
-    hdrs = ["slice_store.h"],
-    copts = COPTS,
+cc_test(
+    name = "slice_store_test",
+    srcs = ["slice_store_test.cpp"],
+    copts = TEST_COPTS,
     linkopts = LINKOPTS,
     deps = [
+        "//cpp/pl/minitable/core:slice_store",
         "//cpp/pl/minitable/memtable",
-        "//cpp/pl/sstv2/merge:merge_iterator",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-    ],
-)
-
-cc_library(
-    name = "key",
-    hdrs = ["key.h"],
-    deps = [
-        "//cpp/pl/sstv2/types:op_type",
-        "//cpp/pl/sstv2/types:value",
+        "@googletest//:gtest_main",
     ],
 )

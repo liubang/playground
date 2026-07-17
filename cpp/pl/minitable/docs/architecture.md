@@ -6,7 +6,7 @@
 
 复合 RowKey、StorageKey、MVCC 后缀的逐字节持久格式、保序证明、golden vectors 和 strict decode 规则见 [Key 编码规范](key_encoding.md)。本文只保留架构层布局；两者冲突时，已版本化的 Key 编码规范是字节格式的权威定义。
 
-截至 2026-07-17，Phase 0 仍在进行中：proto v2 已具备 CF、动态 qualifier、显式分区 range、128-bit Timestamp、ManifestEdit 和 SliceSnapshot 初版；KeyFormat v1 已实现 canonical StorageKey/VersionedStorageKey codec、strict decode 和首批 golden tests；基础 arena-backed MemTable 与正向 k-way MergeIterator primitive 已落地；sstv2/minidfs 已打通 SST 流式构建、finalized FileIdentity、精确随机读取和正向迭代。当前尚未完成 comparator/schema fingerprint、expected-identity open/remove、MemTable batch prepare/publish、单 Slice LSM、Manifest、MVCC、Slice Raft 和数据面；Master 仍使用旧协议且只是服务骨架。后续修改必须同步更新本文的“当前状态”“剩余工作”和分阶段完成定义，避免目标设计与实现状态混淆。
+截至 2026-07-18，Phase 0 仍在进行中：proto v2 已具备 CF、动态 qualifier、显式分区 range、128-bit Timestamp、ManifestEdit 和 SliceSnapshot 初版；KeyFormat v1 已实现 canonical StorageKey/VersionedStorageKey codec、strict decode 和首批 golden tests；arena-backed MemTable 已具备受 owner/generation 校验的可回滚 reservation、batch prepare/publish/abort、严格递增 apply-index 版本链和 pinned read-visible cursor，最小 `SliceStore` 已独占 writable MemTable 并实现跨 LG 两阶段 apply 与 release/acquire 可见水位；正向 k-way MergeIterator primitive 已落地；sstv2/minidfs 已打通 SST 流式构建、finalized FileIdentity、精确随机读取和正向迭代。当前尚未完成 comparator/schema fingerprint、expected-identity open/remove、MemTable freeze/read-view generation 与 SST read view 集成、单 Slice LSM、Manifest、MVCC、Slice Raft 和数据面；Master 仍使用旧协议且只是服务骨架。后续修改必须同步更新本文的“当前状态”“剩余工作”和分阶段完成定义，避免目标设计与实现状态混淆。
 
 minitable 的目标是实现一个生产可用的分布式半结构化宽表存储，具备以下能力：
 
@@ -1388,7 +1388,7 @@ minidfs 改造只有在满足以下条件后才算完成：
 - KeyFormat v1 已实现 GLOBAL_ORDER/HASH StorageKey、QualifierToken、降序 Version、NaN/signed-zero 规则、strict decode 和首批 golden tests；
 - sstv2 Builder `FinishResult` 已返回 key/value finalized FileIdentity、row count 和 min/max key；
 - 正向 k-way `MergeIterator` primitive 已实现；
-- 基础 MemTable 已实现 arena、freeze、正向 cursor、shared lifetime、apply index 单调检查和基础内存上限。
+- MemTable 已实现带 owner/generation 校验的 arena checkpoint/rewind、受逻辑写预算约束的 batch reservation、可失败 prepare 与无失败 publish、严格递增 apply-index 版本链、固定 read-visible watermark 的正向 cursor、freeze 和 shared lifetime；最小 `SliceStore` 独占 writable MemTable，已实现多 LG 稳定顺序 prepare、prepare 失败全 abort、全部 publish 后 release 推进 Slice 可见水位，并以保证产生有效观测的并发 read-view 测试覆盖跨 LG 混合 index 检测。
 
 Phase 0 进入 Phase 1 前仍待完成的硬门槛：
 
@@ -1397,7 +1397,7 @@ Phase 0 进入 Phase 1 前仍待完成的硬门槛：
 - `FinishResult`/SST properties/Manifest 补齐 format version、schema fingerprint、comparator domain 和 checksum algorithm；
 - sstv2/minidfs `open/remove` 支持 expected identity，Manifest 和 GC 完整保存并校验 key/value identity；
 - 提供真正的 SST `ForwardCursor` adapter，打通 MemTable + SST merge read view；
-- MemTable 实现 allocation rollback/reservation、精确记账、重复 key 不变量以及 batch prepare/publish/read-visible watermark。
+- 将当前最小 `SliceStore` 接入后续 Slice Raft apply/runtime，补齐 freeze 时完整 `SliceReadView` generation 原子替换、immutable MemTable/ManifestRef pin，以及 MemTable + SST merge read view；继续验证 committed apply 的 publish 路径保持无失败。
 
 反向 Iterator、lazy value、Block Cache、prefix Bloom、vectored/async read 不阻塞正向单 Slice 闭环，但在对外承诺对应功能或性能目标前必须完成。
 
