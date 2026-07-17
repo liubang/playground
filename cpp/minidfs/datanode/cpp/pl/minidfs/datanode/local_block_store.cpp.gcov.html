@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">72.2&nbsp;%</td>
+            <td class="headerCovTableEntryLo">72.1&nbsp;%</td>
             <td class="headerCovTableEntry">587</td>
-            <td class="headerCovTableEntry">424</td>
+            <td class="headerCovTableEntry">423</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 15:53:26</td>
+            <td class="headerValue">2026-07-17 23:54:08</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -943,9 +943,9 @@
 <span id="L845"><span class="lineNum">     845</span>                 :             : </span>
 <span id="L846"><span class="lineNum">     846</span>                 :             :     const auto&amp; header = header_result.value();</span>
 <span id="L847"><span class="lineNum">     847</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          29 :     if (header.compression_type != static_cast&lt;uint32_t&gt;(CompressionType::kNone)) {</span></span>
-<span id="L848"><span class="lineNum">     848</span>                 :<span class="tlaGNC">           2 :         return pl::makeError(</span></span>
-<span id="L849"><span class="lineNum">     849</span>                 :<span class="tlaGNC">           1 :             static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidArgument),</span></span>
-<span id="L850"><span class="lineNum">     850</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             fmt::format(&quot;range read does not support compression type {}&quot;, header.compression_type));</span></span>
+<span id="L848"><span class="lineNum">     848</span>                 :<span class="tlaGNC">           1 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidArgument),</span></span>
+<span id="L849"><span class="lineNum">     849</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                              fmt::format(&quot;range read does not support compression type {}&quot;,</span></span>
+<span id="L850"><span class="lineNum">     850</span>                 :             :                                          header.compression_type));</span>
 <span id="L851"><span class="lineNum">     851</span>                 :             :     }</span>
 <span id="L852"><span class="lineNum">     852</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          28 :     if (header.chunk_count &gt; kMaxChunkCount) {</span></span>
 <span id="L853"><span class="lineNum">     853</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_io_error(&quot;invalid chunk count in block header&quot;));</span></span>
@@ -964,24 +964,24 @@
 <span id="L866"><span class="lineNum">     866</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_io_error(&quot;invalid block header: non-empty range without chunks&quot;));</span></span>
 <span id="L867"><span class="lineNum">     867</span>                 :             :     }</span>
 <span id="L868"><span class="lineNum">     868</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          27 :     if (header.chunk_offsets[0] != 0) {</span></span>
-<span id="L869"><span class="lineNum">     869</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_io_error(&quot;invalid block header: first chunk must start at offset 0&quot;));</span></span>
-<span id="L870"><span class="lineNum">     870</span>                 :             :     }</span>
-<span id="L871"><span class="lineNum">     871</span>                 :             : </span>
-<span id="L872"><span class="lineNum">     872</span>                 :<span class="tlaGNC tlaBgGNC">          27 :     int fd = ::open(path.c_str(), O_RDONLY);</span></span>
-<span id="L873"><span class="lineNum">     873</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 :     if (fd &lt; 0) {</span></span>
-<span id="L874"><span class="lineNum">     874</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_not_found(path.string()));</span></span>
-<span id="L875"><span class="lineNum">     875</span>                 :             :     }</span>
-<span id="L876"><span class="lineNum">     876</span>                 :             : </span>
-<span id="L877"><span class="lineNum">     877</span>                 :<span class="tlaGNC tlaBgGNC">          27 :     auto close_fd = [&amp;]() {</span></span>
-<span id="L878"><span class="lineNum">     878</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          27 :         if (fd &gt;= 0) {</span></span>
-<span id="L879"><span class="lineNum">     879</span>                 :<span class="tlaGNC">          27 :             ::close(fd);</span></span>
-<span id="L880"><span class="lineNum">     880</span>                 :<span class="tlaGNC">          27 :             fd = -1;</span></span>
-<span id="L881"><span class="lineNum">     881</span>                 :             :         }</span>
-<span id="L882"><span class="lineNum">     882</span>                 :<span class="tlaGNC">          54 :     };</span></span>
-<span id="L883"><span class="lineNum">     883</span>                 :             : </span>
-<span id="L884"><span class="lineNum">     884</span>                 :<span class="tlaGNC">          34 :     auto read_chunk_exact = [&amp;](uint64_t chunk_offset,</span></span>
-<span id="L885"><span class="lineNum">     885</span>                 :             :                                 uint64_t chunk_size,</span>
-<span id="L886"><span class="lineNum">     886</span>                 :             :                                 std::string* out) -&gt; pl::Result&lt;pl::Void&gt; {</span>
+<span id="L869"><span class="lineNum">     869</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(</span></span>
+<span id="L870"><span class="lineNum">     870</span>                 :<span class="tlaUNC">           0 :             make_io_error(&quot;invalid block header: first chunk must start at offset 0&quot;));</span></span>
+<span id="L871"><span class="lineNum">     871</span>                 :             :     }</span>
+<span id="L872"><span class="lineNum">     872</span>                 :             : </span>
+<span id="L873"><span class="lineNum">     873</span>                 :<span class="tlaGNC tlaBgGNC">          27 :     int fd = ::open(path.c_str(), O_RDONLY);</span></span>
+<span id="L874"><span class="lineNum">     874</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 :     if (fd &lt; 0) {</span></span>
+<span id="L875"><span class="lineNum">     875</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_not_found(path.string()));</span></span>
+<span id="L876"><span class="lineNum">     876</span>                 :             :     }</span>
+<span id="L877"><span class="lineNum">     877</span>                 :             : </span>
+<span id="L878"><span class="lineNum">     878</span>                 :<span class="tlaGNC tlaBgGNC">          27 :     auto close_fd = [&amp;]() {</span></span>
+<span id="L879"><span class="lineNum">     879</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          27 :         if (fd &gt;= 0) {</span></span>
+<span id="L880"><span class="lineNum">     880</span>                 :<span class="tlaGNC">          27 :             ::close(fd);</span></span>
+<span id="L881"><span class="lineNum">     881</span>                 :<span class="tlaGNC">          27 :             fd = -1;</span></span>
+<span id="L882"><span class="lineNum">     882</span>                 :             :         }</span>
+<span id="L883"><span class="lineNum">     883</span>                 :<span class="tlaGNC">          54 :     };</span></span>
+<span id="L884"><span class="lineNum">     884</span>                 :             : </span>
+<span id="L885"><span class="lineNum">     885</span>                 :             :     auto read_chunk_exact =</span>
+<span id="L886"><span class="lineNum">     886</span>                 :<span class="tlaGNC">          34 :         [&amp;](uint64_t chunk_offset, uint64_t chunk_size, std::string* out) -&gt; pl::Result&lt;pl::Void&gt; {</span></span>
 <span id="L887"><span class="lineNum">     887</span>                 :<span class="tlaGNC">          34 :         out-&gt;assign(chunk_size, '\0');</span></span>
 <span id="L888"><span class="lineNum">     888</span>                 :             :         uint64_t done = 0;</span>
 <span id="L889"><span class="lineNum">     889</span>         [<span class="tlaGBC" title="Branch 0 was taken 34 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 34 times"> + </span>]:<span class="tlaGNC">          68 :         while (done &lt; chunk_size) {</span></span>
@@ -994,8 +994,8 @@
 <span id="L896"><span class="lineNum">     896</span>                 :             :             }</span>
 <span id="L897"><span class="lineNum">     897</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 34 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          34 :             if (nread &lt;= 0) {</span></span>
 <span id="L898"><span class="lineNum">     898</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 if (nread &lt; 0) {</span></span>
-<span id="L899"><span class="lineNum">     899</span>                 :<span class="tlaUNC">           0 :                     return pl::makeError(make_io_error(</span></span>
-<span id="L900"><span class="lineNum">     900</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                         fmt::format(&quot;pread failed: {}&quot;, std::strerror(errno))));</span></span>
+<span id="L899"><span class="lineNum">     899</span>                 :<span class="tlaUNC">           0 :                     return pl::makeError(</span></span>
+<span id="L900"><span class="lineNum">     900</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                         make_io_error(fmt::format(&quot;pread failed: {}&quot;, std::strerror(errno))));</span></span>
 <span id="L901"><span class="lineNum">     901</span>                 :             :                 }</span>
 <span id="L902"><span class="lineNum">     902</span>                 :<span class="tlaUNC">           0 :                 return pl::makeError(make_io_error(</span></span>
 <span id="L903"><span class="lineNum">     903</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                     fmt::format(&quot;short pread: expected {} bytes, got {}&quot;, chunk_size, done)));</span></span>
@@ -1032,190 +1032,189 @@
 <span id="L934"><span class="lineNum">     934</span>                 :             :         uint32_t crc = compute_crc32c(chunk_data.data(), chunk_data.size());</span>
 <span id="L935"><span class="lineNum">     935</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 33 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          34 :         if (crc != header.chunk_checksums[i]) {</span></span>
 <span id="L936"><span class="lineNum">     936</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :             close_fd();</span></span>
-<span id="L937"><span class="lineNum">     937</span>                 :<span class="tlaGNC">           1 :             return pl::makeError(make_checksum_error(</span></span>
-<span id="L938"><span class="lineNum">     938</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                 fmt::format(&quot;chunk {} CRC mismatch: expected={:#x}, got={:#x}&quot;,</span></span>
-<span id="L939"><span class="lineNum">     939</span>                 :             :                             i,</span>
-<span id="L940"><span class="lineNum">     940</span>                 :             :                             header.chunk_checksums[i],</span>
-<span id="L941"><span class="lineNum">     941</span>                 :             :                             crc)));</span>
+<span id="L937"><span class="lineNum">     937</span>                 :<span class="tlaGNC">           2 :             return pl::makeError(</span></span>
+<span id="L938"><span class="lineNum">     938</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                 make_checksum_error(fmt::format(&quot;chunk {} CRC mismatch: expected={:#x}, got={:#x}&quot;,</span></span>
+<span id="L939"><span class="lineNum">     939</span>                 :             :                                                 i,</span>
+<span id="L940"><span class="lineNum">     940</span>                 :             :                                                 header.chunk_checksums[i],</span>
+<span id="L941"><span class="lineNum">     941</span>                 :             :                                                 crc)));</span>
 <span id="L942"><span class="lineNum">     942</span>                 :             :         }</span>
 <span id="L943"><span class="lineNum">     943</span>                 :             : </span>
 <span id="L944"><span class="lineNum">     944</span>                 :             :         uint64_t overlap_begin = std::max&lt;uint64_t&gt;(chunk_begin, range_begin);</span>
 <span id="L945"><span class="lineNum">     945</span>                 :             :         uint64_t overlap_end = std::min&lt;uint64_t&gt;(chunk_end, range_end);</span>
-<span id="L946"><span class="lineNum">     946</span>         [<span class="tlaGBC" title="Branch 0 was taken 33 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          33 :         data.append(chunk_data.data() + (overlap_begin - chunk_begin),</span></span>
-<span id="L947"><span class="lineNum">     947</span>                 :             :                     overlap_end - overlap_begin);</span>
-<span id="L948"><span class="lineNum">     948</span>                 :             :     }</span>
-<span id="L949"><span class="lineNum">     949</span>                 :             : </span>
-<span id="L950"><span class="lineNum">     950</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :     close_fd();</span></span>
-<span id="L951"><span class="lineNum">     951</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC">          26 :     if (data.size() != to_read) {</span></span>
-<span id="L952"><span class="lineNum">     952</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_io_error(</span></span>
-<span id="L953"><span class="lineNum">     953</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             fmt::format(&quot;short range read: expected {} bytes, got {}&quot;, to_read, data.size())));</span></span>
-<span id="L954"><span class="lineNum">     954</span>                 :             :     }</span>
-<span id="L955"><span class="lineNum">     955</span>                 :             :     return data;</span>
-<span id="L956"><span class="lineNum">     956</span>                 :             : }</span>
-<span id="L957"><span class="lineNum">     957</span>                 :             : </span>
-<span id="L958"><span class="lineNum">     958</span>                 :<span class="tlaGNC tlaBgGNC">           4 : pl::Result&lt;std::string&gt; LocalBlockStore::read_chunk(uint64_t block_id,</span></span>
-<span id="L959"><span class="lineNum">     959</span>                 :             :                                                     uint64_t generation_stamp,</span>
-<span id="L960"><span class="lineNum">     960</span>                 :             :                                                     uint32_t chunk_index) {</span>
-<span id="L961"><span class="lineNum">     961</span>                 :<span class="tlaGNC">           4 :     auto path = block_path(&quot;current&quot;, block_id, generation_stamp);</span></span>
-<span id="L962"><span class="lineNum">     962</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     auto header_result = read_header(path);</span></span>
-<span id="L963"><span class="lineNum">     963</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (header_result.hasError()) {</span></span>
-<span id="L964"><span class="lineNum">     964</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(std::move(header_result.error()));</span></span>
-<span id="L965"><span class="lineNum">     965</span>                 :             :     }</span>
-<span id="L966"><span class="lineNum">     966</span>                 :             : </span>
-<span id="L967"><span class="lineNum">     967</span>                 :             :     const auto&amp; header = header_result.value();</span>
-<span id="L968"><span class="lineNum">     968</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           4 :     if (chunk_index &gt;= header.chunk_count) {</span></span>
-<span id="L969"><span class="lineNum">     969</span>                 :<span class="tlaGNC">           1 :         return pl::makeError(pl::Status(</span></span>
-<span id="L970"><span class="lineNum">     970</span>                 :             :             static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidArgument),</span>
-<span id="L971"><span class="lineNum">     971</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             fmt::format(&quot;chunk_index {} &gt;= chunk_count {}&quot;, chunk_index, header.chunk_count)));</span></span>
-<span id="L972"><span class="lineNum">     972</span>                 :             :     }</span>
-<span id="L973"><span class="lineNum">     973</span>                 :             : </span>
-<span id="L974"><span class="lineNum">     974</span>                 :             :     // Determine chunk offset and size</span>
-<span id="L975"><span class="lineNum">     975</span>                 :<span class="tlaGNC">           3 :     uint32_t offset = header.chunk_offsets[chunk_index];</span></span>
-<span id="L976"><span class="lineNum">     976</span>                 :             :     uint32_t chunk_size = 0;</span>
-<span id="L977"><span class="lineNum">     977</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 :     if (chunk_index + 1 &lt; header.chunk_count) {</span></span>
-<span id="L978"><span class="lineNum">     978</span>                 :<span class="tlaGNC">           1 :         chunk_size = header.chunk_offsets[chunk_index + 1] - offset;</span></span>
-<span id="L979"><span class="lineNum">     979</span>                 :             :     } else {</span>
-<span id="L980"><span class="lineNum">     980</span>                 :             :         // Last chunk: size = file_size - header - offset</span>
-<span id="L981"><span class="lineNum">     981</span>                 :             :         std::ifstream ifs_size(path, std::ios::binary | std::ios::ate);</span>
-<span id="L982"><span class="lineNum">     982</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         auto file_size = static_cast&lt;uint64_t&gt;(ifs_size.tellg());</span></span>
-<span id="L983"><span class="lineNum">     983</span>                 :<span class="tlaGNC">           2 :         chunk_size = static_cast&lt;uint32_t&gt;(file_size - kBlockHeaderSize - offset);</span></span>
-<span id="L984"><span class="lineNum">     984</span>                 :<span class="tlaGNC">           2 :     }</span></span>
-<span id="L985"><span class="lineNum">     985</span>                 :             : </span>
-<span id="L986"><span class="lineNum">     986</span>                 :             :     std::ifstream ifs(path, std::ios::binary);</span>
-<span id="L987"><span class="lineNum">     987</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     ifs.seekg(static_cast&lt;std::streamoff&gt;(kBlockHeaderSize + offset));</span></span>
-<span id="L988"><span class="lineNum">     988</span>                 :             : </span>
-<span id="L989"><span class="lineNum">     989</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     std::string chunk_data(chunk_size, '\0');</span></span>
-<span id="L990"><span class="lineNum">     990</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     ifs.read(chunk_data.data(), chunk_size);</span></span>
-<span id="L991"><span class="lineNum">     991</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (!ifs.good()) {</span></span>
-<span id="L992"><span class="lineNum">     992</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_io_error(&quot;failed to read chunk&quot;));</span></span>
-<span id="L993"><span class="lineNum">     993</span>                 :             :     }</span>
-<span id="L994"><span class="lineNum">     994</span>                 :             : </span>
-<span id="L995"><span class="lineNum">     995</span>                 :             :     // Verify checksum</span>
-<span id="L996"><span class="lineNum">     996</span>                 :             :     uint32_t crc = compute_crc32c(chunk_data.data(), chunk_data.size());</span>
-<span id="L997"><span class="lineNum">     997</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           3 :     if (crc != header.chunk_checksums[chunk_index]) {</span></span>
-<span id="L998"><span class="lineNum">     998</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(</span></span>
-<span id="L999"><span class="lineNum">     999</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             make_checksum_error(fmt::format(&quot;chunk {} CRC mismatch: expected={:#x}, got={:#x}&quot;,</span></span>
-<span id="L1000"><span class="lineNum">    1000</span>                 :             :                                             chunk_index,</span>
-<span id="L1001"><span class="lineNum">    1001</span>                 :             :                                             header.chunk_checksums[chunk_index],</span>
-<span id="L1002"><span class="lineNum">    1002</span>                 :             :                                             crc)));</span>
-<span id="L1003"><span class="lineNum">    1003</span>                 :             :     }</span>
-<span id="L1004"><span class="lineNum">    1004</span>                 :             : </span>
-<span id="L1005"><span class="lineNum">    1005</span>                 :             :     return chunk_data;</span>
-<span id="L1006"><span class="lineNum">    1006</span>                 :<span class="tlaGNC tlaBgGNC">           3 : }</span></span>
-<span id="L1007"><span class="lineNum">    1007</span>                 :             : </span>
-<span id="L1008"><span class="lineNum">    1008</span>                 :<span class="tlaGNC">          30 : pl::Result&lt;bool&gt; LocalBlockStore::verify_block(uint64_t block_id, uint64_t generation_stamp) {</span></span>
-<span id="L1009"><span class="lineNum">    1009</span>                 :<span class="tlaGNC">          30 :     auto path = block_path(&quot;current&quot;, block_id, generation_stamp);</span></span>
-<span id="L1010"><span class="lineNum">    1010</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          60 :     return verify_block_file(path);</span></span>
-<span id="L1011"><span class="lineNum">    1011</span>                 :             : }</span>
-<span id="L1012"><span class="lineNum">    1012</span>                 :             : </span>
-<span id="L1013"><span class="lineNum">    1013</span>                 :<span class="tlaGNC">          83 : pl::Result&lt;bool&gt; LocalBlockStore::verify_block_file(const fs::path&amp; path) const {</span></span>
-<span id="L1014"><span class="lineNum">    1014</span>                 :<span class="tlaGNC">          83 :     auto header_result = read_header(path);</span></span>
-<span id="L1015"><span class="lineNum">    1015</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 81 times"> + </span>]:<span class="tlaGNC">          83 :     if (header_result.hasError()) {</span></span>
-<span id="L1016"><span class="lineNum">    1016</span>                 :<span class="tlaGNC">           4 :         return pl::makeError(std::move(header_result.error()));</span></span>
-<span id="L1017"><span class="lineNum">    1017</span>                 :             :     }</span>
-<span id="L1018"><span class="lineNum">    1018</span>                 :             : </span>
-<span id="L1019"><span class="lineNum">    1019</span>                 :             :     const auto&amp; header = header_result.value();</span>
-<span id="L1020"><span class="lineNum">    1020</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 77 times"> + </span>]:<span class="tlaGNC">          81 :     if (header.chunk_count == 0) {</span></span>
-<span id="L1021"><span class="lineNum">    1021</span>                 :             :         return true;</span>
-<span id="L1022"><span class="lineNum">    1022</span>                 :             :     }</span>
-<span id="L1023"><span class="lineNum">    1023</span>                 :             : </span>
-<span id="L1024"><span class="lineNum">    1024</span>                 :             :     std::ifstream ifs(path, std::ios::binary);</span>
-<span id="L1025"><span class="lineNum">    1025</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 77 times"> + </span>]:<span class="tlaGNC">          77 :     if (!ifs.is_open()) {</span></span>
-<span id="L1026"><span class="lineNum">    1026</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_not_found(path.string()));</span></span>
-<span id="L1027"><span class="lineNum">    1027</span>                 :             :     }</span>
-<span id="L1028"><span class="lineNum">    1028</span>         [<span class="tlaGBC" title="Branch 0 was taken 77 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          77 :     ifs.seekg(0, std::ios::end);</span></span>
-<span id="L1029"><span class="lineNum">    1029</span>         [<span class="tlaGBC" title="Branch 0 was taken 77 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          77 :     auto file_size = static_cast&lt;uint64_t&gt;(ifs.tellg());</span></span>
-<span id="L1030"><span class="lineNum">    1030</span>   [<span class="tlaGBC" title="Branch 0 was taken 77 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 77 times"> + </span>]:<span class="tlaGNC">          77 :     if (file_size &lt; kBlockHeaderSize || file_size - kBlockHeaderSize != header.data_length) {</span></span>
-<span id="L1031"><span class="lineNum">    1031</span>                 :             :         return false;</span>
-<span id="L1032"><span class="lineNum">    1032</span>                 :             :     }</span>
-<span id="L1033"><span class="lineNum">    1033</span>                 :             : </span>
-<span id="L1034"><span class="lineNum">    1034</span>                 :             :     // Verify each chunk's CRC individually.</span>
-<span id="L1035"><span class="lineNum">    1035</span>         [<span class="tlaGBC" title="Branch 0 was taken 77 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          77 :     ifs.seekg(kBlockHeaderSize);</span></span>
-<span id="L1036"><span class="lineNum">    1036</span>                 :             : </span>
-<span id="L1037"><span class="lineNum">    1037</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC">         167 :     for (uint32_t i = 0; i &lt; header.chunk_count; ++i) {</span></span>
-<span id="L1038"><span class="lineNum">    1038</span>                 :             :         uint32_t chunk_size = 0;</span>
-<span id="L1039"><span class="lineNum">    1039</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 77 times"> + </span>]:<span class="tlaGNC">          93 :         if (i + 1 &lt; header.chunk_count) {</span></span>
-<span id="L1040"><span class="lineNum">    1040</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :             if (header.chunk_offsets[i + 1] &lt; header.chunk_offsets[i]) {</span></span>
-<span id="L1041"><span class="lineNum">    1041</span>                 :             :                 return false;</span>
-<span id="L1042"><span class="lineNum">    1042</span>                 :             :             }</span>
-<span id="L1043"><span class="lineNum">    1043</span>                 :<span class="tlaGNC">          16 :             chunk_size = header.chunk_offsets[i + 1] - header.chunk_offsets[i];</span></span>
-<span id="L1044"><span class="lineNum">    1044</span>                 :             :         } else {</span>
-<span id="L1045"><span class="lineNum">    1045</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 77 times"> + </span>]:<span class="tlaGNC">          77 :             if (header.chunk_offsets[i] &gt; header.data_length) {</span></span>
-<span id="L1046"><span class="lineNum">    1046</span>                 :             :                 return false;</span>
-<span id="L1047"><span class="lineNum">    1047</span>                 :             :             }</span>
-<span id="L1048"><span class="lineNum">    1048</span>                 :<span class="tlaGNC">          77 :             chunk_size = static_cast&lt;uint32_t&gt;(header.data_length - header.chunk_offsets[i]);</span></span>
-<span id="L1049"><span class="lineNum">    1049</span>                 :             :         }</span>
-<span id="L1050"><span class="lineNum">    1050</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          93 :         ifs.seekg(static_cast&lt;std::streamoff&gt;(kBlockHeaderSize + header.chunk_offsets[i]));</span></span>
-<span id="L1051"><span class="lineNum">    1051</span>                 :             : </span>
-<span id="L1052"><span class="lineNum">    1052</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          93 :         std::string buf(chunk_size, '\0');</span></span>
-<span id="L1053"><span class="lineNum">    1053</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          93 :         ifs.read(buf.data(), chunk_size);</span></span>
-<span id="L1054"><span class="lineNum">    1054</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 93 times"> + </span>]:<span class="tlaGNC">          93 :         if (!ifs.good()) {</span></span>
-<span id="L1055"><span class="lineNum">    1055</span>                 :             :             return false;</span>
-<span id="L1056"><span class="lineNum">    1056</span>                 :             :         }</span>
-<span id="L1057"><span class="lineNum">    1057</span>                 :             : </span>
-<span id="L1058"><span class="lineNum">    1058</span>                 :             :         uint32_t crc = compute_crc32c(buf.data(), buf.size());</span>
-<span id="L1059"><span class="lineNum">    1059</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 90 times"> + </span>]:<span class="tlaGNC">          93 :         if (crc != header.chunk_checksums[i]) {</span></span>
-<span id="L1060"><span class="lineNum">    1060</span>                 :             :             return false;</span>
-<span id="L1061"><span class="lineNum">    1061</span>                 :             :         }</span>
-<span id="L1062"><span class="lineNum">    1062</span>                 :             :     }</span>
-<span id="L1063"><span class="lineNum">    1063</span>                 :             : </span>
-<span id="L1064"><span class="lineNum">    1064</span>         [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          74 :     ifs.seekg(kBlockHeaderSize);</span></span>
-<span id="L1065"><span class="lineNum">    1065</span>         [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          74 :     std::string all_data(header.data_length, '\0');</span></span>
-<span id="L1066"><span class="lineNum">    1066</span>         [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          74 :     ifs.read(all_data.data(), static_cast&lt;std::streamsize&gt;(all_data.size()));</span></span>
-<span id="L1067"><span class="lineNum">    1067</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC">          74 :     if (!ifs.good()) {</span></span>
-<span id="L1068"><span class="lineNum">    1068</span>                 :             :         return false;</span>
-<span id="L1069"><span class="lineNum">    1069</span>                 :             :     }</span>
-<span id="L1070"><span class="lineNum">    1070</span>                 :<span class="tlaGNC">          74 :     return compute_crc32c(all_data.data(), all_data.size()) == header.block_checksum;</span></span>
-<span id="L1071"><span class="lineNum">    1071</span>                 :<span class="tlaGNC">          77 : }</span></span>
-<span id="L1072"><span class="lineNum">    1072</span>                 :             : </span>
-<span id="L1073"><span class="lineNum">    1073</span>                 :             : // Block Reporting</span>
-<span id="L1074"><span class="lineNum">    1074</span>                 :             : </span>
-<span id="L1075"><span class="lineNum">    1075</span>                 :<span class="tlaGNC">          11 : pl::Result&lt;std::vector&lt;BlockInfo&gt;&gt; LocalBlockStore::report_blocks() {</span></span>
-<span id="L1076"><span class="lineNum">    1076</span>                 :<span class="tlaGNC">          11 :     std::lock_guard lock(mu_);</span></span>
-<span id="L1077"><span class="lineNum">    1077</span>                 :             : </span>
-<span id="L1078"><span class="lineNum">    1078</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     std::vector&lt;BlockInfo&gt; blocks;</span></span>
-<span id="L1079"><span class="lineNum">    1079</span>                 :             :     std::error_code ec;</span>
-<span id="L1080"><span class="lineNum">    1080</span>   [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          42 :     for (auto&amp; entry : fs::directory_iterator(current_path_, ec)) {</span></span>
-<span id="L1081"><span class="lineNum">    1081</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :         if (!entry.is_regular_file()) {</span></span>
-<span id="L1082"><span class="lineNum">    1082</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             continue;</span></span>
-<span id="L1083"><span class="lineNum">    1083</span>                 :             :         }</span>
-<span id="L1084"><span class="lineNum">    1084</span>                 :             : </span>
-<span id="L1085"><span class="lineNum">    1085</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          10 :         auto header_result = read_header(entry.path());</span></span>
-<span id="L1086"><span class="lineNum">    1086</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :         if (header_result.hasError()) {</span></span>
-<span id="L1087"><span class="lineNum">    1087</span>                 :             :             continue; // Skip corrupt/unreadable files</span>
-<span id="L1088"><span class="lineNum">    1088</span>                 :             :         }</span>
-<span id="L1089"><span class="lineNum">    1089</span>                 :             : </span>
-<span id="L1090"><span class="lineNum">    1090</span>                 :             :         const auto&amp; header = header_result.value();</span>
-<span id="L1091"><span class="lineNum">    1091</span>                 :             :         BlockInfo info{};</span>
-<span id="L1092"><span class="lineNum">    1092</span>                 :<span class="tlaGNC">          10 :         info.block_id = header.block_id;</span></span>
-<span id="L1093"><span class="lineNum">    1093</span>                 :<span class="tlaGNC">          10 :         info.generation_stamp = header.generation_stamp;</span></span>
-<span id="L1094"><span class="lineNum">    1094</span>                 :<span class="tlaGNC">          10 :         info.length = header.data_length;</span></span>
-<span id="L1095"><span class="lineNum">    1095</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :         blocks.push_back(info);</span></span>
-<span id="L1096"><span class="lineNum">    1096</span>                 :             :     }</span>
-<span id="L1097"><span class="lineNum">    1097</span>                 :             : </span>
-<span id="L1098"><span class="lineNum">    1098</span>                 :<span class="tlaGNC">          11 :     return blocks;</span></span>
-<span id="L1099"><span class="lineNum">    1099</span>                 :             : }</span>
-<span id="L1100"><span class="lineNum">    1100</span>                 :             : </span>
-<span id="L1101"><span class="lineNum">    1101</span>                 :<span class="tlaGNC">           9 : bool LocalBlockStore::has_block(uint64_t block_id, uint64_t generation_stamp) const {</span></span>
-<span id="L1102"><span class="lineNum">    1102</span>                 :<span class="tlaGNC">           9 :     auto path = block_path(&quot;current&quot;, block_id, generation_stamp);</span></span>
-<span id="L1103"><span class="lineNum">    1103</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          18 :     return fs::exists(path);</span></span>
-<span id="L1104"><span class="lineNum">    1104</span>                 :             : }</span>
-<span id="L1105"><span class="lineNum">    1105</span>                 :             : </span>
-<span id="L1106"><span class="lineNum">    1106</span>                 :<span class="tlaGNC">          16 : pl::Result&lt;uint64_t&gt; LocalBlockStore::available_bytes() const {</span></span>
-<span id="L1107"><span class="lineNum">    1107</span>                 :             :     std::error_code ec;</span>
-<span id="L1108"><span class="lineNum">    1108</span>                 :<span class="tlaGNC">          16 :     auto space = fs::space(root_path_, ec);</span></span>
-<span id="L1109"><span class="lineNum">    1109</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :     if (ec) {</span></span>
-<span id="L1110"><span class="lineNum">    1110</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(</span></span>
-<span id="L1111"><span class="lineNum">    1111</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             make_io_error(fmt::format(&quot;failed to query disk space: {}&quot;, ec.message())));</span></span>
-<span id="L1112"><span class="lineNum">    1112</span>                 :             :     }</span>
-<span id="L1113"><span class="lineNum">    1113</span>                 :<span class="tlaGNC tlaBgGNC">          16 :     uint64_t available = space.available;</span></span>
-<span id="L1114"><span class="lineNum">    1114</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :     if (available &lt;= config_.reserved_bytes) {</span></span>
-<span id="L1115"><span class="lineNum">    1115</span>                 :             :         return uint64_t{0};</span>
-<span id="L1116"><span class="lineNum">    1116</span>                 :             :     }</span>
-<span id="L1117"><span class="lineNum">    1117</span>                 :<span class="tlaGNC">          16 :     return available - config_.reserved_bytes;</span></span>
-<span id="L1118"><span class="lineNum">    1118</span>                 :             : }</span>
-<span id="L1119"><span class="lineNum">    1119</span>                 :             : </span>
-<span id="L1120"><span class="lineNum">    1120</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L946"><span class="lineNum">     946</span>         [<span class="tlaGBC" title="Branch 0 was taken 33 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          33 :         data.append(chunk_data.data() + (overlap_begin - chunk_begin), overlap_end - overlap_begin);</span></span>
+<span id="L947"><span class="lineNum">     947</span>                 :             :     }</span>
+<span id="L948"><span class="lineNum">     948</span>                 :             : </span>
+<span id="L949"><span class="lineNum">     949</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :     close_fd();</span></span>
+<span id="L950"><span class="lineNum">     950</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC">          26 :     if (data.size() != to_read) {</span></span>
+<span id="L951"><span class="lineNum">     951</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_io_error(</span></span>
+<span id="L952"><span class="lineNum">     952</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             fmt::format(&quot;short range read: expected {} bytes, got {}&quot;, to_read, data.size())));</span></span>
+<span id="L953"><span class="lineNum">     953</span>                 :             :     }</span>
+<span id="L954"><span class="lineNum">     954</span>                 :             :     return data;</span>
+<span id="L955"><span class="lineNum">     955</span>                 :             : }</span>
+<span id="L956"><span class="lineNum">     956</span>                 :             : </span>
+<span id="L957"><span class="lineNum">     957</span>                 :<span class="tlaGNC tlaBgGNC">           4 : pl::Result&lt;std::string&gt; LocalBlockStore::read_chunk(uint64_t block_id,</span></span>
+<span id="L958"><span class="lineNum">     958</span>                 :             :                                                     uint64_t generation_stamp,</span>
+<span id="L959"><span class="lineNum">     959</span>                 :             :                                                     uint32_t chunk_index) {</span>
+<span id="L960"><span class="lineNum">     960</span>                 :<span class="tlaGNC">           4 :     auto path = block_path(&quot;current&quot;, block_id, generation_stamp);</span></span>
+<span id="L961"><span class="lineNum">     961</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     auto header_result = read_header(path);</span></span>
+<span id="L962"><span class="lineNum">     962</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (header_result.hasError()) {</span></span>
+<span id="L963"><span class="lineNum">     963</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(std::move(header_result.error()));</span></span>
+<span id="L964"><span class="lineNum">     964</span>                 :             :     }</span>
+<span id="L965"><span class="lineNum">     965</span>                 :             : </span>
+<span id="L966"><span class="lineNum">     966</span>                 :             :     const auto&amp; header = header_result.value();</span>
+<span id="L967"><span class="lineNum">     967</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           4 :     if (chunk_index &gt;= header.chunk_count) {</span></span>
+<span id="L968"><span class="lineNum">     968</span>                 :<span class="tlaGNC">           1 :         return pl::makeError(pl::Status(</span></span>
+<span id="L969"><span class="lineNum">     969</span>                 :             :             static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidArgument),</span>
+<span id="L970"><span class="lineNum">     970</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             fmt::format(&quot;chunk_index {} &gt;= chunk_count {}&quot;, chunk_index, header.chunk_count)));</span></span>
+<span id="L971"><span class="lineNum">     971</span>                 :             :     }</span>
+<span id="L972"><span class="lineNum">     972</span>                 :             : </span>
+<span id="L973"><span class="lineNum">     973</span>                 :             :     // Determine chunk offset and size</span>
+<span id="L974"><span class="lineNum">     974</span>                 :<span class="tlaGNC">           3 :     uint32_t offset = header.chunk_offsets[chunk_index];</span></span>
+<span id="L975"><span class="lineNum">     975</span>                 :             :     uint32_t chunk_size = 0;</span>
+<span id="L976"><span class="lineNum">     976</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 :     if (chunk_index + 1 &lt; header.chunk_count) {</span></span>
+<span id="L977"><span class="lineNum">     977</span>                 :<span class="tlaGNC">           1 :         chunk_size = header.chunk_offsets[chunk_index + 1] - offset;</span></span>
+<span id="L978"><span class="lineNum">     978</span>                 :             :     } else {</span>
+<span id="L979"><span class="lineNum">     979</span>                 :             :         // Last chunk: size = file_size - header - offset</span>
+<span id="L980"><span class="lineNum">     980</span>                 :             :         std::ifstream ifs_size(path, std::ios::binary | std::ios::ate);</span>
+<span id="L981"><span class="lineNum">     981</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         auto file_size = static_cast&lt;uint64_t&gt;(ifs_size.tellg());</span></span>
+<span id="L982"><span class="lineNum">     982</span>                 :<span class="tlaGNC">           2 :         chunk_size = static_cast&lt;uint32_t&gt;(file_size - kBlockHeaderSize - offset);</span></span>
+<span id="L983"><span class="lineNum">     983</span>                 :<span class="tlaGNC">           2 :     }</span></span>
+<span id="L984"><span class="lineNum">     984</span>                 :             : </span>
+<span id="L985"><span class="lineNum">     985</span>                 :             :     std::ifstream ifs(path, std::ios::binary);</span>
+<span id="L986"><span class="lineNum">     986</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     ifs.seekg(static_cast&lt;std::streamoff&gt;(kBlockHeaderSize + offset));</span></span>
+<span id="L987"><span class="lineNum">     987</span>                 :             : </span>
+<span id="L988"><span class="lineNum">     988</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     std::string chunk_data(chunk_size, '\0');</span></span>
+<span id="L989"><span class="lineNum">     989</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     ifs.read(chunk_data.data(), chunk_size);</span></span>
+<span id="L990"><span class="lineNum">     990</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (!ifs.good()) {</span></span>
+<span id="L991"><span class="lineNum">     991</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_io_error(&quot;failed to read chunk&quot;));</span></span>
+<span id="L992"><span class="lineNum">     992</span>                 :             :     }</span>
+<span id="L993"><span class="lineNum">     993</span>                 :             : </span>
+<span id="L994"><span class="lineNum">     994</span>                 :             :     // Verify checksum</span>
+<span id="L995"><span class="lineNum">     995</span>                 :             :     uint32_t crc = compute_crc32c(chunk_data.data(), chunk_data.size());</span>
+<span id="L996"><span class="lineNum">     996</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           3 :     if (crc != header.chunk_checksums[chunk_index]) {</span></span>
+<span id="L997"><span class="lineNum">     997</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(</span></span>
+<span id="L998"><span class="lineNum">     998</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             make_checksum_error(fmt::format(&quot;chunk {} CRC mismatch: expected={:#x}, got={:#x}&quot;,</span></span>
+<span id="L999"><span class="lineNum">     999</span>                 :             :                                             chunk_index,</span>
+<span id="L1000"><span class="lineNum">    1000</span>                 :             :                                             header.chunk_checksums[chunk_index],</span>
+<span id="L1001"><span class="lineNum">    1001</span>                 :             :                                             crc)));</span>
+<span id="L1002"><span class="lineNum">    1002</span>                 :             :     }</span>
+<span id="L1003"><span class="lineNum">    1003</span>                 :             : </span>
+<span id="L1004"><span class="lineNum">    1004</span>                 :             :     return chunk_data;</span>
+<span id="L1005"><span class="lineNum">    1005</span>                 :<span class="tlaGNC tlaBgGNC">           3 : }</span></span>
+<span id="L1006"><span class="lineNum">    1006</span>                 :             : </span>
+<span id="L1007"><span class="lineNum">    1007</span>                 :<span class="tlaGNC">          30 : pl::Result&lt;bool&gt; LocalBlockStore::verify_block(uint64_t block_id, uint64_t generation_stamp) {</span></span>
+<span id="L1008"><span class="lineNum">    1008</span>                 :<span class="tlaGNC">          30 :     auto path = block_path(&quot;current&quot;, block_id, generation_stamp);</span></span>
+<span id="L1009"><span class="lineNum">    1009</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          60 :     return verify_block_file(path);</span></span>
+<span id="L1010"><span class="lineNum">    1010</span>                 :             : }</span>
+<span id="L1011"><span class="lineNum">    1011</span>                 :             : </span>
+<span id="L1012"><span class="lineNum">    1012</span>                 :<span class="tlaGNC">          83 : pl::Result&lt;bool&gt; LocalBlockStore::verify_block_file(const fs::path&amp; path) const {</span></span>
+<span id="L1013"><span class="lineNum">    1013</span>                 :<span class="tlaGNC">          83 :     auto header_result = read_header(path);</span></span>
+<span id="L1014"><span class="lineNum">    1014</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 81 times"> + </span>]:<span class="tlaGNC">          83 :     if (header_result.hasError()) {</span></span>
+<span id="L1015"><span class="lineNum">    1015</span>                 :<span class="tlaGNC">           4 :         return pl::makeError(std::move(header_result.error()));</span></span>
+<span id="L1016"><span class="lineNum">    1016</span>                 :             :     }</span>
+<span id="L1017"><span class="lineNum">    1017</span>                 :             : </span>
+<span id="L1018"><span class="lineNum">    1018</span>                 :             :     const auto&amp; header = header_result.value();</span>
+<span id="L1019"><span class="lineNum">    1019</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 77 times"> + </span>]:<span class="tlaGNC">          81 :     if (header.chunk_count == 0) {</span></span>
+<span id="L1020"><span class="lineNum">    1020</span>                 :             :         return true;</span>
+<span id="L1021"><span class="lineNum">    1021</span>                 :             :     }</span>
+<span id="L1022"><span class="lineNum">    1022</span>                 :             : </span>
+<span id="L1023"><span class="lineNum">    1023</span>                 :             :     std::ifstream ifs(path, std::ios::binary);</span>
+<span id="L1024"><span class="lineNum">    1024</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 77 times"> + </span>]:<span class="tlaGNC">          77 :     if (!ifs.is_open()) {</span></span>
+<span id="L1025"><span class="lineNum">    1025</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_not_found(path.string()));</span></span>
+<span id="L1026"><span class="lineNum">    1026</span>                 :             :     }</span>
+<span id="L1027"><span class="lineNum">    1027</span>         [<span class="tlaGBC" title="Branch 0 was taken 77 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          77 :     ifs.seekg(0, std::ios::end);</span></span>
+<span id="L1028"><span class="lineNum">    1028</span>         [<span class="tlaGBC" title="Branch 0 was taken 77 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          77 :     auto file_size = static_cast&lt;uint64_t&gt;(ifs.tellg());</span></span>
+<span id="L1029"><span class="lineNum">    1029</span>   [<span class="tlaGBC" title="Branch 0 was taken 77 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 77 times"> + </span>]:<span class="tlaGNC">          77 :     if (file_size &lt; kBlockHeaderSize || file_size - kBlockHeaderSize != header.data_length) {</span></span>
+<span id="L1030"><span class="lineNum">    1030</span>                 :             :         return false;</span>
+<span id="L1031"><span class="lineNum">    1031</span>                 :             :     }</span>
+<span id="L1032"><span class="lineNum">    1032</span>                 :             : </span>
+<span id="L1033"><span class="lineNum">    1033</span>                 :             :     // Verify each chunk's CRC individually.</span>
+<span id="L1034"><span class="lineNum">    1034</span>         [<span class="tlaGBC" title="Branch 0 was taken 77 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          77 :     ifs.seekg(kBlockHeaderSize);</span></span>
+<span id="L1035"><span class="lineNum">    1035</span>                 :             : </span>
+<span id="L1036"><span class="lineNum">    1036</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC">         167 :     for (uint32_t i = 0; i &lt; header.chunk_count; ++i) {</span></span>
+<span id="L1037"><span class="lineNum">    1037</span>                 :             :         uint32_t chunk_size = 0;</span>
+<span id="L1038"><span class="lineNum">    1038</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 77 times"> + </span>]:<span class="tlaGNC">          93 :         if (i + 1 &lt; header.chunk_count) {</span></span>
+<span id="L1039"><span class="lineNum">    1039</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :             if (header.chunk_offsets[i + 1] &lt; header.chunk_offsets[i]) {</span></span>
+<span id="L1040"><span class="lineNum">    1040</span>                 :             :                 return false;</span>
+<span id="L1041"><span class="lineNum">    1041</span>                 :             :             }</span>
+<span id="L1042"><span class="lineNum">    1042</span>                 :<span class="tlaGNC">          16 :             chunk_size = header.chunk_offsets[i + 1] - header.chunk_offsets[i];</span></span>
+<span id="L1043"><span class="lineNum">    1043</span>                 :             :         } else {</span>
+<span id="L1044"><span class="lineNum">    1044</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 77 times"> + </span>]:<span class="tlaGNC">          77 :             if (header.chunk_offsets[i] &gt; header.data_length) {</span></span>
+<span id="L1045"><span class="lineNum">    1045</span>                 :             :                 return false;</span>
+<span id="L1046"><span class="lineNum">    1046</span>                 :             :             }</span>
+<span id="L1047"><span class="lineNum">    1047</span>                 :<span class="tlaGNC">          77 :             chunk_size = static_cast&lt;uint32_t&gt;(header.data_length - header.chunk_offsets[i]);</span></span>
+<span id="L1048"><span class="lineNum">    1048</span>                 :             :         }</span>
+<span id="L1049"><span class="lineNum">    1049</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          93 :         ifs.seekg(static_cast&lt;std::streamoff&gt;(kBlockHeaderSize + header.chunk_offsets[i]));</span></span>
+<span id="L1050"><span class="lineNum">    1050</span>                 :             : </span>
+<span id="L1051"><span class="lineNum">    1051</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          93 :         std::string buf(chunk_size, '\0');</span></span>
+<span id="L1052"><span class="lineNum">    1052</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          93 :         ifs.read(buf.data(), chunk_size);</span></span>
+<span id="L1053"><span class="lineNum">    1053</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 93 times"> + </span>]:<span class="tlaGNC">          93 :         if (!ifs.good()) {</span></span>
+<span id="L1054"><span class="lineNum">    1054</span>                 :             :             return false;</span>
+<span id="L1055"><span class="lineNum">    1055</span>                 :             :         }</span>
+<span id="L1056"><span class="lineNum">    1056</span>                 :             : </span>
+<span id="L1057"><span class="lineNum">    1057</span>                 :             :         uint32_t crc = compute_crc32c(buf.data(), buf.size());</span>
+<span id="L1058"><span class="lineNum">    1058</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 90 times"> + </span>]:<span class="tlaGNC">          93 :         if (crc != header.chunk_checksums[i]) {</span></span>
+<span id="L1059"><span class="lineNum">    1059</span>                 :             :             return false;</span>
+<span id="L1060"><span class="lineNum">    1060</span>                 :             :         }</span>
+<span id="L1061"><span class="lineNum">    1061</span>                 :             :     }</span>
+<span id="L1062"><span class="lineNum">    1062</span>                 :             : </span>
+<span id="L1063"><span class="lineNum">    1063</span>         [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          74 :     ifs.seekg(kBlockHeaderSize);</span></span>
+<span id="L1064"><span class="lineNum">    1064</span>         [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          74 :     std::string all_data(header.data_length, '\0');</span></span>
+<span id="L1065"><span class="lineNum">    1065</span>         [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          74 :     ifs.read(all_data.data(), static_cast&lt;std::streamsize&gt;(all_data.size()));</span></span>
+<span id="L1066"><span class="lineNum">    1066</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC">          74 :     if (!ifs.good()) {</span></span>
+<span id="L1067"><span class="lineNum">    1067</span>                 :             :         return false;</span>
+<span id="L1068"><span class="lineNum">    1068</span>                 :             :     }</span>
+<span id="L1069"><span class="lineNum">    1069</span>                 :<span class="tlaGNC">          74 :     return compute_crc32c(all_data.data(), all_data.size()) == header.block_checksum;</span></span>
+<span id="L1070"><span class="lineNum">    1070</span>                 :<span class="tlaGNC">          77 : }</span></span>
+<span id="L1071"><span class="lineNum">    1071</span>                 :             : </span>
+<span id="L1072"><span class="lineNum">    1072</span>                 :             : // Block Reporting</span>
+<span id="L1073"><span class="lineNum">    1073</span>                 :             : </span>
+<span id="L1074"><span class="lineNum">    1074</span>                 :<span class="tlaGNC">          11 : pl::Result&lt;std::vector&lt;BlockInfo&gt;&gt; LocalBlockStore::report_blocks() {</span></span>
+<span id="L1075"><span class="lineNum">    1075</span>                 :<span class="tlaGNC">          11 :     std::lock_guard lock(mu_);</span></span>
+<span id="L1076"><span class="lineNum">    1076</span>                 :             : </span>
+<span id="L1077"><span class="lineNum">    1077</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     std::vector&lt;BlockInfo&gt; blocks;</span></span>
+<span id="L1078"><span class="lineNum">    1078</span>                 :             :     std::error_code ec;</span>
+<span id="L1079"><span class="lineNum">    1079</span>   [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          42 :     for (auto&amp; entry : fs::directory_iterator(current_path_, ec)) {</span></span>
+<span id="L1080"><span class="lineNum">    1080</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :         if (!entry.is_regular_file()) {</span></span>
+<span id="L1081"><span class="lineNum">    1081</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             continue;</span></span>
+<span id="L1082"><span class="lineNum">    1082</span>                 :             :         }</span>
+<span id="L1083"><span class="lineNum">    1083</span>                 :             : </span>
+<span id="L1084"><span class="lineNum">    1084</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          10 :         auto header_result = read_header(entry.path());</span></span>
+<span id="L1085"><span class="lineNum">    1085</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :         if (header_result.hasError()) {</span></span>
+<span id="L1086"><span class="lineNum">    1086</span>                 :             :             continue; // Skip corrupt/unreadable files</span>
+<span id="L1087"><span class="lineNum">    1087</span>                 :             :         }</span>
+<span id="L1088"><span class="lineNum">    1088</span>                 :             : </span>
+<span id="L1089"><span class="lineNum">    1089</span>                 :             :         const auto&amp; header = header_result.value();</span>
+<span id="L1090"><span class="lineNum">    1090</span>                 :             :         BlockInfo info{};</span>
+<span id="L1091"><span class="lineNum">    1091</span>                 :<span class="tlaGNC">          10 :         info.block_id = header.block_id;</span></span>
+<span id="L1092"><span class="lineNum">    1092</span>                 :<span class="tlaGNC">          10 :         info.generation_stamp = header.generation_stamp;</span></span>
+<span id="L1093"><span class="lineNum">    1093</span>                 :<span class="tlaGNC">          10 :         info.length = header.data_length;</span></span>
+<span id="L1094"><span class="lineNum">    1094</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :         blocks.push_back(info);</span></span>
+<span id="L1095"><span class="lineNum">    1095</span>                 :             :     }</span>
+<span id="L1096"><span class="lineNum">    1096</span>                 :             : </span>
+<span id="L1097"><span class="lineNum">    1097</span>                 :<span class="tlaGNC">          11 :     return blocks;</span></span>
+<span id="L1098"><span class="lineNum">    1098</span>                 :             : }</span>
+<span id="L1099"><span class="lineNum">    1099</span>                 :             : </span>
+<span id="L1100"><span class="lineNum">    1100</span>                 :<span class="tlaGNC">           9 : bool LocalBlockStore::has_block(uint64_t block_id, uint64_t generation_stamp) const {</span></span>
+<span id="L1101"><span class="lineNum">    1101</span>                 :<span class="tlaGNC">           9 :     auto path = block_path(&quot;current&quot;, block_id, generation_stamp);</span></span>
+<span id="L1102"><span class="lineNum">    1102</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          18 :     return fs::exists(path);</span></span>
+<span id="L1103"><span class="lineNum">    1103</span>                 :             : }</span>
+<span id="L1104"><span class="lineNum">    1104</span>                 :             : </span>
+<span id="L1105"><span class="lineNum">    1105</span>                 :<span class="tlaGNC">          16 : pl::Result&lt;uint64_t&gt; LocalBlockStore::available_bytes() const {</span></span>
+<span id="L1106"><span class="lineNum">    1106</span>                 :             :     std::error_code ec;</span>
+<span id="L1107"><span class="lineNum">    1107</span>                 :<span class="tlaGNC">          16 :     auto space = fs::space(root_path_, ec);</span></span>
+<span id="L1108"><span class="lineNum">    1108</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :     if (ec) {</span></span>
+<span id="L1109"><span class="lineNum">    1109</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(</span></span>
+<span id="L1110"><span class="lineNum">    1110</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             make_io_error(fmt::format(&quot;failed to query disk space: {}&quot;, ec.message())));</span></span>
+<span id="L1111"><span class="lineNum">    1111</span>                 :             :     }</span>
+<span id="L1112"><span class="lineNum">    1112</span>                 :<span class="tlaGNC tlaBgGNC">          16 :     uint64_t available = space.available;</span></span>
+<span id="L1113"><span class="lineNum">    1113</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :     if (available &lt;= config_.reserved_bytes) {</span></span>
+<span id="L1114"><span class="lineNum">    1114</span>                 :             :         return uint64_t{0};</span>
+<span id="L1115"><span class="lineNum">    1115</span>                 :             :     }</span>
+<span id="L1116"><span class="lineNum">    1116</span>                 :<span class="tlaGNC">          16 :     return available - config_.reserved_bytes;</span></span>
+<span id="L1117"><span class="lineNum">    1117</span>                 :             : }</span>
+<span id="L1118"><span class="lineNum">    1118</span>                 :             : </span>
+<span id="L1119"><span class="lineNum">    1119</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>

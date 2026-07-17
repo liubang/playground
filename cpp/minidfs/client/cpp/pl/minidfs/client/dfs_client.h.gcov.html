@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 15:53:26</td>
+            <td class="headerValue">2026-07-17 23:54:08</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -148,171 +148,170 @@
 <span id="L77"><span class="lineNum">      77</span>                 :             : </span>
 <span id="L78"><span class="lineNum">      78</span>                 :             :     /// Create an immutable-after-complete output stream.</span>
 <span id="L79"><span class="lineNum">      79</span>                 :             :     /// Existing closed files may be replaced when overwrite=true.</span>
-<span id="L80"><span class="lineNum">      80</span>                 :             :     [[nodiscard]] Result&lt;DfsOutputStream&gt; create_immutable_output_stream(</span>
-<span id="L81"><span class="lineNum">      81</span>                 :             :         std::string_view dfs_path,</span>
-<span id="L82"><span class="lineNum">      82</span>                 :             :         bool overwrite = false);</span>
-<span id="L83"><span class="lineNum">      83</span>                 :             : </span>
-<span id="L84"><span class="lineNum">      84</span>                 :             :     /// Write a local file to DFS using pipeline replication.</span>
-<span id="L85"><span class="lineNum">      85</span>                 :             :     /// Existing closed files may be replaced when overwrite=true.</span>
-<span id="L86"><span class="lineNum">      86</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; put(std::string_view local_path,</span>
-<span id="L87"><span class="lineNum">      87</span>                 :             :                                    std::string_view dfs_path,</span>
-<span id="L88"><span class="lineNum">      88</span>                 :             :                                    bool overwrite = false);</span>
-<span id="L89"><span class="lineNum">      89</span>                 :             : </span>
-<span id="L90"><span class="lineNum">      90</span>                 :             :     /// Append a local file to an existing DFS file.</span>
-<span id="L91"><span class="lineNum">      91</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; append(std::string_view local_path, std::string_view dfs_path);</span>
-<span id="L92"><span class="lineNum">      92</span>                 :             : </span>
-<span id="L93"><span class="lineNum">      93</span>                 :             :     /// Shrink an existing DFS file.</span>
-<span id="L94"><span class="lineNum">      94</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; truncate(std::string_view dfs_path, uint64_t length);</span>
-<span id="L95"><span class="lineNum">      95</span>                 :             : </span>
-<span id="L96"><span class="lineNum">      96</span>                 :             :     /// Change an existing DFS file's desired replication factor.</span>
-<span id="L97"><span class="lineNum">      97</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; setrep(std::string_view dfs_path, uint32_t replication);</span>
-<span id="L98"><span class="lineNum">      98</span>                 :             : </span>
-<span id="L99"><span class="lineNum">      99</span>                 :             :     /// Read a DFS file to a local path.</span>
-<span id="L100"><span class="lineNum">     100</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; get(std::string_view dfs_path, std::string_view local_path);</span>
-<span id="L101"><span class="lineNum">     101</span>                 :             : </span>
-<span id="L102"><span class="lineNum">     102</span>                 :             :     /// Exact positional read bound to the latest published identity from stat().</span>
-<span id="L103"><span class="lineNum">     103</span>                 :             :     [[nodiscard]] Result&lt;std::string&gt; read_exact(std::string_view dfs_path,</span>
-<span id="L104"><span class="lineNum">     104</span>                 :             :                                                  uint64_t offset,</span>
-<span id="L105"><span class="lineNum">     105</span>                 :             :                                                  uint64_t length);</span>
-<span id="L106"><span class="lineNum">     106</span>                 :             : </span>
-<span id="L107"><span class="lineNum">     107</span>                 :             :     /// Exact positional read bound to a caller-provided published identity.</span>
-<span id="L108"><span class="lineNum">     108</span>                 :             :     [[nodiscard]] Result&lt;std::string&gt; read_exact(std::string_view dfs_path,</span>
-<span id="L109"><span class="lineNum">     109</span>                 :             :                                                  uint64_t offset,</span>
-<span id="L110"><span class="lineNum">     110</span>                 :             :                                                  uint64_t length,</span>
-<span id="L111"><span class="lineNum">     111</span>                 :             :                                                  const FileIdentity&amp; expected_identity);</span>
-<span id="L112"><span class="lineNum">     112</span>                 :             : </span>
-<span id="L113"><span class="lineNum">     113</span>                 :             :     // Admin / diagnostic operations</span>
-<span id="L114"><span class="lineNum">     114</span>                 :             : </span>
-<span id="L115"><span class="lineNum">     115</span>                 :             :     /// Cluster-wide summary (capacity, nodes, blocks, files).</span>
-<span id="L116"><span class="lineNum">     116</span>                 :             :     struct ClusterInfo {</span>
-<span id="L117"><span class="lineNum">     117</span>                 :             :         uint64_t total_capacity_bytes = 0;</span>
-<span id="L118"><span class="lineNum">     118</span>                 :             :         uint64_t used_bytes = 0;</span>
-<span id="L119"><span class="lineNum">     119</span>                 :             :         uint64_t free_bytes = 0;</span>
-<span id="L120"><span class="lineNum">     120</span>                 :             :         uint32_t live_datanodes = 0;</span>
-<span id="L121"><span class="lineNum">     121</span>                 :             :         uint32_t dead_datanodes = 0;</span>
-<span id="L122"><span class="lineNum">     122</span>                 :             :         uint64_t total_blocks = 0;</span>
-<span id="L123"><span class="lineNum">     123</span>                 :             :         uint64_t total_files = 0;</span>
-<span id="L124"><span class="lineNum">     124</span>                 :             :         uint64_t total_directories = 0;</span>
-<span id="L125"><span class="lineNum">     125</span>                 :             :         uint32_t under_replicated_blocks = 0;</span>
-<span id="L126"><span class="lineNum">     126</span>                 :             :     };</span>
-<span id="L127"><span class="lineNum">     127</span>                 :             :     [[nodiscard]] Result&lt;ClusterInfo&gt; get_cluster_info();</span>
-<span id="L128"><span class="lineNum">     128</span>                 :             : </span>
-<span id="L129"><span class="lineNum">     129</span>                 :             :     /// Per-DataNode summary returned by list_datanodes / get_datanode_info.</span>
-<span id="L130"><span class="lineNum">     130</span>                 :             :     struct DataNodeSummary {</span>
-<span id="L131"><span class="lineNum">     131</span>                 :             :         uint64_t datanode_id = 0;</span>
-<span id="L132"><span class="lineNum">     132</span>                 :             :         std::string uuid;</span>
-<span id="L133"><span class="lineNum">     133</span>                 :             :         std::string hostname;</span>
-<span id="L134"><span class="lineNum">     134</span>                 :             :         std::string ip;</span>
-<span id="L135"><span class="lineNum">     135</span>                 :             :         uint32_t rpc_port = 0;</span>
-<span id="L136"><span class="lineNum">     136</span>                 :             :         uint32_t data_port = 0;</span>
-<span id="L137"><span class="lineNum">     137</span>                 :             :         std::string rack;</span>
-<span id="L138"><span class="lineNum">     138</span>                 :             :         std::string state;</span>
-<span id="L139"><span class="lineNum">     139</span>                 :             :         uint64_t capacity_bytes = 0;</span>
-<span id="L140"><span class="lineNum">     140</span>                 :             :         uint64_t used_bytes = 0;</span>
-<span id="L141"><span class="lineNum">     141</span>                 :             :         uint64_t free_bytes = 0;</span>
-<span id="L142"><span class="lineNum">     142</span>                 :             :         uint64_t last_heartbeat_ms = 0;</span>
-<span id="L143"><span class="lineNum">     143</span>                 :             :         uint32_t block_count = 0;</span>
-<span id="L144"><span class="lineNum">     144</span>                 :             :     };</span>
-<span id="L145"><span class="lineNum">     145</span>                 :             :     [[nodiscard]] Result&lt;std::vector&lt;DataNodeSummary&gt;&gt; list_datanodes(bool include_dead = false);</span>
-<span id="L146"><span class="lineNum">     146</span>                 :             :     [[nodiscard]] Result&lt;DataNodeSummary&gt; get_datanode_info(uint64_t datanode_id);</span>
-<span id="L147"><span class="lineNum">     147</span>                 :             :     [[nodiscard]] Result&lt;DataNodeSummary&gt; get_datanode_info_by_uuid(std::string_view uuid);</span>
-<span id="L148"><span class="lineNum">     148</span>                 :             : </span>
-<span id="L149"><span class="lineNum">     149</span>                 :             :     /// Inode details (file or directory).</span>
-<span id="L150"><span class="lineNum">     150</span>                 :             :     struct InodeDetail {</span>
-<span id="L151"><span class="lineNum">     151</span>                 :             :         uint64_t inode_id = 0;</span>
-<span id="L152"><span class="lineNum">     152</span>                 :             :         std::string type;</span>
-<span id="L153"><span class="lineNum">     153</span>                 :             :         uint64_t parent_id = 0;</span>
-<span id="L154"><span class="lineNum">     154</span>                 :             :         std::string name;</span>
-<span id="L155"><span class="lineNum">     155</span>                 :             :         std::string owner;</span>
-<span id="L156"><span class="lineNum">     156</span>                 :             :         std::string group;</span>
-<span id="L157"><span class="lineNum">     157</span>                 :             :         uint32_t permission = 0;</span>
-<span id="L158"><span class="lineNum">     158</span>                 :             :         uint64_t length = 0;</span>
-<span id="L159"><span class="lineNum">     159</span>                 :             :         uint32_t replication = 0;</span>
-<span id="L160"><span class="lineNum">     160</span>                 :             :         uint64_t block_size = 0;</span>
-<span id="L161"><span class="lineNum">     161</span>                 :             :         std::string state;</span>
-<span id="L162"><span class="lineNum">     162</span>                 :             :         uint64_t ctime_ms = 0;</span>
-<span id="L163"><span class="lineNum">     163</span>                 :             :         uint64_t mtime_ms = 0;</span>
-<span id="L164"><span class="lineNum">     164</span>                 :             :         uint32_t block_count = 0;</span>
-<span id="L165"><span class="lineNum">     165</span>                 :             :         uint32_t child_count = 0;</span>
-<span id="L166"><span class="lineNum">     166</span>                 :             :     };</span>
-<span id="L167"><span class="lineNum">     167</span>                 :             :     [[nodiscard]] Result&lt;InodeDetail&gt; get_inode_info(uint64_t inode_id);</span>
-<span id="L168"><span class="lineNum">     168</span>                 :             :     [[nodiscard]] Result&lt;InodeDetail&gt; get_inode_info_by_path(std::string_view path);</span>
-<span id="L169"><span class="lineNum">     169</span>                 :             : </span>
-<span id="L170"><span class="lineNum">     170</span>                 :             :     /// Block location info.</span>
-<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     struct BlockLocation {</span></span>
-<span id="L172"><span class="lineNum">     172</span>                 :             :         uint64_t datanode_id = 0;</span>
-<span id="L173"><span class="lineNum">     173</span>                 :             :         std::string host;</span>
-<span id="L174"><span class="lineNum">     174</span>                 :             :         uint32_t data_port = 0;</span>
-<span id="L175"><span class="lineNum">     175</span>                 :             :     };</span>
-<span id="L176"><span class="lineNum">     176</span>                 :             : </span>
-<span id="L177"><span class="lineNum">     177</span>                 :             :     /// Per-block detail for file blocks listing.</span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaUNC">           0 :     struct FileBlockDetail {</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :             :         uint64_t block_id = 0;</span>
-<span id="L180"><span class="lineNum">     180</span>                 :             :         uint32_t block_index = 0;</span>
-<span id="L181"><span class="lineNum">     181</span>                 :             :         uint64_t generation_stamp = 0;</span>
-<span id="L182"><span class="lineNum">     182</span>                 :             :         uint64_t length = 0;</span>
-<span id="L183"><span class="lineNum">     183</span>                 :             :         std::string state;</span>
-<span id="L184"><span class="lineNum">     184</span>                 :             :         uint32_t desired_replicas = 0;</span>
-<span id="L185"><span class="lineNum">     185</span>                 :             :         uint32_t actual_replicas = 0;</span>
-<span id="L186"><span class="lineNum">     186</span>                 :             :         std::vector&lt;BlockLocation&gt; locations;</span>
-<span id="L187"><span class="lineNum">     187</span>                 :             :     };</span>
-<span id="L188"><span class="lineNum">     188</span>                 :             :     [[nodiscard]] Result&lt;std::vector&lt;FileBlockDetail&gt;&gt; get_file_blocks(uint64_t inode_id);</span>
-<span id="L189"><span class="lineNum">     189</span>                 :             :     [[nodiscard]] Result&lt;std::vector&lt;FileBlockDetail&gt;&gt; get_file_blocks_by_path(</span>
-<span id="L190"><span class="lineNum">     190</span>                 :             :         std::string_view path);</span>
-<span id="L191"><span class="lineNum">     191</span>                 :             : </span>
-<span id="L192"><span class="lineNum">     192</span>                 :             :     /// Detailed replica info for a single block.</span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaUNC">           0 :     struct ReplicaDetail {</span></span>
-<span id="L194"><span class="lineNum">     194</span>                 :             :         uint64_t datanode_id = 0;</span>
-<span id="L195"><span class="lineNum">     195</span>                 :             :         std::string hostname;</span>
-<span id="L196"><span class="lineNum">     196</span>                 :             :         std::string state;</span>
-<span id="L197"><span class="lineNum">     197</span>                 :             :         uint64_t length = 0;</span>
-<span id="L198"><span class="lineNum">     198</span>                 :             :         uint64_t generation_stamp = 0;</span>
-<span id="L199"><span class="lineNum">     199</span>                 :             :         uint64_t report_time_ms = 0;</span>
-<span id="L200"><span class="lineNum">     200</span>                 :             :     };</span>
-<span id="L201"><span class="lineNum">     201</span>                 :             : </span>
-<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaUNC">           0 :     struct BlockDetail {</span></span>
-<span id="L203"><span class="lineNum">     203</span>                 :             :         uint64_t block_id = 0;</span>
-<span id="L204"><span class="lineNum">     204</span>                 :             :         uint64_t inode_id = 0;</span>
-<span id="L205"><span class="lineNum">     205</span>                 :             :         uint32_t block_index = 0;</span>
-<span id="L206"><span class="lineNum">     206</span>                 :             :         uint64_t generation_stamp = 0;</span>
-<span id="L207"><span class="lineNum">     207</span>                 :             :         uint64_t length = 0;</span>
-<span id="L208"><span class="lineNum">     208</span>                 :             :         std::string state;</span>
-<span id="L209"><span class="lineNum">     209</span>                 :             :         uint32_t desired_replicas = 0;</span>
-<span id="L210"><span class="lineNum">     210</span>                 :             :         std::vector&lt;ReplicaDetail&gt; replicas;</span>
-<span id="L211"><span class="lineNum">     211</span>                 :             :     };</span>
-<span id="L212"><span class="lineNum">     212</span>                 :             :     [[nodiscard]] Result&lt;BlockDetail&gt; get_block_info(uint64_t block_id);</span>
-<span id="L213"><span class="lineNum">     213</span>                 :             : </span>
-<span id="L214"><span class="lineNum">     214</span>                 :             : private:</span>
-<span id="L215"><span class="lineNum">     215</span>                 :             :     explicit DfsClient(DfsClientConfig config);</span>
-<span id="L216"><span class="lineNum">     216</span>                 :             : </span>
-<span id="L217"><span class="lineNum">     217</span>                 :             :     /// Initialize the brpc channel to NameNode.</span>
-<span id="L218"><span class="lineNum">     218</span>                 :             :     [[nodiscard]] bool init();</span>
-<span id="L219"><span class="lineNum">     219</span>                 :             : </span>
-<span id="L220"><span class="lineNum">     220</span>                 :             :     /// Read one exact byte range from a located block with replica fallback.</span>
-<span id="L221"><span class="lineNum">     221</span>                 :             :     [[nodiscard]] Result&lt;std::string&gt; read_block(const LocatedBlock&amp; block,</span>
-<span id="L222"><span class="lineNum">     222</span>                 :             :                                                  uint64_t offset,</span>
-<span id="L223"><span class="lineNum">     223</span>                 :             :                                                  uint64_t length);</span>
-<span id="L224"><span class="lineNum">     224</span>                 :             : </span>
-<span id="L225"><span class="lineNum">     225</span>                 :             :     /// Generate a stable per-logical-call request ID.</span>
-<span id="L226"><span class="lineNum">     226</span>                 :             :     [[nodiscard]] std::string next_request_id();</span>
-<span id="L227"><span class="lineNum">     227</span>                 :             : </span>
-<span id="L228"><span class="lineNum">     228</span>                 :             :     [[nodiscard]] Result&lt;std::string&gt; read_exact_with_status(std::string_view dfs_path,</span>
-<span id="L229"><span class="lineNum">     229</span>                 :             :                                                              uint64_t offset,</span>
-<span id="L230"><span class="lineNum">     230</span>                 :             :                                                              uint64_t length,</span>
-<span id="L231"><span class="lineNum">     231</span>                 :             :                                                              const FileStatus&amp; fs,</span>
-<span id="L232"><span class="lineNum">     232</span>                 :             :                                                              const FileIdentity&amp; expected_identity);</span>
-<span id="L233"><span class="lineNum">     233</span>                 :             : </span>
-<span id="L234"><span class="lineNum">     234</span>                 :             :     [[nodiscard]] Result&lt;DfsOutputStream&gt; create_output_stream(std::string_view dfs_path,</span>
-<span id="L235"><span class="lineNum">     235</span>                 :             :                                                                bool overwrite,</span>
-<span id="L236"><span class="lineNum">     236</span>                 :             :                                                                FileAppendMode file_append_mode);</span>
-<span id="L237"><span class="lineNum">     237</span>                 :             : </span>
-<span id="L238"><span class="lineNum">     238</span>                 :             : private:</span>
-<span id="L239"><span class="lineNum">     239</span>                 :             :     DfsClientConfig config_;</span>
-<span id="L240"><span class="lineNum">     240</span>                 :             :     brpc::Channel namenode_channel_;</span>
-<span id="L241"><span class="lineNum">     241</span>                 :             :     std::atomic&lt;uint64_t&gt; request_seq_{0};</span>
-<span id="L242"><span class="lineNum">     242</span>                 :             : };</span>
-<span id="L243"><span class="lineNum">     243</span>                 :             : </span>
-<span id="L244"><span class="lineNum">     244</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :     [[nodiscard]] Result&lt;DfsOutputStream&gt; create_immutable_output_stream(std::string_view dfs_path,</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             :                                                                          bool overwrite = false);</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : </span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :     /// Write a local file to DFS using pipeline replication.</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :     /// Existing closed files may be replaced when overwrite=true.</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; put(std::string_view local_path,</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :                                    std::string_view dfs_path,</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :                                    bool overwrite = false);</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             : </span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :     /// Append a local file to an existing DFS file.</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; append(std::string_view local_path, std::string_view dfs_path);</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             : </span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :     /// Shrink an existing DFS file.</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; truncate(std::string_view dfs_path, uint64_t length);</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             : </span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :     /// Change an existing DFS file's desired replication factor.</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; setrep(std::string_view dfs_path, uint32_t replication);</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : </span>
+<span id="L98"><span class="lineNum">      98</span>                 :             :     /// Read a DFS file to a local path.</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; get(std::string_view dfs_path, std::string_view local_path);</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             : </span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :     /// Exact positional read bound to the latest published identity from stat().</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :     [[nodiscard]] Result&lt;std::string&gt; read_exact(std::string_view dfs_path,</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             :                                                  uint64_t offset,</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :                                                  uint64_t length);</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : </span>
+<span id="L106"><span class="lineNum">     106</span>                 :             :     /// Exact positional read bound to a caller-provided published identity.</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             :     [[nodiscard]] Result&lt;std::string&gt; read_exact(std::string_view dfs_path,</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :                                                  uint64_t offset,</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             :                                                  uint64_t length,</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             :                                                  const FileIdentity&amp; expected_identity);</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             : </span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :     // Admin / diagnostic operations</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             : </span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :     /// Cluster-wide summary (capacity, nodes, blocks, files).</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             :     struct ClusterInfo {</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :         uint64_t total_capacity_bytes = 0;</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             :         uint64_t used_bytes = 0;</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :         uint64_t free_bytes = 0;</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             :         uint32_t live_datanodes = 0;</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :         uint32_t dead_datanodes = 0;</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :         uint64_t total_blocks = 0;</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :         uint64_t total_files = 0;</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :         uint64_t total_directories = 0;</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :         uint32_t under_replicated_blocks = 0;</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :     };</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :     [[nodiscard]] Result&lt;ClusterInfo&gt; get_cluster_info();</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             : </span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :     /// Per-DataNode summary returned by list_datanodes / get_datanode_info.</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :     struct DataNodeSummary {</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :         uint64_t datanode_id = 0;</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             :         std::string uuid;</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             :         std::string hostname;</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             :         std::string ip;</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             :         uint32_t rpc_port = 0;</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             :         uint32_t data_port = 0;</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             :         std::string rack;</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :         std::string state;</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :         uint64_t capacity_bytes = 0;</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :         uint64_t used_bytes = 0;</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :         uint64_t free_bytes = 0;</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :         uint64_t last_heartbeat_ms = 0;</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             :         uint32_t block_count = 0;</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             :     };</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             :     [[nodiscard]] Result&lt;std::vector&lt;DataNodeSummary&gt;&gt; list_datanodes(bool include_dead = false);</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             :     [[nodiscard]] Result&lt;DataNodeSummary&gt; get_datanode_info(uint64_t datanode_id);</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             :     [[nodiscard]] Result&lt;DataNodeSummary&gt; get_datanode_info_by_uuid(std::string_view uuid);</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : </span>
+<span id="L148"><span class="lineNum">     148</span>                 :             :     /// Inode details (file or directory).</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             :     struct InodeDetail {</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :         uint64_t inode_id = 0;</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             :         std::string type;</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             :         uint64_t parent_id = 0;</span>
+<span id="L153"><span class="lineNum">     153</span>                 :             :         std::string name;</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             :         std::string owner;</span>
+<span id="L155"><span class="lineNum">     155</span>                 :             :         std::string group;</span>
+<span id="L156"><span class="lineNum">     156</span>                 :             :         uint32_t permission = 0;</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :         uint64_t length = 0;</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :         uint32_t replication = 0;</span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :         uint64_t block_size = 0;</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :         std::string state;</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             :         uint64_t ctime_ms = 0;</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             :         uint64_t mtime_ms = 0;</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             :         uint32_t block_count = 0;</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :         uint32_t child_count = 0;</span>
+<span id="L165"><span class="lineNum">     165</span>                 :             :     };</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             :     [[nodiscard]] Result&lt;InodeDetail&gt; get_inode_info(uint64_t inode_id);</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             :     [[nodiscard]] Result&lt;InodeDetail&gt; get_inode_info_by_path(std::string_view path);</span>
+<span id="L168"><span class="lineNum">     168</span>                 :             : </span>
+<span id="L169"><span class="lineNum">     169</span>                 :             :     /// Block location info.</span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     struct BlockLocation {</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :         uint64_t datanode_id = 0;</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             :         std::string host;</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             :         uint32_t data_port = 0;</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             :     };</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             : </span>
+<span id="L176"><span class="lineNum">     176</span>                 :             :     /// Per-block detail for file blocks listing.</span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaUNC">           0 :     struct FileBlockDetail {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :             :         uint64_t block_id = 0;</span>
+<span id="L179"><span class="lineNum">     179</span>                 :             :         uint32_t block_index = 0;</span>
+<span id="L180"><span class="lineNum">     180</span>                 :             :         uint64_t generation_stamp = 0;</span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :         uint64_t length = 0;</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             :         std::string state;</span>
+<span id="L183"><span class="lineNum">     183</span>                 :             :         uint32_t desired_replicas = 0;</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :         uint32_t actual_replicas = 0;</span>
+<span id="L185"><span class="lineNum">     185</span>                 :             :         std::vector&lt;BlockLocation&gt; locations;</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :     };</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             :     [[nodiscard]] Result&lt;std::vector&lt;FileBlockDetail&gt;&gt; get_file_blocks(uint64_t inode_id);</span>
+<span id="L188"><span class="lineNum">     188</span>                 :             :     [[nodiscard]] Result&lt;std::vector&lt;FileBlockDetail&gt;&gt; get_file_blocks_by_path(</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             :         std::string_view path);</span>
+<span id="L190"><span class="lineNum">     190</span>                 :             : </span>
+<span id="L191"><span class="lineNum">     191</span>                 :             :     /// Detailed replica info for a single block.</span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaUNC">           0 :     struct ReplicaDetail {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :             :         uint64_t datanode_id = 0;</span>
+<span id="L194"><span class="lineNum">     194</span>                 :             :         std::string hostname;</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             :         std::string state;</span>
+<span id="L196"><span class="lineNum">     196</span>                 :             :         uint64_t length = 0;</span>
+<span id="L197"><span class="lineNum">     197</span>                 :             :         uint64_t generation_stamp = 0;</span>
+<span id="L198"><span class="lineNum">     198</span>                 :             :         uint64_t report_time_ms = 0;</span>
+<span id="L199"><span class="lineNum">     199</span>                 :             :     };</span>
+<span id="L200"><span class="lineNum">     200</span>                 :             : </span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaUNC">           0 :     struct BlockDetail {</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :             :         uint64_t block_id = 0;</span>
+<span id="L203"><span class="lineNum">     203</span>                 :             :         uint64_t inode_id = 0;</span>
+<span id="L204"><span class="lineNum">     204</span>                 :             :         uint32_t block_index = 0;</span>
+<span id="L205"><span class="lineNum">     205</span>                 :             :         uint64_t generation_stamp = 0;</span>
+<span id="L206"><span class="lineNum">     206</span>                 :             :         uint64_t length = 0;</span>
+<span id="L207"><span class="lineNum">     207</span>                 :             :         std::string state;</span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :         uint32_t desired_replicas = 0;</span>
+<span id="L209"><span class="lineNum">     209</span>                 :             :         std::vector&lt;ReplicaDetail&gt; replicas;</span>
+<span id="L210"><span class="lineNum">     210</span>                 :             :     };</span>
+<span id="L211"><span class="lineNum">     211</span>                 :             :     [[nodiscard]] Result&lt;BlockDetail&gt; get_block_info(uint64_t block_id);</span>
+<span id="L212"><span class="lineNum">     212</span>                 :             : </span>
+<span id="L213"><span class="lineNum">     213</span>                 :             : private:</span>
+<span id="L214"><span class="lineNum">     214</span>                 :             :     explicit DfsClient(DfsClientConfig config);</span>
+<span id="L215"><span class="lineNum">     215</span>                 :             : </span>
+<span id="L216"><span class="lineNum">     216</span>                 :             :     /// Initialize the brpc channel to NameNode.</span>
+<span id="L217"><span class="lineNum">     217</span>                 :             :     [[nodiscard]] bool init();</span>
+<span id="L218"><span class="lineNum">     218</span>                 :             : </span>
+<span id="L219"><span class="lineNum">     219</span>                 :             :     /// Read one exact byte range from a located block with replica fallback.</span>
+<span id="L220"><span class="lineNum">     220</span>                 :             :     [[nodiscard]] Result&lt;std::string&gt; read_block(const LocatedBlock&amp; block,</span>
+<span id="L221"><span class="lineNum">     221</span>                 :             :                                                  uint64_t offset,</span>
+<span id="L222"><span class="lineNum">     222</span>                 :             :                                                  uint64_t length);</span>
+<span id="L223"><span class="lineNum">     223</span>                 :             : </span>
+<span id="L224"><span class="lineNum">     224</span>                 :             :     /// Generate a stable per-logical-call request ID.</span>
+<span id="L225"><span class="lineNum">     225</span>                 :             :     [[nodiscard]] std::string next_request_id();</span>
+<span id="L226"><span class="lineNum">     226</span>                 :             : </span>
+<span id="L227"><span class="lineNum">     227</span>                 :             :     [[nodiscard]] Result&lt;std::string&gt; read_exact_with_status(std::string_view dfs_path,</span>
+<span id="L228"><span class="lineNum">     228</span>                 :             :                                                              uint64_t offset,</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             :                                                              uint64_t length,</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             :                                                              const FileStatus&amp; fs,</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             :                                                              const FileIdentity&amp; expected_identity);</span>
+<span id="L232"><span class="lineNum">     232</span>                 :             : </span>
+<span id="L233"><span class="lineNum">     233</span>                 :             :     [[nodiscard]] Result&lt;DfsOutputStream&gt; create_output_stream(std::string_view dfs_path,</span>
+<span id="L234"><span class="lineNum">     234</span>                 :             :                                                                bool overwrite,</span>
+<span id="L235"><span class="lineNum">     235</span>                 :             :                                                                FileAppendMode file_append_mode);</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             : </span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : private:</span>
+<span id="L238"><span class="lineNum">     238</span>                 :             :     DfsClientConfig config_;</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             :     brpc::Channel namenode_channel_;</span>
+<span id="L240"><span class="lineNum">     240</span>                 :             :     std::atomic&lt;uint64_t&gt; request_seq_{0};</span>
+<span id="L241"><span class="lineNum">     241</span>                 :             : };</span>
+<span id="L242"><span class="lineNum">     242</span>                 :             : </span>
+<span id="L243"><span class="lineNum">     243</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>

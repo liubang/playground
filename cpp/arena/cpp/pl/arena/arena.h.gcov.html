@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 15:53:26</td>
+            <td class="headerValue">2026-07-17 23:54:08</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -98,29 +98,29 @@
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : class Arena : public DisableCopyAndMove {</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : public:</span>
-<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC tlaBgGNC">          17 :     explicit Arena(std::size_t initial_block_size = 64 * 1024)</span></span>
-<span id="L31"><span class="lineNum">      31</span>         [<span class="tlaGBC" title="Branch 0 was taken 17 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          17 :         : default_block_size_(initial_block_size) {</span></span>
-<span id="L32"><span class="lineNum">      32</span>         [<span class="tlaGBC" title="Branch 0 was taken 17 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          17 :         allocate_new_block(initial_block_size);</span></span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">          17 :     }</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC tlaBgGNC">          22 :     explicit Arena(std::size_t initial_block_size = 64 * 1024)</span></span>
+<span id="L31"><span class="lineNum">      31</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          22 :         : default_block_size_(initial_block_size) {</span></span>
+<span id="L32"><span class="lineNum">      32</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          22 :         allocate_new_block(initial_block_size);</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">          22 :     }</span></span>
 <span id="L34"><span class="lineNum">      34</span>                 :             : </span>
 <span id="L35"><span class="lineNum">      35</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          17 :     ~Arena() = default;</span></span>
 <span id="L36"><span class="lineNum">      36</span>                 :             : </span>
-<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">        5350 :     void* allocate(std::size_t size, std::size_t alignment = alignof(std::max_align_t)) {</span></span>
-<span id="L38"><span class="lineNum">      38</span>         [<span class="tlaGBC" title="Branch 0 was taken 5350 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5350 :         if (size == 0) {</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">        5357 :     void* allocate(std::size_t size, std::size_t alignment = alignof(std::max_align_t)) {</span></span>
+<span id="L38"><span class="lineNum">      38</span>         [<span class="tlaGBC" title="Branch 0 was taken 5357 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5357 :         if (size == 0) {</span></span>
 <span id="L39"><span class="lineNum">      39</span>                 :             :             return nullptr;</span>
 <span id="L40"><span class="lineNum">      40</span>                 :             :         }</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             :         size = align_up(size, alignment);</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : </span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">        5350 :         if (current_block_ids_ &lt; blocks_.size()) {</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">        5357 :         if (current_block_ids_ &lt; blocks_.size()) {</span></span>
 <span id="L44"><span class="lineNum">      44</span>                 :             :             auto&amp; current_block = blocks_[current_block_ids_];</span>
 <span id="L45"><span class="lineNum">      45</span>                 :             :             // Compute alignment based on the absolute address, not just the offset</span>
-<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">        5350 :             auto base_addr = reinterpret_cast&lt;std::uintptr_t&gt;(current_block.data.get());</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">        5357 :             auto base_addr = reinterpret_cast&lt;std::uintptr_t&gt;(current_block.data.get());</span></span>
 <span id="L47"><span class="lineNum">      47</span>                 :             :             std::size_t aligned_used =</span>
-<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">        5350 :                 align_up_addr(base_addr + current_block.used, alignment) - base_addr;</span></span>
-<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">        5350 :             if (aligned_used + size &lt;= current_block.size) {</span></span>
-<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">        5340 :                 void* ptr = current_block.data.get() + aligned_used;</span></span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">        5340 :                 current_block.used = aligned_used + size;</span></span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">        5340 :                 return ptr;</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">        5357 :                 align_up_addr(base_addr + current_block.used, alignment) - base_addr;</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">        5357 :             if (aligned_used + size &lt;= current_block.size) {</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">        5347 :                 void* ptr = current_block.data.get() + aligned_used;</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">        5347 :                 current_block.used = aligned_used + size;</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">        5347 :                 return ptr;</span></span>
 <span id="L53"><span class="lineNum">      53</span>                 :             :             }</span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :         }</span>
 <span id="L55"><span class="lineNum">      55</span>                 :             : </span>
@@ -194,27 +194,27 @@
 <span id="L123"><span class="lineNum">     123</span>                 :             : </span>
 <span id="L124"><span class="lineNum">     124</span>                 :             : private:</span>
 <span id="L125"><span class="lineNum">     125</span>                 :             :     static constexpr std::size_t align_up(std::size_t size, std::size_t alignment) noexcept {</span>
-<span id="L126"><span class="lineNum">     126</span>         [<span class="tlaGBC" title="Branch 0 was taken 5350 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5350 :         return (size + alignment - 1) &amp; ~(alignment - 1);</span></span>
+<span id="L126"><span class="lineNum">     126</span>         [<span class="tlaGBC" title="Branch 0 was taken 5357 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5357 :         return (size + alignment - 1) &amp; ~(alignment - 1);</span></span>
 <span id="L127"><span class="lineNum">     127</span>                 :             :     }</span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : </span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :     static std::uintptr_t align_up_addr(std::uintptr_t addr, std::size_t alignment) noexcept {</span>
-<span id="L130"><span class="lineNum">     130</span>         [<span class="tlaGBC" title="Branch 0 was taken 5340 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">        5360 :         return (addr + alignment - 1) &amp; ~(static_cast&lt;std::uintptr_t&gt;(alignment) - 1);</span></span>
+<span id="L130"><span class="lineNum">     130</span>         [<span class="tlaGBC" title="Branch 0 was taken 5347 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">        5367 :         return (addr + alignment - 1) &amp; ~(static_cast&lt;std::uintptr_t&gt;(alignment) - 1);</span></span>
 <span id="L131"><span class="lineNum">     131</span>                 :             :     }</span>
 <span id="L132"><span class="lineNum">     132</span>                 :             : </span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          27 :     void allocate_new_block(std::size_t min_size) {</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          27 :         std::size_t block_size = std::max(default_block_size_, min_size);</span></span>
-<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          27 :         blocks_.emplace_back(block_size);</span></span>
-<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          27 :         current_block_ids_ = blocks_.size() - 1;</span></span>
-<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">          27 :     }</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          32 :     void allocate_new_block(std::size_t min_size) {</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          32 :         std::size_t block_size = std::max(default_block_size_, min_size);</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          32 :         blocks_.emplace_back(block_size);</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          32 :         current_block_ids_ = blocks_.size() - 1;</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">          32 :     }</span></span>
 <span id="L138"><span class="lineNum">     138</span>                 :             : </span>
 <span id="L139"><span class="lineNum">     139</span>                 :             : private:</span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          38 :     struct Block {</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          43 :     struct Block {</span></span>
 <span id="L141"><span class="lineNum">     141</span>                 :             :         std::unique_ptr&lt;std::byte[]&gt; data;</span>
 <span id="L142"><span class="lineNum">     142</span>                 :             :         std::size_t size = 0;</span>
 <span id="L143"><span class="lineNum">     143</span>                 :             :         std::size_t used = 0;</span>
 <span id="L144"><span class="lineNum">     144</span>                 :             : </span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :         Block(std::size_t block_size)</span>
-<span id="L146"><span class="lineNum">     146</span>         [<span class="tlaGBC" title="Branch 0 was taken 24 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          27 :             : data(std::make_unique&lt;std::byte[]&gt;(block_size)), size(block_size) {}</span></span>
+<span id="L146"><span class="lineNum">     146</span>         [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          32 :             : data(std::make_unique&lt;std::byte[]&gt;(block_size)), size(block_size) {}</span></span>
 <span id="L147"><span class="lineNum">     147</span>                 :             :     };</span>
 <span id="L148"><span class="lineNum">     148</span>                 :             : </span>
 <span id="L149"><span class="lineNum">     149</span>                 :             :     std::vector&lt;Block&gt; blocks_;</span>

@@ -32,26 +32,26 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">5</td>
-            <td class="headerCovTableEntry">5</td>
+            <td class="headerCovTableEntry">12</td>
+            <td class="headerCovTableEntry">12</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 15:53:26</td>
+            <td class="headerValue">2026-07-17 23:54:08</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryHi">-</td>
-            <td class="headerCovTableEntry">0</td>
-            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">1</td>
           </tr>
           <tr>
             <td></td>
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">51.4&nbsp;%</td>
-            <td class="headerCovTableEntry">72</td>
-            <td class="headerCovTableEntry">37</td>
+            <td class="headerCovTableEntryLo">51.2&nbsp;%</td>
+            <td class="headerCovTableEntry">82</td>
+            <td class="headerCovTableEntry">42</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -127,143 +127,153 @@
 <span id="L49"><span class="lineNum">      49</span>                 :             :     std::string value_file_name = &quot;value.sstv2&quot;;</span>
 <span id="L50"><span class="lineNum">      50</span>                 :             : };</span>
 <span id="L51"><span class="lineNum">      51</span>                 :             : </span>
-<span id="L52"><span class="lineNum">      52</span>                 :             : struct FinishResult {</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             :     uint64_t key_file_size = 0;</span>
-<span id="L54"><span class="lineNum">      54</span>                 :             :     uint64_t value_file_size = 0;</span>
-<span id="L55"><span class="lineNum">      55</span>                 :             : };</span>
-<span id="L56"><span class="lineNum">      56</span>                 :             : </span>
-<span id="L57"><span class="lineNum">      57</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          48 : struct Sinks {</span></span>
-<span id="L58"><span class="lineNum">      58</span>                 :             :     std::shared_ptr&lt;io::FileSystem&gt; filesystem;</span>
-<span id="L59"><span class="lineNum">      59</span>                 :             :     io::FileHandle key = io::kInvalidFileHandle;</span>
-<span id="L60"><span class="lineNum">      60</span>                 :             :     io::FileHandle value = io::kInvalidFileHandle;</span>
-<span id="L61"><span class="lineNum">      61</span>                 :             : };</span>
-<span id="L62"><span class="lineNum">      62</span>                 :             : </span>
-<span id="L63"><span class="lineNum">      63</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC">          17 : struct ScanOptions {</span></span>
-<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 1 time"> + </span>]
-<span id="L64"><span class="lineNum">      64</span>                 :             :     std::optional&lt;KeyPrefix&gt; start;</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             :     std::optional&lt;KeyPrefix&gt; limit;</span>
+<span id="L52"><span class="lineNum">      52</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          44 : struct FinishResult {</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">           1 :     io::FileIdentity key_file;</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">           1 :     io::FileIdentity value_file;</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">           1 :     uint64_t row_count = 0;</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">           1 :     std::optional&lt;std::string&gt; min_key;</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">           1 :     std::optional&lt;std::string&gt; max_key;</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : </span>
+<span id="L59"><span class="lineNum">      59</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           1 :     bool operator==(const FinishResult&amp;) const = default;</span></span>
+<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span id="L60"><span class="lineNum">      60</span>                 :             : };</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : </span>
+<span id="L62"><span class="lineNum">      62</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          48 : struct Sinks {</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :     std::shared_ptr&lt;io::FileSystem&gt; filesystem;</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :     io::FileHandle key = io::kInvalidFileHandle;</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :     io::FileHandle value = io::kInvalidFileHandle;</span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : };</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : </span>
-<span id="L68"><span class="lineNum">      68</span>                 :             : class Builder {</span>
-<span id="L69"><span class="lineNum">      69</span>                 :             : public:</span>
-<span id="L70"><span class="lineNum">      70</span>                 :             :     Builder(types::Schema::ConstRef schema, Sinks sinks, BuilderOptions options = {});</span>
-<span id="L71"><span class="lineNum">      71</span>                 :             : </span>
-<span id="L72"><span class="lineNum">      72</span>                 :             :     [[nodiscard]] absl::Status add(const types::Row&amp; row);</span>
-<span id="L73"><span class="lineNum">      73</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;FinishResult&gt; finish_result();</span>
-<span id="L74"><span class="lineNum">      74</span>                 :             :     [[nodiscard]] static absl::StatusOr&lt;FinishResult&gt; finish_to_sinks(</span>
-<span id="L75"><span class="lineNum">      75</span>                 :             :         types::Schema::ConstRef schema,</span>
-<span id="L76"><span class="lineNum">      76</span>                 :             :         Sinks sinks,</span>
-<span id="L77"><span class="lineNum">      77</span>                 :             :         BuilderOptions options,</span>
-<span id="L78"><span class="lineNum">      78</span>                 :             :         const std::vector&lt;types::Row&gt;&amp; rows);</span>
-<span id="L79"><span class="lineNum">      79</span>                 :             : </span>
-<span id="L80"><span class="lineNum">      80</span>                 :             : private:</span>
-<span id="L81"><span class="lineNum">      81</span>                 :             :     [[nodiscard]] uint64_t max_data_block_rows() const noexcept;</span>
-<span id="L82"><span class="lineNum">      82</span>                 :             :     [[nodiscard]] uint64_t index_fanout() const noexcept;</span>
-<span id="L83"><span class="lineNum">      83</span>                 :             :     [[nodiscard]] block::Options data_block_options() const noexcept;</span>
-<span id="L84"><span class="lineNum">      84</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;size_t&gt; encoded_data_block_size_with(</span>
-<span id="L85"><span class="lineNum">      85</span>                 :             :         const types::InternalRow&amp; candidate, std::string_view candidate_embedded) const;</span>
-<span id="L86"><span class="lineNum">      86</span>                 :             :     [[nodiscard]] absl::Status flush_data_block();</span>
-<span id="L87"><span class="lineNum">      87</span>                 :             : </span>
-<span id="L88"><span class="lineNum">      88</span>                 :             :     types::Schema::ConstRef schema_;</span>
-<span id="L89"><span class="lineNum">      89</span>                 :             :     types::InternalSchema::ConstRef internal_schema_;</span>
-<span id="L90"><span class="lineNum">      90</span>                 :             :     BuilderOptions options_;</span>
-<span id="L91"><span class="lineNum">      91</span>                 :             :     Sinks sinks_;</span>
-<span id="L92"><span class="lineNum">      92</span>                 :             :     std::unique_ptr&lt;index::TreeBuilder&gt; index_builder_;</span>
-<span id="L93"><span class="lineNum">      93</span>                 :             :     std::vector&lt;types::InternalRow&gt; pending_rows_;</span>
-<span id="L94"><span class="lineNum">      94</span>                 :             :     std::vector&lt;std::string&gt; pending_embedded_values_;</span>
-<span id="L95"><span class="lineNum">      95</span>                 :             :     bloom::Builder bloom_builder_;</span>
-<span id="L96"><span class="lineNum">      96</span>                 :             :     std::optional&lt;types::AllKey&gt; last_all_key_;</span>
-<span id="L97"><span class="lineNum">      97</span>                 :             :     uint64_t total_row_count_ = 0;</span>
-<span id="L98"><span class="lineNum">      98</span>                 :             :     uint64_t data_block_count_ = 0;</span>
-<span id="L99"><span class="lineNum">      99</span>                 :             :     bool finished_ = false;</span>
-<span id="L100"><span class="lineNum">     100</span>                 :             : };</span>
-<span id="L101"><span class="lineNum">     101</span>                 :             : </span>
-<span id="L102"><span class="lineNum">     102</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          30 : class Reader {</span></span>
-<span id="L103"><span class="lineNum">     103</span>                 :             : public:</span>
-<span id="L104"><span class="lineNum">     104</span>                 :             :     class Iterator;</span>
-<span id="L105"><span class="lineNum">     105</span>                 :             :     struct ReaderState;</span>
-<span id="L106"><span class="lineNum">     106</span>                 :             : </span>
-<span id="L107"><span class="lineNum">     107</span>                 :             :     [[nodiscard]] static absl::StatusOr&lt;Reader&gt; open(std::shared_ptr&lt;io::FileSystem&gt; filesystem,</span>
-<span id="L108"><span class="lineNum">     108</span>                 :             :                                                      io::FileHandle key_file,</span>
-<span id="L109"><span class="lineNum">     109</span>                 :             :                                                      io::FileHandle value_file);</span>
+<span id="L68"><span class="lineNum">      68</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC">          17 : struct ScanOptions {</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 1 time"> + </span>]
+<span id="L69"><span class="lineNum">      69</span>                 :             :     std::optional&lt;KeyPrefix&gt; start;</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :     std::optional&lt;KeyPrefix&gt; limit;</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : };</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : class Builder {</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : public:</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :     Builder(types::Schema::ConstRef schema, Sinks sinks, BuilderOptions options = {});</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : </span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :     [[nodiscard]] absl::Status add(const types::Row&amp; row);</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;FinishResult&gt; finish_result();</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :     [[nodiscard]] static absl::StatusOr&lt;FinishResult&gt; finish_to_sinks(</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :         types::Schema::ConstRef schema,</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             :         Sinks sinks,</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :         BuilderOptions options,</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :         const std::vector&lt;types::Row&gt;&amp; rows);</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             : </span>
+<span id="L85"><span class="lineNum">      85</span>                 :             : private:</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :     [[nodiscard]] uint64_t max_data_block_rows() const noexcept;</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :     [[nodiscard]] uint64_t index_fanout() const noexcept;</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     [[nodiscard]] block::Options data_block_options() const noexcept;</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;size_t&gt; encoded_data_block_size_with(</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :         const types::InternalRow&amp; candidate, std::string_view candidate_embedded) const;</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :     [[nodiscard]] absl::Status flush_data_block();</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             : </span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :     types::Schema::ConstRef schema_;</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :     types::InternalSchema::ConstRef internal_schema_;</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :     BuilderOptions options_;</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :     Sinks sinks_;</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             :     std::unique_ptr&lt;index::TreeBuilder&gt; index_builder_;</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             :     std::vector&lt;types::InternalRow&gt; pending_rows_;</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :     std::vector&lt;std::string&gt; pending_embedded_values_;</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :     bloom::Builder bloom_builder_;</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :     std::optional&lt;types::AllKey&gt; last_all_key_;</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :     uint64_t total_row_count_ = 0;</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             :     uint64_t data_block_count_ = 0;</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :     std::optional&lt;std::string&gt; min_key_;</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :     std::optional&lt;std::string&gt; max_key_;</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             :     enum class State : uint8_t { kOpen, kFinished, kFailed };</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             :     State state_ = State::kOpen;</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :     std::optional&lt;FinishResult&gt; finish_result_;</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : };</span>
 <span id="L110"><span class="lineNum">     110</span>                 :             : </span>
-<span id="L111"><span class="lineNum">     111</span>                 :             :     [[nodiscard]] types::Schema::ConstRef schema() const;</span>
-<span id="L112"><span class="lineNum">     112</span>                 :             :     [[nodiscard]] const format::Configuration&amp; configuration() const;</span>
-<span id="L113"><span class="lineNum">     113</span>                 :             :     [[nodiscard]] const format::Statistics&amp; statistics() const;</span>
-<span id="L114"><span class="lineNum">     114</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::vector&lt;types::Row&gt;&gt; scan() const;</span>
-<span id="L115"><span class="lineNum">     115</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::vector&lt;types::Row&gt;&gt; scan(const ScanOptions&amp; options) const;</span>
-<span id="L116"><span class="lineNum">     116</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::optional&lt;types::Row&gt;&gt; get(const types::AllKey&amp; all_key) const;</span>
-<span id="L117"><span class="lineNum">     117</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::optional&lt;types::Row&gt;&gt; get(const types::RowKey&amp; row_key,</span>
-<span id="L118"><span class="lineNum">     118</span>                 :             :                                                                 types::SystemKey system_key) const;</span>
-<span id="L119"><span class="lineNum">     119</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;Iterator&gt; new_iterator(const ScanOptions&amp; options = {}) const;</span>
-<span id="L120"><span class="lineNum">     120</span>                 :             : </span>
-<span id="L121"><span class="lineNum">     121</span>                 :             : private:</span>
-<span id="L122"><span class="lineNum">     122</span>                 :             :     friend class Iterator;</span>
-<span id="L123"><span class="lineNum">     123</span>                 :             : </span>
-<span id="L124"><span class="lineNum">     124</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::string&gt; read_key_range(uint64_t offset,</span>
-<span id="L125"><span class="lineNum">     125</span>                 :             :                                                              uint64_t length) const;</span>
-<span id="L126"><span class="lineNum">     126</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::string&gt; read_value_range(uint64_t offset,</span>
-<span id="L127"><span class="lineNum">     127</span>                 :             :                                                                uint64_t length) const;</span>
-<span id="L128"><span class="lineNum">     128</span>                 :             : </span>
-<span id="L129"><span class="lineNum">     129</span>                 :             :     std::shared_ptr&lt;const ReaderState&gt; state_;</span>
-<span id="L130"><span class="lineNum">     130</span>                 :             : };</span>
-<span id="L131"><span class="lineNum">     131</span>                 :             : </span>
-<span id="L132"><span class="lineNum">     132</span>                 :             : struct Reader::ReaderState {</span>
-<span id="L133"><span class="lineNum">     133</span>                 :             :     types::Schema::ConstRef schema;</span>
-<span id="L134"><span class="lineNum">     134</span>                 :             :     types::InternalSchema::ConstRef internal_schema;</span>
-<span id="L135"><span class="lineNum">     135</span>                 :             :     format::Configuration configuration;</span>
-<span id="L136"><span class="lineNum">     136</span>                 :             :     format::Statistics statistics;</span>
-<span id="L137"><span class="lineNum">     137</span>                 :             :     std::shared_ptr&lt;io::FileSystem&gt; filesystem;</span>
-<span id="L138"><span class="lineNum">     138</span>                 :             :     io::FileHandle key_file = io::kInvalidFileHandle;</span>
-<span id="L139"><span class="lineNum">     139</span>                 :             :     io::FileHandle value_file = io::kInvalidFileHandle;</span>
-<span id="L140"><span class="lineNum">     140</span>                 :             :     bloom::Reader bloom;</span>
-<span id="L141"><span class="lineNum">     141</span>                 :             :     index::BlockRef root;</span>
-<span id="L142"><span class="lineNum">     142</span>                 :             : };</span>
-<span id="L143"><span class="lineNum">     143</span>                 :             : </span>
-<span id="L144"><span class="lineNum">     144</span>                 :             : class Reader::Iterator {</span>
-<span id="L145"><span class="lineNum">     145</span>                 :             : public:</span>
-<span id="L146"><span class="lineNum">     146</span>                 :             :     Iterator() = default;</span>
-<span id="L147"><span class="lineNum">     147</span>                 :             : </span>
-<span id="L148"><span class="lineNum">     148</span>                 :             :     [[nodiscard]] absl::Status SeekToFirst();</span>
-<span id="L149"><span class="lineNum">     149</span>                 :             :     [[nodiscard]] absl::Status Seek(const KeyPrefix&amp; target);</span>
-<span id="L150"><span class="lineNum">     150</span>                 :             :     [[nodiscard]] absl::Status Next();</span>
-<span id="L151"><span class="lineNum">     151</span>                 :             : </span>
-<span id="L152"><span class="lineNum">     152</span>   [<span class="tlaGBC" title="Branch 0 was taken 294 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 294 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         315 :     [[nodiscard]] bool Valid() const { return valid_ &amp;&amp; status_.ok(); }</span></span>
+<span id="L111"><span class="lineNum">     111</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          30 : class Reader {</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :             : public:</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :     class Iterator;</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :     struct ReaderState;</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : </span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :     [[nodiscard]] static absl::StatusOr&lt;Reader&gt; open(std::shared_ptr&lt;io::FileSystem&gt; filesystem,</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             :                                                      io::FileHandle key_file,</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :                                                      io::FileHandle value_file);</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : </span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :     [[nodiscard]] types::Schema::ConstRef schema() const;</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :     [[nodiscard]] const format::Configuration&amp; configuration() const;</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :     [[nodiscard]] const format::Statistics&amp; statistics() const;</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::vector&lt;types::Row&gt;&gt; scan() const;</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::vector&lt;types::Row&gt;&gt; scan(const ScanOptions&amp; options) const;</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::optional&lt;types::Row&gt;&gt; get(const types::AllKey&amp; all_key) const;</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::optional&lt;types::Row&gt;&gt; get(const types::RowKey&amp; row_key,</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             :                                                                 types::SystemKey system_key) const;</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;Iterator&gt; new_iterator(const ScanOptions&amp; options = {}) const;</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : </span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : private:</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             :     friend class Iterator;</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : </span>
+<span id="L133"><span class="lineNum">     133</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::string&gt; read_key_range(uint64_t offset,</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             :                                                              uint64_t length) const;</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::string&gt; read_value_range(uint64_t offset,</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             :                                                                uint64_t length) const;</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             : </span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :     std::shared_ptr&lt;const ReaderState&gt; state_;</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             : };</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             : </span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : struct Reader::ReaderState {</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             :     types::Schema::ConstRef schema;</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             :     types::InternalSchema::ConstRef internal_schema;</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             :     format::Configuration configuration;</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             :     format::Statistics statistics;</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             :     std::shared_ptr&lt;io::FileSystem&gt; filesystem;</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             :     io::FileHandle key_file = io::kInvalidFileHandle;</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             :     io::FileHandle value_file = io::kInvalidFileHandle;</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             :     bloom::Reader bloom;</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :     index::BlockRef root;</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             : };</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             : </span>
+<span id="L153"><span class="lineNum">     153</span>                 :             : class Reader::Iterator {</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             : public:</span>
+<span id="L155"><span class="lineNum">     155</span>                 :             :     Iterator() = default;</span>
+<span id="L156"><span class="lineNum">     156</span>                 :             : </span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :     [[nodiscard]] absl::Status SeekToFirst();</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :     [[nodiscard]] absl::Status Seek(const KeyPrefix&amp; target);</span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :     [[nodiscard]] absl::Status Next();</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             : </span>
+<span id="L161"><span class="lineNum">     161</span>   [<span class="tlaGBC" title="Branch 0 was taken 294 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 294 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         315 :     [[nodiscard]] bool Valid() const { return valid_ &amp;&amp; status_.ok(); }</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaGBC" title="Branch 11 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 16 was not taken"> - </span><span class="tlaGBC" title="Branch 17 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 18 was not taken"> - </span> 
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 21 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 22 was taken 4 times"> + </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 23 was not taken"> - </span>]
-<span id="L153"><span class="lineNum">     153</span>                 :             :     [[nodiscard]] const types::Row&amp; row() const { return current_row_; }</span>
-<span id="L154"><span class="lineNum">     154</span>                 :             :     [[nodiscard]] std::string_view key() const { return current_key_bytes_; }</span>
-<span id="L155"><span class="lineNum">     155</span>                 :             :     [[nodiscard]] const absl::Status&amp; status() const { return status_; }</span>
-<span id="L156"><span class="lineNum">     156</span>                 :             :     [[nodiscard]] size_t state_slots_for_test() const;</span>
-<span id="L157"><span class="lineNum">     157</span>                 :             : </span>
-<span id="L158"><span class="lineNum">     158</span>                 :             : private:</span>
-<span id="L159"><span class="lineNum">     159</span>                 :             :     friend class Reader;</span>
-<span id="L160"><span class="lineNum">     160</span>                 :             : </span>
-<span id="L161"><span class="lineNum">     161</span>                 :             :     Iterator(std::shared_ptr&lt;const ReaderState&gt; state,</span>
-<span id="L162"><span class="lineNum">     162</span>                 :             :              std::optional&lt;types::PrefixKey&gt; start_key,</span>
-<span id="L163"><span class="lineNum">     163</span>                 :             :              std::optional&lt;types::PrefixKey&gt; limit_key);</span>
-<span id="L164"><span class="lineNum">     164</span>                 :             : </span>
-<span id="L165"><span class="lineNum">     165</span>                 :             :     [[nodiscard]] absl::Status seek_impl(const std::optional&lt;types::PrefixKey&gt;&amp; start_key);</span>
-<span id="L166"><span class="lineNum">     166</span>                 :             :     [[nodiscard]] absl::Status load_current_block(const std::optional&lt;types::PrefixKey&gt;&amp; start_key,</span>
-<span id="L167"><span class="lineNum">     167</span>                 :             :                                                   bool apply_start_key);</span>
-<span id="L168"><span class="lineNum">     168</span>                 :             :     [[nodiscard]] absl::Status advance_to_next_valid();</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             :     [[nodiscard]] const types::Row&amp; row() const { return current_row_; }</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             :     [[nodiscard]] std::string_view key() const { return current_key_bytes_; }</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :     [[nodiscard]] const absl::Status&amp; status() const { return status_; }</span>
+<span id="L165"><span class="lineNum">     165</span>                 :             :     [[nodiscard]] size_t state_slots_for_test() const;</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             : </span>
+<span id="L167"><span class="lineNum">     167</span>                 :             : private:</span>
+<span id="L168"><span class="lineNum">     168</span>                 :             :     friend class Reader;</span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : </span>
-<span id="L170"><span class="lineNum">     170</span>                 :             :     std::shared_ptr&lt;const ReaderState&gt; state_;</span>
-<span id="L171"><span class="lineNum">     171</span>                 :             :     std::optional&lt;types::PrefixKey&gt; start_key_;</span>
-<span id="L172"><span class="lineNum">     172</span>                 :             :     std::optional&lt;types::PrefixKey&gt; limit_key_;</span>
-<span id="L173"><span class="lineNum">     173</span>                 :             :     std::optional&lt;index::ForwardCursor&gt; cursor_;</span>
-<span id="L174"><span class="lineNum">     174</span>                 :             :     size_t row_index_ = 0;</span>
-<span id="L175"><span class="lineNum">     175</span>                 :             :     std::optional&lt;block::BlockReader&gt; block_;</span>
-<span id="L176"><span class="lineNum">     176</span>                 :             :     bool valid_ = false;</span>
-<span id="L177"><span class="lineNum">     177</span>                 :             :     types::Row current_row_;</span>
-<span id="L178"><span class="lineNum">     178</span>                 :             :     std::string current_key_bytes_;</span>
-<span id="L179"><span class="lineNum">     179</span>                 :             :     absl::Status status_;</span>
-<span id="L180"><span class="lineNum">     180</span>                 :             : };</span>
-<span id="L181"><span class="lineNum">     181</span>                 :             : </span>
-<span id="L182"><span class="lineNum">     182</span>                 :             : } // namespace pl::sstv2::file</span>
+<span id="L170"><span class="lineNum">     170</span>                 :             :     Iterator(std::shared_ptr&lt;const ReaderState&gt; state,</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :              std::optional&lt;types::PrefixKey&gt; start_key,</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             :              std::optional&lt;types::PrefixKey&gt; limit_key);</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : </span>
+<span id="L174"><span class="lineNum">     174</span>                 :             :     [[nodiscard]] absl::Status seek_impl(const std::optional&lt;types::PrefixKey&gt;&amp; start_key);</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             :     [[nodiscard]] absl::Status load_current_block(const std::optional&lt;types::PrefixKey&gt;&amp; start_key,</span>
+<span id="L176"><span class="lineNum">     176</span>                 :             :                                                   bool apply_start_key);</span>
+<span id="L177"><span class="lineNum">     177</span>                 :             :     [[nodiscard]] absl::Status advance_to_next_valid();</span>
+<span id="L178"><span class="lineNum">     178</span>                 :             : </span>
+<span id="L179"><span class="lineNum">     179</span>                 :             :     std::shared_ptr&lt;const ReaderState&gt; state_;</span>
+<span id="L180"><span class="lineNum">     180</span>                 :             :     std::optional&lt;types::PrefixKey&gt; start_key_;</span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :     std::optional&lt;types::PrefixKey&gt; limit_key_;</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             :     std::optional&lt;index::ForwardCursor&gt; cursor_;</span>
+<span id="L183"><span class="lineNum">     183</span>                 :             :     size_t row_index_ = 0;</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :     std::optional&lt;block::BlockReader&gt; block_;</span>
+<span id="L185"><span class="lineNum">     185</span>                 :             :     bool valid_ = false;</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :     types::Row current_row_;</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             :     std::string current_key_bytes_;</span>
+<span id="L188"><span class="lineNum">     188</span>                 :             :     absl::Status status_;</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             : };</span>
+<span id="L190"><span class="lineNum">     190</span>                 :             : </span>
+<span id="L191"><span class="lineNum">     191</span>                 :             : } // namespace pl::sstv2::file</span>
         </pre>
               </td>
             </tr>
