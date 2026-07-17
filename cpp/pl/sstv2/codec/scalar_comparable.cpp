@@ -422,6 +422,7 @@ size_t decode_double(const uint8_t* src, size_t len, double* value) {
 size_t decode_bytes(const uint8_t* src, size_t len, std::string* value) {
     value->clear();
     size_t offset = 0;
+    bool saw_continuation = false;
 
     while (true) {
         // Each group is 9 bytes: 8 data + 1 marker.
@@ -434,10 +435,19 @@ size_t decode_bytes(const uint8_t* src, size_t len, std::string* value) {
             // Non-final group: all 8 bytes are data.
             value->append(reinterpret_cast<const char*>(src + offset), 8);
             offset += 9;
+            saw_continuation = true;
         } else {
             // Final group: marker indicates number of real bytes (0-8).
-            if (marker > 8)
-                return 0; // invalid marker
+            if (marker > 8 || (saw_continuation && marker == 0)) {
+                return 0; // invalid or non-canonical final group
+            }
+            // A final group has exactly one canonical representation: every padding
+            // byte after the payload must be zero.
+            for (size_t i = marker; i < 8; ++i) {
+                if (src[offset + i] != 0) {
+                    return 0;
+                }
+            }
             value->append(reinterpret_cast<const char*>(src + offset), marker);
             offset += 9;
             return offset;

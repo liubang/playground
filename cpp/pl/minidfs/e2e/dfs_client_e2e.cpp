@@ -804,19 +804,19 @@ private:
 
         auto finish_result =
             require_status_or(builder.finish_result(), "sstv2 builder.finish_result");
-        require(finish_result.key_file_size ==
-                    require_status_or(sst_filesystem_->size(key_sink), "size sstv2 key file"),
-                "sstv2 key size mismatch after finish");
-        require(finish_result.value_file_size ==
-                    require_status_or(sst_filesystem_->size(value_sink), "size sstv2 value file"),
-                "sstv2 value size mismatch after finish");
-        require(finish_result.value_file_size > 0,
+        require(finish_result.key_file.length > 0, "sstv2 key file is empty");
+        require(finish_result.value_file.length > 0,
                 "sstv2 value file should contain separated values");
-        require(finish_result.value_file_size < total_payload_size,
+        require(finish_result.value_file.length < total_payload_size,
                 "sstv2 value file should not contain embedded values only");
-
-        require_absl_ok(sst_filesystem_->close(key_sink), "close sstv2 key file");
-        require_absl_ok(sst_filesystem_->close(value_sink), "close sstv2 value file");
+        require(finish_result.key_file.file_id != 0 && finish_result.key_file.checksum_valid,
+                "sstv2 key identity is incomplete");
+        require(finish_result.value_file.file_id != 0 && finish_result.value_file.checksum_valid,
+                "sstv2 value identity is incomplete");
+        require(finish_result.row_count == 40, "sstv2 finish row count mismatch");
+        require(finish_result.min_key.has_value() && finish_result.max_key.has_value() &&
+                    *finish_result.min_key < *finish_result.max_key,
+                "sstv2 finish key bounds are invalid");
 
         auto key_status = require_value(client_->stat(key_path), "stat sstv2 key file");
         auto value_status = require_value(client_->stat(value_path), "stat sstv2 value file");
@@ -829,19 +829,30 @@ private:
                 "sstv2 key published identity is missing");
         require(value_status.published_identity.inode_id != 0,
                 "sstv2 value published identity is missing");
-        require(key_status.length == finish_result.key_file_size, "sstv2 key stat length mismatch");
-        require(value_status.length == finish_result.value_file_size,
+        require(key_status.length == finish_result.key_file.length,
+                "sstv2 key stat length mismatch");
+        require(value_status.length == finish_result.value_file.length,
                 "sstv2 value stat length mismatch");
+        require(key_status.published_identity.inode_id == finish_result.key_file.file_id &&
+                    key_status.published_identity.content_generation ==
+                        finish_result.key_file.content_generation &&
+                    key_status.published_identity.checksum == finish_result.key_file.checksum,
+                "sstv2 key published identity mismatch");
+        require(value_status.published_identity.inode_id == finish_result.value_file.file_id &&
+                    value_status.published_identity.content_generation ==
+                        finish_result.value_file.content_generation &&
+                    value_status.published_identity.checksum == finish_result.value_file.checksum,
+                "sstv2 value published identity mismatch");
 
         auto key_reader = require_status_or(sst_filesystem_->open(key_path), "open sstv2 key file");
         auto value_reader =
             require_status_or(sst_filesystem_->open(value_path), "open sstv2 value file");
 
         require(require_status_or(sst_filesystem_->size(key_reader),
-                                  "size opened sstv2 key file") == finish_result.key_file_size,
+                                  "size opened sstv2 key file") == finish_result.key_file.length,
                 "sstv2 key random adapter size mismatch");
         require(require_status_or(sst_filesystem_->size(value_reader),
-                                  "size opened sstv2 value file") == finish_result.value_file_size,
+                                  "size opened sstv2 value file") == finish_result.value_file.length,
                 "sstv2 value random adapter size mismatch");
 
         auto reader =

@@ -279,7 +279,8 @@ TEST_F(NamespaceManagerTest, CompleteFilePublishIdentityIsIdempotent) {
     auto mismatch = mgr_->complete_file_publish_identity(file.value().inode_id, 124, 456);
     EXPECT_TRUE(mismatch.hasError());
 
-    auto missing_checksum = mgr_->complete_file_publish_identity(file.value().inode_id, 123, std::nullopt);
+    auto missing_checksum =
+        mgr_->complete_file_publish_identity(file.value().inode_id, 123, std::nullopt);
     EXPECT_TRUE(missing_checksum.hasError());
 }
 

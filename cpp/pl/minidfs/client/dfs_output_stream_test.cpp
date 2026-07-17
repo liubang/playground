@@ -16,16 +16,15 @@
 
 #include <brpc/closure_guard.h>
 #include <brpc/server.h>
-#include <gtest/gtest.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include <filesystem>
 #include <fstream>
+#include <gtest/gtest.h>
 #include <iterator>
+#include <netinet/in.h>
 #include <optional>
 #include <string>
+#include <sys/socket.h>
+#include <unistd.h>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -105,14 +104,15 @@ public:
         completed_client_ids.push_back(request->client_id());
         completed_lengths.push_back(request->expected_length());
         completed_has_checksums.push_back(request->has_expected_checksum());
-        completed_checksums.push_back(request->has_expected_checksum() ? request->expected_checksum()
-                                                                       : 0u);
+        completed_checksums.push_back(
+            request->has_expected_checksum() ? request->expected_checksum() : 0u);
         response->mutable_status()->set_code(0);
         auto* identity = response->mutable_file_identity();
         identity->set_inode_id(request->inode_id());
         identity->set_content_generation(complete_count);
         identity->set_length(request->expected_length());
-        identity->set_checksum(request->has_expected_checksum() ? request->expected_checksum() : 0u);
+        identity->set_checksum(request->has_expected_checksum() ? request->expected_checksum()
+                                                                : 0u);
     }
 
     void CommitBlock(google::protobuf::RpcController* /*controller*/,
@@ -286,7 +286,10 @@ public:
 
     void set_datanode_port(int port) { datanode_port_ = port; }
 
-    void configure_file(std::string path, FileIdentity identity, std::string source_data, uint64_t block_size) {
+    void configure_file(std::string path,
+                        FileIdentity identity,
+                        std::string source_data,
+                        uint64_t block_size) {
         path_ = std::move(path);
         identity_ = identity;
         const uint64_t visible_length = std::min<uint64_t>(identity_.length, source_data.size());
@@ -459,8 +462,8 @@ public:
             return;
         }
 
-        const std::string chunk =
-            payload.substr(static_cast<size_t>(request->offset()), static_cast<size_t>(request->length()));
+        const std::string chunk = payload.substr(static_cast<size_t>(request->offset()),
+                                                 static_cast<size_t>(request->length()));
         response->mutable_status()->set_code(0);
         response->set_data(chunk);
         response->set_length(chunk.size());
@@ -495,9 +498,9 @@ protected:
         client_ = DfsClient::create(config);
         ASSERT_NE(client_, nullptr);
 
-        temp_dir_ = std::filesystem::temp_directory_path() /
-                    ("minidfs-client-read-" + std::to_string(::getpid()) + "-" +
-                     std::to_string(now_ms()));
+        temp_dir_ =
+            std::filesystem::temp_directory_path() /
+            ("minidfs-client-read-" + std::to_string(::getpid()) + "-" + std::to_string(now_ms()));
         std::filesystem::create_directories(temp_dir_);
     }
 
@@ -569,8 +572,7 @@ TEST_F(DfsClientReadExactTest, TruncatedAppendableIdentityChangeStillRejectedWhe
 
     auto read_result = client_->read_exact(dfs_path, 0, old_identity.length, old_identity);
     ASSERT_TRUE(read_result.hasError());
-    EXPECT_EQ(read_result.error().code(),
-              static_cast<status_code_t>(ErrorCode::kInvalidArgument));
+    EXPECT_EQ(read_result.error().code(), static_cast<status_code_t>(ErrorCode::kInvalidArgument));
     EXPECT_EQ(namenode_.get_located_blocks_calls(), 0u);
 }
 

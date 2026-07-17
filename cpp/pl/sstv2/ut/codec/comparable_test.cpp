@@ -159,6 +159,17 @@ TEST(ComparableBytesTest, LongString) {
     EXPECT_LT(a, b);
 }
 
+TEST(ComparableBytesTest, DecoderRejectsNonCanonicalPadding) {
+    std::string encoded;
+    encode_bytes("a", &encoded);
+    ASSERT_EQ(encoded.size(), 9U);
+    encoded[1] = 'x';
+    std::string decoded;
+    EXPECT_EQ(
+        decode_bytes(reinterpret_cast<const uint8_t*>(encoded.data()), encoded.size(), &decoded),
+        0U);
+}
+
 TEST(ComparableMapTest, CanonicalInsertionOrder) {
     using types::DataType;
     using types::SortOrder;
@@ -378,6 +389,19 @@ TEST(ComparableDecodeTest, BytesBinaryData) {
     size_t n = decode_bytes(reinterpret_cast<const uint8_t*>(enc.data()), enc.size(), &decoded);
     EXPECT_GT(n, 0u);
     EXPECT_EQ(decoded, data);
+}
+
+TEST(ComparableDecodeTest, RejectsNonCanonicalEmptyFinalGroup) {
+    std::string encoded;
+    encode_bytes("12345678", &encoded);
+    ASSERT_EQ(encoded.size(), 9U);
+    encoded.back() = static_cast<char>(0xff);
+    encoded.append(9, '\0');
+
+    std::string decoded;
+    EXPECT_EQ(
+        decode_bytes(reinterpret_cast<const uint8_t*>(encoded.data()), encoded.size(), &decoded),
+        0U);
 }
 
 // =============================================================================

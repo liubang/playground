@@ -4,7 +4,9 @@
 
 本文定义 minitable 的目标架构和核心语义，也是实现状态与目标契约的统一入口。除明确标注“当前已具备”的能力外，其余内容均为目标设计，不能据此推断代码已经实现。
 
-截至 2026-07-17，minitable 本体仍处于协议和 Master 骨架阶段；sstv2 与 minidfs 已打通不可变 SST 的流式构建、精确随机读取和正向迭代，但单 Slice LSM、Manifest、MVCC、Slice Raft 和数据面尚未实现。后续修改必须同步更新本文的“当前状态”“剩余工作”和分阶段完成定义，避免目标设计与实现状态混淆。
+复合 RowKey、StorageKey、MVCC 后缀的逐字节持久格式、保序证明、golden vectors 和 strict decode 规则见 [Key 编码规范](key_encoding.md)。本文只保留架构层布局；两者冲突时，已版本化的 Key 编码规范是字节格式的权威定义。
+
+截至 2026-07-17，Phase 0 仍在进行中：proto v2 已具备 CF、动态 qualifier、显式分区 range、128-bit Timestamp、ManifestEdit 和 SliceSnapshot 初版；KeyFormat v1 已实现 canonical StorageKey/VersionedStorageKey codec、strict decode 和首批 golden tests；基础 arena-backed MemTable 与正向 k-way MergeIterator primitive 已落地；sstv2/minidfs 已打通 SST 流式构建、finalized FileIdentity、精确随机读取和正向迭代。当前尚未完成 comparator/schema fingerprint、expected-identity open/remove、MemTable batch prepare/publish、单 Slice LSM、Manifest、MVCC、Slice Raft 和数据面；Master 仍使用旧协议且只是服务骨架。后续修改必须同步更新本文的“当前状态”“剩余工作”和分阶段完成定义，避免目标设计与实现状态混淆。
 
 minitable 的目标是实现一个生产可用的分布式半结构化宽表存储，具备以下能力：
 
@@ -158,6 +160,8 @@ RowKey = (key_0, key_1, ..., key_n-1)
 - 编码必须统一调用 sstv2 memcomparable codec；
 - Master、Client 和 UnitServer 不得各自实现不同编码器。
 
+异构列直接拼接后仍可做 byte compare 的前提、数学证明、标量变换及 STRING/BYTES 的 8+1 自终止分组格式，统一定义在 [Key 编码规范](key_encoding.md)。任何编码规则变更都必须升级 KeyFormat version。
+
 分区 key 必须是 RowKey 的非空连续前缀。路由只依据逻辑 RowKey，不受 CF、qualifier、version 影响。
 
 ## 4.2 ColumnFamily
@@ -291,6 +295,8 @@ Timestamp {
 
 ## 4.6 内部 Key Layout
 
+本节是物理布局摘要；精确字节格式、canonical 规则、证明和 golden vectors 见 [Key 编码规范](key_encoding.md)。
+
 每个 LG 使用一个 sstv2 Schema。GLOBAL_ORDER 与 HASH 使用不同的物理前缀，但共享 Cell 后缀：
 
 ```text
@@ -308,7 +314,7 @@ HASH StorageKey = OrderedVirtualBucketId
 
 HASH 将稳定 virtual bucket ID 放在最前，使一个 bucket range 对应连续 SST key range；Split/Merge/bootstrap 可据此裁剪或复用 SST，而不必扫描整张表重新计算 bucket。逻辑 API 返回 RowKey 时不暴露该物理前缀。
 
-建议编码：
+KeyFormat v1 编码：
 
 ```text
 RecordPrefix:
@@ -316,12 +322,12 @@ RecordPrefix:
   0x01 = CF tombstone marker
   0x02 = ordinary cell
 
-QualifierToken:
-  0x00 + ordered-varint(column_id)      = static qualifier
-  0x01 + memcomparable-bytes(qualifier) = dynamic qualifier
+QualifierToken（仅 ordinary cell 存在）:
+  0x00 + ordered_uint32(column_id)       = static qualifier
+  0x01 + memcomparable-bytes(qualifier)  = dynamic qualifier
 ```
 
-`row tombstone` 使用保留 CF ID 和空 qualifier；`CF tombstone` 使用目标 CF ID 和空 qualifier。用户 CF ID 从 1 开始，0 永久保留。
+`row tombstone` 使用保留 CF ID 0，`CF tombstone` 使用目标 CF ID；两者都没有 QualifierToken 字节。用户 CF ID 从 1 开始，0 永久保留。
 
 最终 sstv2 `AllKey`：
 
@@ -331,7 +337,7 @@ AllKey = StorageKey
        + OpType
 ```
 
-Version 必须按 `(commit_ts descending, mutation_seq descending)` memcomparable 编码，使同一 Cell 的最新版本物理相邻且优先出现。`mutation_seq` 在 canonical RowTransaction 内从 0 单调分配，row/CF/cell marker 也占用独立序号；同一请求在所有副本必须得到相同顺序。`OpType` 只用于相同逻辑版本下的确定性格式判别；正常写入必须保证同一个 `(CellKey, commit_ts, mutation_seq)` 只有一个 operation。
+Version 必须按 `(commit_ts descending, mutation_seq descending)` memcomparable 编码，使同一 Cell 的最新版本物理相邻且优先出现。`mutation_seq` 在 canonical RowTransaction 内从 0 单调分配，row/CF/cell marker 也占用独立序号；同一请求在所有副本必须得到相同顺序。`OpType` 只用于相同逻辑版本下的确定性格式判别；正常写入必须保证同一个 `(CellKey, commit_ts, mutation_seq)` 只有一个 operation。Row/CF tombstone 必须搭配 Delete，strict encoder/decoder 拒绝其他组合。
 
 `OrderedVirtualBucketId` 使用固定宽度 big-endian 无符号编码，宽度和 hash reduction 算法进入 Table partition format version。动态 qualifier 使用 sstv2 memcomparable bytes 编码，不允许各组件自定义 escape 规则。RowKey 中默认禁止 NaN；若未来允许，必须先固定 canonical NaN bit pattern。
 
@@ -1043,16 +1049,15 @@ Master `on_apply` 是纯确定性状态转换。调度规划在 Leader 侧完成
 
 所有 mutation 都有 request ID；所有列表接口有有界分页；所有响应使用结构化错误和 RetryAction；`NOT_LEADER`、`NOT_PRIMARY`、`ROUTE_EPOCH_STALE` 携带可执行 hint。
 
-当前 `proto/v2` 是第一版草案，后续需要根据本文补充：
+当前 `proto/v2` 是第一版草案，已表达 ColumnFamily、动态 qualifier、显式 Key/Bucket range、128-bit Timestamp、canonical RowTransaction、ManifestEdit 和稳定 CellRef，但尚未接入 Master/DataService，也未完成兼容性冻结。后续需要根据本文补充：
 
-- ColumnFamily 与动态 qualifier；
 - MergeOperator descriptor 和 Merge RPC；
 - Seek、Batch、CheckAndMutate；
 - GLOBAL_ORDER 的 `next_row_key/read_ts` 与 HASH 的 per-bucket opaque scan token；
 - Split/Merge/Migrate operation；
-- finalized Master mutation；
-- Flush/Compaction ManifestEdit；
-- TSO 和 GC safe point。
+- 完整 TSO、timestamp domain fence、GC safe point 与 snapshot lease；
+- `SliceSnapshot` 的 dedupe retention、operator descriptor 和 active operation fence；
+- proto reserved-field、wire compatibility 和语义校验测试。
 
 ---
 
@@ -1062,12 +1067,14 @@ sstv2 当前应定位为不可变 SST 文件库，不是完整 LSM。为满足 m
 
 ## 18.1 当前已具备（截至 2026-07-17）
 
-以下能力已有实现和单元测试，`bazel test //cpp/pl/sstv2/...` 当前 15/15 通过：
+以下能力已有实现和单元测试，`bazel test //cpp/pl/sstv2/...` 当前 16/16 通过：
 
 - 统一 `FileSystem`、强类型 `FileHandle`、`LocalFileSystem` 和 `MiniDfsFileSystem`；
-- append-only 流式 Builder，按 block 行数/大小有界缓冲，增量写 key/value 文件并构建多层索引；
+- append-only 流式 Builder，按 block 行数/大小有界缓冲，增量写 key/value 文件并构建多层索引；`FinishResult` 返回 key/value FileIdentity、row count 和 min/max encoded key；
 - 正向流式 Iterator：`SeekToFirst`、`Seek`、`Next`、start/limit bound，`ForwardCursor` 状态为 O(tree height)；
-- memcomparable 基础 codec：整数、浮点、STRING/BYTES、ASC/DESC、复合 RowKey、128-bit `Version{major, minor}` 和 OpType；
+- 正向 k-way `MergeIterator` primitive，支持 lower-bound seek、稳定 source priority、重复 physical key 和 sticky child error；
+- memcomparable 基础 codec：整数、浮点、STRING/BYTES、ASC/DESC、复合 RowKey、128-bit `Version{major, minor}` 和 OpType；bytes decoder 拒绝非 canonical padding/终止组；
+- canonical shortest big-endian `ordered_uint32`；
 - embedded/separated value、Snappy/Zstd、完整 AllKey Bloom；
 - block、Bloom、Tail 和 separated value CRC32C，short read、格式版本及多类 corruption 检测；
 - MiniDFS sink 上的 SST 构建、point Get、正向 Iterator 和 Seek 已有跨组件 E2E 场景。
@@ -1078,18 +1085,19 @@ sstv2 当前应定位为不可变 SST 文件库，不是完整 LSM。为满足 m
 
 进入单 Slice LSM 闭环前必须完成：
 
-1. **minitable Key 契约**
-   - 用现有 sstv2 codec 固化本节定义的 GLOBAL_ORDER/HASH `StorageKey`、QualifierToken 和降序 Version；
-   - 明确 NaN 规则；RowKey 默认禁止 NaN；
-   - 增加跨平台 golden/property tests。
+1. **minitable Key 契约（部分完成）**
+   - 已实现 GLOBAL_ORDER/HASH `StorageKey`、QualifierToken、降序 Version、NaN 拒绝、signed-zero canonicalization、strict decode 和首批 golden vectors；
+   - 仍需将 `key_format_version + row_key_schema_fingerprint` 固化到 Table metadata、Manifest 和 SST properties，并由 Reader 校验 comparator domain；
+   - 仍需补齐随机 property/fuzz、完整边界矩阵及 GCC/Clang、x86/ARM golden compatibility。
 
-2. **Manifest 构建结果**
-   - 扩展 Builder `FinishResult`，返回 min/max encoded key、entry count、format version 和文件校验信息；
-   - sstv2 `FileSystem` 向上暴露可持久化 FileIdentity，而不仅是进程内 FileHandle。
+2. **Manifest 构建结果（部分完成）**
+   - Builder `FinishResult` 已返回 min/max encoded key、entry count 和 key/value finalized FileIdentity；
+   - 仍需返回并持久化 SST format version、KeyFormat/comparator domain、schema fingerprint 和 checksum algorithm；
+   - `open/remove` 仍需支持 expected identity，Manifest/GC 不得只依赖 path。
 
-3. **多路归并 primitive**
-   - 提供正向 k-way MergeIterator，供 minitable 归并 MemTable 与多 SST；
-   - sstv2 只负责机械有序归并，MVCC、tombstone、TTL、source priority 和 MergeOperator 仍由 minitable 处理。
+3. **多路归并 primitive（primitive 已完成）**
+   - 正向 k-way `MergeIterator` 已可归并任意 `ForwardCursor`；仍需提供真正的 SST Reader cursor adapter 并接入 MemTable + SST read view；
+   - sstv2 只负责机械有序归并，MVCC、tombstone、TTL 和 MergeOperator 仍由 minitable 处理；source priority 仅作为相同 key 的稳定机械 tie-breaker。
 
 在承诺完整 Data API 前必须完成：
 
@@ -1157,10 +1165,10 @@ minidfs 是 SST、Manifest 和 Snapshot 的可靠对象存储层。minitable 不
 
 进入单 Slice Manifest 闭环前必须完成：
 
-1. **跨层文件身份契约**
-   - sstv2 `close/complete` 向 minitable 返回 finalized FileIdentity；
-   - `open/read/remove` 支持 expected identity；GC 不得仅凭可复用 path 删除文件；
-   - key/value 双文件不要求 minidfs 跨文件事务，由 minitable Raft ManifestEdit 统一发布。
+1. **跨层文件身份契约（部分完成）**
+   - sstv2 `close/complete` 已向上返回 finalized FileIdentity，`FinishResult` 已携带 key/value identity；
+   - `open/remove` 仍需支持 expected identity；GC 不得仅凭可复用 path 删除文件；
+   - Manifest 尚需完整保存 key/value identity、format/domain 信息；key/value 双文件不要求 minidfs 跨文件事务，由 minitable Raft ManifestEdit 统一发布。
 
 2. **故障边界测试**
    - 覆盖 key/value 分别 complete、响应丢失、UnitServer crash、Manifest 未提交 orphan、identity mismatch；
@@ -1210,16 +1218,16 @@ minidfs 改造只有在满足以下条件后才算完成：
 
 ## 20. SkipList/MemTable 协同改造清单
 
-当前 SkipList 的单写多读模型可匹配 Raft apply，但需要：
+当前基础 MemTable 已实现 arena-backed key/value、immutable freeze、正向 lower-bound cursor、shared ownership lifetime、apply index 单调检查和基础内存上限，可作为 Phase 0 reference implementation。它仍使用 `std::map + shared_mutex`，不是最终生产 SkipList。
 
-- arena 分配，减少逐节点 new/delete；
-- immutable freeze，不在线 remove；
-- typed iterator 和 upper bound；
-- key/value memory accounting；
-- iterator pin/shared lifetime；
-- apply index/commit_ts 可见性；
-- 批量 prepare + atomic publish；
-- benchmark 和并发 sanitizer 测试。
+进入单 Slice MVCC 前仍需：
+
+- 批量 prepare + atomic publish，以及 read-visible apply index/commit_ts watermark；
+- 分配失败可 rollback/reservation，避免 arena 已消耗但写入未发布；
+- 明确重复完整 VersionedStorageKey 的幂等校验，禁止静默覆盖冲突值；
+- 包含 map node、arena block rounding 和 allocator metadata 的一致内存记账/admission；
+- typed range upper bound、benchmark 和并发 sanitizer 测试；
+- 多 LG 阶段的跨 LG atomic visibility。
 
 若 copy-on-write freeze 和 arena 足够，不必实现复杂的并发物理删除。完成定义：TSAN 下单写多读长期无竞态；freeze 前后 reference model 对拍无漏项；iterator pin 期间旧 arena 不释放；故障注入和内存压力下 prepare/publish 不产生部分可见；百万级节点 benchmark 满足内存/吞吐门槛。
 
@@ -1369,22 +1377,27 @@ minidfs 改造只有在满足以下条件后才算完成：
 
 ### Phase 0：底层契约
 
-已完成的不可变文件 I/O 子阶段：
+当前状态：**Phase 0 进行中，主要 primitive 已落地，但硬门槛尚未闭环。**
+
+已完成或已有可测试初版：
 
 - sstv2 提供统一 `FileSystem` 与强类型 `FileHandle` 抽象，Builder 通过 append-only handle 将 key/value 文件增量写入外部 sink，Reader 通过精确 `read_at` 随机读取；
 - sstv2 Reader 基于随机读打开文件，正向 Iterator 支持 `SeekToFirst` / `Seek` / `Next` 和 start/limit bound，索引 `ForwardCursor` 只保留根到当前叶子的路径，内存为 O(tree height)；
-- minidfs 提供 immutable-after-complete 文件、`FileIdentity(inode_id, content_generation, length, checksum)` 原子发布和身份绑定的 `read_exact`；
-- minidfs DataNode 使用 positional read，只读取并校验与请求范围相交的落盘 chunk；Client 支持跨 Block 和副本回退；
-- `MiniDfsFileSystem` 已通过 `create/append/close` 与 `open/read_at` 打通 sstv2 key/value 双文件的流式构建和随机读取，并有跨组件 E2E 场景；单文件 close/complete 原子，双文件可见性由后续 minitable Manifest/Raft edit 统一发布。
+- minidfs 提供 immutable-after-complete 文件、`FileIdentity(inode_id, content_generation, length, checksum)` 原子发布和身份绑定的 `read_exact`；`MiniDfsFileSystem` 已打通 SST key/value 双文件构建、随机读取和跨组件 E2E；
+- proto v2 已表达 CF、动态 qualifier、显式分区 range、128-bit Timestamp、ManifestEdit、SliceSnapshot 初版和稳定 CellRef；
+- KeyFormat v1 已实现 GLOBAL_ORDER/HASH StorageKey、QualifierToken、降序 Version、NaN/signed-zero 规则、strict decode 和首批 golden tests；
+- sstv2 Builder `FinishResult` 已返回 key/value finalized FileIdentity、row count 和 min/max key；
+- 正向 k-way `MergeIterator` primitive 已实现；
+- 基础 MemTable 已实现 arena、freeze、正向 cursor、shared lifetime、apply index 单调检查和基础内存上限。
 
 Phase 0 进入 Phase 1 前仍待完成的硬门槛：
 
-- 冻结 GLOBAL_ORDER/HASH `StorageKey`、QualifierToken、降序 Version 和 NaN 规则，并补 golden/property tests；
-- proto v2 表达 CF、动态 qualifier、分区 range、128-bit timestamp、ManifestEdit 和稳定 CellRef；
-- sstv2 Builder 返回 Manifest 所需 min/max key、entry count、format/checksum 信息；
-- sstv2/minidfs 跨层接口向 minitable 暴露 finalized FileIdentity，并支持 expected-identity open/remove；
-- 提供正向 k-way MergeIterator；
-- MemTable arena/freeze、iterator lifetime、内存记账和批量 prepare/publish。
+- 持久化并强校验 `key_format_version + row_key_schema_fingerprint` comparator domain，补齐随机 property/fuzz 与跨平台 golden tests；
+- 完成 proto v2 compatibility/reserved-field 审计，并将运行路径从旧 proto 迁移到 v2；
+- `FinishResult`/SST properties/Manifest 补齐 format version、schema fingerprint、comparator domain 和 checksum algorithm；
+- sstv2/minidfs `open/remove` 支持 expected identity，Manifest 和 GC 完整保存并校验 key/value identity；
+- 提供真正的 SST `ForwardCursor` adapter，打通 MemTable + SST merge read view；
+- MemTable 实现 allocation rollback/reservation、精确记账、重复 key 不变量以及 batch prepare/publish/read-visible watermark。
 
 反向 Iterator、lazy value、Block Cache、prefix Bloom、vectored/async read 不阻塞正向单 Slice 闭环，但在对外承诺对应功能或性能目标前必须完成。
 

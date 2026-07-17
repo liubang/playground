@@ -50,8 +50,13 @@ struct BuilderOptions {
 };
 
 struct FinishResult {
-    uint64_t key_file_size = 0;
-    uint64_t value_file_size = 0;
+    io::FileIdentity key_file;
+    io::FileIdentity value_file;
+    uint64_t row_count = 0;
+    std::optional<std::string> min_key;
+    std::optional<std::string> max_key;
+
+    bool operator==(const FinishResult&) const = default;
 };
 
 struct Sinks {
@@ -96,7 +101,11 @@ private:
     std::optional<types::AllKey> last_all_key_;
     uint64_t total_row_count_ = 0;
     uint64_t data_block_count_ = 0;
-    bool finished_ = false;
+    std::optional<std::string> min_key_;
+    std::optional<std::string> max_key_;
+    enum class State : uint8_t { kOpen, kFinished, kFailed };
+    State state_ = State::kOpen;
+    std::optional<FinishResult> finish_result_;
 };
 
 class Reader {

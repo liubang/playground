@@ -26,6 +26,7 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/sstv2/codec/fixed.h"
 
 namespace pl::sstv2::io {
 namespace {
@@ -123,6 +124,11 @@ absl::Status LocalFileSystem::append(FileHandle handle, std::span<const std::byt
     if (!(*file)->writable) {
         return absl::FailedPreconditionError("file is not writable");
     }
+    const std::string_view appended(reinterpret_cast<const char*>(data.data()), data.size());
+    const uint64_t updated_checksum =
+        crc32c::Extend(static_cast<uint32_t>((*file)->checksum),
+                       reinterpret_cast<const uint8_t*>(appended.data()),
+                       appended.size());
     size_t written = 0;
     while (written < data.size()) {
         const size_t remaining = data.size() - written;
@@ -140,6 +146,7 @@ absl::Status LocalFileSystem::append(FileHandle handle, std::span<const std::byt
         }
         written += static_cast<size_t>(result);
     }
+    (*file)->checksum = updated_checksum;
     return absl::OkStatus();
 }
 
@@ -204,7 +211,7 @@ absl::StatusOr<uint64_t> LocalFileSystem::size(FileHandle handle) {
     return static_cast<uint64_t>(info.st_size);
 }
 
-absl::Status LocalFileSystem::close(FileHandle handle) {
+absl::StatusOr<FileIdentity> LocalFileSystem::close(FileHandle handle) {
     std::shared_ptr<OpenFile> file;
     {
         std::lock_guard lock(mutex_);
@@ -216,11 +223,24 @@ absl::Status LocalFileSystem::close(FileHandle handle) {
         open_files_.erase(it);
     }
     std::lock_guard file_lock(file->mutex);
+    struct stat info{};
+    if (::fstat(file->descriptor, &info) != 0) {
+        return errno_status("fstat before close", "file", errno);
+    }
+    if (info.st_size < 0) {
+        return absl::DataLossError("local file has negative size");
+    }
     const int descriptor = std::exchange(file->descriptor, -1);
     if (::close(descriptor) != 0) {
         return errno_status("close", "file", errno);
     }
-    return absl::OkStatus();
+    return FileIdentity{
+        .file_id = static_cast<uint64_t>(info.st_ino),
+        .content_generation = 0,
+        .length = static_cast<uint64_t>(info.st_size),
+        .checksum = file->checksum,
+        .checksum_valid = file->writable,
+    };
 }
 
 absl::Status LocalFileSystem::remove(std::string_view path) {

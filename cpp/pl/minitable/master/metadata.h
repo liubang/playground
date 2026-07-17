@@ -46,7 +46,8 @@ struct TableEntry {
     [[nodiscard]] const pb::ReplicaEndpoint* primary() const {
         for (const auto& s : slices) {
             for (const auto& r : s.replicas()) {
-                if (r.role() == pb::ReplicaRole::PRIMARY) return &r;
+                if (r.role() == pb::ReplicaRole::PRIMARY)
+                    return &r;
             }
         }
         return nullptr;
@@ -75,14 +76,14 @@ public:
     // ---- 状态查询 (多线程安全) ----
 
     [[nodiscard]] std::optional<pb::SliceInfo> lookup(const std::string& ns,
-                                                       const std::string& table,
-                                                       const std::string& key) const;
+                                                      const std::string& table,
+                                                      const std::string& key) const;
 
     [[nodiscard]] std::optional<std::vector<pb::SliceInfo>> list_slices(
         const std::string& ns, const std::string& table) const;
 
     [[nodiscard]] std::optional<pb::TableInfo> get_table(const std::string& ns,
-                                                          const std::string& table) const;
+                                                         const std::string& table) const;
 
     [[nodiscard]] std::vector<uint64_t> get_slices_by_us(uint64_t unit_server_id) const;
 
@@ -125,32 +126,38 @@ private:
 // =========================================================================
 
 inline std::optional<pb::SliceInfo> Metadata::lookup(const std::string& ns,
-                                                      const std::string& table,
-                                                      const std::string& key) const {
+                                                     const std::string& table,
+                                                     const std::string& key) const {
     auto view = snapshot();
     auto ns_it = view->by_name.find(ns);
-    if (ns_it == view->by_name.end()) return std::nullopt;
+    if (ns_it == view->by_name.end())
+        return std::nullopt;
     auto tbl_it = ns_it->second.find(table);
-    if (tbl_it == ns_it->second.end()) return std::nullopt;
+    if (tbl_it == ns_it->second.end())
+        return std::nullopt;
     auto route_it = view->by_table_id.find(tbl_it->second);
-    if (route_it == view->by_table_id.end()) return std::nullopt;
+    if (route_it == view->by_table_id.end())
+        return std::nullopt;
 
     const auto& entry = *route_it->second;
     switch (entry.info.partition().type()) {
-    case pb::PartitionType::HASH:
-        if (entry.slices.empty()) return std::nullopt;
-        return entry.slices[hash_key(key, entry.info.partition().slice_count()) %
-                            entry.info.partition().slice_count()];
-    case pb::PartitionType::GLOBAL_ORDER: {
-        auto it = std::lower_bound(entry.slices.begin(), entry.slices.end(), key,
-                                    [](const pb::SliceInfo& s, const std::string& k) {
-                                        return s.end_key() < k;
-                                    });
-        if (it != entry.slices.end()) return *it;
-        return std::nullopt;
-    }
-    default:
-        return std::nullopt;
+        case pb::PartitionType::HASH:
+            if (entry.slices.empty())
+                return std::nullopt;
+            return entry.slices[hash_key(key, entry.info.partition().slice_count()) %
+                                entry.info.partition().slice_count()];
+        case pb::PartitionType::GLOBAL_ORDER: {
+            auto it = std::lower_bound(
+                entry.slices.begin(),
+                entry.slices.end(),
+                key,
+                [](const pb::SliceInfo& s, const std::string& k) { return s.end_key() < k; });
+            if (it != entry.slices.end())
+                return *it;
+            return std::nullopt;
+        }
+        default:
+            return std::nullopt;
     }
 }
 
@@ -158,30 +165,37 @@ inline std::optional<std::vector<pb::SliceInfo>> Metadata::list_slices(
     const std::string& ns, const std::string& table) const {
     auto view = snapshot();
     auto ns_it = view->by_name.find(ns);
-    if (ns_it == view->by_name.end()) return std::nullopt;
+    if (ns_it == view->by_name.end())
+        return std::nullopt;
     auto tbl_it = ns_it->second.find(table);
-    if (tbl_it == ns_it->second.end()) return std::nullopt;
+    if (tbl_it == ns_it->second.end())
+        return std::nullopt;
     auto route_it = view->by_table_id.find(tbl_it->second);
-    if (route_it == view->by_table_id.end()) return std::nullopt;
+    if (route_it == view->by_table_id.end())
+        return std::nullopt;
     return route_it->second->slices;
 }
 
 inline std::optional<pb::TableInfo> Metadata::get_table(const std::string& ns,
-                                                         const std::string& table) const {
+                                                        const std::string& table) const {
     auto view = snapshot();
     auto ns_it = view->by_name.find(ns);
-    if (ns_it == view->by_name.end()) return std::nullopt;
+    if (ns_it == view->by_name.end())
+        return std::nullopt;
     auto tbl_it = ns_it->second.find(table);
-    if (tbl_it == ns_it->second.end()) return std::nullopt;
+    if (tbl_it == ns_it->second.end())
+        return std::nullopt;
     auto route_it = view->by_table_id.find(tbl_it->second);
-    if (route_it == view->by_table_id.end()) return std::nullopt;
+    if (route_it == view->by_table_id.end())
+        return std::nullopt;
     return route_it->second->info;
 }
 
 inline std::vector<uint64_t> Metadata::get_slices_by_us(uint64_t unit_server_id) const {
     auto view = snapshot();
     auto it = view->by_unitserver.find(unit_server_id);
-    if (it != view->by_unitserver.end()) return it->second;
+    if (it != view->by_unitserver.end())
+        return it->second;
     return {};
 }
 
@@ -189,4 +203,4 @@ inline uint64_t Metadata::hash_key(const std::string& key, uint32_t /*slice_coun
     return std::hash<std::string>{}(key);
 }
 
-}  // namespace pl::minitable::master
+} // namespace pl::minitable::master

@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
     // 3. 创建三个独立的 service 实现
     namespace mm = pl::minitable::master;
     mm::MasterServiceImpl master_svc(sm.get());
-    mm::AdminServiceImpl  admin_svc(sm.get());
+    mm::AdminServiceImpl admin_svc(sm.get());
     mm::UnitServerServiceImpl unit_svc(sm.get());
 
     // Phase 1: 共用 brpc Server, 后续可各自绑定独立端口

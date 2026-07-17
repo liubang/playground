@@ -90,8 +90,7 @@ inline FileIdentity to_file_identity(const protocol::FileIdentityProto& proto) {
 inline bool same_published_identity(const FileIdentity& expected, const FileIdentity& actual) {
     return expected.inode_id == actual.inode_id &&
            expected.content_generation == actual.content_generation &&
-           expected.length == actual.length &&
-           expected.checksum_valid == actual.checksum_valid &&
+           expected.length == actual.length && expected.checksum_valid == actual.checksum_valid &&
            (!expected.checksum_valid || expected.checksum == actual.checksum);
 }
 
@@ -315,10 +314,9 @@ Result<DfsOutputStream> DfsClient::create_output_stream(std::string_view dfs_pat
     create_req.set_block_size(config_.block_size);
     create_req.set_client_id(config_.client_id);
     create_req.set_overwrite(overwrite);
-    create_req.set_file_append_mode(
-        file_append_mode == FileAppendMode::kImmutableAfterComplete
-            ? protocol::FILE_APPEND_MODE_IMMUTABLE_AFTER_COMPLETE
-            : protocol::FILE_APPEND_MODE_APPENDABLE);
+    create_req.set_file_append_mode(file_append_mode == FileAppendMode::kImmutableAfterComplete
+                                        ? protocol::FILE_APPEND_MODE_IMMUTABLE_AFTER_COMPLETE
+                                        : protocol::FILE_APPEND_MODE_APPENDABLE);
     auto* create_header = create_req.mutable_header();
     create_header->set_request_id(next_request_id());
     create_header->set_client_id(config_.client_id);
@@ -350,7 +348,7 @@ Result<DfsOutputStream> DfsClient::create_output_stream(std::string_view dfs_pat
 }
 
 Result<DfsOutputStream> DfsClient::create_immutable_output_stream(std::string_view dfs_path,
-                                                                   bool overwrite) {
+                                                                  bool overwrite) {
     return create_output_stream(dfs_path, overwrite, FileAppendMode::kImmutableAfterComplete);
 }
 
@@ -416,24 +414,23 @@ Result<Void> DfsClient::append(std::string_view local_path, std::string_view dfs
                              "cannot append without a trusted published content checksum");
     }
 
-    auto stream =
-        DfsOutputStream::create(&namenode_channel_,
-                                response.inode_id(),
-                                config_.client_id,
-                                {
-                                    .block_size = response.block_size(),
-                                    .chunk_size = config_.chunk_size,
-                                    .replication = response.replication(),
-                                    .rpc_timeout_ms = config_.rpc_timeout_ms,
-                                    .starting_block_index = response.next_block_index(),
-                                    .initial_length = response.published_identity().length(),
-                                    .initial_checksum =
-                                        response.published_identity().checksum_valid()
-                                            ? std::optional<uint32_t>(
-                                                  response.published_identity().checksum())
-                                            : std::nullopt,
-                                    .request_id_prefix = header->request_id(),
-                                });
+    auto stream = DfsOutputStream::create(
+        &namenode_channel_,
+        response.inode_id(),
+        config_.client_id,
+        {
+            .block_size = response.block_size(),
+            .chunk_size = config_.chunk_size,
+            .replication = response.replication(),
+            .rpc_timeout_ms = config_.rpc_timeout_ms,
+            .starting_block_index = response.next_block_index(),
+            .initial_length = response.published_identity().length(),
+            .initial_checksum =
+                response.published_identity().checksum_valid()
+                    ? std::optional<uint32_t>(response.published_identity().checksum())
+                    : std::nullopt,
+            .request_id_prefix = header->request_id(),
+        });
     if (stream.hasError()) {
         return folly::makeUnexpected(stream.error());
     }

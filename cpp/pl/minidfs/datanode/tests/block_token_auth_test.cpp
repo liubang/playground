@@ -619,12 +619,12 @@ TEST(BlockTokenPrimitiveTest, FileIdentityIsCoveredBySignature) {
     auto token = issue_block_token(
         100, 200, 300, 5, kBlockTokenPermissionRead, 300000, secret, 1000, &identity);
     ASSERT_TRUE(token.has_file_identity());
-    EXPECT_TRUE(verify_block_token(
-        token, secret, BlockTokenPermission::kRead, 100, 200, 300, 5, 2000));
+    EXPECT_TRUE(
+        verify_block_token(token, secret, BlockTokenPermission::kRead, 100, 200, 300, 5, 2000));
 
     token.mutable_file_identity()->set_content_generation(8);
-    EXPECT_FALSE(verify_block_token(
-        token, secret, BlockTokenPermission::kRead, 100, 200, 300, 5, 2000));
+    EXPECT_FALSE(
+        verify_block_token(token, secret, BlockTokenPermission::kRead, 100, 200, 300, 5, 2000));
 }
 
 TEST(BlockTokenPrimitiveTest, ExpiredTokenFailsVerification) {

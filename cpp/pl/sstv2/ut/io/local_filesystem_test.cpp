@@ -47,7 +47,12 @@ TEST_F(LocalFileSystemTest, CreatesAppendsAndReadsExactly) {
     ASSERT_TRUE(filesystem_.append(*writer, bytes("hello")).ok());
     ASSERT_TRUE(filesystem_.append(*writer, bytes(" world")).ok());
     EXPECT_EQ(*filesystem_.size(*writer), 11);
-    ASSERT_TRUE(filesystem_.close(*writer).ok());
+    auto identity = filesystem_.close(*writer);
+    ASSERT_TRUE(identity.ok()) << identity.status();
+    EXPECT_NE(identity->file_id, 0U);
+    EXPECT_EQ(identity->length, 11U);
+    EXPECT_TRUE(identity->checksum_valid);
+    EXPECT_NE(identity->checksum, 0U);
 
     auto reader = filesystem_.open(path("table.sst"));
     ASSERT_TRUE(reader.ok()) << reader.status();

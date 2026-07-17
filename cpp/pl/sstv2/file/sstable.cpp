@@ -342,8 +342,8 @@ absl::StatusOr<size_t> Builder::encoded_data_block_size_with(
 }
 
 absl::Status Builder::add(const Row& row) {
-    if (finished_) {
-        return absl::FailedPreconditionError("builder is already finished");
+    if (state_ != State::kOpen) {
+        return absl::FailedPreconditionError("builder is not open");
     }
     if (schema_ == nullptr || internal_schema_ == nullptr) {
         return absl::InvalidArgumentError("schema is null");
@@ -435,6 +435,15 @@ absl::Status Builder::add(const Row& row) {
     if (!status.ok()) {
         return status;
     }
+    auto encoded_key = codec::make_encoded_all_key(internal, internal_schema_);
+    if (!encoded_key.ok()) {
+        state_ = State::kFailed;
+        return encoded_key.status();
+    }
+    if (!min_key_.has_value()) {
+        min_key_ = encoded_key->bytes();
+    }
+    max_key_ = encoded_key->bytes();
     pending_rows_.push_back(std::move(internal));
     pending_embedded_values_.push_back(std::move(embedded_value));
     last_all_key_ = row.all_key;
@@ -488,10 +497,13 @@ absl::Status Builder::flush_data_block() {
 }
 
 absl::StatusOr<FinishResult> Builder::finish_result() {
-    if (finished_) {
-        return absl::FailedPreconditionError("builder is already finished");
+    if (state_ == State::kFinished) {
+        return *finish_result_;
     }
-    finished_ = true;
+    if (state_ == State::kFailed) {
+        return absl::FailedPreconditionError("builder is in a failed state");
+    }
+    state_ = State::kFailed;
     if (schema_ == nullptr || internal_schema_ == nullptr) {
         return absl::InvalidArgumentError("schema is null");
     }
@@ -601,10 +613,31 @@ absl::StatusOr<FinishResult> Builder::finish_result() {
         return status;
     }
 
-    return FinishResult{
-        .key_file_size = *sinks_.filesystem->size(sinks_.key),
-        .value_file_size = *sinks_.filesystem->size(sinks_.value),
+    auto key_identity = sinks_.filesystem->close(sinks_.key);
+    sinks_.key = io::kInvalidFileHandle;
+    if (!key_identity.ok()) {
+        static_cast<void>(sinks_.filesystem->close(sinks_.value));
+        sinks_.value = io::kInvalidFileHandle;
+        return key_identity.status();
+    }
+    auto value_identity = sinks_.filesystem->close(sinks_.value);
+    sinks_.value = io::kInvalidFileHandle;
+    if (!value_identity.ok()) {
+        return value_identity.status();
+    }
+    if (key_identity->length != statistics.key_file_size ||
+        value_identity->length != statistics.value_file_size) {
+        return absl::DataLossError("published file identity length does not match SST statistics");
+    }
+    finish_result_ = FinishResult{
+        .key_file = *key_identity,
+        .value_file = *value_identity,
+        .row_count = total_row_count_,
+        .min_key = min_key_,
+        .max_key = max_key_,
     };
+    state_ = State::kFinished;
+    return *finish_result_;
 }
 
 absl::StatusOr<FinishResult> Builder::finish_to_sinks(types::Schema::ConstRef schema,

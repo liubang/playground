@@ -581,8 +581,8 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
     if (h.magic != expected) {
         return absl::InvalidArgumentError("block magic mismatch");
     }
-    constexpr uint64_t kKnownFlags = block_flags::kPatternStore | block_flags::kRowKeyBitmap |
-                                     block_flags::kCompressMask;
+    constexpr uint64_t kKnownFlags =
+        block_flags::kPatternStore | block_flags::kRowKeyBitmap | block_flags::kCompressMask;
     if ((h.flags & block_flags::kPatternStore) == 0 || (h.flags & ~kKnownFlags) != 0 ||
         (h.flags & block_flags::kRowKeyBitmap) != 0) {
         return absl::InvalidArgumentError("invalid block flags");
@@ -638,8 +638,7 @@ absl::StatusOr<BlockReader> BlockReader::open(std::string_view block,
         if (n == 0) {
             return absl::InvalidArgumentError("bad column offset table");
         }
-        if (off < Header::kSize || off > h.offset_table_offset ||
-            (i > 0 && off < offsets[i - 1])) {
+        if (off < Header::kSize || off > h.offset_table_offset || (i > 0 && off < offsets[i - 1])) {
             return absl::InvalidArgumentError("invalid column offset");
         }
         offsets[i] = off;

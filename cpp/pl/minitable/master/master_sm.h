@@ -17,7 +17,6 @@
 #pragma once
 
 #include <braft/raft.h>
-
 #include <memory>
 #include <string_view>
 
@@ -68,4 +67,4 @@ private:
     UnitServerManager unit_server_manager_;
 };
 
-}  // namespace pl::minitable::master
+} // namespace pl::minitable::master

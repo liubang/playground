@@ -171,21 +171,45 @@ absl::StatusOr<uint64_t> MiniDfsFileSystem::size(FileHandle handle) {
     return std::get<ReadFile>(*it->second).identity.length;
 }
 
-absl::Status MiniDfsFileSystem::close(FileHandle handle) {
+absl::StatusOr<FileIdentity> MiniDfsFileSystem::close(FileHandle handle) {
     std::lock_guard lock(mutex_);
     const auto it = open_files_.find(handle);
     if (it == open_files_.end()) {
         return absl::FailedPreconditionError("file handle is closed or invalid");
     }
-    absl::Status status = absl::OkStatus();
+    FileIdentity identity;
     if (auto* stream = std::get_if<minidfs::DfsOutputStream>(it->second.get())) {
         auto result = stream->close();
         if (result.hasError()) {
-            status = to_absl_status(result.error(), "close");
+            const auto status = to_absl_status(result.error(), "close");
+            open_files_.erase(it);
+            return status;
         }
+        const auto published = stream->published_identity();
+        if (!published.has_value() || published->inode_id == 0 ||
+            !published->checksum_valid) {
+            open_files_.erase(it);
+            return absl::DataLossError("MiniDFS close did not return a published identity");
+        }
+        identity = FileIdentity{
+            .file_id = published->inode_id,
+            .content_generation = published->content_generation,
+            .length = published->length,
+            .checksum = published->checksum,
+            .checksum_valid = published->checksum_valid,
+        };
+    } else {
+        const auto& published = std::get<ReadFile>(*it->second).identity;
+        identity = FileIdentity{
+            .file_id = published.inode_id,
+            .content_generation = published.content_generation,
+            .length = published.length,
+            .checksum = published.checksum,
+            .checksum_valid = published.checksum_valid,
+        };
     }
     open_files_.erase(it);
-    return status;
+    return identity;
 }
 
 absl::Status MiniDfsFileSystem::remove(std::string_view path) {

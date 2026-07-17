@@ -66,14 +66,13 @@ inline uint32_t all_data_plane_permissions() {
            kBlockTokenPermissionTruncate;
 }
 
-inline std::string block_token_payload(
-    uint64_t block_id,
-    uint64_t generation_stamp,
-    uint64_t inode_id,
-    uint32_t block_index,
-    uint32_t permissions,
-    uint64_t expires_at_ms,
-    const protocol::FileIdentityProto* file_identity = nullptr) {
+inline std::string block_token_payload(uint64_t block_id,
+                                       uint64_t generation_stamp,
+                                       uint64_t inode_id,
+                                       uint32_t block_index,
+                                       uint32_t permissions,
+                                       uint64_t expires_at_ms,
+                                       const protocol::FileIdentityProto* file_identity = nullptr) {
     std::string payload = std::to_string(block_id) + "|" + std::to_string(generation_stamp) + "|" +
                           std::to_string(inode_id) + "|" + std::to_string(block_index) + "|" +
                           std::to_string(permissions) + "|" + std::to_string(expires_at_ms);

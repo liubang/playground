@@ -77,9 +77,8 @@ public:
 
     /// Create an immutable-after-complete output stream.
     /// Existing closed files may be replaced when overwrite=true.
-    [[nodiscard]] Result<DfsOutputStream> create_immutable_output_stream(
-        std::string_view dfs_path,
-        bool overwrite = false);
+    [[nodiscard]] Result<DfsOutputStream> create_immutable_output_stream(std::string_view dfs_path,
+                                                                         bool overwrite = false);
 
     /// Write a local file to DFS using pipeline replication.
     /// Existing closed files may be replaced when overwrite=true.

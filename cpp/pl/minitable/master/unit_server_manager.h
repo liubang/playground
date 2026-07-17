@@ -59,9 +59,9 @@ public:
     using FailoverFn = std::function<void(uint64_t us_id)>;
 
     explicit UnitServerManager(size_t queue_capacity = 4096,
-                        int64_t stale_threshold_us = 10'000'000,
-                        int64_t dead_threshold_us  = 30'000'000,
-                        int64_t check_interval_us  = 1'000'000)
+                               int64_t stale_threshold_us = 10'000'000,
+                               int64_t dead_threshold_us = 30'000'000,
+                               int64_t check_interval_us = 1'000'000)
         : pool_(1, queue_capacity),
           stale_threshold_us_(stale_threshold_us),
           dead_threshold_us_(dead_threshold_us),
@@ -80,8 +80,8 @@ public:
 
     // ---- 存活状态 ----
 
-    void update_heartbeat(uint64_t us_id, const std::string& host, uint32_t port,
-                          int64_t capacity, int64_t now_us);
+    void update_heartbeat(
+        uint64_t us_id, const std::string& host, uint32_t port, int64_t capacity, int64_t now_us);
 
     [[nodiscard]] std::vector<Heartbeat> get_all_heartbeats() const;
 
@@ -111,8 +111,8 @@ private:
 // 实现
 // =========================================================================
 
-inline void UnitServerManager::update_heartbeat(uint64_t us_id, const std::string& host,
-                                         uint32_t port, int64_t capacity, int64_t now_us) {
+inline void UnitServerManager::update_heartbeat(
+    uint64_t us_id, const std::string& host, uint32_t port, int64_t capacity, int64_t now_us) {
     std::lock_guard<std::mutex> lock(hb_mutex_);
     auto [it, inserted] = heartbeats_.try_emplace(us_id);
     auto& hb = it->second;
@@ -132,14 +132,16 @@ inline std::vector<UnitServerManager::Heartbeat> UnitServerManager::get_all_hear
     std::lock_guard<std::mutex> lock(hb_mutex_);
     std::vector<Heartbeat> result;
     result.reserve(heartbeats_.size());
-    for (const auto& [id, hb] : heartbeats_) result.push_back(hb);
+    for (const auto& [id, hb] : heartbeats_)
+        result.push_back(hb);
     return result;
 }
 
 inline void UnitServerManager::set_state(uint64_t us_id, State state) {
     std::lock_guard<std::mutex> lock(hb_mutex_);
     auto it = heartbeats_.find(us_id);
-    if (it != heartbeats_.end()) it->second.state = state;
+    if (it != heartbeats_.end())
+        it->second.state = state;
 }
 
 inline void UnitServerManager::remove_heartbeat(uint64_t us_id) {
@@ -148,11 +150,13 @@ inline void UnitServerManager::remove_heartbeat(uint64_t us_id) {
 }
 
 inline void UnitServerManager::start_detector(FailoverFn on_failover) {
-    if (detector_running_.exchange(true)) return;
+    if (detector_running_.exchange(true))
+        return;
     detector_thread_ = std::thread([this, fn = std::move(on_failover)] {
         while (detector_running_.load(std::memory_order_relaxed)) {
             std::this_thread::sleep_for(std::chrono::microseconds(check_interval_us_));
-            if (!detector_running_.load(std::memory_order_relaxed)) break;
+            if (!detector_running_.load(std::memory_order_relaxed))
+                break;
 
             int64_t now_us = std::chrono::duration_cast<std::chrono::microseconds>(
                                  std::chrono::steady_clock::now().time_since_epoch())
@@ -172,8 +176,10 @@ inline void UnitServerManager::start_detector(FailoverFn on_failover) {
 }
 
 inline void UnitServerManager::stop_detector() {
-    if (!detector_running_.exchange(false)) return;
-    if (detector_thread_.joinable()) detector_thread_.join();
+    if (!detector_running_.exchange(false))
+        return;
+    if (detector_thread_.joinable())
+        detector_thread_.join();
 }
 
-}  // namespace pl::minitable::master
+} // namespace pl::minitable::master

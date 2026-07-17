@@ -18,7 +18,6 @@
 #include "cpp/pl/minitable/master/master_service_impl.h"
 
 #include <brpc/closure_guard.h>
-
 #include <string>
 
 #include "cpp/pl/minitable/master/metadata.h"
@@ -34,18 +33,20 @@ void set_status(pb::Status* s, int code, const std::string& msg) {
     s->set_msg(msg);
 }
 
-void set_ok(pb::Status* s) { s->set_code(0); }
+void set_ok(pb::Status* s) {
+    s->set_code(0);
+}
 
-}  // namespace
+} // namespace
 
 // =========================================================================
 // GetSlice
 // =========================================================================
 
 void MasterServiceImpl::GetSlice(google::protobuf::RpcController* cntl,
-                                  const pb::GetSliceRequest* req,
-                                  pb::GetSliceResponse* resp,
-                                  google::protobuf::Closure* done) {
+                                 const pb::GetSliceRequest* req,
+                                 pb::GetSliceResponse* resp,
+                                 google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
     (void)cntl;
 
@@ -60,13 +61,26 @@ void MasterServiceImpl::GetSlice(google::protobuf::RpcController* cntl,
         // Phase 1: simple concatenation of string values
         for (const auto& v : req->row_key().values()) {
             switch (v.value_case()) {
-            case pb::RowKeyValue::kStrVal:   encoded.append(v.str_val()); break;
-            case pb::RowKeyValue::kIntVal:   encoded.append(std::to_string(v.int_val())); break;
-            case pb::RowKeyValue::kUintVal:  encoded.append(std::to_string(v.uint_val())); break;
-            case pb::RowKeyValue::kInt32Val: encoded.append(std::to_string(v.int32_val())); break;
-            case pb::RowKeyValue::kUint32Val:encoded.append(std::to_string(v.uint32_val())); break;
-            case pb::RowKeyValue::kBytesVal: encoded.append(v.bytes_val()); break;
-            default: break;
+                case pb::RowKeyValue::kStrVal:
+                    encoded.append(v.str_val());
+                    break;
+                case pb::RowKeyValue::kIntVal:
+                    encoded.append(std::to_string(v.int_val()));
+                    break;
+                case pb::RowKeyValue::kUintVal:
+                    encoded.append(std::to_string(v.uint_val()));
+                    break;
+                case pb::RowKeyValue::kInt32Val:
+                    encoded.append(std::to_string(v.int32_val()));
+                    break;
+                case pb::RowKeyValue::kUint32Val:
+                    encoded.append(std::to_string(v.uint32_val()));
+                    break;
+                case pb::RowKeyValue::kBytesVal:
+                    encoded.append(v.bytes_val());
+                    break;
+                default:
+                    break;
             }
         }
         auto route = sm_->metadata().lookup(req->namespace_(), req->name(), encoded);
@@ -93,9 +107,9 @@ void MasterServiceImpl::GetSlice(google::protobuf::RpcController* cntl,
 // =========================================================================
 
 void MasterServiceImpl::CreateTable(google::protobuf::RpcController* cntl,
-                                     const pb::CreateTableRequest* req,
-                                     pb::CreateTableResponse* resp,
-                                     google::protobuf::Closure* done) {
+                                    const pb::CreateTableRequest* req,
+                                    pb::CreateTableResponse* resp,
+                                    google::protobuf::Closure* done) {
     (void)cntl;
 
     if (req->name().empty() || !req->has_schema()) {
@@ -130,29 +144,37 @@ void MasterServiceImpl::CreateTable(google::protobuf::RpcController* cntl,
 // =========================================================================
 
 void MasterServiceImpl::UpdateTable(google::protobuf::RpcController* cntl,
-                                     const pb::UpdateTableRequest* req,
-                                     pb::UpdateTableResponse* resp,
-                                     google::protobuf::Closure* done) {
+                                    const pb::UpdateTableRequest* req,
+                                    pb::UpdateTableResponse* resp,
+                                    google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
-    (void)cntl; (void)req;
-    if (!sm_->is_leader()) { set_status(resp->mutable_status(), 4, "not primary master"); return; }
+    (void)cntl;
+    (void)req;
+    if (!sm_->is_leader()) {
+        set_status(resp->mutable_status(), 4, "not primary master");
+        return;
+    }
     set_ok(resp->mutable_status());
 }
 
 void MasterServiceImpl::DropTable(google::protobuf::RpcController* cntl,
-                                   const pb::DropTableRequest* req,
-                                   pb::DropTableResponse* resp,
-                                   google::protobuf::Closure* done) {
+                                  const pb::DropTableRequest* req,
+                                  pb::DropTableResponse* resp,
+                                  google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
-    (void)cntl; (void)req;
-    if (!sm_->is_leader()) { set_status(resp->mutable_status(), 4, "not primary master"); return; }
+    (void)cntl;
+    (void)req;
+    if (!sm_->is_leader()) {
+        set_status(resp->mutable_status(), 4, "not primary master");
+        return;
+    }
     set_ok(resp->mutable_status());
 }
 
 void MasterServiceImpl::GetTable(google::protobuf::RpcController* cntl,
-                                  const pb::GetTableRequest* req,
-                                  pb::GetTableResponse* resp,
-                                  google::protobuf::Closure* done) {
+                                 const pb::GetTableRequest* req,
+                                 pb::GetTableResponse* resp,
+                                 google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
     (void)cntl;
     auto info = sm_->metadata().get_table(req->namespace_(), req->name());
@@ -165,12 +187,13 @@ void MasterServiceImpl::GetTable(google::protobuf::RpcController* cntl,
 }
 
 void MasterServiceImpl::ListTables(google::protobuf::RpcController* cntl,
-                                    const pb::ListTablesRequest* req,
-                                    pb::ListTablesResponse* resp,
-                                    google::protobuf::Closure* done) {
+                                   const pb::ListTablesRequest* req,
+                                   pb::ListTablesResponse* resp,
+                                   google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
-    (void)cntl; (void)req;
+    (void)cntl;
+    (void)req;
     set_ok(resp->mutable_status());
 }
 
-}  // namespace pl::minitable::master
+} // namespace pl::minitable::master
