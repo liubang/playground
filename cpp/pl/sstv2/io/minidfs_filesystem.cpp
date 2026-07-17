@@ -43,6 +43,9 @@ absl::Status to_absl_status(const Status& status, std::string_view operation) {
         code == static_cast<status_code_t>(ErrorCode::kPathTooLong)) {
         return absl::InvalidArgumentError(message);
     }
+    if (code == static_cast<status_code_t>(ErrorCode::kIdentityMismatch)) {
+        return absl::FailedPreconditionError(message);
+    }
     if (code == static_cast<status_code_t>(ErrorCode::kNotFound) ||
         code == static_cast<status_code_t>(ErrorCode::kFileNotFound) ||
         code == static_cast<status_code_t>(ErrorCode::kBlockNotFound)) {
@@ -122,6 +125,28 @@ absl::StatusOr<FileHandle> MiniDfsFileSystem::open(std::string_view path) {
     return handle;
 }
 
+absl::StatusOr<FileHandle> MiniDfsFileSystem::open(std::string_view path,
+                                                   const FileIdentity& expected) {
+    auto handle = open(path);
+    if (!handle.ok()) {
+        return handle.status();
+    }
+    std::lock_guard lock(mutex_);
+    const auto it = open_files_.find(*handle);
+    if (it == open_files_.end()) {
+        return absl::InternalError("opened MiniDFS handle disappeared");
+    }
+    const auto* file = std::get_if<ReadFile>(it->second.get());
+    if (file == nullptr || file->identity.inode_id != expected.file_id ||
+        file->identity.content_generation != expected.content_generation ||
+        file->identity.length != expected.length || file->identity.checksum != expected.checksum ||
+        file->identity.checksum_valid != expected.checksum_valid) {
+        open_files_.erase(it);
+        return absl::FailedPreconditionError("MiniDFS file identity mismatch");
+    }
+    return handle;
+}
+
 absl::Status MiniDfsFileSystem::append(FileHandle handle, std::span<const std::byte> data) {
     std::lock_guard lock(mutex_);
     const auto it = open_files_.find(handle);
@@ -186,8 +211,7 @@ absl::StatusOr<FileIdentity> MiniDfsFileSystem::close(FileHandle handle) {
             return status;
         }
         const auto published = stream->published_identity();
-        if (!published.has_value() || published->inode_id == 0 ||
-            !published->checksum_valid) {
+        if (!published.has_value() || published->inode_id == 0 || !published->checksum_valid) {
             open_files_.erase(it);
             return absl::DataLossError("MiniDFS close did not return a published identity");
         }
@@ -218,6 +242,28 @@ absl::Status MiniDfsFileSystem::remove(std::string_view path) {
     }
     auto result = client_->rm(path, false);
     return result.hasError() ? to_absl_status(result.error(), "delete") : absl::OkStatus();
+}
+
+absl::Status MiniDfsFileSystem::remove(std::string_view path, const FileIdentity& expected) {
+    if (client_ == nullptr) {
+        return absl::FailedPreconditionError("MiniDFS client is null");
+    }
+    if (expected.file_id == 0 || !expected.checksum_valid) {
+        return absl::InvalidArgumentError("invalid identity for MiniDFS identity-fenced remove");
+    }
+    const minidfs::FileIdentity identity{
+        .inode_id = expected.file_id,
+        .content_generation = expected.content_generation,
+        .length = expected.length,
+        .checksum = static_cast<uint32_t>(expected.checksum),
+        .checksum_valid = expected.checksum_valid,
+    };
+    if (static_cast<uint64_t>(identity.checksum) != expected.checksum) {
+        return absl::InvalidArgumentError("MiniDFS checksum exceeds the supported CRC32C domain");
+    }
+    auto result = client_->rm(path, identity);
+    return result.hasError() ? to_absl_status(result.error(), "identity-fenced delete")
+                             : absl::OkStatus();
 }
 
 absl::Status MiniDfsFileSystem::rename(std::string_view source, std::string_view destination) {

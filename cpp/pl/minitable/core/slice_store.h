@@ -23,12 +23,17 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "cpp/pl/minitable/core/manifest.h"
+#include "cpp/pl/minitable/core/sst_read_source.h"
 #include "cpp/pl/minitable/memtable/memtable.h"
+#include "cpp/pl/sstv2/file/sstable.h"
+#include "cpp/pl/sstv2/io/filesystem.h"
 
 namespace pl::minitable {
 
@@ -37,49 +42,173 @@ struct LocalityGroupPatch {
     std::span<const MemTableMutation> mutations;
 };
 
+struct LocalityGroupReadState {
+    std::shared_ptr<MemTable> active;
+    std::shared_ptr<MemTable> immutable;
+    uint64_t immutable_id = 0;
+    uint64_t immutable_fence_index = 0;
+    uint64_t last_installed_immutable_id = 0;
+    // Newest first. Lower source priority therefore wins on duplicate keys.
+    std::vector<std::shared_ptr<const SstReadSource>> ssts;
+    MemTableOptions options;
+};
+
+struct SliceVersion {
+    uint64_t generation = 0;
+    std::shared_ptr<const ManifestRef> manifest;
+    std::map<uint32_t, LocalityGroupReadState> locality_groups;
+};
+
+struct PublishedReadState {
+    std::shared_ptr<const SliceVersion> version;
+    uint64_t visible_applied_index = 0;
+};
+
+class FlushToken final {
+public:
+    FlushToken(const FlushToken&) = delete;
+    FlushToken& operator=(const FlushToken&) = delete;
+    FlushToken(FlushToken&&) noexcept = default;
+    FlushToken& operator=(FlushToken&&) noexcept = default;
+
+    [[nodiscard]] uint32_t locality_group_id() const { return locality_group_id_; }
+    [[nodiscard]] uint64_t immutable_id() const { return immutable_id_; }
+    [[nodiscard]] uint64_t fence_index() const { return fence_index_; }
+
+private:
+    friend class SliceStore;
+    FlushToken(uint64_t store_incarnation,
+               uint32_t locality_group_id,
+               uint64_t immutable_id,
+               uint64_t fence_index,
+               std::shared_ptr<MemTable> immutable)
+        : store_incarnation_(store_incarnation),
+          locality_group_id_(locality_group_id),
+          immutable_id_(immutable_id),
+          fence_index_(fence_index),
+          immutable_(std::move(immutable)) {}
+
+    uint64_t store_incarnation_ = 0;
+    uint32_t locality_group_id_ = 0;
+    uint64_t immutable_id_ = 0;
+    uint64_t fence_index_ = 0;
+    std::shared_ptr<MemTable> immutable_;
+};
+
+struct SliceStorePersistence {
+    std::shared_ptr<sstv2::io::FileSystem> filesystem;
+    std::string manifest_directory;
+};
+
+struct SliceStoreRecovery {
+    std::map<uint32_t, MemTableOptions> locality_groups;
+    SliceStorePersistence persistence;
+    PersistedManifest manifest;
+};
+
+struct FlushSstOptions {
+    std::shared_ptr<sstv2::io::FileSystem> filesystem;
+    std::string key_path;
+    std::string value_path;
+    sstv2::file::BuilderOptions builder_options;
+};
+
+class FinalizedFlush final {
+public:
+    [[nodiscard]] const SstIdentity& identity() const { return source_->identity(); }
+
+private:
+    friend class SliceStore;
+    FinalizedFlush(uint64_t store_incarnation,
+                   uint32_t locality_group_id,
+                   uint64_t immutable_id,
+                   uint64_t fence_index,
+                   std::shared_ptr<const SstReadSource> source)
+        : store_incarnation_(store_incarnation),
+          locality_group_id_(locality_group_id),
+          immutable_id_(immutable_id),
+          fence_index_(fence_index),
+          source_(std::move(source)) {}
+
+    uint64_t store_incarnation_ = 0;
+    uint32_t locality_group_id_ = 0;
+    uint64_t immutable_id_ = 0;
+    uint64_t fence_index_ = 0;
+    std::shared_ptr<const SstReadSource> source_;
+};
+
 class SliceReadView final {
 public:
-    [[nodiscard]] uint64_t visible_applied_index() const { return visible_applied_index_; }
+    [[nodiscard]] uint64_t generation() const { return state_->version->generation; }
+    [[nodiscard]] uint64_t visible_applied_index() const { return state_->visible_applied_index; }
+    [[nodiscard]] bool has_immutable(uint32_t locality_group_id) const;
+    [[nodiscard]] size_t sst_count(uint32_t locality_group_id) const;
     [[nodiscard]] absl::StatusOr<std::unique_ptr<sstv2::merge::ForwardCursor>> new_cursor(
         uint32_t locality_group_id) const;
 
 private:
     friend class SliceStore;
-    SliceReadView(uint64_t visible_applied_index,
-                  std::map<uint32_t, std::shared_ptr<MemTable>> locality_groups)
-        : visible_applied_index_(visible_applied_index),
-          locality_groups_(std::move(locality_groups)) {}
+    explicit SliceReadView(std::shared_ptr<const PublishedReadState> state)
+        : state_(std::move(state)) {}
 
-    uint64_t visible_applied_index_ = 0;
-    std::map<uint32_t, std::shared_ptr<MemTable>> locality_groups_;
+    std::shared_ptr<const PublishedReadState> state_;
 };
 
-// Minimal in-process Slice apply coordinator. It prepares all LG MemTables in
-// stable ID order, performs infallible publication, then release-publishes one
-// Slice-wide visibility watermark for readers to acquire and pin.
+// In-process Slice storage coordinator. Writers serialize through apply_mutex_;
+// readers atomically pin one immutable PublishedReadState containing both the
+// structural SliceVersion and its compatible visibility watermark.
 class SliceStore final {
 public:
-    // SliceStore constructs and exclusively owns every writable MemTable. Read
-    // views expose cursors only, so no caller can bypass the Slice watermark.
     [[nodiscard]] static absl::StatusOr<std::unique_ptr<SliceStore>> Create(
-        std::map<uint32_t, MemTableOptions> locality_groups);
+        std::map<uint32_t, MemTableOptions> locality_groups,
+        SliceStorePersistence persistence = {});
+    [[nodiscard]] static absl::StatusOr<std::unique_ptr<SliceStore>> Reopen(
+        SliceStoreRecovery recovery);
 
     [[nodiscard]] absl::Status apply(std::span<const LocalityGroupPatch> patches,
                                      uint64_t apply_index);
+    [[nodiscard]] absl::Status freeze_locality_group(uint32_t locality_group_id);
+
+    // Flush build performs all IO outside apply_mutex_. install_flush validates
+    // the per-immutable fence against the latest SliceVersion and atomically
+    // installs the SST while retiring exactly that immutable generation.
+    [[nodiscard]] absl::StatusOr<FlushToken> begin_flush(uint32_t locality_group_id) const;
+    [[nodiscard]] static absl::StatusOr<FinalizedFlush> build_flush_sst(const FlushToken& token,
+                                                                        FlushSstOptions options);
+    [[nodiscard]] absl::Status install_flush(const FlushToken& token, const FinalizedFlush& flush);
+
     [[nodiscard]] SliceReadView read_view() const;
+    [[nodiscard]] const PersistedManifest& persisted_manifest() const noexcept {
+        return persisted_manifest_;
+    }
+    [[nodiscard]] size_t orphan_count() const;
+    [[nodiscard]] absl::Status collect_orphans();
     [[nodiscard]] uint64_t visible_applied_index() const {
-        return visible_applied_index_.load(std::memory_order_acquire);
+        return std::atomic_load_explicit(&published_, std::memory_order_acquire)
+            ->visible_applied_index;
+    }
+    [[nodiscard]] uint64_t generation() const {
+        return std::atomic_load_explicit(&published_, std::memory_order_acquire)
+            ->version->generation;
     }
 
 private:
-    explicit SliceStore(std::map<uint32_t, std::shared_ptr<MemTable>> locality_groups)
-        : locality_groups_(std::move(locality_groups)) {}
+    SliceStore(uint64_t store_incarnation,
+               std::shared_ptr<const PublishedReadState> initial,
+               SliceStorePersistence persistence,
+               PersistedManifest persisted_manifest)
+        : store_incarnation_(store_incarnation),
+          published_(std::move(initial)),
+          persistence_(std::move(persistence)),
+          persisted_manifest_(std::move(persisted_manifest)) {}
 
-    // Raft apply has one writer. This mutex also makes accidental concurrent
-    // callers obey the same deterministic order.
     mutable std::mutex apply_mutex_;
-    std::map<uint32_t, std::shared_ptr<MemTable>> locality_groups_;
-    std::atomic<uint64_t> visible_applied_index_{0};
+    uint64_t store_incarnation_ = 0;
+    uint64_t next_immutable_id_ = 1;
+    std::shared_ptr<const PublishedReadState> published_;
+    SliceStorePersistence persistence_;
+    PersistedManifest persisted_manifest_;
+    std::vector<SstIdentity> orphans_;
 };
 
 } // namespace pl::minitable

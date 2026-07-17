@@ -382,6 +382,32 @@ pl::Result<Inode> NamespaceManager::remove(std::string_view path, bool recursive
     return inode;
 }
 
+pl::Result<Inode> NamespaceManager::remove_if_version(std::string_view path,
+                                                      uint64_t expected_version) {
+    auto valid = validate_path(path);
+    if (valid.hasError()) {
+        return folly::makeUnexpected(valid.error());
+    }
+    auto components = split_path(path);
+    if (components.empty()) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidPath),
+                             "cannot remove root directory");
+    }
+    auto inode = walk_path(components);
+    if (inode.hasError()) {
+        return inode;
+    }
+    if (inode.value().type != InodeType::kFile || inode.value().version != expected_version) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kIdentityMismatch),
+                             "path changed before identity-fenced delete");
+    }
+    auto deleted = store_->delete_inode_if_version(inode.value().inode_id, expected_version);
+    if (deleted.hasError()) {
+        return folly::makeUnexpected(deleted.error());
+    }
+    return inode.value();
+}
+
 pl::Result<pl::Void> NamespaceManager::rename(std::string_view src, std::string_view dst) {
     auto src_valid = validate_path(src);
     if (src_valid.hasError()) {
