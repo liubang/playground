@@ -3,6 +3,7 @@
 #include "cpp/pl/sstv2/merge/merge_iterator.h"
 
 #include <algorithm>
+#include <new>
 #include <tuple>
 
 #include "absl/status/status.h"
@@ -10,6 +11,12 @@
 namespace pl::sstv2::merge {
 
 MergeIterator::MergeIterator(std::vector<Source> sources) : sources_(std::move(sources)) {
+    try {
+        heap_.reserve(sources_.size());
+    } catch (const std::bad_alloc&) {
+        status_ = absl::ResourceExhaustedError("merge heap allocation failed");
+        return;
+    }
     for (const auto& source : sources_) {
         if (source.cursor == nullptr) {
             status_ = absl::InvalidArgumentError("merge source cursor is null");
@@ -27,14 +34,19 @@ bool MergeIterator::less(size_t lhs, size_t rhs) const {
 
 absl::Status MergeIterator::rebuild_heap() {
     heap_.clear();
-    for (size_t i = 0; i < sources_.size(); ++i) {
-        if (sources_[i].cursor->valid()) {
-            heap_.push_back(i);
+    try {
+        for (size_t i = 0; i < sources_.size(); ++i) {
+            if (sources_[i].cursor->valid()) {
+                heap_.push_back(i);
+            }
         }
+    } catch (const std::bad_alloc&) {
+        status_ = absl::ResourceExhaustedError("merge heap allocation failed");
+        heap_.clear();
+        return status_;
     }
-    std::make_heap(heap_.begin(), heap_.end(), [this](size_t lhs, size_t rhs) {
-        return less(lhs, rhs);
-    });
+    std::make_heap(
+        heap_.begin(), heap_.end(), [this](size_t lhs, size_t rhs) { return less(lhs, rhs); });
     return absl::OkStatus();
 }
 
@@ -73,9 +85,8 @@ absl::Status MergeIterator::next() {
     if (heap_.empty()) {
         return absl::FailedPreconditionError("merge iterator is not valid");
     }
-    std::pop_heap(heap_.begin(), heap_.end(), [this](size_t lhs, size_t rhs) {
-        return less(lhs, rhs);
-    });
+    std::pop_heap(
+        heap_.begin(), heap_.end(), [this](size_t lhs, size_t rhs) { return less(lhs, rhs); });
     const size_t current = heap_.back();
     heap_.pop_back();
     status_ = sources_[current].cursor->next();
@@ -85,9 +96,8 @@ absl::Status MergeIterator::next() {
     }
     if (sources_[current].cursor->valid()) {
         heap_.push_back(current);
-        std::push_heap(heap_.begin(), heap_.end(), [this](size_t lhs, size_t rhs) {
-            return less(lhs, rhs);
-        });
+        std::push_heap(
+            heap_.begin(), heap_.end(), [this](size_t lhs, size_t rhs) { return less(lhs, rhs); });
     }
     return absl::OkStatus();
 }

@@ -35,6 +35,15 @@ struct Configuration {
     uint64_t max_index_block_size_soft_limit = 64 * 1024;
     uint64_t max_index_block_size_hard_limit = 128 * 1024;
     uint64_t max_index_block_row_count = 4096;
+    // Persisted comparator-domain properties. Zero means unspecified for legacy
+    // SSTs; consumers that require a domain must reject zero explicitly.
+    uint64_t sst_format_version = 1;
+    uint64_t key_format_version = 0;
+    uint64_t row_key_schema_fingerprint = 0;
+    uint64_t comparator_domain_fingerprint = 0;
+    uint64_t checksum_algorithm = 1; // CRC32C
+
+    bool operator==(const Configuration&) const = default;
 };
 
 struct Statistics {

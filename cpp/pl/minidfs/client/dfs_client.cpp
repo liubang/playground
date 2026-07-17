@@ -275,6 +275,34 @@ Result<Void> DfsClient::rm(std::string_view path, bool recursive) {
     return check_status(response.status());
 }
 
+Result<Void> DfsClient::rm(std::string_view path, const FileIdentity& expected_identity) {
+    protocol::NameNodeService_Stub stub(&namenode_channel_);
+    brpc::Controller cntl;
+
+    protocol::DeleteRequest request;
+    request.set_path(std::string(path));
+    request.set_recursive(false);
+    auto* expected = request.mutable_expected_file_identity();
+    expected->set_inode_id(expected_identity.inode_id);
+    expected->set_content_generation(expected_identity.content_generation);
+    expected->set_length(expected_identity.length);
+    expected->set_checksum(expected_identity.checksum);
+    expected->set_checksum_valid(expected_identity.checksum_valid);
+    auto* header = request.mutable_header();
+    header->set_request_id(next_request_id());
+    header->set_client_id(config_.client_id);
+
+    protocol::DeleteResponse response;
+    stub.Delete(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "Identity-fenced Delete RPC failed: {}",
+                            cntl.ErrorText());
+    }
+    return check_status(response.status());
+}
+
 Result<Void> DfsClient::mv(std::string_view src, std::string_view dst) {
     protocol::NameNodeService_Stub stub(&namenode_channel_);
     brpc::Controller cntl;

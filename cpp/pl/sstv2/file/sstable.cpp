@@ -284,22 +284,39 @@ absl::Status validate_statistics(const format::Statistics& statistics,
 
 } // namespace
 
-Builder::Builder(types::Schema::ConstRef schema, Sinks sinks, BuilderOptions options)
-    : schema_(std::move(schema)),
-      internal_schema_(schema_ == nullptr ? nullptr : InternalSchema::make(schema_)),
-      options_(std::move(options)),
-      sinks_(std::move(sinks)),
-      index_builder_(internal_schema_ == nullptr || sinks_.filesystem == nullptr ||
-                             sinks_.key == io::kInvalidFileHandle
-                         ? nullptr
-                         : std::make_unique<index::TreeBuilder>(
-                               internal_schema_,
-                               index_fanout(),
-                               options_.configuration.max_index_block_size_soft_limit,
-                               options_.configuration.max_index_block_size_hard_limit,
-                               options_.block_compression,
-                               sinks_.filesystem,
-                               sinks_.key)) {}
+Builder::Builder(types::Schema::ConstRef schema, Sinks sinks, BuilderOptions options) noexcept
+    : schema_(std::move(schema)), options_(std::move(options)), sinks_(std::move(sinks)) {
+    try {
+        internal_schema_ = schema_ == nullptr ? nullptr : InternalSchema::make(schema_);
+        if (internal_schema_ != nullptr && sinks_.filesystem != nullptr &&
+            sinks_.key != io::kInvalidFileHandle) {
+            index_builder_ = std::make_unique<index::TreeBuilder>(
+                internal_schema_,
+                index_fanout(),
+                options_.configuration.max_index_block_size_soft_limit,
+                options_.configuration.max_index_block_size_hard_limit,
+                options_.block_compression,
+                sinks_.filesystem,
+                sinks_.key);
+        }
+    } catch (const std::bad_alloc&) {
+        initialization_status_ =
+            absl::ResourceExhaustedError("SST builder initialization allocation failed");
+    } catch (...) {
+        initialization_status_ = absl::InternalError("SST builder initialization failed");
+    }
+}
+
+Builder::~Builder() {
+    if (sinks_.filesystem != nullptr) {
+        if (sinks_.key != io::kInvalidFileHandle) {
+            (void)sinks_.filesystem->close(sinks_.key);
+        }
+        if (sinks_.value != io::kInvalidFileHandle) {
+            (void)sinks_.filesystem->close(sinks_.value);
+        }
+    }
+}
 
 uint64_t Builder::max_data_block_rows() const noexcept {
     return std::max<uint64_t>(1, options_.configuration.max_data_block_row_count);
@@ -342,6 +359,9 @@ absl::StatusOr<size_t> Builder::encoded_data_block_size_with(
 }
 
 absl::Status Builder::add(const Row& row) {
+    if (!initialization_status_.ok()) {
+        return initialization_status_;
+    }
     if (state_ != State::kOpen) {
         return absl::FailedPreconditionError("builder is not open");
     }
@@ -384,7 +404,14 @@ absl::Status Builder::add(const Row& row) {
     }
     const bool embedded =
         has_payload && encoded_payload.size() <= options_.configuration.max_embedded_value_size;
-    const uint64_t offset = embedded ? 0 : *sinks_.filesystem->size(sinks_.value);
+    uint64_t offset = 0;
+    if (!embedded) {
+        auto value_size = sinks_.filesystem->size(sinks_.value);
+        if (!value_size.ok()) {
+            return value_size.status();
+        }
+        offset = *value_size;
+    }
     const uint64_t length = encoded_payload.size();
     const uint64_t checksum = has_payload ? codec::crc32c_u64(encoded_payload) : 0;
     std::string embedded_value = embedded ? encoded_payload : std::string{};
@@ -477,7 +504,11 @@ absl::Status Builder::flush_data_block() {
     if (!encoded_block.ok()) {
         return encoded_block.status();
     }
-    const uint64_t offset = *sinks_.filesystem->size(sinks_.key);
+    auto key_size = sinks_.filesystem->size(sinks_.key);
+    if (!key_size.ok()) {
+        return key_size.status();
+    }
+    const uint64_t offset = *key_size;
     const uint64_t length = encoded_block->size();
     status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(*encoded_block)));
     if (!status.ok()) {
@@ -497,6 +528,9 @@ absl::Status Builder::flush_data_block() {
 }
 
 absl::StatusOr<FinishResult> Builder::finish_result() {
+    if (!initialization_status_.ok()) {
+        return initialization_status_;
+    }
     if (state_ == State::kFinished) {
         return *finish_result_;
     }
@@ -527,34 +561,54 @@ absl::StatusOr<FinishResult> Builder::finish_result() {
     const uint64_t root_length = index->root.length;
 
     std::string bloom = bloom_builder_.finish();
-    const uint64_t bloom_offset = *sinks_.filesystem->size(sinks_.key);
+    auto key_size = sinks_.filesystem->size(sinks_.key);
+    if (!key_size.ok()) {
+        return key_size.status();
+    }
+    const uint64_t bloom_offset = *key_size;
     const uint64_t bloom_length = bloom.size();
     status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(bloom)));
     if (!status.ok()) {
         return status;
     }
 
-    const uint64_t configuration_offset = *sinks_.filesystem->size(sinks_.key);
+    key_size = sinks_.filesystem->size(sinks_.key);
+    if (!key_size.ok()) {
+        return key_size.status();
+    }
+    const uint64_t configuration_offset = *key_size;
     const std::string configuration = format::encode_configuration(options_.configuration);
     status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(configuration)));
     if (!status.ok()) {
         return status;
     }
-    const uint64_t schema_offset = *sinks_.filesystem->size(sinks_.key);
+    key_size = sinks_.filesystem->size(sinks_.key);
+    if (!key_size.ok()) {
+        return key_size.status();
+    }
+    const uint64_t schema_offset = *key_size;
     const std::string schema = format::encode_schema(*schema_);
     status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(schema)));
     if (!status.ok()) {
         return status;
     }
 
+    auto value_size = sinks_.filesystem->size(sinks_.value);
+    if (!value_size.ok()) {
+        return value_size.status();
+    }
     format::Statistics statistics{
         .total_row_count = total_row_count_,
         .data_block_count = data_block_count_,
         .index_block_count = index->block_count,
         .key_file_size = 0,
-        .value_file_size = *sinks_.filesystem->size(sinks_.value),
+        .value_file_size = *value_size,
     };
-    const uint64_t statistics_offset = *sinks_.filesystem->size(sinks_.key);
+    key_size = sinks_.filesystem->size(sinks_.key);
+    if (!key_size.ok()) {
+        return key_size.status();
+    }
+    const uint64_t statistics_offset = *key_size;
     std::string statistics_section = format::encode_statistics(statistics);
 
     format::SectionEntries locator_entries;
@@ -583,9 +637,12 @@ absl::StatusOr<FinishResult> Builder::finish_result() {
         locator = format::encode_section(
             format::SectionMagic::kLocator,
             format::make_section_map(format::SectionEntries(locator_entries)));
-        const uint64_t key_file_size = *sinks_.filesystem->size(sinks_.key) +
-                                       statistics_section.size() + locator.size() +
-                                       format::Tail::kSize;
+        key_size = sinks_.filesystem->size(sinks_.key);
+        if (!key_size.ok()) {
+            return key_size.status();
+        }
+        const uint64_t key_file_size =
+            *key_size + statistics_section.size() + locator.size() + format::Tail::kSize;
         if (statistics.key_file_size == key_file_size) {
             converged = true;
             break;
@@ -601,7 +658,11 @@ absl::StatusOr<FinishResult> Builder::finish_result() {
     if (!status.ok()) {
         return status;
     }
-    const uint64_t locator_offset = *sinks_.filesystem->size(sinks_.key);
+    key_size = sinks_.filesystem->size(sinks_.key);
+    if (!key_size.ok()) {
+        return key_size.status();
+    }
+    const uint64_t locator_offset = *key_size;
     status = sinks_.filesystem->append(sinks_.key, std::as_bytes(std::span(locator)));
     if (!status.ok()) {
         return status;
@@ -633,6 +694,12 @@ absl::StatusOr<FinishResult> Builder::finish_result() {
         .key_file = *key_identity,
         .value_file = *value_identity,
         .row_count = total_row_count_,
+        .sst_format_version = options_.configuration.sst_format_version,
+        .key_format_version = options_.configuration.key_format_version,
+        .row_key_schema_fingerprint = options_.configuration.row_key_schema_fingerprint,
+        .comparator_domain_fingerprint =
+            options_.configuration.comparator_domain_fingerprint,
+        .checksum_algorithm = options_.configuration.checksum_algorithm,
         .min_key = min_key_,
         .max_key = max_key_,
     };
@@ -658,21 +725,58 @@ absl::StatusOr<FinishResult> Builder::finish_to_sinks(types::Schema::ConstRef sc
     return result;
 }
 
+Reader::ReaderState::~ReaderState() {
+    if (filesystem != nullptr) {
+        if (key_file != io::kInvalidFileHandle) {
+            (void)filesystem->close(key_file);
+        }
+        if (value_file != io::kInvalidFileHandle) {
+            (void)filesystem->close(value_file);
+        }
+    }
+}
+
 absl::StatusOr<Reader> Reader::open(std::shared_ptr<io::FileSystem> filesystem,
                                     io::FileHandle key_file,
                                     io::FileHandle value_file) {
-    if (filesystem == nullptr || key_file == io::kInvalidFileHandle ||
-        value_file == io::kInvalidFileHandle) {
+    if (filesystem == nullptr) {
+        return absl::InvalidArgumentError("reader filesystem is null");
+    }
+    if (key_file == io::kInvalidFileHandle || value_file == io::kInvalidFileHandle) {
+        if (key_file != io::kInvalidFileHandle) {
+            (void)filesystem->close(key_file);
+        }
+        if (value_file != io::kInvalidFileHandle) {
+            (void)filesystem->close(value_file);
+        }
         return absl::InvalidArgumentError("reader files must not be null");
     }
-    if (*filesystem->size(key_file) < format::Tail::kSize) {
+    if (key_file == value_file) {
+        (void)filesystem->close(key_file);
+        return absl::InvalidArgumentError("reader key and value handles must be distinct");
+    }
+    std::shared_ptr<ReaderState> state;
+    try {
+        state = std::make_shared<ReaderState>();
+    } catch (const std::bad_alloc&) {
+        (void)filesystem->close(key_file);
+        (void)filesystem->close(value_file);
+        return absl::ResourceExhaustedError("reader state allocation failed");
+    }
+    state->filesystem = filesystem;
+    state->key_file = key_file;
+    state->value_file = value_file;
+
+    auto key_file_size = filesystem->size(key_file);
+    if (!key_file_size.ok()) {
+        return key_file_size.status();
+    }
+    if (*key_file_size < format::Tail::kSize) {
         return absl::InvalidArgumentError("key file is shorter than tail");
     }
 
-    auto tail_bytes = read_range(filesystem,
-                                 key_file,
-                                 *filesystem->size(key_file) - format::Tail::kSize,
-                                 format::Tail::kSize);
+    auto tail_bytes =
+        read_range(filesystem, key_file, *key_file_size - format::Tail::kSize, format::Tail::kSize);
     if (!tail_bytes.ok()) {
         return tail_bytes.status();
     }
@@ -761,8 +865,11 @@ absl::StatusOr<Reader> Reader::open(std::shared_ptr<io::FileSystem> filesystem,
         return bloom_length.status();
     }
 
-    auto status = validate_statistics(
-        *statistics, *filesystem->size(key_file), *filesystem->size(value_file));
+    auto value_file_size = filesystem->size(value_file);
+    if (!value_file_size.ok()) {
+        return value_file_size.status();
+    }
+    auto status = validate_statistics(*statistics, *key_file_size, *value_file_size);
     if (!status.ok()) {
         return status;
     }
@@ -789,14 +896,10 @@ absl::StatusOr<Reader> Reader::open(std::shared_ptr<io::FileSystem> filesystem,
         return absl::InvalidArgumentError("bloom row count mismatch");
     }
 
-    auto state = std::make_shared<ReaderState>();
     state->schema = *schema;
     state->internal_schema = std::move(internal_schema);
     state->configuration = *configuration;
     state->statistics = *statistics;
-    state->filesystem = std::move(filesystem);
-    state->key_file = key_file;
-    state->value_file = value_file;
     state->bloom = std::move(*bloom);
     state->root = index::BlockRef{.offset = *root_offset, .length = *root_length};
 

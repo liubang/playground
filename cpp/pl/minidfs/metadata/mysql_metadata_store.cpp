@@ -476,6 +476,31 @@ pl::Result<pl::Void> MySQLMetadataStore::delete_inode(uint64_t inode_id) {
     return pl::Void{};
 }
 
+pl::Result<pl::Void> MySQLMetadataStore::delete_inode_if_version(uint64_t inode_id,
+                                                                 uint64_t expected_version) {
+    PooledConnection owned;
+    if (active_bound_connection() == nullptr) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
+    }
+    auto* conn = get_active_conn(owned);
+
+    auto sql = fmt::format(
+        "DELETE FROM inodes WHERE inode_id = {} AND version = {}", inode_id, expected_version);
+    auto res = conn->execute(sql);
+    if (res.hasError()) {
+        return folly::makeUnexpected(res.error());
+    }
+    if (res.value().affected_rows() != 1) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kIdentityMismatch),
+                             "inode changed before identity-fenced delete");
+    }
+    return pl::Void{};
+}
+
 // Block operations
 
 pl::Result<BlockMeta> MySQLMetadataStore::get_block(uint64_t block_id) {

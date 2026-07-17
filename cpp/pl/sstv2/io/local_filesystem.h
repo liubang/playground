@@ -30,6 +30,8 @@ public:
     [[nodiscard]] absl::StatusOr<FileHandle> create(std::string_view path,
                                                     const CreateOptions& options = {}) override;
     [[nodiscard]] absl::StatusOr<FileHandle> open(std::string_view path) override;
+    [[nodiscard]] absl::StatusOr<FileHandle> open(std::string_view path,
+                                                  const FileIdentity& expected) override;
     [[nodiscard]] absl::Status append(FileHandle handle, std::span<const std::byte> data) override;
     [[nodiscard]] absl::Status read_at(FileHandle handle,
                                        uint64_t offset,
@@ -37,6 +39,8 @@ public:
     [[nodiscard]] absl::StatusOr<uint64_t> size(FileHandle handle) override;
     [[nodiscard]] absl::StatusOr<FileIdentity> close(FileHandle handle) override;
     [[nodiscard]] absl::Status remove(std::string_view path) override;
+    [[nodiscard]] absl::Status remove(std::string_view path,
+                                      const FileIdentity& expected) override;
     [[nodiscard]] absl::Status rename(std::string_view source,
                                       std::string_view destination) override;
 

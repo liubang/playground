@@ -175,6 +175,18 @@ public:
         return pl::Void{};
     }
 
+    pl::Result<pl::Void> delete_inode_if_version(uint64_t inode_id,
+                                                 uint64_t expected_version) override {
+        std::lock_guard lock(mu_);
+        const auto found = inodes_.find(inode_id);
+        if (found == inodes_.end() || found->second.version != expected_version) {
+            return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kIdentityMismatch),
+                                 "inode changed before identity-fenced delete");
+        }
+        inodes_.erase(found);
+        return pl::Void{};
+    }
+
     // Block operations
     pl::Result<BlockMeta> get_block(uint64_t block_id) override {
         std::lock_guard lock(mu_);

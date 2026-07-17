@@ -53,6 +53,11 @@ struct FinishResult {
     io::FileIdentity key_file;
     io::FileIdentity value_file;
     uint64_t row_count = 0;
+    uint64_t sst_format_version = 1;
+    uint64_t key_format_version = 0;
+    uint64_t row_key_schema_fingerprint = 0;
+    uint64_t comparator_domain_fingerprint = 0;
+    uint64_t checksum_algorithm = 1;
     std::optional<std::string> min_key;
     std::optional<std::string> max_key;
 
@@ -72,7 +77,8 @@ struct ScanOptions {
 
 class Builder {
 public:
-    Builder(types::Schema::ConstRef schema, Sinks sinks, BuilderOptions options = {});
+    Builder(types::Schema::ConstRef schema, Sinks sinks, BuilderOptions options = {}) noexcept;
+    ~Builder();
 
     [[nodiscard]] absl::Status add(const types::Row& row);
     [[nodiscard]] absl::StatusOr<FinishResult> finish_result();
@@ -95,6 +101,7 @@ private:
     BuilderOptions options_;
     Sinks sinks_;
     std::unique_ptr<index::TreeBuilder> index_builder_;
+    absl::Status initialization_status_;
     std::vector<types::InternalRow> pending_rows_;
     std::vector<std::string> pending_embedded_values_;
     bloom::Builder bloom_builder_;
@@ -139,6 +146,8 @@ private:
 };
 
 struct Reader::ReaderState {
+    ~ReaderState();
+
     types::Schema::ConstRef schema;
     types::InternalSchema::ConstRef internal_schema;
     format::Configuration configuration;

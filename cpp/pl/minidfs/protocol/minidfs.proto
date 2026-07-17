@@ -200,6 +200,9 @@ message ListStatusResponse {
 message DeleteRequest {
     string path = 1;
     bool recursive = 2;
+    // When present, deletion is a compare-and-delete of this exact published
+    // immutable file generation. Directories cannot use this field.
+    optional FileIdentityProto expected_file_identity = 3;
     RequestHeader header = 15;
 }
 

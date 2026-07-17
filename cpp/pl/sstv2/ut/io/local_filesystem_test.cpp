@@ -7,6 +7,7 @@
 //      https://www.apache.org/licenses/LICENSE-2.0
 
 #include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
@@ -83,6 +84,85 @@ TEST_F(LocalFileSystemTest, EnforcesCreateOverwriteAndHandleOwnership) {
     EXPECT_FALSE(other.size(*reader).ok());
     ASSERT_TRUE(filesystem_.close(*reader).ok());
     EXPECT_FALSE(filesystem_.size(*reader).ok());
+}
+
+TEST_F(LocalFileSystemTest, IdentityFencedOpenRejectsContentAndObjectReplacement) {
+    auto writer = filesystem_.create(path("table.sst"));
+    ASSERT_TRUE(writer.ok());
+    ASSERT_TRUE(filesystem_.append(*writer, bytes("original")).ok());
+    auto identity = filesystem_.close(*writer);
+    ASSERT_TRUE(identity.ok());
+
+    auto reader = filesystem_.open(path("table.sst"), *identity);
+    ASSERT_TRUE(reader.ok());
+    ASSERT_TRUE(filesystem_.close(*reader).ok());
+
+    {
+        std::fstream file(path("table.sst"), std::ios::in | std::ios::out | std::ios::binary);
+        ASSERT_TRUE(file.is_open());
+        file.write("modified", 8);
+    }
+    EXPECT_EQ(filesystem_.open(path("table.sst"), *identity).status().code(),
+              absl::StatusCode::kFailedPrecondition);
+
+    ASSERT_TRUE(filesystem_.remove(path("table.sst")).ok());
+    auto replacement = filesystem_.create(path("table.sst"));
+    ASSERT_TRUE(replacement.ok());
+    ASSERT_TRUE(filesystem_.append(*replacement, bytes("original")).ok());
+    ASSERT_TRUE(filesystem_.close(*replacement).ok());
+    EXPECT_EQ(filesystem_.open(path("table.sst"), *identity).status().code(),
+              absl::StatusCode::kFailedPrecondition);
+}
+
+TEST_F(LocalFileSystemTest, IdentityFencedRemoveIsIdempotentAndRejectsReplacement) {
+    auto writer = filesystem_.create(path("table.sst"));
+    ASSERT_TRUE(writer.ok());
+    ASSERT_TRUE(filesystem_.append(*writer, bytes("original")).ok());
+    auto original = filesystem_.close(*writer);
+    ASSERT_TRUE(original.ok());
+
+    ASSERT_TRUE(filesystem_.remove(path("table.sst"), *original).ok());
+    EXPECT_TRUE(filesystem_.remove(path("table.sst"), *original).ok());
+
+    auto replacement_writer = filesystem_.create(path("table.sst"));
+    ASSERT_TRUE(replacement_writer.ok());
+    ASSERT_TRUE(filesystem_.append(*replacement_writer, bytes("original")).ok());
+    auto replacement = filesystem_.close(*replacement_writer);
+    ASSERT_TRUE(replacement.ok());
+    ASSERT_NE(replacement->file_id, original->file_id);
+
+    EXPECT_EQ(filesystem_.remove(path("table.sst"), *original).code(),
+              absl::StatusCode::kFailedPrecondition);
+    auto reader = filesystem_.open(path("table.sst"), *replacement);
+    ASSERT_TRUE(reader.ok());
+    ASSERT_TRUE(filesystem_.close(*reader).ok());
+}
+
+TEST_F(LocalFileSystemTest, IdentityFencedRemoveRejectsSameInodeContentTampering) {
+    auto writer = filesystem_.create(path("table.sst"));
+    ASSERT_TRUE(writer.ok());
+    ASSERT_TRUE(filesystem_.append(*writer, bytes("original")).ok());
+    auto identity = filesystem_.close(*writer);
+    ASSERT_TRUE(identity.ok());
+
+    {
+        std::fstream file(path("table.sst"), std::ios::in | std::ios::out | std::ios::binary);
+        ASSERT_TRUE(file.is_open());
+        file.write("modified", 8);
+    }
+    EXPECT_EQ(filesystem_.remove(path("table.sst"), *identity).code(),
+              absl::StatusCode::kFailedPrecondition);
+    EXPECT_TRUE(std::filesystem::exists(path("table.sst")));
+}
+
+TEST_F(LocalFileSystemTest, IdentityFencedRemoveRejectsInvalidIdentity) {
+    auto invalid = FileIdentity{.file_id = 0,
+                                .content_generation = 0,
+                                .length = 0,
+                                .checksum = 0,
+                                .checksum_valid = false};
+    EXPECT_EQ(filesystem_.remove(path("missing.sst"), invalid).code(),
+              absl::StatusCode::kInvalidArgument);
 }
 
 TEST_F(LocalFileSystemTest, RenamesAndRemovesFiles) {

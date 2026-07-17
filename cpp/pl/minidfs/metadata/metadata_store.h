@@ -92,6 +92,11 @@ public:
     /// Delete an inode by ID.
     virtual pl::Result<pl::Void> delete_inode(uint64_t inode_id) = 0;
 
+    /// Delete only if the inode still has expected_version. Implementations must
+    /// perform the comparison and delete in one storage operation.
+    virtual pl::Result<pl::Void> delete_inode_if_version(uint64_t inode_id,
+                                                         uint64_t expected_version) = 0;
+
     // Block operations
 
     /// Get block metadata by block_id.

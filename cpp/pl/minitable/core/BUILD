@@ -21,14 +21,71 @@ load("//cpp:copts/configure_copts.bzl", "COPTS", "LINKOPTS")
 package(default_visibility = ["//cpp/pl/minitable:__subpackages__"])
 
 cc_library(
+    name = "manifest",
+    srcs = ["manifest.cpp"],
+    hdrs = ["manifest.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":sst_read_source",
+        "//cpp/pl/sstv2/codec:fixed",
+        "//cpp/pl/sstv2/io:filesystem",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "embedded_slice",
+    srcs = ["embedded_slice.cpp"],
+    hdrs = ["embedded_slice.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":key",
+        ":slice_store",
+        "//cpp/pl/minitable/codec:cell_key_codec",
+        "//cpp/pl/sstv2/types:value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "sst_read_source",
+    srcs = ["sst_read_source.cpp"],
+    hdrs = ["sst_read_source.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/sstv2/file:sstable",
+        "//cpp/pl/sstv2/io:filesystem",
+        "//cpp/pl/sstv2/merge:merge_iterator",
+        "//cpp/pl/sstv2/types:key",
+        "//cpp/pl/sstv2/types:value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
     name = "slice_store",
     srcs = ["slice_store.cpp"],
     hdrs = ["slice_store.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
+        ":manifest",
+        ":sst_read_source",
         "//cpp/pl/minitable/memtable",
+        "//cpp/pl/sstv2/file:sstable",
+        "//cpp/pl/sstv2/io:filesystem",
         "//cpp/pl/sstv2/merge:merge_iterator",
+        "//cpp/pl/sstv2/types:key",
+        "//cpp/pl/sstv2/types:row",
+        "//cpp/pl/sstv2/types:schema",
+        "//cpp/pl/sstv2/types:value",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
     ],

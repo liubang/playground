@@ -64,6 +64,8 @@ public:
     [[nodiscard]] absl::StatusOr<VersionedStorageKey> DecodeVersionedStorageKey(
         std::string_view encoded) const;
 
+    [[nodiscard]] const KeyFormat& format() const noexcept { return format_; }
+
 private:
     CellKeyCodec(KeyFormat format, sstv2::types::Schema::ConstRef row_key_schema)
         : format_(format), row_key_schema_(std::move(row_key_schema)) {}

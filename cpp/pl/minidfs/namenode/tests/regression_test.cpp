@@ -757,6 +757,72 @@ TEST_F(RegressionNameNodeTest, P0_IdempotentDeleteReplay) {
     EXPECT_EQ(resp2.status().code(), 0u) << "Duplicate Delete should succeed";
 }
 
+TEST_F(RegressionNameNodeTest, P0_IdentityFencedDeleteIsAtomicAndIdempotent) {
+    NameNodeServiceImpl service(
+        ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", 3600000);
+    auto file = ns_mgr_->create_file("/identity-delete.dat",
+                                     "user",
+                                     "grp",
+                                     0644,
+                                     3,
+                                     128 * kMB,
+                                     FileAppendMode::kImmutableAfterComplete);
+    ASSERT_TRUE(file.hasValue());
+    auto identity = ns_mgr_->complete_file_publish_identity(file.value().inode_id, 12, 3456);
+    ASSERT_TRUE(identity.hasValue());
+
+    auto expect_rejected = [&](protocol::DeleteRequest request) {
+        protocol::DeleteResponse response;
+        service.Delete(nullptr, &request, &response, nullptr);
+        EXPECT_EQ(response.status().code(), static_cast<uint32_t>(ErrorCode::kIdentityMismatch));
+        EXPECT_TRUE(ns_mgr_->get_file_status("/identity-delete.dat").hasValue());
+    };
+    auto make_expected = [&] {
+        protocol::DeleteRequest request;
+        request.set_path("/identity-delete.dat");
+        request.set_recursive(false);
+        auto* expected = request.mutable_expected_file_identity();
+        expected->set_inode_id(identity.value().inode_id);
+        expected->set_content_generation(identity.value().content_generation);
+        expected->set_length(identity.value().length);
+        expected->set_checksum(identity.value().checksum);
+        expected->set_checksum_valid(true);
+        return request;
+    };
+
+    auto wrong_inode = make_expected();
+    wrong_inode.mutable_expected_file_identity()->set_inode_id(identity.value().inode_id + 1);
+    expect_rejected(std::move(wrong_inode));
+    auto wrong_generation = make_expected();
+    wrong_generation.mutable_expected_file_identity()->set_content_generation(
+        identity.value().content_generation + 1);
+    expect_rejected(std::move(wrong_generation));
+    auto untrusted_checksum = make_expected();
+    untrusted_checksum.mutable_expected_file_identity()->set_checksum_valid(false);
+    expect_rejected(std::move(untrusted_checksum));
+    auto recursive = make_expected();
+    recursive.set_recursive(true);
+    expect_rejected(std::move(recursive));
+
+    protocol::DeleteRequest matching;
+    matching.set_path("/identity-delete.dat");
+    matching.set_recursive(false);
+    auto* expected = matching.mutable_expected_file_identity();
+    expected->set_inode_id(identity.value().inode_id);
+    expected->set_content_generation(identity.value().content_generation);
+    expected->set_length(identity.value().length);
+    expected->set_checksum(identity.value().checksum);
+    expected->set_checksum_valid(true);
+    protocol::DeleteResponse first;
+    service.Delete(nullptr, &matching, &first, nullptr);
+    ASSERT_EQ(first.status().code(), 0u);
+    EXPECT_TRUE(ns_mgr_->get_file_status("/identity-delete.dat").hasError());
+
+    protocol::DeleteResponse retry;
+    service.Delete(nullptr, &matching, &retry, nullptr);
+    EXPECT_EQ(retry.status().code(), 0u);
+}
+
 // P0: Idempotent replay — duplicate Rename request returns success
 TEST_F(RegressionNameNodeTest, P0_IdempotentRenameReplay) {
     NameNodeServiceImpl service(
