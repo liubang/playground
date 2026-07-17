@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 15:53:26</td>
+            <td class="headerValue">2026-07-17 23:54:08</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -706,8 +706,8 @@
 <span id="L632"><span class="lineNum">     632</span>                 :             : }</span>
 <span id="L633"><span class="lineNum">     633</span>                 :             : </span>
 <span id="L634"><span class="lineNum">     634</span>                 :<span class="tlaGNC">           4 : pl::Result&lt;pl::Void&gt; NamespaceManager::set_file_length(uint64_t inode_id,</span></span>
-<span id="L635"><span class="lineNum">     635</span>                 :             :                                                       uint64_t length,</span>
-<span id="L636"><span class="lineNum">     636</span>                 :             :                                                       std::optional&lt;uint32_t&gt; checksum) {</span>
+<span id="L635"><span class="lineNum">     635</span>                 :             :                                                        uint64_t length,</span>
+<span id="L636"><span class="lineNum">     636</span>                 :             :                                                        std::optional&lt;uint32_t&gt; checksum) {</span>
 <span id="L637"><span class="lineNum">     637</span>                 :<span class="tlaGNC">           4 :     auto inode_result = store_-&gt;get_inode(inode_id);</span></span>
 <span id="L638"><span class="lineNum">     638</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (inode_result.hasError()) {</span></span>
 <span id="L639"><span class="lineNum">     639</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(inode_result.error());</span></span>
