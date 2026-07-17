@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 09:36:47</td>
+            <td class="headerValue">2026-07-17 15:53:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -90,31 +90,31 @@
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
 <span id="L20"><span class="lineNum">      20</span>                 :             : namespace pl::sstv2::codec {</span>
 <span id="L21"><span class="lineNum">      21</span>                 :             : </span>
-<span id="L22"><span class="lineNum">      22</span>                 :<span class="tlaGNC tlaBgGNC">        5294 : size_t encode_varint(uint64_t value, uint8_t* dst) noexcept {</span></span>
+<span id="L22"><span class="lineNum">      22</span>                 :<span class="tlaGNC tlaBgGNC">       32238 : size_t encode_varint(uint64_t value, uint8_t* dst) noexcept {</span></span>
 <span id="L23"><span class="lineNum">      23</span>                 :             :     size_t n = 0;</span>
-<span id="L24"><span class="lineNum">      24</span>         [<span class="tlaGBC" title="Branch 0 was taken 904 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5294 times"> + </span>]:<span class="tlaGNC">        6198 :     while (value &gt;= 0x80) {</span></span>
-<span id="L25"><span class="lineNum">      25</span>                 :<span class="tlaGNC">         904 :         dst[n++] = static_cast&lt;uint8_t&gt;(value | 0x80);</span></span>
-<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">         904 :         value &gt;&gt;= 7;</span></span>
+<span id="L24"><span class="lineNum">      24</span>         [<span class="tlaGBC" title="Branch 0 was taken 6441 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 32238 times"> + </span>]:<span class="tlaGNC">       38679 :     while (value &gt;= 0x80) {</span></span>
+<span id="L25"><span class="lineNum">      25</span>                 :<span class="tlaGNC">        6441 :         dst[n++] = static_cast&lt;uint8_t&gt;(value | 0x80);</span></span>
+<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">        6441 :         value &gt;&gt;= 7;</span></span>
 <span id="L27"><span class="lineNum">      27</span>                 :             :     }</span>
-<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">        5294 :     dst[n++] = static_cast&lt;uint8_t&gt;(value);</span></span>
-<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">        5294 :     return n;</span></span>
+<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">       32238 :     dst[n++] = static_cast&lt;uint8_t&gt;(value);</span></span>
+<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">       32238 :     return n;</span></span>
 <span id="L30"><span class="lineNum">      30</span>                 :             : }</span>
 <span id="L31"><span class="lineNum">      31</span>                 :             : </span>
-<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">        3546 : size_t decode_varint(const uint8_t* src, size_t len, uint64_t* value) noexcept {</span></span>
-<span id="L33"><span class="lineNum">      33</span>   [<span class="tlaGBC" title="Branch 0 was taken 3545 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 3544 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">        3546 :     if (value == nullptr || (src == nullptr &amp;&amp; len != 0)) {</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">       20994 : size_t decode_varint(const uint8_t* src, size_t len, uint64_t* value) noexcept {</span></span>
+<span id="L33"><span class="lineNum">      33</span>   [<span class="tlaGBC" title="Branch 0 was taken 20993 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 20992 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">       20994 :     if (value == nullptr || (src == nullptr &amp;&amp; len != 0)) {</span></span>
 <span id="L34"><span class="lineNum">      34</span>                 :             :         return 0;</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             :     }</span>
 <span id="L36"><span class="lineNum">      36</span>                 :             :     uint64_t result = 0;</span>
-<span id="L37"><span class="lineNum">      37</span>         [<span class="tlaGBC" title="Branch 0 was taken 4211 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">        4214 :     for (size_t i = 0; i &lt; len &amp;&amp; i &lt; 10; ++i) {</span></span>
-<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">        4211 :         uint64_t byte = src[i];</span></span>
+<span id="L37"><span class="lineNum">      37</span>         [<span class="tlaGBC" title="Branch 0 was taken 25334 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">       25337 :     for (size_t i = 0; i &lt; len &amp;&amp; i &lt; 10; ++i) {</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">       25334 :         uint64_t byte = src[i];</span></span>
 <span id="L39"><span class="lineNum">      39</span>                 :             :         // The 10th byte (i==9) contributes bits 63, only bit 0 is valid.</span>
-<span id="L40"><span class="lineNum">      40</span>   [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4204 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span>]:<span class="tlaGNC">        4211 :         if (i == 9 &amp;&amp; (byte &amp; 0x7E) != 0) {</span></span>
+<span id="L40"><span class="lineNum">      40</span>   [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 25327 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span>]:<span class="tlaGNC">       25334 :         if (i == 9 &amp;&amp; (byte &amp; 0x7E) != 0) {</span></span>
 <span id="L41"><span class="lineNum">      41</span>                 :             :             return 0; // overflow: would exceed uint64</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             :         }</span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">        4208 :         result |= (byte &amp; 0x7F) &lt;&lt; (7 * i);</span></span>
-<span id="L44"><span class="lineNum">      44</span>         [<span class="tlaGBC" title="Branch 0 was taken 3538 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 670 times"> + </span>]:<span class="tlaGNC">        4208 :         if ((byte &amp; 0x80) == 0) {</span></span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">        3538 :             *value = result;</span></span>
-<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">        3538 :             return i + 1;</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">       25331 :         result |= (byte &amp; 0x7F) &lt;&lt; (7 * i);</span></span>
+<span id="L44"><span class="lineNum">      44</span>         [<span class="tlaGBC" title="Branch 0 was taken 20986 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4345 times"> + </span>]:<span class="tlaGNC">       25331 :         if ((byte &amp; 0x80) == 0) {</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">       20986 :             *value = result;</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">       20986 :             return i + 1;</span></span>
 <span id="L47"><span class="lineNum">      47</span>                 :             :         }</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             :     }</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             :     return 0; // truncated or overflow</span>

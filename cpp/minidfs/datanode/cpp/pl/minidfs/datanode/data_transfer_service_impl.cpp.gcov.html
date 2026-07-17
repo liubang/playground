@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">68.8&nbsp;%</td>
-            <td class="headerCovTableEntry">112</td>
-            <td class="headerCovTableEntry">77</td>
+            <td class="headerCovTableEntryLo">67.3&nbsp;%</td>
+            <td class="headerCovTableEntry">107</td>
+            <td class="headerCovTableEntry">72</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 09:36:47</td>
+            <td class="headerValue">2026-07-17 15:53:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">31.4&nbsp;%</td>
-            <td class="headerCovTableEntry">242</td>
-            <td class="headerCovTableEntry">76</td>
+            <td class="headerCovTableEntryLo">30.7&nbsp;%</td>
+            <td class="headerCovTableEntry">238</td>
+            <td class="headerCovTableEntry">73</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -108,8 +108,8 @@
 <span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">          19 : }</span></span>
 <span id="L38"><span class="lineNum">      38</span>                 :             : </span>
 <span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">          17 : DataTransferServiceImpl::DataTransferServiceImpl(LocalBlockStore* store,</span></span>
-<span id="L40"><span class="lineNum">      40</span>                 :             :                                                    BlockReporter* reporter,</span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          17 :                                                    std::string block_token_secret)</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :                                                  BlockReporter* reporter,</span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          17 :                                                  std::string block_token_secret)</span></span>
 <span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          17 :     : store_(store), reporter_(reporter), block_token_secret_(std::move(block_token_secret)) {}</span></span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : </span>
 <span id="L44"><span class="lineNum">      44</span>                 :             : // WriteBlock — pipeline write handling.</span>
@@ -301,9 +301,9 @@
 <span id="L224"><span class="lineNum">     224</span>                 :             :     uint64_t block_id = request-&gt;block_id();</span>
 <span id="L225"><span class="lineNum">     225</span>                 :             :     uint64_t generation_stamp = request-&gt;generation_stamp();</span>
 <span id="L226"><span class="lineNum">     226</span>                 :             :     uint64_t offset = request-&gt;offset();</span>
-<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">           1 :     uint64_t length = request-&gt;length();</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :             :     uint64_t length = request-&gt;length();</span>
 <span id="L228"><span class="lineNum">     228</span>                 :             : </span>
-<span id="L229"><span class="lineNum">     229</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto data_result = store_-&gt;read_block_data(block_id, generation_stamp);</span></span>
+<span id="L229"><span class="lineNum">     229</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto data_result = store_-&gt;read_block_range(block_id, generation_stamp, offset, length);</span></span>
 <span id="L230"><span class="lineNum">     230</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (data_result.hasError()) {</span></span>
 <span id="L231"><span class="lineNum">     231</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :         fill_status(</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
@@ -311,149 +311,145 @@
 <span id="L233"><span class="lineNum">     233</span>                 :             :         return;</span>
 <span id="L234"><span class="lineNum">     234</span>                 :             :     }</span>
 <span id="L235"><span class="lineNum">     235</span>                 :             : </span>
-<span id="L236"><span class="lineNum">     236</span>                 :             :     const auto&amp; block_data = data_result.value();</span>
-<span id="L237"><span class="lineNum">     237</span>                 :             : </span>
-<span id="L238"><span class="lineNum">     238</span>                 :             :     // Handle offset and length</span>
-<span id="L239"><span class="lineNum">     239</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (offset &gt;= block_data.size()) {</span></span>
-<span id="L240"><span class="lineNum">     240</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         fill_status(response-&gt;mutable_status(), 0);</span></span>
-<span id="L241"><span class="lineNum">     241</span>                 :             :         response-&gt;set_length(0);</span>
-<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaUNC">           0 :         return;</span></span>
-<span id="L243"><span class="lineNum">     243</span>                 :             :     }</span>
-<span id="L244"><span class="lineNum">     244</span>                 :             : </span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC tlaBgGNC">           1 :     uint64_t available = block_data.size() - offset;</span></span>
-<span id="L246"><span class="lineNum">     246</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     uint64_t to_return = (length == 0) ? available : std::min(length, available);</span></span>
-<span id="L247"><span class="lineNum">     247</span>                 :             : </span>
-<span id="L248"><span class="lineNum">     248</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     response-&gt;set_data(block_data.data() + offset, to_return);</span></span>
-<span id="L249"><span class="lineNum">     249</span>                 :             :     response-&gt;set_length(to_return);</span>
-<span id="L250"><span class="lineNum">     250</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     response-&gt;set_checksum(compute_crc32c(block_data.data() + offset, to_return));</span></span>
-<span id="L251"><span class="lineNum">     251</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     fill_status(response-&gt;mutable_status(), 0);</span></span>
-<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">           6 : }</span></span>
-<span id="L253"><span class="lineNum">     253</span>                 :             : </span>
-<span id="L254"><span class="lineNum">     254</span>                 :             : // TransferBlock — full-block replication.</span>
-<span id="L255"><span class="lineNum">     255</span>                 :             : // Receives a complete block data payload, creates + writes + finalizes in one shot.</span>
-<span id="L256"><span class="lineNum">     256</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           5 : void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*controller*/,</span></span>
-<span id="L257"><span class="lineNum">     257</span>                 :             :                                             const protocol::TransferBlockRequest* request,</span>
-<span id="L258"><span class="lineNum">     258</span>                 :             :                                             protocol::TransferBlockResponse* response,</span>
-<span id="L259"><span class="lineNum">     259</span>                 :             :                                             google::protobuf::Closure* done) {</span>
-<span id="L260"><span class="lineNum">     260</span>                 :             :     brpc::ClosureGuard guard(done);</span>
-<span id="L261"><span class="lineNum">     261</span>                 :             : </span>
-<span id="L262"><span class="lineNum">     262</span>                 :             :     // Authorize block token — requires kTransfer permission</span>
-<span id="L263"><span class="lineNum">     263</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">           5 :     if (!authorize_token(request-&gt;block_token(),</span></span>
-<span id="L264"><span class="lineNum">     264</span>                 :             :                          BlockTokenPermission::kTransfer,</span>
-<span id="L265"><span class="lineNum">     265</span>                 :             :                          request-&gt;block_id(),</span>
-<span id="L266"><span class="lineNum">     266</span>                 :             :                          request-&gt;generation_stamp(),</span>
-<span id="L267"><span class="lineNum">     267</span>                 :             :                          request-&gt;inode_id(),</span>
-<span id="L268"><span class="lineNum">     268</span>                 :             :                          request-&gt;block_index())) {</span>
-<span id="L269"><span class="lineNum">     269</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         fill_status(response-&gt;mutable_status(),</span></span>
-<span id="L270"><span class="lineNum">     270</span>                 :             :                     static_cast&lt;uint32_t&gt;(ErrorCode::kInvalidBlockToken),</span>
-<span id="L271"><span class="lineNum">     271</span>                 :             :                     &quot;block token verification failed for TransferBlock&quot;);</span>
-<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">           4 :         return;</span></span>
-<span id="L273"><span class="lineNum">     273</span>                 :             :     }</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             :     const auto&amp; data = data_result.value();</span>
+<span id="L237"><span class="lineNum">     237</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (length &gt; 0 &amp;&amp; data.size() != length) {</span></span>
+<span id="L238"><span class="lineNum">     238</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         fill_status(response-&gt;mutable_status(),</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :             :                     static_cast&lt;uint32_t&gt;(ErrorCode::kIOError),</span>
+<span id="L240"><span class="lineNum">     240</span>                 :             :                     &quot;short range read is not allowed&quot;);</span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaUNC">           0 :         return;</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :             :     }</span>
+<span id="L243"><span class="lineNum">     243</span>                 :             : </span>
+<span id="L244"><span class="lineNum">     244</span>                 :             :     response-&gt;set_data(data);</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             :     response-&gt;set_length(data.size());</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             :     response-&gt;set_checksum(compute_crc32c(data.data(), data.size()));</span>
+<span id="L247"><span class="lineNum">     247</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     fill_status(response-&gt;mutable_status(), 0);</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">           6 : }</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :             : </span>
+<span id="L250"><span class="lineNum">     250</span>                 :             : // TransferBlock — full-block replication.</span>
+<span id="L251"><span class="lineNum">     251</span>                 :             : // Receives a complete block data payload, creates + writes + finalizes in one shot.</span>
+<span id="L252"><span class="lineNum">     252</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           5 : void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*controller*/,</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :             :                                             const protocol::TransferBlockRequest* request,</span>
+<span id="L254"><span class="lineNum">     254</span>                 :             :                                             protocol::TransferBlockResponse* response,</span>
+<span id="L255"><span class="lineNum">     255</span>                 :             :                                             google::protobuf::Closure* done) {</span>
+<span id="L256"><span class="lineNum">     256</span>                 :             :     brpc::ClosureGuard guard(done);</span>
+<span id="L257"><span class="lineNum">     257</span>                 :             : </span>
+<span id="L258"><span class="lineNum">     258</span>                 :             :     // Authorize block token — requires kTransfer permission</span>
+<span id="L259"><span class="lineNum">     259</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">           5 :     if (!authorize_token(request-&gt;block_token(),</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :             :                          BlockTokenPermission::kTransfer,</span>
+<span id="L261"><span class="lineNum">     261</span>                 :             :                          request-&gt;block_id(),</span>
+<span id="L262"><span class="lineNum">     262</span>                 :             :                          request-&gt;generation_stamp(),</span>
+<span id="L263"><span class="lineNum">     263</span>                 :             :                          request-&gt;inode_id(),</span>
+<span id="L264"><span class="lineNum">     264</span>                 :             :                          request-&gt;block_index())) {</span>
+<span id="L265"><span class="lineNum">     265</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         fill_status(response-&gt;mutable_status(),</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :             :                     static_cast&lt;uint32_t&gt;(ErrorCode::kInvalidBlockToken),</span>
+<span id="L267"><span class="lineNum">     267</span>                 :             :                     &quot;block token verification failed for TransferBlock&quot;);</span>
+<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">           4 :         return;</span></span>
+<span id="L269"><span class="lineNum">     269</span>                 :             :     }</span>
+<span id="L270"><span class="lineNum">     270</span>                 :             : </span>
+<span id="L271"><span class="lineNum">     271</span>                 :             :     uint64_t block_id = request-&gt;block_id();</span>
+<span id="L272"><span class="lineNum">     272</span>                 :             :     uint64_t generation_stamp = request-&gt;generation_stamp();</span>
+<span id="L273"><span class="lineNum">     273</span>                 :             :     const auto&amp; data = request-&gt;data();</span>
 <span id="L274"><span class="lineNum">     274</span>                 :             : </span>
-<span id="L275"><span class="lineNum">     275</span>                 :             :     uint64_t block_id = request-&gt;block_id();</span>
-<span id="L276"><span class="lineNum">     276</span>                 :             :     uint64_t generation_stamp = request-&gt;generation_stamp();</span>
-<span id="L277"><span class="lineNum">     277</span>                 :             :     const auto&amp; data = request-&gt;data();</span>
-<span id="L278"><span class="lineNum">     278</span>                 :             : </span>
-<span id="L279"><span class="lineNum">     279</span>                 :             :     // Create block in tmp/</span>
-<span id="L280"><span class="lineNum">     280</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto create_result = store_-&gt;create_block(</span></span>
-<span id="L281"><span class="lineNum">     281</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         block_id, request-&gt;inode_id(), request-&gt;block_index(), generation_stamp);</span></span>
-<span id="L282"><span class="lineNum">     282</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (create_result.hasError()) {</span></span>
-<span id="L283"><span class="lineNum">     283</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :         fill_status(response-&gt;mutable_status(),</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :             :     // Create block in tmp/</span>
+<span id="L276"><span class="lineNum">     276</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     auto create_result = store_-&gt;create_block(</span></span>
+<span id="L277"><span class="lineNum">     277</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         block_id, request-&gt;inode_id(), request-&gt;block_index(), generation_stamp);</span></span>
+<span id="L278"><span class="lineNum">     278</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (create_result.hasError()) {</span></span>
+<span id="L279"><span class="lineNum">     279</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :         fill_status(response-&gt;mutable_status(),</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
-<span id="L284"><span class="lineNum">     284</span>                 :             :                     create_result.error().code(),</span>
-<span id="L285"><span class="lineNum">     285</span>                 :             :                     create_result.error().message());</span>
-<span id="L286"><span class="lineNum">     286</span>                 :             :         return;</span>
-<span id="L287"><span class="lineNum">     287</span>                 :             :     }</span>
-<span id="L288"><span class="lineNum">     288</span>                 :             : </span>
-<span id="L289"><span class="lineNum">     289</span>                 :             :     // Write data as a single chunk</span>
-<span id="L290"><span class="lineNum">     290</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (!data.empty()) {</span></span>
-<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">           1 :         auto append_result = store_-&gt;append_chunk(block_id,</span></span>
-<span id="L292"><span class="lineNum">     292</span>                 :             :                                                   generation_stamp,</span>
-<span id="L293"><span class="lineNum">     293</span>                 :             :                                                   data.data(),</span>
-<span id="L294"><span class="lineNum">     294</span>                 :             :                                                   static_cast&lt;uint32_t&gt;(data.size()),</span>
-<span id="L295"><span class="lineNum">     295</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                                                   /*chunk_index=*/0);</span></span>
-<span id="L296"><span class="lineNum">     296</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :         if (append_result.hasError()) {</span></span>
-<span id="L297"><span class="lineNum">     297</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :             fill_status(response-&gt;mutable_status(),</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :             :                     create_result.error().code(),</span>
+<span id="L281"><span class="lineNum">     281</span>                 :             :                     create_result.error().message());</span>
+<span id="L282"><span class="lineNum">     282</span>                 :             :         return;</span>
+<span id="L283"><span class="lineNum">     283</span>                 :             :     }</span>
+<span id="L284"><span class="lineNum">     284</span>                 :             : </span>
+<span id="L285"><span class="lineNum">     285</span>                 :             :     // Write data as a single chunk</span>
+<span id="L286"><span class="lineNum">     286</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (!data.empty()) {</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">           1 :         auto append_result = store_-&gt;append_chunk(block_id,</span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :             :                                                   generation_stamp,</span>
+<span id="L289"><span class="lineNum">     289</span>                 :             :                                                   data.data(),</span>
+<span id="L290"><span class="lineNum">     290</span>                 :             :                                                   static_cast&lt;uint32_t&gt;(data.size()),</span>
+<span id="L291"><span class="lineNum">     291</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                                                   /*chunk_index=*/0);</span></span>
+<span id="L292"><span class="lineNum">     292</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :         if (append_result.hasError()) {</span></span>
+<span id="L293"><span class="lineNum">     293</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :             fill_status(response-&gt;mutable_status(),</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
-<span id="L298"><span class="lineNum">     298</span>                 :             :                         append_result.error().code(),</span>
-<span id="L299"><span class="lineNum">     299</span>                 :             :                         append_result.error().message());</span>
-<span id="L300"><span class="lineNum">     300</span>                 :             :             return;</span>
-<span id="L301"><span class="lineNum">     301</span>                 :             :         }</span>
-<span id="L302"><span class="lineNum">     302</span>                 :             :     }</span>
-<span id="L303"><span class="lineNum">     303</span>                 :             : </span>
-<span id="L304"><span class="lineNum">     304</span>                 :             :     // Finalize</span>
-<span id="L305"><span class="lineNum">     305</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     auto finalize_result = store_-&gt;finalize_block(block_id, generation_stamp);</span></span>
-<span id="L306"><span class="lineNum">     306</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (finalize_result.hasError()) {</span></span>
-<span id="L307"><span class="lineNum">     307</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :         fill_status(response-&gt;mutable_status(),</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :             :                         append_result.error().code(),</span>
+<span id="L295"><span class="lineNum">     295</span>                 :             :                         append_result.error().message());</span>
+<span id="L296"><span class="lineNum">     296</span>                 :             :             return;</span>
+<span id="L297"><span class="lineNum">     297</span>                 :             :         }</span>
+<span id="L298"><span class="lineNum">     298</span>                 :             :     }</span>
+<span id="L299"><span class="lineNum">     299</span>                 :             : </span>
+<span id="L300"><span class="lineNum">     300</span>                 :             :     // Finalize</span>
+<span id="L301"><span class="lineNum">     301</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     auto finalize_result = store_-&gt;finalize_block(block_id, generation_stamp);</span></span>
+<span id="L302"><span class="lineNum">     302</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (finalize_result.hasError()) {</span></span>
+<span id="L303"><span class="lineNum">     303</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :         fill_status(response-&gt;mutable_status(),</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
-<span id="L308"><span class="lineNum">     308</span>                 :             :                     finalize_result.error().code(),</span>
-<span id="L309"><span class="lineNum">     309</span>                 :             :                     finalize_result.error().message());</span>
-<span id="L310"><span class="lineNum">     310</span>                 :             :         return;</span>
-<span id="L311"><span class="lineNum">     311</span>                 :             :     }</span>
-<span id="L312"><span class="lineNum">     312</span>                 :             : </span>
-<span id="L313"><span class="lineNum">     313</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (reporter_) {</span></span>
-<span id="L314"><span class="lineNum">     314</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         reporter_-&gt;notify_block_finalized(block_id);</span></span>
-<span id="L315"><span class="lineNum">     315</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         (void)reporter_-&gt;send_incremental_report();</span></span>
-<span id="L316"><span class="lineNum">     316</span>                 :             :     }</span>
-<span id="L317"><span class="lineNum">     317</span>                 :             : </span>
-<span id="L318"><span class="lineNum">     318</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           2 :     LOG(INFO) &lt;&lt; &quot;block &quot; &lt;&lt; block_id &lt;&lt; &quot;:&quot; &lt;&lt; generation_stamp</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :             :                     finalize_result.error().code(),</span>
+<span id="L305"><span class="lineNum">     305</span>                 :             :                     finalize_result.error().message());</span>
+<span id="L306"><span class="lineNum">     306</span>                 :             :         return;</span>
+<span id="L307"><span class="lineNum">     307</span>                 :             :     }</span>
+<span id="L308"><span class="lineNum">     308</span>                 :             : </span>
+<span id="L309"><span class="lineNum">     309</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (reporter_) {</span></span>
+<span id="L310"><span class="lineNum">     310</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         reporter_-&gt;notify_block_finalized(block_id);</span></span>
+<span id="L311"><span class="lineNum">     311</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         (void)reporter_-&gt;send_incremental_report();</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :             :     }</span>
+<span id="L313"><span class="lineNum">     313</span>                 :             : </span>
+<span id="L314"><span class="lineNum">     314</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           2 :     LOG(INFO) &lt;&lt; &quot;block &quot; &lt;&lt; block_id &lt;&lt; &quot;:&quot; &lt;&lt; generation_stamp</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 9 was not taken"> - </span>]
-<span id="L319"><span class="lineNum">     319</span>                 :             :               &lt;&lt; &quot; received via transfer replication (&quot; &lt;&lt; data.size() &lt;&lt; &quot; bytes)&quot;;</span>
-<span id="L320"><span class="lineNum">     320</span>                 :             : </span>
-<span id="L321"><span class="lineNum">     321</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     fill_status(response-&gt;mutable_status(), 0);</span></span>
-<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">           5 : }</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :             : </span>
-<span id="L324"><span class="lineNum">     324</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 : void DataTransferServiceImpl::TruncateBlock(google::protobuf::RpcController* /*controller*/,</span></span>
-<span id="L325"><span class="lineNum">     325</span>                 :             :                                             const protocol::TruncateBlockRequest* request,</span>
-<span id="L326"><span class="lineNum">     326</span>                 :             :                                             protocol::TruncateBlockResponse* response,</span>
-<span id="L327"><span class="lineNum">     327</span>                 :             :                                             google::protobuf::Closure* done) {</span>
-<span id="L328"><span class="lineNum">     328</span>                 :             :     brpc::ClosureGuard guard(done);</span>
-<span id="L329"><span class="lineNum">     329</span>                 :             : </span>
-<span id="L330"><span class="lineNum">     330</span>                 :             :     // Authorize block token — requires kTruncate permission</span>
-<span id="L331"><span class="lineNum">     331</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">           3 :     if (!authorize_token(request-&gt;block_token(),</span></span>
-<span id="L332"><span class="lineNum">     332</span>                 :             :                          BlockTokenPermission::kTruncate,</span>
-<span id="L333"><span class="lineNum">     333</span>                 :             :                          request-&gt;block_id(),</span>
-<span id="L334"><span class="lineNum">     334</span>                 :             :                          request-&gt;generation_stamp(),</span>
-<span id="L335"><span class="lineNum">     335</span>                 :             :                          request-&gt;block_token().inode_id(),</span>
-<span id="L336"><span class="lineNum">     336</span>                 :             :                          request-&gt;block_token().block_index())) {</span>
-<span id="L337"><span class="lineNum">     337</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         fill_status(response-&gt;mutable_status(),</span></span>
-<span id="L338"><span class="lineNum">     338</span>                 :             :                     static_cast&lt;uint32_t&gt;(ErrorCode::kInvalidBlockToken),</span>
-<span id="L339"><span class="lineNum">     339</span>                 :             :                     &quot;block token verification failed for TruncateBlock&quot;);</span>
-<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC">           2 :         return;</span></span>
-<span id="L341"><span class="lineNum">     341</span>                 :             :     }</span>
-<span id="L342"><span class="lineNum">     342</span>                 :             : </span>
-<span id="L343"><span class="lineNum">     343</span>                 :             :     auto truncate =</span>
-<span id="L344"><span class="lineNum">     344</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         store_-&gt;truncate_block(request-&gt;block_id(), request-&gt;generation_stamp(), request-&gt;length());</span></span>
-<span id="L345"><span class="lineNum">     345</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (truncate.hasError()) {</span></span>
-<span id="L346"><span class="lineNum">     346</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :         fill_status(</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :             :               &lt;&lt; &quot; received via transfer replication (&quot; &lt;&lt; data.size() &lt;&lt; &quot; bytes)&quot;;</span>
+<span id="L316"><span class="lineNum">     316</span>                 :             : </span>
+<span id="L317"><span class="lineNum">     317</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     fill_status(response-&gt;mutable_status(), 0);</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">           5 : }</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :             : </span>
+<span id="L320"><span class="lineNum">     320</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 : void DataTransferServiceImpl::TruncateBlock(google::protobuf::RpcController* /*controller*/,</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :             :                                             const protocol::TruncateBlockRequest* request,</span>
+<span id="L322"><span class="lineNum">     322</span>                 :             :                                             protocol::TruncateBlockResponse* response,</span>
+<span id="L323"><span class="lineNum">     323</span>                 :             :                                             google::protobuf::Closure* done) {</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             :     brpc::ClosureGuard guard(done);</span>
+<span id="L325"><span class="lineNum">     325</span>                 :             : </span>
+<span id="L326"><span class="lineNum">     326</span>                 :             :     // Authorize block token — requires kTruncate permission</span>
+<span id="L327"><span class="lineNum">     327</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">           3 :     if (!authorize_token(request-&gt;block_token(),</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :             :                          BlockTokenPermission::kTruncate,</span>
+<span id="L329"><span class="lineNum">     329</span>                 :             :                          request-&gt;block_id(),</span>
+<span id="L330"><span class="lineNum">     330</span>                 :             :                          request-&gt;generation_stamp(),</span>
+<span id="L331"><span class="lineNum">     331</span>                 :             :                          request-&gt;block_token().inode_id(),</span>
+<span id="L332"><span class="lineNum">     332</span>                 :             :                          request-&gt;block_token().block_index())) {</span>
+<span id="L333"><span class="lineNum">     333</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         fill_status(response-&gt;mutable_status(),</span></span>
+<span id="L334"><span class="lineNum">     334</span>                 :             :                     static_cast&lt;uint32_t&gt;(ErrorCode::kInvalidBlockToken),</span>
+<span id="L335"><span class="lineNum">     335</span>                 :             :                     &quot;block token verification failed for TruncateBlock&quot;);</span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">           2 :         return;</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :             :     }</span>
+<span id="L338"><span class="lineNum">     338</span>                 :             : </span>
+<span id="L339"><span class="lineNum">     339</span>                 :             :     auto truncate =</span>
+<span id="L340"><span class="lineNum">     340</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         store_-&gt;truncate_block(request-&gt;block_id(), request-&gt;generation_stamp(), request-&gt;length());</span></span>
+<span id="L341"><span class="lineNum">     341</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (truncate.hasError()) {</span></span>
+<span id="L342"><span class="lineNum">     342</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :         fill_status(</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
-<span id="L347"><span class="lineNum">     347</span>                 :             :             response-&gt;mutable_status(), truncate.error().code(), truncate.error().message());</span>
-<span id="L348"><span class="lineNum">     348</span>                 :             :         return;</span>
+<span id="L343"><span class="lineNum">     343</span>                 :             :             response-&gt;mutable_status(), truncate.error().code(), truncate.error().message());</span>
+<span id="L344"><span class="lineNum">     344</span>                 :             :         return;</span>
+<span id="L345"><span class="lineNum">     345</span>                 :             :     }</span>
+<span id="L346"><span class="lineNum">     346</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (reporter_) {</span></span>
+<span id="L347"><span class="lineNum">     347</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         reporter_-&gt;notify_block_finalized(request-&gt;block_id());</span></span>
+<span id="L348"><span class="lineNum">     348</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         (void)reporter_-&gt;send_incremental_report();</span></span>
 <span id="L349"><span class="lineNum">     349</span>                 :             :     }</span>
-<span id="L350"><span class="lineNum">     350</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           1 :     if (reporter_) {</span></span>
-<span id="L351"><span class="lineNum">     351</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         reporter_-&gt;notify_block_finalized(request-&gt;block_id());</span></span>
-<span id="L352"><span class="lineNum">     352</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         (void)reporter_-&gt;send_incremental_report();</span></span>
-<span id="L353"><span class="lineNum">     353</span>                 :             :     }</span>
-<span id="L354"><span class="lineNum">     354</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     fill_status(response-&gt;mutable_status(), 0);</span></span>
-<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaGNC">           3 : }</span></span>
-<span id="L356"><span class="lineNum">     356</span>                 :             : </span>
-<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC">          19 : bool DataTransferServiceImpl::authorize_token(const protocol::BlockTokenProto&amp; token,</span></span>
-<span id="L358"><span class="lineNum">     358</span>                 :             :                                               BlockTokenPermission required_permission,</span>
-<span id="L359"><span class="lineNum">     359</span>                 :             :                                               uint64_t expected_block_id,</span>
-<span id="L360"><span class="lineNum">     360</span>                 :             :                                               uint64_t expected_generation_stamp,</span>
-<span id="L361"><span class="lineNum">     361</span>                 :             :                                               uint64_t expected_inode_id,</span>
-<span id="L362"><span class="lineNum">     362</span>                 :             :                                               uint32_t expected_block_index) const {</span>
-<span id="L363"><span class="lineNum">     363</span>                 :<span class="tlaGNC">          19 :     return verify_block_token(token,</span></span>
-<span id="L364"><span class="lineNum">     364</span>                 :<span class="tlaGNC">          19 :                              block_token_secret_,</span></span>
-<span id="L365"><span class="lineNum">     365</span>                 :             :                              required_permission,</span>
-<span id="L366"><span class="lineNum">     366</span>                 :             :                              expected_block_id,</span>
-<span id="L367"><span class="lineNum">     367</span>                 :             :                              expected_generation_stamp,</span>
-<span id="L368"><span class="lineNum">     368</span>                 :             :                              expected_inode_id,</span>
-<span id="L369"><span class="lineNum">     369</span>                 :<span class="tlaGNC">          19 :                              expected_block_index);</span></span>
-<span id="L370"><span class="lineNum">     370</span>                 :             : }</span>
-<span id="L371"><span class="lineNum">     371</span>                 :             : </span>
-<span id="L372"><span class="lineNum">     372</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L350"><span class="lineNum">     350</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     fill_status(response-&gt;mutable_status(), 0);</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaGNC">           3 : }</span></span>
+<span id="L352"><span class="lineNum">     352</span>                 :             : </span>
+<span id="L353"><span class="lineNum">     353</span>                 :<span class="tlaGNC">          19 : bool DataTransferServiceImpl::authorize_token(const protocol::BlockTokenProto&amp; token,</span></span>
+<span id="L354"><span class="lineNum">     354</span>                 :             :                                               BlockTokenPermission required_permission,</span>
+<span id="L355"><span class="lineNum">     355</span>                 :             :                                               uint64_t expected_block_id,</span>
+<span id="L356"><span class="lineNum">     356</span>                 :             :                                               uint64_t expected_generation_stamp,</span>
+<span id="L357"><span class="lineNum">     357</span>                 :             :                                               uint64_t expected_inode_id,</span>
+<span id="L358"><span class="lineNum">     358</span>                 :             :                                               uint32_t expected_block_index) const {</span>
+<span id="L359"><span class="lineNum">     359</span>                 :<span class="tlaGNC">          19 :     return verify_block_token(token,</span></span>
+<span id="L360"><span class="lineNum">     360</span>                 :<span class="tlaGNC">          19 :                               block_token_secret_,</span></span>
+<span id="L361"><span class="lineNum">     361</span>                 :             :                               required_permission,</span>
+<span id="L362"><span class="lineNum">     362</span>                 :             :                               expected_block_id,</span>
+<span id="L363"><span class="lineNum">     363</span>                 :             :                               expected_generation_stamp,</span>
+<span id="L364"><span class="lineNum">     364</span>                 :             :                               expected_inode_id,</span>
+<span id="L365"><span class="lineNum">     365</span>                 :<span class="tlaGNC">          19 :                               expected_block_index);</span></span>
+<span id="L366"><span class="lineNum">     366</span>                 :             : }</span>
+<span id="L367"><span class="lineNum">     367</span>                 :             : </span>
+<span id="L368"><span class="lineNum">     368</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>

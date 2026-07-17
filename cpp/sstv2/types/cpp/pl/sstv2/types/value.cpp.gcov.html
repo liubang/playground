@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 09:36:47</td>
+            <td class="headerValue">2026-07-17 15:53:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -161,15 +161,15 @@
 <span id="L90"><span class="lineNum">      90</span>                 :             : </span>
 <span id="L91"><span class="lineNum">      91</span>                 :             : } // namespace</span>
 <span id="L92"><span class="lineNum">      92</span>                 :             : </span>
-<span id="L93"><span class="lineNum">      93</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         111 : absl::Status encode_value(const Value&amp; value, std::string* dst) {</span></span>
+<span id="L93"><span class="lineNum">      93</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         398 : absl::Status encode_value(const Value&amp; value, std::string* dst) {</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 82 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 7 times"> + </span> 
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 369 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 7 times"> + </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 18 was not taken"> - </span>]
-<span id="L94"><span class="lineNum">      94</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         111 :     switch (value.type()) {</span></span>
+<span id="L94"><span class="lineNum">      94</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         398 :     switch (value.type()) {</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 82 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 7 times"> + </span> 
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 369 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 7 times"> + </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 18 was not taken"> - </span>]
 <span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case DataType::kNone:</span></span>
 <span id="L96"><span class="lineNum">      96</span>                 :             :             return absl::OkStatus();</span>
@@ -217,7 +217,7 @@
 <span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaUNC">           0 :             codec::encode_varint(value.as_version().major, dst);</span></span>
 <span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaUNC">           0 :             codec::encode_varint(value.as_version().minor, dst);</span></span>
 <span id="L140"><span class="lineNum">     140</span>                 :             :             return absl::OkStatus();</span>
-<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC tlaBgGNC">          82 :         case DataType::kString:</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC tlaBgGNC">         369 :         case DataType::kString:</span></span>
 <span id="L142"><span class="lineNum">     142</span>                 :             :         case DataType::kU16String:</span>
 <span id="L143"><span class="lineNum">     143</span>                 :             :         case DataType::kU32String:</span>
 <span id="L144"><span class="lineNum">     144</span>                 :             :         case DataType::kBinary:</span>
@@ -251,21 +251,21 @@
 <span id="L172"><span class="lineNum">     172</span>                 :             :     }</span>
 <span id="L173"><span class="lineNum">     173</span>                 :             : }</span>
 <span id="L174"><span class="lineNum">     174</span>                 :             : </span>
-<span id="L175"><span class="lineNum">     175</span>         [<span class="tlaGBC" title="Branch 0 was taken 111 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         111 : absl::StatusOr&lt;std::string&gt; encode_value(const Value&amp; value) {</span></span>
+<span id="L175"><span class="lineNum">     175</span>         [<span class="tlaGBC" title="Branch 0 was taken 398 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         398 : absl::StatusOr&lt;std::string&gt; encode_value(const Value&amp; value) {</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :             :     std::string encoded;</span>
-<span id="L177"><span class="lineNum">     177</span>         [<span class="tlaGBC" title="Branch 0 was taken 111 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         111 :     auto status = encode_value(value, &amp;encoded);</span></span>
-<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 111 times"> + </span>]:<span class="tlaGNC">         111 :     if (!status.ok()) {</span></span>
+<span id="L177"><span class="lineNum">     177</span>         [<span class="tlaGBC" title="Branch 0 was taken 398 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         398 :     auto status = encode_value(value, &amp;encoded);</span></span>
+<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 398 times"> + </span>]:<span class="tlaGNC">         398 :     if (!status.ok()) {</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :             :         return status;</span>
 <span id="L180"><span class="lineNum">     180</span>                 :             :     }</span>
 <span id="L181"><span class="lineNum">     181</span>                 :             :     return encoded;</span>
 <span id="L182"><span class="lineNum">     182</span>                 :             : }</span>
 <span id="L183"><span class="lineNum">     183</span>                 :             : </span>
-<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">         104 : absl::StatusOr&lt;Value&gt; decode_value(DataType type, std::string_view bytes) {</span></span>
-<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">         104 :     size_t pos = 0;</span></span>
-<span id="L186"><span class="lineNum">     186</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         104 :     switch (type) {</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">         367 : absl::StatusOr&lt;Value&gt; decode_value(DataType type, std::string_view bytes) {</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">         367 :     size_t pos = 0;</span></span>
+<span id="L186"><span class="lineNum">     186</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         367 :     switch (type) {</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 17 times"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 71 times"> + </span><span class="tlaUNC" title="Branch 16 was not taken"> - </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaUNC" title="Branch 18 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 334 times"> + </span><span class="tlaUNC" title="Branch 16 was not taken"> - </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaUNC" title="Branch 18 was not taken"> - </span> 
 <span class="lineNum">        </span>       <span class="tlaGBC" title="Branch 19 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 20 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span>]
 <span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case DataType::kNone:</span></span>
 <span id="L188"><span class="lineNum">     188</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if (auto status = require_end(bytes, pos); !status.ok()) {</span></span>
@@ -402,8 +402,8 @@
 <span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaUNC">           0 :             return Value::make&lt;DataType::kVersion&gt;(</span></span>
 <span id="L320"><span class="lineNum">     320</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                 types::Version{.major = *major, .minor = *minor});</span></span>
 <span id="L321"><span class="lineNum">     321</span>                 :             :         }</span>
-<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC tlaBgGNC">          71 :         case DataType::kString:</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">         142 :             return Value::make&lt;DataType::kString&gt;(bytes);</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC tlaBgGNC">         334 :         case DataType::kString:</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">         668 :             return Value::make&lt;DataType::kString&gt;(bytes);</span></span>
 <span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case DataType::kU16String:</span></span>
 <span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaUNC">           0 :             return Value::make&lt;DataType::kU16String&gt;(bytes);</span></span>
 <span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaUNC">           0 :         case DataType::kU32String:</span></span>

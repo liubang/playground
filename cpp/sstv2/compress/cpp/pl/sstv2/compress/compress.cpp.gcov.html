@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 09:36:47</td>
+            <td class="headerValue">2026-07-17 15:53:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -109,8 +109,8 @@
 <span id="L38"><span class="lineNum">      38</span>                 :             :     return absl::OkStatus();</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             : }</span>
 <span id="L40"><span class="lineNum">      40</span>                 :             : </span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">         138 : absl::StatusOr&lt;std::string&gt; compress_none(std::string_view input, int /*level*/) {</span></span>
-<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">         138 :     return std::string(input);</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">        1033 : absl::StatusOr&lt;std::string&gt; compress_none(std::string_view input, int /*level*/) {</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">        1033 :     return std::string(input);</span></span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : }</span>
 <span id="L44"><span class="lineNum">      44</span>                 :             : </span>
 <span id="L45"><span class="lineNum">      45</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 : absl::StatusOr&lt;std::string&gt; compress_snappy(std::string_view input, int /*level*/) {</span></span>
@@ -135,11 +135,11 @@
 <span id="L63"><span class="lineNum">      63</span>                 :             :     return out;</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             : }</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : </span>
-<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC tlaBgGNC">          92 : absl::StatusOr&lt;std::string&gt; uncompress_none(std::string_view input, uint64_t uncompressed_size) {</span></span>
-<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 92 times"> + </span>]:<span class="tlaGNC">          92 :     if (input.size() != uncompressed_size) {</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC tlaBgGNC">         682 : absl::StatusOr&lt;std::string&gt; uncompress_none(std::string_view input, uint64_t uncompressed_size) {</span></span>
+<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 682 times"> + </span>]:<span class="tlaGNC">         682 :     if (input.size() != uncompressed_size) {</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;uncompressed size mismatch&quot;);</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :     }</span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC tlaBgGNC">          92 :     return std::string(input);</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC tlaBgGNC">         682 :     return std::string(input);</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : }</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : </span>
 <span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">           4 : absl::StatusOr&lt;std::string&gt; uncompress_snappy(std::string_view input, uint64_t uncompressed_size) {</span></span>
@@ -179,10 +179,10 @@
 <span id="L107"><span class="lineNum">     107</span>                 :             : </span>
 <span id="L108"><span class="lineNum">     108</span>                 :             : } // namespace detail</span>
 <span id="L109"><span class="lineNum">     109</span>                 :             : </span>
-<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC tlaBgGNC">         141 : absl::StatusOr&lt;Buffer&gt; compress_to_buffer(std::string_view input, const Options&amp; options) {</span></span>
-<span id="L111"><span class="lineNum">     111</span>   [<span class="tlaGBC" title="Branch 0 was taken 138 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         141 :     switch (options.codec) {</span></span>
-<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">         138 :         case Codec::kNone:</span></span>
-<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">         138 :             return CodecImpl&lt;Codec::kNone&gt;::compress(input, options);</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC tlaBgGNC">        1036 : absl::StatusOr&lt;Buffer&gt; compress_to_buffer(std::string_view input, const Options&amp; options) {</span></span>
+<span id="L111"><span class="lineNum">     111</span>   [<span class="tlaGBC" title="Branch 0 was taken 1033 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        1036 :     switch (options.codec) {</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">        1033 :         case Codec::kNone:</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">        1033 :             return CodecImpl&lt;Codec::kNone&gt;::compress(input, options);</span></span>
 <span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           2 :         case Codec::kSnappy:</span></span>
 <span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">           2 :             return CodecImpl&lt;Codec::kSnappy&gt;::compress(input, options);</span></span>
 <span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">           1 :         case Codec::kZstd:</span></span>
@@ -191,20 +191,20 @@
 <span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     return absl::InvalidArgumentError(&quot;unknown compression codec&quot;);</span></span>
 <span id="L120"><span class="lineNum">     120</span>                 :             : }</span>
 <span id="L121"><span class="lineNum">     121</span>                 :             : </span>
-<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC tlaBgGNC">         141 : absl::StatusOr&lt;std::string&gt; compress(std::string_view input, const Options&amp; options) {</span></span>
-<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">         141 :     auto buffer = compress_to_buffer(input, options);</span></span>
-<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 141 times"> + </span>]:<span class="tlaGNC">         141 :     if (!buffer.ok()) {</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC tlaBgGNC">        1036 : absl::StatusOr&lt;std::string&gt; compress(std::string_view input, const Options&amp; options) {</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">        1036 :     auto buffer = compress_to_buffer(input, options);</span></span>
+<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1036 times"> + </span>]:<span class="tlaGNC">        1036 :     if (!buffer.ok()) {</span></span>
 <span id="L125"><span class="lineNum">     125</span>                 :             :         return buffer.status();</span>
 <span id="L126"><span class="lineNum">     126</span>                 :             :     }</span>
 <span id="L127"><span class="lineNum">     127</span>                 :             :     return std::move(buffer-&gt;bytes);</span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : }</span>
 <span id="L129"><span class="lineNum">     129</span>                 :             : </span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          97 : absl::StatusOr&lt;std::string&gt; uncompress(std::string_view input,</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">         687 : absl::StatusOr&lt;std::string&gt; uncompress(std::string_view input,</span></span>
 <span id="L131"><span class="lineNum">     131</span>                 :             :                                        Codec codec,</span>
 <span id="L132"><span class="lineNum">     132</span>                 :             :                                        uint64_t uncompressed_size) {</span>
-<span id="L133"><span class="lineNum">     133</span>   [<span class="tlaGBC" title="Branch 0 was taken 92 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          97 :     switch (codec) {</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          92 :         case Codec::kNone:</span></span>
-<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          92 :             return CodecImpl&lt;Codec::kNone&gt;::uncompress(input, uncompressed_size);</span></span>
+<span id="L133"><span class="lineNum">     133</span>   [<span class="tlaGBC" title="Branch 0 was taken 682 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         687 :     switch (codec) {</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">         682 :         case Codec::kNone:</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">         682 :             return CodecImpl&lt;Codec::kNone&gt;::uncompress(input, uncompressed_size);</span></span>
 <span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">           3 :         case Codec::kSnappy:</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">           3 :             return CodecImpl&lt;Codec::kSnappy&gt;::uncompress(input, uncompressed_size);</span></span>
 <span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">           2 :         case Codec::kZstd:</span></span>
