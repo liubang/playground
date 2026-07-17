@@ -70,6 +70,9 @@ public:
     /// Delete a file or directory.
     [[nodiscard]] Result<Void> rm(std::string_view path, bool recursive = false);
 
+    /// Atomically delete only the matching published immutable file generation.
+    [[nodiscard]] Result<Void> rm(std::string_view path, const FileIdentity& expected_identity);
+
     /// Rename/move a file or directory.
     [[nodiscard]] Result<Void> mv(std::string_view src, std::string_view dst);
 

@@ -48,6 +48,8 @@ public:
     pl::Result<pl::Void> create_inode(const Inode& inode) override;
     pl::Result<pl::Void> update_inode(const Inode& inode) override;
     pl::Result<pl::Void> delete_inode(uint64_t inode_id) override;
+    pl::Result<pl::Void> delete_inode_if_version(uint64_t inode_id,
+                                                 uint64_t expected_version) override;
 
     // Block operations
 

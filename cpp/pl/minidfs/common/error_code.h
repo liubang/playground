@@ -46,6 +46,7 @@ enum class ErrorCode : uint16_t {
     kDirectoryNotEmpty = 1006,
     kPathTooLong = 1007,
     kInvalidPath = 1008,
+    kIdentityMismatch = 1009,
 
     // Lease errors
     kLeaseExpired = 2000,
@@ -108,6 +109,8 @@ constexpr std::string_view error_code_name(ErrorCode code) {
             return "PathTooLong";
         case ErrorCode::kInvalidPath:
             return "InvalidPath";
+        case ErrorCode::kIdentityMismatch:
+            return "IdentityMismatch";
         case ErrorCode::kLeaseExpired:
             return "LeaseExpired";
         case ErrorCode::kLeaseConflict:

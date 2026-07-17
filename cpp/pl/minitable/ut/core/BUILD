@@ -19,6 +19,19 @@ load("@rules_cc//cc:defs.bzl", "cc_test")
 load("//cpp:copts/configure_copts.bzl", "LINKOPTS", "TEST_COPTS")
 
 cc_test(
+    name = "embedded_slice_test",
+    srcs = ["embedded_slice_test.cpp"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/minitable/core:embedded_slice",
+        "//cpp/pl/sstv2/io:local_filesystem",
+        "//cpp/pl/sstv2/types:schema",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "slice_store_test",
     srcs = ["slice_store_test.cpp"],
     copts = TEST_COPTS,
@@ -26,6 +39,7 @@ cc_test(
     deps = [
         "//cpp/pl/minitable/core:slice_store",
         "//cpp/pl/minitable/memtable",
+        "//cpp/pl/sstv2/io:local_filesystem",
         "@googletest//:gtest_main",
     ],
 )
