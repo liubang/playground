@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 09:36:47</td>
+            <td class="headerValue">2026-07-17 15:53:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -124,11 +124,11 @@
 <span id="L53"><span class="lineNum">      53</span>                 :             : </span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :     // Construct a data flag for a value column.</span>
 <span id="L55"><span class="lineNum">      55</span>                 :             :     static constexpr ColumnFlag for_value(DataType dt, bool checksum, bool bool_val = false) {</span>
-<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC tlaBgGNC">          57 :         uint64_t bits = static_cast&lt;uint8_t&gt;(dt);</span></span>
-<span id="L57"><span class="lineNum">      57</span>         [<span class="tlaGBC" title="Branch 0 was taken 55 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">          57 :         if (checksum) {</span></span>
-<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          55 :             bits |= kChecksumBit;</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC tlaBgGNC">         344 :         uint64_t bits = static_cast&lt;uint8_t&gt;(dt);</span></span>
+<span id="L57"><span class="lineNum">      57</span>         [<span class="tlaGBC" title="Branch 0 was taken 342 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">         344 :         if (checksum) {</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">         342 :             bits |= kChecksumBit;</span></span>
 <span id="L59"><span class="lineNum">      59</span>                 :             :         }</span>
-<span id="L60"><span class="lineNum">      60</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 56 times"> + </span>]:<span class="tlaGNC">          57 :         if (bool_val) {</span></span>
+<span id="L60"><span class="lineNum">      60</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 343 times"> + </span>]:<span class="tlaGNC">         344 :         if (bool_val) {</span></span>
 <span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">           1 :             bits |= kBoolBit;</span></span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :         }</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :         return ColumnFlag{bits};</span>
@@ -152,12 +152,12 @@
 <span id="L81"><span class="lineNum">      81</span>                 :             :     // =========================================================================</span>
 <span id="L82"><span class="lineNum">      82</span>                 :             : </span>
 <span id="L83"><span class="lineNum">      83</span>                 :             :     [[nodiscard]] constexpr DataType data_type() const {</span>
-<span id="L84"><span class="lineNum">      84</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 100 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 117 times"> + </span> :<span class="tlaGNC">         277 :         return static_cast&lt;DataType&gt;(bits_ &amp; kDtMask);</span></span>
-<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 23 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 14 times"> + </span>]
+<span id="L84"><span class="lineNum">      84</span>   [<span class="tlaGBC" title="Branch 0 was taken 356 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 965 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 768 times"> + </span> :<span class="tlaGNC">        2106 :         return static_cast&lt;DataType&gt;(bits_ &amp; kDtMask);</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 2 times"> + </span>]
 <span id="L85"><span class="lineNum">      85</span>                 :             :     }</span>
 <span id="L86"><span class="lineNum">      86</span>                 :             : </span>
-<span id="L87"><span class="lineNum">      87</span>         [<span class="tlaGBC" title="Branch 0 was taken 41 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          41 :     [[nodiscard]] constexpr bool has_checksum() const { return (bits_ &amp; kChecksumBit) != 0; }</span></span>
-<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">         169 :     [[nodiscard]] constexpr bool bool_value() const { return (bits_ &amp; kBoolBit) != 0; }</span></span>
+<span id="L87"><span class="lineNum">      87</span>         [<span class="tlaGBC" title="Branch 0 was taken 304 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         304 :     [[nodiscard]] constexpr bool has_checksum() const { return (bits_ &amp; kChecksumBit) != 0; }</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">        1090 :     [[nodiscard]] constexpr bool bool_value() const { return (bits_ &amp; kBoolBit) != 0; }</span></span>
 <span id="L89"><span class="lineNum">      89</span>                 :             : </span>
 <span id="L90"><span class="lineNum">      90</span>                 :             :     // =========================================================================</span>
 <span id="L91"><span class="lineNum">      91</span>                 :             :     // Semantic queries.</span>
@@ -183,14 +183,14 @@
 <span id="L111"><span class="lineNum">     111</span>                 :             :     // - Reserved bits must be zero.</span>
 <span id="L112"><span class="lineNum">     112</span>                 :             :     // - Index entries must have C=0 and B=0.</span>
 <span id="L113"><span class="lineNum">     113</span>                 :             :     // - B bit must be 0 when DT != Bool.</span>
-<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">         216 :     [[nodiscard]] constexpr bool is_valid() const {</span></span>
-<span id="L115"><span class="lineNum">     115</span>   [<span class="tlaGBC" title="Branch 0 was taken 214 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 214 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         216 :         if ((bits_ &amp; kReservedMask) != 0 || !is_valid_data_type(data_type())) {</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">        1400 :     [[nodiscard]] constexpr bool is_valid() const {</span></span>
+<span id="L115"><span class="lineNum">     115</span>   [<span class="tlaGBC" title="Branch 0 was taken 1398 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1398 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        1400 :         if ((bits_ &amp; kReservedMask) != 0 || !is_valid_data_type(data_type())) {</span></span>
 <span id="L116"><span class="lineNum">     116</span>                 :             :             return false;</span>
 <span id="L117"><span class="lineNum">     117</span>                 :             :         }</span>
-<span id="L118"><span class="lineNum">     118</span>   [<span class="tlaGBC" title="Branch 0 was taken 114 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 100 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 113 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">         214 :         if (is_index_entry() &amp;&amp; (bits_ &amp; (kChecksumBit | kBoolBit)) != 0) {</span></span>
+<span id="L118"><span class="lineNum">     118</span>   [<span class="tlaGBC" title="Branch 0 was taken 767 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 631 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 766 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">        1398 :         if (is_index_entry() &amp;&amp; (bits_ &amp; (kChecksumBit | kBoolBit)) != 0) {</span></span>
 <span id="L119"><span class="lineNum">     119</span>                 :             :             return false;</span>
 <span id="L120"><span class="lineNum">     120</span>                 :             :         }</span>
-<span id="L121"><span class="lineNum">     121</span>   [<span class="tlaGBC" title="Branch 0 was taken 209 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 208 times"> + </span>]:<span class="tlaGNC">         213 :         if (data_type() != DataType::kBool &amp;&amp; bool_value()) {</span></span>
+<span id="L121"><span class="lineNum">     121</span>   [<span class="tlaGBC" title="Branch 0 was taken 1393 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 1392 times"> + </span>]:<span class="tlaGNC">        1397 :         if (data_type() != DataType::kBool &amp;&amp; bool_value()) {</span></span>
 <span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">           1 :             return false;</span></span>
 <span id="L123"><span class="lineNum">     123</span>                 :             :         }</span>
 <span id="L124"><span class="lineNum">     124</span>                 :             :         return true;</span>
@@ -200,7 +200,7 @@
 <span id="L128"><span class="lineNum">     128</span>                 :             :     // Raw access and comparison.</span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :     // =========================================================================</span>
 <span id="L130"><span class="lineNum">     130</span>                 :             : </span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          61 :     [[nodiscard]] constexpr uint64_t raw() const { return bits_; }</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">         728 :     [[nodiscard]] constexpr uint64_t raw() const { return bits_; }</span></span>
 <span id="L132"><span class="lineNum">     132</span>                 :             : </span>
 <span id="L133"><span class="lineNum">     133</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     constexpr bool operator==(const ColumnFlag&amp; rhs) const { return bits_ == rhs.bits_; }</span></span>
 <span id="L134"><span class="lineNum">     134</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     constexpr bool operator!=(const ColumnFlag&amp; rhs) const { return bits_ != rhs.bits_; }</span></span>

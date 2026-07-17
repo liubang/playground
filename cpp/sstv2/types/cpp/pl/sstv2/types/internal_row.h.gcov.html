@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 09:36:47</td>
+            <td class="headerValue">2026-07-17 15:53:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">58.8&nbsp;%</td>
+            <td class="headerCovTableEntryLo">64.7&nbsp;%</td>
             <td class="headerCovTableEntry">34</td>
-            <td class="headerCovTableEntry">20</td>
+            <td class="headerCovTableEntry">22</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -141,9 +141,9 @@
 <span id="L70"><span class="lineNum">      70</span>                 :             : // &quot;key side&quot; metadata. Value bytes flow through a separate channel.</span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : // =============================================================================</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : </span>
-<span id="L73"><span class="lineNum">      73</span>   [<span class="tlaGBC" title="Branch 0 was taken 58 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 33 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 24 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 36 times"> + </span> :<span class="tlaGNC tlaBgGNC">        1350 : struct InternalRow {</span></span>
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 60 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaGBC" title="Branch 11 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
+<span id="L73"><span class="lineNum">      73</span>   [<span class="tlaGBC" title="Branch 0 was taken 344 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 46 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 40 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 750 times"> + </span> :<span class="tlaGNC tlaBgGNC">        9655 : struct InternalRow {</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 347 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 7 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaGBC" title="Branch 11 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaGBC" title="Branch 22 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
 <span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span><span class="tlaGBC" title="Branch 26 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 27 was not taken"> - </span>]
@@ -169,8 +169,8 @@
 <span id="L93"><span class="lineNum">      93</span>                 :             :         return ColumnFlag::from_raw(columns[s-&gt;flag_index()].get&lt;DataType::kUint64&gt;());</span>
 <span id="L94"><span class="lineNum">      94</span>                 :             :     }</span>
 <span id="L95"><span class="lineNum">      95</span>                 :             : </span>
-<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          41 :     [[nodiscard]] std::string_view filename(const InternalSchema::ConstRef&amp; s) const {</span></span>
-<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">          41 :         return columns[s-&gt;filename_index()].ref&lt;DataType::kString&gt;();</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">         304 :     [[nodiscard]] std::string_view filename(const InternalSchema::ConstRef&amp; s) const {</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">         304 :         return columns[s-&gt;filename_index()].ref&lt;DataType::kString&gt;();</span></span>
 <span id="L98"><span class="lineNum">      98</span>                 :             :     }</span>
 <span id="L99"><span class="lineNum">      99</span>                 :             : </span>
 <span id="L100"><span class="lineNum">     100</span>                 :             :     [[nodiscard]] uint64_t offset(const InternalSchema::ConstRef&amp; s) const {</span>
@@ -189,12 +189,12 @@
 <span id="L113"><span class="lineNum">     113</span>                 :             :     // Semantic queries.</span>
 <span id="L114"><span class="lineNum">     114</span>                 :             :     // =========================================================================</span>
 <span id="L115"><span class="lineNum">     115</span>                 :             : </span>
-<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">          41 :     [[nodiscard]] ValueLocation location(const InternalSchema::ConstRef&amp; s) const {</span></span>
-<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          41 :         auto fn = filename(s);</span></span>
-<span id="L118"><span class="lineNum">     118</span>         [<span class="tlaGBC" title="Branch 0 was taken 40 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">          41 :         if (fn == kEmbeddedFilename) {</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">         304 :     [[nodiscard]] ValueLocation location(const InternalSchema::ConstRef&amp; s) const {</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">         304 :         auto fn = filename(s);</span></span>
+<span id="L118"><span class="lineNum">     118</span>         [<span class="tlaGBC" title="Branch 0 was taken 303 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">         304 :         if (fn == kEmbeddedFilename) {</span></span>
 <span id="L119"><span class="lineNum">     119</span>                 :             :             return ValueLocation::kEmbedded;</span>
 <span id="L120"><span class="lineNum">     120</span>                 :             :         }</span>
-<span id="L121"><span class="lineNum">     121</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 40 times"> + </span>]:<span class="tlaGNC">          40 :         if (fn == kKeyFileFilename) {</span></span>
+<span id="L121"><span class="lineNum">     121</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 303 times"> + </span>]:<span class="tlaGNC">         303 :         if (fn == kKeyFileFilename) {</span></span>
 <span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return ValueLocation::kKeyFile;</span></span>
 <span id="L123"><span class="lineNum">     123</span>                 :             :         }</span>
 <span id="L124"><span class="lineNum">     124</span>                 :             :         return ValueLocation::kValueFile;</span>
@@ -212,10 +212,10 @@
 <span id="L136"><span class="lineNum">     136</span>                 :             :     // Construction helper.</span>
 <span id="L137"><span class="lineNum">     137</span>                 :             :     // =========================================================================</span>
 <span id="L138"><span class="lineNum">     138</span>                 :             : </span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC tlaBgGNC">         320 :     static InternalRow make(const InternalSchema::ConstRef&amp; s) {</span></span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">         320 :         InternalRow row;</span></span>
-<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 320 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         320 :         row.columns.resize(s-&gt;column_count());</span></span>
-<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">         320 :         return row;</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC tlaBgGNC">        2263 :     static InternalRow make(const InternalSchema::ConstRef&amp; s) {</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">        2263 :         InternalRow row;</span></span>
+<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 2263 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2263 :         row.columns.resize(s-&gt;column_count());</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">        2263 :         return row;</span></span>
 <span id="L143"><span class="lineNum">     143</span>                 :             :     }</span>
 <span id="L144"><span class="lineNum">     144</span>                 :             : };</span>
 <span id="L145"><span class="lineNum">     145</span>                 :             : </span>

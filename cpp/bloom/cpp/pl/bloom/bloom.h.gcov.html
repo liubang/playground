@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-17 09:36:47</td>
+            <td class="headerValue">2026-07-17 15:53:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">83.3&nbsp;%</td>
@@ -232,19 +232,19 @@
 <span id="L161"><span class="lineNum">     161</span>                 :             : </span>
 <span id="L162"><span class="lineNum">     162</span>                 :             : class StandardBloomFilter {</span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : public:</span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC tlaBgGNC">          19 :     static int choose_num_probes(int bits_per_key) {</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC tlaBgGNC">          26 :     static int choose_num_probes(int bits_per_key) {</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :             :         // 0.69 =~ ln(2)</span>
-<span id="L166"><span class="lineNum">     166</span>   [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          38 :         return std::min(30, std::max(1, static_cast&lt;int&gt;(bits_per_key * 0.69)));</span></span>
+<span id="L166"><span class="lineNum">     166</span>   [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          52 :         return std::min(30, std::max(1, static_cast&lt;int&gt;(bits_per_key * 0.69)));</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :             :     }</span>
 <span id="L168"><span class="lineNum">     168</span>                 :             : </span>
-<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">        8254 :     static void add_hash(uint32_t h, uint32_t total_bits, int num_probes, /* output */ char* data) {</span></span>
-<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">        8254 :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span></span>
-<span id="L171"><span class="lineNum">     171</span>         [<span class="tlaGBC" title="Branch 0 was taken 49524 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8254 times"> + </span>]:<span class="tlaGNC">       57778 :         for (int i = 0; i &lt; num_probes; ++i) {</span></span>
-<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">       49524 :             const uint32_t bitpos = h % total_bits;</span></span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">       49524 :             data[bitpos &gt;&gt; 3] |= (uint8_t{1} &lt;&lt; (bitpos &amp; 7));</span></span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">       49524 :             h += delta;</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">        8540 :     static void add_hash(uint32_t h, uint32_t total_bits, int num_probes, /* output */ char* data) {</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">        8540 :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span></span>
+<span id="L171"><span class="lineNum">     171</span>         [<span class="tlaGBC" title="Branch 0 was taken 51240 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8540 times"> + </span>]:<span class="tlaGNC">       59780 :         for (int i = 0; i &lt; num_probes; ++i) {</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">       51240 :             const uint32_t bitpos = h % total_bits;</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">       51240 :             data[bitpos &gt;&gt; 3] |= (uint8_t{1} &lt;&lt; (bitpos &amp; 7));</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">       51240 :             h += delta;</span></span>
 <span id="L175"><span class="lineNum">     175</span>                 :             :         }</span>
-<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">        8254 :     }</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">        8540 :     }</span></span>
 <span id="L177"><span class="lineNum">     177</span>                 :             : </span>
 <span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">        1006 :     static bool hash_may_match(uint32_t h, uint32_t total_bits, int num_probes, const char* data) {</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">        1006 :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span></span>
