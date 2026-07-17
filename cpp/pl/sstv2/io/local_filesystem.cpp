@@ -14,11 +14,14 @@
 
 #include "cpp/pl/sstv2/io/local_filesystem.h"
 
+#include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
 #include <limits>
+#include <span>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -109,6 +112,57 @@ absl::StatusOr<FileHandle> LocalFileSystem::open(std::string_view path) {
     file->descriptor = descriptor;
     file->writable = false;
     open_files_.emplace(handle, std::move(file));
+    return handle;
+}
+
+absl::StatusOr<FileHandle> LocalFileSystem::open(std::string_view path,
+                                                 const FileIdentity& expected) {
+    auto handle = open(path);
+    if (!handle.ok()) {
+        return handle.status();
+    }
+    auto file = get_open_file(*handle);
+    if (!file.ok()) {
+        return file.status();
+    }
+    struct stat info{};
+    int stat_error = 0;
+    {
+        std::lock_guard file_lock((*file)->mutex);
+        if (::fstat((*file)->descriptor, &info) != 0) {
+            stat_error = errno;
+        }
+    }
+    if (stat_error != 0) {
+        const auto status = errno_status("fstat identity", path, stat_error);
+        (void)close(*handle);
+        return status;
+    }
+    if (info.st_size < 0 || static_cast<uint64_t>(info.st_ino) != expected.file_id ||
+        static_cast<uint64_t>(info.st_size) != expected.length ||
+        expected.content_generation != 0 || !expected.checksum_valid) {
+        (void)close(*handle);
+        return absl::FailedPreconditionError("local file identity mismatch");
+    }
+    std::array<std::byte, 64 * 1024> buffer{};
+    uint64_t offset = 0;
+    uint32_t checksum = 0;
+    while (offset < expected.length) {
+        const size_t length =
+            static_cast<size_t>(std::min<uint64_t>(buffer.size(), expected.length - offset));
+        auto status = read_at(*handle, offset, std::span(buffer).first(length));
+        if (!status.ok()) {
+            (void)close(*handle);
+            return status;
+        }
+        checksum =
+            crc32c::Extend(checksum, reinterpret_cast<const uint8_t*>(buffer.data()), length);
+        offset += length;
+    }
+    if (static_cast<uint64_t>(checksum) != expected.checksum) {
+        (void)close(*handle);
+        return absl::FailedPreconditionError("local file checksum mismatch");
+    }
     return handle;
 }
 
@@ -224,15 +278,19 @@ absl::StatusOr<FileIdentity> LocalFileSystem::close(FileHandle handle) {
     }
     std::lock_guard file_lock(file->mutex);
     struct stat info{};
-    if (::fstat(file->descriptor, &info) != 0) {
-        return errno_status("fstat before close", "file", errno);
+    const int stat_result = ::fstat(file->descriptor, &info);
+    const int stat_error = stat_result == 0 ? 0 : errno;
+    const int descriptor = std::exchange(file->descriptor, -1);
+    const int close_result = ::close(descriptor);
+    const int close_error = close_result == 0 ? 0 : errno;
+    if (stat_result != 0) {
+        return errno_status("fstat before close", "file", stat_error);
+    }
+    if (close_result != 0) {
+        return errno_status("close", "file", close_error);
     }
     if (info.st_size < 0) {
         return absl::DataLossError("local file has negative size");
-    }
-    const int descriptor = std::exchange(file->descriptor, -1);
-    if (::close(descriptor) != 0) {
-        return errno_status("close", "file", errno);
     }
     return FileIdentity{
         .file_id = static_cast<uint64_t>(info.st_ino),
@@ -247,6 +305,90 @@ absl::Status LocalFileSystem::remove(std::string_view path) {
     const std::string owned_path(path);
     if (::unlink(owned_path.c_str()) != 0) {
         return errno_status("remove", path, errno);
+    }
+    return absl::OkStatus();
+}
+
+absl::Status LocalFileSystem::remove(std::string_view path, const FileIdentity& expected) {
+    if (expected.file_id == 0 || expected.content_generation != 0 || !expected.checksum_valid) {
+        return absl::InvalidArgumentError("invalid identity for local identity-fenced remove");
+    }
+
+    const std::string owned_path(path);
+    const int descriptor = ::open(owned_path.c_str(), O_RDONLY | O_NOFOLLOW);
+    if (descriptor < 0) {
+        return errno == ENOENT ? absl::OkStatus()
+                               : errno_status("open for identity-fenced remove", path, errno);
+    }
+
+    struct stat info{};
+    const int stat_result = ::fstat(descriptor, &info);
+    const int stat_error = stat_result == 0 ? 0 : errno;
+    if (stat_result != 0) {
+        (void)::close(descriptor);
+        return errno_status("fstat for identity-fenced remove", path, stat_error);
+    }
+    if (!S_ISREG(info.st_mode) || info.st_size < 0 ||
+        static_cast<uint64_t>(info.st_ino) != expected.file_id ||
+        static_cast<uint64_t>(info.st_size) != expected.length) {
+        (void)::close(descriptor);
+        return absl::FailedPreconditionError("local remove identity mismatch");
+    }
+
+    std::array<std::byte, 64 * 1024> buffer{};
+    uint64_t offset = 0;
+    uint32_t checksum = 0;
+    while (offset < expected.length) {
+        const size_t length =
+            static_cast<size_t>(std::min<uint64_t>(buffer.size(), expected.length - offset));
+        const ssize_t count = ::pread(descriptor, buffer.data(), length, static_cast<off_t>(offset));
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            const int read_error = errno;
+            (void)::close(descriptor);
+            return errno_status("read for identity-fenced remove", path, read_error);
+        }
+        if (count == 0) {
+            (void)::close(descriptor);
+            return absl::FailedPreconditionError("local remove identity changed during validation");
+        }
+        checksum = crc32c::Extend(checksum,
+                                  reinterpret_cast<const uint8_t*>(buffer.data()),
+                                  static_cast<size_t>(count));
+        offset += static_cast<uint64_t>(count);
+    }
+    if (static_cast<uint64_t>(checksum) != expected.checksum) {
+        (void)::close(descriptor);
+        return absl::FailedPreconditionError("local remove checksum mismatch");
+    }
+
+    // Revalidate the directory entry immediately before unlink. LocalFileSystem
+    // serializes its own namespace mutations; callers must keep managed SST
+    // directories private from external writers because POSIX has no portable
+    // compare-and-unlink syscall.
+    std::lock_guard lock(mutex_);
+    struct stat current{};
+    if (::lstat(owned_path.c_str(), &current) != 0) {
+        const int error = errno;
+        (void)::close(descriptor);
+        return error == ENOENT ? absl::OkStatus()
+                               : errno_status("lstat for identity-fenced remove", path, error);
+    }
+    if (!S_ISREG(current.st_mode) || current.st_size < 0 ||
+        static_cast<uint64_t>(current.st_ino) != expected.file_id ||
+        static_cast<uint64_t>(current.st_size) != expected.length) {
+        (void)::close(descriptor);
+        return absl::FailedPreconditionError("local remove path was replaced");
+    }
+    if (::unlink(owned_path.c_str()) != 0) {
+        const int error = errno;
+        (void)::close(descriptor);
+        return error == ENOENT ? absl::OkStatus() : errno_status("identity-fenced remove", path, error);
+    }
+    if (::close(descriptor) != 0) {
+        return errno_status("close after identity-fenced remove", path, errno);
     }
     return absl::OkStatus();
 }

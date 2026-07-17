@@ -1049,8 +1049,32 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
 
     auto target = ns_mgr_->resolve_path(request->path());
     if (target.hasError()) {
-        fill_status(response->mutable_status(), target.error().code(), target.error().message());
+        if (request->has_expected_file_identity() &&
+            target.error().code() == static_cast<status_code_t>(ErrorCode::kNotFound)) {
+            // Compare-and-delete is retry-safe after a successful first attempt.
+            fill_status(response->mutable_status(), 0);
+        } else {
+            fill_status(
+                response->mutable_status(), target.error().code(), target.error().message());
+        }
         return;
+    }
+
+    if (request->has_expected_file_identity()) {
+        const auto& expected = request->expected_file_identity();
+        const auto& actual = target.value();
+        if (request->recursive() || actual.type != InodeType::kFile ||
+            actual.file_append_mode != FileAppendMode::kImmutableAfterComplete ||
+            expected.inode_id() == 0 || !expected.checksum_valid() ||
+            actual.inode_id != expected.inode_id() ||
+            actual.content_generation != expected.content_generation() ||
+            actual.length != expected.length() || actual.checksum != expected.checksum() ||
+            actual.checksum_valid != expected.checksum_valid()) {
+            fill_status(response->mutable_status(),
+                        static_cast<status_code_t>(ErrorCode::kIdentityMismatch),
+                        "delete expected file identity does not match current path");
+            return;
+        }
     }
 
     if (target.value().type == InodeType::kFile) {
@@ -1089,7 +1113,9 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
         }
     }
 
-    auto result = ns_mgr_->remove(request->path(), request->recursive());
+    auto result = request->has_expected_file_identity()
+                      ? ns_mgr_->remove_if_version(request->path(), target.value().version)
+                      : ns_mgr_->remove(request->path(), request->recursive());
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
