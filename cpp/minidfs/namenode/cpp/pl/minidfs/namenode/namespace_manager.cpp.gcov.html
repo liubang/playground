@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryMed">84.3&nbsp;%</td>
+            <td class="headerCovTableEntryMed">84.6&nbsp;%</td>
             <td class="headerCovTableEntry">318</td>
-            <td class="headerCovTableEntry">268</td>
+            <td class="headerCovTableEntry">269</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-16 08:17:52</td>
+            <td class="headerValue">2026-07-17 09:36:47</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">54.7&nbsp;%</td>
+            <td class="headerCovTableEntryLo">55.3&nbsp;%</td>
             <td class="headerCovTableEntry">380</td>
-            <td class="headerCovTableEntry">208</td>
+            <td class="headerCovTableEntry">210</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -98,12 +98,12 @@
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : namespace {</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : </span>
-<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC tlaBgGNC">          97 : pl::Result&lt;pl::Void&gt; validate_path(std::string_view path) {</span></span>
-<span id="L31"><span class="lineNum">      31</span>   [<span class="tlaGBC" title="Branch 0 was taken 97 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 96 times"> + </span>]:<span class="tlaGNC">          97 :     if (path.empty() || path[0] != '/') {</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC tlaBgGNC">         104 : pl::Result&lt;pl::Void&gt; validate_path(std::string_view path) {</span></span>
+<span id="L31"><span class="lineNum">      31</span>   [<span class="tlaGBC" title="Branch 0 was taken 104 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 103 times"> + </span>]:<span class="tlaGNC">         104 :     if (path.empty() || path[0] != '/') {</span></span>
 <span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">           2 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidPath),</span></span>
 <span id="L33"><span class="lineNum">      33</span>                 :             :                              &quot;path must be absolute (start with '/')&quot;);</span>
 <span id="L34"><span class="lineNum">      34</span>                 :             :     }</span>
-<span id="L35"><span class="lineNum">      35</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 96 times"> + </span>]:<span class="tlaGNC">          96 :     if (path.size() &gt; kMaxPathLength) {</span></span>
+<span id="L35"><span class="lineNum">      35</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 103 times"> + </span>]:<span class="tlaGNC">         103 :     if (path.size() &gt; kMaxPathLength) {</span></span>
 <span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(</span></span>
 <span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaUNC">           0 :             static_cast&lt;pl::status_code_t&gt;(ErrorCode::kPathTooLong),</span></span>
 <span id="L38"><span class="lineNum">      38</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             fmt::format(&quot;path length {} exceeds max {}&quot;, path.size(), kMaxPathLength));</span></span>
@@ -113,44 +113,44 @@
 <span id="L42"><span class="lineNum">      42</span>                 :             : </span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : } // namespace</span>
 <span id="L44"><span class="lineNum">      44</span>                 :             : </span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC tlaBgGNC">          50 : NamespaceManager::NamespaceManager(MetadataStore* store) : store_(store) {}</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC tlaBgGNC">          52 : NamespaceManager::NamespaceManager(MetadataStore* store) : store_(store) {}</span></span>
 <span id="L46"><span class="lineNum">      46</span>                 :             : </span>
 <span id="L47"><span class="lineNum">      47</span>                 :             : // Path utilities</span>
-<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">          94 : std::vector&lt;std::string_view&gt; NamespaceManager::split_path(std::string_view path) {</span></span>
-<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          94 :     std::vector&lt;std::string_view&gt; components;</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">         101 : std::vector&lt;std::string_view&gt; NamespaceManager::split_path(std::string_view path) {</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">         101 :     std::vector&lt;std::string_view&gt; components;</span></span>
 <span id="L50"><span class="lineNum">      50</span>                 :             :     size_t start = 1; // skip leading '/'</span>
-<span id="L51"><span class="lineNum">      51</span>         [<span class="tlaGBC" title="Branch 0 was taken 115 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 94 times"> + </span>]:<span class="tlaGNC">         209 :     while (start &lt; path.size()) {</span></span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         115 :         auto end = path.find('/', start);</span></span>
-<span id="L53"><span class="lineNum">      53</span>         [<span class="tlaGBC" title="Branch 0 was taken 89 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC">         115 :         if (end == std::string_view::npos) {</span></span>
+<span id="L51"><span class="lineNum">      51</span>         [<span class="tlaGBC" title="Branch 0 was taken 124 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 101 times"> + </span>]:<span class="tlaGNC">         225 :     while (start &lt; path.size()) {</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         124 :         auto end = path.find('/', start);</span></span>
+<span id="L53"><span class="lineNum">      53</span>         [<span class="tlaGBC" title="Branch 0 was taken 96 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">         124 :         if (end == std::string_view::npos) {</span></span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :             end = path.size();</span>
 <span id="L55"><span class="lineNum">      55</span>                 :             :         }</span>
-<span id="L56"><span class="lineNum">      56</span>         [<span class="tlaGBC" title="Branch 0 was taken 115 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         115 :         if (end &gt; start) {</span></span>
-<span id="L57"><span class="lineNum">      57</span>         [<span class="tlaGBC" title="Branch 0 was taken 115 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         230 :             components.push_back(path.substr(start, end - start));</span></span>
+<span id="L56"><span class="lineNum">      56</span>         [<span class="tlaGBC" title="Branch 0 was taken 124 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         124 :         if (end &gt; start) {</span></span>
+<span id="L57"><span class="lineNum">      57</span>         [<span class="tlaGBC" title="Branch 0 was taken 124 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         248 :             components.push_back(path.substr(start, end - start));</span></span>
 <span id="L58"><span class="lineNum">      58</span>                 :             :         }</span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         115 :         start = end + 1;</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         124 :         start = end + 1;</span></span>
 <span id="L60"><span class="lineNum">      60</span>                 :             :     }</span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          94 :     return components;</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">         101 :     return components;</span></span>
 <span id="L62"><span class="lineNum">      62</span>                 :             : }</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             : </span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">          83 : pl::Result&lt;Inode&gt; NamespaceManager::walk_path(const std::vector&lt;std::string_view&gt;&amp; components) {</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">          90 : pl::Result&lt;Inode&gt; NamespaceManager::walk_path(const std::vector&lt;std::string_view&gt;&amp; components) {</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :             :     // Start from root (inode_id = 1)</span>
-<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">          83 :     auto current = store_-&gt;get_inode(kRootInodeId);</span></span>
-<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 83 times"> + </span>]:<span class="tlaGNC">          83 :     if (current.hasError()) {</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">          90 :     auto current = store_-&gt;get_inode(kRootInodeId);</span></span>
+<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 90 times"> + </span>]:<span class="tlaGNC">          90 :     if (current.hasError()) {</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return current;</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :     }</span>
 <span id="L70"><span class="lineNum">      70</span>                 :             : </span>
-<span id="L71"><span class="lineNum">      71</span>         [<span class="tlaGBC" title="Branch 0 was taken 49 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         123 :     for (const auto&amp; name : components) {</span></span>
-<span id="L72"><span class="lineNum">      72</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 49 times"> + </span>]:<span class="tlaGNC">          49 :         if (current.value().type != InodeType::kDirectory) {</span></span>
+<span id="L71"><span class="lineNum">      71</span>         [<span class="tlaGBC" title="Branch 0 was taken 53 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 80 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         133 :     for (const auto&amp; name : components) {</span></span>
+<span id="L72"><span class="lineNum">      72</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 53 times"> + </span>]:<span class="tlaGNC">          53 :         if (current.value().type != InodeType::kDirectory) {</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kNotDirectory),</span></span>
 <span id="L74"><span class="lineNum">      74</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                                  fmt::format(&quot;'{}' is not a directory&quot;, current.value().name));</span></span>
 <span id="L75"><span class="lineNum">      75</span>                 :             :         }</span>
-<span id="L76"><span class="lineNum">      76</span>   [<span class="tlaGBC" title="Branch 0 was taken 49 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 49 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          49 :         auto child = store_-&gt;get_child(current.value().inode_id, name);</span></span>
-<span id="L77"><span class="lineNum">      77</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 49 times"> + </span>]:<span class="tlaGNC">          49 :         if (child.hasError()) {</span></span>
+<span id="L76"><span class="lineNum">      76</span>   [<span class="tlaGBC" title="Branch 0 was taken 53 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 53 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          53 :         auto child = store_-&gt;get_child(current.value().inode_id, name);</span></span>
+<span id="L77"><span class="lineNum">      77</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 53 times"> + </span>]:<span class="tlaGNC">          53 :         if (child.hasError()) {</span></span>
 <span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return folly::makeUnexpected(child.error());</span></span>
 <span id="L79"><span class="lineNum">      79</span>                 :             :         }</span>
-<span id="L80"><span class="lineNum">      80</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 40 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          49 :         if (!child.value().has_value()) {</span></span>
-<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">           9 :             return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kNotFound),</span></span>
-<span id="L82"><span class="lineNum">      82</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          18 :                                  fmt::format(&quot;path component '{}' not found&quot;, name));</span></span>
+<span id="L80"><span class="lineNum">      80</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 43 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          53 :         if (!child.value().has_value()) {</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">          10 :             return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kNotFound),</span></span>
+<span id="L82"><span class="lineNum">      82</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :                                  fmt::format(&quot;path component '{}' not found&quot;, name));</span></span>
 <span id="L83"><span class="lineNum">      83</span>                 :             :         }</span>
 <span id="L84"><span class="lineNum">      84</span>                 :             :         current = std::move(child.value().value());</span>
 <span id="L85"><span class="lineNum">      85</span>                 :             :     }</span>
@@ -210,24 +210,24 @@
 <span id="L139"><span class="lineNum">     139</span>                 :             : }</span>
 <span id="L140"><span class="lineNum">     140</span>                 :             : </span>
 <span id="L141"><span class="lineNum">     141</span>                 :             : // Directory operations</span>
-<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          23 : pl::Result&lt;Inode&gt; NamespaceManager::mkdir(std::string_view path,</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          25 : pl::Result&lt;Inode&gt; NamespaceManager::mkdir(std::string_view path,</span></span>
 <span id="L143"><span class="lineNum">     143</span>                 :             :                                           std::string_view owner,</span>
 <span id="L144"><span class="lineNum">     144</span>                 :             :                                           std::string_view group,</span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :                                           uint32_t permission,</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             :                                           bool create_parent) {</span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          23 :     auto valid = validate_path(path);</span></span>
-<span id="L148"><span class="lineNum">     148</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC">          23 :     if (valid.hasError()) {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          25 :     auto valid = validate_path(path);</span></span>
+<span id="L148"><span class="lineNum">     148</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span>]:<span class="tlaGNC">          25 :     if (valid.hasError()) {</span></span>
 <span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">           1 :         return folly::makeUnexpected(valid.error());</span></span>
 <span id="L150"><span class="lineNum">     150</span>                 :             :     }</span>
 <span id="L151"><span class="lineNum">     151</span>                 :             : </span>
-<span id="L152"><span class="lineNum">     152</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          22 :     auto components = split_path(path);</span></span>
-<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC">          22 :     if (components.empty()) {</span></span>
+<span id="L152"><span class="lineNum">     152</span>         [<span class="tlaGBC" title="Branch 0 was taken 24 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          24 :     auto components = split_path(path);</span></span>
+<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 23 times"> + </span>]:<span class="tlaGNC">          24 :     if (components.empty()) {</span></span>
 <span id="L154"><span class="lineNum">     154</span>                 :             :         // Path is &quot;/&quot;, root already exists.</span>
 <span id="L155"><span class="lineNum">     155</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         return store_-&gt;get_inode(kRootInodeId);</span></span>
 <span id="L156"><span class="lineNum">     156</span>                 :             :     }</span>
 <span id="L157"><span class="lineNum">     157</span>                 :             : </span>
-<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">          21 :     Inode parent;</span></span>
-<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          21 :     if (create_parent) {</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">          23 :     Inode parent;</span></span>
+<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          23 :     if (create_parent) {</span></span>
 <span id="L160"><span class="lineNum">     160</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :         auto parent_result = ensure_parent(components, owner, group, permission);</span></span>
 <span id="L161"><span class="lineNum">     161</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :         if (parent_result.hasError()) {</span></span>
 <span id="L162"><span class="lineNum">     162</span>                 :             :             return parent_result;</span>
@@ -236,21 +236,21 @@
 <span id="L165"><span class="lineNum">     165</span>                 :             :     } else {</span>
 <span id="L166"><span class="lineNum">     166</span>                 :             :         // Walk to parent (all but last component).</span>
 <span id="L167"><span class="lineNum">     167</span>                 :             :         auto parent_components =</span>
-<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :             std::vector&lt;std::string_view&gt;(components.begin(), components.end() - 1);</span></span>
-<span id="L169"><span class="lineNum">     169</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :         auto parent_result = walk_path(parent_components);</span></span>
-<span id="L170"><span class="lineNum">     170</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          13 :         if (parent_result.hasError()) {</span></span>
+<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          15 :             std::vector&lt;std::string_view&gt;(components.begin(), components.end() - 1);</span></span>
+<span id="L169"><span class="lineNum">     169</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          15 :         auto parent_result = walk_path(parent_components);</span></span>
+<span id="L170"><span class="lineNum">     170</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          15 :         if (parent_result.hasError()) {</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :             :             return parent_result;</span>
 <span id="L172"><span class="lineNum">     172</span>                 :             :         }</span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">          12 :         parent = std::move(parent_result.value());</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">          14 :         parent = std::move(parent_result.value());</span></span>
 <span id="L174"><span class="lineNum">     174</span>                 :             :     }</span>
 <span id="L175"><span class="lineNum">     175</span>                 :             : </span>
 <span id="L176"><span class="lineNum">     176</span>                 :             :     // Check if target already exists.</span>
 <span id="L177"><span class="lineNum">     177</span>                 :             :     auto&amp; dir_name = components.back();</span>
-<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :     auto existing = store_-&gt;get_child(parent.inode_id, dir_name);</span></span>
-<span id="L179"><span class="lineNum">     179</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 20 times"> + </span>]:<span class="tlaGNC">          20 :     if (existing.hasError()) {</span></span>
+<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          22 :     auto existing = store_-&gt;get_child(parent.inode_id, dir_name);</span></span>
+<span id="L179"><span class="lineNum">     179</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span>]:<span class="tlaGNC">          22 :     if (existing.hasError()) {</span></span>
 <span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(existing.error());</span></span>
 <span id="L181"><span class="lineNum">     181</span>                 :             :     }</span>
-<span id="L182"><span class="lineNum">     182</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          20 :     if (existing.value().has_value()) {</span></span>
+<span id="L182"><span class="lineNum">     182</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          22 :     if (existing.value().has_value()) {</span></span>
 <span id="L183"><span class="lineNum">     183</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         if (existing.value()-&gt;type == InodeType::kDirectory) {</span></span>
 <span id="L184"><span class="lineNum">     184</span>                 :             :             // Already exists as directory, idempotent.</span>
 <span id="L185"><span class="lineNum">     185</span>                 :             :             return existing.value().value();</span>
@@ -260,102 +260,102 @@
 <span id="L189"><span class="lineNum">     189</span>                 :             :     }</span>
 <span id="L190"><span class="lineNum">     190</span>                 :             : </span>
 <span id="L191"><span class="lineNum">     191</span>                 :             :     // Allocate ID and create.</span>
-<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 19 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          19 :     auto id_result = store_-&gt;alloc_id(&quot;inode&quot;);</span></span>
-<span id="L193"><span class="lineNum">     193</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">          19 :     if (id_result.hasError()) {</span></span>
+<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 21 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          21 :     auto id_result = store_-&gt;alloc_id(&quot;inode&quot;);</span></span>
+<span id="L193"><span class="lineNum">     193</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC">          21 :     if (id_result.hasError()) {</span></span>
 <span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(id_result.error());</span></span>
 <span id="L195"><span class="lineNum">     195</span>                 :             :     }</span>
 <span id="L196"><span class="lineNum">     196</span>                 :             : </span>
 <span id="L197"><span class="lineNum">     197</span>                 :             :     uint64_t ts = now_ms();</span>
-<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC tlaBgGNC">          19 :     Inode dir;</span></span>
-<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">          19 :     dir.inode_id = id_result.value();</span></span>
-<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">          19 :     dir.type = InodeType::kDirectory;</span></span>
-<span id="L201"><span class="lineNum">     201</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          19 :     dir.parent_id = parent.inode_id;</span></span>
-<span id="L202"><span class="lineNum">     202</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          38 :     dir.name = std::string(dir_name);</span></span>
-<span id="L203"><span class="lineNum">     203</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          38 :     dir.owner = std::string(owner);</span></span>
-<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          19 :     dir.group = std::string(group);</span></span>
-<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          19 :     dir.permission = permission;</span></span>
-<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">          19 :     dir.ctime_ms = ts;</span></span>
-<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">          19 :     dir.mtime_ms = ts;</span></span>
-<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          19 :     dir.version = 1;</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC tlaBgGNC">          21 :     Inode dir;</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">          21 :     dir.inode_id = id_result.value();</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">          21 :     dir.type = InodeType::kDirectory;</span></span>
+<span id="L201"><span class="lineNum">     201</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          21 :     dir.parent_id = parent.inode_id;</span></span>
+<span id="L202"><span class="lineNum">     202</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          42 :     dir.name = std::string(dir_name);</span></span>
+<span id="L203"><span class="lineNum">     203</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          42 :     dir.owner = std::string(owner);</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          21 :     dir.group = std::string(group);</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          21 :     dir.permission = permission;</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">          21 :     dir.ctime_ms = ts;</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">          21 :     dir.mtime_ms = ts;</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          21 :     dir.version = 1;</span></span>
 <span id="L209"><span class="lineNum">     209</span>                 :             : </span>
-<span id="L210"><span class="lineNum">     210</span>         [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          19 :     auto create_res = store_-&gt;create_inode(dir);</span></span>
-<span id="L211"><span class="lineNum">     211</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">          19 :     if (create_res.hasError()) {</span></span>
+<span id="L210"><span class="lineNum">     210</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          21 :     auto create_res = store_-&gt;create_inode(dir);</span></span>
+<span id="L211"><span class="lineNum">     211</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC">          21 :     if (create_res.hasError()) {</span></span>
 <span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(create_res.error());</span></span>
 <span id="L213"><span class="lineNum">     213</span>                 :             :     }</span>
 <span id="L214"><span class="lineNum">     214</span>                 :             :     return dir;</span>
-<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC tlaBgGNC">          40 : }</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC tlaBgGNC">          44 : }</span></span>
 <span id="L216"><span class="lineNum">     216</span>                 :             : </span>
 <span id="L217"><span class="lineNum">     217</span>                 :             : // File operations</span>
-<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">          28 : pl::Result&lt;Inode&gt; NamespaceManager::create_file(std::string_view path,</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">          29 : pl::Result&lt;Inode&gt; NamespaceManager::create_file(std::string_view path,</span></span>
 <span id="L219"><span class="lineNum">     219</span>                 :             :                                                 std::string_view owner,</span>
 <span id="L220"><span class="lineNum">     220</span>                 :             :                                                 std::string_view group,</span>
 <span id="L221"><span class="lineNum">     221</span>                 :             :                                                 uint32_t permission,</span>
 <span id="L222"><span class="lineNum">     222</span>                 :             :                                                 uint32_t replication,</span>
 <span id="L223"><span class="lineNum">     223</span>                 :             :                                                 uint64_t block_size) {</span>
-<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">          28 :     auto valid = validate_path(path);</span></span>
-<span id="L225"><span class="lineNum">     225</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          28 :     if (valid.hasError()) {</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">          29 :     auto valid = validate_path(path);</span></span>
+<span id="L225"><span class="lineNum">     225</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 29 times"> + </span>]:<span class="tlaGNC">          29 :     if (valid.hasError()) {</span></span>
 <span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(valid.error());</span></span>
 <span id="L227"><span class="lineNum">     227</span>                 :             :     }</span>
 <span id="L228"><span class="lineNum">     228</span>                 :             : </span>
-<span id="L229"><span class="lineNum">     229</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          28 :     auto components = split_path(path);</span></span>
-<span id="L230"><span class="lineNum">     230</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          28 :     if (components.empty()) {</span></span>
+<span id="L229"><span class="lineNum">     229</span>         [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          29 :     auto components = split_path(path);</span></span>
+<span id="L230"><span class="lineNum">     230</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 29 times"> + </span>]:<span class="tlaGNC">          29 :     if (components.empty()) {</span></span>
 <span id="L231"><span class="lineNum">     231</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidPath),</span></span>
 <span id="L232"><span class="lineNum">     232</span>                 :             :                              &quot;cannot create file at root path&quot;);</span>
 <span id="L233"><span class="lineNum">     233</span>                 :             :     }</span>
 <span id="L234"><span class="lineNum">     234</span>                 :             : </span>
 <span id="L235"><span class="lineNum">     235</span>                 :             :     // Resolve parent directory.</span>
 <span id="L236"><span class="lineNum">     236</span>                 :             :     auto parent_components =</span>
-<span id="L237"><span class="lineNum">     237</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          28 :         std::vector&lt;std::string_view&gt;(components.begin(), components.end() - 1);</span></span>
-<span id="L238"><span class="lineNum">     238</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          28 :     auto parent_result = walk_path(parent_components);</span></span>
-<span id="L239"><span class="lineNum">     239</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          28 :     if (parent_result.hasError()) {</span></span>
+<span id="L237"><span class="lineNum">     237</span>         [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          29 :         std::vector&lt;std::string_view&gt;(components.begin(), components.end() - 1);</span></span>
+<span id="L238"><span class="lineNum">     238</span>         [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          29 :     auto parent_result = walk_path(parent_components);</span></span>
+<span id="L239"><span class="lineNum">     239</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          29 :     if (parent_result.hasError()) {</span></span>
 <span id="L240"><span class="lineNum">     240</span>                 :             :         return parent_result;</span>
 <span id="L241"><span class="lineNum">     241</span>                 :             :     }</span>
 <span id="L242"><span class="lineNum">     242</span>                 :             :     auto&amp; parent = parent_result.value();</span>
 <span id="L243"><span class="lineNum">     243</span>                 :             : </span>
-<span id="L244"><span class="lineNum">     244</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 :     if (parent.type != InodeType::kDirectory) {</span></span>
+<span id="L244"><span class="lineNum">     244</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          28 :     if (parent.type != InodeType::kDirectory) {</span></span>
 <span id="L245"><span class="lineNum">     245</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kNotDirectory),</span></span>
 <span id="L246"><span class="lineNum">     246</span>                 :             :                              &quot;parent is not a directory&quot;);</span>
 <span id="L247"><span class="lineNum">     247</span>                 :             :     }</span>
 <span id="L248"><span class="lineNum">     248</span>                 :             : </span>
 <span id="L249"><span class="lineNum">     249</span>                 :             :     // Check if file already exists.</span>
 <span id="L250"><span class="lineNum">     250</span>                 :             :     auto&amp; file_name = components.back();</span>
-<span id="L251"><span class="lineNum">     251</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          27 :     auto existing = store_-&gt;get_child(parent.inode_id, file_name);</span></span>
-<span id="L252"><span class="lineNum">     252</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 :     if (existing.hasError()) {</span></span>
+<span id="L251"><span class="lineNum">     251</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          28 :     auto existing = store_-&gt;get_child(parent.inode_id, file_name);</span></span>
+<span id="L252"><span class="lineNum">     252</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          28 :     if (existing.hasError()) {</span></span>
 <span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(existing.error());</span></span>
 <span id="L254"><span class="lineNum">     254</span>                 :             :     }</span>
-<span id="L255"><span class="lineNum">     255</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          27 :     if (existing.value().has_value()) {</span></span>
+<span id="L255"><span class="lineNum">     255</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          28 :     if (existing.value().has_value()) {</span></span>
 <span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">           1 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kAlreadyExists),</span></span>
 <span id="L257"><span class="lineNum">     257</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                              fmt::format(&quot;'{}' already exists&quot;, file_name));</span></span>
 <span id="L258"><span class="lineNum">     258</span>                 :             :     }</span>
 <span id="L259"><span class="lineNum">     259</span>                 :             : </span>
 <span id="L260"><span class="lineNum">     260</span>                 :             :     // Allocate ID and create file inode.</span>
-<span id="L261"><span class="lineNum">     261</span>   [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 26 times"> + </span>]:<span class="tlaGNC">          26 :     auto id_result = store_-&gt;alloc_id(&quot;inode&quot;);</span></span>
-<span id="L262"><span class="lineNum">     262</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC">          26 :     if (id_result.hasError()) {</span></span>
+<span id="L261"><span class="lineNum">     261</span>   [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 :     auto id_result = store_-&gt;alloc_id(&quot;inode&quot;);</span></span>
+<span id="L262"><span class="lineNum">     262</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 :     if (id_result.hasError()) {</span></span>
 <span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(id_result.error());</span></span>
 <span id="L264"><span class="lineNum">     264</span>                 :             :     }</span>
 <span id="L265"><span class="lineNum">     265</span>                 :             : </span>
 <span id="L266"><span class="lineNum">     266</span>                 :             :     uint64_t ts = now_ms();</span>
-<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC tlaBgGNC">          26 :     Inode file;</span></span>
-<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          26 :     file.inode_id = id_result.value();</span></span>
-<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">          26 :     file.type = InodeType::kFile;</span></span>
-<span id="L270"><span class="lineNum">     270</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :     file.parent_id = parent.inode_id;</span></span>
-<span id="L271"><span class="lineNum">     271</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          52 :     file.name = std::string(file_name);</span></span>
-<span id="L272"><span class="lineNum">     272</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          52 :     file.owner = std::string(owner);</span></span>
-<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          26 :     file.group = std::string(group);</span></span>
-<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">          26 :     file.permission = permission;</span></span>
-<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">          26 :     file.replication = replication;</span></span>
-<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">          26 :     file.block_size = block_size;</span></span>
-<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">          26 :     file.state = FileState::kUnderConstruction;</span></span>
-<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">          26 :     file.ctime_ms = ts;</span></span>
-<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          26 :     file.mtime_ms = ts;</span></span>
-<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">          26 :     file.version = 1;</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC tlaBgGNC">          27 :     Inode file;</span></span>
+<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          27 :     file.inode_id = id_result.value();</span></span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">          27 :     file.type = InodeType::kFile;</span></span>
+<span id="L270"><span class="lineNum">     270</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          27 :     file.parent_id = parent.inode_id;</span></span>
+<span id="L271"><span class="lineNum">     271</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          54 :     file.name = std::string(file_name);</span></span>
+<span id="L272"><span class="lineNum">     272</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          54 :     file.owner = std::string(owner);</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          27 :     file.group = std::string(group);</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">          27 :     file.permission = permission;</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">          27 :     file.replication = replication;</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">          27 :     file.block_size = block_size;</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">          27 :     file.state = FileState::kUnderConstruction;</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">          27 :     file.ctime_ms = ts;</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          27 :     file.mtime_ms = ts;</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">          27 :     file.version = 1;</span></span>
 <span id="L281"><span class="lineNum">     281</span>                 :             : </span>
-<span id="L282"><span class="lineNum">     282</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :     auto create_res = store_-&gt;create_inode(file);</span></span>
-<span id="L283"><span class="lineNum">     283</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC">          26 :     if (create_res.hasError()) {</span></span>
+<span id="L282"><span class="lineNum">     282</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          27 :     auto create_res = store_-&gt;create_inode(file);</span></span>
+<span id="L283"><span class="lineNum">     283</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 :     if (create_res.hasError()) {</span></span>
 <span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(create_res.error());</span></span>
 <span id="L285"><span class="lineNum">     285</span>                 :             :     }</span>
 <span id="L286"><span class="lineNum">     286</span>                 :             :     return file;</span>
-<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC tlaBgGNC">          26 : }</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC tlaBgGNC">          27 : }</span></span>
 <span id="L288"><span class="lineNum">     288</span>                 :             : </span>
 <span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">           2 : pl::Result&lt;Inode&gt; NamespaceManager::begin_append(std::string_view path) {</span></span>
 <span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">           2 :     auto inode = resolve_path(path);</span></span>
@@ -445,82 +445,82 @@
 <span id="L374"><span class="lineNum">     374</span>                 :             :     return inode;</span>
 <span id="L375"><span class="lineNum">     375</span>                 :             : }</span>
 <span id="L376"><span class="lineNum">     376</span>                 :             : </span>
-<span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaGNC tlaBgGNC">           6 : pl::Result&lt;pl::Void&gt; NamespaceManager::rename(std::string_view src, std::string_view dst) {</span></span>
-<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC">           6 :     auto src_valid = validate_path(src);</span></span>
-<span id="L379"><span class="lineNum">     379</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :     if (src_valid.hasError()) {</span></span>
+<span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaGNC tlaBgGNC">           8 : pl::Result&lt;pl::Void&gt; NamespaceManager::rename(std::string_view src, std::string_view dst) {</span></span>
+<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC">           8 :     auto src_valid = validate_path(src);</span></span>
+<span id="L379"><span class="lineNum">     379</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :     if (src_valid.hasError()) {</span></span>
 <span id="L380"><span class="lineNum">     380</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return src_valid;</span></span>
 <span id="L381"><span class="lineNum">     381</span>                 :             :     }</span>
-<span id="L382"><span class="lineNum">     382</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           6 :     auto dst_valid = validate_path(dst);</span></span>
-<span id="L383"><span class="lineNum">     383</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :     if (dst_valid.hasError()) {</span></span>
+<span id="L382"><span class="lineNum">     382</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           8 :     auto dst_valid = validate_path(dst);</span></span>
+<span id="L383"><span class="lineNum">     383</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :     if (dst_valid.hasError()) {</span></span>
 <span id="L384"><span class="lineNum">     384</span>                 :             :         return dst_valid;</span>
 <span id="L385"><span class="lineNum">     385</span>                 :             :     }</span>
-<span id="L386"><span class="lineNum">     386</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           6 :     if (src == dst) {</span></span>
+<span id="L386"><span class="lineNum">     386</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           8 :     if (src == dst) {</span></span>
 <span id="L387"><span class="lineNum">     387</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidArgument),</span></span>
 <span id="L388"><span class="lineNum">     388</span>                 :             :                              &quot;source and destination are identical&quot;);</span>
 <span id="L389"><span class="lineNum">     389</span>                 :             :     }</span>
 <span id="L390"><span class="lineNum">     390</span>                 :             : </span>
-<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :     auto src_components = split_path(src);</span></span>
-<span id="L392"><span class="lineNum">     392</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :     auto dst_components = split_path(dst);</span></span>
+<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     auto src_components = split_path(src);</span></span>
+<span id="L392"><span class="lineNum">     392</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     auto dst_components = split_path(dst);</span></span>
 <span id="L393"><span class="lineNum">     393</span>                 :             : </span>
-<span id="L394"><span class="lineNum">     394</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :     if (src_components.empty()) {</span></span>
+<span id="L394"><span class="lineNum">     394</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (src_components.empty()) {</span></span>
 <span id="L395"><span class="lineNum">     395</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidPath),</span></span>
 <span id="L396"><span class="lineNum">     396</span>                 :             :                              &quot;cannot rename root&quot;);</span>
 <span id="L397"><span class="lineNum">     397</span>                 :             :     }</span>
-<span id="L398"><span class="lineNum">     398</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           5 :     if (dst_components.empty()) {</span></span>
+<span id="L398"><span class="lineNum">     398</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           7 :     if (dst_components.empty()) {</span></span>
 <span id="L399"><span class="lineNum">     399</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidPath),</span></span>
 <span id="L400"><span class="lineNum">     400</span>                 :             :                              &quot;cannot rename to root&quot;);</span>
 <span id="L401"><span class="lineNum">     401</span>                 :             :     }</span>
 <span id="L402"><span class="lineNum">     402</span>                 :             : </span>
 <span id="L403"><span class="lineNum">     403</span>                 :             :     // Resolve source.</span>
-<span id="L404"><span class="lineNum">     404</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           5 :     auto src_inode = walk_path(src_components);</span></span>
-<span id="L405"><span class="lineNum">     405</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           5 :     if (src_inode.hasError()) {</span></span>
+<span id="L404"><span class="lineNum">     404</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           7 :     auto src_inode = walk_path(src_components);</span></span>
+<span id="L405"><span class="lineNum">     405</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           7 :     if (src_inode.hasError()) {</span></span>
 <span id="L406"><span class="lineNum">     406</span>                 :<span class="tlaGNC">           1 :         return folly::makeUnexpected(src_inode.error());</span></span>
 <span id="L407"><span class="lineNum">     407</span>                 :             :     }</span>
 <span id="L408"><span class="lineNum">     408</span>                 :             : </span>
 <span id="L409"><span class="lineNum">     409</span>                 :             :     // Resolve destination parent.</span>
 <span id="L410"><span class="lineNum">     410</span>                 :             :     auto dst_parent_components =</span>
-<span id="L411"><span class="lineNum">     411</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         std::vector&lt;std::string_view&gt;(dst_components.begin(), dst_components.end() - 1);</span></span>
-<span id="L412"><span class="lineNum">     412</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     auto dst_parent = walk_path(dst_parent_components);</span></span>
-<span id="L413"><span class="lineNum">     413</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (dst_parent.hasError()) {</span></span>
-<span id="L414"><span class="lineNum">     414</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(dst_parent.error());</span></span>
+<span id="L411"><span class="lineNum">     411</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :         std::vector&lt;std::string_view&gt;(dst_components.begin(), dst_components.end() - 1);</span></span>
+<span id="L412"><span class="lineNum">     412</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     auto dst_parent = walk_path(dst_parent_components);</span></span>
+<span id="L413"><span class="lineNum">     413</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           6 :     if (dst_parent.hasError()) {</span></span>
+<span id="L414"><span class="lineNum">     414</span>                 :<span class="tlaGNC">           1 :         return folly::makeUnexpected(dst_parent.error());</span></span>
 <span id="L415"><span class="lineNum">     415</span>                 :             :     }</span>
 <span id="L416"><span class="lineNum">     416</span>                 :             : </span>
-<span id="L417"><span class="lineNum">     417</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           4 :     if (src_inode.value().type == InodeType::kDirectory) {</span></span>
+<span id="L417"><span class="lineNum">     417</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           5 :     if (src_inode.value().type == InodeType::kDirectory) {</span></span>
 <span id="L418"><span class="lineNum">     418</span>                 :             :         // Prevent moving a directory into itself or one of its descendants.</span>
-<span id="L419"><span class="lineNum">     419</span>                 :<span class="tlaGNC">           1 :         uint64_t ancestor_id = dst_parent.value().inode_id;</span></span>
-<span id="L420"><span class="lineNum">     420</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         while (ancestor_id != 0) {</span></span>
-<span id="L421"><span class="lineNum">     421</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           2 :             if (ancestor_id == src_inode.value().inode_id) {</span></span>
+<span id="L419"><span class="lineNum">     419</span>                 :<span class="tlaGNC">           2 :         uint64_t ancestor_id = dst_parent.value().inode_id;</span></span>
+<span id="L420"><span class="lineNum">     420</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           5 :         while (ancestor_id != 0) {</span></span>
+<span id="L421"><span class="lineNum">     421</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           4 :             if (ancestor_id == src_inode.value().inode_id) {</span></span>
 <span id="L422"><span class="lineNum">     422</span>                 :<span class="tlaGNC">           2 :                 return pl::makeError(</span></span>
 <span id="L423"><span class="lineNum">     423</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                     static_cast&lt;pl::status_code_t&gt;(ErrorCode::kInvalidArgument),</span></span>
 <span id="L424"><span class="lineNum">     424</span>                 :             :                     &quot;cannot move a directory into itself or its descendant&quot;);</span>
 <span id="L425"><span class="lineNum">     425</span>                 :             :             }</span>
-<span id="L426"><span class="lineNum">     426</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :             auto ancestor = store_-&gt;get_inode(ancestor_id);</span></span>
-<span id="L427"><span class="lineNum">     427</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :             if (ancestor.hasError()) {</span></span>
+<span id="L426"><span class="lineNum">     426</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :             auto ancestor = store_-&gt;get_inode(ancestor_id);</span></span>
+<span id="L427"><span class="lineNum">     427</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :             if (ancestor.hasError()) {</span></span>
 <span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return folly::makeUnexpected(ancestor.error());</span></span>
 <span id="L429"><span class="lineNum">     429</span>                 :             :             }</span>
-<span id="L430"><span class="lineNum">     430</span>                 :<span class="tlaGNC tlaBgGNC">           1 :             ancestor_id = ancestor.value().parent_id;</span></span>
+<span id="L430"><span class="lineNum">     430</span>                 :<span class="tlaGNC tlaBgGNC">           3 :             ancestor_id = ancestor.value().parent_id;</span></span>
 <span id="L431"><span class="lineNum">     431</span>                 :             :         }</span>
 <span id="L432"><span class="lineNum">     432</span>                 :             :     }</span>
 <span id="L433"><span class="lineNum">     433</span>                 :             : </span>
 <span id="L434"><span class="lineNum">     434</span>                 :             :     // Check destination doesn't already exist.</span>
 <span id="L435"><span class="lineNum">     435</span>                 :             :     auto&amp; dst_name = dst_components.back();</span>
-<span id="L436"><span class="lineNum">     436</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           3 :     auto existing = store_-&gt;get_child(dst_parent.value().inode_id, dst_name);</span></span>
-<span id="L437"><span class="lineNum">     437</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (existing.hasError()) {</span></span>
+<span id="L436"><span class="lineNum">     436</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           4 :     auto existing = store_-&gt;get_child(dst_parent.value().inode_id, dst_name);</span></span>
+<span id="L437"><span class="lineNum">     437</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (existing.hasError()) {</span></span>
 <span id="L438"><span class="lineNum">     438</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(existing.error());</span></span>
 <span id="L439"><span class="lineNum">     439</span>                 :             :     }</span>
-<span id="L440"><span class="lineNum">     440</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           3 :     if (existing.value().has_value()) {</span></span>
+<span id="L440"><span class="lineNum">     440</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           4 :     if (existing.value().has_value()) {</span></span>
 <span id="L441"><span class="lineNum">     441</span>                 :<span class="tlaGNC">           1 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kAlreadyExists),</span></span>
 <span id="L442"><span class="lineNum">     442</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                              fmt::format(&quot;destination '{}' already exists&quot;, dst_name));</span></span>
 <span id="L443"><span class="lineNum">     443</span>                 :             :     }</span>
 <span id="L444"><span class="lineNum">     444</span>                 :             : </span>
 <span id="L445"><span class="lineNum">     445</span>                 :             :     // Update inode: change parent_id and name.</span>
-<span id="L446"><span class="lineNum">     446</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     Inode updated = src_inode.value();</span></span>
-<span id="L447"><span class="lineNum">     447</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     updated.parent_id = dst_parent.value().inode_id;</span></span>
-<span id="L448"><span class="lineNum">     448</span>                 :<span class="tlaGNC">           4 :     updated.name = std::string(dst_name);</span></span>
-<span id="L449"><span class="lineNum">     449</span>                 :<span class="tlaGNC">           2 :     updated.mtime_ms = now_ms();</span></span>
+<span id="L446"><span class="lineNum">     446</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     Inode updated = src_inode.value();</span></span>
+<span id="L447"><span class="lineNum">     447</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     updated.parent_id = dst_parent.value().inode_id;</span></span>
+<span id="L448"><span class="lineNum">     448</span>                 :<span class="tlaGNC">           6 :     updated.name = std::string(dst_name);</span></span>
+<span id="L449"><span class="lineNum">     449</span>                 :<span class="tlaGNC">           3 :     updated.mtime_ms = now_ms();</span></span>
 <span id="L450"><span class="lineNum">     450</span>                 :             : </span>
-<span id="L451"><span class="lineNum">     451</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     return store_-&gt;update_inode(updated);</span></span>
-<span id="L452"><span class="lineNum">     452</span>                 :<span class="tlaGNC">           2 : }</span></span>
+<span id="L451"><span class="lineNum">     451</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     return store_-&gt;update_inode(updated);</span></span>
+<span id="L452"><span class="lineNum">     452</span>                 :<span class="tlaGNC">           3 : }</span></span>
 <span id="L453"><span class="lineNum">     453</span>                 :             : </span>
 <span id="L454"><span class="lineNum">     454</span>                 :             : // Query operations</span>
 <span id="L455"><span class="lineNum">     455</span>                 :<span class="tlaGNC">          15 : pl::Result&lt;FileStatus&gt; NamespaceManager::get_file_status(std::string_view path) {</span></span>
