@@ -103,10 +103,14 @@ Inode row_to_inode(const boost::mysql::row_view& row) {
     inode.length = to_u64(row[7]);
     inode.replication = to_u32(row[8]);
     inode.block_size = to_u64(row[9]);
-    inode.state = static_cast<FileState>(to_u32(row[10]));
-    inode.ctime_ms = to_u64(row[11]);
-    inode.mtime_ms = to_u64(row[12]);
-    inode.version = to_u64(row[13]);
+    inode.file_append_mode = static_cast<FileAppendMode>(to_u32(row[10]));
+    inode.content_generation = to_u64(row[11]);
+    inode.checksum = to_u32(row[12]);
+    inode.checksum_valid = to_u32(row[13]) != 0;
+    inode.state = static_cast<FileState>(to_u32(row[14]));
+    inode.ctime_ms = to_u64(row[15]);
+    inode.mtime_ms = to_u64(row[16]);
+    inode.version = to_u64(row[17]);
     return inode;
 }
 
@@ -278,10 +282,12 @@ pl::Result<Inode> MySQLMetadataStore::get_inode(uint64_t inode_id) {
     }
     auto* conn = get_active_conn(owned);
 
-    auto sql = fmt::format("SELECT inode_id, type, parent_id, name, owner, `group`, permission, "
-                           "length, replication, block_size, state, ctime_ms, mtime_ms, version "
-                           "FROM inodes WHERE inode_id = {}",
-                           inode_id);
+    auto sql = fmt::format(
+        "SELECT inode_id, type, parent_id, name, owner, `group`, permission, "
+        "length, replication, block_size, file_append_mode, content_generation, checksum, "
+        "checksum_valid, state, ctime_ms, mtime_ms, version "
+        "FROM inodes WHERE inode_id = {}",
+        inode_id);
 
     auto res = conn->execute(sql);
     if (res.hasError()) {
@@ -308,11 +314,13 @@ pl::Result<std::optional<Inode>> MySQLMetadataStore::get_child(uint64_t parent_i
     }
     auto* conn = get_active_conn(owned);
 
-    auto sql = fmt::format("SELECT inode_id, type, parent_id, name, owner, `group`, permission, "
-                           "length, replication, block_size, state, ctime_ms, mtime_ms, version "
-                           "FROM inodes WHERE parent_id = {} AND name = '{}'",
-                           parent_id,
-                           escape_sql(name));
+    auto sql = fmt::format(
+        "SELECT inode_id, type, parent_id, name, owner, `group`, permission, "
+        "length, replication, block_size, file_append_mode, content_generation, checksum, "
+        "checksum_valid, state, ctime_ms, mtime_ms, version "
+        "FROM inodes WHERE parent_id = {} AND name = '{}'",
+        parent_id,
+        escape_sql(name));
 
     auto res = conn->execute(sql);
     if (res.hasError()) {
@@ -337,10 +345,12 @@ pl::Result<std::vector<Inode>> MySQLMetadataStore::list_children(uint64_t parent
     }
     auto* conn = get_active_conn(owned);
 
-    auto sql = fmt::format("SELECT inode_id, type, parent_id, name, owner, `group`, permission, "
-                           "length, replication, block_size, state, ctime_ms, mtime_ms, version "
-                           "FROM inodes WHERE parent_id = {} ORDER BY name",
-                           parent_id);
+    auto sql = fmt::format(
+        "SELECT inode_id, type, parent_id, name, owner, `group`, permission, "
+        "length, replication, block_size, file_append_mode, content_generation, checksum, "
+        "checksum_valid, state, ctime_ms, mtime_ms, version "
+        "FROM inodes WHERE parent_id = {} ORDER BY name",
+        parent_id);
 
     auto res = conn->execute(sql);
     if (res.hasError()) {
@@ -369,8 +379,9 @@ pl::Result<pl::Void> MySQLMetadataStore::create_inode(const Inode& inode) {
 
     auto sql = fmt::format(
         "INSERT INTO inodes (inode_id, type, parent_id, name, owner, `group`, "
-        "permission, length, replication, block_size, state, ctime_ms, mtime_ms, version) "
-        "VALUES ({}, {}, {}, '{}', '{}', '{}', {}, {}, {}, {}, {}, {}, {}, {})",
+        "permission, length, replication, block_size, file_append_mode, content_generation, "
+        "checksum, checksum_valid, state, ctime_ms, mtime_ms, version) "
+        "VALUES ({}, {}, {}, '{}', '{}', '{}', {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
         inode.inode_id,
         static_cast<uint8_t>(inode.type),
         inode.parent_id,
@@ -381,6 +392,10 @@ pl::Result<pl::Void> MySQLMetadataStore::create_inode(const Inode& inode) {
         inode.length,
         inode.replication,
         inode.block_size,
+        static_cast<uint8_t>(inode.file_append_mode),
+        inode.content_generation,
+        inode.checksum,
+        inode.checksum_valid,
         static_cast<uint8_t>(inode.state),
         inode.ctime_ms,
         inode.mtime_ms,
@@ -406,7 +421,8 @@ pl::Result<pl::Void> MySQLMetadataStore::update_inode(const Inode& inode) {
 
     auto sql =
         fmt::format("UPDATE inodes SET type={}, parent_id={}, name='{}', owner='{}', `group`='{}', "
-                    "permission={}, length={}, replication={}, block_size={}, state={}, "
+                    "permission={}, length={}, replication={}, block_size={}, file_append_mode={}, "
+                    "content_generation={}, checksum={}, checksum_valid={}, state={}, "
                     "mtime_ms={}, version=version+1 WHERE inode_id={} AND version={}",
                     static_cast<uint8_t>(inode.type),
                     inode.parent_id,
@@ -417,6 +433,10 @@ pl::Result<pl::Void> MySQLMetadataStore::update_inode(const Inode& inode) {
                     inode.length,
                     inode.replication,
                     inode.block_size,
+                    static_cast<uint8_t>(inode.file_append_mode),
+                    inode.content_generation,
+                    inode.checksum,
+                    inode.checksum_valid,
                     static_cast<uint8_t>(inode.state),
                     inode.mtime_ms,
                     inode.inode_id,
@@ -1184,10 +1204,9 @@ pl::Result<std::optional<OplogEntry>> MySQLMetadataStore::get_oplog_by_request_i
     }
     auto* conn = get_active_conn(owned);
 
-    auto sql =
-        fmt::format("SELECT op_type, target_inode_id, request_id, payload_json "
-                    "FROM op_log WHERE request_id = '{}' LIMIT 1",
-                    escape_sql(request_id));
+    auto sql = fmt::format("SELECT op_type, target_inode_id, request_id, payload_json "
+                           "FROM op_log WHERE request_id = '{}' LIMIT 1",
+                           escape_sql(request_id));
 
     auto res = conn->execute(sql);
     if (res.hasError()) {

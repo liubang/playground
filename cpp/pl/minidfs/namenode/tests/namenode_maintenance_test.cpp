@@ -39,10 +39,10 @@ protected:
         namespace_manager_ = std::make_unique<NamespaceManager>(store_.get());
         datanode_manager_ = std::make_unique<DataNodeManager>(store_.get());
         placement_manager_ = std::make_unique<PlacementManager>(datanode_manager_.get());
-        block_manager_ = std::make_unique<BlockManager>(
+        block_manager_ =
+            std::make_unique<BlockManager>(store_.get(), placement_manager_.get(), "test-secret");
+        replication_manager_ = std::make_unique<ReplicationManager>(
             store_.get(), placement_manager_.get(), "test-secret");
-        replication_manager_ =
-            std::make_unique<ReplicationManager>(store_.get(), placement_manager_.get(), "test-secret");
         maintenance_ = std::make_unique<NameNodeMaintenance>(NameNodeMaintenance::Config{},
                                                              store_.get(),
                                                              namespace_manager_.get(),
@@ -78,7 +78,7 @@ protected:
     std::unique_ptr<NameNodeMaintenance> maintenance_;
 };
 
-TEST_F(NameNodeMaintenanceTest, RecoversExpiredLeaseToCommittedPrefix) {
+TEST_F(NameNodeMaintenanceTest, RejectsLeaseRecoveryWithoutTrustedFileChecksum) {
     uint64_t datanode_id = register_datanode("dn-1");
     auto file = namespace_manager_->create_file("/recover", "user", "group", 0644, 1, 128);
     ASSERT_TRUE(file.hasValue());
@@ -110,15 +110,17 @@ TEST_F(NameNodeMaintenanceTest, RecoversExpiredLeaseToCommittedPrefix) {
     ASSERT_TRUE(store_->create_block(abandoned).hasValue());
     create_replica(abandoned.block_id, datanode_id, ReplicaState::kWriting);
 
-    ASSERT_TRUE(maintenance_->run_once().hasValue());
+    auto recovery = maintenance_->run_once();
+    ASSERT_TRUE(recovery.hasError());
+    EXPECT_EQ(recovery.error().code(),
+              static_cast<pl::status_code_t>(ErrorCode::kChecksumMismatch));
 
-    auto recovered = store_->get_inode(file.value().inode_id);
-    ASSERT_TRUE(recovered.hasValue());
-    EXPECT_EQ(recovered.value().state, FileState::kNormal);
-    EXPECT_EQ(recovered.value().length, 64u);
-    EXPECT_FALSE(store_->get_active_lease(file.value().inode_id).value().has_value());
-    EXPECT_EQ(store_->get_block(abandoned.block_id).value().state, BlockState::kDeleted);
-    EXPECT_EQ(store_->get_replicas(abandoned.block_id).value()[0].state, ReplicaState::kDeleting);
+    auto unchanged = store_->get_inode(file.value().inode_id);
+    ASSERT_TRUE(unchanged.hasValue());
+    EXPECT_EQ(unchanged.value().state, FileState::kUnderConstruction);
+    EXPECT_EQ(unchanged.value().length, 0u);
+    EXPECT_TRUE(store_->get_active_lease(file.value().inode_id).value().has_value());
+    EXPECT_EQ(store_->get_block(abandoned.block_id).value().state, BlockState::kAllocating);
 }
 
 TEST_F(NameNodeMaintenanceTest, SchedulesDurableDeduplicatedRepairAwayFromDeadNode) {

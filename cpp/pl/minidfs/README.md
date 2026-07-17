@@ -69,7 +69,7 @@ cpp/pl/minidfs/
 │   └── tests/       # namenode 单元测试（6 个 target）
 ├── datanode/        # DataNode 存储引擎及服务
 │   └── tests/       # datanode 单元测试（5 个 target）
-├── client/          # CLI 工具及 DfsClient SDK
+├── client/          # CLI、DfsClient SDK 及 sstv2 文件 I/O 适配器
 └── docs/            # 项目文档
     ├── architecture.md  # 架构概览
     ├── spec.md          # 实现规格
@@ -410,5 +410,11 @@ minidfs -namenode=$NAMENODE block 1001
 **租约机制**：文件写入通过 Lease 保证互斥，避免并发写入冲突。
 
 **CRC32C 校验**：Linux 使用 Intel ISA-L 库的 SIMD 加速实现，macOS 使用 Google crc32c 库（利用 ARM 硬件 CRC 指令）。两者计算结果一致（相同多项式），每个 chunk 独立校验，支持增量计算和快速验证。
+
+**不可变文件发布**：文件可创建为 `kImmutableAfterComplete`。Client 在 Complete 时提交最终长度和内容 CRC32C，NameNode 原子发布包含 inode、content generation、length 和 checksum 的 `FileIdentity`；发布后拒绝 append 和 truncate。
+
+**身份绑定随机读**：`DfsClient::read_exact()` 支持按 `(path, offset, length, FileIdentity)` 读取，跨 Block 时自动切分并在副本间回退。DataNode 使用 `pread`，只读取请求涉及的 chunk，同时校验这些 chunk 的完整落盘 CRC32C。
+
+**sstv2 互操作**：sstv2 在自身 `io/` 层定义统一的 `FileSystem`/强类型 `FileHandle` 抽象；`MiniDfsFileSystem` 将 `create/append/close` 映射到 immutable output stream，将 `open/read_at` 映射到固定已发布 `FileIdentity` 的 `read_exact`，并精确填充调用方字节缓冲区。该实现共享持有 `DfsClient`，保证打开句柄期间客户端存活；两个 SST 对象的逻辑原子可见性仍由上层 Manifest 负责。
 
 更多设计细节参见 [docs/spec.md](docs/spec.md)。

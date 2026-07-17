@@ -26,6 +26,16 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 cc_test(
+    name = "buffer_test",
+    srcs = ["ut/buffer/buffer_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/buffer",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "varint_test",
     srcs = ["ut/codec/varint_test.cpp"],
     copts = TEST_COPTS,
@@ -140,6 +150,16 @@ cc_test(
 )
 
 cc_test(
+    name = "local_filesystem_test",
+    srcs = ["ut/io/local_filesystem_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/io:local_filesystem",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "index_tree_test",
     srcs = ["ut/index/index_tree_test.cpp"],
     copts = TEST_COPTS,
@@ -147,6 +167,7 @@ cc_test(
         "//cpp/pl/sstv2/block",
         "//cpp/pl/sstv2/codec:fixed",
         "//cpp/pl/sstv2/index",
+        "//cpp/pl/sstv2/io:local_filesystem",
         "//cpp/pl/sstv2/types:key",
         "//cpp/pl/sstv2/types:row",
         "//cpp/pl/sstv2/types:schema",
@@ -177,6 +198,7 @@ cc_test(
         "//cpp/pl/sstv2/file:sstable",
         "//cpp/pl/sstv2/format:section",
         "//cpp/pl/sstv2/format:tail",
+        "//cpp/pl/sstv2/io:local_filesystem",
         "//cpp/pl/sstv2/types:row",
         "//cpp/pl/sstv2/types:schema",
         "@googletest//:gtest_main",

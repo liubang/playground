@@ -82,8 +82,8 @@ public:
 
     /// Initialize storage directories. Must be called once before use.
     /// Optionally keep the currently active tmp block from startup cleanup.
-    pl::Result<pl::Void> init(std::optional<std::pair<uint64_t, uint64_t>> active_tmp_block =
-                                  std::nullopt);
+    pl::Result<pl::Void> init(
+        std::optional<std::pair<uint64_t, uint64_t>> active_tmp_block = std::nullopt);
 
     /// Create a new block in tmp/ and write the initial header.
     /// The block enters the "writing" state.
@@ -127,6 +127,13 @@ public:
     /// Read the full data region of a finalized block.
     /// Returns raw bytes (header excluded).
     pl::Result<std::string> read_block_data(uint64_t block_id, uint64_t generation_stamp);
+
+    /// Read a byte range of a finalized block using positional reads.
+    /// Returns up to `length` bytes starting at `offset` (or the remaining bytes when length=0).
+    pl::Result<std::string> read_block_range(uint64_t block_id,
+                                             uint64_t generation_stamp,
+                                             uint64_t offset,
+                                             uint64_t length);
 
     /// Read a specific chunk from a finalized block.
     pl::Result<std::string> read_chunk(uint64_t block_id,

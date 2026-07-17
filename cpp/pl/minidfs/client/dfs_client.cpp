@@ -49,7 +49,7 @@ inline Result<Void> check_status(const protocol::StatusProto& sp) {
 
 /// Build a FileStatus from a FileStatusProto.
 inline FileStatus to_file_status(const protocol::FileStatusProto& proto) {
-    return FileStatus{
+    FileStatus status{
         .inode_id = proto.inode_id(),
         .path = proto.path(),
         .is_dir = proto.is_dir(),
@@ -61,6 +61,47 @@ inline FileStatus to_file_status(const protocol::FileStatusProto& proto) {
         .group = proto.group(),
         .permission = proto.permission(),
     };
+    status.file_append_mode =
+        proto.file_append_mode() == protocol::FILE_APPEND_MODE_IMMUTABLE_AFTER_COMPLETE
+            ? FileAppendMode::kImmutableAfterComplete
+            : FileAppendMode::kAppendable;
+    if (proto.has_published_identity()) {
+        status.published_identity = {
+            .inode_id = proto.published_identity().inode_id(),
+            .content_generation = proto.published_identity().content_generation(),
+            .length = proto.published_identity().length(),
+            .checksum = proto.published_identity().checksum(),
+            .checksum_valid = proto.published_identity().checksum_valid(),
+        };
+    }
+    return status;
+}
+
+inline FileIdentity to_file_identity(const protocol::FileIdentityProto& proto) {
+    return FileIdentity{
+        .inode_id = proto.inode_id(),
+        .content_generation = proto.content_generation(),
+        .length = proto.length(),
+        .checksum = proto.checksum(),
+        .checksum_valid = proto.checksum_valid(),
+    };
+}
+
+inline bool same_published_identity(const FileIdentity& expected, const FileIdentity& actual) {
+    return expected.inode_id == actual.inode_id &&
+           expected.content_generation == actual.content_generation &&
+           expected.length == actual.length &&
+           expected.checksum_valid == actual.checksum_valid &&
+           (!expected.checksum_valid || expected.checksum == actual.checksum);
+}
+
+inline bool same_published_identity(const protocol::FileIdentityProto& expected,
+                                    const FileIdentity& actual) {
+    return expected.inode_id() == actual.inode_id &&
+           expected.content_generation() == actual.content_generation &&
+           expected.length() == actual.length &&
+           expected.checksum_valid() == actual.checksum_valid &&
+           (!expected.checksum_valid() || expected.checksum() == actual.checksum);
 }
 
 // RAII wrapper for file descriptors.
@@ -259,24 +300,9 @@ Result<Void> DfsClient::mv(std::string_view src, std::string_view dst) {
 
 // File write — pipeline replication
 
-Result<Void> DfsClient::put(std::string_view local_path,
-                            std::string_view dfs_path,
-                            bool overwrite) {
-    // 1. Open local file
-    ScopedFd fd(::open(std::string(local_path).c_str(), O_RDONLY));
-    if (fd.get() < 0) {
-        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
-                            "Cannot open local file: {}",
-                            local_path);
-    }
-
-    struct stat st{};
-    if (::fstat(fd.get(), &st) != 0) {
-        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
-                            "Cannot stat local file: {}",
-                            local_path);
-    }
-    // 2. CreateFile on NameNode
+Result<DfsOutputStream> DfsClient::create_output_stream(std::string_view dfs_path,
+                                                        bool overwrite,
+                                                        FileAppendMode file_append_mode) {
     protocol::NameNodeService_Stub stub(&namenode_channel_);
     brpc::Controller cntl;
 
@@ -289,6 +315,10 @@ Result<Void> DfsClient::put(std::string_view local_path,
     create_req.set_block_size(config_.block_size);
     create_req.set_client_id(config_.client_id);
     create_req.set_overwrite(overwrite);
+    create_req.set_file_append_mode(
+        file_append_mode == FileAppendMode::kImmutableAfterComplete
+            ? protocol::FILE_APPEND_MODE_IMMUTABLE_AFTER_COMPLETE
+            : protocol::FILE_APPEND_MODE_APPENDABLE);
     auto* create_header = create_req.mutable_header();
     create_header->set_request_id(next_request_id());
     create_header->set_client_id(config_.client_id);
@@ -306,17 +336,43 @@ Result<Void> DfsClient::put(std::string_view local_path,
                              create_resp.status().message());
     }
 
-    const uint64_t inode_id = create_resp.inode_id();
-    auto stream = DfsOutputStream::create(&namenode_channel_,
-                                          inode_id,
-                                          config_.client_id,
-                                          {
-                                              .block_size = config_.block_size,
-                                              .chunk_size = config_.chunk_size,
-                                              .replication = config_.replication,
-                                              .rpc_timeout_ms = config_.rpc_timeout_ms,
-                                              .request_id_prefix = create_header->request_id(),
-                                          });
+    return DfsOutputStream::create(&namenode_channel_,
+                                   create_resp.inode_id(),
+                                   config_.client_id,
+                                   {
+                                       .block_size = config_.block_size,
+                                       .chunk_size = config_.chunk_size,
+                                       .replication = config_.replication,
+                                       .rpc_timeout_ms = config_.rpc_timeout_ms,
+                                       .initial_checksum = compute_crc32c(nullptr, 0),
+                                       .request_id_prefix = create_header->request_id(),
+                                   });
+}
+
+Result<DfsOutputStream> DfsClient::create_immutable_output_stream(std::string_view dfs_path,
+                                                                   bool overwrite) {
+    return create_output_stream(dfs_path, overwrite, FileAppendMode::kImmutableAfterComplete);
+}
+
+Result<Void> DfsClient::put(std::string_view local_path,
+                            std::string_view dfs_path,
+                            bool overwrite) {
+    // 1. Open local file
+    ScopedFd fd(::open(std::string(local_path).c_str(), O_RDONLY));
+    if (fd.get() < 0) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
+                            "Cannot open local file: {}",
+                            local_path);
+    }
+
+    struct stat st{};
+    if (::fstat(fd.get(), &st) != 0) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
+                            "Cannot stat local file: {}",
+                            local_path);
+    }
+
+    auto stream = create_output_stream(dfs_path, overwrite, FileAppendMode::kAppendable);
     if (stream.hasError()) {
         return folly::makeUnexpected(stream.error());
     }
@@ -351,17 +407,33 @@ Result<Void> DfsClient::append(std::string_view local_path, std::string_view dfs
                              response.status().message());
     }
 
-    auto stream = DfsOutputStream::create(&namenode_channel_,
-                                          response.inode_id(),
-                                          config_.client_id,
-                                          {
-                                              .block_size = response.block_size(),
-                                              .chunk_size = config_.chunk_size,
-                                              .replication = response.replication(),
-                                              .rpc_timeout_ms = config_.rpc_timeout_ms,
-                                              .starting_block_index = response.next_block_index(),
-                                              .request_id_prefix = header->request_id(),
-                                          });
+    if (!response.has_published_identity()) {
+        return pl::makeError(static_cast<status_code_t>(ErrorCode::kInternalError),
+                             "AppendFile response missing published identity");
+    }
+    if (!response.published_identity().checksum_valid()) {
+        return pl::makeError(static_cast<status_code_t>(ErrorCode::kChecksumMismatch),
+                             "cannot append without a trusted published content checksum");
+    }
+
+    auto stream =
+        DfsOutputStream::create(&namenode_channel_,
+                                response.inode_id(),
+                                config_.client_id,
+                                {
+                                    .block_size = response.block_size(),
+                                    .chunk_size = config_.chunk_size,
+                                    .replication = response.replication(),
+                                    .rpc_timeout_ms = config_.rpc_timeout_ms,
+                                    .starting_block_index = response.next_block_index(),
+                                    .initial_length = response.published_identity().length(),
+                                    .initial_checksum =
+                                        response.published_identity().checksum_valid()
+                                            ? std::optional<uint32_t>(
+                                                  response.published_identity().checksum())
+                                            : std::nullopt,
+                                    .request_id_prefix = header->request_id(),
+                                });
     if (stream.hasError()) {
         return folly::makeUnexpected(stream.error());
     }
@@ -409,7 +481,6 @@ Result<Void> DfsClient::setrep(std::string_view dfs_path, uint32_t replication) 
 // File read
 
 Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_path) {
-    // 1. Get file status to obtain inode_id
     auto stat_result = stat(dfs_path);
     if (stat_result.hasError()) {
         RETURN_ERROR(stat_result);
@@ -421,16 +492,101 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
                             dfs_path);
     }
 
-    // 2. GetLocatedBlocks
-    protocol::NameNodeService_Stub stub(&namenode_channel_);
-    brpc::Controller cntl;
+    auto data = read_exact(dfs_path, 0, fs.length, fs.published_identity);
+    if (data.hasError()) {
+        return folly::makeUnexpected(data.error());
+    }
 
+    std::ofstream ofs(std::string(local_path), std::ios::binary | std::ios::trunc);
+    if (!ofs.is_open()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
+                            "Cannot open local file for writing: {}",
+                            local_path);
+    }
+    ofs.write(data.value().data(), static_cast<std::streamsize>(data.value().size()));
+    if (!ofs.good()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
+                            "Write error on local file: {}",
+                            local_path);
+    }
+
+    ofs.close();
+    RETURN_VOID;
+}
+
+Result<std::string> DfsClient::read_exact(std::string_view dfs_path,
+                                          uint64_t offset,
+                                          uint64_t length) {
+    auto stat_result = stat(dfs_path);
+    if (stat_result.hasError()) {
+        RETURN_ERROR(stat_result);
+    }
+    const auto& fs = stat_result.value();
+    return read_exact_with_status(dfs_path, offset, length, fs, fs.published_identity);
+}
+
+Result<std::string> DfsClient::read_exact(std::string_view dfs_path,
+                                          uint64_t offset,
+                                          uint64_t length,
+                                          const FileIdentity& expected_identity) {
+    auto stat_result = stat(dfs_path);
+    if (stat_result.hasError()) {
+        RETURN_ERROR(stat_result);
+    }
+    const auto& fs = stat_result.value();
+    if (expected_identity.inode_id != fs.inode_id) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kInvalidArgument),
+                            "expected inode {} does not match path inode {}",
+                            expected_identity.inode_id,
+                            fs.inode_id);
+    }
+    return read_exact_with_status(dfs_path, offset, length, fs, expected_identity);
+}
+
+Result<std::string> DfsClient::read_exact_with_status(std::string_view dfs_path,
+                                                      uint64_t offset,
+                                                      uint64_t length,
+                                                      const FileStatus& fs,
+                                                      const FileIdentity& expected_identity) {
+    if (fs.is_dir) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIsDirectory),
+                            "Cannot read a directory: {}",
+                            dfs_path);
+    }
+    if (!same_published_identity(expected_identity, fs.published_identity)) {
+        return pl::makeError(static_cast<status_code_t>(ErrorCode::kInvalidArgument),
+                             "stale expected file identity");
+    }
+    if (offset > expected_identity.length || length > expected_identity.length - offset) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kInvalidArgument),
+                            "read range [{}, {}) exceeds file length {}",
+                            offset,
+                            offset + length,
+                            expected_identity.length);
+    }
+    protocol::NameNodeService_Stub stub(&namenode_channel_);
     protocol::GetLocatedBlocksRequest req;
     req.set_inode_id(fs.inode_id);
+    auto* expected = req.mutable_expected_file_identity();
+    expected->set_inode_id(expected_identity.inode_id);
+    expected->set_content_generation(expected_identity.content_generation);
+    expected->set_length(expected_identity.length);
+    expected->set_checksum(expected_identity.checksum);
+    expected->set_checksum_valid(expected_identity.checksum_valid);
 
+    auto validate_identity = [&](const protocol::FileIdentityProto& identity,
+                                 std::string_view operation) -> Result<Void> {
+        if (!same_published_identity(identity, expected_identity)) {
+            return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kInternalError),
+                                "{} returned mismatched file identity",
+                                operation);
+        }
+        RETURN_VOID;
+    };
+
+    brpc::Controller cntl;
     protocol::GetLocatedBlocksResponse resp;
     stub.GetLocatedBlocks(&cntl, &req, &resp, nullptr);
-
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
                             "GetLocatedBlocks RPC failed: {}",
@@ -440,18 +596,24 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
         return pl::makeError(static_cast<status_code_t>(resp.status().code()),
                              resp.status().message());
     }
-
-    // 3. Open local file for writing
-    std::ofstream ofs(std::string(local_path), std::ios::binary | std::ios::trunc);
-    if (!ofs.is_open()) {
-        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
-                            "Cannot open local file for writing: {}",
-                            local_path);
+    if (!resp.has_file_identity()) {
+        return pl::makeError(static_cast<status_code_t>(ErrorCode::kInternalError),
+                             "GetLocatedBlocks missing file identity");
+    }
+    auto initial_identity_ok = validate_identity(resp.file_identity(), "GetLocatedBlocks");
+    if (initial_identity_ok.hasError()) {
+        return folly::makeUnexpected(initial_identity_ok.error());
+    }
+    if (length == 0) {
+        return std::string{};
     }
 
-    // 4. Read each block. Refresh the complete located-block snapshot before a token
-    // expires; all tokens in one snapshot are normally issued at nearly the same time.
-    for (int block_pos = 0; block_pos < resp.blocks_size(); ++block_pos) {
+    std::string result;
+    result.reserve(length);
+    uint64_t remaining = length;
+    uint64_t current_offset = offset;
+
+    for (int block_pos = 0; block_pos < resp.blocks_size() && remaining > 0; ++block_pos) {
         if (block_token_needs_refresh(resp.blocks(block_pos).block_token(), now_ms(), 1000)) {
             brpc::Controller refresh_cntl;
             protocol::GetLocatedBlocksResponse refreshed;
@@ -465,6 +627,15 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
                 return pl::makeError(static_cast<status_code_t>(refreshed.status().code()),
                                      refreshed.status().message());
             }
+            if (!refreshed.has_file_identity()) {
+                return pl::makeError(static_cast<status_code_t>(ErrorCode::kInternalError),
+                                     "GetLocatedBlocks token refresh missing file identity");
+            }
+            auto refreshed_identity_ok =
+                validate_identity(refreshed.file_identity(), "GetLocatedBlocks token refresh");
+            if (refreshed_identity_ok.hasError()) {
+                return folly::makeUnexpected(refreshed_identity_ok.error());
+            }
             resp = std::move(refreshed);
             if (block_pos >= resp.blocks_size()) {
                 return pl::makeError(static_cast<status_code_t>(ErrorCode::kBlockNotFound),
@@ -473,6 +644,12 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
         }
 
         const auto& block_proto = resp.blocks(block_pos);
+        uint64_t block_begin = block_proto.offset();
+        uint64_t block_end = block_begin + block_proto.length();
+        if (current_offset >= block_end || block_begin >= current_offset + remaining) {
+            continue;
+        }
+
         LocatedBlock block{
             .block_id = block_proto.block_id(),
             .generation_stamp = block_proto.generation_stamp(),
@@ -486,34 +663,63 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
                 .data_port = loc.data_port(),
             });
         }
-        // Copy block token from NameNode response
-        if (block_proto.has_block_token()) {
-            block.block_token = {
-                .block_id = block_proto.block_token().block_id(),
-                .generation_stamp = block_proto.block_token().generation_stamp(),
-                .inode_id = block_proto.block_token().inode_id(),
-                .block_index = block_proto.block_token().block_index(),
-                .permissions = block_proto.block_token().permissions(),
-                .expires_at_ms = block_proto.block_token().expires_at_ms(),
-                .signature = block_proto.block_token().signature(),
-            };
+        if (!block_proto.has_block_token()) {
+            return pl::makeError(static_cast<status_code_t>(ErrorCode::kInternalError),
+                                 "GetLocatedBlocks returned block without token");
         }
+        block.block_token = {
+            .block_id = block_proto.block_token().block_id(),
+            .generation_stamp = block_proto.block_token().generation_stamp(),
+            .inode_id = block_proto.block_token().inode_id(),
+            .block_index = block_proto.block_token().block_index(),
+            .permissions = block_proto.block_token().permissions(),
+            .expires_at_ms = block_proto.block_token().expires_at_ms(),
+            .signature = block_proto.block_token().signature(),
+        };
+        if (!block_proto.block_token().has_file_identity()) {
+            return pl::makeError(static_cast<status_code_t>(ErrorCode::kInternalError),
+                                 "GetLocatedBlocks returned token without file identity");
+        }
+        auto token_identity = to_file_identity(block_proto.block_token().file_identity());
+        if (!same_published_identity(token_identity, expected_identity)) {
+            return pl::makeError(static_cast<status_code_t>(ErrorCode::kInternalError),
+                                 "GetLocatedBlocks returned token with mismatched file identity");
+        }
+        block.block_token.file_identity = std::move(token_identity);
 
-        auto data_result = read_block(block);
-        if (data_result.hasError()) {
-            RETURN_ERROR(data_result);
+        uint64_t in_block_offset = current_offset > block_begin ? current_offset - block_begin : 0;
+        uint64_t can_read =
+            std::min<uint64_t>(remaining, block_end - (block_begin + in_block_offset));
+        auto chunk = read_block(block, in_block_offset, can_read);
+        if (chunk.hasError()) {
+            RETURN_ERROR(chunk);
         }
-        ofs.write(data_result.value().data(),
-                  static_cast<std::streamsize>(data_result.value().size()));
-        if (!ofs.good()) {
+        if (chunk.value().size() != can_read) {
             return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
-                                "Write error on local file: {}",
-                                local_path);
+                                "short read: expected {}, got {}",
+                                can_read,
+                                chunk.value().size());
         }
+        result.append(chunk.value());
+        current_offset += can_read;
+        remaining -= can_read;
     }
 
-    ofs.close();
-    RETURN_VOID;
+    if (remaining != 0) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
+                            "short read at file level, {} bytes remaining",
+                            remaining);
+    }
+    if (offset == 0 && length == expected_identity.length && expected_identity.checksum_valid) {
+        uint32_t checksum = compute_crc32c(result.data(), result.size());
+        if (checksum != expected_identity.checksum) {
+            return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kChecksumMismatch),
+                                "file checksum mismatch: expected={:#x}, got={:#x}",
+                                expected_identity.checksum,
+                                checksum);
+        }
+    }
+    return result;
 }
 
 // Admin / diagnostic operations
@@ -854,8 +1060,13 @@ Result<DfsClient::BlockDetail> DfsClient::get_block_info(uint64_t block_id) {
 
 // File read
 
-Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
-    // Try each replica location until one succeeds
+Result<std::string> DfsClient::read_block(const LocatedBlock& block,
+                                          uint64_t offset,
+                                          uint64_t length) {
+    if (length == 0) {
+        return std::string{};
+    }
+    // Try each replica location until one succeeds.
     for (const auto& loc : block.locations) {
         brpc::Channel dn_channel;
         brpc::ChannelOptions options;
@@ -873,8 +1084,8 @@ Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
         protocol::ReadBlockRequest req;
         req.set_block_id(block.block_id);
         req.set_generation_stamp(block.generation_stamp);
-        req.set_offset(0);
-        req.set_length(0); // 0 = read entire block
+        req.set_offset(offset);
+        req.set_length(length);
 
         // Attach block token for DataNode authorization
         auto* token = req.mutable_block_token();
@@ -885,6 +1096,15 @@ Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
         token->set_permissions(block.block_token.permissions);
         token->set_expires_at_ms(block.block_token.expires_at_ms);
         token->set_signature(block.block_token.signature);
+        if (block.block_token.file_identity.has_value()) {
+            const auto& identity = block.block_token.file_identity.value();
+            auto* token_identity = token->mutable_file_identity();
+            token_identity->set_inode_id(identity.inode_id);
+            token_identity->set_content_generation(identity.content_generation);
+            token_identity->set_length(identity.length);
+            token_identity->set_checksum(identity.checksum);
+            token_identity->set_checksum_valid(identity.checksum_valid);
+        }
 
         protocol::ReadBlockResponse resp;
         dn_stub.ReadBlock(&cntl, &req, &resp, nullptr);
@@ -898,6 +1118,11 @@ Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
             LOG(WARNING) << "ReadBlock from " << addr
                          << " returned error: " << resp.status().message()
                          << ", trying next replica";
+            continue;
+        }
+        if (resp.length() != length || resp.data().size() != length) {
+            LOG(WARNING) << "ReadBlock from " << addr << " short read (expected " << length
+                         << ", got " << resp.length() << "), trying next replica";
             continue;
         }
 

@@ -34,8 +34,8 @@
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 #include "cpp/pl/minidfs/namenode/datanode_manager.h"
 #include "cpp/pl/minidfs/namenode/lease_manager.h"
-#include "cpp/pl/minidfs/namenode/namespace_manager.h"
 #include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
+#include "cpp/pl/minidfs/namenode/namespace_manager.h"
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
 #include "cpp/pl/minidfs/namenode/tests/mock_metadata_store.h"
 #include "cpp/pl/minidfs/protocol/minidfs.pb.h"
@@ -91,8 +91,7 @@ protected:
         ns_mgr_ = std::make_unique<NamespaceManager>(store_.get());
         dn_mgr_ = std::make_unique<DataNodeManager>(store_.get());
         placement_ = std::make_unique<PlacementManager>(dn_mgr_.get());
-        block_mgr_ =
-            std::make_unique<BlockManager>(store_.get(), placement_.get(), "test-secret");
+        block_mgr_ = std::make_unique<BlockManager>(store_.get(), placement_.get(), "test-secret");
         lease_mgr_ = std::make_unique<LeaseManager>(store_.get());
 
         // Register 3 datanodes so placement can succeed.
@@ -197,10 +196,8 @@ TEST_F(RegressionNameNodeTest, P0_PipelineReplicationCommitOnlyFinalizesAckedRep
     ASSERT_GE(alloc.value().locations.size(), 2u);
     uint64_t acked_dn_1 = alloc.value().locations[0].datanode_id;
     uint64_t acked_dn_2 = alloc.value().locations[1].datanode_id;
-    auto commit = block_mgr_->commit_block(alloc.value().block_id,
-                                           1 * kMB,
-                                           alloc.value().generation_stamp,
-                                           {acked_dn_1, acked_dn_2});
+    auto commit = block_mgr_->commit_block(
+        alloc.value().block_id, 1 * kMB, alloc.value().generation_stamp, {acked_dn_1, acked_dn_2});
     ASSERT_TRUE(commit.hasValue());
 
     auto after_commit = store_raw()->get_replicas(alloc.value().block_id);
@@ -382,11 +379,10 @@ TEST(RegressionNameNodeRenameTest, ConcurrentCrossRenameCannotCreateNamespaceCyc
     auto ns_mgr = std::make_unique<NamespaceManager>(store.get());
     auto dn_mgr = std::make_unique<DataNodeManager>(store.get());
     auto placement = std::make_unique<PlacementManager>(dn_mgr.get());
-    auto block_mgr =
-        std::make_unique<BlockManager>(store.get(), placement.get(), "test-secret");
+    auto block_mgr = std::make_unique<BlockManager>(store.get(), placement.get(), "test-secret");
     auto lease_mgr = std::make_unique<LeaseManager>(store.get());
-    NameNodeServiceImpl service(ns_mgr.get(), block_mgr.get(), lease_mgr.get(), store.get(),
-                                "test-secret", 3600000);
+    NameNodeServiceImpl service(
+        ns_mgr.get(), block_mgr.get(), lease_mgr.get(), store.get(), "test-secret", 3600000);
 
     ASSERT_TRUE(ns_mgr->mkdir("/a", "user", "grp", 0755).hasValue());
     ASSERT_TRUE(ns_mgr->mkdir("/b", "user", "grp", 0755).hasValue());
@@ -438,11 +434,10 @@ TEST(RegressionNameNodeDeleteTest, RecursiveDeleteListChildrenErrorMustAbort) {
     auto ns_mgr = std::make_unique<NamespaceManager>(store.get());
     auto dn_mgr = std::make_unique<DataNodeManager>(store.get());
     auto placement = std::make_unique<PlacementManager>(dn_mgr.get());
-    auto block_mgr =
-        std::make_unique<BlockManager>(store.get(), placement.get(), "test-secret");
+    auto block_mgr = std::make_unique<BlockManager>(store.get(), placement.get(), "test-secret");
     auto lease_mgr = std::make_unique<LeaseManager>(store.get());
-    NameNodeServiceImpl service(ns_mgr.get(), block_mgr.get(), lease_mgr.get(), store.get(),
-                            "test-secret", 3600000);
+    NameNodeServiceImpl service(
+        ns_mgr.get(), block_mgr.get(), lease_mgr.get(), store.get(), "test-secret", 3600000);
 
     ASSERT_TRUE(ns_mgr->mkdir("/a/b", "user", "grp", 0755, true).hasValue());
     auto child = ns_mgr->resolve_path("/a/b");
@@ -603,8 +598,8 @@ TEST_F(RegressionNameNodeTest, P1_CapacityAwarePlacementPrefersHighFreeNodes) {
 //   1st call: succeeds, returns inode_id.
 //   2nd call: should replay the same inode_id without creating a duplicate inode.
 TEST_F(RegressionNameNodeTest, P0_IdempotentMkdirReplay) {
-    NameNodeServiceImpl service(ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(),
-                                "test-secret", 3600000);
+    NameNodeServiceImpl service(
+        ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", 3600000);
     const std::string req_id = "idem-mkdir-001";
 
     protocol::MkdirRequest req1;
@@ -630,14 +625,13 @@ TEST_F(RegressionNameNodeTest, P0_IdempotentMkdirReplay) {
     protocol::MkdirResponse resp2;
     service.Mkdir(nullptr, &req2, &resp2, nullptr);
     EXPECT_EQ(resp2.status().code(), 0u) << "Duplicate Mkdir should succeed";
-    EXPECT_EQ(resp2.inode_id(), first_inode_id)
-        << "Duplicate Mkdir must return the same inode_id";
+    EXPECT_EQ(resp2.inode_id(), first_inode_id) << "Duplicate Mkdir must return the same inode_id";
 }
 
 // P0: Idempotent replay — duplicate CreateFile request returns equivalent response
 TEST_F(RegressionNameNodeTest, P0_IdempotentCreateFileReplay) {
-    NameNodeServiceImpl service(ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(),
-                                "test-secret", 3600000);
+    NameNodeServiceImpl service(
+        ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", 3600000);
     const std::string req_id = "idem-create-001";
 
     protocol::CreateFileRequest req1;
@@ -678,12 +672,8 @@ TEST_F(RegressionNameNodeTest, P0_IdempotentCreateFileReplay) {
 
 TEST_F(RegressionNameNodeTest, AllocateBlockReplayReissuesToken) {
     constexpr uint64_t kTokenTtlMs = 3600000;
-    NameNodeServiceImpl service(ns_mgr_.get(),
-                                block_mgr_.get(),
-                                lease_mgr_.get(),
-                                store_raw(),
-                                "test-secret",
-                                kTokenTtlMs);
+    NameNodeServiceImpl service(
+        ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", kTokenTtlMs);
     auto file = ns_mgr_->create_file("/idem_block.dat", "user", "grp", 0644, 3, 128 * kMB);
     ASSERT_TRUE(file.hasValue());
     ASSERT_TRUE(lease_mgr_->acquire_lease(file.value().inode_id, "client").hasValue());
@@ -735,8 +725,8 @@ TEST_F(RegressionNameNodeTest, AllocateBlockReplayReissuesToken) {
 
 // P0: Idempotent replay — duplicate Delete request returns success without side effects
 TEST_F(RegressionNameNodeTest, P0_IdempotentDeleteReplay) {
-    NameNodeServiceImpl service(ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(),
-                                "test-secret", 3600000);
+    NameNodeServiceImpl service(
+        ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", 3600000);
     const std::string req_id = "idem-delete-001";
 
     // Create a file first
@@ -769,8 +759,8 @@ TEST_F(RegressionNameNodeTest, P0_IdempotentDeleteReplay) {
 
 // P0: Idempotent replay — duplicate Rename request returns success
 TEST_F(RegressionNameNodeTest, P0_IdempotentRenameReplay) {
-    NameNodeServiceImpl service(ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(),
-                                "test-secret", 3600000);
+    NameNodeServiceImpl service(
+        ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", 3600000);
     const std::string req_id = "idem-rename-001";
 
     // Create a file first
@@ -815,7 +805,8 @@ public:
             return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kMySQLQueryFailed),
                                  "injected write_oplog failure");
         }
-        return testing::MockMetadataStore::write_oplog(op_type, target_inode_id, request_id, payload_json);
+        return testing::MockMetadataStore::write_oplog(
+            op_type, target_inode_id, request_id, payload_json);
     }
 
 private:
@@ -827,8 +818,7 @@ TEST(RegressionNameNodeIdempotencyTest, P0_WriteOplogFailureFallsBackToReplay) {
     auto ns_mgr = std::make_unique<NamespaceManager>(store.get());
     auto dn_mgr = std::make_unique<DataNodeManager>(store.get());
     auto placement = std::make_unique<PlacementManager>(dn_mgr.get());
-    auto block_mgr =
-        std::make_unique<BlockManager>(store.get(), placement.get(), "test-secret");
+    auto block_mgr = std::make_unique<BlockManager>(store.get(), placement.get(), "test-secret");
     auto lease_mgr = std::make_unique<LeaseManager>(store.get());
 
     // Register datanodes for placement
@@ -836,8 +826,8 @@ TEST(RegressionNameNodeIdempotencyTest, P0_WriteOplogFailureFallsBackToReplay) {
     dn_mgr->register_datanode("dn-2", "host2", "10.0.0.2", 9000, 9100, "/rack2", 1000 * kGB);
     dn_mgr->register_datanode("dn-3", "host3", "10.0.0.3", 9000, 9100, "/rack3", 1000 * kGB);
 
-    NameNodeServiceImpl service(ns_mgr.get(), block_mgr.get(), lease_mgr.get(), store.get(),
-                                "test-secret", 3600000);
+    NameNodeServiceImpl service(
+        ns_mgr.get(), block_mgr.get(), lease_mgr.get(), store.get(), "test-secret", 3600000);
     const std::string req_id = "idem-atomic-001";
 
     // First request: succeeds, oplog written
@@ -873,8 +863,235 @@ TEST(RegressionNameNodeIdempotencyTest, P0_WriteOplogFailureFallsBackToReplay) {
     // Should fall back to existing oplog entry and return success
     EXPECT_EQ(resp2.status().code(), 0u)
         << "Duplicate CreateFile with write_oplog failure should fall back to replay";
-    EXPECT_EQ(resp2.inode_id(), inode_id)
-        << "Fell-back CreateFile should return same inode_id";
+    EXPECT_EQ(resp2.inode_id(), inode_id) << "Fell-back CreateFile should return same inode_id";
+}
+
+TEST_F(RegressionNameNodeTest, CompleteReplayRequiresExpectedIdentityAndIsIdempotent) {
+    NameNodeServiceImpl service(
+        ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", 3600000);
+
+    auto file = ns_mgr_->create_file("/complete-replay.dat", "user", "grp", 0644, 3, 128 * kMB);
+    ASSERT_TRUE(file.hasValue());
+    ASSERT_TRUE(lease_mgr_->acquire_lease(file.value().inode_id, "client-1").hasValue());
+
+    auto alloc = block_mgr_->allocate_block(file.value().inode_id, 0, 3);
+    ASSERT_TRUE(alloc.hasValue());
+    ASSERT_TRUE(block_mgr_
+                    ->commit_block(alloc.value().block_id,
+                                   16,
+                                   alloc.value().generation_stamp,
+                                   datanode_ids(alloc.value()))
+                    .hasValue());
+
+    protocol::CompleteFileRequest first;
+    first.set_inode_id(file.value().inode_id);
+    first.set_client_id("client-1");
+    first.set_expected_length(16);
+    first.set_expected_checksum(0x12345678u);
+    protocol::CompleteFileResponse first_resp;
+    service.CompleteFile(nullptr, &first, &first_resp, nullptr);
+    ASSERT_EQ(first_resp.status().code(), 0u);
+    ASSERT_TRUE(first_resp.has_file_identity());
+    EXPECT_EQ(first_resp.file_identity().content_generation(), 1u);
+    EXPECT_EQ(first_resp.file_identity().length(), 16u);
+    EXPECT_EQ(first_resp.file_identity().checksum(), 0x12345678u);
+
+    protocol::CompleteFileRequest replay_missing;
+    replay_missing.set_inode_id(file.value().inode_id);
+    replay_missing.set_client_id("client-1");
+    replay_missing.set_expected_length(16);
+    protocol::CompleteFileResponse replay_missing_resp;
+    service.CompleteFile(nullptr, &replay_missing, &replay_missing_resp, nullptr);
+    EXPECT_NE(replay_missing_resp.status().code(), 0u);
+
+    protocol::CompleteFileRequest replay;
+    replay.set_inode_id(file.value().inode_id);
+    replay.set_client_id("client-1");
+    replay.set_expected_length(16);
+    replay.set_expected_checksum(0x12345678u);
+    protocol::CompleteFileResponse replay_resp;
+    service.CompleteFile(nullptr, &replay, &replay_resp, nullptr);
+    ASSERT_EQ(replay_resp.status().code(), 0u);
+    ASSERT_TRUE(replay_resp.has_file_identity());
+    EXPECT_EQ(replay_resp.file_identity().content_generation(), 1u);
+    EXPECT_EQ(replay_resp.file_identity().length(), 16u);
+    EXPECT_EQ(replay_resp.file_identity().checksum(), 0x12345678u);
+
+    protocol::CompleteFileRequest replay_mismatch;
+    replay_mismatch.set_inode_id(file.value().inode_id);
+    replay_mismatch.set_client_id("client-1");
+    replay_mismatch.set_expected_length(16);
+    replay_mismatch.set_expected_checksum(0x12345679u);
+    protocol::CompleteFileResponse replay_mismatch_resp;
+    service.CompleteFile(nullptr, &replay_mismatch, &replay_mismatch_resp, nullptr);
+    EXPECT_NE(replay_mismatch_resp.status().code(), 0u);
+
+    auto inode = store_raw()->get_inode(file.value().inode_id);
+    ASSERT_TRUE(inode.hasValue());
+    EXPECT_EQ(inode.value().content_generation, 1u);
+}
+
+TEST_F(RegressionNameNodeTest, GetLocatedBlocksClipsPublishedLengthAndRejectsStaleIdentity) {
+    NameNodeServiceImpl service(
+        ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", 3600000);
+
+    auto file = ns_mgr_->create_file("/located.dat", "user", "grp", 0644, 3, 128 * kMB);
+    ASSERT_TRUE(file.hasValue());
+
+    auto first = block_mgr_->allocate_block(file.value().inode_id, 0, 3);
+    ASSERT_TRUE(first.hasValue());
+    ASSERT_TRUE(block_mgr_
+                    ->commit_block(first.value().block_id,
+                                   8,
+                                   first.value().generation_stamp,
+                                   datanode_ids(first.value()))
+                    .hasValue());
+
+    auto second = block_mgr_->allocate_block(file.value().inode_id, 1, 3);
+    ASSERT_TRUE(second.hasValue());
+    ASSERT_TRUE(block_mgr_
+                    ->commit_block(second.value().block_id,
+                                   6,
+                                   second.value().generation_stamp,
+                                   datanode_ids(second.value()))
+                    .hasValue());
+
+    auto inode = store_raw()->get_inode(file.value().inode_id);
+    ASSERT_TRUE(inode.hasValue());
+    inode.value().state = FileState::kNormal;
+    inode.value().length = 10;
+    inode.value().content_generation = 2;
+    inode.value().checksum = 0x87654321u;
+    inode.value().checksum_valid = true;
+    ASSERT_TRUE(store_raw()->update_inode(inode.value()).hasValue());
+
+    protocol::GetLocatedBlocksRequest request;
+    request.set_inode_id(file.value().inode_id);
+    auto* expected = request.mutable_expected_file_identity();
+    expected->set_inode_id(file.value().inode_id);
+    expected->set_content_generation(2);
+    expected->set_length(10);
+    expected->set_checksum(0x87654321u);
+    expected->set_checksum_valid(true);
+    protocol::GetLocatedBlocksResponse response;
+    service.GetLocatedBlocks(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(response.status().code(), 0u);
+    ASSERT_EQ(response.blocks_size(), 2);
+    EXPECT_EQ(response.blocks(0).length(), 8u);
+    EXPECT_EQ(response.blocks(1).offset(), 8u);
+    EXPECT_EQ(response.blocks(1).length(), 2u);
+    EXPECT_EQ(response.blocks(0).block_token().inode_id(), file.value().inode_id);
+    EXPECT_EQ(response.blocks(1).block_token().inode_id(), file.value().inode_id);
+    ASSERT_TRUE(response.blocks(0).block_token().has_file_identity());
+    EXPECT_EQ(response.blocks(0).block_token().file_identity().content_generation(), 2u);
+    EXPECT_EQ(response.blocks(0).block_token().file_identity().length(), 10u);
+    EXPECT_TRUE(verify_block_token(response.blocks(0).block_token(),
+                                   "test-secret",
+                                   BlockTokenPermission::kRead,
+                                   response.blocks(0).block_id(),
+                                   response.blocks(0).generation_stamp(),
+                                   file.value().inode_id,
+                                   0));
+
+    protocol::GetLocatedBlocksRequest stale;
+    stale.set_inode_id(file.value().inode_id);
+    auto* stale_expected = stale.mutable_expected_file_identity();
+    stale_expected->set_inode_id(file.value().inode_id);
+    stale_expected->set_content_generation(1);
+    stale_expected->set_length(10);
+    stale_expected->set_checksum(0x87654321u);
+    stale_expected->set_checksum_valid(true);
+    protocol::GetLocatedBlocksResponse stale_response;
+    service.GetLocatedBlocks(nullptr, &stale, &stale_response, nullptr);
+    EXPECT_NE(stale_response.status().code(), 0u);
+}
+
+TEST_F(RegressionNameNodeTest, GetLocatedBlocksIgnoresChecksumValueWhenChecksumIsUnknown) {
+    NameNodeServiceImpl service(
+        ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", 3600000);
+
+    auto file = ns_mgr_->create_file("/unknown-checksum-located.dat", "user", "grp", 0644, 3, 128 * kMB);
+    ASSERT_TRUE(file.hasValue());
+
+    auto block = block_mgr_->allocate_block(file.value().inode_id, 0, 3);
+    ASSERT_TRUE(block.hasValue());
+    ASSERT_TRUE(block_mgr_
+                    ->commit_block(block.value().block_id,
+                                   8,
+                                   block.value().generation_stamp,
+                                   datanode_ids(block.value()))
+                    .hasValue());
+
+    auto inode = store_raw()->get_inode(file.value().inode_id);
+    ASSERT_TRUE(inode.hasValue());
+    inode.value().state = FileState::kNormal;
+    inode.value().length = 8;
+    inode.value().content_generation = 5;
+    inode.value().checksum_valid = false;
+    inode.value().checksum = 0xCAFEBABEu;
+    ASSERT_TRUE(store_raw()->update_inode(inode.value()).hasValue());
+
+    protocol::GetLocatedBlocksRequest request;
+    request.set_inode_id(file.value().inode_id);
+    auto* expected = request.mutable_expected_file_identity();
+    expected->set_inode_id(file.value().inode_id);
+    expected->set_content_generation(5);
+    expected->set_length(8);
+    expected->set_checksum_valid(false);
+    expected->set_checksum(0u); // must be ignored when checksum_valid=false
+
+    protocol::GetLocatedBlocksResponse response;
+    service.GetLocatedBlocks(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(response.status().code(), 0u);
+    EXPECT_EQ(response.blocks_size(), 1);
+    ASSERT_TRUE(response.has_file_identity());
+    EXPECT_FALSE(response.file_identity().checksum_valid());
+    EXPECT_EQ(response.file_identity().checksum(), 0xCAFEBABEu);
+
+    protocol::GetLocatedBlocksRequest stale_flag;
+    stale_flag.set_inode_id(file.value().inode_id);
+    auto* stale_expected = stale_flag.mutable_expected_file_identity();
+    stale_expected->set_inode_id(file.value().inode_id);
+    stale_expected->set_content_generation(5);
+    stale_expected->set_length(8);
+    stale_expected->set_checksum_valid(true);
+    stale_expected->set_checksum(0xCAFEBABEu);
+
+    protocol::GetLocatedBlocksResponse stale_flag_response;
+    service.GetLocatedBlocks(nullptr, &stale_flag, &stale_flag_response, nullptr);
+    EXPECT_NE(stale_flag_response.status().code(), 0u);
+}
+
+TEST_F(RegressionNameNodeTest, CompleteWithoutExpectedChecksumIsRejected) {
+    NameNodeServiceImpl service(
+        ns_mgr_.get(), block_mgr_.get(), lease_mgr_.get(), store_raw(), "test-secret", 3600000);
+
+    auto file = ns_mgr_->create_file("/unknown-checksum.dat", "user", "grp", 0644, 3, 128 * kMB);
+    ASSERT_TRUE(file.hasValue());
+    ASSERT_TRUE(lease_mgr_->acquire_lease(file.value().inode_id, "client-1").hasValue());
+
+    auto alloc = block_mgr_->allocate_block(file.value().inode_id, 0, 3);
+    ASSERT_TRUE(alloc.hasValue());
+    ASSERT_TRUE(block_mgr_
+                    ->commit_block(alloc.value().block_id,
+                                   11,
+                                   alloc.value().generation_stamp,
+                                   datanode_ids(alloc.value()))
+                    .hasValue());
+
+    protocol::CompleteFileRequest request;
+    request.set_inode_id(file.value().inode_id);
+    request.set_client_id("client-1");
+    request.set_expected_length(11);
+    protocol::CompleteFileResponse response;
+    service.CompleteFile(nullptr, &request, &response, nullptr);
+    EXPECT_NE(response.status().code(), 0u);
+    EXPECT_FALSE(response.has_file_identity());
+
+    auto inode = store_raw()->get_inode(file.value().inode_id);
+    ASSERT_TRUE(inode.hasValue());
+    EXPECT_EQ(inode.value().state, FileState::kUnderConstruction);
+    EXPECT_FALSE(inode.value().checksum_valid);
 }
 
 TEST_F(RegressionNameNodeTest, P0_AllocIdFirstInsertContiguity) {

@@ -17,7 +17,10 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-package(default_visibility = ["//cpp/pl/minidfs:__subpackages__"])
+package(default_visibility = [
+    "//cpp/pl/minidfs:__subpackages__",
+    "//cpp/pl/sstv2/io:__pkg__",
+])
 
 cc_library(
     name = "common",

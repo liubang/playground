@@ -112,9 +112,10 @@ graph TB
 
 | 模块 | 代码路径 | 职责 |
 |------|---------|------|
-| DfsClient | `client/dfs_client.h` | 高层 API 封装 (mkdir/put/get/ls/rm/mv) |
-| DfsOutputStream | `client/dfs_output_stream.h` | 流式写入：按 block_size 分块，每块 Pipeline 写入 |
+| DfsClient | `client/dfs_client.h` | 高层 API；提供 immutable output stream，以及绑定 `FileIdentity` 的跨 Block `read_exact` |
+| DfsOutputStream | `client/dfs_output_stream.h` | 流式 Pipeline 写入；complete 提交内容长度/CRC32C 并取得已发布 `FileIdentity` |
 | DfsInputStream | `client/dfs_input_stream.h` | 流式读取：按块拉取，副本容错切换 |
+| MiniDfsFileSystem | `../sstv2/io/minidfs_filesystem.h` | 实现 sstv2 `FileSystem`：`create/append/close` 对接 immutable `DfsOutputStream`，`open/read_at` 对接身份绑定的 `DfsClient::read_exact` 并填充调用方字节缓冲区；共享持有 `DfsClient` |
 
 ### 元数据层
 
@@ -157,16 +158,19 @@ sequenceDiagram
         DN3->>NN: CommitBlock(block_id, length)
     end
 
-    C->>NN: CompleteFile(inode_id, final_length)
+    C->>NN: CompleteFile(inode_id, expected_length, expected_checksum)
+    NN-->>C: FileIdentity(inode_id, generation, length, checksum)
 ```
 
 关键点：
 
 1. 每个 Block 独立分配，NameNode 通过 PlacementManager 选择目标 DataNode
 2. Pipeline 写入：数据从 Client 流向 DN1，DN1 转发到 DN2，DN2 转发到 DN3
-3. 每个 chunk（默认 1MB）是一次独立的 RPC 请求-响应
+3. 每个 chunk（默认 1MB）是一次独立的 RPC 请求-响应，并在 DataNode 落盘时记录 CRC32C
 4. 所有副本都提交后，NameNode 将 Block 状态从 Allocating 转为 Committed
 5. 只有 Block 满或文件写完时才触发 CommitBlock
+6. Complete 必须声明客户端计算的内容长度和 CRC32C；成功时原子发布 `FileIdentity`
+7. `kImmutableAfterComplete` 文件发布后拒绝 append、truncate 和原地覆盖；Complete replay 必须与已发布 identity 一致
 
 ### 读取流程 (get)
 
@@ -185,7 +189,7 @@ sequenceDiagram
     end
 ```
 
-Client 从 NameNode 获取所有块的位置信息后，直接从 DataNode 读取数据。如果某个 DataNode 不可用，Client 自动切换到同一块的其他副本。
+Client 从 NameNode 获取按已发布文件长度裁剪后的块位置，再直接从 DataNode positional read。如果某个 DataNode 超时、短读、校验失败或不可用，Client 自动切换到同一块的其他副本。`read_exact(path, offset, length, expected_identity)` 在 NameNode 和 Block Token 两层绑定 `FileIdentity`，防止路径重用或内容 generation 变化造成 ABA；DataNode 只读取与范围相交的 chunk，但会校验每个相交 chunk 的完整落盘 CRC32C。
 
 ### 心跳与块汇报
 

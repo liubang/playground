@@ -21,6 +21,7 @@
 #include <brpc/controller.h>
 #include <cstring>
 #include <fmt/core.h>
+#include <optional>
 #include <utility>
 
 #include "cpp/pl/minidfs/common/checksum.h"
@@ -48,7 +49,9 @@ DfsOutputStream::DfsOutputStream(brpc::Channel* namenode_channel,
       inode_id_(inode_id),
       client_id_(std::move(client_id)),
       options_(options),
-      current_block_index_(options.starting_block_index) {
+      current_block_index_(options.starting_block_index),
+      total_bytes_written_(options.initial_length),
+      rolling_checksum_(options.initial_checksum) {
     buffer_.reserve(options_.block_size);
 }
 
@@ -67,8 +70,10 @@ DfsOutputStream::DfsOutputStream(DfsOutputStream&& other) noexcept
       buffer_(std::move(other.buffer_)),
       current_block_index_(std::exchange(other.current_block_index_, 0)),
       total_bytes_written_(std::exchange(other.total_bytes_written_, 0)),
+      rolling_checksum_(std::exchange(other.rolling_checksum_, std::nullopt)),
       request_seq_(std::exchange(other.request_seq_, 0)),
-      closed_(std::exchange(other.closed_, true)) {}
+      closed_(std::exchange(other.closed_, true)),
+      published_identity_(std::move(other.published_identity_)) {}
 
 pl::Result<DfsOutputStream> DfsOutputStream::create(brpc::Channel* namenode_channel,
                                                     uint64_t inode_id,
@@ -81,6 +86,10 @@ pl::Result<DfsOutputStream> DfsOutputStream::create(brpc::Channel* namenode_chan
     }
     if (options.request_id_prefix.empty()) {
         options.request_id_prefix = std::string(client_id);
+    }
+    if (!options.initial_checksum.has_value()) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+                             "output stream requires a trusted initial content checksum");
     }
     return DfsOutputStream(namenode_channel, inode_id, std::string(client_id), options);
 }
@@ -101,6 +110,9 @@ pl::Result<pl::Void> DfsOutputStream::write(const void* data, uint64_t len) {
         bytes += writable;
         len -= writable;
         total_bytes_written_ += writable;
+        if (rolling_checksum_.has_value()) {
+            rolling_checksum_ = extend_crc32c(*rolling_checksum_, bytes - writable, writable);
+        }
         if (buffer_.size() == options_.block_size) {
             auto flushed = flush_block();
             if (flushed.hasError()) {
@@ -167,8 +179,8 @@ pl::Result<pl::Void> DfsOutputStream::flush_block() {
         return status;
     }
 
-    auto result =
-        write_block_pipeline(allocated.block(), current_block_index_, buffer_.data(), buffer_.size());
+    auto result = write_block_pipeline(
+        allocated.block(), current_block_index_, buffer_.data(), buffer_.size());
     if (result.hasError()) {
         return result;
     }
@@ -263,6 +275,8 @@ pl::Result<pl::Void> DfsOutputStream::close() {
     protocol::CompleteFileRequest request;
     request.set_inode_id(inode_id_);
     request.set_client_id(client_id_);
+    request.set_expected_length(total_bytes_written_);
+    request.set_expected_checksum(*rolling_checksum_);
     auto* header = request.mutable_header();
     header->set_request_id(next_request_id("complete"));
     header->set_client_id(client_id_);
@@ -275,6 +289,15 @@ pl::Result<pl::Void> DfsOutputStream::close() {
     auto status = check_status(response.status());
     if (status.hasError()) {
         return status;
+    }
+    if (response.has_file_identity()) {
+        published_identity_ = FileIdentity{
+            .inode_id = response.file_identity().inode_id(),
+            .content_generation = response.file_identity().content_generation(),
+            .length = response.file_identity().length(),
+            .checksum = response.file_identity().checksum(),
+            .checksum_valid = response.file_identity().checksum_valid(),
+        };
     }
     closed_ = true;
     return pl::Void{};

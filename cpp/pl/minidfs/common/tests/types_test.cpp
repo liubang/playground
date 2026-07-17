@@ -35,6 +35,9 @@ TEST(TypesTest, InodeDefaults) {
     EXPECT_EQ(inode.length, 0u);
     EXPECT_EQ(inode.replication, kDefaultReplication);
     EXPECT_EQ(inode.block_size, kDefaultBlockSize);
+    EXPECT_EQ(inode.file_append_mode, FileAppendMode::kAppendable);
+    EXPECT_EQ(inode.content_generation, 0u);
+    EXPECT_EQ(inode.checksum, 0u);
     EXPECT_EQ(inode.state, FileState::kNormal);
     EXPECT_EQ(inode.ctime_ms, 0u);
     EXPECT_EQ(inode.mtime_ms, 0u);
@@ -50,6 +53,11 @@ TEST(TypesTest, FileStateValues) {
     EXPECT_EQ(static_cast<uint8_t>(FileState::kNormal), 0u);
     EXPECT_EQ(static_cast<uint8_t>(FileState::kUnderConstruction), 1u);
     EXPECT_EQ(static_cast<uint8_t>(FileState::kDeleted), 2u);
+}
+
+TEST(TypesTest, FileAppendModeValues) {
+    EXPECT_EQ(static_cast<uint8_t>(FileAppendMode::kAppendable), 0u);
+    EXPECT_EQ(static_cast<uint8_t>(FileAppendMode::kImmutableAfterComplete), 1u);
 }
 
 // BlockMeta default values
@@ -153,6 +161,15 @@ TEST(TypesTest, DataNodeEndpointDefaults) {
     EXPECT_EQ(ep.data_port, 0u);
 }
 
+// FileIdentity
+TEST(TypesTest, FileIdentityDefaults) {
+    FileIdentity identity;
+    EXPECT_EQ(identity.inode_id, 0u);
+    EXPECT_EQ(identity.content_generation, 0u);
+    EXPECT_EQ(identity.length, 0u);
+    EXPECT_EQ(identity.checksum, 0u);
+}
+
 // FileStatus
 TEST(TypesTest, FileStatusDefaults) {
     FileStatus fs;
@@ -166,6 +183,11 @@ TEST(TypesTest, FileStatusDefaults) {
     EXPECT_TRUE(fs.owner.empty());
     EXPECT_TRUE(fs.group.empty());
     EXPECT_EQ(fs.permission, 0u);
+    EXPECT_EQ(fs.file_append_mode, FileAppendMode::kAppendable);
+    EXPECT_EQ(fs.published_identity.inode_id, 0u);
+    EXPECT_EQ(fs.published_identity.content_generation, 0u);
+    EXPECT_EQ(fs.published_identity.length, 0u);
+    EXPECT_EQ(fs.published_identity.checksum, 0u);
 }
 
 // Struct assignment / copy

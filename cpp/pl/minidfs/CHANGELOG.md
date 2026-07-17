@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-07-17
+
+### 不可变文件发布与身份
+
+- 新增 `FileAppendMode` 和稳定的 `FileIdentity(inode_id, content_generation, length, checksum)`；immutable 文件 Complete 后拒绝 append、truncate 和原地覆盖。
+- Complete 必须提交客户端计算的最终长度与内容 CRC32C，并原子返回已发布 identity；幂等 replay 必须与已发布 identity 一致且不重复增加 generation。
+- appendable 文件 truncate 后增加 content generation，并将未知的内容 checksum 明确标记为无效，不再以块元数据伪装文件内容校验和。
+
+### 身份绑定随机读
+
+- `DfsClient::read_exact` 支持绑定调用方提供的 `FileIdentity`，按已发布长度跨 Block 精确读取，并对超时、短读、校验失败执行副本回退。
+- GetLocatedBlocks、token refresh 和 Block Token 全程绑定相同文件 identity，拒绝路径重用或 generation 变化产生的 stale read。
+- DataNode 使用 `pread` 实现真正的范围读取，只读取相交 chunk，同时验证每个相交 chunk 的完整落盘 CRC32C。
+
+### sstv2 集成
+
+- 新增 sstv2 `MiniDfsFileSystem` 后端，通过统一 `FileSystem`/`FileHandle` 接口将 key/value sink 追加写入 immutable MiniDFS 文件，并在 `close` 时发布。
+- `open` 固定已发布 identity，`read_at` 通过 `read_exact` 精确填充 sstv2 Reader 提供的字节缓冲区；后端共享持有 `DfsClient` 以覆盖打开句柄的生命周期。
+- E2E 覆盖 embedded/separated value、point get、Seek/Next 全量迭代、跨 Block 小范围读取、immutable mutation 拒绝和 DataNode 重启恢复。
+
+### 验证
+
+- `bazel test //cpp/pl/minidfs/... //cpp/pl/sstv2/... --test_output=errors` 全部 34 个测试目标通过。
+- `docker/minidfs/tests/e2e.sh all` 从空卷执行通过，包括 CLI、DfsClient/sstv2 集成、DataNode 重启和启动 block report。
+
 ## 2026-07-16
 
 ### NameNode 与元数据一致性

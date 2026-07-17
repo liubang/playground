@@ -22,6 +22,7 @@
 #include <chrono>
 #include <functional>
 
+#include "cpp/pl/minidfs/common/error_code.h"
 #include "cpp/pl/minidfs/common/time_util.h"
 
 namespace pl::minidfs {
@@ -72,29 +73,12 @@ pl::Result<pl::Void> NameNodeMaintenance::recover_expired_leases() {
         return folly::makeUnexpected(leases.error());
     }
 
-    for (const auto& lease : leases.value()) {
-        auto txn = store_->begin_transaction();
-        if (txn.hasError()) {
-            return folly::makeUnexpected(txn.error());
-        }
-        auto final_length = block_manager_->recover_file(lease.inode_id);
-        if (final_length.hasError()) {
-            return folly::makeUnexpected(final_length.error());
-        }
-        auto complete = namespace_manager_->complete_file(lease.inode_id, final_length.value());
-        if (complete.hasError()) {
-            return folly::makeUnexpected(complete.error());
-        }
-        auto close = store_->close_lease(lease.inode_id);
-        if (close.hasError()) {
-            return folly::makeUnexpected(close.error());
-        }
-        auto commit = txn.value()->commit();
-        if (commit.hasError()) {
-            return folly::makeUnexpected(commit.error());
-        }
-        LOG(INFO) << "recovered expired lease " << lease.lease_id << " for inode " << lease.inode_id
-                  << ", readable length=" << final_length.value();
+    if (!leases.value().empty()) {
+        // Recovery can determine a committed length, but block metadata cannot reconstruct the
+        // file-level CRC32C. Keep the lease and under-construction state intact rather than
+        // publishing a fabricated FileIdentity checksum.
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kChecksumMismatch),
+                             "cannot recover expired lease without a trusted file checksum");
     }
     return pl::Void{};
 }

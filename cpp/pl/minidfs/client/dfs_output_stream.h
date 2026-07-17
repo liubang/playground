@@ -18,6 +18,7 @@
 
 #include <brpc/channel.h>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,8 @@ struct DfsOutputStreamOptions {
     uint32_t replication = 0;
     int32_t rpc_timeout_ms = 0;
     uint32_t starting_block_index = 0;
+    uint64_t initial_length = 0;
+    std::optional<uint32_t> initial_checksum = std::nullopt;
     std::string request_id_prefix;
 };
 
@@ -70,6 +73,11 @@ public:
     /// 已写入的总字节数
     [[nodiscard]] uint64_t bytes_written() const { return total_bytes_written_; }
 
+    /// 完成后由NameNode发布的文件身份
+    [[nodiscard]] std::optional<FileIdentity> published_identity() const {
+        return published_identity_;
+    }
+
     /// 是否已关闭
     [[nodiscard]] bool closed() const { return closed_; }
 
@@ -101,8 +109,10 @@ private:
     std::string buffer_; // 当前 block 的数据缓冲区
     uint32_t current_block_index_ = 0;
     uint64_t total_bytes_written_ = 0;
+    std::optional<uint32_t> rolling_checksum_;
     uint64_t request_seq_ = 0;
     bool closed_ = false;
+    std::optional<FileIdentity> published_identity_;
 };
 
 } // namespace pl::minidfs

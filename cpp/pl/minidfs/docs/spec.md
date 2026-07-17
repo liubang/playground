@@ -130,6 +130,10 @@ cpp/pl/minidfs/
 │   ├── cli_main.cpp         // minidfs CLI 入口
 │   └── datanode_main.cpp    // DataNode 服务入口
 │
+├── ../sstv2/io/
+│   ├── filesystem.h         // sstv2 统一 FileSystem/FileHandle 契约
+│   └── minidfs_filesystem.* // 基于 DfsClient 的文件系统后端
+│
 └── master/
     ├── BUILD
     ├── namenode_main.cpp     // NameNode 服务入口
@@ -158,6 +162,19 @@ enum class FileState : uint8_t {
     kDeleted          = 2,
 };
 
+enum class FileAppendMode : uint8_t {
+    kAppendable = 0,
+    kImmutableAfterComplete = 1,
+};
+
+struct FileIdentity {
+    uint64_t inode_id;
+    uint64_t content_generation;
+    uint64_t length;
+    uint32_t checksum;
+    bool checksum_valid;
+};
+
 struct Inode {
     uint64_t    inode_id;
     InodeType   type;
@@ -168,9 +185,13 @@ struct Inode {
     std::string group;
     uint32_t    permission;
 
-    uint64_t    length;       // 文件总长度（目录为 0）
+    uint64_t    length;       // 已发布文件长度（目录为 0）
     uint32_t    replication;
     uint64_t    block_size;
+    FileAppendMode file_append_mode;
+    uint64_t    content_generation;
+    uint32_t    checksum;
+    bool        checksum_valid;
 
     FileState   state;
 
@@ -181,6 +202,8 @@ struct Inode {
 
 } // namespace pl::minidfs
 ```
+
+`FileIdentity` 是读取和缓存的稳定身份。NameNode 只在 Complete 成功时原子发布新 identity；身份比较绑定 inode、content generation、length 和 checksum validity。checksum 有效时还必须匹配其值。`kImmutableAfterComplete` 文件发布后禁止 append 和 truncate。
 
 ## 5.2 Block 元数据
 

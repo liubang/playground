@@ -109,14 +109,16 @@ class TreeReader {
 public:
     // Full scan: return all data block refs
     static absl::Status scan_data_blocks(
-        std::string_view key_file,
+        const std::shared_ptr<io::FileSystem>& filesystem,
+io::FileHandle key_file,
         const InternalSchema::ConstRef& schema,
         BlockRef root,
         std::vector<BlockRef>* data_blocks);
 
     // Prefix scan: data blocks starting from start_key
     static absl::Status scan_data_blocks_from(
-        std::string_view key_file,
+        const std::shared_ptr<io::FileSystem>& filesystem,
+io::FileHandle key_file,
         const InternalSchema::ConstRef& schema,
         BlockRef root,
         const PrefixKey& start_key,
@@ -124,7 +126,8 @@ public:
 
     // Range scan: data blocks in [start_key, limit_key)
     static absl::Status scan_data_blocks_in_range(
-        std::string_view key_file,
+        const std::shared_ptr<io::FileSystem>& filesystem,
+io::FileHandle key_file,
         const InternalSchema::ConstRef& schema,
         BlockRef root,
         const std::optional<PrefixKey>& start_key,
@@ -133,7 +136,8 @@ public:
 
     // Point lookup: find the data block containing target_key
     static absl::StatusOr<std::optional<BlockRef>> find_data_block(
-        std::string_view key_file,
+        const std::shared_ptr<io::FileSystem>& filesystem,
+io::FileHandle key_file,
         const InternalSchema::ConstRef& schema,
         BlockRef root,
         const AllKey& target_key);

@@ -47,6 +47,7 @@ message BlockTokenProto {
     uint32 permissions = 5;
     uint64 expires_at_ms = 6;
     bytes signature = 7;
+    optional FileIdentityProto file_identity = 8;
 }
 
 message LocatedBlockProto {
@@ -56,6 +57,19 @@ message LocatedBlockProto {
     uint64 length = 4;
     repeated DataNodeEndpointProto locations = 5;
     BlockTokenProto block_token = 6;
+}
+
+enum FileAppendModeProto {
+    FILE_APPEND_MODE_APPENDABLE = 0;
+    FILE_APPEND_MODE_IMMUTABLE_AFTER_COMPLETE = 1;
+}
+
+message FileIdentityProto {
+    uint64 inode_id = 1;
+    uint64 content_generation = 2;
+    uint64 length = 3;
+    uint32 checksum = 4;
+    bool checksum_valid = 5;
 }
 
 message FileStatusProto {
@@ -69,6 +83,8 @@ message FileStatusProto {
     string owner = 8;
     string group = 9;
     uint32 permission = 10;
+    FileAppendModeProto file_append_mode = 11;
+    FileIdentityProto published_identity = 12;
 }
 
 message BlockInfoProto {
@@ -100,6 +116,7 @@ message CreateFileRequest {
     uint64 block_size = 6;
     string client_id = 7;
     bool overwrite = 8;
+    FileAppendModeProto file_append_mode = 9;
     RequestHeader header = 15;
 }
 
@@ -122,6 +139,7 @@ message AppendFileResponse {
     uint32 next_block_index = 4;
     uint64 block_size = 5;
     uint32 replication = 6;
+    FileIdentityProto published_identity = 7;
 }
 
 message AllocateBlockRequest {
@@ -140,20 +158,25 @@ message AllocateBlockResponse {
 message CompleteFileRequest {
     uint64 inode_id = 1;
     string client_id = 2;
+    optional uint64 expected_length = 3;
+    optional uint32 expected_checksum = 4;
     RequestHeader header = 15;
 }
 
 message CompleteFileResponse {
     StatusProto status = 1;
+    FileIdentityProto file_identity = 2;
 }
 
 message GetLocatedBlocksRequest {
     uint64 inode_id = 1;
+    FileIdentityProto expected_file_identity = 2;
 }
 
 message GetLocatedBlocksResponse {
     StatusProto status = 1;
     repeated LocatedBlockProto blocks = 2;
+    FileIdentityProto file_identity = 3;
 }
 
 message GetFileStatusRequest {

@@ -33,6 +33,7 @@ cc_library(
     deps = [
         "//cpp/pl/sstv2/block",
         "//cpp/pl/sstv2/bloom",
+        "//cpp/pl/sstv2/buffer",
         "//cpp/pl/sstv2/codec:fixed",
         "//cpp/pl/sstv2/codec:value_comparable",
         "//cpp/pl/sstv2/compress",
@@ -40,6 +41,7 @@ cc_library(
         "//cpp/pl/sstv2/format:section",
         "//cpp/pl/sstv2/format:tail",
         "//cpp/pl/sstv2/index",
+        "//cpp/pl/sstv2/io:filesystem",
         "//cpp/pl/sstv2/types:internal_row",
         "//cpp/pl/sstv2/types:internal_schema",
         "//cpp/pl/sstv2/types:key",

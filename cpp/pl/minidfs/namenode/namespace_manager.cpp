@@ -220,7 +220,8 @@ pl::Result<Inode> NamespaceManager::create_file(std::string_view path,
                                                 std::string_view group,
                                                 uint32_t permission,
                                                 uint32_t replication,
-                                                uint64_t block_size) {
+                                                uint64_t block_size,
+                                                FileAppendMode file_append_mode) {
     auto valid = validate_path(path);
     if (valid.hasError()) {
         return folly::makeUnexpected(valid.error());
@@ -274,6 +275,9 @@ pl::Result<Inode> NamespaceManager::create_file(std::string_view path,
     file.permission = permission;
     file.replication = replication;
     file.block_size = block_size;
+    file.file_append_mode = file_append_mode;
+    file.content_generation = 0;
+    file.checksum = 0;
     file.state = FileState::kUnderConstruction;
     file.ctime_ms = ts;
     file.mtime_ms = ts;
@@ -298,6 +302,10 @@ pl::Result<Inode> NamespaceManager::begin_append(std::string_view path) {
     if (inode.value().state != FileState::kNormal) {
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kFileUnderConstruction),
                              "file is already under construction");
+    }
+    if (inode.value().file_append_mode == FileAppendMode::kImmutableAfterComplete) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kPermissionDenied),
+                             "append is disabled for immutable-after-complete files");
     }
 
     auto file = std::move(inode.value());
@@ -419,9 +427,8 @@ pl::Result<pl::Void> NamespaceManager::rename(std::string_view src, std::string_
         uint64_t ancestor_id = dst_parent.value().inode_id;
         while (ancestor_id != 0) {
             if (ancestor_id == src_inode.value().inode_id) {
-                return pl::makeError(
-                    static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
-                    "cannot move a directory into itself or its descendant");
+                return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+                                     "cannot move a directory into itself or its descendant");
             }
             auto ancestor = store_->get_inode(ancestor_id);
             if (ancestor.hasError()) {
@@ -476,6 +483,14 @@ pl::Result<FileStatus> NamespaceManager::get_file_status(std::string_view path) 
     status.owner = inode.owner;
     status.group = inode.group;
     status.permission = inode.permission;
+    status.file_append_mode = inode.file_append_mode;
+    status.published_identity = {
+        .inode_id = inode.inode_id,
+        .content_generation = inode.content_generation,
+        .length = inode.length,
+        .checksum = inode.checksum,
+        .checksum_valid = inode.checksum_valid,
+    };
     return status;
 }
 
@@ -516,6 +531,14 @@ pl::Result<std::vector<FileStatus>> NamespaceManager::list_status(std::string_vi
         fs.owner = child.owner;
         fs.group = child.group;
         fs.permission = child.permission;
+        fs.file_append_mode = child.file_append_mode;
+        fs.published_identity = {
+            .inode_id = child.inode_id,
+            .content_generation = child.content_generation,
+            .length = child.length,
+            .checksum = child.checksum,
+            .checksum_valid = child.checksum_valid,
+        };
         result.push_back(std::move(fs));
     }
     return result;
@@ -530,6 +553,15 @@ pl::Result<Inode> NamespaceManager::resolve_path(std::string_view path) {
 }
 
 pl::Result<pl::Void> NamespaceManager::complete_file(uint64_t inode_id, uint64_t final_length) {
+    auto identity = complete_file_publish_identity(inode_id, final_length, std::nullopt);
+    if (identity.hasError()) {
+        return folly::makeUnexpected(identity.error());
+    }
+    return pl::Void{};
+}
+
+pl::Result<FileIdentity> NamespaceManager::complete_file_publish_identity(
+    uint64_t inode_id, uint64_t final_length, std::optional<uint32_t> checksum) {
     auto inode_result = store_->get_inode(inode_id);
     if (inode_result.hasError()) {
         return folly::makeUnexpected(inode_result.error());
@@ -541,13 +573,67 @@ pl::Result<pl::Void> NamespaceManager::complete_file(uint64_t inode_id, uint64_t
                              "cannot complete a directory");
     }
 
-    inode.state = FileState::kNormal;
-    inode.length = final_length;
-    inode.mtime_ms = now_ms();
-    return store_->update_inode(inode);
+    const bool already_completed = inode.state == FileState::kNormal;
+    if (already_completed) {
+        if (inode.length != final_length) {
+            return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+                                 "complete replay length mismatch");
+        }
+        if (!checksum.has_value()) {
+            return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+                                 "complete replay requires expected checksum");
+        }
+        if (!inode.checksum_valid || inode.checksum != checksum.value()) {
+            return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kChecksumMismatch),
+                                 "complete replay checksum does not match published identity");
+        }
+    }
+
+    if (!already_completed) {
+        inode.state = FileState::kNormal;
+        inode.length = final_length;
+        inode.content_generation += 1;
+        inode.checksum = checksum.value_or(0);
+        inode.checksum_valid = checksum.has_value();
+        inode.mtime_ms = now_ms();
+        auto update = store_->update_inode(inode);
+        if (update.hasError()) {
+            return folly::makeUnexpected(update.error());
+        }
+    }
+
+    FileIdentity identity;
+    identity.inode_id = inode.inode_id;
+    identity.content_generation = inode.content_generation;
+    identity.length = inode.length;
+    identity.checksum = inode.checksum;
+    identity.checksum_valid = inode.checksum_valid;
+    return identity;
 }
 
-pl::Result<pl::Void> NamespaceManager::set_file_length(uint64_t inode_id, uint64_t length) {
+pl::Result<FileIdentity> NamespaceManager::get_file_identity(uint64_t inode_id) {
+    auto inode_result = store_->get_inode(inode_id);
+    if (inode_result.hasError()) {
+        return folly::makeUnexpected(inode_result.error());
+    }
+    const auto& inode = inode_result.value();
+    if (inode.type != InodeType::kFile) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kIsDirectory),
+                             "inode is not a file");
+    }
+
+    FileIdentity identity;
+    identity.inode_id = inode.inode_id;
+    identity.content_generation = inode.content_generation;
+    identity.length = inode.length;
+    identity.checksum = inode.checksum;
+    identity.checksum_valid = inode.checksum_valid;
+    return identity;
+}
+
+pl::Result<pl::Void> NamespaceManager::set_file_length(uint64_t inode_id,
+                                                      uint64_t length,
+                                                      std::optional<uint32_t> checksum) {
     auto inode_result = store_->get_inode(inode_id);
     if (inode_result.hasError()) {
         return folly::makeUnexpected(inode_result.error());
@@ -561,7 +647,22 @@ pl::Result<pl::Void> NamespaceManager::set_file_length(uint64_t inode_id, uint64
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kFileUnderConstruction),
                              "cannot truncate a file under construction");
     }
+    if (inode.file_append_mode == FileAppendMode::kImmutableAfterComplete) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kPermissionDenied),
+                             "truncate is disabled for immutable-after-complete files");
+    }
+    if (length > inode.length) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+                             "truncate length exceeds current file length");
+    }
+    if (length == inode.length) {
+        return pl::Void{};
+    }
+
     inode.length = length;
+    inode.content_generation += 1;
+    inode.checksum = checksum.value_or(0);
+    inode.checksum_valid = checksum.has_value();
     inode.mtime_ms = now_ms();
     return store_->update_inode(inode);
 }

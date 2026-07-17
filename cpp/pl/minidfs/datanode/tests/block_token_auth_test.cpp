@@ -22,10 +22,9 @@
 #include <brpc/channel.h>
 #include <brpc/controller.h>
 #include <brpc/server.h>
-#include <gtest/gtest.h>
-
 #include <cstdlib>
 #include <filesystem>
+#include <gtest/gtest.h>
 #include <optional>
 #include <string>
 
@@ -52,9 +51,9 @@ constexpr const char* kSecret = "test-block-token-secret-for-auth-test";
 class BlockTokenAuthTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_dir_ = fs::temp_directory_path() /
-                    ("minidfs_token_auth_test_" + std::to_string(::getpid()) + "_" +
-                     std::to_string(counter_++));
+        test_dir_ =
+            fs::temp_directory_path() / ("minidfs_token_auth_test_" + std::to_string(::getpid()) +
+                                         "_" + std::to_string(counter_++));
         fs::create_directories(test_dir_);
 
         LocalBlockStore::Config config;
@@ -65,19 +64,23 @@ protected:
 
         // BlockReporter with no-op functions (we don't need real NN communication for auth tests)
         pl::minidfs::BlockReportFunc report_func =
-            [](uint64_t, const pl::minidfs::BlockReport&) -> pl::Result<pl::minidfs::BlockReportResponse> {
+            [](uint64_t,
+               const pl::minidfs::BlockReport&) -> pl::Result<pl::minidfs::BlockReportResponse> {
             return pl::minidfs::BlockReportResponse{};
         };
-        pl::minidfs::DeleteBlockFunc delete_func =
-            [](uint64_t, uint64_t) -> pl::Result<pl::Void> { return pl::Void{}; };
+        pl::minidfs::DeleteBlockFunc delete_func = [](uint64_t, uint64_t) -> pl::Result<pl::Void> {
+            return pl::Void{};
+        };
 
         BlockReporter::Config br_config{
             .datanode_id = 1,
             .full_report_interval_ms = 600000,
         };
-        reporter_ = std::make_unique<BlockReporter>(br_config, store_.get(), report_func, delete_func);
+        reporter_ =
+            std::make_unique<BlockReporter>(br_config, store_.get(), report_func, delete_func);
 
-        service_ = std::make_unique<DataTransferServiceImpl>(store_.get(), reporter_.get(), kSecret);
+        service_ =
+            std::make_unique<DataTransferServiceImpl>(store_.get(), reporter_.get(), kSecret);
 
         // Start brpc server
         ASSERT_EQ(server_.AddService(service_.get(), brpc::SERVER_DOESNT_OWN_SERVICE), 0);
@@ -103,7 +106,8 @@ protected:
     }
 
     /// Helper: issue a block token with the given permissions and a far-future expiry.
-    static protocol::BlockTokenProto issue_token(uint32_t permissions, uint64_t block_id = kBlockId) {
+    static protocol::BlockTokenProto issue_token(uint32_t permissions,
+                                                 uint64_t block_id = kBlockId) {
         return issue_block_token(block_id,
                                  kGenerationStamp,
                                  kInodeId,
@@ -134,13 +138,8 @@ protected:
         token.set_block_index(kBlockIndex);
         token.set_permissions(permissions);
         token.set_expires_at_ms(1); // epoch + 1ms = long expired
-        token.set_signature(block_token_signature(kSecret,
-                                                  kBlockId,
-                                                  kGenerationStamp,
-                                                  kInodeId,
-                                                  kBlockIndex,
-                                                  permissions,
-                                                  1));
+        token.set_signature(block_token_signature(
+            kSecret, kBlockId, kGenerationStamp, kInodeId, kBlockIndex, permissions, 1));
         return token;
     }
 
@@ -161,8 +160,8 @@ TEST_F(BlockTokenAuthTest, ReadBlockWithValidTokenSucceeds) {
     // First, create and finalize a block so it can be read
     ASSERT_TRUE(store_->create_block(kBlockId, kInodeId, kBlockIndex, kGenerationStamp).hasValue());
     std::string data = "hello world";
-    ASSERT_TRUE(store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0)
-                    .hasValue());
+    ASSERT_TRUE(
+        store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0).hasValue());
     ASSERT_TRUE(store_->finalize_block(kBlockId, kGenerationStamp).hasValue());
 
     auto token = issue_token(kBlockTokenPermissionRead);
@@ -187,8 +186,8 @@ TEST_F(BlockTokenAuthTest, ReadBlockWithoutTokenFails) {
     // Create a block to read
     ASSERT_TRUE(store_->create_block(kBlockId, kInodeId, kBlockIndex, kGenerationStamp).hasValue());
     std::string data = "test";
-    ASSERT_TRUE(store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0)
-                    .hasValue());
+    ASSERT_TRUE(
+        store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0).hasValue());
     ASSERT_TRUE(store_->finalize_block(kBlockId, kGenerationStamp).hasValue());
 
     brpc::Controller cntl;
@@ -210,8 +209,8 @@ TEST_F(BlockTokenAuthTest, ReadBlockWithWrongPermissionFails) {
     // Create a block to read
     ASSERT_TRUE(store_->create_block(kBlockId, kInodeId, kBlockIndex, kGenerationStamp).hasValue());
     std::string data = "test";
-    ASSERT_TRUE(store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0)
-                    .hasValue());
+    ASSERT_TRUE(
+        store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0).hasValue());
     ASSERT_TRUE(store_->finalize_block(kBlockId, kGenerationStamp).hasValue());
 
     // Issue a Write-only token, try to Read
@@ -236,8 +235,8 @@ TEST_F(BlockTokenAuthTest, ReadBlockWithWrongSecretFails) {
     // Create a block to read
     ASSERT_TRUE(store_->create_block(kBlockId, kInodeId, kBlockIndex, kGenerationStamp).hasValue());
     std::string data = "test";
-    ASSERT_TRUE(store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0)
-                    .hasValue());
+    ASSERT_TRUE(
+        store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0).hasValue());
     ASSERT_TRUE(store_->finalize_block(kBlockId, kGenerationStamp).hasValue());
 
     auto token = issue_token_wrong_secret(kBlockTokenPermissionRead);
@@ -261,8 +260,8 @@ TEST_F(BlockTokenAuthTest, ReadBlockWithExpiredTokenFails) {
     // Create a block to read
     ASSERT_TRUE(store_->create_block(kBlockId, kInodeId, kBlockIndex, kGenerationStamp).hasValue());
     std::string data = "test";
-    ASSERT_TRUE(store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0)
-                    .hasValue());
+    ASSERT_TRUE(
+        store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0).hasValue());
     ASSERT_TRUE(store_->finalize_block(kBlockId, kGenerationStamp).hasValue());
 
     auto token = issue_expired_token(kBlockTokenPermissionRead);
@@ -286,8 +285,8 @@ TEST_F(BlockTokenAuthTest, ReadBlockWithWrongBlockIdFails) {
     // Create a block
     ASSERT_TRUE(store_->create_block(kBlockId, kInodeId, kBlockIndex, kGenerationStamp).hasValue());
     std::string data = "test";
-    ASSERT_TRUE(store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0)
-                    .hasValue());
+    ASSERT_TRUE(
+        store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0).hasValue());
     ASSERT_TRUE(store_->finalize_block(kBlockId, kGenerationStamp).hasValue());
 
     // Token is for block_id=kBlockId, but request asks for block_id=999
@@ -489,8 +488,8 @@ TEST_F(BlockTokenAuthTest, TruncateBlockWithValidTokenSucceeds) {
     // First create and finalize a block
     ASSERT_TRUE(store_->create_block(kBlockId, kInodeId, kBlockIndex, kGenerationStamp).hasValue());
     std::string data = "some data to truncate";
-    ASSERT_TRUE(store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0)
-                    .hasValue());
+    ASSERT_TRUE(
+        store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0).hasValue());
     ASSERT_TRUE(store_->finalize_block(kBlockId, kGenerationStamp).hasValue());
 
     auto token = issue_token(kBlockTokenPermissionTruncate);
@@ -513,8 +512,8 @@ TEST_F(BlockTokenAuthTest, TruncateBlockWithoutTokenFails) {
     // Create a block so truncate would otherwise succeed
     ASSERT_TRUE(store_->create_block(kBlockId, kInodeId, kBlockIndex, kGenerationStamp).hasValue());
     std::string data = "some data";
-    ASSERT_TRUE(store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0)
-                    .hasValue());
+    ASSERT_TRUE(
+        store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0).hasValue());
     ASSERT_TRUE(store_->finalize_block(kBlockId, kGenerationStamp).hasValue());
 
     brpc::Controller cntl;
@@ -535,8 +534,8 @@ TEST_F(BlockTokenAuthTest, TruncateBlockWithReadTokenFails) {
     // Create a block so truncate would otherwise succeed
     ASSERT_TRUE(store_->create_block(kBlockId, kInodeId, kBlockIndex, kGenerationStamp).hasValue());
     std::string data = "some data";
-    ASSERT_TRUE(store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0)
-                    .hasValue());
+    ASSERT_TRUE(
+        store_->append_chunk(kBlockId, kGenerationStamp, data.data(), data.size(), 0).hasValue());
     ASSERT_TRUE(store_->finalize_block(kBlockId, kGenerationStamp).hasValue());
 
     auto token = issue_token(kBlockTokenPermissionRead);
@@ -569,9 +568,8 @@ TEST(BlockTokenPrimitiveTest, RequiresExplicitConfiguredSecret) {
     EXPECT_EQ(configured_block_token_secret("explicit-secret"), "explicit-secret");
 
     const char* original = std::getenv("MINIDFS_BLOCK_TOKEN_SECRET");
-    const std::optional<std::string> saved = original == nullptr
-                                                 ? std::nullopt
-                                                 : std::optional<std::string>(original);
+    const std::optional<std::string> saved =
+        original == nullptr ? std::nullopt : std::optional<std::string>(original);
     ASSERT_EQ(setenv("MINIDFS_BLOCK_TOKEN_SECRET", "environment-secret", 1), 0);
     EXPECT_EQ(configured_block_token_secret(), "environment-secret");
     if (saved.has_value()) {
@@ -604,16 +602,39 @@ TEST(BlockTokenPrimitiveTest, IssueAndVerifyTokenRoundTrip) {
 
     EXPECT_TRUE(verify_block_token(token, secret, BlockTokenPermission::kRead, 100, 200, 300, 5));
     EXPECT_FALSE(verify_block_token(token, secret, BlockTokenPermission::kWrite, 100, 200, 300, 5));
-    EXPECT_FALSE(verify_block_token(token, "wrong-secret", BlockTokenPermission::kRead, 100, 200, 300, 5));
+    EXPECT_FALSE(
+        verify_block_token(token, "wrong-secret", BlockTokenPermission::kRead, 100, 200, 300, 5));
     EXPECT_FALSE(verify_block_token(token, secret, BlockTokenPermission::kRead, 999, 200, 300, 5));
+}
+
+TEST(BlockTokenPrimitiveTest, FileIdentityIsCoveredBySignature) {
+    const std::string secret = "identity-test-secret";
+    protocol::FileIdentityProto identity;
+    identity.set_inode_id(300);
+    identity.set_content_generation(7);
+    identity.set_length(4096);
+    identity.set_checksum(0x12345678u);
+    identity.set_checksum_valid(true);
+
+    auto token = issue_block_token(
+        100, 200, 300, 5, kBlockTokenPermissionRead, 300000, secret, 1000, &identity);
+    ASSERT_TRUE(token.has_file_identity());
+    EXPECT_TRUE(verify_block_token(
+        token, secret, BlockTokenPermission::kRead, 100, 200, 300, 5, 2000));
+
+    token.mutable_file_identity()->set_content_generation(8);
+    EXPECT_FALSE(verify_block_token(
+        token, secret, BlockTokenPermission::kRead, 100, 200, 300, 5, 2000));
 }
 
 TEST(BlockTokenPrimitiveTest, ExpiredTokenFailsVerification) {
     const std::string secret = "expiry-test-secret";
     // Issue token with 0 TTL — already expired
-    auto token = issue_block_token(100, 200, 300, 5, kBlockTokenPermissionRead, 0, secret, /*now=*/1000);
+    auto token =
+        issue_block_token(100, 200, 300, 5, kBlockTokenPermissionRead, 0, secret, /*now=*/1000);
     // Token expires at 1000ms, current time is after that
-    EXPECT_FALSE(verify_block_token(token, secret, BlockTokenPermission::kRead, 100, 200, 300, 5, 2000));
+    EXPECT_FALSE(
+        verify_block_token(token, secret, BlockTokenPermission::kRead, 100, 200, 300, 5, 2000));
 }
 
 TEST(BlockTokenPrimitiveTest, TamperedSignatureFailsVerification) {

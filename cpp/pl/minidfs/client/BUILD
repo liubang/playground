@@ -35,7 +35,10 @@ cc_library(
     ],
     copts = COPTS,
     linkopts = LINKOPTS,
-    visibility = ["//cpp/pl/minidfs:__subpackages__"],
+    visibility = [
+        "//cpp/pl/minidfs:__subpackages__",
+        "//cpp/pl/sstv2/io:__pkg__",
+    ],
     deps = [
         "//cpp/pl/minidfs/common",
         "//cpp/pl/minidfs/protocol:minidfs_cc_proto",

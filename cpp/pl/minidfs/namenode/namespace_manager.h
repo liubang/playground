@@ -18,6 +18,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -61,7 +62,8 @@ public:
                                   std::string_view group,
                                   uint32_t permission,
                                   uint32_t replication,
-                                  uint64_t block_size);
+                                  uint64_t block_size,
+                                  FileAppendMode file_append_mode = FileAppendMode::kAppendable);
 
     /// Reopen an existing file for append.
     pl::Result<Inode> begin_append(std::string_view path);
@@ -88,8 +90,19 @@ public:
     /// Complete a file (transition from UnderConstruction to Normal).
     pl::Result<pl::Void> complete_file(uint64_t inode_id, uint64_t final_length);
 
-    /// Update the length of an existing closed file after block truncation.
-    pl::Result<pl::Void> set_file_length(uint64_t inode_id, uint64_t length);
+    /// Complete and atomically publish a new file identity.
+    pl::Result<FileIdentity> complete_file_publish_identity(uint64_t inode_id,
+                                                            uint64_t final_length,
+                                                            std::optional<uint32_t> checksum);
+
+    /// Read the latest published file identity.
+    pl::Result<FileIdentity> get_file_identity(uint64_t inode_id);
+
+    /// Update the published identity of an existing closed file after truncation.
+    /// If checksum is not provided, checksum is marked as unknown (0).
+    pl::Result<pl::Void> set_file_length(uint64_t inode_id,
+                                         uint64_t length,
+                                         std::optional<uint32_t> checksum = std::nullopt);
 
     /// Update the desired replication factor recorded on an existing closed file.
     pl::Result<pl::Void> set_replication(uint64_t inode_id, uint32_t replication);

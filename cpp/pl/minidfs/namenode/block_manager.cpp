@@ -39,10 +39,10 @@ BlockManager::BlockManager(MetadataStore* store,
       block_token_ttl_ms_(block_token_ttl_ms) {}
 
 protocol::BlockTokenProto BlockManager::issue_block_token(uint64_t block_id,
-                                                           uint64_t generation_stamp,
-                                                           uint64_t inode_id,
-                                                           uint32_t block_index,
-                                                           uint32_t permissions) const {
+                                                          uint64_t generation_stamp,
+                                                          uint64_t inode_id,
+                                                          uint32_t block_index,
+                                                          uint32_t permissions) const {
     return pl::minidfs::issue_block_token(block_id,
                                           generation_stamp,
                                           inode_id,
@@ -173,8 +173,8 @@ pl::Result<LocatedBlock> BlockManager::allocate_block_in_transaction(uint64_t in
     located.generation_stamp = gen;
     located.offset = 0;
     located.length = 0;
-    auto token = issue_block_token(
-        block_id, gen, inode_id, block_index, kBlockTokenPermissionWrite);
+    auto token =
+        issue_block_token(block_id, gen, inode_id, block_index, kBlockTokenPermissionWrite);
     located.block_token = {
         .block_id = token.block_id(),
         .generation_stamp = token.generation_stamp(),
@@ -230,12 +230,11 @@ pl::Result<pl::Void> BlockManager::commit_block(
     }
     uint32_t required_finalized = std::min<uint32_t>(kMinWriteReplica, block.desired_replica);
     if (finalized_count < required_finalized) {
-        return pl::makeError(
-            static_cast<pl::status_code_t>(ErrorCode::kInsufficientReplicas),
-            fmt::format("block {} requires {} finalized replicas, only {} matched",
-                        block_id,
-                        required_finalized,
-                        finalized_count));
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInsufficientReplicas),
+                             fmt::format("block {} requires {} finalized replicas, only {} matched",
+                                         block_id,
+                                         required_finalized,
+                                         finalized_count));
     }
 
     if (!already_committed) {
@@ -402,6 +401,10 @@ pl::Result<pl::Void> BlockManager::truncate_file(uint64_t inode_id,
     if (inode.value().type != InodeType::kFile || inode.value().state != FileState::kNormal) {
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kFileUnderConstruction),
                              "only closed files can be truncated");
+    }
+    if (inode.value().file_append_mode == FileAppendMode::kImmutableAfterComplete) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kPermissionDenied),
+                             "truncate is disabled for immutable-after-complete files");
     }
     if (new_length > inode.value().length) {
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),

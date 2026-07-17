@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fmt/format.h>
+#include <optional>
 
 #include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/common/error_code.h"
@@ -118,18 +119,17 @@ std::string make_oplog_payload(const protocol::RequestHeader& header,
                                uint32_t status_code,
                                std::string_view status_message,
                                std::string_view response_payload_json) {
-    return fmt::format(
-        "{{\"request_id\":\"{}\",\"client_id\":\"{}\",\"user\":\"{}\","
-        "\"op_type\":\"{}\",\"target_inode_id\":{},\"status_code\":{},"
-        "\"status_message\":\"{}\",\"response\":{}}}",
-        escape_json(header.request_id()),
-        escape_json(header.client_id()),
-        escape_json(header.user()),
-        escape_json(op_type),
-        target_inode_id,
-        status_code,
-        escape_json(status_message),
-        response_payload_json);
+    return fmt::format("{{\"request_id\":\"{}\",\"client_id\":\"{}\",\"user\":\"{}\","
+                       "\"op_type\":\"{}\",\"target_inode_id\":{},\"status_code\":{},"
+                       "\"status_message\":\"{}\",\"response\":{}}}",
+                       escape_json(header.request_id()),
+                       escape_json(header.client_id()),
+                       escape_json(header.user()),
+                       escape_json(op_type),
+                       target_inode_id,
+                       status_code,
+                       escape_json(status_message),
+                       response_payload_json);
 }
 
 bool parse_json_u64(std::string_view json, std::string_view key, uint64_t* value) {
@@ -380,14 +380,21 @@ std::string located_block_to_json(const LocatedBlock& block) {
                                  block.locations[i].data_port);
     }
     locations += "]";
-    return fmt::format(
-        "{{\"block\":{{\"block_id\":{},\"generation_stamp\":{},\"offset\":{},"
-        "\"length\":{},\"locations\":{}}}}}",
-        block.block_id,
-        block.generation_stamp,
-        block.offset,
-        block.length,
-        locations);
+    return fmt::format("{{\"block\":{{\"block_id\":{},\"generation_stamp\":{},\"offset\":{},"
+                       "\"length\":{},\"locations\":{}}}}}",
+                       block.block_id,
+                       block.generation_stamp,
+                       block.offset,
+                       block.length,
+                       locations);
+}
+
+void fill_file_identity_proto(protocol::FileIdentityProto* proto, const FileIdentity& identity) {
+    proto->set_inode_id(identity.inode_id);
+    proto->set_content_generation(identity.content_generation);
+    proto->set_length(identity.length);
+    proto->set_checksum(identity.checksum);
+    proto->set_checksum_valid(identity.checksum_valid);
 }
 
 bool rebuild_allocate_block_from_metadata(MetadataStore* store,
@@ -415,7 +422,8 @@ bool rebuild_allocate_block_from_metadata(MetadataStore* store,
             return false;
         }
         for (const auto& replica : replicas.value()) {
-            if (replica.state == ReplicaState::kDeleted || replica.state == ReplicaState::kCorrupt) {
+            if (replica.state == ReplicaState::kDeleted ||
+                replica.state == ReplicaState::kCorrupt) {
                 continue;
             }
             auto datanode = store->get_datanode(replica.datanode_id);
@@ -424,7 +432,8 @@ bool rebuild_allocate_block_from_metadata(MetadataStore* store,
             }
             out->locations.push_back(DataNodeEndpoint{
                 .datanode_id = datanode.value().datanode_id,
-                .host = datanode.value().ip.empty() ? datanode.value().hostname : datanode.value().ip,
+                .host =
+                    datanode.value().ip.empty() ? datanode.value().hostname : datanode.value().ip,
                 .data_port = datanode.value().data_port,
             });
         }
@@ -454,6 +463,10 @@ void NameNodeServiceImpl::fill_file_status(protocol::FileStatusProto* proto, con
     proto->set_owner(fs.owner);
     proto->set_group(fs.group);
     proto->set_permission(fs.permission);
+    proto->set_file_append_mode(fs.file_append_mode == FileAppendMode::kImmutableAfterComplete
+                                    ? protocol::FILE_APPEND_MODE_IMMUTABLE_AFTER_COMPLETE
+                                    : protocol::FILE_APPEND_MODE_APPENDABLE);
+    fill_file_identity_proto(proto->mutable_published_identity(), fs.published_identity);
 }
 
 void NameNodeServiceImpl::fill_located_block(protocol::LocatedBlockProto* proto,
@@ -476,6 +489,10 @@ void NameNodeServiceImpl::fill_located_block(protocol::LocatedBlockProto* proto,
     token->set_permissions(lb.block_token.permissions);
     token->set_expires_at_ms(lb.block_token.expires_at_ms);
     token->set_signature(lb.block_token.signature);
+    if (lb.block_token.file_identity.has_value()) {
+        fill_file_identity_proto(token->mutable_file_identity(),
+                                 lb.block_token.file_identity.value());
+    }
 }
 
 NameNodeServiceImpl::NameNodeServiceImpl(NamespaceManager* ns_mgr,
@@ -492,10 +509,10 @@ NameNodeServiceImpl::NameNodeServiceImpl(NamespaceManager* ns_mgr,
       block_token_ttl_ms_(block_token_ttl_ms) {}
 
 protocol::BlockTokenProto NameNodeServiceImpl::issue_block_token(uint64_t block_id,
-                                                                  uint64_t generation_stamp,
-                                                                  uint64_t inode_id,
-                                                                  uint32_t block_index,
-                                                                  uint32_t permissions) const {
+                                                                 uint64_t generation_stamp,
+                                                                 uint64_t inode_id,
+                                                                 uint32_t block_index,
+                                                                 uint32_t permissions) const {
     return pl::minidfs::issue_block_token(block_id,
                                           generation_stamp,
                                           inode_id,
@@ -523,13 +540,14 @@ bool NameNodeServiceImpl::check_idempotent(const protocol::RequestHeader& header
 }
 
 pl::Result<pl::Void> NameNodeServiceImpl::write_oplog(std::string_view op_type,
-                                                    uint64_t target_inode_id,
-                                                    const protocol::RequestHeader& header,
-                                                    std::string_view payload_json) {
+                                                      uint64_t target_inode_id,
+                                                      const protocol::RequestHeader& header,
+                                                      std::string_view payload_json) {
     if (header.request_id().empty()) {
         return pl::Void{};
     }
-    return metadata_store_->write_oplog(op_type, target_inode_id, header.request_id(), payload_json);
+    return metadata_store_->write_oplog(
+        op_type, target_inode_id, header.request_id(), payload_json);
 }
 
 // Namespace Operations
@@ -542,7 +560,8 @@ void NameNodeServiceImpl::Mkdir(google::protobuf::RpcController* /*controller*/,
     if (request->has_header() && !request->header().request_id().empty()) {
         auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
         if (existing.hasError()) {
-            fill_status(response->mutable_status(), existing.error().code(), existing.error().message());
+            fill_status(
+                response->mutable_status(), existing.error().code(), existing.error().message());
             return;
         }
         if (existing.value().has_value()) {
@@ -584,7 +603,8 @@ void NameNodeServiceImpl::Mkdir(google::protobuf::RpcController* /*controller*/,
                                  /*create_parent=*/true);
     if (result.hasError()) {
         if (request->has_header() && !request->header().request_id().empty()) {
-            auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+            auto existing =
+                metadata_store_->get_oplog_by_request_id(request->header().request_id());
             if (existing.hasValue() && existing.value().has_value()) {
                 uint32_t status_code = 0;
                 uint64_t target_inode_id = 0;
@@ -611,12 +631,13 @@ void NameNodeServiceImpl::Mkdir(google::protobuf::RpcController* /*controller*/,
     }
 
     if (request->has_header() && !request->header().request_id().empty()) {
-        auto payload = make_oplog_payload(request->header(),
-                                          "mkdir",
-                                          result.value().inode_id,
-                                          0,
-                                          "",
-                                          fmt::format("{{\"inode_id\":{}}}", result.value().inode_id));
+        auto payload =
+            make_oplog_payload(request->header(),
+                               "mkdir",
+                               result.value().inode_id,
+                               0,
+                               "",
+                               fmt::format("{{\"inode_id\":{}}}", result.value().inode_id));
         auto log = write_oplog("mkdir", result.value().inode_id, request->header(), payload);
         if (log.hasError()) {
             fill_status(response->mutable_status(), log.error().code(), log.error().message());
@@ -643,7 +664,8 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
     if (request->has_header() && !request->header().request_id().empty()) {
         auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
         if (existing.hasError()) {
-            fill_status(response->mutable_status(), existing.error().code(), existing.error().message());
+            fill_status(
+                response->mutable_status(), existing.error().code(), existing.error().message());
             return;
         }
         if (existing.value().has_value()) {
@@ -678,6 +700,10 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
     uint32_t replication =
         request->replication() > 0 ? request->replication() : kDefaultReplication;
     uint64_t block_size = request->block_size() > 0 ? request->block_size() : kDefaultBlockSize;
+    FileAppendMode file_append_mode =
+        request->file_append_mode() == protocol::FILE_APPEND_MODE_IMMUTABLE_AFTER_COMPLETE
+            ? FileAppendMode::kImmutableAfterComplete
+            : FileAppendMode::kAppendable;
 
     auto txn = metadata_store_->begin_transaction();
     if (txn.hasError()) {
@@ -726,10 +752,12 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
                                        request->group(),
                                        request->permission(),
                                        replication,
-                                       block_size);
+                                       block_size,
+                                       file_append_mode);
     if (result.hasError()) {
         if (request->has_header() && !request->header().request_id().empty()) {
-            auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+            auto existing =
+                metadata_store_->get_oplog_by_request_id(request->header().request_id());
             if (existing.hasValue() && existing.value().has_value()) {
                 uint32_t status_code = 0;
                 uint64_t target_inode_id = 0;
@@ -768,18 +796,18 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
     }
 
     if (request->has_header() && !request->header().request_id().empty()) {
-        auto payload = make_oplog_payload(
-            request->header(),
-            "create_file",
-            result.value().inode_id,
-            0,
-            "",
-            fmt::format("{{\"inode_id\":{},\"lease_id\":{}}}",
-                        result.value().inode_id,
-                        lease_result.value().lease_id));
+        auto payload = make_oplog_payload(request->header(),
+                                          "create_file",
+                                          result.value().inode_id,
+                                          0,
+                                          "",
+                                          fmt::format("{{\"inode_id\":{},\"lease_id\":{}}}",
+                                                      result.value().inode_id,
+                                                      lease_result.value().lease_id));
         auto log = write_oplog("create_file", result.value().inode_id, request->header(), payload);
         if (log.hasError()) {
-            auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+            auto existing =
+                metadata_store_->get_oplog_by_request_id(request->header().request_id());
             if (existing.hasValue() && existing.value().has_value()) {
                 uint32_t status_code = 0;
                 uint64_t target_inode_id = 0;
@@ -827,7 +855,39 @@ void NameNodeServiceImpl::CompleteFile(google::protobuf::RpcController* /*contro
                                        google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
-    // Get located blocks to compute final file length
+    auto current = metadata_store_->get_inode(request->inode_id());
+    if (current.hasError()) {
+        fill_status(response->mutable_status(), current.error().code(), current.error().message());
+        return;
+    }
+    if (current.value().state == FileState::kNormal) {
+        if (!request->has_expected_length() || !request->has_expected_checksum()) {
+            fill_status(response->mutable_status(),
+                        static_cast<uint32_t>(ErrorCode::kInvalidArgument),
+                        "complete replay requires expected length and checksum");
+            return;
+        }
+        auto identity = ns_mgr_->complete_file_publish_identity(
+            request->inode_id(), request->expected_length(), request->expected_checksum());
+        if (identity.hasError()) {
+            fill_status(
+                response->mutable_status(), identity.error().code(), identity.error().message());
+            return;
+        }
+        fill_status(response->mutable_status(), 0);
+        fill_file_identity_proto(response->mutable_file_identity(), identity.value());
+        return;
+    }
+
+    if (!request->has_expected_length() || !request->has_expected_checksum()) {
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kInvalidArgument),
+                    "complete requires client-provided content length and checksum");
+        return;
+    }
+
+    // Get located blocks only to verify the committed physical length. Block metadata
+    // checksums are not content checksums and must never be published as FileIdentity.
     auto blocks_result = block_mgr_->get_located_blocks(request->inode_id());
     if (blocks_result.hasError()) {
         fill_status(response->mutable_status(),
@@ -841,18 +901,27 @@ void NameNodeServiceImpl::CompleteFile(google::protobuf::RpcController* /*contro
         total_length += b.length;
     }
 
+    if (request->expected_length() != total_length) {
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kInvalidArgument),
+                    "complete length does not match committed blocks");
+        return;
+    }
+    uint64_t final_length = request->expected_length();
+    std::optional<uint32_t> final_checksum = request->expected_checksum();
+
     auto txn = metadata_store_->begin_transaction();
     if (txn.hasError()) {
         fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
         return;
     }
 
-    // Complete the file (transition state)
-    auto complete_result = ns_mgr_->complete_file(request->inode_id(), total_length);
-    if (complete_result.hasError()) {
-        fill_status(response->mutable_status(),
-                    complete_result.error().code(),
-                    complete_result.error().message());
+    // Complete the file and publish identity atomically.
+    auto identity =
+        ns_mgr_->complete_file_publish_identity(request->inode_id(), final_length, final_checksum);
+    if (identity.hasError()) {
+        fill_status(
+            response->mutable_status(), identity.error().code(), identity.error().message());
         return;
     }
 
@@ -874,6 +943,7 @@ void NameNodeServiceImpl::CompleteFile(google::protobuf::RpcController* /*contro
     }
 
     fill_status(response->mutable_status(), 0);
+    fill_file_identity_proto(response->mutable_file_identity(), identity.value());
 }
 
 void NameNodeServiceImpl::AppendFile(google::protobuf::RpcController* /*controller*/,
@@ -919,6 +989,12 @@ void NameNodeServiceImpl::AppendFile(google::protobuf::RpcController* /*controll
     response->set_next_block_index(next_block_index);
     response->set_block_size(inode.value().block_size);
     response->set_replication(inode.value().replication);
+    fill_file_identity_proto(response->mutable_published_identity(),
+                             {.inode_id = inode.value().inode_id,
+                              .content_generation = inode.value().content_generation,
+                              .length = inode.value().length,
+                              .checksum = inode.value().checksum,
+                              .checksum_valid = inode.value().checksum_valid});
 }
 
 void NameNodeServiceImpl::GetFileStatus(google::protobuf::RpcController* /*controller*/,
@@ -1020,12 +1096,8 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
     }
 
     if (request->has_header() && !request->header().request_id().empty()) {
-        auto payload = make_oplog_payload(request->header(),
-                                          "delete",
-                                          result.value().inode_id,
-                                          0,
-                                          "",
-                                          "{}");
+        auto payload =
+            make_oplog_payload(request->header(), "delete", result.value().inode_id, 0, "", "{}");
         auto log = write_oplog("delete", result.value().inode_id, request->header(), payload);
         if (log.hasError()) {
             fill_status(response->mutable_status(), log.error().code(), log.error().message());
@@ -1097,28 +1169,32 @@ void NameNodeServiceImpl::TruncateFile(google::protobuf::RpcController* /*contro
         return;
     }
 
+    if (inode.value().file_append_mode == FileAppendMode::kImmutableAfterComplete) {
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kPermissionDenied),
+                    "truncate is disabled for immutable-after-complete files");
+        return;
+    }
+
     auto txn = metadata_store_->begin_transaction();
     if (txn.hasError()) {
         fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
         return;
     }
-    auto truncate =
-        block_mgr_->truncate_file(inode.value().inode_id,
-                                  request->length(),
-                                  [this](const BlockReplica& replica, uint64_t length) {
-                                      auto token = issue_block_token(replica.block_id,
-                                                                     replica.generation_stamp,
-                                                                     0,
-                                                                     0,
-                                                                     kBlockTokenPermissionTruncate);
-                                      return truncate_replica(metadata_store_, token, replica, length);
-                                  });
+    auto truncate = block_mgr_->truncate_file(
+        inode.value().inode_id,
+        request->length(),
+        [this](const BlockReplica& replica, uint64_t length) {
+            auto token = issue_block_token(
+                replica.block_id, replica.generation_stamp, 0, 0, kBlockTokenPermissionTruncate);
+            return truncate_replica(metadata_store_, token, replica, length);
+        });
     if (truncate.hasError()) {
         fill_status(
             response->mutable_status(), truncate.error().code(), truncate.error().message());
         return;
     }
-    auto update = ns_mgr_->set_file_length(inode.value().inode_id, request->length());
+    auto update = ns_mgr_->set_file_length(inode.value().inode_id, request->length(), std::nullopt);
     if (update.hasError()) {
         fill_status(response->mutable_status(), update.error().code(), update.error().message());
         return;
@@ -1189,7 +1265,8 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
     if (request->has_header() && !request->header().request_id().empty()) {
         auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
         if (existing.hasError()) {
-            fill_status(response->mutable_status(), existing.error().code(), existing.error().message());
+            fill_status(
+                response->mutable_status(), existing.error().code(), existing.error().message());
             return;
         }
         if (existing.value().has_value()) {
@@ -1247,7 +1324,8 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
         request->inode_id(), request->block_index(), replication);
     if (result.hasError()) {
         if (request->has_header() && !request->header().request_id().empty()) {
-            auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+            auto existing =
+                metadata_store_->get_oplog_by_request_id(request->header().request_id());
             if (existing.hasValue() && existing.value().has_value()) {
                 uint32_t status_code = 0;
                 uint64_t target_inode_id = 0;
@@ -1298,7 +1376,8 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
                                           located_block_to_json(result.value()));
         auto log = write_oplog("allocate_block", request->inode_id(), request->header(), payload);
         if (log.hasError()) {
-            auto existing = metadata_store_->get_oplog_by_request_id(request->header().request_id());
+            auto existing =
+                metadata_store_->get_oplog_by_request_id(request->header().request_id());
             if (existing.hasValue() && existing.value().has_value()) {
                 uint32_t status_code = 0;
                 uint64_t target_inode_id = 0;
@@ -1356,6 +1435,27 @@ void NameNodeServiceImpl::GetLocatedBlocks(google::protobuf::RpcController* /*co
                                            google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
+    auto identity = ns_mgr_->get_file_identity(request->inode_id());
+    if (identity.hasError()) {
+        fill_status(
+            response->mutable_status(), identity.error().code(), identity.error().message());
+        return;
+    }
+
+    if (request->has_expected_file_identity()) {
+        const auto& expected = request->expected_file_identity();
+        if (expected.inode_id() != identity.value().inode_id ||
+            expected.content_generation() != identity.value().content_generation ||
+            expected.length() != identity.value().length ||
+            expected.checksum_valid() != identity.value().checksum_valid ||
+            (expected.checksum_valid() && expected.checksum() != identity.value().checksum)) {
+            fill_status(response->mutable_status(),
+                        static_cast<uint32_t>(ErrorCode::kInvalidArgument),
+                        "stale expected file identity");
+            return;
+        }
+    }
+
     auto result = block_mgr_->get_located_blocks(request->inode_id());
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
@@ -1363,8 +1463,38 @@ void NameNodeServiceImpl::GetLocatedBlocks(google::protobuf::RpcController* /*co
     }
 
     fill_status(response->mutable_status(), 0);
+    auto* response_identity = response->mutable_file_identity();
+    fill_file_identity_proto(response_identity, identity.value());
+    uint64_t published_end = identity.value().length;
     for (const auto& lb : result.value()) {
-        fill_located_block(response->add_blocks(), lb);
+        if (lb.offset >= published_end) {
+            break;
+        }
+        auto clipped = lb;
+        clipped.length = std::min<uint64_t>(clipped.length, published_end - clipped.offset);
+        if (clipped.length == 0) {
+            continue;
+        }
+        auto token = pl::minidfs::issue_block_token(clipped.block_id,
+                                                    clipped.generation_stamp,
+                                                    identity.value().inode_id,
+                                                    lb.block_token.block_index,
+                                                    kBlockTokenPermissionRead,
+                                                    block_token_ttl_ms_,
+                                                    block_token_secret_,
+                                                    0,
+                                                    response_identity);
+        clipped.block_token = {
+            .block_id = token.block_id(),
+            .generation_stamp = token.generation_stamp(),
+            .inode_id = token.inode_id(),
+            .block_index = token.block_index(),
+            .permissions = token.permissions(),
+            .expires_at_ms = token.expires_at_ms(),
+            .signature = token.signature(),
+            .file_identity = identity.value(),
+        };
+        fill_located_block(response->add_blocks(), clipped);
     }
 }
 
@@ -1390,11 +1520,12 @@ void DataNodeProtocolServiceImpl::fill_status(protocol::StatusProto* proto,
     set_status(proto, code, msg);
 }
 
-protocol::BlockTokenProto DataNodeProtocolServiceImpl::issue_block_token(uint64_t block_id,
-                                                                           uint64_t generation_stamp,
-                                                                           uint64_t inode_id,
-                                                                           uint32_t block_index,
-                                                                           uint32_t permissions) const {
+protocol::BlockTokenProto DataNodeProtocolServiceImpl::issue_block_token(
+    uint64_t block_id,
+    uint64_t generation_stamp,
+    uint64_t inode_id,
+    uint32_t block_index,
+    uint32_t permissions) const {
     return pl::minidfs::issue_block_token(block_id,
                                           generation_stamp,
                                           inode_id,

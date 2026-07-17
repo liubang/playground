@@ -78,6 +78,7 @@ public:
         // Initialize ID allocators.
         id_counters_["inode"] = 1000;
         id_counters_["block"] = 1000;
+        id_counters_["generation_stamp"] = 1000;
         id_counters_["datanode"] = 1000;
         id_counters_["lease"] = 1000;
     }

@@ -43,8 +43,7 @@ protected:
         store_ = std::make_unique<testing::MockMetadataStore>();
         dn_mgr_ = std::make_unique<DataNodeManager>(store_.get());
         placement_ = std::make_unique<PlacementManager>(dn_mgr_.get());
-        block_mgr_ =
-            std::make_unique<BlockManager>(store_.get(), placement_.get(), "test-secret");
+        block_mgr_ = std::make_unique<BlockManager>(store_.get(), placement_.get(), "test-secret");
 
         Inode file;
         file.inode_id = 100;
@@ -293,8 +292,8 @@ TEST_F(BlockManagerTest, AllocateBlockLeavesNoGhostWhenPlacementFails) {
     auto failing_store = std::make_unique<testing::MockMetadataStore>();
     auto failing_dn_mgr = std::make_unique<DataNodeManager>(failing_store.get());
     auto failing_placement = std::make_unique<PlacementManager>(failing_dn_mgr.get());
-    auto failing_block_mgr = std::make_unique<BlockManager>(
-        failing_store.get(), failing_placement.get(), "test-secret");
+    auto failing_block_mgr =
+        std::make_unique<BlockManager>(failing_store.get(), failing_placement.get(), "test-secret");
 
     Inode file;
     file.inode_id = 200;
@@ -308,6 +307,22 @@ TEST_F(BlockManagerTest, AllocateBlockLeavesNoGhostWhenPlacementFails) {
     auto blocks = failing_store->get_blocks_by_inode(200);
     ASSERT_TRUE(blocks.hasValue());
     EXPECT_TRUE(blocks.value().empty());
+}
+
+TEST_F(BlockManagerTest, TruncateFileRejectsImmutableAfterComplete) {
+    auto immutable_inode = store_->get_inode(100);
+    ASSERT_TRUE(immutable_inode.hasValue());
+    immutable_inode.value().state = FileState::kNormal;
+    immutable_inode.value().file_append_mode = FileAppendMode::kImmutableAfterComplete;
+    immutable_inode.value().length = 8;
+    ASSERT_TRUE(store_->update_inode(immutable_inode.value()).hasValue());
+
+    auto result = block_mgr_->truncate_file(
+        100, 4, [](const BlockReplica& /*replica*/, uint64_t /*length*/) -> pl::Result<pl::Void> {
+            return pl::Result<pl::Void>(pl::Void{});
+        });
+    ASSERT_TRUE(result.hasError());
+    EXPECT_EQ(result.error().code(), static_cast<pl::status_code_t>(ErrorCode::kPermissionDenied));
 }
 
 TEST_F(BlockManagerTest, TruncateFileShrinksLastRetainedBlockAndInvalidatesTail) {

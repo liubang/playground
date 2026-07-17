@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,6 +32,7 @@
 #include "cpp/pl/sstv2/compress/compress.h"
 #include "cpp/pl/sstv2/format/metadata.h"
 #include "cpp/pl/sstv2/index/index_tree.h"
+#include "cpp/pl/sstv2/io/filesystem.h"
 #include "cpp/pl/sstv2/types/internal_row.h"
 #include "cpp/pl/sstv2/types/internal_schema.h"
 #include "cpp/pl/sstv2/types/key.h"
@@ -47,9 +49,15 @@ struct BuilderOptions {
     std::string value_file_name = "value.sstv2";
 };
 
-struct Files {
-    std::string key_file;
-    std::string value_file;
+struct FinishResult {
+    uint64_t key_file_size = 0;
+    uint64_t value_file_size = 0;
+};
+
+struct Sinks {
+    std::shared_ptr<io::FileSystem> filesystem;
+    io::FileHandle key = io::kInvalidFileHandle;
+    io::FileHandle value = io::kInvalidFileHandle;
 };
 
 struct ScanOptions {
@@ -59,10 +67,15 @@ struct ScanOptions {
 
 class Builder {
 public:
-    Builder(types::Schema::ConstRef schema, BuilderOptions options = {});
+    Builder(types::Schema::ConstRef schema, Sinks sinks, BuilderOptions options = {});
 
     [[nodiscard]] absl::Status add(const types::Row& row);
-    [[nodiscard]] absl::StatusOr<Files> finish();
+    [[nodiscard]] absl::StatusOr<FinishResult> finish_result();
+    [[nodiscard]] static absl::StatusOr<FinishResult> finish_to_sinks(
+        types::Schema::ConstRef schema,
+        Sinks sinks,
+        BuilderOptions options,
+        const std::vector<types::Row>& rows);
 
 private:
     [[nodiscard]] uint64_t max_data_block_rows() const noexcept;
@@ -75,7 +88,7 @@ private:
     types::Schema::ConstRef schema_;
     types::InternalSchema::ConstRef internal_schema_;
     BuilderOptions options_;
-    Files files_;
+    Sinks sinks_;
     std::unique_ptr<index::TreeBuilder> index_builder_;
     std::vector<types::InternalRow> pending_rows_;
     std::vector<std::string> pending_embedded_values_;
@@ -88,28 +101,82 @@ private:
 
 class Reader {
 public:
-    [[nodiscard]] static absl::StatusOr<Reader> open(std::string_view key_file,
-                                                     std::string_view value_file);
+    class Iterator;
+    struct ReaderState;
 
-    [[nodiscard]] types::Schema::ConstRef schema() const { return schema_; }
-    [[nodiscard]] const format::Configuration& configuration() const { return configuration_; }
-    [[nodiscard]] const format::Statistics& statistics() const { return statistics_; }
+    [[nodiscard]] static absl::StatusOr<Reader> open(std::shared_ptr<io::FileSystem> filesystem,
+                                                     io::FileHandle key_file,
+                                                     io::FileHandle value_file);
+
+    [[nodiscard]] types::Schema::ConstRef schema() const;
+    [[nodiscard]] const format::Configuration& configuration() const;
+    [[nodiscard]] const format::Statistics& statistics() const;
     [[nodiscard]] absl::StatusOr<std::vector<types::Row>> scan() const;
     [[nodiscard]] absl::StatusOr<std::vector<types::Row>> scan(const ScanOptions& options) const;
     [[nodiscard]] absl::StatusOr<std::optional<types::Row>> get(const types::AllKey& all_key) const;
     [[nodiscard]] absl::StatusOr<std::optional<types::Row>> get(const types::RowKey& row_key,
                                                                 types::SystemKey system_key) const;
+    [[nodiscard]] absl::StatusOr<Iterator> new_iterator(const ScanOptions& options = {}) const;
 
 private:
-    types::Schema::ConstRef schema_;
-    types::InternalSchema::ConstRef internal_schema_;
-    format::Configuration configuration_;
-    format::Statistics statistics_;
-    std::string key_file_;
-    std::string value_file_;
-    bloom::Reader bloom_;
-    uint64_t root_index_offset_ = 0;
-    uint64_t root_index_length_ = 0;
+    friend class Iterator;
+
+    [[nodiscard]] absl::StatusOr<std::string> read_key_range(uint64_t offset,
+                                                             uint64_t length) const;
+    [[nodiscard]] absl::StatusOr<std::string> read_value_range(uint64_t offset,
+                                                               uint64_t length) const;
+
+    std::shared_ptr<const ReaderState> state_;
+};
+
+struct Reader::ReaderState {
+    types::Schema::ConstRef schema;
+    types::InternalSchema::ConstRef internal_schema;
+    format::Configuration configuration;
+    format::Statistics statistics;
+    std::shared_ptr<io::FileSystem> filesystem;
+    io::FileHandle key_file = io::kInvalidFileHandle;
+    io::FileHandle value_file = io::kInvalidFileHandle;
+    bloom::Reader bloom;
+    index::BlockRef root;
+};
+
+class Reader::Iterator {
+public:
+    Iterator() = default;
+
+    [[nodiscard]] absl::Status SeekToFirst();
+    [[nodiscard]] absl::Status Seek(const KeyPrefix& target);
+    [[nodiscard]] absl::Status Next();
+
+    [[nodiscard]] bool Valid() const { return valid_ && status_.ok(); }
+    [[nodiscard]] const types::Row& row() const { return current_row_; }
+    [[nodiscard]] std::string_view key() const { return current_key_bytes_; }
+    [[nodiscard]] const absl::Status& status() const { return status_; }
+    [[nodiscard]] size_t state_slots_for_test() const;
+
+private:
+    friend class Reader;
+
+    Iterator(std::shared_ptr<const ReaderState> state,
+             std::optional<types::PrefixKey> start_key,
+             std::optional<types::PrefixKey> limit_key);
+
+    [[nodiscard]] absl::Status seek_impl(const std::optional<types::PrefixKey>& start_key);
+    [[nodiscard]] absl::Status load_current_block(const std::optional<types::PrefixKey>& start_key,
+                                                  bool apply_start_key);
+    [[nodiscard]] absl::Status advance_to_next_valid();
+
+    std::shared_ptr<const ReaderState> state_;
+    std::optional<types::PrefixKey> start_key_;
+    std::optional<types::PrefixKey> limit_key_;
+    std::optional<index::ForwardCursor> cursor_;
+    size_t row_index_ = 0;
+    std::optional<block::BlockReader> block_;
+    bool valid_ = false;
+    types::Row current_row_;
+    std::string current_key_bytes_;
+    absl::Status status_;
 };
 
 } // namespace pl::sstv2::file
