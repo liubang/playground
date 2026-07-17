@@ -258,6 +258,29 @@ TEST_F(NamespaceManagerTest, CompleteFile) {
     auto stat = mgr_->get_file_status("/wip.txt");
     ASSERT_TRUE(stat.hasValue());
     EXPECT_EQ(stat.value().length, 1024u);
+    EXPECT_EQ(stat.value().published_identity.content_generation, 1u);
+}
+
+TEST_F(NamespaceManagerTest, CompleteFilePublishIdentityIsIdempotent) {
+    auto file = mgr_->create_file("/ident.txt", "user1", "grp1", 0644, 3, 128 * kMB);
+    ASSERT_TRUE(file.hasValue());
+
+    auto identity = mgr_->complete_file_publish_identity(file.value().inode_id, 123, 456);
+    ASSERT_TRUE(identity.hasValue());
+    EXPECT_EQ(identity.value().inode_id, file.value().inode_id);
+    EXPECT_EQ(identity.value().content_generation, 1u);
+    EXPECT_EQ(identity.value().length, 123u);
+    EXPECT_EQ(identity.value().checksum, 456u);
+
+    auto replay = mgr_->complete_file_publish_identity(file.value().inode_id, 123, 456);
+    ASSERT_TRUE(replay.hasValue());
+    EXPECT_EQ(replay.value().content_generation, 1u);
+
+    auto mismatch = mgr_->complete_file_publish_identity(file.value().inode_id, 124, 456);
+    EXPECT_TRUE(mismatch.hasError());
+
+    auto missing_checksum = mgr_->complete_file_publish_identity(file.value().inode_id, 123, std::nullopt);
+    EXPECT_TRUE(missing_checksum.hasError());
 }
 
 TEST_F(NamespaceManagerTest, CompleteFileOnDir) {
@@ -277,12 +300,37 @@ TEST_F(NamespaceManagerTest, SetFileLengthAndReplicationOnClosedFile) {
     ASSERT_TRUE(inode.hasValue());
     EXPECT_EQ(inode.value().length, 32u);
     EXPECT_EQ(inode.value().replication, 2u);
+    EXPECT_EQ(inode.value().content_generation, 2u);
+    EXPECT_EQ(inode.value().checksum, 0u);
 }
 
 TEST_F(NamespaceManagerTest, SetFileLengthRejectsUnderConstructionFile) {
     auto file = mgr_->create_file("/wip-length", "user", "group", 0644, 3, 128);
     ASSERT_TRUE(file.hasValue());
     EXPECT_TRUE(mgr_->set_file_length(file.value().inode_id, 0).hasError());
+}
+
+TEST_F(NamespaceManagerTest, SetFileLengthRejectsImmutableAfterCompleteFile) {
+    auto file = mgr_->create_file("/immutable-length",
+                                  "user",
+                                  "group",
+                                  0644,
+                                  3,
+                                  128,
+                                  FileAppendMode::kImmutableAfterComplete);
+    ASSERT_TRUE(file.hasValue());
+    ASSERT_TRUE(mgr_->complete_file(file.value().inode_id, 64).hasValue());
+    EXPECT_TRUE(mgr_->set_file_length(file.value().inode_id, 32).hasError());
+}
+
+TEST_F(NamespaceManagerTest, SetFileLengthRejectsExpansion) {
+    auto file = mgr_->create_file("/expand-length", "user", "group", 0644, 3, 128);
+    ASSERT_TRUE(file.hasValue());
+    ASSERT_TRUE(mgr_->complete_file(file.value().inode_id, 64).hasValue());
+
+    auto result = mgr_->set_file_length(file.value().inode_id, 65);
+    ASSERT_TRUE(result.hasError());
+    EXPECT_EQ(result.error().code(), static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument));
 }
 
 TEST_F(NamespaceManagerTest, BeginAppendReopensCompletedFile) {
@@ -294,6 +342,18 @@ TEST_F(NamespaceManagerTest, BeginAppendReopensCompletedFile) {
     ASSERT_TRUE(reopened.hasValue());
     EXPECT_EQ(reopened.value().state, FileState::kUnderConstruction);
     EXPECT_EQ(reopened.value().length, 64u);
+}
+
+TEST_F(NamespaceManagerTest, BeginAppendRejectsImmutableAfterCompleteFile) {
+    auto file = mgr_->create_file(
+        "/immutable", "user", "group", 0644, 3, 128, FileAppendMode::kImmutableAfterComplete);
+    ASSERT_TRUE(file.hasValue());
+    ASSERT_TRUE(mgr_->complete_file(file.value().inode_id, 64).hasValue());
+
+    auto reopened = mgr_->begin_append("/immutable");
+    ASSERT_TRUE(reopened.hasError());
+    EXPECT_EQ(reopened.error().code(),
+              static_cast<pl::status_code_t>(ErrorCode::kPermissionDenied));
 }
 
 TEST_F(NamespaceManagerTest, BeginAppendRejectsUnderConstructionFile) {

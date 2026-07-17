@@ -13,9 +13,11 @@ cpp/pl/sstv2/
   block/           Block 格式（header, data table, column-store unit, offset table, bitmap）
   pattern/         Pattern 编码器/解码器（pattern 0-5, 100）
   bloom/           Bloom Filter 构建与查询
-  index/           Index Tree 构建与遍历
+  index/           Index Tree 构建与有界遍历
   metadata/        Metadata Section 编解码
-  file/            文件级组装（Tail, Locator, Builder, Reader, ValueFile）
+  buffer/          内存字节游标与可复用写缓冲（BufferReader, BufferWriter）
+  io/              文件 I/O 抽象（FileSystem, FileHandle, Local/MiniDFS 后端）
+  file/            文件级组装（Tail, Locator, streaming Builder, random-access Reader）
   compress/        Block 压缩/解压
   ut/              单元测试（按模块子目录组织）
   docs/            设计文档
@@ -27,6 +29,7 @@ cpp/pl/sstv2/
 
 ```
 file/ (顶层)
+  |-- io/
   |-- block/
   |     |-- pattern/
   |     |     +-- codec/
@@ -296,28 +299,34 @@ public:
 | `file/sstable_builder.h/.cpp` | SSTable 写入器 |
 | `file/sstable_reader.h/.cpp` | SSTable 读取器 |
 
-**SSTableBuilder 接口设计**：
+**当前文件层接口**：
 
 ```cpp
-class SSTableBuilder {
+struct Sinks {
+std::shared_ptr<io::FileSystem> filesystem;
+io::FileHandle key;
+io::FileHandle value;
+};
+
+class Builder {
 public:
-    SSTableBuilder(Schema schema, std::string key_file_path, BuilderOptions opts);
+    Builder(Schema::ConstRef schema, BuilderOptions options = {});
+    Builder(Schema::ConstRef schema, Sinks sinks, BuilderOptions options = {});
+    absl::Status add(const Row& row);
+    absl::StatusOr<FinishResult> finish_result();
+};
 
-    // 按 all-key 严格递增顺序添加行。
-    // 内部负责：
-    //   1. 校验 row 与 schema 匹配
-    //   2. 计算 all_key（memcomparable encoding）
-    //   3. 决定 embedded/separated
-    //   4. 构造 InternalRow（填充 M+7 列）
-    //   5. 调用 BlockBuilder::add(row, all_key, payload)
-    //   6. Block 满时 flush，注册到 IndexTreeBuilder
-    //   7. 收集 all_key 到 BloomFilterBuilder
-    Status add(const Row& row);
-
-    Status finish();
-    void abort();
+class Reader {
+public:
+static absl::StatusOr<Reader> open(
+std::shared_ptr<io::FileSystem> filesystem,
+io::FileHandle key,
+io::FileHandle value);
+    absl::StatusOr<Iterator> new_iterator(const ScanOptions& options = {}) const;
 };
 ```
+
+Builder 按 block 通过 `FileSystem::append` 和字节 span 增量写入 key/value handle，不要求完整文件驻留内存。Reader 和 Index Tree 通过 `FileSystem::read_at` 精确填充调用方缓冲区；正向 Iterator 使用 `ForwardCursor` 保存当前树路径，状态大小为 O(tree height)。内存编解码由 `BufferReader`/`BufferWriter` 承担，生产代码不再依赖内存文件系统。
 
 ---
 
@@ -325,15 +334,16 @@ public:
 
 | Step | 状态 | 说明 |
 |------|------|------|
-| Step 1: codec/ | ✅ 完成 | endian, varint, comparable 全部实现并测试通过 |
-| Step 2: types/ | ✅ 完成 | 全部类型定义完成并测试通过 |
-| Step 3: pattern/ | 待实现 | |
-| Step 4: compress/ | 待实现 | |
-| Step 5: block/ | 待实现 | |
-| Step 6: bloom/ | 待实现 | |
-| Step 7: metadata/ | 待实现 | |
-| Step 8: index/ | 待实现 | |
-| Step 9: file/ | 待实现 | |
+| Step 1: codec/ | ✅ 完成 | endian, varint, comparable 已实现并测试通过；跨平台 golden 补强仍在后续计划 |
+| Step 2: types/ | ✅ 完成 | 类型定义已完成并测试通过 |
+| Step 3: pattern/ | ✅ 完成 | 已实现并测试通过 |
+| Step 4: compress/ | ✅ 完成 | 已实现并测试通过 |
+| Step 5: block/ | ✅ 完成 | 已实现并测试通过 |
+| Step 6: bloom/ | ✅ 完成 | 已实现并测试通过 |
+| Step 7: metadata/format | ✅ 完成 | 已实现并测试通过 |
+| Step 8: index/ | ✅ 正向遍历完成 | 随机读 TreeReader 与 O(tree height) ForwardCursor；反向遍历待实现 |
+| Step 8.5: buffer/ + io/ | ✅ 完成 | BufferReader/BufferWriter、span-based FileSystem、强类型 FileHandle，以及 Local、MiniDFS 实现；测试故障由 test-only mock 注入 |
+| Step 9: file/ | ✅ Phase 0 完成 | 流式 Builder、随机读 Reader、Seek/Next 正向 Iterator；反向 Iterator 待实现 |
 
 ---
 

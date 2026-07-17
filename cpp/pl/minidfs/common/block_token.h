@@ -17,14 +17,13 @@
 
 #pragma once
 
-#include <cstdlib>
 #include <cstdint>
-#include <string>
-#include <string_view>
-
+#include <cstdlib>
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+#include <string>
+#include <string_view>
 
 #include "cpp/pl/minidfs/common/time_util.h"
 #include "cpp/pl/minidfs/protocol/minidfs.pb.h"
@@ -39,10 +38,8 @@ enum class BlockTokenPermission : uint32_t {
     kTruncate = 1u << 3,
 };
 
-constexpr uint32_t kBlockTokenPermissionRead =
-    static_cast<uint32_t>(BlockTokenPermission::kRead);
-constexpr uint32_t kBlockTokenPermissionWrite =
-    static_cast<uint32_t>(BlockTokenPermission::kWrite);
+constexpr uint32_t kBlockTokenPermissionRead = static_cast<uint32_t>(BlockTokenPermission::kRead);
+constexpr uint32_t kBlockTokenPermissionWrite = static_cast<uint32_t>(BlockTokenPermission::kWrite);
 constexpr uint32_t kBlockTokenPermissionTransfer =
     static_cast<uint32_t>(BlockTokenPermission::kTransfer);
 constexpr uint32_t kBlockTokenPermissionTruncate =
@@ -69,26 +66,43 @@ inline uint32_t all_data_plane_permissions() {
            kBlockTokenPermissionTruncate;
 }
 
-inline std::string block_token_payload(uint64_t block_id,
-                                       uint64_t generation_stamp,
-                                       uint64_t inode_id,
-                                       uint32_t block_index,
-                                       uint32_t permissions,
-                                       uint64_t expires_at_ms) {
-    return std::to_string(block_id) + "|" + std::to_string(generation_stamp) + "|" +
-           std::to_string(inode_id) + "|" + std::to_string(block_index) + "|" +
-           std::to_string(permissions) + "|" + std::to_string(expires_at_ms);
+inline std::string block_token_payload(
+    uint64_t block_id,
+    uint64_t generation_stamp,
+    uint64_t inode_id,
+    uint32_t block_index,
+    uint32_t permissions,
+    uint64_t expires_at_ms,
+    const protocol::FileIdentityProto* file_identity = nullptr) {
+    std::string payload = std::to_string(block_id) + "|" + std::to_string(generation_stamp) + "|" +
+                          std::to_string(inode_id) + "|" + std::to_string(block_index) + "|" +
+                          std::to_string(permissions) + "|" + std::to_string(expires_at_ms);
+    if (file_identity != nullptr) {
+        payload += "|" + std::to_string(file_identity->inode_id()) + "|" +
+                   std::to_string(file_identity->content_generation()) + "|" +
+                   std::to_string(file_identity->length()) + "|" +
+                   std::to_string(file_identity->checksum_valid() ? 1 : 0) + "|" +
+                   std::to_string(file_identity->checksum());
+    }
+    return payload;
 }
 
-inline std::string block_token_signature(const std::string& secret,
-                                         uint64_t block_id,
-                                         uint64_t generation_stamp,
-                                         uint64_t inode_id,
-                                         uint32_t block_index,
-                                         uint32_t permissions,
-                                         uint64_t expires_at_ms) {
-    const std::string payload = block_token_payload(
-        block_id, generation_stamp, inode_id, block_index, permissions, expires_at_ms);
+inline std::string block_token_signature(
+    const std::string& secret,
+    uint64_t block_id,
+    uint64_t generation_stamp,
+    uint64_t inode_id,
+    uint32_t block_index,
+    uint32_t permissions,
+    uint64_t expires_at_ms,
+    const protocol::FileIdentityProto* file_identity = nullptr) {
+    const std::string payload = block_token_payload(block_id,
+                                                    generation_stamp,
+                                                    inode_id,
+                                                    block_index,
+                                                    permissions,
+                                                    expires_at_ms,
+                                                    file_identity);
 
     unsigned int digest_len = 0;
     unsigned char digest[EVP_MAX_MD_SIZE] = {0};
@@ -105,14 +119,16 @@ inline std::string block_token_signature(const std::string& secret,
     return std::string(reinterpret_cast<const char*>(digest), digest_len);
 }
 
-inline protocol::BlockTokenProto issue_block_token(uint64_t block_id,
-                                                   uint64_t generation_stamp,
-                                                   uint64_t inode_id,
-                                                   uint32_t block_index,
-                                                   uint32_t permissions,
-                                                   uint64_t ttl_ms,
-                                                   const std::string& secret,
-                                                   uint64_t now = 0) {
+inline protocol::BlockTokenProto issue_block_token(
+    uint64_t block_id,
+    uint64_t generation_stamp,
+    uint64_t inode_id,
+    uint32_t block_index,
+    uint32_t permissions,
+    uint64_t ttl_ms,
+    const std::string& secret,
+    uint64_t now = 0,
+    const protocol::FileIdentityProto* file_identity = nullptr) {
     if (now == 0) {
         now = now_ms();
     }
@@ -123,13 +139,17 @@ inline protocol::BlockTokenProto issue_block_token(uint64_t block_id,
     token.set_block_index(block_index);
     token.set_permissions(permissions);
     token.set_expires_at_ms(now + ttl_ms);
+    if (file_identity != nullptr) {
+        *token.mutable_file_identity() = *file_identity;
+    }
     token.set_signature(block_token_signature(secret,
                                               block_id,
                                               generation_stamp,
                                               inode_id,
                                               block_index,
                                               permissions,
-                                              token.expires_at_ms()));
+                                              token.expires_at_ms(),
+                                              file_identity));
     return token;
 }
 
@@ -171,13 +191,15 @@ inline bool verify_block_token(const protocol::BlockTokenProto& token,
         return false;
     }
 
+    const auto* file_identity = token.has_file_identity() ? &token.file_identity() : nullptr;
     const std::string expected_signature = block_token_signature(secret,
                                                                  token.block_id(),
                                                                  token.generation_stamp(),
                                                                  token.inode_id(),
                                                                  token.block_index(),
                                                                  token.permissions(),
-                                                                 token.expires_at_ms());
+                                                                 token.expires_at_ms(),
+                                                                 file_identity);
     if (expected_signature.empty()) {
         return false;
     }

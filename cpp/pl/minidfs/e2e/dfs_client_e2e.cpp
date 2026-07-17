@@ -33,14 +33,23 @@
 #include <string_view>
 #include <system_error>
 #include <unistd.h>
+#include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "cpp/pl/minidfs/client/dfs_client.h"
 #include "cpp/pl/minidfs/common/block_token.h"
 #include "cpp/pl/minidfs/common/checksum.h"
 #include "cpp/pl/minidfs/common/error_code.h"
 #include "cpp/pl/minidfs/protocol/minidfs.pb.h"
+#include "cpp/pl/sstv2/file/sstable.h"
+#include "cpp/pl/sstv2/io/minidfs_filesystem.h"
+#include "cpp/pl/sstv2/types/row.h"
+#include "cpp/pl/sstv2/types/schema.h"
 
 DEFINE_string(namenode, "127.0.0.1:19000", "NameNode address");
 DEFINE_string(work_dir, "/tmp", "Parent directory for local E2E files");
@@ -67,6 +76,19 @@ template <typename T> T require_value(Result<T> result, std::string_view operati
         throw Failure(std::string(operation) + " failed: " + result.error().describe());
     }
     return std::move(result).value();
+}
+
+template <typename T> T require_status_or(absl::StatusOr<T> result, std::string_view operation) {
+    if (!result.ok()) {
+        throw Failure(std::string(operation) + " failed: " + result.status().ToString());
+    }
+    return std::move(result).value();
+}
+
+void require_absl_ok(absl::Status status, std::string_view operation) {
+    if (!status.ok()) {
+        throw Failure(std::string(operation) + " failed: " + status.ToString());
+    }
 }
 
 void require_ok(Result<Void> result, std::string_view operation) {
@@ -158,6 +180,41 @@ std::string unique_id(std::string_view prefix) {
            std::to_string(++sequence);
 }
 
+sstv2::types::Schema::ConstRef make_sst_schema() {
+    using sstv2::types::DataType;
+    using sstv2::types::Schema;
+    using sstv2::types::SchemaBuilder;
+
+    auto schema = SchemaBuilder()
+                      .add_column("tenant", DataType::kString)
+                      .add_column("id", DataType::kUint64)
+                      .build();
+    require(schema.has_value(), "failed to build sstv2 schema");
+    return std::make_shared<const Schema>(std::move(*schema));
+}
+
+sstv2::types::Row make_sst_row(std::string tenant,
+                               uint64_t id,
+                               uint64_t version_major,
+                               uint64_t version_minor,
+                               std::string value) {
+    using sstv2::types::DataType;
+    using sstv2::types::OpType;
+    using sstv2::types::Row;
+    using sstv2::types::RowKey;
+    using sstv2::types::SystemKey;
+    using sstv2::types::Value;
+    using sstv2::types::Version;
+
+    return Row::create(
+        RowKey::from_columns({
+            Value::make<DataType::kString>(std::move(tenant)),
+            Value::make<DataType::kUint64>(id),
+        }),
+        SystemKey{Version{.major = version_major, .minor = version_minor}, OpType::kPut},
+        Value::make<DataType::kString>(std::move(value)));
+}
+
 void initialize_channel(brpc::Channel* channel, std::string_view address) {
     brpc::ChannelOptions options;
     options.timeout_ms = 10000;
@@ -193,8 +250,10 @@ public:
         config.replication = FLAGS_replication;
         config.block_size = FLAGS_block_size;
         client_id_ = config.client_id;
-        client_ = DfsClient::create(std::move(config));
-        require(client_ != nullptr, "DfsClient::create returned nullptr");
+        auto client = DfsClient::create(std::move(config));
+        require(client != nullptr, "DfsClient::create returned nullptr");
+        client_ = std::shared_ptr<DfsClient>(std::move(client));
+        sst_filesystem_ = std::make_shared<sstv2::io::MiniDfsFileSystem>(client_);
         initialize_channel(&namenode_channel_, FLAGS_namenode);
     }
 
@@ -208,6 +267,7 @@ public:
             verify_allocate_block_semantics();
             verify_rename_safety();
             verify_mutations_and_errors();
+            verify_sstv2_integration();
             cleanup();
         } catch (...) {
             cleanup();
@@ -490,9 +550,12 @@ private:
     }
 
     void complete_raw_file(uint64_t inode_id, std::string_view client_id) {
+        static constexpr std::string_view kPayload = "e2e";
         protocol::CompleteFileRequest request;
         request.set_inode_id(inode_id);
         request.set_client_id(std::string(client_id));
+        request.set_expected_length(kPayload.size());
+        request.set_expected_checksum(compute_crc32c(kPayload.data(), kPayload.size()));
         set_header(request.mutable_header(), client_id, unique_id("complete-file"));
         protocol::CompleteFileResponse response;
         brpc::Controller controller;
@@ -655,6 +718,19 @@ private:
         require_ok(client_->get(target, appended.string()), "get appended file");
         require_same_file(expected_appended, appended, "append");
 
+        const uint64_t cross_range_offset = FLAGS_block_size > 8 ? FLAGS_block_size - 8 : 0;
+        const uint64_t cross_range_length = 32;
+        auto cross_range =
+            require_value(client_->read_exact(target, cross_range_offset, cross_range_length),
+                          "read_exact cross-block small range");
+        require(expected.size() >= cross_range_offset + cross_range_length,
+                "cross-block source bytes are insufficient");
+        std::string expected_cross(
+            expected.begin() + static_cast<std::ptrdiff_t>(cross_range_offset),
+            expected.begin() +
+                static_cast<std::ptrdiff_t>(cross_range_offset + cross_range_length));
+        require(cross_range == expected_cross, "cross-block small range read mismatch");
+
         require_ok(client_->truncate(target, FLAGS_block_size), "truncate");
         const auto truncated = temp_dir_.path() / "truncated.download";
         require_ok(client_->get(target, truncated.string()), "get truncated file");
@@ -686,11 +762,164 @@ private:
         require_error(client_->stat(root_ + "/missing"), "stat missing path");
     }
 
+    void verify_sstv2_integration() {
+        std::cout << "[API E2E] sstv2 filesystem integration on immutable MiniDFS files\n";
+        const auto data_dir = root_ + "/level1/level2/data";
+        const auto key_path = data_dir + "/sstv2-adapter.key";
+        const auto value_path = data_dir + "/sstv2-adapter.value";
+
+        auto key_sink = require_status_or(sst_filesystem_->create(key_path, {.overwrite = true}),
+                                          "create sstv2 key file");
+        auto value_sink = require_status_or(
+            sst_filesystem_->create(value_path, {.overwrite = true}), "create sstv2 value file");
+
+        sstv2::file::BuilderOptions options;
+        options.configuration.max_embedded_value_size = 32;
+        options.configuration.max_data_block_row_count = 3;
+        options.configuration.max_index_block_row_count = 4;
+        options.value_file_name = "sstv2-adapter.value";
+
+        sstv2::file::Builder builder(make_sst_schema(),
+                                     sstv2::file::Sinks{
+                                         .filesystem = sst_filesystem_,
+                                         .key = key_sink,
+                                         .value = value_sink,
+                                     },
+                                     options);
+
+        std::unordered_map<uint64_t, std::string> expected_values;
+        uint64_t total_payload_size = 0;
+        for (uint64_t id = 1; id <= 40; ++id) {
+            std::string value;
+            if (id % 3 == 0) {
+                value = absl::StrCat("embedded-", id);
+            } else {
+                value = std::string(64 * 1024 + (id % 17), static_cast<char>('a' + (id % 26)));
+            }
+            total_payload_size += value.size();
+            expected_values.emplace(id, value);
+            require_absl_ok(builder.add(make_sst_row("tenant", id, 100, id, value)),
+                            absl::StrCat("sstv2 builder.add row ", id));
+        }
+
+        auto finish_result =
+            require_status_or(builder.finish_result(), "sstv2 builder.finish_result");
+        require(finish_result.key_file_size ==
+                    require_status_or(sst_filesystem_->size(key_sink), "size sstv2 key file"),
+                "sstv2 key size mismatch after finish");
+        require(finish_result.value_file_size ==
+                    require_status_or(sst_filesystem_->size(value_sink), "size sstv2 value file"),
+                "sstv2 value size mismatch after finish");
+        require(finish_result.value_file_size > 0,
+                "sstv2 value file should contain separated values");
+        require(finish_result.value_file_size < total_payload_size,
+                "sstv2 value file should not contain embedded values only");
+
+        require_absl_ok(sst_filesystem_->close(key_sink), "close sstv2 key file");
+        require_absl_ok(sst_filesystem_->close(value_sink), "close sstv2 value file");
+
+        auto key_status = require_value(client_->stat(key_path), "stat sstv2 key file");
+        auto value_status = require_value(client_->stat(value_path), "stat sstv2 value file");
+
+        require(key_status.file_append_mode == FileAppendMode::kImmutableAfterComplete,
+                "sstv2 key file is not immutable-after-complete");
+        require(value_status.file_append_mode == FileAppendMode::kImmutableAfterComplete,
+                "sstv2 value file is not immutable-after-complete");
+        require(key_status.published_identity.inode_id != 0,
+                "sstv2 key published identity is missing");
+        require(value_status.published_identity.inode_id != 0,
+                "sstv2 value published identity is missing");
+        require(key_status.length == finish_result.key_file_size, "sstv2 key stat length mismatch");
+        require(value_status.length == finish_result.value_file_size,
+                "sstv2 value stat length mismatch");
+
+        auto key_reader = require_status_or(sst_filesystem_->open(key_path), "open sstv2 key file");
+        auto value_reader =
+            require_status_or(sst_filesystem_->open(value_path), "open sstv2 value file");
+
+        require(require_status_or(sst_filesystem_->size(key_reader),
+                                  "size opened sstv2 key file") == finish_result.key_file_size,
+                "sstv2 key random adapter size mismatch");
+        require(require_status_or(sst_filesystem_->size(value_reader),
+                                  "size opened sstv2 value file") == finish_result.value_file_size,
+                "sstv2 value random adapter size mismatch");
+
+        auto reader =
+            require_status_or(sstv2::file::Reader::open(sst_filesystem_, key_reader, value_reader),
+                              "sstv2 Reader::open");
+
+        using sstv2::types::DataType;
+        using sstv2::types::KeyPrefix;
+        using sstv2::types::RowKey;
+        using sstv2::types::SystemKey;
+        using sstv2::types::Value;
+        using sstv2::types::Version;
+
+        auto point_get =
+            require_status_or(reader.get(RowKey::from_columns({
+                                             Value::make<DataType::kString>("tenant"),
+                                             Value::make<DataType::kUint64>(uint64_t{17}),
+                                         }),
+                                         SystemKey{Version{.major = 100, .minor = 17}}),
+                              "sstv2 reader.get");
+        require(point_get.has_value(), "sstv2 point get returned no row");
+        require(point_get->value.as_string() == expected_values.at(17),
+                "sstv2 point get value mismatch");
+
+        auto it = require_status_or(reader.new_iterator(), "sstv2 reader.new_iterator");
+        require_absl_ok(it.SeekToFirst(), "sstv2 iterator SeekToFirst");
+        uint64_t expected_id = 1;
+        while (it.Valid()) {
+            const auto& row = it.row();
+            require(row.all_key.column(0).as_string() == "tenant",
+                    "sstv2 iterator tenant mismatch");
+            const uint64_t id = row.all_key.column(1).as_uint64();
+            require(
+                id == expected_id,
+                absl::StrCat("sstv2 iterator id mismatch, expected ", expected_id, " got ", id));
+            require(row.value.as_string() == expected_values.at(id),
+                    absl::StrCat("sstv2 iterator value mismatch at id ", id));
+            ++expected_id;
+            require_absl_ok(it.Next(), "sstv2 iterator Next");
+        }
+        require(expected_id == expected_values.size() + 1, "sstv2 iterator did not visit all rows");
+
+        require_absl_ok(
+            it.Seek(KeyPrefix{.key_columns = {Value::make<DataType::kString>("tenant"),
+                                              Value::make<DataType::kUint64>(uint64_t{20})}}),
+            "sstv2 iterator Seek exact");
+        require(it.Valid(), "sstv2 iterator exact seek invalid");
+        require(it.row().all_key.column(1).as_uint64() == 20,
+                "sstv2 iterator exact seek landed on wrong row");
+        require_absl_ok(it.Next(), "sstv2 iterator Next after exact seek");
+        require(it.Valid(), "sstv2 iterator should remain valid after exact seek Next");
+        require(it.row().all_key.column(1).as_uint64() == 21,
+                "sstv2 iterator next row mismatch after exact seek");
+
+        require_absl_ok(
+            it.Seek(KeyPrefix{.key_columns = {Value::make<DataType::kString>("tenant"),
+                                              Value::make<DataType::kUint64>(uint64_t{999})}}),
+            "sstv2 iterator Seek out of range");
+        require(!it.Valid(), "sstv2 iterator out-of-range seek should be invalid");
+
+        const auto immutable_append = temp_dir_.path() / "sstv2-immutable-append.txt";
+        write_text_file(immutable_append, "immutable append should fail\n");
+        require_error(client_->append(immutable_append.string(), key_path),
+                      "append immutable sstv2 key file");
+        require_error(client_->append(immutable_append.string(), value_path),
+                      "append immutable sstv2 value file");
+        require_error(client_->truncate(key_path, key_status.length),
+                      "truncate immutable sstv2 key file");
+        require_error(client_->truncate(value_path, value_status.length),
+                      "truncate immutable sstv2 value file");
+    }
+
 private:
     TempDirectory temp_dir_;
     std::string root_;
     std::string client_id_;
-    std::unique_ptr<DfsClient> client_;
+    std::shared_ptr<DfsClient> client_;
+    std::shared_ptr<sstv2::io::FileSystem> sst_filesystem_;
     brpc::Channel namenode_channel_;
 };
 
