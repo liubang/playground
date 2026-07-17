@@ -39,6 +39,10 @@ enum ErrorCode {
     INVALID_PAGE_TOKEN = 17;
     EXPIRED_PAGE_TOKEN = 18;
     FAILED_PRECONDITION = 19;
+    RESOURCE_EXHAUSTED = 20;
+    DATA_LOSS = 21;
+    FORMAT_VERSION_UNSUPPORTED = 22;
+    SNAPSHOT_EXPIRED = 23;
 }
 
 enum RetryAction {
@@ -142,6 +146,30 @@ message Value {
     }
 }
 
+message Timestamp {
+    fixed64 domain_epoch = 1;
+    fixed64 counter = 2;
+}
+
+message StaticQualifier {
+    // Stable static column identity within its column family. Zero is reserved.
+    uint32 column_id = 1;
+}
+
+message DynamicQualifier {
+    // Empty is a valid qualifier and is distinct from an absent qualifier.
+    bytes qualifier = 1;
+}
+
+message CellRef {
+    // Stable column-family identity. Zero is reserved for row tombstones.
+    uint32 column_family_id = 1;
+    oneof qualifier {
+        StaticQualifier static_qualifier = 2;
+        DynamicQualifier dynamic_qualifier = 3;
+    }
+}
+
 message RowKeyColumn {
     // Immutable numeric identity within a table. Never reused after deletion.
     uint32 column_id = 1;
@@ -152,24 +180,38 @@ message RowKeyColumn {
     bool partition_key = 5;
 }
 
-message ColumnDef {
-    // Immutable numeric identity within a table. Names may change; IDs may not.
+message StaticColumnDef {
+    // Immutable numeric identity within its column family. Zero is reserved.
     uint32 column_id = 1;
     string name = 2;
     TypeDescriptor type = 3;
     bool nullable = 4;
 }
 
-message LocalityGroup {
+message LocalityGroupDef {
+    // Immutable numeric identity within a table. Zero is reserved.
     uint32 locality_group_id = 1;
     string name = 2;
-    repeated ColumnDef columns = 3;
+}
+
+message DynamicQualifierPolicy {
+    bool enabled = 1;
+}
+
+message ColumnFamilyDef {
+    // Immutable numeric identity within a table. Zero is reserved.
+    uint32 column_family_id = 1;
+    string name = 2;
+    uint32 locality_group_id = 3;
+    repeated StaticColumnDef static_columns = 4;
+    DynamicQualifierPolicy dynamic_qualifiers = 5;
 }
 
 message TableSchema {
     // Row-key shape, IDs, types and ordering are immutable after table creation.
     repeated RowKeyColumn row_key = 1;
-    repeated LocalityGroup locality_groups = 2;
+    repeated LocalityGroupDef locality_groups = 2;
+    repeated ColumnFamilyDef column_families = 3;
 }
 
 message RowKey {
@@ -183,12 +225,27 @@ enum PartitionType {
     GLOBAL_ORDER = 2;
 }
 
+enum HashAlgorithm {
+    HASH_ALGORITHM_UNSPECIFIED = 0;
+    XXH3_64_V1 = 1;
+}
+
+message KeyFormat {
+    // Immutable persisted format descriptor. Readers reject unsupported versions.
+    uint32 version = 1;
+    uint32 max_encoded_key_bytes = 2;
+    uint32 max_dynamic_qualifier_bytes = 3;
+    uint32 max_row_key_columns = 4;
+}
+
 message PartitionSpec {
     PartitionType type = 1;
-    // Required and greater than zero for HASH; ignored for GLOBAL_ORDER.
+    // Initial physical parallelism; independent from virtual_bucket_count.
     uint32 initial_slice_count = 2;
-    // Fixed stable hash algorithm identifier. Currently only "xxh3_64_v1".
-    string hash_algorithm = 3;
+    HashAlgorithm hash_algorithm = 3;
+    // Immutable and required for HASH; zero for GLOBAL_ORDER.
+    uint32 virtual_bucket_count = 4;
+    KeyFormat key_format = 5;
 }
 
 enum TableState {
@@ -235,12 +292,26 @@ message ReplicaEndpoint {
     uint64 raft_term = 5;
 }
 
+message KeyRange {
+    // Encoded with the table's canonical logical RowKey codec. Empty means unbounded.
+    bytes encoded_start_key = 1;
+    bytes encoded_end_key = 2;
+}
+
+message BucketRange {
+    uint32 start_bucket = 1;
+    uint32 end_bucket = 2;
+}
+
 message SliceRoute {
     uint64 slice_id = 1;
-    // Encoded with sstv2 memcomparable row-key encoding. Empty means unbounded.
-    bytes start_key = 2;
-    bytes end_key = 3;
+    reserved 2, 3;
     repeated ReplicaEndpoint replicas = 4;
+    oneof partition_range {
+        KeyRange key_range = 5;
+        BucketRange bucket_range = 6;
+    }
+    uint64 replica_set_epoch = 7;
 }
 
 message RouteInfo {

@@ -30,63 +30,70 @@ void set_status(pb::Status* s, int code, const std::string& msg) {
     s->set_msg(msg);
 }
 
-void set_ok(pb::Status* s) { s->set_code(0); }
+void set_ok(pb::Status* s) {
+    s->set_code(0);
+}
 
-}  // namespace
+} // namespace
 
-#define CHECK_LEADER(r)                                                     \
-    do {                                                                    \
-        if (!sm_->is_leader()) {                                            \
-            set_status((r)->mutable_status(), 4, "not primary master");     \
-            return;                                                         \
-        }                                                                   \
+#define CHECK_LEADER(r)                                                 \
+    do {                                                                \
+        if (!sm_->is_leader()) {                                        \
+            set_status((r)->mutable_status(), 4, "not primary master"); \
+            return;                                                     \
+        }                                                               \
     } while (0)
 
 void AdminServiceImpl::CreateRegion(google::protobuf::RpcController* cntl,
-                                     const pb::CreateRegionRequest* req,
-                                     pb::CreateRegionResponse* resp,
-                                     google::protobuf::Closure* done) {
+                                    const pb::CreateRegionRequest* req,
+                                    pb::CreateRegionResponse* resp,
+                                    google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
-    (void)cntl; (void)req;
+    (void)cntl;
+    (void)req;
     CHECK_LEADER(resp);
     set_ok(resp->mutable_status());
 }
 
 void AdminServiceImpl::DropRegion(google::protobuf::RpcController* cntl,
-                                   const pb::DropRegionRequest* req,
-                                   pb::DropRegionResponse* resp,
-                                   google::protobuf::Closure* done) {
+                                  const pb::DropRegionRequest* req,
+                                  pb::DropRegionResponse* resp,
+                                  google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
-    (void)cntl; (void)req;
+    (void)cntl;
+    (void)req;
     CHECK_LEADER(resp);
     set_ok(resp->mutable_status());
 }
 
 void AdminServiceImpl::GetRegion(google::protobuf::RpcController* cntl,
-                                  const pb::GetRegionRequest* req,
-                                  pb::GetRegionResponse* resp,
-                                  google::protobuf::Closure* done) {
+                                 const pb::GetRegionRequest* req,
+                                 pb::GetRegionResponse* resp,
+                                 google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
-    (void)cntl; (void)req;
+    (void)cntl;
+    (void)req;
     set_ok(resp->mutable_status());
 }
 
 void AdminServiceImpl::ListRegions(google::protobuf::RpcController* cntl,
-                                    const pb::ListRegionsRequest* req,
-                                    pb::ListRegionsResponse* resp,
-                                    google::protobuf::Closure* done) {
+                                   const pb::ListRegionsRequest* req,
+                                   pb::ListRegionsResponse* resp,
+                                   google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
-    (void)cntl; (void)req;
+    (void)cntl;
+    (void)req;
     set_ok(resp->mutable_status());
 }
 
 void AdminServiceImpl::ListUnitServers(google::protobuf::RpcController* cntl,
-                                        const pb::ListUnitServersRequest* req,
-                                        pb::ListUnitServersResponse* resp,
-                                        google::protobuf::Closure* done) {
+                                       const pb::ListUnitServersRequest* req,
+                                       pb::ListUnitServersResponse* resp,
+                                       google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
-    (void)cntl; (void)req;
+    (void)cntl;
+    (void)req;
     set_ok(resp->mutable_status());
 }
 
-}  // namespace pl::minitable::master
+} // namespace pl::minitable::master
