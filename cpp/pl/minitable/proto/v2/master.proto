@@ -36,30 +36,43 @@ message CreateTableResponse {
 
 enum AlterOperationType {
     ALTER_OPERATION_TYPE_UNSPECIFIED = 0;
-    ADD_COLUMN = 1;
-    RENAME_COLUMN = 2;
-    DROP_COLUMN = 3;
+    ADD_STATIC_COLUMN = 1;
+    RENAME_STATIC_COLUMN = 2;
+    DROP_STATIC_COLUMN = 3;
     ADD_LOCALITY_GROUP = 4;
     RENAME_LOCALITY_GROUP = 5;
     SET_TABLE_STATE = 6;
+    ADD_COLUMN_FAMILY = 7;
+    RENAME_COLUMN_FAMILY = 8;
 }
 
-message AddColumn {
-    uint32 locality_group_id = 1;
-    ColumnDef column = 2;
+message AddStaticColumn {
+    uint32 column_family_id = 1;
+    StaticColumnDef column = 2;
 }
 
-message RenameColumn {
-    uint32 column_id = 1;
-    string new_name = 2;
+message RenameStaticColumn {
+    uint32 column_family_id = 1;
+    uint32 column_id = 2;
+    string new_name = 3;
 }
 
-message DropColumn {
-    uint32 column_id = 1;
+message DropStaticColumn {
+    uint32 column_family_id = 1;
+    uint32 column_id = 2;
 }
 
 message AddLocalityGroup {
-    LocalityGroup locality_group = 1;
+    LocalityGroupDef locality_group = 1;
+}
+
+message AddColumnFamily {
+    ColumnFamilyDef column_family = 1;
+}
+
+message RenameColumnFamily {
+    uint32 column_family_id = 1;
+    string new_name = 2;
 }
 
 message RenameLocalityGroup {
@@ -74,12 +87,14 @@ message SetTableState {
 message AlterOperation {
     AlterOperationType type = 1;
     oneof operation {
-        AddColumn add_column = 2;
-        RenameColumn rename_column = 3;
-        DropColumn drop_column = 4;
+        AddStaticColumn add_static_column = 2;
+        RenameStaticColumn rename_static_column = 3;
+        DropStaticColumn drop_static_column = 4;
         AddLocalityGroup add_locality_group = 5;
         RenameLocalityGroup rename_locality_group = 6;
         SetTableState set_table_state = 7;
+        AddColumnFamily add_column_family = 8;
+        RenameColumnFamily rename_column_family = 9;
     }
 }
 

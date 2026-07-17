@@ -49,7 +49,7 @@ public:
                                        uint64_t offset,
                                        std::span<std::byte> destination) override;
     [[nodiscard]] absl::StatusOr<uint64_t> size(FileHandle handle) override;
-    [[nodiscard]] absl::Status close(FileHandle handle) override;
+    [[nodiscard]] absl::StatusOr<FileIdentity> close(FileHandle handle) override;
     [[nodiscard]] absl::Status remove(std::string_view path) override;
     [[nodiscard]] absl::Status rename(std::string_view source,
                                       std::string_view destination) override;

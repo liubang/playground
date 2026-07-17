@@ -845,9 +845,9 @@ pl::Result<std::string> LocalBlockStore::read_block_range(uint64_t block_id,
 
     const auto& header = header_result.value();
     if (header.compression_type != static_cast<uint32_t>(CompressionType::kNone)) {
-        return pl::makeError(
-            static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
-            fmt::format("range read does not support compression type {}", header.compression_type));
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+                             fmt::format("range read does not support compression type {}",
+                                         header.compression_type));
     }
     if (header.chunk_count > kMaxChunkCount) {
         return pl::makeError(make_io_error("invalid chunk count in block header"));
@@ -866,7 +866,8 @@ pl::Result<std::string> LocalBlockStore::read_block_range(uint64_t block_id,
         return pl::makeError(make_io_error("invalid block header: non-empty range without chunks"));
     }
     if (header.chunk_offsets[0] != 0) {
-        return pl::makeError(make_io_error("invalid block header: first chunk must start at offset 0"));
+        return pl::makeError(
+            make_io_error("invalid block header: first chunk must start at offset 0"));
     }
 
     int fd = ::open(path.c_str(), O_RDONLY);
@@ -881,9 +882,8 @@ pl::Result<std::string> LocalBlockStore::read_block_range(uint64_t block_id,
         }
     };
 
-    auto read_chunk_exact = [&](uint64_t chunk_offset,
-                                uint64_t chunk_size,
-                                std::string* out) -> pl::Result<pl::Void> {
+    auto read_chunk_exact =
+        [&](uint64_t chunk_offset, uint64_t chunk_size, std::string* out) -> pl::Result<pl::Void> {
         out->assign(chunk_size, '\0');
         uint64_t done = 0;
         while (done < chunk_size) {
@@ -896,8 +896,8 @@ pl::Result<std::string> LocalBlockStore::read_block_range(uint64_t block_id,
             }
             if (nread <= 0) {
                 if (nread < 0) {
-                    return pl::makeError(make_io_error(
-                        fmt::format("pread failed: {}", std::strerror(errno))));
+                    return pl::makeError(
+                        make_io_error(fmt::format("pread failed: {}", std::strerror(errno))));
                 }
                 return pl::makeError(make_io_error(
                     fmt::format("short pread: expected {} bytes, got {}", chunk_size, done)));
@@ -934,17 +934,16 @@ pl::Result<std::string> LocalBlockStore::read_block_range(uint64_t block_id,
         uint32_t crc = compute_crc32c(chunk_data.data(), chunk_data.size());
         if (crc != header.chunk_checksums[i]) {
             close_fd();
-            return pl::makeError(make_checksum_error(
-                fmt::format("chunk {} CRC mismatch: expected={:#x}, got={:#x}",
-                            i,
-                            header.chunk_checksums[i],
-                            crc)));
+            return pl::makeError(
+                make_checksum_error(fmt::format("chunk {} CRC mismatch: expected={:#x}, got={:#x}",
+                                                i,
+                                                header.chunk_checksums[i],
+                                                crc)));
         }
 
         uint64_t overlap_begin = std::max<uint64_t>(chunk_begin, range_begin);
         uint64_t overlap_end = std::min<uint64_t>(chunk_end, range_end);
-        data.append(chunk_data.data() + (overlap_begin - chunk_begin),
-                    overlap_end - overlap_begin);
+        data.append(chunk_data.data() + (overlap_begin - chunk_begin), overlap_end - overlap_begin);
     }
 
     close_fd();

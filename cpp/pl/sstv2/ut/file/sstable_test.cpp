@@ -166,7 +166,9 @@ public:
         return local_.read_at(handle, offset, destination);
     }
     absl::StatusOr<uint64_t> size(io::FileHandle handle) override { return local_.size(handle); }
-    absl::Status close(io::FileHandle handle) override { return local_.close(handle); }
+    absl::StatusOr<io::FileIdentity> close(io::FileHandle handle) override {
+        return local_.close(handle);
+    }
     absl::Status remove(std::string_view path) override { return local_.remove(path); }
     absl::Status rename(std::string_view source, std::string_view destination) override {
         return local_.rename(source, destination);
@@ -275,12 +277,6 @@ protected:
             return absl::NotFoundError("test builder has no registered sinks");
         }
         it->finished = true;
-        if (auto status = filesystem_->close(it->key_writer); !status.ok()) {
-            return status;
-        }
-        if (auto status = filesystem_->close(it->value_writer); !status.ok()) {
-            return status;
-        }
         auto key = filesystem_->open(it->key_path);
         if (!key.ok()) {
             return key.status();
@@ -291,8 +287,8 @@ protected:
         }
         return Table{*key,
                      *value,
-                     result->key_file_size,
-                     result->value_file_size,
+                     result->key_file.length,
+                     result->value_file.length,
                      read_contents(filesystem_, *key),
                      read_contents(filesystem_, *value)};
     }
@@ -725,9 +721,6 @@ TEST_F(SSTableTest, BuilderSinksParityAndIteratorBoundedRead) {
     auto instrumented_files = instrumented_builder.finish_result();
     ASSERT_TRUE(local_files.ok()) << local_files.status();
     ASSERT_TRUE(instrumented_files.ok()) << instrumented_files.status();
-    ASSERT_TRUE(sink_fs->close(key_sink).ok());
-    ASSERT_TRUE(sink_fs->close(value_sink).ok());
-
     auto key_reader = sink_fs->open(sink_key_path);
     auto value_reader = sink_fs->open(sink_value_path);
     ASSERT_TRUE(key_reader.ok()) << key_reader.status();
@@ -774,9 +767,17 @@ TEST_F(SSTableTest, FinishResultDisambiguatesEmptyFilesAndSize) {
 
     auto result = builder.finish_result();
     ASSERT_TRUE(result.ok()) << result.status();
-    EXPECT_EQ(result->key_file_size, *filesystem->size(key_sink));
-    EXPECT_EQ(result->value_file_size, *filesystem->size(value_sink));
-    ASSERT_TRUE(filesystem->close(key_sink).ok());
+    EXPECT_GT(result->key_file.length, 0U);
+    EXPECT_EQ(result->value_file.length, 0U);
+    EXPECT_TRUE(result->key_file.checksum_valid);
+    EXPECT_TRUE(result->value_file.checksum_valid);
+    EXPECT_EQ(result->row_count, 0U);
+    EXPECT_FALSE(result->min_key.has_value());
+    EXPECT_FALSE(result->max_key.has_value());
+    auto repeated = builder.finish_result();
+    ASSERT_TRUE(repeated.ok());
+    EXPECT_EQ(*repeated, *result);
+    EXPECT_FALSE(filesystem->size(key_sink).ok());
     auto key_reader = filesystem->open(key_path);
     ASSERT_TRUE(key_reader.ok()) << key_reader.status();
     EXPECT_FALSE(read_contents(filesystem, *key_reader).empty());
@@ -799,7 +800,10 @@ TEST_F(SSTableTest, FinishToSinksSupportsExternalRowsInput) {
         BuilderOptions{},
         rows);
     ASSERT_TRUE(result.ok()) << result.status();
-    ASSERT_TRUE(filesystem->close(key_sink).ok());
+    EXPECT_EQ(result->row_count, 2U);
+    ASSERT_TRUE(result->min_key.has_value());
+    ASSERT_TRUE(result->max_key.has_value());
+    EXPECT_LT(*result->min_key, *result->max_key);
     auto key_reader = filesystem->open(key_path);
     ASSERT_TRUE(key_reader.ok()) << key_reader.status();
     EXPECT_FALSE(read_contents(filesystem, *key_reader).empty());

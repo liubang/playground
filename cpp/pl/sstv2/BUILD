@@ -189,6 +189,16 @@ cc_test(
 )
 
 cc_test(
+    name = "merge_iterator_test",
+    srcs = ["ut/merge/merge_iterator_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/sstv2/merge:merge_iterator",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "sstable_test",
     srcs = ["ut/file/sstable_test.cpp"],
     copts = TEST_COPTS,
