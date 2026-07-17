@@ -71,6 +71,10 @@ public:
     /// Delete a file or empty directory. Returns the deleted inode.
     pl::Result<Inode> remove(std::string_view path, bool recursive = false);
 
+    /// Delete a file only if its inode version still matches a previously
+    /// resolved identity. Intended for compare-and-delete transactions.
+    pl::Result<Inode> remove_if_version(std::string_view path, uint64_t expected_version);
+
     /// Rename/move a file or directory.
     pl::Result<pl::Void> rename(std::string_view src, std::string_view dst);
 

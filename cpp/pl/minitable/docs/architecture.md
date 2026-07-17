@@ -6,7 +6,7 @@
 
 复合 RowKey、StorageKey、MVCC 后缀的逐字节持久格式、保序证明、golden vectors 和 strict decode 规则见 [Key 编码规范](key_encoding.md)。本文只保留架构层布局；两者冲突时，已版本化的 Key 编码规范是字节格式的权威定义。
 
-截至 2026-07-18，Phase 0 仍在进行中：proto v2 已具备 CF、动态 qualifier、显式分区 range、128-bit Timestamp、ManifestEdit 和 SliceSnapshot 初版；KeyFormat v1 已实现 canonical StorageKey/VersionedStorageKey codec、strict decode 和首批 golden tests；arena-backed MemTable 已具备受 owner/generation 校验的可回滚 reservation、batch prepare/publish/abort、严格递增 apply-index 版本链和 pinned read-visible cursor，最小 `SliceStore` 已独占 writable MemTable 并实现跨 LG 两阶段 apply 与 release/acquire 可见水位；正向 k-way MergeIterator primitive 已落地；sstv2/minidfs 已打通 SST 流式构建、finalized FileIdentity、精确随机读取和正向迭代。当前尚未完成 comparator/schema fingerprint、expected-identity open/remove、MemTable freeze/read-view generation 与 SST read view 集成、单 Slice LSM、Manifest、MVCC、Slice Raft 和数据面；Master 仍使用旧协议且只是服务骨架。后续修改必须同步更新本文的“当前状态”“剩余工作”和分阶段完成定义，避免目标设计与实现状态混淆。
+截至 2026-07-18，Phase 0 底层硬门槛已形成可测试闭环，Phase 1A 进行中：proto v2 已具备 CF、动态 qualifier、显式分区 range、128-bit Timestamp、ManifestEdit 和 SliceSnapshot 初版；KeyFormat v1 已实现 canonical StorageKey/VersionedStorageKey codec、strict decode 和首批 golden tests；arena-backed MemTable 与 `SliceStore` 已具备原子 apply/freeze/install、generation-named 持久 Manifest CAS、reopen recovery、comparator domain 强校验及 identity-fenced open/remove。LocalFS/MiniDFS 的 expected-identity remove 分别通过 unlink 前身份重验和 NameNode 元数据事务内 compare-and-delete 保证路径复用安全。Phase 1A 新增单写者串行化的 `EmbeddedSlice`：在 GLOBAL_ORDER、单 Slice、单 LG 范围内提供 Slice-local timestamp、Put/Delete、snapshot Get、正向范围 Scan、row/CF/cell tombstone、NULL/空值区分、Flush/Reopen 及时间戳高水位恢复，并已通过随机 reference MVCC model 跨 Flush 边界对拍。当前尚未完成真实 schema fingerprint 派生、proto v2 运行路径迁移、所有 crash point 注入、安全水位驱动的 Manifest/orphan GC、Raft/WAL、分页 Scan 和完整 Row size admission；未 Flush 的进程内写不具备崩溃持久性，仍不得推进 durable WAL 截断。Master 仍使用旧协议且只是服务骨架。后续修改必须同步更新本文的“当前状态”“剩余工作”和分阶段完成定义，避免目标设计与实现状态混淆。
 
 minitable 的目标是实现一个生产可用的分布式半结构化宽表存储，具备以下能力：
 
@@ -1093,7 +1093,7 @@ sstv2 当前应定位为不可变 SST 文件库，不是完整 LSM。为满足 m
 2. **Manifest 构建结果（部分完成）**
    - Builder `FinishResult` 已返回 min/max encoded key、entry count 和 key/value finalized FileIdentity；
    - 仍需返回并持久化 SST format version、KeyFormat/comparator domain、schema fingerprint 和 checksum algorithm；
-   - `open/remove` 仍需支持 expected identity，Manifest/GC 不得只依赖 path。
+   - `open/remove` 已支持 expected identity；MiniDFS expected-remove 是事务内原子 compare-and-delete，LocalFS 在受管私有目录假设下执行 inode/length/checksum 校验与 unlink 前重验；后续 Manifest/GC 必须使用该接口，禁止只依赖 path。
 
 3. **多路归并 primitive（primitive 已完成）**
    - 正向 k-way `MergeIterator` 已可归并任意 `ForwardCursor`；仍需提供真正的 SST Reader cursor adapter 并接入 MemTable + SST read view；
@@ -1218,9 +1218,9 @@ minidfs 改造只有在满足以下条件后才算完成：
 
 ## 20. SkipList/MemTable 协同改造清单
 
-当前基础 MemTable 已实现 arena-backed key/value、immutable freeze、正向 lower-bound cursor、shared ownership lifetime、apply index 单调检查和基础内存上限，可作为 Phase 0 reference implementation。它仍使用 `std::map + shared_mutex`，不是最终生产 SkipList。
+当前 MemTable 已实现 arena-backed 多版本 key/value、两阶段 batch、immutable freeze、固定水位正向 lower-bound cursor、shared ownership lifetime、严格递增 apply index 和逻辑写预算；其有序索引仍使用 `std::map + shared_mutex`，不是最终生产 SkipList。`SliceStore` 通过单写 `apply_mutex_` 和不可变 `PublishedReadState` 原子发布 Active/Immutable/SST 组合，已实现 token-fenced Flush/install/retire、持久 generation-named Manifest 和 Reopen；当前 live set 尚未由 Raft 管理，旧 Manifest 与 crash orphan 的安全水位 GC 也未完成。
 
-进入单 Slice MVCC 前仍需：
+进入生产级 MemTable 与多 LG 前仍需：
 
 - 批量 prepare + atomic publish，以及 read-visible apply index/commit_ts watermark；
 - 分配失败可 rollback/reservation，避免 arena 已消耗但写入未发布；
@@ -1377,7 +1377,7 @@ minidfs 改造只有在满足以下条件后才算完成：
 
 ### Phase 0：底层契约
 
-当前状态：**Phase 0 进行中，主要 primitive 已落地，但硬门槛尚未闭环。**
+当前状态：**Phase 0 底层硬门槛已形成可测试闭环；跨平台兼容性、proto 迁移和安全 GC 作为进入 Phase 1B 前的加固项继续推进。**
 
 已完成或已有可测试初版：
 
@@ -1388,16 +1388,14 @@ minidfs 改造只有在满足以下条件后才算完成：
 - KeyFormat v1 已实现 GLOBAL_ORDER/HASH StorageKey、QualifierToken、降序 Version、NaN/signed-zero 规则、strict decode 和首批 golden tests；
 - sstv2 Builder `FinishResult` 已返回 key/value finalized FileIdentity、row count 和 min/max key；
 - 正向 k-way `MergeIterator` primitive 已实现；
-- MemTable 已实现带 owner/generation 校验的 arena checkpoint/rewind、受逻辑写预算约束的 batch reservation、可失败 prepare 与无失败 publish、严格递增 apply-index 版本链、固定 read-visible watermark 的正向 cursor、freeze 和 shared lifetime；最小 `SliceStore` 独占 writable MemTable，已实现多 LG 稳定顺序 prepare、prepare 失败全 abort、全部 publish 后 release 推进 Slice 可见水位，并以保证产生有效观测的并发 read-view 测试覆盖跨 LG 混合 index 检测。
+- MemTable 已实现带 owner/generation 校验的 arena checkpoint/rewind、受逻辑写预算约束的 batch reservation、可失败 prepare 与无失败 publish、严格递增 apply-index 版本链、固定 read-visible watermark 的正向 cursor、freeze 和 shared lifetime；`SliceStore` 独占 writable MemTable，以不可变 `SliceVersion` 和单个 `PublishedReadState` 原子绑定结构 generation 与数据可见水位，已实现跨 LG 两阶段 apply、单 Immutable slot 的 Active→Immutable freeze、opaque Flush token、per-Immutable identity/fence、锁外 sstv2 Builder、FileIdentity-fenced SST open、SST install 与 Immutable retire 的单次原子发布、旧 read view pin，以及 Active→Immutable→新到旧 SST 的去重合并 cursor。generation-named 持久 Manifest、deterministic CAS、bounded install ledger 与 Reopen 已落地，LocalFS E2E 覆盖 Flush 前后读等价、crash-before-install、reopen 后继续安装、多代 SST、错误 provenance、构建失败、Manifest/SST 篡改拒绝；关键并发/identity 测试已重复运行。
 
 Phase 0 进入 Phase 1 前仍待完成的硬门槛：
 
-- 持久化并强校验 `key_format_version + row_key_schema_fingerprint` comparator domain，补齐随机 property/fuzz 与跨平台 golden tests；
+- 将当前占位的 row-key schema fingerprint 替换为由真实 Table RowKey Schema 派生并在 Table metadata、Manifest、SST properties 三处一致强校验的值，补齐随机 property/fuzz 与跨平台 golden tests；
 - 完成 proto v2 compatibility/reserved-field 审计，并将运行路径从旧 proto 迁移到 v2；
-- `FinishResult`/SST properties/Manifest 补齐 format version、schema fingerprint、comparator domain 和 checksum algorithm；
-- sstv2/minidfs `open/remove` 支持 expected identity，Manifest 和 GC 完整保存并校验 key/value identity；
-- 提供真正的 SST `ForwardCursor` adapter，打通 MemTable + SST merge read view；
-- 将当前最小 `SliceStore` 接入后续 Slice Raft apply/runtime，补齐 freeze 时完整 `SliceReadView` generation 原子替换、immutable MemTable/ManifestRef pin，以及 MemTable + SST merge read view；继续验证 committed apply 的 publish 路径保持无失败。
+- 基于 pinned Manifest/read view 安全水位实现旧 Manifest 与 finalized/broken orphan SST 的异步 GC；
+- 将当前 `SliceStore` 接入后续 Slice Raft apply/runtime，继续验证 committed apply 的 publish 路径保持无失败；在 Raft Snapshot 完成前不得推进 durable flush watermark 或截断 WAL。
 
 反向 Iterator、lazy value、Block Cache、prefix Bloom、vectored/async read 不阻塞正向单 Slice 闭环，但在对外承诺对应功能或性能目标前必须完成。
 
@@ -1405,11 +1403,15 @@ Phase 0 进入 Phase 1 前仍待完成的硬门槛：
 
 目标：不依赖 Master、网络 Raft 和 minidfs 集群，先证明核心 Cell 语义。
 
+当前状态：**进行中。** `EmbeddedSlice` 已在 GLOBAL_ORDER、单 Slice、单 LG 范围实现串行 timestamp/write/freeze/flush，读路径通过 pinned `SliceReadView` 并发执行；已具备 Put/Delete、snapshot Get、`[start,end)` 正向 Scan、row/CF/cell tombstone、同 timestamp 的 mutation_seq 屏障顺序、NULL/空值区分、Flush/Manifest/Reopen 和高水位恢复。确定性随机用例已与 reference model 在 Active、Immutable、SST 混合视图及 Flush 边界对拍，并覆盖并发 writer timestamp 唯一性、精确 Get 不越行、范围边界和 tombstone 后重建。
+
 1. 冻结 codec、CellRef、tombstone、Version 和 Slice-local timestamp domain；
 2. 单 Slice、单 LG：Put/Get/Delete、MVCC、正向 Seek/Scan；
 3. MemTable arena/freeze、k-way MergeIterator 和完整 Row 聚合；
 4. 基于临时目录或 in-process FileSystem 完成 Flush、Manifest CAS 和 reopen recovery；
 5. 对 reference MVCC model 做随机对拍，并在 Flush/Manifest 各边界注入 crash。
+
+剩余工作：补齐真实 schema fingerprint、完整 Cell value canonical/schema validation、Row 聚合尺寸 admission 与无 mid-row pagination 约束；为 SST build/finalize/Manifest publish 的每个故障点增加可枚举 fault injection，并实现 broken/finalized orphan 清理；将 timestamp high watermark 直接固化到 Manifest，避免 Reopen 全表扫描。
 
 退出条件：codec golden/property test 稳定；未提交文件不可见；任意 crash 后逻辑查询结果与 reference model 等价；无 mid-row pagination。
 

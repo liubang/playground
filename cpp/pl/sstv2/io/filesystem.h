@@ -76,6 +76,13 @@ public:
     [[nodiscard]] virtual absl::StatusOr<FileHandle> create(std::string_view path,
                                                             const CreateOptions& options = {}) = 0;
     [[nodiscard]] virtual absl::StatusOr<FileHandle> open(std::string_view path) = 0;
+    // Opens only the finalized object identified by expected. Backends should
+    // reject path reuse or content-generation changes instead of silently
+    // opening a different object at the same path.
+    [[nodiscard]] virtual absl::StatusOr<FileHandle> open(std::string_view /*path*/,
+                                                          const FileIdentity& /*expected*/) {
+        return absl::UnimplementedError("filesystem does not support identity-fenced open");
+    }
     [[nodiscard]] virtual absl::Status append(FileHandle handle,
                                               std::span<const std::byte> data) = 0;
     // Fills destination exactly from offset without changing shared file position.
@@ -86,6 +93,13 @@ public:
     [[nodiscard]] virtual absl::StatusOr<uint64_t> size(FileHandle handle) = 0;
     [[nodiscard]] virtual absl::StatusOr<FileIdentity> close(FileHandle handle) = 0;
     [[nodiscard]] virtual absl::Status remove(std::string_view path) = 0;
+    // Removes only the finalized object identified by expected. Missing paths
+    // are treated as success so retries are idempotent; an existing object with
+    // a different identity must be preserved and reported as a precondition failure.
+    [[nodiscard]] virtual absl::Status remove(std::string_view /*path*/,
+                                              const FileIdentity& /*expected*/) {
+        return absl::UnimplementedError("filesystem does not support identity-fenced remove");
+    }
     [[nodiscard]] virtual absl::Status rename(std::string_view source,
                                               std::string_view destination) = 0;
 

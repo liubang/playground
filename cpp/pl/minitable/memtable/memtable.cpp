@@ -30,7 +30,11 @@ absl::StatusOr<std::shared_ptr<MemTable>> MemTable::Create(MemTableOptions optio
         options.arena_block_bytes > options.memory_limit_bytes) {
         return absl::InvalidArgumentError("invalid MemTable memory configuration");
     }
-    return std::shared_ptr<MemTable>(new MemTable(options));
+    try {
+        return std::shared_ptr<MemTable>(new MemTable(options));
+    } catch (const std::bad_alloc&) {
+        return absl::ResourceExhaustedError("MemTable allocation failed");
+    }
 }
 
 MemTable::MemTable(MemTableOptions options)
@@ -83,8 +87,8 @@ absl::StatusOr<MemTable::PreparedBatch> MemTable::prepare_batch(
     }
 
     size_t incremental = 0;
-    const size_t remaining = options_.memory_limit_bytes -
-                             std::min(charged_bytes_, options_.memory_limit_bytes);
+    const size_t remaining =
+        options_.memory_limit_bytes - std::min(charged_bytes_, options_.memory_limit_bytes);
     for (const auto& [key, value] : canonical) {
         const size_t key_bytes = entries_.contains(key) ? size_t{0} : key.size();
         if (key_bytes > remaining - incremental ||
@@ -258,8 +262,7 @@ uint64_t MemTable::max_apply_index() const {
     return max_apply_index_;
 }
 
-std::unique_ptr<sstv2::merge::ForwardCursor> MemTable::new_cursor(
-    uint64_t read_visible_index) {
+std::unique_ptr<sstv2::merge::ForwardCursor> MemTable::new_cursor(uint64_t read_visible_index) {
     return std::make_unique<Cursor>(shared_from_this(), read_visible_index);
 }
 

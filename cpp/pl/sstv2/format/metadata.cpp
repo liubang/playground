@@ -40,6 +40,11 @@ constexpr std::string_view kMaxDataBlockRows = "MaxDataBlockRowCount";
 constexpr std::string_view kMaxIndexBlockSoft = "MaxIndexBlockSizeInByte_SoftLimit";
 constexpr std::string_view kMaxIndexBlockHard = "MaxIndexBlockSizeInByte_HardLimit";
 constexpr std::string_view kMaxIndexBlockRows = "MaxIndexBlockRowCount";
+constexpr std::string_view kSstFormatVersion = "SstFormatVersion";
+constexpr std::string_view kKeyFormatVersion = "KeyFormatVersion";
+constexpr std::string_view kRowKeySchemaFingerprint = "RowKeySchemaFingerprint";
+constexpr std::string_view kComparatorDomainFingerprint = "ComparatorDomainFingerprint";
+constexpr std::string_view kChecksumAlgorithm = "ChecksumAlgorithm";
 
 constexpr std::string_view kColumnCount = "ColumnCount";
 constexpr std::string_view kRowKeyColumnCount = "RowKeyColumnCount";
@@ -149,6 +154,21 @@ SectionMap configuration_entries(const Configuration& configuration) {
     add_entry(&entries,
               kMaxIndexBlockRows,
               Value::make<DataType::kUint64>(configuration.max_index_block_row_count));
+    add_entry(&entries,
+              kSstFormatVersion,
+              Value::make<DataType::kUint64>(configuration.sst_format_version));
+    add_entry(&entries,
+              kKeyFormatVersion,
+              Value::make<DataType::kUint64>(configuration.key_format_version));
+    add_entry(&entries,
+              kRowKeySchemaFingerprint,
+              Value::make<DataType::kUint64>(configuration.row_key_schema_fingerprint));
+    add_entry(&entries,
+              kComparatorDomainFingerprint,
+              Value::make<DataType::kUint64>(configuration.comparator_domain_fingerprint));
+    add_entry(&entries,
+              kChecksumAlgorithm,
+              Value::make<DataType::kUint64>(configuration.checksum_algorithm));
     return make_section_map(std::move(entries));
 }
 
@@ -182,8 +202,17 @@ absl::StatusOr<Configuration> configuration_from_entries(const SectionMap& entri
     }
     auto index_rows =
         optional_uint64(entries, kMaxIndexBlockRows, configuration.max_index_block_row_count);
-    if (!index_rows.ok()) {
-        return index_rows.status();
+    auto sst_format = optional_uint64(entries, kSstFormatVersion, configuration.sst_format_version);
+    auto key_format = optional_uint64(entries, kKeyFormatVersion, configuration.key_format_version);
+    auto schema_fingerprint = optional_uint64(
+        entries, kRowKeySchemaFingerprint, configuration.row_key_schema_fingerprint);
+    auto domain_fingerprint = optional_uint64(
+        entries, kComparatorDomainFingerprint, configuration.comparator_domain_fingerprint);
+    auto checksum_algorithm =
+        optional_uint64(entries, kChecksumAlgorithm, configuration.checksum_algorithm);
+    if (!index_rows.ok() || !sst_format.ok() || !key_format.ok() ||
+        !schema_fingerprint.ok() || !domain_fingerprint.ok() || !checksum_algorithm.ok()) {
+        return absl::InvalidArgumentError("invalid comparator-domain configuration metadata");
     }
     configuration.max_embedded_value_size = *embedded;
     configuration.max_data_block_size_soft_limit = *soft;
@@ -192,6 +221,11 @@ absl::StatusOr<Configuration> configuration_from_entries(const SectionMap& entri
     configuration.max_index_block_size_soft_limit = *index_soft;
     configuration.max_index_block_size_hard_limit = *index_hard;
     configuration.max_index_block_row_count = *index_rows;
+    configuration.sst_format_version = *sst_format;
+    configuration.key_format_version = *key_format;
+    configuration.row_key_schema_fingerprint = *schema_fingerprint;
+    configuration.comparator_domain_fingerprint = *domain_fingerprint;
+    configuration.checksum_algorithm = *checksum_algorithm;
     return configuration;
 }
 
