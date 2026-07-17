@@ -17,8 +17,14 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
+#include <new>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "cpp/pl/utility/utility.h"
@@ -27,6 +33,27 @@ namespace pl {
 
 class Arena : public DisableCopyAndMove {
 public:
+    class Checkpoint {
+    public:
+        Checkpoint() = default;
+
+    private:
+        friend class Arena;
+        Checkpoint(const Arena* owner,
+                   std::size_t generation,
+                   std::size_t block_index,
+                   std::size_t used)
+            : owner_(owner),
+              generation_(generation),
+              block_index_(block_index),
+              used_(used) {}
+
+        const Arena* owner_ = nullptr;
+        std::size_t generation_ = 0;
+        std::size_t block_index_ = 0;
+        std::size_t used_ = 0;
+    };
+
     explicit Arena(std::size_t initial_block_size = 64 * 1024)
         : default_block_size_(initial_block_size) {
         allocate_new_block(initial_block_size);
@@ -35,7 +62,8 @@ public:
     ~Arena() = default;
 
     void* allocate(std::size_t size, std::size_t alignment = alignof(std::max_align_t)) {
-        if (size == 0) {
+        if (size == 0 || alignment == 0 || (alignment & (alignment - 1)) != 0 ||
+            size > std::numeric_limits<std::size_t>::max() - (alignment - 1)) {
             return nullptr;
         }
         size = align_up(size, alignment);
@@ -56,6 +84,9 @@ public:
         // Allocate a new block large enough to satisfy alignment + size.
         // Worst case padding for alignment is (alignment - 1) bytes.
         std::size_t extra = (alignment > alignof(std::max_align_t)) ? (alignment - 1) : 0;
+        if (size > std::numeric_limits<std::size_t>::max() - extra) {
+            return nullptr;
+        }
         allocate_new_block(size + extra);
         auto& new_block = blocks_[current_block_ids_];
         auto base_addr = reinterpret_cast<std::uintptr_t>(new_block.data.get());
@@ -80,12 +111,46 @@ public:
         }
     }
 
+    // Only one checkpoint may be active. commit() or rewind() consumes it;
+    // owner and generation checks reject cross-Arena and stale checkpoints.
+    [[nodiscard]] Checkpoint checkpoint() noexcept {
+        ++checkpoint_generation_;
+        checkpoint_active_ = true;
+        return Checkpoint(this,
+                          checkpoint_generation_,
+                          current_block_ids_,
+                          blocks_.empty() ? 0 : blocks_[current_block_ids_].used);
+    }
+
+    [[nodiscard]] bool commit(Checkpoint checkpoint) noexcept {
+        if (!valid_checkpoint(checkpoint)) {
+            return false;
+        }
+        checkpoint_active_ = false;
+        return true;
+    }
+
+    [[nodiscard]] bool rewind(Checkpoint checkpoint) noexcept {
+        if (!valid_checkpoint(checkpoint)) {
+            return false;
+        }
+        blocks_.erase(blocks_.begin() +
+                          static_cast<std::ptrdiff_t>(checkpoint.block_index_ + 1),
+                      blocks_.end());
+        current_block_ids_ = checkpoint.block_index_;
+        blocks_[current_block_ids_].used = checkpoint.used_;
+        checkpoint_active_ = false;
+        return true;
+    }
+
     void reset() noexcept {
         if (!blocks_.empty()) {
             blocks_[0].used = 0;
             blocks_.erase(blocks_.begin() + 1, blocks_.end());
             current_block_ids_ = 0;
         }
+        ++checkpoint_generation_;
+        checkpoint_active_ = false;
     }
 
     struct Stats {
@@ -122,6 +187,13 @@ public:
     }
 
 private:
+    [[nodiscard]] bool valid_checkpoint(const Checkpoint& checkpoint) const noexcept {
+        return checkpoint_active_ && checkpoint.owner_ == this &&
+               checkpoint.generation_ == checkpoint_generation_ &&
+               checkpoint.block_index_ < blocks_.size() &&
+               checkpoint.used_ <= blocks_[checkpoint.block_index_].used;
+    }
+
     static constexpr std::size_t align_up(std::size_t size, std::size_t alignment) noexcept {
         return (size + alignment - 1) & ~(alignment - 1);
     }
@@ -149,6 +221,8 @@ private:
     std::vector<Block> blocks_;
     std::size_t default_block_size_{0};
     std::size_t current_block_ids_{0};
+    std::size_t checkpoint_generation_{0};
+    bool checkpoint_active_{false};
 };
 
 } // namespace pl

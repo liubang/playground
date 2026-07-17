@@ -17,9 +17,11 @@
 
 #include "cpp/pl/minitable/memtable/memtable.h"
 
+#include <algorithm>
 #include <cstring>
-#include <limits>
 #include <mutex>
+#include <new>
+#include <utility>
 
 namespace pl::minitable {
 
@@ -34,67 +36,198 @@ absl::StatusOr<std::shared_ptr<MemTable>> MemTable::Create(MemTableOptions optio
 MemTable::MemTable(MemTableOptions options)
     : options_(options), arena_(options.arena_block_bytes) {}
 
-absl::StatusOr<std::string_view> MemTable::copy_to_arena(std::string_view bytes) {
-    if (bytes.empty()) {
-        return std::string_view{};
-    }
-    auto* destination = static_cast<char*>(arena_.allocate(bytes.size(), alignof(char)));
-    if (destination == nullptr) {
-        return absl::ResourceExhaustedError("MemTable arena allocation failed");
-    }
-    std::memcpy(destination, bytes.data(), bytes.size());
-    return std::string_view(destination, bytes.size());
-}
-
 absl::Status MemTable::put(std::string_view encoded_key,
                            std::string_view encoded_value,
                            uint64_t apply_index) {
-    if (encoded_key.empty()) {
-        return absl::InvalidArgumentError("MemTable key is empty");
+    const MemTableMutation mutation{.encoded_key = encoded_key, .encoded_value = encoded_value};
+    return put_batch(std::span<const MemTableMutation>(&mutation, 1), apply_index);
+}
+
+absl::Status MemTable::put_batch(std::span<const MemTableMutation> mutations,
+                                 uint64_t apply_index) {
+    auto prepared = prepare_batch(mutations, apply_index);
+    if (!prepared.ok()) {
+        return prepared.status();
     }
+    prepared->publish();
+    return absl::OkStatus();
+}
+
+absl::StatusOr<MemTable::PreparedBatch> MemTable::prepare_batch(
+    std::span<const MemTableMutation> mutations, uint64_t apply_index) {
+    if (mutations.empty()) {
+        return absl::InvalidArgumentError("MemTable mutation batch is empty");
+    }
+
+    std::map<std::string_view, std::string_view, KeyLess> canonical;
+    try {
+        for (const auto& mutation : mutations) {
+            if (mutation.encoded_key.empty()) {
+                return absl::InvalidArgumentError("MemTable key is empty");
+            }
+            canonical.insert_or_assign(mutation.encoded_key, mutation.encoded_value);
+        }
+    } catch (const std::bad_alloc&) {
+        return absl::ResourceExhaustedError("MemTable batch canonicalization allocation failed");
+    }
+
     std::unique_lock lock(mutex_);
     if (frozen_) {
         return absl::FailedPreconditionError("MemTable is frozen");
     }
-    if (apply_index < max_apply_index_) {
-        return absl::InvalidArgumentError("apply index regressed");
+    if (prepare_pending_) {
+        return absl::FailedPreconditionError("MemTable already has a prepared batch");
     }
-    const auto existing = entries_.find(encoded_key);
-    const size_t key_bytes = existing == entries_.end() ? encoded_key.size() : size_t{0};
+    if (apply_index == 0 || apply_index <= max_apply_index_) {
+        return absl::InvalidArgumentError("apply index must strictly advance");
+    }
+
+    size_t incremental = 0;
     const size_t remaining = options_.memory_limit_bytes -
                              std::min(charged_bytes_, options_.memory_limit_bytes);
-    if (key_bytes > remaining || encoded_value.size() > remaining - key_bytes) {
-        return absl::ResourceExhaustedError("MemTable memory limit exceeded");
-    }
-    const size_t incremental = key_bytes + encoded_value.size();
-
-    if (existing != entries_.end()) {
-        auto value = copy_to_arena(encoded_value);
-        if (!value.ok()) {
-            return value.status();
+    for (const auto& [key, value] : canonical) {
+        const size_t key_bytes = entries_.contains(key) ? size_t{0} : key.size();
+        if (key_bytes > remaining - incremental ||
+            value.size() > remaining - incremental - key_bytes) {
+            return absl::ResourceExhaustedError("MemTable memory limit exceeded");
         }
-        charged_bytes_ += incremental;
-        existing->second = Entry{.value = *value, .apply_index = apply_index};
-    } else {
-        // Reserve a new entry's key and value in one allocation. If allocation fails,
-        // the arena and ordered index remain unchanged as one logical operation.
-        auto* storage = static_cast<char*>(arena_.allocate(incremental, alignof(char)));
+        incremental += key_bytes + value.size();
+        const size_t aligned =
+            (incremental + alignof(VersionNode) - 1) & ~(alignof(VersionNode) - 1);
+        if (aligned < incremental || aligned > remaining ||
+            sizeof(VersionNode) > remaining - aligned) {
+            return absl::ResourceExhaustedError("MemTable memory limit exceeded");
+        }
+        incremental = aligned + sizeof(VersionNode);
+    }
+
+    const auto checkpoint = arena_.checkpoint();
+    try {
+        auto* storage = static_cast<char*>(arena_.allocate(incremental, alignof(VersionNode)));
         if (storage == nullptr) {
+            static_cast<void>(arena_.rewind(checkpoint));
             return absl::ResourceExhaustedError("MemTable arena allocation failed");
         }
-        std::memcpy(storage, encoded_key.data(), encoded_key.size());
-        std::memcpy(storage + encoded_key.size(), encoded_value.data(), encoded_value.size());
-        const std::string_view key(storage, encoded_key.size());
-        const std::string_view value(storage + encoded_key.size(), encoded_value.size());
-        charged_bytes_ += incremental;
-        entries_.emplace(key, Entry{.value = value, .apply_index = apply_index});
+
+        PreparedBatch::StagedEntries new_entries;
+        std::vector<std::pair<VersionNode**, VersionNode*>> replacements;
+        replacements.reserve(canonical.size());
+
+        size_t offset = 0;
+        for (const auto& [key, value] : canonical) {
+            auto existing = entries_.find(key);
+            std::string_view owned_key;
+            if (existing == entries_.end()) {
+                std::memcpy(storage + offset, key.data(), key.size());
+                owned_key = std::string_view(storage + offset, key.size());
+                offset += key.size();
+            } else {
+                owned_key = existing->first;
+            }
+
+            std::string_view owned_value;
+            if (!value.empty()) {
+                std::memcpy(storage + offset, value.data(), value.size());
+                owned_value = std::string_view(storage + offset, value.size());
+                offset += value.size();
+            }
+            const size_t aligned_offset =
+                (offset + alignof(VersionNode) - 1) & ~(alignof(VersionNode) - 1);
+            auto* node = new (storage + aligned_offset)
+                VersionNode{.value = owned_value,
+                            .apply_index = apply_index,
+                            .previous = existing == entries_.end() ? nullptr : existing->second};
+            offset = aligned_offset + sizeof(VersionNode);
+
+            if (existing == entries_.end()) {
+                new_entries.emplace(owned_key, node);
+            } else {
+                replacements.emplace_back(&existing->second, node);
+            }
+        }
+
+        auto table = shared_from_this();
+        prepare_pending_ = true;
+        return PreparedBatch(std::move(table),
+                             checkpoint,
+                             std::move(new_entries),
+                             std::move(replacements),
+                             incremental,
+                             apply_index);
+    } catch (const std::bad_alloc&) {
+        static_cast<void>(arena_.rewind(checkpoint));
+        return absl::ResourceExhaustedError("MemTable batch preparation allocation failed");
+    } catch (...) {
+        static_cast<void>(arena_.rewind(checkpoint));
+        throw;
     }
-    max_apply_index_ = apply_index;
-    return absl::OkStatus();
+}
+
+MemTable::PreparedBatch::PreparedBatch(
+    std::shared_ptr<MemTable> table,
+    Arena::Checkpoint checkpoint,
+    StagedEntries new_entries,
+    std::vector<std::pair<VersionNode**, VersionNode*>> replacements,
+    size_t charged_bytes,
+    uint64_t apply_index)
+    : table_(std::move(table)),
+      checkpoint_(checkpoint),
+      new_entries_(std::move(new_entries)),
+      replacements_(std::move(replacements)),
+      charged_bytes_(charged_bytes),
+      apply_index_(apply_index) {}
+
+MemTable::PreparedBatch::PreparedBatch(PreparedBatch&& other) noexcept
+    : table_(std::move(other.table_)),
+      checkpoint_(other.checkpoint_),
+      new_entries_(std::move(other.new_entries_)),
+      replacements_(std::move(other.replacements_)),
+      charged_bytes_(other.charged_bytes_),
+      apply_index_(other.apply_index_) {}
+
+MemTable::PreparedBatch::~PreparedBatch() {
+    abort();
+}
+
+void MemTable::PreparedBatch::publish() noexcept {
+    if (table_ == nullptr) {
+        std::terminate();
+    }
+    std::unique_lock lock(table_->mutex_);
+    for (const auto& [slot, node] : replacements_) {
+        *slot = node;
+    }
+    table_->entries_.merge(new_entries_);
+    table_->charged_bytes_ += charged_bytes_;
+    table_->max_apply_index_ = apply_index_;
+    table_->prepare_pending_ = false;
+    if (!table_->arena_.commit(checkpoint_)) {
+        std::terminate();
+    }
+    auto table = std::move(table_);
+    lock.unlock();
+    table.reset();
+}
+
+void MemTable::PreparedBatch::abort() noexcept {
+    if (table_ == nullptr) {
+        return;
+    }
+    std::unique_lock lock(table_->mutex_);
+    if (!table_->arena_.rewind(checkpoint_)) {
+        std::terminate();
+    }
+    table_->prepare_pending_ = false;
+    auto table = std::move(table_);
+    lock.unlock();
+    table.reset();
 }
 
 absl::Status MemTable::freeze() {
     std::unique_lock lock(mutex_);
+    if (prepare_pending_) {
+        return absl::FailedPreconditionError("MemTable has a prepared batch");
+    }
     frozen_ = true;
     return absl::OkStatus();
 }
@@ -111,7 +244,8 @@ size_t MemTable::size() const {
 
 size_t MemTable::memory_usage() const {
     std::shared_lock lock(mutex_);
-    return arena_.get_stats().total_allocated + entries_.size() * sizeof(decltype(entries_)::value_type);
+    return arena_.get_stats().total_allocated +
+           entries_.size() * sizeof(decltype(entries_)::value_type);
 }
 
 bool MemTable::should_flush() const {
@@ -124,19 +258,38 @@ uint64_t MemTable::max_apply_index() const {
     return max_apply_index_;
 }
 
-std::unique_ptr<sstv2::merge::ForwardCursor> MemTable::new_cursor() {
-    return std::make_unique<Cursor>(shared_from_this());
+std::unique_ptr<sstv2::merge::ForwardCursor> MemTable::new_cursor(
+    uint64_t read_visible_index) {
+    return std::make_unique<Cursor>(shared_from_this(), read_visible_index);
 }
 
-MemTable::Cursor::Cursor(std::shared_ptr<MemTable> table) : table_(std::move(table)) {}
+MemTable::Cursor::Cursor(std::shared_ptr<MemTable> table, uint64_t read_visible_index)
+    : table_(std::move(table)), read_visible_index_(read_visible_index) {}
+
+void MemTable::Cursor::position_from(MapIterator it) {
+    while (it != table_->entries_.end()) {
+        auto* version = it->second;
+        while (version != nullptr && version->apply_index > read_visible_index_) {
+            version = version->previous;
+        }
+        if (version != nullptr) {
+            valid_ = true;
+            current_key_ = it->first;
+            current_value_ = version->value;
+            return;
+        }
+        ++it;
+    }
+    valid_ = false;
+    current_key_ = {};
+    current_value_ = {};
+}
 
 absl::Status MemTable::Cursor::position_at_or_after(std::string_view encoded_key, bool first) {
     std::shared_lock lock(table_->mutex_);
     const auto it = first ? table_->entries_.begin() : table_->entries_.lower_bound(encoded_key);
     positioned_ = true;
-    valid_ = it != table_->entries_.end();
-    current_key_ = valid_ ? it->first : std::string_view{};
-    current_value_ = valid_ ? it->second.value : std::string_view{};
+    position_from(it);
     return absl::OkStatus();
 }
 
@@ -153,10 +306,7 @@ absl::Status MemTable::Cursor::next() {
         return absl::FailedPreconditionError("MemTable cursor is not valid");
     }
     std::shared_lock lock(table_->mutex_);
-    const auto it = table_->entries_.upper_bound(current_key_);
-    valid_ = it != table_->entries_.end();
-    current_key_ = valid_ ? it->first : std::string_view{};
-    current_value_ = valid_ ? it->second.value : std::string_view{};
+    position_from(table_->entries_.upper_bound(current_key_));
     return absl::OkStatus();
 }
 
