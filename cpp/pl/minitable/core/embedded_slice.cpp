@@ -93,10 +93,26 @@ absl::Status ValidateOptions(const codec::CellKeyCodec& codec,
     if (options.timestamp_domain_epoch == 0) {
         return absl::InvalidArgumentError("timestamp domain epoch zero is reserved");
     }
+    if (options.max_row_aggregate_bytes == 0) {
+        return absl::InvalidArgumentError("row aggregate limit must be non-zero");
+    }
     if (codec.format().partition_mode != PartitionMode::kGlobalOrder) {
         return absl::UnimplementedError("Phase 1A EmbeddedSlice supports GLOBAL_ORDER only");
     }
     return absl::OkStatus();
+}
+
+ComparatorDomain ComparatorDomainFor(const codec::CellKeyCodec& codec) {
+    return MakeComparatorDomain(codec.format().version,
+                                codec.row_key_schema_fingerprint(),
+                                static_cast<uint64_t>(codec.format().partition_mode),
+                                static_cast<uint64_t>(codec.format().hash_algorithm),
+                                codec.format().virtual_bucket_count);
+}
+
+void ConfigurePersistenceDomain(const codec::CellKeyCodec& codec, EmbeddedSliceOptions* options) {
+    options->persistence.comparator_domain = ComparatorDomainFor(codec);
+    options->persistence.timestamp_domain_epoch = options->timestamp_domain_epoch;
 }
 
 absl::StatusOr<std::string> EncodeRowStart(const codec::CellKeyCodec& codec,
@@ -113,6 +129,7 @@ absl::StatusOr<std::unique_ptr<EmbeddedSlice>> EmbeddedSlice::Create(codec::Cell
     if (!status.ok()) {
         return status;
     }
+    ConfigurePersistenceDomain(codec, &options);
     auto store =
         SliceStore::Create({{options.locality_group_id, options.memtable}}, options.persistence);
     if (!store.ok()) {
@@ -128,6 +145,7 @@ absl::StatusOr<std::unique_ptr<EmbeddedSlice>> EmbeddedSlice::Reopen(
     if (!status.ok()) {
         return status;
     }
+    ConfigurePersistenceDomain(codec, &recovery.options);
     auto store = SliceStore::Reopen(
         {.locality_groups = {{recovery.options.locality_group_id, recovery.options.memtable}},
          .persistence = recovery.options.persistence,
@@ -136,30 +154,8 @@ absl::StatusOr<std::unique_ptr<EmbeddedSlice>> EmbeddedSlice::Reopen(
         return store.status();
     }
 
-    uint64_t high_watermark = 0;
-    auto cursor = (*store)->read_view().new_cursor(recovery.options.locality_group_id);
-    if (!cursor.ok()) {
-        return cursor.status();
-    }
-    status = (*cursor)->seek_to_first();
-    if (!status.ok()) {
-        return status;
-    }
-    while ((*cursor)->valid()) {
-        auto key = codec.DecodeVersionedStorageKey((*cursor)->key());
-        if (!key.ok()) {
-            return key.status();
-        }
-        if (key->commit_ts.domain_epoch != recovery.options.timestamp_domain_epoch) {
-            return absl::FailedPreconditionError(
-                "persisted key belongs to another timestamp domain");
-        }
-        high_watermark = std::max(high_watermark, key->commit_ts.counter);
-        status = (*cursor)->next();
-        if (!status.ok()) {
-            return status;
-        }
-    }
+    const uint64_t high_watermark =
+        (*store)->read_view().manifest().timestamp_high_watermark;
     return std::unique_ptr<EmbeddedSlice>(new EmbeddedSlice(
         std::move(codec), std::move(recovery.options), std::move(*store), high_watermark));
 }
@@ -303,6 +299,8 @@ absl::StatusOr<std::vector<VisibleRow>> EmbeddedSlice::scan_encoded(
         }
 
         std::map<std::string, RowAccumulator> rows;
+        std::string aggregate_row;
+        size_t aggregate_bytes = 0;
         while ((*cursor)->valid()) {
             auto decoded = codec_.DecodeVersionedStorageKey((*cursor)->key());
             if (!decoded.ok()) {
@@ -319,6 +317,16 @@ absl::StatusOr<std::vector<VisibleRow>> EmbeddedSlice::scan_encoded(
             if (decoded->commit_ts.domain_epoch != options_.timestamp_domain_epoch) {
                 return absl::DataLossError("stored key belongs to another timestamp domain");
             }
+            if (aggregate_row != *row_start) {
+                aggregate_row = *row_start;
+                aggregate_bytes = 0;
+            }
+            const size_t entry_bytes = (*cursor)->key().size() + (*cursor)->value().size();
+            if (entry_bytes > options_.max_row_aggregate_bytes -
+                                  std::min(aggregate_bytes, options_.max_row_aggregate_bytes)) {
+                return absl::ResourceExhaustedError("logical row exceeds aggregate size limit");
+            }
+            aggregate_bytes += entry_bytes;
             if (IsVisible(decoded->commit_ts, read_ts)) {
                 auto [it, inserted] = rows.try_emplace(*row_start);
                 if (inserted) {

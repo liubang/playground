@@ -6,7 +6,7 @@
 
 复合 RowKey、StorageKey、MVCC 后缀的逐字节持久格式、保序证明、golden vectors 和 strict decode 规则见 [Key 编码规范](key_encoding.md)。本文只保留架构层布局；两者冲突时，已版本化的 Key 编码规范是字节格式的权威定义。
 
-截至 2026-07-18，Phase 0 底层硬门槛已形成可测试闭环，Phase 1A 进行中：proto v2 已具备 CF、动态 qualifier、显式分区 range、128-bit Timestamp、ManifestEdit 和 SliceSnapshot 初版；KeyFormat v1 已实现 canonical StorageKey/VersionedStorageKey codec、strict decode 和首批 golden tests；arena-backed MemTable 与 `SliceStore` 已具备原子 apply/freeze/install、generation-named 持久 Manifest CAS、reopen recovery、comparator domain 强校验及 identity-fenced open/remove。LocalFS/MiniDFS 的 expected-identity remove 分别通过 unlink 前身份重验和 NameNode 元数据事务内 compare-and-delete 保证路径复用安全。Phase 1A 新增单写者串行化的 `EmbeddedSlice`：在 GLOBAL_ORDER、单 Slice、单 LG 范围内提供 Slice-local timestamp、Put/Delete、snapshot Get、正向范围 Scan、row/CF/cell tombstone、NULL/空值区分、Flush/Reopen 及时间戳高水位恢复，并已通过随机 reference MVCC model 跨 Flush 边界对拍。当前尚未完成真实 schema fingerprint 派生、proto v2 运行路径迁移、所有 crash point 注入、安全水位驱动的 Manifest/orphan GC、Raft/WAL、分页 Scan 和完整 Row size admission；未 Flush 的进程内写不具备崩溃持久性，仍不得推进 durable WAL 截断。Master 仍使用旧协议且只是服务骨架。后续修改必须同步更新本文的“当前状态”“剩余工作”和分阶段完成定义，避免目标设计与实现状态混淆。
+截至 2026-07-18，Phase 0 底层硬门槛已形成可测试闭环，Phase 1A 已完成：proto v2 已具备 CF、动态 qualifier、显式分区 range、128-bit Timestamp、ManifestEdit 和 SliceSnapshot；KeyFormat v1 已实现 canonical StorageKey/VersionedStorageKey codec、strict decode 和 golden tests；arena-backed MemTable 与 `SliceStore` 已具备原子 apply/freeze/install、generation-named 持久 Manifest CAS、reopen recovery、comparator domain 强校验及 identity-fenced open/remove。LocalFS/MiniDFS 的 expected-identity remove 分别通过 unlink 前身份重验和 NameNode 元数据事务内 compare-and-delete 保证路径复用安全。Phase 1A 的 `EmbeddedSlice` 在 GLOBAL_ORDER、单 Slice、单 LG 范围内提供 Slice-local timestamp、Put/Delete、snapshot Get、正向范围 Scan、row/CF/cell tombstone、NULL/空值区分、Flush/Reopen 及时间戳高水位恢复，并已通过随机 reference MVCC model 跨 Flush 边界对拍。Phase 1B 的 Raft/Snapshot 核心闭环已完成：`SliceApplyMachine` 消费 committed entry 中固化的 apply index、commit timestamp、commit physical time、payload hash 和完整响应，提供确定性跨副本 apply、重复请求原响应返回、request ID 冲突拒绝及 dedupe Snapshot 导入导出；Flush Manifest 持久化 committed timestamp/physical-time watermark；`BraftSliceAdapter` 已接入真实 braft `on_apply`、Snapshot save/load 和错误回滚。真实单进程三副本 E2E 已覆盖选主、复制、定向切主、切主后写入、两次 durable Snapshot 触发日志前缀压缩、清空 Follower 全部本地状态、真实 `InstallSnapshot` repair 以及 tail log 追赶，并通过重复稳定性验收。当前仍未完成面向公开 Data RPC 的 proto v2 运行路径迁移、minidfs streaming Flush、跨请求分页 Scan、自动目录枚举式 orphan 发现及完整故障矩阵；Master 仍使用旧协议且只是服务骨架。WAL 仅由 braft local log 提供，生产部署的 minidfs 持久闭环和截断策略仍需后续完成。后续修改必须同步更新本文的“当前状态”“剩余工作”和分阶段完成定义，避免目标设计与实现状态混淆。
 
 minitable 的目标是实现一个生产可用的分布式半结构化宽表存储，具备以下能力：
 
@@ -1403,7 +1403,7 @@ Phase 0 进入 Phase 1 前仍待完成的硬门槛：
 
 目标：不依赖 Master、网络 Raft 和 minidfs 集群，先证明核心 Cell 语义。
 
-当前状态：**进行中。** `EmbeddedSlice` 已在 GLOBAL_ORDER、单 Slice、单 LG 范围实现串行 timestamp/write/freeze/flush，读路径通过 pinned `SliceReadView` 并发执行；已具备 Put/Delete、snapshot Get、`[start,end)` 正向 Scan、row/CF/cell tombstone、同 timestamp 的 mutation_seq 屏障顺序、NULL/空值区分、Flush/Manifest/Reopen 和高水位恢复。确定性随机用例已与 reference model 在 Active、Immutable、SST 混合视图及 Flush 边界对拍，并覆盖并发 writer timestamp 唯一性、精确 Get 不越行、范围边界和 tombstone 后重建。
+当前状态：**已完成。** `EmbeddedSlice` 已在 GLOBAL_ORDER、单 Slice、单 LG 范围实现串行 timestamp/write/freeze/flush，读路径通过 pinned `SliceReadView` 并发执行；已具备 Put/Delete、snapshot Get、`[start,end)` 正向 Scan、row/CF/cell tombstone、同 timestamp 的 mutation_seq 屏障顺序、NULL/空值区分、Flush/Manifest/Reopen 和高水位恢复。确定性随机用例已与 reference model 在 Active、Immutable、SST 混合视图及 Flush 边界对拍，并覆盖并发 writer timestamp 唯一性、精确 Get 不越行、范围边界和 tombstone 后重建。
 
 1. 冻结 codec、CellRef、tombstone、Version 和 Slice-local timestamp domain；
 2. 单 Slice、单 LG：Put/Get/Delete、MVCC、正向 Seek/Scan；
@@ -1411,15 +1411,17 @@ Phase 0 进入 Phase 1 前仍待完成的硬门槛：
 4. 基于临时目录或 in-process FileSystem 完成 Flush、Manifest CAS 和 reopen recovery；
 5. 对 reference MVCC model 做随机对拍，并在 Flush/Manifest 各边界注入 crash。
 
-剩余工作：补齐真实 schema fingerprint、完整 Cell value canonical/schema validation、Row 聚合尺寸 admission 与无 mid-row pagination 约束；为 SST build/finalize/Manifest publish 的每个故障点增加可枚举 fault injection，并实现 broken/finalized orphan 清理；将 timestamp high watermark 直接固化到 Manifest，避免 Reopen 全表扫描。
+完成项：RowKey Schema 语义 fingerprint 由列类型与排序方向稳定派生，并与 KeyFormat 共同形成 ComparatorDomain，在 Manifest、SST properties 和 Reader 三方强校验；timestamp domain/high watermark 直接固化到 Manifest，Reopen 不再扫描全表；Row 聚合具备硬尺寸 admission，超限整行失败而不返回半行；SST create/build/finalize、Manifest persist 和 read-state publish 边界具备可枚举 fault injection；未提交 finalized SST 可由恢复 operation ledger 作为显式 orphan candidate 导入并按 FileIdentity 清理，旧 Manifest 由 generation 安全水位回收。
 
-退出条件：codec golden/property test 稳定；未提交文件不可见；任意 crash 后逻辑查询结果与 reference model 等价；无 mid-row pagination。
+退出条件已满足：codec golden/property test 稳定；未提交文件不可见；故障边界恢复后逻辑查询结果与 reference model 等价；当前完整 Scan 不存在 mid-row pagination。自动扫描目录发现未知 orphan、跨请求分页 token 与完整 Cell value schema validation 分别留给文件所有者集成、Phase 1B 和后续 Schema 层，不属于 Phase 1A 嵌入式 API。
 
 ### Phase 1B：单 Slice Raft 与 minidfs 持久闭环
 
-1. Slice Raft deterministic apply、完整 dedupe response、commit physical time；
+当前状态：**进行中，Raft/Snapshot 核心闭环已完成并通过严格 E2E 验收。** `SliceApplyMachine` 按 committed apply index 串行消费外部日志条目，apply 不读取本地时钟、不分配 timestamp；相同 `(client_id, request_id, payload_hash)` 返回首次完整响应且只推进 Raft apply 水位，同 ID 异 payload 产生确定性冲突；dedupe records 可由 Snapshot 层导出/导入，导入时校验 durable applied index 和 physical-time watermark；Flush/Reopen 保留 timestamp high watermark 与 last commit physical time。`SliceRaftStateMachine` 将严格连续的 deterministic replay 与允许 braft 配置日志 index 间隙的真实 apply 路径分离；`BraftSliceAdapter` 已实现 `on_apply`、Snapshot save/load、closure 回滚和安装错误处理。真实三副本 E2E 已证明选主、复制、定向切主、切主后继续提交、durable Snapshot、日志前缀压缩、空副本 `InstallSnapshot` repair 和后续日志追赶，且连续 5 次运行稳定通过。Phase 1B 尚未整体退出，剩余项集中在 minidfs 持久闭环、公开 RPC 迁移、完整故障矩阵、跨 LG 与分页 Scan。
+
+1. Slice Raft deterministic apply、完整 dedupe response、commit physical time、真实 braft 三副本与 Snapshot repair（已完成）；
 2. minidfs streaming Flush、FileIdentity 校验与 Raft `ManifestEdit` CAS；
-3. 完整 `SliceSnapshot`、日志截断条件和 Snapshot 安装；
+3. `SliceSnapshot` canonical encode/decode、durable flush fence、braft save/install 和 repair（核心闭环已完成；生产日志截断策略待完成）；
 4. append/commit/apply、SST complete、Manifest commit、Snapshot save/install 全故障点恢复；
 5. 扩展到多 LG，引入 pin 的 `SliceReadView` 和跨 LG prepare/publish；
 6. GLOBAL_ORDER 分页 Scan 使用固定 read_ts、snapshot lease 和 `next_row_key`。

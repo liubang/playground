@@ -21,6 +21,7 @@
 #include <type_traits>
 
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/codec/ordered_uint.h"
 #include "cpp/pl/sstv2/codec/scalar_comparable.h"
 #include "cpp/pl/sstv2/codec/value_comparable.h"
@@ -232,6 +233,19 @@ absl::StatusOr<CellKeyCodec> CellKeyCodec::Create(KeyFormat format,
     return CellKeyCodec(format, std::move(row_key_schema));
 }
 
+uint64_t CellKeyCodec::row_key_schema_fingerprint() const noexcept {
+    std::string canonical("minitable-row-key-schema-v1");
+    sstv2::codec::append_fixed32(
+        &canonical, static_cast<uint32_t>(row_key_schema_->row_key_column_count()));
+    for (size_t i = 0; i < row_key_schema_->row_key_column_count(); ++i) {
+        sstv2::codec::append_fixed8(
+            &canonical, static_cast<uint8_t>(row_key_schema_->column_type(i)));
+        sstv2::codec::append_fixed8(
+            &canonical, static_cast<uint8_t>(row_key_schema_->column_order(i)));
+    }
+    return sstv2::codec::crc32c_u64(canonical);
+}
+
 absl::Status CellKeyCodec::ValidateRowKey(const std::vector<sstv2::types::Value>& row_key) const {
     if (row_key.size() != row_key_schema_->row_key_column_count()) {
         return absl::InvalidArgumentError("row key column count mismatch");
@@ -294,6 +308,36 @@ absl::StatusOr<std::string> CellKeyCodec::EncodeLogicalRowKey(
         }
     }
     return encoded;
+}
+
+absl::StatusOr<std::vector<sstv2::types::Value>> CellKeyCodec::DecodeLogicalRowKey(
+    std::string_view encoded) const {
+    if (encoded.size() > format_.max_encoded_key_bytes) {
+        return DataLoss("encoded logical row key exceeds format limit");
+    }
+    DecodeCursor cursor{.input = encoded};
+    std::vector<Value> row_key;
+    try {
+        row_key.reserve(row_key_schema_->row_key_column_count());
+        for (size_t i = 0; i < row_key_schema_->row_key_column_count(); ++i) {
+            auto value = DecodeRowKeyValue(
+                row_key_schema_->column_type(i), row_key_schema_->column_order(i), &cursor);
+            if (!value.ok()) {
+                return value.status();
+            }
+            row_key.push_back(std::move(*value));
+        }
+    } catch (const std::bad_alloc&) {
+        return absl::ResourceExhaustedError("logical row key decode allocation failed");
+    }
+    if (cursor.remaining() != 0) {
+        return DataLoss("logical row key has trailing bytes");
+    }
+    auto canonical = EncodeLogicalRowKey(row_key);
+    if (!canonical.ok() || *canonical != encoded) {
+        return DataLoss("logical row key is non-canonical");
+    }
+    return row_key;
 }
 
 absl::Status CellKeyCodec::AppendRecordTarget(const RecordTarget& target,

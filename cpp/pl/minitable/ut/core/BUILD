@@ -32,14 +32,40 @@ cc_test(
 )
 
 cc_test(
+    name = "slice_braft_e2e_test",
+    srcs = ["slice_braft_e2e_test.cpp"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    tags = ["exclusive"],
+    timeout = "long",
+    deps = [
+        "//cpp/pl/minitable/codec:cell_key_codec",
+        "//cpp/pl/minitable/core:braft_slice_adapter",
+        "//cpp/pl/minitable/core:slice_apply_machine",
+        "//cpp/pl/minitable/core:slice_raft_state_machine",
+        "//cpp/pl/minitable/core:slice_store",
+        "//cpp/pl/sstv2/io:local_filesystem",
+        "//cpp/pl/sstv2/types:schema",
+        "@braft//:braft",
+        "@brpc//:brpc",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "slice_store_test",
     srcs = ["slice_store_test.cpp"],
     copts = TEST_COPTS,
     linkopts = LINKOPTS,
     deps = [
+        "//cpp/pl/minitable/codec:cell_key_codec",
+        "//cpp/pl/minitable/core:slice_apply_machine",
+        "//cpp/pl/minitable/core:slice_raft_state_machine",
+        "//cpp/pl/minitable/core:slice_snapshot",
         "//cpp/pl/minitable/core:slice_store",
         "//cpp/pl/minitable/memtable",
         "//cpp/pl/sstv2/io:local_filesystem",
+        "//cpp/pl/sstv2/types:schema",
         "@googletest//:gtest_main",
     ],
 )

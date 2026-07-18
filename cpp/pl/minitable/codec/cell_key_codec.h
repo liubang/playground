@@ -52,6 +52,8 @@ public:
 
     [[nodiscard]] absl::StatusOr<std::string> EncodeLogicalRowKey(
         const std::vector<sstv2::types::Value>& row_key) const;
+    [[nodiscard]] absl::StatusOr<std::vector<sstv2::types::Value>> DecodeLogicalRowKey(
+        std::string_view encoded) const;
 
     [[nodiscard]] absl::StatusOr<std::string> EncodeStorageKey(const StorageKey& key) const;
 
@@ -65,6 +67,9 @@ public:
         std::string_view encoded) const;
 
     [[nodiscard]] const KeyFormat& format() const noexcept { return format_; }
+    // Stable semantic fingerprint of the ordered RowKey column types and sort directions.
+    // Column names are intentionally excluded because they do not affect byte ordering.
+    [[nodiscard]] uint64_t row_key_schema_fingerprint() const noexcept;
 
 private:
     CellKeyCodec(KeyFormat format, sstv2::types::Schema::ConstRef row_key_schema)

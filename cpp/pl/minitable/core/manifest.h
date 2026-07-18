@@ -18,7 +18,7 @@
 
 namespace pl::minitable {
 
-inline constexpr uint32_t kManifestFormatVersion = 2;
+inline constexpr uint32_t kManifestFormatVersion = 3;
 inline constexpr size_t kMaxInstalledEditLedgerEntries = 64;
 
 struct ManifestSst {
@@ -50,6 +50,10 @@ struct ManifestRef {
     uint32_t format_version = kManifestFormatVersion;
     uint64_t generation = 1;
     uint64_t next_sst_sequence = 1;
+    ComparatorDomain comparator_domain = kMinitableComparatorDomain;
+    uint64_t timestamp_domain_epoch = 1;
+    uint64_t timestamp_high_watermark = 0;
+    uint64_t last_commit_physical_ms = 0;
     std::map<uint32_t, LocalityGroupManifest> locality_groups;
     std::vector<InstalledManifestEdit> installed_edits;
 
@@ -63,6 +67,8 @@ struct ManifestEdit {
     uint64_t new_generation = 0;
     uint64_t immutable_id = 0;
     uint64_t immutable_fence_index = 0;
+    uint64_t timestamp_high_watermark = 0;
+    uint64_t last_commit_physical_ms = 0;
     std::vector<SstIdentity> outputs;
 };
 
@@ -70,6 +76,8 @@ struct PersistedManifest {
     std::string path;
     sstv2::io::FileIdentity identity;
     uint64_t generation = 0;
+
+    bool operator==(const PersistedManifest&) const = default;
 };
 
 [[nodiscard]] absl::StatusOr<std::shared_ptr<const ManifestRef>> ApplyManifestEdit(
