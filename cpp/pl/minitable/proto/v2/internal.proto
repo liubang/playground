@@ -66,6 +66,7 @@ message DedupeRecord {
     MutationIdentity identity = 1;
     bytes serialized_response = 2;
     uint64 applied_index = 3;
+    uint64 commit_physical_ms = 4;
 }
 
 message MasterSnapshot {
@@ -114,6 +115,8 @@ message SliceMutation {
     uint64 slice_id = 4;
     uint64 schema_version = 5;
     uint64 route_epoch = 6;
+    // Canonical complete response returned for every retry of this identity.
+    bytes serialized_response = 7;
     oneof operation {
         RowTransaction row_transaction = 10;
     }
@@ -138,6 +141,8 @@ message SstObject {
     bytes min_key = 9;
     bytes max_key = 10;
     uint64 row_count = 11;
+    FileIdentity key_file_identity = 12;
+    FileIdentity value_file_identity = 13;
 }
 
 message LocalityGroupManifest {
@@ -182,4 +187,12 @@ message SliceSnapshot {
     pl.minitable.proto.v2.Timestamp closed_ts = 17;
     uint64 closed_ts_fence_index = 18;
     pl.minitable.proto.v2.Timestamp gc_safe_point = 19;
+    fixed64 timestamp_domain_epoch = 20;
+    uint64 last_commit_physical_ms = 21;
+    uint64 dedupe_retention_floor = 22;
+    fixed64 comparator_domain_fingerprint = 23;
+    string manifest_path = 24;
+    FileIdentity manifest_object_identity = 25;
+    uint64 manifest_generation = 26;
+    fixed64 snapshot_checksum = 27;
 }

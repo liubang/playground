@@ -42,6 +42,13 @@ inline constexpr uint64_t kMinitableSstFormatVersion = 1;
 inline constexpr uint64_t kCrc32cChecksumAlgorithm = 1;
 inline constexpr ComparatorDomain kMinitableComparatorDomain;
 
+[[nodiscard]] ComparatorDomain MakeComparatorDomain(uint64_t key_format_version,
+                                                    uint64_t row_key_schema_fingerprint,
+                                                    uint64_t partition_mode,
+                                                    uint64_t hash_algorithm_version,
+                                                    uint64_t virtual_bucket_count);
+[[nodiscard]] bool IsValidComparatorDomain(const ComparatorDomain& domain);
+
 struct SstIdentity {
     std::string key_path;
     std::string value_path;
