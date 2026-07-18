@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "absl/status/status.h"
+#include "cpp/pl/sstv2/codec/fixed.h"
 #include "cpp/pl/sstv2/types/data_type.h"
 #include "cpp/pl/sstv2/types/key_prefix.h"
 #include "cpp/pl/sstv2/types/value.h"
@@ -92,13 +93,43 @@ bool ValidFinalizedIdentity(const sstv2::io::FileIdentity& identity) {
 
 } // namespace
 
+ComparatorDomain MakeComparatorDomain(uint64_t key_format_version,
+                                      uint64_t row_key_schema_fingerprint,
+                                      uint64_t partition_mode,
+                                      uint64_t hash_algorithm_version,
+                                      uint64_t virtual_bucket_count) {
+    std::string canonical("minitable-comparator-domain-v1");
+    sstv2::codec::append_fixed64(&canonical, key_format_version);
+    sstv2::codec::append_fixed64(&canonical, row_key_schema_fingerprint);
+    sstv2::codec::append_fixed64(&canonical, partition_mode);
+    sstv2::codec::append_fixed64(&canonical, hash_algorithm_version);
+    sstv2::codec::append_fixed64(&canonical, virtual_bucket_count);
+    return {.key_format_version = key_format_version,
+            .row_key_schema_fingerprint = row_key_schema_fingerprint,
+            .partition_mode = partition_mode,
+            .hash_algorithm_version = hash_algorithm_version,
+            .virtual_bucket_count = virtual_bucket_count,
+            .fingerprint = sstv2::codec::crc32c_u64(canonical)};
+}
+
+bool IsValidComparatorDomain(const ComparatorDomain& domain) {
+    return domain == kMinitableComparatorDomain ||
+           (domain.key_format_version != 0 && domain.row_key_schema_fingerprint != 0 &&
+            domain.partition_mode != 0 &&
+            domain == MakeComparatorDomain(domain.key_format_version,
+                                           domain.row_key_schema_fingerprint,
+                                           domain.partition_mode,
+                                           domain.hash_algorithm_version,
+                                           domain.virtual_bucket_count));
+}
+
 absl::StatusOr<std::shared_ptr<const SstReadSource>> SstReadSource::Open(
     std::shared_ptr<sstv2::io::FileSystem> filesystem, SstIdentity identity) {
     if (filesystem == nullptr || identity.key_path.empty() || identity.value_path.empty() ||
         !ValidFinalizedIdentity(identity.key_file) ||
         !ValidFinalizedIdentity(identity.value_file) ||
         identity.sst_format_version != kMinitableSstFormatVersion ||
-        identity.comparator_domain != kMinitableComparatorDomain ||
+        !IsValidComparatorDomain(identity.comparator_domain) ||
         identity.checksum_algorithm != kCrc32cChecksumAlgorithm) {
         return absl::InvalidArgumentError("invalid finalized SST identity");
     }

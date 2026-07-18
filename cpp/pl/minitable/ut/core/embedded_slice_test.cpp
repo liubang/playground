@@ -24,8 +24,10 @@ using sstv2::types::DataType;
 using sstv2::types::OpType;
 using sstv2::types::Value;
 
-codec::CellKeyCodec MakeCodec() {
-    auto schema = sstv2::types::SchemaBuilder().add_column("row", DataType::kUint64).build();
+codec::CellKeyCodec MakeCodec(DataType type = DataType::kUint64,
+                              sstv2::types::SortOrder order =
+                                  sstv2::types::SortOrder::kAscending) {
+    auto schema = sstv2::types::SchemaBuilder().add_column("row", type, order).build();
     EXPECT_TRUE(schema.has_value());
     auto codec = codec::CellKeyCodec::Create(
         {}, std::make_shared<const sstv2::types::Schema>(std::move(*schema)));
@@ -70,7 +72,7 @@ std::optional<std::string> ReadCell(const EmbeddedSlice& slice,
 
 EmbeddedSliceOptions PersistentOptions(std::string_view suffix) {
     const auto directory =
-        (std::filesystem::temp_directory_path() / ("minitable-mvcc-" + std::string(suffix)))
+        (std::filesystem::path(::testing::TempDir()) / ("minitable-mvcc-" + std::string(suffix)))
             .string();
     std::filesystem::remove_all(directory);
     std::filesystem::create_directories(directory);
@@ -204,6 +206,8 @@ TEST(EmbeddedSliceTest, FlushAndReopenPreserveMvccAndTimestampHighWatermark) {
     EXPECT_EQ(ReadCell(**reopened, 1, Cell(1, 1), old->counter), "old");
     EXPECT_EQ(ReadCell(**reopened, 1, Cell(1, 1), current->counter), "new");
     EXPECT_EQ((*reopened)->last_timestamp_counter(), current->counter);
+    EXPECT_EQ((*reopened)->storage_for_testing().read_view().manifest().timestamp_high_watermark,
+              current->counter);
     auto next = (*reopened)->mutate(Row(2), std::vector<CellMutation>{Put(Cell(1, 1), "next")});
     ASSERT_TRUE(next.ok());
     EXPECT_EQ(next->counter, current->counter + 1);
@@ -289,6 +293,44 @@ TEST(EmbeddedSliceTest, TombstoneOnlyGetDoesNotScanIntoNextRow) {
     auto result = (*slice)->get(Row(1), *next);
     ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_FALSE(result->has_value());
+}
+
+TEST(EmbeddedSliceTest, ReopenRejectsDifferentRowKeySchemaAndTimestampDomain) {
+    auto options = PersistentOptions("domain-mismatch");
+    auto slice = EmbeddedSlice::Create(MakeCodec(), options);
+    ASSERT_TRUE(slice.ok());
+    ASSERT_TRUE((*slice)->mutate(Row(1), std::vector<CellMutation>{Put(Cell(1, 1), "v")}).ok());
+    ASSERT_TRUE((*slice)->freeze().ok());
+    ASSERT_TRUE((*slice)
+                    ->flush({.filesystem = options.persistence.filesystem,
+                             .key_path = options.persistence.manifest_directory + "/domain.sst",
+                             .value_path = options.persistence.manifest_directory + "/domain.val"})
+                    .ok());
+    const auto manifest = (*slice)->persisted_manifest();
+
+    EXPECT_EQ(EmbeddedSlice::Reopen(MakeCodec(DataType::kInt64),
+                                    {.options = options, .manifest = manifest})
+                  .status()
+                  .code(),
+              absl::StatusCode::kFailedPrecondition);
+    ++options.timestamp_domain_epoch;
+    EXPECT_EQ(EmbeddedSlice::Reopen(MakeCodec(), {.options = options, .manifest = manifest})
+                  .status()
+                  .code(),
+              absl::StatusCode::kFailedPrecondition);
+}
+
+TEST(EmbeddedSliceTest, ScanRejectsOversizedRowWithoutReturningPartialData) {
+    auto slice = EmbeddedSlice::Create(
+        MakeCodec(), {.timestamp_domain_epoch = 7, .max_row_aggregate_bytes = 32});
+    ASSERT_TRUE(slice.ok());
+    ASSERT_TRUE((*slice)
+                    ->mutate(Row(1), std::vector<CellMutation>{Put(Cell(1, 1), std::string(64, 'x'))})
+                    .ok());
+    EXPECT_EQ((*slice)->scan(std::nullopt, std::nullopt, {.domain_epoch = 7, .counter = 1})
+                  .status()
+                  .code(),
+              absl::StatusCode::kResourceExhausted);
 }
 
 TEST(EmbeddedSliceTest, RejectsInvalidMutationShapesWithoutAdvancingTimestamp) {
