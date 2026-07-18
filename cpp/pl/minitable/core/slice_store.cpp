@@ -17,6 +17,7 @@
 
 #include "cpp/pl/minitable/core/slice_store.h"
 
+#include <algorithm>
 #include <limits>
 #include <new>
 #include <string>
@@ -35,6 +36,10 @@ namespace pl::minitable {
 namespace {
 
 std::atomic<uint64_t> g_next_store_incarnation{1};
+
+absl::Status InjectFault(const FlushFaultInjector& injector, FlushFaultPoint point) {
+    return injector ? injector(point) : absl::OkStatus();
+}
 
 class LocalityGroupCursor final : public sstv2::merge::ForwardCursor {
 public:
@@ -163,6 +168,10 @@ absl::StatusOr<std::unique_ptr<SliceStore>> SliceStore::Create(
         (persistence.filesystem == nullptr || persistence.manifest_directory.empty())) {
         return absl::InvalidArgumentError("incomplete SliceStore persistence options");
     }
+    if (!IsValidComparatorDomain(persistence.comparator_domain) ||
+        persistence.timestamp_domain_epoch == 0) {
+        return absl::InvalidArgumentError("invalid SliceStore persistence domain");
+    }
     if (persistent && locality_group_options.size() != 1) {
         return absl::UnimplementedError(
             "persistent reopen currently requires the Phase 1A single locality group model");
@@ -170,6 +179,8 @@ absl::StatusOr<std::unique_ptr<SliceStore>> SliceStore::Create(
 
     try {
         auto manifest = std::make_shared<ManifestRef>();
+        manifest->comparator_domain = persistence.comparator_domain;
+        manifest->timestamp_domain_epoch = persistence.timestamp_domain_epoch;
         for (const auto& [locality_group_id, options] : locality_group_options) {
             static_cast<void>(options);
             manifest->locality_groups.emplace(locality_group_id, LocalityGroupManifest{});
@@ -189,8 +200,11 @@ absl::StatusOr<std::unique_ptr<SliceStore>> SliceStore::Create(
                 locality_group_id,
                 LocalityGroupReadState{.active = std::move(*memtable), .options = options});
         }
-        auto initial = std::make_shared<PublishedReadState>(
-            PublishedReadState{.version = std::move(version), .visible_applied_index = 0});
+        auto initial = std::make_shared<PublishedReadState>(PublishedReadState{
+            .version = std::move(version),
+            .visible_applied_index = 0,
+            .timestamp_high_watermark = 0,
+            .last_commit_physical_ms = 0});
         PersistedManifest persisted;
         if (persistent) {
             auto result = PersistManifest(persistence.filesystem,
@@ -222,6 +236,10 @@ absl::StatusOr<std::unique_ptr<SliceStore>> SliceStore::Reopen(SliceStoreRecover
     auto manifest = LoadManifest(recovery.persistence.filesystem, recovery.manifest);
     if (!manifest.ok()) {
         return manifest.status();
+    }
+    if ((*manifest)->comparator_domain != recovery.persistence.comparator_domain ||
+        (*manifest)->timestamp_domain_epoch != recovery.persistence.timestamp_domain_epoch) {
+        return absl::FailedPreconditionError("recovery comparator or timestamp domain mismatch");
     }
     if ((*manifest)->locality_groups.size() != recovery.locality_groups.size()) {
         return absl::FailedPreconditionError("recovery locality groups do not match manifest");
@@ -255,7 +273,10 @@ absl::StatusOr<std::unique_ptr<SliceStore>> SliceStore::Reopen(SliceStoreRecover
             version->locality_groups.emplace(locality_group_id, std::move(group));
         }
         auto initial = std::make_shared<PublishedReadState>(PublishedReadState{
-            .version = std::move(version), .visible_applied_index = visible_applied_index});
+            .version = std::move(version),
+            .visible_applied_index = visible_applied_index,
+            .timestamp_high_watermark = (*manifest)->timestamp_high_watermark,
+            .last_commit_physical_ms = (*manifest)->last_commit_physical_ms});
         const uint64_t incarnation =
             g_next_store_incarnation.fetch_add(1, std::memory_order_relaxed);
         if (incarnation == 0) {
@@ -265,6 +286,21 @@ absl::StatusOr<std::unique_ptr<SliceStore>> SliceStore::Reopen(SliceStoreRecover
                                                                 std::move(initial),
                                                                 std::move(recovery.persistence),
                                                                 std::move(recovery.manifest)));
+        for (auto& candidate : recovery.orphan_candidates) {
+            const bool live = std::ranges::any_of(
+                (*manifest)->locality_groups, [&candidate](const auto& locality_group) {
+                    return std::ranges::any_of(locality_group.second.ssts, [&candidate](const auto& sst) {
+                        return sst.identity == candidate;
+                    });
+                });
+            if (live) {
+                return absl::FailedPreconditionError(
+                    "recovery orphan candidate is referenced by the live Manifest");
+            }
+            if (std::ranges::find(store->orphans_, candidate) == store->orphans_.end()) {
+                store->orphans_.push_back(std::move(candidate));
+            }
+        }
         if (!(*manifest)->installed_edits.empty()) {
             const uint64_t last_edit_id = (*manifest)->installed_edits.back().edit_id;
             if (last_edit_id == std::numeric_limits<uint64_t>::max()) {
@@ -282,11 +318,25 @@ absl::Status SliceStore::apply(std::span<const LocalityGroupPatch> patches, uint
     if (patches.empty()) {
         return absl::InvalidArgumentError("SliceStore patch list is empty");
     }
+    const auto current = std::atomic_load_explicit(&published_, std::memory_order_acquire);
+    return apply_committed(patches,
+                           apply_index,
+                           std::max(current->timestamp_high_watermark, apply_index),
+                           current->last_commit_physical_ms);
+}
 
+absl::Status SliceStore::apply_committed(std::span<const LocalityGroupPatch> patches,
+                                         uint64_t apply_index,
+                                         uint64_t timestamp_high_watermark,
+                                         uint64_t commit_physical_ms) {
     std::lock_guard apply_lock(apply_mutex_);
     const auto current = std::atomic_load_explicit(&published_, std::memory_order_acquire);
     if (apply_index <= current->visible_applied_index) {
         return absl::InvalidArgumentError("SliceStore apply index must advance");
+    }
+    if (timestamp_high_watermark < current->timestamp_high_watermark ||
+        commit_physical_ms < current->last_commit_physical_ms) {
+        return absl::InvalidArgumentError("committed timestamp metadata must not regress");
     }
 
     std::map<uint32_t, std::span<const MemTableMutation>> canonical;
@@ -308,8 +358,11 @@ absl::Status SliceStore::apply(std::span<const LocalityGroupPatch> patches, uint
 
     std::shared_ptr<const PublishedReadState> next;
     try {
-        next = std::make_shared<PublishedReadState>(
-            PublishedReadState{.version = current->version, .visible_applied_index = apply_index});
+        next = std::make_shared<PublishedReadState>(PublishedReadState{
+            .version = current->version,
+            .visible_applied_index = apply_index,
+            .timestamp_high_watermark = timestamp_high_watermark,
+            .last_commit_physical_ms = commit_physical_ms});
     } catch (const std::bad_alloc&) {
         return absl::ResourceExhaustedError("Slice read-state allocation failed");
     }
@@ -366,11 +419,15 @@ absl::Status SliceStore::freeze_locality_group(uint32_t locality_group_id) {
         locality_group.immutable = locality_group.active;
         locality_group.immutable_id = next_immutable_id_;
         locality_group.immutable_fence_index = current->visible_applied_index;
+        locality_group.immutable_timestamp_high_watermark = current->timestamp_high_watermark;
+        locality_group.immutable_last_commit_physical_ms = current->last_commit_physical_ms;
         locality_group.active = std::move(*new_active);
         version->generation = current->version->generation + 1;
         next = std::make_shared<PublishedReadState>(
             PublishedReadState{.version = std::move(version),
-                               .visible_applied_index = current->visible_applied_index});
+                               .visible_applied_index = current->visible_applied_index,
+                               .timestamp_high_watermark = current->timestamp_high_watermark,
+                               .last_commit_physical_ms = current->last_commit_physical_ms});
     } catch (const std::bad_alloc&) {
         return absl::ResourceExhaustedError("Slice freeze read-state allocation failed");
     }
@@ -398,6 +455,9 @@ absl::StatusOr<FlushToken> SliceStore::begin_flush(uint32_t locality_group_id) c
                       locality_group_id,
                       found->second.immutable_id,
                       found->second.immutable_fence_index,
+                      found->second.immutable_timestamp_high_watermark,
+                      found->second.immutable_last_commit_physical_ms,
+                      current->version->manifest->comparator_domain,
                       found->second.immutable);
 }
 
@@ -408,6 +468,10 @@ absl::StatusOr<FinalizedFlush> SliceStore::build_flush_sst(const FlushToken& tok
         options.key_path == options.value_path) {
         return absl::InvalidArgumentError("invalid flush token or SST options");
     }
+    auto status = InjectFault(options.fault_injector, FlushFaultPoint::kBeforeKeyCreate);
+    if (!status.ok()) {
+        return status;
+    }
     auto schema = FlushSchema();
     if (!schema.ok()) {
         return schema.status();
@@ -417,21 +481,32 @@ absl::StatusOr<FinalizedFlush> SliceStore::build_flush_sst(const FlushToken& tok
     if (!key.ok()) {
         return key.status();
     }
+    status = InjectFault(options.fault_injector, FlushFaultPoint::kAfterKeyCreate);
+    if (!status.ok()) {
+        (void)options.filesystem->close(*key);
+        return status;
+    }
     auto value = options.filesystem->create(options.value_path);
     if (!value.ok()) {
         (void)options.filesystem->close(*key);
         return value.status();
     }
 
+    status = InjectFault(options.fault_injector, FlushFaultPoint::kAfterValueCreate);
+    if (!status.ok()) {
+        (void)options.filesystem->close(*key);
+        (void)options.filesystem->close(*value);
+        return status;
+    }
     PendingSinks pending(options.filesystem, options.key_path, options.value_path, *key, *value);
     options.builder_options.value_file_name = options.value_path;
     options.builder_options.configuration.sst_format_version = kMinitableSstFormatVersion;
     options.builder_options.configuration.key_format_version =
-        kMinitableComparatorDomain.key_format_version;
+        token.comparator_domain_.key_format_version;
     options.builder_options.configuration.row_key_schema_fingerprint =
-        kMinitableComparatorDomain.row_key_schema_fingerprint;
+        token.comparator_domain_.row_key_schema_fingerprint;
     options.builder_options.configuration.comparator_domain_fingerprint =
-        kMinitableComparatorDomain.fingerprint;
+        token.comparator_domain_.fingerprint;
     options.builder_options.configuration.checksum_algorithm = kCrc32cChecksumAlgorithm;
     std::unique_ptr<sstv2::file::Builder> builder;
     try {
@@ -444,7 +519,7 @@ absl::StatusOr<FinalizedFlush> SliceStore::build_flush_sst(const FlushToken& tok
     }
     pending.release();
     auto cursor = token.immutable_->new_cursor(token.fence_index_);
-    auto status = cursor->seek_to_first();
+    status = cursor->seek_to_first();
     if (!status.ok()) {
         return status;
     }
@@ -468,9 +543,17 @@ absl::StatusOr<FinalizedFlush> SliceStore::build_flush_sst(const FlushToken& tok
         }
     }
 
+    status = InjectFault(options.fault_injector, FlushFaultPoint::kBeforeSstFinalize);
+    if (!status.ok()) {
+        return status;
+    }
     auto result = builder->finish_result();
     if (!result.ok()) {
         return result.status();
+    }
+    status = InjectFault(options.fault_injector, FlushFaultPoint::kAfterSstFinalize);
+    if (!status.ok()) {
+        return status;
     }
     SstIdentity identity{
         .key_path = std::move(options.key_path),
@@ -479,7 +562,7 @@ absl::StatusOr<FinalizedFlush> SliceStore::build_flush_sst(const FlushToken& tok
         .value_file = result->value_file,
         .row_count = result->row_count,
         .sst_format_version = result->sst_format_version,
-        .comparator_domain = kMinitableComparatorDomain,
+        .comparator_domain = token.comparator_domain_,
         .checksum_algorithm = result->checksum_algorithm,
     };
     auto source = SstReadSource::Open(options.filesystem, std::move(identity));
@@ -531,6 +614,8 @@ absl::Status SliceStore::install_flush(const FlushToken& token, const FinalizedF
         .new_generation = current->version->manifest->generation + 1,
         .immutable_id = token.immutable_id_,
         .immutable_fence_index = token.fence_index_,
+        .timestamp_high_watermark = token.timestamp_high_watermark_,
+        .last_commit_physical_ms = token.last_commit_physical_ms_,
         .outputs = {flush.source_->identity()},
     };
     auto manifest = ApplyManifestEdit(*current->version->manifest, edit);
@@ -545,6 +630,15 @@ absl::Status SliceStore::install_flush(const FlushToken& token, const FinalizedF
 
     PersistedManifest persisted;
     if (persistence_.filesystem != nullptr) {
+        auto fault = InjectFault(persistence_.fault_injector, FlushFaultPoint::kBeforeManifestPersist);
+        if (!fault.ok()) {
+            try {
+                orphans_.push_back(flush.source_->identity());
+            } catch (const std::bad_alloc&) {
+                return absl::ResourceExhaustedError("failed to record injected flush orphan");
+            }
+            return fault;
+        }
         auto result = PersistManifest(persistence_.filesystem,
                                       persistence_.manifest_directory + "/manifest-" +
                                           std::to_string((*manifest)->generation) + ".mtmf",
@@ -558,6 +652,16 @@ absl::Status SliceStore::install_flush(const FlushToken& token, const FinalizedF
             return result.status();
         }
         persisted = std::move(*result);
+        fault = InjectFault(persistence_.fault_injector, FlushFaultPoint::kAfterManifestPersist);
+        if (!fault.ok()) {
+            (void)persistence_.filesystem->remove(persisted.path, persisted.identity);
+            try {
+                orphans_.push_back(flush.source_->identity());
+            } catch (const std::bad_alloc&) {
+                return absl::ResourceExhaustedError("failed to record injected flush orphan");
+            }
+            return fault;
+        }
     }
 
     std::shared_ptr<const PublishedReadState> next;
@@ -569,11 +673,15 @@ absl::Status SliceStore::install_flush(const FlushToken& token, const FinalizedF
         locality_group.last_installed_immutable_id = token.immutable_id_;
         locality_group.immutable_id = 0;
         locality_group.immutable_fence_index = 0;
+        locality_group.immutable_timestamp_high_watermark = 0;
+        locality_group.immutable_last_commit_physical_ms = 0;
         version->generation = current->version->generation + 1;
         version->manifest = std::move(*manifest);
         next = std::make_shared<PublishedReadState>(
             PublishedReadState{.version = std::move(version),
-                               .visible_applied_index = current->visible_applied_index});
+                               .visible_applied_index = current->visible_applied_index,
+                               .timestamp_high_watermark = current->timestamp_high_watermark,
+                               .last_commit_physical_ms = current->last_commit_physical_ms});
     } catch (const std::bad_alloc&) {
         if (!persisted.path.empty()) {
             (void)persistence_.filesystem->remove(persisted.path, persisted.identity);
@@ -586,14 +694,39 @@ absl::Status SliceStore::install_flush(const FlushToken& token, const FinalizedF
         }
         return absl::ResourceExhaustedError("flush install read-state allocation failed");
     }
+    auto fault = InjectFault(persistence_.fault_injector, FlushFaultPoint::kBeforeReadStatePublish);
+    if (!fault.ok()) {
+        if (!persisted.path.empty()) {
+            (void)persistence_.filesystem->remove(persisted.path, persisted.identity);
+        }
+        try {
+            orphans_.push_back(flush.source_->identity());
+        } catch (const std::bad_alloc&) {
+            return absl::ResourceExhaustedError("failed to record injected flush orphan");
+        }
+        return fault;
+    }
     std::atomic_store_explicit(&published_, std::move(next), std::memory_order_release);
     if (!persisted.path.empty()) {
         // Generation-named Manifest objects are immutable. The predecessor remains
         // available as the last crash-safe authority until a future GC proves that
         // no snapshot/recovery reference can still name it.
+        if (!persisted_manifest_.path.empty()) {
+            obsolete_manifests_.push_back(persisted_manifest_);
+        }
         persisted_manifest_ = std::move(persisted);
     }
     return absl::OkStatus();
+}
+
+uint64_t SliceStore::minimum_flushed_applied_index() const {
+    const auto current = std::atomic_load_explicit(&published_, std::memory_order_acquire);
+    uint64_t minimum = std::numeric_limits<uint64_t>::max();
+    for (const auto& [group_id, group] : current->version->manifest->locality_groups) {
+        static_cast<void>(group_id);
+        minimum = std::min(minimum, group.flushed_applied_index);
+    }
+    return minimum == std::numeric_limits<uint64_t>::max() ? 0 : minimum;
 }
 
 SliceReadView SliceStore::read_view() const {
@@ -603,6 +736,30 @@ SliceReadView SliceStore::read_view() const {
 size_t SliceStore::orphan_count() const {
     std::lock_guard lock(apply_mutex_);
     return orphans_.size();
+}
+
+absl::Status SliceStore::collect_manifests_before(uint64_t minimum_generation_to_keep) {
+    std::lock_guard lock(apply_mutex_);
+    if (persistence_.filesystem == nullptr) {
+        return absl::FailedPreconditionError("Manifest GC requires a persistent filesystem");
+    }
+    std::vector<PersistedManifest> remaining;
+    absl::Status first_error;
+    for (const auto& manifest : obsolete_manifests_) {
+        if (manifest.generation >= minimum_generation_to_keep) {
+            remaining.push_back(manifest);
+            continue;
+        }
+        const auto status = persistence_.filesystem->remove(manifest.path, manifest.identity);
+        if (!status.ok()) {
+            remaining.push_back(manifest);
+            if (first_error.ok()) {
+                first_error = status;
+            }
+        }
+    }
+    obsolete_manifests_ = std::move(remaining);
+    return first_error;
 }
 
 absl::Status SliceStore::collect_orphans() {

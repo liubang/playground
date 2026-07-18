@@ -42,6 +42,9 @@ struct VisibleRow {
 struct EmbeddedSliceOptions {
     uint32_t locality_group_id = 1;
     uint64_t timestamp_domain_epoch = 1;
+    // Hard bound for one materialized logical row, including encoded persisted entries.
+    // Scan never returns a partial row; it fails before publishing an oversized row.
+    size_t max_row_aggregate_bytes = 8 * 1024 * 1024;
     MemTableOptions memtable;
     SliceStorePersistence persistence;
 };

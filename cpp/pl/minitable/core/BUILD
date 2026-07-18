@@ -36,6 +36,66 @@ cc_library(
 )
 
 cc_library(
+    name = "slice_apply_machine",
+    srcs = ["slice_apply_machine.cpp"],
+    hdrs = ["slice_apply_machine.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":key",
+        ":slice_store",
+        "//cpp/pl/minitable/codec:cell_key_codec",
+        "//cpp/pl/minitable/proto/v2:internal_cc_proto",
+        "//cpp/pl/sstv2/types:value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "slice_snapshot",
+    srcs = ["slice_snapshot.cpp"],
+    hdrs = ["slice_snapshot.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":slice_apply_machine",
+        ":slice_store",
+        "//cpp/pl/minitable/proto/v2:internal_cc_proto",
+        "//cpp/pl/sstv2/codec:fixed",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "slice_raft_state_machine",
+    srcs = ["slice_raft_state_machine.cpp"],
+    hdrs = ["slice_raft_state_machine.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":slice_apply_machine",
+        ":slice_snapshot",
+        "//cpp/pl/minitable/codec:cell_key_codec",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "braft_slice_adapter",
+    srcs = ["braft_slice_adapter.cpp"],
+    hdrs = ["braft_slice_adapter.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":slice_raft_state_machine",
+        "@braft//:braft",
+    ],
+)
+
+cc_library(
     name = "embedded_slice",
     srcs = ["embedded_slice.cpp"],
     hdrs = ["embedded_slice.h"],
