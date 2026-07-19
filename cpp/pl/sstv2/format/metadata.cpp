@@ -210,8 +210,8 @@ absl::StatusOr<Configuration> configuration_from_entries(const SectionMap& entri
         entries, kComparatorDomainFingerprint, configuration.comparator_domain_fingerprint);
     auto checksum_algorithm =
         optional_uint64(entries, kChecksumAlgorithm, configuration.checksum_algorithm);
-    if (!index_rows.ok() || !sst_format.ok() || !key_format.ok() ||
-        !schema_fingerprint.ok() || !domain_fingerprint.ok() || !checksum_algorithm.ok()) {
+    if (!index_rows.ok() || !sst_format.ok() || !key_format.ok() || !schema_fingerprint.ok() ||
+        !domain_fingerprint.ok() || !checksum_algorithm.ok()) {
         return absl::InvalidArgumentError("invalid comparator-domain configuration metadata");
     }
     configuration.max_embedded_value_size = *embedded;

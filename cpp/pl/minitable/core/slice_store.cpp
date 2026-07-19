@@ -200,11 +200,11 @@ absl::StatusOr<std::unique_ptr<SliceStore>> SliceStore::Create(
                 locality_group_id,
                 LocalityGroupReadState{.active = std::move(*memtable), .options = options});
         }
-        auto initial = std::make_shared<PublishedReadState>(PublishedReadState{
-            .version = std::move(version),
-            .visible_applied_index = 0,
-            .timestamp_high_watermark = 0,
-            .last_commit_physical_ms = 0});
+        auto initial =
+            std::make_shared<PublishedReadState>(PublishedReadState{.version = std::move(version),
+                                                                    .visible_applied_index = 0,
+                                                                    .timestamp_high_watermark = 0,
+                                                                    .last_commit_physical_ms = 0});
         PersistedManifest persisted;
         if (persistent) {
             auto result = PersistManifest(persistence.filesystem,
@@ -272,11 +272,11 @@ absl::StatusOr<std::unique_ptr<SliceStore>> SliceStore::Reopen(SliceStoreRecover
                 std::max(visible_applied_index, manifest_group->second.flushed_applied_index);
             version->locality_groups.emplace(locality_group_id, std::move(group));
         }
-        auto initial = std::make_shared<PublishedReadState>(PublishedReadState{
-            .version = std::move(version),
-            .visible_applied_index = visible_applied_index,
-            .timestamp_high_watermark = (*manifest)->timestamp_high_watermark,
-            .last_commit_physical_ms = (*manifest)->last_commit_physical_ms});
+        auto initial = std::make_shared<PublishedReadState>(
+            PublishedReadState{.version = std::move(version),
+                               .visible_applied_index = visible_applied_index,
+                               .timestamp_high_watermark = (*manifest)->timestamp_high_watermark,
+                               .last_commit_physical_ms = (*manifest)->last_commit_physical_ms});
         const uint64_t incarnation =
             g_next_store_incarnation.fetch_add(1, std::memory_order_relaxed);
         if (incarnation == 0) {
@@ -289,9 +289,9 @@ absl::StatusOr<std::unique_ptr<SliceStore>> SliceStore::Reopen(SliceStoreRecover
         for (auto& candidate : recovery.orphan_candidates) {
             const bool live = std::ranges::any_of(
                 (*manifest)->locality_groups, [&candidate](const auto& locality_group) {
-                    return std::ranges::any_of(locality_group.second.ssts, [&candidate](const auto& sst) {
-                        return sst.identity == candidate;
-                    });
+                    return std::ranges::any_of(
+                        locality_group.second.ssts,
+                        [&candidate](const auto& sst) { return sst.identity == candidate; });
                 });
             if (live) {
                 return absl::FailedPreconditionError(
@@ -358,11 +358,11 @@ absl::Status SliceStore::apply_committed(std::span<const LocalityGroupPatch> pat
 
     std::shared_ptr<const PublishedReadState> next;
     try {
-        next = std::make_shared<PublishedReadState>(PublishedReadState{
-            .version = current->version,
-            .visible_applied_index = apply_index,
-            .timestamp_high_watermark = timestamp_high_watermark,
-            .last_commit_physical_ms = commit_physical_ms});
+        next = std::make_shared<PublishedReadState>(
+            PublishedReadState{.version = current->version,
+                               .visible_applied_index = apply_index,
+                               .timestamp_high_watermark = timestamp_high_watermark,
+                               .last_commit_physical_ms = commit_physical_ms});
     } catch (const std::bad_alloc&) {
         return absl::ResourceExhaustedError("Slice read-state allocation failed");
     }
@@ -630,7 +630,8 @@ absl::Status SliceStore::install_flush(const FlushToken& token, const FinalizedF
 
     PersistedManifest persisted;
     if (persistence_.filesystem != nullptr) {
-        auto fault = InjectFault(persistence_.fault_injector, FlushFaultPoint::kBeforeManifestPersist);
+        auto fault =
+            InjectFault(persistence_.fault_injector, FlushFaultPoint::kBeforeManifestPersist);
         if (!fault.ok()) {
             try {
                 orphans_.push_back(flush.source_->identity());
