@@ -1525,6 +1525,7 @@ void NameNodeServiceImpl::GetLocatedBlocks(google::protobuf::RpcController* /*co
 }
 
 // Lease Operations
+
 void NameNodeServiceImpl::RenewLease(google::protobuf::RpcController* /*controller*/,
                                      const protocol::RenewLeaseRequest* request,
                                      protocol::RenewLeaseResponse* response,

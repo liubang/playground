@@ -174,7 +174,8 @@ absl::StatusOr<std::shared_ptr<const ManifestRef>> ApplyManifestEdit(const Manif
         return status;
     }
     if (edit.edit_id == 0 || edit.locality_group_id == 0 || edit.immutable_id == 0 ||
-        edit.outputs.size() != 1 || edit.timestamp_high_watermark < current.timestamp_high_watermark ||
+        edit.outputs.size() != 1 ||
+        edit.timestamp_high_watermark < current.timestamp_high_watermark ||
         edit.last_commit_physical_ms < current.last_commit_physical_ms) {
         return absl::InvalidArgumentError("invalid flush manifest edit");
     }
@@ -247,8 +248,8 @@ absl::StatusOr<std::string> EncodeManifest(const ManifestRef& manifest) {
         sstv2::codec::append_fixed64(&payload, manifest.generation);
         sstv2::codec::append_fixed64(&payload, manifest.next_sst_sequence);
         sstv2::codec::append_fixed64(&payload, manifest.comparator_domain.key_format_version);
-        sstv2::codec::append_fixed64(
-            &payload, manifest.comparator_domain.row_key_schema_fingerprint);
+        sstv2::codec::append_fixed64(&payload,
+                                     manifest.comparator_domain.row_key_schema_fingerprint);
         sstv2::codec::append_fixed64(&payload, manifest.comparator_domain.partition_mode);
         sstv2::codec::append_fixed64(&payload, manifest.comparator_domain.hash_algorithm_version);
         sstv2::codec::append_fixed64(&payload, manifest.comparator_domain.virtual_bucket_count);
@@ -402,13 +403,13 @@ absl::StatusOr<std::shared_ptr<const ManifestRef>> DecodeManifest(
                          .value_file = *value_file,
                          .row_count = *row_count,
                          .sst_format_version = *sst_format,
-                         .comparator_domain = {
-                             .key_format_version = *sst_key_format,
-                             .row_key_schema_fingerprint = *sst_schema_fingerprint,
-                             .partition_mode = *sst_partition_mode,
-                             .hash_algorithm_version = *sst_hash_algorithm,
-                             .virtual_bucket_count = *sst_virtual_buckets,
-                             .fingerprint = *sst_domain_fingerprint},
+                         .comparator_domain = {.key_format_version = *sst_key_format,
+                                               .row_key_schema_fingerprint =
+                                                   *sst_schema_fingerprint,
+                                               .partition_mode = *sst_partition_mode,
+                                               .hash_algorithm_version = *sst_hash_algorithm,
+                                               .virtual_bucket_count = *sst_virtual_buckets,
+                                               .fingerprint = *sst_domain_fingerprint},
                          .checksum_algorithm = *checksum_algorithm}});
             }
             if (!manifest->locality_groups.emplace(*id, std::move(group)).second) {

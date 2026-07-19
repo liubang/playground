@@ -25,8 +25,7 @@ using sstv2::types::OpType;
 using sstv2::types::Value;
 
 codec::CellKeyCodec MakeCodec(DataType type = DataType::kUint64,
-                              sstv2::types::SortOrder order =
-                                  sstv2::types::SortOrder::kAscending) {
+                              sstv2::types::SortOrder order = sstv2::types::SortOrder::kAscending) {
     auto schema = sstv2::types::SchemaBuilder().add_column("row", type, order).build();
     EXPECT_TRUE(schema.has_value());
     auto codec = codec::CellKeyCodec::Create(
@@ -324,10 +323,12 @@ TEST(EmbeddedSliceTest, ScanRejectsOversizedRowWithoutReturningPartialData) {
     auto slice = EmbeddedSlice::Create(
         MakeCodec(), {.timestamp_domain_epoch = 7, .max_row_aggregate_bytes = 32});
     ASSERT_TRUE(slice.ok());
-    ASSERT_TRUE((*slice)
-                    ->mutate(Row(1), std::vector<CellMutation>{Put(Cell(1, 1), std::string(64, 'x'))})
-                    .ok());
-    EXPECT_EQ((*slice)->scan(std::nullopt, std::nullopt, {.domain_epoch = 7, .counter = 1})
+    ASSERT_TRUE(
+        (*slice)
+            ->mutate(Row(1), std::vector<CellMutation>{Put(Cell(1, 1), std::string(64, 'x'))})
+            .ok());
+    EXPECT_EQ((*slice)
+                  ->scan(std::nullopt, std::nullopt, {.domain_epoch = 7, .counter = 1})
                   .status()
                   .code(),
               absl::StatusCode::kResourceExhausted);

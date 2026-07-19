@@ -1,13 +1,12 @@
 // Copyright (c) 2026 The Authors. All rights reserved.
-#include "cpp/pl/sstv2/merge/merge_iterator.h"
-
 #include <algorithm>
+#include <gtest/gtest.h>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include "cpp/pl/sstv2/merge/merge_iterator.h"
 
 namespace pl::sstv2::merge {
 namespace {
@@ -23,14 +22,14 @@ public:
         return absl::OkStatus();
     }
     absl::Status seek(std::string_view key) override {
-        index_ = static_cast<size_t>(std::lower_bound(
-                                         entries_.begin(),
-                                         entries_.end(),
-                                         key,
-                                         [](const auto& entry, std::string_view target) {
-                                             return entry.first < target;
-                                         }) -
-                                     entries_.begin());
+        index_ =
+            static_cast<size_t>(std::lower_bound(entries_.begin(),
+                                                 entries_.end(),
+                                                 key,
+                                                 [](const auto& entry, std::string_view target) {
+                                                     return entry.first < target;
+                                                 }) -
+                                entries_.begin());
         return absl::OkStatus();
     }
     absl::Status next() override {

@@ -12,16 +12,20 @@ absl::StatusOr<ApplyResult> SliceRaftStateMachine::on_apply(uint64_t index,
     return apply_committed(index, term, data, false);
 }
 
-absl::StatusOr<ApplyResult> SliceRaftStateMachine::on_braft_apply(
-    uint64_t index, uint64_t term, std::span<const std::byte> data) {
+absl::StatusOr<ApplyResult> SliceRaftStateMachine::on_braft_apply(uint64_t index,
+                                                                  uint64_t term,
+                                                                  std::span<const std::byte> data) {
     return apply_committed(index, term, data, true);
 }
 
-absl::StatusOr<ApplyResult> SliceRaftStateMachine::apply_committed(
-    uint64_t index, uint64_t term, std::span<const std::byte> data, bool allow_index_gap) {
+absl::StatusOr<ApplyResult> SliceRaftStateMachine::apply_committed(uint64_t index,
+                                                                   uint64_t term,
+                                                                   std::span<const std::byte> data,
+                                                                   bool allow_index_gap) {
     std::lock_guard lock(mutex_);
     const uint64_t visible_index = machine_->store().visible_applied_index();
-    const bool index_is_valid = allow_index_gap ? index > visible_index : index == visible_index + 1;
+    const bool index_is_valid =
+        allow_index_gap ? index > visible_index : index == visible_index + 1;
     if (term == 0 || index == 0 || !index_is_valid) {
         return absl::DataLossError("committed Raft entry has an invalid state-machine index");
     }
@@ -66,8 +70,7 @@ absl::Status SliceRaftStateMachine::on_snapshot_load(
 }
 
 absl::Status SliceRaftStateMachine::replay(
-    std::span<const std::pair<uint64_t, std::string>> committed_entries,
-    uint64_t term) {
+    std::span<const std::pair<uint64_t, std::string>> committed_entries, uint64_t term) {
     uint64_t previous = machine_->store().visible_applied_index();
     for (const auto& [index, data] : committed_entries) {
         if (index != previous + 1) {

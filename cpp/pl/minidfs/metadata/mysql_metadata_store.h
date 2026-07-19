@@ -39,7 +39,6 @@ public:
     // Transaction management
 
     pl::Result<std::unique_ptr<Transaction>> begin_transaction() override;
-
     // Inode operations
 
     pl::Result<Inode> get_inode(uint64_t inode_id) override;
@@ -50,7 +49,6 @@ public:
     pl::Result<pl::Void> delete_inode(uint64_t inode_id) override;
     pl::Result<pl::Void> delete_inode_if_version(uint64_t inode_id,
                                                  uint64_t expected_version) override;
-
     // Block operations
 
     pl::Result<BlockMeta> get_block(uint64_t block_id) override;

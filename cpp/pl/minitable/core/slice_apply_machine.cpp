@@ -133,12 +133,11 @@ absl::StatusOr<ApplyResult> SliceApplyMachine::apply(const CommittedSliceMutatio
                         .request_id = mutation.identity.request_id};
     const auto existing = dedupe_.find(key);
     if (existing != dedupe_.end()) {
-        status = store_->apply_committed({},
-                                         mutation.apply_index,
-                                         std::max(store_->timestamp_high_watermark(),
-                                                  mutation.commit_ts.counter),
-                                         std::max(store_->last_commit_physical_ms(),
-                                                  mutation.commit_physical_ms));
+        status = store_->apply_committed(
+            {},
+            mutation.apply_index,
+            std::max(store_->timestamp_high_watermark(), mutation.commit_ts.counter),
+            std::max(store_->last_commit_physical_ms(), mutation.commit_physical_ms));
         if (!status.ok()) {
             return status;
         }
@@ -181,10 +180,8 @@ absl::StatusOr<ApplyResult> SliceApplyMachine::apply(const CommittedSliceMutatio
         if (!inserted) {
             return absl::InternalError("dedupe insertion raced under apply serialization");
         }
-        status = store_->apply_committed(patches,
-                                         mutation.apply_index,
-                                         mutation.commit_ts.counter,
-                                         mutation.commit_physical_ms);
+        status = store_->apply_committed(
+            patches, mutation.apply_index, mutation.commit_ts.counter, mutation.commit_physical_ms);
         if (!status.ok()) {
             dedupe_.erase(record_it);
             return status;
@@ -196,11 +193,25 @@ absl::StatusOr<ApplyResult> SliceApplyMachine::apply(const CommittedSliceMutatio
 }
 
 absl::StatusOr<std::string> EncodeSliceMutationV2(const CommittedSliceMutation& mutation,
-                                                       std::string_view encoded_logical_row_key,
-                                                       const codec::CellKeyCodec& codec) {
-    if (mutation.locality_group_ids.size() != mutation.locality_group_mutations.size() ||
+                                                  std::string_view encoded_logical_row_key,
+                                                  const codec::CellKeyCodec& codec) {
+    auto status = ValidateIdentity(mutation.identity);
+    if (!status.ok()) {
+        return status;
+    }
+    if (mutation.commit_ts.domain_epoch == 0 || mutation.commit_ts.counter == 0 ||
+        mutation.commit_physical_ms == 0 || mutation.serialized_response.empty() ||
+        mutation.locality_group_ids.size() != mutation.locality_group_mutations.size() ||
         mutation.locality_group_ids.empty()) {
-        return absl::InvalidArgumentError("cannot encode invalid locality group patches");
+        return absl::InvalidArgumentError("cannot encode incomplete committed Slice mutation");
+    }
+    std::set<uint32_t> group_ids;
+    for (size_t index = 0; index < mutation.locality_group_ids.size(); ++index) {
+        if (mutation.locality_group_ids[index] == 0 ||
+            mutation.locality_group_mutations[index].empty() ||
+            !group_ids.insert(mutation.locality_group_ids[index]).second) {
+            return absl::InvalidArgumentError("cannot encode invalid locality group patches");
+        }
     }
     auto decoded_row = codec.DecodeLogicalRowKey(encoded_logical_row_key);
     if (!decoded_row.ok()) {
@@ -227,7 +238,12 @@ absl::StatusOr<std::string> EncodeSliceMutationV2(const CommittedSliceMutation& 
             }
             if (decoded_key->storage_key.row_key != *decoded_row ||
                 decoded_key->commit_ts != mutation.commit_ts) {
-                return absl::InvalidArgumentError("mutation key does not match canonical row transaction");
+                return absl::InvalidArgumentError(
+                    "mutation key does not match canonical row transaction");
+            }
+            if (decoded_key->op_type == OpType::kMerge) {
+                return absl::InvalidArgumentError(
+                    "SliceMutation v2 does not support merge operations");
             }
             auto* canonical = group->add_mutations();
             canonical->set_mutation_seq(decoded_key->mutation_seq);
@@ -240,9 +256,8 @@ absl::StatusOr<std::string> EncodeSliceMutationV2(const CommittedSliceMutation& 
                 auto* cell = canonical->mutable_cell();
                 EncodeCellRef(std::get<CellRef>(decoded_key->storage_key.target),
                               cell->mutable_cell());
-                cell->set_type(decoded_key->op_type == OpType::kPut
-                                   ? public_proto::SET
-                                   : public_proto::DELETE_COLUMN);
+                cell->set_type(decoded_key->op_type == OpType::kPut ? public_proto::SET
+                                                                    : public_proto::DELETE_COLUMN);
                 if (decoded_key->op_type == OpType::kPut) {
                     cell->mutable_value()->set_bytes_value(mutation_entry.encoded_value);
                 }
@@ -287,6 +302,14 @@ absl::StatusOr<CommittedSliceMutation> DecodeSliceMutationV2(
         .commit_physical_ms = transaction.commit_physical_ms(),
         .serialized_response = proto.serialized_response(),
     };
+    auto status = ValidateIdentity(result.identity);
+    if (!status.ok()) {
+        return status;
+    }
+    if (!transaction.has_commit_ts() || result.commit_ts.domain_epoch == 0 ||
+        result.commit_ts.counter == 0 || result.commit_physical_ms == 0) {
+        return absl::InvalidArgumentError("row transaction requires a complete commit timestamp");
+    }
     std::set<uint32_t> group_ids;
     try {
         for (const auto& group : transaction.locality_groups()) {
@@ -299,13 +322,14 @@ absl::StatusOr<CommittedSliceMutation> DecodeSliceMutationV2(
             mutations.reserve(static_cast<size_t>(group.mutations_size()));
             for (const auto& canonical : group.mutations()) {
                 if (!sequences.insert(canonical.mutation_seq()).second) {
-                    return absl::InvalidArgumentError("duplicate mutation sequence in row transaction");
+                    return absl::InvalidArgumentError(
+                        "duplicate mutation sequence in row transaction");
                 }
-                VersionedStorageKey key{.storage_key = {.partition = GlobalOrderPrefix{},
-                                                        .row_key = *row_key},
-                                        .commit_ts = result.commit_ts,
-                                        .mutation_seq = canonical.mutation_seq(),
-                                        .op_type = OpType::kDelete};
+                VersionedStorageKey key{
+                    .storage_key = {.partition = GlobalOrderPrefix{}, .row_key = *row_key},
+                    .commit_ts = result.commit_ts,
+                    .mutation_seq = canonical.mutation_seq(),
+                    .op_type = OpType::kDelete};
                 std::string value;
                 switch (canonical.operation_case()) {
                     case internal_proto::CanonicalMutation::kDeleteRow:
@@ -345,7 +369,8 @@ absl::StatusOr<CommittedSliceMutation> DecodeSliceMutationV2(
                         break;
                     }
                     default:
-                        return absl::InvalidArgumentError("canonical mutation operation is missing");
+                        return absl::InvalidArgumentError(
+                            "canonical mutation operation is missing");
                 }
                 auto encoded_key = codec.EncodeVersionedStorageKey(key);
                 if (!encoded_key.ok()) {
@@ -364,6 +389,20 @@ absl::StatusOr<CommittedSliceMutation> DecodeSliceMutationV2(
         return absl::InvalidArgumentError("row transaction has no locality group writes");
     }
     return result;
+}
+
+DedupeLookupResult SliceApplyMachine::lookup_dedupe(const MutationIdentity& identity) const {
+    std::lock_guard lock(mutex_);
+    const auto it =
+        dedupe_.find(DedupeKey{.client_id = identity.client_id, .request_id = identity.request_id});
+    if (it == dedupe_.end()) {
+        return {};
+    }
+    if (it->second.identity.payload_hash != identity.payload_hash) {
+        return {.kind = DedupeLookupKind::kConflict};
+    }
+    return {.kind = DedupeLookupKind::kDuplicate,
+            .serialized_response = it->second.serialized_response};
 }
 
 std::vector<DedupeRecord> SliceApplyMachine::export_dedupe_records() const {
