@@ -53,6 +53,35 @@ cc_library(
 )
 
 cc_library(
+    name = "vessel_slice_state_machine",
+    srcs = ["vessel_slice_state_machine.cpp"],
+    hdrs = ["vessel_slice_state_machine.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":slice_apply_machine",
+        "//cpp/pl/minitable/codec:cell_key_codec",
+        "//cpp/pl/minivessel:replica_runtime",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "vessel_slice_replica",
+    srcs = ["vessel_slice_replica.cpp"],
+    hdrs = ["vessel_slice_replica.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":vessel_slice_state_machine",
+        "//cpp/pl/minivessel:replica_runtime",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
     name = "slice_proposal_frontend",
     srcs = ["slice_proposal_frontend.cpp"],
     hdrs = ["slice_proposal_frontend.h"],

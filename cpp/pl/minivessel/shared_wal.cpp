@@ -129,12 +129,15 @@ FramedSharedWal::FramedSharedWal(ActiveLogStorage* storage, FramedSharedWalOptio
     : storage_(storage), options_(std::move(options)), next_lrsn_(1) {}
 
 FramedSharedWal::~FramedSharedWal() {
-    if (writer_.handle.valid()) {
+    if (writer_.handle.valid() && storage_ != nullptr) {
         (void)storage_->release_writer(writer_.handle);
     }
 }
 
 absl::StatusOr<FramedSharedWal::ScanResult> FramedSharedWal::scan_durable() {
+    if (storage_ == nullptr) {
+        return absl::FailedPreconditionError("FramedSharedWal is not configured with a backend");
+    }
     auto durable_size = storage_->durable_size(options_.path);
     if (!durable_size.ok()) {
         if (durable_size.status().code() == absl::StatusCode::kNotFound) {
