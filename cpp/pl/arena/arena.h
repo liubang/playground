@@ -43,10 +43,7 @@ public:
                    std::size_t generation,
                    std::size_t block_index,
                    std::size_t used)
-            : owner_(owner),
-              generation_(generation),
-              block_index_(block_index),
-              used_(used) {}
+            : owner_(owner), generation_(generation), block_index_(block_index), used_(used) {}
 
         const Arena* owner_ = nullptr;
         std::size_t generation_ = 0;
@@ -134,8 +131,7 @@ public:
         if (!valid_checkpoint(checkpoint)) {
             return false;
         }
-        blocks_.erase(blocks_.begin() +
-                          static_cast<std::ptrdiff_t>(checkpoint.block_index_ + 1),
+        blocks_.erase(blocks_.begin() + static_cast<std::ptrdiff_t>(checkpoint.block_index_ + 1),
                       blocks_.end());
         current_block_ids_ = checkpoint.block_index_;
         blocks_[current_block_ids_].used = checkpoint.used_;

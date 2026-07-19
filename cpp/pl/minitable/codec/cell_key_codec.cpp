@@ -235,13 +235,13 @@ absl::StatusOr<CellKeyCodec> CellKeyCodec::Create(KeyFormat format,
 
 uint64_t CellKeyCodec::row_key_schema_fingerprint() const noexcept {
     std::string canonical("minitable-row-key-schema-v1");
-    sstv2::codec::append_fixed32(
-        &canonical, static_cast<uint32_t>(row_key_schema_->row_key_column_count()));
+    sstv2::codec::append_fixed32(&canonical,
+                                 static_cast<uint32_t>(row_key_schema_->row_key_column_count()));
     for (size_t i = 0; i < row_key_schema_->row_key_column_count(); ++i) {
-        sstv2::codec::append_fixed8(
-            &canonical, static_cast<uint8_t>(row_key_schema_->column_type(i)));
-        sstv2::codec::append_fixed8(
-            &canonical, static_cast<uint8_t>(row_key_schema_->column_order(i)));
+        sstv2::codec::append_fixed8(&canonical,
+                                    static_cast<uint8_t>(row_key_schema_->column_type(i)));
+        sstv2::codec::append_fixed8(&canonical,
+                                    static_cast<uint8_t>(row_key_schema_->column_order(i)));
     }
     return sstv2::codec::crc32c_u64(canonical);
 }

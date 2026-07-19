@@ -39,6 +39,15 @@ struct VisibleRow {
     std::vector<VisibleCell> cells;
 };
 
+// Shared Phase-1 MVCC point-read path used by embedded and RPC frontends.
+[[nodiscard]] absl::StatusOr<std::optional<VisibleRow>> ReadVisibleRow(
+    const codec::CellKeyCodec& codec,
+    const SliceStore& store,
+    uint32_t locality_group_id,
+    const std::vector<sstv2::types::Value>& row_key,
+    Timestamp read_ts,
+    size_t max_row_aggregate_bytes = 8 * 1024 * 1024);
+
 struct EmbeddedSliceOptions {
     uint32_t locality_group_id = 1;
     uint64_t timestamp_domain_epoch = 1;

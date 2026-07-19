@@ -30,7 +30,7 @@ namespace pl::minitable {
 struct ComparatorDomain {
     uint64_t key_format_version = 1;
     uint64_t row_key_schema_fingerprint = 0x4D54424C42494E31ULL; // MTBLBIN1
-    uint64_t partition_mode = 1; // GLOBAL_ORDER
+    uint64_t partition_mode = 1;                                 // GLOBAL_ORDER
     uint64_t hash_algorithm_version = 0;
     uint64_t virtual_bucket_count = 0;
     uint64_t fingerprint = 0x9A0C9ED4382FD4A1ULL;

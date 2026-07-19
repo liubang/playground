@@ -154,8 +154,7 @@ absl::StatusOr<std::unique_ptr<EmbeddedSlice>> EmbeddedSlice::Reopen(
         return store.status();
     }
 
-    const uint64_t high_watermark =
-        (*store)->read_view().manifest().timestamp_high_watermark;
+    const uint64_t high_watermark = (*store)->read_view().manifest().timestamp_high_watermark;
     return std::unique_ptr<EmbeddedSlice>(new EmbeddedSlice(
         std::move(codec), std::move(recovery.options), std::move(*store), high_watermark));
 }
@@ -240,18 +239,126 @@ absl::StatusOr<Timestamp> EmbeddedSlice::mutate(const std::vector<Value>& row_ke
 
 absl::StatusOr<std::optional<VisibleRow>> EmbeddedSlice::get(const std::vector<Value>& row_key,
                                                              Timestamp read_ts) const {
-    auto start = EncodeRowStart(codec_, row_key);
+    return ReadVisibleRow(codec_,
+                          *store_,
+                          options_.locality_group_id,
+                          row_key,
+                          read_ts,
+                          options_.max_row_aggregate_bytes);
+}
+
+absl::StatusOr<std::optional<VisibleRow>> ReadVisibleRow(const codec::CellKeyCodec& codec,
+                                                         const SliceStore& store,
+                                                         uint32_t locality_group_id,
+                                                         const std::vector<Value>& row_key,
+                                                         Timestamp read_ts,
+                                                         size_t max_row_aggregate_bytes) {
+    if (read_ts.domain_epoch != store.read_view().manifest().timestamp_domain_epoch) {
+        return absl::InvalidArgumentError("read timestamp belongs to another Slice domain");
+    }
+    if (max_row_aggregate_bytes == 0) {
+        return absl::InvalidArgumentError("row aggregate limit must be non-zero");
+    }
+    auto start = EncodeRowStart(codec, row_key);
     if (!start.ok()) {
         return start.status();
     }
-    auto rows = scan_encoded(*start, std::nullopt, read_ts, *start);
-    if (!rows.ok()) {
-        return rows.status();
+    try {
+        auto cursor = store.read_view().new_cursor(locality_group_id);
+        if (!cursor.ok()) {
+            return cursor.status();
+        }
+        auto status = (*cursor)->seek(*start);
+        if (!status.ok()) {
+            return status;
+        }
+        RowAccumulator accumulator{.row_key = row_key};
+        size_t aggregate_bytes = 0;
+        while ((*cursor)->valid()) {
+            auto decoded = codec.DecodeVersionedStorageKey((*cursor)->key());
+            if (!decoded.ok()) {
+                return decoded.status();
+            }
+            auto row_start = EncodeRowStart(codec, decoded->storage_key.row_key);
+            if (!row_start.ok()) {
+                return row_start.status();
+            }
+            if (*row_start != *start) {
+                break;
+            }
+            if (decoded->commit_ts.domain_epoch != read_ts.domain_epoch) {
+                return absl::DataLossError("stored key belongs to another timestamp domain");
+            }
+            const size_t entry_bytes = (*cursor)->key().size() + (*cursor)->value().size();
+            if (entry_bytes >
+                max_row_aggregate_bytes - std::min(aggregate_bytes, max_row_aggregate_bytes)) {
+                return absl::ResourceExhaustedError("logical row exceeds aggregate size limit");
+            }
+            aggregate_bytes += entry_bytes;
+            if (IsVisible(decoded->commit_ts, read_ts)) {
+                if (std::holds_alternative<RowTombstone>(decoded->storage_key.target)) {
+                    RaiseDelete(
+                        &accumulator.row_delete,
+                        {.commit_ts = decoded->commit_ts, .mutation_seq = decoded->mutation_seq});
+                } else if (const auto* family =
+                               std::get_if<ColumnFamilyTombstone>(&decoded->storage_key.target)) {
+                    const VersionStamp stamp{.commit_ts = decoded->commit_ts,
+                                             .mutation_seq = decoded->mutation_seq};
+                    auto it = accumulator.family_deletes.find(family->column_family_id);
+                    if (it == accumulator.family_deletes.end() || it->second < stamp) {
+                        accumulator.family_deletes[family->column_family_id] = stamp;
+                    }
+                } else {
+                    const auto& ref = std::get<CellRef>(decoded->storage_key.target);
+                    if (!accumulator.cells.contains(ref)) {
+                        if (decoded->op_type == OpType::kPut) {
+                            auto value = DecodeCellValue((*cursor)->value());
+                            if (!value.ok()) {
+                                return value.status();
+                            }
+                            accumulator.cells.emplace(
+                                ref,
+                                VisibleCell{.ref = ref,
+                                            .commit_ts = decoded->commit_ts,
+                                            .mutation_seq = decoded->mutation_seq,
+                                            .value = std::move(*value)});
+                        } else if (decoded->op_type == OpType::kDelete) {
+                            accumulator.cells.emplace(ref, std::nullopt);
+                        } else {
+                            return absl::DataLossError("unsupported operation in Phase 1 data");
+                        }
+                    }
+                }
+            }
+            status = (*cursor)->next();
+            if (!status.ok()) {
+                return status;
+            }
+        }
+        VisibleRow result{.row_key = row_key};
+        for (auto& [ref, cell] : accumulator.cells) {
+            static_cast<void>(ref);
+            if (!cell.has_value()) {
+                continue;
+            }
+            const VersionStamp stamp{.commit_ts = cell->commit_ts,
+                                     .mutation_seq = cell->mutation_seq};
+            if (accumulator.row_delete.has_value() && stamp <= *accumulator.row_delete) {
+                continue;
+            }
+            const auto family = accumulator.family_deletes.find(cell->ref.column_family_id);
+            if (family != accumulator.family_deletes.end() && stamp <= family->second) {
+                continue;
+            }
+            result.cells.push_back(std::move(*cell));
+        }
+        if (result.cells.empty()) {
+            return std::optional<VisibleRow>{};
+        }
+        return std::optional<VisibleRow>(std::move(result));
+    } catch (const std::bad_alloc&) {
+        return absl::ResourceExhaustedError("MVCC point read allocation failed");
     }
-    if (rows->empty() || rows->front().row_key != row_key) {
-        return std::nullopt;
-    }
-    return std::move(rows->front());
 }
 
 absl::StatusOr<std::vector<VisibleRow>> EmbeddedSlice::scan(

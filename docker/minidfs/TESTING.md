@@ -17,7 +17,8 @@
 - [6. Append 与 Truncate](#6-append-与-truncate)
 - [7. 覆盖写、Setrep 与递归清理](#7-覆盖写setrep-与递归清理)
 - [8. 自动化脚本对照](#8-自动化脚本对照)
-- [9. 清理与排障](#9-清理与排障)
+- [9. MiniVessel 不可变对象 E2E](#9-minivessel-不可变对象-e2e)
+- [10. 清理与排障](#10-清理与排障)
 
 ---
 
@@ -511,9 +512,12 @@ unset -f cli
 | `build` | 运行全部 MiniDFS Bazel 测试，并构建 Builder/Runtime 镜像 |
 | `start` | 删除旧容器和数据卷，启动全新集群并验证 3 个 DataNode 注册 |
 | `test` | 在当前集群执行全部 E2E 断言；开始时清理遗留 `/e2e` |
+| `api-test` | 只运行 DfsClient API E2E binary |
+| `minivessel-test` | 运行真实 MiniDFS 上的 MiniVessel immutable checkpoint/sealed object 集成测试 |
+| `recovery-test` | 运行 DataNode 重启与 block report 恢复测试 |
 | `down` | 停止并删除容器，保留命名卷 |
 | `reset` | 停止集群，并删除容器、命名卷和孤儿容器 |
-| `all` | 依次执行 `build`、`start`、`test` |
+| `all` | 依次执行 `build`、`start`、全部 API/MiniVessel/recovery E2E |
 
 测试失败时脚本会保留容器和命名卷，以便查看现场。可以调整等待超时：
 
@@ -529,9 +533,32 @@ BAZEL_BUILDER_IMAGE=liubang/bazel-builder:8.7.0 ./tests/e2e.sh build
 
 ---
 
-## 9. 清理与排障
+## 9. MiniVessel 不可变对象 E2E
 
-### 9.1 停止或完全重置
+集群启动并健康后，执行：
+
+```bash
+./tests/e2e.sh minivessel-test
+```
+
+该命令运行容器内的 `minivessel-minidfs-e2e`，使用 `/minivessel-e2e` 隔离目录，验证 immutable object 的创建、发布身份、identity-fenced open、精确读取和 identity-fenced 删除。选主协调由 MiniVessel 外部服务负责，不属于 MiniDFS。
+
+从宿主机连接已经运行的集群，可从仓库根目录执行：
+
+```bash
+bazel run //cpp/pl/minivessel:minidfs_e2e -- \
+  --namenode=127.0.0.1:19000 \
+  --dfs_root=/minivessel-e2e-host
+```
+
+`./tests/e2e.sh all` 已包含该测试。注意 `start` 与 `all` 会删除旧数据卷；只重跑时使用
+`minivessel-test`。
+
+---
+
+## 10. 清理与排障
+
+### 10.1 停止或完全重置
 
 ```bash
 # 停止容器但保留数据卷
@@ -548,7 +575,7 @@ docker compose down -v --remove-orphans
 ./tests/e2e.sh reset
 ```
 
-### 9.2 查看状态和日志
+### 10.2 查看状态和日志
 
 ```bash
 docker compose ps
@@ -560,7 +587,7 @@ docker compose logs --tail=200 datanode1 datanode2 datanode3
 docker compose logs -f namenode datanode1 datanode2 datanode3
 ```
 
-### 9.3 检查 MySQL 元数据
+### 10.3 检查 MySQL 元数据
 
 ```bash
 MYSQL_ROOT_PASSWORD="$(grep '^MYSQL_ROOT_PASSWORD=' .env | cut -d= -f2-)"
@@ -569,7 +596,7 @@ docker compose exec -T \
     mysql mysql -uroot -e 'USE minidfs; SHOW TABLES;'
 ```
 
-### 9.4 常见问题
+### 10.4 常见问题
 
 | 问题 | 原因 | 处理方式 |
 | --- | --- | --- |

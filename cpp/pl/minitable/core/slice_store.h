@@ -79,9 +79,7 @@ public:
     [[nodiscard]] uint32_t locality_group_id() const { return locality_group_id_; }
     [[nodiscard]] uint64_t immutable_id() const { return immutable_id_; }
     [[nodiscard]] uint64_t fence_index() const { return fence_index_; }
-    [[nodiscard]] uint64_t timestamp_high_watermark() const {
-        return timestamp_high_watermark_;
-    }
+    [[nodiscard]] uint64_t timestamp_high_watermark() const { return timestamp_high_watermark_; }
     [[nodiscard]] uint64_t last_commit_physical_ms() const { return last_commit_physical_ms_; }
 
 private:

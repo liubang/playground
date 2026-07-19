@@ -31,11 +31,24 @@ void BraftSliceAdapter::on_apply(::braft::Iterator& iterator) {
             iterator.set_error_and_rollback(1, &failure);
             return;
         }
+        if (iterator.done() != nullptr) {
+            ProposalApplyCallback callback;
+            {
+                std::lock_guard lock(callback_mutex_);
+                const auto it = proposal_callbacks_.find(iterator.done());
+                if (it != proposal_callbacks_.end()) {
+                    callback = std::move(it->second);
+                    proposal_callbacks_.erase(it);
+                }
+            }
+            if (callback) {
+                callback(std::move(*result));
+            }
+        }
     }
 }
 
-void BraftSliceAdapter::on_snapshot_save(::braft::SnapshotWriter* writer,
-                                         ::braft::Closure* done) {
+void BraftSliceAdapter::on_snapshot_save(::braft::SnapshotWriter* writer, ::braft::Closure* done) {
     ::brpc::ClosureGuard done_guard(done);
     auto encoded = state_machine_->on_snapshot_save();
     if (!encoded.ok()) {
@@ -48,6 +61,44 @@ void BraftSliceAdapter::on_snapshot_save(::braft::SnapshotWriter* writer,
     output.close();
     if (!output || writer->add_file(kSnapshotFile) != 0) {
         done->status().set_error(EIO, "failed to publish SliceSnapshot");
+    }
+}
+
+void BraftSliceAdapter::register_proposal(::braft::Closure* closure,
+                                          ProposalApplyCallback callback) {
+    std::lock_guard lock(callback_mutex_);
+    proposal_callbacks_.insert_or_assign(closure, std::move(callback));
+}
+
+void BraftSliceAdapter::unregister_proposal(::braft::Closure* closure) {
+    std::lock_guard lock(callback_mutex_);
+    proposal_callbacks_.erase(closure);
+}
+
+void BraftSliceAdapter::set_leadership_observer(SliceLeadershipObserver* observer) {
+    std::lock_guard lock(callback_mutex_);
+    leadership_observer_ = observer;
+}
+
+void BraftSliceAdapter::on_leader_start(int64_t term) {
+    SliceLeadershipObserver* observer = nullptr;
+    {
+        std::lock_guard lock(callback_mutex_);
+        observer = leadership_observer_;
+    }
+    if (observer != nullptr) {
+        observer->on_slice_leader_start(term);
+    }
+}
+
+void BraftSliceAdapter::on_leader_stop(const butil::Status& /*status*/) {
+    SliceLeadershipObserver* observer = nullptr;
+    {
+        std::lock_guard lock(callback_mutex_);
+        observer = leadership_observer_;
+    }
+    if (observer != nullptr) {
+        observer->on_slice_leader_stop();
     }
 }
 

@@ -1,11 +1,10 @@
 // Copyright (c) 2026 The Authors. All rights reserved.
-#include "cpp/pl/minitable/memtable/memtable.h"
-
+#include <gtest/gtest.h>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include "cpp/pl/minitable/memtable/memtable.h"
 
 namespace pl::minitable {
 namespace {
@@ -49,8 +48,7 @@ TEST(MemTableTest, FreezeIsIdempotentAndRejectsWrites) {
 }
 
 TEST(MemTableTest, EnforcesApplyOrderAndMemoryLimitWithoutPartialInsert) {
-    auto table = MemTable::Create(
-        {.memory_limit_bytes = 64, .arena_block_bytes = 16});
+    auto table = MemTable::Create({.memory_limit_bytes = 64, .arena_block_bytes = 16});
     ASSERT_TRUE(table.ok());
     ASSERT_TRUE((*table)->put("a", "value", 5).ok());
     EXPECT_EQ((*table)->put("b", "value", 4).code(), absl::StatusCode::kInvalidArgument);
@@ -106,8 +104,7 @@ TEST(MemTableTest, BatchValidationFailureDoesNotPublishPartialChanges) {
         {.encoded_key = "a", .encoded_value = "new"},
         {.encoded_key = "b", .encoded_value = "12345"},
     };
-    EXPECT_EQ((*table)->put_batch(oversized, 4).code(),
-              absl::StatusCode::kResourceExhausted);
+    EXPECT_EQ((*table)->put_batch(oversized, 4).code(), absl::StatusCode::kResourceExhausted);
     EXPECT_EQ((*table)->size(), 1U);
     EXPECT_EQ((*table)->max_apply_index(), 3U);
 
@@ -206,8 +203,7 @@ TEST(MemTableTest, CursorUsesPinnedVisibilityWatermarkAcrossOverwrites) {
 }
 
 TEST(MemTableTest, PreparedBatchSafelyOutlivesLastExternalTableOwner) {
-    const std::vector<MemTableMutation> mutations = {
-        {.encoded_key = "a", .encoded_value = "1"}};
+    const std::vector<MemTableMutation> mutations = {{.encoded_key = "a", .encoded_value = "1"}};
     {
         auto table = MemTable::Create();
         ASSERT_TRUE(table.ok());
@@ -231,8 +227,7 @@ TEST(MemTableTest, RejectsZeroAndDuplicateApplyIndexes) {
     ASSERT_TRUE(table.ok());
     EXPECT_EQ((*table)->put("a", "zero", 0).code(), absl::StatusCode::kInvalidArgument);
     ASSERT_TRUE((*table)->put("a", "one", 1).ok());
-    EXPECT_EQ((*table)->put("a", "duplicate", 1).code(),
-              absl::StatusCode::kInvalidArgument);
+    EXPECT_EQ((*table)->put("a", "duplicate", 1).code(), absl::StatusCode::kInvalidArgument);
 
     auto cursor = (*table)->new_cursor(1);
     ASSERT_TRUE(cursor->seek_to_first().ok());
@@ -243,8 +238,7 @@ TEST(MemTableTest, RejectsZeroAndDuplicateApplyIndexes) {
 TEST(MemTableTest, PendingPrepareRejectsOtherWritersAndFreeze) {
     auto table = MemTable::Create();
     ASSERT_TRUE(table.ok());
-    const std::vector<MemTableMutation> mutations = {
-        {.encoded_key = "a", .encoded_value = "1"}};
+    const std::vector<MemTableMutation> mutations = {{.encoded_key = "a", .encoded_value = "1"}};
     auto prepared = (*table)->prepare_batch(mutations, 1);
     ASSERT_TRUE(prepared.ok());
 
@@ -259,8 +253,7 @@ TEST(MemTableTest, PendingPrepareRejectsOtherWritersAndFreeze) {
 TEST(MemTableTest, PreparedBatchDestructorImplicitlyAborts) {
     auto table = MemTable::Create();
     ASSERT_TRUE(table.ok());
-    const std::vector<MemTableMutation> mutations = {
-        {.encoded_key = "a", .encoded_value = "1"}};
+    const std::vector<MemTableMutation> mutations = {{.encoded_key = "a", .encoded_value = "1"}};
     {
         auto prepared = (*table)->prepare_batch(mutations, 1);
         ASSERT_TRUE(prepared.ok());

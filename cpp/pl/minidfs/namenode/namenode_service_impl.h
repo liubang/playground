@@ -114,7 +114,6 @@ private:
     static void fill_status(protocol::StatusProto* proto, uint32_t code, std::string_view msg = {});
     static void fill_file_status(protocol::FileStatusProto* proto, const FileStatus& fs);
     static void fill_located_block(protocol::LocatedBlockProto* proto, const LocatedBlock& lb);
-
     // Generic status-only idempotency check used by RPCs without payload replay.
     bool check_idempotent(const protocol::RequestHeader& header, protocol::StatusProto* status);
 

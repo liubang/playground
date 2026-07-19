@@ -697,8 +697,7 @@ absl::StatusOr<FinishResult> Builder::finish_result() {
         .sst_format_version = options_.configuration.sst_format_version,
         .key_format_version = options_.configuration.key_format_version,
         .row_key_schema_fingerprint = options_.configuration.row_key_schema_fingerprint,
-        .comparator_domain_fingerprint =
-            options_.configuration.comparator_domain_fingerprint,
+        .comparator_domain_fingerprint = options_.configuration.comparator_domain_fingerprint,
         .checksum_algorithm = options_.configuration.checksum_algorithm,
         .min_key = min_key_,
         .max_key = max_key_,

@@ -153,7 +153,8 @@ absl::StatusOr<LoadedSliceSnapshot> InstallSliceSnapshot(
         snapshot.comparator_domain_fingerprint() != persistence.comparator_domain.fingerprint ||
         snapshot.locality_groups_size() != static_cast<int>(locality_groups.size()) ||
         !snapshot.has_manifest_object_identity() || snapshot.manifest_path().empty()) {
-        return absl::FailedPreconditionError("SliceSnapshot does not match the target Slice domain");
+        return absl::FailedPreconditionError(
+            "SliceSnapshot does not match the target Slice domain");
     }
     uint64_t minimum_flushed = std::numeric_limits<uint64_t>::max();
     std::set<uint32_t> seen_groups;
@@ -164,7 +165,8 @@ absl::StatusOr<LoadedSliceSnapshot> InstallSliceSnapshot(
         }
         minimum_flushed = std::min(minimum_flushed, group.flushed_applied_index());
         for (const auto& sst : group.ssts()) {
-            auto key = persistence.filesystem->open(sst.key_file(), GetFileIdentity(sst.key_file_identity()));
+            auto key = persistence.filesystem->open(sst.key_file(),
+                                                    GetFileIdentity(sst.key_file_identity()));
             if (!key.ok()) {
                 return key.status();
             }
@@ -172,8 +174,8 @@ absl::StatusOr<LoadedSliceSnapshot> InstallSliceSnapshot(
             if (!key_close.ok()) {
                 return key_close.status();
             }
-            auto value = persistence.filesystem->open(
-                sst.value_file(), GetFileIdentity(sst.value_file_identity()));
+            auto value = persistence.filesystem->open(sst.value_file(),
+                                                      GetFileIdentity(sst.value_file_identity()));
             if (!value.ok()) {
                 return value.status();
             }
@@ -184,7 +186,8 @@ absl::StatusOr<LoadedSliceSnapshot> InstallSliceSnapshot(
         }
     }
     if (metadata.last_included_index > minimum_flushed) {
-        return absl::FailedPreconditionError("SliceSnapshot advances beyond a locality group flush fence");
+        return absl::FailedPreconditionError(
+            "SliceSnapshot advances beyond a locality group flush fence");
     }
     PersistedManifest persisted{.path = snapshot.manifest_path(),
                                 .identity = GetFileIdentity(snapshot.manifest_object_identity()),

@@ -90,34 +90,34 @@ std::string ReadValue(const SliceReadView& view, uint32_t locality_group_id, std
 std::shared_ptr<const codec::CellKeyCodec> MakeCodec() {
     auto schema = SchemaBuilder().add_column("key", DataType::kString).build();
     EXPECT_TRUE(schema.has_value());
-    auto codec = codec::CellKeyCodec::Create(
-        {.partition_mode = PartitionMode::kGlobalOrder},
-        std::make_shared<const Schema>(std::move(*schema)));
+    auto codec = codec::CellKeyCodec::Create({.partition_mode = PartitionMode::kGlobalOrder},
+                                             std::make_shared<const Schema>(std::move(*schema)));
     EXPECT_TRUE(codec.ok());
     return std::make_shared<const codec::CellKeyCodec>(std::move(*codec));
 }
 
 CommittedSliceMutation CanonicalCommitted(const codec::CellKeyCodec& codec,
-                                           uint64_t index,
-                                           std::string request_id,
-                                           std::string row,
-                                           std::string value) {
-    VersionedStorageKey key{.storage_key = {.partition = GlobalOrderPrefix{},
-                                            .row_key = {Value::make<DataType::kString>(row)},
-                                            .target = CellRef{.column_family_id = 1,
-                                                              .qualifier = StaticQualifier{1}}},
-                            .commit_ts = {.domain_epoch = 1, .counter = index + 100},
-                            .mutation_seq = 0,
-                            .op_type = OpType::kPut};
+                                          uint64_t index,
+                                          std::string request_id,
+                                          std::string row,
+                                          std::string value) {
+    VersionedStorageKey key{
+        .storage_key = {.partition = GlobalOrderPrefix{},
+                        .row_key = {Value::make<DataType::kString>(row)},
+                        .target = CellRef{.column_family_id = 1, .qualifier = StaticQualifier{1}}},
+        .commit_ts = {.domain_epoch = 1, .counter = index + 100},
+        .mutation_seq = 0,
+        .op_type = OpType::kPut};
     auto encoded_key = codec.EncodeVersionedStorageKey(key);
     EXPECT_TRUE(encoded_key.ok());
     return {.apply_index = index,
-            .identity = {.client_id = "e2e", .request_id = std::move(request_id),
+            .identity = {.client_id = "e2e",
+                         .request_id = std::move(request_id),
                          .payload_hash = index + 1000},
             .commit_ts = key.commit_ts,
             .commit_physical_ms = 10'000 + index,
             .locality_group_mutations = {{{.encoded_key = std::move(*encoded_key),
-                                            .encoded_value = std::move(value)}}},
+                                           .encoded_value = std::move(value)}}},
             .locality_group_ids = {1},
             .serialized_response = "ok-" + std::to_string(index)};
 }
@@ -134,8 +134,8 @@ CommittedSliceMutation Committed(uint64_t index,
                          .payload_hash = payload_hash},
             .commit_ts = {.domain_epoch = 1, .counter = index + 100},
             .commit_physical_ms = physical_ms,
-            .locality_group_mutations = {
-                {{.encoded_key = std::move(key), .encoded_value = std::move(value)}}},
+            .locality_group_mutations = {{{.encoded_key = std::move(key),
+                                           .encoded_value = std::move(value)}}},
             .locality_group_ids = {1},
             .serialized_response = "response-" + std::to_string(index)};
 }
@@ -222,7 +222,8 @@ TEST(SliceApplyMachineTest, FlushReopenRestoresCommittedMetadataAndDedupeSnapsho
     ASSERT_TRUE(reopened_store.ok()) << reopened_store.status();
     EXPECT_EQ((*reopened_store)->timestamp_high_watermark(), mutation.commit_ts.counter);
     EXPECT_EQ((*reopened_store)->last_commit_physical_ms(), mutation.commit_physical_ms);
-    auto reopened = SliceApplyMachine::Create(std::move(*reopened_store), {.dedupe_records = records});
+    auto reopened =
+        SliceApplyMachine::Create(std::move(*reopened_store), {.dedupe_records = records});
     ASSERT_TRUE(reopened.ok()) << reopened.status();
     auto duplicate = Committed(8, "durable", 77, "key", "wrong", 7008);
     auto result = (*reopened)->apply(duplicate);
@@ -235,16 +236,14 @@ TEST(SliceApplyMachineTest, FlushReopenRestoresCommittedMetadataAndDedupeSnapsho
 TEST(SliceApplyMachineTest, RecoveryRejectsDedupeBeyondDurableAppliedIndex) {
     auto store = SliceStore::Create({{1, {}}});
     ASSERT_TRUE(store.ok());
-    DedupeRecord future{.identity = {.client_id = "client",
-                                     .request_id = "future",
-                                     .payload_hash = 1},
-                        .serialized_response = "response",
-                        .applied_index = 1,
-                        .commit_physical_ms = 1};
-    EXPECT_EQ(SliceApplyMachine::Create(std::move(*store), {.dedupe_records = {future}})
-                  .status()
-                  .code(),
-              absl::StatusCode::kFailedPrecondition);
+    DedupeRecord future{
+        .identity = {.client_id = "client", .request_id = "future", .payload_hash = 1},
+        .serialized_response = "response",
+        .applied_index = 1,
+        .commit_physical_ms = 1};
+    EXPECT_EQ(
+        SliceApplyMachine::Create(std::move(*store), {.dedupe_records = {future}}).status().code(),
+        absl::StatusCode::kFailedPrecondition);
 }
 
 TEST(SliceApplyMachineTest, FreezeFenceOwnsTimestampMetadataBeforeLaterActiveApply) {
@@ -288,10 +287,10 @@ TEST(SliceRaftE2ETest, ThreeReplicasLeaderChangeRestartSnapshotRepairAndReplay) 
         ASSERT_TRUE(store.ok()) << store.status();
         auto machine = SliceApplyMachine::Create(std::move(*store));
         ASSERT_TRUE(machine.ok()) << machine.status();
-        replicas.push_back({.manifest_directory = directory,
-                            .persistence = persistence,
-                            .fsm = std::make_unique<SliceRaftStateMachine>(
-                                std::move(*machine), codec, metadata)});
+        replicas.push_back(
+            {.manifest_directory = directory,
+             .persistence = persistence,
+             .fsm = std::make_unique<SliceRaftStateMachine>(std::move(*machine), codec, metadata)});
     }
 
     std::vector<std::pair<uint64_t, std::string>> wal;
@@ -301,17 +300,20 @@ TEST(SliceRaftE2ETest, ThreeReplicasLeaderChangeRestartSnapshotRepairAndReplay) 
                                            "request-" + std::to_string(index),
                                            "row-" + std::to_string(index),
                                            "value-" + std::to_string(index));
-        auto row_key = codec->EncodeLogicalRowKey(mutation.locality_group_mutations[0].empty()
-                                                      ? std::vector<Value>{}
-                                                      : std::vector<Value>{Value::make<DataType::kString>(
-                                                            "row-" + std::to_string(index))});
+        auto row_key =
+            codec->EncodeLogicalRowKey(mutation.locality_group_mutations[0].empty()
+                                           ? std::vector<Value>{}
+                                           : std::vector<Value>{Value::make<DataType::kString>(
+                                                 "row-" + std::to_string(index))});
         ASSERT_TRUE(row_key.ok());
         auto encoded = EncodeSliceMutationV2(mutation, *row_key, *codec);
         ASSERT_TRUE(encoded.ok()) << encoded.status();
         wal.emplace_back(index, *encoded);
         for (auto& replica : replicas) {
-            auto applied = replica.fsm->on_apply(
-                index, index <= 2 ? 1 : 2, std::as_bytes(std::span(encoded->data(), encoded->size())));
+            auto applied =
+                replica.fsm->on_apply(index,
+                                      index <= 2 ? 1 : 2,
+                                      std::as_bytes(std::span(encoded->data(), encoded->size())));
             ASSERT_TRUE(applied.ok()) << applied.status();
         }
     }
@@ -339,9 +341,10 @@ TEST(SliceRaftE2ETest, ThreeReplicasLeaderChangeRestartSnapshotRepairAndReplay) 
     ASSERT_TRUE(empty_store.ok());
     auto empty_machine = SliceApplyMachine::Create(std::move(*empty_store));
     ASSERT_TRUE(empty_machine.ok());
-    replicas[2].fsm = std::make_unique<SliceRaftStateMachine>(
-        std::move(*empty_machine), codec, metadata);
-    ASSERT_TRUE(replicas[2].fsm
+    replicas[2].fsm =
+        std::make_unique<SliceRaftStateMachine>(std::move(*empty_machine), codec, metadata);
+    ASSERT_TRUE(replicas[2]
+                    .fsm
                     ->on_snapshot_load(std::as_bytes(std::span(snapshot->data(), snapshot->size())),
                                        {{1, {}}},
                                        replicas[1].persistence)
@@ -361,7 +364,8 @@ TEST(SliceRaftE2ETest, ThreeReplicasLeaderChangeRestartSnapshotRepairAndReplay) 
 
     // Snapshot corruption is rejected before replacing installed state.
     (*snapshot)[snapshot->size() / 2] ^= 1;
-    EXPECT_EQ(replicas[0].fsm
+    EXPECT_EQ(replicas[0]
+                  .fsm
                   ->on_snapshot_load(std::as_bytes(std::span(snapshot->data(), snapshot->size())),
                                      {{1, {}}},
                                      replicas[1].persistence)
@@ -376,18 +380,20 @@ TEST(SliceRaftStateMachineTest, RejectsLogGapWithoutAdvancingState) {
     ASSERT_TRUE(store.ok());
     auto machine = SliceApplyMachine::Create(std::move(*store));
     ASSERT_TRUE(machine.ok());
-    SliceRaftStateMachine fsm(
-        std::move(*machine),
-        codec,
-        {.table_id = 1, .slice_id = 1, .schema_version = 1, .route_epoch = 1,
-         .replica_set_epoch = 1, .dedupe_retention_floor = 1});
+    SliceRaftStateMachine fsm(std::move(*machine),
+                              codec,
+                              {.table_id = 1,
+                               .slice_id = 1,
+                               .schema_version = 1,
+                               .route_epoch = 1,
+                               .replica_set_epoch = 1,
+                               .dedupe_retention_floor = 1});
     auto mutation = CanonicalCommitted(*codec, 2, "gap", "row", "value");
     auto row = codec->EncodeLogicalRowKey({Value::make<DataType::kString>("row")});
     ASSERT_TRUE(row.ok());
     auto encoded = EncodeSliceMutationV2(mutation, *row, *codec);
     ASSERT_TRUE(encoded.ok());
-    auto result = fsm.on_apply(
-        2, 1, std::as_bytes(std::span(encoded->data(), encoded->size())));
+    auto result = fsm.on_apply(2, 1, std::as_bytes(std::span(encoded->data(), encoded->size())));
     EXPECT_EQ(result.status().code(), absl::StatusCode::kDataLoss);
     EXPECT_EQ(fsm.machine().store().visible_applied_index(), 0U);
 }
@@ -1130,12 +1136,13 @@ TEST(SliceStoreTest, ManifestFaultPointsRecordCollectableOrphans) {
         auto filesystem = std::make_shared<sstv2::io::LocalFileSystem>();
         const auto suffix = "manifest-fault-" + std::to_string(static_cast<int>(point));
         const auto paths = MakeTempSstPaths(suffix);
-        const SliceStorePersistence persistence{
-            .filesystem = filesystem,
-            .manifest_directory = MakeManifestDirectory(suffix),
-            .fault_injector = [point](FlushFaultPoint current) {
-                return current == point ? absl::UnavailableError("injected") : absl::OkStatus();
-            }};
+        const SliceStorePersistence persistence{.filesystem = filesystem,
+                                                .manifest_directory = MakeManifestDirectory(suffix),
+                                                .fault_injector = [point](FlushFaultPoint current) {
+                                                    return current == point
+                                                               ? absl::UnavailableError("injected")
+                                                               : absl::OkStatus();
+                                                }};
         auto store = SliceStore::Create({{1, {}}}, persistence);
         ASSERT_TRUE(store.ok());
         const auto initial = (*store)->persisted_manifest();
@@ -1150,8 +1157,7 @@ TEST(SliceStoreTest, ManifestFaultPointsRecordCollectableOrphans) {
         auto flush = SliceStore::build_flush_sst(
             *token, {.filesystem = filesystem, .key_path = paths.key, .value_path = paths.value});
         ASSERT_TRUE(flush.ok());
-        EXPECT_EQ((*store)->install_flush(*token, *flush).code(),
-                  absl::StatusCode::kUnavailable);
+        EXPECT_EQ((*store)->install_flush(*token, *flush).code(), absl::StatusCode::kUnavailable);
         EXPECT_EQ((*store)->persisted_manifest(), initial);
         EXPECT_EQ((*store)->orphan_count(), 1U);
         EXPECT_TRUE((*store)->collect_orphans().ok());

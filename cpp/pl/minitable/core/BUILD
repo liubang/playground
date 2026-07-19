@@ -53,6 +53,21 @@ cc_library(
 )
 
 cc_library(
+    name = "slice_proposal_frontend",
+    srcs = ["slice_proposal_frontend.cpp"],
+    hdrs = ["slice_proposal_frontend.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":braft_slice_adapter",
+        ":data_service_core",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@braft//:braft",
+    ],
+)
+
+cc_library(
     name = "slice_snapshot",
     srcs = ["slice_snapshot.cpp"],
     hdrs = ["slice_snapshot.h"],
@@ -92,6 +107,23 @@ cc_library(
     deps = [
         ":slice_raft_state_machine",
         "@braft//:braft",
+    ],
+)
+
+cc_library(
+    name = "data_service_core",
+    srcs = ["data_service_core.cpp"],
+    hdrs = ["data_service_core.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":embedded_slice",
+        ":slice_apply_machine",
+        "//cpp/pl/minitable/codec:cell_key_codec",
+        "//cpp/pl/minitable/proto/v2:data_cc_proto",
+        "//cpp/pl/sstv2/types:value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
     ],
 )
 

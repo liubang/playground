@@ -852,7 +852,8 @@ private:
                                   "size opened sstv2 key file") == finish_result.key_file.length,
                 "sstv2 key random adapter size mismatch");
         require(require_status_or(sst_filesystem_->size(value_reader),
-                                  "size opened sstv2 value file") == finish_result.value_file.length,
+                                  "size opened sstv2 value file") ==
+                    finish_result.value_file.length,
                 "sstv2 value random adapter size mismatch");
 
         auto reader =

@@ -156,11 +156,8 @@ TEST_F(LocalFileSystemTest, IdentityFencedRemoveRejectsSameInodeContentTampering
 }
 
 TEST_F(LocalFileSystemTest, IdentityFencedRemoveRejectsInvalidIdentity) {
-    auto invalid = FileIdentity{.file_id = 0,
-                                .content_generation = 0,
-                                .length = 0,
-                                .checksum = 0,
-                                .checksum_valid = false};
+    auto invalid = FileIdentity{
+        .file_id = 0, .content_generation = 0, .length = 0, .checksum = 0, .checksum_valid = false};
     EXPECT_EQ(filesystem_.remove(path("missing.sst"), invalid).code(),
               absl::StatusCode::kInvalidArgument);
 }
