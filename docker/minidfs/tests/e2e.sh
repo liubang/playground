@@ -84,8 +84,10 @@ build_builder_image() {
 build_and_test() {
     log "Running all MiniDFS Bazel tests"
     (cd "$REPO_ROOT" && bazel test //cpp/pl/minidfs/... --test_output=errors)
-    log "Building the standalone DfsClient API E2E binary"
-    (cd "$REPO_ROOT" && bazel build //cpp/pl/minidfs/e2e:dfs_client_e2e)
+    log "Building standalone MiniDFS API and MiniVessel immutable-object E2E binaries"
+    (cd "$REPO_ROOT" && bazel build \
+        //cpp/pl/minidfs/e2e:dfs_client_e2e \
+        //cpp/pl/minivessel:minidfs_e2e)
     build_builder_image
     log "Building MiniDFS Linux runtime image with persistent Bazel caches"
     BUILDER_IMAGE="$BUILDER_IMAGE" compose build namenode
@@ -166,6 +168,13 @@ run_api_tests() {
         --dfs_root=/api-e2e \
         --block_size=1048576 \
         --replication=3
+}
+
+run_minivessel_tests() {
+    log "Testing MiniVessel immutable-object integration with MiniDFS"
+    compose run --rm -T --no-deps --entrypoint minivessel-minidfs-e2e cli \
+        --namenode=namenode:9000 \
+        --dfs_root=/minivessel-e2e
 }
 
 run_tests() {
@@ -360,7 +369,7 @@ run_recovery_test() {
 }
 
 usage() {
-    echo "Usage: $0 {all|build|start|test|api-test|recovery-test|down|reset}"
+    echo "Usage: $0 {all|build|start|test|api-test|minivessel-test|recovery-test|down|reset}"
 }
 
 main() {
@@ -371,12 +380,14 @@ main() {
             build_and_test
             start_cluster
             run_tests
+            run_minivessel_tests
             run_recovery_test
             ;;
         build) build_and_test ;;
         start) start_cluster ;;
         test) run_tests ;;
         api-test) run_api_tests ;;
+        minivessel-test) run_minivessel_tests ;;
         recovery-test) run_recovery_test ;;
         down) compose down ;;
         reset) compose down -v --remove-orphans ;;

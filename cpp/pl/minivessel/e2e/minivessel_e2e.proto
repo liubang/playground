@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package pl.minivessel.e2e.protocol;
+option cc_generic_services = true;
+
+message RpcStatus {
+  int32 code = 1;
+  string message = 2;
+}
+message Group { string group_id = 1; uint64 incarnation = 2; }
+message FileIdentity {
+  uint64 inode_id = 1;
+  uint64 content_generation = 2;
+  uint64 length = 3;
+  uint32 checksum = 4;
+  bool checksum_valid = 5;
+}
+message WriterSession {
+  string owner = 1;
+  uint64 assignment_epoch = 2;
+  uint64 writer_epoch = 3;
+  uint64 lease_id = 4;
+  uint64 expires_at_ms = 5;
+}
+enum RecordType { RECORD_TYPE_UNSPECIFIED = 0; MUTATION = 1; PRIMARY_BARRIER = 2; CHECKPOINT = 3; }
+message Record {
+  uint64 lrsn = 1;
+  uint64 writer_epoch = 2;
+  RecordType type = 3;
+  string request_id = 4;
+  bytes payload = 5;
+  string object_path = 6;
+  FileIdentity identity = 7;
+  uint64 durable_offset = 8;
+}
+message AcquireWriterRequest { string owner = 1; uint64 assignment_epoch = 2; uint64 lease_timeout_ms = 3; }
+message WriterResponse { RpcStatus status = 1; WriterSession session = 2; }
+message SessionRequest { WriterSession session = 1; }
+message StatusResponse { RpcStatus status = 1; uint64 durable_lrsn = 2; uint64 writer_epoch = 3; string writer_owner = 4; uint64 object_count = 5; }
+message AppendRequest { WriterSession session = 1; RecordType type = 2; string request_id = 3; bytes payload = 4; }
+message AppendResponse { RpcStatus status = 1; Record record = 2; }
+message ReadRequest { uint64 first_lrsn = 1; uint64 max_records = 2; }
+message ReadResponse { RpcStatus status = 1; repeated Record records = 2; }
+service SharedLogService {
+  rpc AcquireWriter(AcquireWriterRequest) returns (WriterResponse);
+  rpc RenewWriter(SessionRequest) returns (WriterResponse);
+  rpc ReleaseWriter(SessionRequest) returns (RpcStatus);
+  rpc Append(AppendRequest) returns (AppendResponse);
+  rpc Read(ReadRequest) returns (ReadResponse);
+  rpc Status(Group) returns (StatusResponse);
+}
+
+message Empty {}
+message CounterStatus {
+  RpcStatus status = 1;
+  string replica_id = 2;
+  string role = 3;
+  sint64 value = 4;
+  uint64 applied_lrsn = 5;
+  uint64 writer_epoch = 6;
+  bool primary_resources_active = 7;
+  uint64 lifecycle_transitions = 8;
+  string last_error = 9;
+}
+message AddRequest { sint64 delta = 1; string request_id = 2; }
+message CommitResponse { RpcStatus status = 1; uint64 lrsn = 2; }
+service CounterService {
+  rpc Status(Empty) returns (CounterStatus);
+  rpc Promote(Empty) returns (CounterStatus);
+  rpc Demote(Empty) returns (CounterStatus);
+  rpc Add(AddRequest) returns (CommitResponse);
+  rpc Checkpoint(Empty) returns (CommitResponse);
+  rpc Poll(Empty) returns (CounterStatus);
+  rpc PausePolling(Empty) returns (CounterStatus);
+  rpc ResumePolling(Empty) returns (CounterStatus);
+  rpc Stop(Empty) returns (CounterStatus);
+}

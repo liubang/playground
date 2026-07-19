@@ -37,6 +37,7 @@ cc_library(
     linkopts = LINKOPTS,
     visibility = [
         "//cpp/pl/minidfs:__subpackages__",
+        "//cpp/pl/minivessel:__pkg__",
         "//cpp/pl/sstv2/io:__pkg__",
     ],
     deps = [

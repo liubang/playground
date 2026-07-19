@@ -1,0 +1,69 @@
+name: playground-minivessel
+x-image: &image
+  image: liubang/minivessel:local
+  build:
+    context: ../..
+    dockerfile: docker/minivessel/Dockerfile
+    args: { BUILDER_IMAGE: "${BUILDER_IMAGE:-liubang/bazel-builder:8.7.0}" }
+x-dn: &dn
+  <<: *image
+  restart: "no"
+  environment: { MINIDFS_BLOCK_TOKEN_SECRET: "${MINIDFS_BLOCK_TOKEN_SECRET:-minivessel-e2e-secret}" }
+  depends_on: { namenode: { condition: service_healthy } }
+  healthcheck: { test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9100/status"], interval: 2s, timeout: 2s, retries: 30 }
+  networks: [vessel]
+x-replica: &replica
+  <<: *image
+  restart: "no"
+  depends_on: { sharedlog: { condition: service_healthy } }
+  healthcheck: { test: ["CMD", "minivessel-control", "--address=127.0.0.1:9300", "--command=health"], interval: 2s, timeout: 2s, retries: 30 }
+  networks: [vessel]
+services:
+  mysql:
+    image: mysql:8.3
+    restart: "no"
+    environment: { MYSQL_ROOT_PASSWORD: minidfs_root, MYSQL_DATABASE: minidfs, MYSQL_USER: minidfs, MYSQL_PASSWORD: minidfs }
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../../cpp/pl/minidfs/metadata/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck: { test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"], interval: 2s, timeout: 3s, retries: 40 }
+    networks: [vessel]
+  namenode:
+    <<: *image
+    command: ["minidfs-namenode", "--port=9000", "--mysql_host=mysql", "--mysql_port=3306", "--mysql_user=minidfs", "--mysql_password=minidfs", "--mysql_database=minidfs", "--datanode_scan_interval_ms=1000", "--replication_scan_interval_ms=1000"]
+    environment: { MINIDFS_BLOCK_TOKEN_SECRET: "${MINIDFS_BLOCK_TOKEN_SECRET:-minivessel-e2e-secret}" }
+    depends_on: { mysql: { condition: service_healthy } }
+    healthcheck: { test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/status"], interval: 2s, timeout: 2s, retries: 30 }
+    networks: [vessel]
+  datanode1:
+    <<: *dn
+    command: ["minidfs-datanode", "--namenode_addr=namenode:9000", "--hostname=datanode1", "--ip=datanode1", "--uuid=minivessel-dn1", "--port=9100", "--rpc_port=9100", "--storage_root=/data/minidfs", "--block_report_interval_ms=1000"]
+    volumes: ["dn1:/data/minidfs"]
+  datanode2:
+    <<: *dn
+    command: ["minidfs-datanode", "--namenode_addr=namenode:9000", "--hostname=datanode2", "--ip=datanode2", "--uuid=minivessel-dn2", "--port=9100", "--rpc_port=9100", "--storage_root=/data/minidfs", "--block_report_interval_ms=1000"]
+    volumes: ["dn2:/data/minidfs"]
+  datanode3:
+    <<: *dn
+    command: ["minidfs-datanode", "--namenode_addr=namenode:9000", "--hostname=datanode3", "--ip=datanode3", "--uuid=minivessel-dn3", "--port=9100", "--rpc_port=9100", "--storage_root=/data/minidfs", "--block_report_interval_ms=1000"]
+    volumes: ["dn3:/data/minidfs"]
+  sharedlog:
+    <<: *image
+    command: ["minivessel-sharedlog", "--port=9200", "--namenode_addr=namenode:9000", "--group_id=counter", "--incarnation=1", "--replication=3"]
+    depends_on:
+      datanode1: { condition: service_healthy }
+      datanode2: { condition: service_healthy }
+      datanode3: { condition: service_healthy }
+    healthcheck: { test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9200/status"], interval: 2s, timeout: 2s, retries: 30 }
+    networks: [vessel]
+  replica-a:
+    <<: *replica
+    command: ["minivessel-replica", "--port=9300", "--shared_log_addr=sharedlog:9200", "--replica_id=replica-a", "--assignment_epoch=1"]
+  replica-b:
+    <<: *replica
+    command: ["minivessel-replica", "--port=9300", "--shared_log_addr=sharedlog:9200", "--replica_id=replica-b", "--assignment_epoch=2"]
+  replica-c:
+    <<: *replica
+    command: ["minivessel-replica", "--port=9300", "--shared_log_addr=sharedlog:9200", "--replica_id=replica-c", "--assignment_epoch=3"]
+volumes: { mysql-data: {}, dn1: {}, dn2: {}, dn3: {} }
+networks: { vessel: { driver: bridge } }

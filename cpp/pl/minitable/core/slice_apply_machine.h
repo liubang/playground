@@ -76,8 +76,16 @@ struct ApplyResult {
     std::string serialized_response;
 };
 
+enum class DedupeLookupKind : uint8_t { kMissing, kDuplicate, kConflict };
+
+struct DedupeLookupResult {
+    DedupeLookupKind kind = DedupeLookupKind::kMissing;
+    std::string serialized_response;
+};
+
 // Deterministic state-machine boundary used by a future braft on_apply callback.
-// It consumes only values embedded in a committed entry and never reads clocks or allocates timestamps.
+// It consumes only values embedded in a committed entry and never reads clocks or allocates
+// timestamps.
 class SliceApplyMachine final {
 public:
     [[nodiscard]] static absl::StatusOr<std::unique_ptr<SliceApplyMachine>> Create(
@@ -89,6 +97,7 @@ public:
         uint64_t apply_index,
         const codec::CellKeyCodec& codec);
     [[nodiscard]] std::vector<DedupeRecord> export_dedupe_records() const;
+    [[nodiscard]] DedupeLookupResult lookup_dedupe(const MutationIdentity& identity) const;
 
     [[nodiscard]] SliceStore& store() noexcept { return *store_; }
     [[nodiscard]] const SliceStore& store() const noexcept { return *store_; }
@@ -100,8 +109,7 @@ private:
         auto operator<=>(const DedupeKey&) const = default;
     };
 
-    SliceApplyMachine(std::unique_ptr<SliceStore> store,
-                      std::map<DedupeKey, DedupeRecord> dedupe)
+    SliceApplyMachine(std::unique_ptr<SliceStore> store, std::map<DedupeKey, DedupeRecord> dedupe)
         : store_(std::move(store)), dedupe_(std::move(dedupe)) {}
 
     mutable std::mutex mutex_;

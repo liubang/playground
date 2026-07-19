@@ -19,6 +19,18 @@ load("@rules_cc//cc:defs.bzl", "cc_test")
 load("//cpp:copts/configure_copts.bzl", "LINKOPTS", "TEST_COPTS")
 
 cc_test(
+    name = "data_service_core_test",
+    srcs = ["data_service_core_test.cpp"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/minitable/core:data_service_core",
+        "//cpp/pl/sstv2/types:schema",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "embedded_slice_test",
     srcs = ["embedded_slice_test.cpp"],
     copts = TEST_COPTS,
@@ -42,12 +54,27 @@ cc_test(
         "//cpp/pl/minitable/codec:cell_key_codec",
         "//cpp/pl/minitable/core:braft_slice_adapter",
         "//cpp/pl/minitable/core:slice_apply_machine",
+        "//cpp/pl/minitable/core:slice_proposal_frontend",
         "//cpp/pl/minitable/core:slice_raft_state_machine",
         "//cpp/pl/minitable/core:slice_store",
         "//cpp/pl/sstv2/io:local_filesystem",
         "//cpp/pl/sstv2/types:schema",
         "@braft//:braft",
         "@brpc//:brpc",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "slice_mutation_codec_test",
+    srcs = ["slice_mutation_codec_test.cpp"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/minitable/codec:cell_key_codec",
+        "//cpp/pl/minitable/core:slice_apply_machine",
+        "//cpp/pl/minitable/proto/v2:internal_cc_proto",
+        "//cpp/pl/sstv2/types:schema",
         "@googletest//:gtest_main",
     ],
 )

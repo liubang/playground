@@ -116,8 +116,7 @@ public:
     [[nodiscard]] absl::StatusOr<uint64_t> size(io::FileHandle handle) override {
         return delegate_->size(handle);
     }
-    [[nodiscard]] absl::StatusOr<io::FileIdentity> close(
-        io::FileHandle handle) override {
+    [[nodiscard]] absl::StatusOr<io::FileIdentity> close(io::FileHandle handle) override {
         return delegate_->close(handle);
     }
     [[nodiscard]] absl::Status remove(std::string_view path) override {
