@@ -341,7 +341,8 @@ absl::Status LocalFileSystem::remove(std::string_view path, const FileIdentity& 
     while (offset < expected.length) {
         const size_t length =
             static_cast<size_t>(std::min<uint64_t>(buffer.size(), expected.length - offset));
-        const ssize_t count = ::pread(descriptor, buffer.data(), length, static_cast<off_t>(offset));
+        const ssize_t count =
+            ::pread(descriptor, buffer.data(), length, static_cast<off_t>(offset));
         if (count < 0) {
             if (errno == EINTR) {
                 continue;
@@ -354,9 +355,8 @@ absl::Status LocalFileSystem::remove(std::string_view path, const FileIdentity& 
             (void)::close(descriptor);
             return absl::FailedPreconditionError("local remove identity changed during validation");
         }
-        checksum = crc32c::Extend(checksum,
-                                  reinterpret_cast<const uint8_t*>(buffer.data()),
-                                  static_cast<size_t>(count));
+        checksum = crc32c::Extend(
+            checksum, reinterpret_cast<const uint8_t*>(buffer.data()), static_cast<size_t>(count));
         offset += static_cast<uint64_t>(count);
     }
     if (static_cast<uint64_t>(checksum) != expected.checksum) {
@@ -385,7 +385,8 @@ absl::Status LocalFileSystem::remove(std::string_view path, const FileIdentity& 
     if (::unlink(owned_path.c_str()) != 0) {
         const int error = errno;
         (void)::close(descriptor);
-        return error == ENOENT ? absl::OkStatus() : errno_status("identity-fenced remove", path, error);
+        return error == ENOENT ? absl::OkStatus()
+                               : errno_status("identity-fenced remove", path, error);
     }
     if (::close(descriptor) != 0) {
         return errno_status("close after identity-fenced remove", path, errno);
