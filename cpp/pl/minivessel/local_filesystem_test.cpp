@@ -20,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 
 #include "cpp/pl/minivessel/local_filesystem.h"
 #include "gtest/gtest.h"
@@ -50,7 +51,14 @@ protected:
 };
 
 TEST_F(LocalFileSystemTest, PublishesOnlySyncedPrefixAndRecoversUnsyncedTail) {
+    static_assert(std::is_base_of_v<VesselFileSystem, LocalFileSystem>);
+    static_assert(std::is_base_of_v<ActiveLogStorage, LocalFileSystem>);
+
     LocalFileSystem filesystem;
+    ASSERT_TRUE(validate_vessel_filesystem(filesystem).ok());
+    ASSERT_TRUE(validate_vessel_filesystem(filesystem, kFramedSharedWalActiveLogCapabilities).ok());
+    ASSERT_NE(filesystem.active_log_storage(), nullptr);
+
     const auto object_capabilities = filesystem.capabilities();
     EXPECT_TRUE(object_capabilities.has(ObjectStorageFeature::kImmutableObjects));
     const auto log_capabilities = filesystem.active_log_capabilities();
@@ -58,6 +66,7 @@ TEST_F(LocalFileSystemTest, PublishesOnlySyncedPrefixAndRecoversUnsyncedTail) {
     EXPECT_TRUE(log_capabilities.has(ActiveLogFeature::kWriterFencing));
     EXPECT_TRUE(log_capabilities.has(ActiveLogFeature::kDurableTail));
     EXPECT_FALSE(log_capabilities.has(ActiveLogFeature::kLeaseRecovery));
+    EXPECT_FALSE(validate_vessel_filesystem(filesystem, kAuthoritativeActiveLogCapabilities).ok());
 
     auto writer = filesystem.acquire_writer(AcquireWriterRequest{
         .path = wal_path_,
@@ -120,7 +129,16 @@ TEST_F(LocalFileSystemTest, ExpiredWriterCannotBeRenewed) {
     auto renewed = filesystem.renew_writer(writer->handle);
     EXPECT_FALSE(renewed.ok());
     EXPECT_EQ(renewed.status().code(), absl::StatusCode::kAborted);
-    EXPECT_TRUE(filesystem.release_writer(writer->handle).ok());
+    EXPECT_FALSE(filesystem
+                     .append(writer->handle,
+                             AppendOptions{.expected_offset = ByteOffset(0),
+                                           .packet_sequence = PacketSequence(0)},
+                             Bytes("stale"))
+                     .ok());
+    EXPECT_FALSE(filesystem.sync(writer->handle).ok());
+    EXPECT_FALSE(filesystem.seal(writer->handle).ok());
+    EXPECT_FALSE(filesystem.sync(writer->handle).ok());
+    EXPECT_FALSE(filesystem.release_writer(writer->handle).ok());
 }
 
 TEST_F(LocalFileSystemTest, RejectsConcurrentWriterAndInvalidAppendPosition) {

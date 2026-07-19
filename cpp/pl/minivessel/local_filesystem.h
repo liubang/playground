@@ -30,7 +30,7 @@ namespace pl::minivessel {
 // serializes live writers across instances/processes; persisted epochs and durable boundaries make
 // restart recovery fail closed. Lease recovery is intentionally not advertised because POSIX flock
 // cannot fence a live-but-expired process.
-class LocalFileSystem final : public ObjectMetadataBackend, public ActiveLogStorage {
+class LocalFileSystem final : public VesselFileSystem, public ActiveLogStorage {
 public:
     LocalFileSystem();
     ~LocalFileSystem() override;
@@ -49,6 +49,11 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<sstv2::io::FileSystem> object_filesystem() const override;
+    [[nodiscard]] ActiveLogStorage* active_log_storage() noexcept override { return this; }
+    [[nodiscard]] const ActiveLogStorage* active_log_storage() const noexcept override {
+        return this;
+    }
+
     [[nodiscard]] absl::StatusOr<WriterSession> acquire_writer(
         const AcquireWriterRequest& request) override;
     [[nodiscard]] absl::StatusOr<WriterSession> renew_writer(WriterHandle handle) override;
