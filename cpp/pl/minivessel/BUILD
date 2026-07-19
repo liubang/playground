@@ -69,7 +69,11 @@ cc_library(
     hdrs = ["filesystem.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
-    deps = ["//cpp/pl/sstv2/io:filesystem"],
+    deps = [
+        ":active_log_storage",
+        "//cpp/pl/sstv2/io:filesystem",
+        "@abseil-cpp//absl/status",
+    ],
 )
 
 cc_library(
@@ -98,6 +102,7 @@ cc_library(
         ":filesystem",
         "//cpp/pl/minidfs/client:dfs_client",
         "//cpp/pl/sstv2/io:minidfs_filesystem",
+        "@abseil-cpp//absl/status",
     ],
 )
 
@@ -177,8 +182,8 @@ cc_test(
     copts = TEST_COPTS,
     linkopts = LINKOPTS,
     deps = [
-        ":active_log_storage",
         ":minidfs_filesystem",
+        ":shared_wal",
         "@googletest//:gtest_main",
     ],
 )
