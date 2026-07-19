@@ -25,21 +25,21 @@ class DfsClient;
 
 namespace pl::minivessel {
 
-// MiniDFS adapter for immutable checkpoint and sealed-segment objects only. Election and active-log
-// authority are external services.
-class MiniDfsFileSystem final : public ObjectMetadataBackend {
+// MiniDFS adapter for immutable checkpoints and sealed segments. Active WAL support will be
+// enabled here only after MiniDFS exposes generic appendable-file, hsync, durable-tail, and writer
+// generation APIs; MiniDFS must not depend on MiniVessel protocol types.
+class MiniDfsFileSystem final : public VesselFileSystem {
 public:
     explicit MiniDfsFileSystem(std::shared_ptr<minidfs::DfsClient> client);
 
     [[nodiscard]] ObjectStorageCapabilities capabilities() const noexcept override {
-        return ObjectStorageCapabilities(
-            static_cast<uint32_t>(ObjectStorageFeature::kImmutableObjects));
+        return kImmutableObjectCapability;
     }
-
     [[nodiscard]] std::shared_ptr<sstv2::io::FileSystem> object_filesystem() const override;
 
 private:
     std::shared_ptr<minidfs::DfsClient> client_;
     std::shared_ptr<sstv2::io::MiniDfsFileSystem> object_filesystem_;
 };
+
 } // namespace pl::minivessel

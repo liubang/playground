@@ -66,6 +66,24 @@ cc_test(
 )
 
 cc_test(
+    name = "slice_vessel_e2e_test",
+    srcs = ["slice_vessel_e2e_test.cpp"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/minitable/codec:cell_key_codec",
+        "//cpp/pl/minitable/core:slice_apply_machine",
+        "//cpp/pl/minitable/core:slice_store",
+        "//cpp/pl/minitable/core:vessel_slice_replica",
+        "//cpp/pl/minivessel:local_filesystem",
+        "//cpp/pl/minivessel:shared_wal",
+        "//cpp/pl/sstv2/types:schema",
+        "//cpp/pl/sstv2/types:value",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "slice_mutation_codec_test",
     srcs = ["slice_mutation_codec_test.cpp"],
     copts = TEST_COPTS,

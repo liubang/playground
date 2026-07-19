@@ -580,7 +580,9 @@ absl::Status LocalFileSystem::close_writer(WriterHandle handle, bool seal_writer
     }
     std::lock_guard lock(writer->mutex);
     absl::Status status;
-    if (seal_writer) {
+    if (seal_writer && NowMs() >= writer->metadata.expires_at_ms) {
+        status = absl::FailedPreconditionError("local writer lease expired");
+    } else if (seal_writer) {
         if (::fsync(writer->descriptor) != 0) {
             status = ErrnoStatus("fsync WAL before seal", writer->path, errno);
         } else {
