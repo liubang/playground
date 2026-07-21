@@ -64,7 +64,6 @@ prepare_env() {
     encryption_key="$(gen_hex_secret 32)"
 
     write_env_file .env \
-        LANGFUSE_VERSION "3.223.0" \
         POSTGRES_VERSION "17" \
         REDIS_VERSION "7" \
         CLICKHOUSE_VERSION "latest" \
