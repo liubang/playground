@@ -1,0 +1,166 @@
+x-langfuse-environment: &langfuse-environment
+  NEXTAUTH_URL: ${LANGFUSE_PUBLIC_URL:?Run ./bootstrap.sh to generate .env}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Run ./bootstrap.sh to generate .env}@postgres:5432/${POSTGRES_DB:-postgres}
+  DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Run ./bootstrap.sh to generate .env}@postgres:5432/${POSTGRES_DB:-postgres}
+  SALT: ${SALT:?Run ./bootstrap.sh to generate .env}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Run ./bootstrap.sh to generate .env}
+  TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-false}
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: ${LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES:-false}
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clickhouse}
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Run ./bootstrap.sh to generate .env}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_AUTH: ${REDIS_AUTH:?Run ./bootstrap.sh to generate .env}
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Run ./bootstrap.sh to generate .env}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Run ./bootstrap.sh to generate .env}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: ${MINIO_PUBLIC_URL:?Run ./bootstrap.sh to generate .env}
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+  LANGFUSE_S3_BATCH_EXPORT_BUCKET: langfuse
+  LANGFUSE_S3_BATCH_EXPORT_REGION: auto
+  LANGFUSE_S3_BATCH_EXPORT_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+  LANGFUSE_S3_BATCH_EXPORT_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Run ./bootstrap.sh to generate .env}
+  LANGFUSE_S3_BATCH_EXPORT_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_BATCH_EXPORT_EXTERNAL_ENDPOINT: ${MINIO_PUBLIC_URL:?Run ./bootstrap.sh to generate .env}
+  LANGFUSE_S3_BATCH_EXPORT_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_BATCH_EXPORT_PREFIX: exports/
+
+x-langfuse-depends-on: &langfuse-depends-on
+  postgres:
+    condition: service_healthy
+  clickhouse:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  minio:
+    condition: service_healthy
+
+services:
+  langfuse-web:
+    image: docker.io/langfuse/langfuse:${LANGFUSE_VERSION:-3}
+    restart: unless-stopped
+    depends_on: *langfuse-depends-on
+    ports:
+      - "${PUBLIC_BIND_ADDR:-127.0.0.1}:${LANGFUSE_PORT:-3100}:3000"
+    environment:
+      <<: *langfuse-environment
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Run ./bootstrap.sh to generate .env}
+    networks:
+      - langfuse
+
+  langfuse-worker:
+    image: docker.io/langfuse/langfuse-worker:${LANGFUSE_VERSION:-3}
+    restart: unless-stopped
+    depends_on: *langfuse-depends-on
+    environment: *langfuse-environment
+    networks:
+      - langfuse
+
+  postgres:
+    image: docker.io/postgres:${POSTGRES_VERSION:-17}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./bootstrap.sh to generate .env}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      - langfuse
+
+  clickhouse:
+    image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-latest}
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Run ./bootstrap.sh to generate .env}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    networks:
+      - langfuse
+
+  redis:
+    image: docker.io/redis:${REDIS_VERSION:-7}
+    restart: unless-stopped
+    environment:
+      REDIS_AUTH: ${REDIS_AUTH:?Run ./bootstrap.sh to generate .env}
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_AUTH:?Run ./bootstrap.sh to generate .env}
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_AUTH}\" ping | grep -q PONG"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    networks:
+      - langfuse
+
+  minio:
+    image: cgr.dev/chainguard/minio:${MINIO_VERSION:-latest}
+    restart: unless-stopped
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Run ./bootstrap.sh to generate .env}
+    ports:
+      - "${PUBLIC_BIND_ADDR:-127.0.0.1}:${MINIO_API_PORT:-9190}:9000"
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9191}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 2s
+    networks:
+      - langfuse
+
+volumes:
+  postgres-data:
+  clickhouse-data:
+  clickhouse-logs:
+  redis-data:
+  minio-data:
+
+networks:
+  langfuse:
