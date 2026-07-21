@@ -50,7 +50,7 @@ x-langfuse-depends-on: &langfuse-depends-on
 
 services:
   langfuse-web:
-    image: docker.io/langfuse/langfuse:${LANGFUSE_VERSION:-3}
+    image: docker.io/langfuse/langfuse:3
     restart: unless-stopped
     depends_on: *langfuse-depends-on
     ports:
@@ -62,7 +62,7 @@ services:
       - langfuse
 
   langfuse-worker:
-    image: docker.io/langfuse/langfuse-worker:${LANGFUSE_VERSION:-3}
+    image: docker.io/langfuse/langfuse-worker:3
     restart: unless-stopped
     depends_on: *langfuse-depends-on
     environment: *langfuse-environment
