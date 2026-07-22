@@ -95,13 +95,13 @@ prepare_env() {
 
 check_web_ready() {
     docker compose exec -T langfuse-web node -e \
-        'fetch("http://localhost:3000/api/public/health?failIfDatabaseUnavailable=true").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))' \
+        'fetch(`http://${require("node:os").hostname()}:3000/api/public/health?failIfDatabaseUnavailable=true`).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))' \
         >/dev/null 2>&1
 }
 
 check_worker_ready() {
     docker compose exec -T langfuse-worker node -e \
-        'fetch("http://localhost:3030/api/health").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))' \
+        'fetch(`http://${require("node:os").hostname()}:3030/api/health`).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))' \
         >/dev/null 2>&1
 }
 
