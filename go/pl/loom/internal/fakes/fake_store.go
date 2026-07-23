@@ -72,6 +72,25 @@ func (s *FakeStore) AppendEvents(_ context.Context, id domain.SessionID, expecte
 	return nil
 }
 
+func (s *FakeStore) AppendEventsAndCheckpoint(_ context.Context, id domain.SessionID, expectedVersion int64, events []domain.Event, checkpoint domain.Checkpoint) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.sessions[id] {
+		return fmt.Errorf("session %s not found", id)
+	}
+	if s.versions[id] != expectedVersion {
+		return fmt.Errorf("version mismatch: expected %d, got %d", s.versions[id], expectedVersion)
+	}
+	newVersion := expectedVersion + int64(len(events))
+	if checkpoint.SessionID != id || checkpoint.Sequence != newVersion {
+		return fmt.Errorf("checkpoint does not cover resulting version %d", newVersion)
+	}
+	s.events[id] = append(s.events[id], events...)
+	s.versions[id] = newVersion
+	s.checkpoints[id] = append(s.checkpoints[id], checkpoint)
+	return nil
+}
+
 func (s *FakeStore) LoadEvents(_ context.Context, id domain.SessionID, after int64) ([]domain.Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

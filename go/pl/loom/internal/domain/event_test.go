@@ -74,7 +74,7 @@ func TestAllEventTypes(t *testing.T) {
 		EventUserMessageAdded, EventModelRequestStarted, EventModelResponseCompleted,
 		EventModelRequestFailed, EventToolCallPrepared, EventPermissionRequested,
 		EventPermissionResolved, EventToolExecutionStarted, EventToolExecutionCompleted,
-		EventFileChanged, EventPlanRevised, EventContextCompacted,
+		EventToolResultAdded, EventFileChanged, EventPlanRevised, EventContextCompacted,
 		EventCheckpointCreated, EventBudgetUpdated, EventRunCompleted,
 		EventRunFailed, EventRunCancelled,
 	}

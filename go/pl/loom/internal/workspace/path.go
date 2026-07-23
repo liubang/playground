@@ -176,6 +176,15 @@ func (v *PathValidator) Snapshot(path string) (Snapshot, error) {
 	return snapshotByOpen(resolved)
 }
 
+// SHA256 returns the current hash of a secure regular workspace file.
+func (v *PathValidator) SHA256(path string) (string, error) {
+	snapshot, err := v.Snapshot(path)
+	if err != nil {
+		return "", err
+	}
+	return snapshot.SHA256, nil
+}
+
 // AtomicWrite replaces a file atomically after validating the expected hash.
 func (v *PathValidator) AtomicWrite(path string, data []byte, opts AtomicWriteOptions) (result Snapshot, err error) {
 	resolved, err := v.ResolveLexical(path)
