@@ -96,12 +96,26 @@ func (t *ApplyPatchTool) Prepare(ctx context.Context, call domain.ToolCall) (dom
 		return domain.PreparedCall{}, err
 	}
 
+	_, _, data, err := ensureExistingTextFile(t.base.validator, pathInfo.Absolute)
+	if err != nil {
+		return domain.PreparedCall{}, err
+	}
+	newData, recoveryErr := applyPatchToData(data, patch)
 	canonical, err := json.Marshal(args)
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Apply patch to %s", args.Path)
-	return t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
+	prepared, err := t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
+	if err != nil {
+		return domain.PreparedCall{}, err
+	}
+	if recoveryErr == nil {
+		prepared.Recovery = &domain.RecoverySpec{
+			Kind: "file_replace", Path: pathInfo.Absolute, ExpectedHash: args.ExpectedHash, ResultHash: hashBytes(newData),
+		}
+	}
+	return prepared, nil
 }
 
 func (t *ApplyPatchTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
