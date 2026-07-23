@@ -66,17 +66,27 @@ func (t *ReplaceTextTool) Prepare(ctx context.Context, call domain.ToolCall) (do
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	args, pathInfo, err := validateReplaceTextArgs(t.base.validator, args)
+	args, pathInfo, data, err := validateReplaceTextArgs(t.base.validator, args)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
 
+	newContent, recoveryErr := applyStringReplacement(string(data), args)
 	canonical, err := json.Marshal(args)
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Replace text in %s", args.Path)
-	return t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
+	prepared, err := t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
+	if err != nil {
+		return domain.PreparedCall{}, err
+	}
+	if recoveryErr == nil {
+		prepared.Recovery = &domain.RecoverySpec{
+			Kind: "file_replace", Path: pathInfo.Absolute, ExpectedHash: args.ExpectedHash, ResultHash: hashBytes([]byte(newContent)),
+		}
+	}
+	return prepared, nil
 }
 
 func (t *ReplaceTextTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
@@ -122,24 +132,24 @@ func (t *ReplaceTextTool) Execute(ctx context.Context, prepared domain.PreparedC
 	})
 }
 
-func validateReplaceTextArgs(validator *workspacepkg.PathValidator, args replaceTextArgs) (replaceTextArgs, workspacepkg.ResolvedPath, error) {
+func validateReplaceTextArgs(validator *workspacepkg.PathValidator, args replaceTextArgs) (replaceTextArgs, workspacepkg.ResolvedPath, []byte, error) {
 	if len(args.NewText) > maxReplacementBytes {
-		return replaceTextArgs{}, workspacepkg.ResolvedPath{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("new_text exceeds %d bytes", maxReplacementBytes))
+		return replaceTextArgs{}, workspacepkg.ResolvedPath{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("new_text exceeds %d bytes", maxReplacementBytes))
 	}
 	if len(args.OldText) == 0 {
-		return replaceTextArgs{}, workspacepkg.ResolvedPath{}, domain.NewError(domain.ErrInvalidInput, "old_text must not be empty")
+		return replaceTextArgs{}, workspacepkg.ResolvedPath{}, nil, domain.NewError(domain.ErrInvalidInput, "old_text must not be empty")
 	}
 	expectedHash, err := canonicalizeHash(args.ExpectedHash)
 	if err != nil {
-		return replaceTextArgs{}, workspacepkg.ResolvedPath{}, err
+		return replaceTextArgs{}, workspacepkg.ResolvedPath{}, nil, err
 	}
-	pathInfo, _, _, err := ensureExistingTextFile(validator, args.Path)
+	pathInfo, _, data, err := ensureExistingTextFile(validator, args.Path)
 	if err != nil {
-		return replaceTextArgs{}, workspacepkg.ResolvedPath{}, err
+		return replaceTextArgs{}, workspacepkg.ResolvedPath{}, nil, err
 	}
 	args.Path = pathInfo.Display
 	args.ExpectedHash = expectedHash
-	return args, pathInfo, nil
+	return args, pathInfo, data, nil
 }
 
 func applyStringReplacement(content string, args replaceTextArgs) (string, error) {

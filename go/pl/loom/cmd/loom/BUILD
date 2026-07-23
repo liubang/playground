@@ -15,22 +15,36 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2026/07/22 21:10
 
-load("@rules_go//go:def.bzl", "go_binary")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
-go_binary(
-    name = "loom",
+go_library(
+    name = "loom_lib",
     srcs = ["main.go"],
     importpath = "github.com/liubang/playground/go/pl/loom/cmd/loom",
-    visibility = ["//visibility:public"],
+    visibility = ["//visibility:private"],
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/model/openai:openai_lib",
+        "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/process:process_lib",
+        "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/tool/builtin:builtin_lib",
         "//go/pl/loom/internal/tool/command:command_lib",
         "//go/pl/loom/internal/tool/edit:edit_lib",
         "//go/pl/loom/internal/tool/gittools:gittools_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
     ],
+)
+
+go_binary(
+    name = "loom",
+    embed = [":loom_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "loom_test",
+    srcs = ["main_test.go"],
+    embed = [":loom_lib"],
 )

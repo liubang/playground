@@ -39,6 +39,7 @@ const (
 	EventPermissionResolved     EventType = "permission.resolved"
 	EventToolExecutionStarted   EventType = "tool.execution_started"
 	EventToolExecutionCompleted EventType = "tool.execution_completed"
+	EventToolResultAdded        EventType = "tool.result_added"
 	EventFileChanged            EventType = "file.changed"
 	EventPlanRevised            EventType = "plan.revised"
 	EventContextCompacted       EventType = "context.compacted"
@@ -70,8 +71,8 @@ func (e Event) Validate() error {
 	if e.ID.IsZero() {
 		return fmt.Errorf("event ID required")
 	}
-	if e.Sequence < 0 {
-		return fmt.Errorf("event sequence must be non-negative")
+	if e.Sequence <= 0 {
+		return fmt.Errorf("event sequence must be positive")
 	}
 	if e.SessionID.IsZero() {
 		return fmt.Errorf("session ID required")
@@ -81,7 +82,7 @@ func (e Event) Validate() error {
 		EventUserMessageAdded, EventModelRequestStarted, EventModelResponseCompleted,
 		EventModelRequestFailed, EventToolCallPrepared, EventPermissionRequested,
 		EventPermissionResolved, EventToolExecutionStarted, EventToolExecutionCompleted,
-		EventFileChanged, EventPlanRevised, EventContextCompacted,
+		EventToolResultAdded, EventFileChanged, EventPlanRevised, EventContextCompacted,
 		EventCheckpointCreated, EventBudgetUpdated, EventRunCompleted,
 		EventRunFailed, EventRunCancelled:
 	default:

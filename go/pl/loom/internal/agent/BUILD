@@ -29,5 +29,8 @@ go_test(
     name = "agent_test",
     srcs = ["run_test.go"],
     embed = [":agent_lib"],
-    deps = ["//go/pl/loom/internal/fakes:fakes_lib"],
+    deps = [
+        "//go/pl/loom/internal/fakes:fakes_lib",
+        "//go/pl/loom/internal/session:session_lib",
+    ],
 )

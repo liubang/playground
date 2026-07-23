@@ -174,6 +174,11 @@ func decodeStrict[T any](raw json.RawMessage) (T, error) {
 	return out, nil
 }
 
+func hashBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
 func cloneRawMessage(raw json.RawMessage) json.RawMessage {
 	if raw == nil {
 		return nil

@@ -30,6 +30,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
+	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
 
 func newTestRun(limits domain.Limits) *Run {
@@ -44,6 +45,241 @@ func TestNewRunStartsPreparing(t *testing.T) {
 	}
 	if run.State.Phase != domain.PhasePreparing {
 		t.Fatalf("expected preparing, got %s", run.State.Phase)
+	}
+}
+
+func TestContinueRunFromTerminalCheckpoint(t *testing.T) {
+	clock := domain.NewFakeClock(time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC))
+	sessionID := domain.NewSessionID()
+	message := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleAssistant,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "first answer"}}, CreatedAt: clock.Now(),
+	}
+	checkpoint := domain.Checkpoint{
+		ID: domain.NewCheckpointID(), SessionID: sessionID, Sequence: 7,
+		State:    domain.RunState{Lifecycle: domain.LifecycleTerminal, Outcome: domain.OutcomeSucceeded},
+		Messages: []domain.Message{message}, Usage: domain.Usage{Turns: 2, InputTokens: 10}, CreatedAt: clock.Now(),
+	}
+	run, err := ContinueRun(checkpoint, checkpoint.Messages, 7, domain.DefaultLimits(), clock)
+	if err != nil {
+		t.Fatalf("ContinueRun: %v", err)
+	}
+	if run.SessionID != sessionID || run.State.Lifecycle != domain.LifecycleActive ||
+		run.State.Phase != domain.PhasePreparing || run.Version != 8 || run.persistedVersion != 7 ||
+		len(run.pendingEvents) != 1 || run.pendingEvents[0].Type != domain.EventRunCreated ||
+		len(run.Messages) != 1 || run.Usage.InputTokens != 10 {
+		t.Fatalf("unexpected continued run: %+v pending=%+v", run, run.pendingEvents)
+	}
+	userEvent := run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "continue"}}, CreatedAt: clock.Now(),
+	})
+	if userEvent.Sequence != 9 || run.Messages[1].Sequence != 2 {
+		t.Fatalf("unexpected continuation sequence: event=%d message=%d", userEvent.Sequence, run.Messages[1].Sequence)
+	}
+}
+
+func TestContinueRunRejectsUnsafeRecovery(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	sessionID := domain.NewSessionID()
+	checkpoint := domain.Checkpoint{
+		ID: domain.NewCheckpointID(), SessionID: sessionID, Sequence: 2,
+		State: domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing}, CreatedAt: clock.Now(),
+	}
+	if _, err := ContinueRun(checkpoint, nil, 2, domain.DefaultLimits(), clock); !hasErrorCode(err, domain.ErrConflict) {
+		t.Fatalf("active checkpoint error = %v, want conflict", err)
+	}
+	checkpoint.State = domain.RunState{Lifecycle: domain.LifecycleTerminal, Outcome: domain.OutcomeSucceeded}
+	if _, err := ContinueRun(checkpoint, nil, 3, domain.DefaultLimits(), clock); !hasErrorCode(err, domain.ErrConflict) {
+		t.Fatalf("stale checkpoint error = %v, want conflict", err)
+	}
+}
+
+func TestRecoverRunClosesInterruptedReadOnlyTool(t *testing.T) {
+	clock := domain.NewFakeClock(time.Date(2026, 7, 23, 13, 0, 0, 0, time.UTC))
+	sessionID := domain.NewSessionID()
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"a"}`)}
+	message := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleAssistant,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartToolCall, ToolCall: &call}}, CreatedAt: clock.Now(),
+	}
+	events := []domain.Event{
+		testAgentEvent(t, sessionID, 1, domain.EventModelResponseCompleted, domain.MessageEventPayload{Message: message}, clock.Now()),
+		testAgentEvent(t, sessionID, 2, domain.EventToolExecutionStarted,
+			toolCallAuditPayload{CallID: call.ID, Tool: call.Name, Risk: domain.R1, ArgsHash: "hash"}, clock.Now()),
+	}
+	run, err := RecoverRun(sessionID, nil, []domain.Message{message}, events, 2, domain.DefaultLimits(), clock, nil)
+	if err != nil {
+		t.Fatalf("RecoverRun: %v", err)
+	}
+	if run.Version != 5 || len(run.pendingEvents) != 3 || len(run.Messages) != 2 {
+		t.Fatalf("unexpected recovered run: version=%d events=%v messages=%v", run.Version, run.pendingEvents, run.Messages)
+	}
+	result, ok := findToolResult(run, call.ID)
+	if !ok || result.Error == nil || result.Error.Code != "interrupted" || !result.Error.Retryable {
+		t.Fatalf("unexpected interrupted result: %+v", result)
+	}
+}
+
+type fakeFileState map[string]string
+
+func (f fakeFileState) SHA256(path string) (string, error) {
+	hash, ok := f[path]
+	if !ok {
+		return "", errors.New("file not found")
+	}
+	return hash, nil
+}
+
+func TestRecoverRunReconcilesInterruptedFileWrite(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	sessionID := domain.NewSessionID()
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "replace_text", Arguments: json.RawMessage(`{}`)}
+	message := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleAssistant,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartToolCall, ToolCall: &call}}, CreatedAt: clock.Now(),
+	}
+	audit := toolCallAuditPayload{
+		CallID: call.ID, Tool: call.Name, Risk: domain.R2,
+		Recovery: &domain.RecoverySpec{Kind: "file_replace", Path: "/workspace/a", ExpectedHash: "old", ResultHash: "new"},
+	}
+	events := []domain.Event{
+		testAgentEvent(t, sessionID, 1, domain.EventModelResponseCompleted, domain.MessageEventPayload{Message: message}, clock.Now()),
+		testAgentEvent(t, sessionID, 2, domain.EventToolExecutionStarted, audit, clock.Now()),
+	}
+	for _, test := range []struct {
+		name       string
+		hash       string
+		wantStatus domain.ToolStatus
+		wantCode   string
+	}{
+		{name: "applied", hash: "new", wantStatus: domain.ToolStatusSuccess},
+		{name: "not applied", hash: "old", wantStatus: domain.ToolStatusError, wantCode: "interrupted_not_applied"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			run, err := RecoverRun(sessionID, nil, []domain.Message{message}, events, 2,
+				domain.DefaultLimits(), clock, fakeFileState{"/workspace/a": test.hash})
+			if err != nil {
+				t.Fatalf("RecoverRun: %v", err)
+			}
+			result, ok := findToolResult(run, call.ID)
+			if !ok || result.Status != test.wantStatus || (test.wantCode != "" && (result.Error == nil || result.Error.Code != test.wantCode)) {
+				t.Fatalf("unexpected reconciled result: %+v", result)
+			}
+		})
+	}
+	if _, err := RecoverRun(sessionID, nil, []domain.Message{message}, events, 2,
+		domain.DefaultLimits(), clock, fakeFileState{"/workspace/a": "other"}); !hasErrorCode(err, domain.ErrConflict) {
+		t.Fatalf("unexpected hash error = %v, want conflict", err)
+	}
+}
+
+func TestRecoverRunBlocksUncertainNonIdempotentTool(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	sessionID := domain.NewSessionID()
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "run_command", Arguments: json.RawMessage(`{"command":"make"}`)}
+	message := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleAssistant,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartToolCall, ToolCall: &call}}, CreatedAt: clock.Now(),
+	}
+	events := []domain.Event{
+		testAgentEvent(t, sessionID, 1, domain.EventModelResponseCompleted, domain.MessageEventPayload{Message: message}, clock.Now()),
+		testAgentEvent(t, sessionID, 2, domain.EventToolExecutionStarted,
+			toolCallAuditPayload{CallID: call.ID, Tool: call.Name, Risk: domain.R2, ArgsHash: "hash"}, clock.Now()),
+	}
+	if _, err := RecoverRun(sessionID, nil, []domain.Message{message}, events, 2,
+		domain.DefaultLimits(), clock, nil); !hasErrorCode(err, domain.ErrConflict) ||
+		!strings.Contains(err.Error(), "uncertain non-idempotent outcome") {
+		t.Fatalf("RecoverRun error = %v, want uncertain conflict", err)
+	}
+}
+
+func TestRecoverRunRejectsCompletionWithoutTranscriptResult(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	sessionID := domain.NewSessionID()
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{}`)}
+	message := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleAssistant,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartToolCall, ToolCall: &call}}, CreatedAt: clock.Now(),
+	}
+	events := []domain.Event{
+		testAgentEvent(t, sessionID, 1, domain.EventModelResponseCompleted, domain.MessageEventPayload{Message: message}, clock.Now()),
+		testAgentEvent(t, sessionID, 2, domain.EventToolExecutionStarted,
+			toolCallAuditPayload{CallID: call.ID, Tool: call.Name, Risk: domain.R1}, clock.Now()),
+		testAgentEvent(t, sessionID, 3, domain.EventToolExecutionCompleted,
+			toolExecutionCompletedPayload{CallID: call.ID, Status: domain.ToolStatusSuccess}, clock.Now()),
+	}
+	if _, err := RecoverRun(sessionID, nil, []domain.Message{message}, events, 3,
+		domain.DefaultLimits(), clock, nil); !hasErrorCode(err, domain.ErrConflict) ||
+		!strings.Contains(err.Error(), "completed without a persisted result") {
+		t.Fatalf("RecoverRun error = %v, want inconsistent completion conflict", err)
+	}
+}
+
+func TestRecoverRunClosesPreparedButUnstartedTool(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	sessionID := domain.NewSessionID()
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "replace_text", Arguments: json.RawMessage(`{}`)}
+	message := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleAssistant,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartToolCall, ToolCall: &call}}, CreatedAt: clock.Now(),
+	}
+	events := []domain.Event{
+		testAgentEvent(t, sessionID, 1, domain.EventModelResponseCompleted, domain.MessageEventPayload{Message: message}, clock.Now()),
+		testAgentEvent(t, sessionID, 2, domain.EventPermissionRequested,
+			toolCallAuditPayload{CallID: call.ID, Tool: call.Name, Risk: domain.R2, ArgsHash: "hash"}, clock.Now()),
+	}
+	run, err := RecoverRun(sessionID, nil, []domain.Message{message}, events, 2, domain.DefaultLimits(), clock, nil)
+	if err != nil {
+		t.Fatalf("RecoverRun: %v", err)
+	}
+	result, ok := findToolResult(run, call.ID)
+	if !ok || result.Error == nil || result.Error.Retryable {
+		t.Fatalf("unexpected unstarted result: %+v", result)
+	}
+}
+
+func TestRecoverRunRetriesInterruptedModelRequestWithNewUserPrompt(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	sessionID := domain.NewSessionID()
+	user := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleUser,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "first"}}, CreatedAt: clock.Now(),
+	}
+	events := []domain.Event{
+		testAgentEvent(t, sessionID, 1, domain.EventUserMessageAdded, domain.MessageEventPayload{Message: user}, clock.Now()),
+		testAgentEvent(t, sessionID, 2, domain.EventRunStateChanged,
+			domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhaseCallingModel}, clock.Now()),
+	}
+	run, err := RecoverRun(sessionID, nil, []domain.Message{user}, events, 2, domain.DefaultLimits(), clock, nil)
+	if err != nil {
+		t.Fatalf("RecoverRun: %v", err)
+	}
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "continue"}}, CreatedAt: clock.Now(),
+	})
+	if run.State.Phase != domain.PhasePreparing || len(run.Messages) != 2 || run.Messages[1].Sequence != 2 {
+		t.Fatalf("unexpected model recovery: %+v", run)
+	}
+}
+
+func testAgentEvent(t *testing.T, sessionID domain.SessionID, sequence int64, typ domain.EventType, payload any, timestamp time.Time) domain.Event {
+	t.Helper()
+	raw, err := domain.MarshalPayload(payload)
+	if err != nil {
+		t.Fatalf("MarshalPayload: %v", err)
+	}
+	return domain.Event{
+		ID: domain.NewEventID(), SessionID: sessionID, Sequence: sequence,
+		Type: typ, Timestamp: timestamp, Payload: raw,
 	}
 }
 
@@ -301,6 +537,26 @@ func TestLoopExecuteCancelled(t *testing.T) {
 	}
 }
 
+func TestLoopExecuteCancelledPersistsTerminalEvent(t *testing.T) {
+	store := &contextCheckingStore{base: fakes.NewFakeStore()}
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	loop := &Loop{Run: run, Model: fakes.NewFakeModel(), Store: store, Registry: NewToolRegistry(), Logger: slog.Default()}
+	if err := loop.Execute(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	if eventIndex(events, domain.EventRunCancelled) < 0 {
+		t.Fatalf("cancelled terminal event was not persisted: %v", collectEventTypes(events))
+	}
+}
+
 func TestLoopExecuteBudgetExhausted(t *testing.T) {
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{
@@ -385,14 +641,20 @@ func TestLoopTracksUsageManifestAndPersistsEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadEvents: %v", err)
 	}
-	if len(events) != 4 {
-		t.Fatalf("expected 4 persisted events, got %d", len(events))
+	if len(events) != 7 {
+		t.Fatalf("expected 7 persisted events, got %d", len(events))
 	}
 	if _, err := domain.UnmarshalMessageEventPayload(events[0].Payload); err != nil {
 		t.Fatalf("invalid persisted user message: %v", err)
 	}
-	if _, err := domain.UnmarshalMessageEventPayload(events[2].Payload); err != nil {
+	if events[2].Type != domain.EventBudgetUpdated || events[3].Type != domain.EventModelRequestStarted {
+		t.Fatalf("missing turn budget or model request audit event: %v", collectEventTypes(events))
+	}
+	if _, err := domain.UnmarshalMessageEventPayload(events[4].Payload); err != nil {
 		t.Fatalf("invalid persisted assistant message: %v", err)
+	}
+	if events[5].Type != domain.EventBudgetUpdated {
+		t.Fatalf("missing budget update event: %v", collectEventTypes(events))
 	}
 }
 
@@ -565,6 +827,16 @@ func TestLoopEmitsApprovalAndSideEffectEventsSafely(t *testing.T) {
 	if completedPayload.Metadata["mode"] != "replace" {
 		t.Fatalf("unexpected completion metadata: %+v", completedPayload.Metadata)
 	}
+	transcript, err := session.Replay(events)
+	if err != nil {
+		t.Fatalf("Replay persisted events: %v", err)
+	}
+	if len(transcript.Messages) != len(run.Messages) {
+		t.Fatalf("replayed %d messages, want %d", len(transcript.Messages), len(run.Messages))
+	}
+	if _, ok := findToolResultInMessages(transcript.Messages, callID); !ok {
+		t.Fatalf("replayed transcript is missing tool result for %s", callID)
+	}
 	if changedPayload.CallID != callID || changedPayload.Path != "/workspace/notes.txt" || changedPayload.OldHash != "old123" || changedPayload.NewHash != "new456" || changedPayload.Size != 42 {
 		t.Fatalf("unexpected file changed payload: %+v", changedPayload)
 	}
@@ -581,6 +853,54 @@ func TestLoopEmitsApprovalAndSideEffectEventsSafely(t *testing.T) {
 	}
 	if strings.Contains(string(events[completedIdx].Payload), "\"content\"") {
 		t.Fatalf("completion payload must not contain tool content: %s", string(events[completedIdx].Payload))
+	}
+}
+
+func TestLoopUsesInjectedPolicyDecisions(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		decision    domain.Decision
+		wantExecute int
+		wantDenied  bool
+	}{
+		{name: "allow bypasses approval", decision: domain.DecisionAllow, wantExecute: 1},
+		{name: "deny blocks execution", decision: domain.DecisionDeny, wantDenied: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			callID := domain.NewToolCallID()
+			tool := newMutableTool(mutableToolConfig{
+				definition:    newTestToolDefinition("write_note", []domain.Capability{domain.CapFSWrite}),
+				canonicalArgs: json.RawMessage(`{"path":"notes.txt"}`),
+				writePaths:    []string{"/workspace/notes.txt"},
+				approvalDesc:  "Write notes.txt",
+				argsHash:      "policy-hash",
+				result:        domain.ToolResult{Status: domain.ToolStatusSuccess},
+			})
+			model := fakes.NewFakeModel(
+				fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{ID: callID, Name: "write_note", Arguments: json.RawMessage(`{"path":"notes.txt"}`)}}, StopReason: domain.StopToolUse},
+				fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+			)
+			run := newTestRun(domain.DefaultLimits())
+			addUserTextMessage(run, "write notes")
+			registry := NewToolRegistry()
+			if err := registry.Register(tool); err != nil {
+				t.Fatalf("Register tool: %v", err)
+			}
+			loop := &Loop{Run: run, Model: model, Policy: fixedPolicy(tt.decision), Registry: registry, Logger: slog.Default()}
+			if err := loop.Execute(context.Background()); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if got := tool.ExecuteCount(); got != tt.wantExecute {
+				t.Fatalf("ExecuteCount() = %d, want %d", got, tt.wantExecute)
+			}
+			result, ok := findToolResult(run, callID)
+			if !ok {
+				t.Fatal("missing tool result")
+			}
+			if tt.wantDenied && (result.Error == nil || result.Error.Code != "permission_denied") {
+				t.Fatalf("expected permission_denied result, got %+v", result)
+			}
+		})
 	}
 }
 
@@ -660,8 +980,8 @@ func TestLoopCommitIntentFailurePreventsExecute(t *testing.T) {
 
 	loop := &Loop{Run: run, Model: model, Store: store, Registry: registry, Logger: slog.Default()}
 	err := loop.Execute(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "commit intent failed") {
-		t.Fatalf("expected commit intent failure, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "append events and checkpoint") {
+		t.Fatalf("expected atomic intent persistence failure, got %v", err)
 	}
 	if tool.ExecuteCount() != 0 {
 		t.Fatalf("tool executed after intent append failure: %d", tool.ExecuteCount())
@@ -868,6 +1188,44 @@ func (t *mutableTool) ExecuteCount() int {
 	return t.executeCalls
 }
 
+type fixedPolicy domain.Decision
+
+func (p fixedPolicy) Evaluate(domain.RiskLevel) domain.Decision { return domain.Decision(p) }
+
+type contextCheckingStore struct {
+	base *fakes.FakeStore
+}
+
+func (s *contextCheckingStore) CreateSession(ctx context.Context, id domain.SessionID) error {
+	return s.base.CreateSession(ctx, id)
+}
+
+func (s *contextCheckingStore) AppendEvents(ctx context.Context, id domain.SessionID, expectedVersion int64, events []domain.Event) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return s.base.AppendEvents(ctx, id, expectedVersion, events)
+}
+
+func (s *contextCheckingStore) AppendEventsAndCheckpoint(ctx context.Context, id domain.SessionID, expectedVersion int64, events []domain.Event, checkpoint domain.Checkpoint) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return s.base.AppendEventsAndCheckpoint(ctx, id, expectedVersion, events, checkpoint)
+}
+
+func (s *contextCheckingStore) LoadEvents(ctx context.Context, id domain.SessionID, after int64) ([]domain.Event, error) {
+	return s.base.LoadEvents(ctx, id, after)
+}
+
+func (s *contextCheckingStore) SaveCheckpoint(ctx context.Context, ckpt domain.Checkpoint) error {
+	return s.base.SaveCheckpoint(ctx, ckpt)
+}
+
+func (s *contextCheckingStore) LoadLatestCheckpoint(ctx context.Context, id domain.SessionID) (domain.Checkpoint, error) {
+	return s.base.LoadLatestCheckpoint(ctx, id)
+}
+
 type failingStore struct {
 	base       *fakes.FakeStore
 	failOnType domain.EventType
@@ -885,6 +1243,15 @@ func (s *failingStore) AppendEvents(ctx context.Context, sessionID domain.Sessio
 		}
 	}
 	return s.base.AppendEvents(ctx, sessionID, expectedVersion, events)
+}
+
+func (s *failingStore) AppendEventsAndCheckpoint(ctx context.Context, sessionID domain.SessionID, expectedVersion int64, events []domain.Event, checkpoint domain.Checkpoint) error {
+	for _, evt := range events {
+		if evt.Type == s.failOnType {
+			return errors.New("injected persistence failure")
+		}
+	}
+	return s.base.AppendEventsAndCheckpoint(ctx, sessionID, expectedVersion, events, checkpoint)
 }
 
 func (s *failingStore) LoadEvents(ctx context.Context, sessionID domain.SessionID, after int64) ([]domain.Event, error) {
@@ -943,6 +1310,11 @@ func mustCreateSession(t *testing.T, store domain.SessionStore, sessionID domain
 	}
 }
 
+func hasErrorCode(err error, code domain.ErrorCode) bool {
+	var agentErr *domain.AgentError
+	return errors.As(err, &agentErr) && agentErr.Code == code
+}
+
 func eventIndex(events []domain.Event, typ domain.EventType) int {
 	for i, evt := range events {
 		if evt.Type == typ {
@@ -961,7 +1333,11 @@ func collectEventTypes(events []domain.Event) []domain.EventType {
 }
 
 func findToolResult(run *Run, callID domain.ToolCallID) (domain.ToolResult, bool) {
-	for _, msg := range run.Messages {
+	return findToolResultInMessages(run.Messages, callID)
+}
+
+func findToolResultInMessages(messages []domain.Message, callID domain.ToolCallID) (domain.ToolResult, bool) {
+	for _, msg := range messages {
 		for _, part := range msg.Parts {
 			if part.Kind == domain.PartToolResult && part.ToolResult != nil && part.ToolResult.CallID == callID {
 				return *part.ToolResult, true

@@ -19,14 +19,23 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "session_lib",
-    srcs = ["transcript.go"],
+    srcs = [
+        "sqlite_store.go",
+        "transcript.go",
+    ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/session",
     visibility = ["//visibility:public"],
-    deps = ["//go/pl/loom/internal/domain:domain_lib"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+        "@org_modernc_sqlite//:sqlite",
+    ],
 )
 
 go_test(
     name = "session_test",
-    srcs = ["transcript_test.go"],
+    srcs = [
+        "sqlite_store_test.go",
+        "transcript_test.go",
+    ],
     embed = [":session_lib"],
 )

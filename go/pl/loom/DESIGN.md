@@ -544,13 +544,14 @@ run.completed / run.failed / run.cancelled
 type SessionStore interface {
     CreateSession(context.Context, Session) error
     AppendEvents(ctx context.Context, expectedVersion int64, events []Event) error
+    AppendEventsAndCheckpoint(ctx context.Context, expectedVersion int64, events []Event, checkpoint Checkpoint) error
     LoadEvents(ctx context.Context, id SessionID, after int64) ([]Event, error)
     SaveCheckpoint(context.Context, Checkpoint) error
     LoadLatestCheckpoint(context.Context, SessionID) (Checkpoint, error)
 }
 ```
 
-推荐 SQLite WAL 保存 Session、Run、Event、Approval、Usage 和 Artifact 元数据；大输出以 SHA-256 内容寻址存文件。数据库有版本迁移、备份和损坏诊断；Artifact 有配额、引用和 GC。
+推荐 SQLite WAL 保存 Session、Run、Event、Approval、Usage 和 Artifact 元数据；大输出以 SHA-256 内容寻址存文件。推进 Run 时 Event batch 与覆盖该版本的 Checkpoint 必须在同一事务内提交，避免事件已提交但投影快照缺失。数据库有版本迁移、备份和损坏诊断；Artifact 有配额、引用和 GC。
 
 ### 13.3 Checkpoint 与恢复
 
@@ -560,10 +561,11 @@ type SessionStore interface {
 
 - 未形成完整模型响应则标记中断并重新请求；
 - 只读幂等工具可重试；
-- 文件写通过操作 ID 和前后哈希确认是否完成；
-- 普通 Shell 默认非幂等，不自动重放；
-- 后台进程通过 PID、启动时间和身份确认；
-- 所有恢复决定形成审计事件。
+- 文件写通过操作 ID 和前后哈希确认是否完成；当前 `replace_text`/`apply_patch` 已实现前后哈希三态核对；
+- 普通 Shell 默认非幂等，不自动重放；当前 `run_command` 结果未知时阻断恢复并要求人工核实；
+- 后台进程只有在 PID、启动时间、可执行身份和 owner token 均可确认时才能接管；当前尚未实现后台进程 registry，因此不宣称可恢复；
+- 旧审批在恢复后失效；只读调用可明确标记为可重试，但当前不会静默自动执行；
+- 恢复决定必须形成审计结果；跨进程 lease/fencing 完成前，不提供 exactly-once 副作用保证。
 
 ## 14. 验证闭环
 
@@ -652,30 +654,31 @@ loom eval                    运行评测
 
 ## 21. 分阶段实施路线
 
-### 21.1 实现进展快照（2026-07-22）
+### 21.1 实现进展快照（2026-07-23）
 
-当前代码已完成 Phase 0、Phase 1，以及 Phase 2 的可运行安全基线。这里的“完成”指当前阶段定义的主链路已经落地并通过单元测试，不代表已经满足第 22 节的全部 1.0 发布门槛。
+当前代码已完成 Phase 0、Phase 1、Phase 2 的可运行安全基线，并进入 Phase 3 的持久化恢复主链路。这里的“完成”指对应主链路已经落地并通过单元测试，不代表已经满足第 22 节的全部 1.0 发布门槛。
 
 | 阶段 | 状态 | 当前实现 |
 |---|---|---|
 | Phase 0 | 已完成 | 领域状态机、强类型 ID、Canonical Message/Tool/Event 协议、Limits、Fake Model/Tool/Store/Approver、Tool Registry、基础 Policy、工作区路径边界和 Go/Bazel 构建骨架 |
 | Phase 1 | 已完成 | OpenAI-compatible Provider、Chat Completions/Responses 流协议、部分流与断流处理、`read_file`、`list_directory`、`search_text`、Context Manifest、Transcript 投影和 `loom run` 闭环 |
 | Phase 2 | 安全基线已完成 | 哈希保护编辑、原子写、严格补丁、PreparedCall 绑定与执行前复验、审批和副作用意图事件、隔离命令执行、Git status/diff、网络默认拒绝、环境秘密剔除和 CLI 工具装配 |
-| Phase 3 | 部分前置 | 已有内存事件接口、Checkpoint 领域类型和确定性 Transcript 投影；SQLite、Artifact、持久化恢复、迁移、GC 和完整故障矩阵尚未实现 |
+| Phase 3 | 主链路进行中 | SQLite WAL Event Store、schema v1、Canonical Transcript、原子 Event+Checkpoint 提交、`sessions`/`inspect`/`resume`、模型请求审计和安全 Reconciler 已实现；Artifact、备份、GC、lease/fencing、完整故障矩阵和升级迁移仍待实现 |
 | Phase 4～7 | 未开始 | 按后续路线实施 |
 
 当前包与能力：
 
 - `internal/domain`：状态机、消息、事件、工具、计划、预算和 Context Manifest 等核心领域模型。
-- `internal/agent`：模型—工具循环、预算检查、审批路由、PreparedCall 复验，以及 `tool.call_prepared`、`permission.*`、`tool.execution_*`、`file.changed` 等审计事件。副作用执行前必须先持久化 intent；提交失败时禁止 dispatch；同一 Tool Call 已有结果时不会在当前 Loop 内自动重放。
+- `internal/agent`：模型—工具循环、预算检查、审批路由、PreparedCall 复验、模型请求生命周期审计和恢复 Reconciler。Event 与对应 Checkpoint 原子提交；副作用执行前必须先持久化 intent；提交失败时禁止 dispatch；旧审批在恢复时失效；同一 Tool Call 已有结果时不会在当前 Loop 内自动重放。
 - `internal/model/openai`：支持 OpenAI-compatible Chat Completions 与 Responses API，包含 SSE 聚合、Usage、工具调用、生命周期事件和兼容网关直接 EOF 的处理。
 - `internal/tool/builtin`：工作区内的有界只读文件、目录和文本搜索。
-- `internal/tool/edit`：`replace_text` 和单文件 strict unified diff `apply_patch`。两者要求 `expected_hash`，冲突返回结构化错误，禁止覆盖并发修改。
+- `internal/tool/edit`：`replace_text` 和单文件 strict unified diff `apply_patch`。两者要求 `expected_hash`，冲突返回结构化错误，禁止覆盖并发修改；Prepare 在可确定时记录写入前后哈希，供崩溃恢复执行三态核对。
 - `internal/workspace`：路径规范化、符号链接与敏感路径拒绝、文件 Snapshot、同目录临时文件、`fsync`、原子 rename、权限和扩展元数据保留。无法安全保留元数据时 fail closed。
 - `internal/process`：`Program + Args` 非 Shell 执行、最小环境、凭证变量剔除、有界 stdout/stderr、独立进程组、超时/取消回收、可执行文件哈希复验和沙箱抽象。
 - `internal/tool/command`：R2 `run_command`，审批摘要展示程序、参数、工作目录、环境变量名、超时与网络策略，不展示环境变量值。
 - `internal/tool/gittools`：只读 `git_status` 和 `git_diff`，使用固定 Git 子命令、literal pathspec、最小环境、超时和输出上限。
-- `cmd/loom`：注册 Phase 1/2 工具；R2/R3 在 TTY 中精确提示审批，非 TTY 默认拒绝；当前公开命令仍以 `run` 和 `version` 为主。
+- `internal/session`：SQLite WAL Event Store、乐观版本控制、纳秒级稳定排序、schema 版本检查、只读一致性检查、Checkpoint 和 Session Inspection。
+- `cmd/loom`：注册 Phase 1/2 工具；R2/R3 在 TTY 中精确提示审批，非 TTY 默认拒绝；公开支持 `run`、`sessions`、`inspect`、`resume` 和 `version`。
 
 Phase 2 当前安全保证：
 
@@ -689,16 +692,18 @@ Phase 2 当前安全保证：
 
 已知限制与后续工作：
 
-- 当前 `SessionStore` 主要由 Fake/内存测试实现支撑，尚无 SQLite Event Store；进程崩溃后的持久化恢复、跨进程 lease/fencing 和完整 `outcome_unknown` Reconciler 属于 Phase 3/6。
+- SQLite Event Store 与进程重启恢复已落地，但跨进程 lease/fencing 尚未实现；乐观版本能阻止两个恢复者同时提交同一版本，不能阻止旧 owner 在外部副作用系统继续运行。
+- `replace_text`/`apply_patch` 可按当前文件 hash 判定“已应用、未应用、外部冲突”；普通命令、后台进程和不支持幂等键/状态查询的外部 API 仍必须进入人工核实，绝不自动重放。
+- 模型请求已记录 started/failed 及 Context Manifest hash，但 provider 不支持幂等查询时，崩溃后的重复计费和已生成但未落盘响应无法自动确认。
 - 当前已实现环境变量秘密剔除和审计 payload 最小化，但跨 Model/UI/Artifact/Trace/MCP 的完整秘密分类、脱敏和不可导出 handle 管线仍属于 Phase 5。
 - 大型完整命令输出尚未转存内容寻址 Artifact；当前只返回有界预览并标记截断。
 - Linux 生产沙箱尚未实现；在此之前，Linux 命令执行保持 fail closed。
-- CLI 尚未实现 `resume`、`sessions`、`inspect`、`diff`、`config`、`auth`、`mcp`、`doctor` 和 `eval`。
+- CLI 尚未实现 `diff`、`config`、`auth`、`mcp`、`doctor` 和 `eval`；`resume` 当前是“恢复/继续同一 Session 并追加新 Prompt”，后续需拆分透明重试、Session continuation 和人工 resolution 命令。
 - 最终变更归因目前依赖 `git_status`/`git_diff` 和 `file.changed` 事件，尚未形成跨恢复的完整归因报告。
 
 当前验证基线：
 
-- `bazel test //go/pl/loom/...`：12 个测试目标全部通过。
+- `bazel test //go/pl/loom/...`：13 个测试目标全部通过。
 - `bazel build //go/pl/loom/... --platforms=@rules_go//go/toolchain:linux_amd64`：通过。
 - macOS 本机构建、CLI `version` 冒烟、lint 和 `git diff --check`：通过。
 - 安全回归覆盖路径穿越、符号链接、敏感路径、哈希冲突、PreparedCall 篡改、Git pathspec、环境秘密剔除、无沙箱 fail closed、输出截断、命令超时/取消和进程后代持有 pipe 等场景。

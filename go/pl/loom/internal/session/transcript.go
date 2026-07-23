@@ -230,6 +230,7 @@ func (p *projector) applyEvent(evt domain.Event) error {
 		domain.EventPermissionRequested,
 		domain.EventPermissionResolved,
 		domain.EventToolExecutionStarted,
+		domain.EventToolExecutionCompleted,
 		domain.EventFileChanged,
 		domain.EventPlanRevised,
 		domain.EventContextCompacted,
@@ -239,7 +240,7 @@ func (p *projector) applyEvent(evt domain.Event) error {
 		domain.EventRunFailed,
 		domain.EventRunCancelled:
 		return nil
-	case domain.EventUserMessageAdded, domain.EventModelResponseCompleted, domain.EventToolExecutionCompleted:
+	case domain.EventUserMessageAdded, domain.EventModelResponseCompleted, domain.EventToolResultAdded:
 		payload, err := domain.UnmarshalMessageEventPayload(evt.Payload)
 		if err != nil {
 			return err

@@ -117,6 +117,7 @@ type Checkpoint struct {
 type SessionStore interface {
 	CreateSession(ctx context.Context, sessionID SessionID) error
 	AppendEvents(ctx context.Context, sessionID SessionID, expectedVersion int64, events []Event) error
+	AppendEventsAndCheckpoint(ctx context.Context, sessionID SessionID, expectedVersion int64, events []Event, checkpoint Checkpoint) error
 	LoadEvents(ctx context.Context, sessionID SessionID, after int64) ([]Event, error)
 	SaveCheckpoint(ctx context.Context, ckpt Checkpoint) error
 	LoadLatestCheckpoint(ctx context.Context, sessionID SessionID) (Checkpoint, error)
