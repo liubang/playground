@@ -76,6 +76,217 @@ func RestoreRun(id domain.RunID, sessionID domain.SessionID, state domain.RunSta
 	}
 }
 
+// ContinueRun starts a new active run in an existing session from a complete
+// terminal checkpoint. The continuation preserves transcript, plan, and usage,
+// while using optimistic persistence from the supplied session version.
+func ContinueRun(checkpoint domain.Checkpoint, messages []domain.Message, sessionVersion int64, limits domain.Limits, clock domain.Clock) (*Run, error) {
+	if checkpoint.ID.IsZero() || checkpoint.SessionID.IsZero() {
+		return nil, domain.NewError(domain.ErrInvalidInput, "checkpoint and session IDs are required")
+	}
+	if err := checkpoint.State.Validate(); err != nil {
+		return nil, domain.NewError(domain.ErrInvalidInput, "invalid checkpoint state", domain.WithCause(err))
+	}
+	if checkpoint.State.Lifecycle != domain.LifecycleTerminal {
+		return nil, domain.NewError(domain.ErrConflict, "only a terminal session can be continued safely")
+	}
+	if checkpoint.Sequence != sessionVersion {
+		return nil, domain.NewError(domain.ErrConflict,
+			fmt.Sprintf("checkpoint sequence %d does not match session version %d", checkpoint.Sequence, sessionVersion))
+	}
+	if clock == nil {
+		return nil, domain.NewError(domain.ErrInvalidInput, "clock is required")
+	}
+	for i, message := range messages {
+		if err := message.Validate(); err != nil {
+			return nil, domain.NewError(domain.ErrInvalidInput,
+				fmt.Sprintf("invalid restored message at index %d", i), domain.WithCause(err))
+		}
+		if message.Sequence != int64(i+1) {
+			return nil, domain.NewError(domain.ErrInvalidInput,
+				fmt.Sprintf("restored message sequence %d at index %d, want %d", message.Sequence, i, i+1))
+		}
+	}
+	run := RestoreRun(domain.NewRunID(), checkpoint.SessionID,
+		domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
+		checkpoint.Plan, checkpoint.Usage, limits, append([]domain.Message(nil), messages...), sessionVersion, clock)
+	run.appendEvent(domain.EventRunCreated, struct {
+		RunID        domain.RunID        `json:"run_id"`
+		ContinuesRun bool                `json:"continues_run"`
+		CheckpointID domain.CheckpointID `json:"checkpoint_id"`
+	}{RunID: run.ID, ContinuesRun: true, CheckpointID: checkpoint.ID})
+	return run, nil
+}
+
+// RecoverRun creates a continuation from an interrupted session. Pending calls
+// that never started, and interrupted read-only calls, are closed with explicit
+// tool errors. A started R2+ call has an uncertain side effect and blocks
+// automatic recovery.
+type FileStateReader interface {
+	SHA256(path string) (string, error)
+}
+
+func RecoverRun(sessionID domain.SessionID, checkpoint *domain.Checkpoint, messages []domain.Message, events []domain.Event, sessionVersion int64, limits domain.Limits, clock domain.Clock, files FileStateReader) (*Run, error) {
+	if sessionID.IsZero() || sessionVersion < 0 || clock == nil {
+		return nil, domain.NewError(domain.ErrInvalidInput, "valid session, version, and clock are required")
+	}
+	if checkpoint != nil {
+		if checkpoint.SessionID != sessionID || checkpoint.Sequence > sessionVersion {
+			return nil, domain.NewError(domain.ErrConflict, "checkpoint does not match the recoverable session version")
+		}
+		if checkpoint.State.Lifecycle == domain.LifecycleTerminal && checkpoint.Sequence == sessionVersion {
+			return ContinueRun(*checkpoint, messages, sessionVersion, limits, clock)
+		}
+	}
+
+	started := make(map[domain.ToolCallID]toolCallAuditPayload)
+	completed := make(map[domain.ToolCallID]struct{})
+	for i, event := range events {
+		if event.SessionID != sessionID || event.Sequence != int64(i+1) {
+			return nil, domain.NewError(domain.ErrInvalidInput, "event timeline is not contiguous for the session")
+		}
+		switch event.Type {
+		case domain.EventToolExecutionStarted:
+			var payload toolCallAuditPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil || payload.CallID.IsZero() {
+				return nil, domain.NewError(domain.ErrInvalidInput, "invalid tool execution start payload", domain.WithCause(err))
+			}
+			started[payload.CallID] = payload
+		case domain.EventToolExecutionCompleted:
+			var payload toolExecutionCompletedPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil || payload.CallID.IsZero() {
+				return nil, domain.NewError(domain.ErrInvalidInput, "invalid tool execution completion payload", domain.WithCause(err))
+			}
+			completed[payload.CallID] = struct{}{}
+		}
+	}
+	if int64(len(events)) != sessionVersion {
+		return nil, domain.NewError(domain.ErrConflict, "event timeline does not match the session version")
+	}
+
+	unresolved := unresolvedToolCalls(messages)
+	reconciled := make(map[domain.ToolCallID]domain.ToolResult)
+	for _, call := range unresolved {
+		if audit, ok := started[call.ID]; ok {
+			if _, done := completed[call.ID]; done {
+				return nil, domain.NewError(domain.ErrConflict,
+					fmt.Sprintf("tool call %s (%s) completed without a persisted result", call.ID, audit.Tool))
+			}
+			if audit.Risk > domain.R1 {
+				result, resolved, err := reconcileFileOperation(call, audit, clock, files)
+				if err != nil {
+					return nil, err
+				}
+				if !resolved {
+					return nil, domain.NewError(domain.ErrConflict,
+						fmt.Sprintf("tool call %s (%s) has an uncertain non-idempotent outcome; inspect the side effect manually", call.ID, audit.Tool))
+				}
+				reconciled[call.ID] = result
+			}
+		}
+	}
+
+	plan := domain.Plan{}
+	usage := domain.Usage{}
+	if checkpoint != nil {
+		plan = checkpoint.Plan
+		usage = checkpoint.Usage
+	}
+	for _, event := range events {
+		if checkpoint != nil && event.Sequence <= checkpoint.Sequence {
+			continue
+		}
+		switch event.Type {
+		case domain.EventBudgetUpdated:
+			if err := json.Unmarshal(event.Payload, &usage); err != nil {
+				return nil, domain.NewError(domain.ErrInvalidInput, "invalid budget update payload", domain.WithCause(err))
+			}
+		case domain.EventPlanRevised:
+			if err := json.Unmarshal(event.Payload, &plan); err != nil {
+				return nil, domain.NewError(domain.ErrInvalidInput, "invalid plan revision payload", domain.WithCause(err))
+			}
+		}
+	}
+	run := RestoreRun(domain.NewRunID(), sessionID,
+		domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
+		plan, usage, limits, append([]domain.Message(nil), messages...), sessionVersion, clock)
+	run.appendEvent(domain.EventRunCreated, struct {
+		RunID       domain.RunID `json:"run_id"`
+		Recovery    bool         `json:"recovery"`
+		Interrupted bool         `json:"interrupted"`
+	}{RunID: run.ID, Recovery: true, Interrupted: true})
+	for _, call := range unresolved {
+		if result, ok := reconciled[call.ID]; ok {
+			run.RecordToolResult(result)
+			continue
+		}
+		message := "tool call was interrupted before execution; prior approval is invalidated and the call was not replayed"
+		retryable := false
+		if audit, ok := started[call.ID]; ok {
+			if _, done := completed[call.ID]; !done && audit.Risk <= domain.R1 {
+				message = "read-only tool execution was interrupted; retry explicitly if still needed"
+				retryable = true
+			}
+		}
+		run.RecordToolResult(domain.ToolResult{
+			CallID: call.ID, Status: domain.ToolStatusError,
+			Error:     &domain.ToolError{Code: "interrupted", Message: message, Retryable: retryable},
+			StartedAt: clock.Now(), FinishedAt: clock.Now(),
+		})
+	}
+	return run, nil
+}
+
+func reconcileFileOperation(call domain.ToolCall, audit toolCallAuditPayload, clock domain.Clock, files FileStateReader) (domain.ToolResult, bool, error) {
+	if audit.Recovery == nil || audit.Recovery.Kind != "file_replace" || files == nil {
+		return domain.ToolResult{}, false, nil
+	}
+	if audit.Recovery.Path == "" || audit.Recovery.ExpectedHash == "" || audit.Recovery.ResultHash == "" {
+		return domain.ToolResult{}, false, domain.NewError(domain.ErrInvalidInput, "file recovery evidence is incomplete")
+	}
+	current, err := files.SHA256(audit.Recovery.Path)
+	if err != nil {
+		return domain.ToolResult{}, false, domain.NewError(domain.ErrConflict,
+			fmt.Sprintf("cannot inspect interrupted file operation %s", call.ID), domain.WithCause(err))
+	}
+	now := clock.Now()
+	switch current {
+	case audit.Recovery.ResultHash:
+		return domain.ToolResult{
+			CallID: call.ID, Status: domain.ToolStatusSuccess, StartedAt: now, FinishedAt: now,
+			Metadata: map[string]string{"recovery": "confirmed_applied", "path": audit.Recovery.Path, "new_hash": current},
+		}, true, nil
+	case audit.Recovery.ExpectedHash:
+		return domain.ToolResult{
+			CallID: call.ID, Status: domain.ToolStatusError, StartedAt: now, FinishedAt: now,
+			Error:    &domain.ToolError{Code: "interrupted_not_applied", Message: "file write was not applied; retry explicitly if still needed", Retryable: true},
+			Metadata: map[string]string{"recovery": "confirmed_not_applied", "path": audit.Recovery.Path},
+		}, true, nil
+	default:
+		return domain.ToolResult{}, false, domain.NewError(domain.ErrConflict,
+			fmt.Sprintf("file %q changed to an unexpected hash after interrupted tool call %s", audit.Recovery.Path, call.ID))
+	}
+}
+
+func unresolvedToolCalls(messages []domain.Message) []domain.ToolCall {
+	resolved := make(map[domain.ToolCallID]struct{})
+	for _, message := range messages {
+		for _, part := range message.Parts {
+			if part.Kind == domain.PartToolResult && part.ToolResult != nil {
+				resolved[part.ToolResult.CallID] = struct{}{}
+			}
+		}
+	}
+	var unresolved []domain.ToolCall
+	for _, message := range messages {
+		for _, call := range message.ToolCalls() {
+			if _, ok := resolved[call.ID]; !ok {
+				unresolved = append(unresolved, call)
+			}
+		}
+	}
+	return unresolved
+}
+
 // TransitionTo moves the run to the given phase, returning events.
 func (r *Run) TransitionTo(phase domain.Phase) ([]domain.Event, error) {
 	newState, err := r.State.Transition(phase)
@@ -174,6 +385,9 @@ func (r *Run) RecordToolResult(result domain.ToolResult) domain.Event {
 	}
 	r.normalizeMessage(&msg)
 	r.Messages = append(r.Messages, msg)
+	resultEvent := r.newEvent(domain.EventToolResultAdded, domain.MessageEventPayload{Message: msg})
+	r.pendingEvents = append(r.pendingEvents, resultEvent)
+	r.Version++
 
 	payload := toolExecutionCompletedPayload{
 		CallID:     result.CallID,
@@ -195,9 +409,10 @@ func (r *Run) CheckBudget() domain.CheckResult {
 	return r.Usage.Check(r.Limits)
 }
 
-// IncrementTurn increments the turn counter.
+// IncrementTurn increments the turn counter and records the complete usage projection.
 func (r *Run) IncrementTurn() {
 	r.Usage.Turns++
+	r.appendEvent(domain.EventBudgetUpdated, r.Usage)
 }
 
 func (r *Run) normalizeMessage(msg *domain.Message) {
@@ -236,13 +451,28 @@ func (r *Run) appendEvent(evtType domain.EventType, payload any) domain.Event {
 }
 
 type toolCallAuditPayload struct {
-	CallID       domain.ToolCallID `json:"call_id"`
-	Tool         string            `json:"tool"`
-	Risk         domain.RiskLevel  `json:"risk"`
-	ArgsHash     string            `json:"args_hash"`
-	ReadPaths    []string          `json:"read_paths,omitempty"`
-	WritePaths   []string          `json:"write_paths,omitempty"`
-	ApprovalDesc string            `json:"approval_desc,omitempty"`
+	CallID       domain.ToolCallID    `json:"call_id"`
+	Tool         string               `json:"tool"`
+	Risk         domain.RiskLevel     `json:"risk"`
+	ArgsHash     string               `json:"args_hash"`
+	ReadPaths    []string             `json:"read_paths,omitempty"`
+	WritePaths   []string             `json:"write_paths,omitempty"`
+	ApprovalDesc string               `json:"approval_desc,omitempty"`
+	Recovery     *domain.RecoverySpec `json:"recovery,omitempty"`
+}
+
+type modelRequestAuditPayload struct {
+	RequestID    domain.EventID `json:"request_id"`
+	ModelName    string         `json:"model_name"`
+	ManifestID   string         `json:"manifest_id"`
+	ManifestHash string         `json:"manifest_hash"`
+	PromptHash   string         `json:"prompt_hash"`
+}
+
+type modelRequestFailedPayload struct {
+	RequestID domain.EventID `json:"request_id"`
+	Stage     string         `json:"stage"`
+	Code      string         `json:"code"`
 }
 
 type permissionResolvedPayload struct {
@@ -275,6 +505,25 @@ type fileChangeResult struct {
 	Size    int64  `json:"size"`
 }
 
+// Policy evaluates the authorization decision for a prepared tool call.
+type Policy interface {
+	Evaluate(risk domain.RiskLevel) domain.Decision
+}
+
+// DefaultPolicy applies the baseline R0/R1 allow, R2/R3 ask, R4 deny policy.
+type DefaultPolicy struct{}
+
+func (DefaultPolicy) Evaluate(risk domain.RiskLevel) domain.Decision {
+	switch risk {
+	case domain.R0, domain.R1:
+		return domain.DecisionAllow
+	case domain.R2, domain.R3:
+		return domain.DecisionAsk
+	default:
+		return domain.DecisionDeny
+	}
+}
+
 // Loop drives the main agent loop for a Run.
 type Loop struct {
 	Run       *Run
@@ -282,6 +531,7 @@ type Loop struct {
 	ModelName string
 	Store     domain.SessionStore
 	Approver  domain.Approver
+	Policy    Policy
 	Registry  *ToolRegistry
 	Logger    *slog.Logger
 
@@ -418,8 +668,18 @@ func (l *Loop) callModel(ctx context.Context) error {
 		ContextManifest: manifest,
 	}
 
+	l.Run.appendEvent(domain.EventModelRequestStarted, modelRequestAuditPayload{
+		RequestID: req.ID, ModelName: modelName, ManifestID: manifest.ID,
+		ManifestHash: manifest.Hash, PromptHash: manifest.PromptHash,
+	})
+	if err := l.flushEvents(ctx); err != nil {
+		return err
+	}
 	stream, err := l.Model.Stream(ctx, req)
 	if err != nil {
+		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
+			RequestID: req.ID, Stage: "start", Code: errorCodeForAudit(err),
+		})
 		l.terminate(ctx, domain.OutcomeFailed)
 		return fmt.Errorf("model stream: %w", err)
 	}
@@ -430,12 +690,16 @@ func (l *Loop) callModel(ctx context.Context) error {
 		if len(response.Message.Parts) > 0 {
 			l.Run.AddAssistantMessage(response.Message)
 		}
+		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
+			RequestID: req.ID, Stage: "stream", Code: errorCodeForAudit(err),
+		})
 		l.terminate(ctx, domain.OutcomeFailed)
 		return fmt.Errorf("model stream aggregation: %w", err)
 	}
 	l.Run.Usage.InputTokens += response.InputTokens
 	l.Run.Usage.OutputTokens += response.OutputTokens
 	l.Run.AddAssistantMessage(response.Message)
+	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 
 	if len(response.Message.ToolCalls()) == 0 {
 		return l.determineCompletion(ctx, response.StopReason)
@@ -480,14 +744,16 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 			continue
 		}
 		l.Run.appendEvent(domain.EventToolCallPrepared, makeToolCallAuditPayload(prepared))
-		switch prepared.Risk {
-		case domain.R0, domain.R1:
+		switch l.policy().Evaluate(prepared.Risk) {
+		case domain.DecisionAllow:
 			l.prepared[tc.ID] = prepared
-		case domain.R2, domain.R3:
+		case domain.DecisionAsk:
 			l.prepared[tc.ID] = prepared
 			needsApproval = true
-		default:
+		case domain.DecisionDeny:
 			l.recordToolError(tc.ID, "permission_denied", "tool call denied by policy")
+		default:
+			l.recordToolError(tc.ID, "permission_denied", "tool call denied by invalid policy decision")
 		}
 	}
 
@@ -503,6 +769,13 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 	return err
 }
 
+func (l *Loop) policy() Policy {
+	if l.Policy == nil {
+		return DefaultPolicy{}
+	}
+	return l.Policy
+}
+
 func (l *Loop) awaitApproval(ctx context.Context) error {
 	if l.Approver == nil {
 		return fmt.Errorf("approver required for risky tool calls")
@@ -510,7 +783,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 	lastMsg := l.Run.Messages[len(l.Run.Messages)-1]
 	for _, tc := range lastMsg.ToolCalls() {
 		prepared, ok := l.prepared[tc.ID]
-		if !ok || prepared.Risk < domain.R2 {
+		if !ok || l.policy().Evaluate(prepared.Risk) != domain.DecisionAsk {
 			continue
 		}
 		l.Run.appendEvent(domain.EventPermissionRequested, makeToolCallAuditPayload(prepared))
@@ -608,7 +881,15 @@ func (l *Loop) terminate(ctx context.Context, outcome domain.Outcome) {
 		}
 		return
 	}
-	if err := l.flushEvents(ctx); err != nil && l.Logger != nil {
+	persistCtx := ctx
+	cancel := func() {}
+	if ctx == nil {
+		persistCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	} else if ctx.Err() != nil {
+		persistCtx, cancel = context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	}
+	defer cancel()
+	if err := l.flushEvents(persistCtx); err != nil && l.Logger != nil {
 		l.Logger.Error("persist terminal event failed", "error", err)
 	}
 }
@@ -618,10 +899,16 @@ func (l *Loop) flushEvents(ctx context.Context) error {
 		return nil
 	}
 	events := append([]domain.Event(nil), l.Run.pendingEvents...)
-	if err := l.Store.AppendEvents(ctx, l.Run.SessionID, l.Run.persistedVersion, events); err != nil {
-		return fmt.Errorf("append events: %w", err)
+	newVersion := l.Run.persistedVersion + int64(len(events))
+	checkpoint := domain.Checkpoint{
+		ID: domain.NewCheckpointID(), SessionID: l.Run.SessionID, Sequence: newVersion,
+		State: l.Run.State, Messages: append([]domain.Message(nil), l.Run.Messages...),
+		Plan: l.Run.Plan, Usage: l.Run.Usage, CreatedAt: l.Run.Clock.Now(),
 	}
-	l.Run.persistedVersion += int64(len(events))
+	if err := l.Store.AppendEventsAndCheckpoint(ctx, l.Run.SessionID, l.Run.persistedVersion, events, checkpoint); err != nil {
+		return fmt.Errorf("append events and checkpoint: %w", err)
+	}
+	l.Run.persistedVersion = newVersion
 	l.Run.pendingEvents = l.Run.pendingEvents[:0]
 	return nil
 }
@@ -665,7 +952,24 @@ func makeToolCallAuditPayload(prepared domain.PreparedCall) toolCallAuditPayload
 		ReadPaths:    cloneStrings(prepared.ReadPaths),
 		WritePaths:   cloneStrings(prepared.WritePaths),
 		ApprovalDesc: prepared.ApprovalDesc,
+		Recovery:     cloneRecoverySpec(prepared.Recovery),
 	}
+}
+
+func cloneRecoverySpec(spec *domain.RecoverySpec) *domain.RecoverySpec {
+	if spec == nil {
+		return nil
+	}
+	copy := *spec
+	return &copy
+}
+
+func errorCodeForAudit(err error) string {
+	var agentErr *domain.AgentError
+	if domain.As(err, &agentErr) {
+		return string(agentErr.Code)
+	}
+	return string(domain.ErrInternal)
 }
 
 func validatePreparedExecution(original domain.ToolCall, prepared domain.PreparedCall, current domain.ToolDefinition) error {
