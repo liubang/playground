@@ -53,6 +53,10 @@ func TestReplaceTextToolSuccessAndPermissionPreserved(t *testing.T) {
 	if got, want := prepared.WritePaths, []string{filepath.Join(validator.Root(), "note.txt")}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("prepared.WritePaths = %v, want %v", got, want)
 	}
+	if prepared.Recovery == nil || prepared.Recovery.ExpectedHash != hexSHA256(original) ||
+		prepared.Recovery.ResultHash != hexSHA256([]byte("hello loom\n")) {
+		t.Fatalf("unexpected recovery evidence: %+v", prepared.Recovery)
+	}
 
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
@@ -203,6 +207,10 @@ func TestApplyPatchToolSuccess(t *testing.T) {
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.Recovery == nil || prepared.Recovery.ExpectedHash != hexSHA256(original) ||
+		prepared.Recovery.ResultHash != hexSHA256([]byte("one\nTWO\nthree\n")) {
+		t.Fatalf("unexpected recovery evidence: %+v", prepared.Recovery)
 	}
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {

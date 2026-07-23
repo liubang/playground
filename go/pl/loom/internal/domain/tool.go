@@ -193,4 +193,14 @@ type PreparedCall struct {
 	ReadPaths    []string // paths this call will read
 	WritePaths   []string // paths this call will write
 	ArgsHash     string   // hash of arguments for approval binding
+	Recovery     *RecoverySpec
+}
+
+// RecoverySpec describes durable evidence that can reconcile an interrupted
+// operation without replaying it. It must not contain secrets or raw arguments.
+type RecoverySpec struct {
+	Kind         string `json:"kind"`
+	Path         string `json:"path,omitempty"`
+	ExpectedHash string `json:"expected_hash,omitempty"`
+	ResultHash   string `json:"result_hash,omitempty"`
 }

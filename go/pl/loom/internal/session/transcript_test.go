@@ -78,7 +78,7 @@ func TestReplayBuildsCanonicalTranscript(t *testing.T) {
 		{ID: domain.NewEventID(), Sequence: 1, SessionID: sessionID, Type: domain.EventSessionCreated, Timestamp: baseTime},
 		messageEvent(t, 2, sessionID, domain.EventUserMessageAdded, userMsg),
 		messageEvent(t, 3, sessionID, domain.EventModelResponseCompleted, assistantDraft),
-		messageEvent(t, 5, sessionID, domain.EventToolExecutionCompleted, toolMsg),
+		messageEvent(t, 5, sessionID, domain.EventToolResultAdded, toolMsg),
 	}
 
 	transcript, err := Replay(events)
@@ -184,6 +184,25 @@ func TestReplayFromCheckpointMatchesReplay(t *testing.T) {
 	json2, _ := fromCheckpoint.CanonicalJSON()
 	if string(json1) != string(json2) {
 		t.Fatalf("checkpoint replay mismatch:\n%s\n%s", json1, json2)
+	}
+}
+
+func TestReplayAcceptsToolCompletionAuditPayload(t *testing.T) {
+	sessionID := domain.NewSessionID()
+	payload := json.RawMessage(`{"call_id":"tc_test","status":"success","started_at":"2025-01-01T00:00:00Z","finished_at":"2025-01-01T00:00:01Z"}`)
+	transcript, err := Replay([]domain.Event{{
+		ID:        domain.NewEventID(),
+		Sequence:  1,
+		SessionID: sessionID,
+		Type:      domain.EventToolExecutionCompleted,
+		Timestamp: time.Now().UTC(),
+		Payload:   payload,
+	}})
+	if err != nil {
+		t.Fatalf("Replay() error = %v", err)
+	}
+	if len(transcript.Messages) != 0 {
+		t.Fatalf("audit event unexpectedly added transcript message: %+v", transcript.Messages)
 	}
 }
 
