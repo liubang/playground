@@ -225,7 +225,9 @@ func ensureExistingTextFile(validator *workspacepkg.PathValidator, input string)
 	}
 	snapshot, err := validator.Snapshot(resolved.Absolute)
 	if err != nil {
-		if os.IsNotExist(err) {
+		// errors.Is (not os.IsNotExist) is required: the validator wraps lstat
+		// failures in fmt.Errorf %w chains that os.IsNotExist does not unwrap.
+		if errors.Is(err, os.ErrNotExist) {
 			return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, "path does not exist", domain.WithCause(err))
 		}
 		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrSecurity, "path is not a writable regular file", domain.WithCause(err))
