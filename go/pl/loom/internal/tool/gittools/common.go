@@ -273,7 +273,8 @@ func sameSortedStrings(left, right []string) bool {
 
 func resolveRepoRoot(validator *workspacepkg.PathValidator, input string) (repoRootResolution, error) {
 	if strings.TrimSpace(input) == "" {
-		return repoRootResolution{}, domain.NewError(domain.ErrInvalidInput, "repo_root is required")
+		// repo_root is optional across git tools: default to the workspace root.
+		input = "."
 	}
 	if len(input) > maxGitPathBytes {
 		return repoRootResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("repo_root exceeds %d bytes", maxGitPathBytes))

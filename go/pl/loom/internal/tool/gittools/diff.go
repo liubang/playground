@@ -53,8 +53,8 @@ type GitDiffTool struct {
 func NewGitDiffTool(validator *workspacepkg.PathValidator) (*GitDiffTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name:         "git_diff",
-		Description:  "Read repository diff using fixed git diff allowlist arguments with bounded output.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1},"staged":{"type":"boolean"},"path":{"type":"string","minLength":1},"unified":{"type":"integer","minimum":0,"maximum":20}},"required":["repo_root"]}`),
+		Description:  "Read repository diff of the working tree or the index (staged) with bounded output.",
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1},"staged":{"type":"boolean"},"path":{"type":"string","minLength":1},"unified":{"type":"integer","minimum":0,"maximum":20}},"required":[]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"staged":{"type":"boolean"},"path":{"type":"string"},"unified":{"type":"integer"},"diff":{"type":"string"},"truncated":{"type":"boolean"},"size_bytes":{"type":"integer"}},"required":["repo_root","staged","unified","diff","truncated","size_bytes"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,

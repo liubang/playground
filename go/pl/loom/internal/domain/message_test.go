@@ -127,6 +127,21 @@ func TestContentPartValidation(t *testing.T) {
 			true,
 		},
 		{
+			"artifact_ref with empty ID",
+			ContentPart{Kind: PartArtifact, Artifact: &ArtifactRef{}},
+			true,
+		},
+		{
+			"artifact_ref with negative size",
+			ContentPart{Kind: PartArtifact, Artifact: &ArtifactRef{ID: NewArtifactID(), Size: -1}},
+			true,
+		},
+		{
+			"valid artifact_ref",
+			ContentPart{Kind: PartArtifact, Artifact: &ArtifactRef{ID: NewArtifactID(), Size: 10}},
+			false,
+		},
+		{
 			"unknown kind",
 			ContentPart{Kind: "unknown"},
 			true,

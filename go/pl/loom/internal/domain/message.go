@@ -53,8 +53,19 @@ const (
 
 // ArtifactRef references a large content blob stored externally.
 type ArtifactRef struct {
-	ID   ArtifactID
-	Size int64
+	ID   ArtifactID `json:"id"`
+	Size int64      `json:"size"`
+}
+
+// Validate ensures the artifact reference is well-formed.
+func (r ArtifactRef) Validate() error {
+	if r.ID.IsZero() {
+		return fmt.Errorf("artifact ID required")
+	}
+	if r.Size < 0 {
+		return fmt.Errorf("artifact size must be non-negative")
+	}
+	return nil
 }
 
 // ContentPart is a tagged union: exactly one field is populated based on Kind.
@@ -88,6 +99,9 @@ func (p ContentPart) Validate() error {
 	case PartArtifact:
 		if p.Artifact == nil {
 			return fmt.Errorf("artifact_ref part must have Artifact set")
+		}
+		if err := p.Artifact.Validate(); err != nil {
+			return fmt.Errorf("invalid artifact reference: %w", err)
 		}
 	default:
 		return fmt.Errorf("unknown part kind %q", p.Kind)

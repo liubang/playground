@@ -361,6 +361,85 @@ func ensureGitAvailable(t *testing.T) {
 	}
 }
 
+func TestGitLogToolReturnsRecentCommits(t *testing.T) {
+	validator, _, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "first commit")
+	mustWriteFile(t, filepath.Join(repoRoot, "b.txt"), []byte("two\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "second commit")
+
+	tool, err := NewGitLogTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitLogTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_log", gitLogArgs{RepoRoot: "repo", Limit: 10}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+
+	var output gitLogOutput
+	decodeToolResult(t, result, &output)
+	if output.Count != 2 {
+		t.Fatalf("output.Count = %d, want 2", output.Count)
+	}
+	if output.Commits[0].Subject != "second commit" || output.Commits[1].Subject != "first commit" {
+		t.Fatalf("commit order = %v, want newest first", []string{output.Commits[0].Subject, output.Commits[1].Subject})
+	}
+	if output.Commits[0].Hash == "" || output.Commits[0].Author != "Loom Test" || output.Commits[0].Date == "" {
+		t.Fatalf("incomplete commit fields: %+v", output.Commits[0])
+	}
+}
+
+// repo_root and limit are optional: empty values default to "." (workspace
+// root) and 20 respectively.
+func TestGitToolsDefaultRepoRootAndLimit(t *testing.T) {
+	validator, workspaceRoot, _ := newGitValidator(t)
+	configureGitRepo(t, workspaceRoot)
+	mustWriteFile(t, filepath.Join(workspaceRoot, "a.txt"), []byte("one\n"))
+	gitRun(t, workspaceRoot, "add", ".")
+	gitRun(t, workspaceRoot, "commit", "-m", "initial")
+
+	statusTool, err := NewGitStatusTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitStatusTool() error = %v", err)
+	}
+	prepared, err := statusTool.Prepare(context.Background(), newToolCall(t, "git_status", gitStatusArgs{}))
+	if err != nil {
+		t.Fatalf("git_status Prepare() with empty repo_root error = %v", err)
+	}
+	result := statusTool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("git_status Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+
+	logTool, err := NewGitLogTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitLogTool() error = %v", err)
+	}
+	prepared, err = logTool.Prepare(context.Background(), newToolCall(t, "git_log", gitLogArgs{}))
+	if err != nil {
+		t.Fatalf("git_log Prepare() with empty args error = %v", err)
+	}
+	var canonical gitLogArgs
+	if err := json.Unmarshal(prepared.Call.Arguments, &canonical); err != nil {
+		t.Fatal(err)
+	}
+	if canonical.RepoRoot != "." || canonical.Limit != 20 {
+		t.Fatalf("canonical defaults = %+v, want repo_root=. limit=20", canonical)
+	}
+	result = logTool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("git_log Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+}
+
 func newGitValidator(t *testing.T) (*workspacepkg.PathValidator, string, string) {
 	t.Helper()
 	workspaceRoot := filepath.Join(t.TempDir(), "workspace")

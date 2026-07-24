@@ -28,8 +28,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -38,7 +40,7 @@ func TestReadFileToolPrepareAndExecute(t *testing.T) {
 	content := "zero\none\ntwo\nthree\n"
 	mustWriteFile(t, filepath.Join(root, "dir", "sample.txt"), []byte(content))
 
-	tool, err := NewReadFileTool(validator)
+	tool, err := NewReadFileTool(validator, nil)
 	if err != nil {
 		t.Fatalf("NewReadFileTool() error = %v", err)
 	}
@@ -90,7 +92,7 @@ func TestReadFileToolRejectsSensitiveComponent(t *testing.T) {
 	validator, root := newValidator(t)
 	mustWriteFile(t, filepath.Join(root, "safe", ".git", "config"), []byte("secret"))
 
-	tool, err := NewReadFileTool(validator)
+	tool, err := NewReadFileTool(validator, nil)
 	if err != nil {
 		t.Fatalf("NewReadFileTool() error = %v", err)
 	}
@@ -106,7 +108,7 @@ func TestReadFileToolStrictJSONBinaryAndPreparedBinding(t *testing.T) {
 	mustWriteFile(t, filepath.Join(root, "text.txt"), []byte("alpha\nbeta\n"))
 	mustWriteFile(t, filepath.Join(root, "data.bin"), []byte{'a', 0, 'b'})
 
-	tool, err := NewReadFileTool(validator)
+	tool, err := NewReadFileTool(validator, nil)
 	if err != nil {
 		t.Fatalf("NewReadFileTool() error = %v", err)
 	}
@@ -138,7 +140,7 @@ func TestReadFileToolCancelled(t *testing.T) {
 	validator, root := newValidator(t)
 	mustWriteFile(t, filepath.Join(root, "text.txt"), []byte("hello\nworld\n"))
 
-	tool, err := NewReadFileTool(validator)
+	tool, err := NewReadFileTool(validator, nil)
 	if err != nil {
 		t.Fatalf("NewReadFileTool() error = %v", err)
 	}
@@ -153,7 +155,7 @@ func TestReadFileToolCancelled(t *testing.T) {
 	assertToolResultError(t, result, domain.ToolStatusCancelled, domain.ErrCancelled)
 }
 
-func TestListDirectoryToolExecuteAndTruncate(t *testing.T) {
+func TestListDirToolExecuteAndTruncate(t *testing.T) {
 	validator, root := newValidator(t)
 	mustMkdirAll(t, filepath.Join(root, "subdir"))
 	mustMkdirAll(t, filepath.Join(root, ".git"))
@@ -163,12 +165,12 @@ func TestListDirectoryToolExecuteAndTruncate(t *testing.T) {
 	mustWriteFile(t, filepath.Join(root, ".git", "config"), []byte("secret"))
 	mustSymlink(t, "alpha.txt", filepath.Join(root, "link.txt"))
 
-	tool, err := NewListDirectoryTool(validator)
+	tool, err := NewListDirTool(validator)
 	if err != nil {
-		t.Fatalf("NewListDirectoryTool() error = %v", err)
+		t.Fatalf("NewListDirTool() error = %v", err)
 	}
 
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "list_directory", listDirectoryArgs{Path: "."}))
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "list_dir", listDirArgs{Path: "."}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -177,7 +179,7 @@ func TestListDirectoryToolExecuteAndTruncate(t *testing.T) {
 		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
 	}
 
-	var output listDirectoryOutput
+	var output listDirOutput
 	decodeToolResult(t, result, &output)
 	gotPaths := make([]string, 0, len(output.Entries))
 	for _, entry := range output.Entries {
@@ -196,7 +198,7 @@ func TestListDirectoryToolExecuteAndTruncate(t *testing.T) {
 	for i := 0; i < maxDirectoryEntries+5; i++ {
 		mustWriteFile(t, filepath.Join(manyDir, fmt.Sprintf("file-%03d.txt", i)), []byte("x"))
 	}
-	prepared, err = tool.Prepare(context.Background(), newToolCall(t, "list_directory", listDirectoryArgs{Path: "many"}))
+	prepared, err = tool.Prepare(context.Background(), newToolCall(t, "list_dir", listDirArgs{Path: "many"}))
 	if err != nil {
 		t.Fatalf("Prepare(many) error = %v", err)
 	}
@@ -216,7 +218,9 @@ func TestListDirectoryToolExecuteAndTruncate(t *testing.T) {
 	}
 }
 
-func TestSearchTextToolExecuteSkipsBinaryAndSymlink(t *testing.T) {
+// The Go fallback engine keeps its own accounting (scanned/skipped files),
+// binary and symlink filtering, and before/after context lines.
+func TestSearchGoFallbackSkipsBinaryAndSymlink(t *testing.T) {
 	validator, root := newValidator(t)
 	mustWriteFile(t, filepath.Join(root, "src", "a.txt"), []byte("Hello world\nsecond line\nHELLO again\n"))
 	mustWriteFile(t, filepath.Join(root, "src", "b.txt"), []byte("no match here\n"))
@@ -226,16 +230,15 @@ func TestSearchTextToolExecuteSkipsBinaryAndSymlink(t *testing.T) {
 	mustWriteFile(t, filepath.Join(root, ".git", "secret.txt"), []byte("hello from sensitive path\n"))
 	mustSymlink(t, filepath.Join("src", "a.txt"), filepath.Join(root, "src", "link.txt"))
 
-	tool, err := NewSearchTextTool(validator)
+	// A nil runner forces the Go fallback engine.
+	tool, err := NewSearchTool(validator, nil)
 	if err != nil {
-		t.Fatalf("NewSearchTextTool() error = %v", err)
+		t.Fatalf("NewSearchTool() error = %v", err)
 	}
 
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search_text", searchTextArgs{
-		Path:   ".",
-		Query:  "hello",
-		Before: 1,
-		After:  1,
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+		Pattern: "hello",
+		Context: 1,
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -245,8 +248,11 @@ func TestSearchTextToolExecuteSkipsBinaryAndSymlink(t *testing.T) {
 		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
 	}
 
-	var output searchTextOutput
+	var output searchOutput
 	decodeToolResult(t, result, &output)
+	if output.Engine != string(engineGoFallback) {
+		t.Fatalf("output.Engine = %q, want go_fallback", output.Engine)
+	}
 	if output.MatchCount != 2 {
 		t.Fatalf("output.MatchCount = %d, want 2", output.MatchCount)
 	}
@@ -262,7 +268,7 @@ func TestSearchTextToolExecuteSkipsBinaryAndSymlink(t *testing.T) {
 	if output.Truncated {
 		t.Fatal("did not expect truncated search output")
 	}
-	wantMatches := []searchTextMatch{
+	wantMatches := []searchMatch{
 		{
 			Path:   "src/a.txt",
 			Line:   1,
@@ -283,7 +289,7 @@ func TestSearchTextToolExecuteSkipsBinaryAndSymlink(t *testing.T) {
 	}
 }
 
-func TestSearchTextToolTruncateStrictJSONAndCancelled(t *testing.T) {
+func TestSearchGoFallbackTruncateStrictJSONAndCancelled(t *testing.T) {
 	validator, root := newValidator(t)
 	var builder strings.Builder
 	for i := 0; i < maxSearchMatches+5; i++ {
@@ -291,19 +297,19 @@ func TestSearchTextToolTruncateStrictJSONAndCancelled(t *testing.T) {
 	}
 	mustWriteFile(t, filepath.Join(root, "many.txt"), []byte(builder.String()))
 
-	tool, err := NewSearchTextTool(validator)
+	tool, err := NewSearchTool(validator, nil)
 	if err != nil {
-		t.Fatalf("NewSearchTextTool() error = %v", err)
+		t.Fatalf("NewSearchTool() error = %v", err)
 	}
 
 	_, err = tool.Prepare(context.Background(), domain.ToolCall{
 		ID:        domain.NewToolCallID(),
-		Name:      "search_text",
-		Arguments: json.RawMessage(`{"path":".","query":"needle","extra":true}`),
+		Name:      "search",
+		Arguments: json.RawMessage(`{"path":".","pattern":"needle","extra":true}`),
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search_text", searchTextArgs{Path: ".", Query: "needle"}))
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{Pattern: "needle"}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -312,7 +318,7 @@ func TestSearchTextToolTruncateStrictJSONAndCancelled(t *testing.T) {
 		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
 	}
 
-	var output searchTextOutput
+	var output searchOutput
 	decodeToolResult(t, result, &output)
 	if !output.Truncated {
 		t.Fatal("expected truncated search output")
@@ -328,6 +334,266 @@ func TestSearchTextToolTruncateStrictJSONAndCancelled(t *testing.T) {
 	cancel()
 	cancelled := tool.Execute(ctx, prepared)
 	assertToolResultError(t, cancelled, domain.ToolStatusCancelled, domain.ErrCancelled)
+}
+
+// fakeRgRunner stubs the sandboxed process runner so ripgrep-engine tests do
+// not depend on the host platform, sandbox, or an installed rg binary.
+type fakeRgRunner struct {
+	result   process.Result
+	err      error
+	lastSpec process.CommandSpec
+}
+
+func (f *fakeRgRunner) Run(_ context.Context, spec process.CommandSpec) (process.Result, error) {
+	f.lastSpec = spec
+	return f.result, f.err
+}
+
+// stubRgLocator makes rgAvailable succeed without a real rg binary.
+func stubRgLocator(t *testing.T) {
+	t.Helper()
+	old := rgLocator
+	rgLocator = func() (string, bool) { return "/fake/rg", true }
+	t.Cleanup(func() { rgLocator = old })
+}
+
+func rgJSON(events ...string) []byte {
+	return []byte(strings.Join(events, "\n") + "\n")
+}
+
+func TestSearchRipgrepEngineAggregatesMatchesAndContext(t *testing.T) {
+	stubRgLocator(t)
+	validator, root := newValidator(t)
+	mustMkdirAll(t, filepath.Join(root, "src"))
+
+	runner := &fakeRgRunner{result: process.Result{
+		ExitCode: 0,
+		Stdout: rgJSON(
+			`{"type":"context","data":{"path":{"text":"`+filepath.Join(validator.Root(), "src", "a.go")+`"},"line_number":1,"lines":{"text":"package src\n"}}}`,
+			`{"type":"match","data":{"path":{"text":"`+filepath.Join(validator.Root(), "src", "a.go")+`"},"line_number":2,"lines":{"text":"func hello() {}\n"}}}`,
+			`{"type":"context","data":{"path":{"text":"`+filepath.Join(validator.Root(), "src", "a.go")+`"},"line_number":3,"lines":{"text":"// after\n"}}}`,
+		),
+	}}
+
+	tool, err := NewSearchTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewSearchTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+		Pattern: "func \\w+\\(",
+		Path:    "src",
+		Context: 1,
+		Glob:    []string{"*.go"},
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+
+	// The argv passed to rg must be allowlist-assembled with the pattern and
+	// search root after a "--" separator.
+	argv := runner.lastSpec.Args
+	n := len(argv)
+	if n < 3 || argv[n-3] != "--" || argv[n-2] != `func \w+\(` || argv[n-1] != filepath.Join(validator.Root(), "src") {
+		t.Fatalf("rg argv tail = %v", argv[max(0, n-4):])
+	}
+	joined := strings.Join(argv, " ")
+	for _, want := range []string{"--json", "--max-count", "-C 1", "-i", "--glob *.go"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("rg argv missing %q: %v", want, argv)
+		}
+	}
+
+	var output searchOutput
+	decodeToolResult(t, result, &output)
+	if output.Engine != string(engineRipgrep) {
+		t.Fatalf("output.Engine = %q, want ripgrep", output.Engine)
+	}
+	if output.MatchCount != 1 {
+		t.Fatalf("output.MatchCount = %d, want 1", output.MatchCount)
+	}
+	match := output.Matches[0]
+	if match.Path != "src/a.go" || match.Line != 2 || match.Text != "func hello() {}" {
+		t.Fatalf("unexpected match: %+v", match)
+	}
+	if len(match.Before) != 1 || match.Before[0].Text != "package src" {
+		t.Fatalf("unexpected before context: %+v", match.Before)
+	}
+	if len(match.After) != 1 || match.After[0].Text != "// after" {
+		t.Fatalf("unexpected after context: %+v", match.After)
+	}
+}
+
+func TestSearchRipgrepErrorSurfacing(t *testing.T) {
+	stubRgLocator(t)
+	validator, _ := newValidator(t)
+	runner := &fakeRgRunner{result: process.Result{ExitCode: 2, Stderr: []byte("regex parse error")}}
+
+	tool, err := NewSearchTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewSearchTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{Pattern: "("}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	assertToolResultError(t, result, domain.ToolStatusError, domain.ErrInvalidInput)
+}
+
+func TestGlobRipgrepEngineListsFiles(t *testing.T) {
+	stubRgLocator(t)
+	validator, root := newValidator(t)
+	mustMkdirAll(t, filepath.Join(root, "src"))
+
+	runner := &fakeRgRunner{result: process.Result{
+		ExitCode: 0,
+		Stdout:   []byte("a.go\nsub/b.go\nREADME.md\n"),
+	}}
+
+	tool, err := NewGlobTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewGlobTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "glob", globArgs{Pattern: "**/*.go", Path: "src"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+
+	var output globOutput
+	decodeToolResult(t, result, &output)
+	if output.Engine != string(engineRipgrep) {
+		t.Fatalf("output.Engine = %q, want ripgrep", output.Engine)
+	}
+	want := []string{"src/README.md", "src/a.go", "src/sub/b.go"}
+	if !reflect.DeepEqual(output.Files, want) {
+		t.Fatalf("output.Files = %v, want %v", output.Files, want)
+	}
+	if runner.lastSpec.Args[0] != "--files" {
+		t.Fatalf("rg argv = %v, want --files first", runner.lastSpec.Args)
+	}
+}
+
+func TestGlobGoFallbackMatchesDoubleStar(t *testing.T) {
+	validator, root := newValidator(t)
+	mustWriteFile(t, filepath.Join(root, "a.go"), []byte("package a\n"))
+	mustWriteFile(t, filepath.Join(root, "sub", "b.go"), []byte("package b\n"))
+	mustWriteFile(t, filepath.Join(root, "sub", "c.txt"), []byte("text\n"))
+	mustMkdirAll(t, filepath.Join(root, ".git"))
+	mustWriteFile(t, filepath.Join(root, ".git", "ignored.go"), []byte("package git\n"))
+
+	tool, err := NewGlobTool(validator, nil)
+	if err != nil {
+		t.Fatalf("NewGlobTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "glob", globArgs{Pattern: "**/*.go"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+
+	var output globOutput
+	decodeToolResult(t, result, &output)
+	if output.Engine != string(engineGoFallback) {
+		t.Fatalf("output.Engine = %q, want go_fallback", output.Engine)
+	}
+	want := []string{"a.go", "sub/b.go"}
+	if !reflect.DeepEqual(output.Files, want) {
+		t.Fatalf("output.Files = %v, want %v (.git must be excluded)", output.Files, want)
+	}
+}
+
+// TestSearchRipgrepRealEndToEnd exercises the true ripgrep binary through the
+// platform sandbox. It skips when rg or a usable sandbox is unavailable.
+func TestSearchRipgrepRealEndToEnd(t *testing.T) {
+	if _, ok := rgLocator(); !ok {
+		t.Skip("ripgrep not installed")
+	}
+	validator, root := newValidator(t)
+	runner, err := process.NewRunner(validator, process.RunnerOptions{
+		Sandbox: process.NewPlatformSandbox(process.PlatformSandboxOptions{}),
+	})
+	if err != nil {
+		t.Skipf("platform sandbox unavailable: %v", err)
+	}
+	// Nested sandboxes (e.g. under Bazel's own test sandbox) reject
+	// sandbox_apply; skip there instead of failing.
+	probe, probeErr := runner.Run(context.Background(), process.CommandSpec{
+		Program: "/usr/bin/true",
+		Args:    []string{},
+		Cwd:     ".",
+		Env:     map[string]string{},
+		Timeout: 5 * time.Second,
+	})
+	if probeErr != nil || probe.ExitCode != 0 {
+		t.Skipf("nested sandbox unavailable: err=%v exit=%d stderr=%s", probeErr, probe.ExitCode, probe.Stderr)
+	}
+
+	// ripgrep only honors .gitignore inside a git repository.
+	mustMkdirAll(t, filepath.Join(root, ".git"))
+	mustWriteFile(t, filepath.Join(root, "src", "a.go"), []byte("package src\nfunc hello() {}\n"))
+	mustWriteFile(t, filepath.Join(root, "src", "b.txt"), []byte("func ignored\n"))
+	mustMkdirAll(t, filepath.Join(root, "bazel-out"))
+	mustWriteFile(t, filepath.Join(root, "bazel-out", "gen.go"), []byte("func generated() {}\n"))
+	mustWriteFile(t, filepath.Join(root, ".gitignore"), []byte("bazel-out/\n"))
+
+	tool, err := NewSearchTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewSearchTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+		Pattern: `func \w+\(`,
+		Glob:    []string{"*.go"},
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+
+	var output searchOutput
+	decodeToolResult(t, result, &output)
+	if output.Engine != string(engineRipgrep) {
+		t.Fatalf("output.Engine = %q, want ripgrep", output.Engine)
+	}
+	if output.MatchCount != 1 || output.Matches[0].Path != "src/a.go" {
+		t.Fatalf("matches = %+v, want exactly src/a.go (gitignore must exclude bazel-out, glob must exclude b.txt)", output.Matches)
+	}
+}
+
+func TestMatchGlobPath(t *testing.T) {
+	cases := []struct {
+		pattern, name string
+		want          bool
+	}{
+		{"*.go", "a.go", true},
+		{"*.go", "a.txt", false},
+		{"**/*.go", "a.go", true},
+		{"**/*.go", "sub/deep/a.go", true},
+		{"src/**", "src/a/b.go", true},
+		{"src/**", "other/a.go", false},
+		{"sub/*/c.go", "sub/b/c.go", true},
+		{"sub/*/c.go", "sub/b/d/c.go", false},
+		{"test_*.go", "test_a.go", true},
+	}
+	for _, tc := range cases {
+		if got := matchGlobPath(tc.pattern, tc.name); got != tc.want {
+			t.Errorf("matchGlobPath(%q, %q) = %v, want %v", tc.pattern, tc.name, got, tc.want)
+		}
+	}
 }
 
 func newValidator(t *testing.T) (*workspacepkg.PathValidator, string) {
