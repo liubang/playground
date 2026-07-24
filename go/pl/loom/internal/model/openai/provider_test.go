@@ -33,6 +33,21 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
+func TestToolResultContentKeepsArtifactRefsOutOfModelPayload(t *testing.T) {
+	ref := domain.ArtifactRef{ID: domain.NewArtifactID(), Size: 1024}
+	result := domain.ToolResult{
+		CallID: domain.NewToolCallID(), Status: domain.ToolStatusSuccess,
+		Content: []domain.ContentPart{
+			{Kind: domain.PartText, Text: `{"stdout":"bounded"}`},
+			{Kind: domain.PartArtifact, Artifact: &ref},
+		},
+		Metadata: map[string]string{"stdout_artifact_id": ref.ID.String()},
+	}
+	if got := toolResultContent(result); got != `{"stdout":"bounded"}` {
+		t.Fatalf("toolResultContent = %q", got)
+	}
+}
+
 func TestProviderStreamRequestAdaptationAndAuthorization(t *testing.T) {
 	t.Parallel()
 
@@ -351,14 +366,20 @@ func TestProviderStreamResponsesTextContract(t *testing.T) {
 	assertEventKinds(
 		t, events,
 		domain.ModelEventResponseStart,
+		domain.ModelEventReasoningStart,
+		domain.ModelEventReasoningDelta,
 		domain.ModelEventTextStart,
 		domain.ModelEventTextDelta,
 		domain.ModelEventTextDelta,
 		domain.ModelEventTextEnd,
+		domain.ModelEventReasoningEnd,
 		domain.ModelEventUsage,
 		domain.ModelEventResponseEnd,
 	)
-	if events[2].TextDelta != "Hel" || events[3].TextDelta != "lo" {
+	if events[2].ReasoningDelta != "should-not-leak" {
+		t.Fatalf("unexpected reasoning delta: %+v", events[2])
+	}
+	if events[4].TextDelta != "Hel" || events[5].TextDelta != "lo" {
 		t.Fatalf("unexpected text deltas: %+v", events)
 	}
 	for _, evt := range events {
@@ -366,11 +387,11 @@ func TestProviderStreamResponsesTextContract(t *testing.T) {
 			t.Fatalf("reasoning text leaked into visible output: %+v", events)
 		}
 	}
-	if events[5].InputTokens != 21 || events[5].OutputTokens != 7 {
-		t.Fatalf("unexpected usage: %+v", events[5])
+	if events[8].InputTokens != 21 || events[8].OutputTokens != 7 {
+		t.Fatalf("unexpected usage: %+v", events[8])
 	}
-	if events[6].StopReason != domain.StopEndTurn {
-		t.Fatalf("unexpected stop reason: %s", events[6].StopReason)
+	if events[9].StopReason != domain.StopEndTurn {
+		t.Fatalf("unexpected stop reason: %s", events[9].StopReason)
 	}
 }
 
@@ -468,26 +489,32 @@ func TestProviderStreamResponsesToolCallsAndToolResultRoundTrip(t *testing.T) {
 		t, events,
 		domain.ModelEventResponseStart,
 		domain.ModelEventToolCallStart,
+		domain.ModelEventReasoningStart,
+		domain.ModelEventReasoningDelta,
 		domain.ModelEventToolArgsDelta,
 		domain.ModelEventToolArgsDelta,
 		domain.ModelEventToolCallEnd,
+		domain.ModelEventReasoningEnd,
 		domain.ModelEventUsage,
 		domain.ModelEventResponseEnd,
 	)
 	if events[1].ToolID != "call_stream" || events[1].ToolName != "read_file" {
 		t.Fatalf("unexpected tool call start: %+v", events[1])
 	}
-	if events[2].ToolArgs != "{" || events[3].ToolArgs != `"path":"b.txt"}` {
+	if events[3].ReasoningDelta != "ignore" {
+		t.Fatalf("unexpected reasoning delta: %+v", events[3])
+	}
+	if events[4].ToolArgs != "{" || events[5].ToolArgs != `"path":"b.txt"}` {
 		t.Fatalf("unexpected tool arg deltas: %+v", events)
 	}
-	if events[4].ToolID != "call_stream" {
-		t.Fatalf("unexpected tool call end: %+v", events[4])
+	if events[6].ToolID != "call_stream" {
+		t.Fatalf("unexpected tool call end: %+v", events[6])
 	}
-	if events[5].InputTokens != 10 || events[5].OutputTokens != 4 {
-		t.Fatalf("unexpected usage: %+v", events[5])
+	if events[8].InputTokens != 10 || events[8].OutputTokens != 4 {
+		t.Fatalf("unexpected usage: %+v", events[8])
 	}
-	if events[6].StopReason != domain.StopToolUse {
-		t.Fatalf("unexpected stop reason: %s", events[6].StopReason)
+	if events[9].StopReason != domain.StopToolUse {
+		t.Fatalf("unexpected stop reason: %s", events[9].StopReason)
 	}
 }
 
