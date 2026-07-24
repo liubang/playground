@@ -49,16 +49,20 @@ type readFileOutput struct {
 	ContentHash string         `json:"content_hash"`
 }
 
-// ReadFileTool implements the builtin read-only file reader.
+// ReadFileTool implements the builtin read-only file reader. Successful
+// reads record the file's content hash into the shared file-state book so
+// edit can detect external modification later.
 type ReadFileTool struct {
 	base baseTool
+	book *workspacepkg.FileStateBook
 }
 
 // NewReadFileTool creates a read_file tool bound to the workspace validator.
-func NewReadFileTool(validator *workspacepkg.PathValidator) (*ReadFileTool, error) {
+// A nil book disables state recording (used by tests).
+func NewReadFileTool(validator *workspacepkg.PathValidator, book *workspacepkg.FileStateBook) (*ReadFileTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name:         "read_file",
-		Description:  "Read a UTF-8 text file within the workspace with bounded line output.",
+		Description:  "Read a UTF-8 text file within the workspace with line numbers. Paginate large files with offset/limit (max 500 lines per call). Binary files are rejected. You MUST read a file before editing it.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1},"offset":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["path"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"integer"},"limit":{"type":"integer"},"total_lines":{"type":"integer"},"truncated":{"type":"boolean"},"lines":{"type":"array"},"size_bytes":{"type":"integer"},"content_hash":{"type":"string"}},"required":["path","offset","limit","total_lines","truncated","lines","size_bytes","content_hash"]}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
@@ -67,7 +71,7 @@ func NewReadFileTool(validator *workspacepkg.PathValidator) (*ReadFileTool, erro
 	if err != nil {
 		return nil, err
 	}
-	return &ReadFileTool{base: base}, nil
+	return &ReadFileTool{base: base, book: book}, nil
 }
 
 func (t *ReadFileTool) Definition() domain.ToolDefinition {
@@ -138,6 +142,8 @@ func (t *ReadFileTool) execute(ctx context.Context, prepared domain.PreparedCall
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
 	selected, truncated := sliceReadFileLines(lines, args.Offset, args.Limit)
+	contentHash := sha256Hex(data)
+	t.book.Record(pathInfo.Absolute, contentHash)
 	output := readFileOutput{
 		Path:        args.Path,
 		Offset:      args.Offset,
@@ -146,7 +152,7 @@ func (t *ReadFileTool) execute(ctx context.Context, prepared domain.PreparedCall
 		Truncated:   truncated,
 		Lines:       selected,
 		SizeBytes:   int64(len(data)),
-		ContentHash: sha256Hex(data),
+		ContentHash: contentHash,
 	}
 	return successResult(prepared.Call.ID, startedAt, output)
 }

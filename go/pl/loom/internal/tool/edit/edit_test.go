@@ -24,28 +24,26 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-func TestReplaceTextToolSuccessAndPermissionPreserved(t *testing.T) {
+func TestEditToolSuccessAndPermissionPreserved(t *testing.T) {
 	validator, root := newValidator(t)
 	path := filepath.Join(root, "note.txt")
 	original := []byte("hello world\n")
 	mustWriteFile(t, path, original, 0o600)
 
-	tool, err := NewReplaceTextTool(validator)
+	tool, err := NewEditTool(validator, nil)
 	if err != nil {
-		t.Fatalf("NewReplaceTextTool() error = %v", err)
+		t.Fatalf("NewEditTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "replace_text", replaceTextArgs{
-		Path:         "note.txt",
-		OldText:      "world",
-		NewText:      "loom",
-		ExpectedHash: hexSHA256(original),
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path:      "note.txt",
+		OldString: "world",
+		NewString: "loom",
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -83,28 +81,28 @@ func TestReplaceTextToolSuccessAndPermissionPreserved(t *testing.T) {
 	}
 }
 
-func TestReplaceTextToolConflictsAndTampering(t *testing.T) {
+func TestEditToolConflictsAndTampering(t *testing.T) {
 	validator, root := newValidator(t)
 	path := filepath.Join(root, "multi.txt")
 	original := []byte("dup\ndup\n")
 	mustWriteFile(t, path, original, 0o644)
 
-	tool, err := NewReplaceTextTool(validator)
+	tool, err := NewEditTool(validator, nil)
 	if err != nil {
-		t.Fatalf("NewReplaceTextTool() error = %v", err)
+		t.Fatalf("NewEditTool() error = %v", err)
 	}
 	_, err = tool.Prepare(context.Background(), domain.ToolCall{
 		ID:        domain.NewToolCallID(),
-		Name:      "replace_text",
-		Arguments: json.RawMessage(`{"path":"multi.txt","old_text":"dup","new_text":"x","expected_hash":"` + workspacepkg.EmptyFileSHA256 + `","extra":true}`),
+		Name:      "edit",
+		Arguments: json.RawMessage(`{"path":"multi.txt","old_string":"dup","new_string":"x","extra":true}`),
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "replace_text", replaceTextArgs{
-		Path:         "multi.txt",
-		OldText:      "dup",
-		NewText:      "x",
-		ExpectedHash: hexSHA256(original),
+	// Without replace_all, multiple matches conflict.
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path:      "multi.txt",
+		OldString: "dup",
+		NewString: "x",
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -112,105 +110,50 @@ func TestReplaceTextToolConflictsAndTampering(t *testing.T) {
 	conflict := tool.Execute(context.Background(), prepared)
 	assertToolResultError(t, conflict, domain.ToolStatusError, domain.ErrConflict)
 
-	prepared.Call.Arguments = mustMarshalRaw(t, replaceTextArgs{
-		Path:         "multi.txt",
-		OldText:      "dup",
-		NewText:      "x",
-		ExpectedHash: hexSHA256(original),
-		ReplaceAll:   true,
+	// A tampered prepared call fails HMAC verification.
+	prepared.Call.Arguments = mustMarshalRaw(t, editArgs{
+		Path:       "multi.txt",
+		OldString:  "dup",
+		NewString:  "x",
+		ReplaceAll: true,
 	})
 	tampered := tool.Execute(context.Background(), prepared)
 	assertToolResultError(t, tampered, domain.ToolStatusError, domain.ErrSecurity)
 }
 
-func TestReplaceTextToolReplaceAllAndHashConflict(t *testing.T) {
+func TestEditToolExpectedHashConflictAndReplaceAll(t *testing.T) {
 	validator, root := newValidator(t)
 	path := filepath.Join(root, "doc.txt")
 	original := []byte("foo foo\n")
 	mustWriteFile(t, path, original, 0o644)
 
-	tool, err := NewReplaceTextTool(validator)
+	tool, err := NewEditTool(validator, nil)
 	if err != nil {
-		t.Fatalf("NewReplaceTextTool() error = %v", err)
+		t.Fatalf("NewEditTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "replace_text", replaceTextArgs{
-		Path:         "doc.txt",
-		OldText:      "foo",
-		NewText:      "bar",
-		ExpectedHash: hexSHA256(original),
-		ReplaceAll:   true,
-	}))
-	if err != nil {
-		t.Fatalf("Prepare() error = %v", err)
-	}
-	if err := os.WriteFile(path, []byte("changed\n"), 0o644); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
-	result := tool.Execute(context.Background(), prepared)
-	assertToolResultError(t, result, domain.ToolStatusError, domain.ErrConflict)
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("os.ReadFile() error = %v", err)
-	}
-	if string(content) != "changed\n" {
-		t.Fatalf("content = %q, want concurrent change preserved", string(content))
-	}
-}
 
-func TestReplaceTextToolRejectsSymlinkAndSensitivePath(t *testing.T) {
-	validator, root := newValidator(t)
-	mustWriteFile(t, filepath.Join(root, "target.txt"), []byte("hello"), 0o644)
-	mustSymlink(t, "target.txt", filepath.Join(root, "link.txt"))
-	tool, err := NewReplaceTextTool(validator)
-	if err != nil {
-		t.Fatalf("NewReplaceTextTool() error = %v", err)
-	}
-	_, err = tool.Prepare(context.Background(), newToolCall(t, "replace_text", replaceTextArgs{
-		Path:         "link.txt",
-		OldText:      "hello",
-		NewText:      "bye",
-		ExpectedHash: hexSHA256([]byte("hello")),
-	}))
-	assertAgentErrorCode(t, err, domain.ErrSecurity)
-	_, err = tool.Prepare(context.Background(), newToolCall(t, "replace_text", replaceTextArgs{
-		Path:         filepath.Join(root, ".git", "config"),
-		OldText:      "x",
-		NewText:      "y",
+	// The optional expected_hash guard catches drift authoritatively.
+	stale, err := tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path:         "doc.txt",
+		OldString:    "foo",
+		NewString:    "bar",
+		ReplaceAll:   true,
 		ExpectedHash: workspacepkg.EmptyFileSHA256,
 	}))
-	assertAgentErrorCode(t, err, domain.ErrSecurity)
-}
-
-func TestApplyPatchToolSuccess(t *testing.T) {
-	validator, root := newValidator(t)
-	path := filepath.Join(root, "file.txt")
-	original := []byte("one\ntwo\nthree\n")
-	mustWriteFile(t, path, original, 0o644)
-
-	tool, err := NewApplyPatchTool(validator)
 	if err != nil {
-		t.Fatalf("NewApplyPatchTool() error = %v", err)
+		t.Fatalf("Prepare(stale) error = %v", err)
 	}
-	patch := strings.Join([]string{
-		"--- a/file.txt",
-		"+++ b/file.txt",
-		"@@ -1,3 +1,3 @@",
-		" one",
-		"-two",
-		"+TWO",
-		" three",
-	}, "\n")
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "apply_patch", applyPatchArgs{
-		Path:         "file.txt",
-		Patch:        patch,
-		ExpectedHash: hexSHA256(original),
+	conflict := tool.Execute(context.Background(), stale)
+	assertToolResultError(t, conflict, domain.ToolStatusError, domain.ErrConflict)
+
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path:       "doc.txt",
+		OldString:  "foo",
+		NewString:  "bar",
+		ReplaceAll: true,
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
-	}
-	if prepared.Recovery == nil || prepared.Recovery.ExpectedHash != hexSHA256(original) ||
-		prepared.Recovery.ResultHash != hexSHA256([]byte("one\nTWO\nthree\n")) {
-		t.Fatalf("unexpected recovery evidence: %+v", prepared.Recovery)
 	}
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
@@ -220,113 +163,93 @@ func TestApplyPatchToolSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.ReadFile() error = %v", err)
 	}
-	if string(content) != "one\nTWO\nthree\n" {
-		t.Fatalf("content = %q, want patched output", string(content))
+	if string(content) != "bar bar\n" {
+		t.Fatalf("content = %q, want replace_all applied", string(content))
 	}
 }
 
-func TestApplyPatchToolRejectsContextConflictAndTampering(t *testing.T) {
+func TestEditToolRejectsSymlinkAndSensitivePath(t *testing.T) {
 	validator, root := newValidator(t)
-	path := filepath.Join(root, "file.txt")
-	original := []byte("one\ntwo\n")
-	mustWriteFile(t, path, original, 0o644)
-
-	tool, err := NewApplyPatchTool(validator)
-	if err != nil {
-		t.Fatalf("NewApplyPatchTool() error = %v", err)
-	}
-	patch := strings.Join([]string{
-		"--- a/file.txt",
-		"+++ b/file.txt",
-		"@@ -1,2 +1,2 @@",
-		" zero",
-		"-two",
-		"+TWO",
-	}, "\n")
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "apply_patch", applyPatchArgs{
-		Path:         "file.txt",
-		Patch:        patch,
-		ExpectedHash: hexSHA256(original),
-	}))
-	if err != nil {
-		t.Fatalf("Prepare() error = %v", err)
-	}
-	result := tool.Execute(context.Background(), prepared)
-	assertToolResultError(t, result, domain.ToolStatusError, domain.ErrConflict)
-	prepared.WritePaths = []string{filepath.Join(root, "other.txt")}
-	tampered := tool.Execute(context.Background(), prepared)
-	assertToolResultError(t, tampered, domain.ToolStatusError, domain.ErrSecurity)
-}
-
-func TestApplyPatchToolRejectsEscapeAndMultipleFiles(t *testing.T) {
-	validator, root := newValidator(t)
-	mustWriteFile(t, filepath.Join(root, "file.txt"), []byte("one\n"), 0o644)
-	tool, err := NewApplyPatchTool(validator)
-	if err != nil {
-		t.Fatalf("NewApplyPatchTool() error = %v", err)
-	}
-	_, err = tool.Prepare(context.Background(), newToolCall(t, "apply_patch", applyPatchArgs{
-		Path:         "file.txt",
-		Patch:        "--- a/../escape.txt\n+++ b/../escape.txt\n@@ -0,0 +1 @@\n+x\n",
-		ExpectedHash: hexSHA256([]byte("one\n")),
-	}))
-	assertAgentErrorCode(t, err, domain.ErrSecurity)
-
-	multi := strings.Join([]string{
-		"--- a/file.txt",
-		"+++ b/file.txt",
-		"@@ -1 +1 @@",
-		"-one",
-		"+ONE",
-		"--- a/other.txt",
-		"+++ b/other.txt",
-		"@@ -0,0 +1 @@",
-		"+two",
-	}, "\n")
-	_, err = tool.Prepare(context.Background(), newToolCall(t, "apply_patch", applyPatchArgs{
-		Path:         "file.txt",
-		Patch:        multi,
-		ExpectedHash: hexSHA256([]byte("one\n")),
-	}))
-	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
-}
-
-func TestApplyPatchToolRejectsSymlinkAndHashConflict(t *testing.T) {
-	validator, root := newValidator(t)
-	mustWriteFile(t, filepath.Join(root, "target.txt"), []byte("one\n"), 0o644)
+	mustWriteFile(t, filepath.Join(root, "target.txt"), []byte("hello"), 0o644)
 	mustSymlink(t, "target.txt", filepath.Join(root, "link.txt"))
-	tool, err := NewApplyPatchTool(validator)
+	tool, err := NewEditTool(validator, nil)
 	if err != nil {
-		t.Fatalf("NewApplyPatchTool() error = %v", err)
+		t.Fatalf("NewEditTool() error = %v", err)
 	}
-	patch := strings.Join([]string{
-		"--- a/link.txt",
-		"+++ b/link.txt",
-		"@@ -1 +1 @@",
-		"-one",
-		"+ONE",
-	}, "\n")
-	_, err = tool.Prepare(context.Background(), newToolCall(t, "apply_patch", applyPatchArgs{
-		Path:         "link.txt",
-		Patch:        patch,
-		ExpectedHash: hexSHA256([]byte("one\n")),
+	_, err = tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path:      "link.txt",
+		OldString: "hello",
+		NewString: "bye",
 	}))
 	assertAgentErrorCode(t, err, domain.ErrSecurity)
+	_, err = tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path:      filepath.Join(root, ".git", "config"),
+		OldString: "x",
+		NewString: "y",
+	}))
+	assertAgentErrorCode(t, err, domain.ErrSecurity)
+}
 
-	mustWriteFile(t, filepath.Join(root, "file.txt"), []byte("one\n"), 0o644)
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "apply_patch", applyPatchArgs{
-		Path:         "file.txt",
-		Patch:        strings.Join([]string{"--- a/file.txt", "+++ b/file.txt", "@@ -1 +1 @@", "-one", "+ONE"}, "\n"),
-		ExpectedHash: hexSHA256([]byte("one\n")),
+// The shared file-state book detects external modification after the agent's
+// last read without any model-carried hash; a fresh read re-arms the edit.
+func TestEditToolDetectsExternalModificationViaBook(t *testing.T) {
+	validator, root := newValidator(t)
+	path := filepath.Join(root, "note.txt")
+	mustWriteFile(t, path, []byte("hello world\n"), 0o644)
+
+	book := workspacepkg.NewFileStateBook()
+	tool, err := NewEditTool(validator, book)
+	if err != nil {
+		t.Fatalf("NewEditTool() error = %v", err)
+	}
+
+	// Simulate a prior read_file: the book now knows the file's hash.
+	abs := filepath.Join(validator.Root(), "note.txt")
+	snapshot, err := validator.Snapshot(abs)
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	book.Record(abs, snapshot.SHA256)
+
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path:      "note.txt",
+		OldString: "world",
+		NewString: "loom",
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("changed\n"), 0o644); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
+
+	// External modification after the read must fail closed.
+	mustWriteFile(t, path, []byte("external change\n"), 0o644)
+	conflict := tool.Execute(context.Background(), prepared)
+	assertToolResultError(t, conflict, domain.ToolStatusError, domain.ErrConflict)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
 	}
-	result := tool.Execute(context.Background(), prepared)
-	assertToolResultError(t, result, domain.ToolStatusError, domain.ErrConflict)
+	if string(content) != "external change\n" {
+		t.Fatalf("externally modified file must not be overwritten: %q", string(content))
+	}
+
+	// A fresh read records the new state and the edit goes through.
+	snapshot2, err := validator.Snapshot(abs)
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	book.Record(abs, snapshot2.SHA256)
+	prepared2, err := tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path:      "note.txt",
+		OldString: "external",
+		NewString: "reviewed",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared2)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success after re-read: %+v", result.Status, result.Error)
+	}
 }
 
 func newValidator(t *testing.T) (*workspacepkg.PathValidator, string) {
@@ -417,6 +340,151 @@ func mustSymlink(t *testing.T, target, link string) {
 	}
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatalf("os.Symlink() error = %v", err)
+	}
+}
+
+func TestWriteToolCreatesFileWithParentDirectories(t *testing.T) {
+	validator, _ := newValidator(t)
+	tool, err := NewWriteTool(validator)
+	if err != nil {
+		t.Fatalf("NewWriteTool() error = %v", err)
+	}
+
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "write", writeArgs{
+		Path:    "nested/dir/new.go",
+		Content: "package dir\n",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.Recovery != nil {
+		t.Fatalf("create must not carry recovery evidence: %+v", prepared.Recovery)
+	}
+	if want := "Write nested/dir/new.go (12 bytes, create)"; prepared.ApprovalDesc != want {
+		t.Fatalf("ApprovalDesc = %q, want %q", prepared.ApprovalDesc, want)
+	}
+
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output writeOutput
+	decodeToolResult(t, result, &output)
+	if !output.Created || output.Path != "nested/dir/new.go" || output.Size != 12 {
+		t.Fatalf("unexpected output: %+v", output)
+	}
+	if output.OldHash != "" {
+		t.Fatalf("create must not report old_hash: %+v", output)
+	}
+	content, err := os.ReadFile(filepath.Join(validator.Root(), "nested", "dir", "new.go"))
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if string(content) != "package dir\n" {
+		t.Fatalf("content = %q", string(content))
+	}
+}
+
+func TestWriteToolOverwriteBindsStateAndDetectsDrift(t *testing.T) {
+	validator, root := newValidator(t)
+	path := filepath.Join(root, "note.txt")
+	original := []byte("before\n")
+	mustWriteFile(t, path, original, 0o644)
+
+	tool, err := NewWriteTool(validator)
+	if err != nil {
+		t.Fatalf("NewWriteTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "write", writeArgs{
+		Path:    "note.txt",
+		Content: "after\n",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if want := "Write note.txt (6 bytes, overwrite)"; prepared.ApprovalDesc != want {
+		t.Fatalf("ApprovalDesc = %q, want %q", prepared.ApprovalDesc, want)
+	}
+	if prepared.Recovery == nil || prepared.Recovery.ExpectedHash != hexSHA256(original) ||
+		prepared.Recovery.ResultHash != hexSHA256([]byte("after\n")) {
+		t.Fatalf("unexpected recovery evidence: %+v", prepared.Recovery)
+	}
+
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output writeOutput
+	decodeToolResult(t, result, &output)
+	if output.Created || output.OldHash != hexSHA256(original) {
+		t.Fatalf("unexpected output: %+v", output)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if string(content) != "after\n" {
+		t.Fatalf("content = %q", string(content))
+	}
+}
+
+func TestWriteToolFailsClosedWhenFileDriftsAfterApproval(t *testing.T) {
+	validator, root := newValidator(t)
+	path := filepath.Join(root, "note.txt")
+	mustWriteFile(t, path, []byte("before\n"), 0o644)
+
+	tool, err := NewWriteTool(validator)
+	if err != nil {
+		t.Fatalf("NewWriteTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "write", writeArgs{
+		Path:    "note.txt",
+		Content: "after\n",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+
+	// External modification between approval and execution must fail closed.
+	mustWriteFile(t, path, []byte("external\n"), 0o644)
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusError {
+		t.Fatalf("Execute() status = %s, want error after drift", result.Status)
+	}
+	if result.Error == nil || result.Error.Code != string(domain.ErrConflict) {
+		t.Fatalf("error code = %v, want conflict", result.Error)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if string(content) != "external\n" {
+		t.Fatalf("drifted file must not be overwritten, content = %q", string(content))
+	}
+}
+
+func TestWriteToolFailsClosedWhenTargetAppearsAfterApproval(t *testing.T) {
+	validator, root := newValidator(t)
+	tool, err := NewWriteTool(validator)
+	if err != nil {
+		t.Fatalf("NewWriteTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "write", writeArgs{
+		Path:    "fresh.txt",
+		Content: "new\n",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+
+	// The target is created externally between approval and execution.
+	mustWriteFile(t, filepath.Join(root, "fresh.txt"), []byte("external\n"), 0o644)
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusError {
+		t.Fatalf("Execute() status = %s, want error after external create", result.Status)
+	}
+	if result.Error == nil || result.Error.Code != string(domain.ErrConflict) {
+		t.Fatalf("error code = %v, want conflict", result.Error)
 	}
 }
 

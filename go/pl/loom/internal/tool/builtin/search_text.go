@@ -20,14 +20,11 @@ package builtin
 import (
 	"bufio"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
@@ -63,111 +60,8 @@ type searchTextOutput struct {
 	Matches         []searchTextMatch `json:"matches"`
 }
 
-// SearchTextTool implements recursive text search without external commands.
-type SearchTextTool struct {
-	base baseTool
-}
-
-// NewSearchTextTool creates a search_text tool.
-func NewSearchTextTool(validator *workspacepkg.PathValidator) (*SearchTextTool, error) {
-	base, err := newBaseTool(domain.ToolDefinition{
-		Name:         "search_text",
-		Description:  "Recursively search UTF-8 text files within the workspace using the Go standard library.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1},"query":{"type":"string","minLength":1,"maxLength":4096},"case_sensitive":{"type":"boolean"},"before":{"type":"integer","minimum":0,"maximum":5},"after":{"type":"integer","minimum":0,"maximum":5}},"required":["path","query"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"query":{"type":"string"},"case_sensitive":{"type":"boolean"},"before":{"type":"integer"},"after":{"type":"integer"},"match_count":{"type":"integer"},"truncated":{"type":"boolean"},"scanned_files":{"type":"integer"},"skipped_binary":{"type":"integer"},"skipped_too_large":{"type":"integer"},"matches":{"type":"array"}},"required":["path","query","case_sensitive","before","after","match_count","truncated","scanned_files","skipped_binary","skipped_too_large","matches"]}`),
-		Capabilities: []domain.Capability{domain.CapFSRead},
-		Source:       domain.ToolSourceBuiltin,
-	}, validator)
-	if err != nil {
-		return nil, err
-	}
-	return &SearchTextTool{base: base}, nil
-}
-
-func (t *SearchTextTool) Definition() domain.ToolDefinition {
-	return t.base.def
-}
-
-func (t *SearchTextTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[searchTextArgs](call.Arguments)
-	if err != nil {
-		return domain.PreparedCall{}, err
-	}
-	args, pathInfo, err := validateSearchTextArgs(t.base.validator, args)
-	if err != nil {
-		return domain.PreparedCall{}, err
-	}
-
-	canonical, err := json.Marshal(args)
-	if err != nil {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
-	}
-	approvalDesc := fmt.Sprintf("Search %q under %s", args.Query, args.Path)
-	return t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
-}
-
-func (t *SearchTextTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
-	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
-	}
-	if len(prepared.ReadPaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
-	}
-
-	args, err := decodeStrict[searchTextArgs](prepared.Call.Arguments)
-	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
-	}
-
-	pathInfo, err := resolveExistingPath(t.base.validator, prepared.ReadPaths[0])
-	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
-	}
-	if pathInfo.Display != args.Path {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
-	}
-	if !pathInfo.Info.IsDir() {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "path must refer to a directory"))
-	}
-
-	output, err := searchDirectory(ctx, t.base.validator, pathInfo, args)
-	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
-	}
-	return successResult(prepared.Call.ID, startedAt, output)
-}
-
-func validateSearchTextArgs(validator *workspacepkg.PathValidator, args searchTextArgs) (searchTextArgs, pathResolution, error) {
-	if strings.TrimSpace(args.Query) == "" {
-		return searchTextArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, "query is required")
-	}
-	if len(args.Query) > maxSearchQueryBytes {
-		return searchTextArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("query exceeds %d bytes", maxSearchQueryBytes))
-	}
-	if args.Before < 0 || args.Before > maxSearchContextLines {
-		return searchTextArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("before must be between 0 and %d", maxSearchContextLines))
-	}
-	if args.After < 0 || args.After > maxSearchContextLines {
-		return searchTextArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("after must be between 0 and %d", maxSearchContextLines))
-	}
-	if args.Before == 0 {
-		args.Before = defaultSearchContextLines
-	}
-	if args.After == 0 {
-		args.After = defaultSearchContextLines
-	}
-
-	pathInfo, err := resolveExistingPath(validator, args.Path)
-	if err != nil {
-		return searchTextArgs{}, pathResolution{}, err
-	}
-	if !pathInfo.Info.IsDir() {
-		return searchTextArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, "path must refer to a directory")
-	}
-	args.Path = pathInfo.Display
-	return args, pathInfo, nil
-}
+// This file now hosts only the Go fallback search engine used by the search
+// tool when ripgrep is unavailable (see search.go for the tool definition).
 
 func searchDirectory(ctx context.Context, validator *workspacepkg.PathValidator, root pathResolution, args searchTextArgs) (searchTextOutput, error) {
 	output := searchTextOutput{

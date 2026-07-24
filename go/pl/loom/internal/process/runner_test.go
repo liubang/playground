@@ -81,6 +81,9 @@ func TestRunnerExecutesProgramAndCapturesStreams(t *testing.T) {
 	if result.Truncated {
 		t.Fatal("Truncated = true, want false")
 	}
+	if result.StdoutBytes != int64(len(result.Stdout)) || result.StderrBytes != int64(len(result.Stderr)) {
+		t.Fatalf("stream byte counts = %d/%d, previews=%d/%d", result.StdoutBytes, result.StderrBytes, len(result.Stdout), len(result.Stderr))
+	}
 }
 
 func TestRunnerTruncatesCombinedOutput(t *testing.T) {
@@ -107,8 +110,39 @@ func TestRunnerTruncatesCombinedOutput(t *testing.T) {
 	if !result.Truncated {
 		t.Fatal("Truncated = false, want true")
 	}
-	if got := len(result.Stdout) + len(result.Stderr); got != 64 {
-		t.Fatalf("captured bytes = %d, want 64", got)
+	if got := len(result.Stdout) + len(result.Stderr); got != 128 {
+		t.Fatalf("captured bytes = %d, want 128 (64 per stream)", got)
+	}
+	if result.StdoutBytes != 80 || result.StderrBytes != 80 || !result.StdoutTruncated || !result.StderrTruncated {
+		t.Fatalf("unexpected stream metadata: %+v", result)
+	}
+	if string(result.Stdout[:24]) != strings.Repeat("A", 24) || string(result.Stdout[len(result.Stdout)-40:]) != strings.Repeat("A", 40) {
+		t.Fatalf("stdout is not head/tail preview: %q", result.Stdout)
+	}
+}
+
+func TestRunnerStreamsCompleteOutputToWriters(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	executable := writePythonScript(t, python, root, "stream.py", []string{
+		"import sys",
+		"sys.stdout.write('H' * 200)",
+		"sys.stderr.write('E' * 150)",
+	})
+	runner := newRunner(t, validator, RunnerOptions{Sandbox: ExplicitTestSandbox{}, LookPath: fixedLookPath(executable)})
+	var stdout, stderr strings.Builder
+	result, err := runner.Run(context.Background(), CommandSpec{
+		Program: "stream", Cwd: root, OutputLimit: 32,
+		StdoutWriter: &stdout, StderrWriter: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if stdout.Len() != 200 || stderr.Len() != 150 {
+		t.Fatalf("streamed lengths = %d/%d", stdout.Len(), stderr.Len())
+	}
+	if len(result.Stdout) != 32 || len(result.Stderr) != 32 || result.StdoutBytes != 200 || result.StderrBytes != 150 {
+		t.Fatalf("unexpected bounded result: %+v", result)
 	}
 }
 

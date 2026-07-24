@@ -20,6 +20,7 @@ package process
 import (
 	"errors"
 	"fmt"
+	"io"
 	"time"
 )
 
@@ -60,27 +61,33 @@ var (
 
 // CommandSpec describes a single process execution request.
 type CommandSpec struct {
-	Program     string
-	Args        []string
-	Cwd         string
-	Env         map[string]string
-	Timeout     time.Duration
-	OutputLimit int64
+	Program      string
+	Args         []string
+	Cwd          string
+	Env          map[string]string
+	Timeout      time.Duration
+	OutputLimit  int64
+	StdoutWriter io.Writer
+	StderrWriter io.Writer
 }
 
 // Result captures the outcome of a process execution.
 type Result struct {
-	ExitCode       int
-	Signal         string
-	Duration       time.Duration
-	TimedOut       bool
-	Cancelled      bool
-	Isolation      string
-	ExecutablePath string
-	ExecutableHash string
-	Stdout         []byte
-	Stderr         []byte
-	Truncated      bool
+	ExitCode        int
+	Signal          string
+	Duration        time.Duration
+	TimedOut        bool
+	Cancelled       bool
+	Isolation       string
+	ExecutablePath  string
+	ExecutableHash  string
+	Stdout          []byte
+	Stderr          []byte
+	StdoutBytes     int64
+	StderrBytes     int64
+	StdoutTruncated bool
+	StderrTruncated bool
+	Truncated       bool
 }
 
 // Sandbox constrains process execution before the command starts.

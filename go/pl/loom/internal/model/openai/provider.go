@@ -577,16 +577,21 @@ func toolResultContent(result domain.ToolResult) string {
 		return result.Error.Message
 	}
 
-	onlyText := true
+	textAndArtifactRefs := true
 	var text strings.Builder
 	for _, part := range result.Content {
-		if part.Kind != domain.PartText {
-			onlyText = false
-			break
+		switch part.Kind {
+		case domain.PartText:
+			text.WriteString(part.Text)
+		case domain.PartArtifact:
+			// Artifact references are persisted in the canonical ToolResult. Tools
+			// include model-safe reference metadata in their bounded text payload;
+			// do not duplicate refs here and accidentally exceed context budgets.
+		default:
+			textAndArtifactRefs = false
 		}
-		text.WriteString(part.Text)
 	}
-	if onlyText {
+	if textAndArtifactRefs && text.Len() > 0 {
 		return text.String()
 	}
 
@@ -813,6 +818,15 @@ func (s *openAIStream) runResponses(parser *sseParser, state *canonicalState) {
 			return
 		}
 		if isReasoningEventName(eventName) {
+			if !state.responseStarted {
+				s.finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError)
+				return
+			}
+			if strings.HasSuffix(eventName, ".delta") {
+				state.emitReasoningDelta(envelope.Delta, s.emit)
+			} else if strings.HasSuffix(eventName, ".done") {
+				state.closeReasoning(s.emit)
+			}
 			continue
 		}
 		if state.finishSeen {
@@ -966,6 +980,7 @@ func (s *openAIStream) finishWithError(state *canonicalState, err error, stop do
 
 type canonicalState struct {
 	textOpen        bool
+	reasoningOpen   bool
 	responseStarted bool
 	finishSeen      bool
 	finalStop       domain.StopReason
@@ -1007,6 +1022,19 @@ func (s *canonicalState) applyChatChunk(chunk chatCompletionChunk, emit func(dom
 		}
 		if hasText {
 			s.emitTextDelta(text, emit)
+		}
+		reasoning, hasReasoning, err := decodeDeltaText(choice.Delta.ReasoningContent)
+		if err != nil {
+			return err
+		}
+		if !hasReasoning {
+			reasoning, hasReasoning, err = decodeDeltaText(choice.Delta.Thinking)
+			if err != nil {
+				return err
+			}
+		}
+		if hasReasoning {
+			s.emitReasoningDelta(reasoning, emit)
 		}
 
 		for _, delta := range choice.Delta.ToolCalls {
@@ -1051,6 +1079,24 @@ func (s *canonicalState) closeText(emit func(domain.ModelEvent) bool) {
 	}
 	emit(domain.ModelEvent{Kind: domain.ModelEventTextEnd})
 	s.textOpen = false
+}
+
+func (s *canonicalState) emitReasoningDelta(text string, emit func(domain.ModelEvent) bool) {
+	if !s.reasoningOpen {
+		emit(domain.ModelEvent{Kind: domain.ModelEventReasoningStart})
+		s.reasoningOpen = true
+	}
+	if text != "" {
+		emit(domain.ModelEvent{Kind: domain.ModelEventReasoningDelta, ReasoningDelta: text})
+	}
+}
+
+func (s *canonicalState) closeReasoning(emit func(domain.ModelEvent) bool) {
+	if !s.reasoningOpen {
+		return
+	}
+	emit(domain.ModelEvent{Kind: domain.ModelEventReasoningEnd})
+	s.reasoningOpen = false
 }
 
 func (s *canonicalState) applyToolDelta(delta toolCallDelta, emit func(domain.ModelEvent) bool) error {
@@ -1249,6 +1295,7 @@ func (s *canonicalState) closeTool(tool *toolState, emit func(domain.ModelEvent)
 
 func (s *canonicalState) closeOpen(emit func(domain.ModelEvent) bool) error {
 	s.closeText(emit)
+	s.closeReasoning(emit)
 	if len(s.tools) == 0 {
 		return nil
 	}
@@ -1293,8 +1340,10 @@ type chatChoice struct {
 }
 
 type chatDelta struct {
-	Content   json.RawMessage `json:"content"`
-	ToolCalls []toolCallDelta `json:"tool_calls,omitempty"`
+	Content          json.RawMessage `json:"content"`
+	ReasoningContent json.RawMessage `json:"reasoning_content,omitempty"`
+	Thinking         json.RawMessage `json:"thinking,omitempty"`
+	ToolCalls        []toolCallDelta `json:"tool_calls,omitempty"`
 }
 
 type toolCallDelta struct {

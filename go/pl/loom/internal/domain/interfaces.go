@@ -19,6 +19,7 @@ package domain
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -65,6 +66,9 @@ const (
 	ModelEventTextStart       ModelEventKind = "text_start"
 	ModelEventTextDelta       ModelEventKind = "text_delta"
 	ModelEventTextEnd         ModelEventKind = "text_end"
+	ModelEventReasoningStart  ModelEventKind = "reasoning_start"
+	ModelEventReasoningDelta  ModelEventKind = "reasoning_delta"
+	ModelEventReasoningEnd    ModelEventKind = "reasoning_end"
 	ModelEventToolCallStart   ModelEventKind = "tool_call_start"
 	ModelEventToolArgsDelta   ModelEventKind = "tool_arguments_delta"
 	ModelEventToolCallEnd     ModelEventKind = "tool_call_end"
@@ -76,16 +80,17 @@ const (
 
 // ModelEvent is a tagged union for streaming model events.
 type ModelEvent struct {
-	Kind         ModelEventKind `json:"kind"`
-	TextDelta    string         `json:"text_delta,omitempty"`
-	ToolIndex    int            `json:"tool_index,omitempty"`
-	ToolID       string         `json:"tool_id,omitempty"`
-	ToolName     string         `json:"tool_name,omitempty"`
-	ToolArgs     string         `json:"tool_args,omitempty"`
-	InputTokens  int64          `json:"input_tokens,omitempty"`
-	OutputTokens int64          `json:"output_tokens,omitempty"`
-	StopReason   StopReason     `json:"stop_reason,omitempty"`
-	Error        string         `json:"error,omitempty"`
+	Kind           ModelEventKind `json:"kind"`
+	TextDelta      string         `json:"text_delta,omitempty"`
+	ReasoningDelta string         `json:"reasoning_delta,omitempty"`
+	ToolIndex      int            `json:"tool_index,omitempty"`
+	ToolID         string         `json:"tool_id,omitempty"`
+	ToolName       string         `json:"tool_name,omitempty"`
+	ToolArgs       string         `json:"tool_args,omitempty"`
+	InputTokens    int64          `json:"input_tokens,omitempty"`
+	OutputTokens   int64          `json:"output_tokens,omitempty"`
+	StopReason     StopReason     `json:"stop_reason,omitempty"`
+	Error          string         `json:"error,omitempty"`
 }
 
 // ModelStream is a pull-based stream of model events.
@@ -97,6 +102,23 @@ type ModelStream interface {
 // Model is the provider-agnostic model interface.
 type Model interface {
 	Stream(ctx context.Context, req ModelRequest) (ModelStream, error)
+}
+
+// --- Artifact interfaces (§8.4, §13.2) ---
+
+// StagedArtifact incrementally captures a bounded immutable blob.
+type StagedArtifact interface {
+	io.Writer
+	TotalBytes() int64
+	StoredBytes() int64
+	Truncated() bool
+	Commit(context.Context) (ArtifactRef, error)
+	Abort() error
+}
+
+// ArtifactStore starts independent staged artifact writes.
+type ArtifactStore interface {
+	Begin(context.Context) (StagedArtifact, error)
 }
 
 // --- SessionStore interface (§13.2) ---

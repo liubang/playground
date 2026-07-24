@@ -23,6 +23,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -31,6 +33,8 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/builtin"
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 func newTestRun(limits domain.Limits) *Run {
@@ -180,7 +184,7 @@ func TestRecoverRunReconcilesInterruptedFileWrite(t *testing.T) {
 func TestRecoverRunBlocksUncertainNonIdempotentTool(t *testing.T) {
 	clock := domain.NewFakeClock(time.Now().UTC())
 	sessionID := domain.NewSessionID()
-	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "run_command", Arguments: json.RawMessage(`{"command":"make"}`)}
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "run_cmd", Arguments: json.RawMessage(`{"command":"make"}`)}
 	message := domain.Message{
 		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleAssistant,
 		Status: domain.MessageStatusFinal, Revision: 1,
@@ -510,6 +514,119 @@ func TestLoopExecuteWithToolCalls(t *testing.T) {
 	}
 }
 
+// Regression: a tool call whose raw arguments differ from the canonical form
+// produced by Prepare (e.g. "./sub" vs "sub", or an absolute path vs the
+// workspace-relative display form) must still execute. Previously the
+// execution-time validation compared raw against canonical bytes and rejected
+// every legitimately normalized call with a "security" error.
+func TestLoopExecuteToolCallWithNonCanonicalPath(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	validator, err := workspacepkg.NewPathValidator(root)
+	if err != nil {
+		t.Fatalf("NewPathValidator: %v", err)
+	}
+	listDir, err := builtin.NewListDirTool(validator)
+	if err != nil {
+		t.Fatalf("NewListDirTool: %v", err)
+	}
+
+	registry := NewToolRegistry()
+	if err := registry.Register(listDir); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{
+				{ID: domain.NewToolCallID(), Name: "list_dir", Arguments: json.RawMessage(`{"path":"./sub"}`)},
+			},
+			StopReason: domain.StopToolUse,
+			UsageIn:    100,
+			UsageOut:   30,
+		},
+		fakes.ScriptEntry{
+			Text:       "listed",
+			StopReason: domain.StopEndTurn,
+			UsageIn:    50,
+			UsageOut:   10,
+		},
+	)
+
+	run := newTestRun(domain.Limits{
+		MaxTurns:         10,
+		MaxToolCalls:     10,
+		MaxParallelTools: 4,
+		MaxOutputTokens:  4096,
+	})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "list ./sub"}},
+		CreatedAt: time.Now(),
+	})
+
+	loop := &Loop{
+		Run:      run,
+		Model:    model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry,
+		Logger:   slog.Default(),
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+
+	var result *domain.ToolResult
+	for i := len(run.Messages) - 1; i >= 0 && result == nil; i-- {
+		for _, part := range run.Messages[i].Parts {
+			if part.Kind == domain.PartToolResult && part.ToolResult != nil {
+				result = part.ToolResult
+			}
+		}
+	}
+	if result == nil {
+		t.Fatal("no tool result recorded")
+	}
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("tool result status = %s, error = %+v", result.Status, result.Error)
+	}
+}
+
+// The freshness re-check must fail closed when the environment changed after
+// the call was prepared: the prepared canonical form no longer matches what
+// Prepare produces now.
+func TestExecuteToolsFailsClosedWhenEnvironmentDrifts(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	validator, err := workspacepkg.NewPathValidator(root)
+	if err != nil {
+		t.Fatalf("NewPathValidator: %v", err)
+	}
+	listDir, err := builtin.NewListDirTool(validator)
+	if err != nil {
+		t.Fatalf("NewListDirTool: %v", err)
+	}
+
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "list_dir", Arguments: json.RawMessage(`{"path":"./sub"}`)}
+	prepared, err := listDir.Prepare(context.Background(), call)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	// The directory disappears after preparation: freshness re-check fails.
+	if err := os.RemoveAll(filepath.Join(root, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyPreparedFreshness(context.Background(), listDir, call, prepared); err == nil {
+		t.Fatal("verifyPreparedFreshness succeeded after the directory vanished")
+	}
+}
+
 func TestLoopExecuteCancelled(t *testing.T) {
 	model := fakes.NewFakeModel()
 
@@ -655,6 +772,91 @@ func TestLoopTracksUsageManifestAndPersistsEvents(t *testing.T) {
 	}
 	if events[5].Type != domain.EventBudgetUpdated {
 		t.Fatalf("missing budget update event: %v", collectEventTypes(events))
+	}
+}
+
+type stubPromptBuilder struct {
+	text  string
+	rules []domain.ContextRuleRef
+	err   error
+}
+
+func (s stubPromptBuilder) Build(context.Context) (string, []domain.ContextRuleRef, error) {
+	return s.text, s.rules, s.err
+}
+
+func TestLoopPrependsSystemPromptToModelRequest(t *testing.T) {
+	model := fakes.NewFakeModel(fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn})
+	run := newTestRun(domain.DefaultLimits())
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "question"}},
+		CreatedAt: run.Clock.Now(),
+	})
+	loop := &Loop{
+		Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default(),
+		SystemPrompt: stubPromptBuilder{
+			text:  "SYSTEM MARKER",
+			rules: []domain.ContextRuleRef{{Source: "loom://builtin/test", Hash: "sha256:abc"}},
+		},
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	calls := model.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 model call, got %d", len(calls))
+	}
+	msgs := calls[0].Messages
+	if len(msgs) != 2 || msgs[0].Role != domain.RoleSystem || msgs[1].Role != domain.RoleUser {
+		t.Fatalf("expected [system, user] request messages, got %+v", msgs)
+	}
+	if got := msgs[0].Parts[0].Text; got != "SYSTEM MARKER" {
+		t.Fatalf("unexpected system prompt text: %q", got)
+	}
+
+	// The system prompt is request-scoped: it must not leak into the transcript.
+	for _, m := range run.Messages {
+		if m.Role == domain.RoleSystem {
+			t.Fatal("system prompt leaked into the persisted transcript")
+		}
+	}
+
+	// Rule sources are audited through the context manifest.
+	manifest := calls[0].ContextManifest
+	if len(manifest.Rules) != 1 || manifest.Rules[0].Source != "loom://builtin/test" {
+		t.Fatalf("manifest rules not populated: %+v", manifest.Rules)
+	}
+	if err := manifest.Validate(); err != nil {
+		t.Fatalf("invalid context manifest: %v", err)
+	}
+}
+
+func TestLoopContinuesWithoutSystemPromptWhenBuildFails(t *testing.T) {
+	model := fakes.NewFakeModel(fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn})
+	run := newTestRun(domain.DefaultLimits())
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "question"}},
+		CreatedAt: run.Clock.Now(),
+	})
+	loop := &Loop{
+		Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default(),
+		SystemPrompt: stubPromptBuilder{err: errors.New("boom")},
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute should tolerate prompt build failure: %v", err)
+	}
+	calls := model.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 model call, got %d", len(calls))
+	}
+	if len(calls[0].Messages) != 1 || calls[0].Messages[0].Role != domain.RoleUser {
+		t.Fatalf("expected bare transcript on prompt failure, got %+v", calls[0].Messages)
+	}
+	if len(calls[0].ContextManifest.Rules) != 0 {
+		t.Fatalf("expected no rule refs on prompt failure, got %+v", calls[0].ContextManifest.Rules)
 	}
 }
 

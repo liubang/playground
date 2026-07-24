@@ -22,6 +22,7 @@ go_library(
     srcs = [
         "common.go",
         "diff.go",
+        "log.go",
         "status.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/gittools",

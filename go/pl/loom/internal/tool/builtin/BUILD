@@ -21,14 +21,18 @@ go_library(
     name = "builtin_lib",
     srcs = [
         "common.go",
-        "list_directory.go",
+        "glob.go",
+        "list_dir.go",
         "read_file.go",
+        "rg.go",
+        "search.go",
         "search_text.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/builtin",
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/process:process_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )

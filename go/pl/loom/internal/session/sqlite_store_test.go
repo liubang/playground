@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -367,6 +368,77 @@ func TestSQLiteStoreListSessionsMostRecentlyUpdatedFirst(t *testing.T) {
 	}
 	if _, err := store.ListSessions(ctx, 0); errorCode(err) != domain.ErrInvalidInput {
 		t.Fatalf("ListSessions invalid limit error = %v", err)
+	}
+}
+
+func TestSQLiteStoreIndexesArtifactReferencesAcrossCheckpoints(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	firstID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("1", 64))
+	secondID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("2", 64))
+	first := testCheckpoint(sessionID, 0, time.Now().UTC())
+	first.Messages[0].Parts = []domain.ContentPart{{Kind: domain.PartArtifact, Artifact: &domain.ArtifactRef{ID: firstID, Size: 12}}}
+	if err := store.SaveCheckpoint(ctx, first); err != nil {
+		t.Fatalf("SaveCheckpoint first: %v", err)
+	}
+	second := testCheckpoint(sessionID, 0, time.Now().UTC().Add(time.Second))
+	second.Messages[0].Parts = []domain.ContentPart{{Kind: domain.PartArtifact, Artifact: &domain.ArtifactRef{ID: secondID, Size: 23}}}
+	if err := store.SaveCheckpoint(ctx, second); err != nil {
+		t.Fatalf("SaveCheckpoint second: %v", err)
+	}
+	refs, err := store.ListArtifactRefs(ctx)
+	if err != nil {
+		t.Fatalf("ListArtifactRefs: %v", err)
+	}
+	if len(refs) != 2 || refs[firstID] != 12 || refs[secondID] != 23 {
+		t.Fatalf("unexpected artifact refs: %+v", refs)
+	}
+}
+
+func TestSQLiteStoreMigratesVersionOneArtifactReferences(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "sessions.db")
+	store := openTestSQLiteStore(t, path)
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	artifactID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("3", 64))
+	checkpoint := testCheckpoint(sessionID, 0, time.Now().UTC())
+	checkpoint.Messages[0].Parts = []domain.ContentPart{{Kind: domain.PartArtifact, Artifact: &domain.ArtifactRef{ID: artifactID, Size: 34}}}
+	data, err := json.Marshal(checkpoint)
+	if err != nil {
+		t.Fatalf("Marshal checkpoint: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `
+INSERT INTO checkpoints(checkpoint_id, session_id, sequence, data, created_at, created_at_unix_nano)
+VALUES (?, ?, ?, ?, ?, ?)`, checkpoint.ID.String(), sessionID.String(), 0, data,
+		formatTime(checkpoint.CreatedAt), checkpoint.CreatedAt.UnixNano()); err != nil {
+		t.Fatalf("insert legacy checkpoint: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, "DELETE FROM artifact_refs"); err != nil {
+		t.Fatalf("clear artifact refs: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, "DELETE FROM schema_migrations WHERE version = 2"); err != nil {
+		t.Fatalf("downgrade schema marker: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?)", formatTime(time.Now().UTC())); err != nil {
+		t.Fatalf("record v1 marker: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	store = openTestSQLiteStore(t, path)
+	refs, err := store.ListArtifactRefs(ctx)
+	if err != nil {
+		t.Fatalf("ListArtifactRefs: %v", err)
+	}
+	if len(refs) != 1 || refs[artifactID] != 34 {
+		t.Fatalf("migrated refs = %+v", refs)
 	}
 }
 

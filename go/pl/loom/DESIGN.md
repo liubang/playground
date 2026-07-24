@@ -387,7 +387,9 @@ B_{context}=B_{model}-B_{output}-B_{safety}
 - `artifact_ref`：完整原始输出；
 - `metadata`：退出码、大小、截断原因和哈希。
 
-保留错误首尾、路径、行号、测试名、退出码、重现命令、总匹配数和展示范围。
+保留错误首尾、路径、行号、测试名、退出码、重现命令、总匹配数和展示范围。当前 `run_cmd` 对 stdout/stderr 分别维护固定内存的 head/tail 预览，并在序列化后再次执行总字节预算校验；Artifact 引用保留在 Canonical Tool Result 中，但 Provider 只向模型发送有界文本视图，避免引用结构重复膨胀上下文。
+
+命令完整输出采用独立的 stdout/stderr 内容寻址 Artifact。执行前创建私有 staging writer，进程运行时边排空 pipe、边计算 SHA-256、边写入临时文件；完成后 `fsync` 并以无覆盖方式原子提交。达到 Artifact 配额后继续排空输出但停止持久化，分别记录观察字节数、保存字节数、预览截断和 Artifact 截断。Artifact 必须先提交，再由 Tool Result/Event 引用；提交后、事件落盘前崩溃产生的无引用 Blob 由后续 GC 清理，绝不先写悬空引用。
 
 ### 8.5 压缩
 
@@ -429,12 +431,30 @@ type Tool interface {
 
 ### 9.2 内置工具
 
-- 只读：`read_file`、`list_directory`、`glob_files`、`search_text`、`git_status`、`git_diff`、后续 `read_diagnostics`。
-- 编辑：`replace_text`、`apply_patch`、`write_file`、`delete_file`、`format_files`。
-- 进程：`run_command`、`start_process`、`poll_process`、`stop_process`。
-- 扩展：MCP、LSP、只读子 Agent。
+命名规范：动词 + 短名词、snake_case、优先日常词汇；`git_` 为命名空间前缀。
 
-长期进程与普通命令分开建模，避免一次 Tool Call 永久阻塞循环。
+当前集合（12 个）：
+
+| 工具 | 风险 | 职责 |
+|---|---:|---|
+| `read_file` | R1 | 分页读取 UTF-8 文件（带行号，offset/limit，二进制拒绝；编辑前必须先读） |
+| `list_dir` | R1 | 单层目录罗列（kind/size/mode/mtime，字典序，200 条截断，不递归） |
+| `glob` | R1 | 按 glob 模式发现文件（如 `**/*.go`），字典序，200 条截断 |
+| `search` | R1 | 正则/字面内容搜索（path/glob/type/context/case/fixed_strings）；`rg --json` 引擎优先，Go 实现回退，`.gitignore` 默认生效 |
+| `write` | R2 | 创建（自动建父目录）或整文件覆写；审批展示路径/字节数/创建或覆盖；堵 `run_cmd` + heredoc 旁路 |
+| `edit` | R2 | `old_string`/`new_string` 精确替换（唯一匹配或 `replace_all`）；陈旧检测内部化（文件自上次读取后被外部修改则报可行动错误）；`expected_hash` 仅作可选高级校验 |
+| `run_cmd` | R2/R3 | 直接执行程序（非 shell）；仅 `program` 必填，其余参数均有默认值；需要 shell 语法时显式 `sh -c` 并承担更高审批风险 |
+| `git_status` | R1 | 仓库状态（porcelain v2，`repo_root` 默认 `"."`） |
+| `git_diff` | R1 | 变更内容（`repo_root` 默认 `"."`，可选 `base`） |
+| `git_log` | R1 | 提交历史（`limit` 分页） |
+| `lint` | R2 | 项目代码诊断：按标记文件确定性检测引擎（go.mod → golangci-lint/go vet，package.json → eslint，pyproject.toml → ruff，compile_commands.json → clang-tidy），沙箱内执行，输出归一化结构化 diagnostics |
+| `web_fetch` | R3 | HTTP/HTTPS GET 抓取网页：HTML 转 markdown（可 text/raw），SSRF 拨号时防护（默认拒绝私网/环回），重定向限 5 跳，大小截断走 artifact 溢出，成功响应进程内缓存 15 分钟 |
+
+分工边界（写入 system prompt）：找文件用 `glob`，找内容用 `search`，看目录用 `list_dir`，读文件用 `read_file`，新建/覆写用 `write`，局部修改用 `edit`，构建/测试/任意程序用 `run_cmd`，仓库信息用 `git_*`，代码诊断用 `lint`，网页内容用 `web_fetch`。
+
+合并与退役：`replace_text` 与 `apply_patch` 合并为 `edit`；`search_text` 重构为 `search`；`list_directory` 更名 `list_dir`；`run_command` 更名 `run_cmd`。旧 Session 中的已退役工具名在恢复时按 `unknown_tool` 语义处理。
+
+进程工具与长期进程分开建模，避免一次 Tool Call 永久阻塞循环：后续 `start_process`、`poll_process`、`stop_process` 独立演进。
 
 ### 9.3 并发
 
@@ -483,9 +503,11 @@ type CommandSpec struct {
 要求：
 
 - 独立进程组；
-- stdout/stderr 并行消费；
-- 输出预览有界，完整输出转 Artifact；
-- 超时先温和终止，宽限后杀进程组；
+- stdout/stderr 并行且持续消费，任何预览或 Artifact 配额都不得导致停止排空 pipe；
+- stdout/stderr 分别使用固定内存 head/tail 预览，并分别流式写入 staging Artifact；
+- Artifact 采用 SHA-256 内容寻址、私有临时文件、`fsync` 和无覆盖原子提交，相同内容自动去重；
+- 分别记录每条流的观察字节数、预览截断、Artifact 截断和 Artifact 引用；达到 Artifact 上限后继续读取但丢弃后续持久化内容；
+- 超时先温和终止，宽限后杀进程组；命令结束时即使原执行 Context 已取消，也使用独立短时 Context 提交已捕获 Artifact；
 - 记录退出码、信号、耗时、截断和资源使用；
 - 非交互命令关闭 stdin；交互命令走独立 PTY 工具并审批；
 - 最小环境变量，剔除模型和云凭证；日志秘密脱敏。
@@ -551,7 +573,7 @@ type SessionStore interface {
 }
 ```
 
-推荐 SQLite WAL 保存 Session、Run、Event、Approval、Usage 和 Artifact 元数据；大输出以 SHA-256 内容寻址存文件。推进 Run 时 Event batch 与覆盖该版本的 Checkpoint 必须在同一事务内提交，避免事件已提交但投影快照缺失。数据库有版本迁移、备份和损坏诊断；Artifact 有配额、引用和 GC。
+推荐 SQLite WAL 保存 Session、Run、Event、Approval、Usage 和 Artifact 元数据；大输出以 SHA-256 内容寻址存文件。当前 Artifact Store 已实现私有目录、流式 staging、单 Artifact 配额、同步、无覆盖原子提交、内容去重、读取时摘要校验和失败清理；`run_cmd` 为 stdout/stderr 分别生成 Artifact。SQLite schema v2 增加按 Session 聚合的 Artifact 引用索引，Checkpoint 与新增引用在同一事务内提交；v1 数据库打开时会扫描已有 Checkpoint 回填索引。显式 `loom gc` 读取引用快照，仅删除超过 24 小时宽限期的无引用 Blob 与崩溃残留 staging 文件。推进 Run 时 Event batch 与覆盖该版本的 Checkpoint 必须在同一事务内提交，避免事件已提交但投影快照缺失。数据库仍需备份和损坏诊断；Artifact 仍需 Session 级/全局配额和可配置保留策略。
 
 ### 13.3 Checkpoint 与恢复
 
@@ -562,7 +584,7 @@ type SessionStore interface {
 - 未形成完整模型响应则标记中断并重新请求；
 - 只读幂等工具可重试；
 - 文件写通过操作 ID 和前后哈希确认是否完成；当前 `replace_text`/`apply_patch` 已实现前后哈希三态核对；
-- 普通 Shell 默认非幂等，不自动重放；当前 `run_command` 结果未知时阻断恢复并要求人工核实；
+- 普通 Shell 默认非幂等，不自动重放；当前 `run_cmd` 结果未知时阻断恢复并要求人工核实；
 - 后台进程只有在 PID、启动时间、可执行身份和 owner token 均可确认时才能接管；当前尚未实现后台进程 registry，因此不宣称可恢复；
 - 旧审批在恢复后失效；只读调用可明确标记为可重试，但当前不会静默自动执行；
 - 恢复决定必须形成审计结果；跨进程 lease/fencing 完成前，不提供 exactly-once 副作用保证。
@@ -661,24 +683,25 @@ loom eval                    运行评测
 | 阶段 | 状态 | 当前实现 |
 |---|---|---|
 | Phase 0 | 已完成 | 领域状态机、强类型 ID、Canonical Message/Tool/Event 协议、Limits、Fake Model/Tool/Store/Approver、Tool Registry、基础 Policy、工作区路径边界和 Go/Bazel 构建骨架 |
-| Phase 1 | 已完成 | OpenAI-compatible Provider、Chat Completions/Responses 流协议、部分流与断流处理、`read_file`、`list_directory`、`search_text`、Context Manifest、Transcript 投影和 `loom run` 闭环 |
+| Phase 1 | 已完成 | OpenAI-compatible Provider、Chat Completions/Responses 流协议、部分流与断流处理、`read_file`、`list_dir`、`search_text`、Context Manifest、Transcript 投影和 `loom run` 闭环 |
 | Phase 2 | 安全基线已完成 | 哈希保护编辑、原子写、严格补丁、PreparedCall 绑定与执行前复验、审批和副作用意图事件、隔离命令执行、Git status/diff、网络默认拒绝、环境秘密剔除和 CLI 工具装配 |
-| Phase 3 | 主链路进行中 | SQLite WAL Event Store、schema v1、Canonical Transcript、原子 Event+Checkpoint 提交、`sessions`/`inspect`/`resume`、模型请求审计和安全 Reconciler 已实现；Artifact、备份、GC、lease/fencing、完整故障矩阵和升级迁移仍待实现 |
+| Phase 3 | 主链路进行中 | SQLite WAL Event Store、schema v2 与 v1→v2 回填迁移、Canonical Transcript、原子 Event+Checkpoint+Artifact 引用索引提交、`sessions`/`inspect`/`resume`/`gc`、模型请求审计、安全 Reconciler、内容寻址 Artifact Store、流式 staging、命令 stdout/stderr Artifact 和 grace-period 孤儿 GC 已实现；备份、lease/fencing、完整故障矩阵、更复杂升级迁移和配额/保留策略仍待实现 |
 | Phase 4～7 | 未开始 | 按后续路线实施 |
 
 当前包与能力：
 
-- `internal/domain`：状态机、消息、事件、工具、计划、预算和 Context Manifest 等核心领域模型。
+- `internal/domain`：状态机、消息、事件、工具、计划、预算、Context Manifest、`ArtifactStore` 和 `StagedArtifact` 等核心领域模型。
 - `internal/agent`：模型—工具循环、预算检查、审批路由、PreparedCall 复验、模型请求生命周期审计和恢复 Reconciler。Event 与对应 Checkpoint 原子提交；副作用执行前必须先持久化 intent；提交失败时禁止 dispatch；旧审批在恢复时失效；同一 Tool Call 已有结果时不会在当前 Loop 内自动重放。
 - `internal/model/openai`：支持 OpenAI-compatible Chat Completions 与 Responses API，包含 SSE 聚合、Usage、工具调用、生命周期事件和兼容网关直接 EOF 的处理。
 - `internal/tool/builtin`：工作区内的有界只读文件、目录和文本搜索。
 - `internal/tool/edit`：`replace_text` 和单文件 strict unified diff `apply_patch`。两者要求 `expected_hash`，冲突返回结构化错误，禁止覆盖并发修改；Prepare 在可确定时记录写入前后哈希，供崩溃恢复执行三态核对。
 - `internal/workspace`：路径规范化、符号链接与敏感路径拒绝、文件 Snapshot、同目录临时文件、`fsync`、原子 rename、权限和扩展元数据保留。无法安全保留元数据时 fail closed。
-- `internal/process`：`Program + Args` 非 Shell 执行、最小环境、凭证变量剔除、有界 stdout/stderr、独立进程组、超时/取消回收、可执行文件哈希复验和沙箱抽象。
-- `internal/tool/command`：R2 `run_command`，审批摘要展示程序、参数、工作目录、环境变量名、超时与网络策略，不展示环境变量值。
+- `internal/artifact`：SHA-256 内容寻址 Blob Store；支持私有目录、流式 staging、单对象配额、观察/保存字节统计、截断后继续消费、`fsync`、无覆盖原子提交、内容去重、读取校验、幂等 Abort，以及引用白名单 + 宽限期驱动的孤儿 Blob/staging GC。
+- `internal/process`：`Program + Args` 非 Shell 执行、最小环境、凭证变量剔除、stdout/stderr 并行排空、独立 head/tail 预览、外部流式 Writer、逐流字节/截断统计、独立进程组、超时/取消回收、可执行文件哈希复验和沙箱抽象。
+- `internal/tool/command`：R2 `run_cmd`，审批摘要展示程序、参数、工作目录、环境变量名、超时与网络策略，不展示环境变量值；命令执行前创建 stdout/stderr staging Artifact，完成后先提交 Blob 再形成 Tool Result 引用，模型只接收严格有界的 head/tail 预览。
 - `internal/tool/gittools`：只读 `git_status` 和 `git_diff`，使用固定 Git 子命令、literal pathspec、最小环境、超时和输出上限。
-- `internal/session`：SQLite WAL Event Store、乐观版本控制、纳秒级稳定排序、schema 版本检查、只读一致性检查、Checkpoint 和 Session Inspection。
-- `cmd/loom`：注册 Phase 1/2 工具；R2/R3 在 TTY 中精确提示审批，非 TTY 默认拒绝；公开支持 `run`、`sessions`、`inspect`、`resume` 和 `version`。
+- `internal/session`：SQLite WAL Event Store、乐观版本控制、纳秒级稳定排序、schema v2 版本检查和 v1 Artifact 引用回填迁移、Checkpoint/Artifact 引用原子提交、全局引用快照、只读一致性检查和 Session Inspection。
+- `cmd/loom`：注册 Phase 1/2 工具；R2/R3 在 TTY 中精确提示审批，非 TTY 默认拒绝；公开支持 `run`、`sessions`、`inspect`、`resume`、`gc` 和 `version`。`gc` 使用 24 小时安全宽限期并输出结构化清理统计。
 
 Phase 2 当前安全保证：
 
@@ -687,7 +710,7 @@ Phase 2 当前安全保证：
 3. 审批绑定规范化参数、风险、能力和读写路径；执行前重新核对模型 Tool Call、Registry Definition 和 PreparedCall。
 4. 命令不经过 Shell，默认不继承模型、云服务和常见 Token/Secret/Credential 环境变量。
 5. 命令超时或取消时先终止进程组，再强制回收；输出 pipe 有硬关闭边界，避免脱离进程组的后代无限持有输出管道。
-6. 网络默认拒绝。macOS 在 `sandbox-exec` 可用时使用 Seatbelt；Linux 当前没有满足约定的 namespace/seccomp/cgroup 实现，因此 `run_command` 在 Linux 上 fail closed，而不是降级为无沙箱执行。
+6. 网络默认拒绝。macOS 在 `sandbox-exec` 可用时使用 Seatbelt；Linux 当前没有满足约定的 namespace/seccomp/cgroup 实现，因此 `run_cmd` 在 Linux 上 fail closed，而不是降级为无沙箱执行。Seatbelt profile 的读策略为宽读 + 显式凭证拒绝：现代运行时（Go/Rust）在路径级读限制下无法启动（dyld 需要 `file-read*` 宽集），因此读取全面放开，但对 `~/.ssh`、`~/.gnupg`、`~/.aws`、`~/.kube`、`~/.docker`、`~/.config/gcloud`、`~/Library/Keychains`、`~/.netrc`、`~/.git-credentials`、`~/.env`、`credentials.json`、`service-account.json` 等凭证路径逐条 deny；写入仍限定工作区与临时目录，网络默认拒绝。
 7. Git 工具只允许固定只读操作，路径按 literal pathspec 传递，避免 pathspec magic 扩大读取范围。
 
 已知限制与后续工作：
@@ -696,17 +719,17 @@ Phase 2 当前安全保证：
 - `replace_text`/`apply_patch` 可按当前文件 hash 判定“已应用、未应用、外部冲突”；普通命令、后台进程和不支持幂等键/状态查询的外部 API 仍必须进入人工核实，绝不自动重放。
 - 模型请求已记录 started/failed 及 Context Manifest hash，但 provider 不支持幂等查询时，崩溃后的重复计费和已生成但未落盘响应无法自动确认。
 - 当前已实现环境变量秘密剔除和审计 payload 最小化，但跨 Model/UI/Artifact/Trace/MCP 的完整秘密分类、脱敏和不可导出 handle 管线仍属于 Phase 5。
-- 大型完整命令输出尚未转存内容寻址 Artifact；当前只返回有界预览并标记截断。
+- 大型命令输出已流式转存独立 stdout/stderr 内容寻址 Artifact；单 Artifact 默认仍受 `MaxArtifactBytes` 限制，超限后继续排空进程输出并明确标记 Artifact 截断。引用索引和显式 24 小时 grace-period 孤儿 GC 已实现，但自动调度、Session 级/全局配额、可配置保留策略和 Session 删除后的引用回收流程尚未实现。
 - Linux 生产沙箱尚未实现；在此之前，Linux 命令执行保持 fail closed。
 - CLI 尚未实现 `diff`、`config`、`auth`、`mcp`、`doctor` 和 `eval`；`resume` 当前是“恢复/继续同一 Session 并追加新 Prompt”，后续需拆分透明重试、Session continuation 和人工 resolution 命令。
 - 最终变更归因目前依赖 `git_status`/`git_diff` 和 `file.changed` 事件，尚未形成跨恢复的完整归因报告。
 
 当前验证基线：
 
-- `bazel test //go/pl/loom/...`：13 个测试目标全部通过。
+- `bazel test //go/pl/loom/...`：14 个测试目标全部通过。
 - `bazel build //go/pl/loom/... --platforms=@rules_go//go/toolchain:linux_amd64`：通过。
 - macOS 本机构建、CLI `version` 冒烟、lint 和 `git diff --check`：通过。
-- 安全回归覆盖路径穿越、符号链接、敏感路径、哈希冲突、PreparedCall 篡改、Git pathspec、环境秘密剔除、无沙箱 fail closed、输出截断、命令超时/取消和进程后代持有 pipe 等场景。
+- 安全回归覆盖路径穿越、符号链接、敏感路径、哈希冲突、PreparedCall 篡改、Git pathspec、环境秘密剔除、无沙箱 fail closed、head/tail 输出边界、staging commit/abort/去重、Artifact 配额截断后持续排空、stdout/stderr 独立完整保存、Provider 上下文不重复展开 Artifact 引用、schema v1 引用回填、跨 Checkpoint 引用保留、GC 宽限期/引用保护/取消/残留 staging 清理、CLI GC、命令超时/取消和进程后代持有 pipe 等场景。
 
 ### Phase 0：规范、架构骨架与安全基座
 
@@ -716,13 +739,13 @@ Phase 2 当前安全保证：
 
 ### Phase 1：只读 Agent 闭环
 
-范围：一个 Provider、Canonical Streaming、`read_file`/`list_directory`/`search_text`、工具注册、轮次、预算、Context Manifest 和只读 Session 投影。
+范围：一个 Provider、Canonical Streaming、`read_file`/`list_dir`/`search_text`、工具注册、轮次、预算、Context Manifest 和只读 Session 投影。
 
 验收：Agent 可自主搜索并回答仓库问题；Tool Call ID 正确关联；部分流、断流和重试符合协议；错误能返回模型；取消和最大轮次有效；完整可见对话可以持久化、分页恢复和确定性渲染。
 
 ### Phase 2：安全编辑、隔离执行与验证
 
-范围：`replace_text`/`apply_patch`、哈希冲突、原子写、PreparedCall 复验、副作用操作日志、`run_command`、Git status/diff、权限审批、秘密出口策略、网络默认拒绝和平台可用的 OS 沙箱。
+范围：`replace_text`/`apply_patch`、哈希冲突、原子写、PreparedCall 复验、副作用操作日志、`run_cmd`、Git status/diff、权限审批、秘密出口策略、网络默认拒绝和平台可用的 OS 沙箱。
 
 验收：能完成“定位—修改—测试—失败再修复”；不覆盖用户并发修改；审批对象与实际执行完全一致；命令超时清理进程组；不可确认的副作用进入 `outcome_unknown` 而不自动重放；最终列出 diff 和验证。无法建立约定沙箱时不得自动执行不可信仓库命令。
 

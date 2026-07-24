@@ -31,7 +31,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 1
+const sqliteSchemaVersion = 2
 
 // SQLiteStore persists session events and checkpoints in a SQLite database.
 // A store serializes writes through one connection; optimistic versions still
@@ -176,6 +176,15 @@ CREATE TABLE IF NOT EXISTS checkpoints (
 );
 CREATE INDEX IF NOT EXISTS idx_checkpoints_session_sequence
     ON checkpoints(session_id, sequence DESC, created_at_unix_nano DESC);
+CREATE TABLE IF NOT EXISTS artifact_refs (
+    session_id TEXT NOT NULL,
+    artifact_id TEXT NOT NULL,
+    size INTEGER NOT NULL CHECK (size >= 0),
+    PRIMARY KEY (session_id, artifact_id),
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_artifact_refs_artifact
+    ON artifact_refs(artifact_id);
 `
 	if _, err := s.db.ExecContext(ctx, schema); err != nil {
 		return storeError("apply sqlite schema", err)
@@ -187,6 +196,11 @@ CREATE INDEX IF NOT EXISTS idx_checkpoints_session_sequence
 	if newestVersion.Valid && newestVersion.Int64 > sqliteSchemaVersion {
 		return domain.NewError(domain.ErrUnavailable,
 			fmt.Sprintf("sqlite schema version %d is newer than supported version %d", newestVersion.Int64, sqliteSchemaVersion))
+	}
+	if !newestVersion.Valid || newestVersion.Int64 < 2 {
+		if err := s.backfillArtifactRefs(ctx); err != nil {
+			return err
+		}
 	}
 	_, err := s.db.ExecContext(ctx,
 		"INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
@@ -362,6 +376,9 @@ VALUES (?, ?, ?, ?, ?, ?)`, checkpoint.ID.String(), sessionID.String(), checkpoi
 			return domain.NewError(domain.ErrConflict, "checkpoint already exists", domain.WithCause(err))
 		}
 		return storeError("save checkpoint", err)
+	}
+	if err := addArtifactRefs(ctx, tx, sessionID, checkpointArtifactRefs(checkpoint)); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return storeError("commit append and checkpoint transaction", err)
@@ -639,6 +656,9 @@ VALUES (?, ?, ?, ?, ?, ?)`, checkpoint.ID.String(), checkpoint.SessionID.String(
 		}
 		return storeError("save checkpoint", err)
 	}
+	if err := addArtifactRefs(ctx, tx, checkpoint.SessionID, checkpointArtifactRefs(checkpoint)); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return storeError("commit checkpoint transaction", err)
 	}
@@ -668,6 +688,118 @@ ORDER BY sequence DESC, created_at_unix_nano DESC, checkpoint_id DESC LIMIT 1`, 
 		return domain.Checkpoint{}, storeError("validate persisted checkpoint", errors.New("checkpoint identity mismatch"))
 	}
 	return checkpoint, nil
+}
+
+// ListArtifactRefs returns all artifacts referenced by durable session projections.
+func (s *SQLiteStore) ListArtifactRefs(ctx context.Context) (map[domain.ArtifactID]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT artifact_id, MAX(size) FROM artifact_refs GROUP BY artifact_id ORDER BY artifact_id`)
+	if err != nil {
+		return nil, storeError("list artifact references", err)
+	}
+	defer rows.Close()
+	refs := make(map[domain.ArtifactID]int64)
+	for rows.Next() {
+		var rawID string
+		var size int64
+		if err := rows.Scan(&rawID, &size); err != nil {
+			return nil, storeError("scan artifact reference", err)
+		}
+		id, err := domain.ParseArtifactID(rawID)
+		if err != nil {
+			return nil, storeError("decode artifact reference", err)
+		}
+		refs[id] = size
+	}
+	if err := rows.Err(); err != nil {
+		return nil, storeError("iterate artifact references", err)
+	}
+	return refs, nil
+}
+
+func (s *SQLiteStore) backfillArtifactRefs(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT session_id, data FROM checkpoints ORDER BY session_id, sequence, created_at_unix_nano, checkpoint_id`)
+	if err != nil {
+		return storeError("load checkpoints for artifact reference migration", err)
+	}
+	defer rows.Close()
+	type migrated struct {
+		sessionID domain.SessionID
+		refs      map[domain.ArtifactID]int64
+	}
+	var all []migrated
+	for rows.Next() {
+		var rawSession string
+		var data []byte
+		if err := rows.Scan(&rawSession, &data); err != nil {
+			return storeError("scan checkpoint for artifact reference migration", err)
+		}
+		sessionID, err := domain.ParseSessionID(rawSession)
+		if err != nil {
+			return storeError("decode migration session ID", err)
+		}
+		var checkpoint domain.Checkpoint
+		if err := json.Unmarshal(data, &checkpoint); err != nil {
+			return storeError("decode checkpoint for artifact reference migration", err)
+		}
+		all = append(all, migrated{sessionID: sessionID, refs: checkpointArtifactRefs(checkpoint)})
+	}
+	if err := rows.Err(); err != nil {
+		return storeError("iterate migration checkpoints", err)
+	}
+	if err := rows.Close(); err != nil {
+		return storeError("close migration checkpoints", err)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return storeError("begin artifact reference migration", err)
+	}
+	defer tx.Rollback()
+	for _, item := range all {
+		if err := addArtifactRefs(ctx, tx, item.sessionID, item.refs); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return storeError("commit artifact reference migration", err)
+	}
+	return nil
+}
+
+func addArtifactRefs(ctx context.Context, tx *sql.Tx, sessionID domain.SessionID, refs map[domain.ArtifactID]int64) error {
+	for id, size := range refs {
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO artifact_refs(session_id, artifact_id, size) VALUES (?, ?, ?)
+ON CONFLICT(session_id, artifact_id) DO UPDATE SET size = MAX(size, excluded.size)`,
+			sessionID.String(), id.String(), size); err != nil {
+			return storeError("insert session artifact reference", err)
+		}
+	}
+	return nil
+}
+
+func checkpointArtifactRefs(checkpoint domain.Checkpoint) map[domain.ArtifactID]int64 {
+	refs := make(map[domain.ArtifactID]int64)
+	add := func(ref *domain.ArtifactRef) {
+		if ref == nil || ref.ID.IsZero() || ref.Size < 0 {
+			return
+		}
+		if old, ok := refs[ref.ID]; !ok || ref.Size > old {
+			refs[ref.ID] = ref.Size
+		}
+	}
+	for _, message := range checkpoint.Messages {
+		for _, part := range message.Parts {
+			add(part.Artifact)
+			if part.ToolResult != nil {
+				for _, content := range part.ToolResult.Content {
+					add(content.Artifact)
+				}
+			}
+		}
+	}
+	return refs
 }
 
 func formatTime(value time.Time) string {

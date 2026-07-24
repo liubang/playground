@@ -154,16 +154,17 @@ func (r *Runner) Run(ctx context.Context, spec CommandSpec) (Result, error) {
 		return result, fmt.Errorf("stderr pipe: %w", err)
 	}
 
-	collector := newOutputCollector(validated.outputLimit)
+	stdoutCollector := newStreamCollector(validated.outputLimit, spec.StdoutWriter)
+	stderrCollector := newStreamCollector(validated.outputLimit, spec.StderrWriter)
 	var copyWG sync.WaitGroup
 	copyWG.Add(2)
 	go func() {
 		defer copyWG.Done()
-		collector.collect(stdoutPipe, true)
+		stdoutCollector.collect(stdoutPipe)
 	}()
 	go func() {
 		defer copyWG.Done()
-		collector.collect(stderrPipe, false)
+		stderrCollector.collect(stderrPipe)
 	}()
 
 	startedAt := r.now()
@@ -189,9 +190,16 @@ func (r *Runner) Run(ctx context.Context, spec CommandSpec) (Result, error) {
 	}
 
 	result.Duration = r.now().Sub(startedAt)
-	result.Stdout = collector.stdout()
-	result.Stderr = collector.stderr()
-	result.Truncated = collector.truncated()
+	result.Stdout = stdoutCollector.preview()
+	result.Stderr = stderrCollector.preview()
+	result.StdoutBytes = stdoutCollector.totalBytes()
+	result.StderrBytes = stderrCollector.totalBytes()
+	result.StdoutTruncated = stdoutCollector.truncated()
+	result.StderrTruncated = stderrCollector.truncated()
+	result.Truncated = result.StdoutTruncated || result.StderrTruncated
+	if captureErr := errors.Join(stdoutCollector.err(), stderrCollector.err()); captureErr != nil {
+		return result, fmt.Errorf("capture command output: %w", captureErr)
+	}
 	result.TimedOut = timedOut
 	result.Cancelled = cancelled
 	fillExitStatus(&result, cmd.ProcessState)
@@ -471,77 +479,97 @@ func fillExitStatus(result *Result, state *os.ProcessState) {
 	}
 }
 
-type outputCollector struct {
+type streamCollector struct {
 	limit        int64
+	headLimit    int64
+	tailLimit    int64
+	writer       io.Writer
 	mu           sync.Mutex
-	stdoutBuf    []byte
-	stderrBuf    []byte
+	head         []byte
+	tail         []byte
 	total        int64
 	wasTruncated bool
+	captureErr   error
 }
 
-func newOutputCollector(limit int64) *outputCollector {
-	return &outputCollector{limit: limit}
+func newStreamCollector(limit int64, writer io.Writer) *streamCollector {
+	if limit < 0 {
+		limit = 0
+	}
+	headLimit := limit * 3 / 8
+	return &streamCollector{limit: limit, headLimit: headLimit, tailLimit: limit - headLimit, writer: writer}
 }
 
-func (c *outputCollector) collect(r io.Reader, stdout bool) {
-	buf := make([]byte, 4096)
+func (c *streamCollector) collect(r io.Reader) {
+	buf := make([]byte, 32*1024)
 	for {
 		n, err := r.Read(buf)
 		if n > 0 {
-			c.append(buf[:n], stdout)
+			c.append(buf[:n])
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !isBenignPipeReadError(err) {
-				c.markTruncated()
+				c.mu.Lock()
+				c.captureErr = errors.Join(c.captureErr, err)
+				c.wasTruncated = true
+				c.mu.Unlock()
 			}
 			return
 		}
 	}
 }
 
-func (c *outputCollector) append(chunk []byte, stdout bool) {
+func (c *streamCollector) append(chunk []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	remaining := c.limit - c.total
-	if remaining <= 0 {
-		c.wasTruncated = true
-		return
-	}
-	if int64(len(chunk)) > remaining {
-		chunk = chunk[:remaining]
-		c.wasTruncated = true
-	}
-	if stdout {
-		c.stdoutBuf = append(c.stdoutBuf, chunk...)
-	} else {
-		c.stderrBuf = append(c.stderrBuf, chunk...)
-	}
 	c.total += int64(len(chunk))
+	if c.writer != nil && c.captureErr == nil {
+		if _, err := c.writer.Write(chunk); err != nil {
+			c.captureErr = err
+		}
+	}
+	if int64(len(c.head)) < c.headLimit {
+		remaining := int(c.headLimit - int64(len(c.head)))
+		if remaining > len(chunk) {
+			remaining = len(chunk)
+		}
+		c.head = append(c.head, chunk[:remaining]...)
+		chunk = chunk[remaining:]
+	}
+	if len(chunk) > 0 && c.tailLimit > 0 {
+		c.tail = append(c.tail, chunk...)
+		if int64(len(c.tail)) > c.tailLimit {
+			c.tail = append([]byte(nil), c.tail[len(c.tail)-int(c.tailLimit):]...)
+		}
+	}
+	c.wasTruncated = c.total > c.limit
 }
 
-func (c *outputCollector) markTruncated() {
+func (c *streamCollector) preview() []byte {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.wasTruncated = true
+	out := make([]byte, 0, len(c.head)+len(c.tail))
+	out = append(out, c.head...)
+	out = append(out, c.tail...)
+	return out
 }
 
-func (c *outputCollector) stdout() []byte {
+func (c *streamCollector) totalBytes() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return append([]byte(nil), c.stdoutBuf...)
+	return c.total
 }
 
-func (c *outputCollector) stderr() []byte {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return append([]byte(nil), c.stderrBuf...)
-}
-
-func (c *outputCollector) truncated() bool {
+func (c *streamCollector) truncated() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.wasTruncated
+}
+
+func (c *streamCollector) err() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.captureErr
 }
 
 func closeReadPipe(pipe io.ReadCloser) {

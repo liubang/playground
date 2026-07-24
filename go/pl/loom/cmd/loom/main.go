@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -33,22 +34,29 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
+	"github.com/liubang/playground/go/pl/loom/internal/app"
+	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/model/openai"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/prompt"
+	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/builtin"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/command"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/edit"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
+	"github.com/liubang/playground/go/pl/loom/internal/ui"
 	"github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 const (
-	version           = "0.2.0-dev"
-	sessionDBEnv      = "LOOM_SESSION_DB"
-	sessionDBFileName = "sessions.db"
+	version               = "0.2.0-dev"
+	sessionDBEnv          = "LOOM_SESSION_DB"
+	sessionDBFileName     = "sessions.db"
+	artifactDirectoryName = "artifacts"
+	artifactGCGracePeriod = 24 * time.Hour
 )
 
 func main() {
@@ -62,12 +70,28 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: loom <run|resume|sessions|inspect|version> [args]")
+		// No args: if TTY, enter interactive chat; otherwise show usage.
+		if isTTY(os.Stdout) && isTTY(os.Stdin) {
+			return runChat(ctx, "", nil)
+		}
+		return errors.New("usage: loom <run|resume|chat|sessions|inspect|gc|version> [args]")
 	}
 	switch args[0] {
 	case "version":
 		fmt.Println("loom", version)
 		return nil
+	case "chat":
+		if len(args) == 1 {
+			return runChat(ctx, "", nil)
+		}
+		if len(args) == 3 && args[1] == "--resume" {
+			sessionID, err := parseSessionID(args[2])
+			if err != nil {
+				return err
+			}
+			return runChat(ctx, "", &sessionID)
+		}
+		return errors.New("usage: loom chat [--resume <session-id>]")
 	case "run":
 		if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {
 			return errors.New("usage: loom run <prompt>")
@@ -92,9 +116,44 @@ func run(ctx context.Context, args []string) error {
 			return errors.New("usage: loom inspect <session-id>")
 		}
 		return inspectSession(ctx, args[1])
+	case "gc":
+		if len(args) != 1 {
+			return errors.New("usage: loom gc")
+		}
+		return collectArtifactGarbage(ctx)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func collectArtifactGarbage(ctx context.Context) error {
+	dbPath, err := prepareSessionDBPath()
+	if err != nil {
+		return err
+	}
+	store, err := session.OpenSQLiteStore(ctx, dbPath)
+	if err != nil {
+		return fmt.Errorf("open session store: %w", err)
+	}
+	defer store.Close()
+	refs, err := store.ListArtifactRefs(ctx)
+	if err != nil {
+		return fmt.Errorf("list artifact references: %w", err)
+	}
+	artifactStore, err := artifact.Open(
+		filepath.Join(filepath.Dir(dbPath), artifactDirectoryName),
+		domain.DefaultLimits().MaxArtifactBytes,
+	)
+	if err != nil {
+		return fmt.Errorf("open artifact store: %w", err)
+	}
+	report, err := artifactStore.CollectGarbage(ctx, refs, artifactGCGracePeriod, time.Now())
+	if err != nil {
+		return fmt.Errorf("collect artifact garbage: %w", err)
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetEscapeHTML(false)
+	return encoder.Encode(report)
 }
 
 func listSessions(ctx context.Context) error {
@@ -169,7 +228,7 @@ func inspectSession(ctx context.Context, rawSessionID string) error {
 	return nil
 }
 
-func runAgent(ctx context.Context, prompt string, resumeSessionID *domain.SessionID) error {
+func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.SessionID) error {
 	root := strings.TrimSpace(os.Getenv("BUILD_WORKSPACE_DIRECTORY"))
 	if root == "" {
 		var err error
@@ -183,23 +242,34 @@ func runAgent(ctx context.Context, prompt string, resumeSessionID *domain.Sessio
 		return fmt.Errorf("validate workspace: %w", err)
 	}
 	registry := agent.NewToolRegistry()
-	readFile, err := builtin.NewReadFileTool(validator)
+	runner, err := process.NewRunner(validator, process.RunnerOptions{
+		Sandbox: process.NewPlatformSandbox(process.PlatformSandboxOptions{}),
+	})
 	if err != nil {
 		return err
 	}
-	listDirectory, err := builtin.NewListDirectoryTool(validator)
+	book := workspace.NewFileStateBook()
+	readFile, err := builtin.NewReadFileTool(validator, book)
 	if err != nil {
 		return err
 	}
-	searchText, err := builtin.NewSearchTextTool(validator)
+	listDir, err := builtin.NewListDirTool(validator)
 	if err != nil {
 		return err
 	}
-	replaceText, err := edit.NewReplaceTextTool(validator)
+	searchTool, err := builtin.NewSearchTool(validator, runner)
 	if err != nil {
 		return err
 	}
-	applyPatch, err := edit.NewApplyPatchTool(validator)
+	globTool, err := builtin.NewGlobTool(validator, runner)
+	if err != nil {
+		return err
+	}
+	editTool, err := edit.NewEditTool(validator, book)
+	if err != nil {
+		return err
+	}
+	writeFile, err := edit.NewWriteTool(validator)
 	if err != nil {
 		return err
 	}
@@ -211,18 +281,29 @@ func runAgent(ctx context.Context, prompt string, resumeSessionID *domain.Sessio
 	if err != nil {
 		return err
 	}
-	runner, err := process.NewRunner(validator, process.RunnerOptions{
-		Sandbox: process.NewPlatformSandbox(process.PlatformSandboxOptions{}),
-	})
+	gitLog, err := gittools.NewGitLogTool(validator)
 	if err != nil {
 		return err
 	}
-	runCommand, err := command.NewRunCommandTool(validator, runner)
+	dbPath, err := prepareSessionDBPath()
+	if err != nil {
+		return err
+	}
+	artifactStore, err := artifact.Open(
+		filepath.Join(filepath.Dir(dbPath), artifactDirectoryName),
+		domain.DefaultLimits().MaxArtifactBytes,
+	)
+	if err != nil {
+		return fmt.Errorf("open artifact store: %w", err)
+	}
+	runCmd, err := command.NewRunCmdToolWithArtifacts(
+		validator, runner, artifactStore, int(domain.DefaultLimits().MaxToolOutputBytes),
+	)
 	if err != nil {
 		return err
 	}
 	for _, tool := range []domain.Tool{
-		readFile, listDirectory, searchText, replaceText, applyPatch, gitStatus, gitDiff, runCommand,
+		readFile, listDir, searchTool, globTool, editTool, writeFile, gitStatus, gitDiff, gitLog, runCmd,
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -243,10 +324,6 @@ func runAgent(ctx context.Context, prompt string, resumeSessionID *domain.Sessio
 		return err
 	}
 
-	dbPath, err := prepareSessionDBPath()
-	if err != nil {
-		return err
-	}
 	store, err := session.OpenSQLiteStore(ctx, dbPath)
 	if err != nil {
 		return fmt.Errorf("open session store: %w", err)
@@ -273,12 +350,18 @@ func runAgent(ctx context.Context, prompt string, resumeSessionID *domain.Sessio
 	}
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
-		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: prompt}},
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: userPrompt}},
 		CreatedAt: time.Now().UTC(),
 	})
+	var promptBuilder agent.PromptBuilder
+	if os.Getenv("LOOM_DISABLE_SYSTEM_PROMPT") != "1" {
+		promptBuilder = prompt.NewBuilder(root,
+			prompt.WithExtraInstructions(os.Getenv("LOOM_SYSTEM_PROMPT_EXTRA")))
+	}
 	loop := agent.Loop{
 		Run: run, Model: provider, ModelName: modelName, Store: store,
 		Approver: consoleApprover{}, Policy: permission.DefaultPolicy(), Registry: registry, Logger: slog.Default(),
+		SystemPrompt: promptBuilder,
 	}
 	fmt.Fprintf(os.Stderr, "loom: session %s\n", run.SessionID)
 	executeErr := loop.Execute(ctx)
@@ -386,6 +469,99 @@ func preparePrivateDataDirectory(directory string, managePermissions bool) error
 		return fmt.Errorf("session data directory %q must not be accessible by group or other users", directory)
 	}
 	return nil
+}
+
+// runChat starts the interactive TUI chat session.
+// If resumeSessionID is non-nil, the session is resumed; otherwise a new session is created.
+func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.SessionID) error {
+	if workspaceRoot == "" {
+		workspaceRoot = strings.TrimSpace(os.Getenv("BUILD_WORKSPACE_DIRECTORY"))
+		if workspaceRoot == "" {
+			var err error
+			workspaceRoot, err = os.Getwd()
+			if err != nil {
+				return fmt.Errorf("get workspace: %w", err)
+			}
+		}
+	}
+
+	dbPath, err := prepareSessionDBPath()
+	if err != nil {
+		return err
+	}
+	artifactDir := filepath.Join(filepath.Dir(dbPath), artifactDirectoryName)
+
+	modelName := strings.TrimSpace(os.Getenv("LOOM_MODEL"))
+	if modelName == "" {
+		modelName = "gpt-4o"
+	}
+
+	bootstrap, err := app.NewBootstrap(ctx, app.BootstrapConfig{
+		WorkspaceRoot:    workspaceRoot,
+		SessionDBPath:    dbPath,
+		ArtifactDir:      artifactDir,
+		ArtifactMaxBytes: domain.DefaultLimits().MaxArtifactBytes,
+		ModelName:        modelName,
+		BaseURL:          os.Getenv("LOOM_BASE_URL"),
+		APIKey:           os.Getenv("LOOM_API_KEY"),
+		WireAPI:          openai.WireAPI(os.Getenv("LOOM_WIRE_API")),
+		Limits:           domain.DefaultLimits(),
+		Policy:           permission.DefaultPolicy(),
+		Logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err != nil {
+		return fmt.Errorf("bootstrap: %w", err)
+	}
+	defer bootstrap.Close()
+
+	broker := runtimeevent.NewBroker()
+	approver := app.NewChannelApprover()
+
+	controller := app.NewController(app.ControllerConfig{
+		Bootstrap: bootstrap,
+		Broker:    broker,
+		Approver:  approver,
+		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	// Start the controller before issuing its serialized commands.
+	go controller.Run(ctx)
+
+	if resumeSessionID != nil {
+		if err := controller.ResumeSession(ctx, *resumeSessionID); err != nil {
+			return fmt.Errorf("resume session: %w", err)
+		}
+	} else if err := controller.NewSession(ctx); err != nil {
+		return fmt.Errorf("new session: %w", err)
+	}
+
+	// Start the TUI. Dumb terminals usually lack a Nerd Font patched font,
+	// so they fall back to plain text icons unless LOOM_ICONS says otherwise.
+	icons := os.Getenv("LOOM_ICONS")
+	if icons == "" && os.Getenv("TERM") == "dumb" {
+		icons = "plain"
+	}
+	opts := ui.InitOptions{
+		NoColor:   os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb",
+		AltScreen: os.Getenv("LOOM_ALT_SCREEN") == "1",
+		Icons:     icons,
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = controller.Shutdown(shutdownCtx)
+		broker.Close()
+	}()
+	return ui.StartTUI(controller, modelName, workspaceRoot, opts)
+}
+
+// isTTY checks whether the given file descriptor is a terminal.
+func isTTY(f *os.File) bool {
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 type consoleApprover struct{}

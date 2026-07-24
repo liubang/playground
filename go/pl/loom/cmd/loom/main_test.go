@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
+	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
@@ -144,6 +145,52 @@ func TestListSessionsCommandReadsPersistentStore(t *testing.T) {
 	})
 	if !strings.Contains(output, sessionID.String()+"\t0\t") {
 		t.Fatalf("sessions output = %q, want session %s", output, sessionID)
+	}
+}
+
+func TestGCCommandDeletesOnlyOldUnreferencedArtifacts(t *testing.T) {
+	ctx := context.Background()
+	directory := filepath.Join(t.TempDir(), "private")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	path := filepath.Join(directory, "sessions.db")
+	t.Setenv(sessionDBEnv, path)
+	store, err := session.OpenSQLiteStore(ctx, path)
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	artifactStore, err := artifact.Open(filepath.Join(directory, artifactDirectoryName), domain.DefaultLimits().MaxArtifactBytes)
+	if err != nil {
+		t.Fatalf("artifact.Open: %v", err)
+	}
+	orphan, err := artifactStore.PutBytes(ctx, []byte("old orphan"))
+	if err != nil {
+		t.Fatalf("PutBytes: %v", err)
+	}
+	digest := strings.TrimPrefix(orphan.ID.String(), "art_sha256_")
+	blobPath := filepath.Join(artifactStore.Root(), "sha256", digest[:2], digest[2:])
+	oldTime := time.Now().Add(-artifactGCGracePeriod - time.Hour)
+	if err := os.Chtimes(blobPath, oldTime, oldTime); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+	output := captureStdout(t, func() {
+		if err := run(ctx, []string{"gc"}); err != nil {
+			t.Fatalf("run gc: %v", err)
+		}
+	})
+	var report artifact.GCReport
+	if err := json.Unmarshal([]byte(output), &report); err != nil {
+		t.Fatalf("decode GC report %q: %v", output, err)
+	}
+	if report.Deleted != 1 || report.DeletedBytes != orphan.Size {
+		t.Fatalf("unexpected GC report: %+v", report)
+	}
+	if _, err := os.Stat(blobPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("orphan still exists: %v", err)
 	}
 }
 

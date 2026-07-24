@@ -87,33 +87,20 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 		return "", fmt.Errorf("seatbelt requires absolute paths")
 	}
 
-	readPaths := []string{
-		"/bin",
-		"/usr",
-		"/System",
-		"/dev",
-		"/private/etc",
-		"/private/var/db/timezone",
-		filepath.Dir(spec.ExecutablePath),
-		filepath.Clean(spec.WorkspaceRoot),
-	}
 	writePaths := []string{filepath.Clean(spec.WorkspaceRoot)}
 	for _, path := range spec.WritablePaths {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
 		writePaths = append(writePaths, filepath.Clean(path))
-		readPaths = append(readPaths, filepath.Clean(path))
 	}
 	for _, path := range s.writablePaths {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
 		writePaths = append(writePaths, filepath.Clean(path))
-		readPaths = append(readPaths, filepath.Clean(path))
 	}
-	readPaths = append(readPaths, filepath.Clean(spec.WorkingDir), os.TempDir())
-	readPaths = uniqueCleanPaths(readPaths)
+	writePaths = append(writePaths, os.TempDir())
 	writePaths = uniqueCleanPaths(writePaths)
 
 	var lines []string
@@ -125,10 +112,15 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 		"(allow process-fork)",
 		"(allow signal (target self))",
 		"(allow sysctl-read)",
-		"(allow file-read-metadata)",
+		// Modern runtimes (Go, Rust) cannot start under a path-scoped read
+		// policy: dyld loads metadata/xattrs across the system and stack-guard
+		// allocation fails under restrictive subpath rules (verified against
+		// ripgrep and the Go toolchain). Reads are therefore allowed broadly,
+		// while credential-like locations stay explicitly denied below.
+		"(allow file-read*)",
 	)
-	for _, path := range readPaths {
-		lines = append(lines, fmt.Sprintf("(allow file-read* (subpath %s))", seatbeltQuote(path)))
+	for _, rule := range sensitiveReadDenies() {
+		lines = append(lines, rule)
 	}
 	for _, path := range writePaths {
 		lines = append(lines, fmt.Sprintf("(allow file-write* (subpath %s))", seatbeltQuote(path)))
@@ -137,6 +129,47 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 		lines = append(lines, "(allow network*)")
 	}
 	return strings.Join(lines, "\n") + "\n", nil
+}
+
+// sensitiveReadDenies returns seatbelt rules denying reads of credential-like
+// locations under the user's home directory. Writes remain scoped to the
+// workspace, and the workspace PathValidator independently rejects these
+// components inside the workspace, so the sandbox only needs to cover the
+// home-level secrets the broad read policy would otherwise expose.
+func sensitiveReadDenies() []string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return nil
+	}
+	subpaths := []string{
+		".ssh",
+		".gnupg",
+		".aws",
+		".azure",
+		".kube",
+		".docker",
+		".config/gcloud",
+		".config/gh",
+		".config/snowflake",
+		"Library/Keychains",
+	}
+	literals := []string{
+		".netrc",
+		".git-credentials",
+		".env",
+		"credentials.json",
+		"service-account.json",
+		".npmrc",
+		".pypirc",
+	}
+	rules := make([]string, 0, len(subpaths)+len(literals))
+	for _, rel := range subpaths {
+		rules = append(rules, fmt.Sprintf("(deny file-read* (subpath %s))", seatbeltQuote(filepath.Join(home, rel))))
+	}
+	for _, rel := range literals {
+		rules = append(rules, fmt.Sprintf("(deny file-read* (literal %s))", seatbeltQuote(filepath.Join(home, rel))))
+	}
+	return rules
 }
 
 func uniqueCleanPaths(paths []string) []string {

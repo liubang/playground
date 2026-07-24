@@ -54,9 +54,10 @@ const (
 	minTimeoutMs                int64 = 1
 	maxTimeoutMs                int64 = 10 * 60 * 1000
 	maxOutputBytes              int64 = 1 << 20
+	defaultModelOutputBytes           = 64 * 1024
 )
 
-type rawRunCommandArgs struct {
+type rawRunCmdArgs struct {
 	Program        *string            `json:"program"`
 	Args           *[]string          `json:"args"`
 	WorkingDir     *string            `json:"working_dir"`
@@ -65,7 +66,7 @@ type rawRunCommandArgs struct {
 	MaxOutputBytes *int64             `json:"max_output_bytes"`
 }
 
-type runCommandArgs struct {
+type runCmdArgs struct {
 	Program        string            `json:"program"`
 	Args           []string          `json:"args"`
 	WorkingDir     string            `json:"working_dir"`
@@ -74,18 +75,26 @@ type runCommandArgs struct {
 	MaxOutputBytes int64             `json:"max_output_bytes"`
 }
 
-type runCommandOutput struct {
-	Stdout         string `json:"stdout"`
-	Stderr         string `json:"stderr"`
-	ExitCode       int    `json:"exit_code"`
-	Signal         string `json:"signal"`
-	DurationMs     int64  `json:"duration_ms"`
-	TimedOut       bool   `json:"timed_out"`
-	Cancelled      bool   `json:"cancelled"`
-	Truncated      bool   `json:"truncated"`
-	Isolation      string `json:"isolation"`
-	ExecutablePath string `json:"executable_path"`
-	Hash           string `json:"hash"`
+type runCmdOutput struct {
+	Stdout                  string              `json:"stdout"`
+	Stderr                  string              `json:"stderr"`
+	StdoutBytes             int64               `json:"stdout_bytes"`
+	StderrBytes             int64               `json:"stderr_bytes"`
+	StdoutPreviewTruncated  bool                `json:"stdout_preview_truncated"`
+	StderrPreviewTruncated  bool                `json:"stderr_preview_truncated"`
+	StdoutArtifactTruncated bool                `json:"stdout_artifact_truncated"`
+	StderrArtifactTruncated bool                `json:"stderr_artifact_truncated"`
+	StdoutArtifact          *domain.ArtifactRef `json:"stdout_artifact,omitempty"`
+	StderrArtifact          *domain.ArtifactRef `json:"stderr_artifact,omitempty"`
+	ExitCode                int                 `json:"exit_code"`
+	Signal                  string              `json:"signal"`
+	DurationMs              int64               `json:"duration_ms"`
+	TimedOut                bool                `json:"timed_out"`
+	Cancelled               bool                `json:"cancelled"`
+	Truncated               bool                `json:"truncated"`
+	Isolation               string              `json:"isolation"`
+	ExecutablePath          string              `json:"executable_path"`
+	Hash                    string              `json:"hash"`
 }
 
 type preparedFingerprint struct {
@@ -102,30 +111,49 @@ type resolvedWorkingDir struct {
 	Display  string
 }
 
-// RunCommandTool adapts process.Runner as the builtin run_command domain tool.
-type RunCommandTool struct {
-	def       domain.ToolDefinition
-	validator *workspacepkg.PathValidator
-	runner    *process.Runner
-	key       [32]byte
+// RunCmdTool adapts process.Runner as the builtin run_cmd domain tool.
+type RunCmdTool struct {
+	def              domain.ToolDefinition
+	validator        *workspacepkg.PathValidator
+	runner           *process.Runner
+	artifacts        domain.ArtifactStore
+	modelOutputBytes int
+	key              [32]byte
 }
 
-// NewRunCommandTool creates a run_command tool bound to a workspace validator and process runner.
-func NewRunCommandTool(
+// NewRunCmdTool creates a run_cmd tool bound to a workspace validator and process runner.
+func NewRunCmdTool(
 	validator *workspacepkg.PathValidator,
 	runner *process.Runner,
-) (*RunCommandTool, error) {
+) (*RunCmdTool, error) {
+	return NewRunCmdToolWithArtifacts(validator, runner, nil, defaultModelOutputBytes)
+}
+
+// NewRunCmdToolWithArtifacts creates a run_cmd tool that externalizes
+// captured output exceeding modelOutputBytes into an immutable artifact.
+func NewRunCmdToolWithArtifacts(
+	validator *workspacepkg.PathValidator,
+	runner *process.Runner,
+	artifacts domain.ArtifactStore,
+	modelOutputBytes int,
+) (*RunCmdTool, error) {
 	if validator == nil {
 		return nil, domain.NewError(domain.ErrInvalidInput, "path validator is required")
 	}
 	if runner == nil {
 		return nil, domain.NewError(domain.ErrInvalidInput, "process runner is required")
 	}
+	if modelOutputBytes <= 0 {
+		return nil, domain.NewError(domain.ErrInvalidInput, "model output limit must be positive")
+	}
 	def := domain.ToolDefinition{
-		Name:         "run_command",
-		Description:  "Execute a non-shell command using the configured process runner. Network access is not configurable here and defaults to denied by the runner sandbox.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576}},"required":["program","args","working_dir","env","timeout_ms","max_output_bytes"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"}},"required":["stdout","stderr","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
+		Name: "run_cmd",
+		Description: "Execute a program directly without a shell. Pipes, redirection and '&&' do NOT work; " +
+			"for shell syntax use program='sh' with args=['-c','...'] (higher approval risk). " +
+			"Only 'program' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
+			"Output beyond the limit is stored as an artifact with a head/tail preview. Network access defaults to denied by the runner sandbox.",
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576}},"required":["program"]}`),
+		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"stdout_preview_truncated":{"type":"boolean"},"stderr_preview_truncated":{"type":"boolean"},"stdout_artifact_truncated":{"type":"boolean"},"stderr_artifact_truncated":{"type":"boolean"},"stdout_artifact":{"type":"object"},"stderr_artifact":{"type":"object"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"}},"required":["stdout","stderr","stdout_bytes","stderr_bytes","stdout_preview_truncated","stderr_preview_truncated","stdout_artifact_truncated","stderr_artifact_truncated","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
 	}
@@ -137,19 +165,21 @@ func NewRunCommandTool(
 	if _, err := rand.Read(key[:]); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "failed to initialize tool verifier", domain.WithCause(err))
 	}
-	return &RunCommandTool{
-		def:       def,
-		validator: validator,
-		runner:    runner,
-		key:       key,
+	return &RunCmdTool{
+		def:              def,
+		validator:        validator,
+		runner:           runner,
+		artifacts:        artifacts,
+		modelOutputBytes: modelOutputBytes,
+		key:              key,
 	}, nil
 }
 
-func (t *RunCommandTool) Definition() domain.ToolDefinition {
+func (t *RunCmdTool) Definition() domain.ToolDefinition {
 	return t.def
 }
 
-func (t *RunCommandTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -160,7 +190,7 @@ func (t *RunCommandTool) Prepare(ctx context.Context, call domain.ToolCall) (dom
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
 	}
 
-	rawArgs, err := decodeStrict[rawRunCommandArgs](call.Arguments)
+	rawArgs, err := decodeStrict[rawRunCmdArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -190,7 +220,7 @@ func (t *RunCommandTool) Prepare(ctx context.Context, call domain.ToolCall) (dom
 	return prepared, nil
 }
 
-func (t *RunCommandTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
+func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
 	if err := t.verifyPreparedCall(prepared); err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
@@ -199,7 +229,7 @@ func (t *RunCommandTool) Execute(ctx context.Context, prepared domain.PreparedCa
 		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call workspace bindings are invalid"))
 	}
 
-	args, err := decodeStrict[runCommandArgs](prepared.Call.Arguments)
+	args, err := decodeStrict[runCmdArgs](prepared.Call.Arguments)
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
@@ -208,42 +238,84 @@ func (t *RunCommandTool) Execute(ctx context.Context, prepared domain.PreparedCa
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
 
+	stdoutStage, stderrStage, err := t.beginOutputArtifacts(ctx)
+	if err != nil {
+		return errorResult(prepared.Call.ID, startedAt, err)
+	}
+	if stdoutStage != nil {
+		defer stdoutStage.Abort()
+	}
+	if stderrStage != nil {
+		defer stderrStage.Abort()
+	}
+	previewLimit := args.MaxOutputBytes
+	if previewLimit > int64(t.modelOutputBytes) {
+		previewLimit = int64(t.modelOutputBytes)
+	}
 	runnerResult, err := t.runner.Run(ctx, process.CommandSpec{
-		Program:     args.Program,
-		Args:        append([]string(nil), args.Args...),
-		Cwd:         resolvedDir.Absolute,
-		Env:         cloneStringMap(args.Env),
-		Timeout:     time.Duration(args.TimeoutMs) * time.Millisecond,
-		OutputLimit: args.MaxOutputBytes,
+		Program:      args.Program,
+		Args:         append([]string(nil), args.Args...),
+		Cwd:          resolvedDir.Absolute,
+		Env:          cloneStringMap(args.Env),
+		Timeout:      time.Duration(args.TimeoutMs) * time.Millisecond,
+		OutputLimit:  max(int64(1), previewLimit/2),
+		StdoutWriter: stdoutStage,
+		StderrWriter: stderrStage,
 	})
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, classifyRunError(err))
 	}
 
-	payload := runCommandOutput{
-		Stdout:         sanitizeUTF8(runnerResult.Stdout),
-		Stderr:         sanitizeUTF8(runnerResult.Stderr),
-		ExitCode:       runnerResult.ExitCode,
-		Signal:         runnerResult.Signal,
-		DurationMs:     durationMilliseconds(runnerResult.Duration),
-		TimedOut:       runnerResult.TimedOut,
-		Cancelled:      runnerResult.Cancelled,
-		Truncated:      runnerResult.Truncated,
-		Isolation:      runnerResult.Isolation,
-		ExecutablePath: runnerResult.ExecutablePath,
-		Hash:           runnerResult.ExecutableHash,
+	commitCtx := ctx
+	cancelCommit := func() {}
+	if ctx == nil || ctx.Err() != nil {
+		base := context.Background()
+		if ctx != nil {
+			base = context.WithoutCancel(ctx)
+		}
+		commitCtx, cancelCommit = context.WithTimeout(base, 5*time.Second)
 	}
-	switch {
-	case runnerResult.TimedOut:
-		return contentResult(prepared.Call.ID, domain.ToolStatusTimeout, startedAt, payload)
-	case runnerResult.Cancelled:
-		return contentResult(prepared.Call.ID, domain.ToolStatusCancelled, startedAt, payload)
-	default:
-		return contentResult(prepared.Call.ID, domain.ToolStatusSuccess, startedAt, payload)
+	defer cancelCommit()
+	stdoutRef, stderrRef, err := commitOutputArtifacts(commitCtx, stdoutStage, stderrStage)
+	if err != nil {
+		return errorResult(prepared.Call.ID, startedAt, domain.NewError(
+			domain.ErrUnavailable, "command completed but captured output could not be committed",
+			domain.WithCause(err)))
 	}
+	payload := runCmdOutput{
+		Stdout:                  sanitizeUTF8(runnerResult.Stdout),
+		Stderr:                  sanitizeUTF8(runnerResult.Stderr),
+		StdoutBytes:             runnerResult.StdoutBytes,
+		StderrBytes:             runnerResult.StderrBytes,
+		StdoutPreviewTruncated:  runnerResult.StdoutTruncated,
+		StderrPreviewTruncated:  runnerResult.StderrTruncated,
+		StdoutArtifactTruncated: stageTruncated(stdoutStage),
+		StderrArtifactTruncated: stageTruncated(stderrStage),
+		StdoutArtifact:          stdoutRef,
+		StderrArtifact:          stderrRef,
+		ExitCode:                runnerResult.ExitCode,
+		Signal:                  runnerResult.Signal,
+		DurationMs:              durationMilliseconds(runnerResult.Duration),
+		TimedOut:                runnerResult.TimedOut,
+		Cancelled:               runnerResult.Cancelled,
+		Truncated:               runnerResult.Truncated || stageTruncated(stdoutStage) || stageTruncated(stderrStage),
+		Isolation:               runnerResult.Isolation,
+		ExecutablePath:          runnerResult.ExecutablePath,
+		Hash:                    runnerResult.ExecutableHash,
+	}
+	if err := boundCommandOutput(&payload, t.modelOutputBytes); err != nil {
+		return errorResult(prepared.Call.ID, startedAt, err)
+	}
+	status := domain.ToolStatusSuccess
+	if runnerResult.TimedOut {
+		status = domain.ToolStatusTimeout
+	} else if runnerResult.Cancelled {
+		status = domain.ToolStatusCancelled
+	}
+	return contentResultWithArtifacts(prepared.Call.ID, status, startedAt, payload, stdoutRef, stderrRef)
 }
 
-func (t *RunCommandTool) verifyPreparedCall(prepared domain.PreparedCall) error {
+func (t *RunCmdTool) verifyPreparedCall(prepared domain.PreparedCall) error {
 	if prepared.Call.Name != t.def.Name {
 		return domain.NewError(domain.ErrSecurity, "prepared call tool name mismatch")
 	}
@@ -259,7 +331,7 @@ func (t *RunCommandTool) verifyPreparedCall(prepared domain.PreparedCall) error 
 	return nil
 }
 
-func (t *RunCommandTool) signPrepared(prepared domain.PreparedCall) string {
+func (t *RunCmdTool) signPrepared(prepared domain.PreparedCall) string {
 	fingerprint := preparedFingerprint{
 		CallID:     prepared.Call.ID.String(),
 		Arguments:  cloneRawMessage(prepared.Call.Arguments),
@@ -274,39 +346,48 @@ func (t *RunCommandTool) signPrepared(prepared domain.PreparedCall) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// Default values applied when the model omits optional parameters, keeping
+// run_cmd calls terse (only 'program' is required).
+const (
+	defaultTimeoutMs      int64 = 120000
+	defaultMaxOutputBytes int64 = 64 << 10
+)
+
 func validateArgs(
 	validator *workspacepkg.PathValidator,
-	raw rawRunCommandArgs,
-) (runCommandArgs, resolvedWorkingDir, error) {
+	raw rawRunCmdArgs,
+) (runCmdArgs, resolvedWorkingDir, error) {
 	if raw.Program == nil {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "program is required")
-	}
-	if raw.Args == nil {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "args is required")
-	}
-	if raw.WorkingDir == nil {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "working_dir is required")
-	}
-	if raw.Env == nil {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "env is required")
-	}
-	if raw.TimeoutMs == nil {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "timeout_ms is required")
-	}
-	if raw.MaxOutputBytes == nil {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "max_output_bytes is required")
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "program is required")
 	}
 
-	args := runCommandArgs{
+	args := runCmdArgs{
 		Program:        strings.TrimSpace(*raw.Program),
-		Args:           append([]string(nil), (*raw.Args)...),
-		Env:            cloneStringMap(*raw.Env),
-		TimeoutMs:      *raw.TimeoutMs,
-		MaxOutputBytes: *raw.MaxOutputBytes,
+		Args:           []string{},
+		Env:            map[string]string{},
+		TimeoutMs:      defaultTimeoutMs,
+		MaxOutputBytes: defaultMaxOutputBytes,
 	}
-	resolvedDir, err := resolveWorkingDir(validator, *raw.WorkingDir)
+	if raw.Args != nil {
+		args.Args = append([]string(nil), (*raw.Args)...)
+	}
+	if raw.Env != nil {
+		args.Env = cloneStringMap(*raw.Env)
+	}
+	if raw.TimeoutMs != nil {
+		args.TimeoutMs = *raw.TimeoutMs
+	}
+	if raw.MaxOutputBytes != nil {
+		args.MaxOutputBytes = *raw.MaxOutputBytes
+	}
+
+	workingDir := "."
+	if raw.WorkingDir != nil {
+		workingDir = *raw.WorkingDir
+	}
+	resolvedDir, err := resolveWorkingDir(validator, workingDir)
 	if err != nil {
-		return runCommandArgs{}, resolvedWorkingDir{}, err
+		return runCmdArgs{}, resolvedWorkingDir{}, err
 	}
 	args.WorkingDir = resolvedDir.Display
 	return validateCanonicalArgs(validator, args)
@@ -314,61 +395,61 @@ func validateArgs(
 
 func validateCanonicalArgs(
 	validator *workspacepkg.PathValidator,
-	args runCommandArgs,
-) (runCommandArgs, resolvedWorkingDir, error) {
+	args runCmdArgs,
+) (runCmdArgs, resolvedWorkingDir, error) {
 	if validator == nil {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "path validator is required")
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "path validator is required")
 	}
 	if args.Program == "" {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "program is required")
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "program is required")
 	}
 	if len(args.Program) > maxProgramBytes {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("program exceeds %d bytes", maxProgramBytes))
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("program exceeds %d bytes", maxProgramBytes))
 	}
 	if strings.ContainsRune(args.Program, 0) {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "program contains null byte")
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "program contains null byte")
 	}
 	if len(args.Args) > maxArgsCount {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args exceeds %d items", maxArgsCount))
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args exceeds %d items", maxArgsCount))
 	}
 	for i, arg := range args.Args {
 		if len(arg) > maxArgBytes {
-			return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args[%d] exceeds %d bytes", i, maxArgBytes))
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args[%d] exceeds %d bytes", i, maxArgBytes))
 		}
 		if strings.ContainsRune(arg, 0) {
-			return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args[%d] contains null byte", i))
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args[%d] contains null byte", i))
 		}
 	}
 	resolvedDir, err := resolveWorkingDir(validator, args.WorkingDir)
 	if err != nil {
-		return runCommandArgs{}, resolvedWorkingDir{}, err
+		return runCmdArgs{}, resolvedWorkingDir{}, err
 	}
 	args.WorkingDir = resolvedDir.Display
 	if args.TimeoutMs < minTimeoutMs || args.TimeoutMs > maxTimeoutMs {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("timeout_ms must be between %d and %d", minTimeoutMs, maxTimeoutMs))
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("timeout_ms must be between %d and %d", minTimeoutMs, maxTimeoutMs))
 	}
 	if args.MaxOutputBytes < 1 || args.MaxOutputBytes > maxOutputBytes {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_bytes must be between 1 and %d", maxOutputBytes))
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_bytes must be between 1 and %d", maxOutputBytes))
 	}
 	if len(args.Env) > maxEnvVars {
-		return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env exceeds %d entries", maxEnvVars))
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env exceeds %d entries", maxEnvVars))
 	}
 	canonicalEnv := make(map[string]string, len(args.Env))
 	for key, value := range args.Env {
 		if len(key) == 0 {
-			return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "env contains an empty key")
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "env contains an empty key")
 		}
 		if len(key) > maxEnvKeyBytes {
-			return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env key %q exceeds %d bytes", key, maxEnvKeyBytes))
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env key %q exceeds %d bytes", key, maxEnvKeyBytes))
 		}
 		if strings.ContainsAny(key, "=\x00") {
-			return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env key %q is invalid", key))
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env key %q is invalid", key))
 		}
 		if len(value) > maxEnvValueBytes {
-			return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env value for %q exceeds %d bytes", key, maxEnvValueBytes))
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env value for %q exceeds %d bytes", key, maxEnvValueBytes))
 		}
 		if strings.ContainsRune(value, 0) {
-			return runCommandArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env value for %q contains null byte", key))
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env value for %q contains null byte", key))
 		}
 		canonicalEnv[key] = value
 	}
@@ -463,18 +544,159 @@ func decodeStrict[T any](raw json.RawMessage) (T, error) {
 	return out, nil
 }
 
-func contentResult(callID domain.ToolCallID, status domain.ToolStatus, startedAt time.Time, payload any) domain.ToolResult {
+func boundCommandOutput(payload *runCmdOutput, limit int) error {
+	if payload == nil || limit <= 0 {
+		return domain.NewError(domain.ErrInvalidInput, "valid command output and model limit are required")
+	}
+	stdout, stderr := payload.Stdout, payload.Stderr
+	payload.Stdout, payload.Stderr = "", ""
+	base, err := json.Marshal(payload)
+	if err != nil {
+		return domain.NewError(domain.ErrInternal, "encode command output metadata", domain.WithCause(err))
+	}
+	remaining := limit - len(base)
+	if remaining < 0 {
+		return domain.NewError(domain.ErrBudget, "command output metadata exceeds model output limit")
+	}
+	stdoutBudget := remaining / 2
+	stderrBudget := remaining - stdoutBudget
+	if len(stdout) < stdoutBudget {
+		stderrBudget += stdoutBudget - len(stdout)
+		stdoutBudget = len(stdout)
+	}
+	if len(stderr) < stderrBudget {
+		stdoutBudget += stderrBudget - len(stderr)
+		stderrBudget = len(stderr)
+	}
+	payload.Stdout = boundedHeadTailString(stdout, stdoutBudget)
+	payload.Stderr = boundedHeadTailString(stderr, stderrBudget)
+	for {
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return domain.NewError(domain.ErrInternal, "encode bounded command output", domain.WithCause(err))
+		}
+		if len(encoded) <= limit {
+			return nil
+		}
+		overflow := len(encoded) - limit
+		if len(payload.Stderr) >= len(payload.Stdout) && len(payload.Stderr) > 0 {
+			payload.Stderr = boundedHeadTailString(payload.Stderr, max(0, len(payload.Stderr)-overflow))
+		} else if len(payload.Stdout) > 0 {
+			payload.Stdout = boundedHeadTailString(payload.Stdout, max(0, len(payload.Stdout)-overflow))
+		} else {
+			return domain.NewError(domain.ErrBudget, "command output cannot fit model output limit")
+		}
+	}
+}
+
+func boundedHeadTailString(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if len(value) <= limit {
+		return value
+	}
+	const marker = "\n...[output omitted]...\n"
+	if limit <= len(marker) {
+		return truncateWithMarker(value, limit)
+	}
+	headBytes := (limit - len(marker)) * 3 / 8
+	tailBytes := limit - len(marker) - headBytes
+	head := value[:headBytes]
+	for len(head) > 0 && !utf8.ValidString(head) {
+		head = head[:len(head)-1]
+	}
+	tail := value[len(value)-tailBytes:]
+	for len(tail) > 0 && !utf8.ValidString(tail) {
+		tail = tail[1:]
+	}
+	return head + marker + tail
+}
+
+func (t *RunCmdTool) beginOutputArtifacts(ctx context.Context) (domain.StagedArtifact, domain.StagedArtifact, error) {
+	if t.artifacts == nil {
+		return nil, nil, nil
+	}
+	stdout, err := t.artifacts.Begin(ctx)
+	if err != nil {
+		return nil, nil, domain.NewError(domain.ErrUnavailable, "begin stdout artifact", domain.WithCause(err))
+	}
+	stderr, err := t.artifacts.Begin(ctx)
+	if err != nil {
+		_ = stdout.Abort()
+		return nil, nil, domain.NewError(domain.ErrUnavailable, "begin stderr artifact", domain.WithCause(err))
+	}
+	return stdout, stderr, nil
+}
+
+func commitOutputArtifacts(
+	ctx context.Context,
+	stdout, stderr domain.StagedArtifact,
+) (*domain.ArtifactRef, *domain.ArtifactRef, error) {
+	var stdoutRef, stderrRef *domain.ArtifactRef
+	if stdout != nil && stdout.TotalBytes() > 0 {
+		ref, err := stdout.Commit(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("commit stdout artifact: %w", err)
+		}
+		stdoutRef = &ref
+	} else if stdout != nil {
+		_ = stdout.Abort()
+	}
+	if stderr != nil && stderr.TotalBytes() > 0 {
+		ref, err := stderr.Commit(ctx)
+		if err != nil {
+			return stdoutRef, nil, fmt.Errorf("commit stderr artifact: %w", err)
+		}
+		stderrRef = &ref
+	} else if stderr != nil {
+		_ = stderr.Abort()
+	}
+	return stdoutRef, stderrRef, nil
+}
+
+func stageTruncated(stage domain.StagedArtifact) bool {
+	return stage != nil && stage.Truncated()
+}
+
+func contentResultWithArtifacts(
+	callID domain.ToolCallID,
+	status domain.ToolStatus,
+	startedAt time.Time,
+	payload any,
+	stdoutRef, stderrRef *domain.ArtifactRef,
+) domain.ToolResult {
 	content, err := json.Marshal(payload)
 	if err != nil {
 		return errorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
 	}
+	parts := []domain.ContentPart{{Kind: domain.PartText, Text: string(content)}}
+	metadata := map[string]string{}
+	if stdoutRef != nil {
+		parts = append(parts, domain.ContentPart{Kind: domain.PartArtifact, Artifact: stdoutRef})
+		metadata["stdout_artifact_id"] = stdoutRef.ID.String()
+		metadata["stdout_artifact_size"] = fmt.Sprintf("%d", stdoutRef.Size)
+	}
+	if stderrRef != nil {
+		parts = append(parts, domain.ContentPart{Kind: domain.PartArtifact, Artifact: stderrRef})
+		metadata["stderr_artifact_id"] = stderrRef.ID.String()
+		metadata["stderr_artifact_size"] = fmt.Sprintf("%d", stderrRef.Size)
+	}
+	if len(metadata) == 0 {
+		metadata = nil
+	}
 	return domain.ToolResult{
 		CallID:     callID,
 		Status:     status,
-		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(content)}},
+		Content:    parts,
 		StartedAt:  startedAt,
 		FinishedAt: time.Now(),
+		Metadata:   metadata,
 	}
+}
+
+func contentResult(callID domain.ToolCallID, status domain.ToolStatus, startedAt time.Time, payload any) domain.ToolResult {
+	return contentResultWithArtifacts(callID, status, startedAt, payload, nil, nil)
 }
 
 func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
@@ -582,7 +804,7 @@ func displayPath(rel string) string {
 	return filepath.ToSlash(clean)
 }
 
-func buildApprovalDesc(args runCommandArgs, prepared domain.PreparedCall) string {
+func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall) string {
 	parts := []string{"Run"}
 	command := append([]string{args.Program}, args.Args...)
 	quoted := make([]string, 0, len(command))

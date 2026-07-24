@@ -19,7 +19,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "command_lib",
-    srcs = ["run_command.go"],
+    srcs = ["run_cmd.go"],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/command",
     visibility = ["//visibility:public"],
     deps = [
@@ -31,9 +31,10 @@ go_library(
 
 go_test(
     name = "command_test",
-    srcs = ["run_command_test.go"],
+    srcs = ["run_cmd_test.go"],
     embed = [":command_lib"],
     deps = [
+        "//go/pl/loom/internal/artifact:artifact_lib",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/process:process_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
