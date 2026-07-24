@@ -28,12 +28,165 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-func TestRunCommandToolSuccessAndNonZeroExit(t *testing.T) {
+func TestRunCmdToolExternalizesLargeOutput(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: fixedLookPath(python),
+	})
+	artifactStore, err := artifact.Open(filepath.Join(t.TempDir(), "artifacts"), 4096)
+	if err != nil {
+		t.Fatalf("artifact.Open() error = %v", err)
+	}
+	tool, err := NewRunCmdToolWithArtifacts(validator, runner, artifactStore, 2048)
+	if err != nil {
+		t.Fatalf("NewRunCmdToolWithArtifacts() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Program:        stringPtr("python3"),
+		Args:           &[]string{"-c", "import sys; sys.stdout.write('o' * 600); sys.stderr.write('e' * 400)"},
+		WorkingDir:     stringPtr(root),
+		Env:            &map[string]string{},
+		TimeoutMs:      int64Ptr(2000),
+		MaxOutputBytes: int64Ptr(1024),
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("status = %q, error = %+v", result.Status, result.Error)
+	}
+	if len(result.Content) != 3 || result.Content[1].Kind != domain.PartArtifact || result.Content[1].Artifact == nil ||
+		result.Content[2].Kind != domain.PartArtifact || result.Content[2].Artifact == nil {
+		t.Fatalf("content = %+v, want preview and stdout/stderr artifacts", result.Content)
+	}
+	var preview runCmdOutput
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &preview); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if !preview.Truncated || !preview.StdoutPreviewTruncated || preview.StderrPreviewTruncated ||
+		preview.StdoutBytes != 600 || preview.StderrBytes != 400 || len(result.Content[0].Text) > 2048 {
+		t.Fatalf("unexpected preview metadata (encoded=%d): %+v", len(result.Content[0].Text), preview)
+	}
+	stdout, err := artifactStore.ReadAll(context.Background(), *result.Content[1].Artifact)
+	if err != nil {
+		t.Fatalf("ReadAll stdout artifact: %v", err)
+	}
+	stderr, err := artifactStore.ReadAll(context.Background(), *result.Content[2].Artifact)
+	if err != nil {
+		t.Fatalf("ReadAll stderr artifact: %v", err)
+	}
+	if len(stdout) != 600 || len(stderr) != 400 || strings.Trim(string(stdout), "o") != "" || strings.Trim(string(stderr), "e") != "" {
+		t.Fatalf("unexpected complete artifacts: stdout=%d stderr=%d", len(stdout), len(stderr))
+	}
+	if result.Metadata["stdout_artifact_id"] != result.Content[1].Artifact.ID.String() ||
+		result.Metadata["stderr_artifact_id"] != result.Content[2].Artifact.ID.String() {
+		t.Fatalf("artifact metadata = %+v", result.Metadata)
+	}
+}
+
+func TestBoundCommandOutputPreservesHeadAndTailWithinEncodedLimit(t *testing.T) {
+	payload := runCmdOutput{
+		Stdout: strings.Repeat("h", 200) + "STDOUT_TAIL",
+		Stderr: strings.Repeat("e", 200) + "STDERR_TAIL",
+	}
+	if err := boundCommandOutput(&payload, 1024); err != nil {
+		t.Fatalf("boundCommandOutput: %v", err)
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if len(encoded) > 1024 || !strings.Contains(payload.Stdout, "STDOUT_TAIL") || !strings.Contains(payload.Stderr, "STDERR_TAIL") {
+		t.Fatalf("bounded output lost tail or exceeded limit: encoded=%d payload=%+v", len(encoded), payload)
+	}
+}
+
+func TestRunCmdToolMarksArtifactTruncationAndDrainsProcessOutput(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: fixedLookPath(python),
+	})
+	artifactStore, err := artifact.Open(filepath.Join(t.TempDir(), "artifacts"), 64)
+	if err != nil {
+		t.Fatalf("artifact.Open() error = %v", err)
+	}
+	tool, err := NewRunCmdToolWithArtifacts(validator, runner, artifactStore, 2048)
+	if err != nil {
+		t.Fatalf("NewRunCmdToolWithArtifacts() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Program: stringPtr("python3"), Args: &[]string{"-c", "import sys; sys.stdout.write('x' * 500); sys.stderr.write('y' * 300)"},
+		WorkingDir: stringPtr(root), Env: &map[string]string{}, TimeoutMs: int64Ptr(2000), MaxOutputBytes: int64Ptr(1024),
+	}))
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute result = %+v", result)
+	}
+	var output runCmdOutput
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &output); err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	if !output.StdoutArtifactTruncated || !output.StderrArtifactTruncated || output.StdoutBytes != 500 || output.StderrBytes != 300 {
+		t.Fatalf("unexpected truncation metadata: %+v", output)
+	}
+	stdout, err := artifactStore.ReadAll(context.Background(), *output.StdoutArtifact)
+	if err != nil || len(stdout) != 64 {
+		t.Fatalf("stdout artifact = %d bytes, %v", len(stdout), err)
+	}
+}
+
+func TestRunCmdToolArtifactFailureDoesNotEmbedLargeOutput(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: fixedLookPath(python),
+	})
+	tool, err := NewRunCmdToolWithArtifacts(validator, runner, failingArtifactWriter{}, 2048)
+	if err != nil {
+		t.Fatalf("NewRunCmdToolWithArtifacts() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Program:        stringPtr("python3"),
+		Args:           &[]string{"-c", "print('x' * 1000)"},
+		WorkingDir:     stringPtr(root),
+		Env:            &map[string]string{},
+		TimeoutMs:      int64Ptr(2000),
+		MaxOutputBytes: int64Ptr(1024),
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusError || result.Error == nil || result.Error.Code != string(domain.ErrUnavailable) {
+		t.Fatalf("result = %+v, want unavailable error", result)
+	}
+	if len(result.Content) != 0 {
+		t.Fatalf("failure leaked command output: %+v", result.Content)
+	}
+}
+
+type failingArtifactWriter struct{}
+
+func (failingArtifactWriter) Begin(context.Context) (domain.StagedArtifact, error) {
+	return nil, errors.New("injected artifact failure")
+}
+
+func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
@@ -44,7 +197,7 @@ func TestRunCommandToolSuccessAndNonZeroExit(t *testing.T) {
 	tool := newTool(t, validator, runner)
 
 	workingDir := mustMkdirAllPath(t, filepath.Join(root, "subdir"))
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{"-c", "import json, os, sys; print(json.dumps({'argv': sys.argv[1:], 'cwd': os.getcwd(), 'safe': os.environ.get('SAFE_VALUE', ''), 'secret': os.environ.get('MY_SECRET_TOKEN', '')}, sort_keys=True)); sys.stderr.buffer.write(b'bad\\xfferr')", "alpha", "beta"},
 		WorkingDir:     stringPtr(workingDir),
@@ -82,7 +235,7 @@ func TestRunCommandToolSuccessAndNonZeroExit(t *testing.T) {
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
 	}
-	var output runCommandOutput
+	var output runCmdOutput
 	decodeToolResult(t, result, &output)
 	if output.ExitCode != 0 || output.Signal != "" {
 		t.Fatalf("unexpected process exit: %+v", output)
@@ -117,7 +270,7 @@ func TestRunCommandToolSuccessAndNonZeroExit(t *testing.T) {
 		t.Fatalf("stdout argv = %#v, want [alpha beta]", stdout["argv"])
 	}
 
-	nonZeroPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	nonZeroPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{"-c", "import sys; sys.stderr.write('boom\\n'); sys.exit(7)"},
 		WorkingDir:     stringPtr(root),
@@ -138,7 +291,7 @@ func TestRunCommandToolSuccessAndNonZeroExit(t *testing.T) {
 	}
 }
 
-func TestRunCommandToolTimeoutAndCancelled(t *testing.T) {
+func TestRunCmdToolTimeoutAndCancelled(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
@@ -147,7 +300,7 @@ func TestRunCommandToolTimeoutAndCancelled(t *testing.T) {
 	})
 	tool := newTool(t, validator, runner)
 
-	timeoutPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	timeoutPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{"-c", "import time; print('start', flush=True); time.sleep(30)"},
 		WorkingDir:     stringPtr(root),
@@ -162,13 +315,13 @@ func TestRunCommandToolTimeoutAndCancelled(t *testing.T) {
 	if timeoutResult.Status != domain.ToolStatusTimeout {
 		t.Fatalf("timeout status = %s, want timeout: %+v", timeoutResult.Status, timeoutResult.Error)
 	}
-	var timeoutOutput runCommandOutput
+	var timeoutOutput runCmdOutput
 	decodeToolResult(t, timeoutResult, &timeoutOutput)
 	if !timeoutOutput.TimedOut || timeoutOutput.Cancelled {
 		t.Fatalf("timeout output = %+v, want timed_out only", timeoutOutput)
 	}
 
-	cancelPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	cancelPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{"-c", "import time; time.sleep(30)"},
 		WorkingDir:     stringPtr(root),
@@ -188,14 +341,14 @@ func TestRunCommandToolTimeoutAndCancelled(t *testing.T) {
 	if cancelResult.Status != domain.ToolStatusCancelled {
 		t.Fatalf("cancel status = %s, want cancelled: %+v", cancelResult.Status, cancelResult.Error)
 	}
-	var cancelOutput runCommandOutput
+	var cancelOutput runCmdOutput
 	decodeToolResult(t, cancelResult, &cancelOutput)
 	if cancelOutput.TimedOut || !cancelOutput.Cancelled {
 		t.Fatalf("cancel output = %+v, want cancelled only", cancelOutput)
 	}
 }
 
-func TestRunCommandToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
+func TestRunCmdToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
@@ -206,12 +359,12 @@ func TestRunCommandToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 
 	_, err := tool.Prepare(context.Background(), domain.ToolCall{
 		ID:        domain.NewToolCallID(),
-		Name:      "run_command",
+		Name:      "run_cmd",
 		Arguments: json.RawMessage(`{"program":"python3","args":[],"working_dir":".","env":{},"timeout_ms":1,"max_output_bytes":1,"extra":true}`),
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
-	_, err = tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	_, err = tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{},
 		WorkingDir:     stringPtr(filepath.Join(root, "..")),
@@ -221,7 +374,7 @@ func TestRunCommandToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	}))
 	assertAgentErrorCode(t, err, domain.ErrSecurity)
 
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{"-c", "print('ok')"},
 		WorkingDir:     stringPtr(root),
@@ -232,7 +385,7 @@ func TestRunCommandToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare(valid) error = %v", err)
 	}
-	prepared.Call.Arguments = mustMarshalRaw(t, runCommandArgs{
+	prepared.Call.Arguments = mustMarshalRaw(t, runCmdArgs{
 		Program:        "python3",
 		Args:           []string{"-c", "print('tampered')"},
 		WorkingDir:     ".",
@@ -243,7 +396,7 @@ func TestRunCommandToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	tampered := tool.Execute(context.Background(), prepared)
 	assertToolResultError(t, tampered, domain.ToolStatusError, domain.ErrSecurity)
 
-	prepared, err = tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	prepared, err = tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{"-c", "print('ok')"},
 		WorkingDir:     stringPtr(root),
@@ -260,7 +413,7 @@ func TestRunCommandToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	assertToolResultError(t, invalidBindings, domain.ToolStatusError, domain.ErrSecurity)
 }
 
-func TestRunCommandToolFailsClosedWithoutSandbox(t *testing.T) {
+func TestRunCmdToolFailsClosedWithoutSandbox(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
@@ -269,7 +422,7 @@ func TestRunCommandToolFailsClosedWithoutSandbox(t *testing.T) {
 	})
 	tool := newTool(t, validator, runner)
 
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{"-c", "print('ok')"},
 		WorkingDir:     stringPtr(root),
@@ -287,9 +440,9 @@ func TestRunCommandToolFailsClosedWithoutSandbox(t *testing.T) {
 	}
 }
 
-func TestRunCommandToolValidateArguments(t *testing.T) {
+func TestRunCmdToolValidateArguments(t *testing.T) {
 	validator, root := newValidator(t)
-	_, _, err := validateArgs(validator, rawRunCommandArgs{
+	_, _, err := validateArgs(validator, rawRunCmdArgs{
 		Program:        nil,
 		Args:           &[]string{},
 		WorkingDir:     stringPtr(root),
@@ -299,7 +452,7 @@ func TestRunCommandToolValidateArguments(t *testing.T) {
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
-	_, _, err = validateArgs(validator, rawRunCommandArgs{
+	_, _, err = validateArgs(validator, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{},
 		WorkingDir:     stringPtr(root),
@@ -309,7 +462,7 @@ func TestRunCommandToolValidateArguments(t *testing.T) {
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
-	_, _, err = validateArgs(validator, rawRunCommandArgs{
+	_, _, err = validateArgs(validator, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{},
 		WorkingDir:     stringPtr(root),
@@ -319,7 +472,7 @@ func TestRunCommandToolValidateArguments(t *testing.T) {
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
-	_, _, err = validateArgs(validator, rawRunCommandArgs{
+	_, _, err = validateArgs(validator, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{},
 		WorkingDir:     stringPtr(root),
@@ -353,11 +506,11 @@ func TestClassifyRunError(t *testing.T) {
 	}
 }
 
-func newTool(t *testing.T, validator *workspacepkg.PathValidator, runner *process.Runner) *RunCommandTool {
+func newTool(t *testing.T, validator *workspacepkg.PathValidator, runner *process.Runner) *RunCmdTool {
 	t.Helper()
-	tool, err := NewRunCommandTool(validator, runner)
+	tool, err := NewRunCmdTool(validator, runner)
 	if err != nil {
-		t.Fatalf("NewRunCommandTool() error = %v", err)
+		t.Fatalf("NewRunCmdTool() error = %v", err)
 	}
 	return tool
 }
@@ -407,7 +560,7 @@ func newToolCall[T any](t *testing.T, args T) domain.ToolCall {
 	t.Helper()
 	return domain.ToolCall{
 		ID:        domain.NewToolCallID(),
-		Name:      "run_command",
+		Name:      "run_cmd",
 		Arguments: mustMarshalRaw(t, args),
 	}
 }
@@ -482,7 +635,7 @@ func mustMkdirAllPath(t *testing.T, path string) string {
 func stringPtr(value string) *string { return &value }
 func int64Ptr(value int64) *int64    { return &value }
 
-func TestRunCommandToolApprovalDescShowsDangerousPayloadAndTruncation(t *testing.T) {
+func TestRunCmdToolApprovalDescShowsDangerousPayloadAndTruncation(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
@@ -491,7 +644,7 @@ func TestRunCommandToolApprovalDescShowsDangerousPayloadAndTruncation(t *testing
 	})
 	tool := newTool(t, validator, runner)
 	payload := strings.Repeat("print('boom');", 80)
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{"-c", payload},
 		WorkingDir:     stringPtr(root),
@@ -519,7 +672,7 @@ func TestRunCommandToolApprovalDescShowsDangerousPayloadAndTruncation(t *testing
 	}
 }
 
-func TestRunCommandToolRejectsKilledBindingMismatch(t *testing.T) {
+func TestRunCmdToolRejectsKilledBindingMismatch(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
@@ -527,7 +680,7 @@ func TestRunCommandToolRejectsKilledBindingMismatch(t *testing.T) {
 		LookPath: fixedLookPath(python),
 	})
 	tool := newTool(t, validator, runner)
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{"-c", "print('ok')"},
 		WorkingDir:     stringPtr(root),
@@ -569,7 +722,7 @@ func TestSanitizeUTF8(t *testing.T) {
 	}
 }
 
-func TestRunCommandToolClassifySignalStillSuccess(t *testing.T) {
+func TestRunCmdToolClassifySignalStillSuccess(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
@@ -581,7 +734,7 @@ func TestRunCommandToolClassifySignalStillSuccess(t *testing.T) {
 		LookPath: fixedLookPath(python),
 	})
 	tool := newTool(t, validator, runner)
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCommandArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Program:        stringPtr("python3"),
 		Args:           &[]string{"-c", "import os, signal; os.kill(os.getpid(), signal.SIGTERM)"},
 		WorkingDir:     stringPtr(root),
@@ -596,7 +749,7 @@ func TestRunCommandToolClassifySignalStillSuccess(t *testing.T) {
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("result.Status = %s, want success", result.Status)
 	}
-	var output runCommandOutput
+	var output runCmdOutput
 	decodeToolResult(t, result, &output)
 	if output.ExitCode == 0 {
 		t.Fatalf("expected non-zero exit for signalled process: %+v", output)

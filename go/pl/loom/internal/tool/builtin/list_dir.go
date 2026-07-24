@@ -30,11 +30,11 @@ import (
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-type listDirectoryArgs struct {
+type listDirArgs struct {
 	Path string `json:"path"`
 }
 
-type listDirectoryEntry struct {
+type listDirEntry struct {
 	Name    string `json:"name"`
 	Path    string `json:"path"`
 	Kind    string `json:"kind"`
@@ -43,23 +43,23 @@ type listDirectoryEntry struct {
 	ModTime string `json:"mod_time"`
 }
 
-type listDirectoryOutput struct {
-	Path       string               `json:"path"`
-	EntryCount int                  `json:"entry_count"`
-	Truncated  bool                 `json:"truncated"`
-	Entries    []listDirectoryEntry `json:"entries"`
+type listDirOutput struct {
+	Path       string         `json:"path"`
+	EntryCount int            `json:"entry_count"`
+	Truncated  bool           `json:"truncated"`
+	Entries    []listDirEntry `json:"entries"`
 }
 
-// ListDirectoryTool implements deterministic directory listing.
-type ListDirectoryTool struct {
+// ListDirTool implements deterministic directory listing.
+type ListDirTool struct {
 	base baseTool
 }
 
-// NewListDirectoryTool creates a list_directory tool.
-func NewListDirectoryTool(validator *workspacepkg.PathValidator) (*ListDirectoryTool, error) {
+// NewListDirTool creates a list_dir tool.
+func NewListDirTool(validator *workspacepkg.PathValidator) (*ListDirTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
-		Name:         "list_directory",
-		Description:  "List directory entries within the workspace in deterministic order.",
+		Name:         "list_dir",
+		Description:  "List direct children of a workspace directory (name, kind, size, mode, mtime), deterministically sorted and capped at 200 entries. Not recursive: use search for content lookup across the tree.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1}},"required":["path"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"entry_count":{"type":"integer"},"truncated":{"type":"boolean"},"entries":{"type":"array"}},"required":["path","entry_count","truncated","entries"]}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
@@ -68,19 +68,19 @@ func NewListDirectoryTool(validator *workspacepkg.PathValidator) (*ListDirectory
 	if err != nil {
 		return nil, err
 	}
-	return &ListDirectoryTool{base: base}, nil
+	return &ListDirTool{base: base}, nil
 }
 
-func (t *ListDirectoryTool) Definition() domain.ToolDefinition {
+func (t *ListDirTool) Definition() domain.ToolDefinition {
 	return t.base.def
 }
 
-func (t *ListDirectoryTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[listDirectoryArgs](call.Arguments)
+func (t *ListDirTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+	args, err := decodeStrict[listDirArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	args, pathInfo, err := validateListDirectoryArgs(t.base.validator, args)
+	args, pathInfo, err := validateListDirArgs(t.base.validator, args)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -93,7 +93,7 @@ func (t *ListDirectoryTool) Prepare(ctx context.Context, call domain.ToolCall) (
 	return t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
 }
 
-func (t *ListDirectoryTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
+func (t *ListDirTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
 	if err := t.base.verifyPreparedCall(prepared); err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
@@ -102,7 +102,7 @@ func (t *ListDirectoryTool) Execute(ctx context.Context, prepared domain.Prepare
 		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
 	}
 
-	args, err := decodeStrict[listDirectoryArgs](prepared.Call.Arguments)
+	args, err := decodeStrict[listDirArgs](prepared.Call.Arguments)
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
@@ -122,7 +122,7 @@ func (t *ListDirectoryTool) Execute(ctx context.Context, prepared domain.Prepare
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	return successResult(prepared.Call.ID, startedAt, listDirectoryOutput{
+	return successResult(prepared.Call.ID, startedAt, listDirOutput{
 		Path:       args.Path,
 		EntryCount: len(entries),
 		Truncated:  truncated,
@@ -130,25 +130,25 @@ func (t *ListDirectoryTool) Execute(ctx context.Context, prepared domain.Prepare
 	})
 }
 
-func validateListDirectoryArgs(validator *workspacepkg.PathValidator, args listDirectoryArgs) (listDirectoryArgs, pathResolution, error) {
+func validateListDirArgs(validator *workspacepkg.PathValidator, args listDirArgs) (listDirArgs, pathResolution, error) {
 	pathInfo, err := resolveExistingPath(validator, args.Path)
 	if err != nil {
-		return listDirectoryArgs{}, pathResolution{}, err
+		return listDirArgs{}, pathResolution{}, err
 	}
 	if !pathInfo.Info.IsDir() {
-		return listDirectoryArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, "path must refer to a directory")
+		return listDirArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, "path must refer to a directory")
 	}
 	args.Path = pathInfo.Display
 	return args, pathInfo, nil
 }
 
-func readDirectoryEntries(ctx context.Context, validator *workspacepkg.PathValidator, dir pathResolution) ([]listDirectoryEntry, bool, error) {
+func readDirectoryEntries(ctx context.Context, validator *workspacepkg.PathValidator, dir pathResolution) ([]listDirEntry, bool, error) {
 	entries, err := os.ReadDir(dir.Absolute)
 	if err != nil {
 		return nil, false, domain.NewError(domain.ErrUnavailable, "failed to read directory", domain.WithCause(err))
 	}
 
-	candidates := make([]listDirectoryEntry, 0, len(entries))
+	candidates := make([]listDirEntry, 0, len(entries))
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -172,7 +172,7 @@ func readDirectoryEntries(ctx context.Context, validator *workspacepkg.PathValid
 			continue
 		}
 		displayPath := joinDisplayPath(dir.Display, name)
-		candidates = append(candidates, listDirectoryEntry{
+		candidates = append(candidates, listDirEntry{
 			Name:    name,
 			Path:    displayPath,
 			Kind:    entryKind(info),

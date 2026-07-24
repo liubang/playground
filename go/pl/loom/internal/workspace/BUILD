@@ -20,6 +20,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "workspace_lib",
     srcs = [
+        "filestate.go",
         "metadata_darwin.go",
         "metadata_linux.go",
         "metadata_unsupported.go",

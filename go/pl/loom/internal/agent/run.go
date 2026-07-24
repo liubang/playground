@@ -22,11 +22,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -450,6 +449,27 @@ func (r *Run) appendEvent(evtType domain.EventType, payload any) domain.Event {
 	return evt
 }
 
+// PendingEvents returns the current batch of events not yet persisted.
+func (r *Run) PendingEvents() []domain.Event {
+	return r.pendingEvents
+}
+
+// PersistedVersion returns the version up to which events have been persisted.
+func (r *Run) PersistedVersion() int64 {
+	return r.persistedVersion
+}
+
+// MarkPersisted marks the given events as persisted at the new version.
+func (r *Run) MarkPersisted(newVersion int64, events []domain.Event) {
+	r.persistedVersion = newVersion
+	// Remove persisted events from pending.
+	if len(events) >= len(r.pendingEvents) {
+		r.pendingEvents = r.pendingEvents[:0]
+	} else {
+		r.pendingEvents = r.pendingEvents[len(events):]
+	}
+}
+
 type toolCallAuditPayload struct {
 	CallID       domain.ToolCallID    `json:"call_id"`
 	Tool         string               `json:"tool"`
@@ -524,16 +544,26 @@ func (DefaultPolicy) Evaluate(risk domain.RiskLevel) domain.Decision {
 	}
 }
 
+// PromptBuilder builds the ephemeral system prompt prepended to every model
+// request. The prompt is request-scoped only: it is never persisted into the
+// session transcript, and its content is audited through the context manifest
+// rule references.
+type PromptBuilder interface {
+	Build(ctx context.Context) (string, []domain.ContextRuleRef, error)
+}
+
 // Loop drives the main agent loop for a Run.
 type Loop struct {
-	Run       *Run
-	Model     domain.Model
-	ModelName string
-	Store     domain.SessionStore
-	Approver  domain.Approver
-	Policy    Policy
-	Registry  *ToolRegistry
-	Logger    *slog.Logger
+	Run          *Run
+	Model        domain.Model
+	ModelName    string
+	Store        domain.SessionStore
+	Approver     domain.Approver
+	Policy       Policy
+	Registry     *ToolRegistry
+	Logger       *slog.Logger
+	StreamHooks  StreamHooks
+	SystemPrompt PromptBuilder
 
 	prepared map[domain.ToolCallID]domain.PreparedCall
 }
@@ -654,7 +684,8 @@ func (l *Loop) callModel(ctx context.Context) error {
 	if modelName == "" {
 		modelName = "default"
 	}
-	manifest, err := buildContextManifest(l.Run.Messages)
+	messages, rules := l.effectiveMessages(ctx)
+	manifest, err := buildContextManifest(messages, rules)
 	if err != nil {
 		l.terminate(ctx, domain.OutcomeFailed)
 		return fmt.Errorf("build context manifest: %w", err)
@@ -662,7 +693,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	req := domain.ModelRequest{
 		ID:              domain.NewEventID(),
 		ModelName:       modelName,
-		Messages:        append([]domain.Message(nil), l.Run.Messages...),
+		Messages:        messages,
 		Tools:           l.Registry.List(),
 		MaxTokens:       l.Run.Limits.MaxOutputTokens,
 		ContextManifest: manifest,
@@ -685,26 +716,75 @@ func (l *Loop) callModel(ctx context.Context) error {
 	}
 	defer stream.Close()
 
-	response, err := aggregateStream(stream, l.Run.Clock)
-	if err != nil {
-		if len(response.Message.Parts) > 0 {
-			l.Run.AddAssistantMessage(response.Message)
+	agg := NewStreamAggregator(l.Run.Clock, l.StreamHooks)
+	aggErr := consumeStream(stream, agg)
+	if aggErr != nil {
+		if agg.HasPartialContent() {
+			l.Run.AddAssistantMessage(agg.InterruptedMessage())
 		}
 		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
-			RequestID: req.ID, Stage: "stream", Code: errorCodeForAudit(err),
+			RequestID: req.ID, Stage: "stream", Code: errorCodeForAudit(aggErr),
 		})
 		l.terminate(ctx, domain.OutcomeFailed)
-		return fmt.Errorf("model stream aggregation: %w", err)
+		return fmt.Errorf("model stream consumption: %w", aggErr)
 	}
-	l.Run.Usage.InputTokens += response.InputTokens
-	l.Run.Usage.OutputTokens += response.OutputTokens
-	l.Run.AddAssistantMessage(response.Message)
+	response, stop, inputTokens, outputTokens, err := agg.Finalize()
+	if err != nil {
+		if agg.HasPartialContent() {
+			l.Run.AddAssistantMessage(agg.InterruptedMessage())
+		}
+		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
+			RequestID: req.ID, Stage: "finalize", Code: errorCodeForAudit(err),
+		})
+		l.terminate(ctx, domain.OutcomeFailed)
+		return fmt.Errorf("model stream finalization: %w", err)
+	}
+	// Record the terminal stream facts on the persisted message so that event
+	// consumers (runtime-event bridge, session inspection) can recover the real
+	// stop reason and correlate the response with its request.
+	if response.Metadata == nil {
+		response.Metadata = make(map[string]string, 2)
+	}
+	response.Metadata["request_id"] = req.ID.String()
+	response.Metadata["stop_reason"] = string(stop)
+	l.Run.Usage.InputTokens += inputTokens
+	l.Run.Usage.OutputTokens += outputTokens
+	l.Run.AddAssistantMessage(response)
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 
-	if len(response.Message.ToolCalls()) == 0 {
-		return l.determineCompletion(ctx, response.StopReason)
+	if len(response.ToolCalls()) == 0 {
+		return l.determineCompletion(ctx, stop)
 	}
 	return l.routeToolCalls(ctx)
+}
+
+// effectiveMessages returns the transcript with the ephemeral system prompt
+// prepended, together with the prompt's audit rule references. A build
+// failure degrades to the bare transcript rather than failing the turn.
+func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domain.ContextRuleRef) {
+	messages := append([]domain.Message(nil), l.Run.Messages...)
+	if l.SystemPrompt == nil {
+		return messages, nil
+	}
+	text, rules, err := l.SystemPrompt.Build(ctx)
+	if err != nil {
+		if l.Logger != nil {
+			l.Logger.Warn("build system prompt failed; continuing without it", "error", err)
+		}
+		return messages, nil
+	}
+	if strings.TrimSpace(text) == "" {
+		return messages, nil
+	}
+	system := domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleSystem,
+		Status:    domain.MessageStatusFinal,
+		Revision:  1,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: text}},
+		CreatedAt: l.Run.Clock.Now(),
+	}
+	return append([]domain.Message{system}, messages...), rules
 }
 
 func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) error {
@@ -786,14 +866,16 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 		if !ok || l.policy().Evaluate(prepared.Risk) != domain.DecisionAsk {
 			continue
 		}
-		l.Run.appendEvent(domain.EventPermissionRequested, makeToolCallAuditPayload(prepared))
+		// The durable permission event ID is the approval ID. Reusing it for
+		// the live request binds the UI decision to the persisted audit fact.
+		approvalEvent := l.Run.appendEvent(domain.EventPermissionRequested, makeToolCallAuditPayload(prepared))
 		if l.Store != nil {
 			if err := l.flushEvents(ctx); err != nil {
 				return err
 			}
 		}
 		decision, err := l.Approver.RequestApproval(ctx, domain.ApprovalRequest{
-			ID:          domain.NewEventID(),
+			ID:          approvalEvent.ID,
 			Call:        prepared,
 			Description: prepared.ApprovalDesc,
 		})
@@ -837,6 +919,10 @@ func (l *Loop) executeTools(ctx context.Context) error {
 			continue
 		}
 		if err := validatePreparedExecution(tc, prepared, tool.Definition()); err != nil {
+			l.recordToolExecutionError(tc.ID, err)
+			continue
+		}
+		if err := verifyPreparedFreshness(ctx, tool, tc, prepared); err != nil {
 			l.recordToolExecutionError(tc.ID, err)
 			continue
 		}
@@ -991,12 +1077,34 @@ func validatePreparedExecution(original domain.ToolCall, prepared domain.Prepare
 	if !sameCapabilities(prepared.Definition.Capabilities, current.Capabilities) {
 		return domain.NewError(domain.ErrSecurity, "prepared call capabilities drift detected")
 	}
-	matched, err := canonicalJSONEqual(original.Arguments, prepared.Call.Arguments)
+	// Note: the assistant's raw arguments are intentionally NOT compared
+	// byte-for-byte with the prepared (canonical) arguments. Normalization is
+	// the Prepare phase's job (e.g. mapping any path spelling onto the
+	// workspace-relative display form), so a literal comparison would reject
+	// every legitimately normalized call. Semantic freshness is enforced by
+	// verifyPreparedFreshness below, and integrity by the ArgsHash HMAC that
+	// Execute re-verifies.
+	return nil
+}
+
+// verifyPreparedFreshness re-runs Prepare on the original tool call and
+// compares the canonical arguments. Normalization during Prepare is
+// deterministic, so equal canonical forms prove the prepared call still
+// reflects the assistant's request; a mismatch means the environment changed
+// after approval (or the prepared call drifted) and execution must fail
+// closed. The model will see the tool error and may re-issue the call,
+// producing a fresh approval bound to current state.
+func verifyPreparedFreshness(ctx context.Context, tool domain.Tool, original domain.ToolCall, prepared domain.PreparedCall) error {
+	fresh, err := tool.Prepare(ctx, original)
+	if err != nil {
+		return err
+	}
+	matched, err := canonicalJSONEqual(fresh.Call.Arguments, prepared.Call.Arguments)
 	if err != nil {
 		return domain.NewError(domain.ErrSecurity, "failed to canonicalize tool call arguments", domain.WithCause(err))
 	}
 	if !matched {
-		return domain.NewError(domain.ErrSecurity, "prepared call arguments no longer match assistant tool call")
+		return domain.NewError(domain.ErrSecurity, "prepared call arguments no longer match the current environment")
 	}
 	return nil
 }
@@ -1083,7 +1191,7 @@ func sameCapabilities(left, right []domain.Capability) bool {
 	return true
 }
 
-func buildContextManifest(messages []domain.Message) (domain.ContextManifest, error) {
+func buildContextManifest(messages []domain.Message, rules []domain.ContextRuleRef) (domain.ContextManifest, error) {
 	data, err := json.Marshal(messages)
 	if err != nil {
 		return domain.ContextManifest{}, err
@@ -1099,147 +1207,9 @@ func buildContextManifest(messages []domain.Message) (domain.ContextManifest, er
 		})
 	}
 	return domain.NewContextManifest(domain.ContextManifest{
+		Rules:         rules,
 		MessageRanges: ranges,
 		Tokenizer:     domain.TokenizerRef{Name: "provider"},
 		PromptHash:    hex.EncodeToString(sum[:]),
 	})
-}
-
-type streamResponse struct {
-	Message      domain.Message
-	StopReason   domain.StopReason
-	InputTokens  int64
-	OutputTokens int64
-}
-
-// aggregateStream validates and collects canonical model events.
-func aggregateStream(stream domain.ModelStream, clock domain.Clock) (response streamResponse, err error) {
-	var text string
-	defer func() {
-		if err == nil || text == "" || len(response.Message.Parts) > 0 {
-			return
-		}
-		response.Message = domain.Message{
-			ID:        domain.NewMessageID(),
-			Role:      domain.RoleAssistant,
-			Status:    domain.MessageStatusInterrupted,
-			Revision:  1,
-			Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: text}},
-			CreatedAt: clock.Now(),
-		}
-	}()
-	tools := make(map[int]*streamToolCall)
-	seenIDs := make(map[string]struct{})
-	var stop domain.StopReason
-	var inputTokens, outputTokens int64
-	responseEnded := false
-
-	for {
-		evt, err := stream.Recv()
-		if err != nil {
-			if errors.Is(err, io.EOF) && responseEnded {
-				break
-			}
-			return streamResponse{}, fmt.Errorf("stream ended before response_end: %w", err)
-		}
-		if responseEnded {
-			return streamResponse{}, fmt.Errorf("event %q after response_end", evt.Kind)
-		}
-
-		switch evt.Kind {
-		case domain.ModelEventResponseStart, domain.ModelEventTextStart,
-			domain.ModelEventTextEnd, domain.ModelEventProviderWarning:
-		case domain.ModelEventTextDelta:
-			text += evt.TextDelta
-		case domain.ModelEventToolCallStart:
-			if _, exists := tools[evt.ToolIndex]; exists {
-				return streamResponse{}, fmt.Errorf("duplicate tool index %d", evt.ToolIndex)
-			}
-			if evt.ToolID == "" || evt.ToolName == "" {
-				return streamResponse{}, fmt.Errorf("tool call start requires id and name")
-			}
-			if _, exists := seenIDs[evt.ToolID]; exists {
-				return streamResponse{}, fmt.Errorf("duplicate tool call id %q", evt.ToolID)
-			}
-			seenIDs[evt.ToolID] = struct{}{}
-			tools[evt.ToolIndex] = &streamToolCall{index: evt.ToolIndex, id: evt.ToolID, name: evt.ToolName}
-		case domain.ModelEventToolArgsDelta:
-			tool, ok := tools[evt.ToolIndex]
-			if !ok {
-				return streamResponse{}, fmt.Errorf("arguments for unknown tool index %d", evt.ToolIndex)
-			}
-			tool.args += evt.ToolArgs
-		case domain.ModelEventToolCallEnd:
-			tool, ok := tools[evt.ToolIndex]
-			if !ok {
-				return streamResponse{}, fmt.Errorf("end for unknown tool index %d", evt.ToolIndex)
-			}
-			tool.ended = true
-		case domain.ModelEventUsage:
-			if evt.InputTokens < 0 || evt.OutputTokens < 0 {
-				return streamResponse{}, fmt.Errorf("negative token usage")
-			}
-			inputTokens, outputTokens = evt.InputTokens, evt.OutputTokens
-		case domain.ModelEventStreamError:
-			if evt.Error == "" {
-				evt.Error = "provider stream error"
-			}
-			return streamResponse{}, errors.New(evt.Error)
-		case domain.ModelEventResponseEnd:
-			if evt.StopReason == "" {
-				return streamResponse{}, fmt.Errorf("response_end requires stop reason")
-			}
-			stop = evt.StopReason
-			responseEnded = true
-		default:
-			return streamResponse{}, fmt.Errorf("unknown model event kind %q", evt.Kind)
-		}
-	}
-
-	indexes := make([]int, 0, len(tools))
-	for index, tool := range tools {
-		if !tool.ended {
-			return streamResponse{}, fmt.Errorf("incomplete tool call at index %d", index)
-		}
-		indexes = append(indexes, index)
-	}
-	sort.Ints(indexes)
-	parts := make([]domain.ContentPart, 0, len(indexes)+1)
-	if text != "" {
-		parts = append(parts, domain.ContentPart{Kind: domain.PartText, Text: text})
-	}
-	for _, index := range indexes {
-		tool := tools[index]
-		id, err := domain.ParseToolCallID(tool.id)
-		if err != nil {
-			return streamResponse{}, fmt.Errorf("invalid tool call id %q: %w", tool.id, err)
-		}
-		call := domain.ToolCall{ID: id, Name: tool.name, Arguments: json.RawMessage(tool.args)}
-		if err := call.Validate(); err != nil {
-			return streamResponse{}, fmt.Errorf("invalid tool call at index %d: %w", index, err)
-		}
-		parts = append(parts, domain.ContentPart{PartIndex: len(parts), Kind: domain.PartToolCall, ToolCall: &call})
-	}
-	if len(parts) == 0 {
-		return streamResponse{}, fmt.Errorf("empty model response")
-	}
-	return streamResponse{
-		Message: domain.Message{
-			ID:        domain.NewMessageID(),
-			Role:      domain.RoleAssistant,
-			Status:    domain.MessageStatusFinal,
-			Revision:  1,
-			Parts:     parts,
-			CreatedAt: clock.Now(),
-		},
-		StopReason: stop, InputTokens: inputTokens, OutputTokens: outputTokens,
-	}, nil
-}
-
-type streamToolCall struct {
-	index int
-	id    string
-	name  string
-	args  string
-	ended bool
 }

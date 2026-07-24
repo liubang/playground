@@ -55,8 +55,8 @@ type GitStatusTool struct {
 func NewGitStatusTool(validator *workspacepkg.PathValidator) (*GitStatusTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name:         "git_status",
-		Description:  "Read repository status using git status porcelain v2 with deterministic JSON output.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1}},"required":["repo_root"]}`),
+		Description:  "Read repository status (branch, head, ahead/behind counts, staged/unstaged/untracked files) using git status porcelain v2 with deterministic JSON output.",
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1}},"required":[]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"branch":{"type":"string"},"head":{"type":"string"},"ahead":{"type":"integer"},"behind":{"type":"integer"},"staged":{"type":"array","items":{"type":"string"}},"unstaged":{"type":"array","items":{"type":"string"}},"untracked":{"type":"array","items":{"type":"string"}}},"required":["repo_root","branch","head","ahead","behind","staged","unstaged","untracked"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,

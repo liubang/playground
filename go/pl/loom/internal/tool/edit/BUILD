@@ -20,9 +20,9 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "edit_lib",
     srcs = [
-        "apply_patch.go",
         "common.go",
-        "replace_text.go",
+        "edit.go",
+        "write.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/edit",
     visibility = ["//visibility:public"],
