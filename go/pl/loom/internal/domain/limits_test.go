@@ -103,3 +103,67 @@ func TestUsageCheckCost(t *testing.T) {
 		t.Error("expected hard breach for cost")
 	}
 }
+
+func TestLimitsFromEnvNoOverrides(t *testing.T) {
+	base := DefaultLimits()
+	got, err := LimitsFromEnv(base)
+	if err != nil {
+		t.Fatalf("LimitsFromEnv() error = %v", err)
+	}
+	if got != base {
+		t.Errorf("LimitsFromEnv() = %+v, want unchanged base", got)
+	}
+}
+
+func TestLimitsFromEnvAppliesOverrides(t *testing.T) {
+	t.Setenv(EnvMaxTurns, "99")
+	t.Setenv(EnvMaxInputTokens, "500000")
+	t.Setenv(EnvMaxCostUSD, "12.5")
+	t.Setenv(EnvMaxWallTime, "45m")
+	t.Setenv(EnvMaxToolOutputBytes, "131072")
+
+	got, err := LimitsFromEnv(DefaultLimits())
+	if err != nil {
+		t.Fatalf("LimitsFromEnv() error = %v", err)
+	}
+	if got.MaxTurns != 99 {
+		t.Errorf("MaxTurns = %d, want 99", got.MaxTurns)
+	}
+	if got.MaxInputTokens != 500000 {
+		t.Errorf("MaxInputTokens = %d, want 500000", got.MaxInputTokens)
+	}
+	if got.MaxEstimatedCostUSD != 12.5 {
+		t.Errorf("MaxEstimatedCostUSD = %f, want 12.5", got.MaxEstimatedCostUSD)
+	}
+	if got.MaxWallTime != 45*time.Minute {
+		t.Errorf("MaxWallTime = %v, want 45m", got.MaxWallTime)
+	}
+	if got.MaxToolOutputBytes != 131072 {
+		t.Errorf("MaxToolOutputBytes = %d, want 131072", got.MaxToolOutputBytes)
+	}
+	// Untouched fields keep the defaults.
+	if got.MaxToolCalls != DefaultLimits().MaxToolCalls {
+		t.Errorf("MaxToolCalls = %d, want default %d", got.MaxToolCalls, DefaultLimits().MaxToolCalls)
+	}
+}
+
+func TestLimitsFromEnvRejectsMalformed(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		val  string
+	}{
+		{"non-integer tokens", EnvMaxInputTokens, "lots"},
+		{"negative turns", EnvMaxTurns, "-1"},
+		{"bad duration", EnvMaxWallTime, "soon"},
+		{"negative cost", EnvMaxCostUSD, "-2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(tt.env, tt.val)
+			if _, err := LimitsFromEnv(DefaultLimits()); err == nil {
+				t.Fatalf("expected error for %s=%q", tt.env, tt.val)
+			}
+		})
+	}
+}

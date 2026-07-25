@@ -206,6 +206,59 @@ func TestReplayAcceptsToolCompletionAuditPayload(t *testing.T) {
 	}
 }
 
+// Regression: checkpoints persisted with a zero-sequence compaction marker
+// must recover instead of hard-failing every continuation with
+// "checkpoint message ... must be positive".
+func TestReplayFromCheckpointRepairsZeroSequenceMarker(t *testing.T) {
+	sessionID := domain.NewSessionID()
+	baseTime := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	marker := domain.Message{
+		ID:        domain.NewMessageID(),
+		Sequence:  0, // persisted by compaction before sequence assignment was fixed
+		Role:      domain.RoleSystem,
+		Status:    domain.MessageStatusFinal,
+		Revision:  1,
+		CreatedAt: baseTime,
+		Parts:     []domain.ContentPart{{PartIndex: 0, Kind: domain.PartText, Text: "[earlier messages archived] 71 messages"}},
+		Metadata:  map[string]string{"compacted": "archived"},
+	}
+	tail := domain.Message{
+		ID:        domain.NewMessageID(),
+		Sequence:  72,
+		Role:      domain.RoleAssistant,
+		Status:    domain.MessageStatusFinal,
+		Revision:  1,
+		CreatedAt: baseTime.Add(time.Second),
+		Parts:     []domain.ContentPart{{PartIndex: 0, Kind: domain.PartText, Text: "continued"}},
+	}
+	ckpt := domain.Checkpoint{
+		ID:        domain.NewCheckpointID(),
+		SessionID: sessionID,
+		Sequence:  3,
+		Messages:  []domain.Message{marker, tail},
+		CreatedAt: baseTime,
+	}
+
+	transcript, err := ReplayFromCheckpoint(ckpt, nil)
+	if err != nil {
+		t.Fatalf("ReplayFromCheckpoint() error = %v, want repaired marker", err)
+	}
+	if len(transcript.Messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(transcript.Messages))
+	}
+	repaired := transcript.Messages[0]
+	if repaired.Sequence <= 0 {
+		t.Fatalf("repaired marker sequence = %d, want positive", repaired.Sequence)
+	}
+	if repaired.Sequence >= transcript.Messages[1].Sequence {
+		t.Fatalf("marker sequence %d must stay below the following message %d", repaired.Sequence, transcript.Messages[1].Sequence)
+	}
+	if err := transcript.Validate(); err != nil {
+		t.Fatalf("repaired transcript invalid: %v", err)
+	}
+}
+
 func TestReplayRejectsInvalidPayload(t *testing.T) {
 	_, err := Replay([]domain.Event{{
 		ID:        domain.NewEventID(),

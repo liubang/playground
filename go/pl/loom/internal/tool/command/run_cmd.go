@@ -58,22 +58,34 @@ const (
 )
 
 type rawRunCmdArgs struct {
-	Program        *string            `json:"program"`
-	Args           *[]string          `json:"args"`
-	WorkingDir     *string            `json:"working_dir"`
-	Env            *map[string]string `json:"env"`
-	TimeoutMs      *int64             `json:"timeout_ms"`
-	MaxOutputBytes *int64             `json:"max_output_bytes"`
+	Program            *string            `json:"program"`
+	Args               *[]string          `json:"args"`
+	WorkingDir         *string            `json:"working_dir"`
+	Env                *map[string]string `json:"env"`
+	TimeoutMs          *int64             `json:"timeout_ms"`
+	MaxOutputBytes     *int64             `json:"max_output_bytes"`
+	SandboxPermissions *string            `json:"sandbox_permissions"`
+	Justification      *string            `json:"justification"`
 }
 
 type runCmdArgs struct {
-	Program        string            `json:"program"`
-	Args           []string          `json:"args"`
-	WorkingDir     string            `json:"working_dir"`
-	Env            map[string]string `json:"env"`
-	TimeoutMs      int64             `json:"timeout_ms"`
-	MaxOutputBytes int64             `json:"max_output_bytes"`
+	Program            string            `json:"program"`
+	Args               []string          `json:"args"`
+	WorkingDir         string            `json:"working_dir"`
+	Env                map[string]string `json:"env"`
+	TimeoutMs          int64             `json:"timeout_ms"`
+	MaxOutputBytes     int64             `json:"max_output_bytes"`
+	SandboxPermissions string            `json:"sandbox_permissions"`
+	Justification      string            `json:"justification,omitempty"`
 }
+
+// sandbox_permissions values: the default sandboxed execution, or an
+// escalated run outside the sandbox after explicit user approval.
+const (
+	sandboxUseDefault       = "use_default"
+	sandboxRequireEscalated = "require_escalated"
+	maxJustificationBytes   = 240
+)
 
 type runCmdOutput struct {
 	Stdout                  string              `json:"stdout"`
@@ -95,6 +107,7 @@ type runCmdOutput struct {
 	Isolation               string              `json:"isolation"`
 	ExecutablePath          string              `json:"executable_path"`
 	Hash                    string              `json:"hash"`
+	Note                    string              `json:"note,omitempty"`
 }
 
 type preparedFingerprint struct {
@@ -148,12 +161,18 @@ func NewRunCmdToolWithArtifacts(
 	}
 	def := domain.ToolDefinition{
 		Name: "run_cmd",
-		Description: "Execute a program directly without a shell. Pipes, redirection and '&&' do NOT work; " +
-			"for shell syntax use program='sh' with args=['-c','...'] (higher approval risk). " +
+		Description: "Execute a program in a sandbox. For pipes, redirection or '&&' use program='sh' with args=['-c','...'] " +
+			"(shell commands are elevated to R3 approval risk). " +
 			"Only 'program' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
-			"Output beyond the limit is stored as an artifact with a head/tail preview. Network access defaults to denied by the runner sandbox.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576}},"required":["program"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"stdout_preview_truncated":{"type":"boolean"},"stderr_preview_truncated":{"type":"boolean"},"stdout_artifact_truncated":{"type":"boolean"},"stderr_artifact_truncated":{"type":"boolean"},"stdout_artifact":{"type":"object"},"stderr_artifact":{"type":"object"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"}},"required":["stdout","stderr","stdout_bytes","stderr_bytes","stdout_preview_truncated","stderr_preview_truncated","stdout_artifact_truncated","stderr_artifact_truncated","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
+			"Output beyond the limit is stored as an artifact with a head/tail preview. " +
+			"The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), " +
+			"and denies writes outside the workspace and temp dir. " +
+			"When a task-critical command fails because of the sandbox (DNS/network errors, permission denied writing outside the workspace, package downloads), " +
+			"retry it with sandbox_permissions='require_escalated' and a short justification question for the user — this runs it OUTSIDE the sandbox after explicit approval (R3); " +
+			"do not give up or ask the user to run it themselves before offering that approval. " +
+			"'justification' is an optional short note shown to the user at approval time; it is REQUIRED with sandbox_permissions='require_escalated' and simply informational otherwise.",
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
+		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"stdout_preview_truncated":{"type":"boolean"},"stderr_preview_truncated":{"type":"boolean"},"stdout_artifact_truncated":{"type":"boolean"},"stderr_artifact_truncated":{"type":"boolean"},"stdout_artifact":{"type":"object"},"stderr_artifact":{"type":"object"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"},"note":{"type":"string"}},"required":["stdout","stderr","stdout_bytes","stderr_bytes","stdout_preview_truncated","stderr_preview_truncated","stdout_artifact_truncated","stderr_artifact_truncated","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
 	}
@@ -211,13 +230,24 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 			Arguments: cloneRawMessage(canonical),
 		},
 		Definition: t.def,
-		Risk:       t.def.Risk(),
+		Risk:       riskForArgs(args, t.def.Risk()),
 		ReadPaths:  []string{root},
 		WritePaths: []string{root},
 	}
 	prepared.ApprovalDesc = buildApprovalDesc(args, prepared)
 	prepared.ArgsHash = t.signPrepared(prepared)
 	return prepared, nil
+}
+
+// riskForArgs elevates to R3 when the call escapes the default sandbox:
+// shell interpreters (arbitrary command lines) and any require_escalated
+// run (executes outside the sandbox with full user privileges). Plain
+// sandboxed programs stay at the definition's R2.
+func riskForArgs(args runCmdArgs, base domain.RiskLevel) domain.RiskLevel {
+	if args.SandboxPermissions == sandboxRequireEscalated || process.IsShellProgram(args.Program) {
+		return domain.R3
+	}
+	return base
 }
 
 func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
@@ -252,7 +282,13 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	if previewLimit > int64(t.modelOutputBytes) {
 		previewLimit = int64(t.modelOutputBytes)
 	}
-	runnerResult, err := t.runner.Run(ctx, process.CommandSpec{
+	// Escalated calls were explicitly approved to run outside the sandbox
+	// (risk R3); everything else uses the runner's default sandbox.
+	sandbox := process.Sandbox(nil)
+	if args.SandboxPermissions == sandboxRequireEscalated {
+		sandbox = process.DirectSandbox{}
+	}
+	runnerResult, err := t.runner.RunWithSandbox(ctx, process.CommandSpec{
 		Program:      args.Program,
 		Args:         append([]string(nil), args.Args...),
 		Cwd:          resolvedDir.Absolute,
@@ -261,7 +297,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		OutputLimit:  max(int64(1), previewLimit/2),
 		StdoutWriter: stdoutStage,
 		StderrWriter: stderrStage,
-	})
+	}, sandbox)
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, classifyRunError(err))
 	}
@@ -302,6 +338,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		Isolation:               runnerResult.Isolation,
 		ExecutablePath:          runnerResult.ExecutablePath,
 		Hash:                    runnerResult.ExecutableHash,
+		Note:                    sandboxDenialNote(string(runnerResult.Stderr)),
 	}
 	if err := boundCommandOutput(&payload, t.modelOutputBytes); err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
@@ -322,7 +359,14 @@ func (t *RunCmdTool) verifyPreparedCall(prepared domain.PreparedCall) error {
 	if !sameDefinition(prepared.Definition, t.def) {
 		return domain.NewError(domain.ErrSecurity, "prepared call definition mismatch")
 	}
-	if prepared.Risk != t.def.Risk() {
+	// The risk tier depends on the program and sandbox mode (shell or
+	// escalated ⇒ R3), so recompute it from the signed arguments instead of
+	// assuming the definition default.
+	args, err := decodeStrict[runCmdArgs](prepared.Call.Arguments)
+	if err != nil {
+		return domain.NewError(domain.ErrSecurity, "prepared call arguments are unreadable")
+	}
+	if prepared.Risk != riskForArgs(args, t.def.Risk()) {
 		return domain.NewError(domain.ErrSecurity, "prepared call risk mismatch")
 	}
 	if expected := t.signPrepared(prepared); !hmac.Equal([]byte(prepared.ArgsHash), []byte(expected)) {
@@ -362,11 +406,18 @@ func validateArgs(
 	}
 
 	args := runCmdArgs{
-		Program:        strings.TrimSpace(*raw.Program),
-		Args:           []string{},
-		Env:            map[string]string{},
-		TimeoutMs:      defaultTimeoutMs,
-		MaxOutputBytes: defaultMaxOutputBytes,
+		Program:            strings.TrimSpace(*raw.Program),
+		Args:               []string{},
+		Env:                map[string]string{},
+		TimeoutMs:          defaultTimeoutMs,
+		MaxOutputBytes:     defaultMaxOutputBytes,
+		SandboxPermissions: sandboxUseDefault,
+	}
+	if raw.SandboxPermissions != nil {
+		args.SandboxPermissions = strings.TrimSpace(*raw.SandboxPermissions)
+	}
+	if raw.Justification != nil {
+		args.Justification = strings.TrimSpace(*raw.Justification)
 	}
 	if raw.Args != nil {
 		args.Args = append([]string(nil), (*raw.Args)...)
@@ -454,6 +505,27 @@ func validateCanonicalArgs(
 		canonicalEnv[key] = value
 	}
 	args.Env = canonicalEnv
+
+	switch args.SandboxPermissions {
+	case sandboxUseDefault:
+		// A justification is accepted on any call: it is only an
+		// informational note shown to the approver, with no effect on
+		// privileges. Rejecting it for sandboxed calls taught models to
+		// retry the same call in a loop (observed 11 consecutive
+		// prepare_failed results in one session).
+		if len(args.Justification) > maxJustificationBytes {
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
+		}
+	case sandboxRequireEscalated:
+		if args.Justification == "" {
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "justification is required with sandbox_permissions=require_escalated (ask the user a short yes/no question)")
+		}
+		if len(args.Justification) > maxJustificationBytes {
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
+		}
+	default:
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("sandbox_permissions must be %q or %q", sandboxUseDefault, sandboxRequireEscalated))
+	}
 	return args, resolvedDir, nil
 }
 
@@ -491,6 +563,27 @@ func resolveWorkingDir(
 	return resolvedWorkingDir{Absolute: absolute, Display: displayPath(rel)}, nil
 }
 
+// sandboxDenialNote detects the stderr fingerprints of sandbox network and
+// socket denials and returns an actionable note for the model, so the
+// constraint is learned from the first failure instead of inferred over
+// several attempts. Returns "" when nothing matches.
+func sandboxDenialNote(stderr string) string {
+	lower := strings.ToLower(stderr)
+	patterns := []string{
+		"no such host", "nodename nor servname", "name or service not known", // DNS resolution
+		"could not resolve", "temporary failure in name resolution",
+		"network is unreachable", "can't assign requested address",
+		"address family not supported", "operation not permitted", // socket/bind/listen denials
+	}
+	for _, p := range patterns {
+		if strings.Contains(lower, p) {
+			return "outbound network and DNS are denied by the sandbox (loopback networking on localhost is allowed). " +
+				"If this command needs external network or credentials (e.g. SSO/OAuth), give the user the exact command to run in a local terminal instead."
+		}
+	}
+	return ""
+}
+
 func classifyRunError(err error) error {
 	switch {
 	case err == nil:
@@ -499,8 +592,6 @@ func classifyRunError(err error) error {
 		return domain.NewError(domain.ErrUnavailable, "process sandbox is unavailable", domain.WithCause(err))
 	case errors.Is(err, process.ErrExecutableHashChanged):
 		return domain.NewError(domain.ErrSecurity, "resolved executable changed before start", domain.WithCause(err))
-	case errors.Is(err, process.ErrShellNotAllowed):
-		return domain.NewError(domain.ErrInvalidInput, "shell execution is not allowed", domain.WithCause(err))
 	case errors.Is(err, context.Canceled):
 		return domain.NewError(domain.ErrCancelled, "operation cancelled", domain.WithCause(err))
 	case errors.Is(err, context.DeadlineExceeded):
@@ -821,7 +912,15 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall) string {
 	}
 	parts = append(parts, "cwd="+shellQuote(args.WorkingDir))
 	parts = append(parts, fmt.Sprintf("timeout=%dms", args.TimeoutMs))
-	parts = append(parts, "network=deny")
+	parts = append(parts, "network=loopback-only")
+	if process.IsShellProgram(args.Program) {
+		parts = append(parts, "shell=R3")
+	}
+	if args.SandboxPermissions == sandboxRequireEscalated {
+		parts = append(parts, "ESCALATED(no-sandbox)["+args.Justification+"]")
+	} else if args.Justification != "" {
+		parts = append(parts, "note["+args.Justification+"]")
+	}
 
 	base := strings.Join(parts, "; ")
 	argsHash := prepared.ArgsHash

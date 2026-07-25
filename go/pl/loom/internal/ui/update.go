@@ -84,7 +84,10 @@ type sessionSwitchedMsg struct {
 type turnCancelRequestedMsg struct{ err error }
 
 // approvalResolvedMsg reports the result of an approval resolution.
-type approvalResolvedMsg struct{ err error }
+type approvalResolvedMsg struct {
+	err      error
+	ruleNote string
+}
 
 // Update is the single-threaded reducer for the TUI.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -120,6 +123,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case approvalResolvedMsg:
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Approval resolution rejected: %v", msg.err), true)
+		} else if msg.ruleNote != "" {
+			m.setStatus(fmt.Sprintf("Allowed; future %q commands auto-approved this session", msg.ruleNote), false)
 		}
 		next = m
 	case clipboardCopiedMsg:
@@ -255,11 +260,10 @@ func (m Model) visibleTranscriptHeight() int {
 	case ModeSearch:
 		reserved += 3 // one-line search bar + border
 	case ModeApproval:
-		reserved += approvalOverlayHeight
-		if m.pendingApproval != nil && m.pendingApproval.Diff != "" {
-			diffLines := strings.Count(m.pendingApproval.Diff, "\n") + 1
-			reserved += min(diffLines, approvalDiffMaxLines) + 2
-		}
+		// Reserve the band's actual height: the prompt is line-count
+		// variable (metadata, note, paths and diff rows come and go), so a
+		// fixed reservation would strand the status bar above the bottom.
+		reserved += len(m.approvalOverlayLines())
 	case ModeHelp:
 		reserved += helpOverlayHeight
 	}
@@ -480,10 +484,43 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonWheelUp {
 		m.pauseFollowTail()
 	}
+	if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
+		if m.toggleReasoningAt(msg.Y) {
+			m.syncTranscript()
+			return m, nil
+		}
+	}
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 	m.updateFollowTailAtBottom()
 	return m, cmd
+}
+
+// toggleReasoningAt flips the reasoning visibility of the assistant block
+// under the clicked screen row — the same affordance as Claude Code's
+// click-to-expand "Thought for Ns". It returns false when the row holds no
+// block with hidden or shown reasoning, so the click can fall through.
+func (m *Model) toggleReasoningAt(screenY int) bool {
+	// The header occupies screen row 0; the transcript starts at row 1.
+	contentLine := screenY - 1 + m.viewport.YOffset
+	if contentLine < 0 {
+		return false
+	}
+	// Offsets ascend along the order: the hit is the last block whose
+	// first line is at or above the clicked content line.
+	var hit *TranscriptBlock
+	for _, id := range m.blocks.Order {
+		offset, ok := m.blockOffsets[id]
+		if !ok || offset > contentLine {
+			continue
+		}
+		hit = m.blocks.ByID[id]
+	}
+	if hit == nil || hit.Kind != BlockKindAssistant || hit.StreamReasoning == "" {
+		return false
+	}
+	hit.ReasoningExpanded = !hit.ReasoningExpanded
+	return true
 }
 
 func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -695,30 +732,68 @@ func (m Model) handleCtrlD() (tea.Model, tea.Cmd) {
 
 // --- approval ---
 
+// approval cursor positions: 0 = allow once, 1 = allow always (persist a
+// categorical rule for the session), 2 = deny.
+
+// approvalDecisionGuard is the window right after the approval overlay
+// appears during which decision keys (Enter/y/a/n/Esc/Ctrl+C) are ignored.
+// Rationale: back-to-back approvals are common with parallel tool calls,
+// and a held key's terminal auto-repeat (typically starting ~500ms in) or
+// an accidental double tap otherwise leaks from the previous overlay into
+// approving a call the user never saw. Observed in a real session: a
+// second web_fetch was auto-approved 527ms after its overlay appeared.
+// Navigation keys stay responsive; 700ms is imperceptible for a genuine
+// decision, which takes at least a second of reading.
+const approvalDecisionGuard = 700 * time.Millisecond
+
 func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.pendingApproval == nil {
 		m.mode = ModeChat
 		return m, nil
 	}
+	if !m.approvalShownAt.IsZero() && time.Since(m.approvalShownAt) < approvalDecisionGuard {
+		switch msg.Type {
+		case tea.KeyEnter, tea.KeyRunes, tea.KeyEsc, tea.KeyCtrlC:
+			return m, nil
+		}
+	}
 	var decision domain.Decision
+	remember := false
 	switch msg.Type {
-	case tea.KeyLeft, tea.KeyShiftTab:
-		m.approvalCursor = 0
+	case tea.KeyLeft, tea.KeyShiftTab, tea.KeyUp:
+		if m.approvalCursor > 0 {
+			m.approvalCursor--
+		}
 		return m, nil
-	case tea.KeyRight, tea.KeyTab:
-		m.approvalCursor = 1
+	case tea.KeyRight, tea.KeyTab, tea.KeyDown:
+		if m.approvalCursor < 2 {
+			m.approvalCursor++
+		}
 		return m, nil
 	case tea.KeyEnter:
-		if m.approvalCursor == 0 {
+		switch m.approvalCursor {
+		case 0:
 			decision = domain.DecisionAllow
-		} else {
+		case 1:
+			if !m.approvalAlwaysAvailable() {
+				return m, nil
+			}
+			decision = domain.DecisionAllow
+			remember = true
+		default:
 			decision = domain.DecisionDeny
 		}
 	case tea.KeyRunes:
 		switch msg.String() {
-		case "y", "Y":
+		case "y", "Y", "1":
 			decision = domain.DecisionAllow
-		case "n", "N":
+		case "a", "A", "2":
+			if !m.approvalAlwaysAvailable() {
+				return m, nil
+			}
+			decision = domain.DecisionAllow
+			remember = true
+		case "n", "N", "3":
 			decision = domain.DecisionDeny
 		default:
 			return m, nil
@@ -732,14 +807,25 @@ func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.setStatus("Denying and cancelling turn...", false)
 		// Always cancel the turn, even when the approval was already resolved
 		// through another path and the deny comes back rejected.
-		return m, tea.Batch(m.resolveApprovalCmd(payload, domain.DecisionDeny), m.cancelTurnCmd())
+		return m, tea.Batch(m.resolveApprovalCmd(payload, domain.DecisionDeny, false), m.cancelTurnCmd())
 	default:
 		return m, nil
 	}
 	payload := m.pendingApproval
 	m.pendingApproval = nil
 	m.mode = ModeChat
-	return m, m.resolveApprovalCmd(payload, decision)
+	return m, m.resolveApprovalCmd(payload, decision, remember)
+}
+
+// approvalAlwaysAvailable reports whether "always allow" can persist a rule
+// for the pending call. It mirrors the overlay's disabled option: shell,
+// escalated, and non-run_cmd calls are per-call decisions only.
+func (m Model) approvalAlwaysAvailable() bool {
+	if m.pendingApproval == nil {
+		return false
+	}
+	_, ok := app.RunCmdRulePreview(m.pendingApproval.ToolName, m.pendingApproval.Arguments)
+	return ok
 }
 
 func approvalBinding(payload *runtimeevent.ApprovalRequestedPayload) app.ApprovalBinding {
@@ -856,6 +942,9 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 			m.modelName = payload.Model
 			m.workspace = payload.Workspace
 		}
+		// A new session view starts its compaction tally fresh.
+		m.compactions = 0
+		m.contextEst, m.lastCallInput = 0, 0
 	case runtimeevent.KindRunPhaseChanged:
 		var payload runtimeevent.RunPhasePayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
@@ -892,6 +981,7 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
 			m.pendingApproval = &payload
 			m.approvalCursor = 0
+			m.approvalShownAt = time.Now()
 			m.mode = ModeApproval
 		}
 		m.phase = "approval"
@@ -912,12 +1002,38 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 			m.setStatus(fmt.Sprintf("Model request failed at %s: %s", payload.Stage, payload.Code), true)
 		}
 		m.setActivity("Model request failed")
+	case runtimeevent.KindContextCompacted:
+		var payload runtimeevent.ContextCompactedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			m.compactions++
+			m.setStatus(fmt.Sprintf("Context compacted ~%s → ~%s tokens",
+				humanizeTokens(int64(payload.EstTokensBefore)),
+				humanizeTokens(int64(payload.EstTokensAfter))), false)
+		}
+	case runtimeevent.KindContextUsage:
+		var payload runtimeevent.ContextUsagePayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			m.contextEst = payload.EstTokens
+			m.lastCallInput = payload.LastCallInputTokens
+		}
 	case runtimeevent.KindRunCancelRequested:
 		m.phase = "cancelling"
 		m.setActivity("Cancelling active work")
 	case runtimeevent.KindRunCompleted, runtimeevent.KindTurnFinished:
 		m.phase = "idle"
 		m.setActivity("Ready")
+		if evt.Kind == runtimeevent.KindTurnFinished {
+			var payload runtimeevent.TurnFinishedPayload
+			if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+				switch {
+				case payload.Error != "":
+					m.setStatus("Turn failed: "+truncateDisplayWidth(payload.Error, 80), true)
+				case m.statusIsError:
+					// A clean turn clears a stale error from an earlier failure.
+					m.setStatus("Ready", false)
+				}
+			}
+		}
 	case runtimeevent.KindRunCancelled:
 		m.phase = "idle"
 		m.setStatus("Turn cancelled", false)
@@ -963,10 +1079,14 @@ func (m Model) cancelTurnCmd() tea.Cmd {
 	}
 }
 
-func (m Model) resolveApprovalCmd(payload *runtimeevent.ApprovalRequestedPayload, decision domain.Decision) tea.Cmd {
+func (m Model) resolveApprovalCmd(payload *runtimeevent.ApprovalRequestedPayload, decision domain.Decision, remember bool) tea.Cmd {
 	return func() tea.Msg {
-		err := m.controller.ResolveApproval(context.Background(), approvalBinding(payload), decision)
-		return approvalResolvedMsg{err: err}
+		var hint *app.ApprovalRuleHint
+		if remember && decision == domain.DecisionAllow {
+			hint = &app.ApprovalRuleHint{ToolName: payload.ToolName, Arguments: payload.Arguments}
+		}
+		note, err := m.controller.ResolveApproval(context.Background(), approvalBinding(payload), decision, hint)
+		return approvalResolvedMsg{err: err, ruleNote: note}
 	}
 }
 

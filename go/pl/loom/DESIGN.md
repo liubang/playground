@@ -262,6 +262,10 @@ type Limits struct {
 
 达到软阈值时提示模型收敛或压缩；达到硬阈值时安全终止并允许恢复。
 
+预算窗口语义：**Limits 是单个 prompt 的防失控上限，不是全 session 的消费账户**。每个新 prompt（`ContinueRun`/resume）开启新的预算窗口（`Run.ResetUsageForNewTurn`），checkpoint 中的累计用量不会带入下一个 prompt——否则长 session 的累计 input tokens 会在循环入口硬检查处逐出后续所有 prompt。崩溃恢复（`RecoverRun` 非终态分支）保留已恢复用量，被中断的 run 仍对已消费部分负责。所有 Limits 字段均可由 `LOOM_MAX_*` 环境变量覆盖（非法值启动即报错）。
+
+状态栏的可观测性与预算语义对应：`turns/in/out/tools` 是当前 prompt 窗口的消耗；`compact:N` 是 session 内压缩次数；`ctx:~N` 是**下一次请求的估算上下文大小**（transcript 字节/4 估算，响应完成时附 provider 实测输入校准，工具批次结束刷新），`LOOM_CONTEXT_WINDOW` 设置模型窗口后显示为 `ctx:~N/W` 并在 ≥80% 时告警——压缩触发线与它在同一尺度上，用户能直接看到压缩逼近。
+
 ## 6. Agent Runtime
 
 ### 6.1 主循环
@@ -393,7 +397,13 @@ B_{context}=B_{model}-B_{output}-B_{safety}
 
 ### 8.5 压缩
 
-接近软阈值时生成结构化摘要：用户目标、约束、已确认事实及证据、读写文件、Git 状态、验证结果、未解决问题、计划、下一步和 Artifact 引用。
+压缩按成本递增分两级实现（`agent.Condenser`）：
+
+**Level 1（已实现，确定性）：observation masking。** 仅在 `input_tokens` 维度的软阈值（80%）触发；迟滞要求距上次压缩又消耗 ≥20k input tokens，且每 run 最多 5 次。保留窗（默认最近 6 条消息）之外、超过 4KB 的 tool result 文本外置到 Artifact Store，原处替换为带 artifact 绝对路径的占位符（沙箱允许 broad 读，模型可用 `run_cmd` 按需取回）。掩码不删消息、不碰 tool_call，assistant tool_call ↔ tool result 配对不变式天然保持；掩码失败保留原文不丢数据；占位符带前缀标记保证二次压缩幂等。压缩后记录 `context.compacted` 事件（含外置清单与压缩前后估算 token）并随下一个 checkpoint 持久化。
+
+**Level 2（已实现，确定性）：跨度归档 + 窗口内掩码。** Level 1 后若估算上下文仍超目标（默认 32k est tokens），将最老的消息跨度整体序列化为单个全保真 JSON-lines artifact，原位替换为带路径的 system 标记消息（`compacted=archived`，切割点必在 tool_call 配对安全边界）；归档失败保留原跨度不丢历史。若尾部保留窗自身仍超目标，则把掩码延伸进窗口（仅保护最后一条消息）。除预算软阈值外，**上下文估算超目标也独立触发压缩**（迟滞仅作用于预算维度）——transcript 每次请求都重发，给它上籌才是长 session 存活的关键。
+
+**Level 3（规划）：模型滚动摘要。** 在归档标记内容的基础上，调用模型为被归档区间生成结构化摘要（用户目标、已做决定、文件改动、未解决问题），替换标记正文；摘要失败降级为确定性标记，绝不阻断 run。
 
 压缩不删除原始事件；摘要记录来源范围；保留最近轮次和当前编辑片段；模型压缩失败时使用确定性裁剪。
 
@@ -443,7 +453,7 @@ type Tool interface {
 | `search` | R1 | 正则/字面内容搜索（path/glob/type/context/case/fixed_strings）；`rg --json` 引擎优先，Go 实现回退，`.gitignore` 默认生效 |
 | `write` | R2 | 创建（自动建父目录）或整文件覆写；审批展示路径/字节数/创建或覆盖；堵 `run_cmd` + heredoc 旁路 |
 | `edit` | R2 | `old_string`/`new_string` 精确替换（唯一匹配或 `replace_all`）；陈旧检测内部化（文件自上次读取后被外部修改则报可行动错误）；`expected_hash` 仅作可选高级校验 |
-| `run_cmd` | R2/R3 | 直接执行程序（非 shell）；仅 `program` 必填，其余参数均有默认值；需要 shell 语法时显式 `sh -c` 并承担更高审批风险 |
+| `run_cmd` | R2/R3 | 沙箱内执行程序；仅 `program` 必填，其余参数均有默认值；shell 语法用 `sh -c`（R3）；`sandbox_permissions=require_escalated` + `justification` 提权到沙箱外执行（R3，审批展示理由），沙箱失败（外网/DNS/写权限）时的标准出路 |
 | `git_status` | R1 | 仓库状态（porcelain v2，`repo_root` 默认 `"."`） |
 | `git_diff` | R1 | 变更内容（`repo_root` 默认 `"."`，可选 `base`） |
 | `git_log` | R1 | 提交历史（`limit` 分页） |
@@ -533,6 +543,8 @@ type CommandSpec struct {
 ### 12.2 Policy
 
 决策为 `allow`、`deny`、`ask`。输入包括工具来源、能力、作用域、风险、工作区信任、用户策略、临时授权和参数摘要。审批可允许一次、会话内精确动作、指定作用域，或拒绝。授权绑定调用参数哈希，参数变化立即失效。模型不能创建持久化授权。
+
+会话内授权（"allow always"）由 `RuleApprover` 实现：仅 `run_cmd` 可固化，规则为类别化前缀（`[program]` 或对已知子命令工具扩展为 `[program, subcommand]`，如 `["go","test"]`、`["bazel","test"]`）；shell 解释器、通用脚本解释器（python/node/ruby/perl）、破坏性程序（rm/sudo/dd 等）、含 heredoc 的命令和 `require_escalated` 提权调用一律不可固化；匹配命中即自动允许，不再打扰用户。规则为会话级，不跨会话持久化。
 
 ### 12.3 威胁模型
 
@@ -710,7 +722,7 @@ Phase 2 当前安全保证：
 3. 审批绑定规范化参数、风险、能力和读写路径；执行前重新核对模型 Tool Call、Registry Definition 和 PreparedCall。
 4. 命令不经过 Shell，默认不继承模型、云服务和常见 Token/Secret/Credential 环境变量。
 5. 命令超时或取消时先终止进程组，再强制回收；输出 pipe 有硬关闭边界，避免脱离进程组的后代无限持有输出管道。
-6. 网络默认拒绝。macOS 在 `sandbox-exec` 可用时使用 Seatbelt；Linux 当前没有满足约定的 namespace/seccomp/cgroup 实现，因此 `run_cmd` 在 Linux 上 fail closed，而不是降级为无沙箱执行。Seatbelt profile 的读策略为宽读 + 显式凭证拒绝：现代运行时（Go/Rust）在路径级读限制下无法启动（dyld 需要 `file-read*` 宽集），因此读取全面放开，但对 `~/.ssh`、`~/.gnupg`、`~/.aws`、`~/.kube`、`~/.docker`、`~/.config/gcloud`、`~/Library/Keychains`、`~/.netrc`、`~/.git-credentials`、`~/.env`、`credentials.json`、`service-account.json` 等凭证路径逐条 deny；写入仍限定工作区与临时目录，网络默认拒绝。
+6. 网络默认拒绝外网，放行 loopback。macOS 在 `sandbox-exec` 可用时使用 Seatbelt；Linux 当前没有满足约定的 namespace/seccomp/cgroup 实现，因此 `run_cmd` 在 Linux 上 fail closed，而不是降级为无沙箱执行。Seatbelt profile 的读策略为宽读 + 显式凭证拒绝：现代运行时（Go/Rust）在路径级读限制下无法启动（dyld 需要 `file-read*` 宽集），因此读取全面放开，但对 `~/.ssh`、`~/.gnupg`、`~/.aws`、`~/.kube`、`~/.docker`、`~/.config/gcloud`、`~/Library/Keychains`、`~/.netrc`、`~/.git-credentials`、`~/.env`、`credentials.json`、`service-account.json` 等凭证路径逐条 deny；写入仍限定工作区与临时目录；外网与 DNS 默认拒绝，loopback 双向放行（`network-bind`/`network-inbound` filter local localhost，`network-outbound` filter remote localhost），允许沙箱内启动开发服务器并本机探测。
 7. Git 工具只允许固定只读操作，路径按 literal pathspec 传递，避免 pathspec magic 扩大读取范围。
 
 已知限制与后续工作：
@@ -1083,3 +1095,82 @@ CLI 的 TTY、非 TTY 和 JSONL 行为必须版本化：stdout 仅承载结果/�
 - 不确定副作用误报成功率为 0。
 
 每个 Phase 的 Acceptance Suite 必须绑定 Requirement ID、故障注入点、测试夹具版本、资源上限和不支持能力披露；“达到预设成功率”等不可量化表述必须在发布前由版本化 Eval Policy 给出具体阈值。
+
+## 36. 环境变量配置参考
+
+Loom 的全部运行时配置经环境变量注入（无配置文件），按用途分组如下。**除明确标注“必需”的项外，其余均为可选**；所有可选项缺省时 Loom 行为不变。
+
+### 36.1 模型接入（Model Gateway）
+
+| 变量 | 必需性 | 默认 | 说明 |
+|---|---|---|---|
+| `LOOM_MODEL` | headless 必需；TUI 可选 | `gpt-4o`（TUI） | 模型名。headless（`loom run`）未设置直接报错 |
+| `LOOM_BASE_URL` | 生产必需 | OpenAI 官方端点 | OpenAI 兼容 API 的 base URL（如自建网关 `https://aigc.sankuai.com/v1`） |
+| `LOOM_API_KEY` | 生产必需 | 空 | API 密钥；空值请求会被上游拒绝 |
+| `LOOM_WIRE_API` | 可选 | `chat_completions` | 线协议：`chat_completions` 或 `responses` |
+
+### 36.2 会话与存储
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `LOOM_SESSION_DB` | `~/.loom/sessions.db` | SQLite 会话库路径；artifact 与 prompt 缓存目录随其同级派生 |
+| `XDG_STATE_HOME` | `~/.local/state` | 影响默认数据目录的解析（XDG 惯例） |
+
+### 36.3 系统提示词
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `LOOM_DISABLE_SYSTEM_PROMPT` | 未设（启用） | 置 `1` 完全禁用内置系统提示词（调试/研究用途） |
+| `LOOM_SYSTEM_PROMPT_EXTRA` | 空 | 附加指令段，以 `loom://config/extra-instructions` 身份进入 Context Manifest |
+| `LOOM_PROMPT_NAME` | 空（内置） | Langfuse Prompt Management 中的提示词名；设置后系统提示词静态段由托管版本替换（需 Langfuse 已配置，拉取失败自动回退内置，见 §33、§36.5） |
+| `LOOM_PROMPT_LABEL` | `production` | 托管提示词的发布标签 |
+
+工作区规则文件（`LOOM.md`/`AGENTS.md`/`CLAUDE.md`）按 §8 自动发现注入，不属于环境变量。
+
+### 36.4 预算（LOOM_MAX_*）
+
+全部可选，覆盖 `domain.Limits` 同名字段；非法值启动即报错（`domain.LimitsFromEnv` fail-fast）。预算语义见 §5.5：**单 prompt 防失控窗口，非 session 账户**。
+
+| 变量 | 说明 |
+|---|---|
+| `LOOM_MAX_TURNS` | 单 prompt 最大模型调用轮数 |
+| `LOOM_MAX_TOOL_CALLS` | 单 prompt 最大工具调用数 |
+| `LOOM_MAX_INPUT_TOKENS` | 输入 token 上限（软/硬阈值见 §5.5） |
+| `LOOM_MAX_OUTPUT_TOKENS` | 单次模型调用输出 token 上限 |
+| `LOOM_MAX_COST_USD` | 成本上限（需 provider 计费数据） |
+| `LOOM_MAX_WALL_TIME` | 单 prompt 墙钟时间上限 |
+| `LOOM_MAX_TOOL_OUTPUT_BYTES` | 单次工具结果模型可见字节上限 |
+| `LOOM_MAX_ARTIFACT_BYTES` | 单个 artifact 字节上限 |
+| `LOOM_MAX_REPEATED_ACTIONS` | 停滞检测的重复动作阈值 |
+
+### 36.5 观测（OTLP/Langfuse，全部可选）
+
+设计原则见 §33：**默认关闭；未配置、配置错误或后端宕机均不影响 agent 运行**（Setup 失败降级 no-op、上报全异步、超时熔断）。三项凭据齐全才启用。
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `LOOM_LANGFUSE_HOST` | 空 | Langfuse base URL。fallback 链：`LOOM_LANGFUSE_HOST` → `LANGFUSE_HOST` → `LANGFUSE_BASE_URL`（社区标准名兼容） |
+| `LOOM_LANGFUSE_PUBLIC_KEY` | 空 | 项目 public key（fallback：`LANGFUSE_PUBLIC_KEY`） |
+| `LOOM_LANGFUSE_SECRET_KEY` | 空 | 项目 secret key（fallback：`LANGFUSE_SECRET_KEY`） |
+| `LOOM_LANGFUSE_ENVIRONMENT` | `dev` | trace 的 environment 维度（dev/ci/prod…） |
+| `LOOM_TRACE_CONTENT` | `1` | 置 `0` 进入脱敏模式：消息/参数内容替换为结构摘要（角色、类型、字节数），代码与对话文本不出进程 |
+| `LOOM_TRACE_USER` | 自动探测 | trace user_id；未设时依次取 `git config user.email`、`$USER` |
+| `LOOM_VERSION` | 构建版本 | trace 的 release 标签，用于按版本对比错误率与消耗 |
+| `LOOM_COST_INPUT_USD_PER_MTOK` | 0（关闭） | 输入费率（USD/百万 token）；与下一项同时为正时上报 `cost_details` |
+| `LOOM_COST_OUTPUT_USD_PER_MTOK` | 0（关闭） | 输出费率 |
+
+### 36.6 TUI
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `LOOM_ICONS` | `nerd` | 图标集：`nerd`（Nerd Font 字形）或 `plain`（纯文本降级）；`TERM=dumb` 时强制 plain |
+| `LOOM_ALT_SCREEN` | 未设 | 置 `1` 启用终端 alternate screen（退出 TUI 后不留回滚内容） |
+| `NO_COLOR` | 未设 | 置任意值禁用一切颜色输出（惯例）；`TERM=dumb` 等效 |
+
+### 36.7 构建与调试
+
+| 变量 | 说明 |
+|---|---|
+| `BUILD_WORKSPACE_DIRECTORY` | Bazel `bazel run` 注入的工作区根，优先于 `os.Getwd()`；非 Bazel 环境无需关心 |
+
+另：主题（dark/light）由终端背景色自动探测（OSC 11），无配置项；`SHELL`、`USER` 只被读取用于环境快照与身份探测，不构成配置。
