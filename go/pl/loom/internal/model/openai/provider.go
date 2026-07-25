@@ -377,17 +377,30 @@ func decodeToolParameters(def domain.ToolDefinition) (any, error) {
 	return parameters, nil
 }
 
+// apiRole normalizes a message role for OpenAI-compatible vendors: a system
+// message anywhere but the head is downgraded to user. GLM-class vendors
+// accept a single leading system message and reject later ones — observed in
+// production as GLM error 1214 "messages 格式有误" after a context-compaction
+// marker (role=system) entered the transcript behind the runtime-injected
+// system prompt.
+func apiRole(msg domain.Message, index int) domain.Role {
+	if index > 0 && msg.Role == domain.RoleSystem {
+		return domain.RoleUser
+	}
+	return msg.Role
+}
+
 func toOpenAIMessages(messages []domain.Message) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(messages))
-	for _, msg := range messages {
-		switch msg.Role {
+	for i, msg := range messages {
+		switch role := apiRole(msg, i); role {
 		case domain.RoleSystem, domain.RoleUser:
 			text, err := messageText(msg)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, map[string]any{
-				"role":    string(msg.Role),
+				"role":    string(role),
 				"content": text,
 			})
 		case domain.RoleAssistant:
@@ -428,14 +441,14 @@ func toOpenAIMessages(messages []domain.Message) ([]map[string]any, error) {
 
 func toResponsesInput(messages []domain.Message) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(messages))
-	for _, msg := range messages {
-		switch msg.Role {
+	for i, msg := range messages {
+		switch role := apiRole(msg, i); role {
 		case domain.RoleSystem, domain.RoleUser:
 			text, err := messageText(msg)
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, responseMessageItem(msg.Role, "input_text", text))
+			out = append(out, responseMessageItem(role, "input_text", text))
 		case domain.RoleAssistant:
 			var text strings.Builder
 			flushText := func() {

@@ -98,6 +98,9 @@ func NewWebFetchTool(artifacts domain.ArtifactStore) (*WebFetchTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "web_fetch",
 		Description: "Fetch a web page or text resource via HTTP/HTTPS GET and return its content. " +
+			"Use it to look up information on the web (documentation, articles, public data such as weather or exchange rates): " +
+			"it has direct network access and is NOT subject to the run_cmd sandbox restrictions. " +
+			"You MUST use it when the answer depends on temporally unstable information (news, prices, weather, library/tool versions, current docs) or when the user explicitly asks to look something up. " +
 			"HTML is converted to markdown by default; use format=text for plain text or format=raw for the untouched body. " +
 			"Private/loopback/link-local destinations are blocked unless allow_private=true. " +
 			"Successful responses are cached for 15 minutes; large content is truncated with the full text stored as an artifact.",

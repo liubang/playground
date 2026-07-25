@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
@@ -41,6 +42,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/lint"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
+	"github.com/liubang/playground/go/pl/loom/internal/trace"
 	"github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -79,6 +81,10 @@ type BootstrapConfig struct {
 	SystemPromptExtra string
 	// DisableSystemPrompt disables injection of the built-in system prompt.
 	DisableSystemPrompt bool
+	// ContextWindow is the model's effective per-request context size in
+	// tokens (LOOM_CONTEXT_WINDOW); 0 lets the loop fall back to
+	// Limits.MaxInputTokens as the occupancy proxy.
+	ContextWindow int64
 	// Logger is the slog.Logger to use; if nil, a default is created.
 	Logger *slog.Logger
 }
@@ -98,6 +104,18 @@ type Bootstrap struct {
 	Logger        *slog.Logger
 	Validator     *workspace.PathValidator
 	Runner        *process.Runner
+	// SessionEnv holds the loom attribution variables (agent name/version,
+	// session ID) injected into every spawned command. The controller
+	// rewrites it on session create/resume; the runner reads it per
+	// execution.
+	SessionEnv *process.AtomicSessionEnv
+	// GoalCell ferries update_goal mutations from the tool to each turn's
+	// agent loop.
+	GoalCell *agent.GoalCell
+	// Recorder is the Langfuse observability sink (no-op when unconfigured).
+	Recorder trace.Recorder
+
+	traceProvider *trace.Provider
 }
 
 // NewBootstrap creates a new Bootstrap and assembles all runtime components.
@@ -135,13 +153,17 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 	// Create process runner. The env allowlist additionally permits the Go
 	// toolchain variables the lint tool overrides (the sandbox only allows
 	// writes inside the workspace and the temp dir, so GOCACHE must be
-	// redirectable for go vet to work at all).
+	// redirectable for go vet to work at all). SessionEnv injects the loom
+	// attribution variables (see process.LoomSessionEnv) into every spawned
+	// command so downstream CLIs can attribute traffic to this session.
+	sessionEnv := &process.AtomicSessionEnv{}
 	runner, err := process.NewRunner(validator, process.RunnerOptions{
 		Sandbox: process.NewPlatformSandbox(process.PlatformSandboxOptions{}),
 		EnvAllowlist: []string{
 			"PATH", "LANG", "LC_ALL", "TMPDIR", "HOME",
 			"GOCACHE", "GOPATH", "GOMODCACHE", "GOPROXY", "GOSUMDB", "GOFLAGS",
 		},
+		SessionEnv: sessionEnv.Get,
 	})
 	if err != nil {
 		_ = store.Close()
@@ -150,7 +172,8 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 
 	// Create tool registry and register built-in tools
 	registry := agent.NewToolRegistry()
-	if err := registerBuiltinTools(registry, validator, runner, artStore, cfg.Limits.MaxToolOutputBytes); err != nil {
+	goalCell := agent.NewGoalCell()
+	if err := registerBuiltinTools(registry, validator, runner, artStore, cfg.Limits.MaxToolOutputBytes, goalCell); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
@@ -177,10 +200,35 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 		policy = p
 	}
 
+	// Langfuse tracing: enabled purely through the environment
+	// (LOOM_LANGFUSE_* / LANGFUSE_*). Setup failure degrades to a no-op
+	// recorder — observability must never break the agent.
+	traceCfg := trace.ConfigFromEnv()
+	var (
+		traceRecorder trace.Recorder = trace.Noop()
+		traceProvider *trace.Provider
+	)
+	if traceCfg.Enabled {
+		provider, err := trace.Setup(ctx, traceCfg)
+		if err != nil {
+			logger.Warn("langfuse tracing disabled: setup failed", "error", err)
+		} else {
+			traceProvider = provider
+			traceRecorder = provider.Recorder()
+			logger.Info("langfuse tracing enabled",
+				"host", traceCfg.Host,
+				"environment", traceCfg.Environment,
+				"include_content", traceCfg.IncludeContent)
+		}
+	}
+
 	var promptBuilder agent.PromptBuilder
 	if !cfg.DisableSystemPrompt {
-		promptBuilder = prompt.NewBuilder(cfg.WorkspaceRoot,
-			prompt.WithExtraInstructions(cfg.SystemPromptExtra))
+		promptOpts := []prompt.Option{prompt.WithExtraInstructions(cfg.SystemPromptExtra)}
+		if opt := ResolveManagedPrompt(ctx, traceCfg, cfg.SessionDBPath, logger); opt != nil {
+			promptOpts = append(promptOpts, opt)
+		}
+		promptBuilder = prompt.NewBuilder(cfg.WorkspaceRoot, promptOpts...)
 	}
 
 	return &Bootstrap{
@@ -195,11 +243,15 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 		Logger:        logger,
 		Validator:     validator,
 		Runner:        runner,
+		SessionEnv:    sessionEnv,
+		GoalCell:      goalCell,
+		Recorder:      traceRecorder,
+		traceProvider: traceProvider,
 	}, nil
 }
 
 // registerBuiltinTools registers all built-in tools with the registry.
-func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64) error {
+func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell) error {
 	// The file-state book is shared by read_file (records hashes) and edit
 	// (checks drift) to detect external modification without model-carried
 	// hashes.
@@ -237,11 +289,27 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 	if err := registry.Register(runCmd); err != nil {
 		return fmt.Errorf("register run_cmd: %w", err)
 	}
+	updateGoal, err := agent.NewUpdateGoalTool(goalCell)
+	if err != nil {
+		return fmt.Errorf("update_goal: %w", err)
+	}
+	if err := registry.Register(updateGoal); err != nil {
+		return fmt.Errorf("register update_goal: %w", err)
+	}
 	return nil
 }
 
 // Close releases all resources held by the Bootstrap.
 func (b *Bootstrap) Close() {
+	if b.traceProvider != nil {
+		// Flush buffered spans with a bounded wait; tracing must never hang
+		// shutdown.
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := b.traceProvider.Shutdown(ctx); err != nil && b.Logger != nil {
+			b.Logger.Warn("langfuse tracing shutdown failed", "error", err)
+		}
+	}
 	if b.Store != nil {
 		if closer, ok := b.Store.(interface{ Close() error }); ok {
 			_ = closer.Close()
@@ -249,15 +317,49 @@ func (b *Bootstrap) Close() {
 	}
 }
 
+// ResolveManagedPrompt fetches the Langfuse-managed system prompt when
+// LOOM_PROMPT_NAME is set and Langfuse is configured. Any failure degrades
+// to nil (built-in prompt) — a prompt-management outage must never block
+// the agent. LOOM_PROMPT_LABEL selects the release label (default
+// "production").
+func ResolveManagedPrompt(ctx context.Context, traceCfg trace.Config, sessionDBPath string, logger *slog.Logger) prompt.Option {
+	name := os.Getenv("LOOM_PROMPT_NAME")
+	if name == "" || !traceCfg.Enabled {
+		return nil
+	}
+	label := os.Getenv("LOOM_PROMPT_LABEL")
+	if label == "" {
+		label = "production"
+	}
+	cacheDir := filepath.Join(filepath.Dir(sessionDBPath), "prompt_cache")
+	client := trace.NewPromptClient(traceCfg, cacheDir)
+	mp, err := client.Get(ctx, name, label)
+	if err != nil {
+		logger.Warn("langfuse managed prompt unavailable, using built-in prompt",
+			"name", name, "label", label, "error", err)
+		return nil
+	}
+	logger.Info("using langfuse managed prompt",
+		"name", mp.Name, "version", mp.Version, "label", label, "fetched_at", mp.FetchedAt)
+	return prompt.WithManagedBase(mp.Name, mp.Version, mp.Content)
+}
+
 // DefaultBootstrapConfig creates a BootstrapConfig with sensible defaults
 // derived from environment variables and the given workspace root.
+// LOOM_MAX_* limit overrides are applied when valid; malformed values fall
+// back to the defaults here (interactive entry points should prefer calling
+// domain.LimitsFromEnv directly so they can fail fast with a clear error).
 func DefaultBootstrapConfig(workspaceRoot string) BootstrapConfig {
+	limits, err := domain.LimitsFromEnv(domain.DefaultLimits())
+	if err != nil {
+		limits = domain.DefaultLimits()
+	}
 	return BootstrapConfig{
 		WorkspaceRoot:       workspaceRoot,
 		ModelName:           getEnvDefault("LOOM_MODEL", "gpt-4o"),
 		BaseURL:             os.Getenv("LOOM_BASE_URL"),
 		APIKey:              os.Getenv("LOOM_API_KEY"),
-		Limits:              domain.DefaultLimits(),
+		Limits:              limits,
 		Policy:              permission.DefaultPolicy(),
 		SystemPromptExtra:   os.Getenv("LOOM_SYSTEM_PROMPT_EXTRA"),
 		DisableSystemPrompt: os.Getenv("LOOM_DISABLE_SYSTEM_PROMPT") == "1",

@@ -75,6 +75,15 @@ type Builder struct {
 	env           EnvProvider
 	rules         RulesProvider
 	clock         domain.Clock
+	managed       *managedBase
+}
+
+// managedBase carries a Langfuse-managed system prompt that replaces the
+// built-in normative sections.
+type managedBase struct {
+	name    string
+	version int
+	content string
 }
 
 // Option customizes a Builder.
@@ -106,6 +115,26 @@ func WithClock(c domain.Clock) Option {
 	}
 }
 
+// WithManagedBase replaces the built-in normative sections with a
+// Langfuse-managed system prompt. Dynamic sections (extra instructions,
+// workspace rules, environment snapshot) are still appended after it. The
+// managed prompt inherits full editorial control of the agent's behavior —
+// treat its Langfuse editors as code reviewers.
+func WithManagedBase(name string, version int, content string) Option {
+	return func(b *Builder) {
+		b.managed = &managedBase{name: name, version: version, content: content}
+	}
+}
+
+// ManagedPromptInfo reports the managed prompt identity, if any, so the
+// agent loop can link generations to the exact managed revision.
+func (b *Builder) ManagedPromptInfo() (name string, version int, ok bool) {
+	if b.managed == nil {
+		return "", 0, false
+	}
+	return b.managed.name, b.managed.version, true
+}
+
 // NewBuilder creates a system prompt builder rooted at the workspace.
 func NewBuilder(workspaceRoot string, opts ...Option) *Builder {
 	b := &Builder{workspaceRoot: workspaceRoot, clock: domain.RealClock{}}
@@ -126,6 +155,13 @@ func NewBuilder(workspaceRoot string, opts ...Option) *Builder {
 // contract (source + sha256 content hash).
 func (b *Builder) Build(ctx context.Context) (string, []domain.ContextRuleRef, error) {
 	sections := builtinSections()
+	if b.managed != nil {
+		sections = []promptSection{{
+			source: fmt.Sprintf("langfuse://prompts/%s?v=%d", b.managed.name, b.managed.version),
+			title:  "系统提示词（Langfuse 托管）",
+			body:   b.managed.content,
+		}}
+	}
 
 	// User preferences precede workspace rules per the context priority in
 	// DESIGN.md §8.1 (system rules > user preferences > workspace rules).
@@ -185,7 +221,9 @@ func builtinSections() []promptSection {
 		{
 			source: "loom://builtin/identity",
 			title:  "身份与角色",
-			body:   `你是 Loom，一个运行在用户本地终端中的 AI 编程助手。你通过工具与用户的真实工作环境交互：阅读代码、修改文件、执行命令。你像一位经验丰富的结对编程伙伴一样，帮助用户高质量地完成软件工程任务。`,
+			body: `你是 Loom，一个运行在用户本地终端中的 AI 编程助手。你通过工具与用户的真实工作环境交互：阅读代码、修改文件、执行命令。你像一位经验丰富的结对编程伙伴一样，帮助用户高质量地完成软件工程任务。
+- 只要请求能用现有工具完成，就应直接完成，不以“编程助手”的身份自我设限——查询时间、天气、翻译、解释概念等与编程无关的请求同样尽力而为。
+- 确实无法完成的请求，说明缺少什么能力并给出可行的替代帮助（如可执行的命令、可访问的途径），而不是直接拒绝。`,
 		},
 		{
 			source: "loom://builtin/workflow",
@@ -194,7 +232,10 @@ func builtinSections() []promptSection {
 - 小步迭代：优先最小且可验证的改动，完成一步、验证一步，再推进下一步。
 - 验证闭环：修改代码后，尽可能通过构建、测试或静态检查验证；无法验证时明确告知用户。
 - 复杂任务先制定计划并随进展更新；遇到阻塞或歧义时，给出最合理的推断并说明，或向用户澄清，不要停滞。
-- 相互独立的工具调用并行发起，有依赖关系的严格按顺序执行；同一调用失败两次后改变策略，不机械重试。`,
+- 相互独立的工具调用并行发起，有依赖关系的严格按顺序执行；同一调用失败两次后改变策略，不机械重试。
+- 行动先播报：发起工具调用前用 1-2 句简短的话说明接下来要做什么（相关联的一组动作合并播报；读取单个文件这类琐碎动作不必逐条播报）；长任务在合理间隔用一句话汇报进展与下一步。
+- edit/write 成功后不要重读文件确认——工具成功即生效，只在报错时处理。
+- 为改动补测试时参照相邻已有测试的位置与风格；不给没有测试的代码库引入测试。`,
 		},
 		{
 			source: "loom://builtin/code-style",
@@ -208,10 +249,23 @@ func builtinSections() []promptSection {
 			source: "loom://builtin/communication",
 			title:  "沟通规范",
 			body: `- 默认使用中文回复；代码、命令与标识符保持原文。
-- 先结论后细节，简洁直接，避免客套与不必要的复述。
+- 先结论后细节，简洁直接，避免客套与不必要的复述；默认回复不超过 10 行，任务复杂时可放宽。
+- 列表条目单行、至多 4-6 条、不嵌套；闲聊、确认与简短问答不用标题和列表，自然对话即可。
 - 不使用 emoji 与装饰性符号；需要标注状态时使用纯文本（如 注意:、风险:）。
-- 引用代码时使用「文件路径:行号」格式；大段代码通过工具写入文件，回复中只展示关键片段。
+- 引用代码时使用「文件路径:行号」格式；不展示已写入文件的全文（用户同机可见），只引用路径与关键片段。
 - 解释重要改动的意图与权衡；执行可能有破坏性的操作前，先说明风险。`,
+		},
+		{
+			source: "loom://builtin/runtime-environment",
+			title:  "运行环境约束",
+			// Keep in sync with internal/process/sandbox_*.go and run_cmd's
+			// tool description; these facts must never be discoverable only
+			// through trial and error.
+			body: `- 查询网络信息用 web_fetch：它直接访问外网（不经沙箱），可抓取网页、文档与公开数据（包括天气、汇率这类公共信息），不是“沙箱无外网”的例外。
+- run_cmd 在隔离沙箱中执行：外网与 DNS 不可达，但 loopback 网络可用——可以监听 localhost 端口并本机访问（如启动开发服务器验证）；写入仅限工作区与系统临时目录（凭证类路径不可读）。
+- 命令因沙箱失败（外网/DNS/写权限，如 OAuth/SSO、go mod download、npm install）且为任务关键步骤时，用 sandbox_permissions='require_escalated' 并附一句给用户的 justification 重跑——审批通过后命令在沙箱外执行；不要直接放弃或请用户代跑。
+- 优先离线可行的验证方式（构建、测试、lint）；验证命令本身需要外网或写权限时再提权。
+- 需要管道、重定向或 && 等 shell 语法时，使用 program="sh"、args=["-c", "..."]（审批风险更高）。`,
 		},
 		{
 			source: "loom://builtin/safety",

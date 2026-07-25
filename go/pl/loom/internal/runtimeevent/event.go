@@ -63,7 +63,8 @@ const (
 	KindToolCompleted RuntimeEventKind = "tool.completed"
 	KindToolProgress  RuntimeEventKind = "tool.progress"
 	// Budget events
-	KindBudgetUpdated RuntimeEventKind = "budget.updated"
+	KindBudgetUpdated    RuntimeEventKind = "budget.updated"
+	KindContextCompacted RuntimeEventKind = "context.compacted"
 	// Cancel events
 	KindRunCancelRequested RuntimeEventKind = "run.cancel_requested"
 	KindRunCancelled       RuntimeEventKind = "run.cancelled"
@@ -73,6 +74,8 @@ const (
 	KindRuntimeFatal   RuntimeEventKind = "runtime.fatal"
 	// Usage snapshot
 	KindUsageUpdated RuntimeEventKind = "usage.updated"
+	// Context occupancy snapshot (estimated transcript size for the next call)
+	KindContextUsage RuntimeEventKind = "context.usage"
 )
 
 // RuntimeEvent is the versioned envelope for real-time communication
@@ -108,7 +111,7 @@ func (e RuntimeEvent) Validate() error {
 		KindModelResponseCompleted, KindModelRequestFailed,
 		KindApprovalRequested, KindApprovalResolved,
 		KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
-		KindBudgetUpdated, KindUsageUpdated,
+		KindBudgetUpdated, KindUsageUpdated, KindContextCompacted, KindContextUsage,
 		KindRunCancelRequested, KindRunCancelled, KindRunCompleted,
 		KindRuntimeWarning, KindRuntimeFatal:
 	default:
@@ -202,6 +205,10 @@ type ApprovalRequestedPayload struct {
 	// Diff is a compact line diff for file-editing calls, rendered in the
 	// approval overlay to support the allow/deny decision.
 	Diff string `json:"diff,omitempty"`
+	// Arguments carries the raw call arguments so an "allow always" decision
+	// can derive a categorical approval rule. It is display-safe (the
+	// approval description already shows the same information).
+	Arguments json.RawMessage `json:"arguments,omitempty"`
 }
 
 // ApprovalResolvedPayload describes an approval resolution.
@@ -238,7 +245,10 @@ type ToolCompletedPayload struct {
 	Status     domain.ToolStatus `json:"status"`
 	DurationMs int64             `json:"duration_ms"`
 	Error      string            `json:"error,omitempty"`
-	FinishedAt time.Time         `json:"finished_at,omitempty"`
+	// ErrorMessage is the human-readable failure reason (e.g. "request
+	// failed with status 418"), shown inline next to the error code.
+	ErrorMessage string    `json:"error_message,omitempty"`
+	FinishedAt   time.Time `json:"finished_at,omitempty"`
 	// Preview is a bounded excerpt of the tool output for expandable display.
 	Preview string `json:"preview,omitempty"`
 }
@@ -263,6 +273,27 @@ type UsageUpdatedPayload struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
 	Turns        int   `json:"turns"`
+}
+
+// ContextCompactedPayload summarizes one context compaction pass. Token
+// counts are estimates (bytes/4), not provider-metered usage. Summarized
+// marks a model-written handoff compaction (history rebuilt around a
+// summary), which frontends flag as accuracy-relevant.
+type ContextCompactedPayload struct {
+MaskedOutputs    int  `json:"masked_outputs"`
+MaskedBytes      int  `json:"masked_bytes"`
+ArchivedMessages int  `json:"archived_messages,omitempty"`
+EstTokensBefore  int  `json:"est_tokens_before"`
+EstTokensAfter   int  `json:"est_tokens_after"`
+Summarized       bool `json:"summarized,omitempty"`
+}
+
+// ContextUsagePayload reports the estimated size of the transcript the next
+// model request would carry, plus the provider-metered input tokens of the
+// last completed call when known. Estimates are byte/4 approximations.
+type ContextUsagePayload struct {
+	EstTokens           int   `json:"est_tokens"`
+	LastCallInputTokens int64 `json:"last_call_input_tokens,omitempty"`
 }
 
 // RunCancelledPayload describes a cancellation.

@@ -35,6 +35,9 @@ func TestLegalTransitions(t *testing.T) {
 		{PhaseAwaitingApproval, PhasePreparing},
 		{PhaseExecutingTools, PhaseCompacting},
 		{PhaseExecutingTools, PhasePreparing},
+		// A preparing run enters compacting directly when the pre-model-call
+		// compaction gate fires (single decision point in the run loop).
+		{PhasePreparing, PhaseCompacting},
 		{PhaseCompacting, PhasePreparing},
 	}
 
@@ -49,7 +52,6 @@ func TestLegalTransitions(t *testing.T) {
 func TestIllegalTransitions(t *testing.T) {
 	illegal := []struct{ from, to Phase }{
 		{PhasePreparing, PhaseExecutingTools},
-		{PhasePreparing, PhaseCompacting},
 		{PhaseAwaitingApproval, PhaseCallingModel},
 		{PhaseCompacting, PhaseExecutingTools},
 		{PhaseCompacting, PhaseCallingModel},
