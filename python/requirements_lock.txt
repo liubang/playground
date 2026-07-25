@@ -88,7 +88,7 @@ pyyaml==6.0.2
 rank-bm25==0.2.2
 referencing==0.36.2
 regex==2024.11.6
-requests==2.32.4
+requests==2.33.0
 rich==14.0.0
 rpds-py==0.26.0
 rtree==1.4.0
