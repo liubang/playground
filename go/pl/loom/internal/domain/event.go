@@ -43,6 +43,7 @@ const (
 	EventFileChanged            EventType = "file.changed"
 	EventPlanRevised            EventType = "plan.revised"
 	EventContextCompacted       EventType = "context.compacted"
+	EventGoalUpdated            EventType = "goal.updated"
 	EventCheckpointCreated      EventType = "checkpoint.created"
 	EventBudgetUpdated          EventType = "budget.updated"
 	EventRunCompleted           EventType = "run.completed"
@@ -82,9 +83,9 @@ func (e Event) Validate() error {
 		EventUserMessageAdded, EventModelRequestStarted, EventModelResponseCompleted,
 		EventModelRequestFailed, EventToolCallPrepared, EventPermissionRequested,
 		EventPermissionResolved, EventToolExecutionStarted, EventToolExecutionCompleted,
-		EventToolResultAdded, EventFileChanged, EventPlanRevised, EventContextCompacted,
-		EventCheckpointCreated, EventBudgetUpdated, EventRunCompleted,
-		EventRunFailed, EventRunCancelled:
+	EventToolResultAdded, EventFileChanged, EventPlanRevised, EventContextCompacted,
+	EventGoalUpdated, EventCheckpointCreated, EventBudgetUpdated, EventRunCompleted,
+	EventRunFailed, EventRunCancelled:
 	default:
 		return fmt.Errorf("unknown event type %q", e.Type)
 	}

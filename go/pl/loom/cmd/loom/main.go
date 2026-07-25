@@ -29,6 +29,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -47,6 +48,9 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/command"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/edit"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/lint"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
+	"github.com/liubang/playground/go/pl/loom/internal/trace"
 	"github.com/liubang/playground/go/pl/loom/internal/ui"
 	"github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
@@ -69,6 +73,11 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
+	// Stamp the build version for trace release attribution when the
+	// operator did not pin one explicitly.
+	if os.Getenv("LOOM_VERSION") == "" {
+		_ = os.Setenv("LOOM_VERSION", version)
+	}
 	if len(args) == 0 {
 		// No args: if TTY, enter interactive chat; otherwise show usage.
 		if isTTY(os.Stdout) && isTTY(os.Stdin) {
@@ -237,13 +246,27 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 			return fmt.Errorf("get workspace: %w", err)
 		}
 	}
+	limits, err := domain.LimitsFromEnv(domain.DefaultLimits())
+	if err != nil {
+		return err
+	}
 	validator, err := workspace.NewPathValidator(root)
 	if err != nil {
 		return fmt.Errorf("validate workspace: %w", err)
 	}
 	registry := agent.NewToolRegistry()
+	// SessionEnv injects the loom attribution variables (agent name/version,
+	// session ID) into every spawned command so downstream CLIs can
+	// attribute traffic to this session; it is filled once the session is
+	// created below.
+	sessionEnv := &process.AtomicSessionEnv{}
 	runner, err := process.NewRunner(validator, process.RunnerOptions{
 		Sandbox: process.NewPlatformSandbox(process.PlatformSandboxOptions{}),
+		EnvAllowlist: []string{
+			"PATH", "LANG", "LC_ALL", "TMPDIR", "HOME",
+			"GOCACHE", "GOPATH", "GOMODCACHE", "GOPROXY", "GOSUMDB", "GOFLAGS",
+		},
+		SessionEnv: sessionEnv.Get,
 	})
 	if err != nil {
 		return err
@@ -285,25 +308,38 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	if err != nil {
 		return err
 	}
+	lintTool, err := lint.NewLintTool(validator, runner)
+	if err != nil {
+		return err
+	}
 	dbPath, err := prepareSessionDBPath()
 	if err != nil {
 		return err
 	}
 	artifactStore, err := artifact.Open(
 		filepath.Join(filepath.Dir(dbPath), artifactDirectoryName),
-		domain.DefaultLimits().MaxArtifactBytes,
+		limits.MaxArtifactBytes,
 	)
 	if err != nil {
 		return fmt.Errorf("open artifact store: %w", err)
 	}
 	runCmd, err := command.NewRunCmdToolWithArtifacts(
-		validator, runner, artifactStore, int(domain.DefaultLimits().MaxToolOutputBytes),
+		validator, runner, artifactStore, int(limits.MaxToolOutputBytes),
 	)
 	if err != nil {
 		return err
 	}
+	webFetch, err := webfetch.NewWebFetchTool(artifactStore)
+	if err != nil {
+		return err
+	}
+	goalCell := agent.NewGoalCell()
+	updateGoal, err := agent.NewUpdateGoalTool(goalCell)
+	if err != nil {
+		return err
+	}
 	for _, tool := range []domain.Tool{
-		readFile, listDir, searchTool, globTool, editTool, writeFile, gitStatus, gitDiff, gitLog, runCmd,
+		readFile, listDir, searchTool, globTool, editTool, writeFile, gitStatus, gitDiff, gitLog, lintTool, webFetch, runCmd, updateGoal,
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -332,7 +368,7 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 
 	var run *agent.Run
 	if resumeSessionID == nil {
-		run = agent.NewRun(domain.NewSessionID(), domain.DefaultLimits(), domain.RealClock{})
+		run = agent.NewRun(domain.NewSessionID(), limits, domain.RealClock{})
 		if err := store.CreateSession(ctx, run.SessionID); err != nil {
 			return fmt.Errorf("create session: %w", err)
 		}
@@ -343,11 +379,15 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 		}
 		run, err = agent.RecoverRun(inspection.Session.ID, inspection.Checkpoint,
 			inspection.Transcript.Messages, inspection.Events, inspection.Session.Version,
-			domain.DefaultLimits(), domain.RealClock{}, validator)
+			limits, domain.RealClock{}, validator)
 		if err != nil {
 			return fmt.Errorf("resume session: %w", err)
 		}
+		// A resumed session continues with a new prompt, so it gets a fresh
+		// per-prompt budget window (same semantics as agent.ContinueRun).
+		run.ResetUsageForNewTurn()
 	}
+	sessionEnv.Store(process.LoomSessionEnv(run.SessionID.String()))
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: userPrompt}},
@@ -355,13 +395,45 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	})
 	var promptBuilder agent.PromptBuilder
 	if os.Getenv("LOOM_DISABLE_SYSTEM_PROMPT") != "1" {
-		promptBuilder = prompt.NewBuilder(root,
-			prompt.WithExtraInstructions(os.Getenv("LOOM_SYSTEM_PROMPT_EXTRA")))
+		promptOpts := []prompt.Option{prompt.WithExtraInstructions(os.Getenv("LOOM_SYSTEM_PROMPT_EXTRA"))}
+		if traceCfg := trace.ConfigFromEnv(); traceCfg.Enabled {
+			if opt := app.ResolveManagedPrompt(ctx, traceCfg, dbPath, slog.Default()); opt != nil {
+				promptOpts = append(promptOpts, opt)
+			}
+		}
+		promptBuilder = prompt.NewBuilder(root, promptOpts...)
+	}
+	// Langfuse tracing for the headless path (the TUI wires it through
+	// app.NewBootstrap). Setup failure degrades to a no-op recorder —
+	// observability must never break the agent.
+	traceRecorder := trace.Recorder(trace.Noop())
+	if traceCfg := trace.ConfigFromEnv(); traceCfg.Enabled {
+		traceProvider, err := trace.Setup(ctx, traceCfg)
+		if err != nil {
+			slog.Warn("langfuse tracing disabled: setup failed", "error", err)
+		} else {
+			traceRecorder = traceProvider.Recorder()
+			slog.Info("langfuse tracing enabled", "host", traceCfg.Host, "environment", traceCfg.Environment)
+			defer func() {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				defer cancel()
+				if err := traceProvider.Shutdown(shutdownCtx); err != nil {
+					slog.Warn("langfuse tracing shutdown failed", "error", err)
+				}
+			}()
+		}
+	}
+
+	contextWindow, err := contextWindowFromEnv()
+	if err != nil {
+		return err
 	}
 	loop := agent.Loop{
 		Run: run, Model: provider, ModelName: modelName, Store: store,
 		Approver: consoleApprover{}, Policy: permission.DefaultPolicy(), Registry: registry, Logger: slog.Default(),
-		SystemPrompt: promptBuilder,
+		SystemPrompt: promptBuilder, Artifacts: artifactStore,
+		Recorder: traceRecorder, Prompt: userPrompt, Workspace: root,
+		ContextWindow: contextWindow, GoalCell: goalCell,
 	}
 	fmt.Fprintf(os.Stderr, "loom: session %s\n", run.SessionID)
 	executeErr := loop.Execute(ctx)
@@ -496,17 +568,26 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 		modelName = "gpt-4o"
 	}
 
+	limits, err := domain.LimitsFromEnv(domain.DefaultLimits())
+	if err != nil {
+		return err
+	}
+	contextWindow, err := contextWindowFromEnv()
+	if err != nil {
+		return err
+	}
 	bootstrap, err := app.NewBootstrap(ctx, app.BootstrapConfig{
 		WorkspaceRoot:    workspaceRoot,
 		SessionDBPath:    dbPath,
 		ArtifactDir:      artifactDir,
-		ArtifactMaxBytes: domain.DefaultLimits().MaxArtifactBytes,
+		ArtifactMaxBytes: limits.MaxArtifactBytes,
 		ModelName:        modelName,
 		BaseURL:          os.Getenv("LOOM_BASE_URL"),
 		APIKey:           os.Getenv("LOOM_API_KEY"),
 		WireAPI:          openai.WireAPI(os.Getenv("LOOM_WIRE_API")),
-		Limits:           domain.DefaultLimits(),
+		Limits:           limits,
 		Policy:           permission.DefaultPolicy(),
+		ContextWindow:    contextWindow,
 		Logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	if err != nil {
@@ -542,9 +623,11 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 		icons = "plain"
 	}
 	opts := ui.InitOptions{
-		NoColor:   os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb",
-		AltScreen: os.Getenv("LOOM_ALT_SCREEN") == "1",
-		Icons:     icons,
+		NoColor:       os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb",
+		AltScreen:     os.Getenv("LOOM_ALT_SCREEN") == "1",
+		Icons:         icons,
+		Limits:        bootstrap.Config.Limits,
+		ContextWindow: int(contextWindow),
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -553,6 +636,21 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 		broker.Close()
 	}()
 	return ui.StartTUI(controller, modelName, workspaceRoot, opts)
+}
+
+// contextWindowFromEnv parses LOOM_CONTEXT_WINDOW: the model's effective
+// per-request context size in tokens. 0 (unset) lets the agent loop fall
+// back to MaxInputTokens as the occupancy proxy.
+func contextWindowFromEnv() (int64, error) {
+	raw := strings.TrimSpace(os.Getenv("LOOM_CONTEXT_WINDOW"))
+	if raw == "" {
+		return 0, nil
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || v < 0 {
+		return 0, fmt.Errorf("LOOM_CONTEXT_WINDOW: expected a non-negative integer, got %q", raw)
+	}
+	return v, nil
 }
 
 // isTTY checks whether the given file descriptor is a terminal.

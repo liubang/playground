@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -67,9 +68,45 @@ func TestApplyRuntimeEventCoalescesDeltasByTurn(t *testing.T) {
 	if len(idx.Order) != 1 {
 		t.Fatalf("block count = %d, want 1", len(idx.Order))
 	}
-	block, ok := idx.Get("stream-7")
+	block, ok := idx.Get("stream-7-1")
 	if !ok || block.Content != "hello world" {
 		t.Fatalf("stream block = %#v, exists=%v", block, ok)
+	}
+}
+
+// Each model response gets its own assistant block, so text, tool calls,
+// and the final answer interleave chronologically (Claude Code style)
+// instead of the final answer overwriting the lead-in text.
+func TestStreamBlocksInterleaveWithToolCalls(t *testing.T) {
+	idx := NewBlockIndex()
+	delta1 := mustPayload(t, runtimeevent.ModelTextDeltaPayload{Delta: "我来查询天气，先抓取数据。"})
+	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Turn: 1, Kind: runtimeevent.KindModelTextDelta, Payload: delta1})
+	completed1 := mustPayload(t, runtimeevent.ModelResponseCompletedPayload{Text: "我来查询天气，先抓取数据。"})
+	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Turn: 1, Kind: runtimeevent.KindModelResponseCompleted, Payload: completed1})
+
+	callID := domain.NewToolCallID()
+	prepared := mustPayload(t, runtimeevent.ToolPreparedPayload{CallID: callID, ToolName: "web_fetch", Risk: domain.R3, Target: "https://x"})
+	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Turn: 1, Kind: runtimeevent.KindToolPrepared, Payload: prepared})
+
+	delta2 := mustPayload(t, runtimeevent.ModelTextDeltaPayload{Delta: "北京未来一周天气如下：..."})
+	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Turn: 1, Kind: runtimeevent.KindModelTextDelta, Payload: delta2})
+	completed2 := mustPayload(t, runtimeevent.ModelResponseCompletedPayload{Text: "北京未来一周天气如下：..."})
+	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Turn: 1, Kind: runtimeevent.KindModelResponseCompleted, Payload: completed2})
+
+	if len(idx.Order) != 3 {
+		t.Fatalf("block count = %d, want 3 (text, tool, text): %v", len(idx.Order), idx.Order)
+	}
+	leadIn := idx.ByID[idx.Order[0]]
+	tool := idx.ByID[idx.Order[1]]
+	answer := idx.ByID[idx.Order[2]]
+	if leadIn.Kind != BlockKindAssistant || tool.Kind != BlockKindTool || answer.Kind != BlockKindAssistant {
+		t.Fatalf("interleaving broken: %v", idx.Order)
+	}
+	if leadIn.Content != "我来查询天气，先抓取数据。" {
+		t.Fatalf("lead-in text was overwritten by the final answer: %q", leadIn.Content)
+	}
+	if answer.Content != "北京未来一周天气如下：..." || leadIn.ID == answer.ID {
+		t.Fatalf("final answer must be its own block: %q id=%q", answer.Content, answer.ID)
 	}
 }
 
@@ -96,12 +133,12 @@ func TestApplyRuntimeEventShowsCollapsibleReasoning(t *testing.T) {
 	payload := mustPayload(t, runtimeevent.ModelReasoningDeltaPayload{Delta: "inspect the request"})
 	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Turn: 7, Kind: runtimeevent.KindModelReasoningDelta, Payload: payload})
 
-	block, ok := idx.Get("stream-7")
+	block, ok := idx.Get("stream-7-1")
 	if !ok || block.StreamReasoning != "inspect the request" {
 		t.Fatalf("reasoning block = %#v, exists=%v", block, ok)
 	}
 	m := Model{theme: NoColorTheme()}
-	if view := m.renderBlock(block); !strings.Contains(view, "Thinking... (press Ctrl+R to expand)") {
+	if view := m.renderBlock(block); !strings.Contains(view, "Thinking... (click or Ctrl+R to expand)") {
 		t.Fatalf("collapsed reasoning view = %q", view)
 	}
 	if !idx.ToggleLatestReasoning() {
@@ -117,7 +154,7 @@ func TestApplyRuntimeEventShowsPreparingTool(t *testing.T) {
 	payload := mustPayload(t, runtimeevent.ModelToolCallDeltaPayload{ToolName: "run_cmd", DeltaBytes: 12})
 
 	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Turn: 7, Kind: runtimeevent.KindModelToolCallDelta, Payload: payload})
-	block, ok := idx.Get("stream-7")
+	block, ok := idx.Get("stream-7-1")
 	if !ok {
 		t.Fatal("missing streaming block")
 	}
@@ -150,7 +187,7 @@ func TestRunCancelledMarksBlocksAndAddsSingleNotice(t *testing.T) {
 	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Sequence: 1, Turn: 3, Kind: runtimeevent.KindModelTextDelta, Payload: delta})
 
 	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Sequence: 2, Kind: runtimeevent.KindRunCancelled})
-	stream, ok := idx.Get("stream-3")
+	stream, ok := idx.Get("stream-3-1")
 	if !ok || !stream.Done || stream.Status != "cancelled" {
 		t.Fatalf("stream block after cancel = %#v, exists=%v", stream, ok)
 	}
@@ -214,7 +251,7 @@ func TestModelResponseCompletedCorrectsDraftWithCanonicalText(t *testing.T) {
 	completed := mustPayload(t, runtimeevent.ModelResponseCompletedPayload{Text: "The answer is 42."})
 	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Sequence: 2, Turn: 1, Kind: runtimeevent.KindModelResponseCompleted, Payload: completed})
 
-	block, ok := idx.Get("stream-1")
+	block, ok := idx.Get("stream-1-1")
 	if !ok || !block.Done {
 		t.Fatalf("stream block = %#v, exists=%v", block, ok)
 	}
@@ -232,6 +269,204 @@ func TestModelResponseCompletedCreatesBlockWhenAllDeltasLost(t *testing.T) {
 	block, ok := idx.Get("final-5")
 	if !ok || !block.Done || block.Content != "recovered from store" {
 		t.Fatalf("final block = %#v, exists=%v", block, ok)
+	}
+}
+
+func TestApplyRuntimeEventContextCompacted(t *testing.T) {
+	idx := NewBlockIndex()
+	payload := mustPayload(t, runtimeevent.ContextCompactedPayload{
+		MaskedOutputs:   3,
+		MaskedBytes:     48_000,
+		EstTokensBefore: 182_000,
+		EstTokensAfter:  41_000,
+	})
+	id := ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Sequence: 7, Kind: runtimeevent.KindContextCompacted, Payload: payload})
+	if id == "" {
+		t.Fatal("expected a notice block for context compaction")
+	}
+	block, ok := idx.Get(id)
+	if !ok || block.Kind != BlockKindNotice {
+		t.Fatalf("block = %#v, want notice", block)
+	}
+	want := "Context compacted: ~182k → ~41k tokens (3 outputs externalized)"
+	if block.Content != want {
+		t.Fatalf("content = %q, want %q", block.Content, want)
+	}
+}
+
+func TestApprovalOverlayShowsAlwaysAllowWithRulePreview(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 100}
+	m.pendingApproval = &runtimeevent.ApprovalRequestedPayload{
+		ApprovalID:  domain.NewEventID(),
+		CallID:      domain.NewToolCallID(),
+		ToolName:    "run_cmd",
+		Risk:        domain.R2,
+		Description: "Run 'go' 'test' './...'",
+		ArgsHash:    "abc",
+		Arguments:   json.RawMessage(`{"program":"go","args":["test","./..."]}`),
+	}
+	m.approvalCursor = 0
+
+	overlay := m.renderApprovalOverlay()
+	for _, want := range []string{"Allow once", "Always allow `go test`", "Deny", "y/a/n"} {
+		if !strings.Contains(overlay, want) {
+			t.Fatalf("overlay missing %q:\n%s", want, overlay)
+		}
+	}
+
+	// Left/right cycles through the three options; Enter on cursor 1 remembers.
+	for i, key := range []tea.KeyMsg{{Type: tea.KeyRight}, {Type: tea.KeyRight}, {Type: tea.KeyLeft}} {
+		updated, _ := m.handleApprovalKey(key)
+		m = updated.(Model)
+		want := []int{1, 2, 1}[i]
+		if m.approvalCursor != want {
+			t.Fatalf("cursor = %d, want %d after key %v", m.approvalCursor, want, key.Type)
+		}
+	}
+	if m.pendingApproval == nil {
+		t.Fatal("approval must still be pending after navigation keys")
+	}
+}
+
+func TestApprovalDecisionGuardIgnoresEarlyKeys(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 100, mode: ModeApproval}
+	m.pendingApproval = &runtimeevent.ApprovalRequestedPayload{
+		ApprovalID: domain.NewEventID(),
+		CallID:     domain.NewToolCallID(),
+		ToolName:   "web_fetch",
+		Risk:       domain.R3,
+	}
+	m.approvalShownAt = time.Now()
+
+	// A key-repeat or double tap right after the overlay appears must not
+	// resolve the approval: no decision command, overlay stays up.
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune{'y'}},
+		{Type: tea.KeyEnter},
+		{Type: tea.KeyRunes, Runes: []rune{'n'}},
+	} {
+		updated, cmd := m.handleApprovalKey(key)
+		m = updated.(Model)
+		if cmd != nil || m.pendingApproval == nil || m.mode != ModeApproval {
+			t.Fatalf("early key %v resolved the approval; guard should ignore it", key.Type)
+		}
+	}
+
+	// Navigation stays responsive during the guard window.
+	updated, _ := m.handleApprovalKey(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	if m.approvalCursor != 1 {
+		t.Fatalf("navigation key blocked by guard: cursor = %d, want 1", m.approvalCursor)
+	}
+
+	// After the guard window the same key resolves normally.
+	m.approvalShownAt = time.Now().Add(-2 * approvalDecisionGuard)
+	updated, cmd := m.handleApprovalKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = updated.(Model)
+	if cmd == nil || m.pendingApproval != nil {
+		t.Fatal("decision key after the guard window must resolve the approval")
+	}
+}
+
+func TestApprovalOverlayHidesRulePreviewForShell(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 100}
+	m.pendingApproval = &runtimeevent.ApprovalRequestedPayload{
+		ApprovalID: domain.NewEventID(),
+		ToolName:   "run_cmd",
+		Risk:       domain.R3,
+		Arguments:  json.RawMessage(`{"program":"sh","args":["-c","echo hi"]}`),
+	}
+	overlay := m.renderApprovalOverlay()
+	if !strings.Contains(overlay, "Always allow") {
+		t.Fatalf("overlay should still offer the always option: %s", overlay)
+	}
+	if strings.Contains(overlay, "Always allow `") {
+		t.Fatalf("shell calls must not show a rule preview: %s", overlay)
+	}
+}
+
+func TestFormatContext(t *testing.T) {
+	tests := []struct {
+		name          string
+		est           int
+		lastCallInput int64
+		window        int
+		wantLabel     string
+		wantWarn      bool
+	}{
+		{name: "estimate without window", est: 41_000, wantLabel: "ctx:~41k"},
+		{name: "estimate with window", est: 41_000, window: 128_000, wantLabel: "ctx:~41k/128k"},
+		{name: "fallback to provider value", lastCallInput: 12_345, wantLabel: "ctx:~12k"},
+		{name: "warning at 80 percent", est: 103_000, window: 128_000, wantLabel: "ctx:~103k/128k", wantWarn: true},
+		{name: "nothing known", wantLabel: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			label, warn := formatContext(tt.est, tt.lastCallInput, tt.window)
+			if label != tt.wantLabel || warn != tt.wantWarn {
+				t.Fatalf("formatContext(%d, %d, %d) = (%q, %v), want (%q, %v)",
+					tt.est, tt.lastCallInput, tt.window, label, warn, tt.wantLabel, tt.wantWarn)
+			}
+		})
+	}
+}
+
+func TestContextUsageEventDrivesStatusBar(t *testing.T) {
+	m := NewModel(newTestController(t), "test-model", "/ws")
+	m.theme = NoColorTheme()
+	m.width = 140
+	m.SetContextWindow(128_000)
+
+	payload := mustPayload(t, runtimeevent.ContextUsagePayload{EstTokens: 41_000, LastCallInputTokens: 39_500})
+	updated, _ := m.Update(runtimeEventMsg(runtimeevent.RuntimeEvent{Sequence: 1, Kind: runtimeevent.KindContextUsage, Payload: payload}))
+	m = updated.(Model)
+
+	if m.contextEst != 41_000 || m.lastCallInput != 39_500 {
+		t.Fatalf("context fields = (%d, %d), want (41000, 39500)", m.contextEst, m.lastCallInput)
+	}
+	if bar := m.renderStatusBar(); !strings.Contains(bar, "ctx:~41k/128k") {
+		t.Fatalf("status bar missing ctx segment: %q", bar)
+	}
+
+	opened := mustPayload(t, runtimeevent.SessionOpenedPayload{Model: "test-model", Workspace: "/ws"})
+	updated, _ = m.Update(runtimeEventMsg(runtimeevent.RuntimeEvent{Sequence: 2, Kind: runtimeevent.KindSessionOpened, Payload: opened}))
+	m = updated.(Model)
+	if m.contextEst != 0 || m.lastCallInput != 0 {
+		t.Fatalf("session open must reset context occupancy: (%d, %d)", m.contextEst, m.lastCallInput)
+	}
+}
+
+func TestCompactionCounterAndStatusBar(t *testing.T) {
+	m := NewModel(newTestController(t), "test-model", "/ws")
+	m.theme = NoColorTheme()
+	m.width = 120
+
+	payload := mustPayload(t, runtimeevent.ContextCompactedPayload{
+		MaskedOutputs:    3,
+		MaskedBytes:      48_000,
+		ArchivedMessages: 27,
+		EstTokensBefore:  182_000,
+		EstTokensAfter:   41_000,
+	})
+	updated, _ := m.Update(runtimeEventMsg(runtimeevent.RuntimeEvent{Sequence: 1, Kind: runtimeevent.KindContextCompacted, Payload: payload}))
+	m = updated.(Model)
+
+	if m.compactions != 1 {
+		t.Fatalf("compactions = %d, want 1", m.compactions)
+	}
+	if !strings.Contains(m.statusMessage, "Context compacted ~182k → ~41k tokens") {
+		t.Fatalf("statusMessage = %q, want compaction summary", m.statusMessage)
+	}
+	if bar := m.renderStatusBar(); !strings.Contains(bar, "compact:1") {
+		t.Fatalf("status bar missing compaction tally: %q", bar)
+	}
+
+	// A new session view resets the tally.
+	opened := mustPayload(t, runtimeevent.SessionOpenedPayload{Model: "test-model", Workspace: "/ws"})
+	updated, _ = m.Update(runtimeEventMsg(runtimeevent.RuntimeEvent{Sequence: 2, Kind: runtimeevent.KindSessionOpened, Payload: opened}))
+	m = updated.(Model)
+	if m.compactions != 0 {
+		t.Fatalf("compactions after session open = %d, want 0", m.compactions)
 	}
 }
 
@@ -270,6 +505,73 @@ func TestRenderStatusBarDropsSegmentsOnNarrowScreens(t *testing.T) {
 	}
 }
 
+func TestFormatUsage(t *testing.T) {
+	tests := []struct {
+		name   string
+		usage  domain.Usage
+		limits domain.Limits
+		want   string
+	}{
+		{
+			name:   "input shown against budget",
+			usage:  domain.Usage{Turns: 17, InputTokens: 212456, OutputTokens: 6095, ToolCalls: 34},
+			limits: domain.Limits{MaxInputTokens: 200_000},
+			want:   "turns:17 in:212k/200k out:6.1k tools:34",
+		},
+		{
+			name:   "zero budget omits denominator",
+			usage:  domain.Usage{Turns: 1, InputTokens: 500, OutputTokens: 50},
+			limits: domain.Limits{},
+			want:   "turns:1 in:500 out:50 tools:0",
+		},
+		{
+			name:   "million scale",
+			usage:  domain.Usage{InputTokens: 2_500_000, OutputTokens: 999},
+			limits: domain.Limits{MaxInputTokens: 4_000_000},
+			want:   "turns:0 in:2.5M/4.0M out:999 tools:0",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := formatUsage(tt.usage, tt.limits); got != tt.want {
+				t.Fatalf("formatUsage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInputUsageRatio(t *testing.T) {
+	if got := inputUsageRatio(domain.Usage{InputTokens: 100}, domain.Limits{}); got != 0 {
+		t.Fatalf("ratio with zero budget = %v, want 0", got)
+	}
+	got := inputUsageRatio(domain.Usage{InputTokens: 160_000}, domain.Limits{MaxInputTokens: 200_000})
+	if got < 0.79 || got > 0.81 {
+		t.Fatalf("ratio = %v, want ~0.8", got)
+	}
+}
+
+func TestHumanizeTokens(t *testing.T) {
+	tests := []struct {
+		n    int64
+		want string
+	}{
+		{0, "0"},
+		{999, "999"},
+		{1000, "1.0k"},
+		{6095, "6.1k"},
+		{10000, "10k"},
+		{212456, "212k"},
+		{999999, "999k"},
+		{1_000_000, "1.0M"},
+		{2_500_000, "2.5M"},
+	}
+	for _, tt := range tests {
+		if got := humanizeTokens(tt.n); got != tt.want {
+			t.Errorf("humanizeTokens(%d) = %q, want %q", tt.n, got, tt.want)
+		}
+	}
+}
+
 func TestInitialSnapshotDoesNotDiscardCompletedRealtimeTurn(t *testing.T) {
 	idx := NewBlockIndex()
 	pendingID := idx.AddPendingUserBlock("hello")
@@ -289,7 +591,7 @@ func TestInitialSnapshotDoesNotDiscardCompletedRealtimeTurn(t *testing.T) {
 	updated, _ := m.handleSnapshot(snapshotMsg{snapshot: app.Snapshot{Messages: []domain.Message{persistedUser}}})
 	m = updated.(Model)
 
-	for _, id := range []string{pendingID, "stream-1"} {
+	for _, id := range []string{pendingID, "stream-1-1"} {
 		if _, ok := m.blocks.Get(id); !ok {
 			t.Fatalf("snapshot discarded realtime block %q; order=%v", id, m.blocks.Order)
 		}
@@ -567,6 +869,9 @@ func TestApprovalOverlayNavigation(t *testing.T) {
 		CallID:     domain.NewToolCallID(),
 		ToolName:   "run_cmd",
 		Risk:       domain.R2,
+		// Rule-eligible arguments: Enter on the always-allow option must
+		// resolve (calls without a derivable rule keep the overlay up).
+		Arguments: json.RawMessage(`{"program":"go","args":["test","./..."]}`),
 	}
 	m.mode = ModeApproval
 	if m.approvalCursor != 0 {
@@ -578,15 +883,16 @@ func TestApprovalOverlayNavigation(t *testing.T) {
 	if m.approvalCursor != 1 || cmd != nil {
 		t.Fatalf("Right: cursor = %d, cmd = %v", m.approvalCursor, cmd)
 	}
+	// Three options: allow once (0) / allow + remember rule (1) / deny (2).
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(Model)
-	if m.approvalCursor != 1 {
-		t.Fatalf("Tab: cursor = %d, want 1", m.approvalCursor)
+	if m.approvalCursor != 2 {
+		t.Fatalf("Tab: cursor = %d, want 2 (deny)", m.approvalCursor)
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 	m = updated.(Model)
-	if m.approvalCursor != 0 {
-		t.Fatalf("Shift+Tab: cursor = %d, want 0", m.approvalCursor)
+	if m.approvalCursor != 1 {
+		t.Fatalf("Shift+Tab: cursor = %d, want 1", m.approvalCursor)
 	}
 
 	// Enter on the allow option resolves the approval asynchronously and
@@ -616,10 +922,92 @@ func TestApprovalOverlayRendersFieldsAndOptions(t *testing.T) {
 	view := m.renderApprovalOverlay()
 	for _, want := range []string{
 		"Approval Required", "R2 (write)", "run_cmd", "make test",
-		"./src", "./out", "0123456789ab", "Allow once", "Deny", "Ctrl+C",
+		"./src", "./out", "Allow once", "Deny", "Ctrl+C",
+		"1.", "2.", "3.", "▍",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("approval overlay missing %q:\n%s", want, view)
+		}
+	}
+	// The args hash is audit plumbing and no longer shown; the audit trail
+	// keeps it in the session events.
+	if strings.Contains(view, "0123456789ab") {
+		t.Fatalf("overlay must not display the args hash:\n%s", view)
+	}
+}
+
+func TestApprovalOverlayStructuresRunCmdDescription(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 100, workspace: "/ws"}
+	m.pendingApproval = &runtimeevent.ApprovalRequestedPayload{
+		ApprovalID: domain.NewEventID(),
+		CallID:     domain.NewToolCallID(),
+		ToolName:   "run_cmd",
+		Risk:       domain.R3,
+		Description: "Run; 'sh' '-c' 'which pandora'; env[none]; cwd='.'; timeout=120000ms; " +
+			"network=loopback-only; shell=R3; note[检查 pandora 是否安装]; args_hash=a47946448cfa",
+		ReadPaths:  []string{"/ws"},
+		WritePaths: []string{"/ws"},
+	}
+	view := m.renderApprovalOverlay()
+	// Action keeps the command, metadata folds into one dim row, the note
+	// stands alone, and the workspace root collapses to a relative label.
+	for _, want := range []string{
+		"Run 'sh' '-c' 'which pandora'",
+		"cwd=. · timeout=120000ms · network=loopback-only",
+		"检查 pandora 是否安装",
+		"workspace (.)",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("structured overlay missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "args_hash") {
+		t.Fatalf("overlay must drop the args_hash segment:\n%s", view)
+	}
+}
+
+func TestApprovalNumberKeysAndDisabledAlways(t *testing.T) {
+	newApprovalModel := func(toolName string, args json.RawMessage) Model {
+		m := Model{theme: NoColorTheme(), width: 100, mode: ModeApproval}
+		m.pendingApproval = &runtimeevent.ApprovalRequestedPayload{
+			ApprovalID: domain.NewEventID(),
+			CallID:     domain.NewToolCallID(),
+			ToolName:   toolName,
+			Risk:       domain.R2,
+			Arguments:  args,
+		}
+		return m
+	}
+
+	// "1" resolves allow-once directly.
+	m := newApprovalModel("run_cmd", json.RawMessage(`{"program":"go","args":["test","./..."]}`))
+	updated, cmd := m.handleApprovalKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	m = updated.(Model)
+	if cmd == nil || m.pendingApproval != nil {
+		t.Fatal("number key 1 must resolve allow-once")
+	}
+
+	// "2" remembers a rule when one is derivable.
+	m = newApprovalModel("run_cmd", json.RawMessage(`{"program":"go","args":["test","./..."]}`))
+	updated, cmd = m.handleApprovalKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	m = updated.(Model)
+	if cmd == nil || m.pendingApproval != nil {
+		t.Fatal("number key 2 must resolve always-allow for a rule-eligible call")
+	}
+
+	// For a shell call the rule is not derivable: "2", "a" and Enter on the
+	// always option are all inert, and the overlay stays up.
+	m = newApprovalModel("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","echo hi"]}`))
+	m.approvalCursor = 1
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune{'2'}},
+		{Type: tea.KeyRunes, Runes: []rune{'a'}},
+		{Type: tea.KeyEnter},
+	} {
+		updated, cmd := m.handleApprovalKey(key)
+		m = updated.(Model)
+		if cmd != nil || m.pendingApproval == nil {
+			t.Fatalf("key %v must be inert when always-allow is unavailable", key.Type)
 		}
 	}
 }
@@ -685,7 +1073,7 @@ func TestStreamingBlockShowsCaret(t *testing.T) {
 	idx := NewBlockIndex()
 	payload := mustPayload(t, runtimeevent.ModelTextDeltaPayload{Delta: "half"})
 	ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Turn: 2, Kind: runtimeevent.KindModelTextDelta, Payload: payload})
-	block, ok := idx.Get("stream-2")
+	block, ok := idx.Get("stream-2-1")
 	if !ok {
 		t.Fatal("missing stream block")
 	}
@@ -856,5 +1244,60 @@ func TestRuntimeEventsFromOtherSessionsAreIgnored(t *testing.T) {
 	}
 	if len(m.blocks.Order) != 1 {
 		t.Fatalf("foreign session event added blocks: %v", m.blocks.Order)
+	}
+}
+
+func TestToggleReasoningAtClick(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 80, height: 24, mode: ModeChat}
+	m.blocks = NewBlockIndex()
+	m.viewport = viewport.New(80, 10)
+	m.blocks.Add(&TranscriptBlock{ID: "u1", Kind: BlockKindUser, Title: "You", Content: "hello", Done: true})
+	m.blocks.Add(&TranscriptBlock{ID: "a1", Kind: BlockKindAssistant, Title: "Assistant", Content: "answer one", StreamReasoning: "chain of thought", Done: true})
+	m.blocks.Add(&TranscriptBlock{ID: "a2", Kind: BlockKindAssistant, Title: "Assistant", Content: "answer two", Done: true})
+	m.syncTranscript()
+
+	assistant, _ := m.blocks.Get("a1")
+	rowOf := func(id string) int { return m.blockOffsets[id] + 1 } // +1: header row
+
+	// Clicking the assistant block with reasoning expands it; clicking again collapses.
+	updated, _ := m.handleMouse(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, Y: rowOf("a1")})
+	m = updated.(Model)
+	if !assistant.ReasoningExpanded {
+		t.Fatal("click on reasoning block should expand the reasoning")
+	}
+	updated, _ = m.handleMouse(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, Y: rowOf("a1")})
+	m = updated.(Model)
+	if assistant.ReasoningExpanded {
+		t.Fatal("second click should collapse the reasoning")
+	}
+
+	// Blocks without reasoning and rows above the transcript ignore clicks.
+	updated, _ = m.handleMouse(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, Y: rowOf("a2")})
+	m = updated.(Model)
+	if assistant.ReasoningExpanded {
+		t.Fatal("click on a block without reasoning must not toggle anything")
+	}
+	if m.toggleReasoningAt(0) {
+		t.Fatal("click on the header row must not toggle anything")
+	}
+}
+
+func TestGradientColors(t *testing.T) {
+	colors := gradientColors("#e69875", "#dbbc7f", 6)
+	if len(colors) != 6 {
+		t.Fatalf("gradient length = %d, want 6", len(colors))
+	}
+	if colors[0] != "#e69875" || colors[5] != "#dbbc7f" {
+		t.Fatalf("gradient endpoints = %v, want exact endpoints", colors)
+	}
+	// Midpoint at t=0.6: r=230+(219-230)*0.6≈223, g=152+(188-152)*0.6≈174, b=117+(127-117)*0.6=123.
+	if colors[3] != "#dfae7b" {
+		t.Fatalf("gradient midpoint = %s, want #dfae7b", colors[3])
+	}
+	if gradientColors("", "#dbbc7f", 3) != nil {
+		t.Fatal("non-hex endpoint must yield nil so callers can fall back")
+	}
+	if got := gradientColors("#e69875", "#dbbc7f", 1); len(got) != 1 || got[0] != "#e69875" {
+		t.Fatalf("single-step gradient = %v, want the start color", got)
 	}
 }

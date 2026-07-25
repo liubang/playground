@@ -28,6 +28,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/render"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
@@ -77,8 +78,12 @@ type Controller struct {
 	bootstrap *Bootstrap
 	broker    *runtimeevent.Broker
 	approver  *ChannelApprover
-	clock     domain.Clock
-	logger    *slog.Logger
+	// rulesApprover auto-allows calls matching session-persisted rules
+	// ("allow always") before delegating to approver. The agent loop sees
+	// only this wrapper.
+	rulesApprover *RuleApprover
+	clock         domain.Clock
+	logger        *slog.Logger
 
 	mu          sync.Mutex
 	state       ControllerState
@@ -134,6 +139,7 @@ func NewController(cfg ControllerConfig) *Controller {
 		bootstrap:     cfg.Bootstrap,
 		broker:        cfg.Broker,
 		approver:      cfg.Approver,
+		rulesApprover: NewRuleApprover(cfg.Approver),
 		clock:         clock,
 		logger:        logger,
 		state:         ControllerStateBooting,
@@ -229,23 +235,30 @@ func (c *Controller) CancelTurn(ctx context.Context) error {
 }
 
 // ResolveApproval resolves a pending approval only when the frontend binding
-// matches the canonical PreparedCall currently awaiting a decision.
-func (c *Controller) ResolveApproval(ctx context.Context, binding ApprovalBinding, decision domain.Decision) error {
+// matches the canonical PreparedCall currently awaiting a decision. When
+// ruleHint is non-nil and the decision is Allow, the controller derives a
+// categorical rule ("allow always") and returns a short note describing it;
+// the note is empty when nothing was remembered.
+func (c *Controller) ResolveApproval(ctx context.Context, binding ApprovalBinding, decision domain.Decision, ruleHint *ApprovalRuleHint) (string, error) {
 	resultCh := make(chan controllerResult, 1)
 	select {
-	case c.cmdCh <- controllerCommand{Kind: cmdResolveApproval, Approval: binding, Decision: decision, ResultCh: resultCh}:
+	case c.cmdCh <- controllerCommand{Kind: cmdResolveApproval, Approval: binding, Decision: decision, RuleHint: ruleHint, ResultCh: resultCh}:
 	case <-ctx.Done():
-		return ctx.Err()
+		return "", ctx.Err()
 	case <-c.doneCh:
-		return fmt.Errorf("controller is closed")
+		return "", fmt.Errorf("controller is closed")
 	}
 	select {
 	case result := <-resultCh:
-		return result.Err
+		if result.Err != nil {
+			return "", result.Err
+		}
+		note, _ := result.Value.(string)
+		return note, nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return "", ctx.Err()
 	case <-c.doneCh:
-		return fmt.Errorf("controller is closed")
+		return "", fmt.Errorf("controller is closed")
 	}
 }
 
@@ -536,12 +549,24 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 		Model:        c.bootstrap.Model,
 		ModelName:    c.bootstrap.ModelName,
 		Store:        &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
-		Approver:     c.approver,
+		Approver:     c.rulesApprover,
 		Policy:       c.bootstrap.Policy,
 		Registry:     c.bootstrap.Registry,
 		Logger:       c.logger,
 		SystemPrompt: c.bootstrap.PromptBuilder,
+		Artifacts:    c.bootstrap.Artifact,
+		Recorder:     c.bootstrap.Recorder,
+		Prompt:       prompt,
+		Workspace:    c.bootstrap.Config.WorkspaceRoot,
+		ContextWindow: c.bootstrap.Config.ContextWindow,
+		GoalCell:      c.bootstrap.GoalCell,
 		StreamHooks: agent.StreamHooks{
+			OnContextUsage: func(estTokens int, lastCallInputTokens int64) {
+				c.publishDurable(c.sessionID, run.ID, turnCounter, runtimeevent.KindContextUsage, runtimeevent.ContextUsagePayload{
+					EstTokens:           estTokens,
+					LastCallInputTokens: lastCallInputTokens,
+				})
+			},
 			OnReasoningDelta: func(delta string) {
 				c.publishEphemeral(c.sessionID, run.ID, turnCounter, runtimeevent.KindModelReasoningDelta, runtimeevent.ModelReasoningDeltaPayload{
 					RequestID: domain.NewEventID(),
@@ -693,7 +718,13 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 		return
 	}
 
-	cmd.ResultCh <- controllerResult{}
+	var note string
+	if cmd.Decision == domain.DecisionAllow && cmd.RuleHint != nil {
+		if prefix, ok := c.rulesApprover.RememberRunCmd(cmd.RuleHint.ToolName, cmd.RuleHint.Arguments); ok {
+			note = strings.Join(prefix, " ")
+		}
+	}
+	cmd.ResultCh <- controllerResult{Value: note}
 }
 
 func (c *Controller) handleNewSession(cmd controllerCommand) {
@@ -718,6 +749,7 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("create session: %w", err)}
 		return
 	}
+	c.publishSessionEnv(sessionID)
 	c.logger.Info("new session created", "session_id", sessionID)
 	cmd.ResultCh <- controllerResult{}
 }
@@ -760,8 +792,19 @@ func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	c.state = ControllerStateIdle
 	c.mu.Unlock()
 
+	c.publishSessionEnv(c.sessionID)
 	c.logger.Info("session resumed", "session_id", c.sessionID)
 	cmd.ResultCh <- controllerResult{}
+}
+
+// publishSessionEnv points the runner's attribution environment at the given
+// session, so commands spawned from here on carry its identity. The holder
+// may be nil in tests that assemble a Bootstrap by hand.
+func (c *Controller) publishSessionEnv(sessionID domain.SessionID) {
+	if c.bootstrap == nil || c.bootstrap.SessionEnv == nil {
+		return
+	}
+	c.bootstrap.SessionEnv.Store(process.LoomSessionEnv(sessionID.String()))
 }
 
 func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
@@ -872,6 +915,7 @@ type controllerCommand struct {
 	SessionID domain.SessionID
 	Approval  ApprovalBinding
 	Decision  domain.Decision
+	RuleHint  *ApprovalRuleHint
 	ResultCh  chan<- controllerResult
 }
 
@@ -1033,6 +1077,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ReadPaths:   payload.ReadPaths,
 				WritePaths:  payload.WritePaths,
 				Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], toolDiffMaxLines),
+				Arguments:   s.pendingArgs[payload.CallID],
 			})
 			s.controller.SetAwaitingApproval()
 		}
@@ -1070,13 +1115,14 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			preview := s.previews[payload.CallID]
 			delete(s.previews, payload.CallID)
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindToolCompleted, runtimeevent.ToolCompletedPayload{
-				CallID:     payload.CallID,
-				ToolName:   payload.ToolName,
-				Status:     payload.Status,
-				DurationMs: durationMs,
-				Error:      payload.ErrorCode,
-				FinishedAt: payload.FinishedAt,
-				Preview:    preview,
+				CallID:       payload.CallID,
+				ToolName:     payload.ToolName,
+				Status:       payload.Status,
+				DurationMs:   durationMs,
+				Error:        payload.ErrorCode,
+				ErrorMessage: payload.ErrorMessage,
+				FinishedAt:   payload.FinishedAt,
+				Preview:      preview,
 			})
 		}
 	case domain.EventBudgetUpdated:
@@ -1088,6 +1134,18 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				OutputTokens: payload.OutputTokens,
 				ToolCalls:    payload.ToolCalls,
 			})
+		}
+	case domain.EventContextCompacted:
+		var payload contextCompactedDTO
+		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+	s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindContextCompacted, runtimeevent.ContextCompactedPayload{
+MaskedOutputs:    payload.MaskedOutputs,
+MaskedBytes:      payload.MaskedBytes,
+ArchivedMessages: payload.ArchivedMessages,
+EstTokensBefore:  payload.EstTokensBefore,
+EstTokensAfter:   payload.EstTokensAfter,
+Summarized:       payload.Summarized,
+})
 		}
 	case domain.EventRunCompleted:
 		s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindRunCompleted, nil)
@@ -1117,6 +1175,16 @@ type modelRequestFailedDTO struct {
 	Code      string         `json:"code"`
 }
 
+// contextCompactedDTO mirrors the agent's unexported compaction payload.
+type contextCompactedDTO struct {
+MaskedOutputs    int  `json:"masked_outputs"`
+MaskedBytes      int  `json:"masked_bytes"`
+ArchivedMessages int  `json:"archived_messages,omitempty"`
+EstTokensBefore  int  `json:"est_tokens_before"`
+EstTokensAfter   int  `json:"est_tokens_after"`
+Summarized       bool `json:"summarized,omitempty"`
+}
+
 type toolCallAuditDTO struct {
 	CallID       domain.ToolCallID `json:"call_id"`
 	Tool         string            `json:"tool"`
@@ -1133,12 +1201,13 @@ type permissionResolvedDTO struct {
 }
 
 type toolExecutionCompletedDTO struct {
-	CallID     domain.ToolCallID `json:"call_id"`
-	ToolName   string            `json:"tool_name,omitempty"`
-	Status     domain.ToolStatus `json:"status"`
-	ErrorCode  string            `json:"error_code,omitempty"`
-	StartedAt  time.Time         `json:"started_at"`
-	FinishedAt time.Time         `json:"finished_at"`
+	CallID       domain.ToolCallID `json:"call_id"`
+	ToolName     string            `json:"tool_name,omitempty"`
+	Status       domain.ToolStatus `json:"status"`
+	ErrorCode    string            `json:"error_code,omitempty"`
+	ErrorMessage string            `json:"error_message,omitempty"`
+	StartedAt    time.Time         `json:"started_at"`
+	FinishedAt   time.Time         `json:"finished_at"`
 }
 
 // toolCallTarget picks the most descriptive display target for a prepared

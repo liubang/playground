@@ -41,6 +41,12 @@ type StreamHooks struct {
 	OnToolCallComplete func(toolIndex int, toolID, toolName, args string)
 	// OnModelUsage is called when usage information is received.
 	OnModelUsage func(inputTokens, outputTokens int64)
+	// OnContextUsage reports the estimated size of the transcript that the
+	// next model request would carry (estTokens, byte/4 approximation) plus
+	// the provider-metered input tokens of the last completed call. It fires
+	// after each completed response and after each tool batch, so frontends
+	// can show live context-window occupancy.
+	OnContextUsage func(estTokens int, lastCallInputTokens int64)
 }
 
 // StreamAggregator validates and collects canonical model events while

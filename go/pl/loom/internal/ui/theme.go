@@ -18,6 +18,10 @@
 package ui
 
 import (
+	"fmt"
+	"math"
+	"strconv"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -304,4 +308,45 @@ func NoColorTheme() *Theme {
 	t.ToolCanceled = noStyle
 	t.Dim = noStyle
 	return t
+}
+
+// gradientColors interpolates n colors from a to b in RGB space, returning
+// nil when either endpoint is not a #rrggbb color (e.g. the no-color
+// theme), so callers can fall back to a single accent or none at all.
+func gradientColors(a, b lipgloss.Color, n int) []lipgloss.Color {
+	if n <= 0 {
+		return nil
+	}
+	ra, ga, ba, okA := parseHexColor(string(a))
+	rb, gb, bb, okB := parseHexColor(string(b))
+	if !okA || !okB {
+		return nil
+	}
+	if n == 1 {
+		return []lipgloss.Color{a}
+	}
+	out := make([]lipgloss.Color, n)
+	for i := 0; i < n; i++ {
+		t := float64(i) / float64(n-1)
+		out[i] = lipgloss.Color(fmt.Sprintf("#%02x%02x%02x",
+			lerpChannel(ra, rb, t), lerpChannel(ga, gb, t), lerpChannel(ba, bb, t)))
+	}
+	return out
+}
+
+func parseHexColor(s string) (r, g, b int, ok bool) {
+	if len(s) != 7 || s[0] != '#' {
+		return 0, 0, 0, false
+	}
+	rv, errR := strconv.ParseUint(s[1:3], 16, 8)
+	gv, errG := strconv.ParseUint(s[3:5], 16, 8)
+	bv, errB := strconv.ParseUint(s[5:7], 16, 8)
+	if errR != nil || errG != nil || errB != nil {
+		return 0, 0, 0, false
+	}
+	return int(rv), int(gv), int(bv), true
+}
+
+func lerpChannel(a, b int, t float64) int {
+	return int(math.Round(float64(a) + float64(b-a)*t))
 }

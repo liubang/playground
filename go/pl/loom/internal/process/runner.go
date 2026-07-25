@@ -45,13 +45,24 @@ const (
 
 var defaultEnvAllowlist = []string{"PATH", "LANG", "LC_ALL", "TMPDIR", "HOME"}
 
-var disallowedShells = map[string]struct{}{
+// shellInterpreters identifies POSIX-style shell interpreters. They are
+// allowed to execute (the seatbelt sandbox provides the actual isolation),
+// and run_cmd elevates their approval risk to R3.
+var shellInterpreters = map[string]struct{}{
 	"sh":   {},
 	"bash": {},
 	"dash": {},
 	"ksh":  {},
 	"zsh":  {},
 	"fish": {},
+}
+
+// IsShellProgram reports whether program names a shell interpreter (by path
+// or bare name). run_cmd uses it to elevate approval risk for shell syntax.
+func IsShellProgram(program string) bool {
+	base := strings.ToLower(filepath.Base(strings.TrimSpace(program)))
+	_, ok := shellInterpreters[base]
+	return ok
 }
 
 // Runner executes validated commands under sandbox control.
@@ -63,6 +74,7 @@ type Runner struct {
 	terminationGrace time.Duration
 	lookPath         func(string) (string, error)
 	now              func() time.Time
+	sessionEnv       func() map[string]string
 }
 
 // NewRunner creates a process runner bound to a workspace validator.
@@ -94,22 +106,35 @@ func NewRunner(validator *workspace.PathValidator, opts RunnerOptions) (*Runner,
 		terminationGrace: terminationGrace,
 		lookPath:         lookPath,
 		now:              now,
+		sessionEnv:       opts.SessionEnv,
 	}, nil
 }
 
 // Run resolves, validates, and executes a command under the configured sandbox.
 func (r *Runner) Run(ctx context.Context, spec CommandSpec) (Result, error) {
+	return r.RunWithSandbox(ctx, spec, r.sandbox)
+}
+
+// RunWithSandbox executes like Run but with an explicit sandbox, letting
+// callers escalate individual approved commands out of the default sandbox
+// (e.g. run_cmd with sandbox_permissions=require_escalated uses DirectSandbox).
+// A nil sandbox falls back to the runner's configured default.
+func (r *Runner) RunWithSandbox(ctx context.Context, spec CommandSpec, sandbox Sandbox) (Result, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if r.sandbox == nil {
+	if sandbox == nil {
+		sandbox = r.sandbox
+	}
+	if sandbox == nil {
 		return Result{Isolation: UnavailableIsolation.Name()}, ErrSandboxRequired
 	}
 	validated, err := r.validateSpec(spec)
 	if err != nil {
 		return Result{}, err
 	}
-	launch, cleanup, isolation, err := r.prepareLaunch(validated)
+	validated.env = r.applySessionEnv(validated.env)
+	launch, cleanup, isolation, err := r.prepareLaunch(validated, sandbox)
 	result := Result{
 		Isolation:      isolation.Name(),
 		ExecutablePath: validated.executablePath,
@@ -226,9 +251,6 @@ func (r *Runner) validateSpec(spec CommandSpec) (validatedSpec, error) {
 	if strings.ContainsRune(program, 0) {
 		return validatedSpec{}, fmt.Errorf("program contains null byte")
 	}
-	if isShellProgram(program) {
-		return validatedSpec{}, ErrShellNotAllowed
-	}
 	for _, arg := range spec.Args {
 		if strings.ContainsRune(arg, 0) {
 			return validatedSpec{}, fmt.Errorf("argument contains null byte")
@@ -263,12 +285,12 @@ func (r *Runner) validateSpec(spec CommandSpec) (validatedSpec, error) {
 	}, nil
 }
 
-func (r *Runner) prepareLaunch(spec validatedSpec) (SandboxLaunch, func() error, Isolation, error) {
+func (r *Runner) prepareLaunch(spec validatedSpec, sandbox Sandbox) (SandboxLaunch, func() error, Isolation, error) {
 	isolation := UnavailableIsolation
-	if r.sandbox != nil && r.sandbox.Isolation() != nil {
-		isolation = r.sandbox.Isolation()
+	if sandbox != nil && sandbox.Isolation() != nil {
+		isolation = sandbox.Isolation()
 	}
-	launch, err := r.sandbox.Prepare(SandboxSpec{
+	launch, err := sandbox.Prepare(SandboxSpec{
 		ExecutablePath: spec.executablePath,
 		Args:           append([]string(nil), spec.args...),
 		WorkingDir:     spec.cwd,
@@ -410,6 +432,49 @@ func buildMinimalEnv(overrides map[string]string, allowlist map[string]struct{})
 	return result
 }
 
+// applySessionEnv merges the loom-authoritative attribution variables from
+// the SessionEnv hook into the minimal environment. Session values are
+// applied last and always win: they identify the owning agent session to
+// child processes for traffic attribution, so neither allowlisted
+// passthrough nor model-supplied CommandSpec.Env overrides may shadow them.
+// Malformed hook entries are skipped — attribution must never break command
+// execution.
+func (r *Runner) applySessionEnv(env []string) []string {
+	if r.sessionEnv == nil {
+		return env
+	}
+	extra := r.sessionEnv()
+	if len(extra) == 0 {
+		return env
+	}
+	values := make(map[string]string, len(env)+len(extra))
+	for _, kv := range env {
+		key, value, _ := strings.Cut(kv, "=")
+		values[key] = value
+	}
+	for key, value := range extra {
+		if !validSessionEnvEntry(key, value) {
+			continue
+		}
+		values[key] = value
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	merged := make([]string, 0, len(keys))
+	for _, key := range keys {
+		merged = append(merged, key+"="+values[key])
+	}
+	return merged
+}
+
+func validSessionEnvEntry(key, value string) bool {
+	key = strings.TrimSpace(key)
+	return key != "" && !strings.ContainsAny(key, "=\x00") && !strings.ContainsRune(value, 0)
+}
+
 func makeEnvAllowlist(keys []string) map[string]struct{} {
 	if len(keys) == 0 {
 		keys = defaultEnvAllowlist
@@ -446,12 +511,6 @@ func isDeniedEnvKey(key string) bool {
 		}
 	}
 	return false
-}
-
-func isShellProgram(program string) bool {
-	base := strings.ToLower(filepath.Base(strings.TrimSpace(program)))
-	_, forbidden := disallowedShells[base]
-	return forbidden
 }
 
 func interpretWaitError(err error) error {

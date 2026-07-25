@@ -132,7 +132,10 @@ type Checkpoint struct {
 	Messages  []Message    `json:"messages"`
 	Plan      Plan         `json:"plan"`
 	Usage     Usage        `json:"usage"`
-	CreatedAt time.Time    `json:"created_at"`
+	// Goal carries the cross-turn objective (nil when none is active); it
+	// survives prompt boundaries through the checkpoint like Plan does.
+	Goal      *Goal     `json:"goal,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // SessionStore persists events and checkpoints.

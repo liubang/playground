@@ -936,6 +936,52 @@ func toolResultMessageForRequest(result domain.ToolResult) domain.Message {
 	}
 }
 
+// Regression: a mid-transcript system message (compaction archive marker)
+// must not reach the vendor as role=system — GLM rejects it with error 1214
+// ("messages 格式有误") because only one leading system message is allowed.
+func TestToOpenAIMessagesDowngradesMidTranscriptSystem(t *testing.T) {
+	systemPrompt := domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleSystem, CreatedAt: time.Unix(0, 0).UTC(),
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "you are loom"}},
+	}
+	marker := domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleSystem, CreatedAt: time.Unix(0, 0).UTC(),
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "[earlier messages archived] 71 messages"}},
+	}
+	user := domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser, CreatedAt: time.Unix(0, 0).UTC(),
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "continue"}},
+	}
+
+	out, err := toOpenAIMessages([]domain.Message{systemPrompt, marker, user})
+	if err != nil {
+		t.Fatalf("toOpenAIMessages() error = %v", err)
+	}
+	if len(out) != 3 {
+		t.Fatalf("messages = %d, want 3", len(out))
+	}
+	if out[0]["role"] != "system" {
+		t.Fatalf("head role = %v, want system", out[0]["role"])
+	}
+	if out[1]["role"] != "user" {
+		t.Fatalf("mid system role = %v, want downgraded to user", out[1]["role"])
+	}
+	if out[1]["content"] != "[earlier messages archived] 71 messages" {
+		t.Fatalf("marker content lost: %v", out[1]["content"])
+	}
+
+	resp, err := toResponsesInput([]domain.Message{systemPrompt, marker, user})
+	if err != nil {
+		t.Fatalf("toResponsesInput() error = %v", err)
+	}
+	if resp[0]["role"] != "system" {
+		t.Fatalf("responses head role = %v, want system", resp[0]["role"])
+	}
+	if resp[1]["role"] != "user" {
+		t.Fatalf("responses mid system role = %v, want user", resp[1]["role"])
+	}
+}
+
 type flakyRoundTripper struct {
 	base  http.RoundTripper
 	fail  int32
