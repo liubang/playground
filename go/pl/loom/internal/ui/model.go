@@ -64,6 +64,17 @@ type Model struct {
 	workspace string
 	phase     string
 	usage     domain.Usage
+	limits    domain.Limits
+	// compactions counts context compaction passes observed in this session
+	// view (shown in the status bar once non-zero).
+	compactions int
+	// contextEst is the estimated token size of the next model request
+	// (byte/4 approximation); lastCallInput is the provider-metered input
+	// tokens of the most recent call. contextWindow is the optional model
+	// context-window size used as the denominator in the status bar.
+	contextEst    int
+	lastCallInput int64
+	contextWindow int
 
 	// Transcript
 	blocks                 *BlockIndex
@@ -103,6 +114,10 @@ type Model struct {
 	// Approval overlay
 	pendingApproval *runtimeevent.ApprovalRequestedPayload
 	approvalCursor  int // 0 = allow once, 1 = deny
+	// approvalShownAt marks when the overlay appeared; decision keys are
+	// ignored briefly so a held/double-tapped key from the previous overlay
+	// cannot spill into a fresh approval the user has not read yet.
+	approvalShownAt time.Time
 
 	// Session picker
 	picker *SessionPicker
@@ -175,6 +190,17 @@ func NewModel(controller *app.Controller, modelName, workspace string) Model {
 		lastActivityAt:         time.Now(),
 		picker:                 NewSessionPicker(),
 	}
+}
+
+// SetLimits records the active run budget for the status bar display.
+func (m *Model) SetLimits(limits domain.Limits) {
+	m.limits = limits
+}
+
+// SetContextWindow records the model context-window size used as the
+// denominator of the ctx status segment; zero hides the denominator.
+func (m *Model) SetContextWindow(tokens int) {
+	m.contextWindow = tokens
 }
 
 // SetTheme sets the active theme.
@@ -264,6 +290,12 @@ type InitOptions struct {
 	AltScreen bool
 	// Icons is the LOOM_ICONS preference: "nerd" (default) or "plain".
 	Icons string
+	// Limits is the active run budget shown by the status bar; a zero value
+	// renders usage without the budget denominator.
+	Limits domain.Limits
+	// ContextWindow is the model context-window size in tokens (from
+	// LOOM_CONTEXT_WINDOW); zero renders the ctx segment without it.
+	ContextWindow int
 }
 
 // StartTUI starts the Bubble Tea program. Blocks until the TUI exits.
@@ -273,6 +305,8 @@ func StartTUI(controller *app.Controller, modelName, workspace string, opts Init
 	m.eventsCh = eventsCh
 	defer unsubscribe()
 	m.SetIcons(ResolveIcons(opts.Icons))
+	m.SetLimits(opts.Limits)
+	m.SetContextWindow(opts.ContextWindow)
 	if opts.NoColor {
 		m.SetTheme(NoColorTheme())
 	}

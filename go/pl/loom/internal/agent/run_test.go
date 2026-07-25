@@ -72,8 +72,13 @@ func TestContinueRunFromTerminalCheckpoint(t *testing.T) {
 	if run.SessionID != sessionID || run.State.Lifecycle != domain.LifecycleActive ||
 		run.State.Phase != domain.PhasePreparing || run.Version != 8 || run.persistedVersion != 7 ||
 		len(run.pendingEvents) != 1 || run.pendingEvents[0].Type != domain.EventRunCreated ||
-		len(run.Messages) != 1 || run.Usage.InputTokens != 10 {
+		len(run.Messages) != 1 {
 		t.Fatalf("unexpected continued run: %+v pending=%+v", run, run.pendingEvents)
+	}
+	// A continuation starts a fresh per-prompt budget window: the
+	// checkpoint's cumulative usage must not throttle the new prompt.
+	if run.Usage != (domain.Usage{}) {
+		t.Fatalf("continued run usage = %+v, want zeroed budget window", run.Usage)
 	}
 	userEvent := run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
@@ -511,6 +516,65 @@ func TestLoopExecuteWithToolCalls(t *testing.T) {
 
 	if run.State.Lifecycle != domain.LifecycleTerminal {
 		t.Fatalf("expected terminal, got %s", run.State.Lifecycle)
+	}
+}
+
+func TestLoopReportsContextUsageAfterResponseAndToolBatch(t *testing.T) {
+	readTool := fakes.ReadFileTool()
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"test.go"}`)}},
+			StopReason: domain.StopToolUse,
+			UsageIn:    100,
+			UsageOut:   30,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn, UsageIn: 200, UsageOut: 15},
+	)
+	registry := NewToolRegistry()
+	if err := registry.Register(readTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "read test.go"}},
+		CreatedAt: time.Now(),
+	})
+
+	type contextSample struct {
+		est       int
+		lastInput int64
+	}
+	var samples []contextSample
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+		StreamHooks: StreamHooks{
+			OnContextUsage: func(estTokens int, lastCallInputTokens int64) {
+				samples = append(samples, contextSample{est: estTokens, lastInput: lastCallInputTokens})
+			},
+		},
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+
+	// Expect at least three reports: after the tool-call response, after the
+	// tool batch, and after the final response.
+	if len(samples) < 3 {
+		t.Fatalf("context usage reports = %d, want ≥ 3: %+v", len(samples), samples)
+	}
+	if samples[0].est <= 0 || samples[0].lastInput != 100 {
+		t.Fatalf("first report = %+v, want est>0 and provider input 100", samples[0])
+	}
+	if samples[1].lastInput != 100 {
+		t.Fatalf("tool-batch report = %+v, want carried lastCallInput 100", samples[1])
+	}
+	last := samples[len(samples)-1]
+	if last.lastInput != 200 || last.est <= 0 {
+		t.Fatalf("final report = %+v, want est>0 and provider input 200", last)
 	}
 }
 
@@ -1058,6 +1122,105 @@ func TestLoopEmitsApprovalAndSideEffectEventsSafely(t *testing.T) {
 	}
 }
 
+// Regression test for the session failure where every approved R3 run_cmd
+// (shell or require_escalated) died with a "security" error before
+// execution: validatePreparedExecution demanded the prepared risk equal the
+// definition's static tier, while run_cmd legitimately elevates R2→R3 per
+// call. Elevation must pass; only downgrades are rejected.
+func TestLoopExecutesElevatedRiskCallAfterApproval(t *testing.T) {
+	callID := domain.NewToolCallID()
+	r3 := domain.R3
+	tool := newMutableTool(mutableToolConfig{
+		definition:    newTestToolDefinition("run_cmd", []domain.Capability{domain.CapProcessExec}),
+		canonicalArgs: json.RawMessage(`{"program":"weather","args":["--help"]}`),
+		readPaths:     []string{"/workspace"},
+		writePaths:    []string{"/workspace"},
+		approvalDesc:  "Run; 'weather' '--help'; ESCALATED(no-sandbox)[ok?]",
+		risk:          &r3,
+		result: domain.ToolResult{
+			Status:     domain.ToolStatusSuccess,
+			StartedAt:  time.Date(2025, 1, 1, 0, 1, 0, 0, time.UTC),
+			FinishedAt: time.Date(2025, 1, 1, 0, 1, 2, 0, time.UTC),
+			Content:    []domain.ContentPart{{Kind: domain.PartText, Text: `{"stdout":"usage..."}`}},
+		},
+	})
+	approver := &callbackApprover{decision: domain.DecisionAllow}
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{{
+				ID:        callID,
+				Name:      "run_cmd",
+				Arguments: json.RawMessage(`{"program":"weather","args":["--help"]}`),
+			}},
+			StopReason: domain.StopToolUse,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+	)
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+	addUserTextMessage(run, "show weather help")
+
+	registry := NewToolRegistry()
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register tool: %v", err)
+	}
+	loop := &Loop{Run: run, Model: model, Store: store, Approver: approver, Registry: registry, Logger: slog.Default()}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if got := tool.ExecuteCount(); got != 1 {
+		t.Fatalf("ExecuteCount = %d, want 1 (approved R3 call must execute)", got)
+	}
+	result, ok := findToolResult(run, callID)
+	if !ok {
+		t.Fatalf("tool result missing for %s", callID)
+	}
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("tool result status = %s, want success (error=%+v)", result.Status, result.Error)
+	}
+
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	resolvedIdx := eventIndex(events, domain.EventPermissionResolved)
+	startedIdx := eventIndex(events, domain.EventToolExecutionStarted)
+	completedIdx := eventIndex(events, domain.EventToolExecutionCompleted)
+	if !(resolvedIdx >= 0 && startedIdx > resolvedIdx && completedIdx > startedIdx) {
+		t.Fatalf("approved R3 call must reach execution: %v", collectEventTypes(events))
+	}
+	if len(approver.Requests()) != 1 || approver.Requests()[0].Call.Risk != domain.R3 {
+		t.Fatalf("approval request must carry the elevated R3 tier: %+v", approver.Requests())
+	}
+}
+
+func TestValidatePreparedExecutionRiskTiers(t *testing.T) {
+	definition := newTestToolDefinition("run_cmd", []domain.Capability{domain.CapProcessExec}) // static R2
+	original := domain.ToolCall{ID: domain.NewToolCallID(), Name: "run_cmd"}
+	preparedFor := func(risk domain.RiskLevel) domain.PreparedCall {
+		return domain.PreparedCall{
+			Call:       domain.ToolCall{ID: original.ID, Name: "run_cmd"},
+			Definition: definition,
+			Risk:       risk,
+		}
+	}
+
+	// Equal and elevated tiers are accepted; elevation happens per call for
+	// shell or require_escalated run_cmd invocations.
+	for _, risk := range []domain.RiskLevel{domain.R2, domain.R3} {
+		if err := validatePreparedExecution(original, preparedFor(risk), definition); err != nil {
+			t.Fatalf("risk %v: unexpected drift error: %v", risk, err)
+		}
+	}
+	// A tier below the definition default weakens the approved policy and
+	// must keep failing closed.
+	if err := validatePreparedExecution(original, preparedFor(domain.R1), definition); !hasErrorCode(err, domain.ErrSecurity) {
+		t.Fatalf("lowered risk error = %v, want security", err)
+	}
+}
+
 func TestLoopUsesInjectedPolicyDecisions(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
@@ -1106,8 +1269,9 @@ func TestLoopUsesInjectedPolicyDecisions(t *testing.T) {
 	}
 }
 
-func TestLoopApprovalErrorPropagatesWithoutDenyResult(t *testing.T) {
-	callID := domain.NewToolCallID()
+func TestLoopApprovalErrorClosesUnresolvedCalls(t *testing.T) {
+	callID1 := domain.NewToolCallID()
+	callID2 := domain.NewToolCallID()
 	tool := newMutableTool(mutableToolConfig{
 		definition:    newTestToolDefinition("write_note", []domain.Capability{domain.CapFSWrite}),
 		canonicalArgs: json.RawMessage(`{"path":"notes.txt"}`),
@@ -1118,7 +1282,10 @@ func TestLoopApprovalErrorPropagatesWithoutDenyResult(t *testing.T) {
 	})
 	approver := &callbackApprover{err: errors.New("approval backend unavailable")}
 	model := fakes.NewFakeModel(fakes.ScriptEntry{
-		ToolCalls:  []domain.ToolCall{{ID: callID, Name: "write_note", Arguments: json.RawMessage(`{"path":"notes.txt"}`)}},
+		ToolCalls: []domain.ToolCall{
+			{ID: callID1, Name: "write_note", Arguments: json.RawMessage(`{"path":"notes.txt"}`)},
+			{ID: callID2, Name: "write_note", Arguments: json.RawMessage(`{"path":"notes.txt"}`)},
+		},
 		StopReason: domain.StopToolUse,
 	})
 	store := fakes.NewFakeStore()
@@ -1138,9 +1305,23 @@ func TestLoopApprovalErrorPropagatesWithoutDenyResult(t *testing.T) {
 	if tool.ExecuteCount() != 0 {
 		t.Fatalf("tool executed despite approver error: %d", tool.ExecuteCount())
 	}
-	if _, ok := findToolResult(run, callID); ok {
-		t.Fatalf("approver error must not be converted into deny result")
+
+	// Both calls must be closed with an interrupted result — never confused
+	// with a user denial — so the transcript stays replayable for providers
+	// that reject dangling tool calls.
+	for _, callID := range []domain.ToolCallID{callID1, callID2} {
+		result, ok := findToolResult(run, callID)
+		if !ok {
+			t.Fatalf("call %s has no result; transcript would be dangling", callID)
+		}
+		if result.Error == nil || result.Error.Code != "interrupted" {
+			t.Fatalf("call %s result = %+v, want interrupted error (not permission_denied)", callID, result)
+		}
+		if result.Error.Code == "permission_denied" {
+			t.Fatalf("approver backend error must not masquerade as a user denial: %+v", result)
+		}
 	}
+	assertTranscriptPairingComplete(t, run.Messages)
 
 	events, loadErr := store.LoadEvents(context.Background(), run.SessionID, 0)
 	if loadErr != nil {
@@ -1151,6 +1332,66 @@ func TestLoopApprovalErrorPropagatesWithoutDenyResult(t *testing.T) {
 	}
 	if eventIndex(events, domain.EventPermissionResolved) >= 0 {
 		t.Fatalf("permission should not resolve on approver error: %v", collectEventTypes(events))
+	}
+}
+
+// assertTranscriptPairingComplete verifies every tool call in the transcript
+// has a recorded result — the invariant providers validate on replay.
+func assertTranscriptPairingComplete(t *testing.T, messages []domain.Message) {
+	t.Helper()
+	if dangling := unresolvedToolCalls(messages); len(dangling) > 0 {
+		t.Fatalf("transcript has %d dangling tool calls: %v", len(dangling), dangling)
+	}
+}
+
+func TestContinueRunClosesDanglingToolCalls(t *testing.T) {
+	clock := domain.NewFakeClock(time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC))
+	sessionID := domain.NewSessionID()
+	callID1 := domain.NewToolCallID()
+	callID2 := domain.NewToolCallID()
+
+	// A terminal checkpoint whose transcript has two calls with no results —
+	// exactly what an approval-interrupted run leaves behind.
+	messages := []domain.Message{
+		{
+			ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleUser,
+			Status: domain.MessageStatusFinal, Revision: 1,
+			Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "run two things"}}, CreatedAt: clock.Now(),
+		},
+		{
+			ID: domain.NewMessageID(), Sequence: 2, Role: domain.RoleAssistant,
+			Status: domain.MessageStatusFinal, Revision: 1,
+			Parts: []domain.ContentPart{
+				{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{ID: callID1, Name: "run_cmd", Arguments: json.RawMessage(`{"program":"weather"}`)}},
+				{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{ID: callID2, Name: "run_cmd", Arguments: json.RawMessage(`{"program":"weather"}`)}},
+			},
+			CreatedAt: clock.Now(),
+		},
+	}
+	checkpoint := domain.Checkpoint{
+		ID: domain.NewCheckpointID(), SessionID: sessionID, Sequence: 7,
+		State:    domain.RunState{Lifecycle: domain.LifecycleTerminal, Outcome: domain.OutcomeFailed},
+		Messages: messages, CreatedAt: clock.Now(),
+	}
+
+	run, err := ContinueRun(checkpoint, messages, 7, domain.DefaultLimits(), clock)
+	if err != nil {
+		t.Fatalf("ContinueRun: %v", err)
+	}
+	assertTranscriptPairingComplete(t, run.Messages)
+	for _, callID := range []domain.ToolCallID{callID1, callID2} {
+		result, ok := findToolResult(run, callID)
+		if !ok || result.Error == nil || result.Error.Code != "interrupted" {
+			t.Fatalf("call %s result = %+v ok=%v, want interrupted", callID, result, ok)
+		}
+	}
+
+	// The repaired transcript must satisfy the same sequential ordering the
+	// continuation validation enforces, so it can be persisted and continued.
+	for i, message := range run.Messages {
+		if message.Sequence != int64(i+1) {
+			t.Fatalf("repaired transcript message[%d].Sequence = %d, want %d", i, message.Sequence, i+1)
+		}
 	}
 }
 
@@ -1294,6 +1535,9 @@ type mutableToolConfig struct {
 	approvalDesc  string
 	argsHash      string
 	result        domain.ToolResult
+	// risk overrides the definition's static risk when non-nil, modelling
+	// tools like run_cmd that elevate the tier per call (shell/escalated).
+	risk *domain.RiskLevel
 }
 
 type mutableTool struct {
@@ -1305,6 +1549,7 @@ type mutableTool struct {
 	approvalDesc  string
 	argsHash      string
 	result        domain.ToolResult
+	risk          *domain.RiskLevel
 	executeCalls  int
 }
 
@@ -1317,6 +1562,7 @@ func newMutableTool(cfg mutableToolConfig) *mutableTool {
 		approvalDesc:  cfg.approvalDesc,
 		argsHash:      cfg.argsHash,
 		result:        cfg.result,
+		risk:          cfg.risk,
 	}
 }
 
@@ -1350,6 +1596,10 @@ func (t *mutableTool) Prepare(_ context.Context, call domain.ToolCall) (domain.P
 	if argsHash == "" {
 		argsHash = "prepared-hash"
 	}
+	risk := def.Risk()
+	if t.risk != nil {
+		risk = *t.risk
+	}
 	return domain.PreparedCall{
 		Call: domain.ToolCall{
 			ID:        call.ID,
@@ -1357,7 +1607,7 @@ func (t *mutableTool) Prepare(_ context.Context, call domain.ToolCall) (domain.P
 			Arguments: canonicalArgs,
 		},
 		Definition:   def,
-		Risk:         def.Risk(),
+		Risk:         risk,
 		ApprovalDesc: approvalDesc,
 		ReadPaths:    readPaths,
 		WritePaths:   writePaths,
@@ -1583,4 +1833,273 @@ func decodeFileChangedPayload(t *testing.T, payload json.RawMessage) fileChanged
 		t.Fatalf("decode file changed payload: %v", err)
 	}
 	return decoded
+}
+
+// --- Context-occupancy budgeting (P0) ---
+
+func TestLoopExecuteInputTokenBudgetDoesNotKill(t *testing.T) {
+	// Cumulative input tokens measure cost, not loss of control: a run that
+	// blows past MaxInputTokens in one call must still complete normally —
+	// context pressure is handled by compaction, never by termination.
+	model := fakes.NewFakeModel(fakes.ScriptEntry{
+		Text: "hi", StopReason: domain.StopEndTurn, UsageIn: 500, UsageOut: 5,
+	})
+	limits := domain.DefaultLimits()
+	limits.MaxInputTokens = 100
+	run := newTestRun(limits)
+	loop := &Loop{Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default()}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v, want nil (token totals are not a kill dimension)", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+	if run.Usage.InputTokens != 500 {
+		t.Fatalf("Usage.InputTokens = %d, want 500 (still accounted for display)", run.Usage.InputTokens)
+	}
+}
+
+func TestShouldCompactOnOccupancy(t *testing.T) {
+	run := newTestRun(domain.DefaultLimits())
+	loop := &Loop{Run: run, ContextWindow: 100}
+
+	loop.lastCallInput = 85 // ≥80% of the window
+	if !loop.shouldCompact() {
+		t.Fatal("occupancy at 85% of window should trigger compaction")
+	}
+	loop.lastCallInput = 50
+	if loop.shouldCompact() {
+		t.Fatal("occupancy at 50% of window must not trigger compaction")
+	}
+	run.Messages = append(run.Messages, toolResultMessage(bigOutput(200_000)))
+	if !loop.shouldCompact() {
+		t.Fatal("estimate above TargetTokens should trigger compaction regardless of occupancy")
+	}
+	run.Messages = nil
+	loop.forceCompact = true
+	if !loop.shouldCompact() {
+		t.Fatal("forceCompact must trigger compaction")
+	}
+}
+
+func TestBudgetNoticeInjection(t *testing.T) {
+	run := newTestRun(domain.DefaultLimits())
+	loop := &Loop{Run: run, ContextWindow: 100}
+
+	loop.lastCallInput = 85
+	loop.maybeInjectBudgetNotice()
+	if len(run.Messages) != 1 || run.Messages[0].Role != domain.RoleSystem ||
+		!strings.Contains(run.Messages[0].TextParts()[0], "remain before auto-compaction") {
+		t.Fatalf("80%% reminder missing: %+v", run.Messages)
+	}
+	if loop.budgetNoticeLevel != 1 {
+		t.Fatalf("budgetNoticeLevel = %d, want 1 after the 80%% reminder", loop.budgetNoticeLevel)
+	}
+	loop.lastCallInput = 95
+	loop.maybeInjectBudgetNotice()
+	if len(run.Messages) != 2 || !strings.Contains(run.Messages[1].TextParts()[0], "nearly full") {
+		t.Fatalf("90%% self-handoff notice missing: %+v", run.Messages)
+	}
+
+	// Compaction re-arms the notices and resets the calibrated occupancy.
+	run.State.Phase = domain.PhaseCompacting
+	if err := loop.compact(context.Background()); err != nil {
+		t.Fatalf("compact() error = %v", err)
+	}
+	if loop.budgetNoticeLevel != 0 || loop.lastCallInput != 0 {
+		t.Fatalf("compact must re-arm notices and reset occupancy: level=%d lastCallInput=%d", loop.budgetNoticeLevel, loop.lastCallInput)
+	}
+}
+
+func TestContextOverflowForcesCompactionAndRetries(t *testing.T) {
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Error: "request failed: maximum context length exceeded"},
+		fakes.ScriptEntry{Text: "recovered", StopReason: domain.StopEndTurn, UsageIn: 10, UsageOut: 5},
+	)
+	run := newTestRun(domain.DefaultLimits())
+	loop := &Loop{Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default()}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v, want retry after overflow to succeed", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+	if calls := len(model.Calls()); calls != 2 {
+		t.Fatalf("model calls = %d, want 2 (overflow then retry)", calls)
+	}
+	foundCompaction := false
+	for _, evt := range run.pendingEvents {
+		if evt.Type == domain.EventContextCompacted {
+			foundCompaction = true
+		}
+	}
+	if !foundCompaction {
+		t.Fatal("overflow must force a compaction before the retry")
+	}
+	if loop.compactFitFailures != 0 {
+		t.Fatalf("successful retry must reset fit failures, got %d", loop.compactFitFailures)
+	}
+}
+
+func TestContextOverflowTwiceTerminates(t *testing.T) {
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Error: "maximum context length exceeded"},
+		fakes.ScriptEntry{Error: "maximum context length exceeded"},
+	)
+	run := newTestRun(domain.DefaultLimits())
+	loop := &Loop{Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default()}
+
+	err := loop.Execute(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "twice in a row") {
+		t.Fatalf("Execute() error = %v, want double-overflow termination", err)
+	}
+	if run.State.Outcome != domain.OutcomeBudgetExhausted {
+		t.Fatalf("outcome = %s, want budget_exhausted", run.State.Outcome)
+	}
+}
+
+// --- Goal primitive (P2) ---
+
+func TestGoalContinuationAndCompletion(t *testing.T) {
+	cell := NewGoalCell()
+	tool, err := NewUpdateGoalTool(cell)
+	if err != nil {
+		t.Fatalf("NewUpdateGoalTool: %v", err)
+	}
+	registry := NewToolRegistry()
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
+			ID: domain.NewToolCallID(), Name: "update_goal",
+			Arguments: json.RawMessage(`{"objective":"fix all tests"}`),
+		}}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "progress", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
+			ID: domain.NewToolCallID(), Name: "update_goal",
+			Arguments: json.RawMessage(`{"status":"complete"}`),
+		}}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+	)
+	run := newTestRun(domain.DefaultLimits())
+	loop := &Loop{Run: run, Model: model, Registry: registry, GoalCell: cell, Logger: slog.Default()}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+	if run.Goal == nil || run.Goal.Status != domain.GoalStatusComplete || run.Goal.Objective != "fix all tests" {
+		t.Fatalf("goal = %+v, want completed objective", run.Goal)
+	}
+	continuationFound := false
+	for _, msg := range run.Messages {
+		if msg.Role == domain.RoleUser && strings.Contains(strings.Join(msg.TextParts(), ""), "Continue working toward the active goal") {
+			continuationFound = true
+		}
+	}
+	if !continuationFound {
+		t.Fatal("active goal must inject a continuation prompt at end of turn")
+	}
+	goalEvents := 0
+	for _, evt := range run.pendingEvents {
+		if evt.Type == domain.EventGoalUpdated {
+			goalEvents++
+		}
+	}
+	if goalEvents < 2 {
+		t.Fatalf("goal.updated events = %d, want >= 2 (activate + complete)", goalEvents)
+	}
+}
+
+func TestGoalBudgetSoftLanding(t *testing.T) {
+	cell := NewGoalCell()
+	tool, err := NewUpdateGoalTool(cell)
+	if err != nil {
+		t.Fatalf("NewUpdateGoalTool: %v", err)
+	}
+	registry := NewToolRegistry()
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
+			ID: domain.NewToolCallID(), Name: "update_goal",
+			Arguments: json.RawMessage(`{"objective":"big refactor","token_budget":10}`),
+		}}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "working", StopReason: domain.StopEndTurn, UsageIn: 8, UsageOut: 4},
+		fakes.ScriptEntry{Text: "wrapping up", StopReason: domain.StopEndTurn, UsageIn: 2, UsageOut: 2},
+	)
+	run := newTestRun(domain.DefaultLimits())
+	loop := &Loop{Run: run, Model: model, Registry: registry, GoalCell: cell, Logger: slog.Default()}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if run.Goal == nil || run.Goal.Status != domain.GoalStatusBudgetLimited {
+		t.Fatalf("goal = %+v, want budget_limited", run.Goal)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded (soft landing, not a budget kill)", run.State.Outcome)
+	}
+	wrapUpFound := false
+	for _, msg := range run.Messages {
+		if msg.Role == domain.RoleUser && strings.Contains(strings.Join(msg.TextParts(), ""), "budget_limited") {
+			wrapUpFound = true
+		}
+	}
+	if !wrapUpFound {
+		t.Fatal("budget exhaustion must inject one wrap-up turn, not terminate mid-work")
+	}
+	if calls := len(model.Calls()); calls != 3 {
+		t.Fatalf("model calls = %d, want 3 (set, work, wrap-up)", calls)
+	}
+}
+
+func TestUpdateGoalToolValidation(t *testing.T) {
+	for _, raw := range []string{
+		`{}`,
+		`{"status":"active"}`,
+		`{"objective":"x","status":"complete"}`,
+		`{"objective":"x","token_budget":-5}`,
+	} {
+		if _, err := decodeUpdateGoalArgs(json.RawMessage(raw)); err == nil {
+			t.Fatalf("decodeUpdateGoalArgs(%s) must fail", raw)
+		}
+	}
+	args, err := decodeUpdateGoalArgs(json.RawMessage(`{"objective":" ship it ","token_budget":1000}`))
+	if err != nil {
+		t.Fatalf("decodeUpdateGoalArgs(valid) error = %v", err)
+	}
+	if args.Objective != "ship it" || args.TokenBudget != 1000 {
+		t.Fatalf("parsed args = %+v", args)
+	}
+
+	cell := NewGoalCell()
+	tool, err := NewUpdateGoalTool(cell)
+	if err != nil {
+		t.Fatalf("NewUpdateGoalTool: %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), domain.ToolCall{
+		ID: domain.NewToolCallID(), Name: "update_goal",
+		Arguments: json.RawMessage(`{"objective":"ship it"}`),
+	})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if prepared.Risk != domain.R1 || prepared.ArgsHash == "" {
+		t.Fatalf("prepared = %+v, want R1 with args hash", prepared)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute status = %s", result.Status)
+	}
+	update, ok := cell.Take()
+	if !ok || update.Objective != "ship it" {
+		t.Fatalf("cell update = %+v, ok=%v", update, ok)
+	}
 }

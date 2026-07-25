@@ -58,7 +58,9 @@ func ReplayFromCheckpoint(ckpt domain.Checkpoint, events []domain.Event) (Transc
 	}
 	projector.sessionID = ckpt.SessionID
 	projector.lastEventSequence = ckpt.Sequence
-	for _, msg := range sortedMessages(ckpt.Messages) {
+	messages := sortedMessages(ckpt.Messages)
+	repairCheckpointSequences(messages)
+	for _, msg := range messages {
 		normalized, err := projector.normalizeMessage(msg)
 		if err != nil {
 			return Transcript{}, fmt.Errorf("checkpoint message %s: %w", msg.ID, err)
@@ -71,6 +73,39 @@ func ReplayFromCheckpoint(ckpt domain.Checkpoint, events []domain.Event) (Transc
 		return Transcript{}, err
 	}
 	return projector.transcript(), nil
+}
+
+// repairCheckpointSequences assigns positive stand-in sequences to
+// checkpoint messages persisted with a non-positive sequence — notably
+// compaction archive markers written before sequence assignment was fixed.
+// Without this repair such sessions are unrecoverable: every continuation
+// is rejected with "sequence must be positive". A message that cannot be
+// slotted into the strictly increasing order is left untouched so the
+// normal validation error still surfaces.
+func repairCheckpointSequences(messages []domain.Message) {
+	var lastPositive int64
+	for i := range messages {
+		if messages[i].Sequence > 0 {
+			lastPositive = messages[i].Sequence
+			continue
+		}
+		candidate := lastPositive + 1
+		// Stay below the next known positive sequence to keep the order
+		// strictly increasing.
+		for j := i + 1; j < len(messages); j++ {
+			if messages[j].Sequence > 0 {
+				if candidate >= messages[j].Sequence {
+					candidate = messages[j].Sequence - 1
+				}
+				break
+			}
+		}
+		if candidate <= lastPositive {
+			continue
+		}
+		messages[i].Sequence = candidate
+		lastPositive = candidate
+	}
 }
 
 // Validate checks the transcript ordering and message invariants.

@@ -340,16 +340,117 @@ func TestRunnerRejectsCwdEscape(t *testing.T) {
 	}
 }
 
-func TestRunnerRejectsShellProgram(t *testing.T) {
+func TestRunnerAllowsShellProgram(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not available")
+	}
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, RunnerOptions{Sandbox: ExplicitTestSandbox{}})
 
-	_, err := runner.Run(context.Background(), CommandSpec{
+	result, err := runner.Run(context.Background(), CommandSpec{
 		Program: "sh",
+		Args:    []string{"-c", "printf hello"},
 		Cwd:     root,
 	})
-	if !errors.Is(err, ErrShellNotAllowed) {
-		t.Fatalf("Run() error = %v, want ErrShellNotAllowed", err)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want shell execution allowed", err)
+	}
+	if string(result.Stdout) != "hello" || result.ExitCode != 0 {
+		t.Fatalf("unexpected result: stdout=%q exit=%d", result.Stdout, result.ExitCode)
+	}
+}
+
+func TestSeatbeltProfileAllowsLoopbackOnly(t *testing.T) {
+	sandbox := SeatbeltSandbox{}
+	profile, err := sandbox.profile(SandboxSpec{
+		ExecutablePath: "/bin/echo",
+		WorkingDir:     "/tmp",
+		WorkspaceRoot:  "/tmp",
+	})
+	if err != nil {
+		t.Fatalf("profile() error = %v", err)
+	}
+	for _, rule := range []string{
+		`(allow network-bind (local ip "localhost:*"))`,
+		`(allow network-inbound (local ip "localhost:*"))`,
+		`(allow network-outbound (remote ip "localhost:*"))`,
+	} {
+		if !strings.Contains(profile, rule) {
+			t.Fatalf("profile missing loopback rule %q:\n%s", rule, profile)
+		}
+	}
+	if strings.Contains(profile, "(allow network*)") {
+		t.Fatalf("profile must not allow full network by default:\n%s", profile)
+	}
+}
+
+// requireSeatbelt skips the test when a seatbelt profile cannot actually be
+// applied here (e.g. nested inside another sandbox such as `bazel test`,
+// where sandbox_apply is denied with "Operation not permitted").
+func requireSeatbelt(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat(sandboxExecPath); err != nil {
+		t.Skip("sandbox-exec not available")
+	}
+	cmd := exec.Command(sandboxExecPath, "-p", "(version 1) (allow default)", "/usr/bin/true")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("seatbelt cannot be applied here: %v (%s)", err, strings.TrimSpace(string(out)))
+	}
+}
+
+func TestSeatbeltLoopbackRoundtrip(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+	requireSeatbelt(t)
+	validator, root := newValidator(t)
+	runner := newRunner(t, validator, RunnerOptions{Sandbox: SeatbeltSandbox{}})
+	result, err := runner.Run(context.Background(), CommandSpec{
+		Program: "python3",
+		Args: []string{"-c",
+			"import socket, threading; srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv.bind(('127.0.0.1', 0)); srv.listen(1); port = srv.getsockname()[1]; accept = lambda: (lambda c: (c.recv(16), c.sendall(b'pong'), c.close()))(srv.accept()[0]); threading.Thread(target=accept, daemon=True).start(); cli = socket.create_connection(('127.0.0.1', port), timeout=5); cli.sendall(b'ping'); print(cli.recv(16).decode())"},
+		Cwd:     root,
+		Timeout: 15 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("sandboxed loopback run error = %v (stderr: %s)", err, result.Stderr)
+	}
+	if strings.TrimSpace(string(result.Stdout)) != "pong" {
+		t.Fatalf("loopback roundtrip stdout = %q, want pong (stderr: %s)", result.Stdout, result.Stderr)
+	}
+}
+
+func TestSeatbeltPublicOutboundStillDenied(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+	requireSeatbelt(t)
+	validator, root := newValidator(t)
+	runner := newRunner(t, validator, RunnerOptions{Sandbox: SeatbeltSandbox{}})
+	result, err := runner.Run(context.Background(), CommandSpec{
+		Program: "python3",
+		Args:    []string{"-c", "import socket; socket.create_connection(('1.1.1.1', 80), timeout=5)"},
+		Cwd:     root,
+		Timeout: 15 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("runner error = %v", err)
+	}
+	if result.ExitCode == 0 {
+		t.Fatal("public outbound must stay denied by the default-deny profile")
+	}
+}
+
+func TestIsShellProgram(t *testing.T) {
+	for _, name := range []string{"sh", "bash", "/bin/zsh", "fish"} {
+		if !IsShellProgram(name) {
+			t.Errorf("IsShellProgram(%q) = false, want true", name)
+		}
+	}
+	for _, name := range []string{"rg", "go", "python3", "/usr/bin/grep"} {
+		if IsShellProgram(name) {
+			t.Errorf("IsShellProgram(%q) = true, want false", name)
+		}
 	}
 }
 
@@ -445,6 +546,164 @@ func TestUnsupportedSandboxFailsClosed(t *testing.T) {
 	if result.Isolation != UnsupportedIsolation.Name() {
 		t.Fatalf("Isolation = %q, want %q", result.Isolation, UnsupportedIsolation.Name())
 	}
+}
+
+func TestRunnerInjectsSessionEnv(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	executable := writePythonScript(t, python, root, "session_env.py", []string{
+		"import json, os",
+		"keys = ['LOOM_AGENT_NAME', 'LOOM_AGENT_VERSION', 'LOOM_SESSION_ID', 'SAFE_VALUE']",
+		"print(json.dumps({key: os.environ.get(key, '') for key in keys}, sort_keys=True))",
+	})
+	t.Setenv("SAFE_VALUE", "from-parent")
+	t.Setenv("LOOM_SESSION_ID", "sess_parent_leak")
+	sessionEnv := &AtomicSessionEnv{}
+	sessionEnv.Store(map[string]string{
+		EnvAgentName:    "loom",
+		EnvAgentVersion: "0.2.0-dev",
+		EnvSessionID:    "sess_injected",
+		"SAFE_VALUE":    "from-session",
+	})
+	runner := newRunner(t, validator, RunnerOptions{
+		Sandbox:      ExplicitTestSandbox{},
+		EnvAllowlist: []string{"PATH", "SAFE_VALUE", "LOOM_SESSION_ID"},
+		LookPath:     fixedLookPath(executable),
+		SessionEnv:   sessionEnv.Get,
+	})
+
+	// The model attempts to spoof the attribution variables; the allowlist
+	// would pass SAFE_VALUE through from the parent. Injected session values
+	// must win in every case.
+	result, err := runner.Run(context.Background(), CommandSpec{
+		Program: "session-env",
+		Cwd:     root,
+		Env: map[string]string{
+			"SAFE_VALUE":     "override-spoof",
+			"LOOM_SESSION_ID": "sess_spoofed",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	var values map[string]string
+	if err := json.Unmarshal(bytesTrimSpace(result.Stdout), &values); err != nil {
+		t.Fatalf("json.Unmarshal(stdout) error = %v, stdout=%q", err, string(result.Stdout))
+	}
+	want := map[string]string{
+		"LOOM_AGENT_NAME":    "loom",
+		"LOOM_AGENT_VERSION": "0.2.0-dev",
+		"LOOM_SESSION_ID":    "sess_injected",
+		"SAFE_VALUE":         "from-session",
+	}
+	for key, wantValue := range want {
+		if got := values[key]; got != wantValue {
+			t.Fatalf("%s = %q, want %q", key, got, wantValue)
+		}
+	}
+
+	// The hook is re-evaluated per execution: a session switch mid-process
+	// (TUI new/resume) is observed by the next command.
+	sessionEnv.Store(map[string]string{EnvSessionID: "sess_switched"})
+	result, err = runner.Run(context.Background(), CommandSpec{Program: "session-env", Cwd: root})
+	if err != nil {
+		t.Fatalf("Run() after switch error = %v", err)
+	}
+	if err := json.Unmarshal(bytesTrimSpace(result.Stdout), &values); err != nil {
+		t.Fatalf("json.Unmarshal(stdout) after switch error = %v", err)
+	}
+	if got := values["LOOM_SESSION_ID"]; got != "sess_switched" {
+		t.Fatalf("LOOM_SESSION_ID after switch = %q, want sess_switched", got)
+	}
+	if got := values["LOOM_AGENT_NAME"]; got != "" {
+		t.Fatalf("LOOM_AGENT_NAME after switch = %q, want empty (cleared)", got)
+	}
+}
+
+func TestRunnerSessionEnvSkipsMalformedEntries(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	executable := writePythonScript(t, python, root, "session_env_bad.py", []string{
+		"import json, os",
+		"keys = ['LOOM_SESSION_ID', 'LOOM_AGENT_NAME']",
+		"print(json.dumps({key: os.environ.get(key, '') for key in keys}, sort_keys=True))",
+	})
+	runner := newRunner(t, validator, RunnerOptions{
+		Sandbox:  ExplicitTestSandbox{},
+		LookPath: fixedLookPath(executable),
+		SessionEnv: func() map[string]string {
+			return map[string]string{
+				"":               "empty-key",
+				"BAD=KEY":        "has-equals",
+				"BAD\x00KEY":      "has-nul",
+				EnvAgentName:     "bad\x00value",
+				EnvSessionID:     "sess_ok",
+			}
+		},
+	})
+
+	result, err := runner.Run(context.Background(), CommandSpec{Program: "session-env-bad", Cwd: root})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	var values map[string]string
+	if err := json.Unmarshal(bytesTrimSpace(result.Stdout), &values); err != nil {
+		t.Fatalf("json.Unmarshal(stdout) error = %v, stdout=%q", err, string(result.Stdout))
+	}
+	if got := values["LOOM_SESSION_ID"]; got != "sess_ok" {
+		t.Fatalf("LOOM_SESSION_ID = %q, want sess_ok", got)
+	}
+	if got := values["LOOM_AGENT_NAME"]; got != "" {
+		t.Fatalf("LOOM_AGENT_NAME = %q, want empty (nul value skipped)", got)
+	}
+}
+
+func TestLoomSessionEnv(t *testing.T) {
+	t.Setenv("LOOM_VERSION", "0.2.0-dev")
+	env := LoomSessionEnv("sess_abc")
+	if got := env[EnvAgentName]; got != "loom" {
+		t.Fatalf("EnvAgentName = %q, want loom", got)
+	}
+	if got := env[EnvAgentVersion]; got != "0.2.0-dev" {
+		t.Fatalf("EnvAgentVersion = %q, want 0.2.0-dev", got)
+	}
+	if got := env[EnvSessionID]; got != "sess_abc" {
+		t.Fatalf("EnvSessionID = %q, want sess_abc", got)
+	}
+
+	if env := LoomSessionEnv("  "); envHasKey(env, EnvSessionID) {
+		t.Fatalf("blank session ID should be omitted, got %v", env)
+	}
+
+	t.Setenv("LOOM_VERSION", "")
+	env = LoomSessionEnv("sess_abc")
+	if envHasKey(env, EnvAgentVersion) {
+		t.Fatalf("empty LOOM_VERSION should omit EnvAgentVersion, got %v", env)
+	}
+}
+
+func TestAtomicSessionEnv(t *testing.T) {
+	holder := &AtomicSessionEnv{}
+	if got := holder.Get(); got == nil || len(got) != 0 {
+		t.Fatalf("zero-value Get() = %v, want empty non-nil map", got)
+	}
+
+	source := map[string]string{EnvSessionID: "sess_1"}
+	holder.Store(source)
+	source[EnvSessionID] = "sess_mutated"
+	if got := holder.Get()[EnvSessionID]; got != "sess_1" {
+		t.Fatalf("Get() after caller mutation = %q, want sess_1 (stored map is cloned)", got)
+	}
+
+	holder.Store(nil)
+	if got := holder.Get(); len(got) != 0 {
+		t.Fatalf("Get() after Store(nil) = %v, want empty", got)
+	}
+}
+
+func envHasKey(env map[string]string, key string) bool {
+	_, ok := env[key]
+	return ok
 }
 
 func newValidator(t *testing.T) (*workspace.PathValidator, string) {

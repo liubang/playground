@@ -19,6 +19,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -26,14 +27,13 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/render"
+	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
-// Reserved heights (including border and padding) for the panels that replace
-// the composer in their respective modes.
-const (
-	approvalOverlayHeight = 16
-	helpOverlayHeight     = 23
-)
+// Reserved height (including border and padding) for the help panel that
+// replaces the composer. The approval band reserves its actual line count
+// instead (see visibleTranscriptHeight).
+const helpOverlayHeight = 23
 
 // View renders the complete TUI.
 func (m Model) View() string {
@@ -137,14 +137,24 @@ var welcomeLogo = []string{
 // on day one.
 func (m Model) renderWelcome() string {
 	var b strings.Builder
-	logoStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
+	// One row of breathing room: the wordmark must not touch the header
+	// band, especially since both are accent-colored.
+	b.WriteString("\n")
+	logoColors := gradientColors(m.theme.Highlight, m.theme.Warning, len(welcomeLogo))
+	logoStyle := lipgloss.NewStyle().Bold(true)
 	if m.width >= 44 {
-		for _, line := range welcomeLogo {
-			b.WriteString(logoStyle.Render(line))
+		for i, line := range welcomeLogo {
+			style := logoStyle
+			if logoColors != nil {
+				style = style.Foreground(logoColors[i])
+			} else {
+				style = style.Foreground(m.theme.Highlight)
+			}
+			b.WriteString(style.Render(line))
 			b.WriteString("\n")
 		}
 	} else {
-		b.WriteString(logoStyle.Render("Loom"))
+		b.WriteString(logoStyle.Foreground(m.theme.Highlight).Render("Loom"))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -276,9 +286,9 @@ func (m Model) renderReasoning(block *TranscriptBlock) string {
 		return m.theme.NoticeBlock.Render("Thinking:\n"+render.SanitizeText(block.StreamReasoning)) + "\n"
 	}
 	if !block.Done {
-		return m.spinnerView() + " " + m.theme.Dim.Render("Thinking... (press Ctrl+R to expand)") + "\n"
+		return m.spinnerView() + " " + m.theme.Dim.Render("Thinking... (click or Ctrl+R to expand)") + "\n"
 	}
-	return m.theme.Dim.Render("Thought process hidden (press Ctrl+R to expand)") + "\n"
+	return m.theme.Dim.Render("Thought process hidden (click or Ctrl+R to expand)") + "\n"
 }
 
 // spinnerView renders the current spinner frame, falling back to a static
@@ -421,8 +431,26 @@ func (m Model) renderStatusBar() string {
 		add(activity, m.spinnerView()+" "+m.theme.StatusBarBusy.Render(activity))
 	}
 
-	usage := fmt.Sprintf("turns:%d tokens:%d/%d tools:%d", m.usage.Turns, m.usage.InputTokens, m.usage.OutputTokens, m.usage.ToolCalls)
-	add(usage, m.theme.Dim.Render(usage))
+	usage := formatUsage(m.usage, m.limits)
+	usageStyle := m.theme.Dim
+	if inputUsageRatio(m.usage, m.limits) >= 0.8 {
+		// Approaching the input budget: the next hard breach kills the run.
+		usageStyle = lipgloss.NewStyle().Foreground(m.theme.Warning)
+	}
+	add(usage, usageStyle.Render(usage))
+
+	if ctx, warn := formatContext(m.contextEst, m.lastCallInput, m.contextWindow); ctx != "" {
+		ctxStyle := m.theme.Dim
+		if warn {
+			ctxStyle = lipgloss.NewStyle().Foreground(m.theme.Warning)
+		}
+		add(ctx, ctxStyle.Render(ctx))
+	}
+
+	if m.compactions > 0 {
+		cpt := fmt.Sprintf("compact:%d", m.compactions)
+		add(cpt, m.theme.Dim.Render(cpt))
+	}
 
 	if !m.followTail && m.newEvents > 0 {
 		hint := fmt.Sprintf("↓%d new", m.newEvents)
@@ -453,78 +481,287 @@ func (m Model) renderStatusBar() string {
 	return bar
 }
 
+// formatUsage renders the status-bar usage segment. The input side shows the
+// accumulated prompt tokens against the configured budget ("in:212k/200k");
+// the output side shows accumulated completion tokens. A zero input budget
+// omits the denominator.
+func formatUsage(usage domain.Usage, limits domain.Limits) string {
+	in := "in:" + humanizeTokens(usage.InputTokens)
+	if limits.MaxInputTokens > 0 {
+		in += "/" + humanizeTokens(limits.MaxInputTokens)
+	}
+	return fmt.Sprintf("turns:%d %s out:%s tools:%d",
+		usage.Turns, in, humanizeTokens(usage.OutputTokens), usage.ToolCalls)
+}
+
+// inputUsageRatio reports how much of the input budget has been consumed;
+// it is 0 when no input budget is configured.
+func inputUsageRatio(usage domain.Usage, limits domain.Limits) float64 {
+	if limits.MaxInputTokens <= 0 {
+		return 0
+	}
+	return float64(usage.InputTokens) / float64(limits.MaxInputTokens)
+}
+
+// formatContext renders the ctx status segment: the estimated size of the
+// next model request, falling back to the provider-metered input of the last
+// call when no estimate exists yet. warn reports occupancy ≥ 80% of the
+// configured context window. Returns "" when nothing is known.
+func formatContext(estTokens int, lastCallInput int64, contextWindow int) (string, bool) {
+	current := int64(estTokens)
+	if current <= 0 {
+		current = lastCallInput
+	}
+	if current <= 0 {
+		return "", false
+	}
+	label := "ctx:~" + humanizeTokens(current)
+	if contextWindow <= 0 {
+		return label, false
+	}
+	label += "/" + humanizeTokens(int64(contextWindow))
+	return label, float64(current)/float64(contextWindow) >= 0.8
+}
+
+// humanizeTokens renders token counts compactly: 999 → "999",
+// 6095 → "6.1k", 212456 → "212k", 2_500_000 → "2.5M".
+func humanizeTokens(n int64) string {
+	switch {
+	case n < 1000:
+		return fmt.Sprintf("%d", n)
+	case n < 10_000:
+		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	case n < 1_000_000:
+		return fmt.Sprintf("%dk", n/1000)
+	default:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	}
+}
+
+// renderApprovalOverlay renders the approval prompt as a full-width band
+// rather than a boxed dialog: a risk-colored bar down the left edge, a
+// title rule, the call summary with structured metadata, and a vertical
+// numbered option list. It shares the full-width language of the header
+// and status bar, and gives long commands and URLs room to breathe.
 func (m Model) renderApprovalOverlay() string {
+	return strings.Join(m.approvalOverlayLines(), "\n")
+}
+
+// approvalOverlayLines builds the band line by line. The layout reserves
+// exactly len(lines) rows for the panel, so the status bar hugs the bottom
+// of the terminal no matter how compact the prompt is — a fixed
+// reservation used to leave a gap under short prompts.
+func (m Model) approvalOverlayLines() []string {
 	p := m.pendingApproval
 	if p == nil {
-		return ""
+		return nil
 	}
 
-	var b strings.Builder
-	title := m.theme.ApprovalTitle.Render(m.iconSet().Warning+" Approval Required") + "  " + m.riskBadge(p.Risk)
-	b.WriteString(title)
-	b.WriteString("\n\n")
+	bar := m.approvalBarStyle(p.Risk).Render("▍")
+	prefix := bar + " "
+	contentWidth := max(m.width-4, 20) // bar, its trailing space, one margin
 
-	field := func(label, value string) {
-		if value == "" {
-			return
+	lines := []string{prefix + m.approvalTitleLine(p, contentWidth), bar}
+
+	desc := parseApprovalDesc(render.SanitizeText(p.Description))
+	summary := lipgloss.NewStyle().Bold(true).Render(p.ToolName)
+	if desc.action != "" {
+		summary += m.theme.Dim.Render(" · ") + truncateDisplayWidth(desc.action, contentWidth-lipgloss.Width(p.ToolName)-3)
+	}
+	lines = append(lines, prefix+summary)
+	if len(desc.meta) > 0 {
+		lines = append(lines, prefix+m.theme.Dim.Render(truncateDisplayWidth(strings.Join(desc.meta, " · "), contentWidth)))
+	}
+	if desc.note != "" {
+		note := desc.note
+		if desc.escalated {
+			note = "runs WITHOUT the sandbox — " + note
 		}
-		b.WriteString(m.theme.DialogLabel.Render(fmt.Sprintf("%-8s", label)))
-		b.WriteString(value)
-		b.WriteString("\n")
+		lines = append(lines, prefix+lipgloss.NewStyle().Foreground(m.theme.Warning).Render(truncateDisplayWidth(note, contentWidth)))
 	}
-	field("Tool", p.ToolName)
-	if desc := render.SanitizeText(p.Description); desc != "" {
-		field("Action", truncateDisplayWidth(desc, 200))
-	}
-	if len(p.ReadPaths) > 0 {
-		field("Reads", truncateDisplayWidth(render.SanitizeText(strings.Join(p.ReadPaths, ", ")), 120))
-	}
-	if len(p.WritePaths) > 0 {
-		field("Writes", truncateDisplayWidth(render.SanitizeText(strings.Join(p.WritePaths, ", ")), 120))
-	}
-	if p.ArgsHash != "" {
-		hash := p.ArgsHash
-		if len(hash) > 12 {
-			hash = hash[:12]
-		}
-		field("Args hash", m.theme.Dim.Render(hash))
-	}
+	lines = append(lines, m.approvalPathLines(p, prefix, contentWidth)...)
 
 	// The argument diff is the primary evidence for the allow/deny decision
 	// on file-editing calls; it gets the remaining vertical budget.
 	if p.Diff != "" {
-		b.WriteString("\n")
-		b.WriteString(m.renderDiff(headLines(p.Diff, approvalDiffMaxLines)))
-		b.WriteString("\n")
+		lines = append(lines, bar)
+		for _, line := range strings.Split(m.renderDiff(headLines(p.Diff, approvalDiffMaxLines)), "\n") {
+			lines = append(lines, prefix+line)
+		}
 	}
 
-	b.WriteString("\n")
-	icons := m.iconSet()
-	allow := m.approvalOption(icons.Success+" Allow once", m.approvalCursor == 0)
-	deny := m.approvalOption(icons.Error+" Deny", m.approvalCursor == 1)
-	fmt.Fprintf(&b, "%s  %s\n\n", allow, deny)
+	lines = append(lines, bar)
+	alwaysRule, alwaysOK := app.RunCmdRulePreview(p.ToolName, p.Arguments)
+	alwaysLabel := "Always allow (not available for this call)"
+	if alwaysOK {
+		alwaysLabel = fmt.Sprintf("Always allow `%s` in this session", alwaysRule)
+	}
+	for i, label := range []string{"Allow once", alwaysLabel, "Deny"} {
+		lines = append(lines, prefix+m.approvalOptionLine(i, label, i == 1 && !alwaysOK))
+	}
 
+	lines = append(lines, bar)
 	key := m.theme.ApprovalKey
 	hint := strings.Join([]string{
-		key.Render("←/→") + " select",
-		key.Render("Enter") + " confirm",
-		key.Render("y/n") + " quick",
+		key.Render("↑/↓") + " select",
+		key.Render("1-3/Enter") + " confirm",
+		key.Render("y/a/n") + " quick",
+		key.Render("Esc") + " deny",
 		key.Render("Ctrl+C") + " deny+cancel",
 	}, m.theme.Dim.Render(" · "))
-	b.WriteString(hint)
+	lines = append(lines, prefix+hint)
+	return lines
+}
 
-	border := m.theme.ApprovalBorder
-	if p.Risk >= domain.R3 {
-		// Destructive calls get a red frame so the danger is visible before
-		// the user reads a single word.
-		border = border.BorderForeground(m.theme.Error)
+// approvalTitleLine renders the band header: the warning title on the left,
+// the risk badge on the right, joined by a dim rule across the full width.
+func (m Model) approvalTitleLine(p *runtimeevent.ApprovalRequestedPayload, width int) string {
+	title := m.theme.ApprovalTitle.Render(m.iconSet().Warning + " Approval Required")
+	badge := m.riskBadge(p.Risk)
+	gap := width - lipgloss.Width(title) - lipgloss.Width(badge) - 2
+	if gap < 4 {
+		return title + "  " + badge
 	}
-	width := m.width - 2
-	if width <= 0 || width > 72 {
-		width = 72
+	return title + " " + m.theme.Dim.Render(strings.Repeat("─", gap)) + " " + badge
+}
+
+// approvalBarStyle colors the band's left bar by risk: red for destructive
+// calls, yellow for writes, green for read-only — the danger is visible
+// before the user reads a single word.
+func (m Model) approvalBarStyle(risk domain.RiskLevel) lipgloss.Style {
+	switch {
+	case risk >= domain.R3:
+		return lipgloss.NewStyle().Foreground(m.theme.Error)
+	case risk == domain.R2:
+		return lipgloss.NewStyle().Foreground(m.theme.Warning)
+	default:
+		return lipgloss.NewStyle().Foreground(m.theme.Success)
 	}
-	width = max(width, 20)
-	return border.Width(width).Render(b.String())
+}
+
+// approvalOptionLine renders one row of the vertical option list: a ❯
+// cursor and reverse video on the selected row, dim on disabled rows.
+func (m Model) approvalOptionLine(index int, label string, disabled bool) string {
+	text := fmt.Sprintf("%d. %s", index+1, label)
+	switch {
+	case m.approvalCursor == index:
+		return "❯ " + m.theme.ApprovalSelected.Render(text)
+	case disabled:
+		return m.theme.Dim.Render("  " + text)
+	default:
+		return "  " + m.theme.ApprovalOption.Render(text)
+	}
+}
+
+// approvalPathLines renders the Reads/Writes rows, collapsing identical
+// path sets and relativizing everything against the workspace root so an
+// approval for a workspace-scoped call reads "workspace (.)" instead of a
+// long absolute path.
+func (m Model) approvalPathLines(p *runtimeevent.ApprovalRequestedPayload, prefix string, width int) []string {
+	label := m.theme.DialogLabel
+	renderRow := func(name string, paths []string) string {
+		shown := make([]string, 0, len(paths))
+		for _, path := range paths {
+			shown = append(shown, m.approvalPathDisplay(path))
+		}
+		// 13 columns: the longest label ("Reads/Writes") is 12, keep one
+		// space of separation before the value.
+		row := label.Render(fmt.Sprintf("%-13s", name)) + truncateDisplayWidth(render.SanitizeText(strings.Join(shown, ", ")), width-13)
+		return prefix + row
+	}
+	reads, writes := strings.Join(p.ReadPaths, "\x00"), strings.Join(p.WritePaths, "\x00")
+	if reads != "" && reads == writes {
+		return []string{renderRow("Reads/Writes", p.ReadPaths)}
+	}
+	var lines []string
+	if len(p.ReadPaths) > 0 {
+		lines = append(lines, renderRow("Reads", p.ReadPaths))
+	}
+	if len(p.WritePaths) > 0 {
+		lines = append(lines, renderRow("Writes", p.WritePaths))
+	}
+	return lines
+}
+
+// approvalPathDisplay renders a path relative to the workspace when it is
+// inside it; the root itself collapses to "workspace (.)".
+func (m Model) approvalPathDisplay(path string) string {
+	if m.workspace == "" {
+		return path
+	}
+	clean := filepath.Clean(path)
+	root := filepath.Clean(m.workspace)
+	if clean == root {
+		return "workspace (.)"
+	}
+	if rel, err := filepath.Rel(root, clean); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
+		return rel
+	}
+	return path
+}
+
+// approvalDescParts is a tool approval description split into the primary
+// action, secondary metadata, and the model's justification note.
+type approvalDescParts struct {
+	action    string
+	meta      []string
+	note      string
+	escalated bool
+}
+
+// parseApprovalDesc splits a structured approval description ("Run; 'cmd';
+// env[none]; cwd='.'; timeout=…; network=…; note[…]; args_hash=…") into
+// displayable pieces. The args_hash segment is audit plumbing and dropped;
+// unknown formats fall back to a single action line.
+func parseApprovalDesc(desc string) approvalDescParts {
+	var out approvalDescParts
+	if desc == "" {
+		return out
+	}
+	var actions []string
+	sawNetwork := false
+	for _, seg := range strings.Split(desc, "; ") {
+		seg = strings.TrimSpace(seg)
+		switch {
+		case seg == "":
+		case strings.HasPrefix(seg, "env["):
+			keys := strings.TrimSuffix(strings.TrimPrefix(seg, "env["), "]")
+			if keys != "" && keys != "none" {
+				out.meta = append(out.meta, "env="+keys)
+			}
+		case strings.HasPrefix(seg, "cwd="):
+			out.meta = append(out.meta, "cwd="+strings.Trim(strings.TrimPrefix(seg, "cwd="), "'"))
+		case strings.HasPrefix(seg, "timeout="):
+			out.meta = append(out.meta, seg)
+		case strings.HasPrefix(seg, "network="):
+			sawNetwork = true
+			out.meta = append(out.meta, seg)
+		case seg == "shell=R3":
+			out.meta = append(out.meta, "shell (elevated)")
+		case strings.HasPrefix(seg, "args_hash="):
+		case strings.HasPrefix(seg, "ESCALATED(no-sandbox)["):
+			out.escalated = true
+			out.note = strings.TrimSuffix(strings.TrimPrefix(seg, "ESCALATED(no-sandbox)["), "]")
+		case strings.HasPrefix(seg, "note["):
+			out.note = strings.TrimSuffix(strings.TrimPrefix(seg, "note["), "]")
+		default:
+			actions = append(actions, seg)
+		}
+	}
+	out.action = strings.Join(actions, " ")
+	if out.action == "" {
+		out.action = desc
+	}
+	// run_cmd descriptions always carry the network segment; use it as the
+	// signal to annotate the sandbox mode.
+	if sawNetwork {
+		if out.escalated {
+			out.meta = append(out.meta, "sandbox=off")
+		} else {
+			out.meta = append(out.meta, "sandboxed")
+		}
+	}
+	return out
 }
 
 // riskBadge renders the risk level as a colored badge: green for read-only,
@@ -541,14 +778,6 @@ func (m Model) riskBadge(risk domain.RiskLevel) string {
 		style = lipgloss.NewStyle().Foreground(m.theme.Error).Bold(true)
 	}
 	return style.Render(label)
-}
-
-// approvalOption renders one dialog option, highlighted when selected.
-func (m Model) approvalOption(label string, selected bool) string {
-	if selected {
-		return m.theme.ApprovalSelected.Render(label)
-	}
-	return m.theme.ApprovalOption.Render(" " + label + " ")
 }
 
 // approvalDiffMaxLines bounds the diff section inside the approval overlay.
@@ -621,10 +850,10 @@ func (m Model) renderHelpOverlay() string {
 	keyRow("Enter", "Send prompt", "Alt+Enter", "Newline in draft")
 	keyRow("Up/Down", "Move in draft; scroll at edge", "PgUp/PgDn", "Scroll transcript")
 	keyRow("Ctrl+End", "Jump to bottom (follow)", "Wheel", "Scroll transcript")
-keyRow("Ctrl+R", "Toggle thought process", "Tab", "Complete /command")
-keyRow("Ctrl+E", "Toggle tool output", "Ctrl+O", "Expand/collapse all tools")
-keyRow("Ctrl+F", "Search transcript", "Ctrl+Y", "Copy last reply")
-keyRow("Ctrl+C", "Cancel turn / clear (x2 quit)", "Ctrl+D", "Exit (when idle)")
+	keyRow("Ctrl+R", "Toggle thought process", "Tab", "Complete /command")
+	keyRow("Ctrl+E", "Toggle tool output", "Ctrl+O", "Expand/collapse all tools")
+	keyRow("Ctrl+F", "Search transcript", "Ctrl+Y", "Copy last reply")
+	keyRow("Ctrl+C", "Cancel turn / clear (x2 quit)", "Ctrl+D", "Exit (when idle)")
 	keyRow("Esc", "Cancel turn; close dialogs", "", "")
 	b.WriteString("\n")
 

@@ -22,6 +22,7 @@ go_library(
         "bootstrap.go",
         "channel_approver.go",
         "controller.go",
+        "rule_approver.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/app",
     visibility = ["//go/pl/loom:__subpackages__"],
@@ -42,6 +43,7 @@ go_library(
         "//go/pl/loom/internal/tool/gittools:gittools_lib",
         "//go/pl/loom/internal/tool/lint:lint_lib",
         "//go/pl/loom/internal/tool/webfetch:webfetch_lib",
+        "//go/pl/loom/internal/trace",
         "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )
@@ -51,12 +53,14 @@ go_test(
     srcs = [
         "channel_approver_test.go",
         "controller_test.go",
+        "rule_approver_test.go",
     ],
     embed = [":app"],
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/fakes:fakes_lib",
+        "//go/pl/loom/internal/process:process_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
         "//go/pl/loom/internal/session:session_lib",
     ],
