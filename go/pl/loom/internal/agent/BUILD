@@ -20,21 +20,28 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "agent_lib",
     srcs = [
+        "compact.go",
+        "goal.go",
         "run.go",
         "stream_hooks.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/agent",
     visibility = ["//visibility:public"],
-    deps = ["//go/pl/loom/internal/domain:domain_lib"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/trace",
+    ],
 )
 
 go_test(
     name = "agent_test",
     srcs = [
+        "compact_test.go",
         "run_test.go",
     ],
     embed = [":agent_lib"],
     deps = [
+        "//go/pl/loom/internal/artifact:artifact_lib",
         "//go/pl/loom/internal/fakes:fakes_lib",
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/tool/builtin:builtin_lib",

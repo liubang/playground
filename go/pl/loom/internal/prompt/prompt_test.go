@@ -68,7 +68,7 @@ func TestBuildContainsAllBuiltinSectionsInOrder(t *testing.T) {
 	text, rules, err := b.Build(context.Background())
 	require.NoError(t, err)
 
-	titles := []string{"身份与角色", "核心工作方式", "代码修改规范", "沟通规范", "终端与 Git 安全约束", "环境与上下文"}
+	titles := []string{"身份与角色", "核心工作方式", "代码修改规范", "沟通规范", "运行环境约束", "终端与 Git 安全约束", "环境与上下文"}
 	last := -1
 	for _, title := range titles {
 		idx := strings.Index(text, "# "+title)
@@ -83,6 +83,31 @@ func TestBuildContainsAllBuiltinSectionsInOrder(t *testing.T) {
 	}
 	assert.Equal(t, "loom://builtin/identity", rules[0].Source)
 	assert.Equal(t, "loom://builtin/environment", rules[len(rules)-1].Source)
+}
+
+func TestBuildDeclaresWebFetchCapabilityAndNoGatekeeping(t *testing.T) {
+	b := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: testEnvironment()}), noRules)
+	text, _, err := b.Build(context.Background())
+	require.NoError(t, err)
+	// The model must learn from the prompt — not from a refusal loop — that
+	// web_fetch has direct network access outside the run_cmd sandbox.
+	assert.Contains(t, text, "web_fetch")
+	assert.Contains(t, text, "不经沙箱")
+	// Anti-gatekeeping: fulfill any tool-completable request instead of
+	// refusing on identity grounds.
+	assert.Contains(t, text, "不以“编程助手”的身份自我设限")
+}
+
+func TestBuildDeclaresWorkflowAndConciseRules(t *testing.T) {
+	b := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: testEnvironment()}), noRules)
+	text, _, err := b.Build(context.Background())
+	require.NoError(t, err)
+	// Preamble narration and validation discipline from the workflow section.
+	assert.Contains(t, text, "行动先播报")
+	assert.Contains(t, text, "不要重读文件确认")
+	// Codex-style concise final-answer rules.
+	assert.Contains(t, text, "不超过 10 行")
+	assert.Contains(t, text, "不展示已写入文件的全文")
 }
 
 func TestBuildRendersEnvironmentSnapshot(t *testing.T) {
@@ -243,6 +268,41 @@ func TestFileRulesProviderTruncatesOversizedFile(t *testing.T) {
 	require.Len(t, files, 1)
 	assert.Contains(t, files[0].Content, "已截断")
 	assert.LessOrEqual(t, len(files[0].Content), maxRuleFileBytes+len("\n（规则文件超过 32KB，已截断）"))
+}
+
+// TestBuilderManagedBaseReplacesBuiltinSections verifies that a
+// Langfuse-managed prompt supersedes the built-in normative sections while
+// dynamic sections (extra instructions) still apply, and that the managed
+// identity is reported for generation linking.
+func TestBuilderManagedBaseReplacesBuiltinSections(t *testing.T) {
+	builder := NewBuilder(t.TempDir(),
+		WithExtraInstructions("no emoji"),
+		WithManagedBase("loom-system", 3, "managed identity"),
+	)
+	text, rules, err := builder.Build(context.Background())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !strings.Contains(text, "managed identity") {
+		t.Fatalf("managed content missing:\n%s", text)
+	}
+	if strings.Contains(text, "身份与角色") {
+		t.Fatalf("builtin sections must be replaced:\n%s", text)
+	}
+	if !strings.Contains(text, "no emoji") {
+		t.Fatalf("extra instructions must still apply:\n%s", text)
+	}
+	assertRuleSourcePresent(t, rules, "langfuse://prompts/loom-system?v=3")
+
+	name, version, ok := builder.ManagedPromptInfo()
+	if !ok || name != "loom-system" || version != 3 {
+		t.Fatalf("ManagedPromptInfo = %q, %d, %v", name, version, ok)
+	}
+
+	plain := NewBuilder(t.TempDir())
+	if _, _, ok := plain.ManagedPromptInfo(); ok {
+		t.Fatal("builder without managed base must report not-managed")
+	}
 }
 
 func assertRuleSourcePresent(t *testing.T, rules []domain.ContextRuleRef, source string) {

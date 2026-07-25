@@ -14,6 +14,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
@@ -77,6 +78,65 @@ func TestControllerContinuesSessionForFollowUpPrompt(t *testing.T) {
 	}
 	if len(snapshot.Messages) != 4 {
 		t.Fatalf("message count = %d, want 4", len(snapshot.Messages))
+	}
+}
+
+func TestControllerPublishesSessionEnv(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	t.Setenv("LOOM_VERSION", "0.2.0-dev")
+	sessionEnv := &process.AtomicSessionEnv{}
+	controller := NewController(ControllerConfig{
+		Bootstrap: &Bootstrap{
+			Config:     BootstrapConfig{Limits: domain.DefaultLimits()},
+			Store:      store,
+			Model:      fakes.NewFakeModel(),
+			ModelName:  "test-model",
+			Registry:   agent.NewToolRegistry(),
+			SessionEnv: sessionEnv,
+		},
+		Broker:   runtimeevent.NewBroker(),
+		Approver: NewChannelApprover(),
+		Clock:    domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	snapshot, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	env := sessionEnv.Get()
+	if got := env[process.EnvSessionID]; got != snapshot.SessionID.String() {
+		t.Fatalf("LOOM_SESSION_ID = %q, want session %q", got, snapshot.SessionID)
+	}
+	if got := env[process.EnvAgentName]; got != "loom" {
+		t.Fatalf("LOOM_AGENT_NAME = %q, want loom", got)
+	}
+	if got := env[process.EnvAgentVersion]; got != "0.2.0-dev" {
+		t.Fatalf("LOOM_AGENT_VERSION = %q, want 0.2.0-dev", got)
+	}
+
+	// A session switch rewrites the attribution environment.
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession(second): %v", err)
+	}
+	snapshot, err = controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot(second): %v", err)
+	}
+	if got := sessionEnv.Get()[process.EnvSessionID]; got != snapshot.SessionID.String() {
+		t.Fatalf("LOOM_SESSION_ID after switch = %q, want session %q", got, snapshot.SessionID)
 	}
 }
 

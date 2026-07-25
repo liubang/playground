@@ -17,7 +17,10 @@
 
 package domain
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // Lifecycle represents the top-level life-cycle state of a Run.
 type Lifecycle string
@@ -151,6 +154,10 @@ var legalTransitions = []transition{
 	{From: PhaseAwaitingApproval, To: PhasePreparing}, // denied
 	{From: PhaseExecutingTools, To: PhaseCompacting},
 	{From: PhaseExecutingTools, To: PhasePreparing},
+	// The loop decides compaction at a single point before each model call
+	// (context pressure, or forced after a provider context-overflow), so a
+	// preparing run may enter the compacting phase directly.
+	{From: PhasePreparing, To: PhaseCompacting},
 	{From: PhaseCompacting, To: PhasePreparing},
 }
 
@@ -209,6 +216,32 @@ func (s RunState) Suspend(reason SuspensionReason) (RunState, error) {
 		return s, fmt.Errorf("suspension reason required")
 	}
 	return RunState{Lifecycle: LifecycleSuspended, Phase: s.Phase, SuspensionReason: reason}, nil
+}
+
+// GoalStatus describes the lifecycle of a cross-turn Goal.
+type GoalStatus string
+
+const (
+	GoalStatusActive   GoalStatus = "active"
+	GoalStatusComplete GoalStatus = "complete"
+	GoalStatusBlocked  GoalStatus = "blocked"
+	// GoalStatusBudgetLimited marks a goal whose token budget is exhausted;
+	// the model gets one wrap-up turn to summarize progress instead of
+	// being hard-terminated mid-work.
+	GoalStatusBudgetLimited GoalStatus = "budget_limited"
+)
+
+// Goal is a cross-turn objective the model sets and updates through the
+// update_goal tool. It survives prompt boundaries via the session
+// checkpoint: ending one turn does not require shrinking the objective to
+// what fits in a single prompt.
+type Goal struct {
+	Objective   string     `json:"objective"`
+	TokenBudget int64      `json:"token_budget,omitempty"`
+	TokensUsed  int64      `json:"tokens_used"`
+	Status      GoalStatus `json:"status"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // Resume moves a suspended run back to active at the same phase.

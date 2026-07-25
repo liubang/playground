@@ -81,6 +81,10 @@ type TranscriptBlock struct {
 type BlockIndex struct {
 	Order []string
 	ByID  map[string]*TranscriptBlock
+	// streamSeq numbers assistant stream blocks within the index; each
+	// model response gets its own block so text and tool calls interleave
+	// chronologically instead of all text merging into one top block.
+	streamSeq int
 }
 
 // NewBlockIndex creates an empty BlockIndex.
@@ -246,20 +250,20 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 	case runtimeevent.KindApprovalRequested:
 		var payload runtimeevent.ApprovalRequestedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
-				block := &TranscriptBlock{
-					ID:         fmt.Sprintf("tool-%s", payload.CallID),
-					Kind:       BlockKindTool,
-					Title:      payload.ToolName,
-					Content:    payload.Description,
-					Status:     "approval",
-					Tool:       payload.ToolName,
-					Risk:       payload.Risk,
-					CallID:     payload.CallID,
-					ApprovalID: payload.ApprovalID,
-					ArgsHash:   payload.ArgsHash,
-					Target:     approvalTarget(payload),
-					Diff:       payload.Diff,
-				}
+			block := &TranscriptBlock{
+				ID:         fmt.Sprintf("tool-%s", payload.CallID),
+				Kind:       BlockKindTool,
+				Title:      payload.ToolName,
+				Content:    payload.Description,
+				Status:     "approval",
+				Tool:       payload.ToolName,
+				Risk:       payload.Risk,
+				CallID:     payload.CallID,
+				ApprovalID: payload.ApprovalID,
+				ArgsHash:   payload.ArgsHash,
+				Target:     approvalTarget(payload),
+				Diff:       payload.Diff,
+			}
 			idx.Add(block)
 			return block.ID
 		}
@@ -295,16 +299,21 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
 			block, exists := idx.Get(fmt.Sprintf("tool-%s", payload.CallID))
 			if exists {
-				block.Done = true
-				var details []string
-				if payload.Status == domain.ToolStatusSuccess {
-					block.Status = "success"
-				} else {
-					block.Status = "error"
-					if payload.Error != "" {
-						details = append(details, payload.Error)
-					}
+			block.Done = true
+			var details []string
+			if payload.Status == domain.ToolStatusSuccess {
+				block.Status = "success"
+			} else {
+				block.Status = "error"
+				if payload.Error != "" {
+					details = append(details, payload.Error)
 				}
+				// The code alone ("unavailable", "security") reads like a
+				// policy denial; the message says what actually failed.
+				if reason := firstLine(payload.ErrorMessage); reason != "" {
+					details = append(details, truncateDisplayWidth(reason, 100))
+				}
+			}
 				block.FinishedAt = payload.FinishedAt
 				if block.FinishedAt.IsZero() {
 					block.FinishedAt = time.Now().UTC()
@@ -338,6 +347,33 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 				idx.Add(block)
 				return block.ID
 			}
+		}
+
+	case runtimeevent.KindContextCompacted:
+		var payload runtimeevent.ContextCompactedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			detail := fmt.Sprintf("%d outputs externalized", payload.MaskedOutputs)
+			if payload.ArchivedMessages > 0 {
+				detail += fmt.Sprintf(", %d messages archived", payload.ArchivedMessages)
+			}
+			if payload.Summarized {
+				detail += ", history summarized"
+			}
+			content := fmt.Sprintf("Context compacted: ~%s → ~%s tokens (%s)",
+				humanizeTokens(int64(payload.EstTokensBefore)),
+				humanizeTokens(int64(payload.EstTokensAfter)),
+				detail)
+			if payload.Summarized {
+				content += " — long sessions with repeated compactions can reduce accuracy; consider a fresh session for new topics"
+			}
+			block := &TranscriptBlock{
+				ID:      fmt.Sprintf("notice-%d", evt.Sequence),
+				Kind:    BlockKindNotice,
+				Content: content,
+				Done:    true,
+			}
+			idx.Add(block)
+			return block.ID
 		}
 
 	case runtimeevent.KindRunCancelRequested, runtimeevent.KindRunCompleted:
@@ -467,6 +503,12 @@ func (idx *BlockIndex) LatestFinalAssistantText() string {
 	return ""
 }
 
+// firstLine returns the first line of text, trimmed; "" for empty input.
+func firstLine(text string) string {
+	line, _, _ := strings.Cut(text, "\n")
+	return strings.TrimSpace(line)
+}
+
 // approvalTarget picks the display target for an approval-requested call.
 func approvalTarget(payload runtimeevent.ApprovalRequestedPayload) string {
 	if len(payload.WritePaths) > 0 {
@@ -479,11 +521,27 @@ func approvalTarget(payload runtimeevent.ApprovalRequestedPayload) string {
 }
 
 func ensureStreamBlock(idx *BlockIndex, turn int) *TranscriptBlock {
-	streamID := fmt.Sprintf("stream-%d", turn)
-	if block, exists := idx.Get(streamID); exists {
-		return block
+	// Reuse the in-flight assistant block. A finalized one belongs to a
+	// completed model response, so the next deltas open a fresh block —
+	// this keeps the lead-in text, the tool calls, and the final answer in
+	// chronological order (Claude Code style), and stops the final answer
+	// from overwriting what the model said before calling tools.
+	for i := len(idx.Order) - 1; i >= 0; i-- {
+		b := idx.ByID[idx.Order[i]]
+		if b.Kind != BlockKindAssistant && b.Kind != BlockKindInterrupted {
+			continue
+		}
+		if !b.Done {
+			return b
+		}
+		break
 	}
-	block := &TranscriptBlock{ID: streamID, Kind: BlockKindAssistant, Title: "Assistant"}
+	idx.streamSeq++
+	block := &TranscriptBlock{
+		ID:    fmt.Sprintf("stream-%d-%d", turn, idx.streamSeq),
+		Kind:  BlockKindAssistant,
+		Title: "Assistant",
+	}
 	idx.Add(block)
 	return block
 }
@@ -565,13 +623,16 @@ func RebuildTranscript(messages []domain.Message) *BlockIndex {
 			}
 			toolBlock.StartedAt = result.StartedAt
 			toolBlock.FinishedAt = result.FinishedAt
-			var details []string
-			if result.Status != domain.ToolStatusSuccess {
-				toolBlock.Status = "error"
-				if result.Error != nil && result.Error.Code != "" {
-					details = append(details, result.Error.Code)
+		var details []string
+		if result.Status != domain.ToolStatusSuccess {
+			toolBlock.Status = "error"
+			if result.Error != nil && result.Error.Code != "" {
+				details = append(details, result.Error.Code)
+				if reason := firstLine(result.Error.Message); reason != "" {
+					details = append(details, truncateDisplayWidth(reason, 100))
 				}
 			}
+		}
 			if d := result.FinishedAt.Sub(result.StartedAt); d > 0 {
 				details = append(details, fmt.Sprintf("%dms", d.Milliseconds()))
 			}

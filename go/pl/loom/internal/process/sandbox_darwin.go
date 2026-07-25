@@ -118,6 +118,13 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 		// ripgrep and the Go toolchain). Reads are therefore allowed broadly,
 		// while credential-like locations stay explicitly denied below.
 		"(allow file-read*)",
+		// Loopback networking is allowed in both directions so dev servers
+		// can bind and be probed locally (verified against sandbox-exec:
+		// bind/inbound filter on the local endpoint, outbound on the remote).
+		// Public egress and DNS resolution stay denied by the default-deny.
+		"(allow network-bind (local ip \"localhost:*\"))",
+		"(allow network-inbound (local ip \"localhost:*\"))",
+		"(allow network-outbound (remote ip \"localhost:*\"))",
 	)
 	for _, rule := range sensitiveReadDenies() {
 		lines = append(lines, rule)

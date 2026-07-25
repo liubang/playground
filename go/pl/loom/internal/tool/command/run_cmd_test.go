@@ -223,7 +223,7 @@ func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	if strings.Contains(prepared.ApprovalDesc, "kept") || strings.Contains(prepared.ApprovalDesc, "drop-me") {
 		t.Fatalf("approval desc leaked env value: %q", prepared.ApprovalDesc)
 	}
-	if !strings.Contains(prepared.ApprovalDesc, "cwd='subdir'") || !strings.Contains(prepared.ApprovalDesc, "timeout=2000ms") || !strings.Contains(prepared.ApprovalDesc, "network=deny") {
+	if !strings.Contains(prepared.ApprovalDesc, "cwd='subdir'") || !strings.Contains(prepared.ApprovalDesc, "timeout=2000ms") || !strings.Contains(prepared.ApprovalDesc, "network=loopback-only") {
 		t.Fatalf("approval desc missing execution context: %q", prepared.ApprovalDesc)
 	}
 	if !strings.Contains(prepared.ApprovalDesc, "args_hash=") {
@@ -483,6 +483,201 @@ func TestRunCmdToolValidateArguments(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 }
 
+func TestRunCmdShellProgramElevatesToR3(t *testing.T) {
+	validator, _ := newValidator(t)
+	python := ensurePython3(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:      process.ExplicitTestSandbox{},
+		EnvAllowlist: []string{"PATH", "SAFE_VALUE"},
+		LookPath:     fixedLookPath(python),
+	})
+	tool := newTool(t, validator, runner)
+
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Program: stringPtr("sh"),
+		Args:    &[]string{"-c", "echo hi | grep h"},
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.Risk != domain.R3 {
+		t.Fatalf("shell risk = %v, want R3", prepared.Risk)
+	}
+	if !strings.Contains(prepared.ApprovalDesc, "shell=R3") {
+		t.Fatalf("approval desc missing shell marker: %q", prepared.ApprovalDesc)
+	}
+
+	// The signed R3 call survives Execute-time verification and actually runs.
+	shellRunner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: exec.LookPath,
+	})
+	shellTool := newTool(t, validator, shellRunner)
+	prepared2, err := shellTool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Program: stringPtr("sh"),
+		Args:    &[]string{"-c", "printf 'a\\nb\\n' | grep b"},
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := shellTool.Execute(context.Background(), prepared2)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output runCmdOutput
+	decodeToolResult(t, result, &output)
+	if output.Stdout != "b\n" {
+		t.Fatalf("shell pipeline stdout = %q, want %q", output.Stdout, "b\n")
+	}
+
+	// Plain programs stay at R2.
+	plain, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{Program: stringPtr("python3")}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if plain.Risk != domain.R2 {
+		t.Fatalf("plain program risk = %v, want R2", plain.Risk)
+	}
+	if strings.Contains(plain.ApprovalDesc, "shell=R3") {
+		t.Fatalf("plain approval desc must not carry the shell marker: %q", plain.ApprovalDesc)
+	}
+}
+
+func TestRunCmdEscalationValidation(t *testing.T) {
+	validator, _ := newValidator(t)
+	python := ensurePython3(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: fixedLookPath(python),
+	})
+	tool := newTool(t, validator, runner)
+
+	t.Run("escalated requires justification", func(t *testing.T) {
+		_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Program:            stringPtr("go"),
+			Args:               &[]string{"mod", "download"},
+			SandboxPermissions: stringPtr("require_escalated"),
+		}))
+		assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+	})
+
+	t.Run("justification accepted with use_default as informational note", func(t *testing.T) {
+		// A justification carries no privileges, so rejecting it on sandboxed
+		// calls only taught models to retry in a loop. It is accepted and
+		// surfaced in the approval description as a plain note.
+		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Program:       stringPtr("go"),
+			Args:          &[]string{"build", "./..."},
+			Justification: stringPtr("编译整个工作区以验证改动"),
+		}))
+		if err != nil {
+			t.Fatalf("Prepare() error = %v", err)
+		}
+		if prepared.Risk != domain.R2 {
+			t.Fatalf("sandboxed risk = %v, want R2", prepared.Risk)
+		}
+		if !strings.Contains(prepared.ApprovalDesc, "note[编译整个工作区以验证改动]") {
+			t.Fatalf("approval desc missing informational note: %q", prepared.ApprovalDesc)
+		}
+		if strings.Contains(prepared.ApprovalDesc, "ESCALATED") {
+			t.Fatalf("sandboxed call must not look escalated: %q", prepared.ApprovalDesc)
+		}
+	})
+
+	t.Run("justification length bound still applies with use_default", func(t *testing.T) {
+		_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Program:       stringPtr("go"),
+			Justification: stringPtr(strings.Repeat("x", maxJustificationBytes+1)),
+		}))
+		assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+	})
+
+	t.Run("escalated elevates risk and shows justification", func(t *testing.T) {
+		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Program:            stringPtr("go"),
+			Args:               &[]string{"mod", "download"},
+			SandboxPermissions: stringPtr("require_escalated"),
+			Justification:      stringPtr("Allow downloading Go modules outside the sandbox?"),
+		}))
+		if err != nil {
+			t.Fatalf("Prepare() error = %v", err)
+		}
+		if prepared.Risk != domain.R3 {
+			t.Fatalf("escalated risk = %v, want R3", prepared.Risk)
+		}
+		if !strings.Contains(prepared.ApprovalDesc, "ESCALATED(no-sandbox)") ||
+			!strings.Contains(prepared.ApprovalDesc, "Allow downloading Go modules outside the sandbox?") {
+			t.Fatalf("approval desc missing escalation + justification: %q", prepared.ApprovalDesc)
+		}
+	})
+}
+
+func TestRunCmdEscalatedBypassesDefaultSandbox(t *testing.T) {
+	validator, root := newValidator(t)
+	python := ensurePython3(t)
+	// The default sandbox always fails; only an escalated call (DirectSandbox)
+	// can get through, which proves the sandbox selection works.
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.UnsupportedSandbox{Reason: "no OS sandbox in this test"},
+		LookPath: fixedLookPath(python),
+	})
+	tool := newTool(t, validator, runner)
+
+	blocked, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Program: stringPtr("python3"),
+		Args:    &[]string{"-c", "print('x')"},
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if result := tool.Execute(context.Background(), blocked); result.Status != domain.ToolStatusError {
+		t.Fatalf("use_default status = %s, want error (unsupported sandbox)", result.Status)
+	}
+
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Program:            stringPtr("python3"),
+		Args:               &[]string{"-c", "import os; p=os.path.join(os.getcwd(), 'esc.txt'); open(p, 'w').write('ok'); print(p)"},
+		WorkingDir:         stringPtr(root),
+		SandboxPermissions: stringPtr("require_escalated"),
+		Justification:      stringPtr("Allow writing esc.txt without a sandbox?"),
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("escalated Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output runCmdOutput
+	decodeToolResult(t, result, &output)
+	if data, err := os.ReadFile(filepath.Join(root, "esc.txt")); err != nil || string(data) != "ok" {
+		t.Fatalf("escalated command did not run outside the sandbox: data=%q err=%v", data, err)
+	}
+}
+
+func TestSandboxDenialNote(t *testing.T) {
+	cases := []struct {
+		stderr string
+		hit    bool
+	}{
+		{"dial tcp: lookup supabase.example.com: no such host", true},
+		{"listen tcp 127.0.0.1:19528: bind: operation not permitted", true},
+		{"curl: (6) Could not resolve host: example.com", true},
+		{"wget: unable to resolve host address 'x'", false},
+		{"compiling main.go", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		note := sandboxDenialNote(tc.stderr)
+		if tc.hit && note == "" {
+			t.Errorf("sandboxDenialNote(%q) = %q, want a note", tc.stderr, note)
+		}
+		if !tc.hit && note != "" {
+			t.Errorf("sandboxDenialNote(%q) = %q, want empty", tc.stderr, note)
+		}
+	}
+}
+
 func TestClassifyRunError(t *testing.T) {
 	cases := []struct {
 		name string
@@ -492,7 +687,6 @@ func TestClassifyRunError(t *testing.T) {
 		{name: "sandbox required", err: process.ErrSandboxRequired, code: domain.ErrUnavailable},
 		{name: "sandbox unavailable", err: process.ErrSandboxUnavailable, code: domain.ErrUnavailable},
 		{name: "hash changed", err: process.ErrExecutableHashChanged, code: domain.ErrSecurity},
-		{name: "shell disallowed", err: process.ErrShellNotAllowed, code: domain.ErrInvalidInput},
 		{name: "cancelled", err: context.Canceled, code: domain.ErrCancelled},
 		{name: "timeout", err: context.DeadlineExceeded, code: domain.ErrTimeout},
 		{name: "not found", err: exec.ErrNotFound, code: domain.ErrInvalidInput},

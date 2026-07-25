@@ -100,6 +100,34 @@ func TestToolCompletedSetsPreviewAndDetail(t *testing.T) {
 	}
 }
 
+func TestToolCompletedDetailIncludesErrorMessage(t *testing.T) {
+	idx := NewBlockIndex()
+	callID := domain.NewToolCallID()
+	ApplyRuntimeEvent(idx, toolEvent(t, runtimeevent.KindToolPrepared, runtimeevent.ToolPreparedPayload{
+		CallID: callID, ToolName: "web_fetch", Risk: domain.R3, Target: "https://tianqi.moji.com/x",
+	}))
+	ApplyRuntimeEvent(idx, toolEvent(t, runtimeevent.KindToolCompleted, runtimeevent.ToolCompletedPayload{
+		CallID:       callID,
+		ToolName:     "web_fetch",
+		Status:       domain.ToolStatusError,
+		Error:        "unavailable",
+		ErrorMessage: "request failed with status 418 (https://tianqi.moji.com/x)\nsecond line ignored",
+		Preview:      "request failed with status 418 (https://tianqi.moji.com/x)",
+	}))
+	block, _ := idx.Get("tool-" + callID.String())
+	if block.Status != "error" {
+		t.Fatalf("Status = %q, want error", block.Status)
+	}
+	// The bare code reads like a policy denial; the summary must also show
+	// the actual reason so users can tell an execution failure apart.
+	if !strings.Contains(block.Detail, "unavailable") || !strings.Contains(block.Detail, "status 418") {
+		t.Fatalf("Detail = %q, want error code and message first line", block.Detail)
+	}
+	if strings.Contains(block.Detail, "second line") {
+		t.Fatalf("Detail must keep only the message's first line: %q", block.Detail)
+	}
+}
+
 func TestToggleLatestToolOutput(t *testing.T) {
 	idx := NewBlockIndex()
 	idx.Add(&TranscriptBlock{ID: "tool-1", Kind: BlockKindTool, Title: "a", Status: "success"})

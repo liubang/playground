@@ -72,6 +72,22 @@ func Open(root string, maxBytes int64) (*Store, error) {
 // Root returns the canonical store root.
 func (s *Store) Root() string { return s.root }
 
+// PathForRef returns the absolute on-disk path of an artifact blob. It
+// reports false when the reference is malformed or the blob is absent, so
+// callers can degrade to citing the bare artifact ID instead.
+func (s *Store) PathForRef(ref domain.ArtifactRef) (string, bool) {
+	digest, err := digestFromRef(ref)
+	if err != nil {
+		return "", false
+	}
+	path := s.pathForDigest(digest)
+	info, err := os.Lstat(path)
+	if err != nil || info.IsDir() {
+		return "", false
+	}
+	return path, true
+}
+
 // StagedWriter incrementally captures one artifact. It always consumes the
 // complete input stream; bytes beyond the store limit are counted but not
 // persisted so process pipes can continue to drain safely.
