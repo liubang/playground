@@ -83,7 +83,7 @@ pyee==13.0.0
 pygments==2.19.2
 pyopenssl==25.1.0
 pyperclip==1.9.0
-python-dotenv==1.1.1
+python-dotenv==1.2.2
 pyyaml==6.0.2
 rank-bm25==0.2.2
 referencing==0.36.2
