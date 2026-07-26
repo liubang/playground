@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/permission"
 )
 
 func argsJSON(t *testing.T, program string, args ...string) json.RawMessage {
@@ -60,8 +61,10 @@ func TestDeriveRunCmdPrefix(t *testing.T) {
 		{"non-token arg keeps program only", []string{"rg", "pattern"}, []string{"rg"}, true},
 		{"shell is banned", []string{"sh", "-c", "echo hi"}, nil, false},
 		{"bash path is banned", []string{"/bin/bash", "-c", "echo hi"}, nil, false},
-		{"python without subcommand is banned", []string{"python3", "script.py"}, nil, false},
-		{"node is banned", []string{"node", "server.js"}, nil, false},
+		{"script file is persistable", []string{"python3", "script.py"}, []string{"python3", "script.py"}, true},
+		{"node script path is persistable", []string{"node", "/home/u/.loom/skills/x/scripts/lx.js", "skill", "start"}, []string{"node", "/home/u/.loom/skills/x/scripts/lx.js"}, true},
+		{"node eval is banned", []string{"node", "-e", "require('fs').rmSync('/')"}, nil, false},
+		{"python bare repl is banned", []string{"python3"}, nil, false},
 		{"rm is banned", []string{"rm", "-rf", "x"}, nil, false},
 		{"sudo is banned", []string{"sudo", "make", "install"}, nil, false},
 		{"heredoc is banned", []string{"sh-cmd-wrapper", "cat<<EOF"}, nil, false},
@@ -69,7 +72,7 @@ func TestDeriveRunCmdPrefix(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := DeriveRunCmdPrefix(tt.argv)
+			got, ok := permission.DeriveRunCmdPrefix(tt.argv)
 			if ok != tt.ok {
 				t.Fatalf("DeriveRunCmdPrefix(%v) ok = %v, want %v", tt.argv, ok, tt.ok)
 			}
@@ -93,7 +96,7 @@ func (r *recordingApprover) RequestApproval(ctx context.Context, req domain.Appr
 
 func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 	inner := &recordingApprover{}
-	rules := NewRuleApprover(inner)
+	rules := NewRuleApprover(inner, permission.NewSessionRules())
 
 	prefix, ok := rules.RememberRunCmd("run_cmd", argsJSON(t, "go", "test", "./pl/loom/..."))
 	if !ok {
@@ -135,10 +138,10 @@ func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 }
 
 func TestRememberRunCmdRejectsNonPersistable(t *testing.T) {
-	rules := NewRuleApprover(nil)
+	rules := NewRuleApprover(nil, permission.NewSessionRules())
 	for name, raw := range map[string]json.RawMessage{
 		"shell":      argsJSON(t, "sh", "-c", "echo hi"),
-		"python":     argsJSON(t, "python3", "script.py"),
+		"eval":       argsJSON(t, "python3", "-c", "print(1)"),
 		"escalated":  json.RawMessage(`{"program":"go","args":["mod","download"],"sandbox_permissions":"require_escalated"}`),
 		"other tool": json.RawMessage(`{"path":"x.go"}`),
 	} {

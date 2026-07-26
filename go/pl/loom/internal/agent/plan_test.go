@@ -288,6 +288,38 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 	}
 }
 
+// TestPlanStatusNoteTrimsEvidence pins the token-economy contract: only the
+// two most recently completed steps keep evidence in the re-injected note,
+// and long evidence is truncated — the note rides every model request, so
+// older steps must collapse to their status line.
+func TestPlanStatusNoteTrimsEvidence(t *testing.T) {
+	longEvidence := strings.Repeat("x", 200)
+	note := planStatusNote(domain.Plan{Items: []domain.PlanItem{
+		{Index: 0, Goal: "oldest", Status: domain.PlanItemDone, Evidence: []string{"old-evidence-should-vanish"}},
+		{Index: 1, Goal: "older", Status: domain.PlanItemDone, Evidence: []string{"another-old-evidence"}},
+		{Index: 2, Goal: "recent", Status: domain.PlanItemDone, Evidence: []string{"recent-evidence"}},
+		{Index: 3, Goal: "latest", Status: domain.PlanItemDone, Evidence: []string{longEvidence}},
+		{Index: 4, Goal: "current", Status: domain.PlanItemInProgress},
+	}})
+	if strings.Contains(note, "old-evidence-should-vanish") || strings.Contains(note, "another-old-evidence") {
+		t.Fatalf("old evidence must collapse out of the note:\n%s", note)
+	}
+	if !strings.Contains(note, "recent-evidence") {
+		t.Fatalf("previous done step keeps evidence:\n%s", note)
+	}
+	if strings.Contains(note, longEvidence) {
+		t.Fatalf("long evidence must be truncated:\n%s", note)
+	}
+	if !strings.Contains(note, "…") {
+		t.Fatalf("truncation marker missing:\n%s", note)
+	}
+	for _, want := range []string{"[done] oldest", "[done] older", "4/5 done"} {
+		if !strings.Contains(note, want) {
+			t.Fatalf("note missing %q:\n%s", want, note)
+		}
+	}
+}
+
 func TestRecoverRunReplaysPlanRevisions(t *testing.T) {
 	clock := domain.NewFakeClock(time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC))
 	sessionID := domain.NewSessionID()
