@@ -15,21 +15,28 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2026/07/26
 
-load("@rules_go//go:def.bzl", "go_test")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+go_library(
+    name = "config_lib",
+    srcs = [
+        "init.go",
+        "load.go",
+        "resolve.go",
+        "schema.go",
+    ],
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/config",
+    visibility = ["//go/pl/loom:__subpackages__"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/model/openai:openai_lib",
+        "//go/pl/loom/internal/permission:permission_lib",
+        "//go/pl/loom/internal/trace",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
 
 go_test(
-    name = "e2e_test",
-    srcs = ["skills_e2e_test.go"],
-    deps = [
-        "//go/pl/loom/internal/agent:agent_lib",
-        "//go/pl/loom/internal/app",
-        "//go/pl/loom/internal/config:config_lib",
-        "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/fakes:fakes_lib",
-        "//go/pl/loom/internal/process:process_lib",
-        "//go/pl/loom/internal/prompt:prompt",
-        "//go/pl/loom/internal/skill:skill_lib",
-        "//go/pl/loom/internal/tool/command:command_lib",
-        "//go/pl/loom/internal/workspace:workspace_lib",
-    ],
+    name = "config_test",
+    srcs = ["config_test.go"],
+    embed = [":config_lib"],
 )

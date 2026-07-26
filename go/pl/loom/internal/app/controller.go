@@ -22,12 +22,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
@@ -55,6 +55,8 @@ type Snapshot struct {
 	SessionID        domain.SessionID `json:"session_id"`
 	RunID            domain.RunID     `json:"run_id,omitempty"`
 	ModelName        string           `json:"model_name"`
+	ProviderName     string           `json:"provider_name,omitempty"`
+	ContextWindow    int64            `json:"context_window,omitempty"`
 	WorkspaceRoot    string           `json:"workspace_root"`
 	TurnCount        int              `json:"turn_count"`
 	Usage            domain.Usage     `json:"usage"`
@@ -96,6 +98,11 @@ type Controller struct {
 	messages    []domain.Message
 	resumedRun  *agent.Run
 	resumed     bool
+	// current overrides Bootstrap.Current after a /model switch; the zero
+	// value means the bootstrap default is still in effect. Provider
+	// instances are prebuilt, so a switch is just a reference swap applied
+	// from the next turn on.
+	current config.ProviderModelRef
 
 	// sessionCtx is the context for the entire TUI session.
 	// Cancelling it terminates the controller.
@@ -290,6 +297,43 @@ func (c *Controller) NewSession(ctx context.Context) error {
 	}
 }
 
+// SetModelResult reports the outcome of a successful SetModel: the
+// previous and current selection plus the new model's metadata, so the
+// frontend can refresh the status bar (ctx denominator) immediately
+// instead of waiting for the next snapshot.
+type SetModelResult struct {
+	Prev config.ProviderModelRef
+	Cur  config.ProviderModelRef
+	Meta config.Model
+}
+
+// SetModel switches the model used by subsequent turns. ref accepts the
+// "provider/model" form or a bare model/provider name (see
+// config.ResolveRef). A turn already in flight finishes with the model it
+// started on; the new selection applies from the next turn on.
+func (c *Controller) SetModel(ctx context.Context, ref string) (SetModelResult, error) {
+	resultCh := make(chan controllerResult, 1)
+	select {
+	case c.cmdCh <- controllerCommand{Kind: cmdSetModel, ModelName: ref, ResultCh: resultCh}:
+	case <-ctx.Done():
+		return SetModelResult{}, ctx.Err()
+	case <-c.doneCh:
+		return SetModelResult{}, fmt.Errorf("controller is closed")
+	}
+	select {
+	case result := <-resultCh:
+		if result.Err != nil {
+			return SetModelResult{}, result.Err
+		}
+		out, _ := result.Value.(SetModelResult)
+		return out, nil
+	case <-ctx.Done():
+		return SetModelResult{}, ctx.Err()
+	case <-c.doneCh:
+		return SetModelResult{}, fmt.Errorf("controller is closed")
+	}
+}
+
 // ResumeSession resumes an existing session.
 func (c *Controller) ResumeSession(ctx context.Context, sessionID domain.SessionID) error {
 	resultCh := make(chan controllerResult, 1)
@@ -407,6 +451,36 @@ func (c *Controller) Done() <-chan struct{} {
 
 // --- internal ---
 
+// currentLocked returns the effective provider/model selection. The
+// caller must hold c.mu. A nil bootstrap (UI tests) degrades to the zero
+// reference.
+func (c *Controller) currentLocked() config.ProviderModelRef {
+	if c.current != (config.ProviderModelRef{}) {
+		return c.current
+	}
+	if c.bootstrap != nil {
+		return c.bootstrap.Current
+	}
+	return config.ProviderModelRef{}
+}
+
+// workspaceLocked returns the workspace root; nil-bootstrap safe.
+func (c *Controller) workspaceLocked() string {
+	if c.bootstrap != nil {
+		return c.bootstrap.WorkspaceRoot
+	}
+	return ""
+}
+
+// persistRememberedRules reports whether "allow always" prefixes should be
+// written to the user rules layer (rules.persist_remembered; default true).
+func (c *Controller) persistRememberedRules() bool {
+	if c.bootstrap == nil || c.bootstrap.Resolved == nil {
+		return true
+	}
+	return c.bootstrap.Resolved.Rules.PersistRemembered
+}
+
 func (c *Controller) setState(s ControllerState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -431,6 +505,8 @@ func (c *Controller) dispatch(cmd controllerCommand) {
 		c.handleNewSession(cmd)
 	case cmdResumeSession:
 		c.handleResumeSession(cmd)
+	case cmdSetModel:
+		c.handleSetModel(cmd)
 	case cmdRequestSnapshot:
 		c.handleRequestSnapshot(cmd)
 	case cmdShutdown:
@@ -499,7 +575,16 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 	c.resumedRun = nil
 	resumed := c.resumed
 	c.resumed = false
+	current := c.currentLocked()
 	c.mu.Unlock()
+	provider := c.bootstrap.Resolved.ProviderByName(current.Provider)
+	if provider == nil {
+		// Cannot happen through Load/SetModel (both validate the ref), but a
+		// hand-assembled bootstrap in tests can mismatch — fail the turn
+		// loudly instead of panicking on provider.Model.
+		return fmt.Errorf("provider %q is not configured", current.Provider)
+	}
+	modelMeta, _ := c.bootstrap.Resolved.ModelMeta(current)
 	if run == nil && turnCounter > 1 {
 		var err error
 		run, err = c.continueRun(ctx)
@@ -508,7 +593,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 		}
 	}
 	if run == nil {
-		run = agent.NewRun(c.sessionID, c.bootstrap.Config.Limits, clock)
+		run = agent.NewRun(c.sessionID, c.bootstrap.Resolved.Limits, clock)
 		// A fresh session may not exist until its first prompt.
 		if err := store.CreateSession(ctx, c.sessionID); err != nil {
 			c.logger.Debug("create session", "error", err)
@@ -544,8 +629,8 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 	// Publish session opened when the first turn in this frontend starts.
 	if turnCounter == 1 {
 		c.publishDurable(c.sessionID, run.ID, turnCounter, runtimeevent.KindSessionOpened, runtimeevent.SessionOpenedPayload{
-			Model:        c.bootstrap.ModelName,
-			Workspace:    c.bootstrap.Config.WorkspaceRoot,
+			Model:        current.String(),
+			Workspace:    c.bootstrap.WorkspaceRoot,
 			Resumed:      resumed,
 			MessageCount: len(run.Messages),
 		})
@@ -554,8 +639,8 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 	// Build the loop
 	loop := &agent.Loop{
 		Run:          run,
-		Model:        c.bootstrap.Model,
-		ModelName:    c.bootstrap.ModelName,
+		Model:        provider.Model,
+		ModelName:    current.Model,
 		Store:        &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
 		Approver:     c.rulesApprover,
 		Policy:       c.bootstrap.Policy,
@@ -565,8 +650,8 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 		Artifacts:    c.bootstrap.Artifact,
 		Recorder:     c.bootstrap.Recorder,
 		Prompt:       prompt,
-		Workspace:    c.bootstrap.Config.WorkspaceRoot,
-		ContextWindow: c.bootstrap.Config.ContextWindow,
+		Workspace:    c.bootstrap.WorkspaceRoot,
+		ContextWindow: modelMeta.ContextWindow,
 		GoalCell:      c.bootstrap.GoalCell,
 		PlanCell:      c.bootstrap.PlanCell,
 		StreamHooks: agent.StreamHooks{
@@ -629,7 +714,7 @@ func (c *Controller) continueRun(ctx context.Context) (*agent.Run, error) {
 		*inspection.Checkpoint,
 		inspection.Transcript.Messages,
 		inspection.Session.Version,
-		c.bootstrap.Config.Limits,
+		c.bootstrap.Resolved.Limits,
 		c.clock,
 	)
 	if err != nil {
@@ -732,10 +817,11 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 		if prefix, ok := c.rulesApprover.RememberRunCmd(cmd.RuleHint.ToolName, cmd.RuleHint.Arguments); ok {
 			note = strings.Join(prefix, " ")
 			// Persist the remembered prefix to the user rules layer so future
-			// sessions inherit it (LOOM_RULES_PERSIST=0 opts out). The
-			// derivation above already banned shells, eval interpreters,
-			// destructive programs, heredocs, and escalated runs.
-			if os.Getenv("LOOM_RULES_PERSIST") != "0" {
+			// sessions inherit it (rules.persist_remembered=false opts out;
+			// a nil bootstrap in tests keeps the default). The derivation
+			// above already banned shells, eval interpreters, destructive
+			// programs, heredocs, and escalated runs.
+			if c.persistRememberedRules() {
 				if dir, err := permission.RulesDirUser(); err == nil {
 					if err := permission.AppendRememberedRule(dir, prefix); err != nil {
 						c.logger.Warn("persist remembered rule failed", "prefix", note, "error", err)
@@ -776,6 +862,25 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	cmd.ResultCh <- controllerResult{}
 }
 
+func (c *Controller) handleSetModel(cmd controllerCommand) {
+	if c.bootstrap == nil || c.bootstrap.Resolved == nil {
+		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("model switching is unavailable: no providers configured")}
+		return
+	}
+	ref, err := c.bootstrap.Resolved.ResolveRef(cmd.ModelName)
+	if err != nil {
+		cmd.ResultCh <- controllerResult{Err: err}
+		return
+	}
+	meta, _ := c.bootstrap.Resolved.ModelMeta(ref)
+	c.mu.Lock()
+	prev := c.currentLocked()
+	c.current = ref
+	c.mu.Unlock()
+	c.logger.Info("model switched", "previous", prev.String(), "current", ref.String())
+	cmd.ResultCh <- controllerResult{Value: SetModelResult{Prev: prev, Cur: ref, Meta: meta}}
+}
+
 func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	c.mu.Lock()
 	if c.state != ControllerStateIdle && c.state != ControllerStateBooting {
@@ -797,7 +902,7 @@ func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	}
 	run, err := agent.RecoverRun(inspection.Session.ID, inspection.Checkpoint,
 		inspection.Transcript.Messages, inspection.Events, inspection.Session.Version,
-		c.bootstrap.Config.Limits, c.clock, c.bootstrap.Validator)
+		c.bootstrap.Resolved.Limits, c.clock, c.bootstrap.Validator)
 	if err != nil {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("recover session: %w", err)}
 		return
@@ -826,17 +931,26 @@ func (c *Controller) publishSessionEnv(sessionID domain.SessionID) {
 	if c.bootstrap == nil || c.bootstrap.SessionEnv == nil {
 		return
 	}
-	c.bootstrap.SessionEnv.Store(process.LoomSessionEnv(sessionID.String()))
+	c.bootstrap.SessionEnv.Store(process.LoomSessionEnv(c.bootstrap.Version, sessionID.String()))
 }
 
 func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 	c.mu.Lock()
+	current := c.currentLocked()
+	var contextWindow int64
+	if c.bootstrap != nil && c.bootstrap.Resolved != nil {
+		if meta, ok := c.bootstrap.Resolved.ModelMeta(current); ok {
+			contextWindow = meta.ContextWindow
+		}
+	}
 	snap := Snapshot{
 		State:            c.state,
 		SessionID:        c.sessionID,
 		RunID:            c.runID,
-		ModelName:        c.bootstrap.ModelName,
-		WorkspaceRoot:    c.bootstrap.Config.WorkspaceRoot,
+		ModelName:        current.Model,
+		ProviderName:     current.Provider,
+		ContextWindow:    contextWindow,
+		WorkspaceRoot:    c.workspaceLocked(),
 		TurnCount:        c.turnCounter,
 		Usage:            c.lastUsage,
 		Messages:         append([]domain.Message(nil), c.messages...),
@@ -927,6 +1041,7 @@ const (
 	cmdResolveApproval = "resolve_approval"
 	cmdNewSession      = "new_session"
 	cmdResumeSession   = "resume_session"
+	cmdSetModel        = "set_model"
 	cmdRequestSnapshot = "request_snapshot"
 	cmdShutdown        = "shutdown"
 )
@@ -935,6 +1050,7 @@ type controllerCommand struct {
 	Kind      string
 	Prompt    string
 	SessionID domain.SessionID
+	ModelName string
 	Approval  ApprovalBinding
 	Decision  domain.Decision
 	RuleHint  *ApprovalRuleHint

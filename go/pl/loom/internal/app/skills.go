@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 	"github.com/liubang/playground/go/pl/loom/internal/skill"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/skillread"
@@ -35,27 +35,24 @@ import (
 // and TUI entry paths so both behave identically.
 //
 // Skills are disabled (no tool, no prompt section; nil option returned) when
-// LOOM_SKILLS=0, or when LOOM_DISABLE_SYSTEM_PROMPT=1 — a read_skill tool
-// without a visible catalog would only mislead the model. getenv is injected
-// for testability (pass os.Getenv in production).
+// cfg.Enabled is false or the built-in system prompt is disabled — a
+// read_skill tool without a visible catalog would only mislead the model.
 func WireSkills(
 	registry *agent.ToolRegistry,
 	workspaceRoot string,
 	contextWindow int64,
-	getenv func(string) string,
+	cfg config.ResolvedSkills,
+	systemPromptDisabled bool,
 	logger *slog.Logger,
 ) (prompt.Option, error) {
 	if registry == nil {
 		return nil, fmt.Errorf("tool registry is required")
 	}
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	if getenv("LOOM_SKILLS") == "0" || getenv("LOOM_DISABLE_SYSTEM_PROMPT") == "1" {
+	if !cfg.Enabled || systemPromptDisabled {
 		return nil, nil
 	}
 	home, _ := os.UserHomeDir()
-	loader := skill.NewLoader(workspaceRoot, home, splitExtraRoots(getenv("LOOM_SKILLS_EXTRA_ROOTS")), logger)
+	loader := skill.NewLoader(workspaceRoot, home, cfg.ExtraRoots, logger)
 	catalog := &skill.AtomicCatalog{}
 	readSkill, err := skillread.NewReadSkillTool(catalog)
 	if err != nil {
@@ -65,15 +62,4 @@ func WireSkills(
 		return nil, fmt.Errorf("register read_skill: %w", err)
 	}
 	return prompt.WithSkillsProvider(skill.NewPromptProvider(loader, catalog, contextWindow)), nil
-}
-
-// splitExtraRoots parses LOOM_SKILLS_EXTRA_ROOTS (':'-separated directories).
-func splitExtraRoots(raw string) []string {
-	var roots []string
-	for _, part := range strings.Split(raw, ":") {
-		if trimmed := strings.TrimSpace(part); trimmed != "" {
-			roots = append(roots, trimmed)
-		}
-	}
-	return roots
 }

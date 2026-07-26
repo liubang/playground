@@ -19,9 +19,11 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
@@ -53,6 +55,9 @@ func (m Model) View() string {
 	if m.mode == ModeSessionPicker {
 		b.WriteString(m.renderSessionPicker())
 		b.WriteString("\n")
+	} else if m.mode == ModeModelPicker {
+		b.WriteString(m.renderModelPicker())
+		b.WriteString("\n")
 	} else {
 		b.WriteString(m.renderTranscript())
 		b.WriteString("\n")
@@ -73,7 +78,7 @@ func (m Model) View() string {
 	case ModeSearch:
 		b.WriteString(m.renderSearchBar())
 		b.WriteString("\n")
-	case ModeSessionPicker:
+	case ModeSessionPicker, ModeModelPicker:
 		// The picker owns the main area; no composer.
 	default:
 		// The pinned plan panel sits directly above the composer (Claude
@@ -97,6 +102,13 @@ func (m Model) View() string {
 	return b.String()
 }
 
+// renderHeader renders the one-line accent band at the top of the frame.
+// The left side carries the brand and model name (bold); the right side
+// carries the working context — git branch and an abbreviated workspace
+// path — in the same band but unbolded, so the brand keeps visual
+// priority. The session id deliberately no longer appears here: it is
+// debugging detail with no day-to-day value (the session picker still
+// lists ids when one is actually needed).
 func (m Model) renderHeader() string {
 	if m.width < 30 {
 		style := m.theme.HeaderStyle
@@ -106,26 +118,123 @@ func (m Model) renderHeader() string {
 		return style.Render("Loom")
 	}
 
-	title := fmt.Sprintf("Loom · %s", m.modelName)
-	if !m.sessionID.IsZero() {
-		title += fmt.Sprintf(" · %s", shortID(m.sessionID))
-	}
-	if m.workspace != "" && m.width >= 60 {
-		title += fmt.Sprintf(" · %s", m.workspace)
-	}
-	// Truncate before styling: lipgloss wraps overlong text onto a second
-	// line, but the layout reserves exactly one row for the header. A wrapped
-	// header makes the frame taller than the terminal and corrupts the
-	// renderer's line tracking.
-	if m.width > 2 {
-		title = truncateDisplayWidth(title, m.width-2)
+	left := "Loom"
+	if m.modelName != "" {
+		left += " · " + m.modelName
 	}
 
-	style := m.theme.HeaderStyle
-	if m.width > 0 {
-		style = style.Width(m.width)
+	// Strip the placeholder width from the shared style; every path below
+	// either sizes the segments individually or sets an explicit width.
+	base := m.theme.HeaderStyle.Width(0)
+	leftSeg := base.Render(left)
+
+	// Budget for the context text: the columns left after the rendered
+	// left segment, the right segment's own padding, and a 2-cell gap.
+	right := m.headerContext(m.width - lipgloss.Width(leftSeg) - 4)
+	if right == "" {
+		// No context fits (or there is none): a single truncated title.
+		// Truncate before styling: lipgloss wraps overlong text onto a
+		// second line, but the layout reserves exactly one row for the
+		// header. A wrapped header makes the frame taller than the
+		// terminal and corrupts the renderer's line tracking.
+		title := truncateDisplayWidth(left, m.width-2)
+		return base.Width(m.width).Render(title)
 	}
-	return style.Render(title)
+
+	rightSeg := base.Bold(false).Render(right)
+	gap := m.width - lipgloss.Width(leftSeg) - lipgloss.Width(rightSeg)
+	// gap >= 2 by construction (the budget above reserves it); clamp only
+	// to keep strings.Repeat safe on degenerate geometries.
+	if gap < 1 {
+		gap = 1
+	}
+	fill := base.Bold(false).Padding(0).Render(strings.Repeat(" ", gap))
+	return leftSeg + fill + rightSeg
+}
+
+// headerContext picks the richest working-context string that fits the
+// budget (in display cells): branch plus full path first, degrading
+// through progressively shorter paths, then path-only variants, then the
+// bare branch, and finally a truncated basename. An empty result means
+// nothing meaningful fits, so the header falls back to the title alone.
+func (m Model) headerContext(budget int) string {
+	if budget <= 0 {
+		return ""
+	}
+	branch := m.gitBranch
+	if icon := m.iconSet().Branch; icon != "" && branch != "" {
+		branch = icon + " " + branch
+	}
+	full := abbreviateHome(m.workspace)
+	base := filepath.Base(m.workspace)
+	short := shortenPath(full)
+
+	var candidates []string
+	if branch != "" && m.workspace != "" {
+		candidates = append(candidates,
+			branch+" · "+full,
+			branch+" · "+short,
+			branch+" · "+base,
+		)
+	}
+	if m.workspace != "" {
+		candidates = append(candidates, full, short, base)
+	}
+	if branch != "" {
+		candidates = append(candidates, branch)
+	}
+	for _, c := range candidates {
+		if lipgloss.Width(c) <= budget {
+			return c
+		}
+	}
+	// Below a handful of cells a truncated basename is unreadable noise;
+	// the band is better off showing the title alone.
+	if m.workspace != "" && budget >= 4 {
+		return truncateDisplayWidth(base, budget)
+	}
+	return ""
+}
+
+// abbreviateHome rewrites the user's home directory prefix as ~, so the
+// workspace path spends its width on the components that identify it.
+func abbreviateHome(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	if path == home {
+		return "~"
+	}
+	prefix := home + string(filepath.Separator)
+	if strings.HasPrefix(path, prefix) {
+		return "~" + path[len(home):]
+	}
+	return path
+}
+
+// shortenPath abbreviates every interior path component to its first rune
+// (fish-shell style), keeping the last component whole so the directory
+// that matters stays readable: ~/workspace/github/loom → ~/w/g/loom.
+// Hidden interior components keep their dot: .config → .c.
+func shortenPath(path string) string {
+	sep := string(filepath.Separator)
+	parts := strings.Split(path, sep)
+	for i, p := range parts {
+		if p == "" || p == "~" || i == len(parts)-1 {
+			continue
+		}
+		if rest, found := strings.CutPrefix(p, "."); found {
+			if r, _ := utf8.DecodeRuneInString(rest); r != utf8.RuneError {
+				parts[i] = "." + string(r)
+			}
+			continue
+		}
+		if r, _ := utf8.DecodeRuneInString(p); r != utf8.RuneError {
+			parts[i] = string(r)
+		}
+	}
+	return strings.Join(parts, sep)
 }
 
 // welcomeLogo is the ASCII mark shown on the first screen of a fresh
@@ -213,6 +322,14 @@ func (m Model) renderSessionPicker() string {
 	}
 	height := m.visibleTranscriptHeight()
 	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(m.picker.Render(m.width-6, height-2))
+}
+
+func (m Model) renderModelPicker() string {
+	if m.modelPicker == nil {
+		return ""
+	}
+	height := m.visibleTranscriptHeight()
+	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(m.modelPicker.Render(m.width-6, height-2))
 }
 
 // renderTranscript renders the transcript viewport. The content itself is
@@ -969,14 +1086,6 @@ func (m Model) renderHelpOverlay() string {
 }
 
 // Helper functions
-
-func shortID(id fmt.Stringer) string {
-	s := id.String()
-	if len(s) > 12 {
-		return s[:12]
-	}
-	return s
-}
 
 // truncateDisplayWidth shortens s to at most width display cells, appending an
 // ellipsis. It walks runes once and assumes s contains no ANSI sequences.

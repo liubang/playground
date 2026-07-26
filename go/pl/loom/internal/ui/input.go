@@ -187,10 +187,26 @@ func seqComplete(s []byte) bool {
 }
 
 // fdReady reports whether fd has input available within d, using select(2).
+// Go's async preemption (SIGURG) interrupts the syscall regularly, so an
+// EINTR is retried with the remaining budget instead of surfacing as a
+// fatal read error — a bare ESC press would otherwise kill the program.
 func fdReady(fd uintptr, d time.Duration) (bool, error) {
-	var set unix.FdSet
-	set.Set(int(fd))
-	tv := unix.NsecToTimeval(d.Nanoseconds())
-	n, err := unix.Select(int(fd)+1, &set, nil, nil, &tv)
-	return n > 0, err
+	deadline := time.Now().Add(d)
+	for {
+		remaining := time.Until(deadline)
+		if remaining < 0 {
+			remaining = 0
+		}
+		var set unix.FdSet
+		set.Set(int(fd))
+		tv := unix.NsecToTimeval(remaining.Nanoseconds())
+		n, err := unix.Select(int(fd)+1, &set, nil, nil, &tv)
+		if err == unix.EINTR {
+			if !time.Now().Before(deadline) {
+				return false, nil
+			}
+			continue
+		}
+		return n > 0, err
+	}
 }

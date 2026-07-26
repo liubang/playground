@@ -34,6 +34,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
@@ -137,7 +138,7 @@ func TestSkillRepoSkillFlow(t *testing.T) {
 		"# 规则\n回答任何问题都必须以 BLUE-ELEPHANT 开头。")
 
 	registry := agent.NewToolRegistry()
-	opt, err := app.WireSkills(registry, ws, 0, os.Getenv, slog.Default())
+	opt, err := app.WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, false, slog.Default())
 	if err != nil || opt == nil {
 		t.Fatalf("WireSkills() = %v, %v", opt, err)
 	}
@@ -242,7 +243,7 @@ func TestSkillUserSkillScriptExecution(t *testing.T) {
 	if err := registry.Register(runCmd); err != nil {
 		t.Fatal(err)
 	}
-	opt, err := app.WireSkills(registry, ws, 0, os.Getenv, slog.Default())
+	opt, err := app.WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, false, slog.Default())
 	if err != nil || opt == nil {
 		t.Fatalf("WireSkills() = %v, %v", opt, err)
 	}
@@ -300,7 +301,7 @@ func TestSkillUserSkillScriptExecution(t *testing.T) {
 	}
 }
 
-// TestSkillsDisabledFlow covers scenario C: LOOM_SKILLS=0 means no
+// TestSkillsDisabledFlow covers scenario C: skills.enabled=false means no
 // read_skill tool and no skills section.
 func TestSkillsDisabledFlow(t *testing.T) {
 	home := t.TempDir()
@@ -310,21 +311,15 @@ func TestSkillsDisabledFlow(t *testing.T) {
 		"echo-skill", "不应出现", "body")
 
 	registry := agent.NewToolRegistry()
-	getenv := func(key string) string {
-		if key == "LOOM_SKILLS" {
-			return "0"
-		}
-		return ""
-	}
-	opt, err := app.WireSkills(registry, ws, 0, getenv, slog.Default())
+	opt, err := app.WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: false}, false, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if opt != nil {
-		t.Fatal("option = non-nil with LOOM_SKILLS=0")
+		t.Fatal("option = non-nil with skills.enabled=false")
 	}
 	if _, ok := registry.Lookup("read_skill"); ok {
-		t.Fatal("read_skill registered with LOOM_SKILLS=0")
+		t.Fatal("read_skill registered with skills.enabled=false")
 	}
 
 	model := fakes.NewFakeModel(fakes.ScriptEntry{

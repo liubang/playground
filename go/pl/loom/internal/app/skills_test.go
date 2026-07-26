@@ -25,24 +25,22 @@ import (
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 )
 
-func getenvWith(pairs map[string]string) func(string) string {
-	return func(key string) string { return pairs[key] }
-}
-
 func TestWireSkillsDisabled(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		env  map[string]string
+		name                 string
+		cfg                  config.ResolvedSkills
+		systemPromptDisabled bool
 	}{
-		{"LOOM_SKILLS=0", map[string]string{"LOOM_SKILLS": "0"}},
-		{"LOOM_DISABLE_SYSTEM_PROMPT=1", map[string]string{"LOOM_DISABLE_SYSTEM_PROMPT": "1"}},
+		{"skills disabled", config.ResolvedSkills{Enabled: false}, false},
+		{"system prompt disabled", config.ResolvedSkills{Enabled: true}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			registry := agent.NewToolRegistry()
-			opt, err := WireSkills(registry, t.TempDir(), 0, getenvWith(tc.env), nil)
+			opt, err := WireSkills(registry, t.TempDir(), 0, tc.cfg, tc.systemPromptDisabled, nil)
 			if err != nil {
 				t.Fatalf("WireSkills() error = %v", err)
 			}
@@ -70,7 +68,7 @@ func TestWireSkillsEnabledEndToEnd(t *testing.T) {
 	}
 
 	registry := agent.NewToolRegistry()
-	opt, err := WireSkills(registry, ws, 0, getenvWith(nil), nil)
+	opt, err := WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, false, nil)
 	if err != nil {
 		t.Fatalf("WireSkills() error = %v", err)
 	}
@@ -101,12 +99,4 @@ func TestWireSkillsEnabledEndToEnd(t *testing.T) {
 	}
 }
 
-func TestSplitExtraRoots(t *testing.T) {
-	if got := splitExtraRoots(""); len(got) != 0 {
-		t.Fatalf("splitExtraRoots(\"\") = %v", got)
-	}
-	got := splitExtraRoots("/a:/b:: /c ")
-	if len(got) != 3 || got[0] != "/a" || got[1] != "/b" || got[2] != "/c" {
-		t.Fatalf("splitExtraRoots() = %v", got)
-	}
-}
+
