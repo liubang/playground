@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -34,12 +35,15 @@ func basicAuthHeader(publicKey, secretKey string) string {
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte(publicKey+":"+secretKey))
 }
 
-// scoreRequest is the Langfuse scores API payload.
+// scoreRequest is the Langfuse scores API payload. Environment must match
+// the trace's langfuse.environment or the score lands in the "default"
+// environment and disappears from environment-filtered dashboards.
 type scoreRequest struct {
-	TraceID string  `json:"traceId"`
-	Name    string  `json:"name"`
-	Value   float64 `json:"value"`
-	Comment string  `json:"comment,omitempty"`
+	TraceID     string  `json:"traceId"`
+	Name        string  `json:"name"`
+	Value       float64 `json:"value"`
+	Comment     string  `json:"comment,omitempty"`
+	Environment string  `json:"environment,omitempty"`
 }
 
 // scoreClient posts numeric trace scores to Langfuse's scores API. All
@@ -48,23 +52,36 @@ type scoreRequest struct {
 type scoreClient struct {
 	host      string
 	basicAuth string
+	env       string
 	http      *http.Client
 	logger    *slog.Logger
+	// wg tracks in-flight submissions so Shutdown can wait for them; a
+	// score queued right before process exit (the common case — runs are
+	// scored at the end) must not be silently dropped.
+	wg sync.WaitGroup
 }
 
-func newScoreClient(host, publicKey, secretKey string) *scoreClient {
+func newScoreClient(host, publicKey, secretKey, environment string, logger *slog.Logger) *scoreClient {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	return &scoreClient{
 		host:      host,
 		basicAuth: basicAuthHeader(publicKey, secretKey),
+		env:       environment,
 		http:      &http.Client{Timeout: 5 * time.Second},
-		logger:    slog.Default(),
+		logger:    logger,
 	}
 }
 
 // submit queues a score report in a background goroutine. It always returns
-// immediately; panics inside the goroutine are recovered and logged.
+// immediately; panics inside the goroutine are recovered and logged. Callers
+// must not invoke submit concurrently with waitIdle (loom scores runs before
+// shutdown starts, so this holds by construction).
 func (c *scoreClient) submit(name, traceID string, value float64, comment string) {
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				c.logger.Warn("langfuse score report panicked", "panic", r)
@@ -72,10 +89,25 @@ func (c *scoreClient) submit(name, traceID string, value float64, comment string
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 		defer cancel()
-		if err := c.post(ctx, scoreRequest{TraceID: traceID, Name: name, Value: value, Comment: comment}); err != nil {
+		req := scoreRequest{TraceID: traceID, Name: name, Value: value, Comment: comment, Environment: c.env}
+		if err := c.post(ctx, req); err != nil {
 			c.logger.Warn("langfuse score report failed", "score", name, "error", err)
 		}
 	}()
+}
+
+// waitIdle blocks until in-flight submissions finish or the timeout elapses.
+func (c *scoreClient) waitIdle(timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		c.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		c.logger.Warn("langfuse score flush timed out; some scores may be lost", "timeout", timeout)
+	}
 }
 
 func (c *scoreClient) post(ctx context.Context, score scoreRequest) error {

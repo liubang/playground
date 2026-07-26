@@ -443,7 +443,7 @@ type Tool interface {
 
 命名规范：动词 + 短名词、snake_case、优先日常词汇；`git_` 为命名空间前缀。
 
-当前集合（12 个）：
+当前集合（13 个）：
 
 | 工具 | 风险 | 职责 |
 |---|---:|---|
@@ -459,8 +459,11 @@ type Tool interface {
 | `git_log` | R1 | 提交历史（`limit` 分页） |
 | `lint` | R2 | 项目代码诊断：按标记文件确定性检测引擎（go.mod → golangci-lint/go vet，package.json → eslint，pyproject.toml → ruff，compile_commands.json → clang-tidy），沙箱内执行，输出归一化结构化 diagnostics |
 | `web_fetch` | R3 | HTTP/HTTPS GET 抓取网页：HTML 转 markdown（可 text/raw），SSRF 拨号时防护（默认拒绝私网/环回），重定向限 5 跳，大小截断走 artifact 溢出，成功响应进程内缓存 15 分钟 |
+| `read_skill` | R1 | 按名称读取已发现技能的 SKILL.md 或其目录内文件（白名单寻址：技能目录内路径解析 + 复验 fail-closed，offset/limit 分页，256KB 上限）；技能发现/注入机制见 SKILL_DESIGN.md |
 
-分工边界（写入 system prompt）：找文件用 `glob`，找内容用 `search`，看目录用 `list_dir`，读文件用 `read_file`，新建/覆写用 `write`，局部修改用 `edit`，构建/测试/任意程序用 `run_cmd`，仓库信息用 `git_*`，代码诊断用 `lint`，网页内容用 `web_fetch`。
+分工边界（写入 system prompt）：找文件用 `glob`，找内容用 `search`，看目录用 `list_dir`，读文件用 `read_file`，新建/覆写用 `write`，局部修改用 `edit`，构建/测试/任意程序用 `run_cmd`，仓库信息用 `git_*`，代码诊断用 `lint`，网页内容用 `web_fetch`，技能正文与其目录内引用用 `read_skill`。
+
+技能（Skills）：`SKILL.md` 从 `<ws>/.loom/skills`、`<ws>/.agents/skills`、`~/.loom/skills`、`~/.agents/skills`（及 `LOOM_SKILLS_EXTRA_ROOTS`）发现；清单以 token 预算降级注入系统提示词（`loom://skills/catalog` 进入 Context Manifest），正文经 `read_skill` 渐进式披露读取；技能脚本走 `run_cmd` 既有沙箱/提权通道。完整设计见 SKILL_DESIGN.md。
 
 合并与退役：`replace_text` 与 `apply_patch` 合并为 `edit`；`search_text` 重构为 `search`；`list_directory` 更名 `list_dir`；`run_command` 更名 `run_cmd`。旧 Session 中的已退役工具名在恢复时按 `unknown_tool` 语义处理。
 
@@ -1124,6 +1127,8 @@ Loom 的全部运行时配置经环境变量注入（无配置文件），按用
 | `LOOM_SYSTEM_PROMPT_EXTRA` | 空 | 附加指令段，以 `loom://config/extra-instructions` 身份进入 Context Manifest |
 | `LOOM_PROMPT_NAME` | 空（内置） | Langfuse Prompt Management 中的提示词名；设置后系统提示词静态段由托管版本替换（需 Langfuse 已配置，拉取失败自动回退内置，见 §33、§36.5） |
 | `LOOM_PROMPT_LABEL` | `production` | 托管提示词的发布标签 |
+| `LOOM_SKILLS` | 未设（启用） | 置 `0` 整体禁用技能支持：不扫描、不注入技能清单、不注册 `read_skill` |
+| `LOOM_SKILLS_EXTRA_ROOTS` | 空 | 额外的 user 级技能根目录（`:` 分隔），与默认 root 按 canonical 路径去重 |
 
 工作区规则文件（`LOOM.md`/`AGENTS.md`/`CLAUDE.md`）按 §8 自动发现注入，不属于环境变量。
 

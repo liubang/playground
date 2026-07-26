@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -174,12 +175,12 @@ func searchFile(ctx context.Context, file pathResolution, needle string, args se
 	}
 	defer opened.Close()
 
-	sample := make([]byte, binarySampleBytes)
+	sample := make([]byte, toolkit.BinarySampleBytes)
 	n, sampleErr := opened.Read(sample)
 	if sampleErr != nil && sampleErr != io.EOF {
 		return fileSearchScanned, nil, domain.NewError(domain.ErrUnavailable, "failed to inspect file", domain.WithCause(sampleErr))
 	}
-	if isBinaryContent(sample[:n]) {
+	if toolkit.IsBinaryContent(sample[:n]) {
 		return fileSearchBinary, nil, nil
 	}
 	if _, err := opened.Seek(0, io.SeekStart); err != nil {

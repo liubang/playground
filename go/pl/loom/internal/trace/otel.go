@@ -19,10 +19,15 @@ package trace
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -96,6 +101,17 @@ func Setup(ctx context.Context, cfg Config) (*Provider, error) {
 	if !cfg.Enabled {
 		return nil, fmt.Errorf("trace.Setup: config disabled (host and keys required)")
 	}
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	// The OTLP SDK's default error handler prints to stderr, which tears
+	// the TUI's rendering. Route exporter failures (serialization errors,
+	// network, 4xx) into the injected logger instead — discardable in the
+	// TUI, visible in headless runs.
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		logger.Warn("otel traces export failed", "error", err)
+	}))
 	exporter, err := otlptracehttp.New(ctx,
 		otlptracehttp.WithEndpointURL(cfg.Host+otlpPath),
 		otlptracehttp.WithHeaders(map[string]string{"Authorization": basicAuthHeader(cfg.PublicKey, cfg.SecretKey)}),
@@ -108,13 +124,15 @@ func Setup(ctx context.Context, cfg Config) (*Provider, error) {
 		attribute.String(attrEnvironment, cfg.Environment),
 	))
 	if err != nil {
+		// Do not leak the exporter on the error path.
+		_ = exporter.Shutdown(ctx)
 		return nil, fmt.Errorf("trace.Setup: create resource: %w", err)
 	}
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(res),
 	)
-	scores := newScoreClient(cfg.Host, cfg.PublicKey, cfg.SecretKey)
+	scores := newScoreClient(cfg.Host, cfg.PublicKey, cfg.SecretKey, cfg.Environment, logger)
 	return &Provider{
 		tp: tp,
 		recorder: &otelRecorder{
@@ -133,9 +151,16 @@ func Setup(ctx context.Context, cfg Config) (*Provider, error) {
 // Recorder returns the agent-facing recorder backed by this provider.
 func (p *Provider) Recorder() Recorder { return p.recorder }
 
-// Shutdown flushes buffered spans and releases the exporter.
+// Shutdown flushes buffered spans and releases the exporter, then waits
+// (briefly, bounded) for in-flight score submissions: runs are scored at
+// the very end, so without the wait a prompt process exit could drop the
+// score even though the request was already queued.
 func (p *Provider) Shutdown(ctx context.Context) error {
-	return p.tp.Shutdown(ctx)
+	err := p.tp.Shutdown(ctx)
+	if p.scores != nil {
+		p.scores.waitIdle(2 * time.Second)
+	}
+	return err
 }
 
 // otelRecorder exports spans over OTLP. Generation and tool spans are
@@ -157,7 +182,14 @@ type otelRun struct {
 }
 
 func (r *otelRecorder) StartRun(ctx context.Context, meta RunMeta) (context.Context, RunHandle) {
-	tags := []string{meta.Workspace}
+	// Redaction hygiene (LOOM_TRACE_CONTENT=0): the workspace path is a
+	// local filesystem path and stays out of tags entirely; the user id is
+	// reported only as an irreversible hash so per-user success rates remain
+	// computable without shipping an email address.
+	var tags []string
+	if r.content {
+		tags = append(tags, meta.Workspace)
+	}
 	if r.release != "" {
 		tags = append(tags, "v"+strings.TrimPrefix(r.release, "v"))
 	}
@@ -170,10 +202,14 @@ func (r *otelRecorder) StartRun(ctx context.Context, meta RunMeta) (context.Cont
 			"model":  meta.Model,
 		})),
 	}
-	if r.userID != "" {
+	userID := r.userID
+	if !r.content {
+		userID = hashUserID(userID)
+	}
+	if userID != "" {
 		attrs = append(attrs,
-			attribute.String(attrTraceUserID, r.userID),
-			attribute.String(attrTraceCompatUserID, r.userID),
+			attribute.String(attrTraceUserID, userID),
+			attribute.String(attrTraceCompatUserID, userID),
 		)
 	}
 	if r.release != "" {
@@ -257,8 +293,16 @@ func (run *otelRun) RecordTool(ctx context.Context, rec ToolRecord) {
 		oteltrace.WithTimestamp(rec.StartTime),
 		oteltrace.WithAttributes(attrs...),
 	)
-	if rec.Status != "success" && rec.Error != "" {
-		span.SetStatus(codes.Error, rec.Error)
+	if rec.Status != "success" {
+		// Under redaction the status message carries only the stable error
+		// code; the free-form message may embed paths or file content.
+		errText := rec.Error
+		if !run.rec.content {
+			errText = rec.Code
+		}
+		if errText != "" {
+			span.SetStatus(codes.Error, sanitizeUTF8(errText))
+		}
 	}
 	span.End(oteltrace.WithTimestamp(rec.EndTime))
 }
@@ -266,7 +310,7 @@ func (run *otelRun) RecordTool(ctx context.Context, rec ToolRecord) {
 func (run *otelRun) RecordEvent(_ context.Context, name string, attrs map[string]string) {
 	kvs := make([]attribute.KeyValue, 0, len(attrs))
 	for k, v := range attrs {
-		kvs = append(kvs, attribute.String(k, v))
+		kvs = append(kvs, attribute.String(k, sanitizeUTF8(v)))
 	}
 	run.span.AddEvent(name, oteltrace.WithAttributes(kvs...))
 }
@@ -286,7 +330,7 @@ func (run *otelRun) End(result RunResult) {
 		run.span.SetAttributes(attribute.String(attrTraceOutput, truncateContent(result.Output)))
 	}
 	if result.Error != "" {
-		run.span.SetStatus(codes.Error, result.Error)
+		run.span.SetStatus(codes.Error, sanitizeUTF8(result.Error))
 	} else {
 		run.span.SetStatus(codes.Ok, result.Outcome)
 	}
@@ -343,7 +387,13 @@ func encodeMessages(messages []domain.Message, content bool) string {
 					sp.Text = truncateContent(text)
 				}
 				if p.ToolResult.Error != nil {
-					sp.Error = p.ToolResult.Error.Message
+					if content {
+						sp.Error = p.ToolResult.Error.Message
+					} else {
+						// Redacted: only the stable classification crosses the
+						// wire; messages may embed paths or file content.
+						sp.Error = p.ToolResult.Error.Code
+					}
 				}
 			}
 			sm.Parts = append(sm.Parts, sp)
@@ -361,12 +411,33 @@ func mustJSON(v any) string {
 	return truncateContent(string(data))
 }
 
+// sanitizeUTF8 makes a string safe for OTLP span attributes: the protobuf
+// encoder rejects invalid UTF-8, and the exporter's error handler would
+// otherwise log the rejection (to stderr, tearing the TUI). Tool and model
+// output may carry arbitrary bytes, so every field that crosses the wire is
+// sanitized here (see truncateContent) or at emission.
+func sanitizeUTF8(s string) string {
+	return strings.ToValidUTF8(s, "�")
+}
+
 // truncateContent bounds a string for span attributes, marking truncation.
+// Sanitizes first and cuts at a rune boundary, so the result is always
+// valid UTF-8 regardless of the input bytes.
 func truncateContent(s string) string {
+	s = sanitizeUTF8(s)
 	if len(s) > maxAttributeContent {
-		return s[:maxAttributeContent] + "…[truncated]"
+		return sanitizeUTF8(s[:maxAttributeContent]) + "…[truncated]"
 	}
 	return s
+}
+
+// hashUserID irreversibly hashes a user identifier for redacted traces.
+func hashUserID(id string) string {
+	if id == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(id))
+	return "u_" + hex.EncodeToString(sum[:])[:16]
 }
 
 // compactStrings drops empty entries.

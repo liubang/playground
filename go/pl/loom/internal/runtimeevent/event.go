@@ -62,9 +62,11 @@ const (
 	KindToolStarted   RuntimeEventKind = "tool.started"
 	KindToolCompleted RuntimeEventKind = "tool.completed"
 	KindToolProgress  RuntimeEventKind = "tool.progress"
-	// Budget events
-	KindBudgetUpdated    RuntimeEventKind = "budget.updated"
-	KindContextCompacted RuntimeEventKind = "context.compacted"
+// Budget events
+KindBudgetUpdated    RuntimeEventKind = "budget.updated"
+KindContextCompacted RuntimeEventKind = "context.compacted"
+// Plan events
+KindPlanUpdated RuntimeEventKind = "plan.updated"
 	// Cancel events
 	KindRunCancelRequested RuntimeEventKind = "run.cancel_requested"
 	KindRunCancelled       RuntimeEventKind = "run.cancelled"
@@ -110,8 +112,8 @@ func (e RuntimeEvent) Validate() error {
 		KindModelRequestStarted, KindModelTextDelta, KindModelReasoningDelta, KindModelToolCallDelta,
 		KindModelResponseCompleted, KindModelRequestFailed,
 		KindApprovalRequested, KindApprovalResolved,
-		KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
-		KindBudgetUpdated, KindUsageUpdated, KindContextCompacted, KindContextUsage,
+KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
+KindBudgetUpdated, KindUsageUpdated, KindContextCompacted, KindContextUsage, KindPlanUpdated,
 		KindRunCancelRequested, KindRunCancelled, KindRunCompleted,
 		KindRuntimeWarning, KindRuntimeFatal:
 	default:

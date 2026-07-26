@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -133,7 +134,7 @@ func (t *ReadFileTool) execute(ctx context.Context, prepared domain.PreparedCall
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	if isBinaryContent(data) {
+	if toolkit.IsBinaryContent(data) {
 		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "file appears to be binary or not valid UTF-8"))
 	}
 

@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -29,6 +30,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
@@ -578,6 +580,345 @@ func TestLoopReportsContextUsageAfterResponseAndToolBatch(t *testing.T) {
 	}
 }
 
+// Regression: when the 80% budget notice fired right after a tool-call
+// response, the notice became the new tail message and the routing readers
+// (which read only the tail) silently dropped the pending call; the next
+// provider request then died with "unresolved tool_call ids ...". The notice
+// is now injected in prepare, and readers scan for the most recent message
+// carrying tool calls.
+func TestLoopRoutesToolCallsWhenBudgetNoticeFires(t *testing.T) {
+	readTool := fakes.ReadFileTool()
+	callID := domain.NewToolCallID()
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls:  []domain.ToolCall{{ID: callID, Name: "read_file", Arguments: json.RawMessage(`{"path":"test.go"}`)}},
+			StopReason: domain.StopToolUse,
+			// Crosses the 80% notice/compaction line for the 100-token window.
+			UsageIn:  85,
+			UsageOut: 30,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn, UsageIn: 90, UsageOut: 15},
+	)
+	registry := NewToolRegistry()
+	if err := registry.Register(readTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "read test.go"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+		ContextWindow: 100,
+	}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if run.State.Lifecycle != domain.LifecycleTerminal {
+		t.Fatalf("expected terminal, got %s", run.State.Lifecycle)
+	}
+
+	// The pending call must have been routed and executed despite the notice.
+	if run.Usage.ToolCalls != 1 {
+		t.Fatalf("tool calls executed = %d, want 1", run.Usage.ToolCalls)
+	}
+	resultIndex := -1
+	for i, msg := range run.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind == domain.PartToolResult && part.ToolResult != nil && part.ToolResult.CallID == callID {
+				resultIndex = i
+			}
+		}
+	}
+	if resultIndex < 0 {
+		t.Fatalf("no tool result recorded for %s", callID)
+	}
+	if dangling := unresolvedToolCalls(run.Messages); len(dangling) > 0 {
+		t.Fatalf("transcript still has unresolved tool calls: %+v", dangling)
+	}
+
+	// Any injected budget notice must sit after the tool result, never
+	// between the call and its result.
+	for i, msg := range run.Messages {
+		if msg.Metadata["kind"] != "system_note" {
+			continue
+		}
+		if i < resultIndex {
+			t.Fatalf("budget notice at index %d sits before the tool result at %d", i, resultIndex)
+		}
+	}
+}
+
+// Regression: a provider that streams malformed tool-call arguments
+// (pretty-printed JSON with literal newlines, truncated payloads, empty
+// arguments) used to kill the whole run at stream finalization
+// ("invalid tool call at index N: invalid arguments JSON"). The run must
+// survive: the aggregator preserves the raw payload as valid placeholder
+// JSON, the tool layer rejects the call with a recoverable prepare error,
+// and the transcript stays valid for checkpointing/recovery.
+func TestLoopSurvivesMalformedToolCallArguments(t *testing.T) {
+	// Emulate the real read_file's strict argument decoding: unknown fields
+	// are rejected, so the malformed-arguments placeholder never executes.
+	readTool := fakes.ReadFileTool()
+	readTool.WithPrepareFn(func(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+		var args struct {
+			Path string `json:"path"`
+		}
+		dec := json.NewDecoder(strings.NewReader(string(call.Arguments)))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&args); err != nil {
+			return domain.PreparedCall{}, fmt.Errorf("invalid read_file arguments: %w", err)
+		}
+		return domain.PreparedCall{
+			Call: call, Definition: readTool.Definition(), Risk: domain.R1,
+			ApprovalDesc: "Read " + args.Path, ArgsHash: "deadbeef",
+		}, nil
+	})
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{
+				// Pretty-printed JSON carrying a literal newline inside a string
+				// is invalid per encoding/json — as observed from glm-5.2.
+				{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage("{\n  \"path\": \"test.go\n\"}")},
+			},
+			StopReason: domain.StopToolUse,
+			UsageIn:    100,
+			UsageOut:   30,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 15},
+	)
+	registry := NewToolRegistry()
+	if err := registry.Register(readTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "read test.go"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+	}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v (run must survive malformed arguments)", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+
+	// The malformed call was routed and rejected by the tool layer with a
+	// recoverable error result (never executed).
+	if len(readTool.ExecutedCalls()) != 0 {
+		t.Fatalf("malformed call must not execute: %+v", readTool.ExecutedCalls())
+	}
+	errorResults := 0
+	for _, msg := range run.Messages {
+		for _, part := range msg.Parts {
+			switch part.Kind {
+			case domain.PartToolCall:
+				if !json.Valid(part.ToolCall.Arguments) {
+					t.Fatalf("persisted call args are not valid JSON: %q", part.ToolCall.Arguments)
+				}
+				if !strings.Contains(string(part.ToolCall.Arguments), "__malformed_arguments") {
+					t.Fatalf("malformed payload not preserved as evidence: %q", part.ToolCall.Arguments)
+				}
+			case domain.PartToolResult:
+				if part.ToolResult != nil && part.ToolResult.Status == domain.ToolStatusError {
+					errorResults++
+				}
+			}
+		}
+	}
+	if errorResults != 1 {
+		t.Fatalf("recoverable tool error results = %d, want 1", errorResults)
+	}
+	if dangling := unresolvedToolCalls(run.Messages); len(dangling) > 0 {
+		t.Fatalf("transcript has unresolved tool calls: %+v", dangling)
+	}
+}
+
+// Regression: a run that revises its plan and then ends with it unfinished
+// (the model delivered the final answer but forgot the closing bookkeeping)
+// must get exactly one extra turn to reconcile — otherwise sessions stick at
+// e.g. 2/3 with an in_progress step after a successful run.
+func TestLoopReconcilesUnfinishedPlanOnce(t *testing.T) {
+	planTool, planCell := newPlanTool(t)
+	registry := NewToolRegistry()
+	if err := registry.Register(planTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	openSnapshot := `{"plan":[` +
+		`{"goal":"step one","status":"done","evidence":["done earlier"]},` +
+		`{"goal":"step two","status":"in_progress"}]}`
+	closeSnapshot := `{"plan":[` +
+		`{"goal":"step one","status":"done","evidence":["done earlier"]},` +
+		`{"goal":"step two","status":"done","evidence":["produced"]}]}`
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(openSnapshot)}},
+			StopReason: domain.StopToolUse,
+			UsageIn:    100,
+			UsageOut:   20,
+		},
+		fakes.ScriptEntry{Text: "final answer", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 30},
+		fakes.ScriptEntry{
+			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(closeSnapshot)}},
+			StopReason: domain.StopToolUse,
+			UsageIn:    100,
+			UsageOut:   20,
+		},
+		fakes.ScriptEntry{Text: "closed", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 10},
+	)
+	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "do it"}}, CreatedAt: time.Now(),
+	})
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+		PlanCell: planCell,
+	}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+	// The nudge produced exactly one extra turn: open plan → answer →
+	// reconcile prompt → closing update_plan → closing text.
+	if calls := len(model.Calls()); calls != 4 {
+		t.Fatalf("model calls = %d, want 4 (plan, answer, closing call, closing text)", calls)
+	}
+	if !run.Plan.IsComplete() {
+		t.Fatalf("plan not closed by the reconcile turn: %+v", run.Plan.Items)
+	}
+	nudges := 0
+	for _, msg := range run.Messages {
+		if msg.Role == domain.RoleUser && strings.Contains(strings.Join(msg.TextParts(), ""), "still has unfinished steps") {
+			nudges++
+		}
+	}
+	if nudges != 1 {
+		t.Fatalf("reconcile nudges = %d, want exactly 1", nudges)
+	}
+}
+
+// The reconcile nudge is one-shot: a model that ends again with an open plan
+// is accepted, not looped forever.
+func TestLoopReconcileNudgeIsOneShot(t *testing.T) {
+	planTool, planCell := newPlanTool(t)
+	registry := NewToolRegistry()
+	if err := registry.Register(planTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	openSnapshot := `{"plan":[` +
+		`{"goal":"step one","status":"done"},` +
+		`{"goal":"step two","status":"in_progress"}]}`
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(openSnapshot)}},
+			StopReason: domain.StopToolUse,
+			UsageIn:    100,
+			UsageOut:   20,
+		},
+		fakes.ScriptEntry{Text: "answer one", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 30},
+		fakes.ScriptEntry{Text: "answer two", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 20},
+	)
+	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "do it"}}, CreatedAt: time.Now(),
+	})
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+		PlanCell: planCell,
+	}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded (open plan accepted after one nudge)", run.State.Outcome)
+	}
+	if calls := len(model.Calls()); calls != 3 {
+		t.Fatalf("model calls = %d, want 3 (plan, nudged answer, accepted answer)", calls)
+	}
+}
+
+// A plan inherited from an earlier turn (not revised this run) must not
+// hijack an unrelated prompt with a reconcile turn.
+func TestLoopDoesNotNudgeForStalePlan(t *testing.T) {
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "quick answer", StopReason: domain.StopEndTurn, UsageIn: 50, UsageOut: 10},
+	)
+	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "fix the typo"}}, CreatedAt: time.Now(),
+	})
+	// Inherited plan state from a previous turn: never revised this run.
+	run.Plan = domain.Plan{Items: []domain.PlanItem{
+		{Index: 0, Goal: "step one", Status: domain.PlanItemDone},
+		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
+	}}
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: NewToolRegistry(), Logger: slog.Default(),
+	}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+	if calls := len(model.Calls()); calls != 1 {
+		t.Fatalf("model calls = %d, want 1 (stale plan must not nudge)", calls)
+	}
+	for _, msg := range run.Messages {
+		if msg.Role == domain.RoleUser && strings.Contains(strings.Join(msg.TextParts(), ""), "still has unfinished steps") {
+			t.Fatal("stale plan triggered a reconcile nudge")
+		}
+	}
+}
+
+func TestLastToolCallsScansPastBookkeepingMessages(t *testing.T) {
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{}`)}
+	withCall := domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleAssistant, Status: domain.MessageStatusFinal, Revision: 1, Sequence: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartToolCall, ToolCall: &call}},
+	}
+	note := domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleSystem, Status: domain.MessageStatusFinal, Revision: 1, Sequence: 2,
+		Parts:    []domain.ContentPart{{Kind: domain.PartText, Text: "[budget notice]"}},
+		Metadata: map[string]string{"kind": "system_note"},
+	}
+	if got := lastToolCalls(nil); len(got) != 0 {
+		t.Fatalf("lastToolCalls(nil) = %v, want none", got)
+	}
+	got := lastToolCalls([]domain.Message{withCall, note})
+	if len(got) != 1 || got[0].ID != call.ID {
+		t.Fatalf("lastToolCalls = %+v, want the call behind the note", got)
+	}
+}
+
 // Regression: a tool call whose raw arguments differ from the canonical form
 // produced by Prepare (e.g. "./sub" vs "sub", or an absolute path vs the
 // workspace-relative display form) must still execute. Previously the
@@ -943,15 +1284,6 @@ func TestAggregateStreamRejectsInterruptedAndMalformedToolCalls(t *testing.T) {
 				{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopToolUse},
 			}},
 		},
-		{
-			name: "invalid arguments",
-			stream: &scriptedStream{events: []domain.ModelEvent{
-				{Kind: domain.ModelEventToolCallStart, ToolIndex: 0, ToolID: domain.NewToolCallID().String(), ToolName: "read_file"},
-				{Kind: domain.ModelEventToolArgsDelta, ToolIndex: 0, ToolArgs: "{"},
-				{Kind: domain.ModelEventToolCallEnd, ToolIndex: 0},
-				{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopToolUse},
-			}},
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -965,6 +1297,35 @@ func TestAggregateStreamRejectsInterruptedAndMalformedToolCalls(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Malformed argument payloads are no longer a protocol error: the
+// aggregator preserves them as valid placeholder JSON and lets the tool
+// layer reject the call recoverably (see
+// TestLoopSurvivesMalformedToolCallArguments).
+func TestAggregateStreamSanitizesMalformedArguments(t *testing.T) {
+	clock := domain.NewFakeClock(time.Unix(0, 0).UTC())
+	stream := &scriptedStream{events: []domain.ModelEvent{
+		{Kind: domain.ModelEventToolCallStart, ToolIndex: 0, ToolID: domain.NewToolCallID().String(), ToolName: "read_file"},
+		{Kind: domain.ModelEventToolArgsDelta, ToolIndex: 0, ToolArgs: "{"},
+		{Kind: domain.ModelEventToolCallEnd, ToolIndex: 0},
+		{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopToolUse},
+	}}
+	response, err := aggregateStream(stream, clock)
+	if err != nil {
+		t.Fatalf("aggregateStream error = %v, want sanitized response", err)
+	}
+	calls := response.Message.ToolCalls()
+	if len(calls) != 1 {
+		t.Fatalf("tool calls = %d, want 1", len(calls))
+	}
+	args := string(calls[0].Arguments)
+	if !json.Valid(calls[0].Arguments) {
+		t.Fatalf("sanitized args are not valid JSON: %q", args)
+	}
+	if !strings.Contains(args, "__malformed_arguments") || !strings.Contains(args, "\u007b") && !strings.Contains(args, "{") {
+		t.Fatalf("raw payload not preserved as evidence: %q", args)
 	}
 }
 
@@ -1883,6 +2244,59 @@ func TestShouldCompactOnOccupancy(t *testing.T) {
 	}
 }
 
+// Regression: a compaction pass that cannot shrink the transcript (e.g.
+// everything sits inside the keep-recent window, so masking and archival
+// both no-op) must not retrigger on the next loop iteration. Otherwise the
+// loop spins forever between preparing and compacting — never calling the
+// model again — while spamming compaction events and checkpoints (this once
+// grew a session DB to tens of gigabytes in minutes).
+func TestShouldCompactDoesNotRetriggerWithoutGrowth(t *testing.T) {
+	run := newTestRun(domain.DefaultLimits())
+	loop := &Loop{Run: run, ContextWindow: 100}
+
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: strings.Repeat("x", 400)}},
+		CreatedAt: time.Now(),
+	})
+	if !loop.shouldCompact() {
+		t.Fatal("transcript at the occupancy line should trigger compaction")
+	}
+
+	// Simulate a no-progress pass: the condenser left the transcript unchanged.
+	loop.lastCompactEst = estTokens(run.Messages)
+	if loop.shouldCompact() {
+		t.Fatal("compaction must not retrigger while the transcript has not grown")
+	}
+	// Metered occupancy pressure alone must not bypass the guard: another
+	// pass over the same transcript cannot help; the run must proceed and
+	// let the provider accept or reject the request.
+	loop.lastCallInput = 95
+	if loop.shouldCompact() {
+		t.Fatal("metered occupancy must not retrigger compaction without transcript growth")
+	}
+
+	// A provider context-overflow rejection still forces a pass.
+	loop.forceCompact = true
+	if !loop.shouldCompact() {
+		t.Fatal("forceCompact must bypass the no-growth guard")
+	}
+	loop.forceCompact = false
+	loop.lastCallInput = 0
+
+	// Real transcript growth re-arms compaction.
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "more context here"}},
+		CreatedAt: time.Now(),
+	})
+	if !loop.shouldCompact() {
+		t.Fatal("transcript growth past the last pass must re-arm compaction")
+	}
+}
+
 func TestBudgetNoticeInjection(t *testing.T) {
 	run := newTestRun(domain.DefaultLimits())
 	loop := &Loop{Run: run, ContextWindow: 100}
@@ -2101,5 +2515,71 @@ func TestUpdateGoalToolValidation(t *testing.T) {
 	update, ok := cell.Take()
 	if !ok || update.Objective != "ship it" {
 		t.Fatalf("cell update = %+v, ok=%v", update, ok)
+	}
+}
+
+func TestRunSuccessScore(t *testing.T) {
+	liveCtx := context.Background()
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	t.Run("bare cancellation is not scored", func(t *testing.T) {
+		if _, _, scored := runSuccessScore(liveCtx, context.Canceled, domain.OutcomeCancelled); scored {
+			t.Fatal("context.Canceled must not be scored")
+		}
+	})
+	t.Run("wrapped cancellation is not scored", func(t *testing.T) {
+		err := fmt.Errorf("model stream consumption: %w", context.Canceled)
+		if _, _, scored := runSuccessScore(liveCtx, err, domain.OutcomeFailed); scored {
+			t.Fatal("wrapped context.Canceled must not be scored even with failed outcome")
+		}
+	})
+	t.Run("chain-less cancel error with cancelled ctx is not scored", func(t *testing.T) {
+		// The provider stream degrades errors to strings, so a mid-stream
+		// Ctrl+C resurfaces as errors.New("context canceled") — no chain.
+		// The run context's own state is the fallback signal.
+		err := errors.New("model stream consumption: context canceled")
+		if _, _, scored := runSuccessScore(canceledCtx, err, domain.OutcomeFailed); scored {
+			t.Fatal("cancelled run context must not be scored even with a chain-less error")
+		}
+	})
+	t.Run("cancelled ctx with nil error is not scored", func(t *testing.T) {
+		if _, _, scored := runSuccessScore(canceledCtx, nil, domain.OutcomeCancelled); scored {
+			t.Fatal("cancelled run context must not be scored")
+		}
+	})
+	t.Run("real errors score zero", func(t *testing.T) {
+		value, comment, scored := runSuccessScore(liveCtx, errors.New("provider 500"), domain.OutcomeFailed)
+		if !scored || value != 0 || comment != "provider 500" {
+			t.Fatalf("got (%v, %q, %v)", value, comment, scored)
+		}
+	})
+	t.Run("budget exhaustion scores zero", func(t *testing.T) {
+		if value, _, scored := runSuccessScore(liveCtx, nil, domain.OutcomeBudgetExhausted); !scored || value != 0 {
+			t.Fatalf("got (%v, %v)", value, scored)
+		}
+	})
+	t.Run("success outcomes score one", func(t *testing.T) {
+		for _, outcome := range []domain.Outcome{domain.OutcomeSucceeded, domain.OutcomeCompletedUnverified} {
+			if value, _, scored := runSuccessScore(liveCtx, nil, outcome); !scored || value != 1 {
+				t.Fatalf("outcome %s: got (%v, %v)", outcome, value, scored)
+			}
+		}
+	})
+}
+
+func TestToolResultTracePreviewKeepsValidUTF8(t *testing.T) {
+	// The 500-byte preview cut lands inside a multi-byte character: the
+	// excerpt must stay valid UTF-8 (OTLP protobuf rejects invalid strings).
+	body := strings.Repeat("a", 490) + "完整的技能正文内容" + strings.Repeat("b", 100)
+	result := domain.ToolResult{
+		Content: []domain.ContentPart{{Kind: domain.PartText, Text: body}},
+	}
+	preview := toolResultTracePreview(result, 500)
+	if !utf8.ValidString(preview) {
+		t.Fatalf("preview is not valid UTF-8: %q", preview[len(preview)-20:])
+	}
+	if !strings.HasSuffix(preview, "…") {
+		t.Fatalf("preview must carry the truncation marker: %q", preview[len(preview)-10:])
 	}
 }

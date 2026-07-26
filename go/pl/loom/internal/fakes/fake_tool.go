@@ -82,7 +82,14 @@ func (t *FakeTool) Execute(ctx context.Context, prepared domain.PreparedCall) do
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.executed = append(t.executed, prepared)
-	return t.result
+	result := t.result
+	// Real tools always stamp the result with the owning call ID; the loop
+	// pairs calls with results by it (isToolResultRecorded). Mirror that so
+	// test scenarios observe the same pairing invariant as production.
+	if result.CallID.IsZero() {
+		result.CallID = prepared.Call.ID
+	}
+	return result
 }
 
 // PreparedCalls returns all calls that went through Prepare.

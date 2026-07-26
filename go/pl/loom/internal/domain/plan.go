@@ -51,6 +51,10 @@ func (p PlanItem) Validate() error {
 
 // Plan is the dynamic task plan for a Run.
 type Plan struct {
+	// Title is a short model-authored name for the overall objective, shown
+	// as the plan panel's title row. Optional; snapshots that omit it keep
+	// the previously set title (see drainPlanUpdates).
+	Title string     `json:"title,omitempty"`
 	Items []PlanItem `json:"items"`
 }
 
