@@ -22,12 +22,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/render"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
@@ -135,11 +137,17 @@ func NewController(cfg ControllerConfig) *Controller {
 		logger = slog.Default()
 	}
 	sessionCtx, cancelSession := context.WithCancel(context.Background())
+	// Bootstrap is nil in some UI tests; session rules then degrade to a
+	// process-local store so "allow always" still works for the run.
+	sessionRules := permission.NewSessionRules()
+	if cfg.Bootstrap != nil && cfg.Bootstrap.SessionRules != nil {
+		sessionRules = cfg.Bootstrap.SessionRules
+	}
 	return &Controller{
 		bootstrap:     cfg.Bootstrap,
 		broker:        cfg.Broker,
 		approver:      cfg.Approver,
-		rulesApprover: NewRuleApprover(cfg.Approver),
+		rulesApprover: NewRuleApprover(cfg.Approver, sessionRules),
 		clock:         clock,
 		logger:        logger,
 		state:         ControllerStateBooting,
@@ -723,6 +731,19 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 	if cmd.Decision == domain.DecisionAllow && cmd.RuleHint != nil {
 		if prefix, ok := c.rulesApprover.RememberRunCmd(cmd.RuleHint.ToolName, cmd.RuleHint.Arguments); ok {
 			note = strings.Join(prefix, " ")
+			// Persist the remembered prefix to the user rules layer so future
+			// sessions inherit it (LOOM_RULES_PERSIST=0 opts out). The
+			// derivation above already banned shells, eval interpreters,
+			// destructive programs, heredocs, and escalated runs.
+			if os.Getenv("LOOM_RULES_PERSIST") != "0" {
+				if dir, err := permission.RulesDirUser(); err == nil {
+					if err := permission.AppendRememberedRule(dir, prefix); err != nil {
+						c.logger.Warn("persist remembered rule failed", "prefix", note, "error", err)
+					} else {
+						note += " (saved to " + dir + ")"
+					}
+				}
+			}
 		}
 	}
 	cmd.ResultCh <- controllerResult{Value: note}

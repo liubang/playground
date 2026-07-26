@@ -20,12 +20,10 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"regexp"
 	"strings"
-	"sync"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
-	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/permission"
 )
 
 // RuleApprover auto-approves prepared calls that match session-persisted
@@ -33,20 +31,20 @@ import (
 // when the user picks "allow always" on an approval, and are categorical
 // command prefixes like ["go", "test"] — never raw full commands.
 //
-// Persistence is session-scoped; durable cross-session rules are a separate
-// follow-up. Only run_cmd calls are rule-eligible: other tools' approvals
+// The store lives in permission.SessionRules and is shared with the policy
+// layer, so a remembered prefix also short-circuits policy evaluation
+// directly. Only run_cmd calls are rule-eligible: other tools' approvals
 // (e.g. edit/write) stay per-call because their blast radius varies by path.
 type RuleApprover struct {
-	inner domain.Approver
-
-	mu             sync.RWMutex
-	runCmdPrefixes [][]string
+	inner   domain.Approver
+	session *permission.SessionRules
 }
 
 // NewRuleApprover wraps inner with session rule matching. A nil inner
-// approver makes every unmatched call deny, which is useful in tests.
-func NewRuleApprover(inner domain.Approver) *RuleApprover {
-	return &RuleApprover{inner: inner}
+// approver makes every unmatched call deny, which is useful in tests. A nil
+// session store disables remembering (rules still match when present).
+func NewRuleApprover(inner domain.Approver, session *permission.SessionRules) *RuleApprover {
+	return &RuleApprover{inner: inner, session: session}
 }
 
 // RequestApproval auto-allows rule-matching calls; everything else reaches
@@ -70,178 +68,51 @@ type ApprovalRuleHint struct {
 
 // RememberRunCmd derives and stores a categorical prefix rule for a run_cmd
 // call, returning the stored prefix. ok=false means the call must never be
-// rule-persisted: shells, destructive programs, generic interpreters without
-// a subcommand, heredocs, and escalated (no-sandbox) runs.
+// rule-persisted: shells, eval-form interpreters, destructive programs,
+// heredocs, and escalated (no-sandbox) runs.
 func (r *RuleApprover) RememberRunCmd(toolName string, arguments json.RawMessage) (prefix []string, ok bool) {
-	if toolName != "run_cmd" {
+	if toolName != "run_cmd" || r.session == nil {
 		return nil, false
 	}
-	argv, ok := runCmdArgv(arguments)
+	argv, ok := permission.RunCmdArgv(arguments)
 	if !ok {
 		return nil, false
 	}
-	prefix, ok = DeriveRunCmdPrefix(argv)
-	if !ok {
-		return nil, false
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, existing := range r.runCmdPrefixes {
-		if stringSliceEqual(existing, prefix) {
-			return prefix, true
-		}
-	}
-	r.runCmdPrefixes = append(r.runCmdPrefixes, prefix)
-	return prefix, true
+	return r.session.RememberRunCmd(argv)
 }
 
 func (r *RuleApprover) matches(call domain.PreparedCall) bool {
-	if call.Call.Name != "run_cmd" {
+	if call.Call.Name != "run_cmd" || r.session == nil {
 		return false
 	}
-	argv, ok := runCmdArgv(call.Call.Arguments)
-	if !ok {
-		return false
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, prefix := range r.runCmdPrefixes {
-		if argvHasPrefix(argv, prefix) {
-			return true
-		}
-	}
-	return false
+	argv, ok := permission.RunCmdArgv(call.Call.Arguments)
+	return ok && r.session.Matches(argv)
 }
 
 // RunCmdRuleCount reports how many run_cmd prefixes are remembered (for
 // status display and tests).
 func (r *RuleApprover) RunCmdRuleCount() int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return len(r.runCmdPrefixes)
-}
-
-// subcommandToken matches simple subcommand words (test, run, vet, download,
-// pr, --free-form not allowed) used to widen a rule from ["go"] to
-// ["go", "test"] without allowing arbitrary scripting.
-var subcommandToken = regexp.MustCompile(`^[a-z][a-z0-9_+-]*$`)
-
-// neverPersistPrograms must never start a persisted rule: shells compose
-// arbitrary commands, interpreters execute arbitrary scripts, and destructive
-// programs do not deserve a standing approval.
-var neverPersistPrograms = map[string]struct{}{
-	"rm": {}, "sudo": {}, "su": {}, "dd": {}, "mkfs": {}, "shred": {},
-	"python": {}, "python3": {}, "node": {}, "ruby": {}, "perl": {},
-}
-
-// subcommandedPrograms are the known subcommand-style tools for which the
-// first positional argument is a categorical subcommand worth including in
-// the rule (["go", "test"] instead of the too-broad ["go"]). For every
-// other program the first argument is data, not a subcommand
-// ("rg pattern", "cat file"), so the rule stays [program].
-var subcommandedPrograms = map[string]struct{}{
-	"go": {}, "npm": {}, "npx": {}, "pnpm": {}, "yarn": {}, "cargo": {},
-	"git": {}, "bazel": {}, "docker": {}, "kubectl": {}, "helm": {}, "gh": {},
-	"golangci-lint": {}, "ruff": {}, "eslint": {}, "tsc": {},
-}
-
-// DeriveRunCmdPrefix computes the categorical rule prefix for a run_cmd argv
-// ([program, ...args]): [program] plus the first subcommand-like positional
-// argument, e.g. ["go", "test"] from ["go", "test", "./..."]. ok=false when
-// the call must not be persisted (see neverPersistPrograms, shells, heredocs,
-// escalated runs).
-func DeriveRunCmdPrefix(argv []string) ([]string, bool) {
-	if len(argv) == 0 {
-		return nil, false
+	if r.session == nil {
+		return 0
 	}
-	program := argv[0]
-	if process.IsShellProgram(program) {
-		return nil, false
-	}
-	base := program
-	if idx := strings.LastIndexAny(base, `/\\`); idx >= 0 {
-		base = base[idx+1:]
-	}
-	if _, banned := neverPersistPrograms[strings.ToLower(base)]; banned {
-		return nil, false
-	}
-	for _, arg := range argv[1:] {
-		if strings.Contains(arg, "<<") {
-			return nil, false
-		}
-	}
-	prefix := []string{program}
-	if _, subcommanded := subcommandedPrograms[strings.ToLower(base)]; !subcommanded {
-		return prefix, true
-	}
-	for _, arg := range argv[1:] {
-		if strings.HasPrefix(arg, "-") {
-			break
-		}
-		if subcommandToken.MatchString(arg) {
-			prefix = append(prefix, arg)
-		}
-		break
-	}
-	return prefix, true
+	return len(r.session.Prefixes())
 }
 
 // RunCmdRulePreview renders the categorical rule that "allow always" would
 // create for a run_cmd call (e.g. "go test"), for display in the approval
-// overlay. ok=false means the call cannot be remembered (shell, interpreter
-// without subcommand, heredoc, escalation, or a non-run_cmd tool).
+// overlay. ok=false means the call cannot be remembered (shell, eval-form
+// interpreter, heredoc, escalation, or a non-run_cmd tool).
 func RunCmdRulePreview(toolName string, arguments json.RawMessage) (string, bool) {
 	if toolName != "run_cmd" {
 		return "", false
 	}
-	argv, ok := runCmdArgv(arguments)
+	argv, ok := permission.RunCmdArgv(arguments)
 	if !ok {
 		return "", false
 	}
-	prefix, ok := DeriveRunCmdPrefix(argv)
+	prefix, ok := permission.DeriveRunCmdPrefix(argv)
 	if !ok {
 		return "", false
 	}
 	return strings.Join(prefix, " "), true
-}
-
-// runCmdArgv extracts [program, ...args] from run_cmd call arguments.
-// Escalated calls are never rule-eligible.
-func runCmdArgv(raw json.RawMessage) ([]string, bool) {
-	var args struct {
-		Program            string   `json:"program"`
-		Args               []string `json:"args"`
-		SandboxPermissions string   `json:"sandbox_permissions"`
-	}
-	if err := json.Unmarshal(raw, &args); err != nil || args.Program == "" {
-		return nil, false
-	}
-	if args.SandboxPermissions == "require_escalated" {
-		return nil, false
-	}
-	return append([]string{args.Program}, args.Args...), true
-}
-
-func argvHasPrefix(argv, prefix []string) bool {
-	if len(prefix) == 0 || len(argv) < len(prefix) {
-		return false
-	}
-	for i := range prefix {
-		if argv[i] != prefix[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func stringSliceEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

@@ -600,15 +600,17 @@ type fileChangeResult struct {
 }
 
 // Policy evaluates the authorization decision for a prepared tool call.
+// Evaluation is call-aware (not just risk-level) so declarative rules can
+// match on the concrete argv/paths before the risk baseline applies.
 type Policy interface {
-	Evaluate(risk domain.RiskLevel) domain.Decision
+	Evaluate(call domain.PreparedCall) domain.Decision
 }
 
 // DefaultPolicy applies the baseline R0/R1 allow, R2/R3 ask, R4 deny policy.
 type DefaultPolicy struct{}
 
-func (DefaultPolicy) Evaluate(risk domain.RiskLevel) domain.Decision {
-	switch risk {
+func (DefaultPolicy) Evaluate(call domain.PreparedCall) domain.Decision {
+	switch call.Risk {
 	case domain.R0, domain.R1:
 		return domain.DecisionAllow
 	case domain.R2, domain.R3:
@@ -1136,7 +1138,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 			continue
 		}
 		l.Run.appendEvent(domain.EventToolCallPrepared, makeToolCallAuditPayload(prepared))
-		switch l.policy().Evaluate(prepared.Risk) {
+		switch l.policy().Evaluate(prepared) {
 		case domain.DecisionAllow:
 			l.prepared[tc.ID] = prepared
 		case domain.DecisionAsk:
@@ -1174,7 +1176,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 	}
 	for _, tc := range lastToolCalls(l.Run.Messages) {
 		prepared, ok := l.prepared[tc.ID]
-		if !ok || l.policy().Evaluate(prepared.Risk) != domain.DecisionAsk {
+		if !ok || l.policy().Evaluate(prepared) != domain.DecisionAsk {
 			continue
 		}
 		// The durable permission event ID is the approval ID. Reusing it for
