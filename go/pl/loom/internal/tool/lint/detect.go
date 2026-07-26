@@ -164,11 +164,16 @@ func (t *LintTool) goPlan(moduleDir string, target pathResolution, forced string
 	}
 	env := map[string]string{
 		// The seatbelt sandbox only allows writes inside the workspace and
-		// the temp dir; point the build cache at a persistent temp location
-		// and force fully offline module resolution.
-		"GOCACHE": filepath.Join(os.TempDir(), "loom-gocache"),
-		"GOPROXY": "off",
-		"GOFLAGS": "-mod=readonly",
+		// the temp dir; point the build/module caches at persistent temp
+		// locations and force fully offline module resolution. GOMODCACHE
+		// must be set explicitly: go (>=1.24) aborts with "module cache not
+		// found: neither GOMODCACHE nor GOPATH is set" in hermetic
+		// environments without HOME (e.g. bazel test on CI), where the
+		// GOPATH default cannot be derived.
+		"GOCACHE":    filepath.Join(os.TempDir(), "loom-gocache"),
+		"GOMODCACHE": filepath.Join(os.TempDir(), "loom-gomodcache"),
+		"GOPROXY":    "off",
+		"GOFLAGS":    "-mod=readonly",
 	}
 
 	if forced != linterGoVet {
