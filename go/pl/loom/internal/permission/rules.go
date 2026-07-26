@@ -45,6 +45,7 @@
 package permission
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -124,6 +125,54 @@ type RuleSet struct {
 	rules []Rule
 }
 
+// Rules returns the loaded rules (for `loom rules list` and tests).
+func (s *RuleSet) Rules() []Rule {
+	if s == nil {
+		return nil
+	}
+	return append([]Rule(nil), s.rules...)
+}
+
+// builtinJSON is the curated set of read-only commands that never deserve
+// an approval prompt. Inclusion bar (v1): no writes, no code execution, no
+// network — harmless even if the sandbox failed open. NOT included on
+// purpose: find (-exec), xargs, awk (system()), sed (-i), git branch (-d),
+// go test (runs code), shells.
+//
+//go:embed builtin.json
+var builtinJSON []byte
+
+// builtinSource marks rules that came from the embedded set.
+const builtinSource = "builtin"
+
+// LoadBuiltinRules parses and self-tests the embedded rule set. A broken
+// embedded rule is a build-time bug, so the error is fatal to the caller
+// (AttachRules panics in tests via the unit test over this function).
+func LoadBuiltinRules() (*RuleSet, error) {
+	var f ruleFile
+	if err := json.Unmarshal(builtinJSON, &f); err != nil {
+		return nil, fmt.Errorf("parse embedded builtin rules: %w", err)
+	}
+	set := &RuleSet{}
+	for i := range f.Rules {
+		f.Rules[i].Source = builtinSource
+		if err := validateRule(&f.Rules[i]); err != nil {
+			return nil, fmt.Errorf("embedded builtin rules: %w", err)
+		}
+		set.rules = append(set.rules, f.Rules[i])
+	}
+	return set, nil
+}
+
+// merge appends other's rules into s (evaluation is strictest-wins, so
+// merge order never changes the outcome).
+func (s *RuleSet) merge(other *RuleSet) {
+	if s == nil || other == nil {
+		return
+	}
+	s.rules = append(s.rules, other.rules...)
+}
+
 // Evaluate returns the strictest decision among matching rules, or "" when
 // no rule matches (callers then fall back to risk-based policy).
 func (s *RuleSet) Evaluate(argv []string) (domain.Decision, Rule) {
@@ -145,6 +194,14 @@ func (s *RuleSet) Evaluate(argv []string) (domain.Decision, Rule) {
 		}
 	}
 	return best, bestR
+}
+
+// MatchRule returns the winning rule for argv (zero Rule with empty Source
+// when nothing matches) — the display-side companion of Evaluate, for
+// `loom rules check`.
+func MatchRule(s *RuleSet, argv []string) Rule {
+	_, r := s.Evaluate(argv)
+	return r
 }
 
 // Size reports the number of loaded rules.
@@ -364,13 +421,21 @@ var neverPersistPrograms = map[string]struct{}{
 }
 
 // interpreterPrograms are rule-eligible ONLY when invoking a script file
-// (node scripts/lx.js), never for inline evaluation (node -e, python -c)
-// or REPL/stdin. The script path becomes part of the categorical prefix, so
-// remembering "node ~/.loom/skills/bi-query-sql/scripts/lx.js" approves only
-// that script — mirroring codex's ban on eval-form amendments while keeping
-// skill workflows memorable.
+// (node scripts/lx.js) or a harmless informational flag (node -v), never
+// for inline evaluation (node -e, python -c) or REPL/stdin. The script path
+// becomes part of the categorical prefix, so remembering "node
+// ~/.loom/skills/bi-query-sql/scripts/lx.js" approves only that script —
+// mirroring codex's ban on eval-form amendments while keeping skill
+// workflows memorable.
 var interpreterPrograms = map[string]struct{}{
 	"python": {}, "python3": {}, "node": {}, "ruby": {}, "perl": {},
+}
+
+// informationalInterpreterFlags print and exit without executing user code;
+// they are the ONLY flag forms interpreters may derive rules for
+// (["node", "-v"] approves exactly the version probe, nothing else).
+var informationalInterpreterFlags = map[string]struct{}{
+	"-v": {}, "--version": {}, "-V": {}, "-h": {}, "--help": {},
 }
 
 // scriptFileToken reports whether arg looks like a script path rather than
@@ -424,11 +489,20 @@ func DeriveRunCmdPrefix(argv []string) ([]string, bool) {
 			return nil, false
 		}
 	}
-	// Interpreters: only script-file invocation is eligible; the script
-	// path joins the prefix. Eval forms (-e/-c/flags first) and bare REPL
-	// or stdin are never eligible.
+	// Interpreters: script-file invocation or a print-and-exit
+	// informational flag is eligible; eval forms (-e/-c/--eval) and bare
+	// REPL or stdin are never eligible.
 	if _, interp := interpreterPrograms[base]; interp {
-		if len(argv) < 2 || strings.HasPrefix(argv[1], "-") || !scriptFileToken(argv[1]) {
+		if len(argv) < 2 {
+			return nil, false
+		}
+		if strings.HasPrefix(argv[1], "-") {
+			if _, harmless := informationalInterpreterFlags[argv[1]]; harmless {
+				return []string{program, argv[1]}, true
+			}
+			return nil, false
+		}
+		if !scriptFileToken(argv[1]) {
 			return nil, false
 		}
 		return []string{program, argv[1]}, true

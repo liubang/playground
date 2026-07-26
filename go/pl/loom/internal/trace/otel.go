@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -421,12 +422,16 @@ func sanitizeUTF8(s string) string {
 }
 
 // truncateContent bounds a string for span attributes, marking truncation.
-// Sanitizes first and cuts at a rune boundary, so the result is always
-// valid UTF-8 regardless of the input bytes.
+// Sanitizes first and backs off to a rune boundary, so the result is
+// always valid UTF-8 and never shows a replacement char mid-text.
 func truncateContent(s string) string {
 	s = sanitizeUTF8(s)
 	if len(s) > maxAttributeContent {
-		return sanitizeUTF8(s[:maxAttributeContent]) + "…[truncated]"
+		cut := maxAttributeContent
+		for cut > 0 && !utf8.ValidString(s[:cut]) {
+			cut--
+		}
+		return s[:cut] + "…[truncated]"
 	}
 	return s
 }
