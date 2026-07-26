@@ -190,32 +190,44 @@ func (m *Model) syncTranscript() {
 	if m.renderCache == nil {
 		m.renderCache = make(map[string]cachedRender)
 	}
-	lines := make([]string, 0, len(m.blocks.Order))
 	m.blockOffsets = make(map[string]int, len(m.blocks.Order))
+	var b strings.Builder
 	offset := 0
+	var prev *TranscriptBlock
 	for _, id := range m.blocks.Order {
 		block := m.blocks.ByID[id]
+		if prev != nil {
+			// A blank row separates logical sections (Claude Code's airy
+			// layout); consecutive tool calls stay packed so a retry burst
+			// still reads as one list instead of scattered rows.
+			if prev.Kind == BlockKindTool && block.Kind == BlockKindTool {
+				b.WriteString("\n")
+			} else {
+				b.WriteString("\n\n")
+				offset++
+			}
+		}
 		m.blockOffsets[id] = offset
 		key := m.blockRenderKey(block)
 		var out string
+		cached := false
 		if key != "" {
 			if entry, ok := m.renderCache[id]; ok && entry.key == key {
 				out = entry.out
-				lines = append(lines, out)
-				offset += lipgloss.Height(out)
-				continue
+				cached = true
 			}
 		}
-		out = m.renderBlock(block)
-		if key != "" {
-			m.renderCache[id] = cachedRender{key: key, out: out}
+		if !cached {
+			out = m.renderBlock(block)
+			if key != "" {
+				m.renderCache[id] = cachedRender{key: key, out: out}
+			}
 		}
-		lines = append(lines, out)
-		// The "\n" join is a line separator, not an extra row: the next block
-		// starts right after this block's own height.
+		b.WriteString(out)
 		offset += lipgloss.Height(out)
+		prev = block
 	}
-	m.viewport.SetContent(strings.Join(lines, "\n"))
+	m.viewport.SetContent(b.String())
 	if m.followTail {
 		m.viewport.GotoBottom()
 	}
@@ -257,6 +269,7 @@ func (m Model) visibleTranscriptHeight() int {
 	case ModeChat:
 		reserved += m.textArea.Height() + 2 // composer border
 		reserved += m.completionHeight()
+		reserved += m.planPanelHeight()
 	case ModeSearch:
 		reserved += 3 // one-line search bar + border
 	case ModeApproval:
@@ -380,6 +393,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyCtrlO:
 		m.blocks.ToggleAllToolOutputs()
+		return m, nil
+	case tea.KeyCtrlT:
+		m.planHidden = !m.planHidden
 		return m, nil
 	case tea.KeyCtrlF:
 		m.enterSearch()
@@ -936,6 +952,12 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 	switch evt.Kind {
 	case runtimeevent.KindTurnStarted:
 		m.setActivity("Preparing turn")
+		// The panel shows the current turn's plan only: a new prompt starts
+		// the display fresh (Claude Code clears tasks between turns). The
+		// runtime plan itself is untouched — an unfinished plan is still
+		// re-injected into the model's context, and the next update_plan
+		// revision brings the panel right back.
+		m.plan = domain.Plan{}
 	case runtimeevent.KindSessionOpened:
 		var payload runtimeevent.SessionOpenedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
@@ -1015,6 +1037,11 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
 			m.contextEst = payload.EstTokens
 			m.lastCallInput = payload.LastCallInputTokens
+		}
+	case runtimeevent.KindPlanUpdated:
+		var plan domain.Plan
+		if err := json.Unmarshal(evt.Payload, &plan); err == nil {
+			m.plan = plan
 		}
 	case runtimeevent.KindRunCancelRequested:
 		m.phase = "cancelling"

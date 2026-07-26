@@ -23,24 +23,30 @@ import "strings"
 // Nerd Font glyphs (the default, requiring a Nerd Font patched terminal
 // font) and plain Unicode text symbols that render in any terminal.
 type Icons struct {
-	Success   string // tool call succeeded, affirmative actions
-	Error     string // tool call failed, deny actions
-	Cancelled string // tool call cancelled
-	Pending   string // waiting / unknown state
-	Approval  string // approval-required marker
-	Warning   string // warning title marker
+	Success     string // tool call succeeded, affirmative actions
+	Error       string // tool call failed, deny actions
+	Cancelled   string // tool call cancelled
+	Pending     string // waiting / unknown state
+	Approval    string // approval-required marker
+	Warning     string // warning title marker
+	PlanDone    string // completed plan step
+	PlanCurrent string // in-progress plan step
+	PlanTodo    string // pending plan step
 }
 
 // NerdIcons returns the Nerd Font glyph set (Font Awesome codepoints, the
 // most widely patched range).
 func NerdIcons() Icons {
 	return Icons{
-		Success:   "\uf00c", //  check
-		Error:     "\uf00d", //  times
-		Cancelled: "\uf05e", //  ban
-		Pending:   "\uf10c", //  circle-o
-		Approval:  "\uf059", //  question-circle
-		Warning:   "\uf071", //  exclamation-triangle
+		Success:     "\uf00c", //  check
+		Error:       "\uf00d", //  times
+		Cancelled:   "\uf05e", //  ban
+		Pending:     "\uf10c", //  circle-o
+		Approval:    "\uf059", //  question-circle
+		Warning:     "\uf071", //  exclamation-triangle
+		PlanDone:    "\uf046", //  check-square-o
+		PlanCurrent: "\uf0c8", //  square
+		PlanTodo:    "\uf096", //  square-o
 	}
 }
 
@@ -49,12 +55,15 @@ func NerdIcons() Icons {
 // unprofessional and breaks width calculations.
 func PlainIcons() Icons {
 	return Icons{
-		Success:   "✓", // ✓
-		Error:     "✗", // ✗
-		Cancelled: "⊘", // ⊘
-		Pending:   "○", // ○
-		Approval:  "?", // ?
-		Warning:   "!", // !
+		Success:     "✓",   // ✓
+		Error:       "✗",   // ✗
+		Cancelled:   "⊘",   // ⊘
+		Pending:     "○",   // ○
+		Approval:    "?",   // ?
+		Warning:     "!",   // !
+		PlanDone:    "[x]", // [x]
+		PlanCurrent: "[>]", // [>]
+		PlanTodo:    "[ ]", // [ ]
 	}
 }
 

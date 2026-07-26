@@ -66,6 +66,13 @@ type RulesProvider interface {
 	Discover(ctx context.Context) ([]RuleFile, error)
 }
 
+// SkillsProvider renders the available-skills catalog section at Build time
+// (implemented by internal/skill). Implementations must be best-effort: a
+// failure degrades to no skills section rather than failing the model turn.
+type SkillsProvider interface {
+	Skills(ctx context.Context) (string, error)
+}
+
 // Builder assembles the system prompt from the built-in normative sections,
 // optional extra instructions, discovered workspace rules, and a dynamic
 // environment snapshot.
@@ -74,6 +81,7 @@ type Builder struct {
 	extra         string
 	env           EnvProvider
 	rules         RulesProvider
+	skills        SkillsProvider
 	clock         domain.Clock
 	managed       *managedBase
 }
@@ -104,6 +112,14 @@ func WithEnvProvider(p EnvProvider) Option {
 // A nil provider disables workspace rules entirely.
 func WithRulesProvider(p RulesProvider) Option {
 	return func(b *Builder) { b.rules = p }
+}
+
+// WithSkillsProvider installs the skills catalog provider. A nil provider
+// disables the skills section entirely (and read_skill should not be
+// registered either, since the model would have no catalog to resolve
+// against).
+func WithSkillsProvider(p SkillsProvider) Option {
+	return func(b *Builder) { b.skills = p }
 }
 
 // WithClock overrides the clock used for the environment snapshot.
@@ -187,6 +203,20 @@ func (b *Builder) Build(ctx context.Context) (string, []domain.ContextRuleRef, e
 		}
 	}
 
+	// The skills catalog sits between workspace rules and the environment
+	// snapshot: it is a capability listing, not a rule. Provider failures
+	// degrade to no section (aligned with rules provider semantics — a
+	// Build error would drop the ENTIRE system prompt in the agent loop).
+	if b.skills != nil {
+		if body, err := b.skills.Skills(ctx); err == nil && strings.TrimSpace(body) != "" {
+			sections = append(sections, promptSection{
+				source: "loom://skills/catalog",
+				title:  "可用技能（Skills）",
+				body:   body,
+			})
+		}
+	}
+
 	env, collectErr := b.env.Collect(ctx)
 	if collectErr != nil {
 		env = Environment{WorkspaceRoot: b.workspaceRoot, Now: b.clock.Now()}
@@ -237,8 +267,17 @@ func builtinSections() []promptSection {
 - edit/write 成功后不要重读文件确认——工具成功即生效，只在报错时处理。
 - 为改动补测试时参照相邻已有测试的位置与风格；不给没有测试的代码库引入测试。`,
 		},
-		{
-			source: "loom://builtin/code-style",
+	{
+		source: "loom://builtin/plan",
+		title:  "任务计划",
+		body: `- 简单直接的任务（约最简单的 25%）不要使用 update_plan；多步骤任务先制定计划再执行。
+- 不做单步计划；计划应分解为可独立验证的若干步骤。创建时用 title 给计划起个简短标题（几个字概括整体目标，如「loom 架构梳理」）。
+- 每完成一个子任务就立即调用 update_plan 更新——先把当前步骤标记为 done（尽量附一句 evidence 说明验证依据），再把下一步标记为 in_progress；任意时刻至多一个 in_progress。禁止攒到任务末尾批量补记。
+- 先产出后标记：只有某步骤的产物（代码修改、命令验证、结论文本）已经实际产生，才能把它标记为 done；涉及“输出/总结/交付”的步骤，必须在同一回复里先输出可见正文、再调用 update_plan，严禁提前标记。
+- 计划跨会话轮次、上下文压缩与中断恢复持久保存，其最新状态会在每次模型请求前自动出现在你的上下文中——不要在回复消息里复述计划内容。`,
+	},
+	{
+		source: "loom://builtin/code-style",
 			title:  "代码修改规范",
 			body: `- 遵循项目既有的代码风格、目录结构与依赖管理方式，不引入未被要求的依赖。
 - 优先编辑现有文件；除非确有必要，不新建文件，不主动创建文档。

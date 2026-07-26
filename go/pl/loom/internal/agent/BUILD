@@ -22,6 +22,7 @@ go_library(
     srcs = [
         "compact.go",
         "goal.go",
+        "plan.go",
         "run.go",
         "stream_hooks.go",
     ],
@@ -37,6 +38,7 @@ go_test(
     name = "agent_test",
     srcs = [
         "compact_test.go",
+        "plan_test.go",
         "run_test.go",
     ],
     embed = [":agent_lib"],

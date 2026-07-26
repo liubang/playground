@@ -655,27 +655,68 @@ func TestRunCmdEscalatedBypassesDefaultSandbox(t *testing.T) {
 	}
 }
 
-func TestSandboxDenialNote(t *testing.T) {
-	cases := []struct {
-		stderr string
-		hit    bool
-	}{
-		{"dial tcp: lookup supabase.sankuai.com: no such host", true},
-		{"listen tcp 127.0.0.1:19528: bind: operation not permitted", true},
-		{"curl: (6) Could not resolve host: example.com", true},
-		{"wget: unable to resolve host address 'x'", false},
-		{"compiling main.go", false},
-		{"", false},
-	}
-	for _, tc := range cases {
-		note := sandboxDenialNote(tc.stderr)
-		if tc.hit && note == "" {
-			t.Errorf("sandboxDenialNote(%q) = %q, want a note", tc.stderr, note)
+func TestSandboxGuidanceNote(t *testing.T) {
+	t.Run("denial fingerprints point at escalation", func(t *testing.T) {
+		cases := []struct {
+			stderr string
+			hit    bool
+		}{
+			{"dial tcp: lookup supabase.sankuai.com: no such host", true},
+			{"listen tcp 127.0.0.1:19528: bind: operation not permitted", true},
+			{"curl: (6) Could not resolve host: example.com", true},
+			{"cp: /protected/file: Read-only file system", true},
+			{"wget: unable to resolve host address 'x'", false},
+			{"compiling main.go", false},
+			{"", false},
 		}
-		if !tc.hit && note != "" {
-			t.Errorf("sandboxDenialNote(%q) = %q, want empty", tc.stderr, note)
+		for _, tc := range cases {
+			note := sandboxGuidanceNote(tc.stderr, false, false)
+			if tc.hit && note == "" {
+				t.Errorf("sandboxGuidanceNote(%q) = %q, want a note", tc.stderr, note)
+			}
+			if !tc.hit && note != "" {
+				t.Errorf("sandboxGuidanceNote(%q) = %q, want empty", tc.stderr, note)
+			}
+			if tc.hit {
+				// Regression guard: the note must route through the
+				// require_escalated approval path, and must never delegate
+				// the command to the user's local terminal (the old advice
+				// taught the model to give up instead of escalating).
+				if !strings.Contains(note, "require_escalated") {
+					t.Errorf("sandboxGuidanceNote(%q) = %q, want escalation guidance", tc.stderr, note)
+				}
+				if strings.Contains(note, "local terminal") {
+					t.Errorf("sandboxGuidanceNote(%q) = %q, must not delegate to the user's terminal", tc.stderr, note)
+				}
+			}
 		}
-	}
+	})
+
+	t.Run("timeout suggests a sandbox network hang", func(t *testing.T) {
+		note := sandboxGuidanceNote("still working...", true, false)
+		if note == "" {
+			t.Fatal("timeout note = empty, want guidance")
+		}
+		if !strings.Contains(note, "require_escalated") || !strings.Contains(note, "timeout") {
+			t.Fatalf("timeout note = %q, want timeout + escalation guidance", note)
+		}
+	})
+
+	t.Run("denial fingerprint wins over timeout", func(t *testing.T) {
+		note := sandboxGuidanceNote("dial tcp: no such host", true, false)
+		if !strings.HasPrefix(note, "outbound network and DNS are denied") {
+			t.Fatalf("note = %q, want the denial variant", note)
+		}
+	})
+
+	t.Run("escalated runs get no note", func(t *testing.T) {
+		if note := sandboxGuidanceNote("dial tcp: no such host", true, true); note != "" {
+			t.Fatalf("escalated note = %q, want empty", note)
+		}
+		if note := sandboxGuidanceNote("", false, true); note != "" {
+			t.Fatalf("escalated note = %q, want empty", note)
+		}
+	})
 }
 
 func TestClassifyRunError(t *testing.T) {

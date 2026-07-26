@@ -218,6 +218,15 @@ func (c Condenser) Condense(ctx context.Context, messages *[]domain.Message, art
 		// protecting only the final message, until the target is met.
 		c.maskRange(ctx, *messages, artifacts, 0, len(*messages)-1, c.TargetTokens, &result)
 	}
+	// Dense-sequence invariant: Run.normalizeMessage assigns new messages
+	// len(messages)+1 and ContinueRun requires restored sequences to equal
+	// index+1. Archival punches a hole in the numbering (the marker inherits
+	// a mid-range sequence), so without renumbering, messages appended after
+	// compaction collide with survivors and brick session recovery with
+	// "sequence N already assigned to message ...".
+	for i := range *messages {
+		(*messages)[i].Sequence = int64(i + 1)
+	}
 	return result
 }
 
@@ -320,10 +329,9 @@ func (c Condenser) archiveOldestSpan(ctx context.Context, messages *[]domain.Mes
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: archiveMarkerText(cut, ref, artifacts)}},
 		CreatedAt: time.Now().UTC(),
 		Metadata:  map[string]string{"compacted": "archived"},
-		// Inherit the sequence of the last archived message: the marker must
-		// satisfy the transcript's positive-and-strictly-increasing invariant
-		// (a zero sequence bricks session recovery with "must be positive").
-		Sequence: msgs[cut-1].Sequence,
+		// Sequence is left zero here: Condense renumbers the whole list
+		// densely before returning, which is the invariant the rest of the
+		// system (message append, continuation validation) relies on.
 	}
 	rest := append([]domain.Message{marker}, msgs[cut:]...)
 	*messages = rest

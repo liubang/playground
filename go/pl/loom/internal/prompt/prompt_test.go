@@ -68,7 +68,7 @@ func TestBuildContainsAllBuiltinSectionsInOrder(t *testing.T) {
 	text, rules, err := b.Build(context.Background())
 	require.NoError(t, err)
 
-	titles := []string{"身份与角色", "核心工作方式", "代码修改规范", "沟通规范", "运行环境约束", "终端与 Git 安全约束", "环境与上下文"}
+	titles := []string{"身份与角色", "核心工作方式", "任务计划", "代码修改规范", "沟通规范", "运行环境约束", "终端与 Git 安全约束", "环境与上下文"}
 	last := -1
 	for _, title := range titles {
 		idx := strings.Index(text, "# "+title)
@@ -324,4 +324,80 @@ func gitRun(t *testing.T, repoRoot string, args ...string) {
 	if err != nil {
 		t.Fatalf("git %v failed: %v\n%s", args, err, output)
 	}
+}
+
+type staticSkillsProvider struct {
+	body string
+	err  error
+}
+
+func (p staticSkillsProvider) Skills(context.Context) (string, error) { return p.body, p.err }
+
+func TestBuildInjectsSkillsSection(t *testing.T) {
+	b := NewBuilder("/ws",
+		WithEnvProvider(staticEnvProvider{env: testEnvironment()}),
+		WithRulesProvider(staticRulesProvider{files: []RuleFile{{Path: "/ws/LOOM.md", Content: "rule"}}}),
+		WithSkillsProvider(staticSkillsProvider{body: "skill catalog body"}),
+	)
+	text, rules, err := b.Build(context.Background())
+	require.NoError(t, err)
+
+	skillsIdx := strings.Index(text, "# 可用技能（Skills）")
+	require.Greater(t, skillsIdx, -1, "skills section missing")
+	assert.True(t, strings.Index(text, "rule") < skillsIdx, "skills section must follow workspace rules")
+	assert.True(t, skillsIdx < strings.Index(text, "# 环境与上下文"), "skills section must precede the environment section")
+	assert.Contains(t, text, "skill catalog body")
+
+	var sources []string
+	for _, r := range rules {
+		sources = append(sources, r.Source)
+	}
+	assert.Contains(t, sources, "loom://skills/catalog")
+}
+
+func TestBuildSkillsProviderFailureDegradesToNoSection(t *testing.T) {
+	b := NewBuilder("/ws",
+		WithEnvProvider(staticEnvProvider{env: testEnvironment()}),
+		noRules,
+		WithSkillsProvider(staticSkillsProvider{err: errors.New("boom")}),
+	)
+	text, rules, err := b.Build(context.Background())
+	require.NoError(t, err)
+	assert.NotContains(t, text, "可用技能")
+	// Every other section keeps its audit ref.
+	for _, r := range rules {
+		assert.NotEqual(t, "loom://skills/catalog", r.Source)
+	}
+	assert.Equal(t, "loom://builtin/environment", rules[len(rules)-1].Source)
+}
+
+func TestBuildSkillsEmptyBodyOmitsSection(t *testing.T) {
+	b := NewBuilder("/ws",
+		WithEnvProvider(staticEnvProvider{env: testEnvironment()}),
+		noRules,
+		WithSkillsProvider(staticSkillsProvider{body: "  \n"}),
+	)
+	text, _, err := b.Build(context.Background())
+	require.NoError(t, err)
+	assert.NotContains(t, text, "可用技能")
+}
+
+func TestBuildManagedPromptKeepsSkillsSection(t *testing.T) {
+	b := NewBuilder("/ws",
+		WithEnvProvider(staticEnvProvider{env: testEnvironment()}),
+		noRules,
+		WithManagedBase("managed", 3, "managed body"),
+		WithSkillsProvider(staticSkillsProvider{body: "skill catalog body"}),
+	)
+	text, rules, err := b.Build(context.Background())
+	require.NoError(t, err)
+	// Managed base replaces builtin sections but dynamic sections survive.
+	assert.NotContains(t, text, "身份与角色")
+	assert.Contains(t, text, "managed body")
+	assert.Contains(t, text, "# 可用技能（Skills）")
+	var sources []string
+	for _, r := range rules {
+		sources = append(sources, r.Source)
+	}
+	assert.Contains(t, sources, "loom://skills/catalog")
 }

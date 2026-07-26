@@ -167,8 +167,8 @@ func NewRunCmdToolWithArtifacts(
 			"Output beyond the limit is stored as an artifact with a head/tail preview. " +
 			"The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), " +
 			"and denies writes outside the workspace and temp dir. " +
-			"When a task-critical command fails because of the sandbox (DNS/network errors, permission denied writing outside the workspace, package downloads), " +
-			"retry it with sandbox_permissions='require_escalated' and a short justification question for the user — this runs it OUTSIDE the sandbox after explicit approval (R3); " +
+			"When a task-critical command fails (or hangs until the timeout) because of the sandbox (DNS/network errors, SSO/OAuth, permission denied writing outside the workspace, package downloads), " +
+			"retry the same command with sandbox_permissions='require_escalated' and a short justification question for the user — after explicit approval (R3) it runs OUTSIDE the sandbox with the full user environment, network, and credentials; " +
 			"do not give up or ask the user to run it themselves before offering that approval. " +
 			"'justification' is an optional short note shown to the user at approval time; it is REQUIRED with sandbox_permissions='require_escalated' and simply informational otherwise.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
@@ -338,7 +338,11 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		Isolation:               runnerResult.Isolation,
 		ExecutablePath:          runnerResult.ExecutablePath,
 		Hash:                    runnerResult.ExecutableHash,
-		Note:                    sandboxDenialNote(string(runnerResult.Stderr)),
+		Note: sandboxGuidanceNote(
+			string(runnerResult.Stderr),
+			runnerResult.TimedOut,
+			args.SandboxPermissions == sandboxRequireEscalated,
+		),
 	}
 	if err := boundCommandOutput(&payload, t.modelOutputBytes); err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
@@ -563,23 +567,37 @@ func resolveWorkingDir(
 	return resolvedWorkingDir{Absolute: absolute, Display: displayPath(rel)}, nil
 }
 
-// sandboxDenialNote detects the stderr fingerprints of sandbox network and
-// socket denials and returns an actionable note for the model, so the
+// sandboxGuidanceNote detects the fingerprints of sandbox denials — network
+// and DNS failures, socket and write denials, and timeouts that look like
+// network hangs — and returns an actionable note for the model, so the
 // constraint is learned from the first failure instead of inferred over
-// several attempts. Returns "" when nothing matches.
-func sandboxDenialNote(stderr string) string {
+// several attempts. The note points at the require_escalated retry the tool
+// description documents: loom can still run the command, just outside the
+// sandbox with explicit approval. Escalated runs get no note (nothing
+// sandbox-related to learn), and "" is returned when nothing matches.
+func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
+	if escalated {
+		return ""
+	}
+	const escalationAdvice = "If this failure is caused by the sandbox (the command needs external network, credentials like SSO/OAuth, or write access outside the workspace/temp dir), " +
+		"retry the SAME command with sandbox_permissions='require_escalated' and a short justification for the user — after approval it runs OUTSIDE the sandbox with the full user environment, network, and credentials. " +
+		"Do not give up or ask the user to run it themselves before offering that approval."
 	lower := strings.ToLower(stderr)
 	patterns := []string{
 		"no such host", "nodename nor servname", "name or service not known", // DNS resolution
 		"could not resolve", "temporary failure in name resolution",
 		"network is unreachable", "can't assign requested address",
 		"address family not supported", "operation not permitted", // socket/bind/listen denials
+		"read-only file system", // write outside workspace/temp dir
 	}
 	for _, p := range patterns {
 		if strings.Contains(lower, p) {
-			return "outbound network and DNS are denied by the sandbox (loopback networking on localhost is allowed). " +
-				"If this command needs external network or credentials (e.g. SSO/OAuth), give the user the exact command to run in a local terminal instead."
+			return "outbound network and DNS are denied by the sandbox (loopback networking on localhost is allowed), and writes are limited to the workspace and temp dir. " + escalationAdvice
 		}
+	}
+	if timedOut {
+		return "the command was killed by the timeout while running inside the sandbox. Sandboxed commands have no outbound network or DNS (loopback only), " +
+			"so network-dependent commands (SSO/OAuth, HTTP APIs, package downloads) usually hang until the timeout instead of failing fast. " + escalationAdvice
 	}
 	return ""
 }
@@ -912,14 +930,17 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall) string {
 	}
 	parts = append(parts, "cwd="+shellQuote(args.WorkingDir))
 	parts = append(parts, fmt.Sprintf("timeout=%dms", args.TimeoutMs))
-	parts = append(parts, "network=loopback-only")
 	if process.IsShellProgram(args.Program) {
 		parts = append(parts, "shell=R3")
 	}
 	if args.SandboxPermissions == sandboxRequireEscalated {
+		parts = append(parts, "network=full")
 		parts = append(parts, "ESCALATED(no-sandbox)["+args.Justification+"]")
-	} else if args.Justification != "" {
-		parts = append(parts, "note["+args.Justification+"]")
+	} else {
+		parts = append(parts, "network=loopback-only")
+		if args.Justification != "" {
+			parts = append(parts, "note["+args.Justification+"]")
+		}
 	}
 
 	base := strings.Join(parts, "; ")
