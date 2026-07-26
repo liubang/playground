@@ -35,7 +35,10 @@ go_library(
 
 go_test(
     name = "process_test",
-    srcs = ["runner_test.go"],
+    srcs = [
+        "runner_seatbelt_test.go",
+        "runner_test.go",
+    ],
     embed = [":process_lib"],
     deps = [
         "//go/pl/loom/internal/workspace:workspace_lib",

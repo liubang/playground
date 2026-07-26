@@ -89,11 +89,31 @@ func (l *Loop) drainPlanUpdates() {
 // planStatusNote renders the ephemeral system message that re-injects the
 // current plan into every model request. It is rebuilt per request, never
 // persisted, so it survives context compaction and crash recovery for free.
+//
+// Token economy: the note rides EVERY model request, so evidence is kept
+// only for the two most recently completed steps and truncated — older
+// steps collapse to their status line (codex injects nothing at all; loom
+// keeps the note because the plan must survive compaction, but not the
+// full evidence trail).
+const (
+	planNoteEvidenceItems  = 2
+	planNoteEvidenceMaxLen = 80
+)
+
 func planStatusNote(plan domain.Plan) string {
 	done := 0
-	for _, item := range plan.Items {
+	lastDone := -1
+	for i, item := range plan.Items {
 		if item.Status == domain.PlanItemDone {
 			done++
+			lastDone = i
+		}
+	}
+	// Evidence rides only with the most recent done steps.
+	prevDone := -1
+	for i := lastDone - 1; i >= 0 && prevDone < 0; i-- {
+		if plan.Items[i].Status == domain.PlanItemDone {
+			prevDone = i
 		}
 	}
 	current := "none"
@@ -108,16 +128,25 @@ func planStatusNote(plan domain.Plan) string {
 	}
 	for i, item := range plan.Items {
 		fmt.Fprintf(&sb, "%d. [%s] %s", i+1, item.Status, item.Goal)
-		if item.Status == domain.PlanItemDone && len(item.Evidence) > 0 {
-			fmt.Fprintf(&sb, " — evidence: %s", strings.Join(item.Evidence, "; "))
+		if item.Status == domain.PlanItemDone && len(item.Evidence) > 0 && (i == lastDone || (planNoteEvidenceItems > 1 && i == prevDone)) {
+			fmt.Fprintf(&sb, " — evidence: %s", truncateRunes(strings.Join(item.Evidence, "; "), planNoteEvidenceMaxLen))
 		}
 		sb.WriteString("\n")
 	}
-	// The note is re-injected before every model call, making it the most
-	// timely channel for the discipline models most often skip: update
-	// immediately, never batch revisions to the end of the task.
-	sb.WriteString("Rule: call update_plan as soon as a step completes — never batch plan updates to the end of the task.")
+	// Guidance is deliberately stage-boundary rather than "update
+	// immediately": every update is a full snapshot that persists in the
+	// transcript, so updates belong at step transitions, not mid-step.
+	sb.WriteString("Rule: update the plan at step boundaries (mark the finished step done, start the next); avoid mid-step or back-to-back revisions.")
 	return sb.String()
+}
+
+// truncateRunes bounds s to max runes, marking truncation.
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
 }
 
 // --- update_plan tool ---
@@ -152,9 +181,9 @@ func NewUpdatePlanTool(cell *PlanCell) (*UpdatePlanTool, error) {
 		Name: "update_plan",
 		Description: "Update the task plan: a checklist you maintain to track progress on multi-step work. " +
 			"Submit the COMPLETE plan snapshot on every call (full replacement, not a diff). " +
-			"Rules: skip this tool for straightforward tasks (roughly the easiest 25%); never create single-step plans; " +
-			"keep at most one step in_progress — mark the current step done (with brief evidence) before starting the next; " +
-			"update the plan immediately when a sub-task completes — never batch plan updates to the end of the task. " +
+		"Rules: skip this tool for straightforward tasks (roughly the easiest 25%); never create single-step plans; " +
+		"keep at most one step in_progress — mark the current step done (with brief evidence) before starting the next; " +
+		"update at step boundaries: each call is a full snapshot that stays in the transcript, so revise when a step completes or the plan changes — not mid-step. " +
 			"Give the plan a short 'title' (a few words naming the overall objective) when creating it; " +
 			"later revisions may omit it to keep the existing title. " +
 			"Only mark a step done after its deliverable actually exists (edits applied, commands verified, conclusions " +

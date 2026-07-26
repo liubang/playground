@@ -117,6 +117,9 @@ type Bootstrap struct {
 	PlanCell *agent.PlanCell
 	// Recorder is the Langfuse observability sink (no-op when unconfigured).
 	Recorder trace.Recorder
+	// SessionRules holds categorical run_cmd prefixes remembered from
+	// interactive "allow always" decisions; shared with Policy.Session.
+	SessionRules *permission.SessionRules
 
 	traceProvider *trace.Provider
 }
@@ -203,6 +206,12 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 		p := permission.DefaultPolicy()
 		policy = p
 	}
+	// Session-remembered approvals ("allow always") share one store with the
+	// policy layer; declarative user/project rules load on top of the
+	// baseline (LOOM_RULES=0 disables).
+	sessionRules := permission.NewSessionRules()
+	policy.Session = sessionRules
+	policy = permission.AttachRules(policy, cfg.WorkspaceRoot, logger)
 
 	// Langfuse tracing: enabled purely through the environment
 	// (LOOM_LANGFUSE_* / LANGFUSE_*). Setup failure degrades to a no-op
@@ -265,6 +274,7 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 		GoalCell:      goalCell,
 		PlanCell:      planCell,
 		Recorder:      traceRecorder,
+		SessionRules:  sessionRules,
 		traceProvider: traceProvider,
 	}, nil
 }
