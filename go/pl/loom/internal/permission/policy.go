@@ -19,7 +19,6 @@ package permission
 
 import (
 	"log/slog"
-	"os"
 	"path/filepath"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -131,30 +130,31 @@ func (p Policy) evaluateRisk(risk domain.RiskLevel) PolicyDecision {
 	}
 }
 
-// PolicyFromEnv builds the effective policy for a workspace: the risk
-// baseline plus declarative rules from the user layer (~/.loom/rules) and
-// the project layer (<workspace>/.loom/rules).
-func PolicyFromEnv(workspaceRoot string, logger *slog.Logger) Policy {
-	return AttachRules(DefaultPolicy(), workspaceRoot, logger)
+// RuleLoadOptions selects which declarative rule layers load onto the
+// policy baseline. Values come from the config file's rules.* section
+// (resolved by internal/config).
+type RuleLoadOptions struct {
+	// Enabled=false skips all rule loading (including the builtin set).
+	Enabled bool
+	// Builtin=false skips only the embedded read-only set.
+	Builtin bool
+	// Project=false skips the project layer (<workspace>/.loom/rules).
+	Project bool
+	// ProjectAllow lets project rules say "allow" (off by default: an
+	// untrusted checkout may only tighten policy, never loosen it).
+	ProjectAllow bool
 }
 
 // AttachRules loads declarative rules onto the given baseline policy: the
 // embedded builtin set, plus the user layer (~/.loom/rules) and the project
 // layer (<workspace>/.loom/rules). Rule loading never fails the agent —
 // broken files are logged and skipped.
-//
-//	LOOM_RULES=0                 — disable all rule loading (incl. builtin)
-//	LOOM_BUILTIN_RULES=0         — disable only the embedded builtin set
-//	LOOM_PROJECT_RULES=0         — disable the project layer entirely
-//	LOOM_PROJECT_RULES_ALLOW=1   — let project rules say "allow" (off by
-//	                               default: an untrusted checkout may only
-//	                               tighten policy, never loosen it)
-func AttachRules(policy Policy, workspaceRoot string, logger *slog.Logger) Policy {
-	if os.Getenv("LOOM_RULES") == "0" {
+func AttachRules(policy Policy, workspaceRoot string, loadOpts RuleLoadOptions, logger *slog.Logger) Policy {
+	if !loadOpts.Enabled {
 		return policy
 	}
 	rules := &RuleSet{}
-	if os.Getenv("LOOM_BUILTIN_RULES") != "0" {
+	if loadOpts.Builtin {
 		if builtin, err := LoadBuiltinRules(); err != nil {
 			// Broken embedded rules are a build-time bug; never break the agent.
 			logger.Warn("loom rules: builtin set rejected", "error", err)
@@ -167,10 +167,10 @@ func AttachRules(policy Policy, workspaceRoot string, logger *slog.Logger) Polic
 		userDir = dir
 	}
 	projectDir := ""
-	if os.Getenv("LOOM_PROJECT_RULES") != "0" {
+	if loadOpts.Project {
 		projectDir = RulesDirProject(workspaceRoot)
 	}
-	opts := LoadOptions{ProjectAllows: os.Getenv("LOOM_PROJECT_RULES_ALLOW") == "1"}
+	opts := LoadOptions{ProjectAllows: loadOpts.ProjectAllow}
 	fileRules, errs := LoadRuleSets(userDir, projectDir, opts)
 	for _, err := range errs {
 		logger.Warn("loom rules: skipped a rule source", "error", err)

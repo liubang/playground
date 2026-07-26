@@ -54,7 +54,7 @@ var slashCommands = []slashCommand{
 	{name: "/clear", usage: "/clear", desc: "Clear transcript view (history retained)"},
 	{name: "/compact", usage: "/compact", desc: "Compact context (not implemented yet)"},
 	{name: "/inspect", usage: "/inspect", desc: "Inspect session state (not implemented yet)"},
-	{name: "/model", usage: "/model", desc: "Switch model (not implemented yet)"},
+	{name: "/model", usage: "/model [name]", desc: "Show or switch the active model"},
 	{name: "/exit", usage: "/exit", desc: "Exit"},
 }
 
@@ -78,6 +78,14 @@ type sessionAction struct {
 type sessionSwitchedMsg struct {
 	action sessionAction
 	err    error
+}
+
+// modelChangedMsg reports the result of a /model switch request. command
+// carries the original composer input so a failure can restore the draft.
+type modelChangedMsg struct {
+	command string
+	result  app.SetModelResult
+	err     error
 }
 
 // turnCancelRequestedMsg reports the result of a cancel request.
@@ -115,6 +123,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next = m.handlePromptSubmitted(msg)
 	case sessionSwitchedMsg:
 		next, cmd = m.handleSessionSwitched(msg)
+	case modelChangedMsg:
+		next = m.handleModelChanged(msg)
 	case turnCancelRequestedMsg:
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Cancel failed: %v", msg.err), true)
@@ -376,6 +386,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case ModeSessionPicker:
 		return m.handlePickerKey(msg)
+	case ModeModelPicker:
+		return m.handleModelPickerKey(msg)
 	case ModeSearch:
 		return m.handleSearchKey(msg)
 	}
@@ -539,28 +551,77 @@ func (m *Model) toggleReasoningAt(screenY int) bool {
 	return true
 }
 
-func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// pickerNav is the cursor-navigation surface shared by all pickers.
+type pickerNav interface {
+	MoveUp()
+	MoveDown()
+}
+
+// navPickerKey routes the keys every picker shares: Esc cancels back to
+// chat, ↑/↓ or vim j/k move the cursor (the composer is hidden in picker
+// modes, so plain letters are safe). handled=false means the caller must
+// route the key itself (Enter, or anything else).
+func (m Model) navPickerKey(msg tea.KeyMsg, nav pickerNav) (Model, bool) {
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.mode = ModeChat
-		return m, nil
+		return m, true
 	case tea.KeyUp:
-		m.picker.MoveUp()
+		nav.MoveUp()
 	case tea.KeyDown:
-		m.picker.MoveDown()
-	case tea.KeyEnter:
-		sessionID := m.picker.Selected()
-		if sessionID.IsZero() {
-			return m, nil
+		nav.MoveDown()
+	case tea.KeyRunes:
+		switch msg.String() {
+		case "k":
+			nav.MoveUp()
+		case "j":
+			nav.MoveDown()
+		default:
+			return m, false
 		}
-		m.setStatus("Resuming session...", false)
-		return m, m.sessionCmd(sessionAction{
-			name:    "Resume",
-			success: "Session resumed",
-			run:     func(ctx context.Context) error { return m.controller.ResumeSession(ctx, sessionID) },
-		})
+	default:
+		return m, false
 	}
-	return m, nil
+	return m, true
+}
+
+func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m2, handled := m.navPickerKey(msg, m.picker); handled {
+		return m2, nil
+	}
+	if msg.Type != tea.KeyEnter {
+		return m, nil
+	}
+	sessionID := m.picker.Selected()
+	if sessionID.IsZero() {
+		return m, nil
+	}
+	m.setStatus("Resuming session...", false)
+	return m, m.sessionCmd(sessionAction{
+		name:    "Resume",
+		success: "Session resumed",
+		run:     func(ctx context.Context) error { return m.controller.ResumeSession(ctx, sessionID) },
+	})
+}
+
+func (m Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m2, handled := m.navPickerKey(msg, m.modelPicker); handled {
+		return m2, nil
+	}
+	if msg.Type != tea.KeyEnter {
+		return m, nil
+	}
+	opt := m.modelPicker.Selected()
+	if opt == nil {
+		return m, nil
+	}
+	m.mode = ModeChat
+	if opt.Ref() == m.modelName {
+		m.setStatus(fmt.Sprintf("Model unchanged: %s", opt.Ref()), false)
+		return m, nil
+	}
+	m.setStatus("Switching model...", false)
+	return m, m.setModelCmd(opt.Ref(), "/model "+opt.Ref())
 }
 
 // --- follow-tail helpers ---
@@ -670,9 +731,30 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		m.textArea.Reset()
 		m.blocks = NewBlockIndex()
 		m.setStatus("Transcript cleared (session history retained)", false)
+	case "/model":
+		if len(fields) > 2 {
+			m.setStatus("Usage: /model [provider/]<model>", true)
+			return m, nil
+		}
+		if len(fields) == 1 {
+			m.textArea.Reset()
+			// With a known catalog, bare /model opens the picker (the active
+			// entry is marked, so it doubles as "show current"); without one
+			// (e.g. a bare test harness) fall back to the status line.
+			if len(m.models) > 0 {
+				m.modelPicker = NewModelPicker(m.models, m.modelName)
+				m.mode = ModeModelPicker
+				return m, nil
+			}
+			m.setStatus(fmt.Sprintf("Current model: %s", m.modelName), false)
+			return m, nil
+		}
+		m.textArea.Reset()
+		m.setStatus("Switching model...", false)
+		return m, m.setModelCmd(fields[1], cmd)
 	case "/exit":
 		return m, tea.Quit
-	case "/compact", "/inspect", "/model":
+	case "/compact", "/inspect":
 		// Keep the draft so the user can edit or retry a mistyped command.
 		m.setStatus(fmt.Sprintf("%s is not implemented yet", fields[0]), false)
 	default:
@@ -696,6 +778,41 @@ func (m Model) handleSessionSwitched(msg sessionSwitchedMsg) (tea.Model, tea.Cmd
 	m.mode = ModeChat
 	m.setStatus(msg.action.success, false)
 	return m, m.requestSnapshot()
+}
+
+// handleModelChanged applies the ack of a /model switch: on success the
+// status bar picks up the new provider/model and the ctx denominator from
+// the model's metadata immediately; on failure the draft is restored so
+// the user can fix a mistyped reference.
+func (m Model) handleModelChanged(msg modelChangedMsg) tea.Model {
+	if msg.err != nil {
+		m.textArea.SetValue(msg.command)
+		m.setStatus(fmt.Sprintf("Switch model failed: %v", msg.err), true)
+		return m
+	}
+	m.modelName = msg.result.Cur.String()
+	if msg.result.Meta.ContextWindow > 0 {
+		m.contextWindow = int(msg.result.Meta.ContextWindow)
+	}
+	// A turn already in flight keeps the model it started on; make that
+	// visible instead of letting the user expect an immediate swap.
+	note := ""
+	if m.isBusy() {
+		note = " (applies from next turn)"
+	}
+	if msg.result.Prev.Provider == "" || msg.result.Prev == msg.result.Cur {
+		m.setStatus(fmt.Sprintf("Model set to %s%s", msg.result.Cur.String(), note), false)
+	} else {
+		m.setStatus(fmt.Sprintf("Switched model: %s → %s%s", msg.result.Prev.String(), msg.result.Cur.String(), note), false)
+	}
+	return m
+}
+
+func (m Model) setModelCmd(ref, command string) tea.Cmd {
+	return func() tea.Msg {
+		result, err := m.controller.SetModel(context.Background(), ref)
+		return modelChangedMsg{command: command, result: result, err: err}
+	}
 }
 
 // --- interrupt and exit ---
@@ -811,6 +928,16 @@ func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			remember = true
 		case "n", "N", "3":
 			decision = domain.DecisionDeny
+		case "k":
+			if m.approvalCursor > 0 {
+				m.approvalCursor--
+			}
+			return m, nil
+		case "j":
+			if m.approvalCursor < 2 {
+				m.approvalCursor++
+			}
+			return m, nil
 		default:
 			return m, nil
 		}
@@ -852,6 +979,15 @@ func approvalBinding(payload *runtimeevent.ApprovalRequestedPayload) app.Approva
 	}
 }
 
+// displayModelRef renders the status-bar model label: provider/model when
+// the provider is known, the bare model otherwise.
+func displayModelRef(provider, model string) string {
+	if provider == "" {
+		return model
+	}
+	return provider + "/" + model
+}
+
 // --- snapshot and event stream ---
 
 func (m Model) handleSnapshot(msg snapshotMsg) (tea.Model, tea.Cmd) {
@@ -862,7 +998,10 @@ func (m Model) handleSnapshot(msg snapshotMsg) (tea.Model, tea.Cmd) {
 	sessionChanged := !m.sessionID.IsZero() && m.sessionID != msg.snapshot.SessionID
 	m.controllerState = msg.snapshot.State
 	m.sessionID = msg.snapshot.SessionID
-	m.modelName = msg.snapshot.ModelName
+	m.modelName = displayModelRef(msg.snapshot.ProviderName, msg.snapshot.ModelName)
+	if msg.snapshot.ContextWindow > 0 {
+		m.contextWindow = int(msg.snapshot.ContextWindow)
+	}
 	m.workspace = msg.snapshot.WorkspaceRoot
 	m.usage = msg.snapshot.Usage
 	if sessionChanged || (m.initialSnapshotPending && len(m.blocks.Order) == 0) {

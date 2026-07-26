@@ -12,12 +12,44 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
+
+// testResolvedConfig builds a resolved config with a single "test" provider
+// backed by the given (fake) model and two selectable models, so /model
+// switching has somewhere to go.
+func testResolvedConfig(model domain.Model) *config.ResolvedConfig {
+	return &config.ResolvedConfig{
+		Providers: []config.ResolvedProvider{{
+			Name:  "test",
+			Model: model,
+			Models: []config.Model{
+				{Name: "test-model", ContextWindow: 128000},
+				{Name: "new-model", ContextWindow: 64000},
+				{Name: "third-model"},
+			},
+			DefaultModel: "test-model",
+		}},
+		Default: config.ProviderModelRef{Provider: "test", Model: "test-model"},
+		Limits:  domain.DefaultLimits(),
+	}
+}
+
+// testBootstrap assembles the minimal Bootstrap a controller test needs.
+func testBootstrap(store domain.SessionStore, model domain.Model) *Bootstrap {
+	resolved := testResolvedConfig(model)
+	return &Bootstrap{
+		Resolved: resolved,
+		Current:  resolved.Default,
+		Store:    store,
+		Registry: agent.NewToolRegistry(),
+	}
+}
 
 func TestControllerContinuesSessionForFollowUpPrompt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -34,16 +66,10 @@ func TestControllerContinuesSessionForFollowUpPrompt(t *testing.T) {
 		fakes.ScriptEntry{Text: "follow-up answer", StopReason: domain.StopEndTurn},
 	)
 	controller := NewController(ControllerConfig{
-		Bootstrap: &Bootstrap{
-			Config:    BootstrapConfig{Limits: domain.DefaultLimits()},
-			Store:     store,
-			Model:     model,
-			ModelName: "test-model",
-			Registry:  agent.NewToolRegistry(),
-		},
-		Broker:   runtimeevent.NewBroker(),
-		Approver: NewChannelApprover(),
-		Clock:    domain.RealClock{},
+		Bootstrap: testBootstrap(store, model),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
 	})
 	go controller.Run(ctx)
 	defer controller.Shutdown(context.Background())
@@ -91,20 +117,15 @@ func TestControllerPublishesSessionEnv(t *testing.T) {
 	}
 	defer store.Close()
 
-	t.Setenv("LOOM_VERSION", "0.2.0-dev")
 	sessionEnv := &process.AtomicSessionEnv{}
+	bootstrap := testBootstrap(store, fakes.NewFakeModel())
+	bootstrap.Version = "0.2.0-dev"
+	bootstrap.SessionEnv = sessionEnv
 	controller := NewController(ControllerConfig{
-		Bootstrap: &Bootstrap{
-			Config:     BootstrapConfig{Limits: domain.DefaultLimits()},
-			Store:      store,
-			Model:      fakes.NewFakeModel(),
-			ModelName:  "test-model",
-			Registry:   agent.NewToolRegistry(),
-			SessionEnv: sessionEnv,
-		},
-		Broker:   runtimeevent.NewBroker(),
-		Approver: NewChannelApprover(),
-		Clock:    domain.RealClock{},
+		Bootstrap: bootstrap,
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
 	})
 	go controller.Run(ctx)
 	defer controller.Shutdown(context.Background())
@@ -222,5 +243,129 @@ func TestBoundPreviewLinesTruncates(t *testing.T) {
 	}
 	if got := boundPreviewLines("  \n", 10, 10); got != "" {
 		t.Fatalf("blank preview = %q, want empty", got)
+	}
+}
+
+func TestControllerSetModel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, fakes.NewFakeModel()),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	// The bootstrap default is in effect before any switch.
+	snapshot, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snapshot.ModelName != "test-model" || snapshot.ProviderName != "test" {
+		t.Fatalf("snapshot = %q/%q, want bootstrap default", snapshot.ProviderName, snapshot.ModelName)
+	}
+	if snapshot.ContextWindow != 128000 {
+		t.Fatalf("snapshot.ContextWindow = %d, want 128000", snapshot.ContextWindow)
+	}
+
+	result, err := controller.SetModel(ctx, "new-model")
+	if err != nil {
+		t.Fatalf("SetModel: %v", err)
+	}
+	if result.Prev != (config.ProviderModelRef{Provider: "test", Model: "test-model"}) {
+		t.Fatalf("SetModel prev = %+v", result.Prev)
+	}
+	if result.Meta.ContextWindow != 64000 {
+		t.Fatalf("SetModel meta.ContextWindow = %d, want 64000", result.Meta.ContextWindow)
+	}
+	snapshot, err = controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snapshot.ModelName != "new-model" || snapshot.ContextWindow != 64000 {
+		t.Fatalf("snapshot = %q (ctx %d), want new-model/64000", snapshot.ModelName, snapshot.ContextWindow)
+	}
+
+	result, err = controller.SetModel(ctx, "test/third-model")
+	if err != nil {
+		t.Fatalf("SetModel(second): %v", err)
+	}
+	if result.Prev.Model != "new-model" {
+		t.Fatalf("SetModel(second) prev = %+v, want new-model", result.Prev)
+	}
+
+	// Unknown references are rejected and keep the current model.
+	if _, err := controller.SetModel(ctx, "   "); err == nil {
+		t.Fatal("SetModel with blank ref should fail")
+	}
+	if _, err := controller.SetModel(ctx, "nosuch-model"); err == nil {
+		t.Fatal("SetModel with unknown model should fail")
+	}
+	snapshot, err = controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snapshot.ModelName != "third-model" {
+		t.Fatalf("ModelName = %q, want third-model after rejected switch", snapshot.ModelName)
+	}
+}
+
+func TestControllerSetModelAppliesFromNextTurn(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "first answer", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "second answer", StopReason: domain.StopEndTurn},
+	)
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, model),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if err := controller.SubmitPrompt(ctx, "one"); err != nil {
+		t.Fatalf("SubmitPrompt(one): %v", err)
+	}
+	waitForIdle(t, controller)
+
+	if _, err := controller.SetModel(ctx, "new-model"); err != nil {
+		t.Fatalf("SetModel: %v", err)
+	}
+	if err := controller.SubmitPrompt(ctx, "two"); err != nil {
+		t.Fatalf("SubmitPrompt(two): %v", err)
+	}
+	waitForIdle(t, controller)
+
+	calls := model.Calls()
+	if len(calls) != 2 {
+		t.Fatalf("model calls = %d, want 2", len(calls))
+	}
+	if calls[0].ModelName != "test-model" {
+		t.Errorf("turn 1 model = %q, want test-model", calls[0].ModelName)
+	}
+	if calls[1].ModelName != "new-model" {
+		t.Errorf("turn 2 model = %q, want new-model", calls[1].ModelName)
 	}
 }

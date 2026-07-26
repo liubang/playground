@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -20,16 +21,39 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/fakes"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
 // newTestController starts a real controller loop so state-dependent key
-// handling can be exercised without fakes.
+// handling can be exercised without fakes. The bootstrap carries one fake
+// provider with two models so /model switching works in tests.
 func newTestController(t *testing.T) *app.Controller {
 	t.Helper()
+	resolved := &config.ResolvedConfig{
+		Providers: []config.ResolvedProvider{{
+			Name:  "test",
+			Model: fakes.NewFakeModel(),
+			Models: []config.Model{
+				{Name: "model-a", ContextWindow: 128000},
+				{Name: "model-b", ContextWindow: 64000},
+			},
+			DefaultModel: "model-a",
+		}},
+		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
+		Limits:  domain.DefaultLimits(),
+	}
 	ctrl := app.NewController(app.ControllerConfig{
+		Bootstrap: &app.Bootstrap{
+			Resolved: resolved,
+			Current:  resolved.Default,
+			Store:    fakes.NewFakeStore(),
+			Registry: agent.NewToolRegistry(),
+		},
 		Broker:   runtimeevent.NewBroker(),
 		Approver: app.NewChannelApprover(),
 	})
@@ -437,6 +461,15 @@ func TestApprovalOverlayShowsAlwaysAllowWithRulePreview(t *testing.T) {
 			t.Fatalf("cursor = %d, want %d after key %v", m.approvalCursor, want, key.Type)
 		}
 	}
+	// j/k navigate the same options vim-style.
+	for i, key := range []tea.KeyMsg{{Type: tea.KeyRunes, Runes: []rune{'j'}}, {Type: tea.KeyRunes, Runes: []rune{'k'}}} {
+		updated, _ := m.handleApprovalKey(key)
+		m = updated.(Model)
+		want := []int{2, 1}[i]
+		if m.approvalCursor != want {
+			t.Fatalf("cursor = %d, want %d after key %q", m.approvalCursor, want, key.String())
+		}
+	}
 	if m.pendingApproval == nil {
 		t.Fatal("approval must still be pending after navigation keys")
 	}
@@ -821,6 +854,41 @@ func TestTruncateDisplayWidthPreservesUTF8(t *testing.T) {
 	}
 }
 
+func TestShortenPath(t *testing.T) {
+	cases := map[string]string{
+		"~/workspace/github/liubang/playground": "~/w/g/l/playground",
+		"/usr/local/bin":                        "/u/l/bin",
+		"relative/path/here":                    "r/p/here",
+		"~/.config/loom/state":                  "~/.c/l/state",
+		"/":                                     "/",
+		"~":                                     "~",
+		"playground":                            "playground",
+		"":                                      "",
+	}
+	for in, want := range cases {
+		if got := shortenPath(in); got != want {
+			t.Errorf("shortenPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestAbbreviateHome(t *testing.T) {
+	home := string(filepath.Separator) + filepath.Join("home", "tester")
+	t.Setenv("HOME", home)
+	cases := map[string]string{
+		home:                     "~",
+		home + "/ws/playground":  "~/ws/playground",
+		"/other/place":           "/other/place",
+		home + "ish/sibling":     home + "ish/sibling", // prefix must match a whole component
+		"relative/path":          "relative/path",
+	}
+	for in, want := range cases {
+		if got := abbreviateHome(in); got != want {
+			t.Errorf("abbreviateHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestSessionPickerSelection(t *testing.T) {
 	first, second := domain.NewSessionID(), domain.NewSessionID()
 	picker := NewSessionPicker()
@@ -828,6 +896,28 @@ func TestSessionPickerSelection(t *testing.T) {
 	picker.MoveDown()
 	if got := picker.Selected(); got != second {
 		t.Fatalf("Selected() = %s, want %s", got, second)
+	}
+}
+
+func TestSessionPickerJKNavigation(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+	m.mode = ModeSessionPicker
+	m.picker = NewSessionPicker()
+	m.picker.Load([]app.SessionSummary{{ID: domain.NewSessionID()}, {ID: domain.NewSessionID()}}, nil)
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updatedModel.(Model)
+	if cmd != nil {
+		t.Fatal("navigation should not spawn a command")
+	}
+	if m.picker.Cursor != 1 {
+		t.Fatalf("cursor after j = %d, want 1", m.picker.Cursor)
+	}
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updatedModel.(Model)
+	if m.picker.Cursor != 0 {
+		t.Fatalf("cursor after k = %d, want 0", m.picker.Cursor)
 	}
 }
 
@@ -949,6 +1039,170 @@ func TestSlashCommandFailurePreservesInput(t *testing.T) {
 	}
 	if !m.statusIsError {
 		t.Fatal("unknown command should be flagged as an error status")
+	}
+}
+
+func TestSlashCommandModel(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model-a", "/ws")
+
+	// No argument: report the current model and clear the draft.
+	m.textArea.SetValue("/model")
+	updated, cmd := m.handleSlashCommand("/model")
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("bare /model should not spawn a command")
+	}
+	if got := m.textArea.Value(); got != "" {
+		t.Fatalf("bare /model should clear the draft, got %q", got)
+	}
+	if !strings.Contains(m.statusMessage, "model-a") || m.statusIsError {
+		t.Fatalf("status = %q (error=%v), want current model name", m.statusMessage, m.statusIsError)
+	}
+
+	// Switch: the ack arrives as a modelChangedMsg and updates the status bar.
+	m.textArea.SetValue("/model model-b")
+	updated, cmd = m.handleSlashCommand("/model model-b")
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("/model <name> should spawn a command")
+	}
+	if got := m.textArea.Value(); got != "" {
+		t.Fatalf("/model <name> should clear the draft, got %q", got)
+	}
+	msg, ok := cmd().(modelChangedMsg)
+	if !ok {
+		t.Fatalf("cmd returned %T, want modelChangedMsg", msg)
+	}
+	if msg.err != nil {
+		t.Fatalf("modelChangedMsg err = %v", msg.err)
+	}
+	updatedModel, _ := m.Update(msg)
+	m = updatedModel.(Model)
+	if got := m.modelName; got != "test/model-b" {
+		t.Fatalf("modelName = %q, want test/model-b", got)
+	}
+	if got := m.contextWindow; got != 64000 {
+		t.Fatalf("contextWindow = %d, want 64000 (from model metadata)", got)
+	}
+	if !strings.Contains(m.statusMessage, "test/model-b") || m.statusIsError {
+		t.Fatalf("status = %q (error=%v), want switch confirmation", m.statusMessage, m.statusIsError)
+	}
+
+	// Extra arguments: usage error, draft preserved.
+	m.textArea.SetValue("/model a b")
+	updated, cmd = m.handleSlashCommand("/model a b")
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("usage error should not spawn a command")
+	}
+	if got := m.textArea.Value(); got != "/model a b" {
+		t.Fatalf("usage error should keep the draft, got %q", got)
+	}
+	if !m.statusIsError {
+		t.Fatal("usage error should be flagged as an error status")
+	}
+}
+
+func TestSlashCommandModelOpensPicker(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+	m.SetModels([]ModelOption{
+		{Provider: "test", Name: "model-a", ContextWindow: 128000, WireAPI: "chat"},
+		{Provider: "test", Name: "model-b", ContextWindow: 64000, WireAPI: "responses"},
+	})
+
+	// Bare /model opens the picker with the cursor on the active model.
+	updated, cmd := m.handleSlashCommand("/model")
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("opening the picker should not spawn a command")
+	}
+	if m.mode != ModeModelPicker {
+		t.Fatalf("mode = %q, want model_picker", m.mode)
+	}
+	if m.modelPicker == nil || m.modelPicker.Cursor != 0 {
+		t.Fatalf("picker cursor = %v, want 0 (active model)", m.modelPicker)
+	}
+
+	// j/k navigate vim-style.
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updatedModel.(Model)
+	if m.modelPicker.Cursor != 1 {
+		t.Fatalf("cursor after j = %d, want 1", m.modelPicker.Cursor)
+	}
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updatedModel.(Model)
+	if m.modelPicker.Cursor != 0 {
+		t.Fatalf("cursor after k = %d, want 0", m.modelPicker.Cursor)
+	}
+
+	// Enter on the second row switches the model.
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updatedModel.(Model)
+	updatedModel, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updatedModel.(Model)
+	if m.mode != ModeChat {
+		t.Fatalf("mode after Enter = %q, want chat", m.mode)
+	}
+	if cmd == nil {
+		t.Fatal("Enter should spawn the switch command")
+	}
+	msg, ok := cmd().(modelChangedMsg)
+	if !ok {
+		t.Fatalf("cmd returned %T, want modelChangedMsg", msg)
+	}
+	if msg.err != nil {
+		t.Fatalf("modelChangedMsg err = %v", msg.err)
+	}
+	updatedModel, _ = m.Update(msg)
+	m = updatedModel.(Model)
+	if got := m.modelName; got != "test/model-b" {
+		t.Fatalf("modelName = %q, want test/model-b", got)
+	}
+	if got := m.contextWindow; got != 64000 {
+		t.Fatalf("contextWindow = %d, want 64000", got)
+	}
+}
+
+func TestModelPickerEscCancels(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+	m.SetModels([]ModelOption{
+		{Provider: "test", Name: "model-a", ContextWindow: 128000},
+		{Provider: "test", Name: "model-b", ContextWindow: 64000},
+	})
+	updated, _ := m.handleSlashCommand("/model")
+	m = updated.(Model)
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updatedModel.(Model)
+	updatedModel, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updatedModel.(Model)
+	if cmd != nil {
+		t.Fatal("Esc should not spawn a command")
+	}
+	if m.mode != ModeChat {
+		t.Fatalf("mode after Esc = %q, want chat", m.mode)
+	}
+	if got := m.modelName; got != "test/model-a" {
+		t.Fatalf("modelName = %q, want unchanged test/model-a", got)
+	}
+}
+
+func TestSlashCommandModelFailureRestoresDraft(t *testing.T) {
+ctrl := newTestController(t)
+m := NewModel(ctrl, "test/model-a", "/ws")
+
+	updatedModel, _ := m.Update(modelChangedMsg{command: "/model oops", err: fmt.Errorf("boom")})
+	m = updatedModel.(Model)
+	if got := m.textArea.Value(); got != "/model oops" {
+		t.Fatalf("failure should restore the draft, got %q", got)
+	}
+	if !m.statusIsError {
+		t.Fatal("failure should be flagged as an error status")
+	}
+	if got := m.modelName; got != "test/model-a" {
+		t.Fatalf("modelName = %q, want unchanged test/model-a", got)
 	}
 }
 

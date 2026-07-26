@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -147,13 +146,13 @@ const (
 const agentName = "loom"
 
 // LoomSessionEnv returns the standard loom attribution environment for a
-// session: agent name, agent version (from LOOM_VERSION, which main stamps
-// at startup; omitted when unset), and the session ID (omitted when empty).
-func LoomSessionEnv(sessionID string) map[string]string {
+// session: agent name, agent version (stamped by the entry point at startup;
+// omitted when empty), and the session ID (omitted when empty).
+func LoomSessionEnv(version, sessionID string) map[string]string {
 	env := map[string]string{
 		EnvAgentName: agentName,
 	}
-	if version := strings.TrimSpace(os.Getenv("LOOM_VERSION")); version != "" {
+	if version = strings.TrimSpace(version); version != "" {
 		env[EnvAgentVersion] = version
 	}
 	if sessionID = strings.TrimSpace(sessionID); sessionID != "" {

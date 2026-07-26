@@ -26,7 +26,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 )
 
@@ -61,70 +60,18 @@ type Config struct {
 	// Logger receives exporter/score/prompt-client failures (OTLP error
 	// handler, score flush, prompt fetch). Nil discards them — pass an
 	// io.Discard logger in the TUI (stderr output would tear the rendering)
-	// and slog.Default() in headless runs. Not populated by ConfigFromEnv.
+	// and slog.Default() in headless runs.
 	Logger *slog.Logger
 }
 
-// ConfigFromEnv reads tracing configuration from the environment.
-// LOOM_LANGFUSE_* takes precedence; the community-standard LANGFUSE_* names
-// are honored as fallbacks so existing Langfuse setups work unchanged.
-//
-//	LOOM_LANGFUSE_HOST / LANGFUSE_HOST / LANGFUSE_BASE_URL — base URL (required)
-//	LOOM_LANGFUSE_PUBLIC_KEY / LANGFUSE_PUBLIC_KEY (required)
-//	LOOM_LANGFUSE_SECRET_KEY / LANGFUSE_SECRET_KEY (required)
-//	LOOM_LANGFUSE_ENVIRONMENT               — default "dev"
-//	LOOM_TRACE_CONTENT                      — "0" redacts message content
-//	LOOM_TRACE_USER                         — user_id (fallback: git email, $USER)
-//	LOOM_VERSION                            — release tag on traces
-//	LOOM_COST_INPUT_USD_PER_MTOK            — input cost rate per 1M tokens
-//	LOOM_COST_OUTPUT_USD_PER_MTOK           — output cost rate per 1M tokens
-func ConfigFromEnv() Config {
-	get := func(names ...string) string {
-		for _, name := range names {
-			if v := os.Getenv(name); v != "" {
-				return v
-			}
-		}
-		return ""
-	}
-	cfg := Config{
-		Host:           strings.TrimRight(get("LOOM_LANGFUSE_HOST", "LANGFUSE_HOST", "LANGFUSE_BASE_URL"), "/"),
-		PublicKey:      get("LOOM_LANGFUSE_PUBLIC_KEY", "LANGFUSE_PUBLIC_KEY"),
-		SecretKey:      get("LOOM_LANGFUSE_SECRET_KEY", "LANGFUSE_SECRET_KEY"),
-		Environment:    os.Getenv("LOOM_LANGFUSE_ENVIRONMENT"),
-		IncludeContent: os.Getenv("LOOM_TRACE_CONTENT") != "0",
-		UserID:         get("LOOM_TRACE_USER"),
-		Release:        get("LOOM_VERSION"),
-	}
-	if cfg.UserID == "" {
-		cfg.UserID = defaultUserID()
-	}
-	cfg.CostInputPerMTok = parseFloatEnv("LOOM_COST_INPUT_USD_PER_MTOK")
-	cfg.CostOutputPerMTok = parseFloatEnv("LOOM_COST_OUTPUT_USD_PER_MTOK")
-	if cfg.Environment == "" {
-		cfg.Environment = "dev"
-	}
-	cfg.Enabled = cfg.Host != "" && cfg.PublicKey != "" && cfg.SecretKey != ""
-	return cfg
-}
-
-// defaultUserID derives a stable user identity: the git author email when
-// available, falling back to the OS account name.
-func defaultUserID() string {
+// DefaultUserID derives a stable user identity: the git author email when
+// available, falling back to the OS account name. Setup applies it whenever
+// the config leaves UserID empty.
+func DefaultUserID() string {
 	if out, err := exec.Command("git", "config", "--get", "user.email").Output(); err == nil {
 		if email := strings.TrimSpace(string(out)); email != "" {
 			return email
 		}
 	}
 	return os.Getenv("USER")
-}
-
-// parseFloatEnv parses a positive float environment value; malformed or
-// non-positive values yield zero (feature off).
-func parseFloatEnv(name string) float64 {
-	v, err := strconv.ParseFloat(os.Getenv(name), 64)
-	if err != nil || v <= 0 {
-		return 0
-	}
-	return v
 }

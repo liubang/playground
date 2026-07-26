@@ -329,17 +329,18 @@ func TestSessionAllowNeverOverridesFileDeny(t *testing.T) {
 }
 
 // TestAttachRulesBuiltinSwitch checks the builtin layer participates by
-// default and drops out with LOOM_BUILTIN_RULES=0.
+// default and drops out when the load options disable it.
 func TestAttachRulesBuiltinSwitch(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	policy := AttachRules(DefaultPolicy(), t.TempDir(), logger)
+	on := RuleLoadOptions{Enabled: true, Builtin: true, Project: true}
+	policy := AttachRules(DefaultPolicy(), t.TempDir(), on, logger)
 	if d := policy.Evaluate(runCmdCall(t, "ls")); d != domain.DecisionAllow {
 		t.Fatalf("builtin should allow ls by default, got %v", d)
 	}
-	t.Setenv("LOOM_BUILTIN_RULES", "0")
-	policy = AttachRules(DefaultPolicy(), t.TempDir(), logger)
+	off := RuleLoadOptions{Enabled: true, Builtin: false, Project: true}
+	policy = AttachRules(DefaultPolicy(), t.TempDir(), off, logger)
 	if d := policy.Evaluate(runCmdCall(t, "ls")); d != domain.DecisionAsk {
-		t.Fatalf("LOOM_BUILTIN_RULES=0 should disable builtin allows, got %v", d)
+		t.Fatalf("Builtin=false should disable builtin allows, got %v", d)
 	}
 }
 

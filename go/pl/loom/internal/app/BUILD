@@ -30,6 +30,7 @@ go_library(
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/artifact:artifact_lib",
+        "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/model/openai:openai_lib",
         "//go/pl/loom/internal/permission:permission_lib",
@@ -62,6 +63,7 @@ go_test(
     embed = [":app"],
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
+        "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/fakes:fakes_lib",
         "//go/pl/loom/internal/process:process_lib",
