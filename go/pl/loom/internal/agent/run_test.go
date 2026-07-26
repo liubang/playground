@@ -2570,7 +2570,8 @@ func TestRunSuccessScore(t *testing.T) {
 
 func TestToolResultTracePreviewKeepsValidUTF8(t *testing.T) {
 	// The 500-byte preview cut lands inside a multi-byte character: the
-	// excerpt must stay valid UTF-8 (OTLP protobuf rejects invalid strings).
+	// excerpt must stay valid UTF-8 (OTLP protobuf rejects invalid strings)
+	// and must end on a complete rune — no replacement char mojibake.
 	body := strings.Repeat("a", 490) + "完整的技能正文内容" + strings.Repeat("b", 100)
 	result := domain.ToolResult{
 		Content: []domain.ContentPart{{Kind: domain.PartText, Text: body}},
@@ -2581,5 +2582,8 @@ func TestToolResultTracePreviewKeepsValidUTF8(t *testing.T) {
 	}
 	if !strings.HasSuffix(preview, "…") {
 		t.Fatalf("preview must carry the truncation marker: %q", preview[len(preview)-10:])
+	}
+	if strings.Contains(preview, "�") {
+		t.Fatalf("preview must cut at a rune boundary, not substitute: %q", preview[len(preview)-20:])
 	}
 }

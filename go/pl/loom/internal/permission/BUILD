@@ -23,6 +23,7 @@ go_library(
         "policy.go",
         "rules.go",
     ],
+    embedsrcs = ["builtin.json"],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/permission",
     visibility = ["//visibility:public"],
     deps = [
