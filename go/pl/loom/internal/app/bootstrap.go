@@ -112,6 +112,9 @@ type Bootstrap struct {
 	// GoalCell ferries update_goal mutations from the tool to each turn's
 	// agent loop.
 	GoalCell *agent.GoalCell
+	// PlanCell ferries update_plan snapshots from the tool to each turn's
+	// agent loop.
+	PlanCell *agent.PlanCell
 	// Recorder is the Langfuse observability sink (no-op when unconfigured).
 	Recorder trace.Recorder
 
@@ -173,7 +176,8 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 	// Create tool registry and register built-in tools
 	registry := agent.NewToolRegistry()
 	goalCell := agent.NewGoalCell()
-	if err := registerBuiltinTools(registry, validator, runner, artStore, cfg.Limits.MaxToolOutputBytes, goalCell); err != nil {
+	planCell := agent.NewPlanCell()
+	if err := registerBuiltinTools(registry, validator, runner, artStore, cfg.Limits.MaxToolOutputBytes, goalCell, planCell); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
@@ -204,6 +208,9 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 	// (LOOM_LANGFUSE_* / LANGFUSE_*). Setup failure degrades to a no-op
 	// recorder — observability must never break the agent.
 	traceCfg := trace.ConfigFromEnv()
+	// Route exporter/client failures into the (discardable) TUI logger:
+	// anything written to stderr tears the TUI rendering.
+	traceCfg.Logger = logger
 	var (
 		traceRecorder trace.Recorder = trace.Noop()
 		traceProvider *trace.Provider
@@ -228,6 +235,17 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 		if opt := ResolveManagedPrompt(ctx, traceCfg, cfg.SessionDBPath, logger); opt != nil {
 			promptOpts = append(promptOpts, opt)
 		}
+		// Skills: registers read_skill and appends the catalog provider
+		// (nil option when LOOM_SKILLS=0). Inside the system-prompt guard
+		// so a catalog-less read_skill is never registered.
+		skillsOpt, err := WireSkills(registry, cfg.WorkspaceRoot, cfg.ContextWindow, os.Getenv, logger)
+		if err != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("wire skills: %w", err)
+		}
+		if skillsOpt != nil {
+			promptOpts = append(promptOpts, skillsOpt)
+		}
 		promptBuilder = prompt.NewBuilder(cfg.WorkspaceRoot, promptOpts...)
 	}
 
@@ -245,13 +263,14 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 		Runner:        runner,
 		SessionEnv:    sessionEnv,
 		GoalCell:      goalCell,
+		PlanCell:      planCell,
 		Recorder:      traceRecorder,
 		traceProvider: traceProvider,
 	}, nil
 }
 
 // registerBuiltinTools registers all built-in tools with the registry.
-func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell) error {
+func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell) error {
 	// The file-state book is shared by read_file (records hashes) and edit
 	// (checks drift) to detect external modification without model-carried
 	// hashes.
@@ -296,6 +315,13 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 	if err := registry.Register(updateGoal); err != nil {
 		return fmt.Errorf("register update_goal: %w", err)
 	}
+	updatePlan, err := agent.NewUpdatePlanTool(planCell)
+	if err != nil {
+		return fmt.Errorf("update_plan: %w", err)
+	}
+	if err := registry.Register(updatePlan); err != nil {
+		return fmt.Errorf("register update_plan: %w", err)
+	}
 	return nil
 }
 
@@ -338,6 +364,12 @@ func ResolveManagedPrompt(ctx context.Context, traceCfg trace.Config, sessionDBP
 		logger.Warn("langfuse managed prompt unavailable, using built-in prompt",
 			"name", name, "label", label, "error", err)
 		return nil
+	}
+	// loom does not substitute Langfuse template variables; surface them
+	// loudly so a templated prompt never ships silently unrendered.
+	if vars := trace.PromptVariables(mp.Content); len(vars) > 0 {
+		logger.Warn("langfuse managed prompt contains unsubstituted variables; they will appear verbatim in the system prompt",
+			"name", mp.Name, "version", mp.Version, "variables", vars)
 	}
 	logger.Info("using langfuse managed prompt",
 		"name", mp.Name, "version", mp.Version, "label", label, "fetched_at", mp.FetchedAt)

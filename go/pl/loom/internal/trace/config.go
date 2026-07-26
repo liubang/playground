@@ -23,6 +23,7 @@
 package trace
 
 import (
+	"log/slog"
 	"os"
 	"os/exec"
 	"strconv"
@@ -53,10 +54,15 @@ type Config struct {
 	// (langfuse.trace.release), enabling per-version comparisons.
 	Release string
 	// CostInputPerMTok and CostOutputPerMTok are optional USD-per-million-
-	//-token rates; when both are positive the recorder computes and
+	// -token rates; when both are positive the recorder computes and
 	// attaches cost_details to generations.
 	CostInputPerMTok  float64
 	CostOutputPerMTok float64
+	// Logger receives exporter/score/prompt-client failures (OTLP error
+	// handler, score flush, prompt fetch). Nil discards them — pass an
+	// io.Discard logger in the TUI (stderr output would tear the rendering)
+	// and slog.Default() in headless runs. Not populated by ConfigFromEnv.
+	Logger *slog.Logger
 }
 
 // ConfigFromEnv reads tracing configuration from the environment.

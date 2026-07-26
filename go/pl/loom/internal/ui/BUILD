@@ -23,6 +23,7 @@ go_library(
         "blocks.go",
         "composer.go",
         "icons.go",
+        "input.go",
         "markdown.go",
         "statusbar.go",
         "theme.go",
@@ -43,6 +44,8 @@ go_library(
         "@com_github_charmbracelet_glamour//:glamour",
         "@com_github_charmbracelet_glamour//styles",
         "@com_github_charmbracelet_lipgloss//:lipgloss",
+        "@org_golang_x_sys//unix",
+        "@org_golang_x_term//:term",
     ],
 )
 
