@@ -76,6 +76,13 @@ func (m Model) View() string {
 	case ModeSessionPicker:
 		// The picker owns the main area; no composer.
 	default:
+		// The pinned plan panel sits directly above the composer (Claude
+		// Code style): the checklist stays visible while the agent works
+		// instead of scrolling away with the transcript.
+		if panel := m.renderPlanPanel(); panel != "" {
+			b.WriteString(panel)
+			b.WriteString("\n")
+		}
 		if m.completionVisible() {
 			b.WriteString(m.renderCompletion())
 			b.WriteString("\n")
@@ -283,7 +290,11 @@ func (m Model) renderReasoning(block *TranscriptBlock) string {
 		return ""
 	}
 	if block.ReasoningExpanded {
-		return m.theme.NoticeBlock.Render("Thinking:\n"+render.SanitizeText(block.StreamReasoning)) + "\n"
+		// The expanded thinking gets a panel background with a primary left
+		// bar: backstage material must be visually distinct from delivered
+		// output so it is never mistaken for the answer.
+		width := max(m.width-4, 20)
+		return m.theme.ReasoningBlock.Width(width).Render("Thinking:\n"+render.SanitizeText(block.StreamReasoning)) + "\n"
 	}
 	if !block.Done {
 		return m.spinnerView() + " " + m.theme.Dim.Render("Thinking... (click or Ctrl+R to expand)") + "\n"
@@ -452,6 +463,11 @@ func (m Model) renderStatusBar() string {
 		add(cpt, m.theme.Dim.Render(cpt))
 	}
 
+	if len(m.plan.Items) > 0 {
+		seg := fmt.Sprintf("plan:%d/%d (ctrl+t:hide)", planDoneCount(m.plan), len(m.plan.Items))
+		add(seg, m.theme.Dim.Render(seg))
+	}
+
 	if !m.followTail && m.newEvents > 0 {
 		hint := fmt.Sprintf("↓%d new", m.newEvents)
 		add(hint, lipgloss.NewStyle().Foreground(m.theme.Highlight).Bold(true).Render(hint))
@@ -479,6 +495,82 @@ func (m Model) renderStatusBar() string {
 		}
 	}
 	return bar
+}
+
+// planPanelMaxItems caps the checklist rows shown in the pinned panel; a
+// longer plan collapses into a "+N more" line.
+const planPanelMaxItems = 6
+
+// planPanelHeight returns the rows reserved for the pinned plan panel above
+// the composer (0 when there is no plan or it is collapsed via ctrl+t).
+// Layout: blank, title, items, blank — the blank rows keep the panel from
+// gluing to the transcript above or the composer below.
+func (m Model) planPanelHeight() int {
+	if len(m.plan.Items) == 0 || m.planHidden {
+		return 0
+	}
+	items := min(len(m.plan.Items), planPanelMaxItems)
+	if len(m.plan.Items) > items {
+		items++ // the "… +N more" line
+	}
+	return items + 3 // blank + title + items + blank
+}
+
+// renderPlanPanel renders the pinned task-plan checklist, Claude Code style:
+// a one-line title carrying the live activity (spinner + current action +
+// elapsed; falling back to the static N/M summary when idle), then the
+// steps indented under it like a tree — done steps dimmed, the in-progress
+// step highlighted — with a blank row on each side.
+func (m Model) renderPlanPanel() string {
+	if len(m.plan.Items) == 0 || m.planHidden {
+		return ""
+	}
+	width := m.width - 2
+	if width < 10 {
+		width = 10
+	}
+	var b strings.Builder
+	b.WriteString("\n") // separate from the transcript above
+	b.WriteString(m.planPanelTitle(width))
+	icons := m.iconSet()
+	shown := min(len(m.plan.Items), planPanelMaxItems)
+	for i := 0; i < shown; i++ {
+		item := m.plan.Items[i]
+		mark := icons.PlanTodo
+		style := lipgloss.NewStyle()
+		switch item.Status {
+		case domain.PlanItemDone:
+			mark = icons.PlanDone
+			style = m.theme.Dim
+		case domain.PlanItemInProgress:
+			mark = icons.PlanCurrent
+			style = lipgloss.NewStyle().Foreground(m.theme.Highlight)
+		}
+		// Items indent two columns under the title; a tree stub on the first
+		// row draws the parent→children grouping while keeping every step's
+		// mark glyph on the same column.
+		indent := "  "
+		if i == 0 {
+			indent = "└ "
+		}
+		b.WriteString("\n" + indent + style.Render(truncateDisplayWidth(mark+" "+item.Goal, width-3)))
+	}
+	if len(m.plan.Items) > shown {
+		b.WriteString("\n  " + m.theme.Dim.Render(fmt.Sprintf("… +%d more", len(m.plan.Items)-shown)))
+	}
+	b.WriteString("\n") // separate from the composer below
+	return b.String()
+}
+
+// planPanelTitle renders the panel's title row: the model-authored short
+// title of the whole plan, falling back to the progress summary when the
+// plan has no title yet.
+func (m Model) planPanelTitle(width int) string {
+	title := strings.TrimSpace(m.plan.Title)
+	if title == "" {
+		title = fmt.Sprintf("plan · %d/%d done", planDoneCount(m.plan), len(m.plan.Items))
+	}
+	return m.theme.Dim.Render(truncateDisplayWidth(title, width))
 }
 
 // formatUsage renders the status-bar usage segment. The input side shows the

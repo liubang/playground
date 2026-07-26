@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -119,6 +120,58 @@ func TestPromptClientFetchAndCacheFallback(t *testing.T) {
 	if _, err := client.Get(context.Background(), "never-fetched", "production"); err == nil {
 		t.Fatal("uncached prompt with dead API must error")
 	}
+
+	// A different label of the SAME prompt must not be served from the
+	// production cache: serving staging content for a production request is
+	// worse than failing over to the built-in prompt.
+	if _, err := client.Get(context.Background(), "loom-system", "staging"); err == nil {
+		t.Fatal("dead API must not serve another label's cache entry")
+	}
+}
+
+// TestPromptCacheIsLabelKeyed verifies cache files are isolated per label
+// and a label-mismatched entry is rejected even when read directly.
+func TestPromptCacheIsLabelKeyed(t *testing.T) {
+	dir := t.TempDir()
+	client := NewPromptClient(Config{Host: "http://unused", PublicKey: "pk", SecretKey: "sk"}, dir)
+	prod := &ManagedPrompt{Name: "p", Version: 1, Content: "prod content", Label: "production"}
+	staging := &ManagedPrompt{Name: "p", Version: 2, Content: "staging content", Label: "staging"}
+	if err := client.writeCache(prod); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.writeCache(staging); err != nil {
+		t.Fatal(err)
+	}
+	got, err := client.readCache("p", "production")
+	if err != nil || got.Content != "prod content" {
+		t.Fatalf("production cache = %+v, %v", got, err)
+	}
+	got, err = client.readCache("p", "staging")
+	if err != nil || got.Content != "staging content" {
+		t.Fatalf("staging cache = %+v, %v", got, err)
+	}
+	// Forged entry: right filename, wrong embedded label.
+	forged := &ManagedPrompt{Name: "p", Version: 9, Content: "forged", Label: "staging"}
+	data, _ := json.Marshal(forged)
+	if err := os.WriteFile(client.cachePath("p", "production"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.readCache("p", "production"); err == nil {
+		t.Fatal("label-mismatched cache entry must be rejected")
+	}
+}
+
+func TestPromptVariables(t *testing.T) {
+	vars := PromptVariables("Answer in {{language}}. Tone: {{ tone }}. Again {{language}}.")
+	if len(vars) != 2 || vars[0] != "language" || vars[1] != "tone" {
+		t.Fatalf("vars = %v", vars)
+	}
+	if vars := PromptVariables("no placeholders here"); len(vars) != 0 {
+		t.Fatalf("vars = %v", vars)
+	}
+	if vars := PromptVariables("not a var: {{123}} but {{real_var}} is"); len(vars) != 1 || vars[0] != "real_var" {
+		t.Fatalf("vars = %v", vars)
+	}
 }
 
 // TestScoreClientPosts verifies the scores API request shape end-to-end.
@@ -138,14 +191,17 @@ func TestScoreClientPosts(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newScoreClient(server.URL, "pk", "sk")
+	client := newScoreClient(server.URL, "pk", "sk", "dev", nil)
 	err := client.post(context.Background(), scoreRequest{
-		TraceID: "abc123", Name: "run_success", Value: 1, Comment: "ok",
+		TraceID: "abc123", Name: "run_success", Value: 1, Comment: "ok", Environment: client.env,
 	})
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
 	if got["traceId"] != "abc123" || got["name"] != "run_success" || got["value"] != float64(1) {
 		t.Fatalf("score payload = %v", got)
+	}
+	if got["environment"] != "dev" {
+		t.Fatalf("score must carry the trace environment, got %v", got["environment"])
 	}
 }

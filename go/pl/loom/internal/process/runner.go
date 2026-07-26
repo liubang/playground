@@ -133,7 +133,7 @@ func (r *Runner) RunWithSandbox(ctx context.Context, spec CommandSpec, sandbox S
 	if err != nil {
 		return Result{}, err
 	}
-	validated.env = r.applySessionEnv(validated.env)
+	validated.env = r.applySessionEnv(r.envForSandbox(spec.Env, sandbox))
 	launch, cleanup, isolation, err := r.prepareLaunch(validated, sandbox)
 	result := Result{
 		Isolation:      isolation.Name(),
@@ -280,9 +280,23 @@ func (r *Runner) validateSpec(spec CommandSpec) (validatedSpec, error) {
 		executableHash: executableHash,
 		args:           append([]string(nil), spec.Args...),
 		cwd:            cwd,
-		env:            buildMinimalEnv(spec.Env, r.envAllowlist),
 		outputLimit:    outputLimit,
 	}, nil
+}
+
+// envForSandbox builds the child environment for the effective sandbox.
+// Sandboxed runs get the minimal allowlisted environment. DirectSandbox runs
+// — the user explicitly approved escaping the sandbox — inherit the full
+// parent environment like a local terminal would, so CLIs that rely on
+// proxy, locale, or credential variables behave exactly as when the user
+// runs them; anything less would keep breaking the very commands the
+// approval was meant to unblock. Session attribution variables are merged
+// afterwards (applySessionEnv) and always win.
+func (r *Runner) envForSandbox(overrides map[string]string, sandbox Sandbox) []string {
+	if _, ok := sandbox.(DirectSandbox); ok {
+		return buildFullEnv(overrides)
+	}
+	return buildMinimalEnv(overrides, r.envAllowlist)
 }
 
 func (r *Runner) prepareLaunch(spec validatedSpec, sandbox Sandbox) (SandboxLaunch, func() error, Isolation, error) {
@@ -389,6 +403,37 @@ func verifyExecutable(path, expectedHash string) error {
 		return fmt.Errorf("%w: %s", ErrExecutableHashChanged, path)
 	}
 	return nil
+}
+
+// buildFullEnv inherits the parent process environment and applies the
+// caller's overrides on top. Entries with empty or malformed keys and values
+// containing NUL bytes are skipped. Used only for user-approved unsandboxed
+// execution (DirectSandbox); sandboxed runs use buildMinimalEnv instead.
+func buildFullEnv(overrides map[string]string) []string {
+	values := map[string]string{}
+	for _, kv := range os.Environ() {
+		key, value, ok := strings.Cut(kv, "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			continue
+		}
+		values[key] = value
+	}
+	for key, value := range overrides {
+		if strings.TrimSpace(key) == "" || strings.ContainsAny(key, "=\x00") || strings.ContainsRune(value, 0) {
+			continue
+		}
+		values[key] = value
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]string, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, key+"="+values[key])
+	}
+	return result
 }
 
 func buildMinimalEnv(overrides map[string]string, allowlist map[string]struct{}) []string {

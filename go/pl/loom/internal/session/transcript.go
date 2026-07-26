@@ -58,8 +58,23 @@ func ReplayFromCheckpoint(ckpt domain.Checkpoint, events []domain.Event) (Transc
 	}
 	projector.sessionID = ckpt.SessionID
 	projector.lastEventSequence = ckpt.Sequence
-	messages := sortedMessages(ckpt.Messages)
-	repairCheckpointSequences(messages)
+	messages := append([]domain.Message(nil), ckpt.Messages...)
+	// Checkpoint messages are persisted in canonical conversation order, so
+	// for a healthy checkpoint sortedMessages below is a no-op. Repair
+	// unhealthy numbering in place instead of erroring out: first slot
+	// non-positive legacy sequences, then — when the numbering is beyond
+	// slotting (duplicates/out-of-order, e.g. post-compaction appends that
+	// collided with surviving messages) — renumber densely, trusting the
+	// persisted array order over the corrupted sequence values.
+	if !sequencesStrictlyIncreasing(messages) {
+		repairCheckpointSequences(messages)
+	}
+	if !sequencesStrictlyIncreasing(messages) {
+		for i := range messages {
+			messages[i].Sequence = int64(i + 1)
+		}
+	}
+	messages = sortedMessages(messages)
 	for _, msg := range messages {
 		normalized, err := projector.normalizeMessage(msg)
 		if err != nil {
@@ -75,13 +90,27 @@ func ReplayFromCheckpoint(ckpt domain.Checkpoint, events []domain.Event) (Transc
 	return projector.transcript(), nil
 }
 
+// sequencesStrictlyIncreasing reports whether message sequences are all
+// positive and strictly increasing in the given (persisted, conversation)
+// order — the numbering a healthy checkpoint already satisfies.
+func sequencesStrictlyIncreasing(messages []domain.Message) bool {
+	last := int64(0)
+	for _, msg := range messages {
+		if msg.Sequence <= last {
+			return false
+		}
+		last = msg.Sequence
+	}
+	return true
+}
+
 // repairCheckpointSequences assigns positive stand-in sequences to
 // checkpoint messages persisted with a non-positive sequence — notably
 // compaction archive markers written before sequence assignment was fixed.
 // Without this repair such sessions are unrecoverable: every continuation
 // is rejected with "sequence must be positive". A message that cannot be
-// slotted into the strictly increasing order is left untouched so the
-// normal validation error still surfaces.
+// slotted into the strictly increasing order is left untouched; the caller
+// then falls back to dense renumbering.
 func repairCheckpointSequences(messages []domain.Message) {
 	var lastPositive int64
 	for i := range messages {

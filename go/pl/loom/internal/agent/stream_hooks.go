@@ -191,7 +191,17 @@ func (a *StreamAggregator) Finalize() (domain.Message, domain.StopReason, int64,
 		if err != nil {
 			return domain.Message{}, "", 0, 0, fmt.Errorf("invalid tool call id %q: %w", tool.id, err)
 		}
-		call := domain.ToolCall{ID: id, Name: tool.name, Arguments: json.RawMessage(tool.args)}
+		args := json.RawMessage(tool.args)
+		if !json.Valid(args) {
+			// Providers occasionally stream malformed arguments (pretty-printed
+			// JSON with literal newlines, payloads truncated mid-stream, or no
+			// arguments at all). Failing the whole run here strands the
+			// session; instead preserve the raw payload as evidence and let
+			// the tool layer reject the call with a recoverable prepare
+			// error, so the model can re-issue it correctly.
+			args = malformedArgumentsPlaceholder(tool.args)
+		}
+		call := domain.ToolCall{ID: id, Name: tool.name, Arguments: args}
 		if err := call.Validate(); err != nil {
 			return domain.Message{}, "", 0, 0, fmt.Errorf("invalid tool call at index %d: %w", index, err)
 		}
@@ -208,6 +218,25 @@ func (a *StreamAggregator) Finalize() (domain.Message, domain.StopReason, int64,
 		Parts:     parts,
 		CreatedAt: a.clock.Now(),
 	}, a.stop, a.inputTokens, a.outputTokens, nil
+}
+
+// malformedArgumentsPlaceholder wraps a provider's malformed tool-call
+// arguments into valid JSON that keeps the raw payload as evidence. The
+// unknown field makes every built-in tool's argument decoder reject the
+// call with a recoverable error result instead of executing garbage.
+func malformedArgumentsPlaceholder(raw string) json.RawMessage {
+	const maxRaw = 2048
+	if len(raw) > maxRaw {
+		raw = raw[:maxRaw] + "\u2026"
+	}
+	payload, err := json.Marshal(map[string]string{
+		"__malformed_arguments": raw,
+		"error":                 "model emitted invalid arguments JSON; re-issue the tool call with valid arguments",
+	})
+	if err != nil {
+		return json.RawMessage(`{"__malformed_arguments":"","error":"model emitted invalid arguments JSON"}`)
+	}
+	return payload
 }
 
 // InterruptedMessage creates an interrupted message from partial text.

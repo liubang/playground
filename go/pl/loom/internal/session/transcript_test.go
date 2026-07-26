@@ -259,6 +259,69 @@ func TestReplayFromCheckpointRepairsZeroSequenceMarker(t *testing.T) {
 	}
 }
 
+// Regression: a checkpoint persisted after span archival used to mix sparse
+// survivor sequences (4..25) with post-compaction appends numbered
+// len(messages)+1, producing duplicates ("checkpoint message ...: sequence 23
+// already assigned to message ...") that bricked every continuation. The
+// persisted array order is the canonical conversation order, so recovery must
+// renumber densely from it instead of erroring out.
+func TestReplayFromCheckpointRenumbersCollidingSequences(t *testing.T) {
+	sessionID := domain.NewSessionID()
+	baseTime := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	msg := func(sequence int64, role domain.Role, text string) domain.Message {
+		return domain.Message{
+			ID:        domain.NewMessageID(),
+			Sequence:  sequence,
+			Role:      role,
+			Status:    domain.MessageStatusFinal,
+			Revision:  1,
+			CreatedAt: baseTime,
+			Parts:     []domain.ContentPart{{PartIndex: 0, Kind: domain.PartText, Text: text}},
+		}
+	}
+
+	// Shape of the corrupted production checkpoint: an archive marker that
+	// inherited the last archived sequence, survivors keeping their original
+	// sparse numbering, then appended messages reusing assigned sequences.
+	messages := []domain.Message{
+		msg(4, domain.RoleSystem, "[earlier messages archived]"),
+		msg(5, domain.RoleUser, "kept user"),
+		msg(6, domain.RoleAssistant, "kept assistant"),
+		msg(23, domain.RoleAssistant, "kept tail 23"),
+		msg(24, domain.RoleAssistant, "kept tail 24"),
+		msg(25, domain.RoleAssistant, "kept tail 25"),
+		msg(23, domain.RoleAssistant, "appended after compaction"),
+		msg(24, domain.RoleAssistant, "appended next"),
+	}
+	ckpt := domain.Checkpoint{
+		ID:        domain.NewCheckpointID(),
+		SessionID: sessionID,
+		Sequence:  3,
+		Messages:  messages,
+		CreatedAt: baseTime,
+	}
+
+	transcript, err := ReplayFromCheckpoint(ckpt, nil)
+	if err != nil {
+		t.Fatalf("ReplayFromCheckpoint() error = %v, want renumbered recovery", err)
+	}
+	if len(transcript.Messages) != len(messages) {
+		t.Fatalf("messages = %d, want %d", len(transcript.Messages), len(messages))
+	}
+	for i, got := range transcript.Messages {
+		if got.ID != messages[i].ID {
+			t.Fatalf("messages[%d] reordered: got %s, want %s (persisted order is canonical)", i, got.ID, messages[i].ID)
+		}
+		if got.Sequence != int64(i+1) {
+			t.Fatalf("messages[%d].Sequence = %d, want %d (dense renumbering)", i, got.Sequence, i+1)
+		}
+	}
+	if err := transcript.Validate(); err != nil {
+		t.Fatalf("renumbered transcript invalid: %v", err)
+	}
+}
+
 func TestReplayRejectsInvalidPayload(t *testing.T) {
 	_, err := Replay([]domain.Event{{
 		ID:        domain.NewEventID(),

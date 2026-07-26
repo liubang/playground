@@ -8,14 +8,18 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
+	"os"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
@@ -291,6 +295,116 @@ func TestApplyRuntimeEventContextCompacted(t *testing.T) {
 	want := "Context compacted: ~182k → ~41k tokens (3 outputs externalized)"
 	if block.Content != want {
 		t.Fatalf("content = %q, want %q", block.Content, want)
+	}
+}
+
+func TestPlanPanelRendersChecklistAndHides(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 100}
+	m.plan = domain.Plan{Items: []domain.PlanItem{
+		{Index: 0, Goal: "read code", Status: domain.PlanItemDone},
+		{Index: 1, Goal: "implement feature", Status: domain.PlanItemInProgress},
+		{Index: 2, Goal: "add tests", Status: domain.PlanItemTodo},
+	}}
+
+	panel := m.renderPlanPanel()
+	// The default glyph set is Nerd Font (see icons_test.go); the plain set
+	// is covered below.
+	for _, want := range []string{"\uf046 read code", "\uf0c8 implement feature", "\uf096 add tests"} {
+		if !strings.Contains(panel, want) {
+			t.Fatalf("panel missing %q:\n%s", want, panel)
+		}
+	}
+	m.SetIcons(PlainIcons())
+	plainPanel := m.renderPlanPanel()
+	for _, want := range []string{"[x] read code", "[>] implement feature", "[ ] add tests"} {
+		if !strings.Contains(plainPanel, want) {
+			t.Fatalf("plain panel missing %q:\n%s", want, plainPanel)
+		}
+	}
+	m.SetIcons(NerdIcons())
+	// Without a plan title the title row falls back to the progress summary.
+	if !strings.Contains(panel, "plan · 1/3 done") {
+		t.Fatalf("title row must show the progress summary:\n%s", panel)
+	}
+	// Steps indent two columns under the title, the first row carries the
+	// tree stub, and every mark glyph lands on the same column.
+	if !strings.Contains(panel, "└ \uf046 read code") || !strings.Contains(panel, "\n  \uf0c8 implement feature") {
+		t.Fatalf("steps must indent under the title:\n%s", panel)
+	}
+	// Blank rows on both sides keep the panel from gluing to the transcript
+	// above and the composer below.
+	if !strings.HasPrefix(panel, "\n") || !strings.HasSuffix(panel, "\n") {
+		t.Fatalf("panel must carry a blank row on each side: %q", panel)
+	}
+	if h := m.planPanelHeight(); h != 6 {
+		t.Fatalf("planPanelHeight = %d, want 6 (blank + title + 3 items + blank)", h)
+	}
+
+	// A model-authored plan title replaces the progress summary — even while
+	// the agent is busy (the title names the whole plan, not the activity).
+	m.phase = "tools"
+	m.activityLabel = "Reading plan.go"
+	m.lastActivityAt = time.Now()
+	m.plan.Title = "loom 架构梳理"
+	titledPanel := m.renderPlanPanel()
+	if !strings.Contains(titledPanel, "loom 架构梳理") {
+		t.Fatalf("title row must carry the plan title:\n%s", titledPanel)
+	}
+	if strings.Contains(titledPanel, "plan · 1/3 done") || strings.Contains(titledPanel, "Reading plan.go") {
+		t.Fatalf("title row must show only the plan title:\n%s", titledPanel)
+	}
+
+	// ctrl+t collapses the panel; the status bar segment keeps the progress.
+	m.planHidden = true
+	if panel := m.renderPlanPanel(); panel != "" {
+		t.Fatalf("hidden panel rendered: %q", panel)
+	}
+	if h := m.planPanelHeight(); h != 0 {
+		t.Fatalf("hidden planPanelHeight = %d, want 0", h)
+	}
+	bar := m.renderStatusBar()
+	if !strings.Contains(bar, "plan:1/3") {
+		t.Fatalf("status bar must keep plan progress while the panel is hidden: %q", bar)
+	}
+}
+
+func TestTurnStartedClearsPlanPanel(t *testing.T) {
+	m := NewModel(newTestController(t), "test-model", "/ws")
+	m.plan = domain.Plan{Items: []domain.PlanItem{
+		{Index: 0, Goal: "read code", Status: domain.PlanItemDone},
+		{Index: 1, Goal: "implement feature", Status: domain.PlanItemDone},
+	}}
+	m.width = 100
+	if m.renderPlanPanel() == "" {
+		t.Fatal("panel must render while a plan is present")
+	}
+
+	// A new turn starts the display fresh; the next plan revision brings the
+	// panel back.
+	updated, _ := m.handleRuntimeEvent(runtimeevent.RuntimeEvent{Kind: runtimeevent.KindTurnStarted})
+	m = updated
+	if len(m.plan.Items) != 0 {
+		t.Fatalf("plan must clear on turn start: %+v", m.plan)
+	}
+	if m.renderPlanPanel() != "" {
+		t.Fatal("panel must hide on turn start")
+	}
+}
+
+func TestPlanPanelCollapsesLongPlans(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 100}
+	items := make([]domain.PlanItem, 0, 9)
+	for i := 0; i < 9; i++ {
+		items = append(items, domain.PlanItem{Index: i, Goal: fmt.Sprintf("step %d", i+1), Status: domain.PlanItemTodo})
+	}
+	m.plan = domain.Plan{Items: items}
+
+	panel := m.renderPlanPanel()
+	if !strings.Contains(panel, "… +3 more") {
+		t.Fatalf("long plan must collapse into a +N line:\n%s", panel)
+	}
+	if h, want := m.planPanelHeight(), planPanelMaxItems+1+3; h != want {
+		t.Fatalf("planPanelHeight = %d, want %d", h, want)
 	}
 }
 
@@ -1279,6 +1393,175 @@ func TestToggleReasoningAtClick(t *testing.T) {
 	}
 	if m.toggleReasoningAt(0) {
 		t.Fatal("click on the header row must not toggle anything")
+	}
+}
+
+// Blocks get a blank separator row between logical sections; consecutive
+// tool calls stay packed so a retry burst still reads as one list.
+func TestSyncTranscriptSeparatesSectionsButPacksToolRuns(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 80, height: 30}
+	m.blocks = NewBlockIndex()
+	m.viewport = viewport.New(80, 20)
+	m.blocks.Add(&TranscriptBlock{ID: "u1", Kind: BlockKindUser, Title: "You", Content: "q", Done: true})
+	m.blocks.Add(&TranscriptBlock{ID: "a1", Kind: BlockKindAssistant, Title: "Assistant", Content: "lead in", Done: true})
+	m.blocks.Add(&TranscriptBlock{ID: "t1", Kind: BlockKindTool, Title: "run_cmd", Status: "success", Done: true})
+	m.blocks.Add(&TranscriptBlock{ID: "t2", Kind: BlockKindTool, Title: "run_cmd", Status: "success", Done: true})
+	m.blocks.Add(&TranscriptBlock{ID: "a2", Kind: BlockKindAssistant, Title: "Assistant", Content: "answer", Done: true})
+	m.syncTranscript()
+
+	// u1(1) + blank + a1(1) + blank + t1(1) t2(1) + blank + a2(1)
+	wantOffsets := map[string]int{"u1": 0, "a1": 2, "t1": 4, "t2": 5, "a2": 7}
+	for id, want := range wantOffsets {
+		if got := m.blockOffsets[id]; got != want {
+			t.Fatalf("blockOffsets[%s] = %d, want %d", id, got, want)
+		}
+	}
+	if got := m.viewport.TotalLineCount(); got != 8 {
+		t.Fatalf("transcript rows = %d, want 8 (2 blanks): offsets=%v", got, m.blockOffsets)
+	}
+}
+
+func TestReasoningBlockThemeContrast(t *testing.T) {
+	dark := DefaultTheme()
+	light := LightTheme()
+	if dark.ReasoningBlock.GetBackground() == light.ReasoningBlock.GetBackground() {
+		t.Fatal("dark and light reasoning panels must use different background colors")
+	}
+	if dark.ReasoningBlock.GetBackground() == nil {
+		t.Fatal("dark theme reasoning block must have a panel background")
+	}
+	if _, isNoColor := NoColorTheme().ReasoningBlock.GetBackground().(lipgloss.NoColor); !isNoColor {
+		t.Fatalf("no-color reasoning block must not paint a background, got %v", NoColorTheme().ReasoningBlock.GetBackground())
+	}
+}
+
+// Fragments of one escape sequence must come back as a single read, so the
+// input parser never sees a lone ESC byte (which it would misread as the
+// Escape key and turn the rest of the sequence into text). The reader
+// understands sequence shape, so the inter-byte gap does not matter.
+func TestAnsiSeqReaderReassemblesFragments(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+	rd := newInputReader(r)
+
+	seq := []byte("\x1b[<65;47;16M")
+	go func() {
+		for _, b := range seq {
+			if _, err := w.Write([]byte{b}); err != nil {
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	buf := make([]byte, 64)
+	n, err := rd.Read(buf)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got := string(buf[:n]); got != string(seq) {
+		t.Fatalf("read = %q, want the whole sequence %q", got, seq)
+	}
+}
+
+// A severed head/tail pair is reassembled even when the tail arrives much
+// later than any debounce window would allow (as long as it beats the
+// escape-hatch timeout).
+func TestAnsiSeqReaderWaitsForSlowTail(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+	rd := newInputReader(r)
+
+	go func() {
+		if _, err := w.Write([]byte("\x1b")); err != nil {
+			return
+		}
+		time.Sleep(fragmentTimeout / 2)
+		_, _ = w.Write([]byte("[<65;47;16M"))
+	}()
+
+	buf := make([]byte, 64)
+	n, err := rd.Read(buf)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got := string(buf[:n]); got != "\x1b[<65;47;16M" {
+		t.Fatalf("read = %q, want the whole sequence", got)
+	}
+}
+
+// Plain text passes through immediately, and a manual ESC keypress is
+// delivered after the escape-hatch timeout rather than being stuck.
+func TestAnsiSeqReaderPassthroughAndLoneEsc(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+	rd := newInputReader(r)
+
+	if _, err := w.Write([]byte("ab")); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 64)
+	n, err := rd.Read(buf)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got := string(buf[:n]); got != "ab" {
+		t.Fatalf("read = %q, want %q", got, "ab")
+	}
+
+	// A lone ESC is forwarded after the timeout (parser maps it to the
+	// Escape key).
+	if _, err := w.Write([]byte("\x1b")); err != nil {
+		t.Fatal(err)
+	}
+	n, err = rd.Read(buf)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got := string(buf[:n]); got != "\x1b" {
+		t.Fatalf("lone ESC read = %q, want ESC byte", got)
+	}
+}
+
+// Sequence-boundary detection: CSI, SS3, X10 mouse, OSC and Alt+char.
+func TestSeqComplete(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"\x1b", false},
+		{"\x1b[", false},
+		{"\x1b[<", false},
+		{"\x1b[<65;47;16", false},
+		{"\x1b[<65;47;16M", true},
+		{"\x1b[<65;47;16m", true},
+		{"\x1b[A", true},
+		{"\x1b[200~", true},
+		{"\x1b[M", false},
+		{"\x1b[MaO0", true},
+		{"\x1bO", false},
+		{"\x1bOA", true},
+		{"\x1b]", false},
+		{"\x1b]11;rgb:0000/0000/0000\x07", true},
+		{"\x1b]11;rgb:0000\x1b\\", true},
+		{"\x1bx", true},
+	}
+	for _, tt := range cases {
+		if got := seqComplete([]byte(tt.in)); got != tt.want {
+			t.Errorf("seqComplete(%q) = %v, want %v", tt.in, got, tt.want)
+		}
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -408,7 +409,7 @@ func (r *Run) AddUserMessage(msg domain.Message) domain.Event {
 func (r *Run) AddSystemNote(text string) {
 	msg := domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleSystem, Status: domain.MessageStatusFinal,
-		Revision: 1,
+		Revision:  1,
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: text}},
 		CreatedAt: r.Clock.Now(),
 		Metadata:  map[string]string{"kind": "system_note"},
@@ -571,9 +572,9 @@ type permissionResolvedPayload struct {
 }
 
 type toolExecutionCompletedPayload struct {
-	CallID     domain.ToolCallID `json:"call_id"`
-	Status     domain.ToolStatus `json:"status"`
-	ErrorCode  string            `json:"error_code,omitempty"`
+	CallID    domain.ToolCallID `json:"call_id"`
+	Status    domain.ToolStatus `json:"status"`
+	ErrorCode string            `json:"error_code,omitempty"`
 	// ErrorMessage carries the human-readable failure reason so frontends
 	// can show it inline; the code alone (e.g. "unavailable") reads like a
 	// denial and left users guessing what actually happened.
@@ -657,6 +658,9 @@ type Loop struct {
 	// GoalCell receives update_goal tool mutations; the loop drains it
 	// after each tool batch. Nil disables goal tracking.
 	GoalCell *GoalCell
+	// PlanCell receives update_plan snapshots; the loop drains it after each
+	// tool batch and replaces the run's plan. Nil disables plan tracking.
+	PlanCell *PlanCell
 
 	prepared map[domain.ToolCallID]domain.PreparedCall
 	// traceRun is the active trace handle for the executing run.
@@ -676,9 +680,23 @@ type Loop struct {
 	// forceCompact demands compaction before the next model call (set
 	// after a provider context-overflow rejection).
 	forceCompact bool
+	// lastCompactEst is the transcript estimate right after the most recent
+	// compaction pass. Re-compacting is pointless until the transcript grows
+	// past it: on an unchanged transcript the condenser cannot make progress
+	// (e.g. everything sits inside the keep-recent window), and the loop
+	// would otherwise spin forever, spamming compaction events/checkpoints.
+	lastCompactEst int
 	// goalWrapUpPending marks the budget-limited goal's wrap-up turn; the
 	// next end-of-turn terminates the run instead of continuing.
 	goalWrapUpPending bool
+	// planReconcileUsed bounds the unfinished-plan closing nudge to one
+	// extra turn per run: advisory bookkeeping is routinely forgotten on the
+	// final step, and an unbounded nudge would loop forever.
+	planReconcileUsed bool
+	// planRevisedThisRun gates the closing nudge to plans this run actually
+	// touched: a stale plan inherited from an earlier turn must not hijack
+	// an unrelated prompt with a reconcile turn.
+	planRevisedThisRun bool
 }
 
 // ToolRegistry looks up tools by name.
@@ -730,6 +748,33 @@ func (r *ToolRegistry) List() []domain.ToolDefinition {
 	return out
 }
 
+// runSuccessScore maps the terminal run state to the Langfuse run_success
+// score that feeds success-rate dashboards. User cancellations are neutral
+// and never scored: a cancelled context is not a failure signal and must
+// not poison the success rate.
+//
+// Cancellation is detected two ways because the provider stream degrades
+// errors to strings in domain.ModelEvent (see openAIStream.finishWithError
+// and StreamAggregator.Apply), so a mid-stream cancel resurfaces as a
+// chain-less error whose text happens to read "context canceled": match
+// the wrapped chain when it survives, and fall back to the run context's
+// own terminal state when it does not.
+func runSuccessScore(ctx context.Context, execErr error, outcome domain.Outcome) (value float64, comment string, scored bool) {
+	switch {
+	case errors.Is(execErr, context.Canceled):
+		return 0, "", false
+	case ctx != nil && errors.Is(ctx.Err(), context.Canceled):
+		return 0, "", false
+	case execErr != nil:
+		return 0, execErr.Error(), true
+	case outcome == domain.OutcomeFailed || outcome == domain.OutcomeBudgetExhausted:
+		return 0, string(outcome), true
+	case outcome == domain.OutcomeSucceeded || outcome == domain.OutcomeCompletedUnverified:
+		return 1, "", true
+	}
+	return 0, "", false
+}
+
 // Execute runs the agent loop to completion (or until cancelled).
 func (l *Loop) Execute(ctx context.Context) (execErr error) {
 	recorder := l.Recorder
@@ -752,15 +797,8 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 			result.Error = execErr.Error()
 		}
 		l.traceRun.End(result)
-		// Success scoring feeds Langfuse's success-rate dashboards; user
-		// cancellations are neutral and not scored.
-		switch {
-		case execErr != nil:
-			l.traceRun.Score(ctx, "run_success", 0, execErr.Error())
-		case l.Run.State.Outcome == domain.OutcomeFailed || l.Run.State.Outcome == domain.OutcomeBudgetExhausted:
-			l.traceRun.Score(ctx, "run_success", 0, string(l.Run.State.Outcome))
-		case l.Run.State.Outcome == domain.OutcomeSucceeded || l.Run.State.Outcome == domain.OutcomeCompletedUnverified:
-			l.traceRun.Score(ctx, "run_success", 1, "")
+		if value, comment, scored := runSuccessScore(ctx, execErr, l.Run.State.Outcome); scored {
+			l.traceRun.Score(ctx, "run_success", value, comment)
 		}
 	}()
 
@@ -832,6 +870,14 @@ func (l *Loop) prepare(ctx context.Context) error {
 		return err
 	}
 	l.Run.IncrementTurn()
+	// Budget notices must not be appended between an assistant tool-call
+	// message and its routing/results: a trailing system note would make
+	// the call-routing readers miss the calls (they scan for the most
+	// recent message with tool calls) and, worse, leave dangling calls
+	// that providers reject. Injecting here — right before the next model
+	// call, after tool results are recorded — keeps the transcript
+	// pairing-safe by construction.
+	l.maybeInjectBudgetNotice()
 	return nil
 }
 
@@ -942,7 +988,6 @@ func (l *Loop) callModel(ctx context.Context) error {
 	// A completed call proves the request fit the window.
 	l.compactFitFailures = 0
 	l.reportContextUsage()
-	l.maybeInjectBudgetNotice()
 
 	if len(response.ToolCalls()) == 0 {
 		return l.determineCompletion(ctx, stop)
@@ -963,33 +1008,96 @@ func (l *Loop) reportContextUsage() {
 // failure degrades to the bare transcript rather than failing the turn.
 func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domain.ContextRuleRef) {
 	messages := append([]domain.Message(nil), l.Run.Messages...)
-	if l.SystemPrompt == nil {
-		return messages, nil
-	}
-	text, rules, err := l.SystemPrompt.Build(ctx)
-	if err != nil {
-		if l.Logger != nil {
-			l.Logger.Warn("build system prompt failed; continuing without it", "error", err)
+	var rules []domain.ContextRuleRef
+	if l.SystemPrompt != nil {
+		text, refs, err := l.SystemPrompt.Build(ctx)
+		switch {
+		case err != nil:
+			if l.Logger != nil {
+				l.Logger.Warn("build system prompt failed; continuing without it", "error", err)
+			}
+		case strings.TrimSpace(text) != "":
+			system := domain.Message{
+				ID:        domain.NewMessageID(),
+				Role:      domain.RoleSystem,
+				Status:    domain.MessageStatusFinal,
+				Revision:  1,
+				Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: text}},
+				CreatedAt: l.Run.Clock.Now(),
+			}
+			messages = append([]domain.Message{system}, messages...)
+			rules = refs
 		}
-		return messages, nil
 	}
-	if strings.TrimSpace(text) == "" {
-		return messages, nil
+	// Re-inject the live task plan right after the system prompt. The note
+	// is rebuilt per request and never persisted, so the model keeps plan
+	// awareness across context compactions and crash recovery — a summary
+	// replacement that drops message history cannot lose the plan.
+	if plan := l.Run.Plan; len(plan.Items) > 0 && !plan.IsComplete() {
+		note := domain.Message{
+			ID:        domain.NewMessageID(),
+			Role:      domain.RoleSystem,
+			Status:    domain.MessageStatusFinal,
+			Revision:  1,
+			Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: planStatusNote(plan)}},
+			CreatedAt: l.Run.Clock.Now(),
+		}
+		insertAt := 0
+		if len(messages) > 0 && messages[0].Role == domain.RoleSystem {
+			insertAt = 1
+		}
+		messages = append(messages[:insertAt:insertAt], append([]domain.Message{note}, messages[insertAt:]...)...)
 	}
-	system := domain.Message{
-		ID:        domain.NewMessageID(),
-		Role:      domain.RoleSystem,
-		Status:    domain.MessageStatusFinal,
-		Revision:  1,
-		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: text}},
+	return messages, rules
+}
+
+// reconcilePlanIfUnfinished gives the model exactly one extra turn to
+// close out an unfinished plan before the run terminates. Advisory plans are
+// otherwise routinely left with an in_progress (or todo) step after the
+// final answer, so a session that succeeded looks like it is still working.
+// One nudge per run: if the model still ends with an open plan afterwards,
+// accept it and terminate.
+func (l *Loop) reconcilePlanIfUnfinished() bool {
+	if l.planReconcileUsed || !l.planRevisedThisRun {
+		return false
+	}
+	plan := l.Run.Plan
+	if len(plan.Items) == 0 || plan.IsComplete() {
+		return false
+	}
+	l.planReconcileUsed = true
+	l.Run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: planReconcilePrompt(plan)}},
 		CreatedAt: l.Run.Clock.Now(),
+	})
+	return true
+}
+
+// planReconcilePrompt is the synthetic user message for the closing nudge:
+// finish genuinely remaining work, or close the bookkeeping when the
+// deliverable is already produced.
+func planReconcilePrompt(plan domain.Plan) string {
+	var remaining strings.Builder
+	for _, item := range plan.Items {
+		if item.Status != domain.PlanItemDone {
+			fmt.Fprintf(&remaining, "- [%s] %s\n", item.Status, item.Goal)
+		}
 	}
-	return append([]domain.Message{system}, messages...), rules
+	return fmt.Sprintf(`The task plan still has unfinished steps:
+
+%s
+
+Before ending your turn, reconcile the plan: if the remaining work is in fact complete (its deliverable is already produced in this conversation), call update_plan to mark those steps done with a brief evidence note — that is closing bookkeeping, not pre-marking. Otherwise keep executing the remaining steps instead of ending.`, strings.TrimRight(remaining.String(), "\n"))
 }
 
 func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) error {
 	switch stop {
 	case domain.StopEndTurn:
+		if l.reconcilePlanIfUnfinished() {
+			_, err := l.Run.TransitionTo(domain.PhasePreparing)
+			return err
+		}
 		if l.continueGoalIfActive() {
 			_, err := l.Run.TransitionTo(domain.PhasePreparing)
 			return err
@@ -1016,15 +1124,15 @@ func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) 
 func (l *Loop) routeToolCalls(ctx context.Context) error {
 	l.prepared = make(map[domain.ToolCallID]domain.PreparedCall)
 	needsApproval := false
-	for _, tc := range l.Run.Messages[len(l.Run.Messages)-1].ToolCalls() {
+	for _, tc := range lastToolCalls(l.Run.Messages) {
 		tool, ok := l.Registry.Lookup(tc.Name)
 		if !ok {
-			l.recordToolError(tc.ID, "unknown_tool", fmt.Sprintf("tool %q not found", tc.Name))
+			l.recordToolError(ctx, tc, "unknown_tool", fmt.Sprintf("tool %q not found", tc.Name))
 			continue
 		}
 		prepared, err := tool.Prepare(ctx, tc)
 		if err != nil {
-			l.recordToolError(tc.ID, "prepare_failed", err.Error())
+			l.recordToolError(ctx, tc, "prepare_failed", err.Error())
 			continue
 		}
 		l.Run.appendEvent(domain.EventToolCallPrepared, makeToolCallAuditPayload(prepared))
@@ -1035,9 +1143,9 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 			l.prepared[tc.ID] = prepared
 			needsApproval = true
 		case domain.DecisionDeny:
-			l.recordToolError(tc.ID, "permission_denied", "tool call denied by policy")
+			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by policy")
 		default:
-			l.recordToolError(tc.ID, "permission_denied", "tool call denied by invalid policy decision")
+			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by invalid policy decision")
 		}
 	}
 
@@ -1064,8 +1172,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 	if l.Approver == nil {
 		return fmt.Errorf("approver required for risky tool calls")
 	}
-	lastMsg := l.Run.Messages[len(l.Run.Messages)-1]
-	for _, tc := range lastMsg.ToolCalls() {
+	for _, tc := range lastToolCalls(l.Run.Messages) {
 		prepared, ok := l.prepared[tc.ID]
 		if !ok || l.policy().Evaluate(prepared.Risk) != domain.DecisionAsk {
 			continue
@@ -1093,7 +1200,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 			// Close every call that never reached a decision before failing the
 			// run: providers reject replayed transcripts containing tool calls
 			// without results, so an approval error must not strand them.
-			l.closeUnresolvedCalls(fmt.Sprintf("approval request failed before execution (%v); the call was not executed", err))
+			l.closeUnresolvedCalls(ctx, fmt.Sprintf("approval request failed before execution (%v); the call was not executed", err))
 			return fmt.Errorf("request approval for %s: %w", tc.ID, err)
 		}
 		l.Run.appendEvent(domain.EventPermissionResolved, permissionResolvedPayload{
@@ -1108,7 +1215,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 		}
 		if decision != domain.DecisionAllow {
 			delete(l.prepared, tc.ID)
-			l.recordToolError(tc.ID, "permission_denied", "tool call denied by policy")
+			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by policy")
 		}
 	}
 	if len(l.prepared) == 0 {
@@ -1120,8 +1227,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 }
 
 func (l *Loop) executeTools(ctx context.Context) error {
-	lastMsg := l.Run.Messages[len(l.Run.Messages)-1]
-	for _, tc := range lastMsg.ToolCalls() {
+	for _, tc := range lastToolCalls(l.Run.Messages) {
 		// Do not replay tool executions that already produced a result.
 		if l.isToolResultRecorded(tc.ID) {
 			continue
@@ -1134,15 +1240,15 @@ func (l *Loop) executeTools(ctx context.Context) error {
 
 		tool, ok := l.Registry.Lookup(prepared.Call.Name)
 		if !ok {
-			l.recordToolError(tc.ID, string(domain.ErrSecurity), "tool registry drift detected before execution")
+			l.recordToolError(ctx, tc, string(domain.ErrSecurity), "tool registry drift detected before execution")
 			continue
 		}
 		if err := validatePreparedExecution(tc, prepared, tool.Definition()); err != nil {
-			l.recordToolExecutionError(tc.ID, err)
+			l.recordToolExecutionError(ctx, tc, err)
 			continue
 		}
 		if err := verifyPreparedFreshness(ctx, tool, tc, prepared); err != nil {
-			l.recordToolExecutionError(tc.ID, err)
+			l.recordToolExecutionError(ctx, tc, err)
 			continue
 		}
 
@@ -1151,7 +1257,7 @@ func (l *Loop) executeTools(ctx context.Context) error {
 			if err := l.flushEvents(ctx); err != nil {
 				// Same dangling-call guarantee as the approval path: close the
 				// not-yet-executed calls so the transcript stays replayable.
-				l.closeUnresolvedCalls(fmt.Sprintf("execution interrupted before completion (%v); the call may not have run", err))
+				l.closeUnresolvedCalls(ctx, fmt.Sprintf("execution interrupted before completion (%v); the call may not have run", err))
 				return err
 			}
 		}
@@ -1167,8 +1273,8 @@ func (l *Loop) executeTools(ctx context.Context) error {
 	// After tools, prepare the next turn; the loop entry decides compaction.
 	l.prepared = nil
 	l.drainGoalUpdates()
+	l.drainPlanUpdates()
 	l.reportContextUsage()
-	l.maybeInjectBudgetNotice()
 	_, err := l.Run.TransitionTo(domain.PhasePreparing)
 	return err
 }
@@ -1185,8 +1291,14 @@ func (l *Loop) shouldCompact() bool {
 	if l.forceCompact {
 		return true
 	}
+	est := estTokens(l.Run.Messages)
+	if l.lastCompactEst > 0 && est <= l.lastCompactEst {
+		// Nothing grew since the last pass; another pass cannot shrink the
+		// transcript either, so let the run proceed to the next model call.
+		return false
+	}
 	cond := l.Condenser.withDefaults()
-	if estTokens(l.Run.Messages) > cond.TargetTokens {
+	if est > cond.TargetTokens {
 		return true
 	}
 	window := l.effectiveContextWindow()
@@ -1342,16 +1454,26 @@ func (l *Loop) summarizeForCompaction(ctx context.Context) (string, error) {
 // call of the latest assistant message that has no recorded result yet. It is
 // the guard that keeps the transcript replayable (providers reject dangling
 // tool calls) when a run fails between routing and execution.
-func (l *Loop) closeUnresolvedCalls(message string) {
-	if len(l.Run.Messages) == 0 {
-		return
-	}
-	for _, tc := range l.Run.Messages[len(l.Run.Messages)-1].ToolCalls() {
+func (l *Loop) closeUnresolvedCalls(ctx context.Context, message string) {
+	for _, tc := range lastToolCalls(l.Run.Messages) {
 		if l.isToolResultRecorded(tc.ID) {
 			continue
 		}
-		l.recordToolError(tc.ID, "interrupted", message)
+		l.recordToolError(ctx, tc, "interrupted", message)
 	}
+}
+
+// lastToolCalls returns the tool calls of the most recent message carrying
+// any. Bookkeeping messages (budget notices, compaction markers) may be
+// appended after the assistant message that owns the calls, so readers must
+// never assume it sits at the transcript tail.
+func lastToolCalls(messages []domain.Message) []domain.ToolCall {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if calls := messages[i].ToolCalls(); len(calls) > 0 {
+			return calls
+		}
+	}
+	return nil
 }
 
 func (l *Loop) compact(ctx context.Context) error {
@@ -1381,10 +1503,12 @@ func (l *Loop) compact(ctx context.Context) error {
 	}
 
 	// Fresh window: the next request's size is the pure estimate again,
-	// and model-visible budget notices re-arm.
+	// and model-visible budget notices re-arm. Remember the post-pass
+	// estimate so shouldCompact only re-fires on real transcript growth.
 	l.lastCallInput = 0
 	l.forceCompact = false
 	l.budgetNoticeLevel = 0
+	l.lastCompactEst = estTokens(l.Run.Messages)
 
 	l.Run.appendEvent(domain.EventContextCompacted, contextCompactedPayload{
 		MaskedOutputs:    len(result.outputs),
@@ -1464,13 +1588,17 @@ func (l *Loop) recordTool(ctx context.Context, prepared domain.PreparedCall, res
 		EndTime:   result.FinishedAt,
 	}
 	if result.Error != nil {
+		rec.Code = result.Error.Code
 		rec.Error = result.Error.Message
 	}
 	l.traceRun.RecordTool(ctx, rec)
 }
 
 // toolResultTracePreview returns a short excerpt of the first text part for
-// the tool span output.
+// the tool span output. The byte-wise cut must not split a multi-byte UTF-8
+// character: span attributes go through OTLP protobuf validation, which
+// rejects invalid UTF-8 strings (and the exporter then logs to stderr,
+// tearing the TUI).
 func toolResultTracePreview(result domain.ToolResult, maxLen int) string {
 	for _, cp := range result.Content {
 		if cp.Kind != domain.PartText {
@@ -1478,7 +1606,7 @@ func toolResultTracePreview(result domain.ToolResult, maxLen int) string {
 		}
 		text := strings.TrimSpace(cp.Text)
 		if len(text) > maxLen {
-			text = text[:maxLen] + "…"
+			text = strings.ToValidUTF8(text[:maxLen], "�") + "…"
 		}
 		return text
 	}
@@ -1552,23 +1680,35 @@ func (l *Loop) isToolResultRecorded(callID domain.ToolCallID) bool {
 	return false
 }
 
-func (l *Loop) recordToolError(id domain.ToolCallID, code, message string) {
+// recordToolError persists an error result for a call that never reached
+// execution (denied, unknown tool, prepare failure, interruption) and emits
+// the matching trace observation: policy denials are security-relevant and
+// must not be invisible in Langfuse just because no tool ran.
+func (l *Loop) recordToolError(ctx context.Context, tc domain.ToolCall, code, message string) {
+	now := l.Run.Clock.Now()
 	l.Run.RecordToolResult(domain.ToolResult{
-		CallID:     id,
+		CallID:     tc.ID,
 		Status:     domain.ToolStatusError,
 		Error:      &domain.ToolError{Code: code, Message: message},
-		StartedAt:  l.Run.Clock.Now(),
-		FinishedAt: l.Run.Clock.Now(),
+		StartedAt:  now,
+		FinishedAt: now,
 	})
+	if l.traceRun != nil {
+		l.traceRun.RecordTool(ctx, trace.ToolRecord{
+			CallID: tc.ID.String(), Name: tc.Name, Arguments: tc.Arguments,
+			Status: string(domain.ToolStatusError), Code: code, Error: message,
+			StartTime: now, EndTime: now,
+		})
+	}
 }
 
-func (l *Loop) recordToolExecutionError(id domain.ToolCallID, err error) {
+func (l *Loop) recordToolExecutionError(ctx context.Context, tc domain.ToolCall, err error) {
 	var agentErr *domain.AgentError
 	if domain.As(err, &agentErr) {
-		l.recordToolError(id, string(agentErr.Code), agentErr.Message)
+		l.recordToolError(ctx, tc, string(agentErr.Code), agentErr.Message)
 		return
 	}
-	l.recordToolError(id, string(domain.ErrInternal), err.Error())
+	l.recordToolError(ctx, tc, string(domain.ErrInternal), err.Error())
 }
 
 func makeToolCallAuditPayload(prepared domain.PreparedCall) toolCallAuditPayload {

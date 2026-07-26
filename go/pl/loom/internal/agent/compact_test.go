@@ -335,11 +335,12 @@ func TestCondenseArchivesOldestSpan(t *testing.T) {
 	}
 }
 
-// Regression: an archive marker with a zero sequence bricks session recovery
-// ("checkpoint message ... must be positive") on every continuation attempt.
-// The marker must inherit a valid sequence that keeps the transcript's
-// positive-and-strictly-increasing invariant.
-func TestCondenseArchiveMarkerCarriesValidSequence(t *testing.T) {
+// Regression: archival punches a hole in the sequence numbering. Messages
+// appended later are numbered len(messages)+1, so sparse survivor sequences
+// collide with them ("sequence N already assigned to message ...") and brick
+// session recovery on the next continuation. Condense must hand back a
+// densely renumbered 1..N list.
+func TestCondenseRenumbersSequencesDensely(t *testing.T) {
 	store := openArtifactStore(t)
 	var messages []domain.Message
 	for i := 0; i < 10; i++ {
@@ -355,15 +356,21 @@ func TestCondenseArchiveMarkerCarriesValidSequence(t *testing.T) {
 	}
 
 	marker := messages[0]
-	if marker.Sequence <= 0 {
-		t.Fatalf("marker sequence = %d, want positive", marker.Sequence)
+	if marker.Sequence != 1 {
+		t.Fatalf("marker sequence = %d, want 1 (dense renumbering)", marker.Sequence)
 	}
-	if want := int64(result.archived); marker.Sequence != want {
-		t.Fatalf("marker sequence = %d, want %d (last archived message)", marker.Sequence, want)
+	for i, msg := range messages {
+		if msg.Sequence != int64(i+1) {
+			t.Fatalf("messages[%d].Sequence = %d, want %d (dense)", i, msg.Sequence, i+1)
+		}
 	}
-	for i := 1; i < len(messages); i++ {
-		if messages[i].Sequence <= messages[i-1].Sequence {
-			t.Fatalf("sequences not strictly increasing at %d: %d <= %d", i, messages[i].Sequence, messages[i-1].Sequence)
+
+	// The post-compaction append path numbers the next message len+1; it
+	// must not collide with any survivor.
+	next := int64(len(messages) + 1)
+	for _, msg := range messages {
+		if msg.Sequence == next {
+			t.Fatalf("next appended sequence %d collides with message %s", next, msg.ID)
 		}
 	}
 }

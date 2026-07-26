@@ -338,8 +338,13 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	if err != nil {
 		return err
 	}
+	planCell := agent.NewPlanCell()
+	updatePlan, err := agent.NewUpdatePlanTool(planCell)
+	if err != nil {
+		return err
+	}
 	for _, tool := range []domain.Tool{
-		readFile, listDir, searchTool, globTool, editTool, writeFile, gitStatus, gitDiff, gitLog, lintTool, webFetch, runCmd, updateGoal,
+		readFile, listDir, searchTool, globTool, editTool, writeFile, gitStatus, gitDiff, gitLog, lintTool, webFetch, runCmd, updateGoal, updatePlan,
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -393,13 +398,28 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: userPrompt}},
 		CreatedAt: time.Now().UTC(),
 	})
+	contextWindow, err := contextWindowFromEnv()
+	if err != nil {
+		return err
+	}
 	var promptBuilder agent.PromptBuilder
 	if os.Getenv("LOOM_DISABLE_SYSTEM_PROMPT") != "1" {
 		promptOpts := []prompt.Option{prompt.WithExtraInstructions(os.Getenv("LOOM_SYSTEM_PROMPT_EXTRA"))}
 		if traceCfg := trace.ConfigFromEnv(); traceCfg.Enabled {
+			traceCfg.Logger = slog.Default()
 			if opt := app.ResolveManagedPrompt(ctx, traceCfg, dbPath, slog.Default()); opt != nil {
 				promptOpts = append(promptOpts, opt)
 			}
+		}
+		// Skills: registers read_skill and appends the catalog provider
+		// (nil option when LOOM_SKILLS=0). Inside the system-prompt guard
+		// so a catalog-less read_skill is never registered.
+		skillsOpt, err := app.WireSkills(registry, root, contextWindow, os.Getenv, slog.Default())
+		if err != nil {
+			return fmt.Errorf("wire skills: %w", err)
+		}
+		if skillsOpt != nil {
+			promptOpts = append(promptOpts, skillsOpt)
 		}
 		promptBuilder = prompt.NewBuilder(root, promptOpts...)
 	}
@@ -408,6 +428,8 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	// observability must never break the agent.
 	traceRecorder := trace.Recorder(trace.Noop())
 	if traceCfg := trace.ConfigFromEnv(); traceCfg.Enabled {
+		// Headless: exporter failures stay visible on stderr.
+		traceCfg.Logger = slog.Default()
 		traceProvider, err := trace.Setup(ctx, traceCfg)
 		if err != nil {
 			slog.Warn("langfuse tracing disabled: setup failed", "error", err)
@@ -424,16 +446,12 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 		}
 	}
 
-	contextWindow, err := contextWindowFromEnv()
-	if err != nil {
-		return err
-	}
 	loop := agent.Loop{
 		Run: run, Model: provider, ModelName: modelName, Store: store,
 		Approver: consoleApprover{}, Policy: permission.DefaultPolicy(), Registry: registry, Logger: slog.Default(),
 		SystemPrompt: promptBuilder, Artifacts: artifactStore,
 		Recorder: traceRecorder, Prompt: userPrompt, Workspace: root,
-		ContextWindow: contextWindow, GoalCell: goalCell,
+		ContextWindow: contextWindow, GoalCell: goalCell, PlanCell: planCell,
 	}
 	fmt.Fprintf(os.Stderr, "loom: session %s\n", run.SessionID)
 	executeErr := loop.Execute(ctx)
