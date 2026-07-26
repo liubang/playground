@@ -54,15 +54,22 @@ go_test(
     srcs = [
         "frame_stability_test.go",
         "icons_test.go",
+        "input_test.go",
         "markdown_test.go",
+        "picker_test.go",
         "toolblocks_test.go",
         "transcript_scroll_test.go",
         "ui_test.go",
     ],
     embed = [":ui"],
     deps = [
+        "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/app:app",
+        "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/fakes:fakes_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "@com_github_charmbracelet_bubbletea//:bubbletea",
+        "@org_golang_x_sys//unix",
     ],
 )

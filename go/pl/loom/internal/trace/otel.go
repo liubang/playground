@@ -99,10 +99,13 @@ type Provider struct {
 // Setup builds the OTLP exporter and tracer provider. A disabled Config is
 // an error here — callers should skip Setup and use Noop instead.
 func Setup(ctx context.Context, cfg Config) (*Provider, error) {
-	if !cfg.Enabled {
-		return nil, fmt.Errorf("trace.Setup: config disabled (host and keys required)")
-	}
-	logger := cfg.Logger
+if !cfg.Enabled {
+return nil, fmt.Errorf("trace.Setup: config disabled (host and keys required)")
+}
+if cfg.UserID == "" {
+cfg.UserID = DefaultUserID()
+}
+logger := cfg.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}

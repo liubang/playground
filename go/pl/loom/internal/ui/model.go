@@ -23,6 +23,8 @@ package ui
 import (
 	"context"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -42,6 +44,7 @@ const (
 	ModeChat          Mode = "chat"
 	ModeApproval      Mode = "approval"
 	ModeSessionPicker Mode = "session_picker"
+	ModeModelPicker   Mode = "model_picker"
 	ModeHelp          Mode = "help"
 	ModeSearch        Mode = "search"
 )
@@ -64,6 +67,7 @@ type Model struct {
 	sessionID domain.SessionID
 	modelName string
 	workspace string
+	gitBranch string
 	phase     string
 	usage     domain.Usage
 	limits    domain.Limits
@@ -128,6 +132,11 @@ planHidden bool
 
 	// Session picker
 	picker *SessionPicker
+
+	// Model picker (/model): the static catalog resolved at startup, and
+	// its popup state while ModeModelPicker is active.
+	models      []ModelOption
+	modelPicker *ModelPicker
 
 	// spinner animates in-progress activity while a turn is busy
 	spinner  spinner.Model
@@ -202,6 +211,11 @@ func NewModel(controller *app.Controller, modelName, workspace string) Model {
 // SetLimits records the active run budget for the status bar display.
 func (m *Model) SetLimits(limits domain.Limits) {
 	m.limits = limits
+}
+
+// SetModels records the selectable model catalog for the /model picker.
+func (m *Model) SetModels(models []ModelOption) {
+	m.models = models
 }
 
 // SetContextWindow records the model context-window size used as the
@@ -300,20 +314,28 @@ type InitOptions struct {
 	// Limits is the active run budget shown by the status bar; a zero value
 	// renders usage without the budget denominator.
 	Limits domain.Limits
-	// ContextWindow is the model context-window size in tokens (from
-	// LOOM_CONTEXT_WINDOW); zero renders the ctx segment without it.
+	// ContextWindow is the startup model's context-window size in tokens
+	// (from its config metadata); zero renders the ctx segment without it.
 	ContextWindow int
+	// Models is the selectable provider/model catalog for the /model picker
+	// (static for the process lifetime).
+	Models []ModelOption
 }
 
 // StartTUI starts the Bubble Tea program. Blocks until the TUI exits.
 func StartTUI(controller *app.Controller, modelName, workspace string, opts InitOptions) error {
 	m := NewModel(controller, modelName, workspace)
+	// The header band shows the workspace's git branch. Detection is a
+	// one-shot, bounded probe: a slow or missing git must never delay
+	// startup, and branch switches mid-session are rare enough to ignore.
+	m.gitBranch = detectGitBranch(workspace)
 	eventsCh, unsubscribe := controller.Subscribe()
 	m.eventsCh = eventsCh
 	defer unsubscribe()
 	m.SetIcons(ResolveIcons(opts.Icons))
 	m.SetLimits(opts.Limits)
 	m.SetContextWindow(opts.ContextWindow)
+	m.SetModels(opts.Models)
 	if opts.NoColor {
 		m.SetTheme(NoColorTheme())
 	}
@@ -336,6 +358,26 @@ func StartTUI(controller *app.Controller, modelName, workspace string, opts Init
 
 	_, err := p.Run()
 	return err
+}
+
+// detectGitBranch resolves the workspace's current git branch for the
+// header band. An empty result simply hides the branch segment.
+func detectGitBranch(workspace string) string {
+	if workspace == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", workspace, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	branch := strings.TrimSpace(string(out))
+	// A detached HEAD reports "HEAD": that is a commit, not a branch name.
+	if branch == "HEAD" {
+		return ""
+	}
+	return branch
 }
 
 // isTerminalFd reports whether f is a character device (terminal).

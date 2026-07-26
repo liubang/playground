@@ -636,27 +636,25 @@ func TestRunnerSessionEnvSkipsMalformedEntries(t *testing.T) {
 }
 
 func TestLoomSessionEnv(t *testing.T) {
-	t.Setenv("LOOM_VERSION", "0.2.0-dev")
-	env := LoomSessionEnv("sess_abc")
-	if got := env[EnvAgentName]; got != "loom" {
-		t.Fatalf("EnvAgentName = %q, want loom", got)
-	}
-	if got := env[EnvAgentVersion]; got != "0.2.0-dev" {
-		t.Fatalf("EnvAgentVersion = %q, want 0.2.0-dev", got)
-	}
-	if got := env[EnvSessionID]; got != "sess_abc" {
-		t.Fatalf("EnvSessionID = %q, want sess_abc", got)
-	}
+env := LoomSessionEnv("0.2.0-dev", "sess_abc")
+if got := env[EnvAgentName]; got != "loom" {
+t.Fatalf("EnvAgentName = %q, want loom", got)
+}
+if got := env[EnvAgentVersion]; got != "0.2.0-dev" {
+t.Fatalf("EnvAgentVersion = %q, want 0.2.0-dev", got)
+}
+if got := env[EnvSessionID]; got != "sess_abc" {
+t.Fatalf("EnvSessionID = %q, want sess_abc", got)
+}
 
-	if env := LoomSessionEnv("  "); envHasKey(env, EnvSessionID) {
-		t.Fatalf("blank session ID should be omitted, got %v", env)
-	}
+if env := LoomSessionEnv("0.2.0-dev", "  "); envHasKey(env, EnvSessionID) {
+t.Fatalf("blank session ID should be omitted, got %v", env)
+}
 
-	t.Setenv("LOOM_VERSION", "")
-	env = LoomSessionEnv("sess_abc")
-	if envHasKey(env, EnvAgentVersion) {
-		t.Fatalf("empty LOOM_VERSION should omit EnvAgentVersion, got %v", env)
-	}
+env = LoomSessionEnv("", "sess_abc")
+if envHasKey(env, EnvAgentVersion) {
+t.Fatalf("empty version should omit EnvAgentVersion, got %v", env)
+}
 }
 
 func TestAtomicSessionEnv(t *testing.T) {

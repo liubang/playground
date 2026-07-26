@@ -1,0 +1,485 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+// Created: 2026/07/26
+
+package config
+
+import (
+	"fmt"
+	"net/url"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/model/openai"
+	"github.com/liubang/playground/go/pl/loom/internal/permission"
+	"github.com/liubang/playground/go/pl/loom/internal/trace"
+)
+
+// EnvLookup resolves an environment variable (os.LookupEnv in production),
+// injected for testability. It is used ONLY for secret references
+// (api_key_env and friends), never for configuration values.
+type EnvLookup func(string) (string, bool)
+
+// ProviderModelRef identifies one resolved provider/model selection.
+type ProviderModelRef struct {
+	Provider string
+	Model    string
+}
+
+// String renders the canonical "provider/model" form.
+func (r ProviderModelRef) String() string { return r.Provider + "/" + r.Model }
+
+// ResolvedProvider is a fully assembled provider: the domain.Model instance
+// is built at load time (construction is cheap — an HTTP client config — so
+// every provider is prebuilt and switching costs nothing).
+type ResolvedProvider struct {
+	Name         string
+	Model        domain.Model
+	Models       []Model
+	DefaultModel string
+}
+
+// modelMeta returns the metadata for the named model.
+func (p *ResolvedProvider) modelMeta(name string) (Model, bool) {
+	for _, m := range p.Models {
+		if m.Name == name {
+			return m, true
+		}
+	}
+	return Model{}, false
+}
+
+// ResolvedConfig is the validated, secret-resolved, fully assembled
+// configuration. Consumers never touch the raw File schema.
+type ResolvedConfig struct {
+	Providers []ResolvedProvider
+	Default   ProviderModelRef
+	Limits    domain.Limits
+	Prompt    Prompt
+	Skills    ResolvedSkills
+	Rules     ResolvedRules
+	Tracing   trace.Config
+	Storage   Storage
+	UI        UI
+}
+
+// ResolvedSkills is the skills section with defaults applied.
+type ResolvedSkills struct {
+	Enabled    bool
+	ExtraRoots []string
+}
+
+// ResolvedRules is the rules section with defaults applied. The zero-value
+// bools are load-bearing defaults chosen in resolveRules.
+type ResolvedRules struct {
+	Enabled           bool
+	Builtin           bool
+	Project           bool
+	ProjectAllow      bool
+	PersistRemembered bool
+}
+
+// ProviderByName returns the named provider, or nil.
+func (c *ResolvedConfig) ProviderByName(name string) *ResolvedProvider {
+	for i := range c.Providers {
+		if c.Providers[i].Name == name {
+			return &c.Providers[i]
+		}
+	}
+	return nil
+}
+
+// ModelMeta returns the metadata of the referenced model.
+func (c *ResolvedConfig) ModelMeta(ref ProviderModelRef) (Model, bool) {
+	p := c.ProviderByName(ref.Provider)
+	if p == nil {
+		return Model{}, false
+	}
+	return p.modelMeta(ref.Model)
+}
+
+// ResolveRef parses a user-supplied model reference (the /model argument or
+// the config "default" key) into a concrete selection:
+//
+//  1. "provider/model" — exact match;
+//  2. bare name matching a provider — that provider's default model;
+//  3. bare model name — must match exactly one provider's catalog;
+//
+// Any ambiguity or miss is an error listing the candidates.
+func (c *ResolvedConfig) ResolveRef(ref string) (ProviderModelRef, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return ProviderModelRef{}, fmt.Errorf("model reference must not be empty")
+	}
+	if strings.Contains(ref, "/") {
+		parts := strings.SplitN(ref, "/", 2)
+		p := c.ProviderByName(parts[0])
+		if p == nil {
+			return ProviderModelRef{}, fmt.Errorf("unknown provider %q in %q (have: %s)", parts[0], ref, c.providerNames())
+		}
+		if _, ok := p.modelMeta(parts[1]); !ok {
+			return ProviderModelRef{}, fmt.Errorf("provider %q has no model %q (have: %s)", parts[0], parts[1], strings.Join(modelNames(p), ", "))
+		}
+		return ProviderModelRef{Provider: parts[0], Model: parts[1]}, nil
+	}
+	if p := c.ProviderByName(ref); p != nil {
+		return ProviderModelRef{Provider: p.Name, Model: p.DefaultModel}, nil
+	}
+	var matches []ProviderModelRef
+	for i := range c.Providers {
+		if _, ok := c.Providers[i].modelMeta(ref); ok {
+			matches = append(matches, ProviderModelRef{Provider: c.Providers[i].Name, Model: ref})
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return ProviderModelRef{}, fmt.Errorf("unknown model %q (have: %s)", ref, c.allRefs())
+	case 1:
+		return matches[0], nil
+	default:
+		refs := make([]string, len(matches))
+		for i, m := range matches {
+			refs[i] = m.String()
+		}
+		return ProviderModelRef{}, fmt.Errorf("model %q is ambiguous: %s — use the provider/model form", ref, strings.Join(refs, ", "))
+	}
+}
+
+func (c *ResolvedConfig) providerNames() string {
+	names := make([]string, len(c.Providers))
+	for i, p := range c.Providers {
+		names[i] = p.Name
+	}
+	return strings.Join(names, ", ")
+}
+
+// allRefs lists every selectable provider/model reference, sorted for
+// stable error messages.
+func (c *ResolvedConfig) allRefs() string {
+	var refs []string
+	for i := range c.Providers {
+		for _, m := range c.Providers[i].Models {
+			refs = append(refs, c.Providers[i].Name+"/"+m.Name)
+		}
+	}
+	sort.Strings(refs)
+	return strings.Join(refs, ", ")
+}
+
+func modelNames(p *ResolvedProvider) []string {
+	names := make([]string, len(p.Models))
+	for i, m := range p.Models {
+		names[i] = m.Name
+	}
+	return names
+}
+
+// resolve validates the raw file, resolves secrets, builds provider
+// instances, and applies built-in defaults. Any problem is a hard error —
+// a configuration that silently half-applies is worse than no run at all
+// (docs/CONFIG_DESIGN.md §7).
+func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
+	if lookup == nil {
+		return nil, fmt.Errorf("config: env lookup is required")
+	}
+	providers, err := resolveProviders(f.Providers, lookup)
+	if err != nil {
+		return nil, err
+	}
+	limits, err := resolveLimits(f.Limits)
+	if err != nil {
+		return nil, err
+	}
+	tracing, err := resolveTracing(f.Tracing, lookup)
+	if err != nil {
+		return nil, err
+	}
+	out := &ResolvedConfig{
+		Providers: providers,
+		Limits:    limits,
+		Prompt:    f.Prompt,
+		Skills: ResolvedSkills{
+			Enabled:    f.Skills.Enabled == nil || *f.Skills.Enabled,
+			ExtraRoots: f.Skills.ExtraRoots,
+		},
+		Rules:   resolveRules(f.Rules),
+		Tracing: tracing,
+		Storage: f.Storage,
+		UI:      f.UI,
+	}
+	if len(providers) > 0 {
+		def := f.Default
+		if def == "" {
+			// Implicit default: the first provider's default model, so a
+			// single-provider file need not spell "default" out (§4.2).
+			def = providers[0].Name + "/" + providers[0].DefaultModel
+		}
+		ref, err := out.ResolveRef(def)
+		if err != nil {
+			return nil, fmt.Errorf("config: default: %w", err)
+		}
+		out.Default = ref
+	}
+	return out, nil
+}
+
+// resolveProviders validates uniqueness and required fields, resolves each
+// API key, and prebuilds one domain.Model per provider.
+func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, error) {
+	seen := make(map[string]bool, len(in))
+	out := make([]ResolvedProvider, 0, len(in))
+	for i := range in {
+		p := in[i]
+		ctx := fmt.Sprintf("providers[%d] (%q)", i, p.Name)
+		if p.Name == "" {
+			return nil, fmt.Errorf("config: providers[%d]: name is required", i)
+		}
+		if strings.Contains(p.Name, "/") {
+			return nil, fmt.Errorf("config: %s: provider name must not contain '/' (it is the provider/model reference separator)", ctx)
+		}
+		if seen[p.Name] {
+			return nil, fmt.Errorf("config: duplicate provider name %q", p.Name)
+		}
+		seen[p.Name] = true
+		if p.Type != "" && p.Type != "openai" {
+			return nil, fmt.Errorf("config: %s: unsupported type %q (only \"openai\" is implemented)", ctx, p.Type)
+		}
+		// base_url is mandatory: openai.New silently falls back to the
+		// official OpenAI endpoint when empty, which would send a foreign
+		// key and the whole conversation to the wrong host (§4.2).
+		if strings.TrimSpace(p.BaseURL) == "" {
+			return nil, fmt.Errorf("config: %s: base_url is required", ctx)
+		}
+		if u, err := url.Parse(p.BaseURL); err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			return nil, fmt.Errorf("config: %s: base_url must be an absolute http(s) URL, got %q", ctx, p.BaseURL)
+		}
+		apiKey, err := resolveSecret(ctx, "api_key", p.APIKey, p.APIKeyEnv, lookup)
+		if err != nil {
+			return nil, err
+		}
+		wireAPI, err := resolveWireAPI(ctx, p.WireAPI)
+		if err != nil {
+			return nil, err
+		}
+		// The user-facing short name travels into the resolved model metadata
+		// (status bar / picker display); the openai constant drives the wire.
+		wireAPIName := strings.TrimSpace(p.WireAPI)
+		if wireAPIName == "" {
+			wireAPIName = "chat"
+		}
+		if len(p.Models) == 0 {
+			return nil, fmt.Errorf("config: %s: at least one model is required", ctx)
+		}
+		retries := 2
+		if p.MaxRetries != nil {
+			if *p.MaxRetries < 0 {
+				return nil, fmt.Errorf("config: %s: max_retries must be >= 0", ctx)
+			}
+			retries = *p.MaxRetries
+		}
+		modelSeen := make(map[string]bool, len(p.Models))
+		for j := range p.Models {
+			m := &p.Models[j]
+			mctx := fmt.Sprintf("%s models[%d] (%q)", ctx, j, m.Name)
+			if m.Name == "" {
+				return nil, fmt.Errorf("config: %s models[%d]: name is required", ctx, j)
+			}
+			if strings.Contains(m.Name, "/") {
+				return nil, fmt.Errorf("config: %s: model name must not contain '/'", mctx)
+			}
+			if modelSeen[m.Name] {
+				return nil, fmt.Errorf("config: %s: duplicate model name %q", ctx, m.Name)
+			}
+			modelSeen[m.Name] = true
+			if m.ContextWindow < 0 || m.MaxOutputTokens < 0 {
+				return nil, fmt.Errorf("config: %s: context_window and max_output_tokens must be >= 0", mctx)
+			}
+			if _, err := resolveWireAPI(mctx, m.WireAPI); err != nil {
+				return nil, err
+			}
+			// Expand inheritance so consumers never re-implement the fallback:
+			// a model without an explicit wire_api speaks the provider's.
+			if strings.TrimSpace(m.WireAPI) == "" {
+				m.WireAPI = wireAPIName
+			}
+		}
+		defaultModel := p.DefaultModel
+		if defaultModel == "" {
+			defaultModel = p.Models[0].Name
+		} else if !modelSeen[defaultModel] {
+			return nil, fmt.Errorf("config: %s: default_model %q is not in its models list", ctx, defaultModel)
+		}
+		instance, err := openai.New(openai.Config{
+			BaseURL:    p.BaseURL,
+			APIKey:     apiKey,
+			WireAPI:    wireAPI,
+			MaxRetries: retries,
+		})
+		if err != nil {
+			// Assembly failure (e.g. an unparseable base_url) is a config
+			// error, not a runtime one — fail fast with full context.
+			return nil, fmt.Errorf("config: %s: %w", ctx, err)
+		}
+		out = append(out, ResolvedProvider{
+			Name:         p.Name,
+			Model:        instance,
+			Models:       p.Models,
+			DefaultModel: defaultModel,
+		})
+	}
+	return out, nil
+}
+
+// resolveSecret implements the inline-or-env-reference rule for a secret
+// field pair ("api_key"/"api_key_env", tracing keys, ...).
+func resolveSecret(ctx, field, inline, envName string, lookup EnvLookup) (string, error) {
+	if inline != "" && envName != "" {
+		return "", fmt.Errorf("config: %s: %s and %s_env are mutually exclusive", ctx, field, field)
+	}
+	if envName != "" {
+		value, ok := lookup(envName)
+		if !ok || value == "" {
+			return "", fmt.Errorf("config: %s: %s_env references %s, which is not set", ctx, field, envName)
+		}
+		return value, nil
+	}
+	return inline, nil
+}
+
+// resolveWireAPI validates a wire_api value and maps the user-facing
+// names onto the provider's internal constants (chat → chat_completions);
+// empty defaults to "chat".
+func resolveWireAPI(ctx, raw string) (openai.WireAPI, error) {
+	switch strings.TrimSpace(raw) {
+	case "", "chat":
+		return openai.WireAPIChatCompletions, nil
+	case "responses":
+		return openai.WireAPIResponses, nil
+	default:
+		return "", fmt.Errorf("config: %s: wire_api must be \"chat\" or \"responses\", got %q", ctx, raw)
+	}
+}
+
+// resolveLimits overlays the file's limits onto the built-in defaults.
+func resolveLimits(in Limits) (domain.Limits, error) {
+	out := domain.DefaultLimits()
+	if in.MaxTurns != nil {
+		out.MaxTurns = *in.MaxTurns
+	}
+	if in.MaxToolCalls != nil {
+		out.MaxToolCalls = *in.MaxToolCalls
+	}
+	if in.MaxInputTokens != nil {
+		out.MaxInputTokens = *in.MaxInputTokens
+	}
+	if in.MaxOutputTokens != nil {
+		out.MaxOutputTokens = *in.MaxOutputTokens
+	}
+	if in.MaxCostUSD != nil {
+		out.MaxEstimatedCostUSD = *in.MaxCostUSD
+	}
+	if in.MaxToolOutputBytes != nil {
+		out.MaxToolOutputBytes = *in.MaxToolOutputBytes
+	}
+	if in.MaxArtifactBytes != nil {
+		out.MaxArtifactBytes = *in.MaxArtifactBytes
+	}
+	if in.MaxRepeatedActions != nil {
+		out.MaxRepeatedActions = *in.MaxRepeatedActions
+	}
+	if in.MaxWallTime != "" {
+		d, err := time.ParseDuration(in.MaxWallTime)
+		if err != nil {
+			return domain.Limits{}, fmt.Errorf("config: limits.max_wall_time: expected a Go duration (e.g. \"45m\"), got %q", in.MaxWallTime)
+		}
+		out.MaxWallTime = d
+	}
+	// Negative values would silently disable a budget dimension or, worse,
+	// make comparisons meaningless — reject them all in one place.
+	negatives := map[string]bool{
+		"max_turns":             out.MaxTurns < 0,
+		"max_tool_calls":        out.MaxToolCalls < 0,
+		"max_input_tokens":      out.MaxInputTokens < 0,
+		"max_output_tokens":     out.MaxOutputTokens < 0,
+		"max_cost_usd":          out.MaxEstimatedCostUSD < 0,
+		"max_wall_time":         out.MaxWallTime < 0,
+		"max_tool_output_bytes": out.MaxToolOutputBytes < 0,
+		"max_artifact_bytes":    out.MaxArtifactBytes < 0,
+		"max_repeated_actions":  out.MaxRepeatedActions < 0,
+	}
+	for field, negative := range negatives {
+		if negative {
+			return domain.Limits{}, fmt.Errorf("config: limits.%s must be >= 0", field)
+		}
+	}
+	return out, nil
+}
+
+// LoadOptions maps the resolved rules section onto the permission layer's
+// load switches (shared by the TUI bootstrap and the headless entry).
+func (r ResolvedRules) LoadOptions() permission.RuleLoadOptions {
+	return permission.RuleLoadOptions{
+		Enabled:      r.Enabled,
+		Builtin:      r.Builtin,
+		Project:      r.Project,
+		ProjectAllow: r.ProjectAllow,
+	}
+}
+
+// resolveRules applies the rule-layer defaults: every layer loads, and
+// project rules may only tighten policy, never loosen it.
+func resolveRules(in Rules) ResolvedRules {
+	return ResolvedRules{
+		Enabled:           in.Enabled == nil || *in.Enabled,
+		Builtin:           in.Builtin == nil || *in.Builtin,
+		Project:           in.Project == nil || *in.Project,
+		ProjectAllow:      in.ProjectAllow != nil && *in.ProjectAllow,
+		PersistRemembered: in.PersistRemembered == nil || *in.PersistRemembered,
+	}
+}
+
+// resolveTracing builds trace.Config; tracing is enabled only when host
+// and both keys are present.
+func resolveTracing(in Tracing, lookup EnvLookup) (trace.Config, error) {
+	publicKey, err := resolveSecret("tracing", "public_key", in.PublicKey, in.PublicKeyEnv, lookup)
+	if err != nil {
+		return trace.Config{}, err
+	}
+	secretKey, err := resolveSecret("tracing", "secret_key", in.SecretKey, in.SecretKeyEnv, lookup)
+	if err != nil {
+		return trace.Config{}, err
+	}
+	if in.CostInputPerMTok < 0 || in.CostOutputPerMTok < 0 {
+		return trace.Config{}, fmt.Errorf("config: tracing cost rates must be >= 0")
+	}
+	env := in.Environment
+	if env == "" {
+		env = "dev"
+	}
+	return trace.Config{
+		Host:              strings.TrimRight(in.Host, "/"),
+		PublicKey:         publicKey,
+		SecretKey:         secretKey,
+		Environment:       env,
+		IncludeContent:    in.IncludeContent == nil || *in.IncludeContent,
+		UserID:            in.User, // empty → trace.Setup derives git email / $USER
+		CostInputPerMTok:  in.CostInputPerMTok,
+		CostOutputPerMTok: in.CostOutputPerMTok,
+		Enabled:           in.Host != "" && publicKey != "" && secretKey != "",
+	}, nil
+}

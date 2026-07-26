@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
@@ -109,8 +110,8 @@ func TestUnknownSizeRendersSingleLine(t *testing.T) {
 func TestHeaderTruncatesOverlongTitle(t *testing.T) {
 	m := Model{
 		theme:     NoColorTheme(),
-		width:     70,
-		modelName: "glm-5.2",
+		width:     34,
+		modelName: "a-very-long-model-name-that-overflows-the-band",
 		sessionID: domain.NewSessionID(),
 		workspace: "/very/long/workspace/path/that/will/not/fit/either",
 	}
@@ -120,5 +121,91 @@ func TestHeaderTruncatesOverlongTitle(t *testing.T) {
 	}
 	if !strings.Contains(header, "...") {
 		t.Fatalf("overlong header not truncated: %q", header)
+	}
+	if w := lipgloss.Width(stripANSI(header)); w > 34 {
+		t.Fatalf("header wider than terminal (%d > 34): %q", w, header)
+	}
+}
+
+// The header band splits into brand (left) and working context (right):
+// git branch plus workspace path. The session id no longer appears here.
+func TestHeaderSplitsBrandAndContext(t *testing.T) {
+	m := Model{
+		theme:     NoColorTheme(),
+		icons:     PlainIcons(),
+		width:     100,
+		modelName: "glm-5.2",
+		sessionID: domain.NewSessionID(),
+		workspace: "/ws/playground",
+		gitBranch: "main",
+	}
+	header := stripANSI(m.renderHeader())
+	if frameLines(header) != 1 {
+		t.Fatalf("header wrapped to %d lines:\n%q", frameLines(header), header)
+	}
+	if !strings.Contains(header, "Loom · glm-5.2") {
+		t.Fatalf("header missing brand/model: %q", header)
+	}
+	// The no-color theme has no edge padding, so the context string sits
+	// flush against the right edge of the band.
+	if !strings.HasSuffix(header, "main · /ws/playground") {
+		t.Fatalf("context not right-aligned in band: %q", header)
+	}
+	if strings.Contains(header, "sess_") {
+		t.Fatalf("session id must not occupy the header band: %q", header)
+	}
+	if w := lipgloss.Width(header); w != 100 {
+		t.Fatalf("header width = %d cells, want exactly the terminal width 100", w)
+	}
+}
+
+// Narrow terminals degrade the context gracefully: the path shrinks
+// fish-style first, then to its basename, then the branch drops, until
+// only the bare wordmark survives below 30 columns.
+func TestHeaderDegradesContextWhenNarrow(t *testing.T) {
+	base := Model{
+		theme:     NoColorTheme(),
+		icons:     PlainIcons(),
+		modelName: "glm-5.2",
+		workspace: "/very/long/workspace/path/that/will/not/fit/either",
+		gitBranch: "feature/a-rather-long-branch-name",
+	}
+
+	narrow := base
+	narrow.width = 46
+	header := stripANSI(narrow.renderHeader())
+	if !strings.Contains(header, "either") {
+		t.Fatalf("directory name should survive narrow widths: %q", header)
+	}
+	if strings.Contains(header, "/very/long") || strings.Contains(header, "feature/") {
+		t.Fatalf("full path and branch must shrink before the basename: %q", header)
+	}
+
+	tighter := base
+	tighter.width = 36
+	header = stripANSI(tighter.renderHeader())
+	if !strings.Contains(header, "either") {
+		t.Fatalf("basename should be the last context to go: %q", header)
+	}
+	if strings.Contains(header, "/") {
+		t.Fatalf("only the bare basename fits at width 36: %q", header)
+	}
+
+	tiny := base
+	tiny.width = 29
+	header = stripANSI(tiny.renderHeader())
+	if strings.TrimSpace(header) != "Loom" {
+		t.Fatalf("width 29 must render the bare wordmark, got %q", header)
+	}
+}
+
+// Branch detection stays silent outside git repositories and must never
+// fail the frame.
+func TestDetectGitBranchOutsideRepo(t *testing.T) {
+	if got := detectGitBranch(t.TempDir()); got != "" {
+		t.Fatalf("detectGitBranch(non-repo) = %q, want empty", got)
+	}
+	if got := detectGitBranch(""); got != "" {
+		t.Fatalf("detectGitBranch(empty) = %q, want empty", got)
 	}
 }

@@ -1,0 +1,350 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+// Created: 2026/07/26
+
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// noEnv rejects every secret reference; tests that need secrets inject
+// their own lookup.
+func noEnv(string) (string, bool) { return "", false }
+
+func envWith(pairs map[string]string) EnvLookup {
+	return func(key string) (string, bool) {
+		v, ok := pairs[key]
+		return v, ok
+	}
+}
+
+const twoProviderYAML = `
+default: deepseek/deepseek-chat
+providers:
+  - name: deepseek
+    type: openai
+    base_url: https://api.deepseek.com/v1
+    api_key: sk-test
+    models:
+      - name: deepseek-chat
+        context_window: 65536
+      - name: deepseek-reasoner
+        context_window: 65536
+        wire_api: responses
+  - name: openai
+    type: openai
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    default_model: gpt-5
+    models:
+      - name: gpt-5
+        context_window: 400000
+`
+
+func writeConfig(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func loadFile(t *testing.T, content string, lookup EnvLookup) *ResolvedConfig {
+	t.Helper()
+	cfg, err := Load(writeConfig(t, content), LoadOptions{RequireProviders: true}, lookup)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	return cfg
+}
+
+func TestLoadResolvesProvidersAndDefault(t *testing.T) {
+	cfg := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk-env"}))
+
+	if len(cfg.Providers) != 2 {
+		t.Fatalf("providers = %d, want 2", len(cfg.Providers))
+	}
+	if cfg.Default != (ProviderModelRef{Provider: "deepseek", Model: "deepseek-chat"}) {
+		t.Fatalf("default = %+v", cfg.Default)
+	}
+	deepseek := cfg.ProviderByName("deepseek")
+	if deepseek == nil || deepseek.Model == nil {
+		t.Fatal("deepseek provider not assembled")
+	}
+	if deepseek.DefaultModel != "deepseek-chat" {
+		t.Fatalf("deepseek default model = %q (implicit models[0])", deepseek.DefaultModel)
+	}
+	openai := cfg.ProviderByName("openai")
+	if openai == nil || openai.DefaultModel != "gpt-5" {
+		t.Fatalf("openai provider = %+v", openai)
+	}
+	meta, ok := cfg.ModelMeta(ProviderModelRef{Provider: "deepseek", Model: "deepseek-reasoner"})
+	if !ok || meta.ContextWindow != 65536 || meta.WireAPI != "responses" {
+		t.Fatalf("model meta = %+v, ok = %v", meta, ok)
+	}
+	// wire_api inheritance is expanded at resolve time: deepseek-chat has no
+	// explicit value and takes the provider default (chat).
+	meta, ok = cfg.ModelMeta(ProviderModelRef{Provider: "deepseek", Model: "deepseek-chat"})
+	if !ok || meta.WireAPI != "chat" {
+		t.Fatalf("inherited wire_api = %q, want chat", meta.WireAPI)
+	}
+}
+
+func TestLoadImplicitDefaultIsFirstProvider(t *testing.T) {
+	cfg := loadFile(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+      - name: m2
+`, noEnv)
+	if cfg.Default != (ProviderModelRef{Provider: "only", Model: "m1"}) {
+		t.Fatalf("implicit default = %+v, want only/m1", cfg.Default)
+	}
+}
+
+func TestResolveRef(t *testing.T) {
+	cfg := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk-env"}))
+
+	cases := []struct {
+		ref  string
+		want ProviderModelRef
+	}{
+		{"deepseek/deepseek-reasoner", ProviderModelRef{"deepseek", "deepseek-reasoner"}},
+		{"gpt-5", ProviderModelRef{"openai", "gpt-5"}},          // bare unique model
+		{"openai", ProviderModelRef{"openai", "gpt-5"}},          // bare provider → its default
+		{" deepseek/deepseek-chat ", ProviderModelRef{"deepseek", "deepseek-chat"}},
+	}
+	for _, tc := range cases {
+		got, err := cfg.ResolveRef(tc.ref)
+		if err != nil {
+			t.Errorf("ResolveRef(%q) error = %v", tc.ref, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("ResolveRef(%q) = %+v, want %+v", tc.ref, got, tc.want)
+		}
+	}
+
+	for _, ref := range []string{"", "nosuch/model", "deepseek/nosuch", "nosuch-model"} {
+		if _, err := cfg.ResolveRef(ref); err == nil {
+			t.Errorf("ResolveRef(%q) should fail", ref)
+		}
+	}
+}
+
+func TestResolveRefAmbiguous(t *testing.T) {
+	cfg := loadFile(t, `
+providers:
+  - name: a
+    base_url: https://a.example.com/v1
+    api_key: sk
+    models: [{name: shared}]
+  - name: b
+    base_url: https://b.example.com/v1
+    api_key: sk
+    models: [{name: shared}]
+`, noEnv)
+	_, err := cfg.ResolveRef("shared")
+	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("ResolveRef(shared) error = %v, want ambiguity with candidates", err)
+	}
+	if !strings.Contains(err.Error(), "a/shared") || !strings.Contains(err.Error(), "b/shared") {
+		t.Fatalf("ambiguity error should list candidates: %v", err)
+	}
+}
+
+func TestLoadValidationErrors(t *testing.T) {
+	cases := []struct {
+		name    string
+		yaml    string
+		wantErr string
+	}{
+		{"unknown field", "providers: []\nnosuchkey: 1", "nosuchkey"},
+		{"duplicate provider", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\n  - {name: x, base_url: 'https://b.com', api_key: k, models: [{name: m}]}", "duplicate provider"},
+		{"bad type", "providers:\n  - {name: x, type: anthropic, base_url: 'https://a.com', api_key: k, models: [{name: m}]}", "unsupported type"},
+		{"missing base_url", "providers:\n  - {name: x, api_key: k, models: [{name: m}]}", "base_url is required"},
+		{"bad base_url", "providers:\n  - {name: x, base_url: '::bad', api_key: k, models: [{name: m}]}", ""},
+		{"empty models", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: []}", "at least one model"},
+		{"duplicate model", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}, {name: m}]}", "duplicate model"},
+		{"bad default_model", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, default_model: nope, models: [{name: m}]}", "default_model"},
+		{"bad wire_api", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, wire_api: grpc, models: [{name: m}]}", "wire_api"},
+		{"bad model wire_api", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m, wire_api: grpc}]}", "wire_api"},
+		{"key conflict", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, api_key_env: E, models: [{name: m}]}", "mutually exclusive"},
+		{"env not set", "providers:\n  - {name: x, base_url: 'https://a.com', api_key_env: MISSING_VAR, models: [{name: m}]}", "not set"},
+		{"bad default ref", "default: nope\nproviders:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}", "default"},
+		{"negative limit", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nlimits:\n  max_turns: -1", "max_turns"},
+		{"bad duration", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nlimits:\n  max_wall_time: soon", "max_wall_time"},
+		{"negative context window", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m, context_window: -1}]}", ">= 0"},
+		{"slash in provider name", "providers:\n  - {name: a/b, base_url: 'https://a.com', api_key: k, models: [{name: m}]}", "must not contain '/'"},
+		{"slash in model name", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: a/b}]}", "must not contain '/'"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Load(writeConfig(t, tc.yaml), LoadOptions{RequireProviders: true}, noEnv)
+			if err == nil {
+				t.Fatalf("Load() should fail")
+			}
+			if tc.wantErr != "" && !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("Load() error = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoadEmptyFile(t *testing.T) {
+	path := writeConfig(t, "# nothing but a comment\n")
+
+	// Offline commands tolerate an empty file.
+	cfg, err := Load(path, LoadOptions{}, noEnv)
+	if err != nil {
+		t.Fatalf("Load(empty, offline) error = %v", err)
+	}
+	if len(cfg.Providers) != 0 {
+		t.Fatalf("providers = %d, want 0", len(cfg.Providers))
+	}
+
+	// Agent entries still fail fast with the embedded example.
+	if _, err := Load(path, LoadOptions{RequireProviders: true}, noEnv); err == nil ||
+		!strings.Contains(err.Error(), "at least one provider") {
+		t.Fatalf("Load(empty, agent) error = %v, want providers-required", err)
+	}
+}
+
+func TestLoadMissingFile(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "config.yaml")
+
+	// Agent entry points fail fast with a copy-pasteable example.
+	_, err := Load(missing, LoadOptions{RequireProviders: true}, noEnv)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("Load() error = %v, want not-found with example", err)
+	}
+	if !strings.Contains(err.Error(), "providers:") {
+		t.Fatalf("error should embed the minimal example: %v", err)
+	}
+
+	// Offline commands tolerate a missing file and fall back to defaults.
+	cfg, err := Load(missing, LoadOptions{}, noEnv)
+	if err != nil {
+		t.Fatalf("Load(offline) error = %v", err)
+	}
+	if len(cfg.Providers) != 0 {
+		t.Fatalf("offline providers = %d, want 0", len(cfg.Providers))
+	}
+}
+
+func TestResolveLimitsOverlay(t *testing.T) {
+	cfg := loadFile(t, twoProviderYAML+`
+limits:
+  max_turns: 80
+  max_cost_usd: 1.5
+  max_wall_time: 1h
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+
+	if cfg.Limits.MaxTurns != 80 {
+		t.Errorf("MaxTurns = %d, want 80", cfg.Limits.MaxTurns)
+	}
+	if cfg.Limits.MaxToolCalls != 200 {
+		t.Errorf("MaxToolCalls = %d, want built-in default 200", cfg.Limits.MaxToolCalls)
+	}
+	if cfg.Limits.MaxEstimatedCostUSD != 1.5 {
+		t.Errorf("MaxEstimatedCostUSD = %v", cfg.Limits.MaxEstimatedCostUSD)
+	}
+	if cfg.Limits.MaxWallTime.Hours() != 1 {
+		t.Errorf("MaxWallTime = %v, want 1h", cfg.Limits.MaxWallTime)
+	}
+}
+
+func TestResolveRulesDefaultsAndOverrides(t *testing.T) {
+	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	want := ResolvedRules{Enabled: true, Builtin: true, Project: true, ProjectAllow: false, PersistRemembered: true}
+	if def.Rules != want {
+		t.Fatalf("default rules = %+v, want %+v", def.Rules, want)
+	}
+
+	cfg := loadFile(t, twoProviderYAML+`
+rules:
+  project: false
+  project_allow: true
+  persist_remembered: false
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if cfg.Rules.Project || !cfg.Rules.ProjectAllow || cfg.Rules.PersistRemembered {
+		t.Fatalf("rules = %+v", cfg.Rules)
+	}
+	if !cfg.Rules.Enabled || !cfg.Rules.Builtin {
+		t.Fatalf("untouched rule defaults flipped: %+v", cfg.Rules)
+	}
+}
+
+func TestResolveTracing(t *testing.T) {
+	// Disabled by default (no host/keys).
+	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if def.Tracing.Enabled {
+		t.Fatal("tracing should be disabled without host and keys")
+	}
+
+	cfg := loadFile(t, twoProviderYAML+`
+tracing:
+  host: https://langfuse.example.com/
+  public_key: pk
+  secret_key_env: LF_SECRET
+  cost_input_usd_per_mtok: 0.15
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk", "LF_SECRET": "sk-lf"}))
+	tr := cfg.Tracing
+	if !tr.Enabled || tr.Host != "https://langfuse.example.com" || tr.SecretKey != "sk-lf" {
+		t.Fatalf("tracing = %+v", tr)
+	}
+	if tr.Environment != "dev" || !tr.IncludeContent {
+		t.Fatalf("tracing defaults = %+v", tr)
+	}
+	if tr.CostInputPerMTok != 0.15 {
+		t.Fatalf("cost rate = %v", tr.CostInputPerMTok)
+	}
+}
+
+func TestWriteTemplate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "loom", "custom-name.yaml")
+	if err := WriteTemplate(path); err != nil {
+		t.Fatalf("WriteTemplate() error = %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("template mode = %o, want 600", info.Mode().Perm())
+	}
+
+	// The generated template must itself load (after the user fills a key).
+	raw, _ := os.ReadFile(path)
+	content := strings.Replace(string(raw), "api_key: sk-xxxxxxxx", "api_key: sk-real", 1)
+	if _, err := Load(writeConfig(t, content), LoadOptions{RequireProviders: true}, noEnv); err != nil {
+		t.Fatalf("generated template does not load: %v", err)
+	}
+
+	// Never overwrite an existing file.
+	if err := WriteTemplate(path); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("second WriteTemplate() error = %v, want already-exists", err)
+	}
+}
+

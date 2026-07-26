@@ -28,38 +28,6 @@ import (
 	"testing"
 )
 
-func TestConfigFromEnvExtendedFields(t *testing.T) {
-	t.Setenv("LOOM_LANGFUSE_HOST", "http://lf:3100")
-	t.Setenv("LOOM_LANGFUSE_PUBLIC_KEY", "pk")
-	t.Setenv("LOOM_LANGFUSE_SECRET_KEY", "sk")
-	t.Setenv("LOOM_TRACE_USER", "dev@example.com")
-	t.Setenv("LOOM_VERSION", "0.2.0-dev")
-	t.Setenv("LOOM_COST_INPUT_USD_PER_MTOK", "0.5")
-	t.Setenv("LOOM_COST_OUTPUT_USD_PER_MTOK", "2.0")
-
-	cfg := ConfigFromEnv()
-	if cfg.UserID != "dev@example.com" {
-		t.Fatalf("UserID = %q", cfg.UserID)
-	}
-	if cfg.Release != "0.2.0-dev" {
-		t.Fatalf("Release = %q", cfg.Release)
-	}
-	if cfg.CostInputPerMTok != 0.5 || cfg.CostOutputPerMTok != 2.0 {
-		t.Fatalf("costs = %v/%v", cfg.CostInputPerMTok, cfg.CostOutputPerMTok)
-	}
-}
-
-func TestParseFloatEnv(t *testing.T) {
-	t.Setenv("LOOM_COST_INPUT_USD_PER_MTOK", "bogus")
-	if got := parseFloatEnv("LOOM_COST_INPUT_USD_PER_MTOK"); got != 0 {
-		t.Fatalf("malformed rate = %v, want 0", got)
-	}
-	t.Setenv("LOOM_COST_INPUT_USD_PER_MTOK", "-1")
-	if got := parseFloatEnv("LOOM_COST_INPUT_USD_PER_MTOK"); got != 0 {
-		t.Fatalf("negative rate = %v, want 0", got)
-	}
-}
-
 func TestFlattenPrompt(t *testing.T) {
 	text, err := flattenPrompt(json.RawMessage(`"you are loom"`))
 	if err != nil || text != "you are loom" {

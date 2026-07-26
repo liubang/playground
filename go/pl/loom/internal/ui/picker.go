@@ -19,6 +19,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -126,8 +127,147 @@ func (p *SessionPicker) Render(width, height int) string {
 		b.WriteString("↓ more\n")
 	}
 
-	b.WriteString("\nEsc = back   Enter = select")
+	b.WriteString("\nj/k or ↑/↓ = move   Enter = select   Esc = back")
 	return b.String()
+}
+
+// ModelOption is one selectable provider/model entry in the /model picker.
+// The catalog is static for the process lifetime (the config file loads
+// once at startup), so it is handed to the TUI via InitOptions.
+type ModelOption struct {
+	Provider      string
+	Name          string
+	ContextWindow int64
+	WireAPI       string
+}
+
+// Ref returns the canonical "provider/model" reference accepted by /model.
+func (o ModelOption) Ref() string { return o.Provider + "/" + o.Name }
+
+// ModelPicker manages the state for picking a model. Unlike SessionPicker
+// there is no loading or error state: the catalog is known up front.
+type ModelPicker struct {
+	Options []ModelOption
+	Cursor  int
+	current string // ref of the active model, marked in the list
+}
+
+// NewModelPicker creates a picker with the cursor on the active model, so
+// the common "open and confirm" flow costs zero keystrokes.
+func NewModelPicker(options []ModelOption, currentRef string) *ModelPicker {
+	p := &ModelPicker{Options: options, current: currentRef}
+	for i, o := range options {
+		if o.Ref() == currentRef {
+			p.Cursor = i
+			break
+		}
+	}
+	return p
+}
+
+// MoveUp moves the cursor up.
+func (p *ModelPicker) MoveUp() {
+	if p.Cursor > 0 {
+		p.Cursor--
+	}
+}
+
+// MoveDown moves the cursor down.
+func (p *ModelPicker) MoveDown() {
+	if p.Cursor < len(p.Options)-1 {
+		p.Cursor++
+	}
+}
+
+// Selected returns the highlighted option, or nil when the list is empty.
+func (p *ModelPicker) Selected() *ModelOption {
+	if p.Cursor < 0 || p.Cursor >= len(p.Options) {
+		return nil
+	}
+	return &p.Options[p.Cursor]
+}
+
+// Render renders the model picker as a string for viewport display,
+// windowed around the cursor like the session picker.
+func (p *ModelPicker) Render(width, height int) string {
+	if len(p.Options) == 0 {
+		return "No models configured.\nPress Esc to go back."
+	}
+
+	start, end := 0, len(p.Options)
+	if height > 0 {
+		visible := height - 4 // heading, blank line, scroll hints, footer
+		if visible < 1 {
+			visible = 1
+		}
+		if p.Cursor >= visible {
+			start = p.Cursor - visible + 1
+		}
+		end = min(start+visible, len(p.Options))
+	}
+
+	// Align the metadata column to the widest reference in the whole list
+	// (not just the window) so columns stay put while scrolling.
+	refWidth := 0
+	for _, o := range p.Options {
+		if n := len(o.Ref()); n > refWidth {
+			refWidth = n
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("Select a model:\n\n")
+	if start > 0 {
+		b.WriteString("↑ more\n")
+	}
+	for i := start; i < end; i++ {
+		o := p.Options[i]
+		prefix := "  "
+		if i == p.Cursor {
+			prefix = "▶ "
+		}
+		marker := ""
+		if o.Ref() == p.current {
+			marker = " ●"
+		}
+		line := fmt.Sprintf("%s%-*s %s%s", prefix, refWidth, o.Ref(), modelOptionMeta(o), marker)
+		if width > 0 {
+			line = truncateDisplayWidth(line, width)
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	if end < len(p.Options) {
+		b.WriteString("↓ more\n")
+	}
+
+	b.WriteString("\nj/k or ↑/↓ = move   Enter = select   Esc = cancel")
+	return b.String()
+}
+
+// modelOptionMeta renders the trailing metadata column: "200k ctx ·
+// responses", with absent parts omitted.
+func modelOptionMeta(o ModelOption) string {
+	var parts []string
+	if o.ContextWindow > 0 {
+		parts = append(parts, formatTokens(o.ContextWindow)+" ctx")
+	}
+	if o.WireAPI != "" {
+		parts = append(parts, o.WireAPI)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// formatTokens renders a token count in compact decimal form (200k, 1.0M).
+func formatTokens(n int64) string {
+	switch {
+	case n < 1000:
+		return strconv.FormatInt(n, 10)
+	case n < 1_000_000:
+		return fmt.Sprintf("%dk", n/1000)
+	default:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	}
 }
 
 // formatTimeAgo returns a short relative time description.

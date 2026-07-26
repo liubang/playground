@@ -32,6 +32,7 @@ type Icons struct {
 	PlanDone    string // completed plan step
 	PlanCurrent string // in-progress plan step
 	PlanTodo    string // pending plan step
+	Branch      string // git branch marker in the header band
 }
 
 // NerdIcons returns the Nerd Font glyph set (Font Awesome codepoints, the
@@ -47,6 +48,7 @@ func NerdIcons() Icons {
 		PlanDone:    "\uf046", //  check-square-o
 		PlanCurrent: "\uf0c8", //  square
 		PlanTodo:    "\uf096", //  square-o
+		Branch:      "\ue0a0", //  powerline branch
 	}
 }
 
@@ -64,6 +66,7 @@ func PlainIcons() Icons {
 		PlanDone:    "[x]", // [x]
 		PlanCurrent: "[>]", // [>]
 		PlanTodo:    "[ ]", // [ ]
+		Branch:      "",    // bare branch name; no safe plain-text glyph
 	}
 }
 
