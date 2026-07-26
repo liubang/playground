@@ -18,7 +18,7 @@
 // Package skillread implements the read_skill builtin tool: whitelist reads
 // of discovered skill files (SKILL.md and files inside the skill directory),
 // which live outside the workspace and therefore cannot go through read_file.
-// See go/pl/loom/SKILL_DESIGN.md §4.4.
+// See go/pl/loom/docs/SKILL_DESIGN.md §4.4.
 package skillread
 
 import (

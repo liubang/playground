@@ -180,7 +180,7 @@ func (b *Builder) Build(ctx context.Context) (string, []domain.ContextRuleRef, e
 	}
 
 	// User preferences precede workspace rules per the context priority in
-	// DESIGN.md §8.1 (system rules > user preferences > workspace rules).
+	// docs/DESIGN.md §8.1 (system rules > user preferences > workspace rules).
 	if extra := strings.TrimSpace(b.extra); extra != "" {
 		sections = append(sections, promptSection{
 			source: "loom://config/extra-instructions",
