@@ -24,14 +24,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
-	"github.com/liubang/playground/go/pl/loom/internal/model/openai"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
@@ -46,64 +45,36 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-// sessionStoreCloser is the interface the Bootstrap needs from its Store.
-// The domain.SessionStore doesn't include Close, but concrete implementations
-// (e.g. SQLiteStore) provide it.
-type sessionStoreCloser interface {
-	domain.SessionStore
-	Close() error
-}
-
-// BootstrapConfig holds all configuration needed to bootstrap a Loom runtime.
+// BootstrapConfig carries the entry-point-specific inputs that do not live
+// in the config file: process paths, the build version, and logging.
 type BootstrapConfig struct {
 	// WorkspaceRoot is the absolute path to the workspace directory.
 	WorkspaceRoot string
-	// SessionDBPath is the path to the SQLite session database.
-	SessionDBPath string
 	// ArtifactDir is the path to the artifact directory.
 	ArtifactDir string
-	// ArtifactMaxBytes is the maximum size for a single artifact.
-	ArtifactMaxBytes int64
-	// ModelName is the model identifier (e.g. "gpt-4o").
-	ModelName string
-	// BaseURL is the OpenAI-compatible API base URL.
-	BaseURL string
-	// APIKey is the API key for the model provider.
-	APIKey string
-	// WireAPI selects the wire protocol (chat or responses).
-	WireAPI openai.WireAPI
-	// Limits defines runtime limits for the agent.
-	Limits domain.Limits
-	// Policy defines the security policy.
-	Policy permission.Policy
-	// SystemPromptExtra holds extra instructions appended to the built-in
-	// system prompt as a dedicated section.
-	SystemPromptExtra string
-	// DisableSystemPrompt disables injection of the built-in system prompt.
-	DisableSystemPrompt bool
-	// ContextWindow is the model's effective per-request context size in
-	// tokens (LOOM_CONTEXT_WINDOW); 0 lets the loop fall back to
-	// Limits.MaxInputTokens as the occupancy proxy.
-	ContextWindow int64
+	// Version is the build version stamped into traces and the attribution
+	// environment of spawned commands.
+	Version string
 	// Logger is the slog.Logger to use; if nil, a default is created.
 	Logger *slog.Logger
 }
 
-// Bootstrap assembles the runtime components for a Loom session.
-// It owns the lifecycle of the session store, artifact store, tool
-// registry, and model provider.
+// Bootstrap assembles the runtime components for a Loom session from a
+// resolved configuration file. It owns the lifecycle of the session store,
+// artifact store, tool registry, and tracing.
 type Bootstrap struct {
-	Config        BootstrapConfig
+	Resolved      *config.ResolvedConfig
+	Current       config.ProviderModelRef
+	WorkspaceRoot string
 	Store         domain.SessionStore
 	Artifact      domain.ArtifactStore
 	Registry      *agent.ToolRegistry
-	Model         domain.Model
-	ModelName     string
 	Policy        permission.Policy
 	PromptBuilder agent.PromptBuilder
 	Logger        *slog.Logger
 	Validator     *workspace.PathValidator
 	Runner        *process.Runner
+	Version       string
 	// SessionEnv holds the loom attribution variables (agent name/version,
 	// session ID) injected into every spawned command. The controller
 	// rewrites it on session create/resume; the runner reads it per
@@ -126,24 +97,23 @@ type Bootstrap struct {
 
 // NewBootstrap creates a new Bootstrap and assembles all runtime components.
 // The caller is responsible for calling Close when done.
-func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) {
+func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg BootstrapConfig) (*Bootstrap, error) {
+	if resolved == nil {
+		return nil, fmt.Errorf("resolved config is required")
+	}
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	// Open session store
-	store, err := session.OpenSQLiteStore(ctx, cfg.SessionDBPath)
+	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDB)
 	if err != nil {
 		return nil, fmt.Errorf("open session store: %w", err)
 	}
 
 	// Open artifact store
-	artifactMaxBytes := cfg.ArtifactMaxBytes
-	if artifactMaxBytes <= 0 {
-		artifactMaxBytes = cfg.Limits.MaxArtifactBytes
-	}
-	artStore, err := artifact.Open(cfg.ArtifactDir, artifactMaxBytes)
+	artStore, err := artifact.Open(cfg.ArtifactDir, resolved.Limits.MaxArtifactBytes)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("open artifact store: %w", err)
@@ -180,46 +150,32 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 	registry := agent.NewToolRegistry()
 	goalCell := agent.NewGoalCell()
 	planCell := agent.NewPlanCell()
-	if err := registerBuiltinTools(registry, validator, runner, artStore, cfg.Limits.MaxToolOutputBytes, goalCell, planCell); err != nil {
+	if err := registerBuiltinTools(registry, validator, runner, artStore, resolved.Limits.MaxToolOutputBytes, goalCell, planCell); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
 
-	// Create model provider
-	wireAPI := cfg.WireAPI
-	if wireAPI == "" {
-		wireAPI = openai.WireAPIChatCompletions
-	}
-	provider, err := openai.New(openai.Config{
-		BaseURL:    cfg.BaseURL,
-		APIKey:     cfg.APIKey,
-		WireAPI:    wireAPI,
-		MaxRetries: 2,
-	})
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("create model provider: %w", err)
-	}
-
-	policy := cfg.Policy
-	if !policy.AutoApproveR1 && !policy.AskR2 {
-		p := permission.DefaultPolicy()
-		policy = p
-	}
 	// Session-remembered approvals ("allow always") share one store with the
 	// policy layer; declarative user/project rules load on top of the
-	// baseline (LOOM_RULES=0 disables).
+	// baseline per the config file's rules.* section.
 	sessionRules := permission.NewSessionRules()
+	policy := permission.DefaultPolicy()
 	policy.Session = sessionRules
-	policy = permission.AttachRules(policy, cfg.WorkspaceRoot, logger)
+	policy = permission.AttachRules(policy, cfg.WorkspaceRoot, permission.RuleLoadOptions{
+		Enabled:      resolved.Rules.Enabled,
+		Builtin:      resolved.Rules.Builtin,
+		Project:      resolved.Rules.Project,
+		ProjectAllow: resolved.Rules.ProjectAllow,
+	}, logger)
 
-	// Langfuse tracing: enabled purely through the environment
-	// (LOOM_LANGFUSE_* / LANGFUSE_*). Setup failure degrades to a no-op
-	// recorder — observability must never break the agent.
-	traceCfg := trace.ConfigFromEnv()
+	// Langfuse tracing comes from the config file's tracing.* section.
+	// Setup failure degrades to a no-op recorder — observability must never
+	// break the agent.
+	traceCfg := resolved.Tracing
 	// Route exporter/client failures into the (discardable) TUI logger:
 	// anything written to stderr tears the TUI rendering.
 	traceCfg.Logger = logger
+	traceCfg.Release = cfg.Version
 	var (
 		traceRecorder trace.Recorder = trace.Noop()
 		traceProvider *trace.Provider
@@ -239,15 +195,17 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 	}
 
 	var promptBuilder agent.PromptBuilder
-	if !cfg.DisableSystemPrompt {
-		promptOpts := []prompt.Option{prompt.WithExtraInstructions(cfg.SystemPromptExtra)}
-		if opt := ResolveManagedPrompt(ctx, traceCfg, cfg.SessionDBPath, logger); opt != nil {
+	if !resolved.Prompt.DisableBuiltin {
+		promptOpts := []prompt.Option{prompt.WithExtraInstructions(resolved.Prompt.Extra)}
+		if opt := ResolveManagedPrompt(ctx, resolved.Prompt.Managed, traceCfg, resolved.Storage.SessionDB, logger); opt != nil {
 			promptOpts = append(promptOpts, opt)
 		}
-		// Skills: registers read_skill and appends the catalog provider
-		// (nil option when LOOM_SKILLS=0). Inside the system-prompt guard
-		// so a catalog-less read_skill is never registered.
-		skillsOpt, err := WireSkills(registry, cfg.WorkspaceRoot, cfg.ContextWindow, os.Getenv, logger)
+		// Skills: registers read_skill and appends the catalog provider.
+		// Inside the system-prompt guard so a catalog-less read_skill is
+		// never registered. The catalog budget tracks the startup model's
+		// window; switching models does not rebuild it (catalogs are far
+		// smaller than any window).
+		skillsOpt, err := WireSkills(registry, cfg.WorkspaceRoot, defaultContextWindow(resolved), resolved.Skills, resolved.Prompt.DisableBuiltin, logger)
 		if err != nil {
 			_ = store.Close()
 			return nil, fmt.Errorf("wire skills: %w", err)
@@ -259,17 +217,18 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 	}
 
 	return &Bootstrap{
-		Config:        cfg,
+		Resolved:      resolved,
+		Current:       resolved.Default,
+		WorkspaceRoot: cfg.WorkspaceRoot,
 		Store:         store,
 		Artifact:      artStore,
 		Registry:      registry,
-		Model:         provider,
-		ModelName:     cfg.ModelName,
 		Policy:        policy,
 		PromptBuilder: promptBuilder,
 		Logger:        logger,
 		Validator:     validator,
 		Runner:        runner,
+		Version:       cfg.Version,
 		SessionEnv:    sessionEnv,
 		GoalCell:      goalCell,
 		PlanCell:      planCell,
@@ -277,6 +236,15 @@ func NewBootstrap(ctx context.Context, cfg BootstrapConfig) (*Bootstrap, error) 
 		SessionRules:  sessionRules,
 		traceProvider: traceProvider,
 	}, nil
+}
+
+// defaultContextWindow returns the startup model's context window (0 = the
+// loop falls back to Limits.MaxInputTokens as the occupancy proxy).
+func defaultContextWindow(resolved *config.ResolvedConfig) int64 {
+	if meta, ok := resolved.ModelMeta(resolved.Default); ok {
+		return meta.ContextWindow
+	}
+	return 0
 }
 
 // registerBuiltinTools registers all built-in tools with the registry.
@@ -353,26 +321,23 @@ func (b *Bootstrap) Close() {
 	}
 }
 
-// ResolveManagedPrompt fetches the Langfuse-managed system prompt when
-// LOOM_PROMPT_NAME is set and Langfuse is configured. Any failure degrades
-// to nil (built-in prompt) — a prompt-management outage must never block
-// the agent. LOOM_PROMPT_LABEL selects the release label (default
-// "production").
-func ResolveManagedPrompt(ctx context.Context, traceCfg trace.Config, sessionDBPath string, logger *slog.Logger) prompt.Option {
-	name := os.Getenv("LOOM_PROMPT_NAME")
-	if name == "" || !traceCfg.Enabled {
+// ResolveManagedPrompt fetches the Langfuse-managed system prompt when the
+// config file names one and tracing is enabled. Any failure degrades to nil
+// (built-in prompt) — a prompt-management outage must never block the agent.
+func ResolveManagedPrompt(ctx context.Context, managed config.ManagedPrompt, traceCfg trace.Config, sessionDBPath string, logger *slog.Logger) prompt.Option {
+	if managed.Name == "" || !traceCfg.Enabled {
 		return nil
 	}
-	label := os.Getenv("LOOM_PROMPT_LABEL")
+	label := managed.Label
 	if label == "" {
 		label = "production"
 	}
 	cacheDir := filepath.Join(filepath.Dir(sessionDBPath), "prompt_cache")
 	client := trace.NewPromptClient(traceCfg, cacheDir)
-	mp, err := client.Get(ctx, name, label)
+	mp, err := client.Get(ctx, managed.Name, label)
 	if err != nil {
 		logger.Warn("langfuse managed prompt unavailable, using built-in prompt",
-			"name", name, "label", label, "error", err)
+			"name", managed.Name, "label", label, "error", err)
 		return nil
 	}
 	// loom does not substitute Langfuse template variables; surface them
@@ -384,39 +349,4 @@ func ResolveManagedPrompt(ctx context.Context, traceCfg trace.Config, sessionDBP
 	logger.Info("using langfuse managed prompt",
 		"name", mp.Name, "version", mp.Version, "label", label, "fetched_at", mp.FetchedAt)
 	return prompt.WithManagedBase(mp.Name, mp.Version, mp.Content)
-}
-
-// DefaultBootstrapConfig creates a BootstrapConfig with sensible defaults
-// derived from environment variables and the given workspace root.
-// LOOM_MAX_* limit overrides are applied when valid; malformed values fall
-// back to the defaults here (interactive entry points should prefer calling
-// domain.LimitsFromEnv directly so they can fail fast with a clear error).
-func DefaultBootstrapConfig(workspaceRoot string) BootstrapConfig {
-	limits, err := domain.LimitsFromEnv(domain.DefaultLimits())
-	if err != nil {
-		limits = domain.DefaultLimits()
-	}
-	return BootstrapConfig{
-		WorkspaceRoot:       workspaceRoot,
-		ModelName:           getEnvDefault("LOOM_MODEL", "gpt-4o"),
-		BaseURL:             os.Getenv("LOOM_BASE_URL"),
-		APIKey:              os.Getenv("LOOM_API_KEY"),
-		Limits:              limits,
-		Policy:              permission.DefaultPolicy(),
-		SystemPromptExtra:   os.Getenv("LOOM_SYSTEM_PROMPT_EXTRA"),
-		DisableSystemPrompt: os.Getenv("LOOM_DISABLE_SYSTEM_PROMPT") == "1",
-	}
-}
-
-// DerivePaths computes session DB and artifact directory paths from a base directory.
-func DerivePaths(baseDir string) (sessionDBPath, artifactDir string) {
-	return filepath.Join(baseDir, "sessions.db"),
-		filepath.Join(baseDir, "artifacts")
-}
-
-func getEnvDefault(key, def string) string {
-	if v, ok := os.LookupEnv(key); ok {
-		return v
-	}
-	return def
 }

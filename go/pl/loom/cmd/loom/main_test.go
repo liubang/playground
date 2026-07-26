@@ -30,27 +30,39 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
 
-func TestPrepareSessionDBPathConfiguredPrivateDirectory(t *testing.T) {
+// writeTestConfig points LOOM_CONFIG at a minimal offline config whose
+// storage.session_db is the given path.
+func writeTestConfig(t *testing.T, sessionDB string) {
+	t.Helper()
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	content := "storage:\n  session_db: '" + sessionDB + "'\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write test config: %v", err)
+	}
+	t.Setenv(configPathEnv, cfgPath)
+}
+
+func TestResolveSessionDBConfiguredPrivateDirectory(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "private")
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	path := filepath.Join(directory, "custom.db")
-	t.Setenv(sessionDBEnv, path)
-	got, err := prepareSessionDBPath()
-	if err != nil {
-		t.Fatalf("prepareSessionDBPath: %v", err)
+	resolved := &config.ResolvedConfig{Storage: config.Storage{SessionDB: path}}
+	if err := resolveSessionDB(resolved, true); err != nil {
+		t.Fatalf("resolveSessionDB: %v", err)
 	}
-	if got != path {
-		t.Fatalf("path = %q, want %q", got, path)
+	if resolved.Storage.SessionDB != path {
+		t.Fatalf("path = %q, want %q", resolved.Storage.SessionDB, path)
 	}
 }
 
-func TestPrepareSessionDBPathRejectsInsecureConfiguredDirectory(t *testing.T) {
+func TestResolveSessionDBRejectsInsecureConfiguredDirectory(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "shared")
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -58,13 +70,13 @@ func TestPrepareSessionDBPathRejectsInsecureConfiguredDirectory(t *testing.T) {
 	if err := os.Chmod(directory, 0o755); err != nil {
 		t.Fatalf("Chmod: %v", err)
 	}
-	t.Setenv(sessionDBEnv, filepath.Join(directory, "sessions.db"))
-	if _, err := prepareSessionDBPath(); err == nil || !strings.Contains(err.Error(), "must not be accessible") {
-		t.Fatalf("prepareSessionDBPath error = %v, want insecure directory error", err)
+	resolved := &config.ResolvedConfig{Storage: config.Storage{SessionDB: filepath.Join(directory, "sessions.db")}}
+	if err := resolveSessionDB(resolved, true); err == nil || !strings.Contains(err.Error(), "must not be accessible") {
+		t.Fatalf("resolveSessionDB error = %v, want insecure directory error", err)
 	}
 }
 
-func TestPrepareSessionDBPathRejectsSymlinkDirectory(t *testing.T) {
+func TestResolveSessionDBRejectsSymlinkDirectory(t *testing.T) {
 	root := t.TempDir()
 	realDirectory := filepath.Join(root, "real")
 	if err := os.MkdirAll(realDirectory, 0o700); err != nil {
@@ -74,9 +86,9 @@ func TestPrepareSessionDBPathRejectsSymlinkDirectory(t *testing.T) {
 	if err := os.Symlink(realDirectory, link); err != nil {
 		t.Fatalf("Symlink: %v", err)
 	}
-	t.Setenv(sessionDBEnv, filepath.Join(link, "sessions.db"))
-	if _, err := prepareSessionDBPath(); err == nil || !strings.Contains(err.Error(), "real directory") {
-		t.Fatalf("prepareSessionDBPath error = %v, want symlink error", err)
+	resolved := &config.ResolvedConfig{Storage: config.Storage{SessionDB: filepath.Join(link, "sessions.db")}}
+	if err := resolveSessionDB(resolved, true); err == nil || !strings.Contains(err.Error(), "real directory") {
+		t.Fatalf("resolveSessionDB error = %v, want symlink error", err)
 	}
 }
 
@@ -109,7 +121,7 @@ func TestSaveTerminalCheckpointSurvivesCancelledContext(t *testing.T) {
 
 func TestListSessionsDoesNotCreateMissingStore(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing", "sessions.db")
-	t.Setenv(sessionDBEnv, path)
+	writeTestConfig(t, path)
 	if err := run(context.Background(), []string{"sessions"}); err != nil {
 		t.Fatalf("run sessions: %v", err)
 	}
@@ -125,7 +137,7 @@ func TestListSessionsCommandReadsPersistentStore(t *testing.T) {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	path := filepath.Join(directory, "sessions.db")
-	t.Setenv(sessionDBEnv, path)
+	writeTestConfig(t, path)
 	store, err := session.OpenSQLiteStore(ctx, path)
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
@@ -155,7 +167,7 @@ func TestGCCommandDeletesOnlyOldUnreferencedArtifacts(t *testing.T) {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	path := filepath.Join(directory, "sessions.db")
-	t.Setenv(sessionDBEnv, path)
+	writeTestConfig(t, path)
 	store, err := session.OpenSQLiteStore(ctx, path)
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
@@ -263,7 +275,7 @@ func TestInspectSessionCommandOutputsRecoveredJSON(t *testing.T) {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	path := filepath.Join(directory, "sessions.db")
-	t.Setenv(sessionDBEnv, path)
+	writeTestConfig(t, path)
 	store, err := session.OpenSQLiteStore(ctx, path)
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
@@ -310,7 +322,7 @@ func TestInspectSessionCommandRejectsInvalidAndMissingSession(t *testing.T) {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	path := filepath.Join(directory, "sessions.db")
-	t.Setenv(sessionDBEnv, path)
+	writeTestConfig(t, path)
 	store, err := session.OpenSQLiteStore(context.Background(), path)
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
@@ -326,7 +338,7 @@ func TestInspectSessionCommandRejectsInvalidAndMissingSession(t *testing.T) {
 
 func TestInspectSessionDoesNotCreateMissingStore(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing", "sessions.db")
-	t.Setenv(sessionDBEnv, path)
+	writeTestConfig(t, path)
 	err := run(context.Background(), []string{"inspect", domain.NewSessionID().String()})
 	if err == nil || !strings.Contains(err.Error(), "session store does not exist") {
 		t.Fatalf("inspect error = %v", err)

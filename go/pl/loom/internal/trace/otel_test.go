@@ -32,46 +32,6 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-func TestConfigFromEnv(t *testing.T) {
-	t.Run("disabled when incomplete", func(t *testing.T) {
-		cfg := ConfigFromEnv()
-		if cfg.Enabled {
-			t.Fatalf("enabled without full config: %+v", cfg)
-		}
-	})
-
-	t.Run("loom variables take precedence", func(t *testing.T) {
-		t.Setenv("LOOM_LANGFUSE_HOST", "http://loom-host:3100/")
-		t.Setenv("LOOM_LANGFUSE_PUBLIC_KEY", "pk-loom")
-		t.Setenv("LOOM_LANGFUSE_SECRET_KEY", "sk-loom")
-		t.Setenv("LANGFUSE_HOST", "http://std-host:3100")
-		cfg := ConfigFromEnv()
-		if !cfg.Enabled {
-			t.Fatal("expected enabled with loom variables")
-		}
-		if cfg.Host != "http://loom-host:3100" {
-			t.Fatalf("host = %q, want loom value with trailing slash trimmed", cfg.Host)
-		}
-		if !cfg.IncludeContent {
-			t.Fatal("content should default to included")
-		}
-	})
-
-	t.Run("standard langfuse variables as fallback", func(t *testing.T) {
-		t.Setenv("LANGFUSE_HOST", "http://std-host:3100")
-		t.Setenv("LANGFUSE_PUBLIC_KEY", "pk-std")
-		t.Setenv("LANGFUSE_SECRET_KEY", "sk-std")
-		t.Setenv("LOOM_TRACE_CONTENT", "0")
-		cfg := ConfigFromEnv()
-		if !cfg.Enabled || cfg.Host != "http://std-host:3100" {
-			t.Fatalf("standard variables not honored: %+v", cfg)
-		}
-		if cfg.IncludeContent {
-			t.Fatal("LOOM_TRACE_CONTENT=0 should redact content")
-		}
-	})
-}
-
 func TestEncodeMessagesContentModes(t *testing.T) {
 	callID := domain.NewToolCallID()
 	messages := []domain.Message{

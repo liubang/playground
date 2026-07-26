@@ -26,22 +26,13 @@ go_library(
         "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/app:app",
         "//go/pl/loom/internal/artifact:artifact_lib",
+        "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/model/openai:openai_lib",
         "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/process:process_lib",
-        "//go/pl/loom/internal/prompt:prompt",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
         "//go/pl/loom/internal/session:session_lib",
-        "//go/pl/loom/internal/tool/builtin:builtin_lib",
-        "//go/pl/loom/internal/tool/command:command_lib",
-        "//go/pl/loom/internal/tool/edit:edit_lib",
-        "//go/pl/loom/internal/tool/gittools:gittools_lib",
-        "//go/pl/loom/internal/tool/lint:lint_lib",
-        "//go/pl/loom/internal/tool/webfetch:webfetch_lib",
-        "//go/pl/loom/internal/trace",
         "//go/pl/loom/internal/ui:ui",
-        "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )
 
@@ -55,5 +46,8 @@ go_test(
     name = "loom_test",
     srcs = ["main_test.go"],
     embed = [":loom_lib"],
-    deps = ["//go/pl/loom/internal/artifact:artifact_lib"],
+    deps = [
+        "//go/pl/loom/internal/artifact:artifact_lib",
+        "//go/pl/loom/internal/config:config_lib",
+    ],
 )
