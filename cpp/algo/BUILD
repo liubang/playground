@@ -15,31 +15,11 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2021/04/08 20:54
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",
     "LINKOPTS",
-    "TEST_COPTS",
-)
-
-cc_library(
-    name = "lru_cache",
-    hdrs = ["lru_cache.h"],
-    copts = COPTS,
-    visibility = ["//visibility:public"],
-)
-
-cc_test(
-    name = "lru_cache_test",
-    srcs = ["lru_cache_test.cpp"],
-    copts = [
-    ] + TEST_COPTS,
-    linkopts = LINKOPTS,
-    deps = [
-        ":lru_cache",
-        "@googletest//:gtest_main",
-    ],
 )
 
 cc_binary(

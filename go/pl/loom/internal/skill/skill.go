@@ -16,7 +16,7 @@
 // Created: 2026/07/26
 
 // Package skill discovers, parses, and renders SKILL.md skills for the loom
-// agent. See go/pl/loom/SKILL_DESIGN.md for the full design.
+// agent. See go/pl/loom/docs/SKILL_DESIGN.md for the full design.
 package skill
 
 import (

@@ -18,7 +18,7 @@
 // Package e2e holds in-process end-to-end tests: scripted FakeModel
 // responses drive the real agent loop with the real tool registry, prompt
 // builder, skills loader, and (where needed) the real process sandbox.
-// See SKILL_DESIGN.md §8.2.
+// See docs/SKILL_DESIGN.md §8.2.
 package e2e
 
 import (
