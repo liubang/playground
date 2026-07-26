@@ -29,6 +29,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
@@ -1597,10 +1598,10 @@ func (l *Loop) recordTool(ctx context.Context, prepared domain.PreparedCall, res
 }
 
 // toolResultTracePreview returns a short excerpt of the first text part for
-// the tool span output. The byte-wise cut must not split a multi-byte UTF-8
-// character: span attributes go through OTLP protobuf validation, which
-// rejects invalid UTF-8 strings (and the exporter then logs to stderr,
-// tearing the TUI).
+// the tool span output. The cut backs off to a rune boundary: multi-byte
+// UTF-8 characters (e.g. CJK at 3 bytes) must never be split — span
+// attributes go through OTLP protobuf validation, which rejects invalid
+// UTF-8, and a replacement char mid-text renders as mojibake in the UI.
 func toolResultTracePreview(result domain.ToolResult, maxLen int) string {
 	for _, cp := range result.Content {
 		if cp.Kind != domain.PartText {
@@ -1608,11 +1609,24 @@ func toolResultTracePreview(result domain.ToolResult, maxLen int) string {
 		}
 		text := strings.TrimSpace(cp.Text)
 		if len(text) > maxLen {
-			text = strings.ToValidUTF8(text[:maxLen], "�") + "…"
+			text = cutAtRuneBoundary(text, maxLen) + "…"
 		}
 		return text
 	}
 	return ""
+}
+
+// cutAtRuneBoundary returns the longest prefix of s within maxBytes that
+// does not split a multi-byte UTF-8 character.
+func cutAtRuneBoundary(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.ValidString(s[:cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // lastAssistantText returns the text of the most recent assistant message,

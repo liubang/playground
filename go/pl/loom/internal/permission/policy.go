@@ -20,6 +20,7 @@ package permission
 import (
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
@@ -56,17 +57,62 @@ func DefaultPolicy() Policy {
 }
 
 // Evaluate returns the policy decision for a prepared tool call: exact
-// rule/session matches first (strictest wins), then the risk baseline.
+// rule/session matches first (strictest wins across ALL sources), then the
+// risk baseline.
 func (p Policy) Evaluate(call domain.PreparedCall) domain.Decision {
-	if argv, ok := RunCmdArgv(call.Call.Arguments); ok && call.Call.Name == "run_cmd" {
-		if p.Session != nil && p.Session.Matches(argv) {
-			return domain.DecisionAllow
-		}
-		if d, _ := p.Rules.Evaluate(argv); d != "" {
-			return d
+	if call.Call.Name != "run_cmd" {
+		return p.evaluateRisk(call.Risk)
+	}
+	argv, ok := RunCmdArgv(call.Call.Arguments)
+	if !ok {
+		return p.evaluateRisk(call.Risk)
+	}
+	// File-layer rules (builtin + user + project) are consulted first;
+	// basename normalization lets absolute paths in trusted system dirs hit
+	// bare-name rules (/bin/ls matches [ls]).
+	best, _ := p.Rules.Evaluate(argv)
+	if best == "" {
+		if norm, ok := NormalizeTrustedPath(argv); ok {
+			best, _ = p.Rules.Evaluate(norm)
 		}
 	}
+	// Session memory may only upgrade "no match" to allow — a remembered
+	// prefix must never override a file-layer deny or ask (strictest wins).
+	if best == "" && p.Session != nil && p.Session.Matches(argv) {
+		best = domain.DecisionAllow
+	}
+	if best != "" {
+		return best
+	}
 	return p.evaluateRisk(call.Risk)
+}
+
+// trustedProgramDirs are root-owned directories whose executables may
+// resolve through basename rules (/bin/ls → ls). Anything outside these
+// directories must match rules by full path: an attacker-writable
+// directory must never gain basename trust (an evil /tmp/ls is NOT ls).
+var trustedProgramDirs = []string{
+	"/bin", "/sbin", "/usr/bin", "/usr/sbin",
+	"/usr/local/bin", "/usr/local/sbin", "/opt/homebrew/bin",
+}
+
+// NormalizeTrustedPath rewrites argv[0] to its basename when it lives in a
+// trusted system directory, so bare-name rules match absolute invocations.
+func NormalizeTrustedPath(argv []string) ([]string, bool) {
+	if len(argv) == 0 {
+		return nil, false
+	}
+	dir := filepath.Dir(argv[0])
+	base := filepath.Base(argv[0])
+	if base == argv[0] {
+		return nil, false // already bare
+	}
+	for _, d := range trustedProgramDirs {
+		if dir == d {
+			return append([]string{base}, argv[1:]...), true
+		}
+	}
+	return nil, false
 }
 
 // evaluateRisk returns the baseline decision for a risk level.
@@ -92,12 +138,13 @@ func PolicyFromEnv(workspaceRoot string, logger *slog.Logger) Policy {
 	return AttachRules(DefaultPolicy(), workspaceRoot, logger)
 }
 
-// AttachRules loads declarative rules from the user layer (~/.loom/rules)
-// and the project layer (<workspace>/.loom/rules) onto the given baseline
-// policy. Rule loading never fails the agent — broken files are logged and
-// skipped.
+// AttachRules loads declarative rules onto the given baseline policy: the
+// embedded builtin set, plus the user layer (~/.loom/rules) and the project
+// layer (<workspace>/.loom/rules). Rule loading never fails the agent —
+// broken files are logged and skipped.
 //
-//	LOOM_RULES=0                 — disable all rule loading
+//	LOOM_RULES=0                 — disable all rule loading (incl. builtin)
+//	LOOM_BUILTIN_RULES=0         — disable only the embedded builtin set
 //	LOOM_PROJECT_RULES=0         — disable the project layer entirely
 //	LOOM_PROJECT_RULES_ALLOW=1   — let project rules say "allow" (off by
 //	                               default: an untrusted checkout may only
@@ -105,6 +152,15 @@ func PolicyFromEnv(workspaceRoot string, logger *slog.Logger) Policy {
 func AttachRules(policy Policy, workspaceRoot string, logger *slog.Logger) Policy {
 	if os.Getenv("LOOM_RULES") == "0" {
 		return policy
+	}
+	rules := &RuleSet{}
+	if os.Getenv("LOOM_BUILTIN_RULES") != "0" {
+		if builtin, err := LoadBuiltinRules(); err != nil {
+			// Broken embedded rules are a build-time bug; never break the agent.
+			logger.Warn("loom rules: builtin set rejected", "error", err)
+		} else {
+			rules.merge(builtin)
+		}
 	}
 	var userDir string
 	if dir, err := RulesDirUser(); err == nil {
@@ -115,10 +171,11 @@ func AttachRules(policy Policy, workspaceRoot string, logger *slog.Logger) Polic
 		projectDir = RulesDirProject(workspaceRoot)
 	}
 	opts := LoadOptions{ProjectAllows: os.Getenv("LOOM_PROJECT_RULES_ALLOW") == "1"}
-	rules, errs := LoadRuleSets(userDir, projectDir, opts)
+	fileRules, errs := LoadRuleSets(userDir, projectDir, opts)
 	for _, err := range errs {
 		logger.Warn("loom rules: skipped a rule source", "error", err)
 	}
+	rules.merge(fileRules)
 	if rules.Size() > 0 {
 		logger.Info("loom rules loaded", "rules", rules.Size())
 	}
