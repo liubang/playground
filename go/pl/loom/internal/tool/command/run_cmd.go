@@ -161,8 +161,8 @@ func NewRunCmdToolWithArtifacts(
 	}
 	def := domain.ToolDefinition{
 		Name: "run_cmd",
-		Description: "Execute a program in a sandbox. For pipes, redirection or '&&' use program='sh' with args=['-c','...'] " +
-			"(shell commands are elevated to R3 approval risk). " +
+Description: "Execute a program in a sandbox. Prefer plain argv form (program + args + env) over shell wrappers: " +
+"program='sh' with args=['-c','...'] is elevated to R3 approval risk and prompts the user every time, so use it ONLY when pipes, redirection or '&&' are truly required. " +
 			"Only 'program' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
 			"Output beyond the limit is stored as an artifact with a head/tail preview. " +
 			"The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), " +

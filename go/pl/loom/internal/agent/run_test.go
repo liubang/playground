@@ -2003,7 +2003,7 @@ func (t *mutableTool) ExecuteCount() int {
 
 type fixedPolicy domain.Decision
 
-func (p fixedPolicy) Evaluate(domain.RiskLevel) domain.Decision { return domain.Decision(p) }
+func (p fixedPolicy) Evaluate(domain.PreparedCall) domain.Decision { return domain.Decision(p) }
 
 type contextCheckingStore struct {
 	base *fakes.FakeStore

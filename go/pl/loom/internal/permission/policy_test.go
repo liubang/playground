@@ -38,7 +38,7 @@ func TestDefaultPolicyEvaluate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := p.Evaluate(tt.risk)
+		got := p.Evaluate(domain.PreparedCall{Risk: tt.risk})
 		if got != tt.want {
 			t.Errorf("Evaluate(R%d) = %s, want %s", tt.risk, got, tt.want)
 		}
@@ -49,7 +49,7 @@ func TestPolicyAutoApproveDisabled(t *testing.T) {
 	p := Policy{AutoApproveR1: false, AskR2: true, DenyR4: true}
 
 	// With AutoApproveR1 disabled, R0/R1 should fall through to default (deny)
-	got := p.Evaluate(domain.R0)
+	got := p.Evaluate(domain.PreparedCall{Risk: domain.R0})
 	if got != domain.DecisionDeny {
 		t.Errorf("Evaluate(R0) with AutoApproveR1=false = %s, want deny", got)
 	}
@@ -59,7 +59,7 @@ func TestPolicyDenyR4Disabled(t *testing.T) {
 	p := Policy{AutoApproveR1: true, AskR2: true, DenyR4: false}
 
 	// With DenyR4 disabled, R4 should fall through to default (deny)
-	got := p.Evaluate(domain.R4)
+	got := p.Evaluate(domain.PreparedCall{Risk: domain.R4})
 	if got != domain.DecisionDeny {
 		t.Errorf("Evaluate(R4) with DenyR4=false = %s, want deny", got)
 	}
@@ -67,7 +67,7 @@ func TestPolicyDenyR4Disabled(t *testing.T) {
 
 func TestPolicyR3AlwaysAsk(t *testing.T) {
 	p := Policy{AutoApproveR1: true, AskR2: true, DenyR4: true}
-	got := p.Evaluate(domain.R3)
+	got := p.Evaluate(domain.PreparedCall{Risk: domain.R3})
 	if got != domain.DecisionAsk {
 		t.Errorf("Evaluate(R3) = %s, want ask", got)
 	}
@@ -77,7 +77,7 @@ func TestPolicyAskR2Disabled(t *testing.T) {
 	p := Policy{AutoApproveR1: true, AskR2: false, DenyR4: true}
 
 	// R2 with AskR2=false falls through to default (deny)
-	got := p.Evaluate(domain.R2)
+	got := p.Evaluate(domain.PreparedCall{Risk: domain.R2})
 	if got != domain.DecisionDeny {
 		t.Errorf("Evaluate(R2) with AskR2=false = %s, want deny", got)
 	}

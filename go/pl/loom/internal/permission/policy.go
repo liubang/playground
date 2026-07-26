@@ -18,13 +18,18 @@
 package permission
 
 import (
+	"log/slog"
+	"os"
+
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
 // PolicyDecision represents allow/deny/ask.
 type PolicyDecision = domain.Decision
 
-// Policy evaluates tool calls against security policy.
+// Policy evaluates tool calls against security policy. Evaluation is
+// prepared-call aware (not just risk-level): declarative rules and
+// session-remembered prefixes are consulted before the risk baseline.
 type Policy struct {
 	// AutoApproveR1 automatically approves R0 and R1 risk operations.
 	AutoApproveR1 bool
@@ -32,6 +37,13 @@ type Policy struct {
 	AskR2 bool
 	// DenyR4 denies R4 operations by default.
 	DenyR4 bool
+	// Rules are declarative argv-prefix rules loaded from user/project
+	// layers (nil = none).
+	Rules *RuleSet
+	// Session holds categorical prefixes remembered from interactive
+	// "allow always" decisions (nil = none). Only run_cmd calls are
+	// session-rule eligible.
+	Session *SessionRules
 }
 
 // DefaultPolicy returns the baseline security policy per §12.1.
@@ -43,8 +55,22 @@ func DefaultPolicy() Policy {
 	}
 }
 
-// Evaluate returns the policy decision for a given risk level.
-func (p Policy) Evaluate(risk domain.RiskLevel) PolicyDecision {
+// Evaluate returns the policy decision for a prepared tool call: exact
+// rule/session matches first (strictest wins), then the risk baseline.
+func (p Policy) Evaluate(call domain.PreparedCall) domain.Decision {
+	if argv, ok := RunCmdArgv(call.Call.Arguments); ok && call.Call.Name == "run_cmd" {
+		if p.Session != nil && p.Session.Matches(argv) {
+			return domain.DecisionAllow
+		}
+		if d, _ := p.Rules.Evaluate(argv); d != "" {
+			return d
+		}
+	}
+	return p.evaluateRisk(call.Risk)
+}
+
+// evaluateRisk returns the baseline decision for a risk level.
+func (p Policy) evaluateRisk(risk domain.RiskLevel) PolicyDecision {
 	switch {
 	case risk <= domain.R1 && p.AutoApproveR1:
 		return domain.DecisionAllow
@@ -57,4 +83,45 @@ func (p Policy) Evaluate(risk domain.RiskLevel) PolicyDecision {
 	default:
 		return domain.DecisionDeny
 	}
+}
+
+// PolicyFromEnv builds the effective policy for a workspace: the risk
+// baseline plus declarative rules from the user layer (~/.loom/rules) and
+// the project layer (<workspace>/.loom/rules).
+func PolicyFromEnv(workspaceRoot string, logger *slog.Logger) Policy {
+	return AttachRules(DefaultPolicy(), workspaceRoot, logger)
+}
+
+// AttachRules loads declarative rules from the user layer (~/.loom/rules)
+// and the project layer (<workspace>/.loom/rules) onto the given baseline
+// policy. Rule loading never fails the agent — broken files are logged and
+// skipped.
+//
+//	LOOM_RULES=0                 — disable all rule loading
+//	LOOM_PROJECT_RULES=0         — disable the project layer entirely
+//	LOOM_PROJECT_RULES_ALLOW=1   — let project rules say "allow" (off by
+//	                               default: an untrusted checkout may only
+//	                               tighten policy, never loosen it)
+func AttachRules(policy Policy, workspaceRoot string, logger *slog.Logger) Policy {
+	if os.Getenv("LOOM_RULES") == "0" {
+		return policy
+	}
+	var userDir string
+	if dir, err := RulesDirUser(); err == nil {
+		userDir = dir
+	}
+	projectDir := ""
+	if os.Getenv("LOOM_PROJECT_RULES") != "0" {
+		projectDir = RulesDirProject(workspaceRoot)
+	}
+	opts := LoadOptions{ProjectAllows: os.Getenv("LOOM_PROJECT_RULES_ALLOW") == "1"}
+	rules, errs := LoadRuleSets(userDir, projectDir, opts)
+	for _, err := range errs {
+		logger.Warn("loom rules: skipped a rule source", "error", err)
+	}
+	if rules.Size() > 0 {
+		logger.Info("loom rules loaded", "rules", rules.Size())
+	}
+	policy.Rules = rules
+	return policy
 }

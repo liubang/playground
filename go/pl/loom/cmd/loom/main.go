@@ -130,6 +130,11 @@ func run(ctx context.Context, args []string) error {
 			return errors.New("usage: loom gc")
 		}
 		return collectArtifactGarbage(ctx)
+	case "rules":
+		if len(args) >= 2 && args[1] == "check" {
+			return checkRules(args[2:])
+		}
+		return errors.New("usage: loom rules check <program> [args...]")
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -448,7 +453,7 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 
 	loop := agent.Loop{
 		Run: run, Model: provider, ModelName: modelName, Store: store,
-		Approver: consoleApprover{}, Policy: permission.DefaultPolicy(), Registry: registry, Logger: slog.Default(),
+		Approver: consoleApprover{}, Policy: permission.PolicyFromEnv(root, slog.Default()), Registry: registry, Logger: slog.Default(),
 		SystemPrompt: promptBuilder, Artifacts: artifactStore,
 		Recorder: traceRecorder, Prompt: userPrompt, Workspace: root,
 		ContextWindow: contextWindow, GoalCell: goalCell, PlanCell: planCell,
@@ -678,6 +683,38 @@ func isTTY(f *os.File) bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+// checkRules is the dry-run inspector for the declarative rule engine: it
+// evaluates an argv exactly like the run_cmd policy path and prints the
+// decision with the matching rule (if any), mirroring `codex execpolicy
+// check`. Usage: loom rules check <program> [args...]
+func checkRules(argv []string) error {
+	if len(argv) == 0 {
+		return errors.New("usage: loom rules check <program> [args...]")
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	logger := slog.Default()
+	policy := permission.PolicyFromEnv(root, logger)
+	argsJSON, _ := json.Marshal(map[string]any{"program": argv[0], "args": argv[1:]})
+	call := domain.PreparedCall{
+		Call: domain.ToolCall{Name: "run_cmd", Arguments: argsJSON},
+		Risk: domain.R2,
+	}
+	decision := policy.Evaluate(call)
+	fmt.Printf("decision: %s\n", decision)
+	if ruleArgv, ok := permission.RunCmdArgv(argsJSON); ok {
+		if _, rule := policy.Rules.Evaluate(ruleArgv); rule.Source != "" {
+			fmt.Printf("matched rule: %v -> %s (%s)\n", rule.ArgvPrefix, rule.Decision, rule.Source)
+			if rule.Justification != "" {
+				fmt.Printf("justification: %s\n", rule.Justification)
+			}
+		}
+	}
+	return nil
 }
 
 type consoleApprover struct{}
