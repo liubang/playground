@@ -63,6 +63,10 @@ type ToolRecord struct {
 	Risk      string
 	Arguments json.RawMessage
 	Status    string // success | error | cancelled | timeout
+	// Code is the stable error classification (permission_denied, internal,
+	// ...); it carries no user content and is reported even when content
+	// capture is redacted, unlike Error.
+	Code      string
 	Error     string
 	Preview   string // bounded output excerpt
 	StartTime time.Time

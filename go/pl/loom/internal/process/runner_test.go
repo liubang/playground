@@ -194,6 +194,61 @@ func TestRunnerStripsSecretEnvironmentVariables(t *testing.T) {
 	}
 }
 
+func TestRunnerDirectSandboxInheritsFullEnvironment(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	executable := writePythonScript(t, python, root, "env.py", []string{
+		"import json, os",
+		"keys = ['PARENT_ONLY_VALUE', 'MY_SECRET_TOKEN', 'OVERRIDE_ME', 'PATH']",
+		"print(json.dumps({key: os.environ.get(key, '') for key in keys}, sort_keys=True))",
+	})
+	t.Setenv("PARENT_ONLY_VALUE", "from-parent")
+	t.Setenv("MY_SECRET_TOKEN", "parent-secret")
+	t.Setenv("OVERRIDE_ME", "from-parent")
+	runner := newRunner(t, validator, RunnerOptions{
+		Sandbox:  ExplicitTestSandbox{},
+		LookPath: fixedLookPath(executable),
+	})
+
+	// The default sandbox keeps the minimal allowlisted environment.
+	sandboxed, err := runner.Run(context.Background(), CommandSpec{Program: "env", Cwd: root})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	var sandboxedValues map[string]string
+	if err := json.Unmarshal(bytesTrimSpace(sandboxed.Stdout), &sandboxedValues); err != nil {
+		t.Fatalf("json.Unmarshal(sandboxed stdout) error = %v, stdout=%q", err, string(sandboxed.Stdout))
+	}
+	if got := sandboxedValues["PARENT_ONLY_VALUE"]; got != "" {
+		t.Fatalf("sandboxed PARENT_ONLY_VALUE = %q, want empty (minimal env)", got)
+	}
+
+	// A user-approved DirectSandbox run inherits the full parent environment
+	// — including credential-like variables the sandbox strips — with
+	// CommandSpec.Env overrides winning on top.
+	escalated, err := runner.RunWithSandbox(context.Background(), CommandSpec{
+		Program: "env",
+		Cwd:     root,
+		Env:     map[string]string{"OVERRIDE_ME": "from-override"},
+	}, DirectSandbox{})
+	if err != nil {
+		t.Fatalf("RunWithSandbox() error = %v", err)
+	}
+	var escalatedValues map[string]string
+	if err := json.Unmarshal(bytesTrimSpace(escalated.Stdout), &escalatedValues); err != nil {
+		t.Fatalf("json.Unmarshal(escalated stdout) error = %v, stdout=%q", err, string(escalated.Stdout))
+	}
+	if got := escalatedValues["PARENT_ONLY_VALUE"]; got != "from-parent" {
+		t.Fatalf("escalated PARENT_ONLY_VALUE = %q, want from-parent", got)
+	}
+	if got := escalatedValues["MY_SECRET_TOKEN"]; got != "parent-secret" {
+		t.Fatalf("escalated MY_SECRET_TOKEN = %q, want parent-secret (full env inheritance)", got)
+	}
+	if got := escalatedValues["OVERRIDE_ME"]; got != "from-override" {
+		t.Fatalf("escalated OVERRIDE_ME = %q, want from-override", got)
+	}
+}
+
 func TestRunnerTimeoutKillsProcessGroup(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
@@ -579,7 +634,7 @@ func TestRunnerInjectsSessionEnv(t *testing.T) {
 		Program: "session-env",
 		Cwd:     root,
 		Env: map[string]string{
-			"SAFE_VALUE":     "override-spoof",
+			"SAFE_VALUE":      "override-spoof",
 			"LOOM_SESSION_ID": "sess_spoofed",
 		},
 	})
@@ -633,11 +688,11 @@ func TestRunnerSessionEnvSkipsMalformedEntries(t *testing.T) {
 		LookPath: fixedLookPath(executable),
 		SessionEnv: func() map[string]string {
 			return map[string]string{
-				"":               "empty-key",
-				"BAD=KEY":        "has-equals",
-				"BAD\x00KEY":      "has-nul",
-				EnvAgentName:     "bad\x00value",
-				EnvSessionID:     "sess_ok",
+				"":           "empty-key",
+				"BAD=KEY":    "has-equals",
+				"BAD\x00KEY": "has-nul",
+				EnvAgentName: "bad\x00value",
+				EnvSessionID: "sess_ok",
 			}
 		},
 	})

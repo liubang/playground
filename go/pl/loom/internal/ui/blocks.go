@@ -376,6 +376,11 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 			return block.ID
 		}
 
+	case runtimeevent.KindPlanUpdated:
+		// No transcript block: the pinned panel above the composer carries
+		// the live checklist (Claude Code style); per-revision blocks would
+		// scroll away and duplicate it.
+
 	case runtimeevent.KindRunCancelRequested, runtimeevent.KindRunCompleted:
 		// No transcript block: the status bar already reflects these states, and
 		// a notice per turn would bury the conversation in lifecycle spam.
@@ -439,6 +444,17 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 		}
 	}
 	return ""
+}
+
+// planDoneCount counts completed plan items.
+func planDoneCount(plan domain.Plan) int {
+	done := 0
+	for _, item := range plan.Items {
+		if item.Status == domain.PlanItemDone {
+			done++
+		}
+	}
+	return done
 }
 
 // ToggleLatestReasoning changes whether the most recent assistant reasoning is visible.

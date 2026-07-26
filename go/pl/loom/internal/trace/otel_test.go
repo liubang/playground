@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -198,6 +199,109 @@ func TestOTelRecorderEmitsRunSpans(t *testing.T) {
 	}
 }
 
+// TestRedactedRunHygiene pins the privacy contract of LOOM_TRACE_CONTENT=0:
+// no workspace path in tags, user id only as an irreversible hash, tool
+// errors reduced to their stable code.
+func TestRedactedRunHygiene(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	recorder := &otelRecorder{
+		tracer: tp.Tracer("test"), content: false,
+		userID: "dev@example.com", release: "0.2.0-dev",
+	}
+
+	ctx := context.Background()
+	ctx, run := recorder.StartRun(ctx, RunMeta{
+		SessionID: "sess-1", RunID: "run-1", Model: "m", Prompt: "secret", Workspace: "/Users/dev/secret-repo",
+	})
+	toolErr := &domain.ToolError{Code: "permission_denied", Message: "tool call denied by policy: /Users/dev/secret-repo/x.go"}
+	run.RecordGeneration(ctx, GenerationRecord{
+		RequestID: "req-1", Model: "m",
+		Input: []domain.Message{{
+			Role: domain.RoleAssistant,
+			Parts: []domain.ContentPart{{Kind: domain.PartToolResult, ToolResult: &domain.ToolResult{
+				CallID: domain.NewToolCallID(), Status: domain.ToolStatusError, Error: toolErr,
+			}}},
+		}},
+		StartTime: time.Now(), EndTime: time.Now(),
+	})
+	run.RecordTool(ctx, ToolRecord{
+		CallID: "tc-1", Name: "run_cmd", Status: "error", Code: toolErr.Code, Error: toolErr.Message,
+		StartTime: time.Now(), EndTime: time.Now(),
+	})
+	run.End(RunResult{Outcome: "completed"})
+	if err := tp.ForceFlush(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	spans := exporter.GetSpans()
+	byName := map[string]tracetest.SpanStub{}
+	for _, s := range spans {
+		byName[s.Name] = s
+	}
+
+	root := byName["loom.run"]
+	for _, kv := range root.Attributes {
+		if string(kv.Key) == attrTraceTags {
+			for _, tag := range kv.Value.AsStringSlice() {
+				if strings.Contains(tag, "secret-repo") || strings.Contains(tag, "/Users/") {
+					t.Fatalf("redacted trace leaks workspace path in tags: %v", tag)
+				}
+			}
+		}
+		if string(kv.Key) == attrTraceUserID || string(kv.Key) == attrTraceCompatUserID {
+			v := kv.Value.Emit()
+			if strings.Contains(v, "@") || !strings.HasPrefix(v, "u_") {
+				t.Fatalf("redacted user id must be a hash, got %q", v)
+			}
+		}
+	}
+	if attrValue(root.Attributes, attrTraceInput) != "" {
+		t.Fatal("redacted trace must not carry prompt input")
+	}
+
+	gen := byName["gen_ai.chat"]
+	input := attrValue(gen.Attributes, attrObservationInput)
+	if strings.Contains(input, "secret-repo") {
+		t.Fatalf("redacted generation input leaks error message: %s", input)
+	}
+	if !strings.Contains(input, "permission_denied") {
+		t.Fatalf("redacted generation input should carry the error code: %s", input)
+	}
+
+	tool := byName["tool.run_cmd"]
+	if tool.Status.Description != "permission_denied" {
+		t.Fatalf("redacted tool status = %q, want the stable code", tool.Status.Description)
+	}
+}
+
+// TestFullContentToolError verifies the non-redacted path still reports the
+// human-readable error message.
+func TestFullContentToolError(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	recorder := &otelRecorder{tracer: tp.Tracer("test"), content: true, userID: "dev@example.com"}
+	ctx := context.Background()
+	ctx, run := recorder.StartRun(ctx, RunMeta{SessionID: "s", RunID: "r", Workspace: "/ws"})
+	run.RecordTool(ctx, ToolRecord{
+		CallID: "tc", Name: "edit", Status: "error", Code: "conflict", Error: "file changed on disk",
+		StartTime: time.Now(), EndTime: time.Now(),
+	})
+	run.End(RunResult{Outcome: "completed"})
+	if err := tp.ForceFlush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range exporter.GetSpans() {
+		if s.Name == "tool.edit" {
+			if s.Status.Description != "file changed on disk" {
+				t.Fatalf("full-content tool status = %q", s.Status.Description)
+			}
+			return
+		}
+	}
+	t.Fatal("tool span missing")
+}
+
 func TestNoopRecorderIsSafe(t *testing.T) {
 	ctx, run := Noop().StartRun(context.Background(), RunMeta{SessionID: "s"})
 	run.RecordGeneration(ctx, GenerationRecord{})
@@ -238,4 +342,27 @@ func keys(m map[string]tracetest.SpanStub) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+func TestTruncateContentAlwaysValidUTF8(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+	}{
+		{"invalid bytes", "abc\xFF\xFEdef"},
+		{"lone continuation", "x\x80y"},
+		{"oversized with cut inside a rune", strings.Repeat("a", maxAttributeContent) + "完整保证截断落在字符中间" + strings.Repeat("b", 100)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := truncateContent(tc.in)
+			if !utf8.ValidString(got) {
+				t.Fatalf("truncateContent() produced invalid UTF-8")
+			}
+		})
+	}
+	// Sanitization must not alter already-valid input.
+	if got := truncateContent("有效内容不变"); got != "有效内容不变" {
+		t.Fatalf("truncateContent() = %q, want input unchanged", got)
+	}
 }

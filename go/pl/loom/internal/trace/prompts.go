@@ -26,6 +26,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -37,6 +39,11 @@ type ManagedPrompt struct {
 	Version   int       `json:"version"`
 	Content   string    `json:"content"`
 	FetchedAt time.Time `json:"fetched_at"`
+	// Label is the release label the prompt was fetched with (e.g.
+	// "production"). The disk cache is keyed by (name, label): serving a
+	// staging prompt for a production request after a network outage is
+	// worse than falling back to the built-in prompt.
+	Label string `json:"label"`
 }
 
 // promptAPIResponse mirrors the Langfuse prompt API response. The prompt
@@ -61,17 +68,22 @@ type PromptClient struct {
 // NewPromptClient builds a client for the Langfuse prompt API. cacheDir
 // persists the last successful fetch per prompt name for offline fallback.
 func NewPromptClient(cfg Config, cacheDir string) *PromptClient {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	return &PromptClient{
 		host:      cfg.Host,
 		basicAuth: basicAuthHeader(cfg.PublicKey, cfg.SecretKey),
 		cacheDir:  cacheDir,
 		http:      &http.Client{Timeout: 10 * time.Second},
-		logger:    slog.Default(),
+		logger:    logger,
 	}
 }
 
 // Get resolves a managed prompt by name and label (e.g. "production").
-// It returns an error only when neither the API nor the cache can serve it.
+// It returns an error only when neither the API nor a cache entry for this
+// exact (name, label) pair can serve it.
 func (c *PromptClient) Get(ctx context.Context, name, label string) (*ManagedPrompt, error) {
 	prompt, err := c.fetch(ctx, name, label)
 	if err == nil {
@@ -80,12 +92,12 @@ func (c *PromptClient) Get(ctx context.Context, name, label string) (*ManagedPro
 		}
 		return prompt, nil
 	}
-	cached, cacheErr := c.readCache(name)
+	cached, cacheErr := c.readCache(name, label)
 	if cacheErr != nil {
-		return nil, fmt.Errorf("fetch %q: %w (no usable cache: %v)", name, err, cacheErr)
+		return nil, fmt.Errorf("fetch %q (label %q): %w (no usable cache: %v)", name, label, err, cacheErr)
 	}
 	c.logger.Warn("langfuse prompt fetch failed, using cached copy",
-		"name", name, "version", cached.Version, "error", err)
+		"name", name, "label", label, "version", cached.Version, "error", err)
 	return cached, nil
 }
 
@@ -119,6 +131,7 @@ func (c *PromptClient) fetch(ctx context.Context, name, label string) (*ManagedP
 		Version:   decoded.Version,
 		Content:   content,
 		FetchedAt: time.Now().UTC(),
+		Label:     label,
 	}, nil
 }
 
@@ -150,14 +163,18 @@ func flattenPrompt(raw json.RawMessage) (string, error) {
 	return out, nil
 }
 
-func (c *PromptClient) cachePath(name string) string {
-	safe := strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
-			return r
-		}
-		return '_'
-	}, name)
-	return filepath.Join(c.cacheDir, safe+".json")
+// cachePath keys the disk cache by (name, label): two labels of the same
+// prompt are different releases and must never serve each other's content.
+func (c *PromptClient) cachePath(name, label string) string {
+	sanitize := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+				return r
+			}
+			return '_'
+		}, s)
+	}
+	return filepath.Join(c.cacheDir, sanitize(name)+"."+sanitize(label)+".json")
 }
 
 func (c *PromptClient) writeCache(prompt *ManagedPrompt) error {
@@ -168,11 +185,11 @@ func (c *PromptClient) writeCache(prompt *ManagedPrompt) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(c.cachePath(prompt.Name), data, 0o600)
+	return os.WriteFile(c.cachePath(prompt.Name, prompt.Label), data, 0o600)
 }
 
-func (c *PromptClient) readCache(name string) (*ManagedPrompt, error) {
-	data, err := os.ReadFile(c.cachePath(name))
+func (c *PromptClient) readCache(name, label string) (*ManagedPrompt, error) {
+	data, err := os.ReadFile(c.cachePath(name, label))
 	if err != nil {
 		return nil, err
 	}
@@ -183,5 +200,29 @@ func (c *PromptClient) readCache(name string) (*ManagedPrompt, error) {
 	if strings.TrimSpace(prompt.Content) == "" {
 		return nil, fmt.Errorf("cached prompt %q is empty", name)
 	}
+	// Defense in depth: even if the file was swapped or written by an older
+	// loom, never serve a different label's content.
+	if prompt.Label != "" && prompt.Label != label {
+		return nil, fmt.Errorf("cached prompt %q is label %q, not %q", name, prompt.Label, label)
+	}
 	return &prompt, nil
+}
+
+// promptVariablePattern matches Langfuse template placeholders: {{name}}.
+var promptVariablePattern = regexp.MustCompile(`\{\{\s*([a-zA-Z_][a-zA-Z0-9_.-]*)\s*\}\}`)
+
+// PromptVariables returns the sorted, de-duplicated placeholder names found
+// in a managed prompt. loom does not substitute variables — callers should
+// surface them so a templated prompt never ships silently unrendered.
+func PromptVariables(content string) []string {
+	seen := map[string]struct{}{}
+	for _, m := range promptVariablePattern.FindAllStringSubmatch(content, -1) {
+		seen[m[1]] = struct{}{}
+	}
+	out := make([]string, 0, len(seen))
+	for v := range seen {
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
 }

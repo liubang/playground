@@ -34,7 +34,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
@@ -54,8 +53,7 @@ const (
 	maxSearchFileBytes        = 1 << 20
 	maxSearchQueryBytes       = 4096
 
-	chunkSize         = 32 << 10
-	binarySampleBytes = 8 << 10
+	chunkSize = 32 << 10
 )
 
 var sensitiveComponents = map[string]struct{}{
@@ -323,14 +321,6 @@ func splitLines(data []byte, maxToken int) ([]string, error) {
 		return nil, domain.NewError(domain.ErrUnavailable, "failed to read text content", domain.WithCause(err))
 	}
 	return lines, nil
-}
-
-func isBinaryContent(data []byte) bool {
-	sample := data
-	if len(sample) > binarySampleBytes {
-		sample = sample[:binarySampleBytes]
-	}
-	return bytes.IndexByte(sample, 0) >= 0 || !utf8.Valid(sample)
 }
 
 func sha256Hex(data []byte) string {

@@ -56,6 +56,11 @@ type Theme struct {
 	// Spinner for in-progress activity (thinking, streaming, tool runs)
 	SpinnerStyle lipgloss.Style
 
+	// ReasoningBlock styles the expanded thinking content: a muted panel
+	// background with a primary left bar, marking it as backstage material
+	// rather than delivered output.
+	ReasoningBlock lipgloss.Style
+
 	// Field labels inside dialogs (dimmed, right-padded)
 	DialogLabel lipgloss.Style
 
@@ -104,6 +109,7 @@ type palette struct {
 	muted     lipgloss.Color
 	highlight lipgloss.Color
 	onAccent  lipgloss.Color // text drawn on accent-filled backgrounds
+	panel     lipgloss.Color // subtle background for inset content panels
 }
 
 // everforestDarkHard is the default palette (Everforest Dark Hard):
@@ -120,6 +126,7 @@ var everforestDarkHard = palette{
 	muted:     lipgloss.Color("#859289"),
 	highlight: lipgloss.Color("#e69875"),
 	onAccent:  lipgloss.Color("#1e2326"),
+	panel:     lipgloss.Color("#272e33"),
 }
 
 // everforestLightHard is the light counterpart (Everforest Light Hard):
@@ -136,6 +143,7 @@ var everforestLightHard = palette{
 	muted:     lipgloss.Color("#a6b0a0"),
 	highlight: lipgloss.Color("#f57d26"),
 	onAccent:  lipgloss.Color("#fffbef"),
+	panel:     lipgloss.Color("#efebd4"),
 }
 
 // DefaultTheme returns the default dark theme: Everforest Dark Hard, so the
@@ -242,6 +250,14 @@ func themeFromPalette(p palette, markdownProfile string) *Theme {
 	t.SpinnerStyle = lipgloss.NewStyle().
 		Foreground(t.Secondary)
 
+	t.ReasoningBlock = lipgloss.NewStyle().
+		Foreground(t.Muted).
+		Background(p.panel).
+		Border(lipgloss.NormalBorder(), false, false, false, true).
+		BorderForeground(t.Primary).
+		BorderBackground(p.panel).
+		Padding(0, 1)
+
 	t.DialogLabel = lipgloss.NewStyle().
 		Foreground(t.Muted)
 
@@ -307,6 +323,7 @@ func NoColorTheme() *Theme {
 	t.ToolError = noStyle.Bold(true)
 	t.ToolCanceled = noStyle
 	t.Dim = noStyle
+	t.ReasoningBlock = noStyle
 	return t
 }
 

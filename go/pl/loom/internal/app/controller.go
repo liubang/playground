@@ -560,6 +560,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 		Workspace:    c.bootstrap.Config.WorkspaceRoot,
 		ContextWindow: c.bootstrap.Config.ContextWindow,
 		GoalCell:      c.bootstrap.GoalCell,
+		PlanCell:      c.bootstrap.PlanCell,
 		StreamHooks: agent.StreamHooks{
 			OnContextUsage: func(estTokens int, lastCallInputTokens int64) {
 				c.publishDurable(c.sessionID, run.ID, turnCounter, runtimeevent.KindContextUsage, runtimeevent.ContextUsagePayload{
@@ -1135,10 +1136,10 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ToolCalls:    payload.ToolCalls,
 			})
 		}
-	case domain.EventContextCompacted:
+case domain.EventContextCompacted:
 		var payload contextCompactedDTO
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
-	s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindContextCompacted, runtimeevent.ContextCompactedPayload{
+s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindContextCompacted, runtimeevent.ContextCompactedPayload{
 MaskedOutputs:    payload.MaskedOutputs,
 MaskedBytes:      payload.MaskedBytes,
 ArchivedMessages: payload.ArchivedMessages,
@@ -1146,6 +1147,11 @@ EstTokensBefore:  payload.EstTokensBefore,
 EstTokensAfter:   payload.EstTokensAfter,
 Summarized:       payload.Summarized,
 })
+		}
+	case domain.EventPlanRevised:
+		var plan domain.Plan
+		if err := json.Unmarshal(ev.Payload, &plan); err == nil {
+			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindPlanUpdated, plan)
 		}
 	case domain.EventRunCompleted:
 		s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindRunCompleted, nil)

@@ -22,6 +22,7 @@ package ui
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -31,6 +32,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
+	"golang.org/x/term"
 )
 
 // Mode represents the top-level UI mode.
@@ -65,9 +67,14 @@ type Model struct {
 	phase     string
 	usage     domain.Usage
 	limits    domain.Limits
-	// compactions counts context compaction passes observed in this session
-	// view (shown in the status bar once non-zero).
-	compactions int
+// compactions counts context compaction passes observed in this session
+// view (shown in the status bar once non-zero).
+compactions int
+// plan is the latest task plan published via plan.updated (empty when the
+// model never called update_plan). planHidden is the ctrl+t toggle that
+// collapses the pinned plan panel above the composer.
+plan       domain.Plan
+planHidden bool
 	// contextEst is the estimated token size of the next model request
 	// (byte/4 approximation); lastCallInput is the provider-metered input
 	// tokens of the most recent call. contextWindow is the optional model
@@ -315,8 +322,27 @@ func StartTUI(controller *app.Controller, modelName, workspace string, opts Init
 	if opts.AltScreen {
 		programOptions = append(programOptions, tea.WithAltScreen())
 	}
+	// Route input through the sequence-aware reader so fragmented escape
+	// sequences (mouse reports delivered in small pieces) arrive at the
+	// parser whole. Bubble Tea only puts the terminal into raw mode when it
+	// owns the input file, so we must do it ourselves here.
+	if isTerminalFd(os.Stdin) {
+		if oldState, err := term.MakeRaw(int(os.Stdin.Fd())); err == nil {
+			defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }()
+			programOptions = append(programOptions, tea.WithInput(newInputReader(os.Stdin)))
+		}
+	}
 	p := tea.NewProgram(m, programOptions...)
 
 	_, err := p.Run()
 	return err
+}
+
+// isTerminalFd reports whether f is a character device (terminal).
+func isTerminalFd(f *os.File) bool {
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
