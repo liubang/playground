@@ -19,6 +19,7 @@ package permission
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -178,6 +179,10 @@ func TestDeriveRunCmdPrefixInterpreters(t *testing.T) {
 		{[]string{"node", "-e", "code()"}, nil, false},
 		{[]string{"node", "--eval", "code()"}, nil, false},
 		{[]string{"node"}, nil, false},
+		{[]string{"node", "-v"}, []string{"node", "-v"}, true},
+		{[]string{"node", "--version"}, []string{"node", "--version"}, true},
+		{[]string{"python3", "-V"}, []string{"python3", "-V"}, true},
+		{[]string{"node", "--inspect", "server.js"}, nil, false},
 		{[]string{"python3", "-c", "print(1)"}, nil, false},
 		{[]string{"python3", "scripts/build.py", "--fast"}, []string{"python3", "scripts/build.py"}, true},
 		{[]string{"/usr/bin/talos", "date", "resolve", "window"}, []string{"/usr/bin/talos", "date"}, true},
@@ -197,6 +202,144 @@ func TestDeriveRunCmdPrefixInterpreters(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestBuiltinRulesAreValid is the guard rail for the embedded set: any
+// future edit that breaks the builtin list (bad prefix, self-test failure)
+// fails CI here instead of silently shipping.
+func TestBuiltinRulesAreValid(t *testing.T) {
+	set, err := LoadBuiltinRules()
+	if err != nil {
+		t.Fatalf("embedded builtin rules must be valid: %v", err)
+	}
+	if set.Size() < 30 {
+		t.Fatalf("builtin set suspiciously small: %d rules", set.Size())
+	}
+	// Every builtin rule must be an allow with a justification (auditability).
+	for _, r := range set.Rules() {
+		if r.Decision != string(domain.DecisionAllow) {
+			t.Fatalf("builtin rule %v must be allow, got %q", r.ArgvPrefix, r.Decision)
+		}
+		if r.Justification == "" {
+			t.Fatalf("builtin rule %v missing justification", r.ArgvPrefix)
+		}
+		if r.Source != builtinSource {
+			t.Fatalf("builtin rule %v source = %q", r.ArgvPrefix, r.Source)
+		}
+	}
+	// Spot-check the inclusion bar's edge cases.
+	for _, argv := range [][]string{{"ls", "-la"}, {"git", "status"}, {"git", "diff", "HEAD"}, {"rg", "foo"}, {"node", "-v"}} {
+		if d, _ := set.Evaluate(argv); d != domain.DecisionAllow {
+			t.Fatalf("%v must be builtin-allowed", argv)
+		}
+	}
+	// And the deliberate exclusions must NOT match.
+	for _, argv := range [][]string{{"find", ".", "-type", "f"}, {"xargs", "rm"}, {"awk", "{print}"}, {"sed", "-i", "s/a/b/", "f"}, {"git", "branch"}, {"git", "checkout"}, {"go", "test", "./..."}, {"sh", "-c", "ls"}, {"curl", "x"}} {
+		if d, _ := set.Evaluate(argv); d != "" {
+			t.Fatalf("%v must not match any builtin rule, got %v", argv, d)
+		}
+	}
+}
+
+// TestNormalizeTrustedPath covers the basename resolution for absolute-path
+// invocations: trusted system dirs resolve, anything else stays opaque.
+func TestNormalizeTrustedPath(t *testing.T) {
+	if norm, ok := NormalizeTrustedPath([]string{"/bin/ls", "-la"}); !ok || norm[0] != "ls" || norm[1] != "-la" {
+		t.Fatalf("/bin/ls = %v, %v", norm, ok)
+	}
+	if norm, ok := NormalizeTrustedPath([]string{"/usr/bin/git", "status"}); !ok || norm[0] != "git" {
+		t.Fatalf("/usr/bin/git = %v, %v", norm, ok)
+	}
+	if norm, ok := NormalizeTrustedPath([]string{"/opt/homebrew/bin/rg", "x"}); !ok || norm[0] != "rg" {
+		t.Fatalf("/opt/homebrew/bin/rg = %v, %v", norm, ok)
+	}
+	for _, argv := range [][]string{
+		{"ls", "-la"},       // already bare
+		{"/tmp/evil/ls"},    // attacker-writable dir
+		{"/Users/u/bin/ls"}, // user-writable dir
+		{"/Users/liubang/.talos/bin/talos", "date"}, // user-installed tool
+		{"./local/ls"}, // relative path
+	} {
+		if _, ok := NormalizeTrustedPath(argv); ok {
+			t.Fatalf("%v must not resolve through basename trust", argv)
+		}
+	}
+}
+
+// TestPolicyEvaluateBuiltinAndNormalization exercises the full policy path:
+// builtin allows fire for bare and trusted absolute forms, never for
+// user-installed or attacker paths.
+func TestPolicyEvaluateBuiltinAndNormalization(t *testing.T) {
+	builtin, err := LoadBuiltinRules()
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := DefaultPolicy()
+	policy.Rules = builtin
+	if d := policy.Evaluate(runCmdCall(t, "ls", "-la")); d != domain.DecisionAllow {
+		t.Fatalf("ls = %v, want allow", d)
+	}
+	if d := policy.Evaluate(runCmdCall(t, "/bin/ls", "-la")); d != domain.DecisionAllow {
+		t.Fatalf("/bin/ls = %v, want allow via trusted basename", d)
+	}
+	if d := policy.Evaluate(runCmdCall(t, "/usr/bin/git", "status", "--short")); d != domain.DecisionAllow {
+		t.Fatalf("/usr/bin/git status = %v, want allow via trusted basename", d)
+	}
+	if d := policy.Evaluate(runCmdCall(t, "/tmp/evil/ls")); d != domain.DecisionAsk {
+		t.Fatalf("/tmp/evil/ls = %v, want ask (no basename trust)", d)
+	}
+	if d := policy.Evaluate(runCmdCall(t, "go", "test", "./...")); d != domain.DecisionAsk {
+		t.Fatalf("go test = %v, want ask (deliberately not builtin)", d)
+	}
+}
+
+// TestSessionAllowNeverOverridesFileDeny is the regression test for the
+// strictest-wins fix: a remembered session prefix must not win over a
+// file-layer deny (or ask).
+func TestSessionAllowNeverOverridesFileDeny(t *testing.T) {
+	dir := t.TempDir()
+	writeRulesFile(t, dir, "rules.json", `{"rules":[
+		{"argv_prefix":["go","test"],"decision":"deny","justification":"no tests today"},
+		{"argv_prefix":["git","push"],"decision":"ask"}
+	]}`)
+	set, errs := LoadRuleSets(dir, "", LoadOptions{})
+	if len(errs) != 0 {
+		t.Fatalf("errs = %v", errs)
+	}
+	policy := DefaultPolicy()
+	policy.Rules = set
+	policy.Session = NewSessionRules()
+	// The user remembered ["go"] earlier (broad session allow).
+	if _, ok := policy.Session.RememberRunCmd([]string{"go", "build", "./..."}); !ok {
+		t.Fatal("go must be rememberable")
+	}
+	// Session allow still works for unmatched-by-file rules.
+	if d := policy.Evaluate(runCmdCall(t, "go", "build", "./...")); d != domain.DecisionAllow {
+		t.Fatalf("go build = %v, want allow via session", d)
+	}
+	// ...but the file deny beats the session allow.
+	if d := policy.Evaluate(runCmdCall(t, "go", "test", "./...")); d != domain.DecisionDeny {
+		t.Fatalf("go test = %v, want deny (file deny must beat session allow)", d)
+	}
+	// And the file ask also beats the session allow.
+	if d := policy.Evaluate(runCmdCall(t, "git", "push", "origin", "main")); d != domain.DecisionAsk {
+		t.Fatalf("git push = %v, want ask (file ask must beat session allow)", d)
+	}
+}
+
+// TestAttachRulesBuiltinSwitch checks the builtin layer participates by
+// default and drops out with LOOM_BUILTIN_RULES=0.
+func TestAttachRulesBuiltinSwitch(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+	policy := AttachRules(DefaultPolicy(), t.TempDir(), logger)
+	if d := policy.Evaluate(runCmdCall(t, "ls")); d != domain.DecisionAllow {
+		t.Fatalf("builtin should allow ls by default, got %v", d)
+	}
+	t.Setenv("LOOM_BUILTIN_RULES", "0")
+	policy = AttachRules(DefaultPolicy(), t.TempDir(), logger)
+	if d := policy.Evaluate(runCmdCall(t, "ls")); d != domain.DecisionAsk {
+		t.Fatalf("LOOM_BUILTIN_RULES=0 should disable builtin allows, got %v", d)
 	}
 }
 

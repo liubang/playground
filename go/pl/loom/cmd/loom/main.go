@@ -131,10 +131,13 @@ func run(ctx context.Context, args []string) error {
 		}
 		return collectArtifactGarbage(ctx)
 	case "rules":
+		if len(args) == 2 && args[1] == "list" {
+			return listRules()
+		}
 		if len(args) >= 2 && args[1] == "check" {
 			return checkRules(args[2:])
 		}
-		return errors.New("usage: loom rules check <program> [args...]")
+		return errors.New("usage: loom rules <list|check <program> [args...]>")
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -706,13 +709,52 @@ func checkRules(argv []string) error {
 	}
 	decision := policy.Evaluate(call)
 	fmt.Printf("decision: %s\n", decision)
+	if process.IsShellProgram(argv[0]) {
+		fmt.Println("note: shell interpreters never match prefix rules (always decided per-call at R3)")
+	}
 	if ruleArgv, ok := permission.RunCmdArgv(argsJSON); ok {
-		if _, rule := policy.Rules.Evaluate(ruleArgv); rule.Source != "" {
-			fmt.Printf("matched rule: %v -> %s (%s)\n", rule.ArgvPrefix, rule.Decision, rule.Source)
+		rule := permission.MatchRule(policy.Rules, ruleArgv)
+		via := ""
+		if rule.Source == "" {
+			if norm, ok := permission.NormalizeTrustedPath(ruleArgv); ok {
+				rule = permission.MatchRule(policy.Rules, norm)
+				via = " (via trusted basename " + norm[0] + ")"
+			}
+		}
+		if rule.Source != "" {
+			source := rule.Source
+			if source == "builtin" {
+				source = "builtin (embedded read-only set)"
+			}
+			fmt.Printf("matched rule: %v -> %s (%s)%s\n", rule.ArgvPrefix, rule.Decision, source, via)
 			if rule.Justification != "" {
 				fmt.Printf("justification: %s\n", rule.Justification)
 			}
 		}
+	}
+	return nil
+}
+
+// listRules prints every effective rule with its layer, so users can audit
+// what the policy engine will do without running a command.
+func listRules() error {
+	root, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	logger := slog.Default()
+	policy := permission.PolicyFromEnv(root, logger)
+	rules := policy.Rules.Rules()
+	if len(rules) == 0 {
+		fmt.Println("no rules in effect (LOOM_RULES/LOOM_BUILTIN_RULES may be disabled)")
+		return nil
+	}
+	for _, r := range rules {
+		just := ""
+		if r.Justification != "" {
+			just = " — " + r.Justification
+		}
+		fmt.Printf("[%s] %-40s %s%s\n", r.Decision, strings.Join(r.ArgvPrefix, " "), r.Source, just)
 	}
 	return nil
 }
