@@ -1189,6 +1189,109 @@ func TestModelPickerEscCancels(t *testing.T) {
 	}
 }
 
+func TestSteerAckRemovesOptimisticEcho(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+
+	// Simulate a submitted prompt whose optimistic echo is visible.
+	m.pendingSubmitID = m.blocks.AddPendingUserBlock("follow up")
+	m.pendingSubmitPrompt = "follow up"
+
+	updatedModel, _ := m.Update(promptSubmittedMsg{
+		prompt: "follow up",
+		result: app.SubmitResult{Steered: true, QueueLen: 2},
+	})
+	m = updatedModel.(Model)
+
+	if m.pendingSubmitID != "" || m.pendingSubmitPrompt != "" {
+		t.Fatal("steer ack must clear the pending submit tracking")
+	}
+	for _, id := range m.blocks.Order {
+		if m.blocks.ByID[id].Content == "follow up" {
+			t.Fatal("steered message must not stay in the transcript as a user block")
+		}
+	}
+	if !strings.Contains(m.statusMessage, "Queued") || m.statusIsError {
+		t.Fatalf("status = %q (error=%v), want queued hint", m.statusMessage, m.statusIsError)
+	}
+}
+
+func TestSteerPanelLifecycle(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+	m.width = 100
+
+	// steer.queued feeds the panel in order.
+	for _, text := range []string{"first note", "second note"} {
+		updatedModel, _ := m.handleRuntimeEvent(runtimeevent.RuntimeEvent{
+			Sequence: 1,
+			Kind:     runtimeevent.KindSteerQueued,
+			Payload:  mustPayload(t, runtimeevent.SteerQueuedPayload{Text: text, QueueLen: len(m.pendingSteers) + 1}),
+		})
+		m = updatedModel
+	}
+	if len(m.pendingSteers) != 2 || m.pendingSteers[0] != "first note" {
+		t.Fatalf("pendingSteers = %v", m.pendingSteers)
+	}
+	panel := m.renderSteerPanel()
+	for _, want := range []string{"Steering (2 queued", "↳ first note", "↳ second note"} {
+		if !strings.Contains(panel, want) {
+			t.Fatalf("steer panel missing %q:\n%s", want, panel)
+		}
+	}
+
+	// steer.injected drains head-first and appends the transcript block.
+	updatedModel, _ := m.handleRuntimeEvent(runtimeevent.RuntimeEvent{
+		Sequence: 2,
+		Kind:     runtimeevent.KindSteerInjected,
+		Payload:  mustPayload(t, runtimeevent.SteerInjectedPayload{Text: "first note"}),
+	})
+	m = updatedModel
+	if len(m.pendingSteers) != 1 || m.pendingSteers[0] != "second note" {
+		t.Fatalf("pendingSteers after inject = %v, want [second note]", m.pendingSteers)
+	}
+	found := false
+	for _, id := range m.blocks.Order {
+		if m.blocks.ByID[id].Content == "first note" && m.blocks.ByID[id].Kind == BlockKindUser {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("injected steer must append a user block to the transcript")
+	}
+}
+
+func TestSteerPanelFlushesOnTurnStarted(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+	m.pendingSteers = []string{"leftover"}
+
+	// The relayed leftovers come back as the new turn's prompt: the panel
+	// must flush instead of double-showing them alongside the user block.
+	updatedModel, _ := m.handleRuntimeEvent(runtimeevent.RuntimeEvent{
+		Sequence: 3,
+		Kind:     runtimeevent.KindTurnStarted,
+		Payload:  mustPayload(t, runtimeevent.TurnStartedPayload{TurnIndex: 2, Prompt: "leftover"}),
+	})
+	m = updatedModel
+	if len(m.pendingSteers) != 0 {
+		t.Fatalf("pendingSteers after turn start = %v, want flushed", m.pendingSteers)
+	}
+}
+
+func TestSteerPanelRebuildsFromSnapshot(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+	updatedModel, _ := m.handleSnapshot(snapshotMsg{snapshot: app.Snapshot{
+		State:         app.ControllerStateRunning,
+		PendingSteers: []string{"kept"},
+	}})
+	m = updatedModel.(Model)
+	if len(m.pendingSteers) != 1 || m.pendingSteers[0] != "kept" {
+		t.Fatalf("pendingSteers from snapshot = %v", m.pendingSteers)
+	}
+}
+
 func TestSlashCommandModelFailureRestoresDraft(t *testing.T) {
 ctrl := newTestController(t)
 m := NewModel(ctrl, "test/model-a", "/ws")
