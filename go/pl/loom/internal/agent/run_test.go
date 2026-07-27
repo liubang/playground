@@ -2314,7 +2314,7 @@ func TestShouldCompactOnOccupancy(t *testing.T) {
 		t.Fatal("estimate above TargetTokens should trigger compaction regardless of occupancy")
 	}
 	run.Messages = nil
-	loop.forceCompact = true
+	loop.ForceCompact = true
 	if !loop.shouldCompact() {
 		t.Fatal("forceCompact must trigger compaction")
 	}
@@ -2354,11 +2354,11 @@ func TestShouldCompactDoesNotRetriggerWithoutGrowth(t *testing.T) {
 	}
 
 	// A provider context-overflow rejection still forces a pass.
-	loop.forceCompact = true
+	loop.ForceCompact = true
 	if !loop.shouldCompact() {
 		t.Fatal("forceCompact must bypass the no-growth guard")
 	}
-	loop.forceCompact = false
+	loop.ForceCompact = false
 	loop.lastCallInput = 0
 
 	// Real transcript growth re-arms compaction.
