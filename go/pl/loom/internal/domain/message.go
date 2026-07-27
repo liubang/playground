@@ -40,6 +40,7 @@ const (
 	PartToolCall   PartKind = "tool_call"
 	PartToolResult PartKind = "tool_result"
 	PartArtifact   PartKind = "artifact_ref"
+	PartReasoning  PartKind = "reasoning"
 )
 
 // MessageStatus identifies the lifecycle status of a logical message revision.
@@ -68,14 +69,29 @@ func (r ArtifactRef) Validate() error {
 	return nil
 }
 
+// ReasoningContent carries a model's reasoning ("thinking") trace plus the
+// provider proof required to replay it. Providers that authenticate thinking
+// blocks (Anthropic's signature, or redacted-thinking data) reject a
+// tool-use continuation whose preceding assistant message lacks the original
+// signed blocks — so the reasoning that precedes tool calls is persisted in
+// the transcript, not just rendered live.
+type ReasoningContent struct {
+	Text      string `json:"text,omitempty"`
+	Signature string `json:"signature,omitempty"`
+	// Redacted marks a provider-redacted thinking block: Text is empty and
+	// Signature holds the opaque redacted payload to echo back.
+	Redacted bool `json:"redacted,omitempty"`
+}
+
 // ContentPart is a tagged union: exactly one field is populated based on Kind.
 type ContentPart struct {
-	PartIndex  int          `json:"part_index,omitempty"`
-	Kind       PartKind     `json:"kind"`
-	Text       string       `json:"text,omitempty"`
-	ToolCall   *ToolCall    `json:"tool_call,omitempty"`
-	ToolResult *ToolResult  `json:"tool_result,omitempty"`
-	Artifact   *ArtifactRef `json:"artifact,omitempty"`
+	PartIndex  int               `json:"part_index,omitempty"`
+	Kind       PartKind          `json:"kind"`
+	Text       string            `json:"text,omitempty"`
+	ToolCall   *ToolCall         `json:"tool_call,omitempty"`
+	ToolResult *ToolResult       `json:"tool_result,omitempty"`
+	Artifact   *ArtifactRef      `json:"artifact,omitempty"`
+	Reasoning  *ReasoningContent `json:"reasoning,omitempty"`
 }
 
 // Validate ensures the ContentPart is well-formed.
@@ -85,8 +101,15 @@ func (p ContentPart) Validate() error {
 	}
 	switch p.Kind {
 	case PartText:
-		if p.ToolCall != nil || p.ToolResult != nil || p.Artifact != nil {
-			return fmt.Errorf("text part must not have tool_call/tool_result/artifact")
+		if p.ToolCall != nil || p.ToolResult != nil || p.Artifact != nil || p.Reasoning != nil {
+			return fmt.Errorf("text part must not have tool_call/tool_result/artifact/reasoning")
+		}
+	case PartReasoning:
+		if p.Reasoning == nil {
+			return fmt.Errorf("reasoning part must have Reasoning set")
+		}
+		if p.Reasoning.Redacted && p.Reasoning.Text != "" {
+			return fmt.Errorf("redacted reasoning part must not carry text")
 		}
 	case PartToolCall:
 		if p.ToolCall == nil {

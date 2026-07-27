@@ -454,6 +454,12 @@ func estTokens(messages []domain.Message) int {
 						}
 					}
 				}
+			case domain.PartReasoning:
+				// Reasoning replayed upstream consumes input budget; count it
+				// conservatively so occupancy never underestimates.
+				if part.Reasoning != nil {
+					total += len(part.Reasoning.Text)
+				}
 			}
 		}
 	}

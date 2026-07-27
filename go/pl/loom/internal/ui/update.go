@@ -35,8 +35,11 @@ import (
 // stream after the broker disconnects it before locking input.
 const maxEventResubscribes = 3
 
-// maxCompletionRows bounds the visible completion candidates.
-const maxCompletionRows = 6
+// maxCompletionRows bounds the visible completion candidates. The command
+// registry is small enough that every candidate fits — the popup shows them
+// all. The cap (and the cursor windowing in renderCompletion) only starts
+// to matter if the registry ever outgrows one screen.
+var maxCompletionRows = len(slashCommands)
 
 // slashCommand describes one slash command for help and completion.
 type slashCommand struct {
@@ -55,6 +58,7 @@ var slashCommands = []slashCommand{
 	{name: "/compact", usage: "/compact", desc: "Compact context (not implemented yet)"},
 	{name: "/inspect", usage: "/inspect", desc: "Inspect session state (not implemented yet)"},
 	{name: "/model", usage: "/model [name]", desc: "Show or switch the active model"},
+	{name: "/reasoning", usage: "/reasoning [level]", desc: "Show or adjust the reasoning level"},
 	{name: "/exit", usage: "/exit", desc: "Exit"},
 }
 
@@ -86,6 +90,14 @@ type sessionSwitchedMsg struct {
 type modelChangedMsg struct {
 	command string
 	result  app.SetModelResult
+	err     error
+}
+
+// reasoningChangedMsg reports the result of a /reasoning request. command
+// carries the original composer input so a failure can restore the draft.
+type reasoningChangedMsg struct {
+	command string
+	result  app.SetReasoningResult
 	err     error
 }
 
@@ -126,6 +138,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next, cmd = m.handleSessionSwitched(msg)
 	case modelChangedMsg:
 		next = m.handleModelChanged(msg)
+	case reasoningChangedMsg:
+		next = m.handleReasoningChanged(msg)
 	case turnCancelRequestedMsg:
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Cancel failed: %v", msg.err), true)
@@ -389,6 +403,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePickerKey(msg)
 	case ModeModelPicker:
 		return m.handleModelPickerKey(msg)
+	case ModeReasoningPicker:
+		return m.handleReasoningPickerKey(msg)
 	case ModeSearch:
 		return m.handleSearchKey(msg)
 	}
@@ -625,6 +641,26 @@ func (m Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, m.setModelCmd(opt.Ref(), "/model "+opt.Ref())
 }
 
+func (m Model) handleReasoningPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m2, handled := m.navPickerKey(msg, m.reasoningPicker); handled {
+		return m2, nil
+	}
+	if msg.Type != tea.KeyEnter {
+		return m, nil
+	}
+	level := m.reasoningPicker.Selected()
+	if level == nil {
+		return m, nil
+	}
+	m.mode = ModeChat
+	if level.Arg == m.reasoningPicker.currentArg {
+		m.setStatus(fmt.Sprintf("Reasoning unchanged: %s", reasoningStatusText(m.reasoningEffort, m.reasoningOverridden)), false)
+		return m, nil
+	}
+	m.setStatus("Updating reasoning...", false)
+	return m, m.setReasoningCmd(level.Arg, "/reasoning "+level.Arg)
+}
+
 // --- follow-tail helpers ---
 
 // followTailSnapLines bounds the "near bottom" zone: when the viewport is
@@ -774,6 +810,22 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		m.textArea.Reset()
 		m.setStatus("Switching model...", false)
 		return m, m.setModelCmd(fields[1], cmd)
+	case "/reasoning":
+		if len(fields) > 2 {
+			m.setStatus("Usage: /reasoning [off|low|medium|high|default]", true)
+			return m, nil
+		}
+		if len(fields) == 1 {
+			// Bare /reasoning opens the picker with the cursor on the active
+			// dial (the override level, or "default" when following config).
+			m.textArea.Reset()
+			m.reasoningPicker = NewReasoningPicker(m.reasoningEffort, m.reasoningOverridden)
+			m.mode = ModeReasoningPicker
+			return m, nil
+		}
+		m.textArea.Reset()
+		m.setStatus("Updating reasoning...", false)
+		return m, m.setReasoningCmd(fields[1], cmd)
 	case "/exit":
 		return m, tea.Quit
 	case "/compact", "/inspect":
@@ -801,6 +853,50 @@ func (m Model) handleSessionSwitched(msg sessionSwitchedMsg) (tea.Model, tea.Cmd
 	m.mode = ModeChat
 	m.setStatus(msg.action.success, false)
 	return m, m.requestSnapshot()
+}
+
+// handleReasoningChanged applies the ack of a /reasoning command: on
+// success the header picks up the new dial immediately; on failure the
+// draft is restored so the user can fix a mistyped level.
+func (m Model) handleReasoningChanged(msg reasoningChangedMsg) tea.Model {
+	if msg.err != nil {
+		m.textArea.SetValue(msg.command)
+		m.setStatus(fmt.Sprintf("Set reasoning failed: %v", msg.err), true)
+		return m
+	}
+	m.reasoningOverridden = msg.result.Overridden
+	m.reasoningEffort = reasoningDialLabel(msg.result.Effective)
+	m.setStatus(fmt.Sprintf("Reasoning: %s", reasoningStatusText(m.reasoningEffort, m.reasoningOverridden)), false)
+	return m
+}
+
+func (m Model) setReasoningCmd(arg, command string) tea.Cmd {
+	return func() tea.Msg {
+		result, err := m.controller.SetReasoning(context.Background(), arg)
+		return reasoningChangedMsg{command: command, result: result, err: err}
+	}
+}
+
+// reasoningDialLabel renders the header dial for an effective spec.
+func reasoningDialLabel(spec domain.ReasoningSpec) string {
+	if spec.Effort != "" {
+		return string(spec.Effort)
+	}
+	if spec.BudgetTokens > 0 {
+		return fmt.Sprintf("budget:%d", spec.BudgetTokens)
+	}
+	return ""
+}
+
+// reasoningStatusText renders the /reasoning ack for the status line.
+func reasoningStatusText(effort string, overridden bool) string {
+	if effort == "" {
+		effort = "provider default"
+	}
+	if overridden {
+		return effort + " (session override)"
+	}
+	return effort + " (model config)"
 }
 
 // handleModelChanged applies the ack of a /model switch: on success the
@@ -1022,6 +1118,8 @@ func (m Model) handleSnapshot(msg snapshotMsg) (tea.Model, tea.Cmd) {
 	m.controllerState = msg.snapshot.State
 	m.sessionID = msg.snapshot.SessionID
 	m.modelName = displayModelRef(msg.snapshot.ProviderName, msg.snapshot.ModelName)
+	m.reasoningEffort = msg.snapshot.ReasoningEffort
+	m.reasoningOverridden = msg.snapshot.ReasoningOverridden
 	if msg.snapshot.ContextWindow > 0 {
 		m.contextWindow = int(msg.snapshot.ContextWindow)
 	}

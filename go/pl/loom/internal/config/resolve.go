@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/model/anthropic"
 	"github.com/liubang/playground/go/pl/loom/internal/model/openai"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
@@ -256,8 +257,14 @@ func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, erro
 			return nil, fmt.Errorf("config: duplicate provider name %q", p.Name)
 		}
 		seen[p.Name] = true
-		if p.Type != "" && p.Type != "openai" {
-			return nil, fmt.Errorf("config: %s: unsupported type %q (only \"openai\" is implemented)", ctx, p.Type)
+		pType := strings.TrimSpace(p.Type)
+		if pType == "" {
+			pType = "openai"
+		}
+		switch pType {
+		case "openai", "anthropic":
+		default:
+			return nil, fmt.Errorf("config: %s: unsupported type %q (supported: \"openai\", \"anthropic\")", ctx, p.Type)
 		}
 		// base_url is mandatory: openai.New silently falls back to the
 		// official OpenAI endpoint when empty, which would send a foreign
@@ -272,15 +279,18 @@ func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, erro
 		if err != nil {
 			return nil, err
 		}
-		wireAPI, err := resolveWireAPI(ctx, p.WireAPI)
+		// The wire_api vocabulary is protocol-specific: OpenAI-compatible
+		// providers speak "chat" or "responses"; Anthropic has exactly one
+		// Messages API and accepts only "messages" (or the default).
+		wireAPI, wireAPIName, err := resolveProviderWireAPI(ctx, pType, p.WireAPI)
 		if err != nil {
 			return nil, err
 		}
-		// The user-facing short name travels into the resolved model metadata
-		// (status bar / picker display); the openai constant drives the wire.
-		wireAPIName := strings.TrimSpace(p.WireAPI)
-		if wireAPIName == "" {
-			wireAPIName = "chat"
+		if err := resolveReasoning(ctx, p.Reasoning); err != nil {
+			return nil, err
+		}
+		if err := resolveAuthType(ctx, pType, p.AuthType); err != nil {
+			return nil, err
 		}
 		if len(p.Models) == 0 {
 			return nil, fmt.Errorf("config: %s: at least one model is required", ctx)
@@ -309,13 +319,21 @@ func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, erro
 			if m.ContextWindow < 0 || m.MaxOutputTokens < 0 {
 				return nil, fmt.Errorf("config: %s: context_window and max_output_tokens must be >= 0", mctx)
 			}
-			if _, err := resolveWireAPI(mctx, m.WireAPI); err != nil {
+			if _, _, err := resolveProviderWireAPI(mctx, pType, m.WireAPI); err != nil {
 				return nil, err
 			}
 			// Expand inheritance so consumers never re-implement the fallback:
 			// a model without an explicit wire_api speaks the provider's.
 			if strings.TrimSpace(m.WireAPI) == "" {
 				m.WireAPI = wireAPIName
+			}
+			if err := resolveReasoning(mctx, m.Reasoning); err != nil {
+				return nil, err
+			}
+			// Same expansion for reasoning: a model without an opinion
+			// inherits the provider-level default.
+			if strings.TrimSpace(m.Reasoning.Effort) == "" && m.Reasoning.BudgetTokens == 0 {
+				m.Reasoning = p.Reasoning
 			}
 		}
 		defaultModel := p.DefaultModel
@@ -324,12 +342,7 @@ func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, erro
 		} else if !modelSeen[defaultModel] {
 			return nil, fmt.Errorf("config: %s: default_model %q is not in its models list", ctx, defaultModel)
 		}
-		instance, err := openai.New(openai.Config{
-			BaseURL:    p.BaseURL,
-			APIKey:     apiKey,
-			WireAPI:    wireAPI,
-			MaxRetries: retries,
-		})
+		instance, err := buildProvider(pType, p, apiKey, wireAPI, retries)
 		if err != nil {
 			// Assembly failure (e.g. an unparseable base_url) is a config
 			// error, not a runtime one — fail fast with full context.
@@ -361,18 +374,82 @@ func resolveSecret(ctx, field, inline, envName string, lookup EnvLookup) (string
 	return inline, nil
 }
 
-// resolveWireAPI validates a wire_api value and maps the user-facing
-// names onto the provider's internal constants (chat → chat_completions);
-// empty defaults to "chat".
-func resolveWireAPI(ctx, raw string) (openai.WireAPI, error) {
-	switch strings.TrimSpace(raw) {
-	case "", "chat":
-		return openai.WireAPIChatCompletions, nil
-	case "responses":
-		return openai.WireAPIResponses, nil
+// buildProvider dispatches provider assembly on the protocol family.
+func buildProvider(pType string, p Provider, apiKey string, wireAPI openai.WireAPI, retries int) (domain.Model, error) {
+	switch pType {
+	case "anthropic":
+		return anthropic.New(anthropic.Config{
+			BaseURL:    p.BaseURL,
+			APIKey:     apiKey,
+			AuthType:   anthropic.AuthType(p.AuthType),
+			Version:    p.APIVersion,
+			MaxRetries: retries,
+		})
 	default:
-		return "", fmt.Errorf("config: %s: wire_api must be \"chat\" or \"responses\", got %q", ctx, raw)
+		return openai.New(openai.Config{
+			BaseURL:    p.BaseURL,
+			APIKey:     apiKey,
+			WireAPI:    wireAPI,
+			MaxRetries: retries,
+		})
 	}
+}
+
+// resolveProviderWireAPI validates a wire_api value in the vocabulary of
+// the provider's protocol family and returns the openai wire constant (for
+// OpenAI-compatible providers) plus the user-facing short name that travels
+// into resolved model metadata; empty defaults to the family's natural
+// choice ("chat" / "messages").
+func resolveProviderWireAPI(ctx, pType, raw string) (openai.WireAPI, string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if pType == "anthropic" {
+		switch trimmed {
+		case "", "messages":
+			return "", "messages", nil
+		default:
+			return "", "", fmt.Errorf("config: %s: wire_api must be \"messages\" for an anthropic provider, got %q", ctx, raw)
+		}
+	}
+	switch trimmed {
+	case "", "chat":
+		return openai.WireAPIChatCompletions, "chat", nil
+	case "responses":
+		return openai.WireAPIResponses, "responses", nil
+	default:
+		return "", "", fmt.Errorf("config: %s: wire_api must be \"chat\" or \"responses\", got %q", ctx, raw)
+	}
+}
+
+// resolveAuthType validates the credential-header selection. Only the
+// anthropic protocol family has more than one convention; for everything
+// else the header is fixed (Bearer) and the key must stay unset.
+func resolveAuthType(ctx, pType, raw string) error {
+	trimmed := strings.TrimSpace(raw)
+	if pType != "anthropic" {
+		if trimmed != "" {
+			return fmt.Errorf("config: %s: auth_type is only meaningful for anthropic providers", ctx)
+		}
+		return nil
+	}
+	switch trimmed {
+	case "", "x-api-key", "bearer":
+		return nil
+	default:
+		return fmt.Errorf("config: %s: auth_type must be \"x-api-key\" or \"bearer\", got %q", ctx, raw)
+	}
+}
+
+// resolveReasoning validates a reasoning section (provider or model level).
+func resolveReasoning(ctx string, r Reasoning) error {
+	switch strings.TrimSpace(r.Effort) {
+	case "", "off", "low", "medium", "high":
+	default:
+		return fmt.Errorf("config: %s: reasoning.effort must be \"off\", \"low\", \"medium\", or \"high\", got %q", ctx, r.Effort)
+	}
+	if r.BudgetTokens < 0 {
+		return fmt.Errorf("config: %s: reasoning.budget_tokens must be >= 0", ctx)
+	}
+	return nil
 }
 
 // resolveLimits overlays the file's limits onto the built-in defaults.

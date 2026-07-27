@@ -64,7 +64,7 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 | 能力 | 位置 | 说明 |
 |------|------|------|
 | Provider 抽象 | `domain.Model`（`internal/domain/interfaces.go`） | `Stream(ctx, ModelRequest)`，**模型名按请求携带**，provider 实例与模型名天然解耦——多模型不需要多实例，多 provider 也只是多实例化 |
-| Provider 实现 | `internal/model/openai` | `openai.New(Config{BaseURL, APIKey, WireAPI, MaxRetries})`；OpenAI-compatible 网关（deepseek/豆包/vLLM 等）均可复用 |
+| Provider 实现 | `internal/model/openai`、`internal/model/anthropic` | `openai.New(Config{BaseURL, APIKey, WireAPI, MaxRetries})`；OpenAI-compatible 网关（deepseek/豆包/vLLM 等）均可复用；`anthropic.New(Config{BaseURL, APIKey, Version, MaxRetries})` 覆盖 Claude Messages API |
 | 运行时切换通道 | `app.Controller.SetModel` / TUI `/model` | 已落地：controller 经 `cmdCh` 串行化换模型名，下一 turn 生效；本设计把它升级为 provider-aware |
 | YAML 依赖 | `gopkg.in/yaml.v3` | 已在 `MODULE.bazel` 与 `internal/skill/parse.go` 使用，**零新增依赖** |
 | 用户数据目录约定 | `~/.loom/`（rules、sessions.db、artifacts） | `permission.RulesDirUser()`、`preparePrivateDataDirectory`（0700 私有目录）直接复用 |

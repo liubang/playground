@@ -1104,6 +1104,168 @@ func TestSlashCommandModel(t *testing.T) {
 	}
 }
 
+func TestSlashCommandReasoning(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+
+	// No argument: open the picker with the cursor on the active dial
+	// ("default" while following the model's configuration).
+	m.textArea.SetValue("/reasoning")
+	updated, cmd := m.handleSlashCommand("/reasoning")
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("bare /reasoning should not spawn a command")
+	}
+	if m.mode != ModeReasoningPicker {
+		t.Fatalf("mode = %s, want reasoning_picker", m.mode)
+	}
+	if got := m.textArea.Value(); got != "" {
+		t.Fatalf("bare /reasoning should clear the draft, got %q", got)
+	}
+	if m.reasoningPicker == nil || m.reasoningPicker.Selected().Arg != "default" {
+		t.Fatalf("picker cursor = %+v, want default", m.reasoningPicker.Selected())
+	}
+
+	// Set an override: the ack arrives as a reasoningChangedMsg and the
+	// header dial updates with the override marker.
+	m.textArea.SetValue("/reasoning high")
+	updated, cmd = m.handleSlashCommand("/reasoning high")
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("/reasoning <level> should spawn a command")
+	}
+	if got := m.textArea.Value(); got != "" {
+		t.Fatalf("/reasoning <level> should clear the draft, got %q", got)
+	}
+	msg, ok := cmd().(reasoningChangedMsg)
+	if !ok {
+		t.Fatalf("cmd returned %T, want reasoningChangedMsg", msg)
+	}
+	if msg.err != nil {
+		t.Fatalf("reasoningChangedMsg err = %v", msg.err)
+	}
+	updatedModel, _ := m.Update(msg)
+	m = updatedModel.(Model)
+	if got := m.reasoningEffort; got != "high" {
+		t.Fatalf("reasoningEffort = %q, want high", got)
+	}
+	if !m.reasoningOverridden {
+		t.Fatal("reasoningOverridden = false, want true after /reasoning high")
+	}
+
+	// Back to the model's configured default.
+	m.textArea.SetValue("/reasoning default")
+	updated, cmd = m.handleSlashCommand("/reasoning default")
+	m = updated.(Model)
+	msg, ok = cmd().(reasoningChangedMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("default cmd = %+v (ok=%v, err=%v)", msg, ok, msg.err)
+	}
+	updatedModel, _ = m.Update(msg)
+	m = updatedModel.(Model)
+	if m.reasoningEffort != "" || m.reasoningOverridden {
+		t.Fatalf("dial = %q (overridden=%v), want provider default", m.reasoningEffort, m.reasoningOverridden)
+	}
+
+	// Unknown level: the controller rejects and the draft is restored.
+	m.textArea.SetValue("/reasoning extreme")
+	updated, cmd = m.handleSlashCommand("/reasoning extreme")
+	m = updated.(Model)
+	msg, ok = cmd().(reasoningChangedMsg)
+	if !ok {
+		t.Fatalf("cmd returned %T, want reasoningChangedMsg", msg)
+	}
+	if msg.err == nil {
+		t.Fatal("unknown level should be rejected by the controller")
+	}
+	updatedModel, _ = m.Update(msg)
+	m = updatedModel.(Model)
+	if got := m.textArea.Value(); got != "/reasoning extreme" {
+		t.Fatalf("rejected command should restore the draft, got %q", got)
+	}
+	if !m.statusIsError {
+		t.Fatal("rejected command should be flagged as an error status")
+	}
+
+	// Extra arguments: usage error, no command spawned.
+	m.textArea.SetValue("/reasoning high low")
+	updated, cmd = m.handleSlashCommand("/reasoning high low")
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("usage error should not spawn a command")
+	}
+	if got := m.textArea.Value(); got != "/reasoning high low" {
+		t.Fatalf("usage error should keep the draft, got %q", got)
+	}
+}
+
+func TestReasoningPickerFlow(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+
+	// Open the picker and move the cursor from "default" down to "high".
+	updated, _ := m.handleSlashCommand("/reasoning")
+	m = updated.(Model)
+	for i := 0; i < 4; i++ {
+		updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m = updatedModel.(Model)
+	}
+	if got := m.reasoningPicker.Selected().Arg; got != "high" {
+		t.Fatalf("cursor = %q, want high", got)
+	}
+
+	// Enter applies the selection through the controller; the header dial
+	// picks up the override marker.
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updatedModel.(Model)
+	if m.mode != ModeChat {
+		t.Fatalf("mode = %s, want chat after selection", m.mode)
+	}
+	if cmd == nil {
+		t.Fatal("picker Enter should spawn the SetReasoning command")
+	}
+	msg, ok := cmd().(reasoningChangedMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("cmd = %+v (ok=%v, err=%v)", msg, ok, msg.err)
+	}
+	updatedModel, _ = m.Update(msg)
+	m = updatedModel.(Model)
+	if m.reasoningEffort != "high" || !m.reasoningOverridden {
+		t.Fatalf("dial = %q (overridden=%v), want high/override", m.reasoningEffort, m.reasoningOverridden)
+	}
+
+	// Reopening puts the cursor on the override level; confirming the
+	// active dial is a no-op ack instead of a controller round-trip.
+	updated, _ = m.handleSlashCommand("/reasoning")
+	m = updated.(Model)
+	if got := m.reasoningPicker.Selected().Arg; got != "high" {
+		t.Fatalf("reopened cursor = %q, want high", got)
+	}
+	updatedModel, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updatedModel.(Model)
+	if cmd != nil {
+		t.Fatal("confirming the active dial should not spawn a command")
+	}
+	if !strings.Contains(m.statusMessage, "unchanged") {
+		t.Fatalf("status = %q, want unchanged ack", m.statusMessage)
+	}
+	if m.reasoningEffort != "high" {
+		t.Fatalf("dial = %q after unchanged ack, want high", m.reasoningEffort)
+	}
+
+	// Esc cancels back to chat without touching the dial.
+	updated, _ = m.handleSlashCommand("/reasoning")
+	m = updated.(Model)
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updatedModel.(Model)
+	if m.mode != ModeChat {
+		t.Fatalf("mode = %s, want chat after Esc", m.mode)
+	}
+	if m.reasoningEffort != "high" {
+		t.Fatalf("dial = %q after Esc, want high", m.reasoningEffort)
+	}
+}
+
 func TestSlashCommandModelOpensPicker(t *testing.T) {
 	ctrl := newTestController(t)
 	m := NewModel(ctrl, "test/model-a", "/ws")
@@ -1578,8 +1740,17 @@ func TestCompletionCandidatesFiltering(t *testing.T) {
 	for _, c := range m.completionCandidates() {
 		names = append(names, c.name)
 	}
+	if len(names) != 2 || names[0] != "/resume" || names[1] != "/reasoning" {
+		t.Fatalf("\"/re\" candidates = %v, want [/resume /reasoning]", names)
+	}
+
+	m.textArea.SetValue("/resu")
+	names = []string{}
+	for _, c := range m.completionCandidates() {
+		names = append(names, c.name)
+	}
 	if len(names) != 1 || names[0] != "/resume" {
-		t.Fatalf("\"/re\" candidates = %v, want [/resume]", names)
+		t.Fatalf("\"/resu\" candidates = %v, want [/resume]", names)
 	}
 
 	m.textArea.SetValue("/x")

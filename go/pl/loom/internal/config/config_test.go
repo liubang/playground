@@ -123,6 +123,50 @@ providers:
 	}
 }
 
+func TestLoadAnthropicProvider(t *testing.T) {
+	cfg := loadFile(t, `
+providers:
+  - name: claude
+    type: anthropic
+    base_url: https://api.anthropic.com
+    api_key_env: ANTHROPIC_API_KEY
+    reasoning: {effort: medium}
+    models:
+      - name: claude-sonnet-4-6
+        context_window: 200000
+        max_output_tokens: 64000
+      - name: claude-haiku-4-5
+        reasoning: {effort: "off"}
+`, envWith(map[string]string{"ANTHROPIC_API_KEY": "sk-ant"}))
+
+	provider := cfg.ProviderByName("claude")
+	if provider == nil || provider.Model == nil {
+		t.Fatal("anthropic provider not assembled")
+	}
+
+	// wire_api defaults to the protocol family's only choice, expanded into
+	// model metadata.
+	meta, ok := cfg.ModelMeta(ProviderModelRef{Provider: "claude", Model: "claude-sonnet-4-6"})
+	if !ok || meta.WireAPI != "messages" {
+		t.Fatalf("model meta = %+v, ok = %v", meta, ok)
+	}
+	// Reasoning inheritance: the model without an opinion takes the
+	// provider-level default.
+	spec := meta.Reasoning.DomainSpec()
+	if spec.Effort != "medium" || spec.BudgetTokens != 0 {
+		t.Fatalf("inherited reasoning = %+v, want medium", spec)
+	}
+
+	// Explicit model-level reasoning wins over the provider default.
+	meta, ok = cfg.ModelMeta(ProviderModelRef{Provider: "claude", Model: "claude-haiku-4-5"})
+	if !ok {
+		t.Fatal("haiku meta missing")
+	}
+	if spec := meta.Reasoning.DomainSpec(); spec.Effort != "off" || spec.Enabled() {
+		t.Fatalf("model reasoning = %+v, want off", spec)
+	}
+}
+
 func TestResolveRef(t *testing.T) {
 	cfg := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk-env"}))
 
@@ -182,7 +226,14 @@ func TestLoadValidationErrors(t *testing.T) {
 	}{
 		{"unknown field", "providers: []\nnosuchkey: 1", "nosuchkey"},
 		{"duplicate provider", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\n  - {name: x, base_url: 'https://b.com', api_key: k, models: [{name: m}]}", "duplicate provider"},
-		{"bad type", "providers:\n  - {name: x, type: anthropic, base_url: 'https://a.com', api_key: k, models: [{name: m}]}", "unsupported type"},
+		{"bad type", "providers:\n  - {name: x, type: gemini, base_url: 'https://a.com', api_key: k, models: [{name: m}]}", "unsupported type"},
+		{"bad anthropic wire_api", "providers:\n  - {name: x, type: anthropic, base_url: 'https://a.com', api_key: k, wire_api: chat, models: [{name: m}]}", "messages"},
+		{"bad anthropic model wire_api", "providers:\n  - {name: x, type: anthropic, base_url: 'https://a.com', api_key: k, models: [{name: m, wire_api: responses}]}", "messages"},
+		{"bad reasoning effort", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m, reasoning: {effort: extreme}}]}", "reasoning.effort"},
+		{"bad provider reasoning effort", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, reasoning: {effort: max}, models: [{name: m}]}", "reasoning.effort"},
+		{"negative reasoning budget", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m, reasoning: {budget_tokens: -1}}]}", "budget_tokens"},
+		{"bad auth_type", "providers:\n  - {name: x, type: anthropic, base_url: 'https://a.com', api_key: k, auth_type: digest, models: [{name: m}]}", "auth_type"},
+		{"auth_type on openai", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, auth_type: bearer, models: [{name: m}]}", "only meaningful for anthropic"},
 		{"missing base_url", "providers:\n  - {name: x, api_key: k, models: [{name: m}]}", "base_url is required"},
 		{"bad base_url", "providers:\n  - {name: x, base_url: '::bad', api_key: k, models: [{name: m}]}", ""},
 		{"empty models", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: []}", "at least one model"},

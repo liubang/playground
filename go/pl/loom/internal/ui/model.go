@@ -41,12 +41,13 @@ import (
 type Mode string
 
 const (
-	ModeChat          Mode = "chat"
-	ModeApproval      Mode = "approval"
-	ModeSessionPicker Mode = "session_picker"
-	ModeModelPicker   Mode = "model_picker"
-	ModeHelp          Mode = "help"
-	ModeSearch        Mode = "search"
+	ModeChat            Mode = "chat"
+	ModeApproval        Mode = "approval"
+	ModeSessionPicker   Mode = "session_picker"
+	ModeModelPicker     Mode = "model_picker"
+	ModeReasoningPicker Mode = "reasoning_picker"
+	ModeHelp            Mode = "help"
+	ModeSearch          Mode = "search"
 )
 
 // Model is the root Bubble Tea model for the Loom TUI.
@@ -71,6 +72,11 @@ type Model struct {
 	phase     string
 	usage     domain.Usage
 	limits    domain.Limits
+	// reasoningEffort is the effective reasoning dial shown in the header
+	// ("" = provider decides); reasoningOverridden marks a session-level
+	// /reasoning override (rendered with a trailing *).
+	reasoningEffort     string
+	reasoningOverridden bool
 // compactions counts context compaction passes observed in this session
 // view (shown in the status bar once non-zero).
 compactions int
@@ -137,6 +143,10 @@ planHidden bool
 	// its popup state while ModeModelPicker is active.
 	models      []ModelOption
 	modelPicker *ModelPicker
+
+	// Reasoning picker (/reasoning): popup state while ModeReasoningPicker
+	// is active.
+	reasoningPicker *ReasoningPicker
 
 	// spinner animates in-progress activity while a turn is busy
 	spinner  spinner.Model

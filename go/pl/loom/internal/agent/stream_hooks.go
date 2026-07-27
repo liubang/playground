@@ -53,16 +53,20 @@ type StreamHooks struct {
 // exposing streaming deltas via hooks. This replaces the previous
 // aggregateStream function to allow real-time UI updates.
 type StreamAggregator struct {
-	clock         domain.Clock
-	hooks         StreamHooks
-	text          string
-	reasoning     string
-	tools         map[int]*streamToolCall
-	seenIDs       map[string]struct{}
-	stop          domain.StopReason
-	inputTokens   int64
-	outputTokens  int64
-	responseEnded bool
+	clock domain.Clock
+	hooks StreamHooks
+	text  string
+	// reasoning accumulates the deltas of the currently open reasoning
+	// block; sealed blocks (with their provider signatures) live in
+	// reasoningBlocks and are persisted as transcript parts.
+	reasoning       string
+	reasoningBlocks []domain.ReasoningContent
+	tools           map[int]*streamToolCall
+	seenIDs         map[string]struct{}
+	stop            domain.StopReason
+	inputTokens     int64
+	outputTokens    int64
+	responseEnded   bool
 }
 
 type streamResponse struct {
@@ -99,9 +103,21 @@ func (a *StreamAggregator) Apply(evt domain.ModelEvent) error {
 	case domain.ModelEventResponseStart:
 		// No-op
 	case domain.ModelEventTextStart, domain.ModelEventTextEnd,
-		domain.ModelEventReasoningStart, domain.ModelEventReasoningEnd,
 		domain.ModelEventProviderWarning:
 		// No-op
+	case domain.ModelEventReasoningStart:
+		// A new block begins; interleaved thinking produces several blocks
+		// per response, each sealed independently at reasoning_end.
+		a.reasoning = ""
+	case domain.ModelEventReasoningEnd:
+		if a.reasoning != "" || evt.ReasoningSignature != "" || evt.ReasoningRedacted {
+			a.reasoningBlocks = append(a.reasoningBlocks, domain.ReasoningContent{
+				Text:      a.reasoning,
+				Signature: evt.ReasoningSignature,
+				Redacted:  evt.ReasoningRedacted,
+			})
+		}
+		a.reasoning = ""
 	case domain.ModelEventTextDelta:
 		a.text += evt.TextDelta
 		if a.hooks.OnTextDelta != nil {
@@ -181,9 +197,19 @@ func (a *StreamAggregator) Finalize() (domain.Message, domain.StopReason, int64,
 		indexes = append(indexes, index)
 	}
 	sort.Ints(indexes)
-	parts := make([]domain.ContentPart, 0, len(indexes)+1)
+	parts := make([]domain.ContentPart, 0, len(a.reasoningBlocks)+len(indexes)+1)
+	appendPart := func(part domain.ContentPart) {
+		part.PartIndex = len(parts)
+		parts = append(parts, part)
+	}
+	// Reasoning precedes the visible answer: providers that authenticate
+	// thinking blocks require them at the head of the assistant message.
+	for i := range a.reasoningBlocks {
+		block := a.reasoningBlocks[i]
+		appendPart(domain.ContentPart{Kind: domain.PartReasoning, Reasoning: &block})
+	}
 	if a.text != "" {
-		parts = append(parts, domain.ContentPart{Kind: domain.PartText, Text: a.text})
+		appendPart(domain.ContentPart{Kind: domain.PartText, Text: a.text})
 	}
 	for _, index := range indexes {
 		tool := a.tools[index]
@@ -205,9 +231,11 @@ func (a *StreamAggregator) Finalize() (domain.Message, domain.StopReason, int64,
 		if err := call.Validate(); err != nil {
 			return domain.Message{}, "", 0, 0, fmt.Errorf("invalid tool call at index %d: %w", index, err)
 		}
-		parts = append(parts, domain.ContentPart{PartIndex: len(parts), Kind: domain.PartToolCall, ToolCall: &call})
+		appendPart(domain.ContentPart{Kind: domain.PartToolCall, ToolCall: &call})
 	}
-	if len(parts) == 0 {
+	// A response of pure reasoning with neither visible text nor tool calls
+	// is still an empty answer — reasoning alone cannot advance the run.
+	if a.text == "" && len(indexes) == 0 {
 		return domain.Message{}, "", 0, 0, fmt.Errorf("empty model response")
 	}
 	return domain.Message{

@@ -1329,6 +1329,82 @@ func TestAggregateStreamSanitizesMalformedArguments(t *testing.T) {
 	}
 }
 
+func TestAggregateStreamPersistsReasoningBlocks(t *testing.T) {
+	clock := domain.NewFakeClock(time.Unix(0, 0).UTC())
+	stream := &scriptedStream{events: []domain.ModelEvent{
+		{Kind: domain.ModelEventReasoningStart},
+		{Kind: domain.ModelEventReasoningDelta, ReasoningDelta: "deep "},
+		{Kind: domain.ModelEventReasoningDelta, ReasoningDelta: "thoughts"},
+		{Kind: domain.ModelEventReasoningEnd, ReasoningSignature: "sig-1"},
+		{Kind: domain.ModelEventTextDelta, TextDelta: "answer"},
+		{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn},
+	}}
+	response, err := aggregateStream(stream, clock)
+	if err != nil {
+		t.Fatalf("aggregateStream error = %v", err)
+	}
+	parts := response.Message.Parts
+	if len(parts) != 2 {
+		t.Fatalf("parts = %+v, want reasoning + text", parts)
+	}
+	if parts[0].Kind != domain.PartReasoning || parts[0].Reasoning == nil {
+		t.Fatalf("parts[0] = %+v", parts[0])
+	}
+	if parts[0].Reasoning.Text != "deep thoughts" || parts[0].Reasoning.Signature != "sig-1" || parts[0].Reasoning.Redacted {
+		t.Fatalf("reasoning = %+v", parts[0].Reasoning)
+	}
+	if parts[1].Kind != domain.PartText || parts[1].Text != "answer" {
+		t.Fatalf("parts[1] = %+v", parts[1])
+	}
+	if err := response.Message.Validate(); err != nil {
+		t.Fatalf("message must validate: %v", err)
+	}
+}
+
+func TestAggregateStreamPersistsInterleavedReasoningBlocks(t *testing.T) {
+	clock := domain.NewFakeClock(time.Unix(0, 0).UTC())
+	toolCallID := domain.NewToolCallID()
+	stream := &scriptedStream{events: []domain.ModelEvent{
+		{Kind: domain.ModelEventReasoningStart},
+		{Kind: domain.ModelEventReasoningDelta, ReasoningDelta: "first"},
+		{Kind: domain.ModelEventReasoningEnd, ReasoningSignature: "sig-1"},
+		{Kind: domain.ModelEventReasoningStart},
+		{Kind: domain.ModelEventReasoningDelta, ReasoningDelta: "second"},
+		{Kind: domain.ModelEventReasoningEnd, ReasoningSignature: "sig-2"},
+		{Kind: domain.ModelEventToolCallStart, ToolIndex: 0, ToolID: toolCallID.String(), ToolName: "read_file"},
+		{Kind: domain.ModelEventToolArgsDelta, ToolIndex: 0, ToolArgs: `{"path":"/tmp/x"}`},
+		{Kind: domain.ModelEventToolCallEnd, ToolIndex: 0},
+		{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopToolUse},
+	}}
+	response, err := aggregateStream(stream, clock)
+	if err != nil {
+		t.Fatalf("aggregateStream error = %v", err)
+	}
+	parts := response.Message.Parts
+	if len(parts) != 3 {
+		t.Fatalf("parts = %+v, want 2 reasoning blocks + tool call", parts)
+	}
+	if parts[0].Reasoning.Signature != "sig-1" || parts[1].Reasoning.Signature != "sig-2" {
+		t.Fatalf("reasoning blocks = %+v / %+v", parts[0].Reasoning, parts[1].Reasoning)
+	}
+	if err := response.Message.Validate(); err != nil {
+		t.Fatalf("message must validate: %v", err)
+	}
+}
+
+func TestAggregateStreamReasoningOnlyResponseIsEmpty(t *testing.T) {
+	clock := domain.NewFakeClock(time.Unix(0, 0).UTC())
+	stream := &scriptedStream{events: []domain.ModelEvent{
+		{Kind: domain.ModelEventReasoningStart},
+		{Kind: domain.ModelEventReasoningDelta, ReasoningDelta: "only thoughts"},
+		{Kind: domain.ModelEventReasoningEnd, ReasoningSignature: "sig-1"},
+		{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn},
+	}}
+	if _, err := aggregateStream(stream, clock); err == nil {
+		t.Fatal("reasoning-only response must remain an empty answer")
+	}
+}
+
 type scriptedStream struct {
 	events      []domain.ModelEvent
 	pos         int
