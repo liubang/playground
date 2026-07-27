@@ -51,19 +51,25 @@ const (
 
 // Snapshot is a read-only projection of the controller's current state.
 type Snapshot struct {
-	State            ControllerState  `json:"state"`
-	SessionID        domain.SessionID `json:"session_id"`
-	RunID            domain.RunID     `json:"run_id,omitempty"`
-	ModelName        string           `json:"model_name"`
-	ProviderName     string           `json:"provider_name,omitempty"`
-	ContextWindow    int64            `json:"context_window,omitempty"`
-	WorkspaceRoot    string           `json:"workspace_root"`
-	TurnCount        int              `json:"turn_count"`
-	Usage            domain.Usage     `json:"usage"`
-	Messages         []domain.Message `json:"messages,omitempty"`
-	PendingApprovals []domain.EventID `json:"pending_approvals,omitempty"`
-	PendingSteers    []string         `json:"pending_steers,omitempty"`
-	Timestamp        time.Time        `json:"timestamp"`
+	State         ControllerState  `json:"state"`
+	SessionID     domain.SessionID `json:"session_id"`
+	RunID         domain.RunID     `json:"run_id,omitempty"`
+	ModelName     string           `json:"model_name"`
+	ProviderName  string           `json:"provider_name,omitempty"`
+	ContextWindow int64            `json:"context_window,omitempty"`
+	// ReasoningEffort is the effective reasoning dial ("off"/"low"/... or
+	// "budget:N"); empty means the provider decides. ReasoningOverridden
+	// marks that it comes from the session override rather than the model's
+	// configuration.
+	ReasoningEffort     string           `json:"reasoning_effort,omitempty"`
+	ReasoningOverridden bool             `json:"reasoning_overridden,omitempty"`
+	WorkspaceRoot       string           `json:"workspace_root"`
+	TurnCount           int              `json:"turn_count"`
+	Usage               domain.Usage     `json:"usage"`
+	Messages            []domain.Message `json:"messages,omitempty"`
+	PendingApprovals    []domain.EventID `json:"pending_approvals,omitempty"`
+	PendingSteers       []string         `json:"pending_steers,omitempty"`
+	Timestamp           time.Time        `json:"timestamp"`
 }
 
 // SessionSummary is the frontend-safe metadata used by session pickers.
@@ -104,6 +110,11 @@ type Controller struct {
 	// instances are prebuilt, so a switch is just a reference swap applied
 	// from the next turn on.
 	current config.ProviderModelRef
+	// reasoningOverride holds the session-scoped reasoning dial set via
+	// /reasoning; nil means the selected model's configured reasoning
+	// applies. Independent of model switches by design — it is the user's
+	// per-task intent, cleared only by "/reasoning default".
+	reasoningOverride *domain.ReasoningSpec
 
 	// sessionCtx is the context for the entire TUI session.
 	// Cancelling it terminates the controller.
@@ -314,6 +325,42 @@ func (c *Controller) NewSession(ctx context.Context) error {
 	}
 }
 
+// SetReasoningResult reports the outcome of a SetReasoning command: the
+// reasoning spec now in effect and whether it comes from the session
+// override (true) or the model's configured default (false).
+type SetReasoningResult struct {
+	Effective  domain.ReasoningSpec
+	Overridden bool
+}
+
+// SetReasoning sets or clears the session-scoped reasoning override. The
+// argument is one of "off", "low", "medium", "high" (set an override) or
+// "default" (clear it and fall back to the selected model's configured
+// reasoning). Like /model, the override is in-memory session state: it
+// applies from the next turn on and never touches the config file.
+func (c *Controller) SetReasoning(ctx context.Context, arg string) (SetReasoningResult, error) {
+	resultCh := make(chan controllerResult, 1)
+	select {
+	case c.cmdCh <- controllerCommand{Kind: cmdSetReasoning, Reasoning: arg, ResultCh: resultCh}:
+	case <-ctx.Done():
+		return SetReasoningResult{}, ctx.Err()
+	case <-c.doneCh:
+		return SetReasoningResult{}, fmt.Errorf("controller is closed")
+	}
+	select {
+	case result := <-resultCh:
+		if result.Err != nil {
+			return SetReasoningResult{}, result.Err
+		}
+		out, _ := result.Value.(SetReasoningResult)
+		return out, nil
+	case <-ctx.Done():
+		return SetReasoningResult{}, ctx.Err()
+	case <-c.doneCh:
+		return SetReasoningResult{}, fmt.Errorf("controller is closed")
+	}
+}
+
 // SetModelResult reports the outcome of a successful SetModel: the
 // previous and current selection plus the new model's metadata, so the
 // frontend can refresh the status bar (ctx denominator) immediately
@@ -481,6 +528,34 @@ func (c *Controller) currentLocked() config.ProviderModelRef {
 	return config.ProviderModelRef{}
 }
 
+// reasoningLocked returns the effective reasoning spec for the current
+// model — the session override when set, otherwise the model's configured
+// default — plus whether the override is the source. The caller must hold
+// c.mu.
+func (c *Controller) reasoningLocked(current config.ProviderModelRef) (domain.ReasoningSpec, bool) {
+	if c.reasoningOverride != nil {
+		return *c.reasoningOverride, true
+	}
+	if c.bootstrap != nil && c.bootstrap.Resolved != nil {
+		if meta, ok := c.bootstrap.Resolved.ModelMeta(current); ok {
+			return meta.Reasoning.DomainSpec(), false
+		}
+	}
+	return domain.ReasoningSpec{}, false
+}
+
+// describeReasoning renders a spec for status-bar display; empty means the
+// provider decides.
+func describeReasoning(spec domain.ReasoningSpec) string {
+	if spec.Effort != "" {
+		return string(spec.Effort)
+	}
+	if spec.BudgetTokens > 0 {
+		return fmt.Sprintf("budget:%d", spec.BudgetTokens)
+	}
+	return ""
+}
+
 // workspaceLocked returns the workspace root; nil-bootstrap safe.
 func (c *Controller) workspaceLocked() string {
 	if c.bootstrap != nil {
@@ -532,6 +607,8 @@ func (c *Controller) dispatch(cmd controllerCommand) {
 		c.handleResumeSession(cmd)
 	case cmdSetModel:
 		c.handleSetModel(cmd)
+	case cmdSetReasoning:
+		c.handleSetReasoning(cmd)
 	case cmdRequestSnapshot:
 		c.handleRequestSnapshot(cmd)
 	case cmdShutdown:
@@ -638,6 +715,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 	resumed := c.resumed
 	c.resumed = false
 	current := c.currentLocked()
+	reasoning, _ := c.reasoningLocked(current)
 	c.mu.Unlock()
 	provider := c.bootstrap.Resolved.ProviderByName(current.Provider)
 	if provider == nil {
@@ -714,6 +792,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 		Prompt:       prompt,
 		Workspace:    c.bootstrap.WorkspaceRoot,
 		ContextWindow: modelMeta.ContextWindow,
+		Reasoning:     reasoning,
 		GoalCell:      c.bootstrap.GoalCell,
 		PlanCell:      c.bootstrap.PlanCell,
 		SteerCell:     c.bootstrap.SteerCell,
@@ -942,6 +1021,27 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	cmd.ResultCh <- controllerResult{}
 }
 
+func (c *Controller) handleSetReasoning(cmd controllerCommand) {
+	var override *domain.ReasoningSpec
+	switch strings.TrimSpace(cmd.Reasoning) {
+	case "default":
+		// nil: clear the override, fall back to the model's configuration.
+	case "off", "low", "medium", "high":
+		effort := domain.ReasoningEffort(strings.TrimSpace(cmd.Reasoning))
+		override = &domain.ReasoningSpec{Effort: effort}
+	default:
+		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("reasoning must be off, low, medium, high, or default, got %q", cmd.Reasoning)}
+		return
+	}
+	c.mu.Lock()
+	c.reasoningOverride = override
+	current := c.currentLocked()
+	effective, overridden := c.reasoningLocked(current)
+	c.mu.Unlock()
+	c.logger.Info("reasoning updated", "override", cmd.Reasoning, "effective", describeReasoning(effective))
+	cmd.ResultCh <- controllerResult{Value: SetReasoningResult{Effective: effective, Overridden: overridden}}
+}
+
 func (c *Controller) handleSetModel(cmd controllerCommand) {
 	if c.bootstrap == nil || c.bootstrap.Resolved == nil {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("model switching is unavailable: no providers configured")}
@@ -1023,20 +1123,23 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 			contextWindow = meta.ContextWindow
 		}
 	}
+	reasoning, overridden := c.reasoningLocked(current)
 	snap := Snapshot{
-		State:            c.state,
-		SessionID:        c.sessionID,
-		RunID:            c.runID,
-		ModelName:        current.Model,
-		ProviderName:     current.Provider,
-		ContextWindow:    contextWindow,
-		WorkspaceRoot:    c.workspaceLocked(),
-		TurnCount:        c.turnCounter,
-		Usage:            c.lastUsage,
-		Messages:         append([]domain.Message(nil), c.messages...),
-		PendingApprovals: c.approver.PendingApprovals(),
-		PendingSteers:    c.steerCellPeek(),
-		Timestamp:        c.clock.Now(),
+		State:               c.state,
+		SessionID:           c.sessionID,
+		RunID:               c.runID,
+		ModelName:           current.Model,
+		ProviderName:        current.Provider,
+		ContextWindow:       contextWindow,
+		ReasoningEffort:     describeReasoning(reasoning),
+		ReasoningOverridden: overridden,
+		WorkspaceRoot:       c.workspaceLocked(),
+		TurnCount:           c.turnCounter,
+		Usage:               c.lastUsage,
+		Messages:            append([]domain.Message(nil), c.messages...),
+		PendingApprovals:    c.approver.PendingApprovals(),
+		PendingSteers:       c.steerCellPeek(),
+		Timestamp:           c.clock.Now(),
 	}
 	c.mu.Unlock()
 	cmd.ResultCh <- controllerResult{Value: snap}
@@ -1123,6 +1226,7 @@ const (
 	cmdNewSession      = "new_session"
 	cmdResumeSession   = "resume_session"
 	cmdSetModel        = "set_model"
+	cmdSetReasoning    = "set_reasoning"
 	cmdRequestSnapshot = "request_snapshot"
 	cmdShutdown        = "shutdown"
 )
@@ -1132,6 +1236,7 @@ type controllerCommand struct {
 	Prompt    string
 	SessionID domain.SessionID
 	ModelName string
+	Reasoning string
 	Approval  ApprovalBinding
 	Decision  domain.Decision
 	RuleHint  *ApprovalRuleHint

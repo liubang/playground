@@ -708,6 +708,8 @@ loom eval                    运行评测
 - `internal/domain`：状态机、消息、事件、工具、计划、预算、Context Manifest、`ArtifactStore` 和 `StagedArtifact` 等核心领域模型。
 - `internal/agent`：模型—工具循环、预算检查、审批路由、PreparedCall 复验、模型请求生命周期审计和恢复 Reconciler。Event 与对应 Checkpoint 原子提交；副作用执行前必须先持久化 intent；提交失败时禁止 dispatch；旧审批在恢复时失效；同一 Tool Call 已有结果时不会在当前 Loop 内自动重放。
 - `internal/model/openai`：支持 OpenAI-compatible Chat Completions 与 Responses API，包含 SSE 聚合、Usage、工具调用、生命周期事件和兼容网关直接 EOF 的处理。
+- `internal/model/anthropic`：Anthropic Messages API Provider，支持扩展思考（thinking 签名块持久化与回放）、tool_use/tool_result 块映射和 redacted_thinking。
+- `internal/model/sse`、`internal/model/httpc`、`internal/model/stream`：Provider 共享基础设施——SSE 解析、建连期重试（全抖动退避 + Retry-After 兑现）和 canonical 事件流泵。
 - `internal/tool/builtin`：工作区内的有界只读文件、目录和文本搜索。
 - `internal/tool/edit`：`replace_text` 和单文件 strict unified diff `apply_patch`。两者要求 `expected_hash`，冲突返回结构化错误，禁止覆盖并发修改；Prepare 在可确定时记录写入前后哈希，供崩溃恢复执行三态核对。
 - `internal/workspace`：路径规范化、符号链接与敏感路径拒绝、文件 Snapshot、同目录临时文件、`fsync`、原子 rename、权限和扩展元数据保留。无法安全保留元数据时 fail closed。

@@ -58,6 +58,9 @@ func (m Model) View() string {
 	} else if m.mode == ModeModelPicker {
 		b.WriteString(m.renderModelPicker())
 		b.WriteString("\n")
+	} else if m.mode == ModeReasoningPicker {
+		b.WriteString(m.renderReasoningPicker())
+		b.WriteString("\n")
 	} else {
 		b.WriteString(m.renderTranscript())
 		b.WriteString("\n")
@@ -78,7 +81,7 @@ func (m Model) View() string {
 	case ModeSearch:
 		b.WriteString(m.renderSearchBar())
 		b.WriteString("\n")
-	case ModeSessionPicker, ModeModelPicker:
+	case ModeSessionPicker, ModeModelPicker, ModeReasoningPicker:
 		// The picker owns the main area; no composer.
 	default:
 		// Pinned panels sit directly above the composer (Claude Code
@@ -124,6 +127,13 @@ func (m Model) renderHeader() string {
 	left := "Loom"
 	if m.modelName != "" {
 		left += " · " + m.modelName
+	}
+	if m.reasoningEffort != "" {
+		dial := "think:" + m.reasoningEffort
+		if m.reasoningOverridden {
+			dial += "*" // session override, not the model's configured default
+		}
+		left += " · " + dial
 	}
 
 	// Strip the placeholder width from the shared style; every path below
@@ -333,6 +343,14 @@ func (m Model) renderModelPicker() string {
 	}
 	height := m.visibleTranscriptHeight()
 	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(m.modelPicker.Render(m.width-6, height-2))
+}
+
+func (m Model) renderReasoningPicker() string {
+	if m.reasoningPicker == nil {
+		return ""
+	}
+	height := m.visibleTranscriptHeight()
+	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(m.reasoningPicker.Render(m.width-6, height-2))
 }
 
 // renderTranscript renders the transcript viewport. The content itself is
@@ -1050,7 +1068,7 @@ func (m Model) renderCompletion() string {
 	var b strings.Builder
 	for i := start; i < end; i++ {
 		c := candidates[i]
-		usage := fmt.Sprintf("%-14s", c.usage)
+		usage := fmt.Sprintf("%-*s", commandUsageWidth(), c.usage)
 		if i == cursor {
 			b.WriteString(m.theme.UserLabel.Render("▶ " + usage))
 		} else {
@@ -1062,6 +1080,19 @@ func (m Model) renderCompletion() string {
 		}
 	}
 	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(b.String())
+}
+
+// commandUsageWidth is the shared usage-column width for the completion
+// popup and the help overlay: the widest registered usage plus padding, so
+// descriptions stay aligned regardless of the active completion filter.
+func commandUsageWidth() int {
+	width := 0
+	for _, c := range slashCommands {
+		if len(c.usage) > width {
+			width = len(c.usage)
+		}
+	}
+	return width + 2
 }
 
 // renderHelpOverlay renders the help dialog with a neutral border (the amber
@@ -1101,7 +1132,7 @@ func (m Model) renderHelpOverlay() string {
 	b.WriteString("\n")
 	for _, c := range slashCommands {
 		b.WriteString("  ")
-		b.WriteString(key.Render(fmt.Sprintf("%-14s", c.usage)))
+		b.WriteString(key.Render(fmt.Sprintf("%-*s", commandUsageWidth(), c.usage)))
 		b.WriteString(dim.Render(c.desc))
 		b.WriteString("\n")
 	}

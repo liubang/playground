@@ -34,6 +34,41 @@ type Tool interface {
 
 // --- Model interface (§7) ---
 
+// ReasoningEffort expresses how much reasoning ("thinking") the model should
+// perform before answering, in vendor-neutral levels. The empty value means
+// "provider default" — the request carries no opinion and the provider
+// behaves as if reasoning were never mentioned.
+type ReasoningEffort string
+
+const (
+	// ReasoningEffortOff explicitly disables reasoning. Providers without a
+	// portable off switch treat it as "no reasoning requested".
+	ReasoningEffortOff    ReasoningEffort = "off"
+	ReasoningEffortLow    ReasoningEffort = "low"
+	ReasoningEffortMedium ReasoningEffort = "medium"
+	ReasoningEffortHigh   ReasoningEffort = "high"
+)
+
+// ReasoningSpec is the vendor-neutral reasoning request carried by every
+// model call. Each provider maps it onto its own wire representation:
+// Anthropic derives thinking.budget_tokens from Effort (BudgetTokens wins
+// when explicit); OpenAI-compatible providers map Effort onto
+// reasoning_effort and ignore BudgetTokens.
+type ReasoningSpec struct {
+	Effort       ReasoningEffort `json:"effort,omitempty"`
+	BudgetTokens int64           `json:"budget_tokens,omitempty"`
+}
+
+// IsZero reports whether the spec carries any opinion at all.
+func (s ReasoningSpec) IsZero() bool {
+	return s.Effort == "" && s.BudgetTokens == 0
+}
+
+// Enabled reports whether reasoning should be turned on for this call.
+func (s ReasoningSpec) Enabled() bool {
+	return s.BudgetTokens > 0 || (s.Effort != "" && s.Effort != ReasoningEffortOff)
+}
+
 // ModelRequest is the unified input to a model provider.
 type ModelRequest struct {
 	ID              EventID
@@ -42,6 +77,7 @@ type ModelRequest struct {
 	Tools           []ToolDefinition
 	MaxTokens       int64
 	Temperature     float64
+	Reasoning       ReasoningSpec
 	ContextManifest ContextManifest
 }
 
@@ -83,14 +119,20 @@ type ModelEvent struct {
 	Kind           ModelEventKind `json:"kind"`
 	TextDelta      string         `json:"text_delta,omitempty"`
 	ReasoningDelta string         `json:"reasoning_delta,omitempty"`
-	ToolIndex      int            `json:"tool_index,omitempty"`
-	ToolID         string         `json:"tool_id,omitempty"`
-	ToolName       string         `json:"tool_name,omitempty"`
-	ToolArgs       string         `json:"tool_args,omitempty"`
-	InputTokens    int64          `json:"input_tokens,omitempty"`
-	OutputTokens   int64          `json:"output_tokens,omitempty"`
-	StopReason     StopReason     `json:"stop_reason,omitempty"`
-	Error          string         `json:"error,omitempty"`
+	// ReasoningSignature rides on the reasoning_end event: the provider proof
+	// (Anthropic thinking signature / redacted payload) needed to replay the
+	// reasoning block in later tool-use turns. ReasoningRedacted marks the
+	// block as provider-redacted (no visible text, opaque payload only).
+	ReasoningSignature string     `json:"reasoning_signature,omitempty"`
+	ReasoningRedacted  bool       `json:"reasoning_redacted,omitempty"`
+	ToolIndex          int        `json:"tool_index,omitempty"`
+	ToolID             string     `json:"tool_id,omitempty"`
+	ToolName           string     `json:"tool_name,omitempty"`
+	ToolArgs           string     `json:"tool_args,omitempty"`
+	InputTokens        int64      `json:"input_tokens,omitempty"`
+	OutputTokens       int64      `json:"output_tokens,omitempty"`
+	StopReason         StopReason `json:"stop_reason,omitempty"`
+	Error              string     `json:"error,omitempty"`
 }
 
 // ModelStream is a pull-based stream of model events.

@@ -21,10 +21,19 @@
 // (api_key_env), which resolve secret *values*, not configuration.
 package config
 
+import (
+	"strings"
+
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
+)
+
 // File is the raw YAML schema of ~/.loom/config.yaml. Pointer fields
 // distinguish "unset" (nil → built-in default) from an explicit value —
 // e.g. limits.max_turns: 0 disables the turn budget and must not be
 // mistaken for "not present".
+//
+// The schema depends on domain only for the vendor-neutral reasoning spec
+// conversion (Reasoning.DomainSpec); nothing here performs I/O.
 type File struct {
 	// Default selects the startup model: "provider/model", a bare model
 	// name (must be unique across providers), or a bare provider name (its
@@ -43,7 +52,9 @@ type File struct {
 	UI      UI      `yaml:"ui"`
 }
 
-// Provider describes one OpenAI-compatible endpoint and its model catalog.
+// Provider describes one model endpoint and its model catalog. Type selects
+// the wire protocol family: "openai" (OpenAI-compatible chat/responses, the
+// default) or "anthropic" (Messages API).
 type Provider struct {
 	Name    string `yaml:"name"`
 	Type    string `yaml:"type"`
@@ -52,12 +63,23 @@ type Provider struct {
 	// variable to read it from. The two are mutually exclusive.
 	APIKey    string `yaml:"api_key"`
 	APIKeyEnv string `yaml:"api_key_env"`
+	// APIVersion is the protocol version header for providers that version
+	// their API out-of-band (Anthropic's anthropic-version); empty selects
+	// the provider implementation's pinned default.
+	APIVersion string `yaml:"api_version"`
+	// AuthType selects the credential header for providers with more than
+	// one authentication convention: "x-api-key" (default) or "bearer".
+	// Only meaningful for anthropic providers today.
+	AuthType string `yaml:"auth_type"`
 	// WireAPI is the provider-level default ("chat" or "responses");
 	// models may override it. Empty means "chat".
-	WireAPI      string `yaml:"wire_api"`
-	MaxRetries   *int   `yaml:"max_retries"`
-	DefaultModel string `yaml:"default_model"`
-	Models       []Model `yaml:"models"`
+	WireAPI      string    `yaml:"wire_api"`
+	MaxRetries   *int      `yaml:"max_retries"`
+	DefaultModel string    `yaml:"default_model"`
+	// Reasoning is the provider-level default reasoning (thinking) intent;
+	// models may override it.
+	Reasoning Reasoning `yaml:"reasoning"`
+	Models    []Model   `yaml:"models"`
 }
 
 // Model is one selectable model with its metadata.
@@ -66,8 +88,29 @@ type Model struct {
 	ContextWindow int64  `yaml:"context_window"`
 	// MaxOutputTokens caps the request parameter (model capability); the
 	// agent budget guardrail lives in limits.max_output_tokens.
-	MaxOutputTokens int64  `yaml:"max_output_tokens"`
-	WireAPI         string `yaml:"wire_api"`
+	MaxOutputTokens int64     `yaml:"max_output_tokens"`
+	WireAPI         string    `yaml:"wire_api"`
+	Reasoning       Reasoning `yaml:"reasoning"`
+}
+
+// Reasoning configures the model's reasoning (thinking) intent in
+// vendor-neutral terms; each provider maps it onto its wire representation
+// (Anthropic thinking.budget_tokens, OpenAI reasoning_effort).
+type Reasoning struct {
+	// Effort is "off", "low", "medium", or "high"; empty means the
+	// provider decides.
+	Effort string `yaml:"effort"`
+	// BudgetTokens is an explicit reasoning token budget; it wins over the
+	// effort-derived budget where the wire API supports one.
+	BudgetTokens int64 `yaml:"budget_tokens"`
+}
+
+// DomainSpec converts the configuration into the vendor-neutral domain spec.
+func (r Reasoning) DomainSpec() domain.ReasoningSpec {
+	return domain.ReasoningSpec{
+		Effort:       domain.ReasoningEffort(strings.TrimSpace(r.Effort)),
+		BudgetTokens: r.BudgetTokens,
+	}
 }
 
 // Limits mirrors domain.Limits; nil fields keep the built-in default.

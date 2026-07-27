@@ -13,31 +13,26 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/26
+# Created: 2026/07/27
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
+
 go_library(
-    name = "config_lib",
-    srcs = [
-        "init.go",
-        "load.go",
-        "resolve.go",
-        "schema.go",
-    ],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/config",
-    visibility = ["//go/pl/loom:__subpackages__"],
+    name = "anthropic_lib",
+    srcs = ["provider.go"],
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/model/anthropic",
+    visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/model/anthropic:anthropic_lib",
-        "//go/pl/loom/internal/model/openai:openai_lib",
-        "//go/pl/loom/internal/permission:permission_lib",
-        "//go/pl/loom/internal/trace",
-        "@in_gopkg_yaml_v3//:yaml_v3",
+        "//go/pl/loom/internal/model/httpc:httpc_lib",
+        "//go/pl/loom/internal/model/sse:sse_lib",
+        "//go/pl/loom/internal/model/stream:stream_lib",
     ],
 )
 
 go_test(
-    name = "config_test",
-    srcs = ["config_test.go"],
-    embed = [":config_lib"],
+    name = "anthropic_test",
+    srcs = ["provider_test.go"],
+    embed = [":anthropic_lib"],
+    deps = ["//go/pl/loom/internal/domain:domain_lib"],
 )

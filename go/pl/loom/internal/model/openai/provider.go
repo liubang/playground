@@ -18,29 +18,23 @@
 package openai
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
+	"github.com/liubang/playground/go/pl/loom/internal/model/sse"
+	"github.com/liubang/playground/go/pl/loom/internal/model/stream"
 )
 
-const (
-	defaultBaseURL        = "https://api.openai.com/v1"
-	defaultInitialBackoff = 200 * time.Millisecond
-	defaultMaxBackoff     = 2 * time.Second
-	statusBodyLimit       = 4096
-)
+const defaultBaseURL = "https://api.openai.com/v1"
 
 // WireAPI selects which OpenAI-compatible wire protocol the provider speaks.
 type WireAPI string
@@ -63,13 +57,10 @@ type Config struct {
 
 // Provider implements domain.Model against OpenAI-compatible streaming APIs.
 type Provider struct {
-	endpointURL    string
-	apiKey         string
-	client         *http.Client
-	wireAPI        WireAPI
-	maxRetries     int
-	initialBackoff time.Duration
-	maxBackoff     time.Duration
+	endpointURL string
+	apiKey      string
+	client      *httpc.Client
+	wireAPI     WireAPI
 }
 
 // New creates a new OpenAI-compatible provider.
@@ -89,36 +80,21 @@ func New(cfg Config) (*Provider, error) {
 		return nil, fmt.Errorf("openai provider: invalid base URL")
 	}
 
-	client := cfg.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
-
-	initialBackoff := cfg.InitialBackoff
-	if initialBackoff <= 0 {
-		initialBackoff = defaultInitialBackoff
-	}
-
-	maxBackoff := cfg.MaxBackoff
-	if maxBackoff <= 0 {
-		maxBackoff = defaultMaxBackoff
-	}
-	if maxBackoff < initialBackoff {
-		maxBackoff = initialBackoff
-	}
-
-	if cfg.MaxRetries < 0 {
-		return nil, fmt.Errorf("openai provider: max retries must be >= 0")
+	client, err := httpc.New(httpc.Config{
+		HTTPClient:     cfg.HTTPClient,
+		MaxRetries:     cfg.MaxRetries,
+		InitialBackoff: cfg.InitialBackoff,
+		MaxBackoff:     cfg.MaxBackoff,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("openai provider: %w", err)
 	}
 
 	return &Provider{
-		endpointURL:    endpointURL,
-		apiKey:         cfg.APIKey,
-		client:         client,
-		wireAPI:        wireAPI,
-		maxRetries:     cfg.MaxRetries,
-		initialBackoff: initialBackoff,
-		maxBackoff:     maxBackoff,
+		endpointURL: endpointURL,
+		apiKey:      cfg.APIKey,
+		client:      client,
+		wireAPI:     wireAPI,
 	}, nil
 }
 
@@ -129,103 +105,28 @@ func (p *Provider) Stream(ctx context.Context, req domain.ModelRequest) (domain.
 		return nil, err
 	}
 
-	streamCtx, cancel := context.WithCancel(ctx)
-	resp, err := p.doRequestWithRetry(streamCtx, body)
-	if err != nil {
-		cancel()
-		return nil, err
+	headers := http.Header{
+		"Content-Type":  {"application/json"},
+		"Accept":        {"text/event-stream"},
+		"Cache-Control": {"no-cache"},
+	}
+	if p.apiKey != "" {
+		headers.Set("Authorization", "Bearer "+p.apiKey)
 	}
 
-	if err := validateStreamResponse(resp); err != nil {
+	resp, err := p.client.Post(ctx, p.endpointURL, body, headers)
+	if err != nil {
+		return nil, fmt.Errorf("openai provider: %w", err)
+	}
+
+	if err := httpc.RequireEventStream(resp); err != nil {
 		_ = resp.Body.Close()
-		cancel()
-		return nil, err
+		return nil, fmt.Errorf("openai provider: %w", err)
 	}
 
-	stream := newOpenAIStream(streamCtx, cancel, resp.Body, p.wireAPI)
-	go stream.run()
-	return stream, nil
-}
-
-func (p *Provider) doRequestWithRetry(ctx context.Context, body []byte) (*http.Response, error) {
-	var lastErr error
-	for attempt := 0; attempt <= p.maxRetries; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpointURL, bytes.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("openai provider: create request: %w", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "text/event-stream")
-		req.Header.Set("Cache-Control", "no-cache")
-		if p.apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+p.apiKey)
-		}
-
-		resp, err := p.client.Do(req)
-		if err != nil {
-			if !shouldRetryRequestError(ctx, err) || attempt == p.maxRetries {
-				return nil, fmt.Errorf("openai provider: request failed: %w", err)
-			}
-			lastErr = err
-			if err := sleepContext(ctx, p.backoff(attempt)); err != nil {
-				return nil, err
-			}
-			continue
-		}
-
-		if shouldRetryStatus(resp.StatusCode) && attempt < p.maxRetries {
-			_ = drainAndClose(resp.Body)
-			if err := sleepContext(ctx, p.backoff(attempt)); err != nil {
-				return nil, err
-			}
-			continue
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			statusErr := readStatusError(resp)
-			_ = resp.Body.Close()
-			if lastErr != nil {
-				return nil, fmt.Errorf("openai provider: request failed after retry: %w", statusErr)
-			}
-			return nil, statusErr
-		}
-
-		return resp, nil
-	}
-
-	if lastErr != nil {
-		return nil, fmt.Errorf("openai provider: request failed after retry: %w", lastErr)
-	}
-	return nil, fmt.Errorf("openai provider: request failed")
-}
-
-func (p *Provider) backoff(attempt int) time.Duration {
-	backoff := p.initialBackoff
-	for i := 0; i < attempt; i++ {
-		backoff *= 2
-		if backoff >= p.maxBackoff {
-			return p.maxBackoff
-		}
-	}
-	if backoff > p.maxBackoff {
-		return p.maxBackoff
-	}
-	return backoff
-}
-
-func validateStreamResponse(resp *http.Response) error {
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" {
-		return fmt.Errorf("openai provider: missing Content-Type")
-	}
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		return fmt.Errorf("openai provider: invalid Content-Type %q: %w", contentType, err)
-	}
-	if mediaType != "text/event-stream" {
-		return fmt.Errorf("openai provider: unexpected Content-Type %q", contentType)
-	}
-	return nil
+	return stream.Start(ctx, resp.Body, func(streamCtx context.Context, body io.Reader, emit stream.Emitter) {
+		p.pump(streamCtx, body, emit)
+	}), nil
 }
 
 func normalizeWireAPI(wireAPI WireAPI) (WireAPI, error) {
@@ -285,6 +186,11 @@ func marshalChatCompletionsRequest(req domain.ModelRequest) ([]byte, error) {
 	if req.Temperature != 0 {
 		payload["temperature"] = req.Temperature
 	}
+	// Chat Completions has a reasoning_effort knob but no token-budget form;
+	// BudgetTokens is silently out of scope for this wire API.
+	if effort := reasoningEffortParam(req.Reasoning); effort != "" {
+		payload["reasoning_effort"] = effort
+	}
 	if len(req.Tools) > 0 {
 		tools, err := toOpenAITools(req.Tools)
 		if err != nil {
@@ -313,6 +219,9 @@ func marshalResponsesRequest(req domain.ModelRequest) ([]byte, error) {
 	}
 	if req.MaxTokens > 0 {
 		payload["max_output_tokens"] = req.MaxTokens
+	}
+	if effort := reasoningEffortParam(req.Reasoning); effort != "" {
+		payload["reasoning"] = map[string]any{"effort": effort}
 	}
 	if len(req.Tools) > 0 {
 		tools, err := toResponsesTools(req.Tools)
@@ -365,6 +274,18 @@ func toResponsesTools(defs []domain.ToolDefinition) ([]map[string]any, error) {
 		})
 	}
 	return out, nil
+}
+
+// reasoningEffortParam maps the vendor-neutral spec onto the OpenAI effort
+// parameter. "off" has no portable representation across compatible vendors
+// (some reason unconditionally), so it falls back to omitting the knob.
+func reasoningEffortParam(spec domain.ReasoningSpec) string {
+	switch spec.Effort {
+	case domain.ReasoningEffortLow, domain.ReasoningEffortMedium, domain.ReasoningEffortHigh:
+		return string(spec.Effort)
+	default:
+		return ""
+	}
 }
 
 func decodeToolParameters(def domain.ToolDefinition) (any, error) {
@@ -427,6 +348,10 @@ func toOpenAIMessages(messages []domain.Message) ([]map[string]any, error) {
 					}
 					flushAssistant()
 					out = append(out, toolResultMessage(*part.ToolResult))
+				case domain.PartReasoning:
+					// Reasoning traces are transcript-local for OpenAI-compatible
+					// vendors: their APIs neither require nor accept prior
+					// reasoning content being sent back.
 				default:
 					return nil, fmt.Errorf("openai provider: unsupported assistant part kind %q", part.Kind)
 				}
@@ -475,6 +400,8 @@ func toResponsesInput(messages []domain.Message) ([]map[string]any, error) {
 					}
 					flushText()
 					out = append(out, responseFunctionCallOutputItem(*part.ToolResult))
+				case domain.PartReasoning:
+					// See toOpenAIMessages: reasoning is not replayed upstream.
 				default:
 					return nil, fmt.Errorf("openai provider: unsupported assistant part kind %q", part.Kind)
 				}
@@ -619,74 +546,6 @@ func toolResultContent(result domain.ToolResult) string {
 	return string(result.Status)
 }
 
-type statusError struct {
-	Code    int
-	Status  string
-	Message string
-}
-
-func (e *statusError) Error() string {
-	if e.Message == "" {
-		return fmt.Sprintf("openai provider: HTTP %d %s", e.Code, e.Status)
-	}
-	return fmt.Sprintf("openai provider: HTTP %d %s: %s", e.Code, e.Status, e.Message)
-}
-
-func readStatusError(resp *http.Response) error {
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, statusBodyLimit))
-	message := strings.TrimSpace(string(body))
-
-	var envelope struct {
-		Error struct {
-			Message string `json:"message"`
-			Type    string `json:"type"`
-			Code    any    `json:"code"`
-		} `json:"error"`
-	}
-	if len(body) > 0 && json.Unmarshal(body, &envelope) == nil && envelope.Error.Message != "" {
-		message = envelope.Error.Message
-	}
-
-	return &statusError{
-		Code:    resp.StatusCode,
-		Status:  resp.Status,
-		Message: message,
-	}
-}
-
-func shouldRetryStatus(code int) bool {
-	return code == http.StatusTooManyRequests || code >= 500
-}
-
-func shouldRetryRequestError(ctx context.Context, err error) bool {
-	if err == nil {
-		return false
-	}
-	if ctx.Err() != nil {
-		return false
-	}
-	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
-}
-
-func sleepContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-func drainAndClose(body io.ReadCloser) error {
-	_, _ = io.Copy(io.Discard, io.LimitReader(body, statusBodyLimit))
-	return body.Close()
-}
-
 func chatCompletionsURL(baseURL string) string {
 	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	switch {
@@ -715,277 +574,228 @@ func responsesURL(baseURL string) string {
 	}
 }
 
-type openAIStream struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	body      io.ReadCloser
-	wireAPI   WireAPI
-	events    chan domain.ModelEvent
-	closed    chan struct{}
-	closeOnce sync.Once
-}
-
-func newOpenAIStream(ctx context.Context, cancel context.CancelFunc, body io.ReadCloser, wireAPI WireAPI) *openAIStream {
-	return &openAIStream{
-		ctx:     ctx,
-		cancel:  cancel,
-		body:    body,
-		wireAPI: wireAPI,
-		events:  make(chan domain.ModelEvent, 64),
-		closed:  make(chan struct{}),
-	}
-}
-
-func (s *openAIStream) Recv() (domain.ModelEvent, error) {
-	evt, ok := <-s.events
-	if !ok {
-		return domain.ModelEvent{}, io.EOF
-	}
-	return evt, nil
-}
-
-func (s *openAIStream) Close() error {
-	var err error
-	s.closeOnce.Do(func() {
-		close(s.closed)
-		s.cancel()
-		err = s.body.Close()
-	})
-	return err
-}
-
-func (s *openAIStream) run() {
-	defer close(s.events)
-	defer s.Close()
-
-	parser := newSSEParser(s.body)
+// pump converts one SSE response body into canonical events; it runs inside
+// the shared stream runner (model/stream).
+func (p *Provider) pump(ctx context.Context, body io.Reader, emit stream.Emitter) {
+	parser := sse.NewParser(body)
 	state := newCanonicalState()
 
-	switch s.wireAPI {
+	switch p.wireAPI {
 	case WireAPIResponses:
-		s.runResponses(parser, state)
+		runResponses(ctx, parser, state, emit)
 	default:
-		s.runChatCompletions(parser, state)
+		runChatCompletions(ctx, parser, state, emit)
 	}
 }
 
-func (s *openAIStream) runChatCompletions(parser *sseParser, state *canonicalState) {
-	if !state.emitResponseStart(s.emit) {
+func runChatCompletions(ctx context.Context, parser *sse.Parser, state *canonicalState, emit stream.Emitter) {
+	if !state.emitResponseStart(emit) {
 		return
 	}
 
 	for {
 		evt, err := parser.Next()
 		if err != nil {
-			s.finishChatReadError(state, err)
+			finishChatReadError(ctx, state, err, emit)
 			return
 		}
 
 		if evt.Data == "[DONE]" {
-			s.finishChatDone(state)
+			finishChatDone(state, emit)
 			return
 		}
 
 		var chunk chatCompletionChunk
 		if err := json.Unmarshal([]byte(evt.Data), &chunk); err != nil {
-			s.finishWithError(state, fmt.Errorf("openai provider: malformed chunk JSON: %w", err), domain.StopProviderError)
+			finishWithError(state, fmt.Errorf("openai provider: malformed chunk JSON: %w", err), domain.StopProviderError, emit)
 			return
 		}
 
-		if err := state.applyChatChunk(chunk, s.emit); err != nil {
-			s.finishWithError(state, err, domain.StopProviderError)
+		if err := state.applyChatChunk(chunk, emit); err != nil {
+			finishWithError(state, err, domain.StopProviderError, emit)
 			return
 		}
 	}
 }
 
-func (s *openAIStream) runResponses(parser *sseParser, state *canonicalState) {
+func runResponses(ctx context.Context, parser *sse.Parser, state *canonicalState, emit stream.Emitter) {
 	for {
 		evt, err := parser.Next()
 		if err != nil {
-			s.finishResponsesReadError(state, err)
+			finishResponsesReadError(ctx, state, err, emit)
 			return
 		}
 
 		if evt.Data == "[DONE]" {
 			if !state.finishSeen {
-				s.finishWithError(state, fmt.Errorf("openai provider: responses stream missing terminal event before [DONE]"), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: responses stream missing terminal event before [DONE]"), domain.StopProviderError, emit)
 				return
 			}
-			state.flushBufferedTerminal(s.emit)
+			state.flushBufferedTerminal(emit)
 			return
 		}
 
 		var envelope responsesEventEnvelope
 		if err := json.Unmarshal([]byte(evt.Data), &envelope); err != nil {
-			s.finishWithError(state, fmt.Errorf("openai provider: malformed chunk JSON: %w", err), domain.StopProviderError)
+			finishWithError(state, fmt.Errorf("openai provider: malformed chunk JSON: %w", err), domain.StopProviderError, emit)
 			return
 		}
 
-		eventName := strings.TrimSpace(evt.Event)
+		eventName := strings.TrimSpace(evt.Name)
 		if eventName == "" {
 			eventName = strings.TrimSpace(envelope.Type)
 		}
 		if eventName == "" {
-			s.finishWithError(state, fmt.Errorf("openai provider: missing responses SSE event name"), domain.StopProviderError)
+			finishWithError(state, fmt.Errorf("openai provider: missing responses SSE event name"), domain.StopProviderError, emit)
 			return
 		}
 		if isReasoningEventName(eventName) {
 			if !state.responseStarted {
-				s.finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError, emit)
 				return
 			}
 			if strings.HasSuffix(eventName, ".delta") {
-				state.emitReasoningDelta(envelope.Delta, s.emit)
+				state.emitReasoningDelta(envelope.Delta, emit)
 			} else if strings.HasSuffix(eventName, ".done") {
-				state.closeReasoning(s.emit)
+				state.closeReasoning(emit)
 			}
 			continue
 		}
 		if state.finishSeen {
-			s.finishWithError(state, fmt.Errorf("openai provider: received event %q after terminal event", eventName), domain.StopProviderError)
+			finishWithError(state, fmt.Errorf("openai provider: received event %q after terminal event", eventName), domain.StopProviderError, emit)
 			return
 		}
 
 		switch eventName {
 		case "response.created":
 			if state.responseStarted {
-				s.finishWithError(state, fmt.Errorf("openai provider: duplicate response.created"), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: duplicate response.created"), domain.StopProviderError, emit)
 				return
 			}
-			if !state.emitResponseStart(s.emit) {
+			if !state.emitResponseStart(emit) {
 				return
 			}
 		case "response.in_progress", "response.content_part.added", "response.content_part.done":
 			// Lifecycle/structural events carry no canonical visible content.
 		case "response.output_text.delta":
 			if !state.responseStarted {
-				s.finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError, emit)
 				return
 			}
-			state.emitTextDelta(envelope.Delta, s.emit)
+			state.emitTextDelta(envelope.Delta, emit)
 		case "response.output_text.done":
 			if !state.responseStarted {
-				s.finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError, emit)
 				return
 			}
-			state.closeText(s.emit)
+			state.closeText(emit)
 		case "response.output_item.added", "response.output_item.done":
 			if !state.responseStarted {
-				s.finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError, emit)
 				return
 			}
 			if envelope.Item == nil {
-				s.finishWithError(state, fmt.Errorf("openai provider: event %q missing item payload", eventName), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: event %q missing item payload", eventName), domain.StopProviderError, emit)
 				return
 			}
 			if isReasoningItemType(envelope.Item.Type) {
 				continue
 			}
-			if err := state.applyResponseToolItem(*envelope.Item, envelope.outputIndex(), strings.HasSuffix(eventName, ".done"), s.emit); err != nil {
-				s.finishWithError(state, err, domain.StopProviderError)
+			if err := state.applyResponseToolItem(*envelope.Item, envelope.outputIndex(), strings.HasSuffix(eventName, ".done"), emit); err != nil {
+				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}
 		case "response.function_call_arguments.delta":
 			if !state.responseStarted {
-				s.finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError, emit)
 				return
 			}
-			state.applyResponseToolArgsDelta(envelope.outputIndex(), envelope.Delta, s.emit)
+			state.applyResponseToolArgsDelta(envelope.outputIndex(), envelope.Delta, emit)
 		case "response.function_call_arguments.done":
 			if !state.responseStarted {
-				s.finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError, emit)
 				return
 			}
-			if err := state.applyResponseToolArgsDone(envelope.outputIndex(), envelope.Arguments, s.emit); err != nil {
-				s.finishWithError(state, err, domain.StopProviderError)
+			if err := state.applyResponseToolArgsDone(envelope.outputIndex(), envelope.Arguments, emit); err != nil {
+				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}
 		case "response.completed":
 			if !state.responseStarted {
-				s.finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError, emit)
 				return
 			}
-			if err := state.prepareBufferedTerminal(state.responsesCompletedStop(), responseUsage(envelope.Response), "", s.emit); err != nil {
-				s.finishWithError(state, err, domain.StopProviderError)
+			if err := state.prepareBufferedTerminal(state.responsesCompletedStop(), responseUsage(envelope.Response), "", emit); err != nil {
+				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}
 		case "response.incomplete":
 			if !state.responseStarted {
-				s.finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError)
+				finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError, emit)
 				return
 			}
 			reason := incompleteReason(envelope.Response)
-			if err := state.prepareBufferedTerminal(mapIncompleteStopReason(reason), nil, incompleteMessage(reason), s.emit); err != nil {
-				s.finishWithError(state, err, domain.StopProviderError)
+			if err := state.prepareBufferedTerminal(mapIncompleteStopReason(reason), nil, incompleteMessage(reason), emit); err != nil {
+				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}
 		case "response.failed", "error":
 			message := responseFailureMessage(eventName, envelope)
-			if err := state.prepareBufferedTerminal(domain.StopProviderError, nil, message, s.emit); err != nil {
-				s.finishWithError(state, err, domain.StopProviderError)
+			if err := state.prepareBufferedTerminal(domain.StopProviderError, nil, message, emit); err != nil {
+				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}
 		default:
-			s.finishWithError(state, fmt.Errorf("openai provider: unsupported responses event %q", eventName), domain.StopProviderError)
+			finishWithError(state, fmt.Errorf("openai provider: unsupported responses event %q", eventName), domain.StopProviderError, emit)
 			return
 		}
 	}
 }
 
-func (s *openAIStream) emit(evt domain.ModelEvent) bool {
-	select {
-	case <-s.closed:
-		return false
-	case s.events <- evt:
-		return true
-	}
-}
-
-func (s *openAIStream) finishChatDone(state *canonicalState) {
+func finishChatDone(state *canonicalState, emit stream.Emitter) {
 	if !state.finishSeen {
 		state.finalStop = domain.StopUnknown
 	}
-	_ = state.closeOpen(s.emit)
-	s.emit(domain.ModelEvent{
+	_ = state.closeOpen(emit)
+	emit(domain.ModelEvent{
 		Kind:       domain.ModelEventResponseEnd,
 		StopReason: state.finalStop,
 	})
 }
 
-func (s *openAIStream) finishChatReadError(state *canonicalState, err error) {
+func finishChatReadError(ctx context.Context, state *canonicalState, err error, emit stream.Emitter) {
 	switch {
-	case s.ctx.Err() != nil:
-		s.finishWithError(state, s.ctx.Err(), domain.StopCancelled)
+	case ctx.Err() != nil:
+		finishWithError(state, ctx.Err(), domain.StopCancelled, emit)
 	case errors.Is(err, io.EOF):
-		s.finishWithError(state, fmt.Errorf("openai provider: stream closed before [DONE]"), domain.StopProviderError)
+		finishWithError(state, fmt.Errorf("openai provider: stream closed before [DONE]"), domain.StopProviderError, emit)
 	default:
-		s.finishWithError(state, fmt.Errorf("openai provider: stream read failed: %w", err), domain.StopProviderError)
+		finishWithError(state, fmt.Errorf("openai provider: stream read failed: %w", err), domain.StopProviderError, emit)
 	}
 }
 
-func (s *openAIStream) finishResponsesReadError(state *canonicalState, err error) {
+func finishResponsesReadError(ctx context.Context, state *canonicalState, err error, emit stream.Emitter) {
 	switch {
-	case s.ctx.Err() != nil:
-		s.finishWithError(state, s.ctx.Err(), domain.StopCancelled)
+	case ctx.Err() != nil:
+		finishWithError(state, ctx.Err(), domain.StopCancelled, emit)
 	case errors.Is(err, io.EOF) && state.finishSeen:
 		// Some compatible gateways close immediately after response.completed
 		// instead of sending the optional [DONE] sentinel.
-		state.flushBufferedTerminal(s.emit)
+		state.flushBufferedTerminal(emit)
 	case errors.Is(err, io.EOF):
-		s.finishWithError(state, fmt.Errorf("openai provider: responses stream closed before terminal event"), domain.StopProviderError)
+		finishWithError(state, fmt.Errorf("openai provider: responses stream closed before terminal event"), domain.StopProviderError, emit)
 	default:
-		s.finishWithError(state, fmt.Errorf("openai provider: stream read failed: %w", err), domain.StopProviderError)
+		finishWithError(state, fmt.Errorf("openai provider: stream read failed: %w", err), domain.StopProviderError, emit)
 	}
 }
 
-func (s *openAIStream) finishWithError(state *canonicalState, err error, stop domain.StopReason) {
-	_ = state.closeOpen(s.emit)
-	s.emit(domain.ModelEvent{
+func finishWithError(state *canonicalState, err error, stop domain.StopReason, emit stream.Emitter) {
+	_ = state.closeOpen(emit)
+	emit(domain.ModelEvent{
 		Kind:  domain.ModelEventStreamError,
 		Error: err.Error(),
 	})
-	s.emit(domain.ModelEvent{
+	emit(domain.ModelEvent{
 		Kind:       domain.ModelEventResponseEnd,
 		StopReason: stop,
 	})
@@ -1507,79 +1317,5 @@ func mapStopReason(reason string) domain.StopReason {
 		return domain.StopUnknown
 	default:
 		return domain.StopUnknown
-	}
-}
-
-type sseEvent struct {
-	Event string
-	Data  string
-}
-
-type sseParser struct {
-	reader *bufio.Reader
-}
-
-func newSSEParser(r io.Reader) *sseParser {
-	return &sseParser{reader: bufio.NewReader(r)}
-}
-
-func (p *sseParser) Next() (sseEvent, error) {
-	var (
-		dataLines []string
-		eventName string
-	)
-
-	for {
-		line, err := p.reader.ReadString('\n')
-		eof := errors.Is(err, io.EOF)
-		if err != nil && !eof {
-			return sseEvent{}, err
-		}
-
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			if len(dataLines) == 0 {
-				if eof {
-					return sseEvent{}, io.EOF
-				}
-				continue
-			}
-			return sseEvent{Event: eventName, Data: strings.Join(dataLines, "\n")}, nil
-		}
-
-		if strings.HasPrefix(line, ":") {
-			if eof {
-				if len(dataLines) == 0 {
-					return sseEvent{}, io.EOF
-				}
-				return sseEvent{Event: eventName, Data: strings.Join(dataLines, "\n")}, nil
-			}
-			continue
-		}
-
-		field, value, found := strings.Cut(line, ":")
-		if !found {
-			return sseEvent{}, fmt.Errorf("openai provider: malformed SSE line %q", line)
-		}
-		if strings.HasPrefix(value, " ") {
-			value = value[1:]
-		}
-
-		switch field {
-		case "data":
-			dataLines = append(dataLines, value)
-		case "event":
-			eventName = value
-		case "id", "retry":
-		default:
-			return sseEvent{}, fmt.Errorf("openai provider: unsupported SSE field %q", field)
-		}
-
-		if eof {
-			if len(dataLines) == 0 {
-				return sseEvent{}, io.EOF
-			}
-			return sseEvent{Event: eventName, Data: strings.Join(dataLines, "\n")}, nil
-		}
 	}
 }

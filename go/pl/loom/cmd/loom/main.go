@@ -389,7 +389,8 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 		Approver: consoleApprover{}, Policy: bootstrap.Policy, Registry: bootstrap.Registry,
 		Logger: slog.Default(), SystemPrompt: bootstrap.PromptBuilder, Artifacts: bootstrap.Artifact,
 		Recorder: bootstrap.Recorder, Prompt: userPrompt, Workspace: root,
-		ContextWindow: meta.ContextWindow, GoalCell: bootstrap.GoalCell, PlanCell: bootstrap.PlanCell,
+		ContextWindow: meta.ContextWindow, Reasoning: meta.Reasoning.DomainSpec(),
+		GoalCell: bootstrap.GoalCell, PlanCell: bootstrap.PlanCell,
 	}
 	fmt.Fprintf(os.Stderr, "loom: session %s\n", run.SessionID)
 	executeErr := loop.Execute(ctx)
