@@ -77,14 +77,14 @@ type Model struct {
 	// /reasoning override (rendered with a trailing *).
 	reasoningEffort     string
 	reasoningOverridden bool
-// compactions counts context compaction passes observed in this session
-// view (shown in the status bar once non-zero).
-compactions int
-// plan is the latest task plan published via plan.updated (empty when the
-// model never called update_plan). planHidden is the ctrl+t toggle that
-// collapses the pinned plan panel above the composer.
-plan       domain.Plan
-planHidden bool
+	// compactions counts context compaction passes observed in this session
+	// view (shown in the status bar once non-zero).
+	compactions int
+	// plan is the latest task plan published via plan.updated (empty when the
+	// model never called update_plan). planHidden is the ctrl+t toggle that
+	// collapses the pinned plan panel above the composer.
+	plan       domain.Plan
+	planHidden bool
 	// contextEst is the estimated token size of the next model request
 	// (byte/4 approximation); lastCallInput is the provider-metered input
 	// tokens of the most recent call. contextWindow is the optional model

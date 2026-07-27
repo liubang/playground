@@ -230,7 +230,7 @@ func NewUpdateGoalTool(cell *GoalCell) (*UpdateGoalTool, error) {
 			"Call with status='complete' only when the objective is verifiably achieved (requirement-by-requirement " +
 			"evidence from the current state), or status='blocked' only when truly stuck without user input. " +
 			"Do not call this tool for trivial single-step tasks.",
-		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"objective":{"type":"string","minLength":1,"maxLength":8192},"token_budget":{"type":"integer","minimum":1},"status":{"type":"string","enum":["complete","blocked"]}}}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"objective":{"type":"string","minLength":1,"maxLength":8192},"token_budget":{"type":"integer","minimum":1},"status":{"type":"string","enum":["complete","blocked"]}}}`),
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"applied":{"type":"boolean"},"objective":{"type":"string"},"token_budget":{"type":"integer"},"close":{"type":"string"},"note":{"type":"string"}},"required":["applied","note"]}`),
 		Source:       domain.ToolSourceBuiltin,
 	}

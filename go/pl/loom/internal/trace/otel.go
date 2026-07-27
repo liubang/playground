@@ -99,13 +99,13 @@ type Provider struct {
 // Setup builds the OTLP exporter and tracer provider. A disabled Config is
 // an error here — callers should skip Setup and use Noop instead.
 func Setup(ctx context.Context, cfg Config) (*Provider, error) {
-if !cfg.Enabled {
-return nil, fmt.Errorf("trace.Setup: config disabled (host and keys required)")
-}
-if cfg.UserID == "" {
-cfg.UserID = DefaultUserID()
-}
-logger := cfg.Logger
+	if !cfg.Enabled {
+		return nil, fmt.Errorf("trace.Setup: config disabled (host and keys required)")
+	}
+	if cfg.UserID == "" {
+		cfg.UserID = DefaultUserID()
+	}
+	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
@@ -116,7 +116,8 @@ logger := cfg.Logger
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
 		logger.Warn("otel traces export failed", "error", err)
 	}))
-	exporter, err := otlptracehttp.New(ctx,
+	exporter, err := otlptracehttp.New(
+		ctx,
 		otlptracehttp.WithEndpointURL(cfg.Host+otlpPath),
 		otlptracehttp.WithHeaders(map[string]string{"Authorization": basicAuthHeader(cfg.PublicKey, cfg.SecretKey)}),
 	)
@@ -211,7 +212,8 @@ func (r *otelRecorder) StartRun(ctx context.Context, meta RunMeta) (context.Cont
 		userID = hashUserID(userID)
 	}
 	if userID != "" {
-		attrs = append(attrs,
+		attrs = append(
+			attrs,
 			attribute.String(attrTraceUserID, userID),
 			attribute.String(attrTraceCompatUserID, userID),
 		)
@@ -245,7 +247,8 @@ func (run *otelRun) RecordGeneration(ctx context.Context, rec GenerationRecord) 
 		attrs = append(attrs, attribute.StringSlice(attrGenAIFinishReasons, []string{rec.StopReason}))
 	}
 	if rec.PromptName != "" {
-		attrs = append(attrs,
+		attrs = append(
+			attrs,
 			attribute.String(attrObservationPromptName, rec.PromptName),
 			attribute.Int(attrObservationPromptVersion, rec.PromptVersion),
 		)
@@ -260,13 +263,15 @@ func (run *otelRun) RecordGeneration(ctx context.Context, rec GenerationRecord) 
 	attrs = append(attrs, attribute.String(attrGenAIInputMessages, encodeMessages(rec.Input, run.rec.content)))
 	if !rec.Output.ID.IsZero() {
 		output := encodeMessages([]domain.Message{rec.Output}, run.rec.content)
-		attrs = append(attrs,
+		attrs = append(
+			attrs,
 			attribute.String(attrObservationOutput, output),
 			attribute.String(attrGenAIOutputMessages, output),
 		)
 	}
 
-	_, span := run.rec.tracer.Start(ctx, "gen_ai.chat",
+	_, span := run.rec.tracer.Start(
+		ctx, "gen_ai.chat",
 		oteltrace.WithTimestamp(rec.StartTime),
 		oteltrace.WithAttributes(attrs...),
 	)
@@ -293,7 +298,8 @@ func (run *otelRun) RecordTool(ctx context.Context, rec ToolRecord) {
 			attrs = append(attrs, attribute.String(attrObservationOutput, truncateContent(rec.Preview)))
 		}
 	}
-	_, span := run.rec.tracer.Start(ctx, "tool."+rec.Name,
+	_, span := run.rec.tracer.Start(
+		ctx, "tool."+rec.Name,
 		oteltrace.WithTimestamp(rec.StartTime),
 		oteltrace.WithAttributes(attrs...),
 	)
