@@ -658,6 +658,9 @@ type Loop struct {
 	// token usage — drives compaction; 0 falls back to
 	// Run.Limits.MaxInputTokens.
 	ContextWindow int64
+	// Reasoning carries the selected model's reasoning (thinking) intent
+	// into every model call; the zero value lets the provider decide.
+	Reasoning domain.ReasoningSpec
 	// GoalCell receives update_goal tool mutations; the loop drains it
 	// after each tool batch. Nil disables goal tracking.
 	GoalCell *GoalCell
@@ -925,6 +928,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 		Messages:        messages,
 		Tools:           l.Registry.List(),
 		MaxTokens:       l.Run.Limits.MaxOutputTokens,
+		Reasoning:       l.Reasoning,
 		ContextManifest: manifest,
 	}
 

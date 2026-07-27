@@ -82,20 +82,31 @@ default: deepseek/deepseek-chat
 # ------------------------------------------------------------------------------
 providers:
   - name: deepseek              # provider 名（全局唯一，/model 引用用）
-    type: openai                # 协议类型；当前仅支持 openai（OpenAI 兼容网关）
+    type: openai                # 协议类型：openai（OpenAI 兼容网关，默认）| anthropic
+                                # （Messages API）。deepseek/豆包/GLM/vLLM 等兼容
+                                # 网关都用 openai；Claude 官方端点用 anthropic。
     base_url: https://api.deepseek.com/v1
-                                # 必填。 OpenAI 兼容端点（deepseek/豆包/vLLM 等均可）
+                                # 必填。与所选协议类型匹配的端点。
     api_key: sk-xxxxxxxx        # API 密钥，直接明文书写即可（配置文件即私有数据）
     # api_key_env: DEEPSEEK_API_KEY
                                 # 或者改用环境变量引用：只存变量名，启动时读取值。
                                 # 适合 CI 或需要分享/入仓配置文件的场景。
                                 # 与 api_key 互斥，同时填写会报错。
-    wire_api: chat              # 请求协议：chat（Chat Completions）| responses
-                                # （Responses API）。省略默认 chat；可被单个模型覆盖。
+    wire_api: chat              # 请求协议：openai 类型下为 chat（Chat Completions）|
+                                # responses（Responses API），省略默认 chat；anthropic
+                                # 类型下只有 messages（可省略）。可被单个模型覆盖。
+    # api_version: ""           # 协议版本头（仅 anthropic 类型的 anthropic-version；
+                                # 省略取实现内置的固定版本）。
+    # auth_type: x-api-key      # 认证头方式（仅 anthropic 类型）：x-api-key（默认，
+                                # 官方端点）| bearer（Authorization: Bearer，Claude Code
+                                # OAuth 与多数 Anthropic 协议网关用的方式）。
     max_retries: 2              # 请求失败重试次数。省略默认 2。
     default_model: deepseek-chat
                                 # 该 provider 的默认模型。省略取 models 列表第一个；
                                 # 填写时必须是 models 中已声明的名字。
+    # reasoning:                # provider 级默认推理（thinking）意图，可被单个模型覆盖：
+    #   effort: medium          #   off | low | medium | high（省略由 provider 决定）
+    #   budget_tokens: 0        #   显式推理 token 预算，>0 时优先于 effort 推导值
     models:                     # 可选模型目录（至少一个；/model 的可选范围）
       - name: deepseek-chat
         context_window: 65536   # 模型上下文窗口（token 数）。用于状态栏用量占比
@@ -114,6 +125,19 @@ providers:
   #   models:
   #     - name: gpt-5
   #       context_window: 400000
+
+  # Anthropic（Claude）provider 示例：
+  # - name: anthropic
+  #   type: anthropic
+  #   base_url: https://api.anthropic.com
+  #   api_key_env: ANTHROPIC_API_KEY
+  #   # auth_type: bearer       # 走 Anthropic 协议网关时改用 bearer
+  #   models:
+  #     - name: claude-sonnet-4-6
+  #       context_window: 200000
+  #       max_output_tokens: 64000
+  #       reasoning:            # 开启扩展思考：带签名回传，tool use 续轮不断链
+  #         effort: high
 
 # ------------------------------------------------------------------------------
 # 运行预算（护栏；任意维度超限将中止当前 run）。全部可选，0 表示不限制。

@@ -22,6 +22,41 @@ import (
 	"testing"
 )
 
+func TestReasoningPickerCursorOnActiveDial(t *testing.T) {
+	// Following the model config: cursor and marker on "default".
+	p := NewReasoningPicker("", false)
+	if got := p.Selected().Arg; got != "default" {
+		t.Fatalf("cursor = %q, want default", got)
+	}
+	out := p.Render(0, 0)
+	if !strings.Contains(out, "default") || !strings.Contains(out, "●") {
+		t.Fatalf("render missing active marker:\n%s", out)
+	}
+
+	// Session override active: cursor and marker on the override level.
+	p = NewReasoningPicker("high", true)
+	if got := p.Selected().Arg; got != "high" {
+		t.Fatalf("cursor = %q, want high", got)
+	}
+}
+
+func TestReasoningPickerNavigationBounds(t *testing.T) {
+	p := NewReasoningPicker("", false)
+	p.MoveUp() // already at the top: stays
+	if p.Cursor != 0 {
+		t.Fatalf("cursor = %d, want 0 (clamped)", p.Cursor)
+	}
+	for i := 0; i < len(ReasoningLevels)+2; i++ {
+		p.MoveDown()
+	}
+	if p.Cursor != len(ReasoningLevels)-1 {
+		t.Fatalf("cursor = %d, want %d (clamped)", p.Cursor, len(ReasoningLevels)-1)
+	}
+	if got := p.Selected().Arg; got != "high" {
+		t.Fatalf("selected = %q, want high", got)
+	}
+}
+
 func testModelOptions() []ModelOption {
 	return []ModelOption{
 		{Provider: "aigc", Name: "glm-5.2", ContextWindow: 200000, WireAPI: "responses"},
