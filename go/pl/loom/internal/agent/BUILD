@@ -24,6 +24,7 @@ go_library(
         "goal.go",
         "plan.go",
         "run.go",
+        "steer.go",
         "stream_hooks.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/agent",
@@ -40,6 +41,7 @@ go_test(
         "compact_test.go",
         "plan_test.go",
         "run_test.go",
+        "steer_test.go",
     ],
     embed = [":agent_lib"],
     deps = [

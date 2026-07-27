@@ -63,6 +63,7 @@ var slashCommands = []slashCommand{
 // promptSubmittedMsg reports the controller's ack for a submitted prompt.
 type promptSubmittedMsg struct {
 	prompt string
+	result app.SubmitResult
 	err    error
 }
 
@@ -626,6 +627,11 @@ func (m Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // --- follow-tail helpers ---
 
+// followTailSnapLines bounds the "near bottom" zone: when the viewport is
+// within this many lines of the transcript tail, an incoming block pulls the
+// view back to the bottom instead of counting an unseen event.
+const followTailSnapLines = 3
+
 func (m *Model) pauseFollowTail() {
 	m.followTail = false
 }
@@ -635,6 +641,13 @@ func (m *Model) updateFollowTailAtBottom() {
 		m.followTail = true
 		m.newEvents = 0
 	}
+}
+
+// nearBottom reports whether the viewport is within followTailSnapLines of
+// the transcript tail, computed against the currently rendered content.
+func (m *Model) nearBottom() bool {
+	maxOffset := max(0, m.viewport.TotalLineCount()-m.viewport.Height)
+	return maxOffset-m.viewport.YOffset <= followTailSnapLines
 }
 
 func (m *Model) resumeFollowTail() {
@@ -671,6 +684,15 @@ func (m Model) submitUserInput(raw string) (tea.Model, tea.Cmd) {
 
 func (m Model) handlePromptSubmitted(msg promptSubmittedMsg) tea.Model {
 	if msg.err == nil {
+		if msg.result.Steered {
+			// The optimistic echo must not become a transcript user block:
+			// the message lives in the steer panel until the loop injects it
+			// (steer.queued fills the panel, steer.injected emits the block).
+			if m.pendingSubmitID != "" {
+				m.blocks.Remove(m.pendingSubmitID)
+			}
+			m.setStatus(fmt.Sprintf("Queued (%d pending) — injects before the next model call; Ctrl+C flushes now", msg.result.QueueLen), false)
+		}
 		m.pendingSubmitID, m.pendingSubmitPrompt = "", ""
 		return m
 	}
@@ -775,6 +797,7 @@ func (m Model) handleSessionSwitched(msg sessionSwitchedMsg) (tea.Model, tea.Cmd
 	m.sessionID = m.controller.SessionID()
 	m.usage = domain.Usage{}
 	m.pendingApproval = nil
+	m.pendingSteers = nil
 	m.mode = ModeChat
 	m.setStatus(msg.action.success, false)
 	return m, m.requestSnapshot()
@@ -1003,6 +1026,7 @@ func (m Model) handleSnapshot(msg snapshotMsg) (tea.Model, tea.Cmd) {
 		m.contextWindow = int(msg.snapshot.ContextWindow)
 	}
 	m.workspace = msg.snapshot.WorkspaceRoot
+	m.pendingSteers = msg.snapshot.PendingSteers
 	m.usage = msg.snapshot.Usage
 	if sessionChanged || (m.initialSnapshotPending && len(m.blocks.Order) == 0) {
 		m.blocks = RebuildTranscript(msg.snapshot.Messages)
@@ -1091,12 +1115,31 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 	switch evt.Kind {
 	case runtimeevent.KindTurnStarted:
 		m.setActivity("Preparing turn")
+		// A turn start flushes the steer panel: leftovers were relayed as
+		// this turn's prompt (steer.queued never fires while idle), so any
+		// remaining entries are now that prompt's user block. Surface the
+		// relay so the stale "Queued" status from the steer ack is replaced.
+		if n := len(m.pendingSteers); n > 0 {
+			m.setStatus(fmt.Sprintf("Relayed %d queued message(s) into this turn", n), false)
+		}
+		m.pendingSteers = nil
 		// The panel shows the current turn's plan only: a new prompt starts
 		// the display fresh (Claude Code clears tasks between turns). The
 		// runtime plan itself is untouched — an unfinished plan is still
 		// re-injected into the model's context, and the next update_plan
 		// revision brings the panel right back.
 		m.plan = domain.Plan{}
+	case runtimeevent.KindSteerQueued:
+		var payload runtimeevent.SteerQueuedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			m.pendingSteers = append(m.pendingSteers, payload.Text)
+		}
+	case runtimeevent.KindSteerInjected:
+		// The cell is FIFO, so injected messages leave the panel head-first;
+		// the block itself is appended by ApplyRuntimeEvent below.
+		if len(m.pendingSteers) > 0 {
+			m.pendingSteers = m.pendingSteers[1:]
+		}
 	case runtimeevent.KindSessionOpened:
 		var payload runtimeevent.SessionOpenedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
@@ -1219,7 +1262,16 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 		}
 	}
 	if ApplyRuntimeEvent(m.blocks, evt) != "" && !m.followTail {
-		m.newEvents++
+		// Near-bottom magnetism: a user who scrolled only a few lines away
+		// from the tail almost certainly still wants to follow new output.
+		// Without this, an accidental wheel/↑ nudge hides freshly streamed
+		// replies below the fold with no visible difference from "no reply",
+		// and the next prompt submit appears to "answer the previous message".
+		if m.mode == ModeChat && m.nearBottom() {
+			m.resumeFollowTail()
+		} else {
+			m.newEvents++
+		}
 	}
 	cmds := []tea.Cmd{m.waitForEvent()}
 	if m.isBusy() && !m.spinning {
@@ -1233,8 +1285,8 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 
 func (m Model) submitPromptCmd(prompt string) tea.Cmd {
 	return func() tea.Msg {
-		err := m.controller.SubmitPrompt(context.Background(), prompt)
-		return promptSubmittedMsg{prompt: prompt, err: err}
+		result, err := m.controller.SubmitPrompt(context.Background(), prompt)
+		return promptSubmittedMsg{prompt: prompt, result: result, err: err}
 	}
 }
 

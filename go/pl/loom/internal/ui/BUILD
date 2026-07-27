@@ -52,6 +52,7 @@ go_library(
 go_test(
     name = "ui_test",
     srcs = [
+        "follow_tail_test.go",
         "frame_stability_test.go",
         "icons_test.go",
         "input_test.go",

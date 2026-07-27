@@ -62,6 +62,7 @@ type Snapshot struct {
 	Usage            domain.Usage     `json:"usage"`
 	Messages         []domain.Message `json:"messages,omitempty"`
 	PendingApprovals []domain.EventID `json:"pending_approvals,omitempty"`
+	PendingSteers    []string         `json:"pending_steers,omitempty"`
 	Timestamp        time.Time        `json:"timestamp"`
 }
 
@@ -208,24 +209,40 @@ func (c *Controller) Run(ctx context.Context) {
 	}
 }
 
-// SubmitPrompt submits a user prompt and starts a new turn.
-// It returns an error if the controller is not idle.
-func (c *Controller) SubmitPrompt(ctx context.Context, prompt string) error {
+// SubmitResult reports how a submitted prompt was accepted.
+type SubmitResult struct {
+	// Steered is true when the prompt was queued into the active turn's
+	// SteerCell instead of starting a new turn immediately.
+	Steered bool
+	// QueueLen is the resulting pending-steer count (0 when started).
+	QueueLen int
+}
+
+// SubmitPrompt submits a user prompt. While the controller is idle it
+// starts a new turn; while a turn is busy (running, awaiting approval, or
+// cancelling) the prompt is queued for steering — the agent loop injects
+// it before its next model call, and leftovers become the next turn's
+// prompt automatically (docs/STEER_DESIGN.md §3.1).
+func (c *Controller) SubmitPrompt(ctx context.Context, prompt string) (SubmitResult, error) {
 	resultCh := make(chan controllerResult, 1)
 	select {
 	case c.cmdCh <- controllerCommand{Kind: cmdSubmitPrompt, Prompt: prompt, ResultCh: resultCh}:
 	case <-ctx.Done():
-		return ctx.Err()
+		return SubmitResult{}, ctx.Err()
 	case <-c.doneCh:
-		return fmt.Errorf("controller is closed")
+		return SubmitResult{}, fmt.Errorf("controller is closed")
 	}
 	select {
 	case result := <-resultCh:
-		return result.Err
+		if result.Err != nil {
+			return SubmitResult{}, result.Err
+		}
+		out, _ := result.Value.(SubmitResult)
+		return out, nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return SubmitResult{}, ctx.Err()
 	case <-c.doneCh:
-		return fmt.Errorf("controller is closed")
+		return SubmitResult{}, fmt.Errorf("controller is closed")
 	}
 }
 
@@ -472,6 +489,14 @@ func (c *Controller) workspaceLocked() string {
 	return ""
 }
 
+// steerCellPeek returns the pending steer queue without draining it.
+func (c *Controller) steerCellPeek() []string {
+	if cell := c.steerCell(); cell != nil {
+		return cell.Peek()
+	}
+	return nil
+}
+
 // persistRememberedRules reports whether "allow always" prefixes should be
 // written to the user rules layer (rules.persist_remembered; default true).
 func (c *Controller) persistRememberedRules() bool {
@@ -521,11 +546,18 @@ func (c *Controller) dispatch(cmd controllerCommand) {
 
 func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	c.mu.Lock()
-	if c.state != ControllerStateIdle {
-		c.mu.Unlock()
-		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("cannot submit prompt in state %q", c.state)}
+	state := c.state
+	c.mu.Unlock()
+	switch state {
+	case ControllerStateRunning, ControllerStateAwaitingApproval, ControllerStateCancelling:
+		c.handleSteer(cmd)
+		return
+	case ControllerStateIdle:
+	default:
+		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("cannot submit prompt in state %q", state)}
 		return
 	}
+	c.mu.Lock()
 	if c.sessionID.IsZero() {
 		c.mu.Unlock()
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("no active session; call NewSession or ResumeSession first")}
@@ -563,7 +595,37 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 		c.onTurnFinished(turnID, turnCounter, err)
 	}()
 
-	cmd.ResultCh <- controllerResult{}
+	cmd.ResultCh <- controllerResult{Value: SubmitResult{}}
+}
+
+// handleSteer queues a prompt submitted while a turn is busy into the
+// SteerCell and notifies the frontend. A full cell rejects so the UI can
+// restore the draft.
+func (c *Controller) handleSteer(cmd controllerCommand) {
+	cell := c.steerCell()
+	if cell == nil {
+		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("cannot steer without a configured steer cell")}
+		return
+	}
+	if err := cell.Put(cmd.Prompt); err != nil {
+		cmd.ResultCh <- controllerResult{Err: err}
+		return
+	}
+	n := cell.Len()
+	c.publishEphemeral(c.sessionID, c.runID, c.turnCounter, runtimeevent.KindSteerQueued, runtimeevent.SteerQueuedPayload{
+		Text:     cmd.Prompt,
+		QueueLen: n,
+	})
+	cmd.ResultCh <- controllerResult{Value: SubmitResult{Steered: true, QueueLen: n}}
+}
+
+// steerCell returns the shared steer mailbox; nil in tests that assemble a
+// bare Controller.
+func (c *Controller) steerCell() *agent.SteerCell {
+	if c.bootstrap == nil {
+		return nil
+	}
+	return c.bootstrap.SteerCell
 }
 
 func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int) error {
@@ -654,6 +716,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 		ContextWindow: modelMeta.ContextWindow,
 		GoalCell:      c.bootstrap.GoalCell,
 		PlanCell:      c.bootstrap.PlanCell,
+		SteerCell:     c.bootstrap.SteerCell,
 		StreamHooks: agent.StreamHooks{
 			OnContextUsage: func(estTokens int, lastCallInputTokens int64) {
 				c.publishDurable(c.sessionID, run.ID, turnCounter, runtimeevent.KindContextUsage, runtimeevent.ContextUsagePayload{
@@ -774,6 +837,23 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 		payload = runtimeevent.TurnFinishedPayload{Error: err.Error()}
 	}
 	c.publishDurable(sessionID, runID, turn, runtimeevent.KindTurnFinished, payload)
+
+	// Steer relay: leftovers the loop never drained become the next turn's
+	// prompt. The relay re-enters through cmdCh so submission stays
+	// serialized with external input; the result channel is buffered, so
+	// nobody has to read it. Relaying on every terminal outcome (completed,
+	// cancelled, failed, budget) is what makes Ctrl+C flush pending steers.
+	if cell := c.steerCell(); cell != nil && cell.Len() > 0 {
+		prompt := strings.Join(cell.Take(), "\n\n")
+		select {
+		case c.cmdCh <- controllerCommand{Kind: cmdSubmitPrompt, Prompt: prompt, ResultCh: make(chan controllerResult, 1)}:
+		default:
+			// The queue is full or the controller is shutting down; the
+			// messages are lost with the process, which matches the cell's
+			// volatile contract (STEER_DESIGN §3.3).
+			c.logger.Warn("steer relay dropped: command queue unavailable", "messages", prompt)
+		}
+	}
 }
 
 func (c *Controller) handleCancelTurn(cmd controllerCommand) {
@@ -955,6 +1035,7 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 		Usage:            c.lastUsage,
 		Messages:         append([]domain.Message(nil), c.messages...),
 		PendingApprovals: c.approver.PendingApprovals(),
+		PendingSteers:    c.steerCellPeek(),
 		Timestamp:        c.clock.Now(),
 	}
 	c.mu.Unlock()
@@ -1228,6 +1309,16 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				Decision:   payload.Decision,
 			})
 			s.controller.SetRunning()
+		}
+	case domain.EventUserMessageAdded:
+		// Only the loop's steer drain produces this inside a turn — the
+		// turn-opening prompt is persisted through the bare store (see
+		// controller.runTurn), so this case uniquely identifies injections.
+		var payload domain.MessageEventPayload
+		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindSteerInjected, runtimeevent.SteerInjectedPayload{
+				Text: strings.Join(payload.Message.TextParts(), ""),
+			})
 		}
 	case domain.EventToolResultAdded:
 		var payload domain.MessageEventPayload

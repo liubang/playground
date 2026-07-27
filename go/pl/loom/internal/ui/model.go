@@ -156,6 +156,12 @@ planHidden bool
 	pendingSubmitID     string
 	pendingSubmitPrompt string
 
+	// pendingSteers mirrors the controller's steer queue for the pinned
+	// steer panel: messages queued while a turn is busy, waiting for the
+	// loop to inject them before its next model call. Fed by steer.queued,
+	// drained FIFO by steer.injected, rebuilt from Snapshot.PendingSteers.
+	pendingSteers []string
+
 	// resubscribes bounds event-stream recovery attempts; eventsDead locks
 	// prompt submission once the stream cannot be recovered.
 	resubscribes int

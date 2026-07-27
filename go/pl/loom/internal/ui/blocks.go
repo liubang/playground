@@ -169,6 +169,23 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 			return block.ID
 		}
 
+	case runtimeevent.KindSteerInjected:
+		// An injected steer has no pending echo in the block stream (it
+		// lived in the steer panel), so there is nothing to confirm — just
+		// append the user block like a confirmed turn prompt.
+		var payload runtimeevent.SteerInjectedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			block := &TranscriptBlock{
+				ID:      fmt.Sprintf("steer-%d", evt.Sequence),
+				Kind:    BlockKindUser,
+				Title:   "You",
+				Content: payload.Text,
+				Done:    true,
+			}
+			idx.Add(block)
+			return block.ID
+		}
+
 	case runtimeevent.KindModelReasoningDelta:
 		block := ensureStreamBlock(idx, evt.Turn)
 		var payload runtimeevent.ModelReasoningDeltaPayload
@@ -391,7 +408,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 			block := &TranscriptBlock{
 				ID:      fmt.Sprintf("notice-%d", evt.Sequence),
 				Kind:    BlockKindNotice,
-				Content: fmt.Sprintf("Turn ended with error: %s", payload.Error),
+				Content: fmt.Sprintf("Turn ended with error: %s", truncateDisplayWidth(payload.Error, turnErrorMaxCells)),
 				Done:    true,
 				Status:  "error",
 			}
@@ -665,6 +682,14 @@ const (
 	toolPreviewMaxLines = 12
 	toolPreviewMaxBytes = 1200
 )
+
+// turnErrorMaxCells bounds the error text shown in a turn-failure notice.
+// Provider error payloads (rate-limit JSON dumps with request IDs and
+// nested extensions) can run for thousands of cells and flood the visible
+// transcript, pushing the conversation out of view and prompting the user
+// to scroll away from the tail. The full error remains in the event log;
+// the notice keeps its informative head.
+const turnErrorMaxCells = 300
 
 // toolDiffMaxLines bounds the argument diff rendered for edit/write calls.
 const toolDiffMaxLines = 40
