@@ -9,13 +9,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
-
-	"os"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -876,11 +875,11 @@ func TestAbbreviateHome(t *testing.T) {
 	home := string(filepath.Separator) + filepath.Join("home", "tester")
 	t.Setenv("HOME", home)
 	cases := map[string]string{
-		home:                     "~",
-		home + "/ws/playground":  "~/ws/playground",
-		"/other/place":           "/other/place",
-		home + "ish/sibling":     home + "ish/sibling", // prefix must match a whole component
-		"relative/path":          "relative/path",
+		home:                    "~",
+		home + "/ws/playground": "~/ws/playground",
+		"/other/place":          "/other/place",
+		home + "ish/sibling":    home + "ish/sibling", // prefix must match a whole component
+		"relative/path":         "relative/path",
 	}
 	for in, want := range cases {
 		if got := abbreviateHome(in); got != want {
@@ -1021,18 +1020,8 @@ func TestCtrlCStateTable(t *testing.T) {
 func TestSlashCommandFailurePreservesInput(t *testing.T) {
 	ctrl := newTestController(t)
 	m := NewModel(ctrl, "model", "/ws")
-	m.textArea.SetValue("/compact")
-	updated, _ := m.handleSlashCommand("/compact")
-	m = updated.(Model)
-	if got := m.textArea.Value(); got != "/compact" {
-		t.Fatalf("unimplemented command should keep the draft, got %q", got)
-	}
-	if !strings.Contains(m.statusMessage, "not implemented") {
-		t.Fatalf("status = %q", m.statusMessage)
-	}
-
 	m.textArea.SetValue("/frobnicate")
-	updated, _ = m.handleSlashCommand("/frobnicate")
+	updated, _ := m.handleSlashCommand("/frobnicate")
 	m = updated.(Model)
 	if got := m.textArea.Value(); got != "/frobnicate" {
 		t.Fatalf("unknown command should keep the draft, got %q", got)
@@ -1195,6 +1184,58 @@ func TestSlashCommandReasoning(t *testing.T) {
 		t.Fatal("usage error should not spawn a command")
 	}
 	if got := m.textArea.Value(); got != "/reasoning high low" {
+		t.Fatalf("usage error should keep the draft, got %q", got)
+	}
+}
+
+func TestSlashCommandCompact(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+
+	// Schedule: the ack confirms with the current context estimate.
+	m.contextEst = 45200
+	updated, cmd := m.handleSlashCommand("/compact")
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("/compact should spawn a command")
+	}
+	if got := m.textArea.Value(); got != "" {
+		t.Fatalf("/compact should clear the draft, got %q", got)
+	}
+	msg, ok := cmd().(compactRequestedMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("cmd = %+v (ok=%v, err=%v)", msg, ok, msg.err)
+	}
+	updatedModel, _ := m.Update(msg)
+	m = updatedModel.(Model)
+	if !strings.Contains(m.statusMessage, "Will compact") || !strings.Contains(m.statusMessage, "45k") {
+		t.Fatalf("status = %q, want scheduling confirmation with estimate", m.statusMessage)
+	}
+
+	// Duplicate: reported as already pending.
+	updated, cmd = m.handleSlashCommand("/compact")
+	m = updated.(Model)
+	msg, ok = cmd().(compactRequestedMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("cmd = %+v (ok=%v, err=%v)", msg, ok, msg.err)
+	}
+	if !msg.result.AlreadyPending {
+		t.Fatal("duplicate /compact should report AlreadyPending")
+	}
+	updatedModel, _ = m.Update(msg)
+	m = updatedModel.(Model)
+	if !strings.Contains(m.statusMessage, "already scheduled") {
+		t.Fatalf("status = %q, want already-pending notice", m.statusMessage)
+	}
+
+	// Arguments: usage error, draft preserved.
+	m.textArea.SetValue("/compact now")
+	updated, cmd = m.handleSlashCommand("/compact now")
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("usage error should not spawn a command")
+	}
+	if got := m.textArea.Value(); got != "/compact now" {
 		t.Fatalf("usage error should keep the draft, got %q", got)
 	}
 }
@@ -1455,8 +1496,8 @@ func TestSteerPanelRebuildsFromSnapshot(t *testing.T) {
 }
 
 func TestSlashCommandModelFailureRestoresDraft(t *testing.T) {
-ctrl := newTestController(t)
-m := NewModel(ctrl, "test/model-a", "/ws")
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
 
 	updatedModel, _ := m.Update(modelChangedMsg{command: "/model oops", err: fmt.Errorf("boom")})
 	m = updatedModel.(Model)

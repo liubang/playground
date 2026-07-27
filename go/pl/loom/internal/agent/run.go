@@ -664,13 +664,13 @@ type Loop struct {
 	// GoalCell receives update_goal tool mutations; the loop drains it
 	// after each tool batch. Nil disables goal tracking.
 	GoalCell *GoalCell
-// PlanCell receives update_plan snapshots; the loop drains it after each
-// tool batch and replaces the run's plan. Nil disables plan tracking.
-PlanCell *PlanCell
-// SteerCell receives user messages submitted while the turn is busy; the
-// loop drains it in prepare (before every model call) and appends them as
-// regular user messages. Nil disables steering.
-SteerCell *SteerCell
+	// PlanCell receives update_plan snapshots; the loop drains it after each
+	// tool batch and replaces the run's plan. Nil disables plan tracking.
+	PlanCell *PlanCell
+	// SteerCell receives user messages submitted while the turn is busy; the
+	// loop drains it in prepare (before every model call) and appends them as
+	// regular user messages. Nil disables steering.
+	SteerCell *SteerCell
 
 	prepared map[domain.ToolCallID]domain.PreparedCall
 	// traceRun is the active trace handle for the executing run.
@@ -687,9 +687,11 @@ SteerCell *SteerCell
 	// (1 = 80% reminder shown, 2 = 90% self-handoff shown); compaction
 	// re-arms them.
 	budgetNoticeLevel int
-	// forceCompact demands compaction before the next model call (set
-	// after a provider context-overflow rejection).
-	forceCompact bool
+	// ForceCompact demands compaction before the next model call. It is set
+	// internally after a provider context-overflow rejection, and may be set
+	// by the caller (e.g. a manual /compact request) to force a pass ahead
+	// of the automatic pressure triggers.
+	ForceCompact bool
 	// lastCompactEst is the transcript estimate right after the most recent
 	// compaction pass. Re-compacting is pointless until the transcript grows
 	// past it: on an unchanged transcript the condenser cannot make progress
@@ -1319,7 +1321,7 @@ func (l *Loop) executeTools(ctx context.Context) error {
 //   - occupancy pressure: the calibrated next-request size crosses 80% of
 //     the effective context window.
 func (l *Loop) shouldCompact() bool {
-	if l.forceCompact {
+	if l.ForceCompact {
 		return true
 	}
 	est := estTokens(l.Run.Messages)
@@ -1381,12 +1383,14 @@ func (l *Loop) maybeInjectBudgetNotice() {
 		l.budgetNoticeLevel = 2
 		l.Run.AddSystemNote(fmt.Sprintf(
 			"[budget notice] The context window is nearly full (~%d of ~%d tokens used) and auto-compaction is imminent. In your next visible reply, concisely capture any critical state (file paths, decisions made, remaining steps) so it survives compaction.",
-			occupancy, window))
+			occupancy, window,
+		))
 	case occupancy*5 >= window*4 && l.budgetNoticeLevel < 1:
 		l.budgetNoticeLevel = 1
 		l.Run.AddSystemNote(fmt.Sprintf(
 			"[budget notice] ~%d tokens remain before auto-compaction (~%d of ~%d used). Keep working, but prefer concise replies and avoid re-reading large outputs.",
-			window-occupancy, occupancy, window))
+			window-occupancy, occupancy, window,
+		))
 	}
 }
 
@@ -1421,7 +1425,7 @@ func (l *Loop) handleContextOverflow(ctx context.Context, cause error) error {
 		l.terminate(ctx, domain.OutcomeBudgetExhausted)
 		return fmt.Errorf("model rejected the request for context size twice in a row (last: %v); start a new session or raise LOOM_CONTEXT_WINDOW", cause)
 	}
-	l.forceCompact = true
+	l.ForceCompact = true
 	if l.Logger != nil {
 		l.Logger.Warn("provider rejected request for context size; forcing compaction", "error", cause)
 	}
@@ -1537,7 +1541,7 @@ func (l *Loop) compact(ctx context.Context) error {
 	// and model-visible budget notices re-arm. Remember the post-pass
 	// estimate so shouldCompact only re-fires on real transcript growth.
 	l.lastCallInput = 0
-	l.forceCompact = false
+	l.ForceCompact = false
 	l.budgetNoticeLevel = 0
 	l.lastCompactEst = estTokens(l.Run.Messages)
 

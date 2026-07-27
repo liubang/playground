@@ -684,6 +684,72 @@ func TestControllerSetReasoning(t *testing.T) {
 	}
 }
 
+func TestControllerRequestCompaction(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "answer", StopReason: domain.StopEndTurn},
+	)
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, model),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	// First request schedules; a duplicate only reports the pending state.
+	result, err := controller.RequestCompaction(ctx)
+	if err != nil {
+		t.Fatalf("RequestCompaction: %v", err)
+	}
+	if result.AlreadyPending {
+		t.Fatal("first request should not report AlreadyPending")
+	}
+	result, err = controller.RequestCompaction(ctx)
+	if err != nil {
+		t.Fatalf("RequestCompaction(duplicate): %v", err)
+	}
+	if !result.AlreadyPending {
+		t.Fatal("duplicate request should report AlreadyPending")
+	}
+
+	// A pending request belongs to its transcript: starting a new session
+	// drops it instead of compacting the wrong one.
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	result, err = controller.RequestCompaction(ctx)
+	if err != nil {
+		t.Fatalf("RequestCompaction(after new session): %v", err)
+	}
+	if result.AlreadyPending {
+		t.Fatal("the pending flag must not leak into the new session")
+	}
+
+	// The next turn consumes the one-shot flag: scheduling starts over.
+	if _, err := controller.SubmitPrompt(ctx, "question"); err != nil {
+		t.Fatalf("SubmitPrompt: %v", err)
+	}
+	waitForIdle(t, controller)
+
+	result, err = controller.RequestCompaction(ctx)
+	if err != nil {
+		t.Fatalf("RequestCompaction(after turn): %v", err)
+	}
+	if result.AlreadyPending {
+		t.Fatal("the flag must have been consumed by the completed turn")
+	}
+}
+
 func TestControllerSetReasoningAppliesFromNextTurn(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
