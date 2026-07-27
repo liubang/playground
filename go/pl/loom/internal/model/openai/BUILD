@@ -22,7 +22,12 @@ go_library(
     srcs = ["provider.go"],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/model/openai",
     visibility = ["//visibility:public"],
-    deps = ["//go/pl/loom/internal/domain:domain_lib"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/model/httpc:httpc_lib",
+        "//go/pl/loom/internal/model/sse:sse_lib",
+        "//go/pl/loom/internal/model/stream:stream_lib",
+    ],
 )
 
 go_test(

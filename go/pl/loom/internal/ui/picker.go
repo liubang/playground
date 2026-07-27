@@ -258,6 +258,103 @@ func modelOptionMeta(o ModelOption) string {
 	return strings.Join(parts, " · ")
 }
 
+// ReasoningLevel is one selectable dial in the /reasoning picker. Arg is
+// the SetReasoning argument.
+type ReasoningLevel struct {
+	Arg   string
+	Label string
+	Desc  string
+}
+
+// ReasoningLevels is the fixed dial catalog in display order: the config
+// fallback first, then the four override levels from least to most thinking.
+var ReasoningLevels = []ReasoningLevel{
+	{Arg: "default", Label: "default", Desc: "follow the model's configured reasoning"},
+	{Arg: "off", Label: "off", Desc: "no thinking; fastest and cheapest"},
+	{Arg: "low", Label: "low", Desc: "light thinking (≈1/8 of the output budget on Anthropic)"},
+	{Arg: "medium", Label: "medium", Desc: "moderate thinking (≈1/3 of the output budget)"},
+	{Arg: "high", Label: "high", Desc: "deep thinking (≈2/3 of the output budget)"},
+}
+
+// ReasoningPicker manages the state for picking a reasoning level. Like the
+// model picker there is no loading state: the catalog is fixed.
+type ReasoningPicker struct {
+	Cursor int
+	// currentArg is the level Arg currently in effect, marked with ●.
+	currentArg string
+}
+
+// NewReasoningPicker creates a picker with the cursor on the active dial:
+// the session-override level when one is set, "default" otherwise.
+func NewReasoningPicker(effort string, overridden bool) *ReasoningPicker {
+	current := "default"
+	if overridden && effort != "" {
+		current = effort
+	}
+	p := &ReasoningPicker{currentArg: current}
+	for i, l := range ReasoningLevels {
+		if l.Arg == current {
+			p.Cursor = i
+			break
+		}
+	}
+	return p
+}
+
+// MoveUp moves the cursor up.
+func (p *ReasoningPicker) MoveUp() {
+	if p.Cursor > 0 {
+		p.Cursor--
+	}
+}
+
+// MoveDown moves the cursor down.
+func (p *ReasoningPicker) MoveDown() {
+	if p.Cursor < len(ReasoningLevels)-1 {
+		p.Cursor++
+	}
+}
+
+// Selected returns the highlighted level.
+func (p *ReasoningPicker) Selected() *ReasoningLevel {
+	if p.Cursor < 0 || p.Cursor >= len(ReasoningLevels) {
+		return nil
+	}
+	return &ReasoningLevels[p.Cursor]
+}
+
+// Render renders the reasoning picker as a string for viewport display.
+func (p *ReasoningPicker) Render(width, height int) string {
+	labelWidth := 0
+	for _, l := range ReasoningLevels {
+		if len(l.Label) > labelWidth {
+			labelWidth = len(l.Label)
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("Select a reasoning level:\n\n")
+	for i, l := range ReasoningLevels {
+		prefix := "  "
+		if i == p.Cursor {
+			prefix = "▶ "
+		}
+		marker := ""
+		if l.Arg == p.currentArg {
+			marker = " ●"
+		}
+		line := fmt.Sprintf("%s%-*s  %s%s", prefix, labelWidth, l.Label, l.Desc, marker)
+		if width > 0 {
+			line = truncateDisplayWidth(line, width)
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\nj/k or ↑/↓ = move   Enter = select   Esc = cancel")
+	return b.String()
+}
+
 // formatTokens renders a token count in compact decimal form (200k, 1.0M).
 func formatTokens(n int64) string {
 	switch {

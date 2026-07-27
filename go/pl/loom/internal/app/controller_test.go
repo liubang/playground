@@ -599,3 +599,138 @@ func TestControllerSetModelAppliesFromNextTurn(t *testing.T) {
 		t.Errorf("turn 2 model = %q, want new-model", calls[1].ModelName)
 	}
 }
+
+func TestControllerSetReasoning(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	// The default model carries a configured reasoning default; the other
+	// does not, so "back to config" is observable across a model switch.
+	resolved := &config.ResolvedConfig{
+		Providers: []config.ResolvedProvider{{
+			Name:  "test",
+			Model: fakes.NewFakeModel(),
+			Models: []config.Model{
+				{Name: "test-model", ContextWindow: 128000, Reasoning: config.Reasoning{Effort: "medium"}},
+				{Name: "new-model", ContextWindow: 64000},
+			},
+			DefaultModel: "test-model",
+		}},
+		Default: config.ProviderModelRef{Provider: "test", Model: "test-model"},
+		Limits:  domain.DefaultLimits(),
+	}
+	controller := NewController(ControllerConfig{
+		Bootstrap: &Bootstrap{
+			Resolved:  resolved,
+			Current:   resolved.Default,
+			Store:     store,
+			Registry:  agent.NewToolRegistry(),
+			SteerCell: agent.NewSteerCell(),
+		},
+		Broker:   runtimeevent.NewBroker(),
+		Approver: NewChannelApprover(),
+		Clock:    domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	// Before any override the model's configured default is in effect.
+	snapshot, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snapshot.ReasoningEffort != "medium" || snapshot.ReasoningOverridden {
+		t.Fatalf("snapshot reasoning = %q (overridden=%v), want medium/config", snapshot.ReasoningEffort, snapshot.ReasoningOverridden)
+	}
+
+	result, err := controller.SetReasoning(ctx, "high")
+	if err != nil {
+		t.Fatalf("SetReasoning(high): %v", err)
+	}
+	if result.Effective.Effort != domain.ReasoningEffortHigh || !result.Overridden {
+		t.Fatalf("SetReasoning(high) = %+v, want high/override", result)
+	}
+
+	// The override is per-task intent: a model switch must not clear it.
+	if _, err := controller.SetModel(ctx, "new-model"); err != nil {
+		t.Fatalf("SetModel: %v", err)
+	}
+	snapshot, err = controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snapshot.ReasoningEffort != "high" || !snapshot.ReasoningOverridden {
+		t.Fatalf("snapshot reasoning after /model = %q (overridden=%v), want high/override", snapshot.ReasoningEffort, snapshot.ReasoningOverridden)
+	}
+
+	// "default" clears the override; the new model has no configured
+	// reasoning, so the provider decides (empty dial).
+	result, err = controller.SetReasoning(ctx, "default")
+	if err != nil {
+		t.Fatalf("SetReasoning(default): %v", err)
+	}
+	if result.Overridden || !result.Effective.IsZero() {
+		t.Fatalf("SetReasoning(default) = %+v, want zero/config", result)
+	}
+
+	if _, err := controller.SetReasoning(ctx, "extreme"); err == nil {
+		t.Fatal("SetReasoning with unknown level should fail")
+	}
+}
+
+func TestControllerSetReasoningAppliesFromNextTurn(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "first answer", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "second answer", StopReason: domain.StopEndTurn},
+	)
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, model),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if _, err := controller.SubmitPrompt(ctx, "one"); err != nil {
+		t.Fatalf("SubmitPrompt(one): %v", err)
+	}
+	waitForIdle(t, controller)
+
+	if _, err := controller.SetReasoning(ctx, "low"); err != nil {
+		t.Fatalf("SetReasoning: %v", err)
+	}
+	if _, err := controller.SubmitPrompt(ctx, "two"); err != nil {
+		t.Fatalf("SubmitPrompt(two): %v", err)
+	}
+	waitForIdle(t, controller)
+
+	calls := model.Calls()
+	if len(calls) != 2 {
+		t.Fatalf("model calls = %d, want 2", len(calls))
+	}
+	if !calls[0].Reasoning.IsZero() {
+		t.Errorf("turn 1 reasoning = %+v, want zero (no override yet)", calls[0].Reasoning)
+	}
+	if calls[1].Reasoning.Effort != domain.ReasoningEffortLow {
+		t.Errorf("turn 2 reasoning = %+v, want low (override)", calls[1].Reasoning)
+	}
+}
