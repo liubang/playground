@@ -184,7 +184,8 @@ func (m Model) headerContext(budget int) string {
 
 	var candidates []string
 	if branch != "" && m.workspace != "" {
-		candidates = append(candidates,
+		candidates = append(
+			candidates,
 			branch+" · "+full,
 			branch+" · "+short,
 			branch+" · "+base,
@@ -680,7 +681,8 @@ func (m Model) renderSteerPanel() string {
 	var b strings.Builder
 	b.WriteString("\n")
 	b.WriteString(m.theme.Dim.Render(fmt.Sprintf(
-		"  Steering (%d queued — injects before next model call, Ctrl+C flushes now):", len(m.pendingSteers))))
+		"  Steering (%d queued — injects before next model call, Ctrl+C flushes now):", len(m.pendingSteers),
+	)))
 	for _, text := range m.pendingSteers {
 		b.WriteString("\n  " + m.theme.Dim.Render("↳ "+truncateDisplayWidth(strings.ReplaceAll(text, "\n", " "), width-6)))
 	}

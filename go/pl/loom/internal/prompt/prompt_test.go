@@ -275,7 +275,8 @@ func TestFileRulesProviderTruncatesOversizedFile(t *testing.T) {
 // dynamic sections (extra instructions) still apply, and that the managed
 // identity is reported for generation linking.
 func TestBuilderManagedBaseReplacesBuiltinSections(t *testing.T) {
-	builder := NewBuilder(t.TempDir(),
+	builder := NewBuilder(
+		t.TempDir(),
 		WithExtraInstructions("no emoji"),
 		WithManagedBase("loom-system", 3, "managed identity"),
 	)
@@ -334,7 +335,8 @@ type staticSkillsProvider struct {
 func (p staticSkillsProvider) Skills(context.Context) (string, error) { return p.body, p.err }
 
 func TestBuildInjectsSkillsSection(t *testing.T) {
-	b := NewBuilder("/ws",
+	b := NewBuilder(
+		"/ws",
 		WithEnvProvider(staticEnvProvider{env: testEnvironment()}),
 		WithRulesProvider(staticRulesProvider{files: []RuleFile{{Path: "/ws/LOOM.md", Content: "rule"}}}),
 		WithSkillsProvider(staticSkillsProvider{body: "skill catalog body"}),
@@ -356,7 +358,8 @@ func TestBuildInjectsSkillsSection(t *testing.T) {
 }
 
 func TestBuildSkillsProviderFailureDegradesToNoSection(t *testing.T) {
-	b := NewBuilder("/ws",
+	b := NewBuilder(
+		"/ws",
 		WithEnvProvider(staticEnvProvider{env: testEnvironment()}),
 		noRules,
 		WithSkillsProvider(staticSkillsProvider{err: errors.New("boom")}),
@@ -372,7 +375,8 @@ func TestBuildSkillsProviderFailureDegradesToNoSection(t *testing.T) {
 }
 
 func TestBuildSkillsEmptyBodyOmitsSection(t *testing.T) {
-	b := NewBuilder("/ws",
+	b := NewBuilder(
+		"/ws",
 		WithEnvProvider(staticEnvProvider{env: testEnvironment()}),
 		noRules,
 		WithSkillsProvider(staticSkillsProvider{body: "  \n"}),
@@ -383,7 +387,8 @@ func TestBuildSkillsEmptyBodyOmitsSection(t *testing.T) {
 }
 
 func TestBuildManagedPromptKeepsSkillsSection(t *testing.T) {
-	b := NewBuilder("/ws",
+	b := NewBuilder(
+		"/ws",
 		WithEnvProvider(staticEnvProvider{env: testEnvironment()}),
 		noRules,
 		WithManagedBase("managed", 3, "managed body"),

@@ -83,9 +83,9 @@ func (e Event) Validate() error {
 		EventUserMessageAdded, EventModelRequestStarted, EventModelResponseCompleted,
 		EventModelRequestFailed, EventToolCallPrepared, EventPermissionRequested,
 		EventPermissionResolved, EventToolExecutionStarted, EventToolExecutionCompleted,
-	EventToolResultAdded, EventFileChanged, EventPlanRevised, EventContextCompacted,
-	EventGoalUpdated, EventCheckpointCreated, EventBudgetUpdated, EventRunCompleted,
-	EventRunFailed, EventRunCancelled:
+		EventToolResultAdded, EventFileChanged, EventPlanRevised, EventContextCompacted,
+		EventGoalUpdated, EventCheckpointCreated, EventBudgetUpdated, EventRunCompleted,
+		EventRunFailed, EventRunCancelled:
 	default:
 		return fmt.Errorf("unknown event type %q", e.Type)
 	}

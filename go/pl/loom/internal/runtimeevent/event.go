@@ -62,14 +62,14 @@ const (
 	KindToolStarted   RuntimeEventKind = "tool.started"
 	KindToolCompleted RuntimeEventKind = "tool.completed"
 	KindToolProgress  RuntimeEventKind = "tool.progress"
-// Budget events
-KindBudgetUpdated    RuntimeEventKind = "budget.updated"
-KindContextCompacted RuntimeEventKind = "context.compacted"
-// Plan events
-KindPlanUpdated RuntimeEventKind = "plan.updated"
-// Steer events (user input submitted while a turn is busy)
-KindSteerQueued   RuntimeEventKind = "steer.queued"
-KindSteerInjected RuntimeEventKind = "steer.injected"
+	// Budget events
+	KindBudgetUpdated    RuntimeEventKind = "budget.updated"
+	KindContextCompacted RuntimeEventKind = "context.compacted"
+	// Plan events
+	KindPlanUpdated RuntimeEventKind = "plan.updated"
+	// Steer events (user input submitted while a turn is busy)
+	KindSteerQueued   RuntimeEventKind = "steer.queued"
+	KindSteerInjected RuntimeEventKind = "steer.injected"
 	// Cancel events
 	KindRunCancelRequested RuntimeEventKind = "run.cancel_requested"
 	KindRunCancelled       RuntimeEventKind = "run.cancelled"
@@ -115,11 +115,11 @@ func (e RuntimeEvent) Validate() error {
 		KindModelRequestStarted, KindModelTextDelta, KindModelReasoningDelta, KindModelToolCallDelta,
 		KindModelResponseCompleted, KindModelRequestFailed,
 		KindApprovalRequested, KindApprovalResolved,
-KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
-KindBudgetUpdated, KindUsageUpdated, KindContextCompacted, KindContextUsage, KindPlanUpdated,
-KindSteerQueued, KindSteerInjected,
-KindRunCancelRequested, KindRunCancelled, KindRunCompleted,
-KindRuntimeWarning, KindRuntimeFatal:
+		KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
+		KindBudgetUpdated, KindUsageUpdated, KindContextCompacted, KindContextUsage, KindPlanUpdated,
+		KindSteerQueued, KindSteerInjected,
+		KindRunCancelRequested, KindRunCancelled, KindRunCompleted,
+		KindRuntimeWarning, KindRuntimeFatal:
 	default:
 		return fmt.Errorf("unknown runtime event kind %q", e.Kind)
 	}
@@ -286,12 +286,12 @@ type UsageUpdatedPayload struct {
 // marks a model-written handoff compaction (history rebuilt around a
 // summary), which frontends flag as accuracy-relevant.
 type ContextCompactedPayload struct {
-MaskedOutputs    int  `json:"masked_outputs"`
-MaskedBytes      int  `json:"masked_bytes"`
-ArchivedMessages int  `json:"archived_messages,omitempty"`
-EstTokensBefore  int  `json:"est_tokens_before"`
-EstTokensAfter   int  `json:"est_tokens_after"`
-Summarized       bool `json:"summarized,omitempty"`
+	MaskedOutputs    int  `json:"masked_outputs"`
+	MaskedBytes      int  `json:"masked_bytes"`
+	ArchivedMessages int  `json:"archived_messages,omitempty"`
+	EstTokensBefore  int  `json:"est_tokens_before"`
+	EstTokensAfter   int  `json:"est_tokens_after"`
+	Summarized       bool `json:"summarized,omitempty"`
 }
 
 // ContextUsagePayload reports the estimated size of the transcript the next
