@@ -81,9 +81,12 @@ func (m Model) View() string {
 	case ModeSessionPicker, ModeModelPicker:
 		// The picker owns the main area; no composer.
 	default:
-		// The pinned plan panel sits directly above the composer (Claude
-		// Code style): the checklist stays visible while the agent works
-		// instead of scrolling away with the transcript.
+		// Pinned panels sit directly above the composer (Claude Code
+		// style): steer queue first, then the plan checklist.
+		if panel := m.renderSteerPanel(); panel != "" {
+			b.WriteString(panel)
+			b.WriteString("\n")
+		}
 		if panel := m.renderPlanPanel(); panel != "" {
 			b.WriteString(panel)
 			b.WriteString("\n")
@@ -585,8 +588,14 @@ func (m Model) renderStatusBar() string {
 		add(seg, m.theme.Dim.Render(seg))
 	}
 
-	if !m.followTail && m.newEvents > 0 {
-		hint := fmt.Sprintf("↓%d new", m.newEvents)
+	// Whenever the view sits above the transcript tail, say so explicitly —
+	// a window that happens to end right at the last user echo is
+	// indistinguishable from "no reply yet", which reads as a lost reply.
+	if !m.viewport.AtBottom() {
+		hint := "scrolled · ctrl+end for latest"
+		if m.newEvents > 0 {
+			hint = fmt.Sprintf("↓%d new · ctrl+end for latest", m.newEvents)
+		}
 		add(hint, lipgloss.NewStyle().Foreground(m.theme.Highlight).Bold(true).Render(hint))
 	}
 
@@ -638,6 +647,28 @@ func (m Model) planPanelHeight() int {
 // elapsed; falling back to the static N/M summary when idle), then the
 // steps indented under it like a tree — done steps dimmed, the in-progress
 // step highlighted — with a blank row on each side.
+// renderSteerPanel renders the pinned pending-steer list directly above
+// the composer (codex's PendingInputPreview equivalent): messages the user
+// submitted while a turn was busy, waiting for the loop to inject them
+// before its next model call. Hidden when empty.
+func (m Model) renderSteerPanel() string {
+	if len(m.pendingSteers) == 0 {
+		return ""
+	}
+	width := m.width - 2
+	if width < 10 {
+		width = 10
+	}
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(m.theme.Dim.Render(fmt.Sprintf(
+		"  Steering (%d queued — injects before next model call, Ctrl+C flushes now):", len(m.pendingSteers))))
+	for _, text := range m.pendingSteers {
+		b.WriteString("\n  " + m.theme.Dim.Render("↳ "+truncateDisplayWidth(strings.ReplaceAll(text, "\n", " "), width-6)))
+	}
+	return b.String()
+}
+
 func (m Model) renderPlanPanel() string {
 	if len(m.plan.Items) == 0 || m.planHidden {
 		return ""
