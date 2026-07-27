@@ -181,9 +181,9 @@ func NewUpdatePlanTool(cell *PlanCell) (*UpdatePlanTool, error) {
 		Name: "update_plan",
 		Description: "Update the task plan: a checklist you maintain to track progress on multi-step work. " +
 			"Submit the COMPLETE plan snapshot on every call (full replacement, not a diff). " +
-		"Rules: skip this tool for straightforward tasks (roughly the easiest 25%); never create single-step plans; " +
-		"keep at most one step in_progress — mark the current step done (with brief evidence) before starting the next; " +
-		"update at step boundaries: each call is a full snapshot that stays in the transcript, so revise when a step completes or the plan changes — not mid-step. " +
+			"Rules: skip this tool for straightforward tasks (roughly the easiest 25%); never create single-step plans; " +
+			"keep at most one step in_progress — mark the current step done (with brief evidence) before starting the next; " +
+			"update at step boundaries: each call is a full snapshot that stays in the transcript, so revise when a step completes or the plan changes — not mid-step. " +
 			"Give the plan a short 'title' (a few words naming the overall objective) when creating it; " +
 			"later revisions may omit it to keep the existing title. " +
 			"Only mark a step done after its deliverable actually exists (edits applied, commands verified, conclusions " +

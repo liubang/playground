@@ -175,8 +175,8 @@ func TestResolveRef(t *testing.T) {
 		want ProviderModelRef
 	}{
 		{"deepseek/deepseek-reasoner", ProviderModelRef{"deepseek", "deepseek-reasoner"}},
-		{"gpt-5", ProviderModelRef{"openai", "gpt-5"}},          // bare unique model
-		{"openai", ProviderModelRef{"openai", "gpt-5"}},          // bare provider → its default
+		{"gpt-5", ProviderModelRef{"openai", "gpt-5"}},  // bare unique model
+		{"openai", ProviderModelRef{"openai", "gpt-5"}}, // bare provider → its default
 		{" deepseek/deepseek-chat ", ProviderModelRef{"deepseek", "deepseek-chat"}},
 	}
 	for _, tc := range cases {
@@ -398,4 +398,3 @@ func TestWriteTemplate(t *testing.T) {
 		t.Fatalf("second WriteTemplate() error = %v, want already-exists", err)
 	}
 }
-

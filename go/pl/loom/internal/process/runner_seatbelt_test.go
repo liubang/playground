@@ -79,8 +79,10 @@ func TestSeatbeltLoopbackRoundtrip(t *testing.T) {
 	runner := newRunner(t, validator, RunnerOptions{Sandbox: SeatbeltSandbox{}})
 	result, err := runner.Run(context.Background(), CommandSpec{
 		Program: "python3",
-		Args: []string{"-c",
-			"import socket, threading; srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv.bind(('127.0.0.1', 0)); srv.listen(1); port = srv.getsockname()[1]; accept = lambda: (lambda c: (c.recv(16), c.sendall(b'pong'), c.close()))(srv.accept()[0]); threading.Thread(target=accept, daemon=True).start(); cli = socket.create_connection(('127.0.0.1', port), timeout=5); cli.sendall(b'ping'); print(cli.recv(16).decode())"},
+		Args: []string{
+			"-c",
+			"import socket, threading; srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv.bind(('127.0.0.1', 0)); srv.listen(1); port = srv.getsockname()[1]; accept = lambda: (lambda c: (c.recv(16), c.sendall(b'pong'), c.close()))(srv.accept()[0]); threading.Thread(target=accept, daemon=True).start(); cli = socket.create_connection(('127.0.0.1', port), timeout=5); cli.sendall(b'ping'); print(cli.recv(16).decode())",
+		},
 		Cwd:     root,
 		Timeout: 15 * time.Second,
 	})

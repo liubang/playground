@@ -98,5 +98,3 @@ func TestWireSkillsEnabledEndToEnd(t *testing.T) {
 		t.Fatal("loom://skills/catalog audit ref missing")
 	}
 }
-
-
