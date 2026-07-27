@@ -7,7 +7,11 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,10 +48,11 @@ func testResolvedConfig(model domain.Model) *config.ResolvedConfig {
 func testBootstrap(store domain.SessionStore, model domain.Model) *Bootstrap {
 	resolved := testResolvedConfig(model)
 	return &Bootstrap{
-		Resolved: resolved,
-		Current:  resolved.Default,
-		Store:    store,
-		Registry: agent.NewToolRegistry(),
+		Resolved:  resolved,
+		Current:   resolved.Default,
+		Store:     store,
+		Registry:  agent.NewToolRegistry(),
+		SteerCell: agent.NewSteerCell(),
 	}
 }
 
@@ -77,12 +82,12 @@ func TestControllerContinuesSessionForFollowUpPrompt(t *testing.T) {
 	if err := controller.NewSession(ctx); err != nil {
 		t.Fatalf("NewSession: %v", err)
 	}
-	if err := controller.SubmitPrompt(ctx, "first question"); err != nil {
+	if _, err := controller.SubmitPrompt(ctx, "first question"); err != nil {
 		t.Fatalf("SubmitPrompt(first): %v", err)
 	}
 	waitForIdle(t, controller)
 
-	if err := controller.SubmitPrompt(ctx, "follow-up question"); err != nil {
+	if _, err := controller.SubmitPrompt(ctx, "follow-up question"); err != nil {
 		t.Fatalf("SubmitPrompt(follow-up): %v", err)
 	}
 	waitForIdle(t, controller)
@@ -159,6 +164,231 @@ func TestControllerPublishesSessionEnv(t *testing.T) {
 	if got := sessionEnv.Get()[process.EnvSessionID]; got != snapshot.SessionID.String() {
 		t.Fatalf("LOOM_SESSION_ID after switch = %q, want session %q", got, snapshot.SessionID)
 	}
+}
+
+// gateModel blocks its first Stream call until Open is called or ctx is
+// cancelled, giving tests a deterministic "turn is busy" window. Later
+// calls (including relay turns) pass straight through after Open.
+type gateModel struct {
+	inner   *fakes.FakeModel
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newGateModel(inner *fakes.FakeModel) *gateModel {
+	return &gateModel{inner: inner, started: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (m *gateModel) Stream(ctx context.Context, req domain.ModelRequest) (domain.ModelStream, error) {
+	m.once.Do(func() { close(m.started) })
+	select {
+	case <-m.release:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return m.inner.Stream(ctx, req)
+}
+
+// Open releases the gate; it must be called exactly once.
+func (m *gateModel) Open() { close(m.release) }
+
+func userTexts(messages []domain.Message) []string {
+	var out []string
+	for _, m := range messages {
+		if m.Role == domain.RoleUser {
+			out = append(out, strings.Join(m.TextParts(), ""))
+		}
+	}
+	return out
+}
+
+// TestControllerSteerInjectsBeforeNextModelCall is the core steer
+// acceptance: a message queued while a turn is starting is drained in
+// prepare and reaches the very next model request as a regular user
+// message, after the turn's prompt.
+func TestControllerSteerInjectsBeforeNextModelCall(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	model := fakes.NewFakeModel(fakes.ScriptEntry{Text: "answer", StopReason: domain.StopEndTurn})
+	bootstrap := testBootstrap(store, model)
+	if err := bootstrap.SteerCell.Put("steer note"); err != nil {
+		t.Fatalf("SteerCell.Put: %v", err)
+	}
+	controller := NewController(ControllerConfig{
+		Bootstrap: bootstrap,
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if _, err := controller.SubmitPrompt(ctx, "question"); err != nil {
+		t.Fatalf("SubmitPrompt: %v", err)
+	}
+	waitForIdle(t, controller)
+
+	calls := model.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("model calls = %d, want 1", len(calls))
+	}
+	if got, want := userTexts(calls[0].Messages), []string{"question", "steer note"}; !slices.Equal(got, want) {
+		t.Fatalf("request user messages = %v, want %v", got, want)
+	}
+	// The injection drained the cell: nothing relays after the turn.
+	snapshot, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if len(snapshot.PendingSteers) != 0 {
+		t.Fatalf("PendingSteers = %v, want drained", snapshot.PendingSteers)
+	}
+}
+
+// TestControllerSteerWhileBusyAndRelayAfterCancel covers the whole steer
+// lifecycle: a busy submission is queued (SubmitResult.Steered), shows up
+// in Snapshot.PendingSteers, and Ctrl+C relays it as the next turn's prompt.
+func TestControllerSteerWhileBusyAndRelayAfterCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	inner := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "first", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "second", StopReason: domain.StopEndTurn},
+	)
+	model := newGateModel(inner)
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, model),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if _, err := controller.SubmitPrompt(ctx, "one"); err != nil {
+		t.Fatalf("SubmitPrompt(one): %v", err)
+	}
+	<-model.started // the first model call is in flight: the turn is busy
+
+	result, err := controller.SubmitPrompt(ctx, "two")
+	if err != nil {
+		t.Fatalf("SubmitPrompt(two): %v", err)
+	}
+	if !result.Steered || result.QueueLen != 1 {
+		t.Fatalf("SubmitResult = %+v, want steered with queue length 1", result)
+	}
+	snapshot, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if !slices.Equal(snapshot.PendingSteers, []string{"two"}) {
+		t.Fatalf("PendingSteers = %v, want [two]", snapshot.PendingSteers)
+	}
+
+	// Ctrl+C flushes: cancel the turn, then let the relay turn through.
+	if err := controller.CancelTurn(ctx); err != nil {
+		t.Fatalf("CancelTurn: %v", err)
+	}
+	model.Open()
+	// The gate cancelled the first Stream at the select, so it never
+	// reached the fake: inner's FIRST call is the relay turn's, and it
+	// carries the continued transcript (turn 1's prompt + the steered one).
+	waitForCalls(t, inner, 1)
+
+	calls := inner.Calls()
+	if got, want := userTexts(calls[0].Messages), []string{"one", "two"}; !slices.Equal(got, want) {
+		t.Fatalf("relay turn user messages = %v, want %v", got, want)
+	}
+	snapshot, err = controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if len(snapshot.PendingSteers) != 0 {
+		t.Fatalf("PendingSteers after relay = %v, want empty", snapshot.PendingSteers)
+	}
+}
+
+// TestControllerSteerCellFullRejects checks the soft capacity: busy
+// submissions past SteerCellCapacity are rejected so the UI can restore
+// the draft.
+func TestControllerSteerCellFullRejects(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	inner := fakes.NewFakeModel(fakes.ScriptEntry{Text: "answer", StopReason: domain.StopEndTurn})
+	model := newGateModel(inner)
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, model),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if _, err := controller.SubmitPrompt(ctx, "one"); err != nil {
+		t.Fatalf("SubmitPrompt(one): %v", err)
+	}
+	<-model.started
+
+	for i := range agent.SteerCellCapacity {
+		if _, err := controller.SubmitPrompt(ctx, fmt.Sprintf("queued %d", i)); err != nil {
+			t.Fatalf("SubmitPrompt #%d: %v", i, err)
+		}
+	}
+	if _, err := controller.SubmitPrompt(ctx, "overflow"); err == nil {
+		t.Fatal("SubmitPrompt past capacity should fail")
+	}
+
+	if err := controller.CancelTurn(ctx); err != nil {
+		t.Fatalf("CancelTurn: %v", err)
+	}
+	model.Open()
+	waitForIdle(t, controller)
+}
+
+// waitForCalls blocks until the fake model has received at least n
+// requests (relay turns reach the model asynchronously via cmdCh).
+func waitForCalls(t *testing.T, model *fakes.FakeModel, n int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(model.Calls()) >= n {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("model calls = %d, want >= %d", len(model.Calls()), n)
 }
 
 func waitForIdle(t *testing.T, controller *Controller) {
@@ -345,7 +575,7 @@ func TestControllerSetModelAppliesFromNextTurn(t *testing.T) {
 	if err := controller.NewSession(ctx); err != nil {
 		t.Fatalf("NewSession: %v", err)
 	}
-	if err := controller.SubmitPrompt(ctx, "one"); err != nil {
+	if _, err := controller.SubmitPrompt(ctx, "one"); err != nil {
 		t.Fatalf("SubmitPrompt(one): %v", err)
 	}
 	waitForIdle(t, controller)
@@ -353,7 +583,7 @@ func TestControllerSetModelAppliesFromNextTurn(t *testing.T) {
 	if _, err := controller.SetModel(ctx, "new-model"); err != nil {
 		t.Fatalf("SetModel: %v", err)
 	}
-	if err := controller.SubmitPrompt(ctx, "two"); err != nil {
+	if _, err := controller.SubmitPrompt(ctx, "two"); err != nil {
 		t.Fatalf("SubmitPrompt(two): %v", err)
 	}
 	waitForIdle(t, controller)

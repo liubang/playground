@@ -67,6 +67,9 @@ KindBudgetUpdated    RuntimeEventKind = "budget.updated"
 KindContextCompacted RuntimeEventKind = "context.compacted"
 // Plan events
 KindPlanUpdated RuntimeEventKind = "plan.updated"
+// Steer events (user input submitted while a turn is busy)
+KindSteerQueued   RuntimeEventKind = "steer.queued"
+KindSteerInjected RuntimeEventKind = "steer.injected"
 	// Cancel events
 	KindRunCancelRequested RuntimeEventKind = "run.cancel_requested"
 	KindRunCancelled       RuntimeEventKind = "run.cancelled"
@@ -114,8 +117,9 @@ func (e RuntimeEvent) Validate() error {
 		KindApprovalRequested, KindApprovalResolved,
 KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
 KindBudgetUpdated, KindUsageUpdated, KindContextCompacted, KindContextUsage, KindPlanUpdated,
-		KindRunCancelRequested, KindRunCancelled, KindRunCompleted,
-		KindRuntimeWarning, KindRuntimeFatal:
+KindSteerQueued, KindSteerInjected,
+KindRunCancelRequested, KindRunCancelled, KindRunCompleted,
+KindRuntimeWarning, KindRuntimeFatal:
 	default:
 		return fmt.Errorf("unknown runtime event kind %q", e.Kind)
 	}
@@ -296,6 +300,21 @@ Summarized       bool `json:"summarized,omitempty"`
 type ContextUsagePayload struct {
 	EstTokens           int   `json:"est_tokens"`
 	LastCallInputTokens int64 `json:"last_call_input_tokens,omitempty"`
+}
+
+// SteerQueuedPayload reports a user message accepted into the pending-steer
+// queue while a turn is busy. Ephemeral: the pending panel rebuilds from
+// Snapshot.PendingSteers after a resubscribe.
+type SteerQueuedPayload struct {
+	Text     string `json:"text"`
+	QueueLen int    `json:"queue_len"`
+}
+
+// SteerInjectedPayload reports a queued message drained by the agent loop
+// and persisted as a regular user message before a model call. Durable: it
+// drives the pending-panel removal and the transcript's user block.
+type SteerInjectedPayload struct {
+	Text string `json:"text"`
 }
 
 // RunCancelledPayload describes a cancellation.

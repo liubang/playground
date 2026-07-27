@@ -661,9 +661,13 @@ type Loop struct {
 	// GoalCell receives update_goal tool mutations; the loop drains it
 	// after each tool batch. Nil disables goal tracking.
 	GoalCell *GoalCell
-	// PlanCell receives update_plan snapshots; the loop drains it after each
-	// tool batch and replaces the run's plan. Nil disables plan tracking.
-	PlanCell *PlanCell
+// PlanCell receives update_plan snapshots; the loop drains it after each
+// tool batch and replaces the run's plan. Nil disables plan tracking.
+PlanCell *PlanCell
+// SteerCell receives user messages submitted while the turn is busy; the
+// loop drains it in prepare (before every model call) and appends them as
+// regular user messages. Nil disables steering.
+SteerCell *SteerCell
 
 	prepared map[domain.ToolCallID]domain.PreparedCall
 	// traceRun is the active trace handle for the executing run.
@@ -873,6 +877,7 @@ func (l *Loop) prepare(ctx context.Context) error {
 		return err
 	}
 	l.Run.IncrementTurn()
+	l.drainSteer()
 	// Budget notices must not be appended between an assistant tool-call
 	// message and its routing/results: a trailing system note would make
 	// the call-routing readers miss the calls (they scan for the most
@@ -882,6 +887,25 @@ func (l *Loop) prepare(ctx context.Context) error {
 	// pairing-safe by construction.
 	l.maybeInjectBudgetNotice()
 	return nil
+}
+
+// drainSteer injects queued user messages as regular user messages at the
+// only transcript-pairing-safe point: after the previous tool results were
+// recorded and before the next model call (the same guarantee the budget
+// notice below relies on). Each message becomes a durable
+// EventUserMessageAdded on the next flush.
+func (l *Loop) drainSteer() {
+	if l.SteerCell == nil {
+		return
+	}
+	for _, text := range l.SteerCell.Take() {
+		l.Run.AddUserMessage(domain.Message{
+			ID:        domain.NewMessageID(),
+			Role:      domain.RoleUser,
+			Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: text}},
+			CreatedAt: l.Run.Clock.Now(),
+		})
+	}
 }
 
 func (l *Loop) callModel(ctx context.Context) error {

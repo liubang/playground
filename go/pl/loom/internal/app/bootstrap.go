@@ -86,6 +86,10 @@ type Bootstrap struct {
 	// PlanCell ferries update_plan snapshots from the tool to each turn's
 	// agent loop.
 	PlanCell *agent.PlanCell
+	// SteerCell ferries user messages submitted while a turn is busy to the
+	// loop's next model call (docs/STEER_DESIGN.md). Shared across turns so
+	// leftovers relay into the next turn's prompt.
+	SteerCell *agent.SteerCell
 	// Recorder is the Langfuse observability sink (no-op when unconfigured).
 	Recorder trace.Recorder
 	// SessionRules holds categorical run_cmd prefixes remembered from
@@ -150,6 +154,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	registry := agent.NewToolRegistry()
 	goalCell := agent.NewGoalCell()
 	planCell := agent.NewPlanCell()
+	steerCell := agent.NewSteerCell()
 	if err := registerBuiltinTools(registry, validator, runner, artStore, resolved.Limits.MaxToolOutputBytes, goalCell, planCell); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("register tools: %w", err)
@@ -232,6 +237,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		SessionEnv:    sessionEnv,
 		GoalCell:      goalCell,
 		PlanCell:      planCell,
+		SteerCell:     steerCell,
 		Recorder:      traceRecorder,
 		SessionRules:  sessionRules,
 		traceProvider: traceProvider,
