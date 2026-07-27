@@ -55,8 +55,7 @@ var slashCommands = []slashCommand{
 	{name: "/sessions", usage: "/sessions", desc: "Pick a session to resume"},
 	{name: "/resume", usage: "/resume <id>", desc: "Resume a session by ID"},
 	{name: "/clear", usage: "/clear", desc: "Clear transcript view (history retained)"},
-	{name: "/compact", usage: "/compact", desc: "Compact context (not implemented yet)"},
-	{name: "/inspect", usage: "/inspect", desc: "Inspect session state (not implemented yet)"},
+	{name: "/compact", usage: "/compact", desc: "Compact context before the next model call"},
 	{name: "/model", usage: "/model [name]", desc: "Show or switch the active model"},
 	{name: "/reasoning", usage: "/reasoning [level]", desc: "Show or adjust the reasoning level"},
 	{name: "/exit", usage: "/exit", desc: "Exit"},
@@ -101,6 +100,12 @@ type reasoningChangedMsg struct {
 	err     error
 }
 
+// compactRequestedMsg reports the result of a /compact request.
+type compactRequestedMsg struct {
+	result app.RequestCompactionResult
+	err    error
+}
+
 // turnCancelRequestedMsg reports the result of a cancel request.
 type turnCancelRequestedMsg struct{ err error }
 
@@ -140,6 +145,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next = m.handleModelChanged(msg)
 	case reasoningChangedMsg:
 		next = m.handleReasoningChanged(msg)
+	case compactRequestedMsg:
+		next = m.handleCompactRequested(msg)
 	case turnCancelRequestedMsg:
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Cancel failed: %v", msg.err), true)
@@ -828,9 +835,13 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		return m, m.setReasoningCmd(fields[1], cmd)
 	case "/exit":
 		return m, tea.Quit
-	case "/compact", "/inspect":
-		// Keep the draft so the user can edit or retry a mistyped command.
-		m.setStatus(fmt.Sprintf("%s is not implemented yet", fields[0]), false)
+	case "/compact":
+		if len(fields) != 1 {
+			m.setStatus("Usage: /compact", true)
+			return m, nil
+		}
+		m.textArea.Reset()
+		return m, m.compactCmd()
 	default:
 		m.setStatus(fmt.Sprintf("Unknown command: %s", fields[0]), true)
 	}
@@ -886,6 +897,33 @@ func reasoningDialLabel(spec domain.ReasoningSpec) string {
 		return fmt.Sprintf("budget:%d", spec.BudgetTokens)
 	}
 	return ""
+}
+
+// handleCompactRequested applies the ack of a /compact request: the pass
+// itself runs inside the next model call and is reported through the
+// ContextCompacted event; this message only confirms the scheduling.
+func (m Model) handleCompactRequested(msg compactRequestedMsg) tea.Model {
+	if msg.err != nil {
+		m.setStatus(fmt.Sprintf("Compact failed: %v", msg.err), true)
+		return m
+	}
+	if msg.result.AlreadyPending {
+		m.setStatus("Compaction already scheduled for the next model call", false)
+		return m
+	}
+	detail := ""
+	if m.contextEst > 0 {
+		detail = fmt.Sprintf(" (current context ≈ %s)", humanizeTokens(int64(m.contextEst)))
+	}
+	m.setStatus(fmt.Sprintf("Will compact before the next model call%s", detail), false)
+	return m
+}
+
+func (m Model) compactCmd() tea.Cmd {
+	return func() tea.Msg {
+		result, err := m.controller.RequestCompaction(context.Background())
+		return compactRequestedMsg{result: result, err: err}
+	}
 }
 
 // reasoningStatusText renders the /reasoning ack for the status line.

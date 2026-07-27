@@ -115,6 +115,9 @@ type Controller struct {
 	// applies. Independent of model switches by design — it is the user's
 	// per-task intent, cleared only by "/reasoning default".
 	reasoningOverride *domain.ReasoningSpec
+	// forceCompact is the one-shot manual compaction request (/compact):
+	// consumed by the next turn's loop construction.
+	forceCompact bool
 
 	// sessionCtx is the context for the entire TUI session.
 	// Cancelling it terminates the controller.
@@ -322,6 +325,40 @@ func (c *Controller) NewSession(ctx context.Context) error {
 		return ctx.Err()
 	case <-c.doneCh:
 		return fmt.Errorf("controller is closed")
+	}
+}
+
+// RequestCompactionResult reports the outcome of a RequestCompaction
+// command. AlreadyPending is true when a compaction was already scheduled
+// and this request changed nothing.
+type RequestCompactionResult struct {
+	AlreadyPending bool
+}
+
+// RequestCompaction schedules a context-compaction pass before the next
+// model call. It is the manual counterpart of the loop's automatic pressure
+// triggers: the flag is one-shot, consumed by the next turn, and the
+// compaction itself is reported through the ContextCompacted runtime event.
+func (c *Controller) RequestCompaction(ctx context.Context) (RequestCompactionResult, error) {
+	resultCh := make(chan controllerResult, 1)
+	select {
+	case c.cmdCh <- controllerCommand{Kind: cmdRequestCompaction, ResultCh: resultCh}:
+	case <-ctx.Done():
+		return RequestCompactionResult{}, ctx.Err()
+	case <-c.doneCh:
+		return RequestCompactionResult{}, fmt.Errorf("controller is closed")
+	}
+	select {
+	case result := <-resultCh:
+		if result.Err != nil {
+			return RequestCompactionResult{}, result.Err
+		}
+		out, _ := result.Value.(RequestCompactionResult)
+		return out, nil
+	case <-ctx.Done():
+		return RequestCompactionResult{}, ctx.Err()
+	case <-c.doneCh:
+		return RequestCompactionResult{}, fmt.Errorf("controller is closed")
 	}
 }
 
@@ -609,6 +646,8 @@ func (c *Controller) dispatch(cmd controllerCommand) {
 		c.handleSetModel(cmd)
 	case cmdSetReasoning:
 		c.handleSetReasoning(cmd)
+	case cmdRequestCompaction:
+		c.handleRequestCompaction(cmd)
 	case cmdRequestSnapshot:
 		c.handleRequestSnapshot(cmd)
 	case cmdShutdown:
@@ -716,6 +755,10 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 	c.resumed = false
 	current := c.currentLocked()
 	reasoning, _ := c.reasoningLocked(current)
+	// A manual /compact request is one-shot: the flag moves onto this turn's
+	// loop and is cleared here so later turns compact on pressure only.
+	forceCompact := c.forceCompact
+	c.forceCompact = false
 	c.mu.Unlock()
 	provider := c.bootstrap.Resolved.ProviderByName(current.Provider)
 	if provider == nil {
@@ -778,21 +821,22 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 
 	// Build the loop
 	loop := &agent.Loop{
-		Run:          run,
-		Model:        provider.Model,
-		ModelName:    current.Model,
-		Store:        &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
-		Approver:     c.rulesApprover,
-		Policy:       c.bootstrap.Policy,
-		Registry:     c.bootstrap.Registry,
-		Logger:       c.logger,
-		SystemPrompt: c.bootstrap.PromptBuilder,
-		Artifacts:    c.bootstrap.Artifact,
-		Recorder:     c.bootstrap.Recorder,
-		Prompt:       prompt,
-		Workspace:    c.bootstrap.WorkspaceRoot,
+		Run:           run,
+		Model:         provider.Model,
+		ModelName:     current.Model,
+		Store:         &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
+		Approver:      c.rulesApprover,
+		Policy:        c.bootstrap.Policy,
+		Registry:      c.bootstrap.Registry,
+		Logger:        c.logger,
+		SystemPrompt:  c.bootstrap.PromptBuilder,
+		Artifacts:     c.bootstrap.Artifact,
+		Recorder:      c.bootstrap.Recorder,
+		Prompt:        prompt,
+		Workspace:     c.bootstrap.WorkspaceRoot,
 		ContextWindow: modelMeta.ContextWindow,
 		Reasoning:     reasoning,
+		ForceCompact:  forceCompact,
 		GoalCell:      c.bootstrap.GoalCell,
 		PlanCell:      c.bootstrap.PlanCell,
 		SteerCell:     c.bootstrap.SteerCell,
@@ -1008,6 +1052,9 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	c.lastUsage = domain.Usage{}
 	c.resumedRun = nil
 	c.resumed = false
+	// A compaction is requested against a specific transcript; it must not
+	// leak into a different session's first turn.
+	c.forceCompact = false
 	sessionID := c.sessionID
 	c.state = ControllerStateIdle
 	c.mu.Unlock()
@@ -1019,6 +1066,17 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	c.publishSessionEnv(sessionID)
 	c.logger.Info("new session created", "session_id", sessionID)
 	cmd.ResultCh <- controllerResult{}
+}
+
+func (c *Controller) handleRequestCompaction(cmd controllerCommand) {
+	c.mu.Lock()
+	pending := c.forceCompact
+	c.forceCompact = true
+	c.mu.Unlock()
+	if !pending {
+		c.logger.Info("compaction scheduled by user")
+	}
+	cmd.ResultCh <- controllerResult{Value: RequestCompactionResult{AlreadyPending: pending}}
 }
 
 func (c *Controller) handleSetReasoning(cmd controllerCommand) {
@@ -1096,6 +1154,9 @@ func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	c.lastUsage = run.Usage
 	c.resumedRun = run
 	c.resumed = true
+	// Same as handleNewSession: a pending compaction belongs to the
+	// transcript it was requested against.
+	c.forceCompact = false
 	c.state = ControllerStateIdle
 	c.mu.Unlock()
 
@@ -1220,15 +1281,16 @@ func (c *Controller) RecordUsage(usage domain.Usage) {
 // --- command types ---
 
 const (
-	cmdSubmitPrompt    = "submit_prompt"
-	cmdCancelTurn      = "cancel_turn"
-	cmdResolveApproval = "resolve_approval"
-	cmdNewSession      = "new_session"
-	cmdResumeSession   = "resume_session"
-	cmdSetModel        = "set_model"
-	cmdSetReasoning    = "set_reasoning"
-	cmdRequestSnapshot = "request_snapshot"
-	cmdShutdown        = "shutdown"
+	cmdSubmitPrompt      = "submit_prompt"
+	cmdCancelTurn        = "cancel_turn"
+	cmdResolveApproval   = "resolve_approval"
+	cmdNewSession        = "new_session"
+	cmdResumeSession     = "resume_session"
+	cmdSetModel          = "set_model"
+	cmdSetReasoning      = "set_reasoning"
+	cmdRequestCompaction = "request_compaction"
+	cmdRequestSnapshot   = "request_snapshot"
+	cmdShutdown          = "shutdown"
 )
 
 type controllerCommand struct {
@@ -1469,17 +1531,17 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ToolCalls:    payload.ToolCalls,
 			})
 		}
-case domain.EventContextCompacted:
+	case domain.EventContextCompacted:
 		var payload contextCompactedDTO
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
-s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindContextCompacted, runtimeevent.ContextCompactedPayload{
-MaskedOutputs:    payload.MaskedOutputs,
-MaskedBytes:      payload.MaskedBytes,
-ArchivedMessages: payload.ArchivedMessages,
-EstTokensBefore:  payload.EstTokensBefore,
-EstTokensAfter:   payload.EstTokensAfter,
-Summarized:       payload.Summarized,
-})
+			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindContextCompacted, runtimeevent.ContextCompactedPayload{
+				MaskedOutputs:    payload.MaskedOutputs,
+				MaskedBytes:      payload.MaskedBytes,
+				ArchivedMessages: payload.ArchivedMessages,
+				EstTokensBefore:  payload.EstTokensBefore,
+				EstTokensAfter:   payload.EstTokensAfter,
+				Summarized:       payload.Summarized,
+			})
 		}
 	case domain.EventPlanRevised:
 		var plan domain.Plan
@@ -1516,12 +1578,12 @@ type modelRequestFailedDTO struct {
 
 // contextCompactedDTO mirrors the agent's unexported compaction payload.
 type contextCompactedDTO struct {
-MaskedOutputs    int  `json:"masked_outputs"`
-MaskedBytes      int  `json:"masked_bytes"`
-ArchivedMessages int  `json:"archived_messages,omitempty"`
-EstTokensBefore  int  `json:"est_tokens_before"`
-EstTokensAfter   int  `json:"est_tokens_after"`
-Summarized       bool `json:"summarized,omitempty"`
+	MaskedOutputs    int  `json:"masked_outputs"`
+	MaskedBytes      int  `json:"masked_bytes"`
+	ArchivedMessages int  `json:"archived_messages,omitempty"`
+	EstTokensBefore  int  `json:"est_tokens_before"`
+	EstTokensAfter   int  `json:"est_tokens_after"`
+	Summarized       bool `json:"summarized,omitempty"`
 }
 
 type toolCallAuditDTO struct {

@@ -228,7 +228,8 @@ func TestLoopCompactMasksAndRecordsEvent(t *testing.T) {
 	store := openArtifactStore(t)
 	run := NewRun(domain.NewSessionID(), domain.Limits{MaxInputTokens: 200_000}, domain.RealClock{})
 	run.AddUserMessage(textMessage(domain.RoleUser, "run the tests"))
-	run.Messages = append(run.Messages,
+	run.Messages = append(
+		run.Messages,
 		toolResultMessage(bigOutput(8000)),
 		textMessage(domain.RoleAssistant, "analyzing"),
 	)
@@ -485,7 +486,7 @@ func TestShouldCompactTriggers(t *testing.T) {
 
 	t.Run("forced compaction after provider context overflow", func(t *testing.T) {
 		loop := newLoop(1 << 30)
-		loop.forceCompact = true
+		loop.ForceCompact = true
 		if !loop.shouldCompact() {
 			t.Fatal("forceCompact must trigger compaction with no other pressure")
 		}
@@ -525,11 +526,15 @@ func TestBuildSummaryReplacement(t *testing.T) {
 		textMessage(domain.RoleAssistant, "working on it"),
 		toolResultMessage(bigOutput(8000)),
 		textMessage(domain.RoleUser, "second task"),
-		{ID: domain.NewMessageID(), Role: domain.RoleSystem, Status: domain.MessageStatusFinal, Revision: 1, Sequence: 5,
-			Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "[budget notice] ..."}}, CreatedAt: now},
-		{ID: domain.NewMessageID(), Role: domain.RoleUser, Status: domain.MessageStatusFinal, Revision: 1, Sequence: 6,
+		{
+			ID: domain.NewMessageID(), Role: domain.RoleSystem, Status: domain.MessageStatusFinal, Revision: 1, Sequence: 5,
+			Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "[budget notice] ..."}}, CreatedAt: now,
+		},
+		{
+			ID: domain.NewMessageID(), Role: domain.RoleUser, Status: domain.MessageStatusFinal, Revision: 1, Sequence: 6,
 			Parts: []domain.ContentPart{{Kind: domain.PartText, Text: CompactionSummaryPrefix + "\nold summary"}}, CreatedAt: now,
-			Metadata: map[string]string{"compacted": compactedSummaryMeta}},
+			Metadata: map[string]string{"compacted": compactedSummaryMeta},
+		},
 	}
 
 	replacement := buildSummaryReplacement(messages, "HANDOFF", now)
@@ -565,7 +570,8 @@ func TestLoopCompactSummarizesWhenMaskingInsufficient(t *testing.T) {
 	store := openArtifactStore(t)
 	run := NewRun(domain.NewSessionID(), domain.Limits{MaxInputTokens: 200_000, MaxOutputTokens: 4096}, domain.RealClock{})
 	run.AddUserMessage(textMessage(domain.RoleUser, "task one"))
-	run.Messages = append(run.Messages,
+	run.Messages = append(
+		run.Messages,
 		toolResultMessage(bigOutput(8000)),
 		textMessage(domain.RoleAssistant, "analyzing"),
 	)
