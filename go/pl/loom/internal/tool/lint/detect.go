@@ -370,5 +370,6 @@ func unavailable(linter string) error {
 func noLinterDetected(display string) error {
 	return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(
 		"no linter detected for %s: probed for go.mod, package.json with eslint config, pyproject.toml/ruff.toml, and compile_commands.json; install the matching linter or pass an explicit 'linter' argument",
-		display))
+		display,
+	))
 }

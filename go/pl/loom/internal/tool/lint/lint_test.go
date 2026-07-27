@@ -81,14 +81,14 @@ func decodeToolResult(t *testing.T, result domain.ToolResult, out any) {
 func mustWriteFile(t *testing.T, path string, data []byte) {
 	t.Helper()
 	mustMkdirAll(t, filepath.Dir(path))
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("os.WriteFile(%q) error = %v", path, err)
 	}
 }
 
 func mustMkdirAll(t *testing.T, path string) {
 	t.Helper()
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatalf("os.MkdirAll(%q) error = %v", path, err)
 	}
 }

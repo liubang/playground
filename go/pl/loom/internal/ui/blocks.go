@@ -316,21 +316,21 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
 			block, exists := idx.Get(fmt.Sprintf("tool-%s", payload.CallID))
 			if exists {
-			block.Done = true
-			var details []string
-			if payload.Status == domain.ToolStatusSuccess {
-				block.Status = "success"
-			} else {
-				block.Status = "error"
-				if payload.Error != "" {
-					details = append(details, payload.Error)
+				block.Done = true
+				var details []string
+				if payload.Status == domain.ToolStatusSuccess {
+					block.Status = "success"
+				} else {
+					block.Status = "error"
+					if payload.Error != "" {
+						details = append(details, payload.Error)
+					}
+					// The code alone ("unavailable", "security") reads like a
+					// policy denial; the message says what actually failed.
+					if reason := firstLine(payload.ErrorMessage); reason != "" {
+						details = append(details, truncateDisplayWidth(reason, 100))
+					}
 				}
-				// The code alone ("unavailable", "security") reads like a
-				// policy denial; the message says what actually failed.
-				if reason := firstLine(payload.ErrorMessage); reason != "" {
-					details = append(details, truncateDisplayWidth(reason, 100))
-				}
-			}
 				block.FinishedAt = payload.FinishedAt
 				if block.FinishedAt.IsZero() {
 					block.FinishedAt = time.Now().UTC()
@@ -656,16 +656,16 @@ func RebuildTranscript(messages []domain.Message) *BlockIndex {
 			}
 			toolBlock.StartedAt = result.StartedAt
 			toolBlock.FinishedAt = result.FinishedAt
-		var details []string
-		if result.Status != domain.ToolStatusSuccess {
-			toolBlock.Status = "error"
-			if result.Error != nil && result.Error.Code != "" {
-				details = append(details, result.Error.Code)
-				if reason := firstLine(result.Error.Message); reason != "" {
-					details = append(details, truncateDisplayWidth(reason, 100))
+			var details []string
+			if result.Status != domain.ToolStatusSuccess {
+				toolBlock.Status = "error"
+				if result.Error != nil && result.Error.Code != "" {
+					details = append(details, result.Error.Code)
+					if reason := firstLine(result.Error.Message); reason != "" {
+						details = append(details, truncateDisplayWidth(reason, 100))
+					}
 				}
 			}
-		}
 			if d := result.FinishedAt.Sub(result.StartedAt); d > 0 {
 				details = append(details, fmt.Sprintf("%dms", d.Milliseconds()))
 			}

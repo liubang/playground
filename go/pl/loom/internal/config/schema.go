@@ -73,9 +73,9 @@ type Provider struct {
 	AuthType string `yaml:"auth_type"`
 	// WireAPI is the provider-level default ("chat" or "responses");
 	// models may override it. Empty means "chat".
-	WireAPI      string    `yaml:"wire_api"`
-	MaxRetries   *int      `yaml:"max_retries"`
-	DefaultModel string    `yaml:"default_model"`
+	WireAPI      string `yaml:"wire_api"`
+	MaxRetries   *int   `yaml:"max_retries"`
+	DefaultModel string `yaml:"default_model"`
 	// Reasoning is the provider-level default reasoning (thinking) intent;
 	// models may override it.
 	Reasoning Reasoning `yaml:"reasoning"`
@@ -115,16 +115,16 @@ func (r Reasoning) DomainSpec() domain.ReasoningSpec {
 
 // Limits mirrors domain.Limits; nil fields keep the built-in default.
 type Limits struct {
-	MaxTurns           *int    `yaml:"max_turns"`
-	MaxToolCalls       *int    `yaml:"max_tool_calls"`
-	MaxInputTokens     *int64  `yaml:"max_input_tokens"`
-	MaxOutputTokens    *int64  `yaml:"max_output_tokens"`
-	MaxCostUSD         *float64 `yaml:"max_cost_usd"`
+	MaxTurns        *int     `yaml:"max_turns"`
+	MaxToolCalls    *int     `yaml:"max_tool_calls"`
+	MaxInputTokens  *int64   `yaml:"max_input_tokens"`
+	MaxOutputTokens *int64   `yaml:"max_output_tokens"`
+	MaxCostUSD      *float64 `yaml:"max_cost_usd"`
 	// MaxWallTime uses Go duration syntax ("30m", "1h").
-	MaxWallTime        string  `yaml:"max_wall_time"`
-	MaxToolOutputBytes *int64  `yaml:"max_tool_output_bytes"`
-	MaxArtifactBytes   *int64  `yaml:"max_artifact_bytes"`
-	MaxRepeatedActions *int    `yaml:"max_repeated_actions"`
+	MaxWallTime        string `yaml:"max_wall_time"`
+	MaxToolOutputBytes *int64 `yaml:"max_tool_output_bytes"`
+	MaxArtifactBytes   *int64 `yaml:"max_artifact_bytes"`
+	MaxRepeatedActions *int   `yaml:"max_repeated_actions"`
 }
 
 // Prompt configures the system prompt.

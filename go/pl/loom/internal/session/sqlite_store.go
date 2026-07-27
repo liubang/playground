@@ -502,7 +502,8 @@ func (s *SQLiteStore) InspectSession(ctx context.Context, sessionID domain.Sessi
 	if err := tx.QueryRowContext(ctx, `
 SELECT session_id, version, created_at, updated_at
 FROM sessions WHERE session_id = ?`, sessionID.String()).Scan(
-		&id, &summary.Version, &createdAt, &updatedAt); err != nil {
+		&id, &summary.Version, &createdAt, &updatedAt,
+	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return SessionInspection{}, domain.NewError(domain.ErrInvalidInput, "session not found")
 		}
