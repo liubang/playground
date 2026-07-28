@@ -223,6 +223,19 @@ func (m *Model) layout() {
 // Rendering is incremental: blocks are memoized by a fingerprint of their
 // render inputs, so long sessions do not re-render every block per event.
 func (m *Model) syncTranscript() {
+	// Skip the O(transcript) rebuild when nothing render-relevant changed
+	// (REVIEW M14). Volatile blocks (in-progress, live timers/spinners)
+	// always force a rebuild so animations keep advancing.
+	if m.blocks == m.lastSyncIdx && m.blocks.Version() == m.lastSyncVersion &&
+		m.width == m.lastSyncWidth && m.theme.NoColor == m.lastSyncNoColor &&
+		!m.hasVolatileBlocks() {
+		return
+	}
+	m.transcriptBuilds++
+	m.lastSyncIdx = m.blocks
+	m.lastSyncVersion = m.blocks.Version()
+	m.lastSyncWidth = m.width
+	m.lastSyncNoColor = m.theme.NoColor
 	if len(m.blocks.Order) == 0 {
 		m.viewport.SetContent(m.renderWelcome())
 		return
@@ -271,6 +284,22 @@ func (m *Model) syncTranscript() {
 	if m.followTail {
 		m.viewport.GotoBottom()
 	}
+}
+
+// hasVolatileBlocks reports whether any block embeds live state (spinner
+// frames, elapsed timers) whose rendering must advance on every tick.
+func (m *Model) hasVolatileBlocks() bool {
+	for _, id := range m.blocks.Order {
+		block := m.blocks.ByID[id]
+		if !block.Done {
+			return true
+		}
+		switch block.Status {
+		case "running", "prepared", "approval", "pending":
+			return true
+		}
+	}
+	return false
 }
 
 // cachedRender is a memoized renderBlock output.

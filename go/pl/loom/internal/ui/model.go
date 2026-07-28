@@ -109,6 +109,19 @@ type Model struct {
 	// transcript content, used by search to jump to a match.
 	blockOffsets map[string]int
 
+	// transcriptBuilds counts full syncTranscript rebuilds (test
+	// instrumentation for REVIEW M14).
+	transcriptBuilds int
+
+	// Transcript sync memo (REVIEW M14): syncTranscript rebuilds the
+	// viewport content only when the block index, width, or theme changed
+	// since the last build — keystrokes and idle spinner ticks no longer
+	// trigger an O(transcript) rebuild.
+	lastSyncIdx     *BlockIndex
+	lastSyncVersion uint64
+	lastSyncWidth   int
+	lastSyncNoColor bool
+
 	// Transcript search state (ModeSearch).
 	searchQuery   string
 	searchMatches []string // matching block IDs in document order
