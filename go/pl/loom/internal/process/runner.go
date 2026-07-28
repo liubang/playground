@@ -133,12 +133,14 @@ func (r *Runner) RunWithSandbox(ctx context.Context, spec CommandSpec, sandbox S
 	if err != nil {
 		return Result{}, err
 	}
-	validated.env = r.applySessionEnv(r.envForSandbox(spec.Env, sandbox))
+	env, droppedEnv := r.envForSandbox(spec.Env, sandbox)
+	validated.env = r.applySessionEnv(env)
 	launch, cleanup, isolation, err := r.prepareLaunch(validated, sandbox)
 	result := Result{
 		Isolation:      isolation.Name(),
 		ExecutablePath: validated.executablePath,
 		ExecutableHash: validated.executableHash,
+		DroppedEnvKeys: droppedEnv,
 	}
 	if err != nil {
 		return result, err
@@ -292,9 +294,9 @@ func (r *Runner) validateSpec(spec CommandSpec) (validatedSpec, error) {
 // runs them; anything less would keep breaking the very commands the
 // approval was meant to unblock. Session attribution variables are merged
 // afterwards (applySessionEnv) and always win.
-func (r *Runner) envForSandbox(overrides map[string]string, sandbox Sandbox) []string {
+func (r *Runner) envForSandbox(overrides map[string]string, sandbox Sandbox) ([]string, []string) {
 	if _, ok := sandbox.(DirectSandbox); ok {
-		return buildFullEnv(overrides)
+		return buildFullEnv(overrides), nil
 	}
 	return buildMinimalEnv(overrides, r.envAllowlist)
 }
@@ -436,7 +438,11 @@ func buildFullEnv(overrides map[string]string) []string {
 	return result
 }
 
-func buildMinimalEnv(overrides map[string]string, allowlist map[string]struct{}) []string {
+// buildMinimalEnv returns the allowlisted environment plus the sorted list
+// of caller-supplied override keys that were dropped. Reporting the drops
+// matters: a silent drop leaves the caller (e.g. the model behind run_cmd)
+// retrying against an environment it believes exists.
+func buildMinimalEnv(overrides map[string]string, allowlist map[string]struct{}) ([]string, []string) {
 	values := map[string]string{}
 	for key := range allowlist {
 		if isDeniedEnvKey(key) {
@@ -459,8 +465,10 @@ func buildMinimalEnv(overrides map[string]string, allowlist map[string]struct{})
 			values["TMPDIR"] = os.TempDir()
 		}
 	}
+	var dropped []string
 	for key, value := range overrides {
 		if !allowedEnvKey(key, allowlist) {
+			dropped = append(dropped, key)
 			continue
 		}
 		values[key] = value
@@ -470,11 +478,12 @@ func buildMinimalEnv(overrides map[string]string, allowlist map[string]struct{})
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	sort.Strings(dropped)
 	result := make([]string, 0, len(keys))
 	for _, key := range keys {
 		result = append(result, key+"="+values[key])
 	}
-	return result
+	return result, dropped
 }
 
 // applySessionEnv merges the loom-authoritative attribution variables from

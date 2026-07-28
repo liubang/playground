@@ -20,6 +20,7 @@ package render
 import (
 	"encoding/json"
 	"strings"
+	"unicode/utf8"
 )
 
 // DiffForToolCall renders a compact diff for file-editing tool calls from
@@ -138,10 +139,16 @@ func capLines(lines []string, max int) []string {
 }
 
 func truncateDiffLine(line string) string {
-	if len(line) > diffMaxLineWidth {
-		return line[:diffMaxLineWidth] + "…"
+	if len(line) <= diffMaxLineWidth {
+		return line
 	}
-	return line
+	// Back off to a rune boundary: a byte cut can split a multi-byte
+	// UTF-8 character.
+	cut := diffMaxLineWidth
+	for cut > 0 && !utf8.ValidString(line[:cut]) {
+		cut--
+	}
+	return line[:cut] + "…"
 }
 
 // lcsDiff computes the line-level diff via a longest-common-subsequence

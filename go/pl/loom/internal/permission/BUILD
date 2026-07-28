@@ -21,6 +21,8 @@ go_library(
     name = "permission_lib",
     srcs = [
         "policy.go",
+        "policy_trust_other.go",
+        "policy_trust_unix.go",
         "rules.go",
     ],
     embedsrcs = ["builtin.json"],

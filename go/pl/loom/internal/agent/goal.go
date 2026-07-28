@@ -261,8 +261,9 @@ func (t *UpdateGoalTool) Prepare(_ context.Context, call domain.ToolCall) (domai
 	desc := "Set goal"
 	if args.Status != "" {
 		desc = fmt.Sprintf("Mark goal %s", args.Status)
-	} else if objective := args.Objective; len(objective) > 60 {
-		desc = fmt.Sprintf("Set goal: %s…", objective[:60])
+	} else if objective := args.Objective; len([]rune(objective)) > 60 {
+		// Rune-aware truncation: a byte cut can split a multi-byte rune.
+		desc = fmt.Sprintf("Set goal: %s", truncateRunes(objective, 60))
 	} else {
 		desc = fmt.Sprintf("Set goal: %s", objective)
 	}
