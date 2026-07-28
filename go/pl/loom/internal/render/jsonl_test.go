@@ -138,17 +138,25 @@ func TestJSONL_NDJSONFormat(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW A10): an encode failure used to write a synthetic
+// "error" line INTO the protocol stream (j.out), with the error text
+// interpolated without JSON escaping — corrupting the NDJSON stream for
+// downstream parsers. Diagnostics must go to the error writer, and durable
+// failures must propagate to the caller.
 func TestJSONL_InvalidPayload(t *testing.T) {
-	// If encoding somehow fails, the renderer should not panic.
-	var buf bytes.Buffer
-	j := NewJSONL(&buf)
+	var out, errOut bytes.Buffer
+	j := NewJSONL(&out, WithErrorWriter(&errOut))
 
-	// An invalid time that cannot be JSON-encoded will cause Encode to fail.
-	// Actually Go's json.Encoder handles all time.Duration — let's instead
-	// exercise the error path with a channel (which can't be marshaled).
-	// This is a synthetic path just to ensure robustness.
-	_ = j
-	_ = buf
+	evt := runtimeevent.RuntimeEvent{
+		Version: runtimeevent.RuntimeEventVersion, Sequence: 1,
+		SessionID: domain.NewSessionID(), Kind: runtimeevent.KindRunCompleted,
+		Time: time.Now(), Durable: true,
+		Payload: json.RawMessage(`{"broken": "unclosed`), // invalid raw JSON → Encode fails
+	}
+	err := j.ObserveDurable(evt)
+	require.Error(t, err, "durable encode failures must propagate")
+	assert.Empty(t, out.String(), "protocol stream must not be polluted with diagnostics")
+	assert.Contains(t, errOut.String(), "encode", "diagnostics must go to the error writer")
 }
 
 func TestJSONL_LargeSequence(t *testing.T) {

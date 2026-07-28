@@ -19,6 +19,7 @@ package process
 
 import (
 	"context"
+	"slices"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -191,6 +192,12 @@ func TestRunnerStripsSecretEnvironmentVariables(t *testing.T) {
 	}
 	if got := values["PATH"]; strings.TrimSpace(got) == "" {
 		t.Fatal("PATH is empty, want minimal allowlisted path")
+	}
+	// Regression (REVIEW M10): the dropped override keys must be reported,
+	// not silently discarded.
+	wantDropped := []string{"AWS_REGION", "MY_SECRET_TOKEN", "OPENAI_API_KEY"}
+	if !slices.Equal(result.DroppedEnvKeys, wantDropped) {
+		t.Fatalf("DroppedEnvKeys = %v, want %v", result.DroppedEnvKeys, wantDropped)
 	}
 }
 

@@ -32,6 +32,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
@@ -402,9 +403,22 @@ func readRuleFile(path string) (RuleFile, bool) {
 		return RuleFile{}, false
 	}
 	if len(content) > maxRuleFileBytes {
-		content = content[:maxRuleFileBytes] + "\n（规则文件超过 32KB，已截断）"
+		content = cutAtRuneBoundary(content, maxRuleFileBytes) + "\n（规则文件超过 32KB，已截断）"
 	}
 	return RuleFile{Path: path, Content: content}, true
+}
+
+// cutAtRuneBoundary returns the longest prefix of s within maxBytes that
+// does not split a multi-byte UTF-8 character.
+func cutAtRuneBoundary(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.ValidString(s[:cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // systemEnvProvider collects the environment snapshot from the host. It is
