@@ -28,10 +28,10 @@
 | M8  | `tool/builtin/rg.go:130`                      | rg 未传 `--max-columns`，单行超 1MB（minified JS）时 scanner token-too-long 整个 search 失败                                                   | ✅ 已修复 |
 | M9  | `tool/command/run_cmd.go:237-238`             | `buildApprovalDesc` 在 `ArgsHash` 赋值之前调用 → 审批描述里的 args_hash 永远走兜底（算法不同），与权限事件记录对不上，审计失效                 | ✅ 已修复 |
 | M10 | `process/runner.go:462-467` | 沙箱模式下模型传的 `env` 被 allowlist 静默丢弃，工具描述未说明，模型无法察觉会反复重试 | ✅ 已修复 |
-| M11 | `workspace/path.go:232-255`                   | `AtomicWrite` hash 复检与 rename 间 TOCTOU 窗口：新建文件场景下窗口内出现的同名文件被无提示覆盖                                                | ⬜ 未修复 |
+| M11 | `workspace/path.go:232-255`                   | `AtomicWrite` hash 复检与 rename 间 TOCTOU 窗口：新建文件场景下窗口内出现的同名文件被无提示覆盖                                                | ✅ 已修复 |
 | M12 | `ui/update.go:1341-1358`                      | `handleEventsClosed`：重订阅计数成功后永不复位（累计断 3 次输入永久锁死）；重订阅丢弃 unsubscribe 句柄，旧订阅泄漏到进程结束                   | ✅ 已修复 |
 | M13 | `cmd/loom/main.go:691-704`                    | `consoleApprover` 每次调用泄漏一个 stdin 读取 goroutine，且 `bufio.Reader` 重建吞预输入                                                        | ✅ 已修复 |
-| M14 | `ui/update.go:192-195`                        | 任意 `tea.Msg`（按键/spinner tick）都触发 `layout()` 全量重建 transcript 字符串，streaming 高频下 CPU 可感知                                   | ⬜ 未修复 |
+| M14 | `ui/update.go:192-195`                        | 任意 `tea.Msg`（按键/spinner tick）都触发 `layout()` 全量重建 transcript 字符串，streaming 高频下 CPU 可感知                                   | ✅ 已修复 |
 | M15 | `tool/webfetch/webfetch.go:382-392`           | `truncateAtBoundary` 按字节截断可切断 UTF-8（`boundedHeadTailString` 已有正确示范）                                                            | ✅ 已修复 |
 | M16 | `tool/builtin/search.go:261-268` | Go fallback 静默忽略 `glob/type/no_ignore` 参数，结果集包含模型明确排除的文件且无提示 | ✅ 已修复 |
 | M17 | `permission/policy.go:62`、`rules.go:384-397` | permission 硬编码 `"run_cmd"` 名字 + 独立 struct 重解析 canonical JSON，三处契约靠人肉保持一致，改名即静默降级                                 | ⬜ 未修复 |
@@ -61,7 +61,7 @@
 | A4  | `model/stream/stream.go:33-43` | `Emitter` 的 false-中止契约无人遵守（anthropic pump 全部丢弃返回值），契约是假的                                                                               | ⬜ 未处理 |
 | A5  | `tool/command/run_cmd.go:631`  | `classifyRunError` 对 process 包错误文本做子串匹配，改文案即静默失灵，应导出 sentinel errors                                                                   | ⬜ 未处理 |
 | A6  | `tool/gittools/common.go:422`  | 绕过 `process.Runner` 直接 exec：不经沙箱、无进程组隔离、限流/超时逻辑平行重复                                                                                 | ⬜ 未处理 |
-| A7 | 注释与实现不符 | `run.go:1811,1823`「ArgsHash HMAC」实为截断 SHA-256 且 Execute 不校验；`policy.go:89`「root-owned」含 `/usr/local/bin`、`/opt/homebrew/bin`（均非 root-owned） | 🔶 部分处理（trusted dirs 已改运行时校验；ArgsHash 注释待修） |
+| A7 | 注释与实现不符 | `run.go:1811,1823`「ArgsHash HMAC」实为截断 SHA-256 且 Execute 不校验；`policy.go:89`「root-owned」含 `/usr/local/bin`、`/opt/homebrew/bin`（均非 root-owned） | ✅ 已修复（trusted dirs 运行时校验；ArgsHash 部分经复核为 M9 修复后的误报——见修复记录） |
 | A8  | `domain/errors.go:80`          | `domain.As` 重复实现标准库且语义有偏差（As 返回 false 不再 unwrap、不支持 `Unwrap() []error`），建议删除改用 `errors.As`                                       | ✅ 已修复 |
 | A9  | `domain/context.go:85-97`      | `ContextManifest` 半数字段无生产者，YAGNI 过度设计                                                                                                             | ⬜ 未处理 |
 | A10 | `render/jsonl.go:89` | 注释称 encode 失败写 stderr，实际写 stdout 污染协议流，且 `err.Error()` 未 JSON 转义可产出非法 JSONL | ✅ 已修复 |
@@ -193,7 +193,20 @@
 ### A7 trustedProgramDirs 静态信任（2026-07-28 修复）
 - **方案**：`isTrustedProgramDir` 运行时校验——目录必须在候选清单内 + root 所有 + 组/其他人不可写（`dirOwnedByRoot` 按 darwin||linux / 其他平台分文件，BUILD 同步）；本机实测 `/opt/homebrew/bin` 为 `liubang:admin drwxrwxr-x`，修复后不再获得 basename 信任。修正了注释的虚假安全假设。
 - **复现用例**：`rules_test.go: TestNormalizeTrustedPathRejectsWritableDir`、`TestNormalizeTrustedPathRejectsNonRootOwnedDir`；既有 homebrew 断言改为运行时条件断言。
-- **遗留**：`run.go:1811,1823` 的「ArgsHash HMAC」注释与实际机制不符（截断 SHA-256，真正防线是 freshness 重放），注释修正留待后续。
+- **遗留（已闭环）**：`run.go` 的「ArgsHash HMAC」注释疑虑经复核为 M9 修复前的旧状态，M9 后注释与实现一致（见下方「A7 ArgsHash 注释复核」）。
+
+### M11 AtomicWrite TOCTOU 覆盖（2026-07-28 修复）
+- **方案**：① 新建文件场景改用 `os.Link` 提交（link 是原子 create-if-absent，EEXIST 即报「expected hash mismatch: file appeared during atomic write」），彻底消除窗口；② 已有文件场景在 rename 前再做一次 `recheckExpectedHash`（POSIX 无 compare-and-swap rename，窗口从整个 temp 写入时长缩到微秒级，注释说明该残余限制）；③ 新增 `beforeCommitHook` 测试注入点。
+- **复现用例**：`workspace/path_test.go: TestAtomicWriteNewFileDoesNotOverwriteAppearingFile`（hook 在 commit 前创建同名文件，旧逻辑静默覆盖、修复后报错且原文件保留）、`TestAtomicWriteExistingFileRechecksHashBeforeCommit`（commit 前修改既有文件必须被拒）。两个用例均在临时回退旧逻辑后确认失败。
+- **验证**：`go test ./internal/workspace/` 全绿。
+
+### M14 任意 tea.Msg 触发 transcript 全量重建（2026-07-28 修复）
+- **方案**：`BlockIndex` 新增单调 `version`（Add/Remove/Toggle×3/confirmPendingUserBlock/ApplyRuntimeEvent 处 bump，整体替换靠指针比较）；`syncTranscript` 在「索引指针+版本+宽度+主题均未变且无 volatile block（进行中/spinner 块）」时直接跳过 O(transcript) 重建。漏 bump 的代价是一次多余重建（安全方向），反向才会酿陈旧屏。
+- **复现用例**：`ui/ui_test.go: TestUpdateSkipsTranscriptRebuildWhenNothingChanged`（先只加 `transcriptBuilds` 计数器验证旧行为：8 次按键 → 8 次全量重建；修复后按键不再重建、block 变更事件仍触发重建）。
+- **验证**：`go test ./internal/ui/` 全绿。
+
+### A7 ArgsHash 注释复核（2026-07-28 复核，无需改码）
+- 复核结论：review 原文的「实为截断 SHA-256 且 Execute 不校验」是 **M9 修复前的旧状态**；M9 已统一为真实 HMAC-SHA256（7 个工具的 `signPrepared` 均 `hmac.New(sha256.New, key)`，Execute 均 `hmac.Equal` 再校验），当前 `run.go:1858,1870` 的「ArgsHash HMAC that Execute re-verifies」注释与实现一致。「截断」仅存在于审批描述的 12 位展示前缀（`approvalDescHashPrefixBytes`），不影响校验。
 
 ### broker 序号空洞（2026-07-28 修复，review 低危项）
 - **方案**：`Publish` 先用 `b.sequence+1` 构造并校验事件，通过后才提交序号。

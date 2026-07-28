@@ -327,6 +327,64 @@ func TestAtomicWriteRejectsConcurrentModificationAndNoTempResidue(t *testing.T) 
 	}
 }
 
+// Regression (REVIEW M11): a new-file AtomicWrite used to silently
+// overwrite a file that appeared between the hash recheck and the rename.
+// The commit must instead fail like a hash mismatch and preserve the
+// concurrently created file.
+func TestAtomicWriteNewFileDoesNotOverwriteAppearingFile(t *testing.T) {
+	v, root := newWorkspaceValidator(t)
+	target := filepath.Join(root, "appearing.txt")
+
+	err := withBeforeCommitHook(func() {
+		if writeErr := os.WriteFile(target, []byte("racer"), 0o644); writeErr != nil {
+			t.Fatalf("os.WriteFile() error = %v", writeErr)
+		}
+	}, func() error {
+		_, err := v.AtomicWrite("appearing.txt", []byte("ours"), AtomicWriteOptions{ExpectedHash: EmptyFileSHA256})
+		return err
+	})
+	if err == nil || !strings.Contains(err.Error(), "expected hash mismatch") {
+		t.Fatalf("expected hash-mismatch error for appearing file, got %v", err)
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if string(content) != "racer" {
+		t.Fatalf("content = %q, want %q (appearing file was silently overwritten)", string(content), "racer")
+	}
+}
+
+// Regression (REVIEW M11): for an existing file the window between the
+// hash recheck and the rename spanned the whole temp-write duration; a
+// modification landing just before the commit must still be rejected.
+func TestAtomicWriteExistingFileRechecksHashBeforeCommit(t *testing.T) {
+	v, root := newWorkspaceValidator(t)
+	target := filepath.Join(root, "existing.txt")
+	if err := os.WriteFile(target, []byte("old"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	err := withBeforeCommitHook(func() {
+		if writeErr := os.WriteFile(target, []byte("racer"), 0o644); writeErr != nil {
+			t.Fatalf("os.WriteFile() error = %v", writeErr)
+		}
+	}, func() error {
+		_, err := v.AtomicWrite("existing.txt", []byte("new"), AtomicWriteOptions{ExpectedHash: hexSHA256([]byte("old"))})
+		return err
+	})
+	if err == nil || !strings.Contains(err.Error(), "expected hash mismatch") {
+		t.Fatalf("expected hash-mismatch error for pre-commit modification, got %v", err)
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if string(content) != "racer" {
+		t.Fatalf("content = %q, want %q", string(content), "racer")
+	}
+}
+
 func TestAtomicWritePreservesXAttrWhenSupported(t *testing.T) {
 	v, root := newWorkspaceValidator(t)
 	path := filepath.Join(root, "xattr.txt")
@@ -388,6 +446,20 @@ func newWorkspaceValidator(t *testing.T) (*PathValidator, string) {
 func hexSHA256(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func withBeforeCommitHook(hook func(), fn func() error) error {
+	prev := beforeCommitHook
+	beforeCommitHook = func(string) {
+		if hook != nil {
+			hook()
+		}
+		beforeCommitHook = nil
+	}
+	defer func() {
+		beforeCommitHook = prev
+	}()
+	return fn()
 }
 
 func withTempCreationHook(hook func(), fn func() error) error {
