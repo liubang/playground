@@ -20,6 +20,10 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "process_lib",
     srcs = [
+        "pipe_pending_darwin.go",
+        "pipe_pending_linux.go",
+        "pipe_pending_other.go",
+        "pipe_pending_unix.go",
         "process_group_unix.go",
         "runner.go",
         "sandbox_darwin.go",
@@ -30,7 +34,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/workspace:workspace_lib",
-    ],
+    ] + select({
+        "@platforms//os:linux": ["@org_golang_x_sys//unix"],
+        "@platforms//os:macos": ["@org_golang_x_sys//unix"],
+        "//conditions:default": [],
+    }),
 )
 
 go_test(
