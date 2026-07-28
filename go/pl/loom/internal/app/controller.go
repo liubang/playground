@@ -635,18 +635,6 @@ func (c *Controller) reasoningLocked(current config.ProviderModelRef) (domain.Re
 	return domain.ReasoningSpec{}, false
 }
 
-// describeReasoning renders a spec for status-bar display; empty means the
-// provider decides.
-func describeReasoning(spec domain.ReasoningSpec) string {
-	if spec.Effort != "" {
-		return string(spec.Effort)
-	}
-	if spec.BudgetTokens > 0 {
-		return fmt.Sprintf("budget:%d", spec.BudgetTokens)
-	}
-	return ""
-}
-
 // workspaceLocked returns the workspace root; nil-bootstrap safe.
 func (c *Controller) workspaceLocked() string {
 	if c.bootstrap != nil {
@@ -1181,7 +1169,7 @@ func (c *Controller) handleSetReasoning(cmd controllerCommand) {
 	current := c.currentLocked()
 	effective, overridden := c.reasoningLocked(current)
 	c.mu.Unlock()
-	c.logger.Info("reasoning updated", "override", cmd.Reasoning, "effective", describeReasoning(effective))
+	c.logger.Info("reasoning updated", "override", cmd.Reasoning, "effective", effective.Label())
 	cmd.ResultCh <- controllerResult{Value: SetReasoningResult{Effective: effective, Overridden: overridden}}
 }
 
@@ -1277,7 +1265,7 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 		ModelName:           current.Model,
 		ProviderName:        current.Provider,
 		ContextWindow:       contextWindow,
-		ReasoningEffort:     describeReasoning(reasoning),
+		ReasoningEffort:     reasoning.Label(),
 		ReasoningOverridden: overridden,
 		WorkspaceRoot:       c.workspaceLocked(),
 		TurnCount:           c.turnCounter,
@@ -1538,7 +1526,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ToolName: payload.Tool,
 				Risk:     payload.Risk,
 				Target:   toolCallTarget(payload),
-				Diff:     render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], toolDiffMaxLines),
+				Diff:     render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffMaxLines),
 			})
 		}
 	case domain.EventPermissionRequested:
@@ -1553,7 +1541,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ArgsHash:    payload.ArgsHash,
 				ReadPaths:   payload.ReadPaths,
 				WritePaths:  payload.WritePaths,
-				Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], toolDiffMaxLines),
+				Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffMaxLines),
 				Arguments:   s.pendingArgs[payload.CallID],
 			})
 			s.controller.SetAwaitingApproval()
@@ -1715,14 +1703,10 @@ func toolCallTarget(audit toolCallAuditDTO) string {
 	return audit.ApprovalDesc
 }
 
-// Bounds for the tool result preview carried by runtime ToolCompleted events.
-const (
-	toolPreviewMaxLines = 12
-	toolPreviewMaxBytes = 1200
-)
-
-// toolDiffMaxLines bounds the rendered argument diff for edit/write calls.
-const toolDiffMaxLines = 40
+// Bounds for the tool result preview carried by runtime ToolCompleted
+// events, and for rendered argument diffs: domain.ToolPreviewMaxLines,
+// domain.ToolPreviewMaxBytes, domain.ToolDiffMaxLines (single home,
+// REVIEW R8).
 
 // pendingArgsCap bounds the stashed-arguments map against leaks from calls
 // that never reach execution (e.g. denied approvals).
@@ -1746,7 +1730,7 @@ func toolResultPreview(msg domain.Message) (domain.ToolCallID, string) {
 		if strings.TrimSpace(text) == "" && result.Error != nil {
 			text = result.Error.Message
 		}
-		return result.CallID, boundPreviewLines(text, toolPreviewMaxLines, toolPreviewMaxBytes)
+		return result.CallID, boundPreviewLines(text, domain.ToolPreviewMaxLines, domain.ToolPreviewMaxBytes)
 	}
 	return domain.ToolCallID{}, ""
 }
@@ -1766,7 +1750,7 @@ func boundPreviewLines(text string, maxLines, maxBytes int) string {
 	}
 	out := strings.Join(lines, "\n")
 	if len(out) > maxBytes {
-		out = out[:maxBytes]
+		out = domain.TruncateAtRuneBoundary(out, maxBytes)
 		truncated = true
 	}
 	if truncated {
