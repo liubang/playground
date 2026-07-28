@@ -106,6 +106,9 @@ type compactRequestedMsg struct {
 	err    error
 }
 
+// questionAnsweredMsg reports the result of answering an ask_user question.
+type questionAnsweredMsg struct{ err error }
+
 // turnCancelRequestedMsg reports the result of a cancel request.
 type turnCancelRequestedMsg struct{ err error }
 
@@ -147,6 +150,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next = m.handleReasoningChanged(msg)
 	case compactRequestedMsg:
 		next = m.handleCompactRequested(msg)
+	case questionAnsweredMsg:
+		if msg.err != nil {
+			m.setStatus(fmt.Sprintf("Answer delivery failed: %v", msg.err), true)
+		}
+		next = m
 	case turnCancelRequestedMsg:
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Cancel failed: %v", msg.err), true)
@@ -311,6 +319,10 @@ func (m Model) visibleTranscriptHeight() int {
 		reserved += len(m.approvalOverlayLines())
 	case ModeHelp:
 		reserved += helpOverlayHeight
+	case ModeQuestion:
+		// Like the approval band, the question overlay is line-count
+		// variable (question text wraps, option list varies).
+		reserved += m.questionOverlayHeight()
 	}
 	if m.height > reserved {
 		return m.height - reserved
@@ -412,6 +424,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleModelPickerKey(msg)
 	case ModeReasoningPicker:
 		return m.handleReasoningPickerKey(msg)
+	case ModeQuestion:
+		return m.handleQuestionKey(msg)
 	case ModeSearch:
 		return m.handleSearchKey(msg)
 	}
@@ -607,6 +621,111 @@ func (m Model) navPickerKey(msg tea.KeyMsg, nav pickerNav) (Model, bool) {
 		return m, false
 	}
 	return m, true
+}
+
+// handleQuestionKey routes keys while the ask_user overlay is active. The
+// free-text row captures printable input (including j/k and space); every
+// other row uses the shared picker navigation.
+func (m Model) handleQuestionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.pendingQuestion == nil || m.choiceList == nil {
+		m.mode = ModeChat
+		return m, nil
+	}
+	if !m.questionShownAt.IsZero() && time.Since(m.questionShownAt) < approvalDecisionGuard {
+		switch msg.Type {
+		case tea.KeyEnter, tea.KeyRunes, tea.KeyEsc, tea.KeyCtrlC, tea.KeySpace:
+			return m, nil
+		}
+	}
+	// The free-text row has a light insert mode: printable keys navigate
+	// until i/Enter starts editing, so j/k never traps the user.
+	switch msg.Type {
+	case tea.KeyUp:
+		m.choiceList.MoveUp()
+	case tea.KeyDown:
+		m.choiceList.MoveDown()
+	case tea.KeyRunes:
+		if m.choiceList.onOtherRow() {
+			if m.choiceList.Editing() {
+				for _, r := range msg.String() {
+					m.choiceList.TypeRune(r)
+				}
+				return m, nil
+			}
+			switch msg.String() {
+			case "k":
+				m.choiceList.MoveUp()
+			case "j":
+				m.choiceList.MoveDown()
+			case "i":
+				m.choiceList.BeginEdit()
+			}
+			return m, nil
+		}
+		switch msg.String() {
+		case "k":
+			m.choiceList.MoveUp()
+		case "j":
+			m.choiceList.MoveDown()
+		}
+	case tea.KeySpace:
+		if m.choiceList.onOtherRow() {
+			if m.choiceList.Editing() {
+				m.choiceList.TypeRune(' ')
+			}
+		} else {
+			m.choiceList.Toggle()
+		}
+	case tea.KeyBackspace:
+		if m.choiceList.Editing() {
+			m.choiceList.Backspace()
+		}
+	case tea.KeyEnter:
+		if m.choiceList.onOtherRow() && !m.choiceList.Editing() {
+			m.choiceList.BeginEdit()
+			return m, nil
+		}
+		answer, ok := m.choiceList.Confirm()
+		if !ok {
+			m.setStatus("Select at least one option, or type a custom answer", true)
+			return m, nil
+		}
+		return m.submitQuestionAnswer(answer)
+	case tea.KeyEsc:
+		if m.choiceList.onOtherRow() && m.choiceList.Editing() {
+			m.choiceList.EndEdit()
+			return m, nil
+		}
+		return m.submitQuestionAnswer(domain.QuestionAnswer{Skipped: true})
+	case tea.KeyCtrlC:
+		payload := m.pendingQuestion
+		m.pendingQuestion = nil
+		m.choiceList = nil
+		m.mode = ModeChat
+		m.setStatus("Skipping question and cancelling turn...", false)
+		return m, tea.Batch(m.answerQuestionCmd(payload.QuestionID, domain.QuestionAnswer{Skipped: true}), m.cancelTurnCmd())
+	}
+	return m, nil
+}
+
+func (m Model) submitQuestionAnswer(answer domain.QuestionAnswer) (tea.Model, tea.Cmd) {
+	payload := m.pendingQuestion
+	m.pendingQuestion = nil
+	m.choiceList = nil
+	m.mode = ModeChat
+	if answer.Skipped {
+		m.setStatus("Question skipped — the model will proceed with its best judgment", false)
+	} else {
+		m.setStatus("Answer sent", false)
+	}
+	return m, m.answerQuestionCmd(payload.QuestionID, answer)
+}
+
+func (m Model) answerQuestionCmd(id domain.EventID, answer domain.QuestionAnswer) tea.Cmd {
+	return func() tea.Msg {
+		_, err := m.controller.AnswerQuestion(context.Background(), id, answer)
+		return questionAnsweredMsg{err: err}
+	}
 }
 
 func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -860,6 +979,8 @@ func (m Model) handleSessionSwitched(msg sessionSwitchedMsg) (tea.Model, tea.Cmd
 	m.sessionID = m.controller.SessionID()
 	m.usage = domain.Usage{}
 	m.pendingApproval = nil
+	m.pendingQuestion = nil
+	m.choiceList = nil
 	m.pendingSteers = nil
 	m.mode = ModeChat
 	m.setStatus(msg.action.success, false)
@@ -1316,6 +1437,36 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 			m.setActivity("Running tool")
 		}
 		m.phase = "tool"
+	case runtimeevent.KindQuestionAsked:
+		var payload runtimeevent.QuestionAskedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			items := make([]ChoiceItem, 0, len(payload.Options))
+			for _, opt := range payload.Options {
+				items = append(items, ChoiceItem{Label: opt.Label, Desc: opt.Description})
+			}
+			m.pendingQuestion = &payload
+			m.choiceList = NewChoiceList(ChoiceListConfig{
+				Title:    "Model asks:\n" + payload.Text,
+				Items:    items,
+				Multi:    payload.AllowMultiple,
+				OtherRow: true,
+			})
+			m.questionShownAt = time.Now()
+			m.mode = ModeQuestion
+		}
+		m.phase = "question"
+		m.setActivity("Waiting for your answer")
+	case runtimeevent.KindQuestionAnswered:
+		var payload runtimeevent.QuestionAnsweredPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			if m.pendingQuestion != nil && m.pendingQuestion.QuestionID == payload.QuestionID {
+				m.pendingQuestion = nil
+				m.choiceList = nil
+				if m.mode == ModeQuestion {
+					m.mode = ModeChat
+				}
+			}
+		}
 	case runtimeevent.KindApprovalRequested:
 		var payload runtimeevent.ApprovalRequestedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {

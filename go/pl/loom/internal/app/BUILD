@@ -21,6 +21,7 @@ go_library(
     srcs = [
         "bootstrap.go",
         "channel_approver.go",
+        "channel_questioner.go",
         "controller.go",
         "rule_approver.go",
         "skills.go",
@@ -56,6 +57,7 @@ go_test(
     name = "app_test",
     srcs = [
         "channel_approver_test.go",
+        "channel_questioner_test.go",
         "controller_test.go",
         "rule_approver_test.go",
         "skills_test.go",

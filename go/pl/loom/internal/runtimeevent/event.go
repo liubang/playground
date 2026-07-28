@@ -57,6 +57,9 @@ const (
 	// Approval events
 	KindApprovalRequested RuntimeEventKind = "approval.requested"
 	KindApprovalResolved  RuntimeEventKind = "approval.resolved"
+	// Question events (model asks the user mid-execution)
+	KindQuestionAsked    RuntimeEventKind = "question.asked"
+	KindQuestionAnswered RuntimeEventKind = "question.answered"
 	// Tool events
 	KindToolPrepared  RuntimeEventKind = "tool.prepared"
 	KindToolStarted   RuntimeEventKind = "tool.started"
@@ -115,6 +118,7 @@ func (e RuntimeEvent) Validate() error {
 		KindModelRequestStarted, KindModelTextDelta, KindModelReasoningDelta, KindModelToolCallDelta,
 		KindModelResponseCompleted, KindModelRequestFailed,
 		KindApprovalRequested, KindApprovalResolved,
+		KindQuestionAsked, KindQuestionAnswered,
 		KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
 		KindBudgetUpdated, KindUsageUpdated, KindContextCompacted, KindContextUsage, KindPlanUpdated,
 		KindSteerQueued, KindSteerInjected,
@@ -222,6 +226,21 @@ type ApprovalResolvedPayload struct {
 	ApprovalID domain.EventID    `json:"approval_id"`
 	CallID     domain.ToolCallID `json:"call_id"`
 	Decision   domain.Decision   `json:"decision"`
+}
+
+// QuestionAskedPayload carries a model question to the interactive
+// frontend. The frontend resolves it by id via the controller.
+type QuestionAskedPayload struct {
+	QuestionID    domain.EventID          `json:"question_id"`
+	Text          string                  `json:"text"`
+	Options       []domain.QuestionOption `json:"options"`
+	AllowMultiple bool                    `json:"allow_multiple,omitempty"`
+}
+
+// QuestionAnsweredPayload reports the resolution of a model question.
+type QuestionAnsweredPayload struct {
+	QuestionID domain.EventID `json:"question_id"`
+	Skipped    bool           `json:"skipped,omitempty"`
 }
 
 // ToolPreparedPayload describes a prepared tool call.
