@@ -147,7 +147,9 @@ func buildSummaryReplacement(messages []domain.Message, summary string, now time
 			continue
 		}
 		if len(text) > remaining {
-			text = text[:remaining] + "\n[...earlier part of this message truncated...]"
+			// Byte-level cutting can split a multi-byte rune (invalid UTF-8
+			// would be persisted and later sent to the provider).
+			text = cutAtRuneBoundary(text, remaining) + "\n[...earlier part of this message truncated...]"
 		}
 		collected = append(collected, text)
 		remaining -= len(text)

@@ -88,6 +88,10 @@ type Result struct {
 	StdoutTruncated bool
 	StderrTruncated bool
 	Truncated       bool
+	// DroppedEnvKeys lists caller-supplied env override keys filtered out by
+	// the sandbox allowlist (nil for full-environment escalated runs), so
+	// callers can surface the drop instead of letting it pass silently.
+	DroppedEnvKeys []string
 }
 
 // Sandbox constrains process execution before the command starts.

@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -372,6 +373,28 @@ func TestLoopCompactMasksAndRecordsEvent(t *testing.T) {
 	// Phase transitioned back to preparing for the next model call.
 	if run.State.Phase != domain.PhasePreparing {
 		t.Fatalf("phase = %v, want preparing", run.State.Phase)
+	}
+}
+
+// Regression (REVIEW R10): the byte-budget truncation in
+// buildSummaryReplacement could split a multi-byte rune, persisting invalid
+// UTF-8 into the compacted transcript (and later into provider requests).
+func TestBuildSummaryReplacementTruncatesAtRuneBoundary(t *testing.T) {
+	// 81920 % 3 = 2: the byte-budget cut lands inside a 3-byte rune.
+	cjk := strings.Repeat("中", 30000) // 90000 bytes > summaryUserMessageMaxBytes
+	messages := []domain.Message{
+		textMessage(domain.RoleUser, cjk),
+	}
+	out := buildSummaryReplacement(messages, "summary", time.Now())
+	if len(out) != 2 {
+		t.Fatalf("replacement messages = %d, want 2 (user + summary bridge)", len(out))
+	}
+	text := strings.Join(out[0].TextParts(), "")
+	if !utf8.ValidString(text) {
+		t.Fatal("truncated user message is not valid UTF-8")
+	}
+	if !strings.Contains(text, "earlier part of this message truncated") {
+		t.Fatal("truncation marker missing")
 	}
 }
 

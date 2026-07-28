@@ -251,8 +251,11 @@ func TestNormalizeTrustedPath(t *testing.T) {
 	if norm, ok := NormalizeTrustedPath([]string{"/usr/bin/git", "status"}); !ok || norm[0] != "git" {
 		t.Fatalf("/usr/bin/git = %v, %v", norm, ok)
 	}
-	if norm, ok := NormalizeTrustedPath([]string{"/opt/homebrew/bin/rg", "x"}); !ok || norm[0] != "rg" {
-		t.Fatalf("/opt/homebrew/bin/rg = %v, %v", norm, ok)
+	// /opt/homebrew/bin resolves only when it is verifiably root-owned and
+	// not group/other-writable; on typical Homebrew machines (owned by the
+	// login user) it must be rejected (REVIEW A7).
+	if _, ok := NormalizeTrustedPath([]string{"/opt/homebrew/bin/rg", "x"}); ok != isTrustedProgramDir("/opt/homebrew/bin") {
+		t.Fatalf("/opt/homebrew/bin/rg normalization = %v, want %v (runtime ownership check)", ok, !ok)
 	}
 	for _, argv := range [][]string{
 		{"ls", "-la"},       // already bare
@@ -264,6 +267,39 @@ func TestNormalizeTrustedPath(t *testing.T) {
 		if _, ok := NormalizeTrustedPath(argv); ok {
 			t.Fatalf("%v must not resolve through basename trust", argv)
 		}
+	}
+}
+
+// Regression (REVIEW A7): trustedProgramDirs claimed to be root-owned, but
+// /opt/homebrew/bin is user-owned and group-writable on any Homebrew
+// machine — a trojaned binary there would have gained basename-rule trust.
+// Directory trust must be verified at runtime.
+func TestNormalizeTrustedPathRejectsWritableDir(t *testing.T) {
+	old := trustedProgramDirs
+	t.Cleanup(func() { trustedProgramDirs = old })
+	dir := filepath.Join(t.TempDir(), "brew")
+	if err := os.Mkdir(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil { // defeat umask
+		t.Fatal(err)
+	}
+	trustedProgramDirs = []string{dir}
+	if _, ok := NormalizeTrustedPath([]string{filepath.Join(dir, "ls"), "-l"}); ok {
+		t.Fatal("group/other-writable dir must never gain basename trust")
+	}
+}
+
+func TestNormalizeTrustedPathRejectsNonRootOwnedDir(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("ownership check is vacuous when tests run as root")
+	}
+	old := trustedProgramDirs
+	t.Cleanup(func() { trustedProgramDirs = old })
+	dir := t.TempDir() // 0700, owned by the current (non-root) user
+	trustedProgramDirs = []string{dir}
+	if _, ok := NormalizeTrustedPath([]string{filepath.Join(dir, "ls"), "-l"}); ok {
+		t.Fatal("non-root-owned dir must never gain basename trust")
 	}
 }
 

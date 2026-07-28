@@ -60,6 +60,29 @@ func TestBrokerSubscribeAndUnsubscribe(t *testing.T) {
 	_ = b.PublishDurable(sessionID, domain.RunID{}, 0, KindTurnFinished, nil)
 }
 
+// Regression: a validation-rejected event used to burn its sequence
+// number, leaving a gap that subscribers would read as a lost event.
+func TestBrokerRejectedEventDoesNotBurnSequence(t *testing.T) {
+	b := NewBroker()
+	defer b.Close()
+	ch, _ := b.Subscribe()
+
+	if err := b.Publish(RuntimeEvent{Kind: KindTurnStarted}); err == nil {
+		t.Fatal("expected validation error for missing session ID")
+	}
+	if got := b.Sequence(); got != 0 {
+		t.Fatalf("sequence = %d after rejected publish, want 0", got)
+	}
+
+	if err := b.PublishDurable(domain.NewSessionID(), domain.RunID{}, 0, KindTurnStarted, TurnStartedPayload{TurnIndex: 1}); err != nil {
+		t.Fatalf("PublishDurable: %v", err)
+	}
+	evt := <-ch
+	if evt.Sequence != 1 {
+		t.Fatalf("first accepted event sequence = %d, want 1 (no gap)", evt.Sequence)
+	}
+}
+
 func TestBrokerMultipleSubscribers(t *testing.T) {
 	b := NewBroker()
 	defer b.Close()

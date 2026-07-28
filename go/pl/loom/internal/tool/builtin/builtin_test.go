@@ -290,6 +290,83 @@ func TestSearchGoFallbackSkipsBinaryAndSymlink(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW M16): the go fallback used to silently ignore glob
+// filters, returning matches from files the model explicitly excluded.
+func TestSearchGoFallbackAppliesGlobFilters(t *testing.T) {
+	validator, root := newValidator(t)
+	mustWriteFile(t, filepath.Join(root, "a.go"), []byte("hello go\n"))
+	mustWriteFile(t, filepath.Join(root, "b.txt"), []byte("hello txt\n"))
+	mustWriteFile(t, filepath.Join(root, "sub", "c.go"), []byte("hello sub\n"))
+
+	tool, err := NewSearchTool(validator, nil) // nil runner → go fallback
+	if err != nil {
+		t.Fatalf("NewSearchTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+		Pattern: "hello",
+		Glob:    []string{"*.go"},
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output searchOutput
+	decodeToolResult(t, result, &output)
+	if output.MatchCount != 2 {
+		t.Fatalf("MatchCount = %d, want 2 (only .go files): %+v", output.MatchCount, output.Matches)
+	}
+	for _, m := range output.Matches {
+		if !strings.HasSuffix(m.Path, ".go") {
+			t.Fatalf("glob filter leaked non-go match: %+v", m)
+		}
+	}
+
+	// Negation excludes; exclusion wins over inclusion.
+	prepared, err = tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+		Pattern: "hello",
+		Glob:    []string{"*.go", "!sub/**"},
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result = tool.Execute(context.Background(), prepared)
+	decodeToolResult(t, result, &output)
+	if output.MatchCount != 1 || output.Matches[0].Path != "a.go" {
+		t.Fatalf("negation glob failed: %+v", output.Matches)
+	}
+}
+
+// Regression (REVIEW M16): filters the fallback cannot honor (type,
+// ignore rules) must be disclosed in the output note.
+func TestSearchGoFallbackNotesUnappliedFilters(t *testing.T) {
+	validator, root := newValidator(t)
+	mustWriteFile(t, filepath.Join(root, "a.go"), []byte("hello\n"))
+
+	tool, err := NewSearchTool(validator, nil)
+	if err != nil {
+		t.Fatalf("NewSearchTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+		Pattern: "hello",
+		Type:    "go",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	var output searchOutput
+	decodeToolResult(t, result, &output)
+	if !strings.Contains(output.Note, "type filter") || !strings.Contains(output.Note, "not applied") {
+		t.Fatalf("note must disclose the unapplied type filter: %q", output.Note)
+	}
+	if !strings.Contains(output.Note, "gitignore") {
+		t.Fatalf("note must disclose unapplied ignore rules: %q", output.Note)
+	}
+}
+
 func TestSearchGoFallbackTruncateStrictJSONAndCancelled(t *testing.T) {
 	validator, root := newValidator(t)
 	var builder strings.Builder

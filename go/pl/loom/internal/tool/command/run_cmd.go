@@ -165,6 +165,7 @@ func NewRunCmdToolWithArtifacts(
 			"program='sh' with args=['-c','...'] is elevated to R3 approval risk and prompts the user every time, so use it ONLY when pipes, redirection or '&&' are truly required. " +
 			"Only 'program' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
 			"Output beyond the limit is stored as an artifact with a head/tail preview. " +
+		"Inside the sandbox, env entries are filtered by a security allowlist; keys that do not survive the filter are reported back in the output's 'note' field (escalated runs inherit the full user environment). " +
 			"The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), " +
 			"and denies writes outside the workspace and temp dir. " +
 			"When a task-critical command fails (or hangs until the timeout) because of the sandbox (DNS/network errors, SSO/OAuth, permission denied writing outside the workspace, package downloads), " +
@@ -341,10 +342,13 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		Isolation:               runnerResult.Isolation,
 		ExecutablePath:          runnerResult.ExecutablePath,
 		Hash:                    runnerResult.ExecutableHash,
-		Note: sandboxGuidanceNote(
-			string(runnerResult.Stderr),
-			runnerResult.TimedOut,
-			args.SandboxPermissions == sandboxRequireEscalated,
+		Note: combineNotes(
+			sandboxGuidanceNote(
+				string(runnerResult.Stderr),
+				runnerResult.TimedOut,
+				args.SandboxPermissions == sandboxRequireEscalated,
+			),
+			droppedEnvNote(runnerResult.DroppedEnvKeys),
 		),
 	}
 	if err := boundCommandOutput(&payload, t.modelOutputBytes); err != nil {
@@ -578,6 +582,27 @@ func resolveWorkingDir(
 // description documents: loom can still run the command, just outside the
 // sandbox with explicit approval. Escalated runs get no note (nothing
 // sandbox-related to learn), and "" is returned when nothing matches.
+// droppedEnvNote surfaces env override keys the sandbox allowlist filtered
+// out, so the model learns the constraint from the first run instead of
+// retrying against an environment it believes exists.
+func droppedEnvNote(dropped []string) string {
+	if len(dropped) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("env keys dropped by the sandbox allowlist: %s", strings.Join(dropped, ", "))
+}
+
+// combineNotes joins non-empty notes with a separator.
+func combineNotes(notes ...string) string {
+	parts := make([]string, 0, len(notes))
+	for _, n := range notes {
+		if n != "" {
+			parts = append(parts, n)
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
 func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
 	if escalated {
 		return ""

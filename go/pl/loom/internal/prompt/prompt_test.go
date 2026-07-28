@@ -26,6 +26,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -268,6 +269,9 @@ func TestFileRulesProviderTruncatesOversizedFile(t *testing.T) {
 	require.Len(t, files, 1)
 	assert.Contains(t, files[0].Content, "已截断")
 	assert.LessOrEqual(t, len(files[0].Content), maxRuleFileBytes+len("\n（规则文件超过 32KB，已截断）"))
+	// Regression (REVIEW R10): 甲 is 3 bytes and 32768 % 3 = 2, so the old
+	// byte-level cut split a rune and produced invalid UTF-8.
+	assert.True(t, utf8.ValidString(files[0].Content), "truncated rule file must stay valid UTF-8")
 }
 
 // TestBuilderManagedBaseReplacesBuiltinSections verifies that a

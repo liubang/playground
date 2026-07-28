@@ -2743,6 +2743,32 @@ func TestGoalBudgetLimitedCanBeCompleted(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW R10): the update_goal approval description truncated
+// the objective at byte 60, which could split a multi-byte rune.
+func TestUpdateGoalApprovalDescTruncatesAtRuneBoundary(t *testing.T) {
+	cell := NewGoalCell()
+	tool, err := NewUpdateGoalTool(cell)
+	if err != nil {
+		t.Fatalf("NewUpdateGoalTool: %v", err)
+	}
+	// 61 runes / 65 bytes: the old byte cut at 60 splits the first 中.
+	objective := strings.Repeat("a", 59) + "中中"
+	prepared, err := tool.Prepare(context.Background(), domain.ToolCall{
+		ID:        domain.NewToolCallID(),
+		Name:      "update_goal",
+		Arguments: json.RawMessage(`{"objective":"` + objective + `"}`),
+	})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if !utf8.ValidString(prepared.ApprovalDesc) {
+		t.Fatalf("approval desc is not valid UTF-8: %q", prepared.ApprovalDesc)
+	}
+	if !strings.Contains(prepared.ApprovalDesc, "…") {
+		t.Fatalf("approval desc should mark truncation: %q", prepared.ApprovalDesc)
+	}
+}
+
 func TestUpdateGoalToolValidation(t *testing.T) {
 	for _, raw := range []string{
 		`{}`,

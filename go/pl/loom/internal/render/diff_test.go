@@ -21,7 +21,21 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
+
+// Regression (REVIEW R10): truncateDiffLine cut at a byte offset, which
+// could split a multi-byte rune (200 % 3 = 2 lands inside a 3-byte char).
+func TestTruncateDiffLineKeepsUTF8(t *testing.T) {
+	line := strings.Repeat("中", 67) // 201 bytes > diffMaxLineWidth
+	got := truncateDiffLine(line)
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncateDiffLine split a rune: %q", got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Fatalf("truncation marker missing: %q", got)
+	}
+}
 
 func TestDiffTextsIdentical(t *testing.T) {
 	if got := DiffTexts("same\n", "same\n", 40); got != "" {
