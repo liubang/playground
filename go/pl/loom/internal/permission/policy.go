@@ -19,6 +19,7 @@ package permission
 
 import (
 	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -86,17 +87,43 @@ func (p Policy) Evaluate(call domain.PreparedCall) domain.Decision {
 	return p.evaluateRisk(call.Risk)
 }
 
-// trustedProgramDirs are root-owned directories whose executables may
-// resolve through basename rules (/bin/ls → ls). Anything outside these
-// directories must match rules by full path: an attacker-writable
+// trustedProgramDirs are candidate system directories whose executables
+// may resolve through basename rules (/bin/ls → ls) — but only after a
+// runtime check proves the directory is trustworthy (isTrustedProgramDir).
+// Anything else must match rules by full path: an attacker-writable
 // directory must never gain basename trust (an evil /tmp/ls is NOT ls).
 var trustedProgramDirs = []string{
 	"/bin", "/sbin", "/usr/bin", "/usr/sbin",
 	"/usr/local/bin", "/usr/local/sbin", "/opt/homebrew/bin",
 }
 
+// isTrustedProgramDir reports whether dir is a candidate directory whose
+// ownership and permissions actually justify basename trust: it must be
+// root-owned and not writable by group or others. A static allowlist is
+// not enough — /opt/homebrew/bin is owned by the daily login user (and
+// group-writable) on any Homebrew machine, so a trojaned binary there
+// would otherwise inherit the trust of bare-name rules.
+func isTrustedProgramDir(dir string) bool {
+	listed := false
+	for _, d := range trustedProgramDirs {
+		if dir == d {
+			listed = true
+			break
+		}
+	}
+	if !listed {
+		return false
+	}
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	return info.Mode().Perm()&0o022 == 0 && dirOwnedByRoot(info)
+}
+
 // NormalizeTrustedPath rewrites argv[0] to its basename when it lives in a
-// trusted system directory, so bare-name rules match absolute invocations.
+// verified trusted system directory, so bare-name rules match absolute
+// invocations.
 func NormalizeTrustedPath(argv []string) ([]string, bool) {
 	if len(argv) == 0 {
 		return nil, false
@@ -106,10 +133,8 @@ func NormalizeTrustedPath(argv []string) ([]string, bool) {
 	if base == argv[0] {
 		return nil, false // already bare
 	}
-	for _, d := range trustedProgramDirs {
-		if dir == d {
-			return append([]string{base}, argv[1:]...), true
-		}
+	if isTrustedProgramDir(dir) {
+		return append([]string{base}, argv[1:]...), true
 	}
 	return nil, false
 }

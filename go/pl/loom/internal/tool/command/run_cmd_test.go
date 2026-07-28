@@ -248,6 +248,12 @@ func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	}
 	var output runCmdOutput
 	decodeToolResult(t, result, &output)
+	// Regression (REVIEW M10): MY_SECRET_TOKEN does not survive the sandbox
+	// env filter; the drop must be surfaced in the output note so the model
+	// learns the constraint instead of retrying blindly.
+	if !strings.Contains(output.Note, "MY_SECRET_TOKEN") {
+		t.Fatalf("output note must report the dropped env key: %q", output.Note)
+	}
 	if output.ExitCode != 0 || output.Signal != "" {
 		t.Fatalf("unexpected process exit: %+v", output)
 	}

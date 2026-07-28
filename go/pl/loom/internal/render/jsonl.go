@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
@@ -36,6 +37,7 @@ import (
 // logs and diagnostics go to stderr.
 type JSONL struct {
 	out              io.Writer
+	errOut           io.Writer
 	includeEphemeral bool
 	encoder          *json.Encoder
 }
@@ -51,10 +53,20 @@ func WithEphemeral(include bool) JSONLOption {
 	}
 }
 
+// WithErrorWriter redirects diagnostics (encode failures) away from the
+// default stderr. Diagnostics must never reach the protocol stream: an
+// interpolated error line is not valid NDJSON.
+func WithErrorWriter(w io.Writer) JSONLOption {
+	return func(j *JSONL) {
+		j.errOut = w
+	}
+}
+
 // NewJSONL creates a new JSONL renderer.
 func NewJSONL(out io.Writer, opts ...JSONLOption) *JSONL {
 	j := &JSONL{
 		out:     out,
+		errOut:  os.Stderr,
 		encoder: json.NewEncoder(out),
 	}
 	for _, opt := range opts {
@@ -71,23 +83,27 @@ func (j *JSONL) ObserveEphemeral(evt runtimeevent.RuntimeEvent) {
 	if !j.includeEphemeral {
 		return
 	}
-	j.emit(evt)
+	_ = j.emit(evt)
 }
 
 // ObserveDurable handles durable events. All durable events are written
-// as JSONL lines regardless of the WithEphemeral setting.
+// as JSONL lines regardless of the WithEphemeral setting. Encode failures
+// are reported to the caller (and logged to the error writer), never
+// written into the protocol stream.
 func (j *JSONL) ObserveDurable(evt runtimeevent.RuntimeEvent) error {
-	j.emit(evt)
-	return nil
+	return j.emit(evt)
 }
 
-func (j *JSONL) emit(evt runtimeevent.RuntimeEvent) {
-	// Encode the RuntimeEvent as a single JSON line.
-	// Errors are unreachable for well-formed events (they're already
-	// validated by the Broker), but log to stderr if they occur.
+func (j *JSONL) emit(evt runtimeevent.RuntimeEvent) error {
+	// Encode the RuntimeEvent as a single JSON line. Errors are unreachable
+	// for well-formed events (they're already validated by the Broker);
+	// when they do occur, diagnostics go to the error writer — the protocol
+	// stream stays valid NDJSON.
 	if err := j.encoder.Encode(evt); err != nil {
-		fmt.Fprintf(j.out, "{\"error\":\"encode failed: %s\"}\n", err.Error())
+		fmt.Fprintf(j.errOut, "jsonl: encode event failed: %v\n", err)
+		return err
 	}
+	return nil
 }
 
 // Flush is a no-op for the JSONL encoder (json.Encoder does not buffer),

@@ -12,7 +12,7 @@
 | H4  | `agent/run.go:1222-1231`                                   | 审批流「先 flushEvents 发布 `approval.requested`，后 `RequestApproval` 注册 pending 槽」；窗口期内前端应答会因 binding 不匹配被拒，决策永久丢失（目前靠 UI 700ms guard 隐式掩盖）                         | ✅ 已修复 |
 | H5  | `tool/builtin/rg.go:59` + `process/sandbox_linux.go:23`    | `rgAvailable` 只探测 rg 二进制存在；Linux 沙箱未实现（fail-closed）时 `runner.Run` 必败，search/glob 整体报废且不回退 Go fallback                                                                         | ✅ 已修复 |
 | H6  | `config/resolve.go:322-345`                                | 模型级 `wire_api` 只校验并写入元数据，`buildProvider` 只用 provider 级 wireAPI 构建唯一实例 → 如 `deepseek-reasoner` 配 `wire_api: responses` 静默失效                                                    | ✅ 已修复 |
-| H7  | `process/runner.go:210-215`                                | `cmd.Wait()` 返回后立即 `closeReadPipe`，管道缓冲区尾部数据可静默丢失且不标 `Truncated`                                                                                                                   | ⬜ 未修复 |
+| H7 | `process/runner.go:210-215` | `cmd.Wait()` 返回后立即 `closeReadPipe`，管道缓冲区尾部数据可静默丢失且不标 `Truncated` | ⬜ 未修复（2026-07-28 观测到活复现：`TestRunCmdToolExternalizesLargeOutput` 间歇性丢失 stderr stage 的 400 字节，表现与本 bug 一致，建议下一批修） |
 
 ## 二、中严重度 Bug
 
@@ -27,13 +27,13 @@
 | M7  | `tool/builtin/rg.go:96-105`                   | `runRipgrep` 丢弃 `Truncated` 信号：输出超限时 search 对拼接半行 JSON 解析失败整体报错；glob 产生接缝假路径且 `truncated=false`                | ✅ 已修复 |
 | M8  | `tool/builtin/rg.go:130`                      | rg 未传 `--max-columns`，单行超 1MB（minified JS）时 scanner token-too-long 整个 search 失败                                                   | ✅ 已修复 |
 | M9  | `tool/command/run_cmd.go:237-238`             | `buildApprovalDesc` 在 `ArgsHash` 赋值之前调用 → 审批描述里的 args_hash 永远走兜底（算法不同），与权限事件记录对不上，审计失效                 | ✅ 已修复 |
-| M10 | `process/runner.go:462-467`                   | 沙箱模式下模型传的 `env` 被 allowlist 静默丢弃，工具描述未说明，模型无法察觉会反复重试                                                         | ⬜ 未修复 |
+| M10 | `process/runner.go:462-467` | 沙箱模式下模型传的 `env` 被 allowlist 静默丢弃，工具描述未说明，模型无法察觉会反复重试 | ✅ 已修复 |
 | M11 | `workspace/path.go:232-255`                   | `AtomicWrite` hash 复检与 rename 间 TOCTOU 窗口：新建文件场景下窗口内出现的同名文件被无提示覆盖                                                | ⬜ 未修复 |
 | M12 | `ui/update.go:1341-1358`                      | `handleEventsClosed`：重订阅计数成功后永不复位（累计断 3 次输入永久锁死）；重订阅丢弃 unsubscribe 句柄，旧订阅泄漏到进程结束                   | ✅ 已修复 |
 | M13 | `cmd/loom/main.go:691-704`                    | `consoleApprover` 每次调用泄漏一个 stdin 读取 goroutine，且 `bufio.Reader` 重建吞预输入                                                        | ✅ 已修复 |
 | M14 | `ui/update.go:192-195`                        | 任意 `tea.Msg`（按键/spinner tick）都触发 `layout()` 全量重建 transcript 字符串，streaming 高频下 CPU 可感知                                   | ⬜ 未修复 |
 | M15 | `tool/webfetch/webfetch.go:382-392`           | `truncateAtBoundary` 按字节截断可切断 UTF-8（`boundedHeadTailString` 已有正确示范）                                                            | ✅ 已修复 |
-| M16 | `tool/builtin/search.go:261-268`              | Go fallback 静默忽略 `glob/type/no_ignore` 参数，结果集包含模型明确排除的文件且无提示                                                          | ⬜ 未修复 |
+| M16 | `tool/builtin/search.go:261-268` | Go fallback 静默忽略 `glob/type/no_ignore` 参数，结果集包含模型明确排除的文件且无提示 | ✅ 已修复 |
 | M17 | `permission/policy.go:62`、`rules.go:384-397` | permission 硬编码 `"run_cmd"` 名字 + 独立 struct 重解析 canonical JSON，三处契约靠人肉保持一致，改名即静默降级                                 | ⬜ 未修复 |
 
 ## 三、冗余代码
@@ -49,7 +49,7 @@
 | R7  | `channel_approver.go` vs `channel_questioner.go`                                              | 注册-等待-删除、DenyAll/SkipAll 近乎对称，可抽泛型 `pendingHub[K,V]` 并统一注册/发布顺序                                                                                                                             | ⬜ 未处理                                                             |
 | R8  | ui 层                                                                                         | 三组 picker 窗口化逻辑相同；`formatTokens`≡`humanizeTokens`；`reasoningDialLabel`≡`describeReasoning`；预览常量双端各一份                                                                                            | ⬜ 未处理                                                             |
 | R9  | 多处                                                                                          | 死代码/死配置：`CanTerminate` 恒 true；`MaxParallelTools`/`MaxRepeatedActions` 无消费方；`ControllerStateFatal` 从未赋值；`Message.MarshalJSON` 无操作；`contentResult` 未使用；edit 包 `hashBytes`/`sha256Hex` 双份 | 🔶 部分处理（MarshalJSON/contentResult/hashBytes 已删；其余留待后续） |
-| R10 | 5 处                                                                                          | 字节截断切 UTF-8：`compact.go:149`、`goal.go:261`、`prompt.go:405`、`render/diff.go:142`、`webfetch.go:386`（应统一 rune 边界截断）                                                                                  | ⬜ 未处理                                                             |
+| R10 | 5 处 | 字节截断切 UTF-8：`compact.go:149`、`goal.go:261`、`prompt.go:405`、`render/diff.go:142`、`webfetch.go:386`（应统一 rune 边界截断） | ✅ 已修复（webfetch 于 M15、其余 4 处于本轮） |
 
 ## 四、抽象不合理
 
@@ -61,10 +61,10 @@
 | A4  | `model/stream/stream.go:33-43` | `Emitter` 的 false-中止契约无人遵守（anthropic pump 全部丢弃返回值），契约是假的                                                                               | ⬜ 未处理 |
 | A5  | `tool/command/run_cmd.go:631`  | `classifyRunError` 对 process 包错误文本做子串匹配，改文案即静默失灵，应导出 sentinel errors                                                                   | ⬜ 未处理 |
 | A6  | `tool/gittools/common.go:422`  | 绕过 `process.Runner` 直接 exec：不经沙箱、无进程组隔离、限流/超时逻辑平行重复                                                                                 | ⬜ 未处理 |
-| A7  | 注释与实现不符                 | `run.go:1811,1823`「ArgsHash HMAC」实为截断 SHA-256 且 Execute 不校验；`policy.go:89`「root-owned」含 `/usr/local/bin`、`/opt/homebrew/bin`（均非 root-owned） | ⬜ 未处理 |
+| A7 | 注释与实现不符 | `run.go:1811,1823`「ArgsHash HMAC」实为截断 SHA-256 且 Execute 不校验；`policy.go:89`「root-owned」含 `/usr/local/bin`、`/opt/homebrew/bin`（均非 root-owned） | 🔶 部分处理（trusted dirs 已改运行时校验；ArgsHash 注释待修） |
 | A8  | `domain/errors.go:80`          | `domain.As` 重复实现标准库且语义有偏差（As 返回 false 不再 unwrap、不支持 `Unwrap() []error`），建议删除改用 `errors.As`                                       | ✅ 已修复 |
 | A9  | `domain/context.go:85-97`      | `ContextManifest` 半数字段无生产者，YAGNI 过度设计                                                                                                             | ⬜ 未处理 |
-| A10 | `render/jsonl.go:89`           | 注释称 encode 失败写 stderr，实际写 stdout 污染协议流，且 `err.Error()` 未 JSON 转义可产出非法 JSONL                                                           | ⬜ 未处理 |
+| A10 | `render/jsonl.go:89` | 注释称 encode 失败写 stderr，实际写 stdout 污染协议流，且 `err.Error()` 未 JSON 转义可产出非法 JSONL | ✅ 已修复 |
 
 ## 五、修复记录
 
@@ -167,6 +167,31 @@
 - **方案**：`truncateAtBoundary` 在行边界回退后再做 UTF-8 有效性回退（逐字节退到合法 rune 边界）。
 - **复现用例**：`webfetch/webfetch_test.go: TestTruncateAtBoundary` 新增 CJK 切分用例。
 - **验证**：`go test ./internal/tool/webfetch/` 全绿。
+
+### A10 JSONL 诊断污染协议流（2026-07-28 修复）
+- **方案**：`JSONL` 新增 `errOut`（默认 stderr，`WithErrorWriter` 可注入）；encode 失败写诊断到 errOut 并返回 error（durable 事件向调用方传播），不再向协议流写未转义的合成错误行。
+- **复现用例**：`render/jsonl_test.go: TestJSONL_InvalidPayload`（原空占位测试改写为真实用例：协议流必须为空、errOut 有诊断、error 传播）。
+
+### R10 剩余 4 处 UTF-8 截断（2026-07-28 修复）
+- **方案**：`compact.go` 复用同包 `cutAtRuneBoundary`；`goal.go` 改用 `truncateRunes`（rune 计数）；`prompt.go` 新增本地 `cutAtRuneBoundary`；`render/diff.go` 截断前回退到 rune 边界。
+- **复现用例**：`compact_test.go: TestBuildSummaryReplacementTruncatesAtRuneBoundary`、`run_test.go: TestUpdateGoalApprovalDescTruncatesAtRuneBoundary`、`prompt_test.go`（既有 CJK 超宽用例补强 UTF-8 断言）、`diff_test.go: TestTruncateDiffLineKeepsUTF8`。
+
+### M10 沙箱 env 静默丢弃（2026-07-28 修复）
+- **方案**：`buildMinimalEnv` 返回被丢弃的 override keys → `process.Result.DroppedEnvKeys`；run_cmd 输出 `note` 合并 `droppedEnvNote`（新增 `combineNotes`）；工具描述声明 allowlist 语义与 note 回显。
+- **复现用例**：`runner_test.go: TestRunnerStripsSecretEnvironmentVariables`（新增 DroppedEnvKeys 断言）、`run_cmd_test.go`（Note 必须包含被丢弃的 MY_SECRET_TOKEN）。
+
+### M16 search fallback 忽略过滤参数（2026-07-28 修复）
+- **方案**：fallback 路径用 `matchGlobPath` 实现 rg 语义 glob 过滤（无斜杠匹配 basename、支持 `!` 否定且否定优先）；`searchOutput` 新增 `note` 字段披露无法生效的过滤（type、.gitignore 规则）。
+- **复现用例**：`builtin_test.go: TestSearchGoFallbackAppliesGlobFilters`（含否定优先）、`TestSearchGoFallbackNotesUnappliedFilters`。
+
+### A7 trustedProgramDirs 静态信任（2026-07-28 修复）
+- **方案**：`isTrustedProgramDir` 运行时校验——目录必须在候选清单内 + root 所有 + 组/其他人不可写（`dirOwnedByRoot` 按 darwin||linux / 其他平台分文件，BUILD 同步）；本机实测 `/opt/homebrew/bin` 为 `liubang:admin drwxrwxr-x`，修复后不再获得 basename 信任。修正了注释的虚假安全假设。
+- **复现用例**：`rules_test.go: TestNormalizeTrustedPathRejectsWritableDir`、`TestNormalizeTrustedPathRejectsNonRootOwnedDir`；既有 homebrew 断言改为运行时条件断言。
+- **遗留**：`run.go:1811,1823` 的「ArgsHash HMAC」注释与实际机制不符（截断 SHA-256，真正防线是 freshness 重放），注释修正留待后续。
+
+### broker 序号空洞（2026-07-28 修复，review 低危项）
+- **方案**：`Publish` 先用 `b.sequence+1` 构造并校验事件，通过后才提交序号。
+- **复现用例**：`broker_test.go: TestBrokerRejectedEventDoesNotBurnSequence`。
 
 ### 冗余/死代码清理（2026-07-28）
 

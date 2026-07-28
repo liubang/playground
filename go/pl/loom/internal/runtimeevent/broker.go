@@ -131,13 +131,16 @@ func (b *Broker) Publish(evt RuntimeEvent) error {
 		return ErrBrokerClosed
 	}
 
-	b.sequence++
-	evt.Sequence = b.sequence
+	// Validate with the tentative sequence BEFORE committing it: a rejected
+	// event must not burn a number — subscribers use sequence continuity to
+	// detect lost events, and a gap would be a false positive.
+	evt.Sequence = b.sequence + 1
 	evt.Time = time.Now().UTC()
 	evt.Version = RuntimeEventVersion
 	if err := evt.Validate(); err != nil {
 		return err
 	}
+	b.sequence++
 
 	for id, sub := range b.subscribers {
 		select {

@@ -60,6 +60,7 @@ type searchOutput struct {
 	SkippedBinary   int           `json:"skipped_binary,omitempty"`
 	SkippedTooLarge int           `json:"skipped_too_large,omitempty"`
 	Matches         []searchMatch `json:"matches"`
+	Note            string        `json:"note,omitempty"`
 }
 
 var typeNamePattern = regexp.MustCompile(`^[A-Za-z0-9_+-]+$`)
@@ -280,6 +281,10 @@ func (t *SearchTool) executeGoFallback(ctx context.Context, prepared domain.Prep
 	for _, m := range output.Matches {
 		matches = append(matches, searchMatch(m))
 	}
+	// Apply the glob filters the rg engine would have applied; the other
+	// filters have no fallback equivalent and must be disclosed in the note
+	// instead of silently ignored.
+	matches = filterMatchesByGlobs(matches, args.Glob)
 	return successResult(prepared.Call.ID, startedAt, searchOutput{
 		Path:            args.Path,
 		Pattern:         args.Pattern,
@@ -291,5 +296,73 @@ func (t *SearchTool) executeGoFallback(ctx context.Context, prepared domain.Prep
 		SkippedBinary:   output.SkippedBinary,
 		SkippedTooLarge: output.SkippedTooLarge,
 		Matches:         matches,
+		Note:            fallbackFilterNote(args),
 	})
+}
+
+// matchSearchGlob mirrors rg --glob semantics closely enough for the
+// fallback: a pattern without a slash matches the basename in any
+// directory, a pattern with a slash matches the workspace-relative path.
+func matchSearchGlob(pattern, relPath string) bool {
+	if !strings.Contains(pattern, "/") {
+		return matchGlobPath("**/"+pattern, relPath)
+	}
+	return matchGlobPath(pattern, relPath)
+}
+
+// filterMatchesByGlobs applies rg-style glob filters: positive patterns
+// union-include, "!"-prefixed patterns exclude (exclusion wins).
+func filterMatchesByGlobs(matches []searchMatch, globs []string) []searchMatch {
+	var positives, negatives []string
+	for _, g := range globs {
+		if rest, ok := strings.CutPrefix(g, "!"); ok {
+			negatives = append(negatives, rest)
+		} else {
+			positives = append(positives, g)
+		}
+	}
+	if len(positives) == 0 && len(negatives) == 0 {
+		return matches
+	}
+	out := make([]searchMatch, 0, len(matches))
+	for _, m := range matches {
+		excluded := false
+		for _, n := range negatives {
+			if matchSearchGlob(n, m.Path) {
+				excluded = true
+				break
+			}
+		}
+		if excluded {
+			continue
+		}
+		if len(positives) > 0 {
+			included := false
+			for _, p := range positives {
+				if matchSearchGlob(p, m.Path) {
+					included = true
+					break
+				}
+			}
+			if !included {
+				continue
+			}
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// fallbackFilterNote discloses which search filters the Go fallback could
+// not honor, so the model does not mistake an unfiltered result set for a
+// filtered one.
+func fallbackFilterNote(args searchArgs) string {
+	var notes []string
+	if args.Type != "" {
+		notes = append(notes, fmt.Sprintf("type filter %q not applied by the go fallback engine", args.Type))
+	}
+	if !args.NoIgnore {
+		notes = append(notes, ".gitignore rules not applied by the go fallback engine")
+	}
+	return strings.Join(notes, "; ")
 }
