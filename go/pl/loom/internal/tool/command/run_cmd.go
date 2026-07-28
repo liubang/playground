@@ -165,7 +165,7 @@ func NewRunCmdToolWithArtifacts(
 			"program='sh' with args=['-c','...'] is elevated to R3 approval risk and prompts the user every time, so use it ONLY when pipes, redirection or '&&' are truly required. " +
 			"Only 'program' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
 			"Output beyond the limit is stored as an artifact with a head/tail preview. " +
-		"Inside the sandbox, env entries are filtered by a security allowlist; keys that do not survive the filter are reported back in the output's 'note' field (escalated runs inherit the full user environment). " +
+			"Inside the sandbox, env entries are filtered by a security allowlist; keys that do not survive the filter are reported back in the output's 'note' field (escalated runs inherit the full user environment). " +
 			"The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), " +
 			"and denies writes outside the workspace and temp dir. " +
 			"When a task-critical command fails (or hangs until the timeout) because of the sandbox (DNS/network errors, SSO/OAuth, permission denied writing outside the workspace, package downloads), " +

@@ -19,7 +19,6 @@ package process
 
 import (
 	"context"
-	"slices"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -28,8 +27,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -119,6 +120,64 @@ func TestRunnerTruncatesCombinedOutput(t *testing.T) {
 	}
 	if string(result.Stdout[:24]) != strings.Repeat("A", 24) || string(result.Stdout[len(result.Stdout)-40:]) != strings.Repeat("A", 40) {
 		t.Fatalf("stdout is not head/tail preview: %q", result.Stdout)
+	}
+}
+
+// slowSink delays every write, simulating a downstream consumer slower
+// than the child process — exactly the situation where output is still
+// sitting in the kernel pipe buffer when the process exits.
+type slowSink struct {
+	mu    sync.Mutex
+	buf   []byte
+	delay time.Duration
+}
+
+func (s *slowSink) Write(p []byte) (int, error) {
+	time.Sleep(s.delay)
+	s.mu.Lock()
+	s.buf = append(s.buf, p...)
+	s.mu.Unlock()
+	return len(p), nil
+}
+
+func (s *slowSink) Len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.buf)
+}
+
+// Regression (REVIEW H7): the runner used to close the output pipes
+// immediately after Wait returned, racing the collector's drain of the
+// kernel pipe buffer — tail output was silently discarded with
+// Truncated=false. The slow sink makes the race deterministic: at process
+// exit up to a full pipe buffer is still undrained, and every byte of it
+// must still reach the writer.
+func TestRunnerDrainsOutputAfterProcessExit(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	const total = 256 << 10
+	executable := writePythonScript(t, python, root, "spew.py", []string{
+		"import sys",
+		"sys.stdout.write('o' * 256 * 1024)",
+	})
+	runner := newRunner(t, validator, RunnerOptions{Sandbox: ExplicitTestSandbox{}, LookPath: fixedLookPath(executable)})
+
+	sink := &slowSink{delay: 2 * time.Millisecond}
+	result, err := runner.Run(context.Background(), CommandSpec{
+		Program: "spew", Cwd: root, OutputLimit: 1 << 20,
+		StdoutWriter: sink,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if sink.Len() != total {
+		t.Fatalf("writer received %d bytes, want %d (tail output lost)", sink.Len(), total)
+	}
+	if result.StdoutBytes != total {
+		t.Fatalf("StdoutBytes = %d, want %d", result.StdoutBytes, total)
+	}
+	if result.Truncated {
+		t.Fatal("a complete drain must not be marked truncated")
 	}
 }
 

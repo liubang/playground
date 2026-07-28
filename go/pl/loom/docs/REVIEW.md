@@ -12,7 +12,7 @@
 | H4  | `agent/run.go:1222-1231`                                   | 审批流「先 flushEvents 发布 `approval.requested`，后 `RequestApproval` 注册 pending 槽」；窗口期内前端应答会因 binding 不匹配被拒，决策永久丢失（目前靠 UI 700ms guard 隐式掩盖）                         | ✅ 已修复 |
 | H5  | `tool/builtin/rg.go:59` + `process/sandbox_linux.go:23`    | `rgAvailable` 只探测 rg 二进制存在；Linux 沙箱未实现（fail-closed）时 `runner.Run` 必败，search/glob 整体报废且不回退 Go fallback                                                                         | ✅ 已修复 |
 | H6  | `config/resolve.go:322-345`                                | 模型级 `wire_api` 只校验并写入元数据，`buildProvider` 只用 provider 级 wireAPI 构建唯一实例 → 如 `deepseek-reasoner` 配 `wire_api: responses` 静默失效                                                    | ✅ 已修复 |
-| H7 | `process/runner.go:210-215` | `cmd.Wait()` 返回后立即 `closeReadPipe`，管道缓冲区尾部数据可静默丢失且不标 `Truncated` | ⬜ 未修复（2026-07-28 观测到活复现：`TestRunCmdToolExternalizesLargeOutput` 间歇性丢失 stderr stage 的 400 字节，表现与本 bug 一致，建议下一批修） |
+| H7 | `process/runner.go:210-215` | `cmd.Wait()` 返回后立即 `closeReadPipe`，管道缓冲区尾部数据可静默丢失且不标 `Truncated` | ✅ 已修复 |
 
 ## 二、中严重度 Bug
 
@@ -167,6 +167,12 @@
 - **方案**：`truncateAtBoundary` 在行边界回退后再做 UTF-8 有效性回退（逐字节退到合法 rune 边界）。
 - **复现用例**：`webfetch/webfetch_test.go: TestTruncateAtBoundary` 新增 CJK 切分用例。
 - **验证**：`go test ./internal/tool/webfetch/` 全绿。
+
+### H7 进程退出后尾部输出丢失（2026-07-28 修复）
+- **根因（比原判断更深一层）**：`exec.Cmd.Wait()` 本身就会在进程退出时关闭 `StdoutPipe` 的读端（官方文档："incorrect to call Wait before all reads from the pipe have completed"），runner 自己的 `closeReadPipe` 只是重复关闭——竞态无法通过调整顺序消除。
+- **方案**：改用自建 `os.Pipe()`（`cmd.Stdout/Stderr = pipeW`），父进程在 Start 后放弃写端；进程组退出后读端自然 EOF，reader 排空内核缓冲后才收尾；仅当 detached 子进程持有写端导致 drain 超时（100ms）时才强制关管，并用 FIONREAD ioctl（`pipe_pending_darwin/linux.go`，x/sys 在 darwin 未导出常量故自定义）探测是否有未排空的字节，有（或探测失败）才标 `Truncated`——detached 但无遗留数据的场景不误报。
+- **复现用例**：`runner_test.go: TestRunnerDrainsOutputAfterProcessExit`（slowSink 每写 2ms 让竞态 deterministic：修复前稳定丢 64KB 且 `Truncated=false`）；既有间歇失败 `TestRunCmdToolExternalizesLargeOutput` 修复后 20/20 通过。
+- **验证**：`go test ./internal/process/` 全绿（含 detached stdio 既有用例），`GOOS=linux go build` 通过。
 
 ### A10 JSONL 诊断污染协议流（2026-07-28 修复）
 - **方案**：`JSONL` 新增 `errOut`（默认 stderr，`WithErrorWriter` 可注入）；encode 失败写诊断到 errOut 并返回 error（durable 事件向调用方传播），不再向协议流写未转义的合成错误行。
