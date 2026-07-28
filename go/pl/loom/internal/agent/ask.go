@@ -22,6 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -167,7 +168,7 @@ func decodeAskUserArgs(raw json.RawMessage) (domain.Question, json.RawMessage, e
 func askUserError(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
 	var agentErr *domain.AgentError
 	code, message := string(domain.ErrInternal), err.Error()
-	if domain.As(err, &agentErr) {
+	if errors.As(err, &agentErr) {
 		code, message = string(agentErr.Code), agentErr.Message
 	}
 	return domain.ToolResult{

@@ -81,13 +81,13 @@ func TestAllErrorCodes(t *testing.T) {
 	}
 }
 
-func TestAsAgentError(t *testing.T) {
+func TestAgentErrorUnwrapsWithErrorsAs(t *testing.T) {
 	inner := NewError(ErrTimeout, "timeout", WithRetryable(true))
 	outer := fmt.Errorf("wrapped: %w", inner)
 
 	var ae *AgentError
-	if !As(outer, &ae) {
-		t.Fatal("expected As to find AgentError")
+	if !errors.As(outer, &ae) {
+		t.Fatal("expected errors.As to find AgentError")
 	}
 	if ae.Code != ErrTimeout {
 		t.Errorf("expected code %s, got %s", ErrTimeout, ae.Code)

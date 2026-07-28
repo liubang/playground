@@ -1079,6 +1079,75 @@ func TestLoopExecuteCancelledPersistsTerminalEvent(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW H2): Usage.WallTime was never updated by production
+// code, so the MaxWallTime runaway limit (default 30min) could never fire.
+// The budget check must observe the elapsed per-prompt window.
+func TestRunWallTimeCountsTowardBudget(t *testing.T) {
+	clock := domain.NewFakeClock(time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC))
+	run := NewRun(domain.NewSessionID(), domain.Limits{MaxWallTime: time.Minute}, clock)
+
+	clock.Advance(2 * time.Minute)
+	check := run.CheckBudget()
+	if !check.HasHard() {
+		t.Fatalf("elapsed wall time must breach the hard limit, got %+v", check)
+	}
+	found := false
+	for _, b := range check.HardBreaches {
+		if b == "wall_time" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("hard breaches = %v, want wall_time", check.HardBreaches)
+	}
+	if run.Usage.WallTime != 2*time.Minute {
+		t.Fatalf("Usage.WallTime = %v, want 2m", run.Usage.WallTime)
+	}
+
+	// A new prompt opens a fresh budget window.
+	run.ResetUsageForNewTurn()
+	if check := run.CheckBudget(); check.HasHard() {
+		t.Fatalf("fresh budget window must clear the wall_time breach, got %+v", check)
+	}
+}
+
+// Regression (REVIEW H2): Usage.CostUSD was never updated, so the
+// MaxEstimatedCostUSD runaway limit could never fire. With cost rates
+// configured, token usage must price into the budget.
+func TestLoopExecuteCostBudgetExhausted(t *testing.T) {
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{
+				{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"test.go"}`)},
+			},
+			StopReason: domain.StopToolUse,
+			UsageIn:    2_000_000,
+		},
+		fakes.ScriptEntry{Text: "unreachable", StopReason: domain.StopEndTurn},
+	)
+	limits := domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxEstimatedCostUSD: 1.0}
+	run := newTestRun(limits)
+
+	registry := NewToolRegistry()
+	if err := registry.Register(fakes.ReadFileTool()); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop := &Loop{
+		Run: run, Model: model, Registry: registry, Logger: slog.Default(),
+		CostInputUSDPerMTok: 1.0, // $1 per million input tokens → first call costs $2
+	}
+	err := loop.Execute(context.Background())
+	if err == nil {
+		t.Fatal("expected budget exhausted error")
+	}
+	if run.State.Outcome != domain.OutcomeBudgetExhausted {
+		t.Fatalf("expected budget_exhausted, got %s", run.State.Outcome)
+	}
+	if run.Usage.CostUSD != 2.0 {
+		t.Fatalf("Usage.CostUSD = %v, want 2.0", run.Usage.CostUSD)
+	}
+}
+
 func TestLoopExecuteBudgetExhausted(t *testing.T) {
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{
@@ -1108,6 +1177,87 @@ func TestLoopExecuteBudgetExhausted(t *testing.T) {
 
 	if run.State.Outcome != domain.OutcomeBudgetExhausted {
 		t.Fatalf("expected budget_exhausted, got %s", run.State.Outcome)
+	}
+}
+
+// Regression (REVIEW M2): an approval request failure used to return with
+// the run still active and no terminal event, unlike every callModel
+// failure path. The run must terminate with OutcomeFailed.
+type askAllPolicy struct{}
+
+func (askAllPolicy) Evaluate(domain.PreparedCall) domain.Decision { return domain.DecisionAsk }
+
+type errorApprover struct{}
+
+func (errorApprover) RequestApproval(context.Context, domain.ApprovalRequest) (domain.Decision, error) {
+	return domain.DecisionDeny, fmt.Errorf("approval channel broken")
+}
+
+func TestLoopApprovalRequestFailureTerminatesRun(t *testing.T) {
+	model := fakes.NewFakeModel(fakes.ScriptEntry{
+		ToolCalls: []domain.ToolCall{
+			{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"test.go"}`)},
+		},
+		StopReason: domain.StopToolUse,
+	})
+	registry := NewToolRegistry()
+	if err := registry.Register(fakes.ReadFileTool()); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	run := newTestRun(domain.DefaultLimits())
+	loop := &Loop{
+		Run: run, Model: model, Registry: registry, Logger: slog.Default(),
+		Policy: askAllPolicy{}, Approver: errorApprover{},
+	}
+
+	err := loop.Execute(context.Background())
+	if err == nil {
+		t.Fatal("expected approval request failure")
+	}
+	if run.State.Lifecycle != domain.LifecycleTerminal || run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("run state = %+v, want terminal/failed", run.State)
+	}
+}
+
+// failOnExecutionStartStore fails persistence once a tool execution starts,
+// simulating a disk failure at the worst possible moment.
+type failOnExecutionStartStore struct {
+	*fakes.FakeStore
+}
+
+func (s *failOnExecutionStartStore) AppendEventsAndCheckpoint(ctx context.Context, sessionID domain.SessionID, expectedVersion int64, events []domain.Event, checkpoint domain.Checkpoint) error {
+	for _, ev := range events {
+		if ev.Type == domain.EventToolExecutionStarted {
+			return fmt.Errorf("disk on fire")
+		}
+	}
+	return s.FakeStore.AppendEventsAndCheckpoint(ctx, sessionID, expectedVersion, events, checkpoint)
+}
+
+// Regression (REVIEW M2): a flush failure before tool execution used to
+// leave the run active with no terminal event.
+func TestLoopExecutionFlushFailureTerminatesRun(t *testing.T) {
+	store := &failOnExecutionStartStore{FakeStore: fakes.NewFakeStore()}
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+	model := fakes.NewFakeModel(fakes.ScriptEntry{
+		ToolCalls: []domain.ToolCall{
+			{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"test.go"}`)},
+		},
+		StopReason: domain.StopToolUse,
+	})
+	registry := NewToolRegistry()
+	if err := registry.Register(fakes.ReadFileTool()); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop := &Loop{Run: run, Model: model, Registry: registry, Store: store, Logger: slog.Default()}
+
+	err := loop.Execute(context.Background())
+	if err == nil {
+		t.Fatal("expected flush failure")
+	}
+	if run.State.Lifecycle != domain.LifecycleTerminal || run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("run state = %+v, want terminal/failed", run.State)
 	}
 }
 
@@ -2547,6 +2697,49 @@ func TestGoalBudgetSoftLanding(t *testing.T) {
 	}
 	if calls := len(model.Calls()); calls != 3 {
 		t.Fatalf("model calls = %d, want 3 (set, work, wrap-up)", calls)
+	}
+}
+
+// Regression (REVIEW M1): the wrap-up prompt tells the model it may call
+// update_goal with status "complete" when the goal is actually done, but
+// drainGoalUpdates only applied Close while the goal was Active — against a
+// budget_limited goal the close was silently dropped even though the tool
+// result reported success.
+func TestGoalBudgetLimitedCanBeCompleted(t *testing.T) {
+	cell := NewGoalCell()
+	tool, err := NewUpdateGoalTool(cell)
+	if err != nil {
+		t.Fatalf("NewUpdateGoalTool: %v", err)
+	}
+	registry := NewToolRegistry()
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
+			ID: domain.NewToolCallID(), Name: "update_goal",
+			Arguments: json.RawMessage(`{"objective":"big refactor","token_budget":10}`),
+		}}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "working", StopReason: domain.StopEndTurn, UsageIn: 8, UsageOut: 4},
+		// The wrap-up turn: the model notices the work is actually done and
+		// closes the goal, as the budget-limit prompt invites it to.
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
+			ID: domain.NewToolCallID(), Name: "update_goal",
+			Arguments: json.RawMessage(`{"status":"complete"}`),
+		}}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+	)
+	run := newTestRun(domain.DefaultLimits())
+	loop := &Loop{Run: run, Model: model, Registry: registry, GoalCell: cell, Logger: slog.Default()}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if run.Goal == nil || run.Goal.Status != domain.GoalStatusComplete {
+		t.Fatalf("goal = %+v, want complete (a budget_limited goal must be closable)", run.Goal)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
 	}
 }
 

@@ -18,7 +18,6 @@
 package domain
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -132,6 +131,14 @@ func (p ContentPart) Validate() error {
 	return nil
 }
 
+// MetadataCompactedArtifacts is the Message.Metadata key under which a
+// compaction replacement message records the JSON-encoded []ArtifactRef
+// list its payload depends on. Replacement messages (e.g. the archive
+// marker) can only carry text parts, so the references they point at would
+// otherwise be invisible to session persistence and garbage collection
+// could reclaim them, leaving dead pointers in the transcript.
+const MetadataCompactedArtifacts = "compacted_artifacts"
+
 // Message represents a single message in a conversation.
 type Message struct {
 	ID        MessageID         `json:"id"`
@@ -192,6 +199,26 @@ func (m Message) Validate() error {
 	return nil
 }
 
+// ArtifactRefs returns every artifact reference carried by the message:
+// direct part references and tool-result content references. Session
+// persistence uses it to keep referenced artifacts alive for GC.
+func (m Message) ArtifactRefs() []ArtifactRef {
+	var refs []ArtifactRef
+	for _, part := range m.Parts {
+		if part.Artifact != nil {
+			refs = append(refs, *part.Artifact)
+		}
+		if part.ToolResult != nil {
+			for _, content := range part.ToolResult.Content {
+				if content.Artifact != nil {
+					refs = append(refs, *content.Artifact)
+				}
+			}
+		}
+	}
+	return refs
+}
+
 // TextParts returns all text content from the message.
 func (m Message) TextParts() []string {
 	var out []string
@@ -212,14 +239,4 @@ func (m Message) ToolCalls() []ToolCall {
 		}
 	}
 	return out
-}
-
-// MarshalJSON implements custom serialization.
-func (m Message) MarshalJSON() ([]byte, error) {
-	type alias Message
-	b, err := json.Marshal(alias(m))
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
 }

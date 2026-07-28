@@ -17,7 +17,10 @@
 
 package domain
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // ErrorCode is a stable error classification across modules.
 type ErrorCode string
@@ -70,30 +73,8 @@ func WithCause(cause error) ErrorOpt { return func(e *AgentError) { e.Cause = ca
 // IsRetryable reports whether an error is retryable.
 func IsRetryable(err error) bool {
 	var ae *AgentError
-	if As(err, &ae) {
+	if errors.As(err, &ae) {
 		return ae.Retryable
-	}
-	return false
-}
-
-// As is a convenience wrapper around the same pattern as errors.As.
-func As(err error, target any) bool {
-	for err != nil {
-		if e, ok := err.(interface{ As(any) bool }); ok {
-			return e.As(target)
-		}
-		// simple type check
-		if t, ok := target.(**AgentError); ok {
-			if ae, ok := err.(*AgentError); ok {
-				*t = ae
-				return true
-			}
-		}
-		if unwrapper, ok := err.(interface{ Unwrap() error }); ok {
-			err = unwrapper.Unwrap()
-		} else {
-			return false
-		}
 	}
 	return false
 }

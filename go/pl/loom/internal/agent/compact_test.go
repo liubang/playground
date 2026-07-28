@@ -153,6 +153,98 @@ func TestCondenseMasksOversizedToolOutputs(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW H1): a masked tool output was previously referenced
+// only from the placeholder TEXT, which checkpointArtifactRefs never scans —
+// `loom gc` could reclaim the artifact and leave a dead pointer in the
+// transcript. The masked result must carry a PartArtifact reference (both
+// providers skip PartArtifact when rendering, so the wire form is unchanged)
+// so session persistence tracks it for garbage collection.
+func TestCondenseMaskRegistersArtifactRef(t *testing.T) {
+	store := openArtifactStore(t)
+	messages := []domain.Message{
+		textMessage(domain.RoleUser, "please run the build"),
+		toolCallMessage("run_cmd"),
+		toolResultMessage(bigOutput(8000)),
+		textMessage(domain.RoleAssistant, "a"),
+		textMessage(domain.RoleAssistant, "b"),
+		textMessage(domain.RoleAssistant, "c"),
+		textMessage(domain.RoleAssistant, "d"),
+		textMessage(domain.RoleAssistant, "e"),
+		textMessage(domain.RoleAssistant, "f"),
+	}
+
+	cond := Condenser{KeepRecentMessages: 6, MaskMinBytes: 4096}
+	result := cond.Condense(context.Background(), &messages, store)
+	if len(result.outputs) != 1 {
+		t.Fatalf("masked outputs = %d, want 1", len(result.outputs))
+	}
+
+	content := messages[2].Parts[0].ToolResult.Content
+	var ref *domain.ArtifactRef
+	for i := range content {
+		if content[i].Kind == domain.PartArtifact {
+			ref = content[i].Artifact
+		}
+	}
+	if ref == nil {
+		t.Fatal("masked tool result must carry a PartArtifact reference so GC keeps the artifact")
+	}
+	if ref.ID.String() != result.outputs[0].Artifact {
+		t.Fatalf("artifact ref = %s, want masked output %s", ref.ID, result.outputs[0].Artifact)
+	}
+	if err := messages[2].Validate(); err != nil {
+		t.Fatalf("masked message must stay valid: %v", err)
+	}
+}
+
+// Regression (REVIEW H1): archiving replaces a message span with a marker,
+// dropping every artifact reference the span carried (masked outputs, run_cmd
+// overflow artifacts) plus the archive artifact itself from the checkpoint.
+// The marker must record all of them in Metadata so checkpointArtifactRefs
+// keeps them alive.
+func TestCondenseArchiveMarkerCarriesArtifactRefs(t *testing.T) {
+	store := openArtifactStore(t)
+	innerRef := domain.ArtifactRef{ID: domain.NewArtifactID(), Size: 10}
+
+	var messages []domain.Message
+	refMsg := textMessage(domain.RoleAssistant, strings.Repeat("x", 400))
+	refMsg.Parts = append(refMsg.Parts, domain.ContentPart{Kind: domain.PartArtifact, Artifact: &innerRef})
+	messages = append(messages, refMsg)
+	for i := 0; i < 9; i++ {
+		messages = append(messages, textMessage(domain.RoleAssistant, strings.Repeat("x", 400)))
+	}
+
+	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 1 << 20, TargetTokens: 250}
+	result := cond.Condense(context.Background(), &messages, store)
+	if result.archived == 0 {
+		t.Fatal("expected archival to happen")
+	}
+
+	encoded := messages[0].Metadata[domain.MetadataCompactedArtifacts]
+	if encoded == "" {
+		t.Fatal("archive marker must record the artifact refs it depends on for GC tracking")
+	}
+	var refs []domain.ArtifactRef
+	if err := json.Unmarshal([]byte(encoded), &refs); err != nil {
+		t.Fatalf("marker artifact refs are not valid JSON: %v", err)
+	}
+	foundInner, foundArchive := false, false
+	for _, r := range refs {
+		if r.ID == innerRef.ID {
+			foundInner = true
+		}
+		if r.ID != innerRef.ID && !r.ID.IsZero() {
+			foundArchive = true
+		}
+	}
+	if !foundInner {
+		t.Fatalf("marker refs %v missing archived span ref %s", refs, innerRef.ID)
+	}
+	if !foundArchive {
+		t.Fatalf("marker refs %v missing the archive artifact itself", refs)
+	}
+}
+
 func TestCondenseSkipsSmallOutputsAndIsIdempotent(t *testing.T) {
 	store := openArtifactStore(t)
 	messages := []domain.Message{

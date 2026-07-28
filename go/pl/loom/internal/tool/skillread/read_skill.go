@@ -473,7 +473,7 @@ func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domai
 	retryable := false
 
 	var agentErr *domain.AgentError
-	if domain.As(err, &agentErr) {
+	if errors.As(err, &agentErr) {
 		code = string(agentErr.Code)
 		message = agentErr.Message
 		retryable = agentErr.Retryable

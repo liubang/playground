@@ -39,20 +39,37 @@ type pendingApproval struct {
 	resultCh chan domain.Decision
 }
 
+// earlyDecision is a frontend decision that arrived before the agent
+// registered its pending slot. The agent loop publishes approval.requested
+// (via the event flush) before RequestApproval runs, so a fast frontend can
+// legitimately answer inside that window.
+type earlyDecision struct {
+	binding  ApprovalBinding
+	decision domain.Decision
+}
+
+// maxEarlyDecisions bounds the early-decision cache. Entries whose request
+// never arrives (for example answers to approvals a rule auto-resolved, or
+// duplicate clicks) are evicted oldest-first.
+const maxEarlyDecisions = 16
+
 // ChannelApprover bridges approval requests between the agent loop and a
 // frontend (TUI or other UI). It implements domain.Approver and uses channels
 // to receive a decision bound to the original PreparedCall.
 type ChannelApprover struct {
-	mu       sync.Mutex
-	pending  map[domain.EventID]pendingApproval
-	done     chan struct{}
-	doneOnce sync.Once
+	mu         sync.Mutex
+	pending    map[domain.EventID]pendingApproval
+	early      map[domain.EventID]earlyDecision
+	earlyOrder []domain.EventID
+	done       chan struct{}
+	doneOnce   sync.Once
 }
 
 // NewChannelApprover creates a new ChannelApprover.
 func NewChannelApprover() *ChannelApprover {
 	return &ChannelApprover{
 		pending: make(map[domain.EventID]pendingApproval),
+		early:   make(map[domain.EventID]earlyDecision),
 		done:    make(chan struct{}),
 	}
 }
@@ -73,6 +90,15 @@ func (a *ChannelApprover) RequestApproval(ctx context.Context, req domain.Approv
 		a.mu.Unlock()
 		return domain.DecisionDeny, fmt.Errorf("approver shut down")
 	default:
+	}
+	// Consume a decision that arrived before registration. A mismatched
+	// cached decision can never satisfy this request; drop it either way.
+	if early, ok := a.early[req.ID]; ok {
+		a.removeEarlyLocked(req.ID)
+		if early.binding == binding {
+			a.mu.Unlock()
+			return early.decision, nil
+		}
 	}
 	a.pending[req.ID] = pendingApproval{binding: binding, resultCh: resultCh}
 	a.mu.Unlock()
@@ -97,7 +123,15 @@ func (a *ChannelApprover) RequestApproval(ctx context.Context, req domain.Approv
 func (a *ChannelApprover) ResolveApproval(binding ApprovalBinding, decision domain.Decision) bool {
 	a.mu.Lock()
 	pending, ok := a.pending[binding.ApprovalID]
-	if !ok || pending.binding != binding {
+	if !ok {
+		// No slot yet: the decision beat the registration (the
+		// approval.requested event is published first). Cache it so the
+		// matching RequestApproval consumes it instead of losing it.
+		a.rememberEarlyLocked(binding, decision)
+		a.mu.Unlock()
+		return true
+	}
+	if pending.binding != binding {
 		a.mu.Unlock()
 		return false
 	}
@@ -108,6 +142,34 @@ func (a *ChannelApprover) ResolveApproval(binding ApprovalBinding, decision doma
 
 	pending.resultCh <- decision
 	return true
+}
+
+// rememberEarlyLocked caches a decision that arrived before its request.
+// Callers must hold a.mu.
+func (a *ChannelApprover) rememberEarlyLocked(binding ApprovalBinding, decision domain.Decision) {
+	if _, exists := a.early[binding.ApprovalID]; !exists {
+		a.earlyOrder = append(a.earlyOrder, binding.ApprovalID)
+	}
+	a.early[binding.ApprovalID] = earlyDecision{binding: binding, decision: decision}
+	for len(a.earlyOrder) > maxEarlyDecisions {
+		oldest := a.earlyOrder[0]
+		a.earlyOrder = a.earlyOrder[1:]
+		delete(a.early, oldest)
+	}
+}
+
+// removeEarlyLocked drops a cached early decision. Callers must hold a.mu.
+func (a *ChannelApprover) removeEarlyLocked(id domain.EventID) {
+	if _, ok := a.early[id]; !ok {
+		return
+	}
+	delete(a.early, id)
+	for i, queued := range a.earlyOrder {
+		if queued == id {
+			a.earlyOrder = append(a.earlyOrder[:i], a.earlyOrder[i+1:]...)
+			break
+		}
+	}
 }
 
 // DenyAll denies all pending approvals and prevents future requests. It is

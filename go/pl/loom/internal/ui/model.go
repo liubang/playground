@@ -179,10 +179,14 @@ type Model struct {
 	// drained FIFO by steer.injected, rebuilt from Snapshot.PendingSteers.
 	pendingSteers []string
 
-	// resubscribes bounds event-stream recovery attempts; eventsDead locks
-	// prompt submission once the stream cannot be recovered.
-	resubscribes int
-	eventsDead   bool
+	// resubscribes bounds CONSECUTIVE event-stream recovery attempts (any
+	// successfully received event resets it); eventsDead locks prompt
+	// submission once the stream cannot be recovered. unsubscribeEvents
+	// releases the current broker subscription; handleEventsClosed calls it
+	// before resubscribing so old subscriptions do not leak.
+	resubscribes      int
+	eventsDead        bool
+	unsubscribeEvents func()
 }
 
 // NewModel creates a new UI model with the given controller.
@@ -354,7 +358,7 @@ func StartTUI(controller *app.Controller, modelName, workspace string, opts Init
 	m.gitBranch = detectGitBranch(workspace)
 	eventsCh, unsubscribe := controller.Subscribe()
 	m.eventsCh = eventsCh
-	defer unsubscribe()
+	m.unsubscribeEvents = unsubscribe
 	m.SetIcons(ResolveIcons(opts.Icons))
 	m.SetLimits(opts.Limits)
 	m.SetContextWindow(opts.ContextWindow)
@@ -379,7 +383,12 @@ func StartTUI(controller *app.Controller, modelName, workspace string, opts Init
 	}
 	p := tea.NewProgram(m, programOptions...)
 
-	_, err := p.Run()
+	finalModel, err := p.Run()
+	// Release whichever subscription is live at exit (resubscribes swap it;
+	// broker unsubscribe is idempotent).
+	if fm, ok := finalModel.(Model); ok && fm.unsubscribeEvents != nil {
+		fm.unsubscribeEvents()
+	}
 	return err
 }
 

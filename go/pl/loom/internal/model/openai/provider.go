@@ -220,6 +220,9 @@ func marshalResponsesRequest(req domain.ModelRequest) ([]byte, error) {
 	if req.MaxTokens > 0 {
 		payload["max_output_tokens"] = req.MaxTokens
 	}
+	if req.Temperature != 0 {
+		payload["temperature"] = req.Temperature
+	}
 	if effort := reasoningEffortParam(req.Reasoning); effort != "" {
 		payload["reasoning"] = map[string]any{"effort": effort}
 	}

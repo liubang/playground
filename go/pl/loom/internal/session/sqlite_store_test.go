@@ -399,6 +399,38 @@ func TestSQLiteStoreIndexesArtifactReferencesAcrossCheckpoints(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW H1): compaction replacement messages record their
+// artifact dependencies in Metadata[domain.MetadataCompactedArtifacts]
+// because a marker message can only carry text parts. The store must scan
+// that metadata so GC never reclaims artifacts a compacted transcript
+// still points at.
+func TestSQLiteStoreTracksCompactionMetadataArtifactRefs(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	firstID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("4", 64))
+	secondID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("5", 64))
+	encoded, err := json.Marshal([]domain.ArtifactRef{{ID: firstID, Size: 40}, {ID: secondID, Size: 50}})
+	if err != nil {
+		t.Fatalf("marshal refs: %v", err)
+	}
+	checkpoint := testCheckpoint(sessionID, 0, time.Now().UTC())
+	checkpoint.Messages[0].Metadata = map[string]string{domain.MetadataCompactedArtifacts: string(encoded)}
+	if err := store.SaveCheckpoint(ctx, checkpoint); err != nil {
+		t.Fatalf("SaveCheckpoint: %v", err)
+	}
+	refs, err := store.ListArtifactRefs(ctx)
+	if err != nil {
+		t.Fatalf("ListArtifactRefs: %v", err)
+	}
+	if len(refs) != 2 || refs[firstID] != 40 || refs[secondID] != 50 {
+		t.Fatalf("unexpected artifact refs: %+v", refs)
+	}
+}
+
 func TestSQLiteStoreMigratesVersionOneArtifactReferences(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "sessions.db")

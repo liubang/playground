@@ -600,8 +600,16 @@ func newStreamCollector(limit int64, writer io.Writer) *streamCollector {
 	if limit < 0 {
 		limit = 0
 	}
-	headLimit := limit * 3 / 8
+	headLimit := PreviewSeamOffset(limit)
 	return &streamCollector{limit: limit, headLimit: headLimit, tailLimit: limit - headLimit, writer: writer}
+}
+
+// PreviewSeamOffset returns the byte offset within a truncated output
+// preview (Result.Stdout/Stderr) where the head portion ends and the tail
+// portion begins. Line-oriented consumers can use it to discard the partial
+// lines straddling the seam instead of parsing a spliced line.
+func PreviewSeamOffset(outputLimit int64) int64 {
+	return outputLimit * 3 / 8
 }
 
 func (c *streamCollector) collect(r io.Reader) {

@@ -348,6 +348,40 @@ func TestInspectSessionDoesNotCreateMissingStore(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW M13): consoleApprover used to create a fresh
+// bufio.Reader per approval — bytes the previous reader had already
+// buffered were silently dropped, and every ctx-cancelled approval leaked a
+// goroutine that then raced the next one on stdin. The shared reader must
+// deliver pre-typed lines in order.
+func TestConsoleApproverSharedReaderPreservesBufferedInput(t *testing.T) {
+	approver := &consoleApprover{}
+	approver.start(strings.NewReader("y\nn\n"))
+
+	first, err := approver.awaitAnswer(context.Background())
+	if err != nil || first != domain.DecisionAllow {
+		t.Fatalf("first answer = %v, %v; want allow", first, err)
+	}
+	second, err := approver.awaitAnswer(context.Background())
+	if err != nil || second != domain.DecisionDeny {
+		t.Fatalf("second answer = %v, %v; want deny (buffered line must not be lost)", second, err)
+	}
+	// EOF closes the line channel; further approvals deny without blocking.
+	third, err := approver.awaitAnswer(context.Background())
+	if err != nil || third != domain.DecisionDeny {
+		t.Fatalf("answer after EOF = %v, %v; want deny", third, err)
+	}
+}
+
+func TestConsoleApproverAwaitAnswerRespectsCancellation(t *testing.T) {
+	approver := &consoleApprover{}
+	approver.start(strings.NewReader("")) // no input ever arrives until EOF
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := approver.awaitAnswer(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("awaitAnswer error = %v, want context.Canceled", err)
+	}
+}
+
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	old := os.Stdout

@@ -174,11 +174,6 @@ func decodeStrict[T any](raw json.RawMessage) (T, error) {
 	return out, nil
 }
 
-func hashBytes(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
-}
-
 func cloneRawMessage(raw json.RawMessage) json.RawMessage {
 	if raw == nil {
 		return nil
@@ -303,7 +298,7 @@ func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domai
 		message = "operation timed out"
 	default:
 		var agentErr *domain.AgentError
-		if domain.As(err, &agentErr) {
+		if errors.As(err, &agentErr) {
 			code = string(agentErr.Code)
 			message = agentErr.Message
 			retryable = agentErr.Retryable

@@ -52,16 +52,19 @@ type Run struct {
 
 	pendingEvents    []domain.Event
 	persistedVersion int64
+	// turnStartedAt anchors the per-prompt wall-time budget window.
+	turnStartedAt time.Time
 }
 
 // NewRun creates a new Run in the preparing phase.
 func NewRun(sessionID domain.SessionID, limits domain.Limits, clock domain.Clock) *Run {
 	return &Run{
-		ID:        domain.NewRunID(),
-		SessionID: sessionID,
-		State:     domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
-		Limits:    limits,
-		Clock:     clock,
+		ID:            domain.NewRunID(),
+		SessionID:     sessionID,
+		State:         domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
+		Limits:        limits,
+		Clock:         clock,
+		turnStartedAt: clock.Now(),
 	}
 }
 
@@ -78,6 +81,9 @@ func RestoreRun(id domain.RunID, sessionID domain.SessionID, state domain.RunSta
 		Version:          version,
 		Clock:            clock,
 		persistedVersion: version,
+		// A restored run's wall-time window anchors at restore time; the
+		// original start is unknowable from the checkpoint.
+		turnStartedAt: clock.Now(),
 	}
 }
 
@@ -466,9 +472,27 @@ func (r *Run) RecordToolResult(result domain.ToolResult) domain.Event {
 	return evt
 }
 
+// touchWallTime folds the elapsed per-prompt window into Usage.WallTime so
+// the wall_time budget dimension is actually enforced. Without this the
+// field stays zero and MaxWallTime can never fire.
+func (r *Run) touchWallTime() {
+	if r.Clock == nil || r.turnStartedAt.IsZero() {
+		return
+	}
+	r.Usage.WallTime = r.Clock.Now().Sub(r.turnStartedAt)
+}
+
 // CheckBudget evaluates usage against limits.
 func (r *Run) CheckBudget() domain.CheckResult {
+	r.touchWallTime()
 	return r.Usage.Check(r.Limits)
+}
+
+// CheckRunaway evaluates only the runaway-protection dimensions (turns,
+// tool calls, cost, wall time), with the wall-time window folded in first.
+func (r *Run) CheckRunaway() domain.CheckResult {
+	r.touchWallTime()
+	return r.Usage.CheckRunaway(r.Limits)
 }
 
 // ResetUsageForNewTurn zeroes the budget counters so a fresh user prompt gets
@@ -477,6 +501,9 @@ func (r *Run) CheckBudget() domain.CheckResult {
 // remains accountable for what it already consumed.
 func (r *Run) ResetUsageForNewTurn() {
 	r.Usage = domain.Usage{}
+	if r.Clock != nil {
+		r.turnStartedAt = r.Clock.Now()
+	}
 }
 
 // IncrementTurn increments the turn counter and records the complete usage projection.
@@ -671,6 +698,11 @@ type Loop struct {
 	// loop drains it in prepare (before every model call) and appends them as
 	// regular user messages. Nil disables steering.
 	SteerCell *SteerCell
+	// CostInputUSDPerMTok / CostOutputUSDPerMTok price metered token usage
+	// into Usage.CostUSD so the max_estimated_cost_usd budget dimension can
+	// fire. Zero disables cost accounting.
+	CostInputUSDPerMTok  float64
+	CostOutputUSDPerMTok float64
 
 	prepared map[domain.ToolCallID]domain.PreparedCall
 	// traceRun is the active trace handle for the executing run.
@@ -815,6 +847,7 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 	}()
 
 	if err := l.flushEvents(ctx); err != nil {
+		l.terminate(ctx, domain.OutcomeFailed)
 		return err
 	}
 	for {
@@ -826,7 +859,7 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 		// Runaway check: turns/tool_calls/cost/wall_time only. Cumulative
 		// token usage is NOT a kill dimension — context pressure is handled
 		// by compaction below, so long healthy runs survive.
-		if check := l.Run.Usage.CheckRunaway(l.Run.Limits); check.HasHard() {
+		if check := l.Run.CheckRunaway(); check.HasHard() {
 			l.terminate(ctx, domain.OutcomeBudgetExhausted)
 			return fmt.Errorf("run budget exhausted: %v; raise the limit via the matching LOOM_MAX_* env var (e.g. LOOM_MAX_TURNS), or start a new session", check.HardBreaches)
 		}
@@ -869,6 +902,7 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 		}
 
 		if err := l.flushEvents(ctx); err != nil {
+			l.terminate(ctx, domain.OutcomeFailed)
 			return err
 		}
 		if l.Run.State.Lifecycle == domain.LifecycleTerminal {
@@ -940,6 +974,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 		ManifestHash: manifest.Hash, PromptHash: manifest.PromptHash,
 	})
 	if err := l.flushEvents(ctx); err != nil {
+		l.terminate(ctx, domain.OutcomeFailed)
 		return err
 	}
 	stream, err := l.Model.Stream(ctx, req)
@@ -1010,11 +1045,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	}
 	response.Metadata["request_id"] = req.ID.String()
 	response.Metadata["stop_reason"] = string(stop)
-	l.Run.Usage.InputTokens += inputTokens
-	l.Run.Usage.OutputTokens += outputTokens
-	if l.Run.Goal != nil && l.Run.Goal.Status == domain.GoalStatusActive {
-		l.Run.Goal.TokensUsed += inputTokens + outputTokens
-	}
+	l.accountUsage(inputTokens, outputTokens)
 	l.Run.AddAssistantMessage(response)
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 	l.lastCallInput = inputTokens
@@ -1221,6 +1252,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 		}
 		if l.Store != nil {
 			if err := l.flushEvents(ctx); err != nil {
+				l.terminate(ctx, domain.OutcomeFailed)
 				return err
 			}
 		}
@@ -1234,6 +1266,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 			// run: providers reject replayed transcripts containing tool calls
 			// without results, so an approval error must not strand them.
 			l.closeUnresolvedCalls(ctx, fmt.Sprintf("approval request failed before execution (%v); the call was not executed", err))
+			l.terminate(ctx, domain.OutcomeFailed)
 			return fmt.Errorf("request approval for %s: %w", tc.ID, err)
 		}
 		l.Run.appendEvent(domain.EventPermissionResolved, permissionResolvedPayload{
@@ -1291,6 +1324,7 @@ func (l *Loop) executeTools(ctx context.Context) error {
 				// Same dangling-call guarantee as the approval path: close the
 				// not-yet-executed calls so the transcript stays replayable.
 				l.closeUnresolvedCalls(ctx, fmt.Sprintf("execution interrupted before completion (%v); the call may not have run", err))
+				l.terminate(ctx, domain.OutcomeFailed)
 				return err
 			}
 		}
@@ -1467,11 +1501,7 @@ func (l *Loop) summarizeForCompaction(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	l.Run.Usage.InputTokens += inputTokens
-	l.Run.Usage.OutputTokens += outputTokens
-	if l.Run.Goal != nil && l.Run.Goal.Status == domain.GoalStatusActive {
-		l.Run.Goal.TokensUsed += inputTokens + outputTokens
-	}
+	l.accountUsage(inputTokens, outputTokens)
 	l.recordGeneration(ctx, trace.GenerationRecord{
 		RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
 		Input: messages, Output: response, StopReason: "compaction",
@@ -1483,6 +1513,23 @@ func (l *Loop) summarizeForCompaction(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("model produced an empty compaction summary")
 	}
 	return text, nil
+}
+
+// accountUsage folds one model call's metered tokens into the run budget:
+// cumulative token counts, the estimated cost (when rates are configured —
+// without it the cost_usd limit can never fire), the goal meter, and the
+// wall-time window.
+func (l *Loop) accountUsage(inputTokens, outputTokens int64) {
+	l.Run.Usage.InputTokens += inputTokens
+	l.Run.Usage.OutputTokens += outputTokens
+	if l.CostInputUSDPerMTok > 0 || l.CostOutputUSDPerMTok > 0 {
+		l.Run.Usage.CostUSD = float64(l.Run.Usage.InputTokens)*l.CostInputUSDPerMTok/1e6 +
+			float64(l.Run.Usage.OutputTokens)*l.CostOutputUSDPerMTok/1e6
+	}
+	l.Run.touchWallTime()
+	if l.Run.Goal != nil && l.Run.Goal.Status == domain.GoalStatusActive {
+		l.Run.Goal.TokensUsed += inputTokens + outputTokens
+	}
 }
 
 // closeUnresolvedCalls records an interrupted error result for every tool
@@ -1752,7 +1799,7 @@ func (l *Loop) recordToolError(ctx context.Context, tc domain.ToolCall, code, me
 
 func (l *Loop) recordToolExecutionError(ctx context.Context, tc domain.ToolCall, err error) {
 	var agentErr *domain.AgentError
-	if domain.As(err, &agentErr) {
+	if errors.As(err, &agentErr) {
 		l.recordToolError(ctx, tc, string(agentErr.Code), agentErr.Message)
 		return
 	}
@@ -1782,7 +1829,7 @@ func cloneRecoverySpec(spec *domain.RecoverySpec) *domain.RecoverySpec {
 
 func errorCodeForAudit(err error) string {
 	var agentErr *domain.AgentError
-	if domain.As(err, &agentErr) {
+	if errors.As(err, &agentErr) {
 		return string(agentErr.Code)
 	}
 	return string(domain.ErrInternal)

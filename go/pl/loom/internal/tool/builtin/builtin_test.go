@@ -22,6 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -428,6 +429,97 @@ func TestSearchRipgrepEngineAggregatesMatchesAndContext(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW M8): rg must cap emitted columns so multi-megabyte
+// single-line files cannot blow the JSONL scanner's token limit.
+func TestRgCommonArgsIncludesMaxColumns(t *testing.T) {
+	args := rgCommonArgs(0, true, false, false, nil, "", 100)
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--max-columns") {
+		t.Fatalf("rg argv missing --max-columns: %v", args)
+	}
+}
+
+// Regression (REVIEW M7): a truncated rg run used to surface as a generic
+// "failed to parse ripgrep JSON output" error — the head/tail seam cuts a
+// JSON line. Unparseable seam lines must be skipped and the result marked
+// truncated instead.
+func TestSearchRipgrepToleratesSeamCorruption(t *testing.T) {
+	stubRgLocator(t)
+	validator, _ := newValidator(t)
+	match := `{"type":"match","data":{"path":{"text":"a.go"},"line_number":2,"lines":{"text":"func hello() {}\n"}}}`
+	runner := &fakeRgRunner{result: process.Result{
+		ExitCode:        0,
+		Stdout:          []byte(match + "\n" + `{"type":"match","data":{"path":{"text":"cut-mid-json`),
+		StdoutTruncated: true,
+	}}
+
+	tool, err := NewSearchTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewSearchTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{Pattern: "hello"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output searchOutput
+	decodeToolResult(t, result, &output)
+	if output.MatchCount != 1 {
+		t.Fatalf("output.MatchCount = %d, want 1 (seam line skipped)", output.MatchCount)
+	}
+	if !output.Truncated {
+		t.Fatal("output.Truncated must be true when the runner truncated rg output")
+	}
+}
+
+// Regression (REVIEW M7): glob must propagate the runner's truncation flag
+// instead of claiming a complete listing, and drop the spliced seam line.
+func TestGlobRipgrepPropagatesTruncation(t *testing.T) {
+	stubRgLocator(t)
+	validator, _ := newValidator(t)
+	runner := &fakeRgRunner{result: process.Result{
+		ExitCode:        0,
+		Stdout:          []byte("a.go\nb.go\n"),
+		StdoutTruncated: true,
+	}}
+
+	tool, err := NewGlobTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewGlobTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "glob", globArgs{Pattern: "*.go"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output globOutput
+	decodeToolResult(t, result, &output)
+	if !output.Truncated {
+		t.Fatal("output.Truncated must be true when the runner truncated rg output")
+	}
+}
+
+func TestTrimPreviewSeamDropsPartialLines(t *testing.T) {
+	// seam=14 splits "partial.go": head keeps complete lines only, the
+	// tail's first line (the continuation) is dropped too.
+	preview := []byte("a.go\nb.go\npartial.go\nc.go\n")
+	out := trimPreviewSeam(preview, 14)
+	if got, want := string(out), "a.go\nb.go\nc.go\n"; got != want {
+		t.Fatalf("trimPreviewSeam = %q, want %q", got, want)
+	}
+	// Previews shorter than the seam pass through untouched.
+	short := []byte("x.go\n")
+	if got := trimPreviewSeam(short, 1<<20); string(got) != "x.go\n" {
+		t.Fatalf("short preview changed: %q", got)
+	}
+}
+
 func TestSearchRipgrepErrorSurfacing(t *testing.T) {
 	stubRgLocator(t)
 	validator, _ := newValidator(t)
@@ -443,6 +535,66 @@ func TestSearchRipgrepErrorSurfacing(t *testing.T) {
 	}
 	result := tool.Execute(context.Background(), prepared)
 	assertToolResultError(t, result, domain.ToolStatusError, domain.ErrInvalidInput)
+}
+
+// Regression (REVIEW H5): on platforms where the sandbox fails closed (e.g.
+// Linux), runner.Run always fails with ErrSandboxUnavailable. search must
+// degrade to the Go engine instead of erroring out.
+func TestSearchFallsBackWhenSandboxUnavailable(t *testing.T) {
+	stubRgLocator(t)
+	validator, root := newValidator(t)
+	mustWriteFile(t, filepath.Join(root, "src", "a.go"), []byte("package src\nfunc hello() {}\n"))
+
+	runner := &fakeRgRunner{err: fmt.Errorf("prepare sandbox: %w", process.ErrSandboxUnavailable)}
+	tool, err := NewSearchTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewSearchTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{Pattern: "hello", Path: "src"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output searchOutput
+	decodeToolResult(t, result, &output)
+	if output.Engine != string(engineGoFallback) {
+		t.Fatalf("output.Engine = %q, want go_fallback", output.Engine)
+	}
+	if output.MatchCount != 1 {
+		t.Fatalf("output.MatchCount = %d, want 1", output.MatchCount)
+	}
+}
+
+// Regression (REVIEW H5): same sandbox-unavailable fallback for glob.
+func TestGlobFallsBackWhenSandboxUnavailable(t *testing.T) {
+	stubRgLocator(t)
+	validator, root := newValidator(t)
+	mustWriteFile(t, filepath.Join(root, "src", "a.go"), []byte("package src\n"))
+
+	runner := &fakeRgRunner{err: fmt.Errorf("%w: linux sandbox is not implemented", process.ErrSandboxUnavailable)}
+	tool, err := NewGlobTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewGlobTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "glob", globArgs{Pattern: "*.go", Path: "src"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output globOutput
+	decodeToolResult(t, result, &output)
+	if output.Engine != string(engineGoFallback) {
+		t.Fatalf("output.Engine = %q, want go_fallback", output.Engine)
+	}
+	if output.Count != 1 || output.Files[0] != "src/a.go" {
+		t.Fatalf("unexpected glob output: %+v", output)
+	}
 }
 
 func TestGlobRipgrepEngineListsFiles(t *testing.T) {
@@ -657,7 +809,7 @@ func assertAgentErrorCode(t *testing.T, err error, want domain.ErrorCode) {
 		t.Fatal("expected error")
 	}
 	var agentErr *domain.AgentError
-	if !domain.As(err, &agentErr) {
+	if !errors.As(err, &agentErr) {
 		t.Fatalf("expected AgentError, got %T: %v", err, err)
 	}
 	if agentErr.Code != want {

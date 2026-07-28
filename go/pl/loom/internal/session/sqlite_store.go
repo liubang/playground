@@ -791,11 +791,17 @@ func checkpointArtifactRefs(checkpoint domain.Checkpoint) map[domain.ArtifactID]
 		}
 	}
 	for _, message := range checkpoint.Messages {
-		for _, part := range message.Parts {
-			add(part.Artifact)
-			if part.ToolResult != nil {
-				for _, content := range part.ToolResult.Content {
-					add(content.Artifact)
+		for _, ref := range message.ArtifactRefs() {
+			ref := ref
+			add(&ref)
+		}
+		// Compaction replacement messages can only carry text parts, so the
+		// artifact references their payload depends on travel in metadata.
+		if encoded := message.Metadata[domain.MetadataCompactedArtifacts]; encoded != "" {
+			var metaRefs []domain.ArtifactRef
+			if err := json.Unmarshal([]byte(encoded), &metaRefs); err == nil {
+				for i := range metaRefs {
+					add(&metaRefs[i])
 				}
 			}
 		}
