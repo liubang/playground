@@ -11,6 +11,7 @@
 | [`bigdata/`](./bigdata) | 大数据全栈：HDFS + MySQL + Hive + Spark + Trino + Iceberg | `cd bigdata && ./bootstrap.sh` |
 | [`doris/`](./doris)     | Apache Doris 集群：1 FE + 2 BE                            | `cd doris && ./bootstrap.sh`   |
 | [`hermes/`](./hermes)   | Hermes Agent 网关 + Dashboard                             | `cd hermes && ./bootstrap.sh`  |
+| [`kerberos/`](./kerberos) | Kerberos 实验室：KDC + GSSAPI demo 服务 + 客户端，含自动 E2E | `cd kerberos && ./bootstrap.sh` |
 | [`monitor/`](./monitor) | Prometheus + Grafana 监控栈                               | `cd monitor && ./bootstrap.sh` |
 | [`mysql/`](./mysql)     | 轻量独立 MySQL（快速实验用）                              | `cd mysql && ./bootstrap.sh`   |
 | [`minidfs/`](./minidfs) | MiniDFS：1 NameNode + 3 DataNode + MySQL，含自动 E2E      | `cd minidfs && ./bootstrap.sh` |
@@ -337,6 +338,20 @@ cd hermes
 ```
 
 Dashboard 默认开启（`HERMES_DASHBOARD=1`），使用登录会话认证，账号密码由 `.env` 中的 `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` / `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD` 提供（`bootstrap.sh` 首次运行时交互式生成）。当前镜像已验证 Dashboard 可登录；若 `8642` 无法连接，请检查 `docker compose logs hermes` 是否实际启动了 Gateway HTTP 监听。
+
+---
+
+## kerberos/
+
+Kerberos 学习实验室：MIT KDC（realm `LAB.LOCAL`）+ GSSAPI echo demo 服务 + 客户端容器，用于体验 `kinit → TGT → 服务票据 → 双向认证 → 会话密钥加密` 全流程以及 keytab 免密认证。
+
+```bash
+cd kerberos
+./bootstrap.sh        # 启动并打印快速玩法
+./tests/e2e.sh all    # 8 项断言：密码认证、预认证拒绝、双向认证、服务票据、无凭证拒绝、keytab、多用户、审计日志
+```
+
+预置用户 `alice/alice123`、`bob/bob12345`，管理员 `admin/admin@LAB.LOCAL`（`admin123`），服务主体 `demo/demo-server@LAB.LOCAL`（keytab 认证）。KDC 的 88 端口映射到 `127.0.0.1`，宿主机配好 `krb5.conf` 后可直接 `kinit`。详细测试说明见 [`kerberos/TESTING.md`](./kerberos/TESTING.md)。
 
 ---
 
