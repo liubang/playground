@@ -19,7 +19,6 @@ package ui
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -90,17 +89,7 @@ func (p *SessionPicker) Render(width, height int) string {
 		return "No existing sessions found.\nPress Esc to go back."
 	}
 
-	start, end := 0, len(p.Summaries)
-	if height > 0 {
-		visible := height - 4 // heading, blank line, scroll hints, footer
-		if visible < 1 {
-			visible = 1
-		}
-		if p.Cursor >= visible {
-			start = p.Cursor - visible + 1
-		}
-		end = min(start+visible, len(p.Summaries))
-	}
+	start, end := pickerWindow(p.Cursor, len(p.Summaries), height)
 
 	var b strings.Builder
 	b.WriteString("Select a session to resume:\n\n")
@@ -194,17 +183,7 @@ func (p *ModelPicker) Render(width, height int) string {
 		return "No models configured.\nPress Esc to go back."
 	}
 
-	start, end := 0, len(p.Options)
-	if height > 0 {
-		visible := height - 4 // heading, blank line, scroll hints, footer
-		if visible < 1 {
-			visible = 1
-		}
-		if p.Cursor >= visible {
-			start = p.Cursor - visible + 1
-		}
-		end = min(start+visible, len(p.Options))
-	}
+	start, end := pickerWindow(p.Cursor, len(p.Options), height)
 
 	// Align the metadata column to the widest reference in the whole list
 	// (not just the window) so columns stay put while scrolling.
@@ -356,15 +335,27 @@ func (p *ReasoningPicker) Render(width, height int) string {
 }
 
 // formatTokens renders a token count in compact decimal form (200k, 1.0M).
+// Delegates to humanizeTokens — the single implementation (REVIEW R8).
 func formatTokens(n int64) string {
-	switch {
-	case n < 1000:
-		return strconv.FormatInt(n, 10)
-	case n < 1_000_000:
-		return fmt.Sprintf("%dk", n/1000)
-	default:
-		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	return humanizeTokens(n)
+}
+
+// pickerWindow computes the visible row window around the cursor so long
+// lists stay reachable within one screen (REVIEW R8: was duplicated per
+// picker).
+func pickerWindow(cursor, total, height int) (start, end int) {
+	start, end = 0, total
+	if height > 0 {
+		visible := height - 4 // heading, blank line, scroll hints, footer
+		if visible < 1 {
+			visible = 1
+		}
+		if cursor >= visible {
+			start = cursor - visible + 1
+		}
+		end = min(start+visible, total)
 	}
+	return start, end
 }
 
 // formatTimeAgo returns a short relative time description.

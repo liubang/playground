@@ -1026,7 +1026,7 @@ func (m Model) handleReasoningChanged(msg reasoningChangedMsg) tea.Model {
 		return m
 	}
 	m.reasoningOverridden = msg.result.Overridden
-	m.reasoningEffort = reasoningDialLabel(msg.result.Effective)
+	m.reasoningEffort = msg.result.Effective.Label()
 	m.setStatus(fmt.Sprintf("Reasoning: %s", reasoningStatusText(m.reasoningEffort, m.reasoningOverridden)), false)
 	return m
 }
@@ -1036,17 +1036,6 @@ func (m Model) setReasoningCmd(arg, command string) tea.Cmd {
 		result, err := m.controller.SetReasoning(context.Background(), arg)
 		return reasoningChangedMsg{command: command, result: result, err: err}
 	}
-}
-
-// reasoningDialLabel renders the header dial for an effective spec.
-func reasoningDialLabel(spec domain.ReasoningSpec) string {
-	if spec.Effort != "" {
-		return string(spec.Effort)
-	}
-	if spec.BudgetTokens > 0 {
-		return fmt.Sprintf("budget:%d", spec.BudgetTokens)
-	}
-	return ""
 }
 
 // handleCompactRequested applies the ack of a /compact request: the pass

@@ -664,7 +664,7 @@ func RebuildTranscript(messages []domain.Message) *BlockIndex {
 				Done:   true,
 				Status: "success",
 				Target: toolTargetFromArgs(call.Arguments),
-				Diff:   render.DiffForToolCall(call.Name, call.Arguments, toolDiffMaxLines),
+				Diff:   render.DiffForToolCall(call.Name, call.Arguments, domain.ToolDiffMaxLines),
 			}
 			result, ok := results[call.ID]
 			if !ok {
@@ -697,11 +697,9 @@ func RebuildTranscript(messages []domain.Message) *BlockIndex {
 	return idx
 }
 
-// Bounds for the persisted-result preview shown by expandable tool blocks.
-const (
-	toolPreviewMaxLines = 12
-	toolPreviewMaxBytes = 1200
-)
+// Bounds for the persisted-result preview shown by expandable tool blocks:
+// domain.ToolPreviewMaxLines / domain.ToolPreviewMaxBytes (single home,
+// REVIEW R8).
 
 // turnErrorMaxCells bounds the error text shown in a turn-failure notice.
 // Provider error payloads (rate-limit JSON dumps with request IDs and
@@ -711,8 +709,8 @@ const (
 // the notice keeps its informative head.
 const turnErrorMaxCells = 300
 
-// toolDiffMaxLines bounds the argument diff rendered for edit/write calls.
-const toolDiffMaxLines = 40
+// The argument-diff bound for edit/write calls: domain.ToolDiffMaxLines
+// (single home, REVIEW R8).
 
 // toolTargetFromArgs extracts the primary display target (path, command or
 // pattern) from raw tool call arguments.
@@ -755,13 +753,13 @@ func toolResultPreviewText(result domain.ToolResult) string {
 	}
 	truncated := false
 	lines := strings.Split(text, "\n")
-	if len(lines) > toolPreviewMaxLines {
-		lines = lines[:toolPreviewMaxLines]
+	if len(lines) > domain.ToolPreviewMaxLines {
+		lines = lines[:domain.ToolPreviewMaxLines]
 		truncated = true
 	}
 	out := strings.Join(lines, "\n")
-	if len(out) > toolPreviewMaxBytes {
-		out = out[:toolPreviewMaxBytes]
+	if len(out) > domain.ToolPreviewMaxBytes {
+		out = domain.TruncateAtRuneBoundary(out, domain.ToolPreviewMaxBytes)
 		truncated = true
 	}
 	if truncated {

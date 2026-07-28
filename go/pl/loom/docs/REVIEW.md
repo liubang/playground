@@ -41,13 +41,13 @@
 | #   | 位置                                                                                          | 问题                                                                                                                                                                                                                 | 状态                                                                  |
 | --- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | R1  | `runtimeevent/aggregator.go`（全文件 226 行）                                                 | 是 `agent/stream_hooks.go` 的过期副本，除自身测试外零调用方，且不支持 reasoning 事件、无 malformed-arguments 兜底，已行为漂移                                                                                        | ✅ 已删除                                                             |
-| R2  | `session/sqlite_store.go:233-303` vs `307-387`                                                | `AppendEvents` 与 `AppendEventsAndCheckpoint` 约 70 行事务骨架完全重复，应抽 `appendEventsTx`                                                                                                                        | ⬜ 未处理                                                             |
+| R2  | `session/sqlite_store.go:233-303` vs `307-387`                                                | `AppendEvents` 与 `AppendEventsAndCheckpoint` 约 70 行事务骨架完全重复，应抽 `appendEventsTx`                                                                                                                        | ✅ 已处理                                                             |
 | R3  | 7 个工具包的 baseTool 骨架                                                                    | `prepareCall/verifyPreparedCall/signPrepared/decodeStrict/errorResult` 等逐字复制且已漂移（gittools `errorResult` 多分支、skillread 丢 context.Canceled 映射）                                                       | ⬜ 未处理                                                             |
-| R4  | `workspace/path.go:307`、`builtin/common.go:59`、`gittools/common.go:54`、`lint/common.go:41` | 敏感路径清单重复 4 份（skillread 唯一正确复用 `workspace.IsSensitive`）                                                                                                                                              | ⬜ 未处理                                                             |
+| R4  | `workspace/path.go:307`、`builtin/common.go:59`、`gittools/common.go:54`、`lint/common.go:41` | 敏感路径清单重复 4 份（skillread 唯一正确复用 `workspace.IsSensitive`）                                                                                                                                              | ✅ 已处理                                                             |
 | R5  | anthropic vs openai provider                                                                  | `toolResultContent`/`messageText`/schema 解码/Stream 骨架/read-error 收尾大段重复，建议抽 `model/wireutil`                                                                                                           | ⬜ 未处理                                                             |
 | R6  | `app/controller.go:262-564`                                                                   | 11 个公开方法共享 ~20 行 RPC 样板（约 200 行），抽 `call(ctx, cmd)` 私有助手                                                                                                                                         | ⬜ 未处理                                                             |
 | R7  | `channel_approver.go` vs `channel_questioner.go`                                              | 注册-等待-删除、DenyAll/SkipAll 近乎对称，可抽泛型 `pendingHub[K,V]` 并统一注册/发布顺序                                                                                                                             | ⬜ 未处理                                                             |
-| R8  | ui 层                                                                                         | 三组 picker 窗口化逻辑相同；`formatTokens`≡`humanizeTokens`；`reasoningDialLabel`≡`describeReasoning`；预览常量双端各一份                                                                                            | ⬜ 未处理                                                             |
+| R8  | ui 层                                                                                         | 三组 picker 窗口化逻辑相同；`formatTokens`≡`humanizeTokens`；`reasoningDialLabel`≡`describeReasoning`；预览常量双端各一份                                                                                            | ✅ 已处理                                                             |
 | R9  | 多处                                                                                          | 死代码/死配置：`CanTerminate` 恒 true；`MaxParallelTools`/`MaxRepeatedActions` 无消费方；`ControllerStateFatal` 从未赋值；`Message.MarshalJSON` 无操作；`contentResult` 未使用；edit 包 `hashBytes`/`sha256Hex` 双份 | 🔶 部分处理（MarshalJSON/contentResult/hashBytes 已删；其余留待后续） |
 | R10 | 5 处 | 字节截断切 UTF-8：`compact.go:149`、`goal.go:261`、`prompt.go:405`、`render/diff.go:142`、`webfetch.go:386`（应统一 rune 边界截断） | ✅ 已修复（webfetch 于 M15、其余 4 处于本轮） |
 
@@ -204,6 +204,18 @@
 - **方案**：`BlockIndex` 新增单调 `version`（Add/Remove/Toggle×3/confirmPendingUserBlock/ApplyRuntimeEvent 处 bump，整体替换靠指针比较）；`syncTranscript` 在「索引指针+版本+宽度+主题均未变且无 volatile block（进行中/spinner 块）」时直接跳过 O(transcript) 重建。漏 bump 的代价是一次多余重建（安全方向），反向才会酿陈旧屏。
 - **复现用例**：`ui/ui_test.go: TestUpdateSkipsTranscriptRebuildWhenNothingChanged`（先只加 `transcriptBuilds` 计数器验证旧行为：8 次按键 → 8 次全量重建；修复后按键不再重建、block 变更事件仍触发重建）。
 - **验证**：`go test ./internal/ui/` 全绿。
+
+### R2/R4/R8 小重构（2026-07-28）
+- **R2**：`sqlite_store.go` 抽 `appendEventsTx`（版本校验+事件插入+版本推进骨架，`extra` 回调承载 checkpoint 写入）与 `validateContiguousEvents`（统一两个公开方法的事件校验，错误文案取原两者中更详细的版本）。
+- **R4**：`workspace.ContainsSensitiveComponent` 导出为唯一清单；builtin/gittools/lint 三份逐字拷贝的 map+循环删除，各自保留一行委托。
+- **R8**：
+  - `reasoningDialLabel`(ui) ≡ `describeReasoning`(app) → 收敛为 `domain.ReasoningSpec.Label()`；
+  - 预览/diff 常量双端各一份 → `domain.ToolPreviewMaxLines/ToolPreviewMaxBytes/ToolDiffMaxLines`；
+  - `formatTokens` → 委托 `humanizeTokens`（既有测试期望全部兼容，1k–10k 区间显示从 "6k" 变为 "6.1k"）；
+  - picker 窗口化×2 → `pickerWindow`；
+  - `cutAtRuneBoundary`(agent/prompt) → 收敛为 `domain.TruncateAtRuneBoundary`；
+  - **附带修复（R10 同类新发现）**：`app/controller.go: boundPreviewLines` 与 `ui/blocks.go: toolResultPreviewText` 的字节截断同样可切 UTF-8，一并改用 rune 边界截断。
+- **验证**：`go test ./...` 全绿，`bazel test //go/pl/loom/...` 31/31（首轮有 1 次间歇失败，复跑 3 轮稳定通过，与本批改动无关）。
 
 ### A7 ArgsHash 注释复核（2026-07-28 复核，无需改码）
 - 复核结论：review 原文的「实为截断 SHA-256 且 Execute 不校验」是 **M9 修复前的旧状态**；M9 已统一为真实 HMAC-SHA256（7 个工具的 `signPrepared` 均 `hmac.New(sha256.New, key)`，Execute 均 `hmac.Equal` 再校验），当前 `run.go:1858,1870` 的「ArgsHash HMAC that Execute re-verifies」注释与实现一致。「截断」仅存在于审批描述的 12 位展示前缀（`approvalDescHashPrefixBytes`），不影响校验。

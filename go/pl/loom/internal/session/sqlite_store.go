@@ -229,14 +229,9 @@ VALUES (?, 0, ?, ?, ?, ?)`, sessionID.String(), formatTime(now), now.UnixNano(),
 	return nil
 }
 
-// AppendEvents atomically appends a contiguous event batch at expectedVersion.
-func (s *SQLiteStore) AppendEvents(ctx context.Context, sessionID domain.SessionID, expectedVersion int64, events []domain.Event) error {
-	if sessionID.IsZero() {
-		return domain.NewError(domain.ErrInvalidInput, "session ID is required")
-	}
-	if expectedVersion < 0 {
-		return domain.NewError(domain.ErrInvalidInput, "expected version must be non-negative")
-	}
+// validateContiguousEvents checks that events form a contiguous batch
+// starting at expectedVersion+1 for the given session.
+func validateContiguousEvents(sessionID domain.SessionID, expectedVersion int64, events []domain.Event) error {
 	for i, event := range events {
 		if err := event.Validate(); err != nil {
 			return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("invalid event at index %d", i), domain.WithCause(err))
@@ -249,7 +244,28 @@ func (s *SQLiteStore) AppendEvents(ctx context.Context, sessionID domain.Session
 			return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("event sequence %d at index %d, want %d", event.Sequence, i, want))
 		}
 	}
+	return nil
+}
 
+// AppendEvents atomically appends a contiguous event batch at expectedVersion.
+func (s *SQLiteStore) AppendEvents(ctx context.Context, sessionID domain.SessionID, expectedVersion int64, events []domain.Event) error {
+	if sessionID.IsZero() {
+		return domain.NewError(domain.ErrInvalidInput, "session ID is required")
+	}
+	if expectedVersion < 0 {
+		return domain.NewError(domain.ErrInvalidInput, "expected version must be non-negative")
+	}
+	if err := validateContiguousEvents(sessionID, expectedVersion, events); err != nil {
+		return err
+	}
+	return s.appendEventsTx(ctx, sessionID, expectedVersion, events, nil)
+}
+
+// appendEventsTx runs the shared append skeleton in one transaction:
+// optimistic version check, event inserts, session version advance. The
+// optional extra runs inside the same transaction (e.g. checkpoint
+// persistence) so the whole batch commits or rolls back together.
+func (s *SQLiteStore) appendEventsTx(ctx context.Context, sessionID domain.SessionID, expectedVersion int64, events []domain.Event, extra func(ctx context.Context, tx *sql.Tx) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return storeError("begin append transaction", err)
@@ -296,6 +312,11 @@ WHERE session_id = ? AND version = ?`, newVersion, formatTime(now), now.UnixNano
 	} else if affected != 1 {
 		return domain.NewError(domain.ErrConflict, "session version changed while appending events")
 	}
+	if extra != nil {
+		if err := extra(ctx, tx); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return storeError("commit append transaction", err)
 	}
@@ -316,74 +337,25 @@ func (s *SQLiteStore) AppendEventsAndCheckpoint(ctx context.Context, sessionID d
 		return domain.NewError(domain.ErrInvalidInput,
 			fmt.Sprintf("checkpoint sequence %d does not match resulting version %d", checkpoint.Sequence, newVersion))
 	}
-	for i, event := range events {
-		if err := event.Validate(); err != nil {
-			return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("invalid event at index %d", i), domain.WithCause(err))
-		}
-		if event.SessionID != sessionID || event.Sequence != expectedVersion+int64(i)+1 {
-			return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("event at index %d is not contiguous for the session", i))
-		}
+	if err := validateContiguousEvents(sessionID, expectedVersion, events); err != nil {
+		return err
 	}
 	data, err := json.Marshal(checkpoint)
 	if err != nil {
 		return domain.NewError(domain.ErrInvalidInput, "encode checkpoint", domain.WithCause(err))
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return storeError("begin append and checkpoint transaction", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	var actualVersion int64
-	if err := tx.QueryRowContext(ctx, "SELECT version FROM sessions WHERE session_id = ?", sessionID.String()).Scan(&actualVersion); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return domain.NewError(domain.ErrInvalidInput, "session not found")
-		}
-		return storeError("load session version", err)
-	}
-	if actualVersion != expectedVersion {
-		return domain.NewError(domain.ErrConflict,
-			fmt.Sprintf("session version mismatch: expected %d, got %d", expectedVersion, actualVersion))
-	}
-	for i := range events {
-		event := events[i]
+	return s.appendEventsTx(ctx, sessionID, expectedVersion, events, func(ctx context.Context, tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO events(event_id, session_id, sequence, type, timestamp, payload)
-VALUES (?, ?, ?, ?, ?, ?)`, event.ID.String(), sessionID.String(), event.Sequence,
-			string(event.Type), formatTime(event.Timestamp), []byte(event.Payload)); err != nil {
-			if isUniqueConstraint(err) {
-				return domain.NewError(domain.ErrConflict, "event already exists", domain.WithCause(err))
-			}
-			return storeError("insert event", err)
-		}
-	}
-	now := time.Now().UTC()
-	result, err := tx.ExecContext(ctx, `
-UPDATE sessions SET version = ?, updated_at = ?, updated_at_unix_nano = ?
-WHERE session_id = ? AND version = ?`, newVersion, formatTime(now), now.UnixNano(), sessionID.String(), expectedVersion)
-	if err != nil {
-		return storeError("advance session version", err)
-	}
-	if affected, err := result.RowsAffected(); err != nil {
-		return storeError("inspect session version update", err)
-	} else if affected != 1 {
-		return domain.NewError(domain.ErrConflict, "session version changed while appending events")
-	}
-	if _, err := tx.ExecContext(ctx, `
 INSERT INTO checkpoints(checkpoint_id, session_id, sequence, data, created_at, created_at_unix_nano)
 VALUES (?, ?, ?, ?, ?, ?)`, checkpoint.ID.String(), sessionID.String(), checkpoint.Sequence,
-		data, formatTime(checkpoint.CreatedAt), checkpoint.CreatedAt.UTC().UnixNano()); err != nil {
-		if isUniqueConstraint(err) {
-			return domain.NewError(domain.ErrConflict, "checkpoint already exists", domain.WithCause(err))
+			data, formatTime(checkpoint.CreatedAt), checkpoint.CreatedAt.UTC().UnixNano()); err != nil {
+			if isUniqueConstraint(err) {
+				return domain.NewError(domain.ErrConflict, "checkpoint already exists", domain.WithCause(err))
+			}
+			return storeError("save checkpoint", err)
 		}
-		return storeError("save checkpoint", err)
-	}
-	if err := addArtifactRefs(ctx, tx, sessionID, checkpointArtifactRefs(checkpoint)); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return storeError("commit append and checkpoint transaction", err)
-	}
-	return nil
+		return addArtifactRefs(ctx, tx, sessionID, checkpointArtifactRefs(checkpoint))
+	})
 }
 
 // LoadEvents loads events after the supplied sequence in ascending order.

@@ -19,6 +19,7 @@ package domain
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 )
@@ -62,6 +63,19 @@ type ReasoningSpec struct {
 // IsZero reports whether the spec carries any opinion at all.
 func (s ReasoningSpec) IsZero() bool {
 	return s.Effort == "" && s.BudgetTokens == 0
+}
+
+// Label renders the spec for compact status display; "" means the provider
+// decides. Single home for what used to be duplicated in app and ui
+// (REVIEW R8).
+func (s ReasoningSpec) Label() string {
+	if s.Effort != "" {
+		return string(s.Effort)
+	}
+	if s.BudgetTokens > 0 {
+		return fmt.Sprintf("budget:%d", s.BudgetTokens)
+	}
+	return ""
 }
 
 // Enabled reports whether reasoning should be turned on for this call.
