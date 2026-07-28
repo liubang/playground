@@ -1,0 +1,2 @@
+# kadmind 访问控制：允许所有 */admin 主体做任何管理操作
+*/admin@LAB.LOCAL *

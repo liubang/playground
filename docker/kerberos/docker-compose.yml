@@ -1,0 +1,62 @@
+services:
+  kdc:
+    build: ./kdc
+    container_name: krb5-kdc
+    hostname: kdc
+    restart: unless-stopped
+    networks:
+      - kerberos
+    volumes:
+      - ./krb5.conf:/etc/krb5.conf:ro
+      - kdc-data:/var/lib/krb5kdc
+      - keytabs:/keytabs
+    ports:
+      # 暴露到本机后，宿主机也可以用这个 KDC 做 kinit 实验
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:88:88"
+      - "${INTERNAL_BIND_ADDR:-127.0.0.1}:88:88/udp"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/88' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  demo-server:
+    build: ./demo
+    container_name: krb5-demo-server
+    hostname: demo-server
+    restart: unless-stopped
+    networks:
+      - kerberos
+    environment:
+      # 服务端凭证来源：keytab 文件（服务版的"密码"）
+      KRB5_KTNAME: /keytabs/demo.service.keytab
+    volumes:
+      - ./krb5.conf:/etc/krb5.conf:ro
+      - keytabs:/keytabs:ro
+    command: ["python3", "/app/server.py"]
+    depends_on:
+      kdc:
+        condition: service_healthy
+
+  client:
+    build: ./demo
+    container_name: krb5-client
+    hostname: client
+    restart: unless-stopped
+    networks:
+      - kerberos
+    volumes:
+      - ./krb5.conf:/etc/krb5.conf:ro
+      - keytabs:/keytabs:ro
+    command: ["sleep", "infinity"]
+    depends_on:
+      kdc:
+        condition: service_healthy
+
+volumes:
+  kdc-data:
+  keytabs:
+
+networks:
+  kerberos:
