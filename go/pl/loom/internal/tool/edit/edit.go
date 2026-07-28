@@ -93,7 +93,7 @@ func (t *EditTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.Pr
 			Kind:         "file_replace",
 			Path:         pathInfo.Absolute,
 			ExpectedHash: sha256Hex(data),
-			ResultHash:   hashBytes([]byte(newContent)),
+			ResultHash:   sha256Hex([]byte(newContent)),
 		}
 	}
 	return prepared, nil

@@ -47,11 +47,10 @@ const (
 
 	maxDirectoryEntries = 200
 
-	defaultSearchContextLines = 0
-	maxSearchContextLines     = 5
-	maxSearchMatches          = 200
-	maxSearchFileBytes        = 1 << 20
-	maxSearchQueryBytes       = 4096
+	maxSearchContextLines = 5
+	maxSearchMatches      = 200
+	maxSearchFileBytes    = 1 << 20
+	maxSearchQueryBytes   = 4096
 
 	chunkSize = 32 << 10
 )
@@ -410,7 +409,7 @@ func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domai
 		message = "operation timed out"
 	default:
 		var agentErr *domain.AgentError
-		if domain.As(err, &agentErr) {
+		if errors.As(err, &agentErr) {
 			code = string(agentErr.Code)
 			message = agentErr.Message
 			retryable = agentErr.Retryable

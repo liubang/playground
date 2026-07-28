@@ -20,6 +20,7 @@ package webfetch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -125,7 +127,7 @@ func TestValidateFetchArgs(t *testing.T) {
 					t.Fatalf("expected error %s, got nil", tt.wantErr)
 				}
 				var ae *domain.AgentError
-				if !domain.As(err, &ae) || ae.Code != tt.wantErr {
+				if !errors.As(err, &ae) || ae.Code != tt.wantErr {
 					t.Fatalf("error code = %v, want %s", err, tt.wantErr)
 				}
 				return
@@ -669,5 +671,17 @@ func TestTruncateAtBoundary(t *testing.T) {
 	got := truncateAtBoundary(s, 20)
 	if got != "line one\nline two" {
 		t.Fatalf("truncateAtBoundary = %q, want line-boundary cut", got)
+	}
+
+	// Regression (REVIEW M15): the byte-level cut used to split multi-byte
+	// runes (3-byte CJK), embedding invalid UTF-8 that json.Marshal silently
+	// rewrote to U+FFFD. 中 is 3 bytes: cutting at byte 11 lands inside it.
+	cjk := strings.Repeat("a", 10) + "中文中文"
+	got = truncateAtBoundary(cjk, 11)
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncateAtBoundary split a rune: %q", got)
+	}
+	if got != strings.Repeat("a", 10) {
+		t.Fatalf("truncateAtBoundary = %q, want backoff to the rune boundary", got)
 	}
 }

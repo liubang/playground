@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -139,9 +140,19 @@ func (t *GlobTool) executeRipgrep(ctx context.Context, prepared domain.PreparedC
 	// rg --files lists candidate files relative to the working directory; the
 	// glob pattern filters them. Fetch one extra entry to detect truncation.
 	argv := []string{"--files", "--glob", args.Pattern, "--", "."}
-	stdout, err := runRipgrep(ctx, t.runner, root.Absolute, argv)
+	stdout, rgTruncated, err := runRipgrep(ctx, t.runner, root.Absolute, argv)
 	if err != nil {
+		if isSandboxFailure(err) {
+			// The sandbox cannot execute anything on this platform (e.g.
+			// Linux fails closed); degrade to the built-in engine.
+			return t.executeGoFallback(ctx, prepared, root, args, startedAt)
+		}
 		return errorResult(prepared.Call.ID, startedAt, err)
+	}
+	if rgTruncated {
+		// A truncated preview splices the head and tail mid-line; drop the
+		// partial lines at the seam so no bogus path enters the result.
+		stdout = trimPreviewSeam(stdout, process.PreviewSeamOffset(rgOutputLimit))
 	}
 
 	lines, err := splitLines(stdout, maxSearchFileBytes)
@@ -156,7 +167,7 @@ func (t *GlobTool) executeRipgrep(ctx context.Context, prepared domain.PreparedC
 		files = append(files, displayUnderRoot(root, line))
 	}
 	sort.Strings(files)
-	truncated := false
+	truncated := rgTruncated
 	if len(files) > maxGlobResults {
 		files = files[:maxGlobResults]
 		truncated = true

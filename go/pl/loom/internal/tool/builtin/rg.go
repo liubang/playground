@@ -18,8 +18,10 @@
 package builtin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -42,6 +44,9 @@ const (
 	rgTimeout      = 30 * time.Second
 	rgOutputLimit  = 1 << 20
 	rgMaxCountHint = 500
+	// rgMaxColumns bounds a single emitted line at 256KB so the JSONL
+	// scanner (1MB token limit) always parses, even with escaping overhead.
+	rgMaxColumns = 256 << 10
 )
 
 // rgLocator probes for the ripgrep binary once per process.
@@ -64,6 +69,15 @@ func rgAvailable(runner rgRunner) bool {
 	return ok
 }
 
+// isSandboxFailure reports whether err means the sandboxed runner cannot
+// execute at all (as opposed to rg itself failing). Platforms without a
+// working sandbox fail closed — Linux's NewPlatformSandbox returns an
+// UnsupportedSandbox, so every execution fails this way — and callers
+// should degrade to the Go engine rather than report an error.
+func isSandboxFailure(err error) bool {
+	return errors.Is(err, process.ErrSandboxUnavailable) || errors.Is(err, process.ErrSandboxRequired)
+}
+
 // rgEvent is one line of `rg --json` output (match/context/begin/end/summary).
 type rgEvent struct {
 	Type string `json:"type"`
@@ -79,9 +93,10 @@ type rgEvent struct {
 }
 
 // runRipgrep executes rg with the given pre-built argument list through the
-// sandboxed process runner and returns raw stdout. rg exit codes: 0 = matches
-// found, 1 = no matches, 2 = error. A missing-match run is not an error.
-func runRipgrep(ctx context.Context, runner rgRunner, cwd string, args []string) ([]byte, error) {
+// sandboxed process runner and returns raw stdout plus whether the runner
+// had to truncate it. rg exit codes: 0 = matches found, 1 = no matches,
+// 2 = error. A missing-match run is not an error.
+func runRipgrep(ctx context.Context, runner rgRunner, cwd string, args []string) ([]byte, bool, error) {
 	result, err := runner.Run(ctx, process.CommandSpec{
 		Program:     "rg",
 		Args:        args,
@@ -91,44 +106,76 @@ func runRipgrep(ctx context.Context, runner rgRunner, cwd string, args []string)
 		OutputLimit: rgOutputLimit,
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	switch result.ExitCode {
 	case 0, 1:
-		return result.Stdout, nil
+		return result.Stdout, result.StdoutTruncated, nil
 	default:
 		stderr := string(result.Stderr)
 		if len(stderr) > 512 {
 			stderr = stderr[:512] + "..."
 		}
-		return nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("ripgrep failed (exit %d): %s", result.ExitCode, stderr))
+		return nil, false, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("ripgrep failed (exit %d): %s", result.ExitCode, stderr))
 	}
 }
 
-// decodeRgEvents parses `rg --json` JSONL output.
-func decodeRgEvents(stdout []byte) ([]rgEvent, error) {
+// trimPreviewSeam drops the partial lines straddling the head/tail seam of a
+// truncated process-output preview: the head's final (possibly cut) line and
+// the tail's first line (its continuation). Without this, a spliced line
+// would surface as a bogus entry (e.g. a nonexistent file path in glob).
+func trimPreviewSeam(preview []byte, seam int64) []byte {
+	if seam <= 0 || int64(len(preview)) <= seam {
+		return preview
+	}
+	head := preview[:seam]
+	tail := preview[seam:]
+	if idx := bytes.LastIndexByte(head, '\n'); idx >= 0 {
+		head = head[:idx+1]
+	} else {
+		head = nil
+	}
+	if idx := bytes.IndexByte(tail, '\n'); idx >= 0 {
+		tail = tail[idx+1:]
+	} else {
+		tail = nil
+	}
+	out := make([]byte, 0, len(head)+len(tail))
+	out = append(out, head...)
+	out = append(out, tail...)
+	return out
+}
+
+// decodeRgEvents parses `rg --json` JSONL output. Lines that fail to parse
+// (artifacts of output truncation cutting a line at the head/tail seam) are
+// skipped and reported via partial, so a truncated run degrades to fewer
+// matches instead of failing the whole search.
+func decodeRgEvents(stdout []byte) (events []rgEvent, partial bool, err error) {
 	lines, err := splitLines(stdout, maxSearchFileBytes)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	var events []rgEvent
 	for _, line := range lines {
 		if line == "" {
 			continue
 		}
 		var evt rgEvent
 		if err := json.Unmarshal([]byte(line), &evt); err != nil {
-			return nil, domain.NewError(domain.ErrInternal, "failed to parse ripgrep JSON output", domain.WithCause(err))
+			partial = true
+			continue
 		}
 		events = append(events, evt)
 	}
-	return events, nil
+	return events, partial, nil
 }
 
 // rgCommonArgs builds the shared rg argument prefix (search behavior flags).
 // Pattern and path are appended by the caller after "--".
 func rgCommonArgs(contextLines int, caseSensitive, fixedStrings, noIgnore bool, globs []string, fileType string, maxCount int) []string {
-	args := []string{"--json", "--max-count", strconv.Itoa(maxCount)}
+	// --max-columns keeps every emitted JSON line far below the 1MB scanner
+	// token limit: without it a multi-megabyte single-line file (minified
+	// JS) makes the whole search fail with token-too-long.
+	args := []string{"--json", "--max-count", strconv.Itoa(maxCount), "--max-columns", strconv.Itoa(rgMaxColumns)}
 	if contextLines > 0 {
 		args = append(args, "-C", strconv.Itoa(contextLines))
 	}

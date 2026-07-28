@@ -53,6 +53,22 @@ type ResolvedProvider struct {
 	Model        domain.Model
 	Models       []Model
 	DefaultModel string
+	// WireModels holds one prebuilt instance per distinct wire_api in the
+	// catalog, keyed by wire-api short name ("chat"/"responses"/"messages").
+	// Models may override the provider-level wire_api; without this the
+	// override would be silently ignored.
+	WireModels map[string]domain.Model
+}
+
+// ModelFor returns the model instance speaking the wire API configured for
+// the named model. Unknown names degrade to the provider default instance.
+func (p *ResolvedProvider) ModelFor(modelName string) domain.Model {
+	if meta, ok := p.modelMeta(modelName); ok {
+		if inst, ok := p.WireModels[meta.WireAPI]; ok {
+			return inst
+		}
+	}
+	return p.Model
 }
 
 // modelMeta returns the metadata for the named model.
@@ -348,11 +364,31 @@ func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, erro
 			// error, not a runtime one — fail fast with full context.
 			return nil, fmt.Errorf("config: %s: %w", ctx, err)
 		}
+		// Models may override the wire API individually (e.g. a reasoner
+		// speaking "responses" while the provider default is "chat").
+		// Prebuild one instance per distinct API so switching costs nothing.
+		wireModels := map[string]domain.Model{wireAPIName: instance}
+		for j := range p.Models {
+			name := p.Models[j].WireAPI // already expanded to the provider default above
+			if _, ok := wireModels[name]; ok {
+				continue
+			}
+			modelWireAPI, _, err := resolveProviderWireAPI(ctx, pType, name)
+			if err != nil {
+				return nil, err
+			}
+			inst, err := buildProvider(pType, p, apiKey, modelWireAPI, retries)
+			if err != nil {
+				return nil, fmt.Errorf("config: %s: %w", ctx, err)
+			}
+			wireModels[name] = inst
+		}
 		out = append(out, ResolvedProvider{
 			Name:         p.Name,
 			Model:        instance,
 			Models:       p.Models,
 			DefaultModel: defaultModel,
+			WireModels:   wireModels,
 		})
 	}
 	return out, nil

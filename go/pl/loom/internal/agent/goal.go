@@ -22,6 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -89,7 +90,9 @@ func (l *Loop) drainGoalUpdates() {
 	now := l.Run.Clock.Now()
 	switch {
 	case update.Close == domain.GoalStatusComplete || update.Close == domain.GoalStatusBlocked:
-		if l.Run.Goal != nil && l.Run.Goal.Status == domain.GoalStatusActive {
+		// A budget_limited goal must also be closable: the wrap-up prompt
+		// explicitly invites update_goal "complete" when the work is done.
+		if l.Run.Goal != nil && (l.Run.Goal.Status == domain.GoalStatusActive || l.Run.Goal.Status == domain.GoalStatusBudgetLimited) {
 			l.Run.Goal.Status = update.Close
 			l.Run.Goal.UpdatedAt = now
 		}
@@ -331,7 +334,7 @@ func decodeUpdateGoalArgs(raw json.RawMessage) (updateGoalArgs, error) {
 func updateGoalError(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
 	var agentErr *domain.AgentError
 	code, message := string(domain.ErrInternal), err.Error()
-	if domain.As(err, &agentErr) {
+	if errors.As(err, &agentErr) {
 		code, message = string(agentErr.Code), agentErr.Message
 	}
 	return domain.ToolResult{

@@ -68,6 +68,55 @@ func TestChannelApproverRequiresExactBinding(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW H4): the agent loop publishes approval.requested (via
+// the event flush) BEFORE RequestApproval registers the pending slot. A
+// frontend answering inside that window used to get "binding does not match
+// a pending request" while the agent kept waiting — the decision was lost.
+// Early decisions must be cached and delivered to the matching request.
+func TestChannelApproverDecisionBeforeRegistration(t *testing.T) {
+	approver := NewChannelApprover()
+	approvalID := domain.NewEventID()
+	callID := domain.NewToolCallID()
+	binding := ApprovalBinding{ApprovalID: approvalID, CallID: callID, ArgsHash: "canonical-args-hash"}
+
+	// The frontend answers before the agent registers the pending slot.
+	if !approver.ResolveApproval(binding, domain.DecisionAllow) {
+		t.Fatal("early decision was rejected; it should be cached for the matching request")
+	}
+
+	decision, err := approver.RequestApproval(context.Background(), domain.ApprovalRequest{
+		ID:   approvalID,
+		Call: domain.PreparedCall{Call: domain.ToolCall{ID: callID}, ArgsHash: "canonical-args-hash"},
+	})
+	if err != nil {
+		t.Fatalf("RequestApproval: %v", err)
+	}
+	if decision != domain.DecisionAllow {
+		t.Fatalf("decision = %q, want allow", decision)
+	}
+	if got := approver.PendingCount(); got != 0 {
+		t.Fatalf("pending = %d, want 0 after the early decision was consumed", got)
+	}
+}
+
+// An early decision whose binding does not match the eventual request must
+// never be delivered: the request blocks as usual.
+func TestChannelApproverEarlyDecisionBindingMismatch(t *testing.T) {
+	approver := NewChannelApprover()
+	approvalID := domain.NewEventID()
+	approver.ResolveApproval(ApprovalBinding{ApprovalID: approvalID, CallID: domain.NewToolCallID(), ArgsHash: "tampered"}, domain.DecisionAllow)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := approver.RequestApproval(ctx, domain.ApprovalRequest{
+		ID:   approvalID,
+		Call: domain.PreparedCall{Call: domain.ToolCall{ID: domain.NewToolCallID()}, ArgsHash: "canonical"},
+	})
+	if err == nil {
+		t.Fatal("mismatched early decision must not satisfy the request")
+	}
+}
+
 func TestChannelApproverDenyAllIsIdempotent(t *testing.T) {
 	approver := NewChannelApprover()
 	approver.DenyAll()
