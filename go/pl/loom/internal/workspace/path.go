@@ -37,7 +37,12 @@ const (
 	defaultNewFileMode fs.FileMode = 0o644
 )
 
-var afterTempFileCreatedHook func(string)
+var (
+	afterTempFileCreatedHook func(string)
+	// beforeCommitHook fires right before the temp file is committed into
+	// place (tests only) — it opens the recheck-to-commit race window.
+	beforeCommitHook func(string)
+)
 
 // PathValidator ensures file paths stay within the workspace root.
 type PathValidator struct {
@@ -249,10 +254,33 @@ func (v *PathValidator) AtomicWrite(path string, data []byte, opts AtomicWriteOp
 		return Snapshot{}, err
 	}
 
-	if err := os.Rename(tempPath, resolved.Absolute); err != nil {
-		return Snapshot{}, fmt.Errorf("rename temp file: %w", err)
+	if beforeCommitHook != nil {
+		beforeCommitHook(resolved.Absolute)
 	}
-	tempPath = ""
+	if metadata.hasExistingFile {
+		// POSIX has no compare-and-swap rename; re-verify the hash right
+		// before the commit to shrink the check-to-commit window from the
+		// whole temp-write duration down to microseconds (REVIEW M11).
+		if err := recheckExpectedHash(resolved, opts.ExpectedHash); err != nil {
+			return Snapshot{}, err
+		}
+		if err := os.Rename(tempPath, resolved.Absolute); err != nil {
+			return Snapshot{}, fmt.Errorf("rename temp file: %w", err)
+		}
+		tempPath = ""
+	} else {
+		// New file: commit via hard link + temp cleanup. link(2) fails
+		// with EEXIST if the target appeared after the earlier recheck —
+		// an atomic create-if-absent, so a concurrently created file is
+		// reported instead of silently overwritten (REVIEW M11).
+		if err := os.Link(tempPath, resolved.Absolute); err != nil {
+			if errors.Is(err, os.ErrExist) {
+				return Snapshot{}, fmt.Errorf("expected hash mismatch for %q: file appeared during atomic write", resolved.Display)
+			}
+			return Snapshot{}, fmt.Errorf("link temp file into place: %w", err)
+		}
+		// Keep tempPath set: the deferred cleanup unlinks the temp name.
+	}
 
 	if opts.SyncParent {
 		if err := syncDirectory(parent); err != nil {

@@ -85,7 +85,16 @@ type BlockIndex struct {
 	// model response gets its own block so text and tool calls interleave
 	// chronologically instead of all text merging into one top block.
 	streamSeq int
+	// version increments on every mutation; syncTranscript compares it to
+	// skip full rebuilds when nothing changed (REVIEW M14).
+	version uint64
 }
+
+// Version returns the mutation counter.
+func (idx *BlockIndex) Version() uint64 { return idx.version }
+
+// touch records a mutation of the index or one of its blocks.
+func (idx *BlockIndex) touch() { idx.version++ }
 
 // NewBlockIndex creates an empty BlockIndex.
 func NewBlockIndex() *BlockIndex {
@@ -101,6 +110,7 @@ func (idx *BlockIndex) Add(b *TranscriptBlock) {
 		idx.Order = append(idx.Order, b.ID)
 	}
 	idx.ByID[b.ID] = b
+	idx.touch()
 }
 
 // Remove deletes a block by ID. It is a no-op for unknown IDs.
@@ -109,6 +119,7 @@ func (idx *BlockIndex) Remove(id string) {
 		return
 	}
 	delete(idx.ByID, id)
+	idx.touch()
 	for i, blockID := range idx.Order {
 		if blockID == id {
 			idx.Order = append(idx.Order[:i], idx.Order[i+1:]...)
@@ -142,6 +153,7 @@ func (idx *BlockIndex) confirmPendingUserBlock(prompt string) *TranscriptBlock {
 		block := idx.ByID[idx.Order[i]]
 		if block.Kind == BlockKindUser && block.Status == "pending" && block.Content == prompt {
 			block.Status = "success"
+			idx.touch()
 			return block
 		}
 	}
@@ -151,6 +163,9 @@ func (idx *BlockIndex) confirmPendingUserBlock(prompt string) *TranscriptBlock {
 // ApplyRuntimeEvent applies a runtime event to the block index, returning
 // the affected block ID (if any).
 func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
+	// Every applied event may mutate a block (stream text, statuses, ...);
+	// a spurious bump only costs one rebuild, a missed one a stale screen.
+	idx.touch()
 	switch evt.Kind {
 	case runtimeevent.KindTurnStarted:
 		var payload runtimeevent.TurnStartedPayload
@@ -480,6 +495,7 @@ func (idx *BlockIndex) ToggleLatestReasoning() bool {
 		block := idx.ByID[idx.Order[i]]
 		if block.Kind == BlockKindAssistant && block.StreamReasoning != "" {
 			block.ReasoningExpanded = !block.ReasoningExpanded
+			idx.touch()
 			return true
 		}
 	}
@@ -493,6 +509,7 @@ func (idx *BlockIndex) ToggleLatestToolOutput() bool {
 		block := idx.ByID[idx.Order[i]]
 		if block.Kind == BlockKindTool && block.Preview != "" {
 			block.Expanded = !block.Expanded
+			idx.touch()
 			return true
 		}
 	}
@@ -520,6 +537,9 @@ func (idx *BlockIndex) ToggleAllToolOutputs() bool {
 			b.Expanded = target
 			changed = true
 		}
+	}
+	if changed {
+		idx.touch()
 	}
 	return changed
 }

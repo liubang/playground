@@ -392,6 +392,40 @@ func TestPlanPanelRendersChecklistAndHides(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW M14): every tea.Msg used to trigger a full
+// transcript rebuild — keystrokes and spinner ticks included, each an
+// O(transcript) string rebuild + viewport reset. Idle messages must not
+// rebuild; block-mutating events still must.
+func TestUpdateSkipsTranscriptRebuildWhenNothingChanged(t *testing.T) {
+	m := NewModel(newTestController(t), "test-model", "/ws")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = updated.(Model)
+	baseline := m.transcriptBuilds
+	if baseline == 0 {
+		t.Fatal("initial layout must build the transcript once")
+	}
+
+	// Keystrokes only touch the composer, never the transcript.
+	for range 8 {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+		m = updated.(Model)
+	}
+	if m.transcriptBuilds != baseline {
+		t.Fatalf("idle keystrokes rebuilt the transcript: builds = %d, want %d", m.transcriptBuilds, baseline)
+	}
+
+	// A runtime event that adds a block must still trigger a rebuild.
+	updated, _ = m.Update(runtimeEventMsg(runtimeevent.RuntimeEvent{
+		Kind:    runtimeevent.KindTurnStarted,
+		Payload: []byte(`{"prompt":"hello"}`),
+	}))
+	m = updated.(Model)
+	if m.transcriptBuilds <= baseline {
+		t.Fatalf("block-mutating event did not rebuild: builds = %d, baseline %d", m.transcriptBuilds, baseline)
+	}
+}
+
 // Regression (REVIEW M12a): the resubscribe counter never reset, so a
 // long-lived session that recovered from three disconnects DAYS apart was
 // locked out forever. A delivered event proves the stream is healthy and
