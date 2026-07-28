@@ -53,8 +53,9 @@ func newTestController(t *testing.T) *app.Controller {
 			Store:    fakes.NewFakeStore(),
 			Registry: agent.NewToolRegistry(),
 		},
-		Broker:   runtimeevent.NewBroker(),
-		Approver: app.NewChannelApprover(),
+		Broker:     runtimeevent.NewBroker(),
+		Approver:   app.NewChannelApprover(),
+		Questioner: app.NewChannelQuestioner(nil),
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -1237,6 +1238,87 @@ func TestSlashCommandCompact(t *testing.T) {
 	}
 	if got := m.textArea.Value(); got != "/compact now" {
 		t.Fatalf("usage error should keep the draft, got %q", got)
+	}
+}
+
+func TestQuestionOverlayFlow(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+
+	// A model question arrives: the overlay opens with the generic choice
+	// list (checkbox mode, free-text row appended).
+	questionID := domain.NewEventID()
+	evt := runtimeevent.RuntimeEvent{
+		Kind: runtimeevent.KindQuestionAsked,
+		Payload: mustPayload(t, runtimeevent.QuestionAskedPayload{
+			QuestionID: questionID,
+			Text:       "which modules should the refactor cover?",
+			Options: []domain.QuestionOption{
+				{Label: "codec", Description: "most of the change"},
+				{Label: "index", Description: "depends on codec"},
+				{Label: "merge", Description: "can follow later"},
+			},
+			AllowMultiple: true,
+		}),
+	}
+	updatedModel, _ := m.Update(runtimeEventMsg(evt))
+	m = updatedModel.(Model)
+	if m.mode != ModeQuestion {
+		t.Fatalf("mode = %s, want question", m.mode)
+	}
+	if m.choiceList == nil || m.pendingQuestion == nil {
+		t.Fatal("choice list not initialized")
+	}
+	// Skip the anti-fat-finger guard window so the keys below take effect.
+	m.questionShownAt = time.Now().Add(-time.Second)
+
+	// Toggle two options, then confirm: the answer goes to the controller.
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = updatedModel.(Model)
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updatedModel.(Model)
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updatedModel.(Model)
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = updatedModel.(Model)
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updatedModel.(Model)
+	if m.mode != ModeChat {
+		t.Fatalf("mode = %s, want chat after confirm", m.mode)
+	}
+	if cmd == nil {
+		t.Fatal("confirm should spawn the answer command")
+	}
+	msg, ok := cmd().(questionAnsweredMsg)
+	if !ok {
+		t.Fatalf("cmd returned %T, want questionAnsweredMsg", msg)
+	}
+	if msg.err != nil {
+		t.Fatalf("answer delivery = %v", msg.err)
+	}
+
+	// A second question: Esc skips without touching the composer.
+	evt.Payload = mustPayload(t, runtimeevent.QuestionAskedPayload{
+		QuestionID: domain.NewEventID(),
+		Text:       "proceed with the risky migration?",
+		Options:    []domain.QuestionOption{{Label: "yes"}, {Label: "no"}},
+	})
+	updatedModel, _ = m.Update(runtimeEventMsg(evt))
+	m = updatedModel.(Model)
+	if m.mode != ModeQuestion {
+		t.Fatalf("mode = %s, want question", m.mode)
+	}
+	m.questionShownAt = time.Now().Add(-time.Second)
+	updatedModel, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updatedModel.(Model)
+	if m.mode != ModeChat {
+		t.Fatalf("mode = %s, want chat after skip", m.mode)
+	}
+	if cmd == nil {
+		t.Fatal("skip should still answer the questioner")
+	}
+	if !strings.Contains(m.statusMessage, "skipped") {
+		t.Fatalf("status = %q, want skip ack", m.statusMessage)
 	}
 }
 

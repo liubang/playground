@@ -75,6 +75,11 @@ func (m Model) View() string {
 			b.WriteString(m.renderApprovalOverlay())
 			b.WriteString("\n")
 		}
+	case ModeQuestion:
+		if m.choiceList != nil {
+			b.WriteString(m.renderQuestionOverlay())
+			b.WriteString("\n")
+		}
 	case ModeHelp:
 		b.WriteString(m.renderHelpOverlay())
 		b.WriteString("\n")
@@ -352,6 +357,24 @@ func (m Model) renderReasoningPicker() string {
 	}
 	height := m.visibleTranscriptHeight()
 	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(m.reasoningPicker.Render(m.width-6, height-2))
+}
+
+// renderQuestionOverlay renders the ask_user dialog. The choice list owns
+// the content; the overlay just frames it like the approval dialog.
+func (m Model) renderQuestionOverlay() string {
+	if m.choiceList == nil {
+		return ""
+	}
+	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(m.choiceList.Render(m.width-6, 0))
+}
+
+// questionOverlayHeight reserves the overlay's rendered height plus its
+// border so the transcript above never gets overdrawn.
+func (m Model) questionOverlayHeight() int {
+	if m.choiceList == nil {
+		return 0
+	}
+	return strings.Count(m.choiceList.Render(m.width-6, 0), "\n") + 1 + 2
 }
 
 // renderTranscript renders the transcript viewport. The content itself is

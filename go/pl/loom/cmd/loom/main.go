@@ -266,11 +266,15 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	artifactDir := filepath.Join(filepath.Dir(resolved.Storage.SessionDB), artifactDirectoryName)
 
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// The questioner is shared: the bootstrap injects it into the ask_user
+	// tool, the controller bridges it to the TUI's question overlay.
+	questioner := app.NewChannelQuestioner(nil)
 	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
 		WorkspaceRoot: root,
 		ArtifactDir:   artifactDir,
 		Version:       version,
 		Logger:        discard,
+		Questioner:    questioner,
 	})
 	if err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
@@ -279,10 +283,11 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 
 	broker := runtimeevent.NewBroker()
 	controller := app.NewController(app.ControllerConfig{
-		Bootstrap: bootstrap,
-		Broker:    broker,
-		Approver:  app.NewChannelApprover(),
-		Logger:    discard,
+		Bootstrap:  bootstrap,
+		Broker:     broker,
+		Approver:   app.NewChannelApprover(),
+		Questioner: questioner,
+		Logger:     discard,
 	})
 
 	// Start the controller before issuing its serialized commands.

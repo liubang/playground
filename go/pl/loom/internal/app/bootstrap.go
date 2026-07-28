@@ -57,6 +57,9 @@ type BootstrapConfig struct {
 	Version string
 	// Logger is the slog.Logger to use; if nil, a default is created.
 	Logger *slog.Logger
+	// Questioner resolves ask_user questions; nil selects the autonomous
+	// questioner (headless-safe: every question is skipped immediately).
+	Questioner domain.Questioner
 }
 
 // Bootstrap assembles the runtime components for a Loom session from a
@@ -90,6 +93,9 @@ type Bootstrap struct {
 	// loop's next model call (docs/STEER_DESIGN.md). Shared across turns so
 	// leftovers relay into the next turn's prompt.
 	SteerCell *agent.SteerCell
+	// Questioner is the ask_user tool's answer source (a ChannelQuestioner
+	// bridged to the TUI, or the autonomous questioner when headless).
+	Questioner domain.Questioner
 	// Recorder is the Langfuse observability sink (no-op when unconfigured).
 	Recorder trace.Recorder
 	// SessionRules holds categorical run_cmd prefixes remembered from
@@ -155,7 +161,11 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	goalCell := agent.NewGoalCell()
 	planCell := agent.NewPlanCell()
 	steerCell := agent.NewSteerCell()
-	if err := registerBuiltinTools(registry, validator, runner, artStore, resolved.Limits.MaxToolOutputBytes, goalCell, planCell); err != nil {
+	questioner := cfg.Questioner
+	if questioner == nil {
+		questioner = domain.AutonomousQuestioner{}
+	}
+	if err := registerBuiltinTools(registry, validator, runner, artStore, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, questioner); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
@@ -238,6 +248,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		GoalCell:      goalCell,
 		PlanCell:      planCell,
 		SteerCell:     steerCell,
+		Questioner:    questioner,
 		Recorder:      traceRecorder,
 		SessionRules:  sessionRules,
 		traceProvider: traceProvider,
@@ -254,7 +265,7 @@ func defaultContextWindow(resolved *config.ResolvedConfig) int64 {
 }
 
 // registerBuiltinTools registers all built-in tools with the registry.
-func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell) error {
+func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner) error {
 	// The file-state book is shared by read_file (records hashes) and edit
 	// (checks drift) to detect external modification without model-carried
 	// hashes.
@@ -305,6 +316,13 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 	}
 	if err := registry.Register(updatePlan); err != nil {
 		return fmt.Errorf("register update_plan: %w", err)
+	}
+	askUser, err := agent.NewAskUserTool(questioner)
+	if err != nil {
+		return fmt.Errorf("ask_user: %w", err)
+	}
+	if err := registry.Register(askUser); err != nil {
+		return fmt.Errorf("register ask_user: %w", err)
 	}
 	return nil
 }

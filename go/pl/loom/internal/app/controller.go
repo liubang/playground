@@ -101,6 +101,7 @@ type Controller struct {
 	sessionID   domain.SessionID
 	runID       domain.RunID
 	turnCounter int
+	questioner  *ChannelQuestioner
 	lastUsage   domain.Usage
 	messages    []domain.Message
 	resumedRun  *agent.Run
@@ -143,8 +144,12 @@ type ControllerConfig struct {
 	Bootstrap *Bootstrap
 	Broker    *runtimeevent.Broker
 	Approver  *ChannelApprover
-	Clock     domain.Clock
-	Logger    *slog.Logger
+	// Questioner bridges ask_user questions to the frontend; nil disables
+	// the bridge (questions then resolve through the bootstrap's
+	// questioner, e.g. the autonomous one when headless).
+	Questioner *ChannelQuestioner
+	Clock      domain.Clock
+	Logger     *slog.Logger
 }
 
 // NewController creates a new Controller in the booting state.
@@ -165,11 +170,12 @@ func NewController(cfg ControllerConfig) *Controller {
 	if cfg.Bootstrap != nil && cfg.Bootstrap.SessionRules != nil {
 		sessionRules = cfg.Bootstrap.SessionRules
 	}
-	return &Controller{
+	c := &Controller{
 		bootstrap:     cfg.Bootstrap,
 		broker:        cfg.Broker,
 		approver:      cfg.Approver,
 		rulesApprover: NewRuleApprover(cfg.Approver, sessionRules),
+		questioner:    cfg.Questioner,
 		clock:         clock,
 		logger:        logger,
 		state:         ControllerStateBooting,
@@ -178,6 +184,22 @@ func NewController(cfg ControllerConfig) *Controller {
 		cmdCh:         make(chan controllerCommand, 64),
 		doneCh:        make(chan struct{}),
 	}
+	// Bridge model questions onto the runtime event stream: the agent loop
+	// blocks in ask_user until a frontend answers via AnswerQuestion.
+	if cfg.Questioner != nil {
+		cfg.Questioner.BindPublish(func(q domain.Question) {
+			c.mu.Lock()
+			sessionID, runID, turn := c.sessionID, c.runID, c.turnCounter
+			c.mu.Unlock()
+			c.publishEphemeral(sessionID, runID, turn, runtimeevent.KindQuestionAsked, runtimeevent.QuestionAskedPayload{
+				QuestionID:    q.ID,
+				Text:          q.Text,
+				Options:       q.Options,
+				AllowMultiple: q.AllowMultiple,
+			})
+		})
+	}
+	return c
 }
 
 // Run starts the command processing loop. It blocks until the controller
@@ -325,6 +347,38 @@ func (c *Controller) NewSession(ctx context.Context) error {
 		return ctx.Err()
 	case <-c.doneCh:
 		return fmt.Errorf("controller is closed")
+	}
+}
+
+// AnswerQuestionResult reports the outcome of an AnswerQuestion command:
+// Resolved is false when the question was unknown or already answered.
+type AnswerQuestionResult struct {
+	Resolved bool
+}
+
+// AnswerQuestion delivers the frontend's answer to a pending ask_user
+// question and publishes the resolution event so every frontend dismisses
+// the overlay.
+func (c *Controller) AnswerQuestion(ctx context.Context, id domain.EventID, answer domain.QuestionAnswer) (AnswerQuestionResult, error) {
+	resultCh := make(chan controllerResult, 1)
+	select {
+	case c.cmdCh <- controllerCommand{Kind: cmdAnswerQuestion, QuestionID: id, Answer: answer, ResultCh: resultCh}:
+	case <-ctx.Done():
+		return AnswerQuestionResult{}, ctx.Err()
+	case <-c.doneCh:
+		return AnswerQuestionResult{}, fmt.Errorf("controller is closed")
+	}
+	select {
+	case result := <-resultCh:
+		if result.Err != nil {
+			return AnswerQuestionResult{}, result.Err
+		}
+		out, _ := result.Value.(AnswerQuestionResult)
+		return out, nil
+	case <-ctx.Done():
+		return AnswerQuestionResult{}, ctx.Err()
+	case <-c.doneCh:
+		return AnswerQuestionResult{}, fmt.Errorf("controller is closed")
 	}
 }
 
@@ -648,6 +702,8 @@ func (c *Controller) dispatch(cmd controllerCommand) {
 		c.handleSetReasoning(cmd)
 	case cmdRequestCompaction:
 		c.handleRequestCompaction(cmd)
+	case cmdAnswerQuestion:
+		c.handleAnswerQuestion(cmd)
 	case cmdRequestSnapshot:
 		c.handleRequestSnapshot(cmd)
 	case cmdShutdown:
@@ -1068,6 +1124,24 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	cmd.ResultCh <- controllerResult{}
 }
 
+func (c *Controller) handleAnswerQuestion(cmd controllerCommand) {
+	if c.questioner == nil {
+		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("question answering is unavailable")}
+		return
+	}
+	resolved := c.questioner.Resolve(cmd.QuestionID, cmd.Answer)
+	if resolved {
+		c.mu.Lock()
+		sessionID, runID, turn := c.sessionID, c.runID, c.turnCounter
+		c.mu.Unlock()
+		c.publishEphemeral(sessionID, runID, turn, runtimeevent.KindQuestionAnswered, runtimeevent.QuestionAnsweredPayload{
+			QuestionID: cmd.QuestionID,
+			Skipped:    cmd.Answer.Skipped,
+		})
+	}
+	cmd.ResultCh <- controllerResult{Value: AnswerQuestionResult{Resolved: resolved}}
+}
+
 func (c *Controller) handleRequestCompaction(cmd controllerCommand) {
 	c.mu.Lock()
 	pending := c.forceCompact
@@ -1222,8 +1296,11 @@ func (c *Controller) handleShutdown() {
 		cancelTurn()
 	}
 
-	// Deny all pending approvals
+	// Deny all pending approvals and skip all pending questions.
 	c.approver.DenyAll()
+	if c.questioner != nil {
+		c.questioner.SkipAll()
+	}
 
 	// Cancel session context
 	if cancelSession != nil {
@@ -1289,20 +1366,23 @@ const (
 	cmdSetModel          = "set_model"
 	cmdSetReasoning      = "set_reasoning"
 	cmdRequestCompaction = "request_compaction"
+	cmdAnswerQuestion    = "answer_question"
 	cmdRequestSnapshot   = "request_snapshot"
 	cmdShutdown          = "shutdown"
 )
 
 type controllerCommand struct {
-	Kind      string
-	Prompt    string
-	SessionID domain.SessionID
-	ModelName string
-	Reasoning string
-	Approval  ApprovalBinding
-	Decision  domain.Decision
-	RuleHint  *ApprovalRuleHint
-	ResultCh  chan<- controllerResult
+	Kind       string
+	Prompt     string
+	SessionID  domain.SessionID
+	ModelName  string
+	Reasoning  string
+	Approval   ApprovalBinding
+	Decision   domain.Decision
+	RuleHint   *ApprovalRuleHint
+	QuestionID domain.EventID
+	Answer     domain.QuestionAnswer
+	ResultCh   chan<- controllerResult
 }
 
 type controllerResult struct {
