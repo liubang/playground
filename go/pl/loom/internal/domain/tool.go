@@ -40,6 +40,10 @@ const (
 	CapSecretUse       Capability = "secret.use"
 	CapWorkspaceOut    Capability = "workspace.outside"
 	CapAgentDelegate   Capability = "agent.delegate"
+	// CapUserInteract marks tools whose purpose is asking the user (never
+	// a side effect on the workspace); without it such tools would fall
+	// into the R2 default and absurdly require approval to ask a question.
+	CapUserInteract Capability = "user.interact"
 )
 
 // ToolSource identifies where a tool originates.
@@ -109,6 +113,8 @@ func (d ToolDefinition) Risk() RiskLevel {
 
 func capabilityRisk(c Capability) RiskLevel {
 	switch c {
+	case CapUserInteract:
+		return R0
 	case CapFSRead, CapGitRead:
 		return R1
 	case CapFSWrite, CapProcessExec:

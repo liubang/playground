@@ -46,6 +46,7 @@ const (
 	ModeSessionPicker   Mode = "session_picker"
 	ModeModelPicker     Mode = "model_picker"
 	ModeReasoningPicker Mode = "reasoning_picker"
+	ModeQuestion        Mode = "question"
 	ModeHelp            Mode = "help"
 	ModeSearch          Mode = "search"
 )
@@ -127,6 +128,12 @@ type Model struct {
 	statusIsError   bool
 	activityLabel   string
 	lastActivityAt  time.Time
+
+	// Question overlay (ask_user): the pending model question and its
+	// generic choice-list state while ModeQuestion is active.
+	pendingQuestion *runtimeevent.QuestionAskedPayload
+	choiceList      *ChoiceList
+	questionShownAt time.Time
 
 	// Approval overlay
 	pendingApproval *runtimeevent.ApprovalRequestedPayload

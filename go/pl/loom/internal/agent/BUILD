@@ -20,6 +20,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "agent_lib",
     srcs = [
+        "ask.go",
         "compact.go",
         "goal.go",
         "plan.go",
@@ -38,6 +39,7 @@ go_library(
 go_test(
     name = "agent_test",
     srcs = [
+        "ask_test.go",
         "compact_test.go",
         "plan_test.go",
         "run_test.go",
