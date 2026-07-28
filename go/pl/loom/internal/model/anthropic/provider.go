@@ -89,7 +89,13 @@ func New(cfg Config) (*Provider, error) {
 		baseURL = defaultBaseURL
 	}
 	endpointURL := baseURL
-	if !strings.HasSuffix(endpointURL, "/v1/messages") {
+	switch {
+	case strings.HasSuffix(endpointURL, "/v1/messages"):
+		// Already complete.
+	case strings.HasSuffix(endpointURL, "/v1"):
+		// OpenAI-style base: avoid producing /v1/v1/messages.
+		endpointURL += "/messages"
+	default:
 		endpointURL += "/v1/messages"
 	}
 
@@ -568,8 +574,9 @@ func pump(ctx context.Context, body io.Reader, emit stream.Emitter) {
 			state.onStreamError(evt.Data, emit)
 			return
 		default:
-			finishWithError(state, fmt.Errorf("anthropic provider: unsupported event %q", evt.Name), emit)
-			return
+			// Forward compatibility: ignore event types we do not know yet
+			// (Anthropic adds stream event kinds over time) instead of
+			// killing the whole stream.
 		}
 	}
 }

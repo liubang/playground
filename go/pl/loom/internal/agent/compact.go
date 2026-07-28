@@ -269,6 +269,12 @@ func (c Condenser) maskMessageOutputs(ctx context.Context, msg *domain.Message, 
 			}
 			original := len(content.Text)
 			content.Text = maskPlaceholder(original, ref, artifacts)
+			// Register the reference structurally so session persistence
+			// (checkpointArtifactRefs) keeps the artifact alive for GC. Both
+			// providers skip PartArtifact when rendering tool results, so the
+			// wire form is unchanged.
+			artifactRef := ref
+			part.ToolResult.Content = append(part.ToolResult.Content, domain.ContentPart{Kind: domain.PartArtifact, Artifact: &artifactRef})
 			result.bytesMasked += original
 			result.outputs = append(result.outputs, maskedOutput{
 				MessageID: msg.ID.String(),
@@ -321,6 +327,21 @@ func (c Condenser) archiveOldestSpan(ctx context.Context, messages *[]domain.Mes
 		return
 	}
 
+	// The marker replaces the whole span, so it inherits every artifact
+	// reference the span carried (masked outputs, run_cmd overflow
+	// artifacts) plus the archive artifact itself. A marker message can
+	// only carry text parts, so the references travel in metadata where
+	// checkpointArtifactRefs picks them up for GC tracking.
+	var refs []domain.ArtifactRef
+	for _, msg := range msgs[:cut] {
+		refs = append(refs, msg.ArtifactRefs()...)
+	}
+	refs = append(refs, ref)
+	metadata := map[string]string{"compacted": "archived"}
+	if encoded, err := json.Marshal(refs); err == nil {
+		metadata[domain.MetadataCompactedArtifacts] = string(encoded)
+	}
+
 	marker := domain.Message{
 		ID:        domain.NewMessageID(),
 		Role:      domain.RoleSystem,
@@ -328,7 +349,7 @@ func (c Condenser) archiveOldestSpan(ctx context.Context, messages *[]domain.Mes
 		Revision:  1,
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: archiveMarkerText(cut, ref, artifacts)}},
 		CreatedAt: time.Now().UTC(),
-		Metadata:  map[string]string{"compacted": "archived"},
+		Metadata:  metadata,
 		// Sequence is left zero here: Condense renumbers the whole list
 		// densely before returning, which is the invariant the rest of the
 		// system (message append, continuation validation) relies on.

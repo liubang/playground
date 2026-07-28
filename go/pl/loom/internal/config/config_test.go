@@ -304,6 +304,30 @@ func TestLoadMissingFile(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW H6): a model-level wire_api override must produce its
+// own model instance. Before the fix, every model silently spoke the
+// provider-level wire API — deepseek-reasoner configured "responses" still
+// hit /chat/completions with no warning.
+func TestResolveModelWireAPIOverrideBuildsDistinctInstance(t *testing.T) {
+	cfg := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk-env"}))
+	deepseek := cfg.ProviderByName("deepseek")
+	if deepseek == nil {
+		t.Fatal("deepseek provider missing")
+	}
+	chat := deepseek.ModelFor("deepseek-chat")
+	responses := deepseek.ModelFor("deepseek-reasoner")
+	if chat == nil || responses == nil {
+		t.Fatal("ModelFor returned nil")
+	}
+	if chat == responses {
+		t.Fatal("models with different wire_api must get distinct model instances")
+	}
+	// Unknown names degrade to the provider default instance.
+	if deepseek.ModelFor("unknown-model") != deepseek.Model {
+		t.Fatal("unknown model should degrade to the provider default instance")
+	}
+}
+
 func TestResolveLimitsOverlay(t *testing.T) {
 	cfg := loadFile(t, twoProviderYAML+`
 limits:

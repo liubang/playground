@@ -141,7 +141,7 @@ func (t *WriteTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.P
 			Kind:         "file_replace",
 			Path:         pathInfo.Absolute,
 			ExpectedHash: canonical.OldHash,
-			ResultHash:   hashBytes([]byte(canonical.Content)),
+			ResultHash:   sha256Hex([]byte(canonical.Content)),
 		}
 	}
 	return prepared, nil

@@ -234,8 +234,10 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 		ReadPaths:  []string{root},
 		WritePaths: []string{root},
 	}
-	prepared.ApprovalDesc = buildApprovalDesc(args, prepared)
+	// Sign before rendering the description so the displayed args_hash
+	// correlates with the ArgsHash recorded in permission events.
 	prepared.ArgsHash = t.signPrepared(prepared)
+	prepared.ApprovalDesc = buildApprovalDesc(args, prepared)
 	return prepared, nil
 }
 
@@ -618,7 +620,7 @@ func classifyRunError(err error) error {
 	}
 
 	var agentErr *domain.AgentError
-	if domain.As(err, &agentErr) {
+	if errors.As(err, &agentErr) {
 		return err
 	}
 	var exitErr *exec.ExitError
@@ -805,10 +807,6 @@ func contentResultWithArtifacts(
 	}
 }
 
-func contentResult(callID domain.ToolCallID, status domain.ToolStatus, startedAt time.Time, payload any) domain.ToolResult {
-	return contentResultWithArtifacts(callID, status, startedAt, payload, nil, nil)
-}
-
 func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
 	status := domain.ToolStatusError
 	code := string(domain.ErrInternal)
@@ -826,7 +824,7 @@ func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domai
 		message = "operation timed out"
 	default:
 		var agentErr *domain.AgentError
-		if domain.As(err, &agentErr) {
+		if errors.As(err, &agentErr) {
 			code = string(agentErr.Code)
 			message = agentErr.Message
 			retryable = agentErr.Retryable
@@ -945,9 +943,11 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall) string {
 	}
 
 	base := strings.Join(parts, "; ")
+	// Display a prefix of the signed HMAC ArgsHash: compact, yet correlates
+	// with the full hash recorded in permission audit events.
 	argsHash := prepared.ArgsHash
-	if argsHash == "" {
-		argsHash = shortArgsHash(prepared.Call.Arguments)
+	if len(argsHash) > approvalDescHashPrefixBytes {
+		argsHash = argsHash[:approvalDescHashPrefixBytes]
 	}
 	suffix := fmt.Sprintf("; args_hash=%s", argsHash)
 	truncated := truncateWithMarker(base, maxApprovalDescBytes-len(suffix))
@@ -997,9 +997,4 @@ func truncateWithMarker(value string, maxBytes int) string {
 		trimmed = trimmed[:len(trimmed)-1]
 	}
 	return trimmed + marker
-}
-
-func shortArgsHash(payload []byte) string {
-	sum := sha256.Sum256(payload)
-	return hex.EncodeToString(sum[:])[:approvalDescHashPrefixBytes]
 }

@@ -741,10 +741,11 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	c.nextTurn++
 	turnID := c.nextTurn
 	c.activeTurn = turnID
+	sessionID, runID := c.sessionID, c.runID
 	c.mu.Unlock()
 
 	// Publish turn started event
-	c.publishDurable(c.sessionID, c.runID, turnCounter, runtimeevent.KindTurnStarted, runtimeevent.TurnStartedPayload{
+	c.publishDurable(sessionID, runID, turnCounter, runtimeevent.KindTurnStarted, runtimeevent.TurnStartedPayload{
 		TurnIndex: turnCounter,
 		Prompt:    cmd.Prompt,
 	})
@@ -784,7 +785,12 @@ func (c *Controller) handleSteer(cmd controllerCommand) {
 		return
 	}
 	n := cell.Len()
-	c.publishEphemeral(c.sessionID, c.runID, c.turnCounter, runtimeevent.KindSteerQueued, runtimeevent.SteerQueuedPayload{
+	// runID is written by the turn goroutine (runTurn) under c.mu; snapshot
+	// the publish identity under the same lock to avoid a data race.
+	c.mu.Lock()
+	sessionID, runID, turnCounter := c.sessionID, c.runID, c.turnCounter
+	c.mu.Unlock()
+	c.publishEphemeral(sessionID, runID, turnCounter, runtimeevent.KindSteerQueued, runtimeevent.SteerQueuedPayload{
 		Text:     cmd.Prompt,
 		QueueLen: n,
 	})
@@ -878,7 +884,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 	// Build the loop
 	loop := &agent.Loop{
 		Run:           run,
-		Model:         provider.Model,
+		Model:         provider.ModelFor(current.Model),
 		ModelName:     current.Model,
 		Store:         &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
 		Approver:      c.rulesApprover,
@@ -896,6 +902,10 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 		GoalCell:      c.bootstrap.GoalCell,
 		PlanCell:      c.bootstrap.PlanCell,
 		SteerCell:     c.bootstrap.SteerCell,
+		// Reuse the tracing cost rates for the cost budget; zero when the
+		// user never configured pricing, which disables cost accounting.
+		CostInputUSDPerMTok:  c.bootstrap.Resolved.Tracing.CostInputPerMTok,
+		CostOutputUSDPerMTok: c.bootstrap.Resolved.Tracing.CostOutputPerMTok,
 		StreamHooks: agent.StreamHooks{
 			OnContextUsage: func(estTokens int, lastCallInputTokens int64) {
 				c.publishDurable(c.sessionID, run.ID, turnCounter, runtimeevent.KindContextUsage, runtimeevent.ContextUsagePayload{
@@ -1039,6 +1049,7 @@ func (c *Controller) handleCancelTurn(cmd controllerCommand) {
 	c.mu.Lock()
 	state := c.state
 	cancelTurn := c.cancelTurn
+	sessionID, runID, turnCounter := c.sessionID, c.runID, c.turnCounter
 	c.mu.Unlock()
 
 	if state != ControllerStateRunning && state != ControllerStateAwaitingApproval {
@@ -1050,7 +1061,7 @@ func (c *Controller) handleCancelTurn(cmd controllerCommand) {
 		cancelTurn()
 	}
 
-	c.publishEphemeral(c.sessionID, c.runID, c.turnCounter, runtimeevent.KindRunCancelRequested, nil)
+	c.publishEphemeral(sessionID, runID, turnCounter, runtimeevent.KindRunCancelRequested, nil)
 	c.setState(ControllerStateCancelling)
 
 	cmd.ResultCh <- controllerResult{}

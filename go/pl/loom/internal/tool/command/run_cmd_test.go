@@ -231,6 +231,17 @@ func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	}
 	assertWorkspaceRootBindings(t, prepared, validator.Root())
 
+	// Regression (REVIEW M9): the description was previously built before
+	// ArgsHash was signed, so the displayed args_hash came from a different
+	// (sha256-of-arguments) fallback and could never be correlated with the
+	// ArgsHash recorded in permission events.
+	if prepared.ArgsHash == "" {
+		t.Fatal("prepared.ArgsHash must be signed")
+	}
+	if want := "args_hash=" + prepared.ArgsHash[:approvalDescHashPrefixBytes]; !strings.Contains(prepared.ApprovalDesc, want) {
+		t.Fatalf("approval desc %q must carry the signed args hash prefix %q", prepared.ApprovalDesc, want)
+	}
+
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
@@ -841,7 +852,7 @@ func assertAgentErrorCode(t *testing.T, err error, want domain.ErrorCode) {
 		t.Fatal("expected error")
 	}
 	var agentErr *domain.AgentError
-	if !domain.As(err, &agentErr) {
+	if !errors.As(err, &agentErr) {
 		t.Fatalf("expected AgentError, got %T: %v", err, err)
 	}
 	if agentErr.Code != want {

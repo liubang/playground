@@ -392,6 +392,44 @@ func TestPlanPanelRendersChecklistAndHides(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW M12a): the resubscribe counter never reset, so a
+// long-lived session that recovered from three disconnects DAYS apart was
+// locked out forever. A delivered event proves the stream is healthy and
+// must re-arm the recovery budget.
+func TestRuntimeEventResetsResubscribeBudget(t *testing.T) {
+	m := NewModel(newTestController(t), "test-model", "/ws")
+	m.resubscribes = maxEventResubscribes - 1
+
+	updated, _ := m.handleRuntimeEvent(runtimeevent.RuntimeEvent{Kind: runtimeevent.KindTurnStarted})
+	m = updated
+	if m.resubscribes != 0 {
+		t.Fatalf("resubscribes = %d, want 0 after a delivered event", m.resubscribes)
+	}
+}
+
+// Regression (REVIEW M12b): resubscribing used to drop the unsubscribe
+// handle, leaking every recovered broker subscription until process exit.
+func TestHandleEventsClosedReleasesOldSubscription(t *testing.T) {
+	m := NewModel(newTestController(t), "test-model", "/ws")
+	released := 0
+	m.unsubscribeEvents = func() { released++ }
+
+	next, _ := m.handleEventsClosed()
+	if released != 1 {
+		t.Fatalf("old subscription released %d times, want 1", released)
+	}
+	nm, ok := next.(Model)
+	if !ok {
+		t.Fatalf("handleEventsClosed returned %T, want Model", next)
+	}
+	if nm.unsubscribeEvents == nil {
+		t.Fatal("new subscription's unsubscribe must be stored")
+	}
+	if nm.resubscribes != 1 {
+		t.Fatalf("resubscribes = %d, want 1", nm.resubscribes)
+	}
+}
+
 func TestTurnStartedClearsPlanPanel(t *testing.T) {
 	m := NewModel(newTestController(t), "test-model", "/ws")
 	m.plan = domain.Plan{Items: []domain.PlanItem{
