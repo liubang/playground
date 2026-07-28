@@ -182,11 +182,16 @@ func (t *SearchTool) executeRipgrep(ctx context.Context, prepared domain.Prepare
 	argv := rgCommonArgs(args.Context, args.CaseSensitive, args.FixedStrings, args.NoIgnore, args.Glob, args.Type, rgMaxCountHint)
 	argv = append(argv, "--", args.Pattern, root.Absolute)
 
-	stdout, err := runRipgrep(ctx, t.runner, root.Absolute, argv)
+	stdout, rgTruncated, err := runRipgrep(ctx, t.runner, root.Absolute, argv)
 	if err != nil {
+		if isSandboxFailure(err) {
+			// The sandbox cannot execute anything on this platform (e.g.
+			// Linux fails closed); degrade to the built-in engine.
+			return t.executeGoFallback(ctx, prepared, root, args, startedAt)
+		}
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	events, err := decodeRgEvents(stdout)
+	events, partial, err := decodeRgEvents(stdout)
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
@@ -198,7 +203,7 @@ func (t *SearchTool) executeRipgrep(ctx context.Context, prepared domain.Prepare
 		Engine:        string(engineRipgrep),
 		CaseSensitive: args.CaseSensitive,
 		MatchCount:    len(matches),
-		Truncated:     truncated,
+		Truncated:     truncated || rgTruncated || partial,
 		Matches:       matches,
 	})
 }

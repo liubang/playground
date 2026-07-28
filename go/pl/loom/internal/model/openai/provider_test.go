@@ -892,6 +892,27 @@ func assertEventKinds(t *testing.T, events []domain.ModelEvent, want ...domain.M
 	}
 }
 
+// Regression (REVIEW M6): the Responses wire API silently dropped
+// temperature even though the API supports it — the same configuration
+// behaved differently across wire APIs.
+func TestMarshalResponsesRequestIncludesTemperature(t *testing.T) {
+	body, err := marshalResponsesRequest(domain.ModelRequest{
+		ModelName:   "gpt-test",
+		Temperature: 0.7,
+		Messages:    []domain.Message{textMessage(domain.RoleUser, "hi")},
+	})
+	if err != nil {
+		t.Fatalf("marshalResponsesRequest: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if payload["temperature"] != 0.7 {
+		t.Fatalf("temperature = %v, want 0.7", payload["temperature"])
+	}
+}
+
 func textMessage(role domain.Role, text string) domain.Message {
 	return domain.Message{
 		ID:        domain.NewMessageID(),

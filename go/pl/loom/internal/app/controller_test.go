@@ -329,6 +329,74 @@ func TestControllerSteerWhileBusyAndRelayAfterCancel(t *testing.T) {
 	}
 }
 
+// slowModel delays each Stream call so the turn stays alive long enough
+// for concurrent commands to overlap the turn goroutine, while still
+// respecting cancellation.
+type slowModel struct {
+	inner *fakes.FakeModel
+	delay time.Duration
+}
+
+func (m *slowModel) Stream(ctx context.Context, req domain.ModelRequest) (domain.ModelStream, error) {
+	timer := time.NewTimer(m.delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return m.inner.Stream(ctx, req)
+}
+
+// Regression (REVIEW H3): runTurn writes c.runID under c.mu in the turn
+// goroutine, while handleSteer/handleCancelTurn used to read it without the
+// lock when publishing ephemeral events. Run with -race: the unsynchronized
+// pair is flagged.
+func TestControllerPublishPathsDoNotRaceRunID(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	script := make([]fakes.ScriptEntry, 64)
+	for i := range script {
+		script[i] = fakes.ScriptEntry{Text: "ok", StopReason: domain.StopEndTurn}
+	}
+	model := &slowModel{inner: fakes.NewFakeModel(script...), delay: 10 * time.Millisecond}
+	bootstrap := testBootstrap(store, model)
+	controller := NewController(ControllerConfig{
+		Bootstrap: bootstrap,
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	for i := 0; i < 30; i++ {
+		if _, err := controller.SubmitPrompt(ctx, "question"); err != nil {
+			t.Fatalf("SubmitPrompt #%d: %v", i, err)
+		}
+		// Spam steers and a cancel while the turn goroutine starts up and
+		// publishes; each publish path used to read c.runID unsynchronized.
+		for j := 0; j < 8; j++ {
+			_, _ = controller.SubmitPrompt(ctx, "steer")
+			time.Sleep(time.Millisecond)
+		}
+		_ = bootstrap.SteerCell.Take() // drain so nothing is relayed
+		_ = controller.CancelTurn(ctx) // turn may already be done; error ignored
+		waitForIdle(t, controller)
+		_ = bootstrap.SteerCell.Take()
+	}
+}
+
 // TestControllerSteerCellFullRejects checks the soft capacity: busy
 // submissions past SteerCellCapacity are rejected so the UI can restore
 // the draft.

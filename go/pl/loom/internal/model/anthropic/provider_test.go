@@ -72,6 +72,67 @@ func findEvent(events []domain.ModelEvent, kind domain.ModelEventKind) (domain.M
 	return domain.ModelEvent{}, false
 }
 
+// Regression (REVIEW M3): a base_url ending in "/v1" (OpenAI-style) used
+// to produce /v1/v1/messages.
+func TestNewHandlesV1SuffixInBaseURL(t *testing.T) {
+	t.Parallel()
+
+	var path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+	}))
+	defer server.Close()
+
+	provider, err := New(Config{BaseURL: server.URL + "/v1", APIKey: "sk-ant"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "claude-test", MaxTokens: 16,
+		Messages: []domain.Message{{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	collectEvents(t, stream)
+	if path != "/v1/messages" {
+		t.Fatalf("path = %q, want /v1/messages", path)
+	}
+}
+
+// Regression (REVIEW M5): an unknown SSE event type used to kill the whole
+// stream — Anthropic adding any new event would break every session. Unknown
+// events must be ignored for forward compatibility.
+func TestStreamIgnoresUnknownEventTypes(t *testing.T) {
+	t.Parallel()
+
+	server := sseServer(t, "event: future_kind\ndata: {\"type\":\"future_kind\",\"x\":1}\n\n"+
+		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n"+
+		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+	defer server.Close()
+
+	provider, err := New(Config{BaseURL: server.URL, APIKey: "sk-ant"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "claude-test", MaxTokens: 16,
+		Messages: []domain.Message{{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	events := collectEvents(t, stream)
+	if _, ok := findEvent(events, domain.ModelEventResponseStart); !ok {
+		t.Fatalf("response_start missing after unknown event: %v", eventKinds(events))
+	}
+	if _, ok := findEvent(events, domain.ModelEventStreamError); ok {
+		t.Fatalf("unknown event must not produce a stream error: %v", eventKinds(events))
+	}
+}
+
 func TestStreamRequestAdaptationAndHeaders(t *testing.T) {
 	t.Parallel()
 

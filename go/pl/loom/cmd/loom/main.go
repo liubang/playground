@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -390,12 +391,13 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	provider := resolved.ProviderByName(current.Provider)
 	meta, _ := resolved.ModelMeta(current)
 	loop := agent.Loop{
-		Run: run, Model: provider.Model, ModelName: current.Model, Store: bootstrap.Store,
-		Approver: consoleApprover{}, Policy: bootstrap.Policy, Registry: bootstrap.Registry,
+		Run: run, Model: provider.ModelFor(current.Model), ModelName: current.Model, Store: bootstrap.Store,
+		Approver: &consoleApprover{}, Policy: bootstrap.Policy, Registry: bootstrap.Registry,
 		Logger: slog.Default(), SystemPrompt: bootstrap.PromptBuilder, Artifacts: bootstrap.Artifact,
 		Recorder: bootstrap.Recorder, Prompt: userPrompt, Workspace: root,
 		ContextWindow: meta.ContextWindow, Reasoning: meta.Reasoning.DomainSpec(),
 		GoalCell: bootstrap.GoalCell, PlanCell: bootstrap.PlanCell,
+		CostInputUSDPerMTok: resolved.Tracing.CostInputPerMTok, CostOutputUSDPerMTok: resolved.Tracing.CostOutputPerMTok,
 	}
 	fmt.Fprintf(os.Stderr, "loom: session %s\n", run.SessionID)
 	executeErr := loop.Execute(ctx)
@@ -676,9 +678,50 @@ func isTTY(f *os.File) bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-type consoleApprover struct{}
+// consoleApprover prompts on the terminal. A single background reader feeds
+// a line channel for the process lifetime: recreating bufio.Reader per
+// approval used to drop bytes it had already buffered, and each cancelled
+// approval leaked a goroutine that then raced the next one on stdin.
+type consoleApprover struct {
+	once  sync.Once
+	lines chan string
+}
 
-func (consoleApprover) RequestApproval(ctx context.Context, req domain.ApprovalRequest) (domain.Decision, error) {
+// start launches the one stdin reader goroutine. It exits on stdin EOF.
+func (a *consoleApprover) start(r io.Reader) {
+	a.once.Do(func() {
+		a.lines = make(chan string)
+		go func() {
+			defer close(a.lines)
+			reader := bufio.NewReader(r)
+			for {
+				line, err := reader.ReadString('\n')
+				if err != nil {
+					return
+				}
+				a.lines <- strings.TrimSpace(strings.ToLower(line))
+			}
+		}()
+	})
+}
+
+// awaitAnswer waits for the next input line or ctx cancellation.
+func (a *consoleApprover) awaitAnswer(ctx context.Context) (domain.Decision, error) {
+	select {
+	case <-ctx.Done():
+		return domain.DecisionDeny, ctx.Err()
+	case value, ok := <-a.lines:
+		if !ok {
+			return domain.DecisionDeny, nil
+		}
+		if value == "y" || value == "yes" {
+			return domain.DecisionAllow, nil
+		}
+		return domain.DecisionDeny, nil
+	}
+}
+
+func (a *consoleApprover) RequestApproval(ctx context.Context, req domain.ApprovalRequest) (domain.Decision, error) {
 	info, err := os.Stdin.Stat()
 	if err != nil {
 		return domain.DecisionDeny, fmt.Errorf("inspect stdin: %w", err)
@@ -686,20 +729,8 @@ func (consoleApprover) RequestApproval(ctx context.Context, req domain.ApprovalR
 	if info.Mode()&os.ModeCharDevice == 0 {
 		return domain.DecisionDeny, nil
 	}
+	a.start(os.Stdin)
 	fmt.Fprintf(os.Stderr, "\nApproval required (R%d): %s\nargs hash: %s\nAllow? [y/N] ",
 		req.Call.Risk, req.Description, req.Call.ArgsHash)
-	answer := make(chan string, 1)
-	go func() {
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		answer <- strings.TrimSpace(strings.ToLower(line))
-	}()
-	select {
-	case <-ctx.Done():
-		return domain.DecisionDeny, ctx.Err()
-	case value := <-answer:
-		if value == "y" || value == "yes" {
-			return domain.DecisionAllow, nil
-		}
-		return domain.DecisionDeny, nil
-	}
+	return a.awaitAnswer(ctx)
 }

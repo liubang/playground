@@ -1352,13 +1352,23 @@ func (m Model) handleEventsClosed() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.resubscribes++
-	eventsCh, _ := m.controller.Subscribe()
+	// Release the dead subscription before attaching a new one; otherwise
+	// every recovery leaks a broker subscriber until process exit.
+	if m.unsubscribeEvents != nil {
+		m.unsubscribeEvents()
+	}
+	eventsCh, unsubscribe := m.controller.Subscribe()
 	m.eventsCh = eventsCh
+	m.unsubscribeEvents = unsubscribe
 	m.setStatus("Event stream interrupted; resubscribed, refreshing view from snapshot", true)
 	return m, tea.Batch(m.waitForEvent(), m.requestSnapshot())
 }
 
 func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd) {
+	// A delivered event proves the (re)subscription is healthy: reset the
+	// consecutive-recovery budget so a long-lived session is never locked
+	// out by ancient, already-recovered disconnects.
+	m.resubscribes = 0
 	// Drop events belonging to other sessions (for example stale events from
 	// before /new or /resume); adopt a session only while unbound.
 	if !evt.SessionID.IsZero() {

@@ -53,6 +53,35 @@ func TestParserBasicEvents(t *testing.T) {
 	}
 }
 
+// Regression (REVIEW M4): the parser used to hard-fail on lines without a
+// colon and on unknown fields, both of which the WHATWG SSE spec says to
+// tolerate — a gateway adding a new field (e.g. "meta:") would kill the
+// whole stream.
+func TestParserToleratesUnknownFieldsAndBareLines(t *testing.T) {
+	events, err := collect(t, "meta: trace-1\nbareline\ndata: hello\n\n")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(events) != 1 || events[0].Data != "hello" {
+		t.Fatalf("events = %+v", events)
+	}
+}
+
+// Regression (REVIEW M4): a data-less named event is dispatched (and
+// discarded) at the blank line; its name must not leak into the next event.
+func TestParserResetsEventNameAfterEmptyDispatch(t *testing.T) {
+	events, err := collect(t, "event: stale\n\ndata: x\n\n")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(events) != 1 || events[0].Data != "x" {
+		t.Fatalf("events = %+v", events)
+	}
+	if events[0].Name != "" {
+		t.Fatalf("event name leaked from the discarded event: %q", events[0].Name)
+	}
+}
+
 func TestParserNamedEventAndMultilineData(t *testing.T) {
 	events, err := collect(t, "event: message_start\ndata: {\"a\":1}\ndata: {\"b\":2}\n\n")
 	if err != nil {
@@ -99,17 +128,15 @@ func TestParserEmptyStream(t *testing.T) {
 	}
 }
 
-func TestParserRejectsMalformedLine(t *testing.T) {
-	_, err := collect(t, "garbage-line-without-colon\n\n")
-	if err == nil || !strings.Contains(err.Error(), "malformed line") {
-		t.Fatalf("err = %v", err)
+// Per the WHATWG SSE spec, a line without a colon is a field name with an
+// empty value, and unknown fields are ignored — neither is fatal.
+func TestParserToleratesBareLineAndUnknownField(t *testing.T) {
+	events, err := collect(t, "garbage-line-without-colon\nbogus: x\ndata: y\n\n")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
 	}
-}
-
-func TestParserRejectsUnknownField(t *testing.T) {
-	_, err := collect(t, "bogus: x\ndata: y\n\n")
-	if err == nil || !strings.Contains(err.Error(), "unsupported field") {
-		t.Fatalf("err = %v", err)
+	if len(events) != 1 || events[0].Data != "y" {
+		t.Fatalf("events = %+v", events)
 	}
 }
 

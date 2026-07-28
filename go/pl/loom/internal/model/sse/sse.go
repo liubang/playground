@@ -24,7 +24,6 @@ package sse
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 )
@@ -64,6 +63,9 @@ func (p *Parser) Next() (Event, error) {
 		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
 			if len(dataLines) == 0 {
+				// Dispatch with an empty buffer: the spec discards the event
+				// and resets the name so it cannot leak into the next one.
+				eventName = ""
 				if eof {
 					return Event{}, io.EOF
 				}
@@ -84,7 +86,8 @@ func (p *Parser) Next() (Event, error) {
 
 		field, value, found := strings.Cut(line, ":")
 		if !found {
-			return Event{}, fmt.Errorf("sse: malformed line %q", line)
+			// Spec: a line without a colon is a field name with an empty value.
+			field, value = line, ""
 		}
 		if strings.HasPrefix(value, " ") {
 			value = value[1:]
@@ -95,9 +98,9 @@ func (p *Parser) Next() (Event, error) {
 			dataLines = append(dataLines, value)
 		case "event":
 			eventName = value
-		case "id", "retry":
 		default:
-			return Event{}, fmt.Errorf("sse: unsupported field %q", field)
+			// Spec: unknown fields (id, retry, and anything a gateway adds)
+			// are ignored, not fatal.
 		}
 
 		if eof {

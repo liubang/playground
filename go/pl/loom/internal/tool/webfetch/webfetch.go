@@ -388,6 +388,12 @@ func truncateAtBoundary(s string, max int) string {
 	if idx := strings.LastIndexByte(cut, '\n'); idx >= 0 && max-idx <= truncateBoundaryGap {
 		cut = cut[:idx]
 	}
+	// Never split a multi-byte UTF-8 character: the byte-level cut can land
+	// inside a rune (e.g. 3-byte CJK), which json.Marshal would silently
+	// rewrite to U+FFFD.
+	for len(cut) > 0 && !utf8.ValidString(cut) {
+		cut = cut[:len(cut)-1]
+	}
 	return cut
 }
 

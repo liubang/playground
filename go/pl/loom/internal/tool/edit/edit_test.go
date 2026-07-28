@@ -22,6 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -315,7 +316,7 @@ func assertAgentErrorCode(t *testing.T, err error, want domain.ErrorCode) {
 		t.Fatal("expected error")
 	}
 	var agentErr *domain.AgentError
-	if !domain.As(err, &agentErr) {
+	if !errors.As(err, &agentErr) {
 		t.Fatalf("expected AgentError, got %T: %v", err, err)
 	}
 	if agentErr.Code != want {
