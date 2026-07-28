@@ -19,7 +19,31 @@ package domain
 
 import (
 	"time"
+	"unicode/utf8"
 )
+
+// Display bounds for tool-result previews and argument diffs, shared by the
+// app layer (event payloads) and the UI (transcript blocks) — single home
+// for what used to be duplicated constants (REVIEW R8).
+const (
+	ToolPreviewMaxLines = 12
+	ToolPreviewMaxBytes = 1200
+	ToolDiffMaxLines    = 40
+)
+
+// TruncateAtRuneBoundary returns the longest prefix of s within maxBytes
+// that does not split a multi-byte UTF-8 character. Shared by every layer
+// that bounds display text (REVIEW R8).
+func TruncateAtRuneBoundary(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.ValidString(s[:cut]) {
+		cut--
+	}
+	return s[:cut]
+}
 
 // Limits constrains the resources a Run can consume.
 type Limits struct {

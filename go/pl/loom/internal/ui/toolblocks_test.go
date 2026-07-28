@@ -388,8 +388,8 @@ func TestToolResultPreviewTextBoundsOutput(t *testing.T) {
 	preview := toolResultPreviewText(result)
 	lines := strings.Split(preview, "\n")
 	// 12 bounded lines + ellipsis marker.
-	if len(lines) > toolPreviewMaxLines+1 {
-		t.Fatalf("preview lines = %d, want <= %d", len(lines), toolPreviewMaxLines+1)
+	if len(lines) > domain.ToolPreviewMaxLines+1 {
+		t.Fatalf("preview lines = %d, want <= %d", len(lines), domain.ToolPreviewMaxLines+1)
 	}
 	if !strings.HasSuffix(preview, "…") {
 		t.Fatalf("truncated preview should end with ellipsis: %q", preview[len(preview)-20:])

@@ -154,7 +154,7 @@ func (v *PathValidator) ResolveLexical(path string) (ResolvedPath, error) {
 	if err != nil {
 		return ResolvedPath{}, fmt.Errorf("rel path: %w", err)
 	}
-	if containsSensitiveComponent(rel) {
+	if ContainsSensitiveComponent(rel) {
 		return ResolvedPath{}, fmt.Errorf("path %q contains a sensitive component", path)
 	}
 
@@ -352,7 +352,10 @@ func IsSensitive(path string) bool {
 	return false
 }
 
-func containsSensitiveComponent(path string) bool {
+// ContainsSensitiveComponent reports whether any component of the path is
+// on the sensitive list (see IsSensitive). Tool packages must call this
+// instead of keeping their own copy of the list (REVIEW R4).
+func ContainsSensitiveComponent(path string) bool {
 	clean := filepath.Clean(path)
 	if clean == "." || clean == string(filepath.Separator) {
 		return false

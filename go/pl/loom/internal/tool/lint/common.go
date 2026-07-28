@@ -38,16 +38,6 @@ import (
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-var sensitiveComponents = map[string]struct{}{
-	".git":                 {},
-	".ssh":                 {},
-	".gnupg":               {},
-	".env":                 {},
-	".credentials":         {},
-	"credentials.json":     {},
-	"service-account.json": {},
-}
-
 type baseTool struct {
 	def       domain.ToolDefinition
 	validator *workspacepkg.PathValidator
@@ -265,17 +255,10 @@ func lexicalWorkspaceRelativePath(validator *workspacepkg.PathValidator, input s
 	return rel, true
 }
 
+// containsSensitiveComponent delegates to the single canonical list in the
+// workspace package (REVIEW R4).
 func containsSensitiveComponent(path string) bool {
-	clean := filepath.Clean(path)
-	if clean == "." || clean == string(filepath.Separator) {
-		return false
-	}
-	for _, part := range strings.Split(clean, string(filepath.Separator)) {
-		if _, ok := sensitiveComponents[part]; ok {
-			return true
-		}
-	}
-	return false
+	return workspacepkg.ContainsSensitiveComponent(path)
 }
 
 func successResult(callID domain.ToolCallID, startedAt time.Time, payload any) domain.ToolResult {
