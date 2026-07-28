@@ -172,14 +172,23 @@ func (r *Runner) RunWithSandbox(ctx context.Context, spec CommandSpec, sandbox S
 	cmd.Stdin = devNull
 	configureUnixProcessGroup(cmd)
 
-	stdoutPipe, err := cmd.StdoutPipe()
+	// Create the output pipes ourselves instead of StdoutPipe/StderrPipe:
+	// exec.Cmd.Wait closes a StdoutPipe's read end as soon as the process
+	// exits, racing the drain of whatever the kernel buffer still holds —
+	// that race silently discarded tail output with Truncated=false
+	// (REVIEW H7). With our own pipes we control when the read ends close.
+	stdoutPipe, stdoutW, err := os.Pipe()
 	if err != nil {
 		return result, fmt.Errorf("stdout pipe: %w", err)
 	}
-	stderrPipe, err := cmd.StderrPipe()
+	stderrPipe, stderrW, err := os.Pipe()
 	if err != nil {
+		_ = stdoutPipe.Close()
+		_ = stdoutW.Close()
 		return result, fmt.Errorf("stderr pipe: %w", err)
 	}
+	cmd.Stdout = stdoutW
+	cmd.Stderr = stderrW
 
 	stdoutCollector := newStreamCollector(validated.outputLimit, spec.StdoutWriter)
 	stderrCollector := newStreamCollector(validated.outputLimit, spec.StderrWriter)
@@ -196,6 +205,8 @@ func (r *Runner) RunWithSandbox(ctx context.Context, spec CommandSpec, sandbox S
 
 	startedAt := r.now()
 	if err := cmd.Start(); err != nil {
+		_ = stdoutW.Close()
+		_ = stderrW.Close()
 		closeReadPipe(stdoutPipe)
 		closeReadPipe(stderrPipe)
 		if !waitForCopyWG(&copyWG, defaultDrainWaitLimit) {
@@ -203,6 +214,10 @@ func (r *Runner) RunWithSandbox(ctx context.Context, spec CommandSpec, sandbox S
 		}
 		return result, fmt.Errorf("start command: %w", err)
 	}
+	// The parent must drop its own write ends, or the readers never see EOF.
+	// (exec already closed its copies of the child descriptors at Start.)
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
 
 	waitErrCh := make(chan error, 1)
 	go func() {
@@ -210,10 +225,25 @@ func (r *Runner) RunWithSandbox(ctx context.Context, spec CommandSpec, sandbox S
 	}()
 
 	waitErr, timedOut, cancelled := r.waitAndReap(execCtx, cmd, waitErrCh)
-	closeReadPipe(stdoutPipe)
-	closeReadPipe(stderrPipe)
+	// Once the process (group) is dead, every write end is closed, so the
+	// readers drain whatever the kernel buffer still holds and finish on
+	// EOF. Only a detached descendant holding a write end open can stall
+	// the drain — force-close then, and report truncation honestly based
+	// on whether undrained bytes remained.
 	if !waitForCopyWG(&copyWG, defaultDrainWaitLimit) {
-		return result, fmt.Errorf("wait command: output readers did not stop")
+		stdoutLost := pipePendingBytes(stdoutPipe) != 0
+		stderrLost := pipePendingBytes(stderrPipe) != 0
+		closeReadPipe(stdoutPipe)
+		closeReadPipe(stderrPipe)
+		if !waitForCopyWG(&copyWG, defaultDrainWaitLimit) {
+			return result, fmt.Errorf("wait command: output readers did not stop")
+		}
+		if stdoutLost {
+			stdoutCollector.markTruncated()
+		}
+		if stderrLost {
+			stderrCollector.markTruncated()
+		}
 	}
 
 	result.Duration = r.now().Sub(startedAt)
@@ -685,6 +715,14 @@ func (c *streamCollector) truncated() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.wasTruncated
+}
+
+// markTruncated records that captured output was forcibly cut short (the
+// drain did not finish before the pipes were closed).
+func (c *streamCollector) markTruncated() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.wasTruncated = true
 }
 
 func (c *streamCollector) err() error {
