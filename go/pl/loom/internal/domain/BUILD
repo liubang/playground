@@ -29,6 +29,7 @@ go_library(
         "limits.go",
         "message.go",
         "plan.go",
+        "question.go",
         "tool.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/domain",

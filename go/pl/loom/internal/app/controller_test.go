@@ -750,6 +750,70 @@ func TestControllerRequestCompaction(t *testing.T) {
 	}
 }
 
+func TestControllerAnswerQuestion(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	questioner := NewChannelQuestioner(nil)
+	bootstrap := testBootstrap(store, fakes.NewFakeModel())
+	controller := NewController(ControllerConfig{
+		Bootstrap:  bootstrap,
+		Broker:     runtimeevent.NewBroker(),
+		Approver:   NewChannelApprover(),
+		Questioner: questioner,
+		Clock:      domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	// A real question is pending: the controller's answer unblocks it.
+	question := domain.Question{Text: "pick one", Options: []domain.QuestionOption{{Label: "a"}, {Label: "b"}}}
+	answerCh := make(chan domain.QuestionAnswer, 1)
+	go func() {
+		answer, _ := questioner.Ask(ctx, question)
+		answerCh <- answer
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	for len(questioner.PendingQuestions()) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("question never became pending")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	pending := questioner.PendingQuestions()
+
+	result, err := controller.AnswerQuestion(ctx, pending[0], domain.QuestionAnswer{Selected: []string{"b"}})
+	if err != nil {
+		t.Fatalf("AnswerQuestion: %v", err)
+	}
+	if !result.Resolved {
+		t.Fatal("AnswerQuestion should resolve the pending question")
+	}
+	select {
+	case answer := <-answerCh:
+		if len(answer.Selected) != 1 || answer.Selected[0] != "b" {
+			t.Fatalf("answer = %+v", answer)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Ask did not return after AnswerQuestion")
+	}
+
+	// Unknown or already-answered questions report Resolved=false.
+	result, err = controller.AnswerQuestion(ctx, pending[0], domain.QuestionAnswer{Skipped: true})
+	if err != nil {
+		t.Fatalf("AnswerQuestion(stale): %v", err)
+	}
+	if result.Resolved {
+		t.Fatal("stale question must not resolve twice")
+	}
+}
+
 func TestControllerSetReasoningAppliesFromNextTurn(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
