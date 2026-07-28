@@ -32,7 +32,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
@@ -411,14 +410,7 @@ func readRuleFile(path string) (RuleFile, bool) {
 // cutAtRuneBoundary returns the longest prefix of s within maxBytes that
 // does not split a multi-byte UTF-8 character.
 func cutAtRuneBoundary(s string, maxBytes int) string {
-	if len(s) <= maxBytes {
-		return s
-	}
-	cut := maxBytes
-	for cut > 0 && !utf8.ValidString(s[:cut]) {
-		cut--
-	}
-	return s[:cut]
+	return domain.TruncateAtRuneBoundary(s, maxBytes)
 }
 
 // systemEnvProvider collects the environment snapshot from the host. It is
