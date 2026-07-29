@@ -395,14 +395,36 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 				humanizeTokens(int64(payload.EstTokensBefore)),
 				humanizeTokens(int64(payload.EstTokensAfter)),
 				detail)
-			if payload.Summarized {
-				content += " — long sessions with repeated compactions can reduce accuracy; consider a fresh session for new topics"
+			if payload.Trigger != "" && payload.Trigger != "auto" {
+				content += fmt.Sprintf(" [%s]", payload.Trigger)
 			}
+			// Every compaction (not only summarizing ones) carries the
+			// accuracy reminder: masking alone already drops detail the
+			// model may have needed (docs/CONTEXT_DESIGN.md §4.3.5).
+			content += " — long sessions with repeated compactions can reduce accuracy; consider a fresh session for new topics"
 			block := &TranscriptBlock{
 				ID:      fmt.Sprintf("notice-%d", evt.Sequence),
 				Kind:    BlockKindNotice,
 				Content: content,
 				Done:    true,
+			}
+			idx.Add(block)
+			return block.ID
+		}
+
+	case runtimeevent.KindBudgetNotice:
+		var payload runtimeevent.BudgetNoticePayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			status := ""
+			if payload.WrapUp {
+				status = "error"
+			}
+			block := &TranscriptBlock{
+				ID:      fmt.Sprintf("notice-%d", evt.Sequence),
+				Kind:    BlockKindNotice,
+				Content: payload.Text,
+				Done:    true,
+				Status:  status,
 			}
 			idx.Add(block)
 			return block.ID

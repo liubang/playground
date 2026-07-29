@@ -84,6 +84,16 @@ func openArtifactStore(t *testing.T) *artifact.Store {
 	return store
 }
 
+// windowWithTarget builds a usable WindowModel whose compaction target is
+// the given token count (trigger/target ratios preserved).
+func windowWithTarget(target int64) WindowModel {
+	return WindowModel{
+		Effective:      target * 4,
+		CompactTrigger: target * 3,
+		CompactTarget:  target,
+	}
+}
+
 func bigOutput(size int) string {
 	return strings.Repeat("0123456789abcdef\n", size/17+1)[:size]
 }
@@ -215,7 +225,7 @@ func TestCondenseArchiveMarkerCarriesArtifactRefs(t *testing.T) {
 		messages = append(messages, textMessage(domain.RoleAssistant, strings.Repeat("x", 400)))
 	}
 
-	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 1 << 20, TargetTokens: 250}
+	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 1 << 20, Window: windowWithTarget(250)}
 	result := cond.Condense(context.Background(), &messages, store)
 	if result.archived == 0 {
 		t.Fatal("expected archival to happen")
@@ -385,7 +395,7 @@ func TestBuildSummaryReplacementTruncatesAtRuneBoundary(t *testing.T) {
 	messages := []domain.Message{
 		textMessage(domain.RoleUser, cjk),
 	}
-	out := buildSummaryReplacement(messages, "summary", time.Now())
+	out, _ := buildSummaryReplacement(messages, "summary", time.Now(), 80*1024)
 	if len(out) != 2 {
 		t.Fatalf("replacement messages = %d, want 2 (user + summary bridge)", len(out))
 	}
@@ -407,7 +417,7 @@ func TestCondenseArchivesOldestSpan(t *testing.T) {
 		messages = append(messages, textMessage(domain.RoleAssistant, strings.Repeat("x", 400)))
 	}
 
-	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 1 << 20, TargetTokens: 250}
+	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 1 << 20, Window: windowWithTarget(250)}
 	result := cond.Condense(context.Background(), &messages, store)
 
 	if result.archived != 8 {
@@ -465,7 +475,7 @@ func TestCondenseRenumbersSequencesDensely(t *testing.T) {
 		messages = append(messages, msg)
 	}
 
-	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 1 << 20, TargetTokens: 250}
+	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 1 << 20, Window: windowWithTarget(250)}
 	result := cond.Condense(context.Background(), &messages, store)
 	if result.archived == 0 {
 		t.Fatal("expected archival to happen")
@@ -546,7 +556,7 @@ func TestCondenseMasksIntoWindowWhenTailHeavy(t *testing.T) {
 		textMessage(domain.RoleAssistant, "working on it"),
 	}
 
-	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 100, TargetTokens: 200}
+	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 100, Window: windowWithTarget(200)}
 	result := cond.Condense(context.Background(), &messages, store)
 
 	// Level 1 masks the first output; the window alone stays above target,
@@ -565,42 +575,52 @@ func TestCondenseMasksIntoWindowWhenTailHeavy(t *testing.T) {
 // --- trigger decision ---
 
 func TestShouldCompactTriggers(t *testing.T) {
-	newLoop := func(target int) *Loop {
+	newLoop := func() *Loop {
 		return &Loop{
-			Run:       NewRun(domain.NewSessionID(), domain.Limits{MaxInputTokens: 200_000}, domain.RealClock{}),
-			Condenser: Condenser{TargetTokens: target},
+			Run:    NewRun(domain.NewSessionID(), domain.Limits{MaxInputTokens: 200_000}, domain.RealClock{}),
+			Window: WindowModel{Effective: 1000, CompactTrigger: 800, CompactTarget: 500},
 		}
 	}
 
 	t.Run("idle run does not compact", func(t *testing.T) {
-		loop := newLoop(1000)
-		if loop.shouldCompact() {
+		if newLoop().shouldCompact() {
 			t.Fatal("no pressure, no compaction")
 		}
 	})
 
-	t.Run("context pressure ignores usage", func(t *testing.T) {
-		loop := newLoop(50)
-		loop.Run.Messages = append(loop.Run.Messages, textMessage(domain.RoleAssistant, strings.Repeat("x", 400)))
+	t.Run("cold-start estimate triggers past the window trigger", func(t *testing.T) {
+		// With no metered input yet, occupancy is the pure transcript
+		// estimate — the cold-start path (docs/CONTEXT_DESIGN.md §4.2).
+		loop := newLoop()
+		loop.Run.Messages = append(loop.Run.Messages, textMessage(domain.RoleAssistant, strings.Repeat("x", 4000)))
 		if !loop.shouldCompact() {
-			t.Fatal("oversized transcript should trigger compaction with zero usage")
+			t.Fatal("estimate-based occupancy past the trigger should compact")
 		}
 	})
 
-	t.Run("occupancy pressure triggers at 80 percent of the window", func(t *testing.T) {
-		loop := newLoop(1 << 30)
-		loop.lastCallInput = 100_000 // 50% of the 200k window
+	t.Run("metered occupancy triggers at the window trigger", func(t *testing.T) {
+		loop := newLoop()
+		loop.lastCallInput = 700 // below the 800 trigger
 		if loop.shouldCompact() {
-			t.Fatal("occupancy below 80% of the window must not trigger compaction")
+			t.Fatal("occupancy below the trigger must not compact")
 		}
-		loop.lastCallInput = 170_000 // 85% → over the threshold
+		loop.lastCallInput = 900 // past the trigger
 		if !loop.shouldCompact() {
-			t.Fatal("occupancy at 85% of the window should trigger compaction")
+			t.Fatal("occupancy past the trigger should compact")
+		}
+	})
+
+	t.Run("zero window disables automatic compaction", func(t *testing.T) {
+		loop := newLoop()
+		loop.Window = WindowModel{}
+		loop.lastCallInput = 1 << 30
+		if loop.shouldCompact() {
+			t.Fatal("an unusable window disables occupancy-driven compaction")
 		}
 	})
 
 	t.Run("forced compaction after provider context overflow", func(t *testing.T) {
-		loop := newLoop(1 << 30)
+		loop := newLoop()
 		loop.ForceCompact = true
 		if !loop.shouldCompact() {
 			t.Fatal("forceCompact must trigger compaction with no other pressure")
@@ -652,7 +672,7 @@ func TestBuildSummaryReplacement(t *testing.T) {
 		},
 	}
 
-	replacement := buildSummaryReplacement(messages, "HANDOFF", now)
+	replacement, _ := buildSummaryReplacement(messages, "HANDOFF", now, 80*1024)
 
 	// Only user-role messages remain: the two real user messages (chronological)
 	// plus the summary bridge; assistant/tool/system messages and the old
@@ -697,8 +717,8 @@ func TestLoopCompactSummarizesWhenMaskingInsufficient(t *testing.T) {
 		Run: run, Model: model, Artifacts: store,
 		// KeepRecentMessages covers the whole transcript so no archival
 		// drops the user message before summarization; the tiny
-		// TargetTokens still forces the summarization path.
-		Condenser: Condenser{KeepRecentMessages: 10, MaskMinBytes: 4096, TargetTokens: 10},
+		// compaction target still forces the summarization path.
+		Condenser: Condenser{KeepRecentMessages: 10, MaskMinBytes: 4096, Window: windowWithTarget(10)},
 	}
 	run.State.Phase = domain.PhaseCompacting
 
