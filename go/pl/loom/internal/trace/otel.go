@@ -259,14 +259,17 @@ func (run *otelRun) RecordGeneration(ctx context.Context, rec GenerationRecord) 
 			"output": float64(rec.OutputTokens) * run.rec.costOut / 1e6,
 		})))
 	}
-	attrs = append(attrs, attribute.String(attrObservationInput, encodeMessages(rec.Input, run.rec.content)))
+	// The Langfuse observation input/output uses the OpenAI ChatML wire
+	// form: the formatted (pretty) view only renders schemas it recognizes,
+	// and silently blanks unknown fields like our parts structure. The
+	// gen_ai semantic-convention attributes keep the structural summary.
+	attrs = append(attrs, attribute.String(attrObservationInput, encodeChatMessages(rec.Input, run.rec.content)))
 	attrs = append(attrs, attribute.String(attrGenAIInputMessages, encodeMessages(rec.Input, run.rec.content)))
 	if !rec.Output.ID.IsZero() {
-		output := encodeMessages([]domain.Message{rec.Output}, run.rec.content)
 		attrs = append(
 			attrs,
-			attribute.String(attrObservationOutput, output),
-			attribute.String(attrGenAIOutputMessages, output),
+			attribute.String(attrObservationOutput, encodeChatMessages([]domain.Message{rec.Output}, run.rec.content)),
+			attribute.String(attrGenAIOutputMessages, encodeMessages([]domain.Message{rec.Output}, run.rec.content)),
 		)
 	}
 
@@ -409,6 +412,93 @@ func encodeMessages(messages []domain.Message, content bool) string {
 			sm.Parts = append(sm.Parts, sp)
 		}
 		out = append(out, sm)
+	}
+	return mustJSON(out)
+}
+
+// chatMessage is the OpenAI ChatML wire form Langfuse's formatted view
+// renders: role + content, with assistant tool_calls and tool results
+// carried as separate role="tool" messages keyed by tool_call_id.
+type chatMessage struct {
+	Role       string         `json:"role"`
+	Content    string         `json:"content,omitempty"`
+	ToolCalls  []chatToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string         `json:"tool_call_id,omitempty"`
+}
+
+type chatToolCall struct {
+	ID       string       `json:"id"`
+	Type     string       `json:"type"` // always "function"
+	Function chatFunction `json:"function"`
+}
+
+type chatFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments,omitempty"`
+}
+
+// encodeChatMessages renders messages in the OpenAI ChatML schema for the
+// langfuse.observation.input/output attributes. Reasoning parts are dropped
+// (ChatML has no reasoning field); they remain visible in the gen_ai
+// semantic-convention attributes. With content disabled no conversation
+// text is emitted: text becomes a byte-size placeholder, tool-call
+// arguments are omitted, and tool errors carry only the stable code.
+func encodeChatMessages(messages []domain.Message, content bool) string {
+	out := make([]chatMessage, 0, len(messages))
+	for _, msg := range messages {
+		cm := chatMessage{Role: string(msg.Role)}
+		var texts []string
+		var toolResults []chatMessage
+		for _, p := range msg.Parts {
+			switch {
+			case p.Kind == domain.PartText:
+				if content {
+					texts = append(texts, p.Text)
+				} else {
+					texts = append(texts, fmt.Sprintf("[redacted: %d bytes]", len(p.Text)))
+				}
+			case p.Kind == domain.PartToolCall && p.ToolCall != nil:
+				tc := chatToolCall{
+					ID:       p.ToolCall.ID.String(),
+					Type:     "function",
+					Function: chatFunction{Name: p.ToolCall.Name},
+				}
+				if content {
+					tc.Function.Arguments = truncateContent(string(p.ToolCall.Arguments))
+				}
+				cm.ToolCalls = append(cm.ToolCalls, tc)
+			case p.Kind == domain.PartToolResult && p.ToolResult != nil:
+				tm := chatMessage{Role: "tool", ToolCallID: p.ToolResult.CallID.String()}
+				switch {
+				case p.ToolResult.Error != nil:
+					if content {
+						tm.Content = truncateContent(p.ToolResult.Error.Message)
+					} else {
+						// Redacted: only the stable classification crosses the
+						// wire; messages may embed paths or file content.
+						tm.Content = p.ToolResult.Error.Code
+					}
+				case content:
+					var text string
+					for _, cp := range p.ToolResult.Content {
+						if cp.Kind == domain.PartText {
+							text += cp.Text
+						}
+					}
+					tm.Content = truncateContent(text)
+				default:
+					tm.Content = "[redacted]"
+				}
+				toolResults = append(toolResults, tm)
+			}
+		}
+		cm.Content = truncateContent(strings.Join(texts, "\n"))
+		// Skip an empty role message: a domain message that only carries
+		// tool results maps to standalone role="tool" messages in ChatML.
+		if cm.Content != "" || len(cm.ToolCalls) > 0 {
+			out = append(out, cm)
+		}
+		out = append(out, toolResults...)
 	}
 	return mustJSON(out)
 }
