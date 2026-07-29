@@ -743,6 +743,41 @@ func TestGlobGoFallbackMatchesDoubleStar(t *testing.T) {
 	}
 }
 
+// Regression: the go fallback used to require pattern segments to align with
+// the full relative path, so a bare '*.go' matched only root-level files
+// while the ripgrep engine matched the basename at any depth — the same
+// call silently returned different results depending on the engine. The
+// fallback now shares the ripgrep semantics (matchSearchGlob).
+func TestGlobGoFallbackMatchesBasenameAtAnyDepth(t *testing.T) {
+	validator, root := newValidator(t)
+	mustWriteFile(t, filepath.Join(root, "root.go"), []byte("package a\n"))
+	mustWriteFile(t, filepath.Join(root, "sub", "deep", "b.go"), []byte("package b\n"))
+	mustWriteFile(t, filepath.Join(root, "sub", "c.txt"), []byte("text\n"))
+
+	tool, err := NewGlobTool(validator, nil)
+	if err != nil {
+		t.Fatalf("NewGlobTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "glob", globArgs{Pattern: "*.go"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+
+	var output globOutput
+	decodeToolResult(t, result, &output)
+	if output.Engine != string(engineGoFallback) {
+		t.Fatalf("output.Engine = %q, want go_fallback", output.Engine)
+	}
+	want := []string{"root.go", "sub/deep/b.go"}
+	if !reflect.DeepEqual(output.Files, want) {
+		t.Fatalf("output.Files = %v, want %v (basename pattern must match at any depth)", output.Files, want)
+	}
+}
+
 // TestSearchRipgrepRealEndToEnd exercises the true ripgrep binary through the
 // platform sandbox. It skips when rg or a usable sandbox is unavailable.
 func TestSearchRipgrepRealEndToEnd(t *testing.T) {

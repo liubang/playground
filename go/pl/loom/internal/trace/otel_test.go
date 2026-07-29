@@ -65,6 +65,86 @@ func TestEncodeMessagesContentModes(t *testing.T) {
 	}
 }
 
+// TestEncodeChatMessagesChatML pins the OpenAI ChatML wire form used for
+// langfuse.observation.input/output: the Langfuse formatted view renders
+// only this schema and blanks unknown fields like our parts structure.
+func TestEncodeChatMessagesChatML(t *testing.T) {
+	callID := domain.NewToolCallID()
+	messages := []domain.Message{
+		{
+			Role: domain.RoleUser,
+			Parts: []domain.ContentPart{
+				{Kind: domain.PartText, Text: "secret prompt"},
+			},
+		},
+		{
+			Role: domain.RoleAssistant,
+			Parts: []domain.ContentPart{
+				{Kind: domain.PartReasoning, Reasoning: &domain.ReasoningContent{Text: "thinking"}},
+				{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{
+					ID: callID, Name: "edit", Arguments: json.RawMessage(`{"path":"a.go"}`),
+				}},
+			},
+		},
+		{
+			Role: domain.RoleUser,
+			Parts: []domain.ContentPart{
+				{Kind: domain.PartToolResult, ToolResult: &domain.ToolResult{
+					CallID:  callID,
+					Status:  domain.ToolStatusSuccess,
+					Content: []domain.ContentPart{{Kind: domain.PartText, Text: "edit applied"}},
+				}},
+			},
+		},
+	}
+
+	full := encodeChatMessages(messages, true)
+	var fullMsgs []map[string]any
+	if err := json.Unmarshal([]byte(full), &fullMsgs); err != nil {
+		t.Fatalf("chat messages must be valid JSON: %v\n%s", err, full)
+	}
+	if len(fullMsgs) != 3 {
+		t.Fatalf("chat messages = %d, want 3 (user, assistant, tool):\n%s", len(fullMsgs), full)
+	}
+	if fullMsgs[0]["role"] != "user" || fullMsgs[0]["content"] != "secret prompt" {
+		t.Fatalf("user message not in ChatML form: %v", fullMsgs[0])
+	}
+	if fullMsgs[1]["role"] != "assistant" {
+		t.Fatalf("assistant message missing: %v", fullMsgs[1])
+	}
+	calls, ok := fullMsgs[1]["tool_calls"].([]any)
+	if !ok || len(calls) != 1 {
+		t.Fatalf("assistant tool_calls missing: %v", fullMsgs[1])
+	}
+	call := calls[0].(map[string]any)
+	if call["id"] != callID.String() || call["type"] != "function" {
+		t.Fatalf("tool_call not in ChatML form: %v", call)
+	}
+	fn := call["function"].(map[string]any)
+	if fn["name"] != "edit" || fn["arguments"] != `{"path":"a.go"}` {
+		t.Fatalf("tool_call function not in ChatML form: %v", fn)
+	}
+	if _, leaked := fullMsgs[1]["reasoning"]; leaked {
+		t.Fatalf("reasoning must be dropped from ChatML: %v", fullMsgs[1])
+	}
+	if fullMsgs[2]["role"] != "tool" || fullMsgs[2]["tool_call_id"] != callID.String() ||
+		fullMsgs[2]["content"] != "edit applied" {
+		t.Fatalf("tool result not in ChatML form: %v", fullMsgs[2])
+	}
+
+	redacted := encodeChatMessages(messages, false)
+	if strings.Contains(redacted, "secret") || strings.Contains(redacted, "a.go") ||
+		strings.Contains(redacted, "edit applied") {
+		t.Fatalf("redacted chat mode leaks content:\n%s", redacted)
+	}
+	if !strings.Contains(redacted, "redacted") {
+		t.Fatalf("redacted chat mode should carry placeholders:\n%s", redacted)
+	}
+	if !strings.Contains(redacted, `"name":"edit"`) {
+		t.Fatalf("redacted chat mode should keep tool names:\n%s", redacted)
+	}
+}
+
 // TestOTelRecorderEmitsRunSpans drives the recorder end-to-end against an
 // in-memory exporter and verifies the span tree and Langfuse attributes.
 func TestOTelRecorderEmitsRunSpans(t *testing.T) {
@@ -123,8 +203,11 @@ func TestOTelRecorderEmitsRunSpans(t *testing.T) {
 	assertAttr(t, gen.Attributes, attrGenAIInputTokens, int64(10))
 	assertAttr(t, gen.Attributes, attrObservationPromptName, "loom-system")
 	input := attrValue(gen.Attributes, attrObservationInput)
-	if !strings.Contains(input, "hello") {
-		t.Fatalf("generation input missing messages: %s", input)
+	if !strings.Contains(input, `"content":"hello"`) {
+		t.Fatalf("generation input must be ChatML (role/content) for the formatted view: %s", input)
+	}
+	if output := attrValue(gen.Attributes, attrObservationOutput); !strings.Contains(output, `"content":"hi there"`) {
+		t.Fatalf("generation output must be ChatML (role/content) for the formatted view: %s", output)
 	}
 	cost := attrValue(gen.Attributes, attrObservationCost)
 	if !strings.Contains(cost, "input") {
