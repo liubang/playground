@@ -61,9 +61,12 @@ type GlobTool struct {
 func NewGlobTool(validator *workspacepkg.PathValidator, runner rgRunner) (*GlobTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "glob",
-		Description: "Find files by name pattern within the workspace (e.g. '**/*.go', 'src/**/test_*.ts'). " +
+		Description: "Find files by name pattern within the workspace (e.g. '*.go', 'src/**/test_*.ts'). " +
+			"A pattern without '/' matches the file name at any depth; a pattern with '/' matches the " +
+			"workspace-relative path ('**' crosses directories). " +
 			"Returns workspace-relative paths in deterministic order, capped at 200. " +
-			"Files matched by .gitignore are skipped when the ripgrep engine is available.",
+			"Files matched by .gitignore and hidden (dot-prefixed) paths are skipped when the ripgrep " +
+			"engine is available; the fallback engine includes them (the engine is reported in the output).",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"pattern":{"type":"string","minLength":1,"maxLength":512},"path":{"type":"string","minLength":1}},"required":["pattern"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"pattern":{"type":"string"},"engine":{"type":"string"},"files":{"type":"array","items":{"type":"string"}},"count":{"type":"integer"},"truncated":{"type":"boolean"}},"required":["path","pattern","engine","files","count","truncated"]}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
@@ -210,7 +213,10 @@ func (t *GlobTool) executeGoFallback(ctx context.Context, prepared domain.Prepar
 		if d.IsDir() || d.Type()&fs.ModeSymlink != 0 {
 			return nil
 		}
-		if !matchGlobPath(args.Pattern, filepath.ToSlash(rel)) {
+		// matchSearchGlob aligns the fallback with the ripgrep engine: a
+		// pattern without a slash matches the basename at any depth, one
+		// with a slash matches the workspace-relative path.
+		if !matchSearchGlob(args.Pattern, filepath.ToSlash(rel)) {
 			return nil
 		}
 		if len(files) >= maxGlobResults {
