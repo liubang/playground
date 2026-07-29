@@ -17,7 +17,10 @@
 
 package domain
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // ContextConfig tunes how the agent derives context-compaction thresholds
 // from a model's context window (docs/CONTEXT_DESIGN.md §4.1). Every
@@ -91,6 +94,13 @@ type RunawayConfig struct {
 	// StallWarnTurns is the number of consecutive turns without any
 	// progress signal that injects a converge reminder (0 disables).
 	StallWarnTurns int `json:"stall_warn_turns"`
+	// StallTimeout is the stall watchdog (docs/CONTEXT_DESIGN.md §4.4.3):
+	// the maximum ACTIVE time since the last progress signal before the
+	// run enters the soft-landing wrap-up and fails. Suspended time
+	// (awaiting approval, waiting for user input) never counts. Zero
+	// disables. This is the only role time plays — it answers "are you
+	// stuck", never "how long have you worked".
+	StallTimeout time.Duration `json:"stall_timeout"`
 }
 
 // DefaultRunawayConfig returns the standard runaway-detection thresholds.
@@ -99,12 +109,13 @@ func DefaultRunawayConfig() RunawayConfig {
 		MaxRepeatedCalls:       3,
 		MaxConsecutiveFailures: 5,
 		StallWarnTurns:         10,
+		StallTimeout:           15 * time.Minute,
 	}
 }
 
 // Validate rejects negative thresholds.
 func (c RunawayConfig) Validate() error {
-	if c.MaxRepeatedCalls < 0 || c.MaxConsecutiveFailures < 0 || c.StallWarnTurns < 0 {
+	if c.MaxRepeatedCalls < 0 || c.MaxConsecutiveFailures < 0 || c.StallWarnTurns < 0 || c.StallTimeout < 0 {
 		return fmt.Errorf("runaway thresholds must be >= 0, got %+v", c)
 	}
 	return nil

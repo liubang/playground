@@ -515,18 +515,14 @@ func resolveLimits(in Limits) (domain.Limits, error) {
 	if in.MaxCostUSD != nil {
 		out.MaxEstimatedCostUSD = *in.MaxCostUSD
 	}
+	if in.MaxTokens != nil {
+		out.MaxTokens = *in.MaxTokens
+	}
 	if in.MaxToolOutputBytes != nil {
 		out.MaxToolOutputBytes = *in.MaxToolOutputBytes
 	}
 	if in.MaxArtifactBytes != nil {
 		out.MaxArtifactBytes = *in.MaxArtifactBytes
-	}
-	if in.MaxWallTime != "" {
-		d, err := time.ParseDuration(in.MaxWallTime)
-		if err != nil {
-			return domain.Limits{}, fmt.Errorf("config: limits.max_wall_time: expected a Go duration (e.g. \"45m\"), got %q", in.MaxWallTime)
-		}
-		out.MaxWallTime = d
 	}
 	// Negative values would silently disable a budget dimension or, worse,
 	// make comparisons meaningless — reject them all in one place.
@@ -534,7 +530,7 @@ func resolveLimits(in Limits) (domain.Limits, error) {
 		"max_input_tokens":      out.MaxInputTokens < 0,
 		"max_output_tokens":     out.MaxOutputTokens < 0,
 		"max_cost_usd":          out.MaxEstimatedCostUSD < 0,
-		"max_wall_time":         out.MaxWallTime < 0,
+		"max_tokens":            out.MaxTokens < 0,
 		"max_tool_output_bytes": out.MaxToolOutputBytes < 0,
 		"max_artifact_bytes":    out.MaxArtifactBytes < 0,
 	}
@@ -580,6 +576,13 @@ func resolveRunaway(in Runaway) (domain.RunawayConfig, error) {
 	}
 	if in.StallWarnTurns != nil {
 		out.StallWarnTurns = *in.StallWarnTurns
+	}
+	if in.StallTimeout != "" {
+		d, err := time.ParseDuration(in.StallTimeout)
+		if err != nil {
+			return domain.RunawayConfig{}, fmt.Errorf("config: runaway.stall_timeout: expected a Go duration (e.g. \"15m\"), got %q", in.StallTimeout)
+		}
+		out.StallTimeout = d
 	}
 	if err := out.Validate(); err != nil {
 		return domain.RunawayConfig{}, fmt.Errorf("config: %w", err)

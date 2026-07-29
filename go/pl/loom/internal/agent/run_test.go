@@ -77,10 +77,13 @@ func TestContinueRunFromTerminalCheckpoint(t *testing.T) {
 		len(run.Messages) != 1 {
 		t.Fatalf("unexpected continued run: %+v pending=%+v", run, run.pendingEvents)
 	}
-	// A continuation starts a fresh per-prompt budget window: the
-	// checkpoint's cumulative usage must not throttle the new prompt.
-	if run.Usage != (domain.Usage{}) {
-		t.Fatalf("continued run usage = %+v, want zeroed budget window", run.Usage)
+	// v3: a continuation inherits the checkpoint's session-cumulative
+	// budget counters (tokens, cost) while the per-prompt observability
+	// counters (turns, tool calls, wall time) reset
+	// (docs/CONTEXT_DESIGN.md §4.4.3).
+	want := domain.Usage{InputTokens: 10}
+	if run.Usage != want {
+		t.Fatalf("continued run usage = %+v, want %+v (session tokens inherited, per-prompt counters reset)", run.Usage, want)
 	}
 	userEvent := run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
@@ -377,14 +380,14 @@ func TestRunAddUserMessage(t *testing.T) {
 }
 
 func TestRunCheckBudget(t *testing.T) {
-	limits := domain.Limits{MaxWallTime: 10 * time.Second}
+	limits := domain.Limits{MaxTokens: 100}
 	clock := domain.NewFakeClock(time.Now().UTC())
 	run := NewRun(domain.NewSessionID(), limits, clock)
-	clock.Advance(9 * time.Second)
+	run.Usage.InputTokens = 90
 	if check := run.CheckBudget(); !check.HasSoft() || check.HasHard() {
 		t.Errorf("expected soft-only breach at 90%%, got %+v", check)
 	}
-	clock.Advance(time.Second)
+	run.Usage.OutputTokens = 10
 	if check := run.CheckBudget(); !check.HasHard() {
 		t.Error("expected hard breach at 100%")
 	}
@@ -1071,35 +1074,45 @@ func TestLoopExecuteCancelledPersistsTerminalEvent(t *testing.T) {
 	}
 }
 
-// Regression (REVIEW H2): Usage.WallTime was never updated by production
-// code, so the MaxWallTime runaway limit (default 30min) could never fire.
-// The budget check must observe the elapsed per-prompt window.
-func TestRunWallTimeCountsTowardBudget(t *testing.T) {
+// v3 (CONTEXT_DESIGN §4.4.3): the token budget is session-cumulative and
+// must survive the prompt boundary, while per-prompt observability
+// counters (turns, tool calls, wall time) reset.
+func TestRunSessionTokenBudgetSurvivesPromptBoundary(t *testing.T) {
 	clock := domain.NewFakeClock(time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC))
-	run := NewRun(domain.NewSessionID(), domain.Limits{MaxWallTime: time.Minute}, clock)
+	run := NewRun(domain.NewSessionID(), domain.Limits{MaxTokens: 100}, clock)
+	run.Usage.InputTokens = 80
+	run.Usage.OutputTokens = 30 // 110 ≥ 100 → hard breach
+	run.Usage.Turns = 7
 
 	clock.Advance(2 * time.Minute)
 	check := run.CheckBudget()
 	if !check.HasHard() {
-		t.Fatalf("elapsed wall time must breach the hard limit, got %+v", check)
+		t.Fatalf("session tokens must breach the hard limit, got %+v", check)
 	}
 	found := false
 	for _, b := range check.HardBreaches {
-		if b == "wall_time" {
+		if b == "tokens" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("hard breaches = %v, want wall_time", check.HardBreaches)
+		t.Fatalf("hard breaches = %v, want tokens", check.HardBreaches)
 	}
 	if run.Usage.WallTime != 2*time.Minute {
-		t.Fatalf("Usage.WallTime = %v, want 2m", run.Usage.WallTime)
+		t.Fatalf("Usage.WallTime = %v, want 2m (display counter)", run.Usage.WallTime)
 	}
 
-	// A new prompt opens a fresh budget window.
+	// A new prompt does NOT clear the session-cumulative budget...
 	run.ResetUsageForNewTurn()
-	if check := run.CheckBudget(); check.HasHard() {
-		t.Fatalf("fresh budget window must clear the wall_time breach, got %+v", check)
+	if check := run.CheckBudget(); !check.HasHard() {
+		t.Fatalf("session token budget must survive the prompt boundary, got %+v", check)
+	}
+	// ...but the per-prompt observability counters reset.
+	if run.Usage.Turns != 0 || run.Usage.WallTime != 0 {
+		t.Fatalf("per-prompt counters must reset: %+v", run.Usage)
+	}
+	if run.Usage.InputTokens != 80 || run.Usage.OutputTokens != 30 {
+		t.Fatalf("session token counters must be preserved: %+v", run.Usage)
 	}
 }
 
@@ -1166,12 +1179,13 @@ func TestLoopExecuteBudgetExhausted(t *testing.T) {
 	registry := NewToolRegistry()
 	logger := slog.Default()
 
-	// A wall-time budget already exhausted at loop entry must not kill the
-	// run mid-work: the soft landing injects one wrap-up turn and the run
-	// terminates with budget_exhausted after the model's final answer.
+	// A session token budget already exhausted at loop entry (debt from an
+	// earlier prompt) must not kill the run mid-work: the soft landing
+	// injects one wrap-up turn and the run terminates with
+	// budget_exhausted after the model's final answer.
 	clock := domain.NewFakeClock(time.Now().UTC())
-	run := NewRun(domain.NewSessionID(), domain.Limits{MaxWallTime: time.Minute}, clock)
-	clock.Advance(2 * time.Minute)
+	run := NewRun(domain.NewSessionID(), domain.Limits{MaxTokens: 100}, clock)
+	run.Usage.InputTokens = 200
 
 	loop := &Loop{
 		Run:      run,
@@ -2593,21 +2607,21 @@ func TestBudgetNoticeInjection(t *testing.T) {
 	}
 }
 
-func TestBudgetNoticeWallTimeAndCost(t *testing.T) {
+func TestBudgetNoticeTokensAndCost(t *testing.T) {
 	clock := domain.NewFakeClock(time.Now().UTC())
 	run := NewRun(domain.NewSessionID(), domain.Limits{
-		MaxWallTime:         100 * time.Second,
+		MaxTokens:           100,
 		MaxEstimatedCostUSD: 1.0,
 	}, clock)
 	loop := &Loop{Run: run}
 
-	clock.Advance(85 * time.Second)
-	run.Usage.CostUSD = 0.97
+	run.Usage.InputTokens = 85 // 85% → level 1
+	run.Usage.CostUSD = 0.97   // 97% → level 2
 	loop.injectBudgetNotices()
 	if len(run.Messages) != 2 {
-		t.Fatalf("wall_time level-1 and cost level-2 reminders expected: %+v", run.Messages)
+		t.Fatalf("tokens level-1 and cost level-2 reminders expected: %+v", run.Messages)
 	}
-	if !strings.Contains(run.Messages[0].TextParts()[0], "wall-clock budget") ||
+	if !strings.Contains(run.Messages[0].TextParts()[0], "session token budget") ||
 		!strings.Contains(run.Messages[1].TextParts()[0], "cost budget") {
 		t.Fatalf("unexpected reminder texts: %+v", run.Messages)
 	}
