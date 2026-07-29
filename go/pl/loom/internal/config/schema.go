@@ -119,15 +119,17 @@ func (r Reasoning) DomainSpec() domain.ReasoningSpec {
 }
 
 // Limits mirrors domain.Limits; nil fields keep the built-in default.
-// Only scarce resources are budgeted (wall time, cost) — turn/tool-call
-// count quotas were removed by design (docs/CONTEXT_DESIGN.md §4.4.3) and
-// are rejected as unknown fields at load.
+// Only scarce resources are budgeted (session-cumulative tokens, cost) —
+// turn/tool-call count quotas and the per-prompt wall-clock cap were
+// removed by design (docs/CONTEXT_DESIGN.md §4.4.3) and are rejected as
+// unknown fields at load.
 type Limits struct {
 	MaxInputTokens  *int64   `yaml:"max_input_tokens"`
 	MaxOutputTokens *int64   `yaml:"max_output_tokens"`
 	MaxCostUSD      *float64 `yaml:"max_cost_usd"`
-	// MaxWallTime uses Go duration syntax ("30m", "1h").
-	MaxWallTime        string `yaml:"max_wall_time"`
+	// MaxTokens budgets session-cumulative metered tokens; nil keeps the
+	// default (0 = unlimited, opt-in).
+	MaxTokens          *int64 `yaml:"max_tokens"`
 	MaxToolOutputBytes *int64 `yaml:"max_tool_output_bytes"`
 	MaxArtifactBytes   *int64 `yaml:"max_artifact_bytes"`
 }
@@ -147,6 +149,9 @@ type Runaway struct {
 	MaxRepeatedCalls       *int `yaml:"max_repeated_calls"`
 	MaxConsecutiveFailures *int `yaml:"max_consecutive_failures"`
 	StallWarnTurns         *int `yaml:"stall_warn_turns"`
+	// StallTimeout uses Go duration syntax ("15m", "1h"); empty keeps the
+	// default, "0" disables the stall watchdog.
+	StallTimeout string `yaml:"stall_timeout"`
 }
 
 // Prompt configures the system prompt.

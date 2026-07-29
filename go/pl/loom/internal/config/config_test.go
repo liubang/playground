@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
@@ -253,7 +254,8 @@ func TestLoadValidationErrors(t *testing.T) {
 		{"target above trigger", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\ncontext:\n  compact_trigger_ratio: 0.7\n  compact_target_ratio: 0.8", "compact_target_ratio"},
 		{"bad model window_utilization", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m, window_utilization: 1.5}]}", "window_utilization"},
 		{"negative runaway threshold", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nrunaway:\n  max_repeated_calls: -1", "runaway"},
-		{"bad duration", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nlimits:\n  max_wall_time: soon", "max_wall_time"},
+		{"removed limit max_wall_time", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nlimits:\n  max_wall_time: 30m", "max_wall_time"},
+		{"bad stall duration", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nrunaway:\n  stall_timeout: soon", "stall_timeout"},
 		{"negative context window", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m, context_window: -1}]}", ">= 0"},
 		{"slash in provider name", "providers:\n  - {name: a/b, base_url: 'https://a.com', api_key: k, models: [{name: m}]}", "must not contain '/'"},
 		{"slash in model name", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: a/b}]}", "must not contain '/'"},
@@ -340,14 +342,14 @@ func TestResolveLimitsOverlay(t *testing.T) {
 	cfg := loadFile(t, twoProviderYAML+`
 limits:
   max_cost_usd: 1.5
-  max_wall_time: 1h
+  max_tokens: 1000000
 `, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
 
 	if cfg.Limits.MaxEstimatedCostUSD != 1.5 {
 		t.Errorf("MaxEstimatedCostUSD = %v", cfg.Limits.MaxEstimatedCostUSD)
 	}
-	if cfg.Limits.MaxWallTime.Hours() != 1 {
-		t.Errorf("MaxWallTime = %v, want 1h", cfg.Limits.MaxWallTime)
+	if cfg.Limits.MaxTokens != 1_000_000 {
+		t.Errorf("MaxTokens = %v, want 1000000", cfg.Limits.MaxTokens)
 	}
 	if cfg.Limits.MaxToolOutputBytes != 48*1024 {
 		t.Errorf("MaxToolOutputBytes = %d, want built-in default 48KB", cfg.Limits.MaxToolOutputBytes)
@@ -369,6 +371,7 @@ context:
 runaway:
   max_repeated_calls: 4
   stall_warn_turns: 0
+  stall_timeout: 5m
 `, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
 	wantContext := domain.ContextConfig{
 		Utilization: 0.9, CompactTriggerRatio: 0.7, CompactTargetRatio: 0.4,
@@ -377,7 +380,7 @@ runaway:
 	if !reflect.DeepEqual(cfg.Context, wantContext) {
 		t.Fatalf("context = %+v, want %+v", cfg.Context, wantContext)
 	}
-	wantRunaway := domain.RunawayConfig{MaxRepeatedCalls: 4, MaxConsecutiveFailures: 5, StallWarnTurns: 0}
+	wantRunaway := domain.RunawayConfig{MaxRepeatedCalls: 4, MaxConsecutiveFailures: 5, StallWarnTurns: 0, StallTimeout: 5 * time.Minute}
 	if cfg.Runaway != wantRunaway {
 		t.Fatalf("runaway = %+v, want %+v", cfg.Runaway, wantRunaway)
 	}

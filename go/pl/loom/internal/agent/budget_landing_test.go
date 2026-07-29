@@ -58,7 +58,7 @@ func TestBudgetWrapUpAutoDeniesToolCalls(t *testing.T) {
 	if err := registry.Register(readTool); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
-	run := NewRun(domain.NewSessionID(), domain.Limits{MaxEstimatedCostUSD: 1.0, MaxWallTime: time.Hour}, domain.RealClock{})
+	run := NewRun(domain.NewSessionID(), domain.Limits{MaxEstimatedCostUSD: 1.0}, domain.RealClock{})
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
@@ -121,7 +121,7 @@ func TestPrepareFailedKeepsEventStreamPaired(t *testing.T) {
 	if err := registry.Register(tool); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
-	run := NewRun(domain.NewSessionID(), domain.Limits{MaxWallTime: time.Hour}, domain.RealClock{})
+	run := NewRun(domain.NewSessionID(), domain.Limits{}, domain.RealClock{})
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
@@ -213,13 +213,13 @@ func TestRecoverRunReArmsBudgetWrapUp(t *testing.T) {
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
 		CreatedAt: clock.Now(),
 	})
-	run.WrapUpPending = dimensionWallTime
+	run.WrapUpPending = dimensionTokens
 	run.appendEvent(domain.EventBudgetWrapupStarted, domain.BudgetWrapupPayload{
-		Dimension: dimensionWallTime, Usage: 1, Limit: 1,
+		Dimension: dimensionTokens, Usage: 1, Limit: 1,
 	})
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
-		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: budgetWrapUpPrompt(dimensionWallTime)}},
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: budgetWrapUpPrompt(dimensionTokens)}},
 		CreatedAt: clock.Now(),
 		Metadata:  map[string]string{"kind": "budget_wrapup"},
 	})
@@ -229,7 +229,7 @@ func TestRecoverRunReArmsBudgetWrapUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecoverRun error = %v", err)
 	}
-	if recovered.WrapUpPending != dimensionWallTime {
-		t.Fatalf("WrapUpPending = %q, want %q (re-armed from the event)", recovered.WrapUpPending, dimensionWallTime)
+	if recovered.WrapUpPending != dimensionTokens {
+		t.Fatalf("WrapUpPending = %q, want %q (re-armed from the event)", recovered.WrapUpPending, dimensionTokens)
 	}
 }

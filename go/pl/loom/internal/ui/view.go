@@ -765,21 +765,21 @@ func (m Model) planPanelTitle(width int) string {
 }
 
 // formatUsage renders the status-bar usage segment. Token counts are
-// cumulative observability counters — never budget denominators
+// session-cumulative counters — the tokens budget denominators
 // (docs/CONTEXT_DESIGN.md §4.4.3: context pressure is shown by the ctx
-// segment against the effective window, cost/time are the only budgets).
+// segment against the effective window; tokens/cost are the budgets).
 func formatUsage(usage domain.Usage) string {
 	return fmt.Sprintf("turns:%d in:%s out:%s tools:%d",
 		usage.Turns, humanizeTokens(usage.InputTokens), humanizeTokens(usage.OutputTokens), usage.ToolCalls)
 }
 
 // budgetUsageRatio reports the highest consumption ratio across the real
-// budget dimensions (wall time, cost); it is 0 when neither is configured.
-// The status bar warns at ≥80% — the graduated-notice band.
+// budget dimensions (session tokens, cost); it is 0 when neither is
+// configured. The status bar warns at ≥80% — the graduated-notice band.
 func budgetUsageRatio(usage domain.Usage, limits domain.Limits) float64 {
 	ratio := 0.0
-	if limits.MaxWallTime > 0 {
-		ratio = max(ratio, float64(usage.WallTime)/float64(limits.MaxWallTime))
+	if limits.MaxTokens > 0 {
+		ratio = max(ratio, float64(usage.InputTokens+usage.OutputTokens)/float64(limits.MaxTokens))
 	}
 	if limits.MaxEstimatedCostUSD > 0 && usage.CostUSD > 0 {
 		ratio = max(ratio, usage.CostUSD/limits.MaxEstimatedCostUSD)
