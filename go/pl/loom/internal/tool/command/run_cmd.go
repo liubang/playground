@@ -98,16 +98,21 @@ type runCmdOutput struct {
 	StderrArtifactTruncated bool                `json:"stderr_artifact_truncated"`
 	StdoutArtifact          *domain.ArtifactRef `json:"stdout_artifact,omitempty"`
 	StderrArtifact          *domain.ArtifactRef `json:"stderr_artifact,omitempty"`
-	ExitCode                int                 `json:"exit_code"`
-	Signal                  string              `json:"signal"`
-	DurationMs              int64               `json:"duration_ms"`
-	TimedOut                bool                `json:"timed_out"`
-	Cancelled               bool                `json:"cancelled"`
-	Truncated               bool                `json:"truncated"`
-	Isolation               string              `json:"isolation"`
-	ExecutablePath          string              `json:"executable_path"`
-	Hash                    string              `json:"hash"`
-	Note                    string              `json:"note,omitempty"`
+	// StdoutArtifactPath/StderrArtifactPath give the model a directly
+	// readable location (run_cmd cat/sed/grep) instead of an opaque blob
+	// ID; empty when the artifact store cannot resolve paths.
+	StdoutArtifactPath string `json:"stdout_artifact_path,omitempty"`
+	StderrArtifactPath string `json:"stderr_artifact_path,omitempty"`
+	ExitCode           int    `json:"exit_code"`
+	Signal             string `json:"signal"`
+	DurationMs         int64  `json:"duration_ms"`
+	TimedOut           bool   `json:"timed_out"`
+	Cancelled          bool   `json:"cancelled"`
+	Truncated          bool   `json:"truncated"`
+	Isolation          string `json:"isolation"`
+	ExecutablePath     string `json:"executable_path"`
+	Hash               string `json:"hash"`
+	Note               string `json:"note,omitempty"`
 }
 
 type preparedFingerprint struct {
@@ -163,6 +168,8 @@ func NewRunCmdToolWithArtifacts(
 		Name: "run_cmd",
 		Description: "Execute a program in a sandbox. Prefer plain argv form (program + args + env) over shell wrappers: " +
 			"program='sh' with args=['-c','...'] is elevated to R3 approval risk and prompts the user every time, so use it ONLY when pipes, redirection or '&&' are truly required. " +
+			"argv is executed directly without a shell: wildcards like '*.go' are passed to the program literally, " +
+			"so glob expansion is a legitimate reason to use the 'sh -c' form (or use the glob tool to find files first). " +
 			"Only 'program' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
 			"Output beyond the limit is stored as an artifact with a head/tail preview. " +
 			"Inside the sandbox, env entries are filtered by a security allowlist; keys that do not survive the filter are reported back in the output's 'note' field (escalated runs inherit the full user environment). " +
@@ -173,7 +180,7 @@ func NewRunCmdToolWithArtifacts(
 			"do not give up or ask the user to run it themselves before offering that approval. " +
 			"'justification' is an optional short note shown to the user at approval time; it is REQUIRED with sandbox_permissions='require_escalated' and simply informational otherwise.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"stdout_preview_truncated":{"type":"boolean"},"stderr_preview_truncated":{"type":"boolean"},"stdout_artifact_truncated":{"type":"boolean"},"stderr_artifact_truncated":{"type":"boolean"},"stdout_artifact":{"type":"object"},"stderr_artifact":{"type":"object"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"},"note":{"type":"string"}},"required":["stdout","stderr","stdout_bytes","stderr_bytes","stdout_preview_truncated","stderr_preview_truncated","stdout_artifact_truncated","stderr_artifact_truncated","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
+		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"stdout_preview_truncated":{"type":"boolean"},"stderr_preview_truncated":{"type":"boolean"},"stdout_artifact_truncated":{"type":"boolean"},"stderr_artifact_truncated":{"type":"boolean"},"stdout_artifact":{"type":"object"},"stderr_artifact":{"type":"object"},"stdout_artifact_path":{"type":"string"},"stderr_artifact_path":{"type":"string"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"},"note":{"type":"string"}},"required":["stdout","stderr","stdout_bytes","stderr_bytes","stdout_preview_truncated","stderr_preview_truncated","stdout_artifact_truncated","stderr_artifact_truncated","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
 	}
@@ -333,6 +340,8 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		StderrArtifactTruncated: stageTruncated(stderrStage),
 		StdoutArtifact:          stdoutRef,
 		StderrArtifact:          stderrRef,
+		StdoutArtifactPath:      artifactPathFor(t.artifacts, stdoutRef),
+		StderrArtifactPath:      artifactPathFor(t.artifacts, stderrRef),
 		ExitCode:                runnerResult.ExitCode,
 		Signal:                  runnerResult.Signal,
 		DurationMs:              durationMilliseconds(runnerResult.Duration),
@@ -748,6 +757,29 @@ func boundedHeadTailString(value string, limit int) string {
 		tail = tail[1:]
 	}
 	return head + marker + tail
+}
+
+// artifactPathResolver is implemented by the concrete artifact store;
+// it gives the model a directly readable path instead of an opaque ID.
+type artifactPathResolver interface {
+	PathForRef(ref domain.ArtifactRef) (string, bool)
+}
+
+// artifactPathFor resolves the on-disk path of a committed artifact, or
+// empty when the store cannot resolve paths or the ref is absent.
+func artifactPathFor(store domain.ArtifactStore, ref *domain.ArtifactRef) string {
+	if store == nil || ref == nil {
+		return ""
+	}
+	resolver, ok := store.(artifactPathResolver)
+	if !ok {
+		return ""
+	}
+	path, found := resolver.PathForRef(*ref)
+	if !found {
+		return ""
+	}
+	return path
 }
 
 func (t *RunCmdTool) beginOutputArtifacts(ctx context.Context) (domain.StagedArtifact, domain.StagedArtifact, error) {

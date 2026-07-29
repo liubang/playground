@@ -87,6 +87,8 @@ type ResolvedConfig struct {
 	Providers []ResolvedProvider
 	Default   ProviderModelRef
 	Limits    domain.Limits
+	Context   domain.ContextConfig
+	Runaway   domain.RunawayConfig
 	Prompt    Prompt
 	Skills    ResolvedSkills
 	Rules     ResolvedRules
@@ -222,6 +224,14 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	contextCfg, err := resolveContext(f.Context)
+	if err != nil {
+		return nil, err
+	}
+	runawayCfg, err := resolveRunaway(f.Runaway)
+	if err != nil {
+		return nil, err
+	}
 	tracing, err := resolveTracing(f.Tracing, lookup)
 	if err != nil {
 		return nil, err
@@ -229,6 +239,8 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 	out := &ResolvedConfig{
 		Providers: providers,
 		Limits:    limits,
+		Context:   contextCfg,
+		Runaway:   runawayCfg,
 		Prompt:    f.Prompt,
 		Skills: ResolvedSkills{
 			Enabled:    f.Skills.Enabled == nil || *f.Skills.Enabled,
@@ -334,6 +346,9 @@ func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, erro
 			modelSeen[m.Name] = true
 			if m.ContextWindow < 0 || m.MaxOutputTokens < 0 {
 				return nil, fmt.Errorf("config: %s: context_window and max_output_tokens must be >= 0", mctx)
+			}
+			if m.WindowUtilization != nil && (*m.WindowUtilization <= 0 || *m.WindowUtilization > 1) {
+				return nil, fmt.Errorf("config: %s: window_utilization must be in (0, 1], got %v", mctx, *m.WindowUtilization)
 			}
 			if _, _, err := resolveProviderWireAPI(mctx, pType, m.WireAPI); err != nil {
 				return nil, err
@@ -491,12 +506,6 @@ func resolveReasoning(ctx string, r Reasoning) error {
 // resolveLimits overlays the file's limits onto the built-in defaults.
 func resolveLimits(in Limits) (domain.Limits, error) {
 	out := domain.DefaultLimits()
-	if in.MaxTurns != nil {
-		out.MaxTurns = *in.MaxTurns
-	}
-	if in.MaxToolCalls != nil {
-		out.MaxToolCalls = *in.MaxToolCalls
-	}
 	if in.MaxInputTokens != nil {
 		out.MaxInputTokens = *in.MaxInputTokens
 	}
@@ -512,9 +521,6 @@ func resolveLimits(in Limits) (domain.Limits, error) {
 	if in.MaxArtifactBytes != nil {
 		out.MaxArtifactBytes = *in.MaxArtifactBytes
 	}
-	if in.MaxRepeatedActions != nil {
-		out.MaxRepeatedActions = *in.MaxRepeatedActions
-	}
 	if in.MaxWallTime != "" {
 		d, err := time.ParseDuration(in.MaxWallTime)
 		if err != nil {
@@ -525,20 +531,58 @@ func resolveLimits(in Limits) (domain.Limits, error) {
 	// Negative values would silently disable a budget dimension or, worse,
 	// make comparisons meaningless — reject them all in one place.
 	negatives := map[string]bool{
-		"max_turns":             out.MaxTurns < 0,
-		"max_tool_calls":        out.MaxToolCalls < 0,
 		"max_input_tokens":      out.MaxInputTokens < 0,
 		"max_output_tokens":     out.MaxOutputTokens < 0,
 		"max_cost_usd":          out.MaxEstimatedCostUSD < 0,
 		"max_wall_time":         out.MaxWallTime < 0,
 		"max_tool_output_bytes": out.MaxToolOutputBytes < 0,
 		"max_artifact_bytes":    out.MaxArtifactBytes < 0,
-		"max_repeated_actions":  out.MaxRepeatedActions < 0,
 	}
 	for field, negative := range negatives {
 		if negative {
 			return domain.Limits{}, fmt.Errorf("config: limits.%s must be >= 0", field)
 		}
+	}
+	return out, nil
+}
+
+// resolveContext overlays the file's context section onto the built-in
+// defaults and enforces the ordering invariants (fail-fast at startup).
+func resolveContext(in Context) (domain.ContextConfig, error) {
+	out := domain.DefaultContextConfig()
+	if in.Utilization != nil {
+		out.Utilization = *in.Utilization
+	}
+	if in.CompactTriggerRatio != nil {
+		out.CompactTriggerRatio = *in.CompactTriggerRatio
+	}
+	if in.CompactTargetRatio != nil {
+		out.CompactTargetRatio = *in.CompactTargetRatio
+	}
+	if in.NoticeLevels != nil {
+		out.NoticeLevels = append([]float64(nil), in.NoticeLevels...)
+	}
+	if err := out.Validate(); err != nil {
+		return domain.ContextConfig{}, fmt.Errorf("config: %w", err)
+	}
+	return out, nil
+}
+
+// resolveRunaway overlays the file's runaway section onto the built-in
+// defaults.
+func resolveRunaway(in Runaway) (domain.RunawayConfig, error) {
+	out := domain.DefaultRunawayConfig()
+	if in.MaxRepeatedCalls != nil {
+		out.MaxRepeatedCalls = *in.MaxRepeatedCalls
+	}
+	if in.MaxConsecutiveFailures != nil {
+		out.MaxConsecutiveFailures = *in.MaxConsecutiveFailures
+	}
+	if in.StallWarnTurns != nil {
+		out.StallWarnTurns = *in.StallWarnTurns
+	}
+	if err := out.Validate(); err != nil {
+		return domain.RunawayConfig{}, fmt.Errorf("config: %w", err)
 	}
 	return out, nil
 }

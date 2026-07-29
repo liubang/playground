@@ -377,17 +377,15 @@ func TestRunAddUserMessage(t *testing.T) {
 }
 
 func TestRunCheckBudget(t *testing.T) {
-	limits := domain.Limits{MaxTurns: 10}
-	run := newTestRun(limits)
-	run.Usage.Turns = 8
-	check := run.CheckBudget()
-	if !check.HasSoft() {
-		t.Error("expected soft breach at 80%")
+	limits := domain.Limits{MaxWallTime: 10 * time.Second}
+	clock := domain.NewFakeClock(time.Now().UTC())
+	run := NewRun(domain.NewSessionID(), limits, clock)
+	clock.Advance(9 * time.Second)
+	if check := run.CheckBudget(); !check.HasSoft() || check.HasHard() {
+		t.Errorf("expected soft-only breach at 90%%, got %+v", check)
 	}
-
-	run.Usage.Turns = 10
-	check = run.CheckBudget()
-	if !check.HasHard() {
+	clock.Advance(time.Second)
+	if check := run.CheckBudget(); !check.HasHard() {
 		t.Error("expected hard breach at 100%")
 	}
 }
@@ -491,10 +489,7 @@ func TestLoopExecuteWithToolCalls(t *testing.T) {
 	logger := slog.Default()
 
 	run := newTestRun(domain.Limits{
-		MaxTurns:         10,
-		MaxToolCalls:     10,
-		MaxParallelTools: 4,
-		MaxOutputTokens:  4096,
+		MaxOutputTokens: 4096,
 	})
 	run.AddUserMessage(domain.Message{
 		ID:        domain.NewMessageID(),
@@ -536,7 +531,7 @@ func TestLoopReportsContextUsageAfterResponseAndToolBatch(t *testing.T) {
 	if err := registry.Register(readTool); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
-	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
 	run.AddUserMessage(domain.Message{
 		ID:        domain.NewMessageID(),
 		Role:      domain.RoleUser,
@@ -603,7 +598,7 @@ func TestLoopRoutesToolCallsWhenBudgetNoticeFires(t *testing.T) {
 	if err := registry.Register(readTool); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
-	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
 	run.AddUserMessage(domain.Message{
 		ID:        domain.NewMessageID(),
 		Role:      domain.RoleUser,
@@ -614,7 +609,7 @@ func TestLoopRoutesToolCallsWhenBudgetNoticeFires(t *testing.T) {
 		Run: run, Model: model,
 		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
 		Registry: registry, Logger: slog.Default(),
-		ContextWindow: 100,
+		Window: WindowModel{Effective: 100, CompactTrigger: 80, CompactTarget: 50},
 	}
 
 	if err := loop.Execute(context.Background()); err != nil {
@@ -697,7 +692,7 @@ func TestLoopSurvivesMalformedToolCallArguments(t *testing.T) {
 	if err := registry.Register(readTool); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
-	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
 	run.AddUserMessage(domain.Message{
 		ID:        domain.NewMessageID(),
 		Role:      domain.RoleUser,
@@ -780,7 +775,7 @@ func TestLoopReconcilesUnfinishedPlanOnce(t *testing.T) {
 		},
 		fakes.ScriptEntry{Text: "closed", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 10},
 	)
-	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
 		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "do it"}}, CreatedAt: time.Now(),
@@ -838,7 +833,7 @@ func TestLoopReconcileNudgeIsOneShot(t *testing.T) {
 		fakes.ScriptEntry{Text: "answer one", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 30},
 		fakes.ScriptEntry{Text: "answer two", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 20},
 	)
-	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
 		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "do it"}}, CreatedAt: time.Now(),
@@ -867,7 +862,7 @@ func TestLoopDoesNotNudgeForStalePlan(t *testing.T) {
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{Text: "quick answer", StopReason: domain.StopEndTurn, UsageIn: 50, UsageOut: 10},
 	)
-	run := newTestRun(domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxOutputTokens: 4096})
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
 		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "fix the typo"}}, CreatedAt: time.Now(),
@@ -961,10 +956,7 @@ func TestLoopExecuteToolCallWithNonCanonicalPath(t *testing.T) {
 	)
 
 	run := newTestRun(domain.Limits{
-		MaxTurns:         10,
-		MaxToolCalls:     10,
-		MaxParallelTools: 4,
-		MaxOutputTokens:  4096,
+		MaxOutputTokens: 4096,
 	})
 	run.AddUserMessage(domain.Message{
 		ID:        domain.NewMessageID(),
@@ -1125,7 +1117,7 @@ func TestLoopExecuteCostBudgetExhausted(t *testing.T) {
 		},
 		fakes.ScriptEntry{Text: "unreachable", StopReason: domain.StopEndTurn},
 	)
-	limits := domain.Limits{MaxTurns: 10, MaxToolCalls: 10, MaxEstimatedCostUSD: 1.0}
+	limits := domain.Limits{MaxEstimatedCostUSD: 1.0}
 	run := newTestRun(limits)
 
 	registry := NewToolRegistry()
@@ -1136,15 +1128,30 @@ func TestLoopExecuteCostBudgetExhausted(t *testing.T) {
 		Run: run, Model: model, Registry: registry, Logger: slog.Default(),
 		CostInputUSDPerMTok: 1.0, // $1 per million input tokens → first call costs $2
 	}
-	err := loop.Execute(context.Background())
-	if err == nil {
-		t.Fatal("expected budget exhausted error")
+	// The hard breach enters the soft-landing wrap-up: the model gets one
+	// final turn (the second script entry) and the run terminates cleanly.
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v, want clean soft-landing termination", err)
 	}
 	if run.State.Outcome != domain.OutcomeBudgetExhausted {
 		t.Fatalf("expected budget_exhausted, got %s", run.State.Outcome)
 	}
 	if run.Usage.CostUSD != 2.0 {
 		t.Fatalf("Usage.CostUSD = %v, want 2.0", run.Usage.CostUSD)
+	}
+	// The wrap-up delivered a final answer and recorded the audit event.
+	if last := run.Messages[len(run.Messages)-1]; last.Role != domain.RoleAssistant ||
+		strings.Join(last.TextParts(), "") != "unreachable" {
+		t.Fatalf("wrap-up must produce a final assistant message, got %+v", last)
+	}
+	wrapupEvent := false
+	for _, evt := range run.pendingEvents {
+		if evt.Type == domain.EventBudgetWrapupStarted {
+			wrapupEvent = true
+		}
+	}
+	if !wrapupEvent {
+		t.Fatal("budget.wrapup_started event missing")
 	}
 }
 
@@ -1159,9 +1166,12 @@ func TestLoopExecuteBudgetExhausted(t *testing.T) {
 	registry := NewToolRegistry()
 	logger := slog.Default()
 
-	limits := domain.Limits{MaxTurns: 1} // very tight budget
-	run := newTestRun(limits)
-	run.Usage.Turns = 1 // already at limit
+	// A wall-time budget already exhausted at loop entry must not kill the
+	// run mid-work: the soft landing injects one wrap-up turn and the run
+	// terminates with budget_exhausted after the model's final answer.
+	clock := domain.NewFakeClock(time.Now().UTC())
+	run := NewRun(domain.NewSessionID(), domain.Limits{MaxWallTime: time.Minute}, clock)
+	clock.Advance(2 * time.Minute)
 
 	loop := &Loop{
 		Run:      run,
@@ -1170,13 +1180,25 @@ func TestLoopExecuteBudgetExhausted(t *testing.T) {
 		Logger:   logger,
 	}
 
-	err := loop.Execute(context.Background())
-	if err == nil {
-		t.Fatal("expected budget exhausted error")
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v, want clean soft-landing termination", err)
 	}
 
 	if run.State.Outcome != domain.OutcomeBudgetExhausted {
 		t.Fatalf("expected budget_exhausted, got %s", run.State.Outcome)
+	}
+	// The transcript carries the wrap-up instruction and the final answer.
+	wrapUpPrompt, finalAnswer := false, false
+	for _, msg := range run.Messages {
+		if msg.Role == domain.RoleUser && msg.Metadata["kind"] == "budget_wrapup" {
+			wrapUpPrompt = true
+		}
+		if msg.Role == domain.RoleAssistant && strings.Join(msg.TextParts(), "") == "hi" {
+			finalAnswer = true
+		}
+	}
+	if !wrapUpPrompt || !finalAnswer {
+		t.Fatalf("soft landing transcript incomplete: prompt=%v answer=%v", wrapUpPrompt, finalAnswer)
 	}
 }
 
@@ -2449,21 +2471,16 @@ func TestLoopExecuteInputTokenBudgetDoesNotKill(t *testing.T) {
 
 func TestShouldCompactOnOccupancy(t *testing.T) {
 	run := newTestRun(domain.DefaultLimits())
-	loop := &Loop{Run: run, ContextWindow: 100}
+	loop := &Loop{Run: run, Window: WindowModel{Effective: 100, CompactTrigger: 80, CompactTarget: 50}}
 
-	loop.lastCallInput = 85 // ≥80% of the window
+	loop.lastCallInput = 85 // past the window-derived trigger
 	if !loop.shouldCompact() {
-		t.Fatal("occupancy at 85% of window should trigger compaction")
+		t.Fatal("occupancy past the trigger should compact")
 	}
 	loop.lastCallInput = 50
 	if loop.shouldCompact() {
-		t.Fatal("occupancy at 50% of window must not trigger compaction")
+		t.Fatal("occupancy below the trigger must not compact")
 	}
-	run.Messages = append(run.Messages, toolResultMessage(bigOutput(200_000)))
-	if !loop.shouldCompact() {
-		t.Fatal("estimate above TargetTokens should trigger compaction regardless of occupancy")
-	}
-	run.Messages = nil
 	loop.ForceCompact = true
 	if !loop.shouldCompact() {
 		t.Fatal("forceCompact must trigger compaction")
@@ -2478,7 +2495,7 @@ func TestShouldCompactOnOccupancy(t *testing.T) {
 // grew a session DB to tens of gigabytes in minutes).
 func TestShouldCompactDoesNotRetriggerWithoutGrowth(t *testing.T) {
 	run := newTestRun(domain.DefaultLimits())
-	loop := &Loop{Run: run, ContextWindow: 100}
+	loop := &Loop{Run: run, Window: WindowModel{Effective: 100, CompactTrigger: 80, CompactTarget: 50}}
 
 	run.AddUserMessage(domain.Message{
 		ID:        domain.NewMessageID(),
@@ -2525,30 +2542,79 @@ func TestShouldCompactDoesNotRetriggerWithoutGrowth(t *testing.T) {
 
 func TestBudgetNoticeInjection(t *testing.T) {
 	run := newTestRun(domain.DefaultLimits())
-	loop := &Loop{Run: run, ContextWindow: 100}
+	loop := &Loop{
+		Run:   run,
+		Model: fakes.NewFakeModel(fakes.ScriptEntry{Text: "HANDOFF", StopReason: domain.StopEndTurn, UsageIn: 10, UsageOut: 5}),
+		Window: WindowModel{
+			Effective: 100, CompactTrigger: 80, CompactTarget: 50, NoticeLevels: []int64{60, 75},
+		},
+	}
 
-	loop.lastCallInput = 85
-	loop.maybeInjectBudgetNotice()
+	// Level 1: occupancy crosses the first window-derived level.
+	loop.lastCallInput = 65
+	loop.injectBudgetNotices()
 	if len(run.Messages) != 1 || run.Messages[0].Role != domain.RoleSystem ||
-		!strings.Contains(run.Messages[0].TextParts()[0], "remain before auto-compaction") {
-		t.Fatalf("80%% reminder missing: %+v", run.Messages)
-	}
-	if loop.budgetNoticeLevel != 1 {
-		t.Fatalf("budgetNoticeLevel = %d, want 1 after the 80%% reminder", loop.budgetNoticeLevel)
-	}
-	loop.lastCallInput = 95
-	loop.maybeInjectBudgetNotice()
-	if len(run.Messages) != 2 || !strings.Contains(run.Messages[1].TextParts()[0], "nearly full") {
-		t.Fatalf("90%% self-handoff notice missing: %+v", run.Messages)
+		!strings.Contains(run.Messages[0].TextParts()[0], "narrow the scope") {
+		t.Fatalf("level-1 occupancy reminder missing: %+v", run.Messages)
 	}
 
-	// Compaction re-arms the notices and resets the calibrated occupancy.
+	// Level 2: crossing the second level fires the compaction-imminent
+	// notice; each level fires once.
+	loop.lastCallInput = 78
+	loop.injectBudgetNotices()
+	if len(run.Messages) != 2 || !strings.Contains(run.Messages[1].TextParts()[0], "auto-compaction is imminent") {
+		t.Fatalf("level-2 occupancy reminder missing: %+v", run.Messages)
+	}
+	loop.injectBudgetNotices()
+	if len(run.Messages) != 2 {
+		t.Fatalf("notices must fire once per level: %+v", run.Messages)
+	}
+
+	// The reminder is auditable through the budget.notice event.
+	noticeEvents := 0
+	for _, evt := range run.pendingEvents {
+		if evt.Type == domain.EventBudgetNotice {
+			noticeEvents++
+		}
+	}
+	if noticeEvents != 2 {
+		t.Fatalf("budget.notice events = %d, want 2", noticeEvents)
+	}
+
+	// Compaction re-arms the occupancy notices and resets the calibrated
+	// occupancy.
 	run.State.Phase = domain.PhaseCompacting
 	if err := loop.compact(context.Background()); err != nil {
 		t.Fatalf("compact() error = %v", err)
 	}
-	if loop.budgetNoticeLevel != 0 || loop.lastCallInput != 0 {
-		t.Fatalf("compact must re-arm notices and reset occupancy: level=%d lastCallInput=%d", loop.budgetNoticeLevel, loop.lastCallInput)
+	if loop.noticeFired[dimensionOccupancy] != 0 || loop.lastCallInput != 0 {
+		t.Fatalf("compact must re-arm occupancy notices and reset occupancy: fired=%d lastCallInput=%d",
+			loop.noticeFired[dimensionOccupancy], loop.lastCallInput)
+	}
+}
+
+func TestBudgetNoticeWallTimeAndCost(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	run := NewRun(domain.NewSessionID(), domain.Limits{
+		MaxWallTime:         100 * time.Second,
+		MaxEstimatedCostUSD: 1.0,
+	}, clock)
+	loop := &Loop{Run: run}
+
+	clock.Advance(85 * time.Second)
+	run.Usage.CostUSD = 0.97
+	loop.injectBudgetNotices()
+	if len(run.Messages) != 2 {
+		t.Fatalf("wall_time level-1 and cost level-2 reminders expected: %+v", run.Messages)
+	}
+	if !strings.Contains(run.Messages[0].TextParts()[0], "wall-clock budget") ||
+		!strings.Contains(run.Messages[1].TextParts()[0], "cost budget") {
+		t.Fatalf("unexpected reminder texts: %+v", run.Messages)
+	}
+	// Same levels never refire.
+	loop.injectBudgetNotices()
+	if len(run.Messages) != 2 {
+		t.Fatalf("resource reminders must fire once per level: %+v", run.Messages)
 	}
 }
 

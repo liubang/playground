@@ -67,6 +67,7 @@ const (
 	KindToolProgress  RuntimeEventKind = "tool.progress"
 	// Budget events
 	KindBudgetUpdated    RuntimeEventKind = "budget.updated"
+	KindBudgetNotice     RuntimeEventKind = "budget.notice"
 	KindContextCompacted RuntimeEventKind = "context.compacted"
 	// Plan events
 	KindPlanUpdated RuntimeEventKind = "plan.updated"
@@ -120,7 +121,7 @@ func (e RuntimeEvent) Validate() error {
 		KindApprovalRequested, KindApprovalResolved,
 		KindQuestionAsked, KindQuestionAnswered,
 		KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
-		KindBudgetUpdated, KindUsageUpdated, KindContextCompacted, KindContextUsage, KindPlanUpdated,
+		KindBudgetUpdated, KindUsageUpdated, KindBudgetNotice, KindContextCompacted, KindContextUsage, KindPlanUpdated,
 		KindSteerQueued, KindSteerInjected,
 		KindRunCancelRequested, KindRunCancelled, KindRunCompleted,
 		KindRuntimeWarning, KindRuntimeFatal:
@@ -305,12 +306,24 @@ type UsageUpdatedPayload struct {
 // marks a model-written handoff compaction (history rebuilt around a
 // summary), which frontends flag as accuracy-relevant.
 type ContextCompactedPayload struct {
-	MaskedOutputs    int  `json:"masked_outputs"`
-	MaskedBytes      int  `json:"masked_bytes"`
-	ArchivedMessages int  `json:"archived_messages,omitempty"`
-	EstTokensBefore  int  `json:"est_tokens_before"`
-	EstTokensAfter   int  `json:"est_tokens_after"`
-	Summarized       bool `json:"summarized,omitempty"`
+	Trigger          string `json:"trigger,omitempty"`
+	Phase            string `json:"phase,omitempty"`
+	MaskedOutputs    int    `json:"masked_outputs"`
+	MaskedBytes      int    `json:"masked_bytes"`
+	ArchivedMessages int    `json:"archived_messages,omitempty"`
+	EstTokensBefore  int    `json:"est_tokens_before"`
+	EstTokensAfter   int    `json:"est_tokens_after"`
+	Summarized       bool   `json:"summarized,omitempty"`
+}
+
+// BudgetNoticePayload describes one graduated budget reminder injected
+// into the transcript (budget notices, runaway warnings) and the
+// soft-landing wrap-up entry (level 0 with the wrap-up dimension).
+type BudgetNoticePayload struct {
+	Text      string `json:"text"`
+	Dimension string `json:"dimension"`
+	Level     int    `json:"level"`
+	WrapUp    bool   `json:"wrap_up,omitempty"`
 }
 
 // ContextUsagePayload reports the estimated size of the transcript the next

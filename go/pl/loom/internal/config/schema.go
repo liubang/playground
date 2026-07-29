@@ -44,6 +44,8 @@ type File struct {
 	Providers []Provider `yaml:"providers"`
 
 	Limits  Limits  `yaml:"limits"`
+	Context Context `yaml:"context"`
+	Runaway Runaway `yaml:"runaway"`
 	Prompt  Prompt  `yaml:"prompt"`
 	Skills  Skills  `yaml:"skills"`
 	Rules   Rules   `yaml:"rules"`
@@ -86,6 +88,9 @@ type Provider struct {
 type Model struct {
 	Name          string `yaml:"name"`
 	ContextWindow int64  `yaml:"context_window"`
+	// WindowUtilization overrides context.utilization for this model (e.g.
+	// when a gateway overstates the window); nil inherits the global value.
+	WindowUtilization *float64 `yaml:"window_utilization"`
 	// MaxOutputTokens caps the request parameter (model capability); the
 	// agent budget guardrail lives in limits.max_output_tokens.
 	MaxOutputTokens int64     `yaml:"max_output_tokens"`
@@ -114,9 +119,10 @@ func (r Reasoning) DomainSpec() domain.ReasoningSpec {
 }
 
 // Limits mirrors domain.Limits; nil fields keep the built-in default.
+// Only scarce resources are budgeted (wall time, cost) — turn/tool-call
+// count quotas were removed by design (docs/CONTEXT_DESIGN.md §4.4.3) and
+// are rejected as unknown fields at load.
 type Limits struct {
-	MaxTurns        *int     `yaml:"max_turns"`
-	MaxToolCalls    *int     `yaml:"max_tool_calls"`
 	MaxInputTokens  *int64   `yaml:"max_input_tokens"`
 	MaxOutputTokens *int64   `yaml:"max_output_tokens"`
 	MaxCostUSD      *float64 `yaml:"max_cost_usd"`
@@ -124,7 +130,23 @@ type Limits struct {
 	MaxWallTime        string `yaml:"max_wall_time"`
 	MaxToolOutputBytes *int64 `yaml:"max_tool_output_bytes"`
 	MaxArtifactBytes   *int64 `yaml:"max_artifact_bytes"`
-	MaxRepeatedActions *int   `yaml:"max_repeated_actions"`
+}
+
+// Context mirrors domain.ContextConfig; nil fields keep the built-in
+// default. All values are ratios of the model's effective context window.
+type Context struct {
+	Utilization         *float64  `yaml:"utilization"`
+	CompactTriggerRatio *float64  `yaml:"compact_trigger_ratio"`
+	CompactTargetRatio  *float64  `yaml:"compact_target_ratio"`
+	NoticeLevels        []float64 `yaml:"notice_levels"`
+}
+
+// Runaway mirrors domain.RunawayConfig; nil fields keep the built-in
+// default.
+type Runaway struct {
+	MaxRepeatedCalls       *int `yaml:"max_repeated_calls"`
+	MaxConsecutiveFailures *int `yaml:"max_consecutive_failures"`
+	StallWarnTurns         *int `yaml:"stall_warn_turns"`
 }
 
 // Prompt configures the system prompt.

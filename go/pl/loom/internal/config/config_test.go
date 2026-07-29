@@ -20,8 +20,11 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
 // noEnv rejects every secret reference; tests that need secrets inject
@@ -244,7 +247,12 @@ func TestLoadValidationErrors(t *testing.T) {
 		{"key conflict", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, api_key_env: E, models: [{name: m}]}", "mutually exclusive"},
 		{"env not set", "providers:\n  - {name: x, base_url: 'https://a.com', api_key_env: MISSING_VAR, models: [{name: m}]}", "not set"},
 		{"bad default ref", "default: nope\nproviders:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}", "default"},
-		{"negative limit", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nlimits:\n  max_turns: -1", "max_turns"},
+		{"negative limit", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nlimits:\n  max_cost_usd: -1", "max_cost_usd"},
+		{"removed limit max_turns", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nlimits:\n  max_turns: 50", "max_turns"},
+		{"notice level above trigger", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\ncontext:\n  notice_levels: [0.6, 0.85]", "notice_levels"},
+		{"target above trigger", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\ncontext:\n  compact_trigger_ratio: 0.7\n  compact_target_ratio: 0.8", "compact_target_ratio"},
+		{"bad model window_utilization", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m, window_utilization: 1.5}]}", "window_utilization"},
+		{"negative runaway threshold", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nrunaway:\n  max_repeated_calls: -1", "runaway"},
 		{"bad duration", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nlimits:\n  max_wall_time: soon", "max_wall_time"},
 		{"negative context window", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m, context_window: -1}]}", ">= 0"},
 		{"slash in provider name", "providers:\n  - {name: a/b, base_url: 'https://a.com', api_key: k, models: [{name: m}]}", "must not contain '/'"},
@@ -331,22 +339,47 @@ func TestResolveModelWireAPIOverrideBuildsDistinctInstance(t *testing.T) {
 func TestResolveLimitsOverlay(t *testing.T) {
 	cfg := loadFile(t, twoProviderYAML+`
 limits:
-  max_turns: 80
   max_cost_usd: 1.5
   max_wall_time: 1h
 `, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
 
-	if cfg.Limits.MaxTurns != 80 {
-		t.Errorf("MaxTurns = %d, want 80", cfg.Limits.MaxTurns)
-	}
-	if cfg.Limits.MaxToolCalls != 200 {
-		t.Errorf("MaxToolCalls = %d, want built-in default 200", cfg.Limits.MaxToolCalls)
-	}
 	if cfg.Limits.MaxEstimatedCostUSD != 1.5 {
 		t.Errorf("MaxEstimatedCostUSD = %v", cfg.Limits.MaxEstimatedCostUSD)
 	}
 	if cfg.Limits.MaxWallTime.Hours() != 1 {
 		t.Errorf("MaxWallTime = %v, want 1h", cfg.Limits.MaxWallTime)
+	}
+	if cfg.Limits.MaxToolOutputBytes != 48*1024 {
+		t.Errorf("MaxToolOutputBytes = %d, want built-in default 48KB", cfg.Limits.MaxToolOutputBytes)
+	}
+}
+
+func TestResolveContextOverlay(t *testing.T) {
+	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if !reflect.DeepEqual(def.Context, domain.DefaultContextConfig()) {
+		t.Fatalf("default context = %+v, want %+v", def.Context, domain.DefaultContextConfig())
+	}
+
+	cfg := loadFile(t, twoProviderYAML+`
+context:
+  utilization: 0.9
+  compact_trigger_ratio: 0.7
+  compact_target_ratio: 0.4
+  notice_levels: [0.5, 0.65]
+runaway:
+  max_repeated_calls: 4
+  stall_warn_turns: 0
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	wantContext := domain.ContextConfig{
+		Utilization: 0.9, CompactTriggerRatio: 0.7, CompactTargetRatio: 0.4,
+		NoticeLevels: []float64{0.5, 0.65},
+	}
+	if !reflect.DeepEqual(cfg.Context, wantContext) {
+		t.Fatalf("context = %+v, want %+v", cfg.Context, wantContext)
+	}
+	wantRunaway := domain.RunawayConfig{MaxRepeatedCalls: 4, MaxConsecutiveFailures: 5, StallWarnTurns: 0}
+	if cfg.Runaway != wantRunaway {
+		t.Fatalf("runaway = %+v, want %+v", cfg.Runaway, wantRunaway)
 	}
 }
 

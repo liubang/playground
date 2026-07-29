@@ -20,6 +20,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "domain_lib",
     srcs = [
+        "budget.go",
         "context.go",
         "errors.go",
         "event.go",

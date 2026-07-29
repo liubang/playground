@@ -46,6 +46,8 @@ const (
 	EventGoalUpdated            EventType = "goal.updated"
 	EventCheckpointCreated      EventType = "checkpoint.created"
 	EventBudgetUpdated          EventType = "budget.updated"
+	EventBudgetNotice           EventType = "budget.notice"
+	EventBudgetWrapupStarted    EventType = "budget.wrapup_started"
 	EventRunCompleted           EventType = "run.completed"
 	EventRunFailed              EventType = "run.failed"
 	EventRunCancelled           EventType = "run.cancelled"
@@ -67,6 +69,27 @@ type MessageEventPayload struct {
 	Message Message `json:"message"`
 }
 
+// BudgetNoticePayload is the EventBudgetNotice payload: one graduated
+// budget reminder injected into the transcript (docs/CONTEXT_DESIGN.md
+// §4.4.1). The message is the full transcript entry; the dimension fields
+// make the notice auditable without parsing text.
+type BudgetNoticePayload struct {
+	Message   Message `json:"message"`
+	Dimension string  `json:"dimension"`
+	Level     int     `json:"level"`
+	Usage     int64   `json:"usage"`
+	Limit     int64   `json:"limit"`
+}
+
+// BudgetWrapupPayload is the EventBudgetWrapupStarted payload: the run
+// entered its soft-landing wrap-up turn. RecoverRun uses the event to
+// re-arm the wrap-up state after a crash.
+type BudgetWrapupPayload struct {
+	Dimension string `json:"dimension"`
+	Usage     int64  `json:"usage"`
+	Limit     int64  `json:"limit"`
+}
+
 // Validate checks the event is well-formed.
 func (e Event) Validate() error {
 	if e.ID.IsZero() {
@@ -84,8 +107,8 @@ func (e Event) Validate() error {
 		EventModelRequestFailed, EventToolCallPrepared, EventPermissionRequested,
 		EventPermissionResolved, EventToolExecutionStarted, EventToolExecutionCompleted,
 		EventToolResultAdded, EventFileChanged, EventPlanRevised, EventContextCompacted,
-		EventGoalUpdated, EventCheckpointCreated, EventBudgetUpdated, EventRunCompleted,
-		EventRunFailed, EventRunCancelled:
+		EventGoalUpdated, EventCheckpointCreated, EventBudgetUpdated, EventBudgetNotice,
+		EventBudgetWrapupStarted, EventRunCompleted, EventRunFailed, EventRunCancelled:
 	default:
 		return fmt.Errorf("unknown event type %q", e.Type)
 	}
