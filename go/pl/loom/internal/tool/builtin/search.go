@@ -77,9 +77,13 @@ func NewSearchTool(validator *workspacepkg.PathValidator, runner rgRunner) (*Sea
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "search",
 		Description: "Search file contents recursively within the workspace. 'pattern' is a ripgrep regular expression " +
-			"(use fixed_strings=true for literal text). Filter with glob (e.g. '*.go') or type. " +
+			"(use fixed_strings=true for literal text). " +
+			"Filter with glob (a pattern without '/' matches the file name at any depth, one with '/' matches the " +
+			"workspace-relative path; prefix with '!' to exclude; multiple patterns union) or with type (a ripgrep " +
+			"type name like 'go', not a glob). " +
 			"Files matched by .gitignore are skipped by default. " +
-			"Uses the ripgrep engine when available and falls back to a built-in literal search otherwise (noted in the output).",
+			"Uses the ripgrep engine when available and falls back to a built-in literal search otherwise (the " +
+			"fallback treats 'pattern' as literal text; unapplied filters are disclosed in the output's note).",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"pattern":{"type":"string","minLength":1,"maxLength":4096},"path":{"type":"string","minLength":1},"glob":{"type":"array","maxItems":16,"items":{"type":"string","minLength":1,"maxLength":256}},"type":{"type":"string","minLength":1,"maxLength":64},"context":{"type":"integer","minimum":0,"maximum":5},"case_sensitive":{"type":"boolean"},"fixed_strings":{"type":"boolean"},"no_ignore":{"type":"boolean"}},"required":["pattern"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"pattern":{"type":"string"},"engine":{"type":"string"},"case_sensitive":{"type":"boolean"},"match_count":{"type":"integer"},"truncated":{"type":"boolean"},"scanned_files":{"type":"integer"},"skipped_binary":{"type":"integer"},"skipped_too_large":{"type":"integer"},"matches":{"type":"array"}},"required":["path","pattern","engine","case_sensitive","match_count","truncated","matches"]}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
@@ -358,6 +362,9 @@ func filterMatchesByGlobs(matches []searchMatch, globs []string) []searchMatch {
 // filtered one.
 func fallbackFilterNote(args searchArgs) string {
 	var notes []string
+	if !args.FixedStrings {
+		notes = append(notes, "pattern matched as literal text by the go fallback engine (regex not supported)")
+	}
 	if args.Type != "" {
 		notes = append(notes, fmt.Sprintf("type filter %q not applied by the go fallback engine", args.Type))
 	}
