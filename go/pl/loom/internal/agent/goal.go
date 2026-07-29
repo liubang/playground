@@ -119,10 +119,12 @@ func (l *Loop) drainGoalUpdates() {
 // model ended its turn: an active goal injects a continuation prompt; a goal
 // whose token budget is exhausted gets exactly one wrap-up turn (soft
 // landing) before the run ends. Returns true when a message was injected.
+// The wrap-up state shares Run.WrapUpPending with the resource-budget
+// soft landing (docs/CONTEXT_DESIGN.md §4.4.2).
 func (l *Loop) continueGoalIfActive() bool {
-	if l.goalWrapUpPending {
+	if l.Run.WrapUpPending == wrapUpGoalTokens {
 		// The budget-limited goal's wrap-up turn just ended.
-		l.goalWrapUpPending = false
+		l.Run.WrapUpPending = ""
 		return false
 	}
 	goal := l.Run.Goal
@@ -137,8 +139,9 @@ func (l *Loop) continueGoalIfActive() bool {
 			ID: domain.NewMessageID(), Role: domain.RoleUser,
 			Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: goalBudgetLimitPrompt(goal)}},
 			CreatedAt: l.Run.Clock.Now(),
+			Metadata:  map[string]string{"kind": "budget_wrapup"},
 		})
-		l.goalWrapUpPending = true
+		l.Run.WrapUpPending = wrapUpGoalTokens
 		return true
 	}
 	l.Run.AddUserMessage(domain.Message{

@@ -119,6 +119,9 @@ type Controller struct {
 	// forceCompact is the one-shot manual compaction request (/compact):
 	// consumed by the next turn's loop construction.
 	forceCompact bool
+	// lastWindowNominal is the previous turn's model window; a shrink marks
+	// the next compaction as a ModelDownshift in the audit event.
+	lastWindowNominal int64
 
 	// sessionCtx is the context for the entire TUI session.
 	// Cancelling it terminates the controller.
@@ -869,27 +872,51 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 		})
 	}
 
+	// Derive the model's context thresholds: the declared window (or the
+	// limits fallback) scaled by the configured ratios, with an optional
+	// per-model utilization override.
+	contextCfg := c.bootstrap.Resolved.Context
+	if modelMeta.WindowUtilization != nil {
+		contextCfg.Utilization = *modelMeta.WindowUtilization
+	}
+	window := agent.NewWindowModel(modelMeta.ContextWindow, c.bootstrap.Resolved.Limits.MaxInputTokens, contextCfg)
+	// Label the first compaction of this turn: a manual /compact request,
+	// or a switch to a smaller-window model (ModelDownshift).
+	c.mu.Lock()
+	previousWindow := c.lastWindowNominal
+	c.lastWindowNominal = window.Nominal
+	c.mu.Unlock()
+	triggerHint := ""
+	switch {
+	case forceCompact:
+		triggerHint = "manual"
+	case previousWindow > 0 && window.Nominal > 0 && window.Nominal < previousWindow:
+		triggerHint = "downshift"
+	}
+
 	// Build the loop
 	loop := &agent.Loop{
-		Run:           run,
-		Model:         provider.ModelFor(current.Model),
-		ModelName:     current.Model,
-		Store:         &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
-		Approver:      c.rulesApprover,
-		Policy:        c.bootstrap.Policy,
-		Registry:      c.bootstrap.Registry,
-		Logger:        c.logger,
-		SystemPrompt:  c.bootstrap.PromptBuilder,
-		Artifacts:     c.bootstrap.Artifact,
-		Recorder:      c.bootstrap.Recorder,
-		Prompt:        prompt,
-		Workspace:     c.bootstrap.WorkspaceRoot,
-		ContextWindow: modelMeta.ContextWindow,
-		Reasoning:     reasoning,
-		ForceCompact:  forceCompact,
-		GoalCell:      c.bootstrap.GoalCell,
-		PlanCell:      c.bootstrap.PlanCell,
-		SteerCell:     c.bootstrap.SteerCell,
+		Run:                run,
+		Model:              provider.ModelFor(current.Model),
+		ModelName:          current.Model,
+		Store:              &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
+		Approver:           c.rulesApprover,
+		Policy:             c.bootstrap.Policy,
+		Registry:           c.bootstrap.Registry,
+		Logger:             c.logger,
+		SystemPrompt:       c.bootstrap.PromptBuilder,
+		Artifacts:          c.bootstrap.Artifact,
+		Recorder:           c.bootstrap.Recorder,
+		Prompt:             prompt,
+		Workspace:          c.bootstrap.WorkspaceRoot,
+		Window:             window,
+		Runaway:            c.bootstrap.Resolved.Runaway,
+		Reasoning:          reasoning,
+		ForceCompact:       forceCompact,
+		CompactTriggerHint: triggerHint,
+		GoalCell:           c.bootstrap.GoalCell,
+		PlanCell:           c.bootstrap.PlanCell,
+		SteerCell:          c.bootstrap.SteerCell,
 		// Reuse the tracing cost rates for the cost budget; zero when the
 		// user never configured pricing, which disables cost accounting.
 		CostInputUSDPerMTok:  c.bootstrap.Resolved.Tracing.CostInputPerMTok,
@@ -1614,12 +1641,32 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 		var payload contextCompactedDTO
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindContextCompacted, runtimeevent.ContextCompactedPayload{
+				Trigger:          payload.Trigger,
+				Phase:            payload.Phase,
 				MaskedOutputs:    payload.MaskedOutputs,
 				MaskedBytes:      payload.MaskedBytes,
 				ArchivedMessages: payload.ArchivedMessages,
 				EstTokensBefore:  payload.EstTokensBefore,
 				EstTokensAfter:   payload.EstTokensAfter,
 				Summarized:       payload.Summarized,
+			})
+		}
+	case domain.EventBudgetNotice:
+		var payload domain.BudgetNoticePayload
+		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindBudgetNotice, runtimeevent.BudgetNoticePayload{
+				Text:      strings.Join(payload.Message.TextParts(), ""),
+				Dimension: payload.Dimension,
+				Level:     payload.Level,
+			})
+		}
+	case domain.EventBudgetWrapupStarted:
+		var payload domain.BudgetWrapupPayload
+		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindBudgetNotice, runtimeevent.BudgetNoticePayload{
+				Text:      fmt.Sprintf("run budget exhausted (%s); the model is wrapping up with a final summary", payload.Dimension),
+				Dimension: payload.Dimension,
+				WrapUp:    true,
 			})
 		}
 	case domain.EventPlanRevised:
@@ -1657,12 +1704,14 @@ type modelRequestFailedDTO struct {
 
 // contextCompactedDTO mirrors the agent's unexported compaction payload.
 type contextCompactedDTO struct {
-	MaskedOutputs    int  `json:"masked_outputs"`
-	MaskedBytes      int  `json:"masked_bytes"`
-	ArchivedMessages int  `json:"archived_messages,omitempty"`
-	EstTokensBefore  int  `json:"est_tokens_before"`
-	EstTokensAfter   int  `json:"est_tokens_after"`
-	Summarized       bool `json:"summarized,omitempty"`
+	Trigger          string `json:"trigger"`
+	Phase            string `json:"phase"`
+	MaskedOutputs    int    `json:"masked_outputs"`
+	MaskedBytes      int    `json:"masked_bytes"`
+	ArchivedMessages int    `json:"archived_messages,omitempty"`
+	EstTokensBefore  int    `json:"est_tokens_before"`
+	EstTokensAfter   int    `json:"est_tokens_after"`
+	Summarized       bool   `json:"summarized,omitempty"`
 }
 
 type toolCallAuditDTO struct {

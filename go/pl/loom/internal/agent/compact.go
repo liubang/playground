@@ -34,16 +34,14 @@ const (
 	// model needs its most recent observations to continue coherently.
 	defaultKeepRecentMessages = 6
 	// defaultMaskMinBytes only externalizes tool outputs large enough to be
-	// worth an artifact round-trip.
-	defaultMaskMinBytes = 4096
-	// defaultTargetTokens is the Level-2 goal: after a compaction pass the
-	// estimated transcript size should be at most this many tokens. The
-	// transcript is resent with every model call, so bounding it — not the
-	// cumulative budget — is what actually keeps long sessions alive.
-	defaultTargetTokens = 32_000
-	// summaryUserMessageMaxBytes bounds the verbatim user messages kept in
-	// a summarized replacement history (≈20k tokens at 4 bytes/token).
-	summaryUserMessageMaxBytes = 80 * 1024
+	// worth an artifact round-trip. 16KB keeps medium outputs inline:
+	// masking them bought little headroom but forced re-reads after
+	// compaction (CONTEXT_DESIGN §4.5).
+	defaultMaskMinBytes = 16 * 1024
+	// summaryUserMessageBudgetRatio is the share of the compaction target
+	// reserved for verbatim user messages in a summarized replacement
+	// history (docs/CONTEXT_DESIGN.md §4.3.3).
+	summaryUserMessageBudgetRatio = 0.20
 	// bytesPerTokenEstimate is the rough text-bytes-per-token ratio used for
 	// before/after reporting only; budget accounting always uses
 	// provider-metered usage.
@@ -87,12 +85,15 @@ const archivedSpanMark = "[earlier messages archived]"
 // unbounded in count: as long as each pass reduces occupancy, a cap only
 // manufactures a death spiral for legitimately long tasks.
 type Condenser struct {
+	// Window carries the model-derived thresholds; its CompactTarget is
+	// the Level-2 goal for the estimated transcript size. The transcript
+	// is resent with every model call, so bounding it — not the
+	// cumulative budget — is what actually keeps long sessions alive.
+	Window WindowModel
 	// KeepRecentMessages is the number of trailing messages never masked.
 	KeepRecentMessages int
 	// MaskMinBytes is the minimum tool-output text size externalized.
 	MaskMinBytes int
-	// TargetTokens is the Level-2 goal for the estimated transcript size.
-	TargetTokens int
 }
 
 func (c Condenser) withDefaults() Condenser {
@@ -102,10 +103,17 @@ func (c Condenser) withDefaults() Condenser {
 	if c.MaskMinBytes <= 0 {
 		c.MaskMinBytes = defaultMaskMinBytes
 	}
-	if c.TargetTokens <= 0 {
-		c.TargetTokens = defaultTargetTokens
-	}
 	return c
+}
+
+// target is the Level-2 goal for the estimated transcript size.
+func (c Condenser) target() int { return int(c.Window.targetOrFallback()) }
+
+// userMessageBudget bounds the verbatim user messages kept in a summarized
+// replacement history: a share of the compaction target, converted to
+// bytes via the transcript estimate ratio.
+func (c Condenser) userMessageBudget() int {
+	return int(float64(c.target()) * summaryUserMessageBudgetRatio * bytesPerTokenEstimate)
 }
 
 // maskedOutput records one externalized tool output for the audit event.
@@ -116,16 +124,22 @@ type maskedOutput struct {
 }
 
 // contextCompactedPayload is the domain.EventContextCompacted payload.
-// Token counts are byte-derived estimates, not provider-metered usage.
+// Est token counts are byte-derived estimates; occupancy counts use the
+// calibrated (provider-metered) scale when available.
 type contextCompactedPayload struct {
-	MaskedOutputs    int            `json:"masked_outputs"`
-	MaskedBytes      int            `json:"masked_bytes"`
-	ArchivedMessages int            `json:"archived_messages,omitempty"`
-	EstTokensBefore  int            `json:"est_tokens_before"`
-	EstTokensAfter   int            `json:"est_tokens_after"`
-	Summarized       bool           `json:"summarized,omitempty"`
-	SummaryBytes     int            `json:"summary_bytes,omitempty"`
-	Outputs          []maskedOutput `json:"outputs,omitempty"`
+	Trigger               string         `json:"trigger"`
+	Phase                 string         `json:"phase"`
+	MaskedOutputs         int            `json:"masked_outputs"`
+	MaskedBytes           int            `json:"masked_bytes"`
+	ArchivedMessages      int            `json:"archived_messages,omitempty"`
+	EstTokensBefore       int            `json:"est_tokens_before"`
+	EstTokensAfter        int            `json:"est_tokens_after"`
+	OccupancyBefore       int64          `json:"occupancy_before,omitempty"`
+	OccupancyAfter        int64          `json:"occupancy_after,omitempty"`
+	Summarized            bool           `json:"summarized,omitempty"`
+	SummaryBytes          int            `json:"summary_bytes,omitempty"`
+	TruncatedUserMessages int            `json:"truncated_user_messages,omitempty"`
+	Outputs               []maskedOutput `json:"outputs,omitempty"`
 }
 
 // buildSummaryReplacement rebuilds the transcript after a model-written
@@ -134,16 +148,23 @@ type contextCompactedPayload struct {
 // truncated), followed by the summary bridge. Masked/archived system
 // markers and prior summary bridges are dropped. The result contains only
 // user-role messages, so no tool-call pairing invariant can be violated.
-func buildSummaryReplacement(messages []domain.Message, summary string, now time.Time) []domain.Message {
+// It returns the replacement plus the number of real user messages that
+// did not fit the budget and were dropped.
+func buildSummaryReplacement(messages []domain.Message, summary string, now time.Time, budgetBytes int) ([]domain.Message, int) {
 	var collected []string
-	remaining := summaryUserMessageMaxBytes
-	for i := len(messages) - 1; i >= 0 && remaining > 0; i-- {
+	dropped := 0
+	remaining := budgetBytes
+	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 		if msg.Role != domain.RoleUser || msg.Metadata["compacted"] != "" {
 			continue
 		}
 		text := strings.Join(msg.TextParts(), "\n")
 		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		if remaining <= 0 {
+			dropped++
 			continue
 		}
 		if len(text) > remaining {
@@ -173,7 +194,7 @@ func buildSummaryReplacement(messages []domain.Message, summary string, now time
 		summary = "(no summary available)"
 	}
 	out = append(out, next(CompactionSummaryPrefix+"\n"+summary, map[string]string{"compacted": compactedSummaryMeta}))
-	return out
+	return out, dropped
 }
 
 // compactResult summarizes one Condense pass.
@@ -193,9 +214,9 @@ type artifactPathResolver interface {
 // Condense compacts the transcript in place through a cost-ordered pipeline:
 //
 // Level 1: mask oversized tool outputs outside the keep-recent window.
-// Level 2a: if the estimate still exceeds TargetTokens, archive the oldest
+// Level 2a: if the estimate still exceeds the target, archive the oldest
 // message span as one full-fidelity artifact, replaced by a marker.
-// Level 2b: if the trailing window alone still exceeds TargetTokens, extend
+// Level 2b: if the trailing window alone still exceeds the target, extend
 // masking into the window, protecting only the final message.
 //
 // Masking never deletes messages and never touches tool calls; archival cuts
@@ -207,18 +228,19 @@ func (c Condenser) Condense(ctx context.Context, messages *[]domain.Message, art
 	if artifacts == nil || len(*messages) == 0 {
 		return result
 	}
+	target := c.target()
 
 	cutoff := len(*messages) - c.KeepRecentMessages
 	if cutoff > 0 {
 		c.maskRange(ctx, *messages, artifacts, 0, cutoff, 0, &result)
 	}
-	if estTokens(*messages) > c.TargetTokens && cutoff > 0 {
+	if estTokens(*messages) > target && cutoff > 0 {
 		c.archiveOldestSpan(ctx, messages, artifacts, &result)
 	}
-	if est := estTokens(*messages); est > c.TargetTokens && len(*messages) > 1 {
+	if est := estTokens(*messages); est > target && len(*messages) > 1 {
 		// The trailing window alone is too heavy: extend masking into it,
 		// protecting only the final message, until the target is met.
-		c.maskRange(ctx, *messages, artifacts, 0, len(*messages)-1, c.TargetTokens, &result)
+		c.maskRange(ctx, *messages, artifacts, 0, len(*messages)-1, target, &result)
 	}
 	// Dense-sequence invariant: Run.normalizeMessage assigns new messages
 	// len(messages)+1 and ContinueRun requires restored sequences to equal
@@ -293,7 +315,7 @@ func (c Condenser) maskMessageOutputs(ctx context.Context, msg *domain.Message, 
 
 // archiveOldestSpan serializes the oldest messages into one full-fidelity
 // artifact and replaces the span with a single marker message. The cut is
-// minimal for meeting TargetTokens and always lands on a tool-pairing-safe
+// minimal for meeting the target and always lands on a tool-pairing-safe
 // boundary; it never eats into the keep-recent window.
 func (c Condenser) archiveOldestSpan(ctx context.Context, messages *[]domain.Message, artifacts domain.ArtifactStore, result *compactResult) {
 	msgs := *messages
@@ -306,7 +328,7 @@ func (c Condenser) archiveOldestSpan(ctx context.Context, messages *[]domain.Mes
 	// exceeds it, in which case archival cannot help (Level 2b takes over).
 	drop := 0
 	for cut := 1; cut <= cutoff; cut++ {
-		if estTokens(msgs[cut:]) <= c.TargetTokens {
+		if estTokens(msgs[cut:]) <= c.target() {
 			drop = cut
 			break
 		}

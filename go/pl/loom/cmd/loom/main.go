@@ -309,12 +309,19 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 		icons = "plain"
 	}
 	meta, _ := resolved.ModelMeta(bootstrap.Current)
+	contextCfg := resolved.Context
+	if meta.WindowUtilization != nil {
+		contextCfg.Utilization = *meta.WindowUtilization
+	}
+	// The status bar measures context occupancy against the effective
+	// window so its warning aligns with the compaction trigger.
+	effectiveWindow := agent.NewWindowModel(meta.ContextWindow, resolved.Limits.MaxInputTokens, contextCfg).Effective
 	opts := ui.InitOptions{
 		NoColor:       os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb",
 		AltScreen:     resolved.UI.AltScreen,
 		Icons:         icons,
 		Limits:        resolved.Limits,
-		ContextWindow: int(meta.ContextWindow),
+		ContextWindow: int(effectiveWindow),
 		Models:        modelCatalog(resolved),
 	}
 	defer func() {
@@ -390,12 +397,17 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	current := resolved.Default
 	provider := resolved.ProviderByName(current.Provider)
 	meta, _ := resolved.ModelMeta(current)
+	contextCfg := resolved.Context
+	if meta.WindowUtilization != nil {
+		contextCfg.Utilization = *meta.WindowUtilization
+	}
 	loop := agent.Loop{
 		Run: run, Model: provider.ModelFor(current.Model), ModelName: current.Model, Store: bootstrap.Store,
 		Approver: &consoleApprover{}, Policy: bootstrap.Policy, Registry: bootstrap.Registry,
 		Logger: slog.Default(), SystemPrompt: bootstrap.PromptBuilder, Artifacts: bootstrap.Artifact,
 		Recorder: bootstrap.Recorder, Prompt: userPrompt, Workspace: root,
-		ContextWindow: meta.ContextWindow, Reasoning: meta.Reasoning.DomainSpec(),
+		Window:  agent.NewWindowModel(meta.ContextWindow, resolved.Limits.MaxInputTokens, contextCfg),
+		Runaway: resolved.Runaway, Reasoning: meta.Reasoning.DomainSpec(),
 		GoalCell: bootstrap.GoalCell, PlanCell: bootstrap.PlanCell,
 		CostInputUSDPerMTok: resolved.Tracing.CostInputPerMTok, CostOutputUSDPerMTok: resolved.Tracing.CostOutputPerMTok,
 	}

@@ -19,6 +19,8 @@ package fakes
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -59,14 +61,14 @@ func (t *FakeTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.Pr
 		return t.prepareFn(ctx, call)
 	}
 
-	// Default: compute args hash and return a valid PreparedCall
+	// Default: hash the arguments like production tools do (sha256, first
+	// 16 hex chars) so repeat-detection and audit assertions observe
+	// realistic fingerprints — the previous raw-hex prefix collapsed every
+	// call sharing an 8-byte argument prefix into one signature.
 	argsHash := "fake_hash"
 	if len(call.Arguments) > 0 {
-		hex := fmt.Sprintf("%x", call.Arguments)
-		if len(hex) > 16 {
-			hex = hex[:16]
-		}
-		argsHash = hex
+		sum := sha256.Sum256(call.Arguments)
+		argsHash = hex.EncodeToString(sum[:])[:16]
 	}
 
 	return domain.PreparedCall{
