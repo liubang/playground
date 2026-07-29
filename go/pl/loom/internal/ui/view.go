@@ -604,10 +604,10 @@ func (m Model) renderStatusBar() string {
 		add(activity, m.spinnerView()+" "+m.theme.StatusBarBusy.Render(activity))
 	}
 
-	usage := formatUsage(m.usage, m.limits)
+	usage := formatUsage(m.usage)
 	usageStyle := m.theme.Dim
-	if inputUsageRatio(m.usage, m.limits) >= 0.8 {
-		// Approaching the input budget: the next hard breach kills the run.
+	if budgetUsageRatio(m.usage, m.limits) >= 0.8 {
+		// Approaching the wall-time/cost budget: the soft-landing wrap-up is near.
 		usageStyle = lipgloss.NewStyle().Foreground(m.theme.Warning)
 	}
 	add(usage, usageStyle.Render(usage))
@@ -764,26 +764,27 @@ func (m Model) planPanelTitle(width int) string {
 	return m.theme.Dim.Render(truncateDisplayWidth(title, width))
 }
 
-// formatUsage renders the status-bar usage segment. The input side shows the
-// accumulated prompt tokens against the configured budget ("in:212k/200k");
-// the output side shows accumulated completion tokens. A zero input budget
-// omits the denominator.
-func formatUsage(usage domain.Usage, limits domain.Limits) string {
-	in := "in:" + humanizeTokens(usage.InputTokens)
-	if limits.MaxInputTokens > 0 {
-		in += "/" + humanizeTokens(limits.MaxInputTokens)
-	}
-	return fmt.Sprintf("turns:%d %s out:%s tools:%d",
-		usage.Turns, in, humanizeTokens(usage.OutputTokens), usage.ToolCalls)
+// formatUsage renders the status-bar usage segment. Token counts are
+// cumulative observability counters — never budget denominators
+// (docs/CONTEXT_DESIGN.md §4.4.3: context pressure is shown by the ctx
+// segment against the effective window, cost/time are the only budgets).
+func formatUsage(usage domain.Usage) string {
+	return fmt.Sprintf("turns:%d in:%s out:%s tools:%d",
+		usage.Turns, humanizeTokens(usage.InputTokens), humanizeTokens(usage.OutputTokens), usage.ToolCalls)
 }
 
-// inputUsageRatio reports how much of the input budget has been consumed;
-// it is 0 when no input budget is configured.
-func inputUsageRatio(usage domain.Usage, limits domain.Limits) float64 {
-	if limits.MaxInputTokens <= 0 {
-		return 0
+// budgetUsageRatio reports the highest consumption ratio across the real
+// budget dimensions (wall time, cost); it is 0 when neither is configured.
+// The status bar warns at ≥80% — the graduated-notice band.
+func budgetUsageRatio(usage domain.Usage, limits domain.Limits) float64 {
+	ratio := 0.0
+	if limits.MaxWallTime > 0 {
+		ratio = max(ratio, float64(usage.WallTime)/float64(limits.MaxWallTime))
 	}
-	return float64(usage.InputTokens) / float64(limits.MaxInputTokens)
+	if limits.MaxEstimatedCostUSD > 0 && usage.CostUSD > 0 {
+		ratio = max(ratio, usage.CostUSD/limits.MaxEstimatedCostUSD)
+	}
+	return ratio
 }
 
 // formatContext renders the ctx status segment: the estimated size of the

@@ -316,9 +316,31 @@ func TestApplyRuntimeEventContextCompacted(t *testing.T) {
 	if !ok || block.Kind != BlockKindNotice {
 		t.Fatalf("block = %#v, want notice", block)
 	}
-	want := "Context compacted: ~182k → ~41k tokens (3 outputs externalized)"
+	want := "Context compacted: ~182k → ~41k tokens (3 outputs externalized) — long sessions with repeated compactions can reduce accuracy; consider a fresh session for new topics"
 	if block.Content != want {
 		t.Fatalf("content = %q, want %q", block.Content, want)
+	}
+}
+
+func TestApplyRuntimeEventBudgetNotice(t *testing.T) {
+	idx := NewBlockIndex()
+	payload := mustPayload(t, runtimeevent.BudgetNoticePayload{
+		Text:   "run budget exhausted (wall_time); the model is wrapping up with a final summary",
+		WrapUp: true, Dimension: "wall_time",
+	})
+	id := ApplyRuntimeEvent(idx, runtimeevent.RuntimeEvent{Sequence: 9, Kind: runtimeevent.KindBudgetNotice, Payload: payload})
+	if id == "" {
+		t.Fatal("expected a notice block for the wrap-up notice")
+	}
+	block, ok := idx.Get(id)
+	if !ok || block.Kind != BlockKindNotice {
+		t.Fatalf("block = %#v, want notice", block)
+	}
+	if block.Status != "error" {
+		t.Fatalf("wrap-up notice status = %q, want error", block.Status)
+	}
+	if !strings.Contains(block.Content, "wrapping up") {
+		t.Fatalf("content = %q", block.Content)
 	}
 }
 
@@ -726,46 +748,49 @@ func TestRenderStatusBarDropsSegmentsOnNarrowScreens(t *testing.T) {
 
 func TestFormatUsage(t *testing.T) {
 	tests := []struct {
-		name   string
-		usage  domain.Usage
-		limits domain.Limits
-		want   string
+		name  string
+		usage domain.Usage
+		want  string
 	}{
 		{
-			name:   "input shown against budget",
-			usage:  domain.Usage{Turns: 17, InputTokens: 212456, OutputTokens: 6095, ToolCalls: 34},
-			limits: domain.Limits{MaxInputTokens: 200_000},
-			want:   "turns:17 in:212k/200k out:6.1k tools:34",
+			name:  "counters without budget denominators",
+			usage: domain.Usage{Turns: 17, InputTokens: 212456, OutputTokens: 6095, ToolCalls: 34},
+			want:  "turns:17 in:212k out:6.1k tools:34",
 		},
 		{
-			name:   "zero budget omits denominator",
-			usage:  domain.Usage{Turns: 1, InputTokens: 500, OutputTokens: 50},
-			limits: domain.Limits{},
-			want:   "turns:1 in:500 out:50 tools:0",
+			name:  "zero usage",
+			usage: domain.Usage{Turns: 1, InputTokens: 500, OutputTokens: 50},
+			want:  "turns:1 in:500 out:50 tools:0",
 		},
 		{
-			name:   "million scale",
-			usage:  domain.Usage{InputTokens: 2_500_000, OutputTokens: 999},
-			limits: domain.Limits{MaxInputTokens: 4_000_000},
-			want:   "turns:0 in:2.5M/4.0M out:999 tools:0",
+			name:  "million scale",
+			usage: domain.Usage{InputTokens: 2_500_000, OutputTokens: 999},
+			want:  "turns:0 in:2.5M out:999 tools:0",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := formatUsage(tt.usage, tt.limits); got != tt.want {
+			if got := formatUsage(tt.usage); got != tt.want {
 				t.Fatalf("formatUsage() = %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestInputUsageRatio(t *testing.T) {
-	if got := inputUsageRatio(domain.Usage{InputTokens: 100}, domain.Limits{}); got != 0 {
-		t.Fatalf("ratio with zero budget = %v, want 0", got)
+func TestBudgetUsageRatio(t *testing.T) {
+	if got := budgetUsageRatio(domain.Usage{WallTime: time.Minute}, domain.Limits{}); got != 0 {
+		t.Fatalf("ratio with zero budgets = %v, want 0", got)
 	}
-	got := inputUsageRatio(domain.Usage{InputTokens: 160_000}, domain.Limits{MaxInputTokens: 200_000})
-	if got < 0.79 || got > 0.81 {
-		t.Fatalf("ratio = %v, want ~0.8", got)
+	// Wall time dominates; cumulative token counts never factor in.
+	limits := domain.Limits{MaxWallTime: 10 * time.Minute, MaxEstimatedCostUSD: 5.0}
+	usage := domain.Usage{WallTime: 9 * time.Minute, CostUSD: 1.0, InputTokens: 1 << 40}
+	if got := budgetUsageRatio(usage, limits); got < 0.89 || got > 0.91 {
+		t.Fatalf("ratio = %v, want ~0.9 (wall time), got %v", got, usage)
+	}
+	// Cost dominates when closer to its limit.
+	usage.CostUSD = 4.9
+	if got := budgetUsageRatio(usage, limits); got < 0.97 {
+		t.Fatalf("ratio = %v, want ~0.98 (cost)", got)
 	}
 }
 

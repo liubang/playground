@@ -29,6 +29,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
@@ -53,6 +54,13 @@ type Run struct {
 	persistedVersion int64
 	// turnStartedAt anchors the per-prompt wall-time budget window.
 	turnStartedAt time.Time
+	// WrapUpPending marks the soft-landing wrap-up turn
+	// (docs/CONTEXT_DESIGN.md §4.4.2): the run budget (dimension name) or
+	// the goal token budget (wrapUpGoalTokens) is exhausted and the model
+	// gets exactly one final turn to summarize before termination. Empty
+	// means no wrap-up is pending. In-memory only; crash recovery re-arms
+	// it from the budget.wrapup_started event or the transcript tail.
+	WrapUpPending string
 }
 
 // NewRun creates a new Run in the preparing phase.
@@ -231,6 +239,7 @@ func RecoverRun(sessionID domain.SessionID, checkpoint *domain.Checkpoint, messa
 		usage = checkpoint.Usage
 		goal = checkpoint.Goal
 	}
+	wrapUpDimension := ""
 	for _, event := range events {
 		if checkpoint != nil && event.Sequence <= checkpoint.Sequence {
 			continue
@@ -250,6 +259,14 @@ func RecoverRun(sessionID domain.SessionID, checkpoint *domain.Checkpoint, messa
 				return nil, domain.NewError(domain.ErrInvalidInput, "invalid goal update payload", domain.WithCause(err))
 			}
 			goal = &updated
+		case domain.EventBudgetWrapupStarted:
+			// A crash during the soft-landing wrap-up re-arms it so the run
+			// still ends with a conclusion (docs/CONTEXT_DESIGN.md §4.4.2).
+			var payload domain.BudgetWrapupPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				return nil, domain.NewError(domain.ErrInvalidInput, "invalid budget wrap-up payload", domain.WithCause(err))
+			}
+			wrapUpDimension = payload.Dimension
 		}
 	}
 	run := RestoreRun(domain.NewRunID(), sessionID,
@@ -258,6 +275,15 @@ func RecoverRun(sessionID domain.SessionID, checkpoint *domain.Checkpoint, messa
 	if goal != nil {
 		cloned := *goal
 		run.Goal = &cloned
+	}
+	if wrapUpDimension != "" {
+		run.WrapUpPending = wrapUpDimension
+	} else if n := len(run.Messages); n > 0 {
+		// Fallback without the event (lost tail): an unanswered wrap-up
+		// instruction at the transcript tail means the same thing.
+		if last := run.Messages[n-1]; last.Role == domain.RoleUser && last.Metadata["kind"] == "budget_wrapup" {
+			run.WrapUpPending = dimensionWallTime
+		}
 	}
 	run.appendEvent(domain.EventRunCreated, struct {
 		RunID       domain.RunID `json:"run_id"`
@@ -424,6 +450,33 @@ func (r *Run) AddSystemNote(text string) {
 	r.Messages = append(r.Messages, msg)
 }
 
+// AddBudgetNotice appends a graduated budget reminder to the transcript as
+// a system-role message and records the auditable EventBudgetNotice in a
+// single version step (docs/CONTEXT_DESIGN.md §4.4.1: budget decisions
+// that steer the model must be replayable, unlike ephemeral system notes).
+func (r *Run) AddBudgetNotice(payload domain.BudgetNoticePayload) domain.Event {
+	msg := payload.Message
+	if msg.Role == "" {
+		msg.Role = domain.RoleSystem
+	}
+	if msg.Metadata == nil {
+		msg.Metadata = map[string]string{"kind": "system_note"}
+	}
+	if msg.CreatedAt.IsZero() {
+		msg.CreatedAt = r.Clock.Now()
+	}
+	if msg.ID.IsZero() {
+		msg.ID = domain.NewMessageID()
+	}
+	r.normalizeMessage(&msg)
+	payload.Message = msg
+	r.Messages = append(r.Messages, msg)
+	r.Version++
+	evt := r.newEvent(domain.EventBudgetNotice, payload)
+	r.pendingEvents = append(r.pendingEvents, evt)
+	return evt
+}
+
 // AddAssistantMessage appends an assistant message.
 func (r *Run) AddAssistantMessage(msg domain.Message) domain.Event {
 	r.normalizeMessage(&msg)
@@ -434,8 +487,13 @@ func (r *Run) AddAssistantMessage(msg domain.Message) domain.Event {
 	return evt
 }
 
-// RecordToolResult records a tool result message.
+// RecordToolResult records a tool result message. Text content is
+// bounded to MaxToolOutputBytes with a head+tail cut — the single final
+// truncation point shared by every tool (docs/CONTEXT_DESIGN.md §4.5),
+// so outsized results cannot swamp the transcript between the tools'
+// own entry-level limits and compaction.
 func (r *Run) RecordToolResult(result domain.ToolResult) domain.Event {
+	truncateToolResultContent(&result, r.Limits.MaxToolOutputBytes)
 	r.Usage.ToolCalls++
 	r.Version++
 
@@ -471,6 +529,54 @@ func (r *Run) RecordToolResult(result domain.ToolResult) domain.Event {
 	return evt
 }
 
+// toolOutputTruncationMark separates the head and tail of a truncated
+// tool output.
+const toolOutputTruncationMark = "\n...[middle omitted]...\n"
+
+// truncateToolResultContent applies the ingestion cap to every oversized
+// text part of a tool result. The warning header tells the model exactly
+// what happened and whether a full-fidelity artifact is attached to the
+// result (run_cmd and compacted outputs carry one).
+func truncateToolResultContent(result *domain.ToolResult, maxBytes int64) {
+	if maxBytes <= 0 {
+		return
+	}
+	for i := range result.Content {
+		content := &result.Content[i]
+		if content.Kind != domain.PartText || int64(len(content.Text)) <= maxBytes {
+			continue
+		}
+		original := len(content.Text)
+		hasArtifact := false
+		for _, part := range result.Content {
+			if part.Kind == domain.PartArtifact {
+				hasArtifact = true
+				break
+			}
+		}
+		locator := "unavailable"
+		if hasArtifact {
+			locator = "see the artifact reference attached to this result"
+		}
+		warning := fmt.Sprintf("Warning: output truncated (original %s / ~%d tokens, showing first+last portions). Full output: %s.\n",
+			humanBytes(original), original/bytesPerTokenEstimate, locator)
+		budget := int(maxBytes) - len(warning) - len(toolOutputTruncationMark)
+		if budget < 2 {
+			content.Text = domain.TruncateAtRuneBoundary(content.Text, int(maxBytes))
+			continue
+		}
+		headLen := budget / 2
+		tailLen := budget - headLen
+		head := domain.TruncateAtRuneBoundary(content.Text, headLen)
+		tail := content.Text[len(content.Text)-tailLen:]
+		// The tail cut may split a multi-byte rune at its start.
+		for len(tail) > 0 && !utf8.ValidString(tail) {
+			tail = tail[1:]
+		}
+		content.Text = warning + head + toolOutputTruncationMark + tail
+	}
+}
+
 // touchWallTime folds the elapsed per-prompt window into Usage.WallTime so
 // the wall_time budget dimension is actually enforced. Without this the
 // field stays zero and MaxWallTime can never fire.
@@ -481,17 +587,12 @@ func (r *Run) touchWallTime() {
 	r.Usage.WallTime = r.Clock.Now().Sub(r.turnStartedAt)
 }
 
-// CheckBudget evaluates usage against limits.
+// CheckBudget evaluates usage against the budget dimensions (wall time,
+// cost), with the wall-time window folded in first. Both the graduated
+// soft notices and the hard wrap-up trigger derive from this single check.
 func (r *Run) CheckBudget() domain.CheckResult {
 	r.touchWallTime()
 	return r.Usage.Check(r.Limits)
-}
-
-// CheckRunaway evaluates only the runaway-protection dimensions (turns,
-// tool calls, cost, wall time), with the wall-time window folded in first.
-func (r *Run) CheckRunaway() domain.CheckResult {
-	r.touchWallTime()
-	return r.Usage.CheckRunaway(r.Limits)
 }
 
 // ResetUsageForNewTurn zeroes the budget counters so a fresh user prompt gets
@@ -571,11 +672,16 @@ type toolCallAuditPayload struct {
 	CallID       domain.ToolCallID    `json:"call_id"`
 	Tool         string               `json:"tool"`
 	Risk         domain.RiskLevel     `json:"risk"`
-	ArgsHash     string               `json:"args_hash"`
+	ArgsHash     string               `json:"args_hash,omitempty"`
 	ReadPaths    []string             `json:"read_paths,omitempty"`
 	WritePaths   []string             `json:"write_paths,omitempty"`
 	ApprovalDesc string               `json:"approval_desc,omitempty"`
 	Recovery     *domain.RecoverySpec `json:"recovery,omitempty"`
+	// PrepareFailed marks the degraded payload emitted when a call fails
+	// during preparation; ArgsRawHash then carries the raw-arguments
+	// fingerprint in place of ArgsHash.
+	PrepareFailed bool   `json:"prepare_failed,omitempty"`
+	ArgsRawHash   string `json:"args_raw_hash,omitempty"`
 }
 
 type modelRequestAuditPayload struct {
@@ -679,11 +785,16 @@ type Loop struct {
 	Recorder  trace.Recorder
 	Prompt    string
 	Workspace string
-	// ContextWindow is the model's effective per-request context size in
-	// tokens (LOOM_CONTEXT_WINDOW). Context occupancy — never cumulative
-	// token usage — drives compaction; 0 falls back to
-	// Run.Limits.MaxInputTokens.
-	ContextWindow int64
+	// Window carries the model-derived context thresholds (compaction
+	// trigger/target, notice levels). Context occupancy — never cumulative
+	// token usage — drives compaction. The zero value disables
+	// occupancy-driven decisions; forced compaction after a provider
+	// overflow still works.
+	Window WindowModel
+	// Runaway tunes behavior-based runaway detection (repeated calls,
+	// consecutive failures, stalls). The zero value applies
+	// domain.DefaultRunawayConfig.
+	Runaway domain.RunawayConfig
 	// Reasoning carries the selected model's reasoning (thinking) intent
 	// into every model call; the zero value lets the provider decide.
 	Reasoning domain.ReasoningSpec
@@ -714,24 +825,44 @@ type Loop struct {
 	// compaction that left occupancy above the window); two in a row is
 	// fatal — the window genuinely cannot hold the work.
 	compactFitFailures int
-	// budgetNoticeLevel tracks one-shot model-visible budget notices
-	// (1 = 80% reminder shown, 2 = 90% self-handoff shown); compaction
-	// re-arms them.
-	budgetNoticeLevel int
+	// noticeFired tracks the highest fired level per budget-notice
+	// dimension (occupancy/wall_time/cost_usd/runaway) so each graduated
+	// reminder fires at most once per prompt; compaction re-arms occupancy.
+	noticeFired map[string]int
+	// pendingNotices queues runaway warnings detected at pairing-unsafe
+	// points (tool routing); prepare drains them before the next call.
+	pendingNotices []domain.BudgetNoticePayload
+	// lastCallSig/repeatedCallCount track consecutive identical tool calls
+	// (runaway repeated-call detection).
+	lastCallSig       string
+	repeatedCallCount int
+	// consecutiveExecFailures counts execution-phase tool failures in a
+	// row (prepare failures excluded by design).
+	consecutiveExecFailures int
+	// seenCallSigs records every (tool, args_hash) signature executed this
+	// run; a first-seen signature is a progress signal (new information
+	// fetched), which keeps read-only research tasks from stalling out.
+	seenCallSigs map[string]struct{}
+	// stallTurns counts consecutive turns without any progress signal.
+	stallTurns int
+	// progressThisTurn is set by any progress signal and consumed by the
+	// next prepare.
+	progressThisTurn bool
 	// ForceCompact demands compaction before the next model call. It is set
 	// internally after a provider context-overflow rejection, and may be set
 	// by the caller (e.g. a manual /compact request) to force a pass ahead
 	// of the automatic pressure triggers.
 	ForceCompact bool
+	// CompactTriggerHint labels the next compaction pass's trigger
+	// ("manual"/"overflow"/"downshift") for the audit event; empty means
+	// automatic pressure.
+	CompactTriggerHint string
 	// lastCompactEst is the transcript estimate right after the most recent
 	// compaction pass. Re-compacting is pointless until the transcript grows
 	// past it: on an unchanged transcript the condenser cannot make progress
 	// (e.g. everything sits inside the keep-recent window), and the loop
 	// would otherwise spin forever, spamming compaction events/checkpoints.
 	lastCompactEst int
-	// goalWrapUpPending marks the budget-limited goal's wrap-up turn; the
-	// next end-of-turn terminates the run instead of continuing.
-	goalWrapUpPending bool
 	// planReconcileUsed bounds the unfinished-plan closing nudge to one
 	// extra turn per run: advisory bookkeeping is routinely forgotten on the
 	// final step, and an unbounded nudge would loop forever.
@@ -855,20 +986,25 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 			return err
 		}
 
-		// Runaway check: turns/tool_calls/cost/wall_time only. Cumulative
-		// token usage is NOT a kill dimension — context pressure is handled
-		// by compaction below, so long healthy runs survive.
-		if check := l.Run.CheckRunaway(); check.HasHard() {
-			l.terminate(ctx, domain.OutcomeBudgetExhausted)
-			return fmt.Errorf("run budget exhausted: %v; raise the limit via the matching LOOM_MAX_* env var (e.g. LOOM_MAX_TURNS), or start a new session", check.HardBreaches)
-		}
-
-		// Single compaction decision point: before each model call, compact
-		// when context pressure (estimate or occupancy) or a forced retry
-		// after provider context-overflow demands it.
-		if l.Run.State.Phase == domain.PhasePreparing && l.shouldCompact() {
-			if _, err := l.Run.TransitionTo(domain.PhaseCompacting); err != nil {
-				return err
+		if l.Run.State.Phase == domain.PhasePreparing {
+			// Hard budget check, only at this transcript-pairing-safe
+			// boundary and only outside an active wrap-up: a breach enters
+			// the soft-landing wrap-up turn instead of killing the run
+			// mid-work (docs/CONTEXT_DESIGN.md §4.4.2). Budgets cover
+			// scarce resources only (wall time, cost); context pressure is
+			// absorbed by compaction below.
+			if l.Run.WrapUpPending == "" {
+				if check := l.Run.CheckBudget(); check.HasHard() {
+					l.startBudgetWrapUp(check.HardBreaches)
+				}
+			}
+			// Single compaction decision point: before each model call,
+			// compact when occupancy pressure or a forced retry after
+			// provider context-overflow demands it.
+			if l.shouldCompact() {
+				if _, err := l.Run.TransitionTo(domain.PhaseCompacting); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -916,14 +1052,17 @@ func (l *Loop) prepare(ctx context.Context) error {
 	}
 	l.Run.IncrementTurn()
 	l.drainSteer()
-	// Budget notices must not be appended between an assistant tool-call
-	// message and its routing/results: a trailing system note would make
-	// the call-routing readers miss the calls (they scan for the most
-	// recent message with tool calls) and, worse, leave dangling calls
-	// that providers reject. Injecting here — right before the next model
+	// Notices must not be appended between an assistant tool-call message
+	// and its routing/results: a trailing note would make the
+	// call-routing readers miss the calls (they scan for the most recent
+	// message with tool calls) and, worse, leave dangling calls that
+	// providers reject. Injecting here — right before the next model
 	// call, after tool results are recorded — keeps the transcript
-	// pairing-safe by construction.
-	l.maybeInjectBudgetNotice()
+	// pairing-safe by construction. Runaway warnings detected during
+	// routing are queued for exactly this point.
+	l.drainPendingNotices()
+	l.injectBudgetNotices()
+	l.trackStall()
 	return nil
 }
 
@@ -1029,6 +1168,9 @@ func (l *Loop) callModel(ctx context.Context) error {
 		}
 		l.terminate(ctx, domain.OutcomeFailed)
 		return fmt.Errorf("model stream finalization: %w", err)
+	}
+	if text := strings.Join(response.TextParts(), ""); strings.TrimSpace(text) != "" {
+		l.progressThisTurn = true
 	}
 	l.recordGeneration(ctx, trace.GenerationRecord{
 		RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
@@ -1157,6 +1299,12 @@ Before ending your turn, reconcile the plan: if the remaining work is in fact co
 func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) error {
 	switch stop {
 	case domain.StopEndTurn:
+		// The budget wrap-up turn ends here: the model produced its final
+		// summary without tool calls, so the soft landing is complete.
+		if l.inRunBudgetWrapUp() {
+			l.terminate(ctx, domain.OutcomeBudgetExhausted)
+			return nil
+		}
 		if l.reconcilePlanIfUnfinished() {
 			_, err := l.Run.TransitionTo(domain.PhasePreparing)
 			return err
@@ -1186,19 +1334,44 @@ func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) 
 
 func (l *Loop) routeToolCalls(ctx context.Context) error {
 	l.prepared = make(map[domain.ToolCallID]domain.PreparedCall)
+	calls := lastToolCalls(l.Run.Messages)
+	// Soft-landing guard (docs/CONTEXT_DESIGN.md §4.4.2): during the
+	// budget wrap-up turn every tool call is denied outright — never
+	// routed to approval — so the run terminates with a paired transcript
+	// instead of hanging on an approval prompt.
+	if l.inRunBudgetWrapUp() {
+		for _, tc := range calls {
+			l.recordToolError(ctx, tc, "permission_denied", "run is in budget wrap-up; tool calls are disabled")
+		}
+		l.terminate(ctx, domain.OutcomeBudgetExhausted)
+		return nil
+	}
 	needsApproval := false
-	for _, tc := range lastToolCalls(l.Run.Messages) {
+	for _, tc := range calls {
 		tool, ok := l.Registry.Lookup(tc.Name)
 		if !ok {
 			l.recordToolError(ctx, tc, "unknown_tool", fmt.Sprintf("tool %q not found", tc.Name))
+			if reason := l.trackToolCall(tc.Name, tc.Arguments); reason != "" {
+				return l.terminateRunaway(ctx, reason)
+			}
 			continue
 		}
 		prepared, err := tool.Prepare(ctx, tc)
 		if err != nil {
-			l.recordToolError(ctx, tc, "prepare_failed", err.Error())
+			rawHash := rawArgsHash(tc.Arguments)
+			l.appendPrepareFailureEvents(tc, rawHash)
+			l.recordToolError(ctx, tc, "prepare_failed", prepareErrorMessage(tc, err))
+			if reason := l.trackToolCall(tc.Name, tc.Arguments); reason != "" {
+				return l.terminateRunaway(ctx, reason)
+			}
 			continue
 		}
 		l.Run.appendEvent(domain.EventToolCallPrepared, makeToolCallAuditPayload(prepared))
+		// Repeat detection hashes the canonical arguments, not the HMAC
+		// call signature (which embeds the unique call ID).
+		if reason := l.trackToolCall(tc.Name, prepared.Call.Arguments); reason != "" {
+			return l.terminateRunaway(ctx, reason)
+		}
 		switch l.policy().Evaluate(prepared) {
 		case domain.DecisionAllow:
 			l.prepared[tc.ID] = prepared
@@ -1222,6 +1395,69 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 	}
 	_, err := l.Run.TransitionTo(domain.PhaseExecutingTools)
 	return err
+}
+
+// appendPrepareFailureEvents keeps the event stream paired for calls that
+// fail during preparation: without them consumers see an execution
+// completion with no matching prepared/started events
+// (docs/CONTEXT_DESIGN.md §4.6). The degraded payload carries the raw
+// args hash so runaway repeat detection and audits can still correlate.
+func (l *Loop) appendPrepareFailureEvents(tc domain.ToolCall, argsRawHash string) {
+	payload := toolCallAuditPayload{
+		CallID:        tc.ID,
+		Tool:          tc.Name,
+		Risk:          domain.R0,
+		ArgsRawHash:   argsRawHash,
+		PrepareFailed: true,
+	}
+	l.Run.appendEvent(domain.EventToolCallPrepared, payload)
+	l.Run.appendEvent(domain.EventToolExecutionStarted, payload)
+}
+
+// prepareErrorMessage renders the model-facing prepare failure. For
+// malformed-arguments placeholders it surfaces the embedded hint instead
+// of the internal placeholder field name (docs/CONTEXT_DESIGN.md §4.6).
+func prepareErrorMessage(tc domain.ToolCall, err error) string {
+	if hint, ok := malformedArgumentsHint(tc.Arguments); ok {
+		return hint
+	}
+	return err.Error()
+}
+
+// malformedArgumentsHint extracts the model-facing guidance embedded in
+// the malformed-arguments placeholder (stream_hooks.go), so the model
+// sees actionable advice instead of `json: unknown field
+// "__malformed_arguments"` — a field it never sent.
+func malformedArgumentsHint(raw json.RawMessage) (string, bool) {
+	var placeholder map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &placeholder); err != nil {
+		return "", false
+	}
+	rawBad, hasBad := placeholder["__malformed_arguments"]
+	hintRaw, hasHint := placeholder["error"]
+	if !hasBad || !hasHint {
+		return "", false
+	}
+	var hint string
+	if err := json.Unmarshal(hintRaw, &hint); err != nil || hint == "" {
+		return "", false
+	}
+	var bad string
+	if err := json.Unmarshal(rawBad, &bad); err == nil && bad != "" {
+		hint += fmt.Sprintf(" (received: %s)", domain.TruncateAtRuneBoundary(bad, 200))
+	}
+	return hint, true
+}
+
+// terminateRunaway closes the dangling calls of the current batch (the
+// transcript must stay replayable) and terminates the run as failed.
+func (l *Loop) terminateRunaway(ctx context.Context, reason string) error {
+	if l.Logger != nil {
+		l.Logger.Warn("terminating runaway run", "reason", reason)
+	}
+	l.closeUnresolvedCalls(ctx, reason+"; the call was not executed")
+	l.terminate(ctx, domain.OutcomeFailed)
+	return errors.New(reason)
 }
 
 func (l *Loop) policy() Policy {
@@ -1332,7 +1568,11 @@ func (l *Loop) executeTools(ctx context.Context) error {
 		l.Run.RecordToolResult(result)
 		l.recordTool(ctx, prepared, result)
 		if changed, ok := extractFileChanged(result, prepared); ok {
+			l.progressThisTurn = true
 			l.Run.appendEvent(domain.EventFileChanged, changed)
+		}
+		if reason := l.trackExecResult(result); reason != "" {
+			return l.terminateRunaway(ctx, reason)
 		}
 	}
 
@@ -1345,39 +1585,27 @@ func (l *Loop) executeTools(ctx context.Context) error {
 	return err
 }
 
-// shouldCompact decides whether the run compacts before the next model call.
-// Compaction is unbounded in count and triggers on three pressures:
-//   - forced: a provider context-overflow demands a retry on a fresh window;
-//   - context pressure: the estimated transcript exceeds the condenser
-//     target (the transcript is resent every model call, so keeping it
-//     bounded is what keeps long sessions alive);
-//   - occupancy pressure: the calibrated next-request size crosses 80% of
-//     the effective context window.
+// shouldCompact decides whether the run compacts before the next model
+// call. Compaction is unbounded in count and triggers on two pressures:
+//   - forced: a provider context-overflow (or manual request) demands a
+//     pass on a fresh window;
+//   - occupancy pressure: the calibrated next-request size reaches the
+//     window-derived trigger. The byte-estimate alone never triggers —
+//     only the provider-calibrated occupancy does
+//     (docs/CONTEXT_DESIGN.md §4.2).
 func (l *Loop) shouldCompact() bool {
 	if l.ForceCompact {
 		return true
 	}
-	est := estTokens(l.Run.Messages)
-	if l.lastCompactEst > 0 && est <= l.lastCompactEst {
+	if !l.Window.Usable() {
+		return false
+	}
+	if l.lastCompactEst > 0 && estTokens(l.Run.Messages) <= l.lastCompactEst {
 		// Nothing grew since the last pass; another pass cannot shrink the
 		// transcript either, so let the run proceed to the next model call.
 		return false
 	}
-	cond := l.Condenser.withDefaults()
-	if est > cond.TargetTokens {
-		return true
-	}
-	window := l.effectiveContextWindow()
-	return window > 0 && l.contextOccupancy()*5 >= window*4
-}
-
-// effectiveContextWindow resolves the per-request context size in tokens:
-// the explicitly configured window, else MaxInputTokens as a proxy.
-func (l *Loop) effectiveContextWindow() int64 {
-	if l.ContextWindow > 0 {
-		return l.ContextWindow
-	}
-	return l.Run.Limits.MaxInputTokens
+	return l.contextOccupancy() >= l.Window.CompactTrigger
 }
 
 // contextOccupancy estimates the size of the next model request in
@@ -1399,32 +1627,6 @@ func (l *Loop) contextOccupancy() int64 {
 		}
 	}
 	return occupancy + int64(estTokens(messages[lastAssistant+1:]))
-}
-
-// maybeInjectBudgetNotice makes the context budget visible to the model
-// (codex-style): a one-shot reminder at 80% occupancy, and a self-handoff
-// request at 90% so critical state is captured in a visible reply before
-// compaction. Compaction re-arms both notices.
-func (l *Loop) maybeInjectBudgetNotice() {
-	window := l.effectiveContextWindow()
-	if window <= 0 {
-		return
-	}
-	occupancy := l.contextOccupancy()
-	switch {
-	case occupancy*10 >= window*9 && l.budgetNoticeLevel < 2:
-		l.budgetNoticeLevel = 2
-		l.Run.AddSystemNote(fmt.Sprintf(
-			"[budget notice] The context window is nearly full (~%d of ~%d tokens used) and auto-compaction is imminent. In your next visible reply, concisely capture any critical state (file paths, decisions made, remaining steps) so it survives compaction.",
-			occupancy, window,
-		))
-	case occupancy*5 >= window*4 && l.budgetNoticeLevel < 1:
-		l.budgetNoticeLevel = 1
-		l.Run.AddSystemNote(fmt.Sprintf(
-			"[budget notice] ~%d tokens remain before auto-compaction (~%d of ~%d used). Keep working, but prefer concise replies and avoid re-reading large outputs.",
-			window-occupancy, occupancy, window,
-		))
-	}
 }
 
 // contextOverflowNeedles fingerprints provider context-window rejections
@@ -1456,9 +1658,10 @@ func (l *Loop) handleContextOverflow(ctx context.Context, cause error) error {
 	l.compactFitFailures++
 	if l.compactFitFailures >= 2 {
 		l.terminate(ctx, domain.OutcomeBudgetExhausted)
-		return fmt.Errorf("model rejected the request for context size twice in a row (last: %v); start a new session or raise LOOM_CONTEXT_WINDOW", cause)
+		return fmt.Errorf("model rejected the request for context size twice in a row (last: %v); start a new session or check the model's context_window configuration", cause)
 	}
 	l.ForceCompact = true
+	l.CompactTriggerHint = "overflow"
 	if l.Logger != nil {
 		l.Logger.Warn("provider rejected request for context size; forcing compaction", "error", cause)
 	}
@@ -1559,6 +1762,18 @@ func lastToolCalls(messages []domain.Message) []domain.ToolCall {
 
 func (l *Loop) compact(ctx context.Context) error {
 	cond := l.Condenser.withDefaults()
+	if !cond.Window.Usable() {
+		cond.Window = l.Window
+	}
+	trigger := l.CompactTriggerHint
+	if trigger == "" {
+		trigger = "auto"
+	}
+	phase := "pre_turn"
+	if l.Run.Usage.Turns > 0 {
+		phase = "mid_turn"
+	}
+	occupancyBefore := l.contextOccupancy()
 	tokensBefore := estTokens(l.Run.Messages)
 	result := cond.Condense(ctx, &l.Run.Messages, l.Artifacts)
 	tokensAfter := estTokens(l.Run.Messages)
@@ -1569,14 +1784,25 @@ func (l *Loop) compact(ctx context.Context) error {
 	// the run.
 	summarized := false
 	summaryBytes := 0
-	if tokensAfter > cond.TargetTokens {
+	truncatedUserMessages := 0
+	if tokensAfter > cond.target() {
 		summary, err := l.summarizeForCompaction(ctx)
+		// The summarize request itself can overflow: drop the oldest
+		// pairing-safe span and retry (codex remove_first_item style).
+		for attempts := 0; err != nil && isContextOverflowError(err) && attempts < maxCompactionSummaryRetries; attempts++ {
+			if !l.dropOldestForCompactionRetry() {
+				break
+			}
+			summary, err = l.summarizeForCompaction(ctx)
+		}
 		if err != nil {
 			if l.Logger != nil {
 				l.Logger.Warn("summarizing compaction failed; keeping masked history", "error", err)
 			}
 		} else {
-			l.Run.Messages = buildSummaryReplacement(l.Run.Messages, summary, l.Run.Clock.Now())
+			var dropped int
+			l.Run.Messages, dropped = buildSummaryReplacement(l.Run.Messages, summary, l.Run.Clock.Now(), cond.userMessageBudget())
+			truncatedUserMessages = dropped
 			summarized = true
 			summaryBytes = len(summary)
 			tokensAfter = estTokens(l.Run.Messages)
@@ -1584,25 +1810,36 @@ func (l *Loop) compact(ctx context.Context) error {
 	}
 
 	// Fresh window: the next request's size is the pure estimate again,
-	// and model-visible budget notices re-arm. Remember the post-pass
-	// estimate so shouldCompact only re-fires on real transcript growth.
+	// and occupancy notices re-arm (other dimensions never do). Remember
+	// the post-pass estimate so shouldCompact only re-fires on real
+	// transcript growth.
 	l.lastCallInput = 0
 	l.ForceCompact = false
-	l.budgetNoticeLevel = 0
+	l.CompactTriggerHint = ""
+	if l.noticeFired != nil {
+		delete(l.noticeFired, dimensionOccupancy)
+	}
 	l.lastCompactEst = estTokens(l.Run.Messages)
 
 	l.Run.appendEvent(domain.EventContextCompacted, contextCompactedPayload{
-		MaskedOutputs:    len(result.outputs),
-		MaskedBytes:      result.bytesMasked,
-		ArchivedMessages: result.archived,
-		EstTokensBefore:  tokensBefore,
-		EstTokensAfter:   tokensAfter,
-		Summarized:       summarized,
-		SummaryBytes:     summaryBytes,
-		Outputs:          result.outputs,
+		Trigger:               trigger,
+		Phase:                 phase,
+		MaskedOutputs:         len(result.outputs),
+		MaskedBytes:           result.bytesMasked,
+		ArchivedMessages:      result.archived,
+		EstTokensBefore:       tokensBefore,
+		EstTokensAfter:        tokensAfter,
+		OccupancyBefore:       occupancyBefore,
+		OccupancyAfter:        int64(tokensAfter),
+		Summarized:            summarized,
+		SummaryBytes:          summaryBytes,
+		TruncatedUserMessages: truncatedUserMessages,
+		Outputs:               result.outputs,
 	})
 	if l.Logger != nil && (len(result.outputs) > 0 || result.archived > 0 || summarized) {
 		l.Logger.Info("context compacted",
+			"trigger", trigger,
+			"phase", phase,
 			"masked_outputs", len(result.outputs),
 			"masked_bytes", result.bytesMasked,
 			"archived_messages", result.archived,
@@ -1612,6 +1849,8 @@ func (l *Loop) compact(ctx context.Context) error {
 	}
 	if l.traceRun != nil {
 		l.traceRun.RecordEvent(ctx, "context.compacted", map[string]string{
+			"trigger":           trigger,
+			"phase":             phase,
 			"masked_outputs":    fmt.Sprintf("%d", len(result.outputs)),
 			"masked_bytes":      fmt.Sprintf("%d", result.bytesMasked),
 			"archived_messages": fmt.Sprintf("%d", result.archived),
@@ -1623,15 +1862,43 @@ func (l *Loop) compact(ctx context.Context) error {
 
 	// Fit check: a compaction that leaves occupancy at or above the window
 	// counts as a fit failure; the next successful call resets it.
-	if window := l.effectiveContextWindow(); window > 0 && l.contextOccupancy() >= window {
+	if l.Window.Usable() && l.contextOccupancy() >= l.Window.Effective {
 		l.compactFitFailures++
 		if l.compactFitFailures >= 2 {
 			l.terminate(ctx, domain.OutcomeBudgetExhausted)
-			return fmt.Errorf("context still occupies ~%d tokens after repeated compactions (window %d); start a new session or raise LOOM_CONTEXT_WINDOW", l.contextOccupancy(), window)
+			return fmt.Errorf("context still occupies ~%d tokens after repeated compactions (effective window %d); start a new session", l.contextOccupancy(), l.Window.Effective)
 		}
 	}
 	_, err := l.Run.TransitionTo(domain.PhasePreparing)
 	return err
+}
+
+// maxCompactionSummaryRetries bounds the drop-oldest retries when the
+// compaction summarize request itself overflows the window.
+const maxCompactionSummaryRetries = 3
+
+// dropOldestForCompactionRetry drops the smallest pairing-safe prefix of
+// the transcript so the summarize request can fit the window. It reports
+// whether anything was dropped. Messages dropped here have already passed
+// Level-1 masking and (when eligible) Level-2 archival in this pass.
+func (l *Loop) dropOldestForCompactionRetry() bool {
+	msgs := l.Run.Messages
+	if len(msgs) <= 1 {
+		return false
+	}
+	cut := pairingSafeCut(msgs, 1, len(msgs)-1)
+	if cut == 0 {
+		return false
+	}
+	remaining := append([]domain.Message(nil), msgs[cut:]...)
+	for i := range remaining {
+		remaining[i].Sequence = int64(i + 1)
+	}
+	l.Run.Messages = remaining
+	if l.Logger != nil {
+		l.Logger.Warn("compaction summarize overflow; dropped oldest messages", "dropped", cut)
+	}
+	return true
 }
 
 // ManagedPromptInfo is implemented by prompt builders backed by Langfuse
