@@ -52,7 +52,8 @@ type Run struct {
 
 	pendingEvents    []domain.Event
 	persistedVersion int64
-	// turnStartedAt anchors the per-prompt wall-time budget window.
+	// turnStartedAt anchors the per-prompt wall-clock observability
+	// counter (Usage.WallTime is display-only, never a budget dimension).
 	turnStartedAt time.Time
 	// WrapUpPending marks the soft-landing wrap-up turn
 	// (docs/CONTEXT_DESIGN.md §4.4.2): the run budget (dimension name) or
@@ -282,7 +283,7 @@ func RecoverRun(sessionID domain.SessionID, checkpoint *domain.Checkpoint, messa
 		// Fallback without the event (lost tail): an unanswered wrap-up
 		// instruction at the transcript tail means the same thing.
 		if last := run.Messages[n-1]; last.Role == domain.RoleUser && last.Metadata["kind"] == "budget_wrapup" {
-			run.WrapUpPending = dimensionWallTime
+			run.WrapUpPending = dimensionTokens
 		}
 	}
 	run.appendEvent(domain.EventRunCreated, struct {
@@ -577,9 +578,8 @@ func truncateToolResultContent(result *domain.ToolResult, maxBytes int64) {
 	}
 }
 
-// touchWallTime folds the elapsed per-prompt window into Usage.WallTime so
-// the wall_time budget dimension is actually enforced. Without this the
-// field stays zero and MaxWallTime can never fire.
+// touchWallTime folds the elapsed per-prompt window into Usage.WallTime.
+// The field is display-only (status bar); it is NOT a budget dimension.
 func (r *Run) touchWallTime() {
 	if r.Clock == nil || r.turnStartedAt.IsZero() {
 		return
@@ -587,20 +587,26 @@ func (r *Run) touchWallTime() {
 	r.Usage.WallTime = r.Clock.Now().Sub(r.turnStartedAt)
 }
 
-// CheckBudget evaluates usage against the budget dimensions (wall time,
-// cost), with the wall-time window folded in first. Both the graduated
-// soft notices and the hard wrap-up trigger derive from this single check.
+// CheckBudget evaluates usage against the budget dimensions (session
+// tokens, cost). Both the graduated soft notices and the hard wrap-up
+// trigger derive from this single check.
 func (r *Run) CheckBudget() domain.CheckResult {
 	r.touchWallTime()
 	return r.Usage.Check(r.Limits)
 }
 
-// ResetUsageForNewTurn zeroes the budget counters so a fresh user prompt gets
-// a full budget window. It is called by frontends at prompt boundaries only;
-// crash recovery (RecoverRun) keeps the restored usage so an interrupted run
-// remains accountable for what it already consumed.
+// ResetUsageForNewTurn resets the PER-PROMPT observability counters so a
+// fresh user prompt starts with clean display counters. The
+// session-cumulative budget counters (tokens, cost) are deliberately
+// preserved — they are the session-level budget baseline inherited from
+// the checkpoint (docs/CONTEXT_DESIGN.md §4.4.3). It is called by
+// frontends at prompt boundaries only; crash recovery (RecoverRun) keeps
+// the restored usage so an interrupted run remains accountable for what
+// it already consumed.
 func (r *Run) ResetUsageForNewTurn() {
-	r.Usage = domain.Usage{}
+	r.Usage.Turns = 0
+	r.Usage.ToolCalls = 0
+	r.Usage.WallTime = 0
 	if r.Clock != nil {
 		r.turnStartedAt = r.Clock.Now()
 	}
@@ -848,6 +854,10 @@ type Loop struct {
 	// progressThisTurn is set by any progress signal and consumed by the
 	// next prepare.
 	progressThisTurn bool
+	// lastProgressAt anchors the stall watchdog: the ACTIVE time since
+	// the last progress signal. Approval waits shift it forward so user
+	// thinking time never counts (docs/CONTEXT_DESIGN.md §4.4.3).
+	lastProgressAt time.Time
 	// ForceCompact demands compaction before the next model call. It is set
 	// internally after a provider context-overflow rejection, and may be set
 	// by the caller (e.g. a manual /compact request) to force a pass ahead
@@ -991,12 +1001,14 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 			// boundary and only outside an active wrap-up: a breach enters
 			// the soft-landing wrap-up turn instead of killing the run
 			// mid-work (docs/CONTEXT_DESIGN.md §4.4.2). Budgets cover
-			// scarce resources only (wall time, cost); context pressure is
-			// absorbed by compaction below.
+			// scarce resources only (session tokens, cost); context
+			// pressure is absorbed by compaction below, and stalls are
+			// caught by the watchdog right after.
 			if l.Run.WrapUpPending == "" {
 				if check := l.Run.CheckBudget(); check.HasHard() {
 					l.startBudgetWrapUp(check.HardBreaches)
 				}
+				l.checkStallTimeout()
 			}
 			// Single compaction decision point: before each model call,
 			// compact when occupancy pressure or a forced retry after
@@ -1170,7 +1182,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 		return fmt.Errorf("model stream finalization: %w", err)
 	}
 	if text := strings.Join(response.TextParts(), ""); strings.TrimSpace(text) != "" {
-		l.progressThisTurn = true
+		l.markProgress()
 	}
 	l.recordGeneration(ctx, trace.GenerationRecord{
 		RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
@@ -1302,7 +1314,7 @@ func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) 
 		// The budget wrap-up turn ends here: the model produced its final
 		// summary without tool calls, so the soft landing is complete.
 		if l.inRunBudgetWrapUp() {
-			l.terminate(ctx, domain.OutcomeBudgetExhausted)
+			l.terminate(ctx, wrapUpOutcome(l.Run.WrapUpPending))
 			return nil
 		}
 		if l.reconcilePlanIfUnfinished() {
@@ -1343,7 +1355,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 		for _, tc := range calls {
 			l.recordToolError(ctx, tc, "permission_denied", "run is in budget wrap-up; tool calls are disabled")
 		}
-		l.terminate(ctx, domain.OutcomeBudgetExhausted)
+		l.terminate(ctx, wrapUpOutcome(l.Run.WrapUpPending))
 		return nil
 	}
 	needsApproval := false
@@ -1471,6 +1483,15 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 	if l.Approver == nil {
 		return fmt.Errorf("approver required for risky tool calls")
 	}
+	// Approval waits are user thinking time, not agent activity: pause
+	// the stall watchdog by shifting its baseline forward on the way out
+	// (docs/CONTEXT_DESIGN.md §4.4.3).
+	suspendStart := l.Run.Clock.Now()
+	defer func() {
+		if !l.lastProgressAt.IsZero() {
+			l.lastProgressAt = l.lastProgressAt.Add(l.Run.Clock.Since(suspendStart))
+		}
+	}()
 	for _, tc := range lastToolCalls(l.Run.Messages) {
 		prepared, ok := l.prepared[tc.ID]
 		if !ok || l.policy().Evaluate(prepared) != domain.DecisionAsk {
@@ -1568,7 +1589,7 @@ func (l *Loop) executeTools(ctx context.Context) error {
 		l.Run.RecordToolResult(result)
 		l.recordTool(ctx, prepared, result)
 		if changed, ok := extractFileChanged(result, prepared); ok {
-			l.progressThisTurn = true
+			l.markProgress()
 			l.Run.appendEvent(domain.EventFileChanged, changed)
 		}
 		if reason := l.trackExecResult(result); reason != "" {

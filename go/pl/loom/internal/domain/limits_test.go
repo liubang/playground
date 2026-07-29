@@ -24,8 +24,8 @@ import (
 
 func TestDefaultLimits(t *testing.T) {
 	lim := DefaultLimits()
-	if lim.MaxWallTime <= 0 {
-		t.Error("MaxWallTime should be positive")
+	if lim.MaxTokens != 0 {
+		t.Error("MaxTokens should default to 0 (unlimited, opt-in)")
 	}
 	if lim.MaxEstimatedCostUSD <= 0 {
 		t.Error("MaxEstimatedCostUSD should be positive")
@@ -39,7 +39,7 @@ func TestDefaultLimits(t *testing.T) {
 }
 
 func TestUsageCheckNoBreach(t *testing.T) {
-	lim := Limits{MaxWallTime: 10 * time.Minute, MaxEstimatedCostUSD: 5.0}
+	lim := Limits{MaxTokens: 1_000_000, MaxEstimatedCostUSD: 5.0}
 	usage := Usage{Turns: 10, ToolCalls: 20, InputTokens: 1000, WallTime: time.Minute, CostUSD: 1.0}
 	result := usage.Check(lim)
 	if result.HasSoft() {
@@ -51,28 +51,29 @@ func TestUsageCheckNoBreach(t *testing.T) {
 }
 
 func TestUsageCheckIgnoresWorkloadCounters(t *testing.T) {
-	// Turns/tool calls/tokens are observability counters, never budget
+	// Turns/tool calls are per-prompt observability counters, never budget
 	// dimensions (docs/CONTEXT_DESIGN.md §4.4.3): no count, however large,
-	// may breach.
-	lim := Limits{MaxWallTime: time.Hour, MaxEstimatedCostUSD: 5.0}
+	// may breach. (Tokens ARE a budget dimension — but MaxTokens is
+	// unlimited here.)
+	lim := Limits{MaxEstimatedCostUSD: 5.0}
 	usage := Usage{Turns: 1 << 20, ToolCalls: 1 << 20, InputTokens: 1 << 40, OutputTokens: 1 << 40}
 	if result := usage.Check(lim); result.HasSoft() || result.HasHard() {
 		t.Errorf("workload counters must not breach budgets: %+v", result)
 	}
 }
 
-func TestUsageCheckWallTime(t *testing.T) {
-	lim := Limits{MaxWallTime: 10 * time.Minute}
-	usage := Usage{WallTime: 9 * time.Minute} // 90% → soft
+func TestUsageCheckTokens(t *testing.T) {
+	lim := Limits{MaxTokens: 100_000}
+	usage := Usage{InputTokens: 80_000, OutputTokens: 10_000} // 90% → soft
 	result := usage.Check(lim)
 	if !result.HasSoft() {
-		t.Error("expected soft breach for wall time")
+		t.Error("expected soft breach for tokens")
 	}
 	if result.HasHard() {
 		t.Error("unexpected hard breach")
 	}
 
-	hard := Usage{WallTime: 10 * time.Minute}
+	hard := Usage{InputTokens: 90_000, OutputTokens: 10_000} // 100% → hard
 	if result := hard.Check(lim); !result.HasHard() {
 		t.Error("expected hard breach at 100%")
 	}
@@ -95,7 +96,7 @@ func TestUsageCheckCost(t *testing.T) {
 
 func TestUsageCheckZeroLimit(t *testing.T) {
 	lim := Limits{} // zero means unlimited on every dimension
-	usage := Usage{WallTime: 999 * time.Hour, CostUSD: 99999}
+	usage := Usage{InputTokens: 1 << 40, OutputTokens: 1 << 40, CostUSD: 99999}
 	if result := usage.Check(lim); result.HasSoft() || result.HasHard() {
 		t.Error("zero limit should not breach")
 	}
