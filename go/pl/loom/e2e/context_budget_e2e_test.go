@@ -319,18 +319,18 @@ func TestE2ENoFalseCompactionBelowWindowTrigger(t *testing.T) {
 	}
 }
 
-// E3: soft landing — a wall-time breach enters exactly one wrap-up turn
-// and the run terminates with a conclusion, not mid-work.
-func TestE2ESoftLandingWallTime(t *testing.T) {
+// E3: soft landing — a session-token breach enters exactly one wrap-up
+// turn and the run terminates with a conclusion, not mid-work.
+func TestE2ESoftLandingTokens(t *testing.T) {
 	ws := t.TempDir()
 	writeFile(t, ws, "a.txt", "data\n")
 	mock := newMockOpenAI(t, []mockEntry{
-		{ToolName: "read_file", ToolArgs: `{"path":"a.txt"}`, UsageIn: 50, UsageOut: 10, Delay: 50 * time.Millisecond},
+		{ToolName: "read_file", ToolArgs: `{"path":"a.txt"}`, UsageIn: 90, UsageOut: 20},
 		{Text: "final summary with conclusions", UsageIn: 50, UsageOut: 20},
 	})
 	registry, artStore := realEnv(t, ws)
 	limits := domain.DefaultLimits()
-	limits.MaxWallTime = time.Millisecond
+	limits.MaxTokens = 100 // first call accounts 110 ≥ 100 → wrap-up
 	run := newBudgetRun(t, limits)
 	loop := newRealLoop(run, mock.provider(t), registry, artStore,
 		agent.NewWindowModel(200_000, 200_000, domain.DefaultContextConfig()))

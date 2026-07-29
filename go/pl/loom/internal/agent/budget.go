@@ -28,9 +28,13 @@ import (
 // resource dimensions; wrapUpGoalTokens is the goal wrap-up marker.
 const (
 	dimensionOccupancy = "occupancy"
-	dimensionWallTime  = "wall_time"
+	dimensionTokens    = "tokens"
 	dimensionCostUSD   = "cost_usd"
 	dimensionRunaway   = "runaway"
+	// dimensionStall marks the stall watchdog's wrap-up: not a resource
+	// budget, but it shares the soft-landing state machine so the run
+	// still ends with a conclusion (docs/CONTEXT_DESIGN.md §4.4.3).
+	dimensionStall = "stall"
 
 	// wrapUpGoalTokens marks the goal token budget's wrap-up turn. Unlike
 	// the resource dimensions it terminates with OutcomeSucceeded — the
@@ -38,7 +42,7 @@ const (
 	wrapUpGoalTokens = "goal_tokens"
 )
 
-// notice level thresholds for the resource dimensions (wall_time,
+// notice level thresholds for the resource dimensions (tokens,
 // cost_usd): level 1 advisory at 80%, level 2 wrap-up request at 95%.
 const (
 	noticeLevel1Ratio = 0.80
@@ -59,13 +63,13 @@ func noticeText(dimension string, level int, usage, limit int64) string {
 		}
 		return fmt.Sprintf("[budget notice] Context occupancy is ~%s of ~%s tokens. Keep working, but narrow the scope: prefer concise replies and avoid re-reading large outputs.",
 			humanizeTokens(usage), humanizeTokens(limit))
-	case dimensionWallTime:
+	case dimensionTokens:
 		if level >= 2 {
-			return fmt.Sprintf("[budget notice] The wall-clock budget is nearly exhausted (%s of %s used). Converge now and prepare to wrap up.",
-				formatDurationShort(time.Duration(usage)), formatDurationShort(time.Duration(limit)))
+			return fmt.Sprintf("[budget notice] The session token budget is nearly exhausted (~%s of ~%s tokens used). Converge now and prepare to wrap up.",
+				humanizeTokens(usage), humanizeTokens(limit))
 		}
-		return fmt.Sprintf("[budget notice] The wall-clock budget is %s of %s used. Keep working, but converge on the remaining steps.",
-			formatDurationShort(time.Duration(usage)), formatDurationShort(time.Duration(limit)))
+		return fmt.Sprintf("[budget notice] The session token budget is ~%s of ~%s tokens used. Keep working, but converge on the remaining steps.",
+			humanizeTokens(usage), humanizeTokens(limit))
 	case dimensionCostUSD:
 		if level >= 2 {
 			return fmt.Sprintf("[budget notice] The cost budget is nearly exhausted ($%.2f of $%.2f used). Converge now and prepare to wrap up.",
@@ -78,8 +82,8 @@ func noticeText(dimension string, level int, usage, limit int64) string {
 }
 
 // injectBudgetNotices fires the graduated reminders whose thresholds the
-// current usage just crossed: occupancy (window-derived levels), wall
-// time and cost (80%/95%). Each dimension+level fires at most once per
+// current usage just crossed: occupancy (window-derived levels), session
+// tokens and cost (80%/95%). Each dimension+level fires at most once per
 // prompt; compaction re-arms occupancy. Callers must be at a
 // transcript-pairing-safe point (prepare).
 func (l *Loop) injectBudgetNotices() {
@@ -96,8 +100,7 @@ func (l *Loop) injectBudgetNotices() {
 			}
 		}
 	}
-	l.Run.touchWallTime()
-	l.injectScaledNotice(dimensionWallTime, int64(l.Run.Usage.WallTime), int64(l.Run.Limits.MaxWallTime))
+	l.injectScaledNotice(dimensionTokens, l.Run.Usage.InputTokens+l.Run.Usage.OutputTokens, l.Run.Limits.MaxTokens)
 	l.injectScaledNotice(dimensionCostUSD, int64(l.Run.Usage.CostUSD*microUSD), int64(l.Run.Limits.MaxEstimatedCostUSD*microUSD))
 }
 
@@ -172,6 +175,13 @@ func noticeMessage(text string, now time.Time) domain.Message {
 // budgetWrapUpPrompt is the injected final-turn instruction: summarize
 // instead of being cut off mid-work.
 func budgetWrapUpPrompt(dimension string) string {
+	if dimension == dimensionStall {
+		return `The run appears stalled: no progress signal (no new information, no file changes, no plan movement) for longer than the configured stall timeout. This is your final turn.
+
+Summarize now: what you accomplished, the conclusions you verified (with file paths), what you were stuck on, and a clear next step for the user.
+
+Do not call any tools — further tool calls will be denied outright.`
+	}
 	return fmt.Sprintf(`The run budget (%s) is exhausted. This is your final turn.
 
 Summarize now: what you accomplished, the conclusions you verified (with file paths), what remains, and a clear next step for the user.
@@ -207,12 +217,13 @@ func (l *Loop) startBudgetWrapUp(dimensions []string) {
 // budgetDimensionUsage reports the current usage and limit of one budget
 // dimension in its natural integer scale.
 func (l *Loop) budgetDimensionUsage(dimension string) (usage, limit int64) {
-	l.Run.touchWallTime()
 	switch dimension {
 	case dimensionCostUSD:
 		return int64(l.Run.Usage.CostUSD * microUSD), int64(l.Run.Limits.MaxEstimatedCostUSD * microUSD)
-	default: // wall_time
-		return int64(l.Run.Usage.WallTime), int64(l.Run.Limits.MaxWallTime)
+	case dimensionStall:
+		return int64(l.stallActiveDuration()), int64(l.runawayConfig().StallTimeout)
+	default: // tokens
+		return l.Run.Usage.InputTokens + l.Run.Usage.OutputTokens, l.Run.Limits.MaxTokens
 	}
 }
 
@@ -223,12 +234,14 @@ func (l *Loop) inRunBudgetWrapUp() bool {
 	return l.Run.WrapUpPending != "" && l.Run.WrapUpPending != wrapUpGoalTokens
 }
 
-// formatDurationShort renders a duration in compact form ("12m30s", "1h5m").
-func formatDurationShort(d time.Duration) string {
-	if d < 0 {
-		d = 0
+// wrapUpOutcome maps the wrap-up dimension to the terminal outcome: an
+// exhausted resource budget is a normal soft landing, a stall is an
+// abnormal ending (docs/CONTEXT_DESIGN.md §4.4.2).
+func wrapUpOutcome(dimension string) domain.Outcome {
+	if dimension == dimensionStall {
+		return domain.OutcomeFailed
 	}
-	return d.Truncate(time.Second).String()
+	return domain.OutcomeBudgetExhausted
 }
 
 // humanizeTokens renders a token count in compact form ("152k", "1.5M").

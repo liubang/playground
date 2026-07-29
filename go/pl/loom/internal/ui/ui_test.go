@@ -778,14 +778,14 @@ func TestFormatUsage(t *testing.T) {
 }
 
 func TestBudgetUsageRatio(t *testing.T) {
-	if got := budgetUsageRatio(domain.Usage{WallTime: time.Minute}, domain.Limits{}); got != 0 {
+	if got := budgetUsageRatio(domain.Usage{InputTokens: 1 << 40}, domain.Limits{}); got != 0 {
 		t.Fatalf("ratio with zero budgets = %v, want 0", got)
 	}
-	// Wall time dominates; cumulative token counts never factor in.
-	limits := domain.Limits{MaxWallTime: 10 * time.Minute, MaxEstimatedCostUSD: 5.0}
-	usage := domain.Usage{WallTime: 9 * time.Minute, CostUSD: 1.0, InputTokens: 1 << 40}
+	// Session tokens dominate; per-prompt wall time never factors in.
+	limits := domain.Limits{MaxTokens: 100_000, MaxEstimatedCostUSD: 5.0}
+	usage := domain.Usage{InputTokens: 80_000, OutputTokens: 10_000, CostUSD: 1.0, WallTime: 999 * time.Hour}
 	if got := budgetUsageRatio(usage, limits); got < 0.89 || got > 0.91 {
-		t.Fatalf("ratio = %v, want ~0.9 (wall time), got %v", got, usage)
+		t.Fatalf("ratio = %v, want ~0.9 (tokens), got %v", got, usage)
 	}
 	// Cost dominates when closer to its limit.
 	usage.CostUSD = 4.9

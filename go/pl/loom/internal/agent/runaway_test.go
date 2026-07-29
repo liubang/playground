@@ -48,7 +48,7 @@ func scriptToolCalls(call domain.ToolCall, times int, finalText string) []fakes.
 
 func runLoopWithTool(t *testing.T, tool domain.Tool, script ...fakes.ScriptEntry) (*Run, *Loop, error) {
 	t.Helper()
-	run := NewRun(domain.NewSessionID(), domain.Limits{MaxWallTime: time.Hour}, domain.RealClock{})
+	run := NewRun(domain.NewSessionID(), domain.Limits{}, domain.RealClock{})
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
@@ -151,7 +151,7 @@ func TestRunawayStallWarnsWithoutTerminating(t *testing.T) {
 	// nothing new, so the stall counter reaches the warning threshold.
 	call := domain.ToolCall{Name: "read_file", Arguments: json.RawMessage(`{"path":"a.go"}`)}
 	entries := scriptToolCalls(call, 3, "final answer")
-	run := NewRun(domain.NewSessionID(), domain.Limits{MaxWallTime: time.Hour}, domain.RealClock{})
+	run := NewRun(domain.NewSessionID(), domain.Limits{}, domain.RealClock{})
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
@@ -198,7 +198,7 @@ func TestRunawayResearchTaskDoesNotStall(t *testing.T) {
 		})
 	}
 	entries = append(entries, fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn})
-	run := NewRun(domain.NewSessionID(), domain.Limits{MaxWallTime: time.Hour}, domain.RealClock{})
+	run := NewRun(domain.NewSessionID(), domain.Limits{}, domain.RealClock{})
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
@@ -224,6 +224,116 @@ func TestRunawayResearchTaskDoesNotStall(t *testing.T) {
 	}
 	if run.State.Outcome != domain.OutcomeSucceeded {
 		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+}
+
+// The stall watchdog (CONTEXT_DESIGN §4.4.3): ACTIVE time without any
+// progress signal beyond StallTimeout enters the soft-landing wrap-up
+// (dimension stall) and the run terminates FAILED — a stall is an
+// abnormal ending, not a budget landing.
+func TestRunawayStallTimeoutSoftLands(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	// Each routing pass burns 20s of active time (slow preparation); the
+	// identical repeat calls produce no new progress signal after the
+	// first one.
+	tool := fakes.ReadFileTool().WithPrepareFn(
+		func(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+			clock.Advance(20 * time.Second)
+			return fakes.ReadFileTool().Prepare(ctx, call)
+		})
+	call := domain.ToolCall{Name: "read_file", Arguments: json.RawMessage(`{"path":"a.go"}`)}
+	entries := scriptToolCalls(call, 8, "wrap-up summary")
+	run := NewRun(domain.NewSessionID(), domain.Limits{}, clock)
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
+		CreatedAt: clock.Now(),
+	})
+	registry := NewToolRegistry()
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop := &Loop{
+		Run: run, Model: fakes.NewFakeModel(entries...),
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+		Runaway: domain.RunawayConfig{
+			MaxRepeatedCalls: 100, MaxConsecutiveFailures: 100,
+			StallWarnTurns: 1000, StallTimeout: time.Minute,
+		},
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error = %v, want clean soft-landing termination", err)
+	}
+	if run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("outcome = %s, want failed (a stall is an abnormal ending)", run.State.Outcome)
+	}
+	wrapup := false
+	for _, evt := range run.pendingEvents {
+		if evt.Type != domain.EventBudgetWrapupStarted {
+			continue
+		}
+		var payload domain.BudgetWrapupPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+			t.Fatalf("wrapup payload: %v", err)
+		}
+		if payload.Dimension != dimensionStall {
+			t.Fatalf("wrapup dimension = %q, want stall", payload.Dimension)
+		}
+		wrapup = true
+	}
+	if !wrapup {
+		t.Fatal("budget.wrapup_started (stall) event missing")
+	}
+	if dangling := unresolvedToolCalls(run.Messages); len(dangling) > 0 {
+		t.Fatalf("transcript must stay paired: %+v", dangling)
+	}
+}
+
+// clockAdvancingApprover simulates a slow human: every approval takes
+// fixed time before allowing.
+type clockAdvancingApprover struct {
+	clock *domain.FakeClock
+	wait  time.Duration
+}
+
+func (a clockAdvancingApprover) RequestApproval(context.Context, domain.ApprovalRequest) (domain.Decision, error) {
+	a.clock.Advance(a.wait)
+	return domain.DecisionAllow, nil
+}
+
+// Approval waits are user thinking time, not agent activity: hours of
+// approval latency must never trip the stall watchdog (the v2 incident:
+// a 24-minute approval wait exhausted the entire wall-clock budget).
+func TestRunawayStallWatchdogIgnoresApprovalWait(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	call := domain.ToolCall{Name: "read_file", Arguments: json.RawMessage(`{"path":"a.go"}`)}
+	entries := scriptToolCalls(call, 4, "done")
+	run := NewRun(domain.NewSessionID(), domain.Limits{}, clock)
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
+		CreatedAt: clock.Now(),
+	})
+	registry := NewToolRegistry()
+	if err := registry.Register(fakes.ReadFileTool()); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop := &Loop{
+		Run: run, Model: fakes.NewFakeModel(entries...),
+		Policy:   askAllPolicy{},
+		Approver: clockAdvancingApprover{clock: clock, wait: 10 * time.Minute},
+		Registry: registry, Logger: slog.Default(),
+		Runaway: domain.RunawayConfig{
+			MaxRepeatedCalls: 100, MaxConsecutiveFailures: 100,
+			StallWarnTurns: 1000, StallTimeout: time.Minute,
+		},
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error = %v (approval waits must not stall the run)", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded (40m of approval waits must not count)", run.State.Outcome)
 	}
 }
 

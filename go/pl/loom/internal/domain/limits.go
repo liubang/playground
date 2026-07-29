@@ -47,23 +47,27 @@ func TruncateAtRuneBoundary(s string, maxBytes int) string {
 
 // Limits constrains the resources a Run can consume.
 //
-// Only genuinely scarce resources are budgeted: elapsed wall time and
-// estimated cost (docs/CONTEXT_DESIGN.md §4.4.3). Turn and tool-call counts
-// are deliberately absent — they are proxy metrics that punish legitimate
-// long work instead of catching runaway behavior; runaway behavior is
-// detected behaviorally (see RunawayConfig). Token ceilings are not budget
-// dimensions either: cumulative tokens measure cost (priced into CostUSD
-// when rates are configured), and per-request context pressure is absorbed
-// by compaction against the model's context window. MaxInputTokens survives
-// only as the fallback context-window proxy for models that do not declare
-// one, and MaxOutputTokens as the per-request output cap.
+// Only genuinely scarce resources are budgeted: cumulative session tokens
+// and estimated cost, both session-scoped counters that never reset at
+// prompt boundaries (docs/CONTEXT_DESIGN.md §4.4.3). Turn/tool-call counts
+// and elapsed wall time are deliberately absent — they are proxy metrics
+// that punish legitimate long work instead of catching runaway behavior;
+// runaway behavior (including stalls) is detected behaviorally (see
+// RunawayConfig). Per-request context pressure is absorbed by compaction
+// against the model's context window. MaxInputTokens survives only as the
+// fallback context-window proxy for models that do not declare one, and
+// MaxOutputTokens as the per-request output cap.
 type Limits struct {
-	MaxInputTokens      int64         `json:"max_input_tokens"`
-	MaxOutputTokens     int64         `json:"max_output_tokens"`
-	MaxEstimatedCostUSD float64       `json:"max_estimated_cost_usd"`
-	MaxWallTime         time.Duration `json:"max_wall_time"`
-	MaxToolOutputBytes  int64         `json:"max_tool_output_bytes"`
-	MaxArtifactBytes    int64         `json:"max_artifact_bytes"`
+	MaxInputTokens      int64   `json:"max_input_tokens"`
+	MaxOutputTokens     int64   `json:"max_output_tokens"`
+	MaxEstimatedCostUSD float64 `json:"max_estimated_cost_usd"`
+	// MaxTokens budgets the session-cumulative metered tokens
+	// (input + output) across every model call in the session. Zero
+	// means unlimited: long-horizon tasks are undisturbed unless the
+	// user explicitly opts into a resource ceiling.
+	MaxTokens          int64 `json:"max_tokens"`
+	MaxToolOutputBytes int64 `json:"max_tool_output_bytes"`
+	MaxArtifactBytes   int64 `json:"max_artifact_bytes"`
 }
 
 // DefaultLimits returns the standard limits.
@@ -72,7 +76,10 @@ func DefaultLimits() Limits {
 		MaxInputTokens:      200_000,
 		MaxOutputTokens:     16_384,
 		MaxEstimatedCostUSD: 5.0,
-		MaxWallTime:         30 * time.Minute,
+		// Unlimited by default (opt-in), matching the codex token-budget
+		// philosophy: long-horizon tasks are constrained by actual resource
+		// consumption only when the user asks for it.
+		MaxTokens: 0,
 		// 48KB (~12k tokens) bounds each ingested tool result; larger
 		// outputs are truncated head+tail with the full text preserved in
 		// the artifact store.
@@ -81,9 +88,13 @@ func DefaultLimits() Limits {
 	}
 }
 
-// Usage tracks accumulated resource consumption against Limits. Turns and
-// ToolCalls are observability counters (status bar, budget events), not
-// budget dimensions.
+// Usage tracks accumulated resource consumption against Limits.
+//
+// InputTokens/OutputTokens/CostUSD are SESSION-cumulative counters: they
+// survive prompt boundaries (inherited from the checkpoint by ContinueRun)
+// and back the budget dimensions. Turns/ToolCalls/WallTime are per-prompt
+// observability counters (status bar, budget events) reset at each prompt
+// boundary — never budget dimensions.
 type Usage struct {
 	Turns        int
 	ToolCalls    int
@@ -116,8 +127,8 @@ func (c CheckResult) SoftHas(name string) bool {
 	return false
 }
 
-// Check evaluates current usage against the budget dimensions (cost, wall
-// time). Soft = 80% of limit (the graduated-notice band, see the agent
+// Check evaluates current usage against the budget dimensions (tokens,
+// cost). Soft = 80% of limit (the graduated-notice band, see the agent
 // loop's budget notices); Hard = 100% of limit (enters the soft-landing
 // wrap-up before termination).
 func (u Usage) Check(l Limits) CheckResult {
@@ -133,7 +144,7 @@ func (u Usage) Check(l Limits) CheckResult {
 			res.SoftBreaches = append(res.SoftBreaches, name)
 		}
 	}
+	soft("tokens", float64(u.InputTokens+u.OutputTokens), float64(l.MaxTokens))
 	soft("cost_usd", u.CostUSD, l.MaxEstimatedCostUSD)
-	soft("wall_time", float64(u.WallTime), float64(l.MaxWallTime))
 	return res
 }

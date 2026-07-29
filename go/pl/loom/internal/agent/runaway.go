@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
@@ -77,7 +78,7 @@ func (l *Loop) trackToolCall(tool string, args json.RawMessage) string {
 	}
 	if _, seen := l.seenCallSigs[sig]; !seen {
 		l.seenCallSigs[sig] = struct{}{}
-		l.progressThisTurn = true
+		l.markProgress()
 	}
 	if cfg.MaxRepeatedCalls <= 0 {
 		return ""
@@ -115,6 +116,13 @@ func (l *Loop) trackExecResult(result domain.ToolResult) string {
 	return ""
 }
 
+// markProgress records a progress signal: it arms the per-turn stall
+// counter and re-anchors the stall watchdog's active-time baseline.
+func (l *Loop) markProgress() {
+	l.progressThisTurn = true
+	l.lastProgressAt = l.Run.Clock.Now()
+}
+
 // trackStall maintains the no-progress counter at the turn boundary
 // (prepare). Any progress signal from the previous turn — visible text,
 // a file change, a plan revision, or a first-seen tool signature —
@@ -122,6 +130,11 @@ func (l *Loop) trackExecResult(result domain.ToolResult) string {
 // converge reminder (never a termination: wandering is corrected, not
 // punished).
 func (l *Loop) trackStall() {
+	// Anchor the watchdog baseline at the first prepare even when the
+	// turns-based warning is disabled: the two detectors are orthogonal.
+	if l.lastProgressAt.IsZero() {
+		l.lastProgressAt = l.Run.Clock.Now()
+	}
 	cfg := l.runawayConfig()
 	if cfg.StallWarnTurns <= 0 {
 		l.progressThisTurn = false
@@ -148,5 +161,33 @@ func (l *Loop) trackStall() {
 				"[runaway warning] The last %d turns produced no visible progress (no new information, no file changes, no plan movement). Stop re-exploring and either commit to a concrete next action or report what is blocking you.",
 				cfg.StallWarnTurns), l.Run.Clock.Now()),
 		})
+	}
+}
+
+// stallActiveDuration reports the ACTIVE time since the last progress
+// signal. Suspended time (approval waits) is compensated back into the
+// baseline by awaitApproval, so user thinking time never counts
+// (docs/CONTEXT_DESIGN.md §4.4.3). A zero baseline — no prepare has run
+// yet — reports no stall.
+func (l *Loop) stallActiveDuration() time.Duration {
+	if l.lastProgressAt.IsZero() {
+		return 0
+	}
+	return max(l.Run.Clock.Since(l.lastProgressAt), 0)
+}
+
+// checkStallTimeout is the stall watchdog: when the active time since
+// the last progress signal reaches StallTimeout the run enters the
+// soft-landing wrap-up (dimension stall) instead of spinning forever.
+// Evaluated at the PhasePreparing boundary alongside the budget check —
+// long tool executions and slow model responses count as active time,
+// which the generous default (15m) accommodates.
+func (l *Loop) checkStallTimeout() {
+	cfg := l.runawayConfig()
+	if cfg.StallTimeout <= 0 || l.Run.WrapUpPending != "" {
+		return
+	}
+	if l.stallActiveDuration() >= cfg.StallTimeout {
+		l.startBudgetWrapUp([]string{dimensionStall})
 	}
 }
