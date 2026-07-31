@@ -283,6 +283,9 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	defer bootstrap.Close()
 
 	broker := runtimeevent.NewBroker()
+	// Bridge delegate_task child-run lifecycle onto the event stream so the
+	// TUI can show live sub-agent progress and the read-only drill-in view.
+	app.WireSubagentObserver(bootstrap.SubagentFactory, broker, bootstrap.Store, discard)
 	controller := app.NewController(app.ControllerConfig{
 		Bootstrap:  bootstrap,
 		Broker:     broker,
@@ -401,6 +404,9 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	if meta.WindowUtilization != nil {
 		contextCfg.Utilization = *meta.WindowUtilization
 	}
+	// Publish the model selection for delegate_task's child loops — the
+	// same mailbox the controller uses on the interactive path.
+	app.PublishSubagentSnapshot(bootstrap.SubagentModels, resolved, current, meta.Reasoning.DomainSpec(), run.SessionID)
 	loop := agent.Loop{
 		Run: run, Model: provider.ModelFor(current.Model), ModelName: current.Model, Store: bootstrap.Store,
 		Approver: &consoleApprover{}, Policy: bootstrap.Policy, Registry: bootstrap.Registry,

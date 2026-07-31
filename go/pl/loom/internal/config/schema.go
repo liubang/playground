@@ -53,6 +53,7 @@ type File struct {
 	Tracing  Tracing  `yaml:"tracing"`
 	Storage  Storage  `yaml:"storage"`
 	UI       UI       `yaml:"ui"`
+	Subagent Subagent `yaml:"subagent"`
 }
 
 // Provider describes one model endpoint and its model catalog. Type selects
@@ -189,9 +190,12 @@ type Rules struct {
 // Approval configures the baseline approval strategy
 // (docs/PERMISSION_DESIGN.md §4.3). Mode selects how calls with no rule
 // or session memory are decided: "on-request" (default: sandboxed,
-// non-dangerous commands run without prompting), "unless-trusted"
-// (legacy: every unmatched R2+ call prompts), or "never" (unattended:
-// sandboxed calls run, escalations are denied).
+// non-dangerous commands run without prompting), "unless-dangerous"
+// (blacklist mode: everything the sandbox confines — sandboxed commands
+// with network grants, workspace writes — runs without prompting; only
+// danger-listed commands, complex shells, and escalations prompt),
+// "unless-trusted" (legacy: every unmatched R2+ call prompts), or
+// "never" (unattended: sandboxed calls run, escalations are denied).
 type Approval struct {
 	Mode string `yaml:"mode"`
 }
@@ -222,4 +226,20 @@ type Storage struct {
 type UI struct {
 	Icons     string `yaml:"icons"`
 	AltScreen bool   `yaml:"alt_screen"`
+}
+
+// Subagent configures the delegate_task sub-agent
+// (docs/SUBAGENT_DESIGN.md §7). Enabled is nil-typed so "absent"
+// defaults to true while an explicit false removes the tool from the
+// registry entirely.
+type Subagent struct {
+	Enabled *bool `yaml:"enabled"`
+	// MaxTokens caps the child run's session-cumulative metered tokens;
+	// nil/0 inherits limits.max_tokens. The child's consumption is also
+	// folded back into the parent run's budget, so delegation is never a
+	// budget loophole.
+	MaxTokens *int64 `yaml:"max_tokens"`
+	// Model pins the sub-agent to a specific "provider/model" (or a bare
+	// model/provider name); empty follows the current turn's model.
+	Model string `yaml:"model"`
 }

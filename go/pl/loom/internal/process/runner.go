@@ -43,7 +43,18 @@ const (
 	defaultPATH                           = "/usr/bin:/bin:/usr/sbin:/sbin"
 )
 
-var defaultEnvAllowlist = []string{"PATH", "LANG", "LC_ALL", "TMPDIR", "HOME"}
+// defaultEnvAllowlist is the minimal environment a sandboxed command
+// sees. NODE_OPTIONS is included so skill CLIs can inject loader hooks
+// (e.g. log-path redirects) into node child processes — inside the
+// sandbox this cannot escape isolation, it only affects the command's
+// own process tree.
+var defaultEnvAllowlist = []string{"PATH", "LANG", "LC_ALL", "TMPDIR", "HOME", "NODE_OPTIONS"}
+
+// allowedEnvPrefixes pass the allowlist by prefix: skill frameworks
+// namespace their settings (SKILL_REGION, SKILL_SCENE, ...), and the
+// deny-list (KEY/TOKEN/SECRET/...) still filters anything sensitive out
+// of that namespace.
+var allowedEnvPrefixes = []string{"SKILL_"}
 
 // shellInterpreters identifies POSIX-style shell interpreters. They are
 // allowed to execute (the seatbelt sandbox provides the actual isolation),
@@ -580,8 +591,15 @@ func allowedEnvKey(key string, allowlist map[string]struct{}) bool {
 	if key == "" || strings.ContainsAny(key, "=\x00") || isDeniedEnvKey(key) {
 		return false
 	}
-	_, ok := allowlist[key]
-	return ok
+	if _, ok := allowlist[key]; ok {
+		return true
+	}
+	for _, prefix := range allowedEnvPrefixes {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func isDeniedEnvKey(key string) bool {

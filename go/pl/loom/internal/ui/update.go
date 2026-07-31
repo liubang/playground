@@ -56,6 +56,7 @@ var slashCommands = []slashCommand{
 	{name: "/resume", usage: "/resume <id>", desc: "Resume a session by ID"},
 	{name: "/clear", usage: "/clear", desc: "Clear transcript view (history retained)"},
 	{name: "/compact", usage: "/compact", desc: "Compact context before the next model call"},
+	{name: "/agent", usage: "/agent", desc: "View the sub-agent run (read-only)"},
 	{name: "/model", usage: "/model [name]", desc: "Show or switch the active model"},
 	{name: "/reasoning", usage: "/reasoning [level]", desc: "Show or adjust the reasoning level"},
 	{name: "/exit", usage: "/exit", desc: "Exit"},
@@ -137,6 +138,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next, cmd = m.handleEventsClosed()
 	case snapshotMsg:
 		next, cmd = m.handleSnapshot(msg)
+	case subagentViewMsg:
+		next, cmd = m.handleSubagentViewMsg(msg)
+	case subagentTickMsg:
+		next, cmd = m.handleSubagentTick(msg)
 	case sessionsLoadedMsg:
 		m.picker.Load(msg.sessions, msg.err)
 		next = m
@@ -327,6 +332,10 @@ func (m Model) blockRenderKey(block *TranscriptBlock) string {
 		block.Kind, block.Status, block.Title, block.Detail, block.Target,
 		block.Diff, block.Expanded, block.ReasoningExpanded, block.StreamReasoning,
 		block.PreparingTool, m.width, m.theme.NoColor, block.Content)
+	if state := block.Subagent; state != nil {
+		fmt.Fprintf(&sb, "|%s|%d|%d|%s", state.ChildID, state.ToolCalls,
+			state.InputTokens+state.OutputTokens, state.Outcome)
+	}
 	return sb.String()
 }
 
@@ -457,6 +466,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleQuestionKey(msg)
 	case ModeSearch:
 		return m.handleSearchKey(msg)
+	case ModeSubagent:
+		return m.handleSubagentKey(msg)
 	}
 
 	switch msg.Type {
@@ -479,6 +490,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyCtrlF:
 		m.enterSearch()
 		return m, nil
+	case tea.KeyCtrlG:
+		return m.openSubagentOverlay()
 	case tea.KeyCtrlY:
 		text := m.blocks.LatestFinalAssistantText()
 		if text == "" {
@@ -584,6 +597,10 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			m.syncTranscript()
 			return m, nil
 		}
+		// Clicking a delegate tool block opens its read-only sub-agent view.
+		if block := m.subagentAt(msg.Y); block != nil {
+			return m.openSubagentOverlayFor(block)
+		}
 	}
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
@@ -591,18 +608,16 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// toggleReasoningAt flips the reasoning visibility of the assistant block
-// under the clicked screen row — the same affordance as Claude Code's
-// click-to-expand "Thought for Ns". It returns false when the row holds no
-// block with hidden or shown reasoning, so the click can fall through.
-func (m *Model) toggleReasoningAt(screenY int) bool {
+// blockAtRow returns the transcript block occupying the clicked screen
+// row: the last block whose first line is at or above the click
+// (offsets ascend along the order). Nil when the row is above the
+// transcript or holds no block.
+func (m *Model) blockAtRow(screenY int) *TranscriptBlock {
 	// The header occupies screen row 0; the transcript starts at row 1.
 	contentLine := screenY - 1 + m.viewport.YOffset
 	if contentLine < 0 {
-		return false
+		return nil
 	}
-	// Offsets ascend along the order: the hit is the last block whose
-	// first line is at or above the clicked content line.
 	var hit *TranscriptBlock
 	for _, id := range m.blocks.Order {
 		offset, ok := m.blockOffsets[id]
@@ -611,6 +626,15 @@ func (m *Model) toggleReasoningAt(screenY int) bool {
 		}
 		hit = m.blocks.ByID[id]
 	}
+	return hit
+}
+
+// toggleReasoningAt flips the reasoning visibility of the assistant block
+// under the clicked screen row — the same affordance as Claude Code's
+// click-to-expand "Thought for Ns". It returns false when the row holds no
+// block with hidden or shown reasoning, so the click can fall through.
+func (m *Model) toggleReasoningAt(screenY int) bool {
+	hit := m.blockAtRow(screenY)
 	if hit == nil || hit.Kind != BlockKindAssistant || hit.StreamReasoning == "" {
 		return false
 	}
@@ -983,6 +1007,13 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		return m, m.setReasoningCmd(fields[1], cmd)
 	case "/exit":
 		return m, tea.Quit
+	case "/agent":
+		if len(fields) != 1 {
+			m.setStatus("Usage: /agent", true)
+			return m, nil
+		}
+		m.textArea.Reset()
+		return m.openSubagentOverlay()
 	case "/compact":
 		if len(fields) != 1 {
 			m.setStatus("Usage: /compact", true)
@@ -1011,6 +1042,7 @@ func (m Model) handleSessionSwitched(msg sessionSwitchedMsg) (tea.Model, tea.Cmd
 	m.pendingQuestion = nil
 	m.choiceList = nil
 	m.pendingSteers = nil
+	m.subOverlay = nil
 	m.mode = ModeChat
 	m.setStatus(msg.action.success, false)
 	return m, m.requestSnapshot()
@@ -1594,6 +1626,18 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 		m.phase = "idle"
 		m.setStatus("Turn cancelled", false)
 		m.setActivity("Ready")
+	case runtimeevent.KindSubagentProgress:
+		m.handleSubagentProgressOverlay(evt)
+	case runtimeevent.KindSubagentStarted:
+		var payload runtimeevent.SubagentStartedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			m.setActivity("Sub-agent exploring")
+		}
+	case runtimeevent.KindSubagentFinished:
+		var payload runtimeevent.SubagentFinishedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil && payload.Outcome != string(domain.OutcomeSucceeded) && payload.Outcome != "" {
+			m.setStatus(fmt.Sprintf("Sub-agent run ended: %s", payload.Outcome), payload.Outcome != string(domain.OutcomeCompletedUnverified))
+		}
 	}
 	switch evt.Kind {
 	case runtimeevent.KindUsageUpdated:

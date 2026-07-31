@@ -40,6 +40,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/edit"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/lint"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
 	"github.com/liubang/playground/go/pl/loom/internal/workspace"
@@ -103,6 +104,15 @@ type Bootstrap struct {
 	// SessionRules holds categorical run_cmd prefixes remembered from
 	// interactive "allow always" decisions; shared with Policy.Session.
 	SessionRules *permission.SessionRules
+	// SubagentModels is the delegate_task model mailbox: the controller
+	// publishes each turn's model selection, the tool reads it at
+	// execution time (docs/SUBAGENT_DESIGN.md D7). Nil when the
+	// sub-agent is disabled (subagent.enabled=false).
+	SubagentModels *subagent.ModelSource
+	// SubagentFactory is the delegate_task child-loop factory, exposed
+	// so the frontend wiring can attach a lifecycle observer
+	// (WireSubagentObserver). Nil when the sub-agent is disabled.
+	SubagentFactory *subagent.Factory
 
 	traceProvider *trace.Provider
 }
@@ -158,7 +168,10 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		return nil, fmt.Errorf("create process runner: %w", err)
 	}
 
-	// Create tool registry and register built-in tools
+	// Create tool registry and register built-in tools. The file-state
+	// book is shared by read_file (records hashes) and edit (checks
+	// drift) — including the sub-agent's read-only registry.
+	book := workspace.NewFileStateBook()
 	registry := agent.NewToolRegistry()
 	goalCell := agent.NewGoalCell()
 	planCell := agent.NewPlanCell()
@@ -167,7 +180,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	if questioner == nil {
 		questioner = domain.AutonomousQuestioner{}
 	}
-	if err := registerBuiltinTools(registry, validator, runner, artStore, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, questioner); err != nil {
+	if err := registerBuiltinTools(registry, validator, runner, artStore, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, questioner, book); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
@@ -237,28 +250,120 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		promptBuilder = prompt.NewBuilder(cfg.WorkspaceRoot, promptOpts...)
 	}
 
+	// Sub-agent delegation (docs/SUBAGENT_DESIGN.md): register
+	// delegate_task against a read-only child registry. The child's
+	// system prompt is the built-in prompt plus the researcher
+	// instructions — no skills catalog, no managed prompt.
+	var (
+		subagentModels  *subagent.ModelSource
+		subagentFactory *subagent.Factory
+	)
+	if resolved.Subagent.Enabled {
+		childRegistry, err := buildSubagentRegistry(validator, runner, artStore, book)
+		if err != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("build sub-agent registry: %w", err)
+		}
+		childLimits := resolved.Limits
+		if resolved.Subagent.MaxTokens > 0 {
+			childLimits.MaxTokens = resolved.Subagent.MaxTokens
+		}
+		subagentModels = &subagent.ModelSource{}
+		factory := &subagent.Factory{
+			Store:     store,
+			Artifacts: artStore,
+			Recorder:  traceRecorder,
+			Logger:    logger,
+			Registry:  childRegistry,
+			Prompt: prompt.NewBuilder(cfg.WorkspaceRoot,
+				prompt.WithExtraInstructions(subagent.ResearcherInstructions)),
+			Workspace:            cfg.WorkspaceRoot,
+			Limits:               childLimits,
+			Runaway:              resolved.Runaway,
+			Models:               subagentModels,
+			CostInputUSDPerMTok:  resolved.Tracing.CostInputPerMTok,
+			CostOutputUSDPerMTok: resolved.Tracing.CostOutputPerMTok,
+		}
+		delegateTool, err := subagent.NewDelegateTaskTool(factory)
+		if err != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("delegate_task: %w", err)
+		}
+		if err := registry.Register(delegateTool); err != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("register delegate_task: %w", err)
+		}
+		subagentFactory = factory
+		logger.Info("sub-agent delegation enabled")
+	}
+
 	return &Bootstrap{
-		Resolved:      resolved,
-		Current:       resolved.Default,
-		WorkspaceRoot: cfg.WorkspaceRoot,
-		Store:         store,
-		Artifact:      artStore,
-		Registry:      registry,
-		Policy:        decider,
-		PromptBuilder: promptBuilder,
-		Logger:        logger,
-		Validator:     validator,
-		Runner:        runner,
-		Version:       cfg.Version,
-		SessionEnv:    sessionEnv,
-		GoalCell:      goalCell,
-		PlanCell:      planCell,
-		SteerCell:     steerCell,
-		Questioner:    questioner,
-		Recorder:      traceRecorder,
-		SessionRules:  sessionRules,
-		traceProvider: traceProvider,
+		Resolved:        resolved,
+		Current:         resolved.Default,
+		WorkspaceRoot:   cfg.WorkspaceRoot,
+		Store:           store,
+		Artifact:        artStore,
+		Registry:        registry,
+		Policy:          decider,
+		PromptBuilder:   promptBuilder,
+		Logger:          logger,
+		Validator:       validator,
+		Runner:          runner,
+		Version:         cfg.Version,
+		SessionEnv:      sessionEnv,
+		GoalCell:        goalCell,
+		PlanCell:        planCell,
+		SteerCell:       steerCell,
+		Questioner:      questioner,
+		Recorder:        traceRecorder,
+		SessionRules:    sessionRules,
+		SubagentModels:  subagentModels,
+		SubagentFactory: subagentFactory,
+		traceProvider:   traceProvider,
 	}, nil
+}
+
+// PublishSubagentSnapshot resolves the effective child-run model
+// selection — the current turn's model, or the pinned subagent.model
+// override — and posts it to the delegate_task mailbox. Shared by the
+// interactive controller path and the headless runner so both behave
+// identically (docs/SUBAGENT_DESIGN.md D7). A pinned model uses its own
+// configured reasoning: the session reasoning override is the user's
+// per-task intent for the MAIN agent and must not leak sideways.
+func PublishSubagentSnapshot(src *subagent.ModelSource, resolved *config.ResolvedConfig, current config.ProviderModelRef, reasoning domain.ReasoningSpec, parentSession domain.SessionID) {
+	if src == nil || resolved == nil {
+		return
+	}
+	provider := resolved.ProviderByName(current.Provider)
+	if provider == nil {
+		return
+	}
+	meta, _ := resolved.ModelMeta(current)
+	contextCfg := resolved.Context
+	if meta.WindowUtilization != nil {
+		contextCfg.Utilization = *meta.WindowUtilization
+	}
+	snap := subagent.ModelSnapshot{
+		Model:         provider.ModelFor(current.Model),
+		ModelName:     current.Model,
+		Window:        agent.NewWindowModel(meta.ContextWindow, resolved.Limits.MaxInputTokens, contextCfg),
+		Reasoning:     reasoning,
+		ParentSession: parentSession,
+	}
+	if pinned := resolved.Subagent.Model; pinned != nil {
+		if pinProvider := resolved.ProviderByName(pinned.Provider); pinProvider != nil {
+			pinMeta, _ := resolved.ModelMeta(*pinned)
+			pinContextCfg := resolved.Context
+			if pinMeta.WindowUtilization != nil {
+				pinContextCfg.Utilization = *pinMeta.WindowUtilization
+			}
+			snap.Model = pinProvider.ModelFor(pinned.Model)
+			snap.ModelName = pinned.Model
+			snap.Window = agent.NewWindowModel(pinMeta.ContextWindow, resolved.Limits.MaxInputTokens, pinContextCfg)
+			snap.Reasoning = pinMeta.Reasoning.DomainSpec()
+		}
+	}
+	src.Set(snap)
 }
 
 // defaultContextWindow returns the startup model's context window (0 = the
@@ -271,11 +376,7 @@ func defaultContextWindow(resolved *config.ResolvedConfig) int64 {
 }
 
 // registerBuiltinTools registers all built-in tools with the registry.
-func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner) error {
-	// The file-state book is shared by read_file (records hashes) and edit
-	// (checks drift) to detect external modification without model-carried
-	// hashes.
-	book := workspace.NewFileStateBook()
+func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook) error {
 	tools := []struct {
 		name string
 		mk   func() (domain.Tool, error)
@@ -331,6 +432,39 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 		return fmt.Errorf("register ask_user: %w", err)
 	}
 	return nil
+}
+
+// buildSubagentRegistry assembles the read-only tool set for
+// delegate_task child runs (docs/SUBAGENT_DESIGN.md §4.2). Excluded by
+// design: edit/write (writes), run_cmd/lint (process execution),
+// update_goal/update_plan (parent-run state), ask_user (no one to
+// answer), and delegate_task itself — recursion depth stays 1 by
+// construction.
+func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook) (*agent.ToolRegistry, error) {
+	registry := agent.NewToolRegistry()
+	tools := []struct {
+		name string
+		mk   func() (domain.Tool, error)
+	}{
+		{"read_file", func() (domain.Tool, error) { return builtin.NewReadFileTool(validator, book) }},
+		{"list_dir", func() (domain.Tool, error) { return builtin.NewListDirTool(validator) }},
+		{"search", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
+		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
+		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator) }},
+		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator) }},
+		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator) }},
+		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(artStore) }},
+	}
+	for _, tt := range tools {
+		t, err := tt.mk()
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", tt.name, err)
+		}
+		if err := registry.Register(t); err != nil {
+			return nil, fmt.Errorf("register %s: %w", tt.name, err)
+		}
+	}
+	return registry, nil
 }
 
 // Close releases all resources held by the Bootstrap.

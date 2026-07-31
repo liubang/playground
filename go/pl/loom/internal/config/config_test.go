@@ -441,6 +441,50 @@ approval:
 	}
 }
 
+func TestResolveSubagentDefaultsAndOverrides(t *testing.T) {
+	// Absent: enabled, no token cap override, follows the turn's model.
+	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if !def.Subagent.Enabled || def.Subagent.MaxTokens != 0 || def.Subagent.Model != nil {
+		t.Fatalf("default subagent = %+v, want enabled/inherit/follow", def.Subagent)
+	}
+
+	cfg := loadFile(t, twoProviderYAML+`
+subagent:
+  max_tokens: 50000
+  model: openai/gpt-5
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if cfg.Subagent.MaxTokens != 50_000 {
+		t.Fatalf("subagent max_tokens = %d, want 50000", cfg.Subagent.MaxTokens)
+	}
+	if cfg.Subagent.Model == nil || cfg.Subagent.Model.String() != "openai/gpt-5" {
+		t.Fatalf("subagent model = %v, want openai/gpt-5", cfg.Subagent.Model)
+	}
+
+	disabled := loadFile(t, twoProviderYAML+`
+subagent:
+  enabled: false
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if disabled.Subagent.Enabled {
+		t.Fatal("subagent.enabled = false must resolve to disabled")
+	}
+
+	_, err := Load(writeConfig(t, twoProviderYAML+`
+subagent:
+  max_tokens: -1
+`), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if err == nil || !strings.Contains(err.Error(), "subagent.max_tokens") {
+		t.Fatalf("err = %v, want subagent.max_tokens validation error", err)
+	}
+
+	_, err = Load(writeConfig(t, twoProviderYAML+`
+subagent:
+  model: nope/ghost
+`), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if err == nil || !strings.Contains(err.Error(), "subagent.model") {
+		t.Fatalf("err = %v, want subagent.model validation error", err)
+	}
+}
+
 func TestResolveTracing(t *testing.T) {
 	// Disabled by default (no host/keys).
 	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))

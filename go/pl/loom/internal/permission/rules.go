@@ -520,16 +520,22 @@ func (s *SessionRules) Prefixes() [][]string {
 // RunCmdCall is the policy-relevant shape of a run_cmd invocation: the
 // argv plus the execution-mode flags the model declared.
 type RunCmdCall struct {
-	// Argv is [program, ...args].
+	// Argv is [program, ...args]. For a provably simple sh -c script this
+	// is the UNWRAPPED inner argv (ShellUnwrapped=true): policy — rules,
+	// danger screen, memory — classifies the real command, not the shell.
 	Argv []string
 	// Escalated marks sandbox_permissions=require_escalated (the model
-	// requests unsandboxed execution). Escalated calls ARE rule-eligible
-	// since schema v2: a rule with an unsandboxed grant can exempt them,
-	// and a lesser grant downgrades them back into a widened sandbox.
+	// requests unsandboxed execution). Escalated calls are rule-eligible
+	// ONLY for rules carrying an unsandboxed grant; a lesser grant never
+	// covers an escalation (AllowGrantCovers).
 	Escalated bool
 	// NeedsNetwork marks needs_network=true: the model declares the
 	// command requires outbound network inside the sandbox.
 	NeedsNetwork bool
+	// ShellUnwrapped reports that Argv was recovered from a simple
+	// sh -c script (process.UnwrapSimpleShell). Execution still goes
+	// through the shell; the unwrap only feeds classification.
+	ShellUnwrapped bool
 }
 
 // ParseRunCmdCall extracts the RunCmdCall from raw run_cmd arguments.
@@ -543,11 +549,17 @@ func ParseRunCmdCall(raw json.RawMessage) (RunCmdCall, bool) {
 	if err := json.Unmarshal(raw, &args); err != nil || args.Program == "" {
 		return RunCmdCall{}, false
 	}
-	return RunCmdCall{
-		Argv:         append([]string{args.Program}, args.Args...),
+	argv := append([]string{args.Program}, args.Args...)
+	info := RunCmdCall{
+		Argv:         argv,
 		Escalated:    args.SandboxPermissions == "require_escalated",
 		NeedsNetwork: args.NeedsNetwork,
-	}, true
+	}
+	if unwrapped, ok := process.UnwrapSimpleShell(argv); ok {
+		info.Argv = unwrapped
+		info.ShellUnwrapped = true
+	}
+	return info, true
 }
 
 // RunCmdArgv extracts [program, ...args] from run_cmd call arguments.
