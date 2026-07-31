@@ -19,6 +19,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2964,6 +2966,172 @@ func TestToolResultTracePreviewKeepsValidUTF8(t *testing.T) {
 	}
 	if strings.Contains(preview, "�") {
 		t.Fatalf("preview must cut at a rune boundary, not substitute: %q", preview[len(preview)-20:])
+	}
+}
+
+// slowSafeTool is a concurrent-safe test tool with a scripted execution
+// delay — the wall-clock witness for parallel batch execution.
+type slowSafeTool struct {
+	def   domain.ToolDefinition
+	delay time.Duration
+}
+
+func (t *slowSafeTool) Definition() domain.ToolDefinition { return t.def }
+func (t *slowSafeTool) ConcurrentSafe() bool              { return true }
+
+func (t *slowSafeTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+	sum := sha256.Sum256(call.Arguments)
+	return domain.PreparedCall{
+		Call: call, Definition: t.def, Risk: domain.R1,
+		ArgsHash: hex.EncodeToString(sum[:])[:16],
+	}, nil
+}
+
+func (t *slowSafeTool) Execute(_ context.Context, prepared domain.PreparedCall) domain.ToolResult {
+	started := time.Now()
+	time.Sleep(t.delay)
+	return domain.ToolResult{
+		CallID: prepared.Call.ID, Status: domain.ToolStatusSuccess,
+		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: "ok"}},
+		StartedAt:  started,
+		FinishedAt: time.Now(),
+	}
+}
+
+func TestSegmentBatchSplitsOnSafety(t *testing.T) {
+	safe := &slowSafeTool{def: newTestToolDefinition("read_file", []domain.Capability{domain.CapFSRead})}
+	unsafe := fakes.EchoTool() // FakeTool does not opt into concurrency
+	exec := func(tool domain.Tool) preparedExec {
+		return preparedExec{tool: tool}
+	}
+	segments := segmentBatch([]preparedExec{
+		exec(safe), exec(unsafe), exec(safe), exec(safe), exec(unsafe), exec(safe),
+	})
+	var sizes []int
+	for _, seg := range segments {
+		sizes = append(sizes, len(seg))
+	}
+	want := []int{1, 1, 2, 1, 1}
+	if len(sizes) != len(want) {
+		t.Fatalf("segments = %v, want %v", sizes, want)
+	}
+	for i := range want {
+		if sizes[i] != want[i] {
+			t.Fatalf("segments = %v, want %v", sizes, want)
+		}
+	}
+}
+
+func TestLoopExecutesConcurrentSafeBatchInParallel(t *testing.T) {
+	toolA := &slowSafeTool{def: newTestToolDefinition("read_file", []domain.Capability{domain.CapFSRead}), delay: 200 * time.Millisecond}
+	toolB := &slowSafeTool{def: newTestToolDefinition("list_dir", []domain.Capability{domain.CapFSRead}), delay: 200 * time.Millisecond}
+	callA := domain.ToolCall{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"a.go"}`)}
+	callB := domain.ToolCall{ID: domain.NewToolCallID(), Name: "list_dir", Arguments: json.RawMessage(`{"path":"dir_b"}`)}
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls:  []domain.ToolCall{callA, callB},
+			StopReason: domain.StopToolUse,
+			UsageIn:    100, UsageOut: 30,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+	)
+	registry := NewToolRegistry()
+	for _, tool := range []domain.Tool{toolA, toolB} {
+		if err := registry.Register(tool); err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+	}
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "read both"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{Run: run, Model: model, Registry: registry, Logger: slog.Default()}
+
+	start := time.Now()
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	elapsed := time.Since(start)
+	// Serial execution would cost >= 400ms of scripted delay.
+	if elapsed > 350*time.Millisecond {
+		t.Fatalf("two 200ms executions took %v — not parallel", elapsed)
+	}
+
+	// Results land in call order (deterministic recording), and every
+	// started event precedes every result — the parallel durability
+	// invariant.
+	var resultIDs []domain.ToolCallID
+	for _, msg := range run.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind == domain.PartToolResult && part.ToolResult != nil {
+				resultIDs = append(resultIDs, part.ToolResult.CallID)
+			}
+		}
+	}
+	if len(resultIDs) != 2 || resultIDs[0] != callA.ID || resultIDs[1] != callB.ID {
+		t.Fatalf("result order = %v, want [A B]", resultIDs)
+	}
+	lastStarted, firstResult := -1, len(run.PendingEvents())
+	for i, evt := range run.PendingEvents() {
+		switch evt.Type {
+		case domain.EventToolExecutionStarted:
+			lastStarted = i
+		case domain.EventToolResultAdded:
+			if i < firstResult {
+				firstResult = i
+			}
+		}
+	}
+	if lastStarted < 0 || firstResult == len(run.PendingEvents()) || lastStarted > firstResult {
+		t.Fatalf("started/result event order violated: lastStarted=%d firstResult=%d", lastStarted, firstResult)
+	}
+}
+
+func TestLoopMixedBatchSerializesUnsafeCalls(t *testing.T) {
+	safe := &slowSafeTool{def: newTestToolDefinition("read_file", []domain.Capability{domain.CapFSRead}), delay: 50 * time.Millisecond}
+	unsafe := fakes.EchoTool()
+	callSafe1 := domain.ToolCall{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"a"}`)}
+	callUnsafe := domain.ToolCall{ID: domain.NewToolCallID(), Name: "echo", Arguments: json.RawMessage(`{"text":"x"}`)}
+	callSafe2 := domain.ToolCall{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"b"}`)}
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls:  []domain.ToolCall{callSafe1, callUnsafe, callSafe2},
+			StopReason: domain.StopToolUse,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+	)
+	registry := NewToolRegistry()
+	for _, tool := range []domain.Tool{safe, unsafe} {
+		if err := registry.Register(tool); err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+	}
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "mixed batch"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{Run: run, Model: model, Registry: registry, Logger: slog.Default()}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var resultIDs []domain.ToolCallID
+	for _, msg := range run.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind == domain.PartToolResult && part.ToolResult != nil {
+				resultIDs = append(resultIDs, part.ToolResult.CallID)
+			}
+		}
+	}
+	if len(resultIDs) != 3 || resultIDs[0] != callSafe1.ID || resultIDs[1] != callUnsafe.ID || resultIDs[2] != callSafe2.ID {
+		t.Fatalf("mixed batch result order = %v, want strict call order", resultIDs)
 	}
 }
 

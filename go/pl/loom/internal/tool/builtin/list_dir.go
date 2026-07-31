@@ -75,6 +75,10 @@ func (t *ListDirTool) Definition() domain.ToolDefinition {
 	return t.base.def
 }
 
+// ConcurrentSafe implements domain.ConcurrentSafely: listings are
+// independent reads.
+func (t *ListDirTool) ConcurrentSafe() bool { return true }
+
 func (t *ListDirTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	args, err := decodeStrict[listDirArgs](call.Arguments)
 	if err != nil {

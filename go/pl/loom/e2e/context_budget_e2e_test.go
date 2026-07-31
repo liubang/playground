@@ -49,17 +49,31 @@ import (
 // canonical-argument fingerprints of the production tools — the surface
 // where the repeated-call detector's ArgsHash bug only showed up.
 
+// mockToolCall is one tool call in a scripted response.
+type mockToolCall struct {
+	Name string
+	Args string
+}
+
 // mockEntry is one scripted response of the mock OpenAI server.
 type mockEntry struct {
-	Text     string // assistant text (finish "stop")
-	ToolName string // single tool call (finish "tool_calls")
-	ToolArgs string // raw JSON arguments of the call
+	Text string // assistant text (finish "stop")
+	// ToolName/ToolArgs script a single tool call; Tools scripts several
+	// in one response (e.g. two parallel delegate_task calls).
+	ToolName string
+	ToolArgs string
+	Tools    []mockToolCall
 	UsageIn  int64
 	UsageOut int64
 	Delay    time.Duration
 	// Fail makes the handler answer HTTP 500 — provider-error injection
 	// (e.g. a sub-agent's model call dying mid-delegation).
 	Fail bool
+	// Match routes this entry to the first unconsumed request whose body
+	// contains the substring; empty matches anything. Entries are consumed
+	// in declaration order among the matching ones — parallel sub-agents
+	// make request order nondeterministic, content makes it stable.
+	Match string
 }
 
 // mockOpenAI replays entries as chat-completions SSE streams and records
@@ -69,13 +83,13 @@ type mockOpenAI struct {
 	server   *httptest.Server
 	mu       sync.Mutex
 	entries  []mockEntry
-	index    int
+	consumed []bool
 	requests [][]byte
 }
 
 func newMockOpenAI(t *testing.T, entries []mockEntry) *mockOpenAI {
 	t.Helper()
-	m := &mockOpenAI{t: t, entries: entries}
+	m := &mockOpenAI{t: t, entries: entries, consumed: make([]bool, len(entries))}
 	m.server = httptest.NewServer(http.HandlerFunc(m.handleChatCompletions))
 	t.Cleanup(m.server.Close)
 	return m
@@ -89,13 +103,20 @@ func (m *mockOpenAI) handleChatCompletions(w http.ResponseWriter, r *http.Reques
 	}
 	m.mu.Lock()
 	m.requests = append(m.requests, body)
-	idx := m.index
-	if idx < len(m.entries) {
-		m.index++
+	idx := -1
+	for i := range m.entries {
+		if m.consumed[i] {
+			continue
+		}
+		if m.entries[i].Match == "" || strings.Contains(string(body), m.entries[i].Match) {
+			idx = i
+			m.consumed[i] = true
+			break
+		}
 	}
 	m.mu.Unlock()
-	if idx >= len(m.entries) {
-		http.Error(w, `{"error":{"message":"mock script exhausted"}}`, http.StatusInternalServerError)
+	if idx < 0 {
+		http.Error(w, `{"error":{"message":"no matching mock entry"}}`, http.StatusInternalServerError)
 		return
 	}
 	entry := m.entries[idx]
@@ -125,14 +146,22 @@ func (m *mockOpenAI) handleChatCompletions(w http.ResponseWriter, r *http.Reques
 	if entry.Text != "" {
 		chunk(map[string]any{"content": entry.Text}, "")
 	}
+	toolCalls := entry.Tools
 	if entry.ToolName != "" {
-		chunk(map[string]any{"tool_calls": []map[string]any{{
-			"index": 0, "id": fmt.Sprintf("call_mock_%d", idx), "type": "function",
-			"function": map[string]any{"name": entry.ToolName, "arguments": entry.ToolArgs},
-		}}}, "")
+		toolCalls = []mockToolCall{{Name: entry.ToolName, Args: entry.ToolArgs}}
+	}
+	if len(toolCalls) > 0 {
+		calls := make([]map[string]any, 0, len(toolCalls))
+		for i, tc := range toolCalls {
+			calls = append(calls, map[string]any{
+				"index": i, "id": fmt.Sprintf("call_mock_%d_%d", idx, i), "type": "function",
+				"function": map[string]any{"name": tc.Name, "arguments": tc.Args},
+			})
+		}
+		chunk(map[string]any{"tool_calls": calls}, "")
 	}
 	finish := "stop"
-	if entry.ToolName != "" {
+	if len(toolCalls) > 0 {
 		finish = "tool_calls"
 	}
 	chunk(map[string]any{}, finish)

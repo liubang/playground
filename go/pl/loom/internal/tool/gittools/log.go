@@ -79,6 +79,10 @@ func (t *GitLogTool) Definition() domain.ToolDefinition {
 	return t.base.def
 }
 
+// ConcurrentSafe implements domain.ConcurrentSafely: each invocation
+// spawns an independent read-only git process.
+func (t *GitLogTool) ConcurrentSafe() bool { return true }
+
 func (t *GitLogTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	args, err := decodeStrict[gitLogArgs](call.Arguments)
 	if err != nil {
