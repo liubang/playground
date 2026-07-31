@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
@@ -177,6 +178,119 @@ func TestE2EDelegateTask(t *testing.T) {
 		!strings.Contains(edge, run.SessionID.String()) {
 		t.Fatalf("first child event = %s %s, want the delegation edge naming the parent session",
 			events[0].Type, edge)
+	}
+}
+
+// TestE2EDelegateTaskParallel verifies that two delegate_task calls in
+// ONE assistant response execute concurrently (docs/SUBAGENT_DESIGN.md
+// §11): two 400ms scripted child delays must overlap, both children get
+// their own isolated session/context, and results land in call order.
+func TestE2EDelegateTaskParallel(t *testing.T) {
+	ws := t.TempDir()
+	writeFile(t, ws, "main.go", "package main\n\nfunc main() {}\n")
+
+	mock := newMockOpenAI(t, []mockEntry{
+		{Tools: []mockToolCall{
+			{Name: "delegate_task", Args: `{"task":"调研 types 目录的设计"}`},
+			{Name: "delegate_task", Args: `{"task":"调研 codec 目录的设计"}`},
+		}, UsageIn: 100, UsageOut: 30},
+		// Serial execution would pay 800ms of scripted delay; parallel
+		// pays ~400ms. Content-based matching keeps the mapping stable
+		// while the children race.
+		{Match: "调研 types", Text: "结论：types 是值类型系统。", UsageIn: 200, UsageOut: 40, Delay: 400 * time.Millisecond},
+		{Match: "调研 codec", Text: "结论：codec 是块编解码。", UsageIn: 300, UsageOut: 50, Delay: 400 * time.Millisecond},
+		{Match: "do the task", Text: "两个调研都完成了。", UsageIn: 400, UsageOut: 60},
+	})
+	model := mock.provider(t)
+
+	childRegistry, artStore := realEnv(t, ws)
+	parentRegistry, _ := realEnv(t, ws)
+	store, err := session.OpenSQLiteStore(context.Background(), filepath.Join(ws, "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	models := &subagent.ModelSource{}
+	factory := &subagent.Factory{
+		Store: store, Artifacts: artStore, Registry: childRegistry,
+		Limits: domain.DefaultLimits(), Runaway: domain.DefaultRunawayConfig(), Models: models,
+	}
+	delegateTool, err := subagent.NewDelegateTaskTool(factory)
+	if err != nil {
+		t.Fatalf("NewDelegateTaskTool() error = %v", err)
+	}
+	if err := parentRegistry.Register(delegateTool); err != nil {
+		t.Fatalf("Register(delegate_task) error = %v", err)
+	}
+
+	run := newBudgetRun(t, domain.DefaultLimits())
+	if err := store.CreateSession(context.Background(), run.SessionID); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	models.Set(subagent.ModelSnapshot{Model: model, ModelName: "mock-model", ParentSession: run.SessionID})
+	loop := newRealLoop(run, model, parentRegistry, artStore, agent.WindowModel{})
+	loop.Store = store
+
+	start := time.Now()
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	elapsed := time.Since(start)
+	if elapsed > 700*time.Millisecond {
+		t.Fatalf("two 400ms child delays took %v — executions serialized", elapsed)
+	}
+	if got := finalAssistantText(t, run); got != "两个调研都完成了。" {
+		t.Fatalf("parent final answer = %q", got)
+	}
+
+	// Both delegations succeeded with their own conclusions, recorded in
+	// call order (types first, codec second).
+	var results []*domain.ToolResult
+	for _, msg := range run.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind == domain.PartToolResult && part.ToolResult != nil {
+				results = append(results, part.ToolResult)
+			}
+		}
+	}
+	if len(results) != 2 {
+		t.Fatalf("delegate results = %d, want 2", len(results))
+	}
+	if !strings.Contains(results[0].Content[0].Text, "结论：types") ||
+		!strings.Contains(results[1].Content[0].Text, "结论：codec") {
+		t.Fatalf("results out of call order or wrong conclusions: %q | %q",
+			results[0].Content[0].Text, results[1].Content[0].Text)
+	}
+	if results[0].Metadata["child_session_id"] == results[1].Metadata["child_session_id"] {
+		t.Fatal("parallel children must get distinct sessions")
+	}
+
+	// Context isolation holds under parallelism: neither child saw the
+	// other's task (or the parent's prompt). Child requests are identified
+	// by the absence of the parent's prompt — the parent's final request
+	// legitimately carries BOTH task strings in its own tool-call history.
+	var typesReq, codecReq string
+	for i := 1; i < 4; i++ {
+		body := mock.requestBody(t, i)
+		if strings.Contains(body, "do the task") {
+			continue // a parent request, not a child
+		}
+		if strings.Contains(body, "调研 types") {
+			typesReq = body
+		}
+		if strings.Contains(body, "调研 codec") {
+			codecReq = body
+		}
+	}
+	if typesReq == "" || codecReq == "" {
+		t.Fatal("both child requests must reach the mock")
+	}
+	if strings.Contains(typesReq, "调研 codec") || strings.Contains(codecReq, "调研 types") {
+		t.Fatal("parallel children saw each other's task — context isolation violated")
+	}
+	if strings.Contains(typesReq, "do the task") || strings.Contains(codecReq, "do the task") {
+		t.Fatal("child request leaked the parent prompt")
 	}
 }
 
