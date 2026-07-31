@@ -1221,7 +1221,9 @@ func TestLoopExecuteBudgetExhausted(t *testing.T) {
 // failure path. The run must terminate with OutcomeFailed.
 type askAllPolicy struct{}
 
-func (askAllPolicy) Evaluate(domain.PreparedCall) domain.Decision { return domain.DecisionAsk }
+func (askAllPolicy) Evaluate(domain.PreparedCall) domain.Verdict {
+	return domain.Verdict{Decision: domain.DecisionAsk, Source: "baseline"}
+}
 
 type errorApprover struct{}
 
@@ -2265,7 +2267,9 @@ func (t *mutableTool) ExecuteCount() int {
 
 type fixedPolicy domain.Decision
 
-func (p fixedPolicy) Evaluate(domain.PreparedCall) domain.Decision { return domain.Decision(p) }
+func (p fixedPolicy) Evaluate(domain.PreparedCall) domain.Verdict {
+	return domain.Verdict{Decision: domain.Decision(p), Source: "baseline"}
+}
 
 type contextCheckingStore struct {
 	base *fakes.FakeStore

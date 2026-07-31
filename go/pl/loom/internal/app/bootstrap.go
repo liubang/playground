@@ -72,7 +72,9 @@ type Bootstrap struct {
 	Store         domain.SessionStore
 	Artifact      domain.ArtifactStore
 	Registry      *agent.ToolRegistry
-	Policy        permission.Policy
+	// Policy is the assembled decider chain (docs/PERMISSION_DESIGN.md
+	// §4.4): rules → danger → session → mode-aware baseline.
+	Policy        agent.Policy
 	PromptBuilder agent.PromptBuilder
 	Logger        *slog.Logger
 	Validator     *workspace.PathValidator
@@ -172,7 +174,9 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 
 	// Session-remembered approvals ("allow always") share one store with the
 	// policy layer; declarative user/project rules load on top of the
-	// baseline per the config file's rules.* section.
+	// baseline per the config file's rules.* section. The assembled decider
+	// chain applies the approval.* baseline mode (on-request by default:
+	// sandboxed non-dangerous commands run without prompting).
 	sessionRules := permission.NewSessionRules()
 	policy := permission.DefaultPolicy()
 	policy.Session = sessionRules
@@ -182,6 +186,8 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		Project:      resolved.Rules.Project,
 		ProjectAllow: resolved.Rules.ProjectAllow,
 	}, logger)
+	decider := policy.Decider(resolved.Approval.Mode)
+	logger.Info("approval mode", "mode", resolved.Approval.Mode)
 
 	// Langfuse tracing comes from the config file's tracing.* section.
 	// Setup failure degrades to a no-op recorder — observability must never
@@ -238,7 +244,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		Store:         store,
 		Artifact:      artStore,
 		Registry:      registry,
-		Policy:        policy,
+		Policy:        decider,
 		PromptBuilder: promptBuilder,
 		Logger:        logger,
 		Validator:     validator,

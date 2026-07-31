@@ -875,21 +875,33 @@ func (m Model) approvalOverlayLines() []string {
 	}
 
 	lines = append(lines, bar)
-	alwaysRule, alwaysOK := app.RunCmdRulePreview(p.ToolName, p.Arguments)
+	alwaysRule, grant, alwaysOK := app.ApprovalRulePreview(p.ToolName, p.Arguments)
 	alwaysLabel := "Always allow (not available for this call)"
 	if alwaysOK {
-		alwaysLabel = fmt.Sprintf("Always allow `%s` in this session", alwaysRule)
+		alwaysLabel = fmt.Sprintf("Always allow `%s`", alwaysRule)
+		if summary := grant.Summary(); summary != "" {
+			alwaysLabel += fmt.Sprintf(" (%s)", summary)
+		}
 	}
-	for i, label := range []string{"Allow once", alwaysLabel, "Deny"} {
+	labels := []string{"Allow once", alwaysLabel}
+	if app.RunCmdTrustPreview(p.ToolName, p.Arguments) {
+		labels = append(labels, fmt.Sprintf("Always TRUST `%s` — runs WITHOUT sandbox", alwaysRule))
+	}
+	labels = append(labels, "Deny")
+	for i, label := range labels {
 		lines = append(lines, prefix+m.approvalOptionLine(i, label, i == 1 && !alwaysOK))
 	}
 
 	lines = append(lines, bar)
 	key := m.theme.ApprovalKey
+	quick := "y/a/n"
+	if len(labels) == 4 {
+		quick = "y/a/t/n"
+	}
 	hint := strings.Join([]string{
 		key.Render("↑/↓") + " select",
-		key.Render("1-3/Enter") + " confirm",
-		key.Render("y/a/n") + " quick",
+		key.Render(fmt.Sprintf("1-%d/Enter", len(labels))) + " confirm",
+		key.Render(quick) + " quick",
 		key.Render("Esc") + " deny",
 		key.Render("Ctrl+C") + " deny+cancel",
 	}, m.theme.Dim.Render(" · "))

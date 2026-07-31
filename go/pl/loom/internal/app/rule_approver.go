@@ -32,9 +32,11 @@ import (
 // command prefixes like ["go", "test"] — never raw full commands.
 //
 // The store lives in permission.SessionRules and is shared with the policy
-// layer, so a remembered prefix also short-circuits policy evaluation
-// directly. Only run_cmd calls are rule-eligible: other tools' approvals
-// (e.g. edit/write) stay per-call because their blast radius varies by path.
+// layer (SessionDecider), so a remembered prefix normally resolves at
+// policy evaluation time and never reaches this approver; the match here
+// is a second line of defense for approvals already in flight. Only
+// run_cmd calls are rule-eligible: other tools' approvals (e.g.
+// edit/write) stay per-call because their blast radius varies by path.
 type RuleApprover struct {
 	inner   domain.Approver
 	session *permission.SessionRules
@@ -64,29 +66,98 @@ func (r *RuleApprover) RequestApproval(ctx context.Context, req domain.ApprovalR
 type ApprovalRuleHint struct {
 	ToolName  string
 	Arguments json.RawMessage
+	// Trust selects the remembered flavor: "" remembers the derived
+	// minimal-capability grant (recommended), "unsandboxed" remembers L2
+	// full trust (only meaningful for escalated calls).
+	Trust string
 }
 
-// RememberRunCmd derives and stores a categorical prefix rule for a run_cmd
-// call, returning the stored prefix. ok=false means the call must never be
-// rule-persisted: shells, eval-form interpreters, destructive programs,
-// heredocs, and escalated (no-sandbox) runs.
-func (r *RuleApprover) RememberRunCmd(toolName string, arguments json.RawMessage) (prefix []string, ok bool) {
-	if toolName != "run_cmd" || r.session == nil {
-		return nil, false
+// TrustUnsandboxed is the ApprovalRuleHint.Trust value for L2 rememberance.
+const TrustUnsandboxed = "unsandboxed"
+
+// RememberedRule is the categorical memory created by an interactive
+// approval: an argv prefix (with grant) for run_cmd, or an exact host
+// for web_fetch. Label is the display form; Prefix/Host carry the
+// structured form for persistence (never re-split from the label).
+type RememberedRule struct {
+	Label  string
+	Prefix []string
+	Host   string
+	Grant  domain.ExecGrant
+}
+
+// RememberCall derives and stores the categorical memory for an approved
+// call. ok=false means the call must never be remembered (shells, eval
+// forms, destructive programs, heredocs, or unmappable URLs).
+func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, trust string) (RememberedRule, bool) {
+	if r.session == nil {
+		return RememberedRule{}, false
 	}
-	argv, ok := permission.RunCmdArgv(arguments)
-	if !ok {
-		return nil, false
+	switch toolName {
+	case "run_cmd":
+		info, parsed := permission.ParseRunCmdCall(arguments)
+		if !parsed {
+			return RememberedRule{}, false
+		}
+		grant := DeriveRememberGrant(info, trust)
+		prefix, remembered := r.session.RememberRunCmd(info.Argv, grant)
+		if !remembered {
+			return RememberedRule{}, false
+		}
+		return RememberedRule{Label: strings.Join(prefix, " "), Prefix: prefix, Grant: grant}, true
+	case "web_fetch":
+		host, parsed := permission.ParseWebFetchHost(arguments)
+		if !parsed {
+			return RememberedRule{}, false
+		}
+		host, remembered := r.session.RememberDomain(host)
+		if !remembered {
+			return RememberedRule{}, false
+		}
+		return RememberedRule{Label: host, Host: host}, true
 	}
-	return r.session.RememberRunCmd(argv)
+	return RememberedRule{}, false
+}
+
+// DeriveRememberGrant computes the grant a remembered rule should carry
+// for the given call and user-chosen trust flavor:
+//
+//   - trust=unsandboxed on an escalated call → L2 full trust (explicit
+//     user opt-in only).
+//   - needs_network or escalated calls → sandboxed network grant (the
+//     overwhelmingly common escalation cause).
+//   - anything else → zero grant (default sandbox).
+func DeriveRememberGrant(info permission.RunCmdCall, trust string) domain.ExecGrant {
+	switch {
+	case trust == TrustUnsandboxed && info.Escalated:
+		return domain.ExecGrant{Unsandboxed: true}
+	case info.NeedsNetwork || info.Escalated:
+		return domain.ExecGrant{NetworkFull: true}
+	default:
+		return domain.ExecGrant{}
+	}
 }
 
 func (r *RuleApprover) matches(call domain.PreparedCall) bool {
-	if call.Call.Name != "run_cmd" || r.session == nil {
+	if r.session == nil {
 		return false
 	}
-	argv, ok := permission.RunCmdArgv(call.Call.Arguments)
-	return ok && r.session.Matches(argv)
+	switch call.Call.Name {
+	case "run_cmd":
+		info, ok := permission.ParseRunCmdCall(call.Call.Arguments)
+		if !ok {
+			return false
+		}
+		grant, matched := r.session.Match(info.Argv)
+		// A remembered grant only auto-approves what it covers: a plain
+		// (zero-grant) memory must not silently approve an escalated or
+		// needs_network request — the user approved the sandboxed form.
+		return matched && permission.AllowGrantCovers(grant, info)
+	case "web_fetch":
+		host, ok := permission.ParseWebFetchHost(call.Call.Arguments)
+		return ok && r.session.MatchDomain(host)
+	}
+	return false
 }
 
 // RunCmdRuleCount reports how many run_cmd prefixes are remembered (for
@@ -98,21 +169,44 @@ func (r *RuleApprover) RunCmdRuleCount() int {
 	return len(r.session.Prefixes())
 }
 
-// RunCmdRulePreview renders the categorical rule that "allow always" would
-// create for a run_cmd call (e.g. "go test"), for display in the approval
-// overlay. ok=false means the call cannot be remembered (shell, eval-form
-// interpreter, heredoc, escalation, or a non-run_cmd tool).
-func RunCmdRulePreview(toolName string, arguments json.RawMessage) (string, bool) {
+// ApprovalRulePreview renders the categorical rule that "allow always"
+// would create for a call, plus the grant it would carry, for display in
+// the approval overlay: an argv prefix ("go test") for run_cmd, an exact
+// host ("www.weather.com.cn") for web_fetch. ok=false means the call
+// cannot be remembered.
+func ApprovalRulePreview(toolName string, arguments json.RawMessage) (preview string, grant domain.ExecGrant, ok bool) {
+	switch toolName {
+	case "run_cmd":
+		info, parsed := permission.ParseRunCmdCall(arguments)
+		if !parsed {
+			return "", domain.ExecGrant{}, false
+		}
+		prefix, ok := permission.DeriveRunCmdPrefix(info.Argv)
+		if !ok {
+			return "", domain.ExecGrant{}, false
+		}
+		return strings.Join(prefix, " "), DeriveRememberGrant(info, ""), true
+	case "web_fetch":
+		host, parsed := permission.ParseWebFetchHost(arguments)
+		if !parsed {
+			return "", domain.ExecGrant{}, false
+		}
+		return host, domain.ExecGrant{}, true
+	}
+	return "", domain.ExecGrant{}, false
+}
+
+// RunCmdTrustPreview reports whether the approval overlay should offer the
+// "always trust (unsandboxed)" option: escalated run_cmd calls whose
+// prefix is derivable.
+func RunCmdTrustPreview(toolName string, arguments json.RawMessage) bool {
 	if toolName != "run_cmd" {
-		return "", false
+		return false
 	}
-	argv, ok := permission.RunCmdArgv(arguments)
-	if !ok {
-		return "", false
+	info, ok := permission.ParseRunCmdCall(arguments)
+	if !ok || !info.Escalated {
+		return false
 	}
-	prefix, ok := permission.DeriveRunCmdPrefix(argv)
-	if !ok {
-		return "", false
-	}
-	return strings.Join(prefix, " "), true
+	_, ok = permission.DeriveRunCmdPrefix(info.Argv)
+	return ok
 }

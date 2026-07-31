@@ -20,10 +20,14 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "permission_lib",
     srcs = [
+        "danger.go",
+        "decider.go",
+        "domain_rules.go",
         "policy.go",
         "policy_trust_other.go",
         "policy_trust_unix.go",
         "rules.go",
+        "verdict.go",
     ],
     embedsrcs = ["builtin.json"],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/permission",
@@ -37,6 +41,8 @@ go_library(
 go_test(
     name = "permission_test",
     srcs = [
+        "domain_rules_test.go",
+        "grant_test.go",
         "policy_test.go",
         "rules_test.go",
     ],

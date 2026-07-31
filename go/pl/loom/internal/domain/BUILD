@@ -29,6 +29,7 @@ go_library(
         "lifecycle.go",
         "limits.go",
         "message.go",
+        "permission.go",
         "plan.go",
         "question.go",
         "tool.go",

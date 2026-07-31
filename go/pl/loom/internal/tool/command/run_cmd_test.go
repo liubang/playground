@@ -661,6 +661,13 @@ func TestRunCmdEscalatedBypassesDefaultSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
+	// The baseline stamps the unsandboxed grant on the escalated ask it
+	// approves; without it (zero grant), even a require_escalated call
+	// runs in the DEFAULT sandbox (L0 must never silently become L2).
+	if result := tool.Execute(context.Background(), prepared); result.Status != domain.ToolStatusError {
+		t.Fatalf("zero-grant escalated status = %s, want error (downgraded to the unavailable default sandbox)", result.Status)
+	}
+	prepared.Grant = domain.ExecGrant{Unsandboxed: true}
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("escalated Execute() status = %s, want success: %+v", result.Status, result.Error)
@@ -670,6 +677,83 @@ func TestRunCmdEscalatedBypassesDefaultSandbox(t *testing.T) {
 	if data, err := os.ReadFile(filepath.Join(root, "esc.txt")); err != nil || string(data) != "ok" {
 		t.Fatalf("escalated command did not run outside the sandbox: data=%q err=%v", data, err)
 	}
+}
+
+func TestRunCmdNeedsNetworkValidation(t *testing.T) {
+	validator, _ := newValidator(t)
+	python := ensurePython3(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: fixedLookPath(python),
+	})
+	tool := newTool(t, validator, runner)
+
+	t.Run("needs_network stays R2 and is marked in the approval desc", func(t *testing.T) {
+		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Program:      stringPtr("talos"),
+			Args:         &[]string{"query", "submit"},
+			NeedsNetwork: boolPtr(true),
+		}))
+		if err != nil {
+			t.Fatalf("Prepare() error = %v", err)
+		}
+		if prepared.Risk != domain.R2 {
+			t.Fatalf("needs_network risk = %v, want R2 (sandboxed path)", prepared.Risk)
+		}
+		if !strings.Contains(prepared.ApprovalDesc, "network=requested-in-sandbox") {
+			t.Fatalf("approval desc missing the network request marker: %q", prepared.ApprovalDesc)
+		}
+	})
+
+	t.Run("needs_network conflicts with require_escalated", func(t *testing.T) {
+		_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Program:            stringPtr("go"),
+			SandboxPermissions: stringPtr("require_escalated"),
+			NeedsNetwork:       boolPtr(true),
+			Justification:      stringPtr("x"),
+		}))
+		assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+	})
+}
+
+// TestRunCmdGrantExecutionModes proves the verdict grant drives sandbox
+// selection (PERMISSION_DESIGN §3.2): an unsandboxed grant executes even
+// when the default sandbox is unavailable, while a network grant widening
+// an unsupported sandbox stays fail-closed.
+func TestRunCmdGrantExecutionModes(t *testing.T) {
+	validator, _ := newValidator(t)
+	python := ensurePython3(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.UnsupportedSandbox{Reason: "no OS sandbox in this test"},
+		LookPath: fixedLookPath(python),
+	})
+	tool := newTool(t, validator, runner)
+	prepare := func() domain.PreparedCall {
+		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Program: stringPtr("python3"),
+			Args:    &[]string{"-c", "print('x')"},
+		}))
+		if err != nil {
+			t.Fatalf("Prepare() error = %v", err)
+		}
+		return prepared
+	}
+
+	t.Run("unsandboxed grant bypasses the unavailable default sandbox", func(t *testing.T) {
+		prepared := prepare()
+		prepared.Grant = domain.ExecGrant{Unsandboxed: true}
+		if result := tool.Execute(context.Background(), prepared); result.Status != domain.ToolStatusSuccess {
+			t.Fatalf("status = %s, want success: %+v", result.Status, result.Error)
+		}
+	})
+
+	t.Run("network grant cannot widen an unsupported sandbox", func(t *testing.T) {
+		prepared := prepare()
+		prepared.Grant = domain.ExecGrant{NetworkFull: true}
+		if result := tool.Execute(context.Background(), prepared); result.Status != domain.ToolStatusError {
+			t.Fatalf("status = %s, want error (fail-closed preserved)", result.Status)
+		}
+	})
 }
 
 func TestSandboxGuidanceNote(t *testing.T) {
@@ -885,7 +969,9 @@ func mustMkdirAllPath(t *testing.T, path string) string {
 }
 
 func stringPtr(value string) *string { return &value }
-func int64Ptr(value int64) *int64    { return &value }
+
+func boolPtr(value bool) *bool    { return &value }
+func int64Ptr(value int64) *int64 { return &value }
 
 func TestRunCmdToolApprovalDescShowsDangerousPayloadAndTruncation(t *testing.T) {
 	python := ensurePython3(t)

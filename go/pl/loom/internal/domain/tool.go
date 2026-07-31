@@ -200,6 +200,13 @@ type PreparedCall struct {
 	WritePaths   []string // paths this call will write
 	ArgsHash     string   // hash of arguments for approval binding
 	Recovery     *RecoverySpec
+	// Grant carries the execution capabilities the policy layer granted
+	// this call (docs/PERMISSION_DESIGN.md). It is assigned by the agent
+	// loop AFTER Prepare and HMAC signing (policy evaluation happens
+	// between the two), so it is deliberately outside the signed
+	// fingerprint: grants are decided by the policy, never by the model.
+	// Zero value = the default sandbox.
+	Grant ExecGrant `json:"grant,omitempty"`
 }
 
 // RecoverySpec describes durable evidence that can reconcile an interrupted
