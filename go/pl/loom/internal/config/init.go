@@ -246,6 +246,11 @@ ui:
                                 # 终端字体未打 Nerd Font 补丁时选 plain；
                                 # TERM=dumb 时自动降级 plain。
   alt_screen: false             # true 使用终端备用屏幕（退出后恢复滚屏，默认 false）
+  # keymap:                     # 快捷键覆盖（docs/VIM_UI_DESIGN.md §5.2）：上下文 → 动作 → 键。
+  #   chat:                     #   非法条目被忽略并在状态栏给出告警
+  #     search_transcript: "ctrl+s"
+  #   picker:
+  #     close: "ctrl+x"
 
 # ------------------------------------------------------------------------------
 # 子代理（delegate_task 工具，docs/SUBAGENT_DESIGN.md §7）

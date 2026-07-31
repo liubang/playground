@@ -17,7 +17,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
@@ -986,54 +985,86 @@ func TestAbbreviateHome(t *testing.T) {
 	}
 }
 
-func TestSessionPickerSelection(t *testing.T) {
+func TestSessionFinderSelection(t *testing.T) {
 	first, second := domain.NewSessionID(), domain.NewSessionID()
-	picker := NewSessionPicker()
-	picker.Load([]app.SessionSummary{{ID: first}, {ID: second}}, nil)
-	picker.MoveDown()
-	if got := picker.Selected(); got != second {
-		t.Fatalf("Selected() = %s, want %s", got, second)
+	host := Model{theme: NoColorTheme()}
+	finder := host.NewSessionFinder()
+	finder.Load(sessionFinderItems([]app.SessionSummary{{ID: first}, {ID: second}}), nil)
+	finder.MoveDown()
+	if got := finder.Selected(); got == nil || got.ID != second {
+		t.Fatalf("Selected() = %+v, want %s", got, second)
 	}
 }
 
-func TestSessionPickerJKNavigation(t *testing.T) {
+func TestSessionFinderModalNavigation(t *testing.T) {
 	ctrl := newTestController(t)
 	m := NewModel(ctrl, "test/model-a", "/ws")
 	m.mode = ModeSessionPicker
-	m.picker = NewSessionPicker()
-	m.picker.Load([]app.SessionSummary{{ID: domain.NewSessionID()}, {ID: domain.NewSessionID()}}, nil)
+	m.sessionFinder = m.NewSessionFinder()
+	first, second := domain.NewSessionID(), domain.NewSessionID()
+	m.sessionFinder.Load(sessionFinderItems([]app.SessionSummary{{ID: first}, {ID: second}}), nil)
 
+	// Insert mode (the default): j types into the fuzzy filter instead of
+	// navigating.
 	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	m = updatedModel.(Model)
 	if cmd != nil {
-		t.Fatal("navigation should not spawn a command")
+		t.Fatal("typing should not spawn a command")
 	}
-	if m.picker.Cursor != 1 {
-		t.Fatalf("cursor after j = %d, want 1", m.picker.Cursor)
+	if got := m.sessionFinder.Query(); got != "j" {
+		t.Fatalf("query = %q, want j (insert mode types into the filter)", got)
+	}
+
+	// Esc enters normal mode; j/k navigate there.
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updatedModel.(Model)
+	if !m.sessionFinder.Normal() {
+		t.Fatal("Esc should enter normal mode")
+	}
+	// The filter is still active; clear it so both rows are visible.
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	m = updatedModel.(Model)
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = updatedModel.(Model)
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updatedModel.(Model)
+
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updatedModel.(Model)
+	if got := m.sessionFinder.Selected(); got == nil || got.ID != second {
+		t.Fatalf("Selected() after j = %+v, want %s", got, second)
 	}
 	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	m = updatedModel.(Model)
-	if m.picker.Cursor != 0 {
-		t.Fatalf("cursor after k = %d, want 0", m.picker.Cursor)
+	if got := m.sessionFinder.Selected(); got == nil || got.ID != first {
+		t.Fatalf("Selected() after k = %+v, want %s", got, first)
+	}
+
+	// q closes the picker from normal mode.
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = updatedModel.(Model)
+	if m.mode != ModeChat {
+		t.Fatalf("mode after q = %s, want chat", m.mode)
 	}
 }
 
-func TestSessionPickerWindowsLongLists(t *testing.T) {
-	picker := NewSessionPicker()
+func TestSessionFinderWindowsLongLists(t *testing.T) {
+	host := Model{theme: NoColorTheme()}
+	finder := host.NewSessionFinder()
 	var summaries []app.SessionSummary
 	for i := 0; i < 20; i++ {
 		summaries = append(summaries, app.SessionSummary{ID: domain.NewSessionID(), UpdatedAt: time.Now()})
 	}
-	picker.Load(summaries, nil)
+	finder.Load(sessionFinderItems(summaries), nil)
 	for i := 0; i < 15; i++ {
-		picker.MoveDown()
+		finder.MoveDown()
 	}
-	rendered := picker.Render(80, 8)
+	rendered := finder.Render(80, 8)
 	if !strings.Contains(rendered, "↑ more") {
-		t.Fatalf("windowed picker missing upward hint:\n%s", rendered)
+		t.Fatalf("windowed finder missing upward hint:\n%s", rendered)
 	}
 	if strings.Count(rendered, "sess_") > 10 {
-		t.Fatalf("windowed picker rendered too many rows:\n%s", rendered)
+		t.Fatalf("windowed finder rendered too many rows:\n%s", rendered)
 	}
 }
 
@@ -1209,8 +1240,8 @@ func TestSlashCommandReasoning(t *testing.T) {
 	if got := m.textArea.Value(); got != "" {
 		t.Fatalf("bare /reasoning should clear the draft, got %q", got)
 	}
-	if m.reasoningPicker == nil || m.reasoningPicker.Selected().Arg != "default" {
-		t.Fatalf("picker cursor = %+v, want default", m.reasoningPicker.Selected())
+	if m.reasoningFinder == nil || m.reasoningFinder.Selected().Arg != "default" {
+		t.Fatalf("picker cursor = %+v, want default", m.reasoningFinder.Selected())
 	}
 
 	// Set an override: the ack arrives as a reasoningChangedMsg and the
@@ -1430,7 +1461,7 @@ func TestReasoningPickerFlow(t *testing.T) {
 		updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		m = updatedModel.(Model)
 	}
-	if got := m.reasoningPicker.Selected().Arg; got != "high" {
+	if got := m.reasoningFinder.Selected().Arg; got != "high" {
 		t.Fatalf("cursor = %q, want high", got)
 	}
 
@@ -1458,7 +1489,7 @@ func TestReasoningPickerFlow(t *testing.T) {
 	// active dial is a no-op ack instead of a controller round-trip.
 	updated, _ = m.handleSlashCommand("/reasoning")
 	m = updated.(Model)
-	if got := m.reasoningPicker.Selected().Arg; got != "high" {
+	if got := m.reasoningFinder.Selected().Arg; got != "high" {
 		t.Fatalf("reopened cursor = %q, want high", got)
 	}
 	updatedModel, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1473,13 +1504,19 @@ func TestReasoningPickerFlow(t *testing.T) {
 		t.Fatalf("dial = %q after unchanged ack, want high", m.reasoningEffort)
 	}
 
-	// Esc cancels back to chat without touching the dial.
+	// Esc steps out one level at a time (insert → normal → closed) and
+	// never touches the dial.
 	updated, _ = m.handleSlashCommand("/reasoning")
 	m = updated.(Model)
 	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updatedModel.(Model)
+	if m.mode != ModeReasoningPicker || !m.reasoningFinder.Normal() {
+		t.Fatalf("first Esc should enter normal mode, mode = %s", m.mode)
+	}
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updatedModel.(Model)
 	if m.mode != ModeChat {
-		t.Fatalf("mode = %s, want chat after Esc", m.mode)
+		t.Fatalf("mode = %s, want chat after second Esc", m.mode)
 	}
 	if m.reasoningEffort != "high" {
 		t.Fatalf("dial = %q after Esc, want high", m.reasoningEffort)
@@ -1503,20 +1540,26 @@ func TestSlashCommandModelOpensPicker(t *testing.T) {
 	if m.mode != ModeModelPicker {
 		t.Fatalf("mode = %q, want model_picker", m.mode)
 	}
-	if m.modelPicker == nil || m.modelPicker.Cursor != 0 {
-		t.Fatalf("picker cursor = %v, want 0 (active model)", m.modelPicker)
+	if m.modelFinder == nil || m.modelFinder.Selected() == nil ||
+		m.modelFinder.Selected().Ref() != "test/model-a" {
+		t.Fatalf("picker cursor = %+v, want the active model", m.modelFinder.Selected())
 	}
 
-	// j/k navigate vim-style.
-	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	// j/k navigate in normal mode (Esc enters it from insert mode).
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updatedModel.(Model)
-	if m.modelPicker.Cursor != 1 {
-		t.Fatalf("cursor after j = %d, want 1", m.modelPicker.Cursor)
+	if !m.modelFinder.Normal() {
+		t.Fatal("Esc should enter normal mode")
+	}
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updatedModel.(Model)
+	if got := m.modelFinder.Selected().Ref(); got != "test/model-b" {
+		t.Fatalf("selected after j = %q, want test/model-b", got)
 	}
 	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	m = updatedModel.(Model)
-	if m.modelPicker.Cursor != 0 {
-		t.Fatalf("cursor after k = %d, want 0", m.modelPicker.Cursor)
+	if got := m.modelFinder.Selected().Ref(); got != "test/model-a" {
+		t.Fatalf("selected after k = %q, want test/model-a", got)
 	}
 
 	// Enter on the second row switches the model.
@@ -1556,9 +1599,10 @@ func TestModelPickerEscCancels(t *testing.T) {
 	})
 	updated, _ := m.handleSlashCommand("/model")
 	m = updated.(Model)
-	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	// Esc steps out one level at a time: insert → normal → closed.
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updatedModel.(Model)
-	updatedModel, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updatedModel.(Model)
 	if cmd != nil {
 		t.Fatal("Esc should not spawn a command")
@@ -1848,9 +1892,9 @@ func TestApprovalNumberKeysAndDisabledAlways(t *testing.T) {
 		t.Fatal("number key 2 must resolve always-allow for a rule-eligible call")
 	}
 
-// For a compound shell call the rule is not derivable: "2", "a" and
-// Enter on the always option are all inert, and the overlay stays up.
-m = newApprovalModel("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","echo hi | cat"]}`))
+	// For a compound shell call the rule is not derivable: "2", "a" and
+	// Enter on the always option are all inert, and the overlay stays up.
+	m = newApprovalModel("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","echo hi | cat"]}`))
 	m.approvalCursor = 1
 	for _, key := range []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune{'2'}},
@@ -2112,7 +2156,7 @@ func TestRuntimeEventsFromOtherSessionsAreIgnored(t *testing.T) {
 func TestToggleReasoningAtClick(t *testing.T) {
 	m := Model{theme: NoColorTheme(), width: 80, height: 24, mode: ModeChat}
 	m.blocks = NewBlockIndex()
-	m.viewport = viewport.New(80, 10)
+	m.viewport = lineView{Width: 80, Height: 10}
 	m.blocks.Add(&TranscriptBlock{ID: "u1", Kind: BlockKindUser, Title: "You", Content: "hello", Done: true})
 	m.blocks.Add(&TranscriptBlock{ID: "a1", Kind: BlockKindAssistant, Title: "Assistant", Content: "answer one", StreamReasoning: "chain of thought", Done: true})
 	m.blocks.Add(&TranscriptBlock{ID: "a2", Kind: BlockKindAssistant, Title: "Assistant", Content: "answer two", Done: true})
@@ -2149,7 +2193,7 @@ func TestToggleReasoningAtClick(t *testing.T) {
 func TestSyncTranscriptSeparatesSectionsButPacksToolRuns(t *testing.T) {
 	m := Model{theme: NoColorTheme(), width: 80, height: 30}
 	m.blocks = NewBlockIndex()
-	m.viewport = viewport.New(80, 20)
+	m.viewport = lineView{Width: 80, Height: 20}
 	m.blocks.Add(&TranscriptBlock{ID: "u1", Kind: BlockKindUser, Title: "You", Content: "q", Done: true})
 	m.blocks.Add(&TranscriptBlock{ID: "a1", Kind: BlockKindAssistant, Title: "Assistant", Content: "lead in", Done: true})
 	m.blocks.Add(&TranscriptBlock{ID: "t1", Kind: BlockKindTool, Title: "run_cmd", Status: "success", Done: true})

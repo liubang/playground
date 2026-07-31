@@ -226,6 +226,11 @@ type Storage struct {
 type UI struct {
 	Icons     string `yaml:"icons"`
 	AltScreen bool   `yaml:"alt_screen"`
+	// Keymap overrides default key bindings (docs/VIM_UI_DESIGN.md §5.2):
+	// context → action → replacement key, e.g.
+	// {chat: {search_transcript: "ctrl+s"}}. Unknown contexts/actions
+	// and conflicting keys are ignored with a status-bar warning.
+	Keymap map[string]map[string]string `yaml:"keymap"`
 }
 
 // Subagent configures the delegate_task sub-agent
