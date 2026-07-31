@@ -23,102 +23,54 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/app"
-	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-// SessionPicker manages the state for picking a session to resume.
-type SessionPicker struct {
-	Summaries []app.SessionSummary
-	Cursor    int
-	Loaded    bool
-	Error     error
-}
+// This file wires the three picker modes onto the generic Finder
+// component (docs/VIM_UI_DESIGN.md §6.4): each picker is a Finder with a
+// source-specific item mapping and preview pane. The Finder itself lives
+// in finder.go; only the data shaping lives here.
 
-// NewSessionPicker creates a new session picker.
-func NewSessionPicker() *SessionPicker {
-	return &SessionPicker{
-		Cursor: 0,
-		Loaded: false,
-	}
-}
-
-// Load loads the session summaries from the store.
-func (p *SessionPicker) Load(summaries []app.SessionSummary, err error) {
-	if err != nil {
-		p.Error = err
-		p.Loaded = true
-		return
-	}
-	p.Summaries = summaries
-	p.Loaded = true
-}
-
-// MoveUp moves the cursor up.
-func (p *SessionPicker) MoveUp() {
-	if p.Cursor > 0 {
-		p.Cursor--
+// finderStyles derives the picker styling from the active theme.
+func (m Model) finderStyles() FinderStyles {
+	return FinderStyles{
+		Cursor: m.theme.UserLabel,
+		Hint:   m.theme.Dim,
+		Badge:  m.theme.UserLabel,
+		Input:  m.theme.DialogLabel,
+		Footer: m.theme.Dim,
 	}
 }
 
-// MoveDown moves the cursor down.
-func (p *SessionPicker) MoveDown() {
-	if p.Cursor < len(p.Summaries)-1 {
-		p.Cursor++
-	}
+// --- sessions ---
+
+// NewSessionFinder creates the /sessions picker in its loading state;
+// the items arrive via sessionsLoadedMsg → Load.
+func (m Model) NewSessionFinder() *Finder[app.SessionSummary] {
+	return NewLoadingFinder[app.SessionSummary]("Sessions", sessionPreview, m.finderStyles())
 }
 
-// Selected returns the currently selected session ID, or zero if none.
-func (p *SessionPicker) Selected() domain.SessionID {
-	if p.Cursor < 0 || p.Cursor >= len(p.Summaries) {
-		return domain.SessionID{}
+// sessionFinderItems maps session summaries onto finder rows: the short
+// ID filters and displays, version and age ride along as the hint.
+func sessionFinderItems(summaries []app.SessionSummary) []FinderItem[app.SessionSummary] {
+	items := make([]FinderItem[app.SessionSummary], 0, len(summaries))
+	for _, s := range summaries {
+		items = append(items, FinderItem[app.SessionSummary]{
+			Value: s,
+			Text:  s.ID.String(),
+			Hint:  fmt.Sprintf("v%d · %s", s.Version, formatTimeAgo(s.UpdatedAt)),
+		})
 	}
-	return p.Summaries[p.Cursor].ID
+	return items
 }
 
-// Render renders the session picker as a string for viewport display. When
-// height is positive, the list is windowed around the cursor so sessions
-// beyond one screen remain reachable.
-func (p *SessionPicker) Render(width, height int) string {
-	if !p.Loaded {
-		return "Loading sessions..."
-	}
-	if p.Error != nil {
-		return fmt.Sprintf("Error loading sessions: %v", p.Error)
-	}
-	if len(p.Summaries) == 0 {
-		return "No existing sessions found.\nPress Esc to go back."
-	}
-
-	start, end := pickerWindow(p.Cursor, len(p.Summaries), height)
-
-	var b strings.Builder
-	b.WriteString("Select a session to resume:\n\n")
-	if start > 0 {
-		b.WriteString("↑ more\n")
-	}
-
-	for i := start; i < end; i++ {
-		s := p.Summaries[i]
-		prefix := "  "
-		if i == p.Cursor {
-			prefix = "▶ "
-		}
-		line := fmt.Sprintf("%s%s  (v%d, updated %s)",
-			prefix, s.ID, s.Version,
-			formatTimeAgo(s.UpdatedAt))
-		if width > 0 {
-			line = truncateDisplayWidth(line, width)
-		}
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-	if end < len(p.Summaries) {
-		b.WriteString("↓ more\n")
-	}
-
-	b.WriteString("\nj/k or ↑/↓ = move   Enter = select   Esc = back")
-	return b.String()
+func sessionPreview(s app.SessionSummary) string {
+	return fmt.Sprintf("ID:       %s\nVersion:  %d\nCreated:  %s\nUpdated:  %s",
+		s.ID, s.Version,
+		s.CreatedAt.Format("2006-01-02 15:04:05"),
+		s.UpdatedAt.Format("2006-01-02 15:04:05"))
 }
+
+// --- models ---
 
 // ModelOption is one selectable provider/model entry in the /model picker.
 // The catalog is static for the process lifetime (the config file loads
@@ -133,95 +85,45 @@ type ModelOption struct {
 // Ref returns the canonical "provider/model" reference accepted by /model.
 func (o ModelOption) Ref() string { return o.Provider + "/" + o.Name }
 
-// ModelPicker manages the state for picking a model. Unlike SessionPicker
-// there is no loading or error state: the catalog is known up front.
-type ModelPicker struct {
-	Options []ModelOption
-	Cursor  int
-	current string // ref of the active model, marked in the list
-}
-
-// NewModelPicker creates a picker with the cursor on the active model, so
-// the common "open and confirm" flow costs zero keystrokes.
-func NewModelPicker(options []ModelOption, currentRef string) *ModelPicker {
-	p := &ModelPicker{Options: options, current: currentRef}
+// NewModelFinder creates the /model picker with the cursor on the active
+// model, so the common "open and confirm" flow costs zero keystrokes.
+func (m Model) NewModelFinder(options []ModelOption, currentRef string) *Finder[ModelOption] {
+	items := make([]FinderItem[ModelOption], 0, len(options))
+	cursorAt := 0
 	for i, o := range options {
+		badge := ""
 		if o.Ref() == currentRef {
-			p.Cursor = i
-			break
+			badge = "●"
+			cursorAt = i
 		}
+		items = append(items, FinderItem[ModelOption]{
+			Value: o,
+			Text:  o.Ref(),
+			Hint:  modelOptionMeta(o),
+			Badge: badge,
+		})
 	}
-	return p
+	return NewFinder(FinderConfig[ModelOption]{
+		Title:    "Models",
+		Items:    items,
+		Preview:  modelPreview,
+		CursorAt: cursorAt,
+		Styles:   m.finderStyles(),
+	})
 }
 
-// MoveUp moves the cursor up.
-func (p *ModelPicker) MoveUp() {
-	if p.Cursor > 0 {
-		p.Cursor--
+func modelPreview(o ModelOption) string {
+	lines := []string{
+		"Provider: " + o.Provider,
+		"Model:    " + o.Name,
 	}
-}
-
-// MoveDown moves the cursor down.
-func (p *ModelPicker) MoveDown() {
-	if p.Cursor < len(p.Options)-1 {
-		p.Cursor++
+	if o.ContextWindow > 0 {
+		lines = append(lines, fmt.Sprintf("Context:  %s tokens", formatTokens(o.ContextWindow)))
 	}
-}
-
-// Selected returns the highlighted option, or nil when the list is empty.
-func (p *ModelPicker) Selected() *ModelOption {
-	if p.Cursor < 0 || p.Cursor >= len(p.Options) {
-		return nil
+	if o.WireAPI != "" {
+		lines = append(lines, "Wire API: "+o.WireAPI)
 	}
-	return &p.Options[p.Cursor]
-}
-
-// Render renders the model picker as a string for viewport display,
-// windowed around the cursor like the session picker.
-func (p *ModelPicker) Render(width, height int) string {
-	if len(p.Options) == 0 {
-		return "No models configured.\nPress Esc to go back."
-	}
-
-	start, end := pickerWindow(p.Cursor, len(p.Options), height)
-
-	// Align the metadata column to the widest reference in the whole list
-	// (not just the window) so columns stay put while scrolling.
-	refWidth := 0
-	for _, o := range p.Options {
-		if n := len(o.Ref()); n > refWidth {
-			refWidth = n
-		}
-	}
-
-	var b strings.Builder
-	b.WriteString("Select a model:\n\n")
-	if start > 0 {
-		b.WriteString("↑ more\n")
-	}
-	for i := start; i < end; i++ {
-		o := p.Options[i]
-		prefix := "  "
-		if i == p.Cursor {
-			prefix = "▶ "
-		}
-		marker := ""
-		if o.Ref() == p.current {
-			marker = " ●"
-		}
-		line := fmt.Sprintf("%s%-*s %s%s", prefix, refWidth, o.Ref(), modelOptionMeta(o), marker)
-		if width > 0 {
-			line = truncateDisplayWidth(line, width)
-		}
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-	if end < len(p.Options) {
-		b.WriteString("↓ more\n")
-	}
-
-	b.WriteString("\nj/k or ↑/↓ = move   Enter = select   Esc = cancel")
-	return b.String()
+	return strings.Join(lines, "\n")
 }
 
 // modelOptionMeta renders the trailing metadata column: "200k ctx ·
@@ -236,6 +138,8 @@ func modelOptionMeta(o ModelOption) string {
 	}
 	return strings.Join(parts, " · ")
 }
+
+// --- reasoning ---
 
 // ReasoningLevel is one selectable dial in the /reasoning picker. Arg is
 // the SetReasoning argument.
@@ -255,83 +159,36 @@ var ReasoningLevels = []ReasoningLevel{
 	{Arg: "high", Label: "high", Desc: "deep thinking (≈2/3 of the output budget)"},
 }
 
-// ReasoningPicker manages the state for picking a reasoning level. Like the
-// model picker there is no loading state: the catalog is fixed.
-type ReasoningPicker struct {
-	Cursor int
-	// currentArg is the level Arg currently in effect, marked with ●.
-	currentArg string
-}
-
-// NewReasoningPicker creates a picker with the cursor on the active dial:
-// the session-override level when one is set, "default" otherwise.
-func NewReasoningPicker(effort string, overridden bool) *ReasoningPicker {
+// NewReasoningFinder creates the /reasoning picker with the cursor on the
+// active dial: the session-override level when one is set, "default"
+// otherwise.
+func (m Model) NewReasoningFinder(effort string, overridden bool) *Finder[ReasoningLevel] {
 	current := "default"
 	if overridden && effort != "" {
 		current = effort
 	}
-	p := &ReasoningPicker{currentArg: current}
+	items := make([]FinderItem[ReasoningLevel], 0, len(ReasoningLevels))
+	cursorAt := 0
 	for i, l := range ReasoningLevels {
+		badge := ""
 		if l.Arg == current {
-			p.Cursor = i
-			break
+			badge = "●"
+			cursorAt = i
 		}
+		items = append(items, FinderItem[ReasoningLevel]{
+			Value: l,
+			Text:  l.Label,
+			Hint:  l.Desc,
+			Badge: badge,
+		})
 	}
-	return p
-}
-
-// MoveUp moves the cursor up.
-func (p *ReasoningPicker) MoveUp() {
-	if p.Cursor > 0 {
-		p.Cursor--
-	}
-}
-
-// MoveDown moves the cursor down.
-func (p *ReasoningPicker) MoveDown() {
-	if p.Cursor < len(ReasoningLevels)-1 {
-		p.Cursor++
-	}
-}
-
-// Selected returns the highlighted level.
-func (p *ReasoningPicker) Selected() *ReasoningLevel {
-	if p.Cursor < 0 || p.Cursor >= len(ReasoningLevels) {
-		return nil
-	}
-	return &ReasoningLevels[p.Cursor]
-}
-
-// Render renders the reasoning picker as a string for viewport display.
-func (p *ReasoningPicker) Render(width, height int) string {
-	labelWidth := 0
-	for _, l := range ReasoningLevels {
-		if len(l.Label) > labelWidth {
-			labelWidth = len(l.Label)
-		}
-	}
-
-	var b strings.Builder
-	b.WriteString("Select a reasoning level:\n\n")
-	for i, l := range ReasoningLevels {
-		prefix := "  "
-		if i == p.Cursor {
-			prefix = "▶ "
-		}
-		marker := ""
-		if l.Arg == p.currentArg {
-			marker = " ●"
-		}
-		line := fmt.Sprintf("%s%-*s  %s%s", prefix, labelWidth, l.Label, l.Desc, marker)
-		if width > 0 {
-			line = truncateDisplayWidth(line, width)
-		}
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-
-	b.WriteString("\nj/k or ↑/↓ = move   Enter = select   Esc = cancel")
-	return b.String()
+	return NewFinder(FinderConfig[ReasoningLevel]{
+		Title:    "Reasoning",
+		Items:    items,
+		Preview:  func(l ReasoningLevel) string { return l.Label + "\n" + l.Desc },
+		CursorAt: cursorAt,
+		Styles:   m.finderStyles(),
+	})
 }
 
 // formatTokens renders a token count in compact decimal form (200k, 1.0M).

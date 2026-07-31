@@ -29,7 +29,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -60,6 +59,11 @@ type Model struct {
 	markdown *markdownRenderer
 	width    int
 	height   int
+	// altScreen mirrors InitOptions.AltScreen: floating windows
+	// (docs/VIM_UI_DESIGN.md §7.1) compose over the base frame only
+	// under the alt-screen renderer; inline mode keeps the in-flow
+	// overlay layout.
+	altScreen bool
 
 	// Controller (runtime interface)
 	controller *app.Controller
@@ -110,9 +114,17 @@ type Model struct {
 	// transcript content, used by search to jump to a match.
 	blockOffsets map[string]int
 
-	// transcriptBuilds counts full syncTranscript rebuilds (test
-	// instrumentation for REVIEW M14).
+	// lastOrder is the block ID order from the previous syncTranscript;
+	// the incremental rebuild keeps the longest positionally-stable,
+	// cache-valid prefix and only re-renders the changed suffix.
+	lastOrder []string
+
+	// transcriptBuilds counts syncTranscript executions that did work
+	// (test instrumentation for REVIEW M14); lastSyncRendered counts the
+	// blocks actually re-rendered in the most recent sync (incremental
+	// rebuild instrumentation).
 	transcriptBuilds int
+	lastSyncRendered int
 
 	// Transcript sync memo (REVIEW M14): syncTranscript rebuilds the
 	// viewport content only when the block index, width, or theme changed
@@ -157,17 +169,20 @@ type Model struct {
 	// cannot spill into a fresh approval the user has not read yet.
 	approvalShownAt time.Time
 
-	// Session picker
-	picker *SessionPicker
+	// Finders (snacks.picker-style selectors, docs/VIM_UI_DESIGN.md §6)
+	// for the three picker modes; nil unless the corresponding mode is
+	// active. The session finder is created on /sessions and filled
+	// asynchronously via sessionsLoadedMsg.
+	sessionFinder   *Finder[app.SessionSummary]
+	modelFinder     *Finder[ModelOption]
+	reasoningFinder *Finder[ReasoningLevel]
 
-	// Model picker (/model): the static catalog resolved at startup, and
-	// its popup state while ModeModelPicker is active.
-	models      []ModelOption
-	modelPicker *ModelPicker
+	// Model picker (/model): the static catalog resolved at startup.
+	models []ModelOption
 
-	// Reasoning picker (/reasoning): popup state while ModeReasoningPicker
-	// is active.
-	reasoningPicker *ReasoningPicker
+	// keymap resolves keys to actions per context (VIM_UI_DESIGN.md §5);
+	// defaults match the historical hardcoded bindings.
+	keymap Keymap
 
 	// spinner animates in-progress activity while a turn is busy
 	spinner  spinner.Model
@@ -176,8 +191,10 @@ type Model struct {
 	// Ctrl+C double-tap tracking
 	lastCancelTime time.Time
 
-	// viewport for transcript
-	viewport viewport.Model
+	// viewport for the transcript: a line-sliced scroll window (scroll.go)
+	// rather than bubbles/viewport, whose per-frame lipgloss reflow was
+	// the dominant render cost on long sessions.
+	viewport lineView
 
 	// Quit confirmation
 	quitConfirm bool
@@ -222,7 +239,9 @@ func NewModel(controller *app.Controller, modelName, workspace string) Model {
 	// Alt+Enter or Ctrl+J, per the TUI design.
 	ta.KeyMap.InsertNewline.SetKeys("alt+enter", "ctrl+j")
 
-	vp := viewport.New(80, 20)
+	// Match the initial 80-column geometry used before the first
+	// WindowSizeMsg.
+	vp := lineView{Width: 80, Height: 20}
 
 	theme := DetectTheme()
 	sp := spinner.New(
@@ -249,7 +268,7 @@ func NewModel(controller *app.Controller, modelName, workspace string) Model {
 		statusMessage:          "Ready",
 		activityLabel:          "Ready",
 		lastActivityAt:         time.Now(),
-		picker:                 NewSessionPicker(),
+		keymap:                 DefaultKeymap(),
 	}
 }
 
@@ -365,6 +384,10 @@ type InitOptions struct {
 	// Models is the selectable provider/model catalog for the /model picker
 	// (static for the process lifetime).
 	Models []ModelOption
+	// Keymap carries the user's ui.keymap overrides (context → action →
+	// key) from the config file; unknown entries are ignored with a
+	// warning shown in the status bar.
+	Keymap map[string]map[string]string
 }
 
 // StartTUI starts the Bubble Tea program. Blocks until the TUI exits.
@@ -381,11 +404,22 @@ func StartTUI(controller *app.Controller, modelName, workspace string, opts Init
 	m.SetLimits(opts.Limits)
 	m.SetContextWindow(opts.ContextWindow)
 	m.SetModels(opts.Models)
+	if len(opts.Keymap) > 0 {
+		resolved, warnings := m.keymap.WithOverrides(opts.Keymap)
+		m.keymap = resolved
+		if len(warnings) > 0 {
+			m.statusMessage = "keymap: " + warnings[0]
+			m.statusIsError = true
+		}
+	}
 	if opts.NoColor {
 		m.SetTheme(NoColorTheme())
 	}
+	m.altScreen = opts.AltScreen
 
-	programOptions := []tea.ProgramOption{tea.WithMouseCellMotion()}
+	// The ANSI compressor shrinks the byte stream to the terminal,
+	// narrowing the tearing window of the v1 line-diff renderer.
+	programOptions := []tea.ProgramOption{tea.WithMouseCellMotion(), tea.WithANSICompressor()}
 	if opts.AltScreen {
 		programOptions = append(programOptions, tea.WithAltScreen())
 	}
