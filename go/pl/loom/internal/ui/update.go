@@ -1162,7 +1162,8 @@ func (m Model) handleCtrlD() (tea.Model, tea.Cmd) {
 // --- approval ---
 
 // approval cursor positions: 0 = allow once, 1 = allow always (persist a
-// categorical rule for the session), 2 = deny.
+// categorical rule with its derived minimal grant), 2 = always trust
+// unsandboxed (escalated run_cmd calls only), last = deny.
 
 // approvalDecisionGuard is the window right after the approval overlay
 // appears during which decision keys (Enter/y/a/n/Esc/Ctrl+C) are ignored.
@@ -1188,6 +1189,8 @@ func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	var decision domain.Decision
 	remember := false
+	trust := ""
+	maxCursor := m.approvalOptionCount() - 1
 	switch msg.Type {
 	case tea.KeyLeft, tea.KeyShiftTab, tea.KeyUp:
 		if m.approvalCursor > 0 {
@@ -1195,7 +1198,7 @@ func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyRight, tea.KeyTab, tea.KeyDown:
-		if m.approvalCursor < 2 {
+		if m.approvalCursor < maxCursor {
 			m.approvalCursor++
 		}
 		return m, nil
@@ -1209,6 +1212,14 @@ func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			decision = domain.DecisionAllow
 			remember = true
+		case 2:
+			if m.approvalOptionCount() == 4 {
+				decision = domain.DecisionAllow
+				remember = true
+				trust = app.TrustUnsandboxed
+			} else {
+				decision = domain.DecisionDeny
+			}
 		default:
 			decision = domain.DecisionDeny
 		}
@@ -1222,7 +1233,18 @@ func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			decision = domain.DecisionAllow
 			remember = true
-		case "n", "N", "3":
+		case "t", "T", "3":
+			if m.approvalOptionCount() != 4 {
+				if msg.String() == "3" {
+					decision = domain.DecisionDeny
+					break
+				}
+				return m, nil
+			}
+			decision = domain.DecisionAllow
+			remember = true
+			trust = app.TrustUnsandboxed
+		case "n", "N", "4":
 			decision = domain.DecisionDeny
 		case "k":
 			if m.approvalCursor > 0 {
@@ -1230,7 +1252,7 @@ func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "j":
-			if m.approvalCursor < 2 {
+			if m.approvalCursor < maxCursor {
 				m.approvalCursor++
 			}
 			return m, nil
@@ -1246,25 +1268,35 @@ func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.setStatus("Denying and cancelling turn...", false)
 		// Always cancel the turn, even when the approval was already resolved
 		// through another path and the deny comes back rejected.
-		return m, tea.Batch(m.resolveApprovalCmd(payload, domain.DecisionDeny, false), m.cancelTurnCmd())
+		return m, tea.Batch(m.resolveApprovalCmd(payload, domain.DecisionDeny, false, ""), m.cancelTurnCmd())
 	default:
 		return m, nil
 	}
 	payload := m.pendingApproval
 	m.pendingApproval = nil
 	m.mode = ModeChat
-	return m, m.resolveApprovalCmd(payload, decision, remember)
+	return m, m.resolveApprovalCmd(payload, decision, remember, trust)
 }
 
-// approvalAlwaysAvailable reports whether "always allow" can persist a rule
-// for the pending call. It mirrors the overlay's disabled option: shell,
-// escalated, and non-run_cmd calls are per-call decisions only.
+// approvalAlwaysAvailable reports whether "always allow" can persist a
+// rule for the pending call. It mirrors the overlay's disabled option:
+// shell, heredoc, and non-run_cmd calls are per-call decisions only.
 func (m Model) approvalAlwaysAvailable() bool {
 	if m.pendingApproval == nil {
 		return false
 	}
-	_, ok := app.RunCmdRulePreview(m.pendingApproval.ToolName, m.pendingApproval.Arguments)
+	_, _, ok := app.ApprovalRulePreview(m.pendingApproval.ToolName, m.pendingApproval.Arguments)
 	return ok
+}
+
+// approvalOptionCount reports how many rows the approval overlay offers:
+// escalated run_cmd calls get a fourth "always trust (unsandboxed)" row
+// between "always allow" and "deny".
+func (m Model) approvalOptionCount() int {
+	if m.pendingApproval != nil && app.RunCmdTrustPreview(m.pendingApproval.ToolName, m.pendingApproval.Arguments) {
+		return 4
+	}
+	return 3
 }
 
 func approvalBinding(payload *runtimeevent.ApprovalRequestedPayload) app.ApprovalBinding {
@@ -1612,11 +1644,11 @@ func (m Model) cancelTurnCmd() tea.Cmd {
 	}
 }
 
-func (m Model) resolveApprovalCmd(payload *runtimeevent.ApprovalRequestedPayload, decision domain.Decision, remember bool) tea.Cmd {
+func (m Model) resolveApprovalCmd(payload *runtimeevent.ApprovalRequestedPayload, decision domain.Decision, remember bool, trust string) tea.Cmd {
 	return func() tea.Msg {
 		var hint *app.ApprovalRuleHint
 		if remember && decision == domain.DecisionAllow {
-			hint = &app.ApprovalRuleHint{ToolName: payload.ToolName, Arguments: payload.Arguments}
+			hint = &app.ApprovalRuleHint{ToolName: payload.ToolName, Arguments: payload.Arguments, Trust: trust}
 		}
 		note, err := m.controller.ResolveApproval(context.Background(), approvalBinding(payload), decision, hint)
 		return approvalResolvedMsg{err: err, ruleNote: note}

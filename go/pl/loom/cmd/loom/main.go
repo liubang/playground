@@ -575,19 +575,39 @@ func listRules() error {
 		if r.Justification != "" {
 			just = " — " + r.Justification
 		}
-		fmt.Printf("[%s] %-40s %s%s\n", r.Decision, strings.Join(r.ArgvPrefix, " "), r.Source, just)
+		grant := ""
+		if g := r.Grant.ExecGrant(); !g.IsZero() {
+			grant = " (" + g.Summary() + ")"
+		}
+		fmt.Printf("[%s] %-40s %s%s\n", r.Decision, strings.Join(r.ArgvPrefix, " ")+grant, r.Source, just)
 	}
 	return nil
 }
 
 // checkRules is the dry-run inspector for the declarative rule engine: it
 // evaluates an argv exactly like the run_cmd policy path and prints the
-// decision with the matching rule (if any), mirroring `codex execpolicy
-// check`. Usage: loom rules check <program> [args...]
+// verdict with the matching rule (if any), mirroring `codex execpolicy
+// check`. Usage: loom rules check [--escalated] [--needs-network] <program> [args...]
 func checkRules(argv []string) error {
-	if len(argv) == 0 {
-		return errors.New("usage: loom rules check <program> [args...]")
+	var (
+		escalated    bool
+		needsNetwork bool
+		args         []string
+	)
+	for _, a := range argv {
+		switch a {
+		case "--escalated":
+			escalated = true
+		case "--needs-network":
+			needsNetwork = true
+		default:
+			args = append(args, a)
+		}
 	}
+	if len(args) == 0 {
+		return errors.New("usage: loom rules check [--escalated] [--needs-network] <program> [args...]")
+	}
+	argv = args
 	root, err := resolveWorkspace("")
 	if err != nil {
 		return err
@@ -597,13 +617,30 @@ func checkRules(argv []string) error {
 		return err
 	}
 	policy := permission.AttachRules(permission.DefaultPolicy(), root, resolved.Rules.LoadOptions(), slog.Default())
-	argsJSON, _ := json.Marshal(map[string]any{"program": argv[0], "args": argv[1:]})
+	callArgs := map[string]any{"program": argv[0], "args": argv[1:]}
+	risk := domain.R2
+	if escalated {
+		callArgs["sandbox_permissions"] = "require_escalated"
+		callArgs["justification"] = "dry run"
+		risk = domain.R3
+	}
+	if needsNetwork {
+		callArgs["needs_network"] = true
+	}
+	argsJSON, _ := json.Marshal(callArgs)
 	call := domain.PreparedCall{
 		Call: domain.ToolCall{Name: "run_cmd", Arguments: argsJSON},
-		Risk: domain.R2,
+		Risk: risk,
 	}
-	decision := policy.Evaluate(call)
-	fmt.Printf("decision: %s\n", decision)
+	decider := policy.Decider(resolved.Approval.Mode)
+	verdict := decider.Evaluate(call)
+	fmt.Printf("decision: %s (source: %s)\n", verdict.Decision, verdict.Source)
+	if !verdict.Grant.IsZero() {
+		fmt.Printf("grant: %s\n", verdict.Grant.Summary())
+	}
+	if verdict.Reason != "" {
+		fmt.Printf("reason: %s\n", verdict.Reason)
+	}
 	if process.IsShellProgram(argv[0]) {
 		fmt.Println("note: shell interpreters never match prefix rules (always decided per-call at R3)")
 	}

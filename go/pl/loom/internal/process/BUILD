@@ -20,6 +20,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "process_lib",
     srcs = [
+        "grant.go",
         "pipe_pending_darwin.go",
         "pipe_pending_linux.go",
         "pipe_pending_other.go",
@@ -46,6 +47,7 @@ go_test(
     srcs = [
         "runner_seatbelt_test.go",
         "runner_test.go",
+        "sandbox_grant_test.go",
     ],
     embed = [":process_lib"],
     deps = [
