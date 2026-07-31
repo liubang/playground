@@ -92,6 +92,7 @@ type ResolvedConfig struct {
 	Prompt    Prompt
 	Skills    ResolvedSkills
 	Rules     ResolvedRules
+	Approval  ResolvedApproval
 	Tracing   trace.Config
 	Storage   Storage
 	UI        UI
@@ -111,6 +112,11 @@ type ResolvedRules struct {
 	Project           bool
 	ProjectAllow      bool
 	PersistRemembered bool
+}
+
+// ResolvedApproval is the approval section with defaults applied.
+type ResolvedApproval struct {
+	Mode permission.ApprovalMode
 }
 
 // ProviderByName returns the named provider, or nil.
@@ -236,6 +242,11 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	mode, err := permission.ParseApprovalMode(f.Approval.Mode)
+	if err != nil {
+		return nil, fmt.Errorf("config: %w", err)
+	}
+	approval := ResolvedApproval{Mode: mode}
 	out := &ResolvedConfig{
 		Providers: providers,
 		Limits:    limits,
@@ -246,10 +257,11 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 			Enabled:    f.Skills.Enabled == nil || *f.Skills.Enabled,
 			ExtraRoots: f.Skills.ExtraRoots,
 		},
-		Rules:   resolveRules(f.Rules),
-		Tracing: tracing,
-		Storage: f.Storage,
-		UI:      f.UI,
+		Rules:    resolveRules(f.Rules),
+		Approval: approval,
+		Tracing:  tracing,
+		Storage:  f.Storage,
+		UI:       f.UI,
 	}
 	if len(providers) > 0 {
 		def := f.Default

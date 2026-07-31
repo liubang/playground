@@ -407,6 +407,40 @@ rules:
 	}
 }
 
+func TestResolveApprovalMode(t *testing.T) {
+	// Absent defaults to on-request (PERMISSION_DESIGN §4.3).
+	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if def.Approval.Mode != "on-request" {
+		t.Fatalf("default approval mode = %q, want on-request", def.Approval.Mode)
+	}
+
+	cfg := loadFile(t, twoProviderYAML+`
+approval:
+  mode: unless-trusted
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if cfg.Approval.Mode != "unless-trusted" {
+		t.Fatalf("approval mode = %q", cfg.Approval.Mode)
+	}
+
+	cfg = loadFile(t, twoProviderYAML+`
+approval:
+  mode: never
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if cfg.Approval.Mode != "never" {
+		t.Fatalf("approval mode = %q", cfg.Approval.Mode)
+	}
+}
+
+func TestResolveApprovalModeRejectsUnknown(t *testing.T) {
+	_, err := Load(writeConfig(t, twoProviderYAML+`
+approval:
+  mode: yolo
+`), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if err == nil || !strings.Contains(err.Error(), "approval.mode") {
+		t.Fatalf("err = %v, want approval.mode validation error", err)
+	}
+}
+
 func TestResolveTracing(t *testing.T) {
 	// Disabled by default (no host/keys).
 	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))

@@ -98,12 +98,15 @@ func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 	inner := &recordingApprover{}
 	rules := NewRuleApprover(inner, permission.NewSessionRules())
 
-	prefix, ok := rules.RememberRunCmd("run_cmd", argsJSON(t, "go", "test", "./pl/loom/..."))
+	rule, ok := rules.RememberCall("run_cmd", argsJSON(t, "go", "test", "./pl/loom/..."), "")
 	if !ok {
 		t.Fatal("expected go test to be persistable")
 	}
-	if !reflect.DeepEqual(prefix, []string{"go", "test"}) {
-		t.Fatalf("prefix = %v, want [go test]", prefix)
+	if !reflect.DeepEqual(rule.Prefix, []string{"go", "test"}) {
+		t.Fatalf("prefix = %v, want [go test]", rule.Prefix)
+	}
+	if !rule.Grant.IsZero() {
+		t.Fatalf("grant = %+v, want zero for a plain sandboxed call", rule.Grant)
 	}
 
 	// A matching later call is auto-approved without touching the user.
@@ -142,14 +145,13 @@ func TestRememberRunCmdRejectsNonPersistable(t *testing.T) {
 	for name, raw := range map[string]json.RawMessage{
 		"shell":      argsJSON(t, "sh", "-c", "echo hi"),
 		"eval":       argsJSON(t, "python3", "-c", "print(1)"),
-		"escalated":  json.RawMessage(`{"program":"go","args":["mod","download"],"sandbox_permissions":"require_escalated"}`),
 		"other tool": json.RawMessage(`{"path":"x.go"}`),
 	} {
 		toolName := "run_cmd"
 		if name == "other tool" {
 			toolName = "edit"
 		}
-		if _, ok := rules.RememberRunCmd(toolName, raw); ok {
+		if _, ok := rules.RememberCall(toolName, raw, ""); ok {
 			t.Fatalf("%s must not be persistable", name)
 		}
 	}
@@ -158,15 +160,107 @@ func TestRememberRunCmdRejectsNonPersistable(t *testing.T) {
 	}
 }
 
-func TestRunCmdRulePreview(t *testing.T) {
-	preview, ok := RunCmdRulePreview("run_cmd", argsJSON(t, "go", "vet", "./..."))
+// TestRememberRunCmdGrantDerivation covers the grant flavors a remembered
+// rule carries (PERMISSION_DESIGN §6.5): needs_network and escalated
+// calls remember a sandboxed network grant; trust=unsandboxed on an
+// escalated call remembers L2 full trust.
+func TestRememberRunCmdGrantDerivation(t *testing.T) {
+	rules := NewRuleApprover(nil, permission.NewSessionRules())
+
+	needsNet := json.RawMessage(`{"program":"talos","args":["query","submit"],"needs_network":true}`)
+	rule, ok := rules.RememberCall("run_cmd", needsNet, "")
+	if !ok || !rule.Grant.NetworkFull || rule.Grant.Unsandboxed {
+		t.Fatalf("needs_network remember = ok=%v grant=%+v, want sandboxed network grant", ok, rule.Grant)
+	}
+
+	escalated := json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`)
+	rule, ok = rules.RememberCall("run_cmd", escalated, "")
+	if !ok || !rule.Grant.NetworkFull || rule.Grant.Unsandboxed {
+		t.Fatalf("escalated remember (grant flavor) = ok=%v grant=%+v, want sandboxed network grant", ok, rule.Grant)
+	}
+
+	rules2 := NewRuleApprover(nil, permission.NewSessionRules())
+	rule, ok = rules2.RememberCall("run_cmd", escalated, TrustUnsandboxed)
+	if !ok || !rule.Grant.Unsandboxed {
+		t.Fatalf("escalated remember (trust flavor) = ok=%v grant=%+v, want unsandboxed", ok, rule.Grant)
+	}
+	// The trust flavor is honored only for escalated calls.
+	rule, ok = rules2.RememberCall("run_cmd", argsJSON(t, "go", "build", "./..."), TrustUnsandboxed)
+	if !ok || !rule.Grant.IsZero() {
+		t.Fatalf("non-escalated trust flavor = ok=%v grant=%+v, want zero grant", ok, rule.Grant)
+	}
+}
+
+func TestApprovalRulePreview(t *testing.T) {
+	preview, grant, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "go", "vet", "./..."))
 	if !ok || preview != "go vet" {
 		t.Fatalf("preview = %q ok = %v, want 'go vet'", preview, ok)
 	}
-	if _, ok := RunCmdRulePreview("run_cmd", argsJSON(t, "sh", "-c", "x")); ok {
+	if !grant.IsZero() {
+		t.Fatalf("grant = %+v, want zero", grant)
+	}
+	if _, _, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "x")); ok {
 		t.Fatal("shell must not have a rule preview")
 	}
-	if _, ok := RunCmdRulePreview("edit", json.RawMessage(`{}`)); ok {
+	if _, _, ok := ApprovalRulePreview("edit", json.RawMessage(`{}`)); ok {
 		t.Fatal("non-run_cmd must not have a rule preview")
+	}
+
+	// needs_network previews carry the network grant.
+	_, grant, ok = ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"talos","needs_network":true}`))
+	if !ok || !grant.NetworkFull {
+		t.Fatalf("needs_network preview grant = %+v ok=%v", grant, ok)
+	}
+
+	// web_fetch previews show the exact host.
+	preview, _, ok = ApprovalRulePreview("web_fetch", json.RawMessage(`{"url":"https://WWW.weather.com.cn/weather/1.shtml"}`))
+	if !ok || preview != "www.weather.com.cn" {
+		t.Fatalf("web_fetch preview = %q ok=%v, want www.weather.com.cn", preview, ok)
+	}
+	if _, _, ok := ApprovalRulePreview("web_fetch", json.RawMessage(`{"url":"ftp://x/y"}`)); ok {
+		t.Fatal("non-http URLs must not have a rule preview")
+	}
+}
+
+// TestRememberWebFetchDomain covers the domain memory for web_fetch
+// approvals: exact host, session match, and auto-approval on later calls.
+func TestRememberWebFetchDomain(t *testing.T) {
+	inner := &recordingApprover{}
+	rules := NewRuleApprover(inner, permission.NewSessionRules())
+
+	rule, ok := rules.RememberCall("web_fetch", json.RawMessage(`{"url":"https://www.weather.com.cn/a"}`), "")
+	if !ok || rule.Host != "www.weather.com.cn" {
+		t.Fatalf("remember = %+v ok=%v", rule, ok)
+	}
+
+	fetch := func(url string) domain.PreparedCall {
+		raw, _ := json.Marshal(map[string]string{"url": url})
+		return domain.PreparedCall{Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "web_fetch", Arguments: raw}}
+	}
+	// Same host (different path, case) auto-approves.
+	decision, err := rules.RequestApproval(context.Background(), domain.ApprovalRequest{Call: fetch("https://WWW.weather.com.cn/other")})
+	if err != nil || decision != domain.DecisionAllow || inner.calls != 0 {
+		t.Fatalf("remembered host: decision=%v err=%v inner=%d", decision, err, inner.calls)
+	}
+	// A different host still prompts.
+	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{Call: fetch("https://api.weather.com.cn/")})
+	if err != nil || decision != domain.DecisionAsk || inner.calls != 1 {
+		t.Fatalf("unremembered host: decision=%v err=%v inner=%d", decision, err, inner.calls)
+	}
+}
+
+func TestRunCmdTrustPreview(t *testing.T) {
+	escalated := json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`)
+	if !RunCmdTrustPreview("run_cmd", escalated) {
+		t.Fatal("escalated run_cmd must offer the trust option")
+	}
+	if RunCmdTrustPreview("run_cmd", argsJSON(t, "make", "build")) {
+		t.Fatal("non-escalated calls must not offer the trust option")
+	}
+	if RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","x"],"sandbox_permissions":"require_escalated"}`)) {
+		t.Fatal("shells must not offer the trust option")
+	}
+	if RunCmdTrustPreview("edit", json.RawMessage(`{}`)) {
+		t.Fatal("non-run_cmd must not offer the trust option")
 	}
 }

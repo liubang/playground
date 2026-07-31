@@ -70,6 +70,10 @@ type Rule struct {
 	// Justification is the human-readable rationale surfaced in approval
 	// prompts and denial messages.
 	Justification string `json:"justification,omitempty"`
+	// Grant widens the execution sandbox for allow rules (schema v2,
+	// docs/PERMISSION_DESIGN.md §5). Only the user layer may carry one;
+	// other layers have it stripped at load time.
+	Grant *RuleGrant `json:"grant,omitempty"`
 	// Match lists example invocations that MUST hit this rule (load-time
 	// self-test). Entries are token arrays or strings (strings.Fields).
 	Match []ArgvExample `json:"match,omitempty"`
@@ -77,6 +81,33 @@ type Rule struct {
 	NotMatch []ArgvExample `json:"not_match,omitempty"`
 	// Source is the file the rule came from (diagnostics only, not serialized).
 	Source string `json:"-"`
+}
+
+// RuleGrant carries capability widenings for an allow rule: instead of
+// dropping the sandbox, the rule opens exactly the capabilities the
+// command needs (docs/PERMISSION_DESIGN.md §3.2).
+type RuleGrant struct {
+	// Network is "full" to allow outbound network/DNS inside the sandbox.
+	Network string `json:"network,omitempty"`
+	// Write lists additional writable absolute paths (~ is expanded at
+	// load; protected workspace subpaths stay excluded).
+	Write []string `json:"write,omitempty"`
+	// Unsandboxed drops the sandbox entirely (L2 trust). Mutually
+	// exclusive with Network/Write.
+	Unsandboxed bool `json:"unsandboxed,omitempty"`
+}
+
+// ExecGrant converts the rule form into the domain contract. A nil
+// receiver yields the zero grant (default sandbox).
+func (g *RuleGrant) ExecGrant() domain.ExecGrant {
+	if g == nil {
+		return domain.ExecGrant{}
+	}
+	return domain.ExecGrant{
+		Unsandboxed:   g.Unsandboxed,
+		NetworkFull:   g.Network == "full",
+		WritablePaths: append([]string(nil), g.Write...),
+	}
 }
 
 // ArgvExample is one self-test invocation: a token array or a bare string.
@@ -97,9 +128,11 @@ func (e *ArgvExample) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// ruleFile is the on-disk shape of one *.json rule file.
+// ruleFile is the on-disk shape of one *.json rule file. The optional
+// "domains" section holds web_fetch host rules (domain_rules.go).
 type ruleFile struct {
-	Rules []Rule `json:"rules"`
+	Rules   []Rule       `json:"rules"`
+	Domains []DomainRule `json:"domains,omitempty"`
 }
 
 // matches reports whether argv hits the rule's prefix.
@@ -120,9 +153,11 @@ func decisionStrictness(d domain.Decision) int {
 	return 0
 }
 
-// RuleSet is an ordered collection of rules from one or more layers.
+// RuleSet is an ordered collection of rules from one or more layers:
+// argv-prefix rules for run_cmd plus host rules for web_fetch.
 type RuleSet struct {
-	rules []Rule
+	rules   []Rule
+	domains []DomainRule
 }
 
 // Rules returns the loaded rules (for `loom rules list` and tests).
@@ -159,6 +194,11 @@ func LoadBuiltinRules() (*RuleSet, error) {
 		if err := validateRule(&f.Rules[i]); err != nil {
 			return nil, fmt.Errorf("embedded builtin rules: %w", err)
 		}
+		if f.Rules[i].Grant != nil {
+			// The embedded set is curated read-only commands; grants are
+			// user-layer-only by design and must never ship in builtin.
+			return nil, fmt.Errorf("embedded builtin rules: rule %v must not carry a grant", f.Rules[i].ArgvPrefix)
+		}
 		set.rules = append(set.rules, f.Rules[i])
 	}
 	return set, nil
@@ -171,6 +211,7 @@ func (s *RuleSet) merge(other *RuleSet) {
 		return
 	}
 	s.rules = append(s.rules, other.rules...)
+	s.domains = append(s.domains, other.domains...)
 }
 
 // Evaluate returns the strictest decision among matching rules, or "" when
@@ -242,7 +283,7 @@ type LoadOptions struct {
 func LoadRuleSets(userDir, projectDir string, opts LoadOptions) (*RuleSet, []error) {
 	set := &RuleSet{}
 	var errs []error
-	load := func(dir string, trusted bool) {
+	load := func(dir string, trusted, allowGrants bool) {
 		if dir == "" {
 			return
 		}
@@ -262,7 +303,7 @@ func LoadRuleSets(userDir, projectDir string, opts LoadOptions) (*RuleSet, []err
 		sort.Strings(names) // deterministic load order within a layer
 		for _, name := range names {
 			path := filepath.Join(dir, name)
-			rules, err := loadRuleFile(path)
+			rules, domains, err := loadRuleFile(path)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -272,41 +313,67 @@ func LoadRuleSets(userDir, projectDir string, opts LoadOptions) (*RuleSet, []err
 					// Untrusted layer: allow rules are dropped (tighten-only).
 					continue
 				}
+				if !allowGrants && r.Grant != nil {
+					// Grants widen the sandbox, so they are user-layer-only:
+					// an untrusted checkout may never loosen the boundary,
+					// even when its allow decisions are honored. Strip (not
+					// drop) so the rule's decision still applies.
+					errs = append(errs, fmt.Errorf("rule file %s: grant stripped from non-user-layer rule %v", path, r.ArgvPrefix))
+					r.Grant = nil
+				}
 				set.rules = append(set.rules, r)
+			}
+			for _, d := range domains {
+				if !trusted && domain.Decision(d.Decision) == domain.DecisionAllow {
+					// Same tighten-only rule for web_fetch host allows.
+					continue
+				}
+				set.domains = append(set.domains, d)
 			}
 		}
 	}
-	load(userDir, true)
-	load(projectDir, opts.ProjectAllows)
+	load(userDir, true, true)
+	load(projectDir, opts.ProjectAllows, false)
 	return set, errs
 }
 
-// loadRuleFile parses and self-tests one rule file.
-func loadRuleFile(path string) ([]Rule, error) {
+// loadRuleFile parses and self-tests one rule file (argv rules plus the
+// optional domains section).
+func loadRuleFile(path string) ([]Rule, []DomainRule, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read rule file %s: %w", path, err)
+		return nil, nil, fmt.Errorf("read rule file %s: %w", path, err)
 	}
 	var f ruleFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("parse rule file %s: %w", path, err)
+		return nil, nil, fmt.Errorf("parse rule file %s: %w", path, err)
 	}
 	for i := range f.Rules {
 		f.Rules[i].Source = path
 		if err := validateRule(&f.Rules[i]); err != nil {
-			return nil, fmt.Errorf("rule file %s: %w", path, err)
+			return nil, nil, fmt.Errorf("rule file %s: %w", path, err)
 		}
 	}
-	return f.Rules, nil
+	for i := range f.Domains {
+		f.Domains[i].Source = path
+		if err := validateDomainRule(&f.Domains[i]); err != nil {
+			return nil, nil, fmt.Errorf("rule file %s: %w", path, err)
+		}
+	}
+	return f.Rules, f.Domains, nil
 }
 
-// validateRule checks decision validity and runs the match/not_match
-// self-test, mirroring codex execpolicy's load-time rule validation.
+// validateRule checks decision and grant validity and runs the
+// match/not_match self-test, mirroring codex execpolicy's load-time rule
+// validation.
 func validateRule(r *Rule) error {
 	switch domain.Decision(r.Decision) {
 	case domain.DecisionAllow, domain.DecisionAsk, domain.DecisionDeny:
 	default:
 		return fmt.Errorf("rule %v: decision must be allow|ask|deny, got %q", r.ArgvPrefix, r.Decision)
+	}
+	if err := validateRuleGrant(r); err != nil {
+		return err
 	}
 	for _, ex := range r.Match {
 		if !r.matches(ex) {
@@ -321,79 +388,176 @@ func validateRule(r *Rule) error {
 	return nil
 }
 
+// validateRuleGrant enforces the grant invariants (§5): grants only on
+// allow rules with a non-empty prefix, unsandboxed is exclusive, network
+// is "full" or absent, and write paths are normalized in place.
+func validateRuleGrant(r *Rule) error {
+	g := r.Grant
+	if g == nil {
+		return nil
+	}
+	if domain.Decision(r.Decision) != domain.DecisionAllow {
+		return fmt.Errorf("rule %v: grant requires decision=allow, got %q", r.ArgvPrefix, r.Decision)
+	}
+	if len(r.ArgvPrefix) == 0 {
+		return fmt.Errorf("rule %v: grant on an empty argv_prefix would widen every command", r.ArgvPrefix)
+	}
+	if g.Unsandboxed && (g.Network != "" || len(g.Write) > 0) {
+		return fmt.Errorf("rule %v: grant.unsandboxed is mutually exclusive with network/write", r.ArgvPrefix)
+	}
+	if g.Network != "" && g.Network != "full" {
+		return fmt.Errorf("rule %v: grant.network must be \"full\", got %q", r.ArgvPrefix, g.Network)
+	}
+	normalized := make([]string, 0, len(g.Write))
+	for _, p := range g.Write {
+		expanded, err := expandHome(p)
+		if err != nil {
+			return fmt.Errorf("rule %v: grant.write path %q: %w", r.ArgvPrefix, p, err)
+		}
+		if !filepath.IsAbs(expanded) {
+			return fmt.Errorf("rule %v: grant.write path %q is not absolute", r.ArgvPrefix, p)
+		}
+		normalized = append(normalized, filepath.Clean(expanded))
+	}
+	g.Write = normalized
+	return nil
+}
+
+// expandHome resolves a leading ~ against the user's home directory.
+func expandHome(p string) (string, error) {
+	if p != "~" && !strings.HasPrefix(p, "~/") {
+		return p, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if p == "~" {
+		return home, nil
+	}
+	return filepath.Join(home, p[2:]), nil
+}
+
 // --- Session rules: in-memory categorical prefixes remembered from "allow
 // always" decisions during this process. ---
 
 // SessionRules stores categorical run_cmd prefixes approved for the rest of
-// the session. Only prefixes derived via DeriveRunCmdPrefix are stored —
-// shells, eval-form interpreters, destructive programs, heredocs, and
-// escalated runs are never eligible.
+// the session, each with the capability grant the user approved. Only
+// prefixes derived via DeriveRunCmdPrefix are stored — shells, eval-form
+// interpreters, destructive programs, and heredocs are never eligible.
 type SessionRules struct {
-	mu       sync.RWMutex
-	prefixes [][]string
+	mu      sync.RWMutex
+	rules   []sessionRule
+	domains map[string]struct{}
+}
+
+// sessionRule is one remembered prefix plus its approved grant.
+type sessionRule struct {
+	prefix []string
+	grant  domain.ExecGrant
 }
 
 // NewSessionRules creates an empty store.
 func NewSessionRules() *SessionRules { return &SessionRules{} }
 
 // RememberRunCmd derives and stores a categorical prefix for a run_cmd
-// argv, returning the stored prefix. ok=false means the call must never be
-// rule-persisted.
-func (s *SessionRules) RememberRunCmd(argv []string) (prefix []string, ok bool) {
+// argv together with its approved grant, returning the stored prefix.
+// ok=false means the call must never be rule-persisted.
+func (s *SessionRules) RememberRunCmd(argv []string, grant domain.ExecGrant) (prefix []string, ok bool) {
 	prefix, ok = DeriveRunCmdPrefix(argv)
 	if !ok {
 		return nil, false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, existing := range s.prefixes {
-		if stringSliceEqual(existing, prefix) {
+	for i, existing := range s.rules {
+		if stringSliceEqual(existing.prefix, prefix) {
+			if !execGrantsEqual(existing.grant, grant) {
+				// The user's LATEST approval wins: upgrading a plain
+				// memory to a granted one (and tightening a granted one)
+				// both honor the most recent interactive decision.
+				s.rules[i].grant = grant
+			}
 			return prefix, true
 		}
 	}
-	s.prefixes = append(s.prefixes, prefix)
+	s.rules = append(s.rules, sessionRule{prefix: prefix, grant: grant})
 	return prefix, true
 }
 
-// Matches reports whether argv starts with any remembered prefix.
-func (s *SessionRules) Matches(argv []string) bool {
+// execGrantsEqual compares two grants for dedup purposes.
+func execGrantsEqual(a, b domain.ExecGrant) bool {
+	return a.Unsandboxed == b.Unsandboxed && a.NetworkFull == b.NetworkFull &&
+		stringSliceEqual(a.WritablePaths, b.WritablePaths)
+}
+
+// Match returns the remembered grant when argv starts with any remembered
+// prefix.
+func (s *SessionRules) Match(argv []string) (domain.ExecGrant, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, prefix := range s.prefixes {
-		if ArgvHasPrefix(argv, prefix) {
-			return true
+	for _, r := range s.rules {
+		if ArgvHasPrefix(argv, r.prefix) {
+			return r.grant, true
 		}
 	}
-	return false
+	return domain.ExecGrant{}, false
 }
 
 // Prefixes returns a copy of the remembered prefixes (status display, tests).
 func (s *SessionRules) Prefixes() [][]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([][]string, len(s.prefixes))
-	copy(out, s.prefixes)
+	out := make([][]string, len(s.rules))
+	for i, r := range s.rules {
+		out[i] = r.prefix
+	}
 	return out
 }
 
 // --- run_cmd argv helpers ---
 
-// RunCmdArgv extracts [program, ...args] from run_cmd call arguments.
-// Escalated calls are never rule-eligible: they run outside the sandbox and
-// must always be decided per-call.
-func RunCmdArgv(raw json.RawMessage) ([]string, bool) {
+// RunCmdCall is the policy-relevant shape of a run_cmd invocation: the
+// argv plus the execution-mode flags the model declared.
+type RunCmdCall struct {
+	// Argv is [program, ...args].
+	Argv []string
+	// Escalated marks sandbox_permissions=require_escalated (the model
+	// requests unsandboxed execution). Escalated calls ARE rule-eligible
+	// since schema v2: a rule with an unsandboxed grant can exempt them,
+	// and a lesser grant downgrades them back into a widened sandbox.
+	Escalated bool
+	// NeedsNetwork marks needs_network=true: the model declares the
+	// command requires outbound network inside the sandbox.
+	NeedsNetwork bool
+}
+
+// ParseRunCmdCall extracts the RunCmdCall from raw run_cmd arguments.
+func ParseRunCmdCall(raw json.RawMessage) (RunCmdCall, bool) {
 	var args struct {
 		Program            string   `json:"program"`
 		Args               []string `json:"args"`
 		SandboxPermissions string   `json:"sandbox_permissions"`
+		NeedsNetwork       bool     `json:"needs_network"`
 	}
 	if err := json.Unmarshal(raw, &args); err != nil || args.Program == "" {
+		return RunCmdCall{}, false
+	}
+	return RunCmdCall{
+		Argv:         append([]string{args.Program}, args.Args...),
+		Escalated:    args.SandboxPermissions == "require_escalated",
+		NeedsNetwork: args.NeedsNetwork,
+	}, true
+}
+
+// RunCmdArgv extracts [program, ...args] from run_cmd call arguments.
+// Prefer ParseRunCmdCall when the execution-mode flags matter.
+func RunCmdArgv(raw json.RawMessage) ([]string, bool) {
+	info, ok := ParseRunCmdCall(raw)
+	if !ok {
 		return nil, false
 	}
-	if args.SandboxPermissions == "require_escalated" {
-		return nil, false
-	}
-	return append([]string{args.Program}, args.Args...), true
+	return info.Argv, true
 }
 
 // ArgvHasPrefix reports whether argv starts with prefix (exact tokens).
@@ -540,10 +704,11 @@ func stringSliceEqual(a, b []string) bool {
 // RememberedRulesFile is the user-layer file "allow always" appends to.
 const RememberedRulesFile = "remembered.json"
 
-// AppendRememberedRule persists a categorical allow rule to the user-layer
-// remembered.json, creating the directory on first use. The justification
-// records that the rule came from an interactive approval.
-func AppendRememberedRule(rulesDir string, prefix []string) error {
+// AppendRememberedRule persists a categorical allow rule — with its
+// approved grant — to the user-layer remembered.json, creating the
+// directory on first use. The justification records that the rule came
+// from an interactive approval.
+func AppendRememberedRule(rulesDir string, prefix []string, grant domain.ExecGrant) error {
 	if err := os.MkdirAll(rulesDir, 0o700); err != nil {
 		return err
 	}
@@ -554,19 +719,46 @@ func AppendRememberedRule(rulesDir string, prefix []string) error {
 			return fmt.Errorf("parse %s: %w", path, err)
 		}
 	}
-	for _, r := range f.Rules {
+	for i, r := range f.Rules {
 		if stringSliceEqual(r.ArgvPrefix, prefix) && r.Decision == string(domain.DecisionAllow) {
-			return nil // already persisted
+			existing := r.Grant.ExecGrant()
+			if execGrantsEqual(existing, grant) {
+				return nil // already persisted with the same grant
+			}
+			// Update the persisted grant to the latest approval — v1
+			// remembered entries (grant-less) must not silently block the
+			// grant a later interactive approval adds.
+			f.Rules[i].Grant = ruleGrantFromExec(grant)
+			data, err := json.MarshalIndent(f, "", "  ")
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(path, data, 0o600)
 		}
 	}
-	f.Rules = append(f.Rules, Rule{
+	rule := Rule{
 		ArgvPrefix:    prefix,
 		Decision:      string(domain.DecisionAllow),
 		Justification: "remembered from an interactive loom approval",
-	})
+		Grant:         ruleGrantFromExec(grant),
+	}
+	f.Rules = append(f.Rules, rule)
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, data, 0o600)
+}
+
+// ruleGrantFromExec converts a domain grant into its rule-file form (nil
+// for the zero grant, keeping v1 files clean).
+func ruleGrantFromExec(grant domain.ExecGrant) *RuleGrant {
+	if grant.IsZero() {
+		return nil
+	}
+	rg := &RuleGrant{Unsandboxed: grant.Unsandboxed, Write: grant.WritablePaths}
+	if grant.NetworkFull {
+		rg.Network = "full"
+	}
+	return rg
 }
