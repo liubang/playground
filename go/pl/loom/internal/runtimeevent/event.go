@@ -74,6 +74,11 @@ const (
 	// Steer events (user input submitted while a turn is busy)
 	KindSteerQueued   RuntimeEventKind = "steer.queued"
 	KindSteerInjected RuntimeEventKind = "steer.injected"
+	// Sub-agent lifecycle (delegate_task child runs). All ephemeral: the
+	// durable facts live in the child's own session (docs/SUBAGENT_DESIGN.md).
+	KindSubagentStarted  RuntimeEventKind = "subagent.started"
+	KindSubagentProgress RuntimeEventKind = "subagent.progress"
+	KindSubagentFinished RuntimeEventKind = "subagent.finished"
 	// Cancel events
 	KindRunCancelRequested RuntimeEventKind = "run.cancel_requested"
 	KindRunCancelled       RuntimeEventKind = "run.cancelled"
@@ -123,6 +128,7 @@ func (e RuntimeEvent) Validate() error {
 		KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
 		KindBudgetUpdated, KindUsageUpdated, KindBudgetNotice, KindContextCompacted, KindContextUsage, KindPlanUpdated,
 		KindSteerQueued, KindSteerInjected,
+		KindSubagentStarted, KindSubagentProgress, KindSubagentFinished,
 		KindRunCancelRequested, KindRunCancelled, KindRunCompleted,
 		KindRuntimeWarning, KindRuntimeFatal:
 	default:
@@ -347,6 +353,38 @@ type SteerQueuedPayload struct {
 // drives the pending-panel removal and the transcript's user block.
 type SteerInjectedPayload struct {
 	Text string `json:"text"`
+}
+
+// SubagentStartedPayload reports that a delegate_task call spawned its
+// child run. Frontends bind it to the delegate tool block via CallID and
+// use ChildSessionID for the read-only drill-in view.
+type SubagentStartedPayload struct {
+	CallID         domain.ToolCallID `json:"call_id"`
+	ChildSessionID domain.SessionID  `json:"child_session_id"`
+	Task           string            `json:"task"`
+}
+
+// SubagentProgressPayload is a periodic counters snapshot of a running
+// child, pulled from the child checkpoint (the child loop publishes no
+// events of its own). ElapsedMs is wall time since the child started.
+type SubagentProgressPayload struct {
+	CallID         domain.ToolCallID `json:"call_id"`
+	ChildSessionID domain.SessionID  `json:"child_session_id"`
+	ToolCalls      int               `json:"tool_calls"`
+	InputTokens    int64             `json:"input_tokens"`
+	OutputTokens   int64             `json:"output_tokens"`
+	ElapsedMs      int64             `json:"elapsed_ms"`
+}
+
+// SubagentFinishedPayload reports the child run's terminal outcome with
+// its final counters.
+type SubagentFinishedPayload struct {
+	CallID         domain.ToolCallID `json:"call_id"`
+	ChildSessionID domain.SessionID  `json:"child_session_id"`
+	Outcome        string            `json:"outcome"`
+	ToolCalls      int               `json:"tool_calls"`
+	InputTokens    int64             `json:"input_tokens"`
+	OutputTokens   int64             `json:"output_tokens"`
 }
 
 // RunCancelledPayload describes a cancellation.

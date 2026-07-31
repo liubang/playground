@@ -820,6 +820,45 @@ func TestSandboxGuidanceNote(t *testing.T) {
 	})
 }
 
+func TestEscalationDowngradeNote(t *testing.T) {
+	// A require_escalated call that ran sandboxed must be told so,
+	// explicitly steering the model away from sandbox workarounds.
+	note := escalationDowngradeNote(true, false)
+	if note == "" {
+		t.Fatal("downgraded escalation note = empty, want an explicit signal")
+	}
+	if !strings.Contains(note, "NOT honored") || !strings.Contains(note, "workaround") {
+		t.Fatalf("note = %q, want downgrade signal + anti-workaround guidance", note)
+	}
+	// Honored escalations and non-escalated calls get no note.
+	if note := escalationDowngradeNote(true, true); note != "" {
+		t.Fatalf("honored escalation note = %q, want empty", note)
+	}
+	if note := escalationDowngradeNote(false, false); note != "" {
+		t.Fatalf("plain call note = %q, want empty", note)
+	}
+}
+
+func TestRiskForArgsSimpleShell(t *testing.T) {
+	base := domain.R2
+	// A provably simple sh -c script keeps the base risk: it is a plain
+	// command wearing a shell costume.
+	simple := runCmdArgs{Program: "sh", Args: []string{"-c", "mkdir -p .myapp_logs"}}
+	if got := riskForArgs(simple, base); got != base {
+		t.Errorf("riskForArgs(simple sh -c) = %v, want %v", got, base)
+	}
+	// Compound scripts stay R3.
+	compound := runCmdArgs{Program: "sh", Args: []string{"-c", "mkdir -p x && echo done"}}
+	if got := riskForArgs(compound, base); got != domain.R3 {
+		t.Errorf("riskForArgs(compound sh -c) = %v, want R3", got)
+	}
+	// Escalations always rate R3.
+	escalated := runCmdArgs{Program: "make", SandboxPermissions: sandboxRequireEscalated}
+	if got := riskForArgs(escalated, base); got != domain.R3 {
+		t.Errorf("riskForArgs(escalated) = %v, want R3", got)
+	}
+}
+
 func TestClassifyRunError(t *testing.T) {
 	cases := []struct {
 		name string

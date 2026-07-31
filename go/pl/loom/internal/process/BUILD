@@ -28,6 +28,7 @@ go_library(
         "process_group_unix.go",
         "runner.go",
         "sandbox_darwin.go",
+        "shell_unwrap.go",
         "sandbox_linux.go",
         "types.go",
     ],
@@ -48,6 +49,7 @@ go_test(
         "runner_seatbelt_test.go",
         "runner_test.go",
         "sandbox_grant_test.go",
+        "shell_unwrap_test.go",
     ],
     embed = [":process_lib"],
     deps = [

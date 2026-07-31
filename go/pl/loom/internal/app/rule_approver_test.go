@@ -143,9 +143,12 @@ func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 func TestRememberRunCmdRejectsNonPersistable(t *testing.T) {
 	rules := NewRuleApprover(nil, permission.NewSessionRules())
 	for name, raw := range map[string]json.RawMessage{
-		"shell":      argsJSON(t, "sh", "-c", "echo hi"),
-		"eval":       argsJSON(t, "python3", "-c", "print(1)"),
-		"other tool": json.RawMessage(`{"path":"x.go"}`),
+		// A compound shell script cannot be unwrapped and stays
+		// unpersistable; a PROVABLY SIMPLE sh -c command is persistable
+		// under its inner program (covered in TestRememberRunCmd).
+		"compound shell": argsJSON(t, "sh", "-c", "echo hi | cat"),
+		"eval":           argsJSON(t, "python3", "-c", "print(1)"),
+		"other tool":     json.RawMessage(`{"path":"x.go"}`),
 	} {
 		toolName := "run_cmd"
 		if name == "other tool" {
@@ -161,9 +164,9 @@ func TestRememberRunCmdRejectsNonPersistable(t *testing.T) {
 }
 
 // TestRememberRunCmdGrantDerivation covers the grant flavors a remembered
-// rule carries (PERMISSION_DESIGN §6.5): needs_network and escalated
-// calls remember a sandboxed network grant; trust=unsandboxed on an
-// escalated call remembers L2 full trust.
+// rule carries: needs_network calls remember a sandboxed network grant;
+// escalated calls can ONLY be remembered as explicit L2 full trust — a
+// lesser grant would never cover the next escalation.
 func TestRememberRunCmdGrantDerivation(t *testing.T) {
 	rules := NewRuleApprover(nil, permission.NewSessionRules())
 
@@ -174,9 +177,8 @@ func TestRememberRunCmdGrantDerivation(t *testing.T) {
 	}
 
 	escalated := json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`)
-	rule, ok = rules.RememberCall("run_cmd", escalated, "")
-	if !ok || !rule.Grant.NetworkFull || rule.Grant.Unsandboxed {
-		t.Fatalf("escalated remember (grant flavor) = ok=%v grant=%+v, want sandboxed network grant", ok, rule.Grant)
+	if _, ok = rules.RememberCall("run_cmd", escalated, ""); ok {
+		t.Fatal("escalated remember without trust flavor must be refused (minimal grants cannot cover escalations)")
 	}
 
 	rules2 := NewRuleApprover(nil, permission.NewSessionRules())
@@ -199,8 +201,19 @@ func TestApprovalRulePreview(t *testing.T) {
 	if !grant.IsZero() {
 		t.Fatalf("grant = %+v, want zero", grant)
 	}
-	if _, _, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "x")); ok {
-		t.Fatal("shell must not have a rule preview")
+	// A compound shell script has no preview; a provably simple sh -c
+	// command previews its inner program.
+	if _, _, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "x | y")); ok {
+		t.Fatal("compound shell must not have a rule preview")
+	}
+	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "ls -la"))
+	if !ok || preview != "ls" {
+		t.Fatalf("simple shell preview = %q ok=%v, want 'ls'", preview, ok)
+	}
+	// Escalated calls have no minimal-capability preview (only the
+	// unsandboxed trust option, surfaced by RunCmdTrustPreview).
+	if _, _, ok := ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`)); ok {
+		t.Fatal("escalated calls must not have a minimal rule preview")
 	}
 	if _, _, ok := ApprovalRulePreview("edit", json.RawMessage(`{}`)); ok {
 		t.Fatal("non-run_cmd must not have a rule preview")
@@ -257,8 +270,12 @@ func TestRunCmdTrustPreview(t *testing.T) {
 	if RunCmdTrustPreview("run_cmd", argsJSON(t, "make", "build")) {
 		t.Fatal("non-escalated calls must not offer the trust option")
 	}
-	if RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","x"],"sandbox_permissions":"require_escalated"}`)) {
-		t.Fatal("shells must not offer the trust option")
+	if RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make deploy && echo done"],"sandbox_permissions":"require_escalated"}`)) {
+		t.Fatal("compound shells must not offer the trust option")
+	}
+	// A simple sh -c script unwraps to its inner program and may offer it.
+	if !RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make deploy"],"sandbox_permissions":"require_escalated"}`)) {
+		t.Fatal("simple-shell escalated calls must offer the trust option for the inner program")
 	}
 	if RunCmdTrustPreview("edit", json.RawMessage(`{}`)) {
 		t.Fatal("non-run_cmd must not offer the trust option")

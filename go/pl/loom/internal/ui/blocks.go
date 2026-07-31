@@ -75,6 +75,22 @@ type TranscriptBlock struct {
 	// Approval info (tool blocks)
 	ApprovalID domain.EventID
 	ArgsHash   string
+
+	// Subagent tracks a delegate_task block's child run: the live
+	// progress line beneath the summary, and the drill-in target for the
+	// read-only overlay (Ctrl+G). Nil for non-delegate tools.
+	Subagent *SubagentBlockState
+}
+
+// SubagentBlockState is the UI-side projection of a delegated child run,
+// fed by subagent.started/progress/finished runtime events.
+type SubagentBlockState struct {
+	ChildID      domain.SessionID
+	ToolCalls    int
+	InputTokens  int64
+	OutputTokens int64
+	// Outcome is empty while the child is still running.
+	Outcome string
 }
 
 // BlockIndex stores transcript blocks indexed by their stable IDs.
@@ -428,6 +444,41 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 			}
 			idx.Add(block)
 			return block.ID
+		}
+
+	case runtimeevent.KindSubagentStarted:
+		var payload runtimeevent.SubagentStartedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			if block, exists := idx.Get(fmt.Sprintf("tool-%s", payload.CallID)); exists {
+				block.Subagent = &SubagentBlockState{ChildID: payload.ChildSessionID}
+				if block.Target == "" {
+					block.Target = truncateDisplayWidth(payload.Task, 80)
+				}
+				return block.ID
+			}
+		}
+
+	case runtimeevent.KindSubagentProgress:
+		var payload runtimeevent.SubagentProgressPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			if block, exists := idx.Get(fmt.Sprintf("tool-%s", payload.CallID)); exists && block.Subagent != nil {
+				block.Subagent.ToolCalls = payload.ToolCalls
+				block.Subagent.InputTokens = payload.InputTokens
+				block.Subagent.OutputTokens = payload.OutputTokens
+				return block.ID
+			}
+		}
+
+	case runtimeevent.KindSubagentFinished:
+		var payload runtimeevent.SubagentFinishedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			if block, exists := idx.Get(fmt.Sprintf("tool-%s", payload.CallID)); exists && block.Subagent != nil {
+				block.Subagent.Outcome = payload.Outcome
+				block.Subagent.ToolCalls = payload.ToolCalls
+				block.Subagent.InputTokens = payload.InputTokens
+				block.Subagent.OutputTokens = payload.OutputTokens
+				return block.ID
+			}
 		}
 
 	case runtimeevent.KindPlanUpdated:

@@ -21,7 +21,9 @@ go_test(
     name = "e2e_test",
     srcs = [
         "context_budget_e2e_test.go",
+        "permission_e2e_test.go",
         "skills_e2e_test.go",
+        "subagent_e2e_test.go",
     ],
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
@@ -31,11 +33,16 @@ go_test(
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/fakes:fakes_lib",
         "//go/pl/loom/internal/model/openai:openai_lib",
+        "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/process:process_lib",
         "//go/pl/loom/internal/prompt:prompt",
+        "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/skill:skill_lib",
         "//go/pl/loom/internal/tool/builtin:builtin_lib",
         "//go/pl/loom/internal/tool/command:command_lib",
+        "//go/pl/loom/internal/tool/edit:edit_lib",
+        "//go/pl/loom/internal/tool/subagent:subagent_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )

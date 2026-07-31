@@ -36,14 +36,35 @@ var dangerousPrograms = map[string]string{
 	"shred":    "shred destroys file contents irrecoverably",
 	"fdisk":    "fdisk edits partition tables",
 	"diskutil": "diskutil can erase/repartition disks",
+	"sudo":     "sudo runs the command as root, escaping every user-level boundary",
+	"su":       "su switches to another user (typically root), escaping every user-level boundary",
+	"doas":     "doas runs the command as another user, escaping every user-level boundary",
 }
 
 // dangerousSubcommandOps are (program, subcommand) pairs whose flagged
-// forms rewrite shared state or discard work: git push --force/--delete.
+// forms rewrite shared state or discard work: git push --force/--delete,
+// git reset --hard.
 var dangerousSubcommandOps = map[string]map[string][]string{
 	"git": {
-		"push": {"--force", "-f", "--force-with-lease", "--delete", "-d"},
+		"push":  {"--force", "-f", "--force-with-lease", "--delete", "-d"},
+		"reset": {"--hard"},
 	},
+}
+
+// exfilNetworkPrograms are network egress tools; combined with an argument
+// pointing at a credential path they look like secret exfiltration. Inside
+// the sandbox sensitive paths stay unreadable, but a widened sandbox
+// (network grant) keeps that protection while the tool gains egress — so
+// the pattern still deserves a prompt.
+var exfilNetworkPrograms = map[string]struct{}{
+	"curl": {}, "wget": {}, "nc": {}, "ncat": {}, "netcat": {}, "scp": {}, "rsync": {},
+}
+
+// credentialPathHints are path fragments whose presence in a network
+// tool's argv suggests credential exfiltration.
+var credentialPathHints = []string{
+	".ssh", ".aws", ".kube", ".gnupg", ".my_sso_config", "id_rsa", "id_ed25519",
+	"credentials", "/etc/shadow", "/etc/passwd",
 }
 
 // DangerousCommand returns a human-readable reason when argv matches the
@@ -68,6 +89,66 @@ func DangerousCommand(argv []string) string {
 	}
 	if reason := matchDangerousTargets(base, argv[1:]); reason != "" {
 		return reason
+	}
+	if reason := matchGitClean(base, argv[1:]); reason != "" {
+		return reason
+	}
+	if reason := matchCredentialExfil(base, argv[1:]); reason != "" {
+		return reason
+	}
+	return ""
+}
+
+// matchGitClean flags `git clean` with a force flag (which deletes
+// untracked files irrecoverably) but not the dry-run form (-n).
+func matchGitClean(base string, args []string) string {
+	if base != "git" {
+		return ""
+	}
+	subcommand := false
+	forced := false
+	skipNext := false
+	for _, arg := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			if _, takesValue := gitValueFlags[arg]; takesValue {
+				skipNext = true
+				continue
+			}
+			if subcommand && strings.ContainsRune(arg, 'f') && !strings.ContainsRune(arg, 'n') {
+				forced = true
+			}
+			continue
+		}
+		if !subcommand {
+			if arg != "clean" {
+				return ""
+			}
+			subcommand = true
+		}
+	}
+	if subcommand && forced {
+		return "git clean -f deletes untracked files irrecoverably"
+	}
+	return ""
+}
+
+// matchCredentialExfil flags network egress tools whose arguments
+// reference credential paths.
+func matchCredentialExfil(base string, args []string) string {
+	if _, ok := exfilNetworkPrograms[base]; !ok {
+		return ""
+	}
+	for _, arg := range args {
+		lower := strings.ToLower(arg)
+		for _, hint := range credentialPathHints {
+			if strings.Contains(lower, hint) {
+				return base + " with a credential-path argument (" + arg + ") looks like secret exfiltration"
+			}
+		}
 	}
 	return ""
 }

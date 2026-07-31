@@ -157,6 +157,16 @@ type ToolError struct {
 	LogRef    string `json:"log_ref,omitempty"`
 }
 
+// ToolResult metadata keys for externally-metered token usage: a tool
+// whose execution consumed model tokens outside the run's own model
+// calls (delegate_task's sub-agent run) reports them here, and the
+// agent loop folds them into the run's budget counters so delegated
+// work stays budget-transparent (docs/SUBAGENT_DESIGN.md §5.2).
+const (
+	ToolMetaExternalInputTokens  = "external_input_tokens"
+	ToolMetaExternalOutputTokens = "external_output_tokens"
+)
+
 // ToolResult represents the outcome of a tool execution.
 type ToolResult struct {
 	CallID     ToolCallID        `json:"call_id"`

@@ -2966,3 +2966,65 @@ func TestToolResultTracePreviewKeepsValidUTF8(t *testing.T) {
 		t.Fatalf("preview must cut at a rune boundary, not substitute: %q", preview[len(preview)-20:])
 	}
 }
+
+func TestLoopFoldsExternalToolUsageIntoBudget(t *testing.T) {
+	// delegate_task's contract: a tool reports externally-metered tokens
+	// (a sub-agent run's consumption) in its result metadata, and the
+	// loop folds them into the run budget alongside its own model calls
+	// (docs/SUBAGENT_DESIGN.md §5.2).
+	delegatingTool := fakes.NewFakeTool(
+		domain.ToolDefinition{
+			Name:         "read_file",
+			Description:  "Read file contents",
+			InputSchema:  json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`),
+			Capabilities: []domain.Capability{domain.CapFSRead},
+			Source:       domain.ToolSourceBuiltin,
+		},
+		domain.ToolResult{
+			Status:  domain.ToolStatusSuccess,
+			Content: []domain.ContentPart{{Kind: domain.PartText, Text: "conclusion"}},
+			Metadata: map[string]string{
+				domain.ToolMetaExternalInputTokens:  "500",
+				domain.ToolMetaExternalOutputTokens: "120",
+			},
+			StartedAt:  time.Now(),
+			FinishedAt: time.Now(),
+		},
+	)
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{
+				{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"x.go"}`)},
+			},
+			StopReason: domain.StopToolUse,
+			UsageIn:    100,
+			UsageOut:   30,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+	)
+	registry := NewToolRegistry()
+	if err := registry.Register(delegatingTool); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "delegate this"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{
+		Run:      run,
+		Model:    model,
+		Registry: registry,
+		Logger:   slog.Default(),
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	// Model-metered 100/30 + externally-reported 500/120.
+	if run.Usage.InputTokens != 600 || run.Usage.OutputTokens != 150 {
+		t.Fatalf("usage = %d/%d, want 600/150 (model + folded external)",
+			run.Usage.InputTokens, run.Usage.OutputTokens)
+	}
+}
