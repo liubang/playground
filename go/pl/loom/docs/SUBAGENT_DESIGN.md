@@ -26,7 +26,6 @@
 ### 1.1 非目标（本期不做）
 
 - **异步 spawn/wait 模型**（codex V2 路线：spawn 立即返回、邮箱通信、父子并发）：需要重写 Controller 并发模型与审批桥，见 §8 演进路径；
-- **并行 delegate**（一个回合多个 `delegate_task` 并发执行）：`executeTools` 串行，并行化是独立优化项；
 - **可写子 Agent**：写操作、审批桥接留待后续；子 Agent 的写需求由主 Agent 消化结论后自行执行（主 Agent 负责验证及修改）；
 - **递归委托**：子 Agent 的工具集不含 `delegate_task`，深度恒为 1；
 - **fork 父上下文**：`fork_turns` 语义预留（§8），V1 子 Agent 一律全新上下文；
@@ -236,3 +235,33 @@ subagent:
 ### 10.4 与 codex 式的差异（有意为之）
 
 不做子活动内联流式渲染：V1 父 turn 阻塞期间主 transcript 没有需要避让的新内容，全屏 overlay 信息密度更高，且不需要反转 D6。V2 异步化后 overlay 主入口保留，再加 agent picker 做并发切换（演进非返工）。
+
+---
+
+## 11. 并行工具执行（V1.2 已实现）
+
+模型一个回合发出多个 `delegate_task`（或多个只读调用）时，`executeTools` 不再一律串行，而是**按安全性分段并行**：
+
+### 11.1 机制
+
+1. **opt-in 接口**：`domain.ConcurrentSafely`（`ConcurrentSafe() bool`）是工具实现的显式声明——共享状态必须只有 mutex 保护的基础设施（file-state book、artifact store、response cache），副作用必须限于本调用。已接入：全部只读工具（read_file/list_dir/search/glob/git_*/read_skill/web_fetch）与 `delegate_task`（每次委托都是全新隔离 session）。未接入（默认串行）：edit/write/run_cmd/lint/update_goal/update_plan/ask_user；
+2. **分段**：一个批次的调用按原始顺序切成「连续安全调用」的最大段。段内并行，段间严格串行——写操作永远不会和读操作重叠，顺序语义不受影响；
+3. **持久化不变量不变**：并行段的**全部** `tool.execution_started` 事件在任何副作用发生前一次性 flush——崩溃恢复对每个 started-but-uncompleted 调用的 reconcile 证据与串行路径完全一致；
+4. **投影保持单线程**：只有 `tool.Execute` 并发；结果收集后**按调用顺序**串行记录（RecordToolResult / trace / 用量折算 / runaway 计数），transcript、事件序列、预算记账全部确定；
+5. **限流**：段内并发上限 4（`maxConcurrentToolExecs`）——子 Agent 是完整的模型循环，无限扇出会放大 provider 压力。
+
+### 11.2 对子 Agent 的意义
+
+多个委托真正并发跑：每个子 session 独立持久化、各有 observer ticker 与进度行（桥按 callID 分轨），overlay 点击各自钻取。上下文隔离在并行下不变（e2e 线上字节级验证）。
+
+### 11.3 并发安全审计记录
+
+| 共享设施 | 结论 |
+|----------|------|
+| `workspace.FileStateBook` | mutex 保护 ✓ |
+| `artifact.Store` | 每次调用私有 staging 文件 ✓ |
+| `webfetch.responseCache` | mutex 保护 ✓ |
+| `session.SQLiteStore` | 单连接串行写 + 每 session 乐观版本 ✓ |
+| `fakes.FakeStore` / `FakeModel` | mutex 保护 ✓ |
+| `process.Runner` | 每次调用独立进程；输出缓冲 mutex 保护 ✓ |
+| trace Recorder（otel） | 线程安全；`recordTool` 只在串行段调用 ✓ |

@@ -117,6 +117,30 @@ func TestRenderSubagentProgress(t *testing.T) {
 	}
 }
 
+func TestRenderSubagentProgressQueuedHint(t *testing.T) {
+	m := Model{theme: NoColorTheme()}
+	// Serial execution: a second delegate_task in the same batch sits in
+	// "prepared" with no child yet — the block must say so instead of
+	// looking broken.
+	queued := &TranscriptBlock{Tool: "delegate_task", Status: "prepared"}
+	if line := m.renderSubagentProgress(queued); !strings.Contains(line, "queued") {
+		t.Fatalf("queued delegate progress = %q, want the queued hint", line)
+	}
+	starting := &TranscriptBlock{Tool: "delegate_task", Status: "running"}
+	if line := m.renderSubagentProgress(starting); !strings.Contains(line, "starting") {
+		t.Fatalf("starting delegate progress = %q, want the starting hint", line)
+	}
+	// A completed or non-delegate block gets no queue hint.
+	done := &TranscriptBlock{Tool: "delegate_task", Status: "success", Done: true}
+	if line := m.renderSubagentProgress(done); line != "" {
+		t.Fatalf("completed delegate without state = %q, want empty", line)
+	}
+	other := &TranscriptBlock{Tool: "read_file", Status: "prepared"}
+	if line := m.renderSubagentProgress(other); line != "" {
+		t.Fatalf("non-delegate prepared block = %q, want empty", line)
+	}
+}
+
 func TestBuildSubagentContent(t *testing.T) {
 	m := Model{theme: NoColorTheme(), width: 100}
 	if out := m.buildSubagentContent(nil); !strings.Contains(out, "not produced any messages") {

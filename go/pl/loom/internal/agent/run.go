@@ -1571,7 +1571,20 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 	return err
 }
 
+// maxConcurrentToolExecs bounds parallel executions within one
+// concurrent-safe segment: delegated child runs are full model loops,
+// so unbounded fan-out would multiply provider pressure
+// (docs/SUBAGENT_DESIGN.md §11).
+const maxConcurrentToolExecs = 4
+
+// preparedExec is one validated call queued for execution.
+type preparedExec struct {
+	prepared domain.PreparedCall
+	tool     domain.Tool
+}
+
 func (l *Loop) executeTools(ctx context.Context) error {
+	var batch []preparedExec
 	for _, tc := range lastToolCalls(l.Run.Messages) {
 		// Do not replay tool executions that already produced a result.
 		if l.isToolResultRecorded(tc.ID) {
@@ -1596,28 +1609,24 @@ func (l *Loop) executeTools(ctx context.Context) error {
 			l.recordToolExecutionError(ctx, tc, err)
 			continue
 		}
+		batch = append(batch, preparedExec{prepared: prepared, tool: tool})
+	}
 
-		l.Run.appendEvent(domain.EventToolExecutionStarted, makeToolCallAuditPayload(prepared))
-		if l.Store != nil {
-			if err := l.flushEvents(ctx); err != nil {
-				// Same dangling-call guarantee as the approval path: close the
-				// not-yet-executed calls so the transcript stays replayable.
-				l.closeUnresolvedCalls(ctx, fmt.Sprintf("execution interrupted before completion (%v); the call may not have run", err))
-				l.terminate(ctx, domain.OutcomeFailed)
-				return err
-			}
+	// Consecutive concurrent-safe calls form parallel segments; everything
+	// else executes one at a time, in batch order. Segment boundaries keep
+	// ordering semantics strict: a write never overlaps a read, and every
+	// segment runs after the previous one fully completed
+	// (docs/SUBAGENT_DESIGN.md §11).
+	for _, segment := range segmentBatch(batch) {
+		var err error
+		switch {
+		case len(segment) > 1:
+			err = l.executeSegmentParallel(ctx, segment)
+		case len(segment) == 1:
+			err = l.executeOne(ctx, segment[0])
 		}
-
-		result := tool.Execute(ctx, prepared)
-		l.Run.RecordToolResult(result)
-		l.recordTool(ctx, prepared, result)
-		l.foldExternalUsage(result)
-		if changed, ok := extractFileChanged(result, prepared); ok {
-			l.markProgress()
-			l.Run.appendEvent(domain.EventFileChanged, changed)
-		}
-		if reason := l.trackExecResult(result); reason != "" {
-			return l.terminateRunaway(ctx, reason)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -1628,6 +1637,99 @@ func (l *Loop) executeTools(ctx context.Context) error {
 	l.reportContextUsage()
 	_, err := l.Run.TransitionTo(domain.PhasePreparing)
 	return err
+}
+
+// segmentBatch splits the batch into maximal runs of consecutive
+// concurrent-safe calls. Singletons and unsafe runs execute serially.
+func segmentBatch(batch []preparedExec) [][]preparedExec {
+	var segments [][]preparedExec
+	for _, item := range batch {
+		if domain.ToolConcurrentSafe(item.tool) && len(segments) > 0 {
+			if last := segments[len(segments)-1]; domain.ToolConcurrentSafe(last[0].tool) {
+				segments[len(segments)-1] = append(last, item)
+				continue
+			}
+		}
+		segments = append(segments, []preparedExec{item})
+	}
+	return segments
+}
+
+// executeOne runs a single call with the classic per-call durability:
+// the started event is persisted right before execution.
+func (l *Loop) executeOne(ctx context.Context, item preparedExec) error {
+	l.Run.appendEvent(domain.EventToolExecutionStarted, makeToolCallAuditPayload(item.prepared))
+	if l.Store != nil {
+		if err := l.flushEvents(ctx); err != nil {
+			// Same dangling-call guarantee as the approval path: close the
+			// not-yet-executed calls so the transcript stays replayable.
+			l.closeUnresolvedCalls(ctx, fmt.Sprintf("execution interrupted before completion (%v); the call may not have run", err))
+			l.terminate(ctx, domain.OutcomeFailed)
+			return err
+		}
+	}
+	result := item.tool.Execute(ctx, item.prepared)
+	l.recordToolOutcome(ctx, item, result)
+	if reason := l.trackExecResult(result); reason != "" {
+		return l.terminateRunaway(ctx, reason)
+	}
+	return nil
+}
+
+// executeSegmentParallel fans one concurrent-safe segment out with
+// bounded parallelism. The durability guarantee matches the serial path:
+// EVERY started event is persisted before ANY side effect begins, so
+// crash recovery reconciles the whole segment from the same evidence.
+// The run projection stays single-threaded — results are recorded
+// serially in call order, keeping the transcript, the event sequence,
+// and the runaway counters deterministic.
+func (l *Loop) executeSegmentParallel(ctx context.Context, segment []preparedExec) error {
+	for _, item := range segment {
+		l.Run.appendEvent(domain.EventToolExecutionStarted, makeToolCallAuditPayload(item.prepared))
+	}
+	if l.Store != nil {
+		if err := l.flushEvents(ctx); err != nil {
+			l.closeUnresolvedCalls(ctx, fmt.Sprintf("execution interrupted before completion (%v); the call may not have run", err))
+			l.terminate(ctx, domain.OutcomeFailed)
+			return err
+		}
+	}
+
+	results := make([]domain.ToolResult, len(segment))
+	sem := make(chan struct{}, maxConcurrentToolExecs)
+	var wg sync.WaitGroup
+	for i, item := range segment {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			results[i] = item.tool.Execute(ctx, item.prepared)
+		}()
+	}
+	wg.Wait()
+
+	for i, item := range segment {
+		l.recordToolOutcome(ctx, item, results[i])
+		if reason := l.trackExecResult(results[i]); reason != "" {
+			return l.terminateRunaway(ctx, reason)
+		}
+	}
+	return nil
+}
+
+// recordToolOutcome records one execution's result through the standard
+// serial chain: transcript message, trace record, external usage fold,
+// file-change audit. Runaway accounting (trackExecResult) is the
+// caller's job so it can control ordering and early termination.
+func (l *Loop) recordToolOutcome(ctx context.Context, item preparedExec, result domain.ToolResult) {
+	l.Run.RecordToolResult(result)
+	l.recordTool(ctx, item.prepared, result)
+	l.foldExternalUsage(result)
+	if changed, ok := extractFileChanged(result, item.prepared); ok {
+		l.markProgress()
+		l.Run.appendEvent(domain.EventFileChanged, changed)
+	}
 }
 
 // shouldCompact decides whether the run compacts before the next model

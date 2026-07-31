@@ -197,6 +197,12 @@ func NewDelegateTaskTool(f *Factory) (*DelegateTaskTool, error) {
 // Definition returns the tool definition.
 func (t *DelegateTaskTool) Definition() domain.ToolDefinition { return t.def }
 
+// ConcurrentSafe implements domain.ConcurrentSafely: every delegation
+// builds a brand-new isolated session, run, and loop, so sibling
+// delegations in one batch can execute in parallel
+// (docs/SUBAGENT_DESIGN.md §11).
+func (t *DelegateTaskTool) ConcurrentSafe() bool { return true }
+
 // Prepare validates and canonicalizes the call; it is side-effect-free.
 //
 // The reported risk is R1: the child is read-only by construction, so a

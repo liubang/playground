@@ -134,6 +134,10 @@ func NewReadSkillTool(catalog *skill.AtomicCatalog) (*ReadSkillTool, error) {
 // Definition returns the tool definition.
 func (t *ReadSkillTool) Definition() domain.ToolDefinition { return t.def }
 
+// ConcurrentSafe implements domain.ConcurrentSafely: skill reads are
+// independent file reads.
+func (t *ReadSkillTool) ConcurrentSafe() bool { return true }
+
 // Prepare locates and resolves the target file without reading its contents
 // (side-effect free and deterministic across the freshness re-Prepare).
 func (t *ReadSkillTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {

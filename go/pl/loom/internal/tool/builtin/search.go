@@ -99,6 +99,10 @@ func (t *SearchTool) Definition() domain.ToolDefinition {
 	return t.base.def
 }
 
+// ConcurrentSafe implements domain.ConcurrentSafely: each search spawns
+// an independent rg process and shares no state across calls.
+func (t *SearchTool) ConcurrentSafe() bool { return true }
+
 func (t *SearchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	args, err := decodeStrict[searchArgs](call.Arguments)
 	if err != nil {

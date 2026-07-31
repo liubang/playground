@@ -33,6 +33,26 @@ type Tool interface {
 	Execute(ctx context.Context, prepared PreparedCall) ToolResult
 }
 
+// ConcurrentSafely is an optional opt-in interface: the tool's Execute
+// is safe to run concurrently with other tool executions in the same
+// batch (docs/SUBAGENT_DESIGN.md §11). Eligibility is a property of the
+// implementation, not of a single call: the tool must share no mutable
+// state across executions except mutex-protected infrastructure
+// (file-state book, artifact store, response caches), and its side
+// effects must be confined to its own call (reads, or — delegate_task —
+// a brand-new isolated session). Tools that write the workspace, spawn
+// foreground processes, or interact with the user must not opt in.
+type ConcurrentSafely interface {
+	ConcurrentSafe() bool
+}
+
+// ToolConcurrentSafe reports whether the tool opted into concurrent
+// batch execution. Missing opt-in means serial — the safe default.
+func ToolConcurrentSafe(t Tool) bool {
+	cs, ok := t.(ConcurrentSafely)
+	return ok && cs.ConcurrentSafe()
+}
+
 // --- Model interface (§7) ---
 
 // ReasoningEffort expresses how much reasoning ("thinking") the model should

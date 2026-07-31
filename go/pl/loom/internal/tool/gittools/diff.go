@@ -69,6 +69,10 @@ func (t *GitDiffTool) Definition() domain.ToolDefinition {
 	return t.base.def
 }
 
+// ConcurrentSafe implements domain.ConcurrentSafely: each invocation
+// spawns an independent read-only git process.
+func (t *GitDiffTool) ConcurrentSafe() bool { return true }
+
 func (t *GitDiffTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	args, err := decodeStrict[gitDiffArgs](call.Arguments)
 	if err != nil {

@@ -125,6 +125,11 @@ func (t *WebFetchTool) Definition() domain.ToolDefinition {
 	return t.base.def
 }
 
+// ConcurrentSafe implements domain.ConcurrentSafely: fetches are
+// independent, the response cache is mutex-protected, and artifact
+// staging uses per-call private files.
+func (t *WebFetchTool) ConcurrentSafe() bool { return true }
+
 func (t *WebFetchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	args, err := decodeStrict[fetchArgs](call.Arguments)
 	if err != nil {
