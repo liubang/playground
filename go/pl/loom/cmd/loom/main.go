@@ -326,6 +326,7 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 		Limits:        resolved.Limits,
 		ContextWindow: int(effectiveWindow),
 		Models:        modelCatalog(resolved),
+		Keymap:        resolved.UI.Keymap,
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

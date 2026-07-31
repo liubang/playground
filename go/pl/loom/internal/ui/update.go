@@ -25,7 +25,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
@@ -143,7 +142,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case subagentTickMsg:
 		next, cmd = m.handleSubagentTick(msg)
 	case sessionsLoadedMsg:
-		m.picker.Load(msg.sessions, msg.err)
+		if m.sessionFinder != nil {
+			m.sessionFinder.Load(sessionFinderItems(msg.sessions), msg.err)
+		}
 		next = m
 	case promptSubmittedMsg:
 		next = m.handlePromptSubmitted(msg)
@@ -228,10 +229,12 @@ func (m *Model) layout() {
 // Rendering is incremental: blocks are memoized by a fingerprint of their
 // render inputs, so long sessions do not re-render every block per event.
 func (m *Model) syncTranscript() {
-	// Skip the O(transcript) rebuild when nothing render-relevant changed
-	// (REVIEW M14). Volatile blocks (in-progress, live timers/spinners)
-	// always force a rebuild so animations keep advancing.
-	if m.blocks == m.lastSyncIdx && m.blocks.Version() == m.lastSyncVersion &&
+	// Skip the rebuild when nothing render-relevant changed (REVIEW M14).
+	// Volatile blocks (in-progress, live timers/spinners) always force a
+	// sync so animations keep advancing — but a volatile-forced sync is
+	// cheap: only the changed suffix is re-rendered (see below).
+	sameIdx := m.blocks == m.lastSyncIdx
+	if sameIdx && m.blocks.Version() == m.lastSyncVersion &&
 		m.width == m.lastSyncWidth && m.theme.NoColor == m.lastSyncNoColor &&
 		!m.hasVolatileBlocks() {
 		return
@@ -243,52 +246,106 @@ func (m *Model) syncTranscript() {
 	m.lastSyncNoColor = m.theme.NoColor
 	if len(m.blocks.Order) == 0 {
 		m.viewport.SetContent(m.renderWelcome())
+		m.lastOrder = nil
 		return
 	}
 	if m.renderCache == nil {
 		m.renderCache = make(map[string]cachedRender)
 	}
-	m.blockOffsets = make(map[string]int, len(m.blocks.Order))
-	var b strings.Builder
-	offset := 0
+	if m.blockOffsets == nil {
+		m.blockOffsets = make(map[string]int, len(m.blocks.Order))
+	}
+
+	order := m.blocks.Order
+	// Longest positionally-stable, cache-valid prefix: these blocks keep
+	// their rendered lines and offsets untouched, so a sync splices only
+	// the changed suffix instead of concatenating and re-splitting the
+	// whole transcript. Streaming is the hot path: the tail block is
+	// volatile, everything before it survives the prefix check.
+	prefix := 0
+	if sameIdx {
+		for prefix < len(order) {
+			if prefix >= len(m.lastOrder) || m.lastOrder[prefix] != order[prefix] {
+				break
+			}
+			id := order[prefix]
+			key := m.blockRenderKey(m.blocks.ByID[id])
+			entry, ok := m.renderCache[id]
+			if key == "" || !ok || entry.key != key {
+				break
+			}
+			if _, ok := m.blockOffsets[id]; !ok {
+				break
+			}
+			prefix++
+		}
+	}
+	if prefix == len(order) {
+		// Forced here by volatility yet nothing re-renderable changed;
+		// keep the previous frame.
+		return
+	}
+
+	// Offsets past the splice point are recomputed below.
+	for _, id := range m.lastOrder[min(prefix, len(m.lastOrder)):] {
+		delete(m.blockOffsets, id)
+	}
+
+	var lines []string
+	if prefix > 0 {
+		lastKept := order[prefix-1]
+		keepEnd := m.blockOffsets[lastKept] + len(m.renderCache[lastKept].lines)
+		keepEnd = min(keepEnd, len(m.viewport.lines))
+		lines = append([]string(nil), m.viewport.lines[:keepEnd]...)
+	}
+	offset := len(lines)
+
+	m.lastSyncRendered = 0
 	var prev *TranscriptBlock
-	for _, id := range m.blocks.Order {
+	if prefix > 0 {
+		prev = m.blocks.ByID[order[prefix-1]]
+	}
+	for i := prefix; i < len(order); i++ {
+		id := order[i]
 		block := m.blocks.ByID[id]
 		if prev != nil {
 			// A blank row separates logical sections (Claude Code's airy
 			// layout); consecutive tool calls stay packed so a retry burst
 			// still reads as one list instead of scattered rows.
+			sep := 1
 			if prev.Kind == BlockKindTool && block.Kind == BlockKindTool {
-				b.WriteString("\n")
-			} else {
-				b.WriteString("\n\n")
+				sep = 0
+			}
+			for j := 0; j < sep; j++ {
+				lines = append(lines, "")
 				offset++
 			}
 		}
 		m.blockOffsets[id] = offset
 		key := m.blockRenderKey(block)
-		var out string
-		cached := false
+		var blockLines []string
 		if key != "" {
 			if entry, ok := m.renderCache[id]; ok && entry.key == key {
-				out = entry.out
-				cached = true
+				blockLines = entry.lines
 			}
 		}
-		if !cached {
-			out = m.renderBlock(block)
+		if blockLines == nil {
+			out := m.renderBlock(block)
+			blockLines = strings.Split(out, "\n")
+			m.lastSyncRendered++
 			if key != "" {
-				m.renderCache[id] = cachedRender{key: key, out: out}
+				m.renderCache[id] = cachedRender{key: key, out: out, lines: blockLines}
 			}
 		}
-		b.WriteString(out)
-		offset += lipgloss.Height(out)
+		lines = append(lines, blockLines...)
+		offset += len(blockLines)
 		prev = block
 	}
-	m.viewport.SetContent(b.String())
+	m.viewport.SetLines(lines)
 	if m.followTail {
 		m.viewport.GotoBottom()
 	}
+	m.lastOrder = append(m.lastOrder[:0], order...)
 }
 
 // hasVolatileBlocks reports whether any block embeds live state (spinner
@@ -307,10 +364,13 @@ func (m *Model) hasVolatileBlocks() bool {
 	return false
 }
 
-// cachedRender is a memoized renderBlock output.
+// cachedRender is a memoized renderBlock output: the joined string and
+// its pre-split lines (the incremental sync splices line slices, so a
+// cache hit must not pay a re-split).
 type cachedRender struct {
-	key string
-	out string
+	key   string
+	out   string
+	lines []string
 }
 
 // blockRenderKey fingerprints every input that affects a block's rendered
@@ -341,9 +401,11 @@ func (m Model) blockRenderKey(block *TranscriptBlock) string {
 
 // visibleTranscriptHeight computes available height for the transcript
 // viewport, reserving space for whatever occupies the composer area.
+// Floating overlays (alt-screen help/question) reserve nothing: they
+// draw over the chat frame, so the base layout applies (m.baseMode).
 func (m Model) visibleTranscriptHeight() int {
 	reserved := 1 + 1 // header + status bar
-	switch m.mode {
+	switch m.baseMode() {
 	case ModeChat:
 		reserved += m.textArea.Height() + 2 // composer border
 		reserved += m.completionHeight()
@@ -457,11 +519,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = ModeChat
 		return m, nil
 	case ModeSessionPicker:
-		return m.handlePickerKey(msg)
+		return m.handleSessionFinderKey(msg)
 	case ModeModelPicker:
-		return m.handleModelPickerKey(msg)
+		return m.handleModelFinderKey(msg)
 	case ModeReasoningPicker:
-		return m.handleReasoningPickerKey(msg)
+		return m.handleReasoningFinderKey(msg)
 	case ModeQuestion:
 		return m.handleQuestionKey(msg)
 	case ModeSearch:
@@ -475,30 +537,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleCtrlC()
 	case tea.KeyCtrlD:
 		return m.handleCtrlD()
-	case tea.KeyCtrlR:
-		m.blocks.ToggleLatestReasoning()
-		return m, nil
-	case tea.KeyCtrlE:
-		m.blocks.ToggleLatestToolOutput()
-		return m, nil
-	case tea.KeyCtrlO:
-		m.blocks.ToggleAllToolOutputs()
-		return m, nil
-	case tea.KeyCtrlT:
-		m.planHidden = !m.planHidden
-		return m, nil
-	case tea.KeyCtrlF:
-		m.enterSearch()
-		return m, nil
-	case tea.KeyCtrlG:
-		return m.openSubagentOverlay()
-	case tea.KeyCtrlY:
-		text := m.blocks.LatestFinalAssistantText()
-		if text == "" {
-			m.setStatus("Nothing to copy", true)
-			return m, nil
-		}
-		return m, copyToClipboard(text)
+	}
+	// Bindable view actions resolve through the keymap (docs/
+	// VIM_UI_DESIGN.md §5); structural keys interleaved with composer
+	// editing stay in the switch below.
+	if action, ok := m.keymap.Lookup(ContextChat, msg); ok {
+		return m.runChatAction(action)
+	}
+	switch msg.Type {
 	case tea.KeyEsc:
 		if m.quitConfirm {
 			return m, tea.Quit
@@ -558,9 +604,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.viewport.LineDown(m.viewport.Height)
 		m.updateFollowTailAtBottom()
 		return m, nil
-	case tea.KeyCtrlEnd:
-		m.resumeFollowTail()
-		return m, nil
 	case tea.KeyEnter:
 		if !msg.Alt {
 			value := m.textArea.Value()
@@ -602,10 +645,18 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			return m.openSubagentOverlayFor(block)
 		}
 	}
-	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
+	// Wheel scrolling (bubbles/viewport handled this internally; lineView
+	// keeps it explicit). One notch scrolls mouseWheelDelta lines.
+	if msg.Action == tea.MouseActionPress {
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			m.viewport.LineUp(mouseWheelDelta)
+		case tea.MouseButtonWheelDown:
+			m.viewport.LineDown(mouseWheelDelta)
+		}
+	}
 	m.updateFollowTailAtBottom()
-	return m, cmd
+	return m, nil
 }
 
 // blockAtRow returns the transcript block occupying the clicked screen
@@ -642,38 +693,85 @@ func (m *Model) toggleReasoningAt(screenY int) bool {
 	return true
 }
 
-// pickerNav is the cursor-navigation surface shared by all pickers.
-type pickerNav interface {
-	MoveUp()
-	MoveDown()
+// runChatAction executes a keymap-resolved global view action.
+func (m Model) runChatAction(action Action) (tea.Model, tea.Cmd) {
+	switch action {
+	case ActionToggleReasoning:
+		m.blocks.ToggleLatestReasoning()
+	case ActionToggleToolOutput:
+		m.blocks.ToggleLatestToolOutput()
+	case ActionToggleAllTools:
+		m.blocks.ToggleAllToolOutputs()
+	case ActionTogglePlan:
+		m.planHidden = !m.planHidden
+	case ActionSearchTranscript:
+		m.enterSearch()
+	case ActionViewSubagent:
+		return m.openSubagentOverlay()
+	case ActionCopyLastReply:
+		text := m.blocks.LatestFinalAssistantText()
+		if text == "" {
+			m.setStatus("Nothing to copy", true)
+			return m, nil
+		}
+		return m, copyToClipboard(text)
+	case ActionJumpToBottom:
+		m.resumeFollowTail()
+	}
+	return m, nil
 }
 
-// navPickerKey routes the keys every picker shares: Esc cancels back to
-// chat, ↑/↓ or vim j/k move the cursor (the composer is hidden in picker
-// modes, so plain letters are safe). handled=false means the caller must
-// route the key itself (Enter, or anything else).
-func (m Model) navPickerKey(msg tea.KeyMsg, nav pickerNav) (Model, bool) {
-	switch msg.Type {
-	case tea.KeyEsc:
-		m.mode = ModeChat
-		return m, true
-	case tea.KeyUp:
-		nav.MoveUp()
-	case tea.KeyDown:
-		nav.MoveDown()
-	case tea.KeyRunes:
-		switch msg.String() {
-		case "k":
-			nav.MoveUp()
-		case "j":
-			nav.MoveDown()
-		default:
-			return m, false
+// routeFinderKey translates keys for every finder mode (docs/
+// VIM_UI_DESIGN.md §6.3): arrows/ctrl+j/k/enter/esc resolve through the
+// picker keymap; normal-mode runes (j/k/g/G/i/q) are hardcoded vim
+// semantics. confirmed=true means the host should take f.Selected().
+func routeFinderKey[T any](m Model, msg tea.KeyMsg, f *Finder[T]) (Model, bool) {
+	if action, ok := m.keymap.Lookup(ContextPicker, msg); ok {
+		switch action {
+		case ActionCursorUp:
+			f.MoveUp()
+		case ActionCursorDown:
+			f.MoveDown()
+		case ActionConfirm:
+			return m, true
+		case ActionClose:
+			// Esc steps out one level at a time: insert → normal → closed.
+			if f.Normal() {
+				m.mode = ModeChat
+			} else {
+				f.EnterNormal()
+			}
 		}
-	default:
 		return m, false
 	}
-	return m, true
+	switch msg.Type {
+	case tea.KeyRunes:
+		if f.Normal() {
+			switch msg.String() {
+			case "k":
+				f.MoveUp()
+			case "j":
+				f.MoveDown()
+			case "g":
+				f.GotoTop()
+			case "G":
+				f.GotoBottom()
+			case "i", "a":
+				f.EnterInsert()
+			case "q":
+				m.mode = ModeChat
+			}
+			return m, false
+		}
+		for _, r := range msg.Runes {
+			f.TypeRune(r)
+		}
+	case tea.KeyBackspace:
+		f.Backspace()
+	case tea.KeyCtrlC:
+		m.mode = ModeChat
+	}
+	return m, false
 }
 
 // handleQuestionKey routes keys while the ask_user overlay is active. The
@@ -781,63 +879,79 @@ func (m Model) answerQuestionCmd(id domain.EventID, answer domain.QuestionAnswer
 	}
 }
 
-func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m2, handled := m.navPickerKey(msg, m.picker); handled {
+func (m Model) handleSessionFinderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.sessionFinder == nil {
+		m.mode = ModeChat
+		return m, nil
+	}
+	m2, confirmed := routeFinderKey(m, msg, m.sessionFinder)
+	if !confirmed {
 		return m2, nil
 	}
-	if msg.Type != tea.KeyEnter {
-		return m, nil
+	sel := m2.sessionFinder.Selected()
+	if sel == nil || sel.ID.IsZero() {
+		return m2, nil
 	}
-	sessionID := m.picker.Selected()
-	if sessionID.IsZero() {
-		return m, nil
-	}
-	m.setStatus("Resuming session...", false)
-	return m, m.sessionCmd(sessionAction{
+	sessionID := sel.ID
+	m2.setStatus("Resuming session...", false)
+	return m2, m2.sessionCmd(sessionAction{
 		name:    "Resume",
 		success: "Session resumed",
-		run:     func(ctx context.Context) error { return m.controller.ResumeSession(ctx, sessionID) },
+		run:     func(ctx context.Context) error { return m2.controller.ResumeSession(ctx, sessionID) },
 	})
 }
 
-func (m Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m2, handled := m.navPickerKey(msg, m.modelPicker); handled {
+func (m Model) handleModelFinderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.modelFinder == nil {
+		m.mode = ModeChat
+		return m, nil
+	}
+	m2, confirmed := routeFinderKey(m, msg, m.modelFinder)
+	if !confirmed {
 		return m2, nil
 	}
-	if msg.Type != tea.KeyEnter {
-		return m, nil
-	}
-	opt := m.modelPicker.Selected()
+	opt := m2.modelFinder.Selected()
 	if opt == nil {
-		return m, nil
+		return m2, nil
 	}
-	m.mode = ModeChat
-	if opt.Ref() == m.modelName {
-		m.setStatus(fmt.Sprintf("Model unchanged: %s", opt.Ref()), false)
-		return m, nil
+	m2.mode = ModeChat
+	if opt.Ref() == m2.modelName {
+		m2.setStatus(fmt.Sprintf("Model unchanged: %s", opt.Ref()), false)
+		return m2, nil
 	}
-	m.setStatus("Switching model...", false)
-	return m, m.setModelCmd(opt.Ref(), "/model "+opt.Ref())
+	m2.setStatus("Switching model...", false)
+	return m2, m2.setModelCmd(opt.Ref(), "/model "+opt.Ref())
 }
 
-func (m Model) handleReasoningPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m2, handled := m.navPickerKey(msg, m.reasoningPicker); handled {
+// currentReasoningArg reports the dial the /reasoning picker marks as
+// active: the session override when set, "default" otherwise.
+func (m Model) currentReasoningArg() string {
+	if m.reasoningOverridden && m.reasoningEffort != "" {
+		return m.reasoningEffort
+	}
+	return "default"
+}
+
+func (m Model) handleReasoningFinderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.reasoningFinder == nil {
+		m.mode = ModeChat
+		return m, nil
+	}
+	m2, confirmed := routeFinderKey(m, msg, m.reasoningFinder)
+	if !confirmed {
 		return m2, nil
 	}
-	if msg.Type != tea.KeyEnter {
-		return m, nil
-	}
-	level := m.reasoningPicker.Selected()
+	level := m2.reasoningFinder.Selected()
 	if level == nil {
-		return m, nil
+		return m2, nil
 	}
-	m.mode = ModeChat
-	if level.Arg == m.reasoningPicker.currentArg {
-		m.setStatus(fmt.Sprintf("Reasoning unchanged: %s", reasoningStatusText(m.reasoningEffort, m.reasoningOverridden)), false)
-		return m, nil
+	m2.mode = ModeChat
+	if level.Arg == m2.currentReasoningArg() {
+		m2.setStatus(fmt.Sprintf("Reasoning unchanged: %s", reasoningStatusText(m2.reasoningEffort, m2.reasoningOverridden)), false)
+		return m2, nil
 	}
-	m.setStatus("Updating reasoning...", false)
-	return m, m.setReasoningCmd(level.Arg, "/reasoning "+level.Arg)
+	m2.setStatus("Updating reasoning...", false)
+	return m2, m2.setReasoningCmd(level.Arg, "/reasoning "+level.Arg)
 }
 
 // --- follow-tail helpers ---
@@ -944,7 +1058,7 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 	case "/sessions":
 		m.textArea.Reset()
 		m.mode = ModeSessionPicker
-		m.picker = NewSessionPicker()
+		m.sessionFinder = m.NewSessionFinder()
 		return m, m.requestSessions()
 	case "/resume":
 		if len(fields) != 2 {
@@ -979,7 +1093,7 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 			// entry is marked, so it doubles as "show current"); without one
 			// (e.g. a bare test harness) fall back to the status line.
 			if len(m.models) > 0 {
-				m.modelPicker = NewModelPicker(m.models, m.modelName)
+				m.modelFinder = m.NewModelFinder(m.models, m.modelName)
 				m.mode = ModeModelPicker
 				return m, nil
 			}
@@ -998,7 +1112,7 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 			// Bare /reasoning opens the picker with the cursor on the active
 			// dial (the override level, or "default" when following config).
 			m.textArea.Reset()
-			m.reasoningPicker = NewReasoningPicker(m.reasoningEffort, m.reasoningOverridden)
+			m.reasoningFinder = m.NewReasoningFinder(m.reasoningEffort, m.reasoningOverridden)
 			m.mode = ModeReasoningPicker
 			return m, nil
 		}

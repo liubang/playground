@@ -20,40 +20,50 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/liubang/playground/go/pl/loom/internal/app"
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-func TestReasoningPickerCursorOnActiveDial(t *testing.T) {
-	// Following the model config: cursor and marker on "default".
-	p := NewReasoningPicker("", false)
-	if got := p.Selected().Arg; got != "default" {
+// pickerTestHost renders finders without colors so assertions match raw
+// text.
+func pickerTestHost() Model {
+	return Model{theme: NoColorTheme()}
+}
+
+func TestReasoningFinderCursorOnActiveDial(t *testing.T) {
+	host := pickerTestHost()
+
+	// Following the model config: cursor and badge on "default".
+	f := host.NewReasoningFinder("", false)
+	if got := f.Selected().Arg; got != "default" {
 		t.Fatalf("cursor = %q, want default", got)
 	}
-	out := p.Render(0, 0)
+	out := f.Render(80, 0)
 	if !strings.Contains(out, "default") || !strings.Contains(out, "●") {
 		t.Fatalf("render missing active marker:\n%s", out)
 	}
 
-	// Session override active: cursor and marker on the override level.
-	p = NewReasoningPicker("high", true)
-	if got := p.Selected().Arg; got != "high" {
+	// Session override active: cursor and badge on the override level.
+	f = host.NewReasoningFinder("high", true)
+	if got := f.Selected().Arg; got != "high" {
 		t.Fatalf("cursor = %q, want high", got)
 	}
 }
 
-func TestReasoningPickerNavigationBounds(t *testing.T) {
-	p := NewReasoningPicker("", false)
-	p.MoveUp() // already at the top: stays
-	if p.Cursor != 0 {
-		t.Fatalf("cursor = %d, want 0 (clamped)", p.Cursor)
+func TestReasoningFinderNavigationBounds(t *testing.T) {
+	host := pickerTestHost()
+	f := host.NewReasoningFinder("", false)
+	f.MoveUp() // already at the top: stays
+	if got := f.Selected().Arg; got != "default" {
+		t.Fatalf("selected = %q, want default (clamped)", got)
 	}
 	for i := 0; i < len(ReasoningLevels)+2; i++ {
-		p.MoveDown()
+		f.MoveDown()
 	}
-	if p.Cursor != len(ReasoningLevels)-1 {
-		t.Fatalf("cursor = %d, want %d (clamped)", p.Cursor, len(ReasoningLevels)-1)
-	}
-	if got := p.Selected().Arg; got != "high" {
-		t.Fatalf("selected = %q, want high", got)
+	if got := f.Selected().Arg; got != "high" {
+		t.Fatalf("selected = %q, want high (clamped)", got)
 	}
 }
 
@@ -65,70 +75,58 @@ func testModelOptions() []ModelOption {
 	}
 }
 
-func TestModelPickerCursorStartsAtCurrent(t *testing.T) {
-	p := NewModelPicker(testModelOptions(), "aigc/deepseek-v4-pro")
-	if p.Cursor != 1 {
-		t.Fatalf("cursor = %d, want 1 (the active model)", p.Cursor)
-	}
-	if got := p.Selected().Ref(); got != "aigc/deepseek-v4-pro" {
-		t.Fatalf("selected = %q", got)
+func TestModelFinderCursorStartsAtCurrent(t *testing.T) {
+	host := pickerTestHost()
+	f := host.NewModelFinder(testModelOptions(), "aigc/deepseek-v4-pro")
+	if got := f.Selected().Ref(); got != "aigc/deepseek-v4-pro" {
+		t.Fatalf("selected = %q, want the active model", got)
 	}
 
 	// An unknown current ref leaves the cursor at the top.
-	p = NewModelPicker(testModelOptions(), "nosuch/model")
-	if p.Cursor != 0 {
-		t.Fatalf("cursor = %d, want 0 for unknown current", p.Cursor)
+	f = host.NewModelFinder(testModelOptions(), "nosuch/model")
+	if got := f.Selected().Ref(); got != "aigc/glm-5.2" {
+		t.Fatalf("selected = %q, want the first option for unknown current", got)
 	}
 }
 
-func TestModelPickerMoveBounds(t *testing.T) {
-	p := NewModelPicker(testModelOptions(), "")
-	p.MoveUp()
-	if p.Cursor != 0 {
-		t.Fatalf("cursor = %d, want clamped 0", p.Cursor)
-	}
-	p.MoveDown()
-	p.MoveDown()
-	p.MoveDown()
-	p.MoveDown()
-	if p.Cursor != 2 {
-		t.Fatalf("cursor = %d, want clamped 2", p.Cursor)
-	}
-}
-
-func TestModelPickerRender(t *testing.T) {
-	p := NewModelPicker(testModelOptions(), "aigc/glm-5.2")
-	out := p.Render(100, 0)
+func TestModelFinderRender(t *testing.T) {
+	host := pickerTestHost()
+	f := host.NewModelFinder(testModelOptions(), "aigc/glm-5.2")
+	out := f.Render(100, 0)
 
 	for _, want := range []string{
-		"Select a model:",
+		"❯", // the filter input line
+		"3/3",
 		"▶ aigc/glm-5.2",
 		"aigc/deepseek-v4-pro",
 		"openai/gpt-5",
 		"200k ctx · responses",
 		"1.0M ctx · responses",
 		"400k ctx · chat",
-		"●",
-		"j/k or ↑/↓ = move",
+		"INSERT",
+		"Wire API: responses", // the preview pane
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q:\n%s", want, out)
 		}
 	}
-	// The active marker belongs to the current model only.
-	if strings.Contains(out, "deepseek-v4-pro 1.0M ctx · responses ●") {
-		t.Errorf("marker leaked to a non-current row:\n%s", out)
+	// The active badge belongs to the current model only.
+	if strings.Count(out, "●") != 1 {
+		t.Errorf("badge should mark exactly one row:\n%s", out)
 	}
 }
 
-func TestModelPickerRenderWindowed(t *testing.T) {
+func TestModelFinderRenderWindowed(t *testing.T) {
+	host := pickerTestHost()
 	options := make([]ModelOption, 0, 20)
 	for i := 0; i < 20; i++ {
-		options = append(options, ModelOption{Provider: "p", Name: strings.Repeat("m", 1) + string(rune('a'+i))})
+		options = append(options, ModelOption{Provider: "p", Name: "m" + string(rune('a'+i))})
 	}
-	p := NewModelPicker(options, "")
-	p.Cursor = 15
-	out := p.Render(60, 10)
+	f := host.NewModelFinder(options, "")
+	for i := 0; i < 15; i++ {
+		f.MoveDown()
+	}
+	out := f.Render(60, 10)
 	if !strings.Contains(out, "↑ more") {
 		t.Errorf("windowed render should hint at rows above:\n%s", out)
 	}
@@ -137,6 +135,53 @@ func TestModelPickerRenderWindowed(t *testing.T) {
 	}
 	if !strings.Contains(out, "▶ p/mp") {
 		t.Errorf("cursor row must stay visible:\n%s", out)
+	}
+	// The frame must never exceed the height budget (inline renderer
+	// line tracking depends on it).
+	if lines := strings.Count(out, "\n") + 1; lines > 10 {
+		t.Errorf("render used %d lines, budget 10:\n%s", lines, out)
+	}
+}
+
+func TestModelFinderFilter(t *testing.T) {
+	host := pickerTestHost()
+	f := host.NewModelFinder(testModelOptions(), "")
+	for _, r := range "gpt" {
+		f.TypeRune(r)
+	}
+	if f.Len() != 1 {
+		t.Fatalf("filtered len = %d, want 1", f.Len())
+	}
+	if got := f.Selected().Ref(); got != "openai/gpt-5" {
+		t.Fatalf("selected = %q, want openai/gpt-5", got)
+	}
+	f.Backspace()
+	f.Backspace()
+	f.Backspace()
+	if f.Len() != 3 {
+		t.Fatalf("len after clearing the query = %d, want 3", f.Len())
+	}
+}
+
+func TestSessionFinderItemsAndPreview(t *testing.T) {
+	host := pickerTestHost()
+	f := host.NewSessionFinder()
+	if out := f.Render(80, 0); !strings.Contains(out, "Loading") {
+		t.Fatalf("unloaded finder should render the loading state:\n%s", out)
+	}
+	summaries := []app.SessionSummary{{
+		ID:        domain.NewSessionID(),
+		Version:   3,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}}
+	f.Load(sessionFinderItems(summaries), nil)
+	out := f.Render(100, 0)
+	if !strings.Contains(out, "v3 ·") {
+		t.Errorf("row hint missing version:\n%s", out)
+	}
+	if !strings.Contains(out, "Version:  3") {
+		t.Errorf("preview pane missing metadata:\n%s", out)
 	}
 }
 

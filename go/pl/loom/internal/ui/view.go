@@ -37,7 +37,10 @@ import (
 // instead (see visibleTranscriptHeight).
 const helpOverlayHeight = 23
 
-// View renders the complete TUI.
+// View renders the complete TUI: the base frame first, then — under the
+// alt-screen renderer only — floating windows composed over it (docs/
+// VIM_UI_DESIGN.md §7.1). Inline mode keeps the in-flow overlay layout
+// because its line tracking cannot tolerate overlays.
 func (m Model) View() string {
 	// Until the first WindowSizeMsg arrives the terminal size is unknown.
 	// Render a single harmless line: any larger first frame risks scrolling
@@ -46,22 +49,86 @@ func (m Model) View() string {
 	if m.width <= 0 || m.height <= 0 {
 		return m.theme.Dim.Render("Loom starting…")
 	}
+	base := m.renderBase()
+	floats := m.activeFloats()
+	if len(floats) == 0 {
+		return base
+	}
+	return ComposeFloats(base, m.width, m.height, floats...)
+}
+
+// baseMode maps overlay modes onto what the base frame renders beneath
+// them. With floats active (alt-screen), help, question and the pickers
+// float over an ordinary chat frame; inline they own their area in-flow.
+func (m Model) baseMode() Mode {
+	if !m.altScreen {
+		return m.mode
+	}
+	switch m.mode {
+	case ModeHelp, ModeQuestion, ModeSessionPicker, ModeModelPicker, ModeReasoningPicker:
+		return ModeChat
+	}
+	return m.mode
+}
+
+// activeFloats returns the floating windows for the current mode, in
+// bottom-to-top composition order. Nil unless the alt-screen renderer is
+// active.
+func (m Model) activeFloats() []Float {
+	if !m.altScreen {
+		return nil
+	}
+	switch m.mode {
+	case ModeHelp:
+		return []Float{centeredFloat(m.renderHelpOverlay(), m.width, m.height)}
+	case ModeQuestion:
+		if m.choiceList != nil {
+			return []Float{centeredFloat(m.renderQuestionOverlay(), m.width, m.height)}
+		}
+	case ModeSessionPicker:
+		return pickerFloat(m, m.sessionFinder)
+	case ModeModelPicker:
+		return pickerFloat(m, m.modelFinder)
+	case ModeReasoningPicker:
+		return pickerFloat(m, m.reasoningFinder)
+	}
+	return nil
+}
+
+// pickerFloat frames a finder as a large centered float (snacks.picker's
+// default big layout): wide enough for the list + preview panes, tall
+// enough for a comfortable scroll window, clamped to the screen.
+func pickerFloat[T any](m Model, f *Finder[T]) []Float {
+	if f == nil {
+		return nil
+	}
+	width := min(max(m.width*4/5, 62), 110)
+	if width > m.width-2 {
+		width = max(m.width-2, 20)
+	}
+	height := min(max(m.height*3/5, 10), 26)
+	content := m.theme.DialogBorder.Width(width).Render(f.Render(width-4, height-2))
+	return []Float{centeredFloat(content, m.width, m.height)}
+}
+
+func (m Model) renderBase() string {
 	var b strings.Builder
 
 	// Header
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n")
 
-	if m.mode == ModeSessionPicker {
+	baseMode := m.baseMode()
+	if baseMode == ModeSessionPicker {
 		b.WriteString(m.renderSessionPicker())
 		b.WriteString("\n")
-	} else if m.mode == ModeModelPicker {
+	} else if baseMode == ModeModelPicker {
 		b.WriteString(m.renderModelPicker())
 		b.WriteString("\n")
-	} else if m.mode == ModeReasoningPicker {
+	} else if baseMode == ModeReasoningPicker {
 		b.WriteString(m.renderReasoningPicker())
 		b.WriteString("\n")
-	} else if m.mode == ModeSubagent {
+	} else if baseMode == ModeSubagent {
 		b.WriteString(m.renderSubagentOverlay())
 		b.WriteString("\n")
 	} else {
@@ -72,7 +139,7 @@ func (m Model) View() string {
 	// Approval and help panels replace the composer area instead of being
 	// appended below the status bar, so the layout never overflows the
 	// terminal and the status bar stays visible.
-	switch m.mode {
+	switch baseMode {
 	case ModeApproval:
 		if m.pendingApproval != nil {
 			b.WriteString(m.renderApprovalOverlay())
@@ -339,27 +406,35 @@ func (m Model) renderSearchBar() string {
 }
 
 func (m Model) renderSessionPicker() string {
-	if m.picker == nil {
-		return "Loading sessions..."
-	}
-	height := m.visibleTranscriptHeight()
-	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(m.picker.Render(m.width-6, height-2))
+	return renderFinderDialog(m, m.sessionFinder, "Loading sessions...")
 }
 
 func (m Model) renderModelPicker() string {
-	if m.modelPicker == nil {
-		return ""
-	}
-	height := m.visibleTranscriptHeight()
-	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(m.modelPicker.Render(m.width-6, height-2))
+	return renderFinderDialog(m, m.modelFinder, "")
 }
 
 func (m Model) renderReasoningPicker() string {
-	if m.reasoningPicker == nil {
-		return ""
+	return renderFinderDialog(m, m.reasoningFinder, "")
+}
+
+// renderFinderDialog frames a finder in the neutral dialog border,
+// filling the area the composer and transcript leave for picker modes.
+func renderFinderDialog[T any](m Model, f *Finder[T], fallback string) string {
+	if f == nil {
+		return fallback
 	}
 	height := m.visibleTranscriptHeight()
-	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(m.reasoningPicker.Render(m.width-6, height-2))
+	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(f.Render(m.width-6, height-2))
+}
+
+// dialogWidth returns the outer width for overlay dialogs: a centered
+// float gets a comfortable fraction of the screen (alt-screen), while
+// the in-flow band (inline) spans the full width.
+func (m Model) dialogWidth() int {
+	if m.altScreen {
+		return min(max(m.width*3/4, 24), 76)
+	}
+	return max(1, m.width-2)
 }
 
 // renderQuestionOverlay renders the ask_user dialog. The choice list owns
@@ -368,7 +443,8 @@ func (m Model) renderQuestionOverlay() string {
 	if m.choiceList == nil {
 		return ""
 	}
-	return m.theme.DialogBorder.Width(max(1, m.width-2)).Render(m.choiceList.Render(m.width-6, 0))
+	width := m.dialogWidth()
+	return m.theme.DialogBorder.Width(width).Render(m.choiceList.Render(width-4, 0))
 }
 
 // questionOverlayHeight reserves the overlay's rendered height plus its
@@ -377,7 +453,7 @@ func (m Model) questionOverlayHeight() int {
 	if m.choiceList == nil {
 		return 0
 	}
-	return strings.Count(m.choiceList.Render(m.width-6, 0), "\n") + 1 + 2
+	return strings.Count(m.choiceList.Render(m.dialogWidth()-4, 0), "\n") + 1 + 2
 }
 
 // renderTranscript renders the transcript viewport. The content itself is
@@ -1184,10 +1260,7 @@ func (m Model) renderHelpOverlay() string {
 	b.WriteString("\n")
 	b.WriteString(dim.Render("Type / for command completion · press any key to close"))
 
-	width := m.width - 2
-	if width <= 0 || width > 76 {
-		width = 76
-	}
+	width := min(m.dialogWidth(), 76)
 	width = max(width, 20)
 	return m.theme.DialogBorder.Width(width).Render(b.String())
 }
