@@ -25,6 +25,7 @@ go_library(
         "controller.go",
         "rule_approver.go",
         "skills.go",
+        "subagent_bridge.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/app",
     visibility = ["//go/pl/loom:__subpackages__"],
@@ -47,6 +48,7 @@ go_library(
         "//go/pl/loom/internal/tool/gittools:gittools_lib",
         "//go/pl/loom/internal/tool/lint:lint_lib",
         "//go/pl/loom/internal/tool/skillread:skillread_lib",
+        "//go/pl/loom/internal/tool/subagent:subagent_lib",
         "//go/pl/loom/internal/tool/webfetch:webfetch_lib",
         "//go/pl/loom/internal/trace",
         "//go/pl/loom/internal/workspace:workspace_lib",
@@ -61,6 +63,7 @@ go_test(
         "controller_test.go",
         "rule_approver_test.go",
         "skills_test.go",
+        "subagent_bridge_test.go",
     ],
     embed = [":app"],
     deps = [
@@ -72,5 +75,6 @@ go_test(
         "//go/pl/loom/internal/prompt:prompt",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
         "//go/pl/loom/internal/session:session_lib",
+        "//go/pl/loom/internal/tool/subagent:subagent_lib",
     ],
 )

@@ -13,39 +13,29 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/22 21:10
+# Created: 2026/07/31
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "permission_lib",
-    srcs = [
-        "danger.go",
-        "decider.go",
-        "domain_rules.go",
-        "policy.go",
-        "policy_trust_other.go",
-        "policy_trust_unix.go",
-        "rules.go",
-        "verdict.go",
-    ],
-    embedsrcs = ["builtin.json"],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/permission",
+    name = "subagent_lib",
+    srcs = ["delegate.go"],
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/subagent",
     visibility = ["//visibility:public"],
     deps = [
+        "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/process:process_lib",
+        "//go/pl/loom/internal/trace",
     ],
 )
 
 go_test(
-    name = "permission_test",
-    srcs = [
-        "decider_unless_dangerous_test.go",
-        "domain_rules_test.go",
-        "grant_test.go",
-        "policy_test.go",
-        "rules_test.go",
+    name = "subagent_test",
+    srcs = ["delegate_test.go"],
+    embed = [":subagent_lib"],
+    deps = [
+        "//go/pl/loom/internal/agent:agent_lib",
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/fakes:fakes_lib",
     ],
-    embed = [":permission_lib"],
 )

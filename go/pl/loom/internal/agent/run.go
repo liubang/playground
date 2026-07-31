@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +75,20 @@ func NewRun(sessionID domain.SessionID, limits domain.Limits, clock domain.Clock
 		Clock:         clock,
 		turnStartedAt: clock.Now(),
 	}
+}
+
+// RecordDelegation marks the run as a delegated sub-agent run: the
+// run.created event carries the parent session and the delegate_task
+// call that spawned it, forming the persistent delegation edge
+// (docs/SUBAGENT_DESIGN.md §6.1) — the loom equivalent of codex's
+// agent-graph-store spawn edge, carried by the existing event stream.
+func (r *Run) RecordDelegation(parent domain.SessionID, callID domain.ToolCallID) {
+	r.appendEvent(domain.EventRunCreated, struct {
+		RunID           domain.RunID      `json:"run_id"`
+		Delegated       bool              `json:"delegated"`
+		ParentSessionID domain.SessionID  `json:"parent_session_id"`
+		ParentToolCall  domain.ToolCallID `json:"parent_tool_call_id"`
+	}{RunID: r.ID, Delegated: true, ParentSessionID: parent, ParentToolCall: callID})
 }
 
 // RestoreRun creates a Run from a checkpoint.
@@ -1596,6 +1611,7 @@ func (l *Loop) executeTools(ctx context.Context) error {
 		result := tool.Execute(ctx, prepared)
 		l.Run.RecordToolResult(result)
 		l.recordTool(ctx, prepared, result)
+		l.foldExternalUsage(result)
 		if changed, ok := extractFileChanged(result, prepared); ok {
 			l.markProgress()
 			l.Run.appendEvent(domain.EventFileChanged, changed)
@@ -1761,6 +1777,27 @@ func (l *Loop) accountUsage(inputTokens, outputTokens int64) {
 	if l.Run.Goal != nil && l.Run.Goal.Status == domain.GoalStatusActive {
 		l.Run.Goal.TokensUsed += inputTokens + outputTokens
 	}
+}
+
+// foldExternalUsage accounts externally-metered token usage reported in
+// a tool result's metadata (domain.ToolMetaExternalInputTokens /
+// ToolMetaExternalOutputTokens) into the run's budget counters. It is
+// the delegate_task contract: a sub-agent run consumes tokens outside
+// the parent's own model calls, and folding them back keeps delegation
+// budget-transparent instead of a loophole (docs/SUBAGENT_DESIGN.md
+// §5.2). The accounting path is the same one model calls use, so the
+// cost estimate and the goal meter stay consistent.
+func (l *Loop) foldExternalUsage(result domain.ToolResult) {
+	if result.Metadata == nil {
+		return
+	}
+	inputTokens, _ := strconv.ParseInt(result.Metadata[domain.ToolMetaExternalInputTokens], 10, 64)
+	outputTokens, _ := strconv.ParseInt(result.Metadata[domain.ToolMetaExternalOutputTokens], 10, 64)
+	if inputTokens <= 0 && outputTokens <= 0 {
+		return
+	}
+	l.accountUsage(inputTokens, outputTokens)
+	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 }
 
 // closeUnresolvedCalls records an interrupted error result for every tool

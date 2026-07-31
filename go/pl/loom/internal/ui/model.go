@@ -49,6 +49,7 @@ const (
 	ModeQuestion        Mode = "question"
 	ModeHelp            Mode = "help"
 	ModeSearch          Mode = "search"
+	ModeSubagent        Mode = "subagent"
 )
 
 // Model is the root Bubble Tea model for the Loom TUI.
@@ -200,6 +201,10 @@ type Model struct {
 	resubscribes      int
 	eventsDead        bool
 	unsubscribeEvents func()
+
+	// subOverlay is the read-only sub-agent drill-in view (Ctrl+G), nil
+	// unless ModeSubagent is active.
+	subOverlay *subagentOverlay
 }
 
 // NewModel creates a new UI model with the given controller.

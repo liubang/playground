@@ -34,6 +34,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/render"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
 )
 
 // ControllerState represents the high-level state of the SessionController.
@@ -797,6 +798,51 @@ func (c *Controller) steerCell() *agent.SteerCell {
 	return c.bootstrap.SteerCell
 }
 
+// subagentModelSource returns the delegate_task model mailbox; nil when
+// the sub-agent is disabled or the bootstrap is hand-assembled in tests.
+func (c *Controller) subagentModelSource() *subagent.ModelSource {
+	if c.bootstrap == nil {
+		return nil
+	}
+	return c.bootstrap.SubagentModels
+}
+
+// SubagentView is a read-only projection of a delegated sub-agent
+// session, backing the TUI's drill-in overlay
+// (docs/SUBAGENT_DESIGN.md §10).
+type SubagentView struct {
+	SessionID domain.SessionID
+	// Outcome is empty while the child is still running.
+	Outcome  domain.Outcome
+	Messages []domain.Message
+	Usage    domain.Usage
+	Active   bool
+}
+
+// SubagentView loads the latest checkpoint of a delegated child session.
+// It reads the store directly (like ListSessions): the child loop
+// flushes a checkpoint after every tool batch, so the projection is
+// near-real-time without any event-stream coupling.
+func (c *Controller) SubagentView(ctx context.Context, sessionID domain.SessionID) (SubagentView, error) {
+	if sessionID.IsZero() {
+		return SubagentView{}, fmt.Errorf("sub-agent session ID is required")
+	}
+	if c.bootstrap == nil || c.bootstrap.Store == nil {
+		return SubagentView{}, fmt.Errorf("sub-agent view is unavailable for this runtime")
+	}
+	checkpoint, err := c.bootstrap.Store.LoadLatestCheckpoint(ctx, sessionID)
+	if err != nil {
+		return SubagentView{}, fmt.Errorf("load sub-agent checkpoint: %w", err)
+	}
+	return SubagentView{
+		SessionID: sessionID,
+		Outcome:   checkpoint.State.Outcome,
+		Messages:  append([]domain.Message(nil), checkpoint.Messages...),
+		Usage:     checkpoint.Usage,
+		Active:    checkpoint.State.Lifecycle != domain.LifecycleTerminal,
+	}, nil
+}
+
 func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int) error {
 	store := c.bootstrap.Store
 	clock := c.clock
@@ -893,6 +939,10 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 	case previousWindow > 0 && window.Nominal > 0 && window.Nominal < previousWindow:
 		triggerHint = "downshift"
 	}
+
+	// Publish this turn's model selection for delegate_task's child
+	// loops (subagent.ModelSource mailbox; docs/SUBAGENT_DESIGN.md D7).
+	PublishSubagentSnapshot(c.subagentModelSource(), c.bootstrap.Resolved, current, reasoning, c.sessionID)
 
 	// Build the loop
 	loop := &agent.Loop{

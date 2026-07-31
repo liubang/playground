@@ -614,7 +614,7 @@ type SessionStore interface {
 
 ## 15. 扩展与前端协议
 
-子 Agent 作为 `delegate_task` 工具：独立上下文和预算、默认只读、最大递归深度 1、只返回结构化结论和证据，主 Agent 负责验证及修改。适用于大型仓库并行探索、资料研究和独立 Review。
+子 Agent 作为 `delegate_task` 工具：独立上下文和预算、默认只读、最大递归深度 1、只返回结构化结论和证据，主 Agent 负责验证及修改。适用于大型仓库并行探索、资料研究和独立 Review。落地设计与演进路径见 `SUBAGENT_DESIGN.md`（V1 同步委托已实现）。
 
 MCP 是主要工具扩展协议，先支持 stdio，后续支持标准远程传输、健康检查、超时和重连。
 
