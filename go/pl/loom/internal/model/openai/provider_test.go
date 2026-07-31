@@ -1003,6 +1003,101 @@ func TestToOpenAIMessagesDowngradesMidTranscriptSystem(t *testing.T) {
 	}
 }
 
+// An output-cap truncation on the responses wire API must NOT surface as
+// a stream error: the buffered text survives, usage is accounted, and the
+// stream ends with StopMaxOutput so the loop can continue or salvage
+// (docs/SUBAGENT_DESIGN.md §12).
+func TestResponsesIncompleteMaxOutputYieldsStopMaxOutput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: response.created\n")
+		fmt.Fprint(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"status\":\"in_progress\"}}\n\n")
+		fmt.Fprint(w, "event: response.output_text.delta\n")
+		fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial findings\"}\n\n")
+		fmt.Fprint(w, "event: response.incomplete\n")
+		fmt.Fprint(w, "data: {\"type\":\"response.incomplete\",\"response\":{\"id\":\"resp_1\",\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"usage\":{\"input_tokens\":50,\"output_tokens\":256}}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	provider := newTestProviderWithWireAPI(t, server.URL+"/v1", server.Client(), 0, WireAPIResponses)
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "glm-5.2",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "research")},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	defer stream.Close()
+
+	events := collectEvents(t, stream)
+	for _, evt := range events {
+		if evt.Kind == domain.ModelEventStreamError {
+			t.Fatalf("max_output truncation surfaced as stream error: %+v", evt)
+		}
+	}
+	assertEventKinds(t, events,
+		domain.ModelEventResponseStart,
+		domain.ModelEventTextStart,
+		domain.ModelEventTextDelta,
+		domain.ModelEventTextEnd,
+		domain.ModelEventUsage,
+		domain.ModelEventResponseEnd,
+	)
+	last := events[len(events)-1]
+	if last.StopReason != domain.StopMaxOutput {
+		t.Fatalf("final stop = %s, want max_output", last.StopReason)
+	}
+	var text string
+	var usage domain.ModelEvent
+	for _, evt := range events {
+		text += evt.TextDelta
+		if evt.Kind == domain.ModelEventUsage {
+			usage = evt
+		}
+	}
+	if text != "partial findings" {
+		t.Fatalf("buffered text = %q, want the truncated text preserved", text)
+	}
+	if usage.InputTokens != 50 || usage.OutputTokens != 256 {
+		t.Fatalf("usage = %+v, want 50/256 accounted", usage)
+	}
+}
+
+// Non-output-cap incompletions keep the error path.
+func TestResponsesIncompleteOtherReasonStillFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: response.created\n")
+		fmt.Fprint(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"status\":\"in_progress\"}}\n\n")
+		fmt.Fprint(w, "event: response.incomplete\n")
+		fmt.Fprint(w, "data: {\"type\":\"response.incomplete\",\"response\":{\"id\":\"resp_1\",\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"content_filter\"}}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	provider := newTestProviderWithWireAPI(t, server.URL+"/v1", server.Client(), 0, WireAPIResponses)
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "glm-5.2",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "research")},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	defer stream.Close()
+
+	events := collectEvents(t, stream)
+	var sawStreamError bool
+	for _, evt := range events {
+		if evt.Kind == domain.ModelEventStreamError {
+			sawStreamError = true
+		}
+	}
+	if !sawStreamError {
+		t.Fatalf("content_filter incompletion must surface as a stream error: %+v", events)
+	}
+}
+
 type flakyRoundTripper struct {
 	base  http.RoundTripper
 	fail  int32

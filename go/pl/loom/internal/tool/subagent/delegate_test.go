@@ -239,6 +239,9 @@ func TestDelegateExecuteModelFailure(t *testing.T) {
 	if result.Metadata["child_session_id"] == "" {
 		t.Fatalf("failure result must still name the child session for audit")
 	}
+	if !strings.Contains(result.Error.Message, "delegate again with a narrower") {
+		t.Fatalf("failure message must carry next-action guidance: %q", result.Error.Message)
+	}
 }
 
 func TestDelegateExecuteWithoutModelSelection(t *testing.T) {

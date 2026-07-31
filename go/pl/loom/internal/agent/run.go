@@ -896,6 +896,11 @@ type Loop struct {
 	// extra turn per run: advisory bookkeeping is routinely forgotten on the
 	// final step, and an unbounded nudge would loop forever.
 	planReconcileUsed bool
+	// maxOutputStops counts consecutive output-cap truncations; hitting
+	// maxOutputContinuationLimit arms the salvage wrap-up instead of
+	// paying another full generation just to be cut off again
+	// (docs/SUBAGENT_DESIGN.md §12).
+	maxOutputStops int
 	// planRevisedThisRun gates the closing nudge to plans this run actually
 	// touched: a stale plan inherited from an earlier turn must not hijack
 	// an unrelated prompt with a reconcile turn.
@@ -1347,7 +1352,22 @@ func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) 
 		l.terminate(ctx, domain.OutcomeSucceeded)
 		return nil
 	case domain.StopMaxOutput:
-		// Model hit output limit — let it continue
+		l.maxOutputStops++
+		if l.inRunBudgetWrapUp() {
+			// Even the salvage turn overflowed the cap: accept whatever
+			// text it produced and land — otherwise a persistently
+			// verbose model would loop here forever.
+			l.terminate(ctx, wrapUpOutcome(l.Run.WrapUpPending))
+			return nil
+		}
+		// The first output-cap truncation lets the model continue — the
+		// partial text stays in the transcript and the next call resumes.
+		// A consecutive repeat means the model is not converging: force
+		// the soft-landing salvage turn (tools denied) so the run ends
+		// with a conclusion instead of another paid truncation.
+		if l.maxOutputStops >= maxOutputContinuationLimit && l.Run.WrapUpPending == "" {
+			l.startBudgetWrapUp([]string{dimensionMaxOutput})
+		}
 		if _, err := l.Run.TransitionTo(domain.PhasePreparing); err != nil {
 			return err
 		}
@@ -1576,6 +1596,11 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 // so unbounded fan-out would multiply provider pressure
 // (docs/SUBAGENT_DESIGN.md §11).
 const maxConcurrentToolExecs = 4
+
+// maxOutputContinuationLimit is how many consecutive output-cap
+// truncations a run tolerates before the salvage wrap-up fires: one
+// free continuation, then conclude.
+const maxOutputContinuationLimit = 2
 
 // preparedExec is one validated call queued for execution.
 type preparedExec struct {

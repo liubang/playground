@@ -3135,6 +3135,81 @@ func TestLoopMixedBatchSerializesUnsafeCalls(t *testing.T) {
 	}
 }
 
+func TestLoopMaxOutputSalvageTurn(t *testing.T) {
+	// Two consecutive output-cap truncations arm the salvage wrap-up: the
+	// run ends with a conclusion (OutcomeCompletedUnverified) instead of
+	// failing on a third paid truncation (docs/SUBAGENT_DESIGN.md §12).
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "第一部分（被截断）", StopReason: domain.StopMaxOutput, UsageIn: 100, UsageOut: 400},
+		fakes.ScriptEntry{Text: "第二部分（仍被截断）", StopReason: domain.StopMaxOutput, UsageIn: 100, UsageOut: 400},
+		fakes.ScriptEntry{Text: "简要结论。", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 50},
+	)
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "research"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default()}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeCompletedUnverified {
+		t.Fatalf("outcome = %s, want completed_unverified (salvage landing)", run.State.Outcome)
+	}
+	if got := lastAssistantText(run.Messages); got != "简要结论。" {
+		t.Fatalf("final answer = %q, want the salvage-turn conclusion", got)
+	}
+	var wrapUpSeen, promptSeen bool
+	for _, evt := range run.PendingEvents() {
+		if evt.Type == domain.EventBudgetWrapupStarted && strings.Contains(string(evt.Payload), `"max_output"`) {
+			wrapUpSeen = true
+		}
+	}
+	for _, msg := range run.Messages {
+		if msg.Role == domain.RoleUser && strings.Contains(strings.Join(msg.TextParts(), ""), "output token limit") {
+			promptSeen = true
+		}
+	}
+	if !wrapUpSeen || !promptSeen {
+		t.Fatalf("salvage wrap-up not armed: event=%v prompt=%v", wrapUpSeen, promptSeen)
+	}
+	if calls := len(model.Calls()); calls != 3 {
+		t.Fatalf("model calls = %d, want 3 (two truncations + one salvage)", calls)
+	}
+}
+
+func TestLoopMaxOutputSalvageTurnItselfCapped(t *testing.T) {
+	// If even the salvage turn overflows, the run lands with whatever text
+	// it has — it must NOT loop forever on a persistently verbose model.
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "第一部分", StopReason: domain.StopMaxOutput, UsageIn: 100, UsageOut: 400},
+		fakes.ScriptEntry{Text: "第二部分", StopReason: domain.StopMaxOutput, UsageIn: 100, UsageOut: 400},
+		fakes.ScriptEntry{Text: "补救也写不完", StopReason: domain.StopMaxOutput, UsageIn: 100, UsageOut: 400},
+	)
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "research"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default()}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeCompletedUnverified {
+		t.Fatalf("outcome = %s, want completed_unverified", run.State.Outcome)
+	}
+	if got := lastAssistantText(run.Messages); got != "补救也写不完" {
+		t.Fatalf("final answer = %q, want the capped salvage text", got)
+	}
+	if calls := len(model.Calls()); calls != 3 {
+		t.Fatalf("model calls = %d, want exactly 3 (no infinite salvage loop)", calls)
+	}
+}
+
 func TestLoopFoldsExternalToolUsageIntoBudget(t *testing.T) {
 	// delegate_task's contract: a tool reports externally-metered tokens
 	// (a sub-agent run's consumption) in its result metadata, and the

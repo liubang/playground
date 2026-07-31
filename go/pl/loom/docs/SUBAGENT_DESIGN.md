@@ -179,10 +179,11 @@ codex 的 multi-agent 仍在快速演进：V1/V2 并存、`multiAgentMode` 已�
 subagent:
   enabled: true            # 总开关；false 则不注册 delegate_task
   max_tokens: 0            # 子 run 的累计 token 上限；0 = 继承 limits.max_tokens
+  max_output_tokens: 8192  # 子 Agent 单次响应的输出上限；0 = 继承 limits.max_output_tokens
   model: ""                # 可选 "provider/model"；空 = 跟随当前 turn 模型
 ```
 
-`enabled=false` 是硬开关：工具不进 registry，模型无从调用。`model` 允许把子 Agent 钉在更便宜的模型上（探索任务的经典用法）；钉住时子 Agent 用该模型自己配置的 reasoning，主 Agent 的会话级 `/reasoning` 覆盖不外溢。
+`enabled=false` 是硬开关：工具不进 registry，模型无从调用。`model` 允许把子 Agent 钉在更便宜的模型上（探索任务的经典用法）；钉住时子 Agent 用该模型自己配置的 reasoning，主 Agent 的会话级 `/reasoning` 覆盖不外溢。`max_output_tokens` 默认 8192 是效果与延迟的权衡（含 reasoning 余量）：子 Agent 的结论应当精炼，而截断只能在流完整个输出预算后才暴露——上限同时是耗时上限（§12）。
 
 ---
 
@@ -265,3 +266,21 @@ subagent:
 | `fakes.FakeStore` / `FakeModel` | mutex 保护 ✓ |
 | `process.Runner` | 每次调用独立进程；输出缓冲 mutex 保护 ✓ |
 | trace Recorder（otel） | 线程安全；`recordTool` 只在串行段调用 ✓ |
+
+---
+
+## 12. 输出截断的软着陆与失败指引（V1.3 已实现）
+
+源自一次线上复盘：三个并行子 Agent 全部死于 `response incomplete: max_output_tokens`——responses API 把输出截断上报为流错误，整轮探索成果（几十次工具调用 + 3.5 分钟生成）归零，父 Agent 只拿到一句 provider 报错。三层修复：
+
+### 12.1 Provider：输出截断不是流错误
+
+openai responses API 的 `response.incomplete`（reason=max_output_tokens 等）不再产生 stream error：缓冲文本保留、usage 照常入账、流以 `StopMaxOutput` 结束，交给 loop 决策。其他 incomplete 原因（content_filter 等）维持错误路径。chat-completions 的 `length` 与 Anthropic 的 `max_tokens` 原本就映射 `StopMaxOutput`，行为对齐。
+
+### 12.2 Loop：连续截断触发补救 turn（max_output wrap-up）
+
+`StopMaxOutput` 第一次放行继续（部分文本留在 transcript，下一轮接着写）；**连续第二次**进入新的 `max_output` wrap-up 维度（复用 budget soft-landing 状态机）：注入「立即基于已有信息简要收尾、禁止工具」的补救指令，tools-denied 一轮后以 `OutcomeCompletedUnverified` 着陆。补救 turn 自身再撞线则直接以现有文本收尾，不会无限循环。对 delegate_task 而言 `completed_unverified` 走**成功**路径——父 Agent 拿到的是抢救出的结论，不是报错。审计：`budget.wrapup_started{dimension:max_output}` 事件入流，崩溃恢复从事件重新武装。
+
+### 12.3 失败结果的行动指引
+
+所有委托失败结果末尾追加 next-action 指引（codex `ERROR_NEXT_ACTION` 模式）：`If you still need the answer, delegate again with a narrower or more specific task, or investigate directly yourself.`——带指引的错误让主 Agent 的降级行为（缩范围重委托/自查）明显可预期。

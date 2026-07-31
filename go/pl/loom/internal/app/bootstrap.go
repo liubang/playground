@@ -268,6 +268,9 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		if resolved.Subagent.MaxTokens > 0 {
 			childLimits.MaxTokens = resolved.Subagent.MaxTokens
 		}
+		if resolved.Subagent.MaxOutputTokens > 0 {
+			childLimits.MaxOutputTokens = resolved.Subagent.MaxOutputTokens
+		}
 		subagentModels = &subagent.ModelSource{}
 		factory := &subagent.Factory{
 			Store:     store,
