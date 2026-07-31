@@ -738,7 +738,19 @@ func runResponses(ctx context.Context, parser *sse.Parser, state *canonicalState
 				return
 			}
 			reason := incompleteReason(envelope.Response)
-			if err := state.prepareBufferedTerminal(mapIncompleteStopReason(reason), nil, incompleteMessage(reason), emit); err != nil {
+			stop := mapIncompleteStopReason(reason)
+			if stop == domain.StopMaxOutput {
+				// An output-cap truncation is NOT a stream failure: the buffered
+				// text survives, usage still counts, and the loop decides whether
+				// to continue or salvage. Emitting a stream error here would kill
+				// the run after the full generation cost was already paid — the
+				// failure mode that wiped out whole sub-agent explorations
+				// (docs/SUBAGENT_DESIGN.md §12).
+				if err := state.prepareBufferedTerminal(stop, responseUsage(envelope.Response), "", emit); err != nil {
+					finishWithError(state, err, domain.StopProviderError, emit)
+					return
+				}
+			} else if err := state.prepareBufferedTerminal(stop, nil, incompleteMessage(reason), emit); err != nil {
 				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}

@@ -442,22 +442,39 @@ approval:
 }
 
 func TestResolveSubagentDefaultsAndOverrides(t *testing.T) {
-	// Absent: enabled, no token cap override, follows the turn's model.
+	// Absent: enabled, no token cap override, 8192 output cap, follows the
+	// turn's model.
 	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
 	if !def.Subagent.Enabled || def.Subagent.MaxTokens != 0 || def.Subagent.Model != nil {
 		t.Fatalf("default subagent = %+v, want enabled/inherit/follow", def.Subagent)
+	}
+	if def.Subagent.MaxOutputTokens != 8192 {
+		t.Fatalf("default subagent max_output_tokens = %d, want 8192", def.Subagent.MaxOutputTokens)
 	}
 
 	cfg := loadFile(t, twoProviderYAML+`
 subagent:
   max_tokens: 50000
+  max_output_tokens: 4000
   model: openai/gpt-5
 `, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
 	if cfg.Subagent.MaxTokens != 50_000 {
 		t.Fatalf("subagent max_tokens = %d, want 50000", cfg.Subagent.MaxTokens)
 	}
+	if cfg.Subagent.MaxOutputTokens != 4000 {
+		t.Fatalf("subagent max_output_tokens = %d, want 4000", cfg.Subagent.MaxOutputTokens)
+	}
 	if cfg.Subagent.Model == nil || cfg.Subagent.Model.String() != "openai/gpt-5" {
 		t.Fatalf("subagent model = %v, want openai/gpt-5", cfg.Subagent.Model)
+	}
+
+	// Explicit 0 inherits the parent limits.
+	inherit := loadFile(t, twoProviderYAML+`
+subagent:
+  max_output_tokens: 0
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if inherit.Subagent.MaxOutputTokens != 0 {
+		t.Fatalf("subagent max_output_tokens = %d, want 0 (inherit)", inherit.Subagent.MaxOutputTokens)
 	}
 
 	disabled := loadFile(t, twoProviderYAML+`
@@ -474,6 +491,14 @@ subagent:
 `), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
 	if err == nil || !strings.Contains(err.Error(), "subagent.max_tokens") {
 		t.Fatalf("err = %v, want subagent.max_tokens validation error", err)
+	}
+
+	_, err = Load(writeConfig(t, twoProviderYAML+`
+subagent:
+  max_output_tokens: -1
+`), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if err == nil || !strings.Contains(err.Error(), "subagent.max_output_tokens") {
+		t.Fatalf("err = %v, want subagent.max_output_tokens validation error", err)
 	}
 
 	_, err = Load(writeConfig(t, twoProviderYAML+`
