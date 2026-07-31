@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -47,7 +46,7 @@ type subagentOverlay struct {
 	childID domain.SessionID
 	task    string
 
-	viewport   viewport.Model
+	viewport   lineView
 	followTail bool
 
 	usage   domain.Usage
@@ -105,7 +104,7 @@ func (m Model) openSubagentOverlayFor(block *TranscriptBlock) (tea.Model, tea.Cm
 	m.subOverlay = &subagentOverlay{
 		childID:    block.Subagent.ChildID,
 		task:       block.Target,
-		viewport:   viewport.New(max(1, m.width), max(1, m.height-4)),
+		viewport:   lineView{Width: max(1, m.width), Height: max(1, m.height-4)},
 		followTail: true,
 	}
 	m.mode = ModeSubagent

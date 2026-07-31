@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
@@ -307,7 +306,7 @@ func TestToolBlockExpandedPrefersDiff(t *testing.T) {
 func TestSearchFlowMatchesAndJumps(t *testing.T) {
 	m := Model{theme: NoColorTheme(), width: 80, height: 24}
 	m.blocks = NewBlockIndex()
-	m.viewport = viewport.New(80, 2) // short viewport so the transcript scrolls
+	m.viewport = lineView{Width: 80, Height: 2} // short viewport so the transcript scrolls
 	m.textArea = textarea.New()
 	m.blocks.Add(&TranscriptBlock{ID: "u1", Kind: BlockKindUser, Title: "You", Content: "hello world", Done: true})
 	m.blocks.Add(&TranscriptBlock{ID: "a1", Kind: BlockKindAssistant, Title: "Assistant", Content: "hi there", Done: true})
