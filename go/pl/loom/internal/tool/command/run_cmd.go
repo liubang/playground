@@ -65,6 +65,7 @@ type rawRunCmdArgs struct {
 	TimeoutMs          *int64             `json:"timeout_ms"`
 	MaxOutputBytes     *int64             `json:"max_output_bytes"`
 	SandboxPermissions *string            `json:"sandbox_permissions"`
+	NeedsNetwork       *bool              `json:"needs_network"`
 	Justification      *string            `json:"justification"`
 }
 
@@ -76,6 +77,7 @@ type runCmdArgs struct {
 	TimeoutMs          int64             `json:"timeout_ms"`
 	MaxOutputBytes     int64             `json:"max_output_bytes"`
 	SandboxPermissions string            `json:"sandbox_permissions"`
+	NeedsNetwork       bool              `json:"needs_network,omitempty"`
 	Justification      string            `json:"justification,omitempty"`
 }
 
@@ -175,11 +177,13 @@ func NewRunCmdToolWithArtifacts(
 			"Inside the sandbox, env entries are filtered by a security allowlist; keys that do not survive the filter are reported back in the output's 'note' field (escalated runs inherit the full user environment). " +
 			"The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), " +
 			"and denies writes outside the workspace and temp dir. " +
-			"When a task-critical command fails (or hangs until the timeout) because of the sandbox (DNS/network errors, SSO/OAuth, permission denied writing outside the workspace, package downloads), " +
-			"retry the same command with sandbox_permissions='require_escalated' and a short justification question for the user — after explicit approval (R3) it runs OUTSIDE the sandbox with the full user environment, network, and credentials; " +
-			"do not give up or ask the user to run it themselves before offering that approval. " +
+			"When a task-critical command fails (or hangs until the timeout) because the sandbox denied OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), " +
+			"PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule. " +
+			"Reserve sandbox_permissions='require_escalated' (with a short justification question) for failures network cannot explain — writes outside the workspace, TTY needs, credential files — it runs OUTSIDE the sandbox with the full user environment after explicit approval (R3). " +
+			"Do not give up or ask the user to run it themselves before offering the matching approval. " +
+			"needs_network must NOT be combined with require_escalated (escalated runs already have full network). " +
 			"'justification' is an optional short note shown to the user at approval time; it is REQUIRED with sandbox_permissions='require_escalated' and simply informational otherwise.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"needs_network":{"type":"boolean"},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"stdout_preview_truncated":{"type":"boolean"},"stderr_preview_truncated":{"type":"boolean"},"stdout_artifact_truncated":{"type":"boolean"},"stderr_artifact_truncated":{"type":"boolean"},"stdout_artifact":{"type":"object"},"stderr_artifact":{"type":"object"},"stdout_artifact_path":{"type":"string"},"stderr_artifact_path":{"type":"string"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"},"note":{"type":"string"}},"required":["stdout","stderr","stdout_bytes","stderr_bytes","stdout_preview_truncated","stderr_preview_truncated","stdout_artifact_truncated","stderr_artifact_truncated","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
@@ -292,13 +296,20 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	if previewLimit > int64(t.modelOutputBytes) {
 		previewLimit = int64(t.modelOutputBytes)
 	}
-	// Escalated calls were explicitly approved to run outside the sandbox
-	// (risk R3); everything else uses the runner's default sandbox.
-	sandbox := process.Sandbox(nil)
-	if args.SandboxPermissions == sandboxRequireEscalated {
-		sandbox = process.DirectSandbox{}
+	// The policy verdict's grant decides the execution mode
+	// (docs/PERMISSION_DESIGN.md §3.2): a rule/session grant can even
+	// DOWNGRADE a require_escalated request back into a widened sandbox —
+	// downgrades only ever restrict. A zero grant means the DEFAULT
+	// sandbox, even for require_escalated requests: the baseline stamps an
+	// explicit Unsandboxed grant on every escalated ask it approves, so a
+	// zero grant here can only come from a grant-less allow (L0) — and L0
+	// trust must never be silently promoted to L2 unsandboxed execution.
+	grant := process.Grant{
+		Unsandboxed:   prepared.Grant.Unsandboxed,
+		NetworkFull:   prepared.Grant.NetworkFull,
+		WritablePaths: prepared.Grant.WritablePaths,
 	}
-	runnerResult, err := t.runner.RunWithSandbox(ctx, process.CommandSpec{
+	runnerResult, err := t.runner.RunWithGrant(ctx, process.CommandSpec{
 		Program:      args.Program,
 		Args:         append([]string(nil), args.Args...),
 		Cwd:          resolvedDir.Absolute,
@@ -307,7 +318,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		OutputLimit:  max(int64(1), previewLimit/2),
 		StdoutWriter: stdoutStage,
 		StderrWriter: stderrStage,
-	}, sandbox)
+	}, grant)
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, classifyRunError(err))
 	}
@@ -436,6 +447,9 @@ func validateArgs(
 	if raw.SandboxPermissions != nil {
 		args.SandboxPermissions = strings.TrimSpace(*raw.SandboxPermissions)
 	}
+	if raw.NeedsNetwork != nil {
+		args.NeedsNetwork = *raw.NeedsNetwork
+	}
 	if raw.Justification != nil {
 		args.Justification = strings.TrimSpace(*raw.Justification)
 	}
@@ -537,6 +551,9 @@ func validateCanonicalArgs(
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
 		}
 	case sandboxRequireEscalated:
+		if args.NeedsNetwork {
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "needs_network cannot be combined with sandbox_permissions=require_escalated (escalated runs already have full network; use needs_network for the sandboxed path)")
+		}
 		if args.Justification == "" {
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "justification is required with sandbox_permissions=require_escalated (ask the user a short yes/no question)")
 		}
@@ -616,25 +633,34 @@ func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
 	if escalated {
 		return ""
 	}
-	const escalationAdvice = "If this failure is caused by the sandbox (the command needs external network, credentials like SSO/OAuth, or write access outside the workspace/temp dir), " +
-		"retry the SAME command with sandbox_permissions='require_escalated' and a short justification for the user — after approval it runs OUTSIDE the sandbox with the full user environment, network, and credentials. " +
-		"Do not give up or ask the user to run it themselves before offering that approval."
+	const networkAdvice = "If this failure is caused by missing OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), " +
+		"PREFER retrying the SAME command with needs_network=true — after a lightweight approval it runs INSIDE the sandbox with network granted. " +
+		"Only when the failure is NOT network-related (write access outside the workspace/temp dir, TTY, credential files like SSO tokens the sandbox hides), " +
+		"retry with sandbox_permissions='require_escalated' and a short justification — after approval it runs OUTSIDE the sandbox with the full user environment. " +
+		"Do not give up or ask the user to run it themselves before offering the matching approval."
 	lower := strings.ToLower(stderr)
-	patterns := []string{
+	networkPatterns := []string{
 		"no such host", "nodename nor servname", "name or service not known", // DNS resolution
 		"could not resolve", "temporary failure in name resolution",
 		"network is unreachable", "can't assign requested address",
+	}
+	for _, p := range networkPatterns {
+		if strings.Contains(lower, p) {
+			return "outbound network and DNS are denied by the sandbox (loopback networking on localhost is allowed). " + networkAdvice
+		}
+	}
+	otherPatterns := []string{
 		"address family not supported", "operation not permitted", // socket/bind/listen denials
 		"read-only file system", // write outside workspace/temp dir
 	}
-	for _, p := range patterns {
+	for _, p := range otherPatterns {
 		if strings.Contains(lower, p) {
-			return "outbound network and DNS are denied by the sandbox (loopback networking on localhost is allowed), and writes are limited to the workspace and temp dir. " + escalationAdvice
+			return "the sandbox restricts networking to loopback and writes to the workspace and temp dir. " + networkAdvice
 		}
 	}
 	if timedOut {
 		return "the command was killed by the timeout while running inside the sandbox. Sandboxed commands have no outbound network or DNS (loopback only), " +
-			"so network-dependent commands (SSO/OAuth, HTTP APIs, package downloads) usually hang until the timeout instead of failing fast. " + escalationAdvice
+			"so network-dependent commands (SSO/OAuth, HTTP APIs, package downloads) usually hang until the timeout instead of failing fast. " + networkAdvice
 	}
 	return ""
 }
@@ -992,6 +1018,11 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall) string {
 	if args.SandboxPermissions == sandboxRequireEscalated {
 		parts = append(parts, "network=full")
 		parts = append(parts, "ESCALATED(no-sandbox)["+args.Justification+"]")
+	} else if args.NeedsNetwork {
+		parts = append(parts, "network=requested-in-sandbox")
+		if args.Justification != "" {
+			parts = append(parts, "note["+args.Justification+"]")
+		}
 	} else {
 		parts = append(parts, "network=loopback-only")
 		if args.Justification != "" {

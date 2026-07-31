@@ -43,15 +43,16 @@ type File struct {
 	// Providers is the only required section: at least one entry.
 	Providers []Provider `yaml:"providers"`
 
-	Limits  Limits  `yaml:"limits"`
-	Context Context `yaml:"context"`
-	Runaway Runaway `yaml:"runaway"`
-	Prompt  Prompt  `yaml:"prompt"`
-	Skills  Skills  `yaml:"skills"`
-	Rules   Rules   `yaml:"rules"`
-	Tracing Tracing `yaml:"tracing"`
-	Storage Storage `yaml:"storage"`
-	UI      UI      `yaml:"ui"`
+	Limits   Limits   `yaml:"limits"`
+	Context  Context  `yaml:"context"`
+	Runaway  Runaway  `yaml:"runaway"`
+	Prompt   Prompt   `yaml:"prompt"`
+	Skills   Skills   `yaml:"skills"`
+	Rules    Rules    `yaml:"rules"`
+	Approval Approval `yaml:"approval"`
+	Tracing  Tracing  `yaml:"tracing"`
+	Storage  Storage  `yaml:"storage"`
+	UI       UI       `yaml:"ui"`
 }
 
 // Provider describes one model endpoint and its model catalog. Type selects
@@ -183,6 +184,16 @@ type Rules struct {
 	Project           *bool `yaml:"project"`
 	ProjectAllow      *bool `yaml:"project_allow"`
 	PersistRemembered *bool `yaml:"persist_remembered"`
+}
+
+// Approval configures the baseline approval strategy
+// (docs/PERMISSION_DESIGN.md §4.3). Mode selects how calls with no rule
+// or session memory are decided: "on-request" (default: sandboxed,
+// non-dangerous commands run without prompting), "unless-trusted"
+// (legacy: every unmatched R2+ call prompts), or "never" (unattended:
+// sandboxed calls run, escalations are denied).
+type Approval struct {
+	Mode string `yaml:"mode"`
 }
 
 // Tracing configures Langfuse observability. Keys follow the same

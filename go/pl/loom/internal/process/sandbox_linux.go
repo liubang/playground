@@ -23,3 +23,9 @@ package process
 func NewPlatformSandbox(PlatformSandboxOptions) Sandbox {
 	return UnsupportedSandbox{Reason: "linux sandbox is not implemented"}
 }
+
+// widenSandbox is a no-op on Linux: the unsupported sandbox stays
+// fail-closed and grants never manufacture isolation that does not exist.
+func widenSandbox(base Sandbox, _ bool, _ []string) Sandbox {
+	return base
+}

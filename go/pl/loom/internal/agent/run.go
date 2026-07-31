@@ -738,25 +738,29 @@ type fileChangeResult struct {
 	Size    int64  `json:"size"`
 }
 
-// Policy evaluates the authorization decision for a prepared tool call.
-// Evaluation is call-aware (not just risk-level) so declarative rules can
-// match on the concrete argv/paths before the risk baseline applies.
+// Policy evaluates the authorization verdict for a prepared tool call
+// (docs/PERMISSION_DESIGN.md §4.1). Evaluation is call-aware (not just
+// risk-level) so declarative rules can match on the concrete argv/paths
+// before the risk baseline applies, and the verdict carries the execution
+// grant alongside the decision.
 type Policy interface {
-	Evaluate(call domain.PreparedCall) domain.Decision
+	Evaluate(call domain.PreparedCall) domain.Verdict
 }
 
 // DefaultPolicy applies the baseline R0/R1 allow, R2/R3 ask, R4 deny policy.
 type DefaultPolicy struct{}
 
-func (DefaultPolicy) Evaluate(call domain.PreparedCall) domain.Decision {
+func (DefaultPolicy) Evaluate(call domain.PreparedCall) domain.Verdict {
+	v := domain.Verdict{Source: "baseline", Reason: "risk baseline"}
 	switch call.Risk {
 	case domain.R0, domain.R1:
-		return domain.DecisionAllow
+		v.Decision = domain.DecisionAllow
 	case domain.R2, domain.R3:
-		return domain.DecisionAsk
+		v.Decision = domain.DecisionAsk
 	default:
-		return domain.DecisionDeny
+		v.Decision = domain.DecisionDeny
 	}
+	return v
 }
 
 // PromptBuilder builds the ephemeral system prompt prepended to every model
@@ -1384,7 +1388,11 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 		if reason := l.trackToolCall(tc.Name, prepared.Call.Arguments); reason != "" {
 			return l.terminateRunaway(ctx, reason)
 		}
-		switch l.policy().Evaluate(prepared) {
+		verdict := l.policy().Evaluate(prepared)
+		// The grant is policy-decided, not model-influenced: it rides the
+		// prepared call into Execute (run_cmd maps it onto the sandbox).
+		prepared.Grant = verdict.Grant
+		switch verdict.Decision {
 		case domain.DecisionAllow:
 			l.prepared[tc.ID] = prepared
 		case domain.DecisionAsk:
@@ -1494,7 +1502,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 	}()
 	for _, tc := range lastToolCalls(l.Run.Messages) {
 		prepared, ok := l.prepared[tc.ID]
-		if !ok || l.policy().Evaluate(prepared) != domain.DecisionAsk {
+		if !ok || l.policy().Evaluate(prepared).Decision != domain.DecisionAsk {
 			continue
 		}
 		// The durable permission event ID is the approval ID. Reusing it for

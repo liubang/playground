@@ -28,13 +28,15 @@ import (
 // PolicyDecision represents allow/deny/ask.
 type PolicyDecision = domain.Decision
 
-// Policy evaluates tool calls against security policy. Evaluation is
-// prepared-call aware (not just risk-level): declarative rules and
-// session-remembered prefixes are consulted before the risk baseline.
+// Policy is the assembly parameter pack for the decider chain
+// (docs/PERMISSION_DESIGN.md §4): declarative rules, session memory, and
+// the classic risk-baseline flags. Evaluation itself lives in the
+// deciders (decider.go); Policy.Decider wires them in strictest-first
+// order.
 type Policy struct {
 	// AutoApproveR1 automatically approves R0 and R1 risk operations.
 	AutoApproveR1 bool
-	// AskR2 prompts the user for R2 operations (default: true).
+	// AskR2 prompts the user for R2 operations (unless-trusted mode).
 	AskR2 bool
 	// DenyR4 denies R4 operations by default.
 	DenyR4 bool
@@ -56,35 +58,26 @@ func DefaultPolicy() Policy {
 	}
 }
 
-// Evaluate returns the policy decision for a prepared tool call: exact
-// rule/session matches first (strictest wins across ALL sources), then the
-// risk baseline.
-func (p Policy) Evaluate(call domain.PreparedCall) domain.Decision {
-	if call.Call.Name != "run_cmd" {
-		return p.evaluateRisk(call.Risk)
+// Decider assembles the strategy chain for the given approval mode:
+//
+//	rules (strictest wins, incl. deny) → danger heuristics → session
+//	memory → mode-aware baseline (always terminal)
+//
+// Swapping a strategy means swapping one chain element. The returned
+// Chain satisfies the agent's Policy interface (Evaluate → domain.Verdict)
+// and never produces a nil verdict.
+func (p Policy) Decider(mode ApprovalMode) Chain {
+	return Chain{
+		RuleDecider{Rules: p.Rules},
+		DangerDecider{Mode: mode},
+		SessionDecider{Session: p.Session},
+		BaselineDecider{
+			Mode:          mode,
+			AutoApproveR1: p.AutoApproveR1,
+			AskR2:         p.AskR2,
+			DenyR4:        p.DenyR4,
+		},
 	}
-	argv, ok := RunCmdArgv(call.Call.Arguments)
-	if !ok {
-		return p.evaluateRisk(call.Risk)
-	}
-	// File-layer rules (builtin + user + project) are consulted first;
-	// basename normalization lets absolute paths in trusted system dirs hit
-	// bare-name rules (/bin/ls matches [ls]).
-	best, _ := p.Rules.Evaluate(argv)
-	if best == "" {
-		if norm, ok := NormalizeTrustedPath(argv); ok {
-			best, _ = p.Rules.Evaluate(norm)
-		}
-	}
-	// Session memory may only upgrade "no match" to allow — a remembered
-	// prefix must never override a file-layer deny or ask (strictest wins).
-	if best == "" && p.Session != nil && p.Session.Matches(argv) {
-		best = domain.DecisionAllow
-	}
-	if best != "" {
-		return best
-	}
-	return p.evaluateRisk(call.Risk)
 }
 
 // trustedProgramDirs are candidate system directories whose executables
@@ -137,22 +130,6 @@ func NormalizeTrustedPath(argv []string) ([]string, bool) {
 		return append([]string{base}, argv[1:]...), true
 	}
 	return nil, false
-}
-
-// evaluateRisk returns the baseline decision for a risk level.
-func (p Policy) evaluateRisk(risk domain.RiskLevel) PolicyDecision {
-	switch {
-	case risk <= domain.R1 && p.AutoApproveR1:
-		return domain.DecisionAllow
-	case risk == domain.R2 && p.AskR2:
-		return domain.DecisionAsk
-	case risk >= domain.R4 && p.DenyR4:
-		return domain.DecisionDeny
-	case risk == domain.R3:
-		return domain.DecisionAsk
-	default:
-		return domain.DecisionDeny
-	}
 }
 
 // RuleLoadOptions selects which declarative rule layers load onto the

@@ -50,6 +50,28 @@ type SeatbeltSandbox struct {
 // Isolation reports the active seatbelt isolation mode.
 func (s SeatbeltSandbox) Isolation() Isolation { return SeatbeltIsolation }
 
+// widenSandbox clones the seatbelt sandbox with additional capabilities
+// (docs/PERMISSION_DESIGN.md §3.2). Other sandbox types are returned
+// unchanged: widening never manufactures isolation that does not exist.
+func widenSandbox(base Sandbox, networkFull bool, extraWritable []string) Sandbox {
+	s, ok := base.(SeatbeltSandbox)
+	if !ok {
+		return base
+	}
+	return SeatbeltSandbox{
+		allowNetwork:  s.allowNetwork || networkFull,
+		writablePaths: uniqueCleanPaths(append(append([]string(nil), s.writablePaths...), extraWritable...)),
+	}
+}
+
+// protectedWorkspaceSubpaths are metadata locations under the writable
+// workspace root that stay read-only: modifying them lets repository
+// content escalate the agent beyond its sandbox (git hooks, hooksPath
+// redirection, loom rule injection). Both the literal and the subpath
+// forms are excluded so first-time creation is blocked as well, mirroring
+// codex's WritableRoot protected-metadata handling.
+var protectedWorkspaceSubpaths = []string{".git/hooks", ".git/config", ".loom"}
+
 // Prepare creates a temporary seatbelt profile and wraps the child process.
 func (s SeatbeltSandbox) Prepare(spec SandboxSpec) (SandboxLaunch, error) {
 	profile, err := s.profile(spec)
@@ -87,20 +109,20 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 		return "", fmt.Errorf("seatbelt requires absolute paths")
 	}
 
-	writePaths := []string{filepath.Clean(spec.WorkspaceRoot)}
+	writePaths := []string{canonicalWritePath(spec.WorkspaceRoot)}
 	for _, path := range spec.WritablePaths {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
-		writePaths = append(writePaths, filepath.Clean(path))
+		writePaths = append(writePaths, canonicalWritePath(path))
 	}
 	for _, path := range s.writablePaths {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
-		writePaths = append(writePaths, filepath.Clean(path))
+		writePaths = append(writePaths, canonicalWritePath(path))
 	}
-	writePaths = append(writePaths, os.TempDir())
+	writePaths = append(writePaths, canonicalWritePath(os.TempDir()))
 	writePaths = uniqueCleanPaths(writePaths)
 
 	var lines []string
@@ -135,48 +157,133 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 	if s.allowNetwork {
 		lines = append(lines, "(allow network*)")
 	}
+	// Destructive-write denies come AFTER every allow (seatbelt's last
+	// match wins): sensitive paths stay un-renameable even when a widened
+	// write root covers them (rename-then-read would bypass the read
+	// deny), and protected workspace metadata stays read-only even when
+	// the workspace sits inside another writable root (e.g. TMPDIR).
+	for _, rule := range sensitiveUnlinkDenies() {
+		lines = append(lines, rule)
+	}
+	workspace := canonicalWritePath(spec.WorkspaceRoot)
+	for _, rel := range protectedWorkspaceSubpaths {
+		protected := seatbeltQuote(filepath.Join(workspace, rel))
+		lines = append(lines,
+			fmt.Sprintf("(deny file-write* (literal %s))", protected),
+			fmt.Sprintf("(deny file-write* (subpath %s))", protected),
+		)
+	}
 	return strings.Join(lines, "\n") + "\n", nil
 }
 
-// sensitiveReadDenies returns seatbelt rules denying reads of credential-like
-// locations under the user's home directory. Writes remain scoped to the
-// workspace, and the workspace PathValidator independently rejects these
-// components inside the workspace, so the sandbox only needs to cover the
-// home-level secrets the broad read policy would otherwise expose.
-func sensitiveReadDenies() []string {
+// sensitiveSubpaths and sensitiveLiterals are the credential-like
+// locations under the user's home directory. Reads are denied up front
+// (sensitiveReadDenies); destructive writes are denied AFTER the write
+// allows (sensitiveUnlinkDenies) so widened write roots cannot enable a
+// rename-then-read bypass.
+var sensitiveSubpaths = []string{
+	".ssh",
+	".gnupg",
+	".aws",
+	".azure",
+	".kube",
+	".docker",
+	".config/gcloud",
+	".config/gh",
+	".config/snowflake",
+	"Library/Keychains",
+}
+
+var sensitiveLiterals = []string{
+	".netrc",
+	".git-credentials",
+	".env",
+	"credentials.json",
+	"service-account.json",
+	".npmrc",
+	".pypirc",
+}
+
+// sensitiveHome returns the canonicalized home directory for sensitive
+// path rules. Seatbelt matches canonical paths, so a symlinked HOME
+// (common in tests and some managed setups) must be resolved or the
+// denies silently match nothing.
+func sensitiveHome() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
+		return ""
+	}
+	return canonicalWritePath(home)
+}
+
+// sensitiveReadDenies returns seatbelt rules denying reads of
+// credential-like locations under the user's home directory. Writes
+// remain scoped to the workspace, and the workspace PathValidator
+// independently rejects these components inside the workspace, so the
+// sandbox only needs to cover the home-level secrets the broad read
+// policy would otherwise expose.
+func sensitiveReadDenies() []string {
+	home := sensitiveHome()
+	if home == "" {
 		return nil
 	}
-	subpaths := []string{
-		".ssh",
-		".gnupg",
-		".aws",
-		".azure",
-		".kube",
-		".docker",
-		".config/gcloud",
-		".config/gh",
-		".config/snowflake",
-		"Library/Keychains",
-	}
-	literals := []string{
-		".netrc",
-		".git-credentials",
-		".env",
-		"credentials.json",
-		"service-account.json",
-		".npmrc",
-		".pypirc",
-	}
-	rules := make([]string, 0, len(subpaths)+len(literals))
-	for _, rel := range subpaths {
+	rules := make([]string, 0, len(sensitiveSubpaths)+len(sensitiveLiterals))
+	for _, rel := range sensitiveSubpaths {
 		rules = append(rules, fmt.Sprintf("(deny file-read* (subpath %s))", seatbeltQuote(filepath.Join(home, rel))))
 	}
-	for _, rel := range literals {
+	for _, rel := range sensitiveLiterals {
 		rules = append(rules, fmt.Sprintf("(deny file-read* (literal %s))", seatbeltQuote(filepath.Join(home, rel))))
 	}
 	return rules
+}
+
+// sensitiveUnlinkDenies returns destructive-write denies for the same
+// locations. They MUST be emitted after all write allows: emitted earlier
+// they are dead rules whenever a widened write root (e.g. grant.write
+// ["~"] or a home-rooted workspace) covers the sensitive path — the
+// trailing allow would win and rename-then-read would bypass the read
+// deny.
+func sensitiveUnlinkDenies() []string {
+	home := sensitiveHome()
+	if home == "" {
+		return nil
+	}
+	rules := make([]string, 0, len(sensitiveSubpaths)+len(sensitiveLiterals))
+	for _, rel := range sensitiveSubpaths {
+		rules = append(rules, fmt.Sprintf("(deny file-write-unlink (subpath %s))", seatbeltQuote(filepath.Join(home, rel))))
+	}
+	for _, rel := range sensitiveLiterals {
+		rules = append(rules, fmt.Sprintf("(deny file-write-unlink (literal %s))", seatbeltQuote(filepath.Join(home, rel))))
+	}
+	return rules
+}
+
+// canonicalWritePath resolves symlinks in a writable path because
+// seatbelt matches CANONICAL paths: on macOS /var and /tmp are symlinks
+// into /private, so the /var/folders/... form of TMPDIR never matches a
+// (subpath ...) rule — writes silently failed. Paths that do not exist
+// yet resolve through their nearest existing ancestor.
+func canonicalWritePath(path string) string {
+	clean := filepath.Clean(path)
+	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+		return resolved
+	}
+	dir := clean
+	var tail []string
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return clean
+		}
+		tail = append([]string{filepath.Base(dir)}, tail...)
+		if resolved, err := filepath.EvalSymlinks(parent); err == nil {
+			for _, elem := range tail {
+				resolved = filepath.Join(resolved, elem)
+			}
+			return resolved
+		}
+		dir = parent
+	}
 }
 
 func uniqueCleanPaths(paths []string) []string {

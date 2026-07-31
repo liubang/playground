@@ -1099,17 +1099,25 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 
 	var note string
 	if cmd.Decision == domain.DecisionAllow && cmd.RuleHint != nil {
-		if prefix, ok := c.rulesApprover.RememberRunCmd(cmd.RuleHint.ToolName, cmd.RuleHint.Arguments); ok {
-			note = strings.Join(prefix, " ")
-			// Persist the remembered prefix to the user rules layer so future
-			// sessions inherit it (rules.persist_remembered=false opts out;
-			// a nil bootstrap in tests keeps the default). The derivation
-			// above already banned shells, eval interpreters, destructive
-			// programs, heredocs, and escalated runs.
+		if rule, ok := c.rulesApprover.RememberCall(cmd.RuleHint.ToolName, cmd.RuleHint.Arguments, cmd.RuleHint.Trust); ok {
+			note = rule.Label
+			if summary := rule.Grant.Summary(); summary != "" {
+				note += " (" + summary + ")"
+			}
+			// Persist the memory to the user rules layer so future sessions
+			// inherit it (rules.persist_remembered=false opts out; a nil
+			// bootstrap in tests keeps the default). run_cmd remembers argv
+			// prefixes (with grants); web_fetch remembers exact hosts.
 			if c.persistRememberedRules() {
 				if dir, err := permission.RulesDirUser(); err == nil {
-					if err := permission.AppendRememberedRule(dir, prefix); err != nil {
-						c.logger.Warn("persist remembered rule failed", "prefix", note, "error", err)
+					var persistErr error
+					if rule.Host != "" {
+						persistErr = permission.AppendRememberedDomain(dir, rule.Host)
+					} else {
+						persistErr = permission.AppendRememberedRule(dir, rule.Prefix, rule.Grant)
+					}
+					if persistErr != nil {
+						c.logger.Warn("persist remembered rule failed", "rule", note, "error", persistErr)
 					} else {
 						note += " (saved to " + dir + ")"
 					}
