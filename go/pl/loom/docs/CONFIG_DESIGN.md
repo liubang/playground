@@ -214,6 +214,11 @@ storage:
 ui:
   icons: nerd                               # LOOM_ICONS：nerd | plain
   alt_screen: false                         # LOOM_ALT_SCREEN=1 ↔ true
+
+subagent:                                   # delegate_task 子 Agent（docs/SUBAGENT_DESIGN.md §7）
+  enabled: true                             # false = 不注册 delegate_task
+  max_tokens: 0                             # 子 run 累计 token 上限；0 = 继承 limits.max_tokens
+  model: ""                                 # 可选 "provider/model"；空 = 跟随当前 turn 模型
 ```
 
 ### 4.2 字段规则

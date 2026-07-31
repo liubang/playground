@@ -255,11 +255,18 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 
 // riskForArgs elevates to R3 when the call escapes the default sandbox:
 // shell interpreters (arbitrary command lines) and any require_escalated
-// run (executes outside the sandbox with full user privileges). Plain
-// sandboxed programs stay at the definition's R2.
+// run (executes outside the sandbox with full user privileges). A shell
+// invocation that provably contains no composition (process.UnwrapSimpleShell)
+// keeps the base risk — it is a plain command wearing a shell costume.
 func riskForArgs(args runCmdArgs, base domain.RiskLevel) domain.RiskLevel {
-	if args.SandboxPermissions == sandboxRequireEscalated || process.IsShellProgram(args.Program) {
+	if args.SandboxPermissions == sandboxRequireEscalated {
 		return domain.R3
+	}
+	if process.IsShellProgram(args.Program) {
+		argv := append([]string{args.Program}, args.Args...)
+		if _, simple := process.UnwrapSimpleShell(argv); !simple {
+			return domain.R3
+		}
 	}
 	return base
 }
@@ -363,6 +370,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		ExecutablePath:          runnerResult.ExecutablePath,
 		Hash:                    runnerResult.ExecutableHash,
 		Note: combineNotes(
+			escalationDowngradeNote(args.SandboxPermissions == sandboxRequireEscalated, prepared.Grant.Unsandboxed),
 			sandboxGuidanceNote(
 				string(runnerResult.Stderr),
 				runnerResult.TimedOut,
@@ -616,6 +624,21 @@ func droppedEnvNote(dropped []string) string {
 		return ""
 	}
 	return fmt.Sprintf("env keys dropped by the sandbox allowlist: %s", strings.Join(dropped, ", "))
+}
+
+// escalationDowngradeNote tells the model when a require_escalated call
+// ran WITHOUT the unsandboxed grant it asked for. Without this signal the
+// failure is indistinguishable from an ordinary sandbox denial, and the
+// model resorts to inventing sandbox workarounds instead of surfacing
+// that an explicit approval is required.
+func escalationDowngradeNote(escalated bool, grantUnsandboxed bool) string {
+	if !escalated || grantUnsandboxed {
+		return ""
+	}
+	return "require_escalated was NOT honored: policy downgraded this call to sandboxed execution " +
+		"(see the isolation field). Do NOT write workaround scripts or patches to bypass the sandbox — " +
+		"unsandboxed execution requires an explicit user approval; if this command failed because of " +
+		"sandbox restrictions, inform the user that approving the escalation prompt is required."
 }
 
 // combineNotes joins non-empty notes with a separator.

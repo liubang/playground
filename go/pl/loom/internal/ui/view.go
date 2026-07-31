@@ -61,6 +61,9 @@ func (m Model) View() string {
 	} else if m.mode == ModeReasoningPicker {
 		b.WriteString(m.renderReasoningPicker())
 		b.WriteString("\n")
+	} else if m.mode == ModeSubagent {
+		b.WriteString(m.renderSubagentOverlay())
+		b.WriteString("\n")
 	} else {
 		b.WriteString(m.renderTranscript())
 		b.WriteString("\n")
@@ -86,8 +89,8 @@ func (m Model) View() string {
 	case ModeSearch:
 		b.WriteString(m.renderSearchBar())
 		b.WriteString("\n")
-	case ModeSessionPicker, ModeModelPicker, ModeReasoningPicker:
-		// The picker owns the main area; no composer.
+	case ModeSessionPicker, ModeModelPicker, ModeReasoningPicker, ModeSubagent:
+		// The picker/overlay owns the main area; no composer.
 	default:
 		// Pinned panels sit directly above the composer (Claude Code
 		// style): steer queue first, then the plan checklist.
@@ -412,6 +415,9 @@ func (m Model) renderBlock(block *TranscriptBlock) string {
 		return m.theme.InterruptedBlock.Render(content)
 	case BlockKindTool:
 		out := m.renderToolSummary(block)
+		if progress := m.renderSubagentProgress(block); progress != "" {
+			out += "\n" + progress
+		}
 		if block.Expanded {
 			switch {
 			case block.Diff != "":
@@ -1162,6 +1168,7 @@ func (m Model) renderHelpOverlay() string {
 	keyRow("Ctrl+R", "Toggle thought process", "Tab", "Complete /command")
 	keyRow("Ctrl+E", "Toggle tool output", "Ctrl+O", "Expand/collapse all tools")
 	keyRow("Ctrl+F", "Search transcript", "Ctrl+Y", "Copy last reply")
+	keyRow("Ctrl+G", "View sub-agent (read-only)", "Click", "Delegate block: view sub-agent")
 	keyRow("Ctrl+C", "Cancel turn / clear (x2 quit)", "Ctrl+D", "Exit (when idle)")
 	keyRow("Esc", "Cancel turn; close dialogs", "", "")
 	b.WriteString("\n")

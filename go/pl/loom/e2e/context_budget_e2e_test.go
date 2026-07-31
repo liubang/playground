@@ -57,6 +57,9 @@ type mockEntry struct {
 	UsageIn  int64
 	UsageOut int64
 	Delay    time.Duration
+	// Fail makes the handler answer HTTP 500 — provider-error injection
+	// (e.g. a sub-agent's model call dying mid-delegation).
+	Fail bool
 }
 
 // mockOpenAI replays entries as chat-completions SSE streams and records
@@ -96,6 +99,10 @@ func (m *mockOpenAI) handleChatCompletions(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	entry := m.entries[idx]
+	if entry.Fail {
+		http.Error(w, `{"error":{"message":"mock injected provider error"}}`, http.StatusInternalServerError)
+		return
+	}
 	if entry.Delay > 0 {
 		time.Sleep(entry.Delay)
 	}

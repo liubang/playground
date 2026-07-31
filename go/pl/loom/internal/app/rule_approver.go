@@ -99,6 +99,13 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 		if !parsed {
 			return RememberedRule{}, false
 		}
+		if info.Escalated && trust != TrustUnsandboxed {
+			// An escalation can only be remembered as explicit full trust:
+			// any lesser grant would not cover the next escalated call
+			// (permission.AllowGrantCovers), so a "minimal" memory would be
+			// dead weight that never fires.
+			return RememberedRule{}, false
+		}
 		grant := DeriveRememberGrant(info, trust)
 		prefix, remembered := r.session.RememberRunCmd(info.Argv, grant)
 		if !remembered {
@@ -123,15 +130,14 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 // for the given call and user-chosen trust flavor:
 //
 //   - trust=unsandboxed on an escalated call → L2 full trust (explicit
-//     user opt-in only).
-//   - needs_network or escalated calls → sandboxed network grant (the
-//     overwhelmingly common escalation cause).
+//     user opt-in only; the ONLY rememberable flavor for escalations).
+//   - needs_network calls → sandboxed network grant.
 //   - anything else → zero grant (default sandbox).
 func DeriveRememberGrant(info permission.RunCmdCall, trust string) domain.ExecGrant {
 	switch {
 	case trust == TrustUnsandboxed && info.Escalated:
 		return domain.ExecGrant{Unsandboxed: true}
-	case info.NeedsNetwork || info.Escalated:
+	case info.NeedsNetwork:
 		return domain.ExecGrant{NetworkFull: true}
 	default:
 		return domain.ExecGrant{}
@@ -178,7 +184,10 @@ func ApprovalRulePreview(toolName string, arguments json.RawMessage) (preview st
 	switch toolName {
 	case "run_cmd":
 		info, parsed := permission.ParseRunCmdCall(arguments)
-		if !parsed {
+		if !parsed || info.Escalated {
+			// Escalated calls offer only "allow once" and "always trust
+			// (unsandboxed)" — a minimal-capability memory could never
+			// cover the next escalation, so the option is hidden.
 			return "", domain.ExecGrant{}, false
 		}
 		prefix, ok := permission.DeriveRunCmdPrefix(info.Argv)

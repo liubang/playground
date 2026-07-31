@@ -615,14 +615,14 @@ func TestApprovalOverlayHidesRulePreviewForShell(t *testing.T) {
 		ApprovalID: domain.NewEventID(),
 		ToolName:   "run_cmd",
 		Risk:       domain.R3,
-		Arguments:  json.RawMessage(`{"program":"sh","args":["-c","echo hi"]}`),
+		Arguments:  json.RawMessage(`{"program":"sh","args":["-c","echo hi | cat"]}`),
 	}
 	overlay := m.renderApprovalOverlay()
 	if !strings.Contains(overlay, "Always allow") {
 		t.Fatalf("overlay should still offer the always option: %s", overlay)
 	}
 	if strings.Contains(overlay, "Always allow `") {
-		t.Fatalf("shell calls must not show a rule preview: %s", overlay)
+		t.Fatalf("compound shell calls must not show a rule preview: %s", overlay)
 	}
 }
 
@@ -1848,9 +1848,9 @@ func TestApprovalNumberKeysAndDisabledAlways(t *testing.T) {
 		t.Fatal("number key 2 must resolve always-allow for a rule-eligible call")
 	}
 
-	// For a shell call the rule is not derivable: "2", "a" and Enter on the
-	// always option are all inert, and the overlay stays up.
-	m = newApprovalModel("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","echo hi"]}`))
+// For a compound shell call the rule is not derivable: "2", "a" and
+// Enter on the always option are all inert, and the overlay stays up.
+m = newApprovalModel("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","echo hi | cat"]}`))
 	m.approvalCursor = 1
 	for _, key := range []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune{'2'}},

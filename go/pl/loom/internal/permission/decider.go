@@ -76,10 +76,10 @@ func (d RuleDecider) evaluateRunCmd(call domain.PreparedCall) *domain.Verdict {
 	}
 	grant := rule.Grant.ExecGrant()
 	if best == domain.DecisionAllow && !AllowGrantCovers(grant, info) {
-		// A v1 (grant-less) allow only covers PLAIN sandboxed calls: an
-		// escalated or needs_network request asks for capabilities the
-		// rule never granted, so it falls through to the baseline, which
-		// asks with the correct grant stamped (L0 ≠ L2).
+		// The matched allow's grant does not cover the capabilities this
+		// call declared (an L0/L1 allow never answers an L2 escalation):
+		// fall through to the baseline, which asks with the correct grant
+		// stamped instead of silently running under-powered.
 		return nil
 	}
 	v := &domain.Verdict{Decision: best, Source: SourceRule, Reason: rule.Justification}
@@ -90,17 +90,22 @@ func (d RuleDecider) evaluateRunCmd(call domain.PreparedCall) *domain.Verdict {
 }
 
 // AllowGrantCovers reports whether an allow verdict's grant satisfies the
-// capabilities the call declared. An explicit (non-zero) grant always
-// decides — it may even downgrade an escalation into a widened sandbox.
-// A zero grant only covers plain sandboxed calls: letting it answer an
-// escalated request would silently promote an L0 rule to L2 unsandboxed
-// execution, and letting it answer needs_network would run the command
-// without the network it just said it needs (a fail-retry loop).
+// capabilities the call declared. Coverage is exact, by design: a lesser
+// grant must never answer a bigger request, because the command then runs
+// WITHOUT the capability it just said it needs — the failure looks
+// identical to the sandbox denial that prompted the request, and the
+// model cannot tell its escalation was refused (silent-downgrade
+// fail-retry loop). Only an explicit unsandboxed grant covers an
+// escalation; only a network (or unsandboxed) grant covers needs_network.
 func AllowGrantCovers(grant domain.ExecGrant, info RunCmdCall) bool {
-	if !grant.IsZero() {
+	switch {
+	case info.Escalated:
+		return grant.Unsandboxed
+	case info.NeedsNetwork:
+		return grant.Unsandboxed || grant.NetworkFull
+	default:
 		return true
 	}
-	return !info.Escalated && !info.NeedsNetwork
 }
 
 // DangerDecider intercepts commands matching the built-in dangerous
@@ -131,7 +136,14 @@ func (d DangerDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	if d.Mode == ModeNever {
 		return &domain.Verdict{Decision: domain.DecisionDeny, Source: SourceDanger, Reason: reason}
 	}
-	return &domain.Verdict{Decision: domain.DecisionAsk, Source: SourceDanger, Reason: reason}
+	v := &domain.Verdict{Decision: domain.DecisionAsk, Source: SourceDanger, Reason: reason}
+	if info.Escalated {
+		// An approved escalation must execute unsandboxed: the ask has to
+		// carry the grant, or approval would silently run the command
+		// sandboxed (see AllowGrantCovers).
+		v.Grant = domain.ExecGrant{Unsandboxed: true}
+	}
+	return v
 }
 
 // SessionDecider consults prefixes remembered from interactive "allow
@@ -191,14 +203,27 @@ type BaselineDecider struct {
 }
 
 // Evaluate resolves the baseline verdict. run_cmd calls get mode-aware
-// handling; every other tool keeps the classic risk baseline in all modes
-// (their blast radius varies by path, so they are not L0-eligible).
+// handling. In unless-dangerous mode every other tool is auto-allowed up
+// to R2 as well: the built-in write/edit tools are confined to the
+// workspace by the path validator (.git/.loom stay protected), so their
+// blast radius is bounded the same way a sandboxed command's is.
 func (d BaselineDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	v := &domain.Verdict{Source: SourceBaseline}
 	if call.Call.Name == "run_cmd" {
 		if info, ok := ParseRunCmdCall(call.Call.Arguments); ok {
 			return d.runCmdBaseline(v, call.Risk, info)
 		}
+	}
+	if d.Mode == ModeUnlessDangerous {
+		switch {
+		case call.Risk >= domain.R4 && d.DenyR4:
+			v.Decision, v.Reason = domain.DecisionDeny, "R4 operations are denied by policy"
+		case call.Risk >= domain.R3:
+			v.Decision, v.Reason = domain.DecisionAsk, "risk baseline: R3 operations require approval"
+		default:
+			v.Decision, v.Reason = domain.DecisionAllow, "unless-dangerous: workspace-confined tools run without prompting"
+		}
+		return v
 	}
 	v.Decision = d.riskBaseline(call.Risk)
 	v.Reason = "risk baseline"
@@ -227,6 +252,28 @@ func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, risk domain.RiskLevel
 			v.Decision, v.Grant, v.Reason = domain.DecisionAllow, domain.ExecGrant{NetworkFull: true}, "never mode: declared network need granted"
 		default:
 			v.Decision, v.Reason = domain.DecisionAllow, "never mode: sandboxed commands run unattended"
+		}
+		return v
+
+	case ModeUnlessDangerous:
+		switch {
+		case risk >= domain.R4 && d.DenyR4:
+			v.Decision, v.Reason = domain.DecisionDeny, "R4 operations are denied by policy"
+		case info.Escalated:
+			// Leaving the sandbox always asks — the danger list is a
+			// heuristic screen and cannot be the only line of defense
+			// outside the sandbox.
+			v.Decision, v.Grant = domain.DecisionAsk, domain.ExecGrant{Unsandboxed: true}
+			v.Reason = "command requests execution OUTSIDE the sandbox (full environment, network, credentials)"
+		case risk >= domain.R3:
+			v.Decision, v.Reason = domain.DecisionAsk, "risk baseline: R3 operations require approval"
+		case info.NeedsNetwork:
+			// The sandbox keeps credential paths unreadable, so granting
+			// declared network needs inside it adds no exfiltration value.
+			v.Decision, v.Grant, v.Reason = domain.DecisionAllow, domain.ExecGrant{NetworkFull: true},
+				"unless-dangerous: declared network need granted inside the sandbox"
+		default:
+			v.Decision, v.Reason = domain.DecisionAllow, "unless-dangerous: sandboxed commands run without prompting"
 		}
 		return v
 

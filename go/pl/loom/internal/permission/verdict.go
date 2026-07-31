@@ -74,6 +74,13 @@ const (
 	// ModeNever allows sandboxed calls (granting declared network needs)
 	// and denies escalations outright — for unattended/CI runs.
 	ModeNever ApprovalMode = "never"
+	// ModeUnlessDangerous auto-allows everything the sandbox still
+	// confines — sandboxed commands (declared network needs granted),
+	// workspace-confined writes — and only prompts for danger-listed
+	// commands, complex shell invocations (R3), and escalations out of
+	// the sandbox. The sandbox remains the boundary; the danger list is
+	// the only routine prompt source.
+	ModeUnlessDangerous ApprovalMode = "unless-dangerous"
 )
 
 // ParseApprovalMode validates a config value; empty selects the default.
@@ -85,7 +92,9 @@ func ParseApprovalMode(s string) (ApprovalMode, error) {
 		return ModeUnlessTrusted, nil
 	case ModeNever:
 		return ModeNever, nil
+	case ModeUnlessDangerous:
+		return ModeUnlessDangerous, nil
 	}
-	return "", fmt.Errorf("approval.mode must be %q, %q, or %q, got %q",
-		ModeOnRequest, ModeUnlessTrusted, ModeNever, s)
+	return "", fmt.Errorf("approval.mode must be %q, %q, %q, or %q, got %q",
+		ModeOnRequest, ModeUnlessTrusted, ModeNever, ModeUnlessDangerous, s)
 }
