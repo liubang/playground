@@ -79,6 +79,10 @@ func (t *ReadFileTool) Definition() domain.ToolDefinition {
 	return t.base.def
 }
 
+// ConcurrentSafe implements domain.ConcurrentSafely: reads are
+// independent and the file-state book is mutex-protected.
+func (t *ReadFileTool) ConcurrentSafe() bool { return true }
+
 func (t *ReadFileTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	args, err := decodeStrict[readFileArgs](call.Arguments)
 	if err != nil {

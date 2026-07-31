@@ -308,10 +308,21 @@ func (m Model) renderSubagentOverlay() string {
 }
 
 // renderSubagentProgress renders the live progress line beneath a
-// delegate_task block's one-line summary.
+// delegate_task block's one-line summary. Delegations execute serially
+// (executeTools is a sequential loop), so a second delegate_task in the
+// same batch visibly queues behind the running one — without the queued
+// hint, "waiting" is indistinguishable from "broken".
 func (m Model) renderSubagentProgress(block *TranscriptBlock) string {
 	state := block.Subagent
 	if state == nil {
+		if block.Tool == "delegate_task" && !block.Done && block.Status != "cancelled" {
+			switch block.Status {
+			case "prepared":
+				return m.theme.Dim.Render(indentLines("↳ queued — previous sub-agent still running", "  "))
+			case "running":
+				return m.theme.Dim.Render(indentLines("↳ sub-agent starting…", "  "))
+			}
+		}
 		return ""
 	}
 	var line string

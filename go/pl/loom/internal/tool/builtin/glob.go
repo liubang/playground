@@ -82,6 +82,10 @@ func (t *GlobTool) Definition() domain.ToolDefinition {
 	return t.base.def
 }
 
+// ConcurrentSafe implements domain.ConcurrentSafely: each glob spawns
+// an independent fd process and shares no state across calls.
+func (t *GlobTool) ConcurrentSafe() bool { return true }
+
 func (t *GlobTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	args, err := decodeStrict[globArgs](call.Arguments)
 	if err != nil {
