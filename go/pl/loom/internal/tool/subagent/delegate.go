@@ -63,6 +63,12 @@ Keep intermediate exploration tight: prefer targeted searches over broad reads, 
 // must be self-contained, not a transcript dump.
 const maxTaskBytes = 16384
 
+// delegateFailureNextAction is the recovery guidance appended to every
+// delegation failure — the codex ERROR_NEXT_ACTION pattern: an error
+// without a next step leaves the parent model guessing, a guided one
+// re-delegates narrower or investigates directly.
+const delegateFailureNextAction = " If you still need the answer, delegate again with a narrower or more specific task, or investigate directly yourself."
+
 // ModelSnapshot is the per-turn model selection the delegate tool runs
 // its child loop on. Tools are registered once at bootstrap and shared
 // across turns, while the model selection is per-turn state, so the
@@ -331,11 +337,11 @@ func (t *DelegateTaskTool) Execute(ctx context.Context, prepared domain.Prepared
 		}
 	case execErr != nil:
 		return delegateError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal,
-			fmt.Sprintf("sub-agent run failed (session %s): %v", childSessionID, execErr)), metadata)
+			fmt.Sprintf("sub-agent run failed (session %s): %v", childSessionID, execErr)+delegateFailureNextAction), metadata)
 	case run.State.Outcome == domain.OutcomeSucceeded || run.State.Outcome == domain.OutcomeCompletedUnverified:
 		if strings.TrimSpace(conclusion) == "" {
 			return delegateError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal,
-				fmt.Sprintf("sub-agent finished (%s) without a conclusion; inspect session %s", run.State.Outcome, childSessionID)), metadata)
+				fmt.Sprintf("sub-agent finished (%s) without a conclusion; inspect session %s", run.State.Outcome, childSessionID)+delegateFailureNextAction), metadata)
 		}
 		return t.successResult(prepared.Call.ID, startedAt, conclusion, run, metadata)
 	default:
@@ -346,7 +352,7 @@ func (t *DelegateTaskTool) Execute(ctx context.Context, prepared domain.Prepared
 		if strings.TrimSpace(conclusion) != "" {
 			message += "; partial conclusion: " + conclusion
 		}
-		return delegateError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, message), metadata)
+		return delegateError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, message+delegateFailureNextAction), metadata)
 	}
 }
 

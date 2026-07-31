@@ -218,6 +218,7 @@ ui:
 subagent:                                   # delegate_task 子 Agent（docs/SUBAGENT_DESIGN.md §7）
   enabled: true                             # false = 不注册 delegate_task
   max_tokens: 0                             # 子 run 累计 token 上限；0 = 继承 limits.max_tokens
+  max_output_tokens: 8192                   # 子 Agent 单次响应输出上限；0 = 继承 limits.max_output_tokens
   model: ""                                 # 可选 "provider/model"；空 = 跟随当前 turn 模型
 ```
 

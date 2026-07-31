@@ -106,6 +106,9 @@ type ResolvedSubagent struct {
 	// MaxTokens caps the child run's cumulative metered tokens; 0 inherits
 	// limits.max_tokens.
 	MaxTokens int64
+	// MaxOutputTokens caps each child model response; 0 inherits
+	// limits.max_output_tokens.
+	MaxOutputTokens int64
 	// Model pins the sub-agent's model selection; nil follows the current
 	// turn's model.
 	Model *ProviderModelRef
@@ -290,13 +293,20 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		out.Default = ref
 	}
 	sub := ResolvedSubagent{
-		Enabled: f.Subagent.Enabled == nil || *f.Subagent.Enabled,
+		Enabled:         f.Subagent.Enabled == nil || *f.Subagent.Enabled,
+		MaxOutputTokens: 8192,
 	}
 	if f.Subagent.MaxTokens != nil {
 		if *f.Subagent.MaxTokens < 0 {
 			return nil, fmt.Errorf("config: subagent.max_tokens must be >= 0")
 		}
 		sub.MaxTokens = *f.Subagent.MaxTokens
+	}
+	if f.Subagent.MaxOutputTokens != nil {
+		if *f.Subagent.MaxOutputTokens < 0 {
+			return nil, fmt.Errorf("config: subagent.max_output_tokens must be >= 0")
+		}
+		sub.MaxOutputTokens = *f.Subagent.MaxOutputTokens
 	}
 	if m := strings.TrimSpace(f.Subagent.Model); m != "" {
 		ref, err := out.ResolveRef(m)
