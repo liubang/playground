@@ -244,6 +244,12 @@ type Subagent struct {
 	// folded back into the parent run's budget, so delegation is never a
 	// budget loophole.
 	MaxTokens *int64 `yaml:"max_tokens"`
+	// MaxOutputTokens caps each child model RESPONSE. Sub-agent answers
+	// should be concise; the per-request cap is also a latency knob — a
+	// truncation is only discovered after the whole output budget has
+	// streamed. nil = 8192 (reasoning headroom included); explicit 0
+	// inherits limits.max_output_tokens.
+	MaxOutputTokens *int64 `yaml:"max_output_tokens"`
 	// Model pins the sub-agent to a specific "provider/model" (or a bare
 	// model/provider name); empty follows the current turn's model.
 	Model string `yaml:"model"`

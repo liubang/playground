@@ -35,6 +35,11 @@ const (
 	// budget, but it shares the soft-landing state machine so the run
 	// still ends with a conclusion (docs/CONTEXT_DESIGN.md §4.4.3).
 	dimensionStall = "stall"
+	// dimensionMaxOutput marks the output-cap salvage wrap-up: the model
+	// hit max_output_tokens repeatedly, so instead of paying another full
+	// generation just to fail again it gets one final tools-denied turn
+	// to conclude from what it has (docs/SUBAGENT_DESIGN.md §12).
+	dimensionMaxOutput = "max_output"
 
 	// wrapUpGoalTokens marks the goal token budget's wrap-up turn. Unlike
 	// the resource dimensions it terminates with OutcomeSucceeded — the
@@ -182,6 +187,13 @@ Summarize now: what you accomplished, the conclusions you verified (with file pa
 
 Do not call any tools — further tool calls will be denied outright.`
 	}
+	if dimension == dimensionMaxOutput {
+		return `Your response was cut off by the output token limit more than once — long uninterrupted generations keep failing. This is your final turn.
+
+Conclude NOW with a concise summary based on what you already have: key findings with file paths, what is verified vs. uncertain, and what remains. Keep it short enough to fit comfortably in one response.
+
+Do not call any tools — further tool calls will be denied outright.`
+	}
 	return fmt.Sprintf(`The run budget (%s) is exhausted. This is your final turn.
 
 Summarize now: what you accomplished, the conclusions you verified (with file paths), what remains, and a clear next step for the user.
@@ -222,6 +234,8 @@ func (l *Loop) budgetDimensionUsage(dimension string) (usage, limit int64) {
 		return int64(l.Run.Usage.CostUSD * microUSD), int64(l.Run.Limits.MaxEstimatedCostUSD * microUSD)
 	case dimensionStall:
 		return int64(l.stallActiveDuration()), int64(l.runawayConfig().StallTimeout)
+	case dimensionMaxOutput:
+		return int64(l.maxOutputStops), int64(maxOutputContinuationLimit)
 	default: // tokens
 		return l.Run.Usage.InputTokens + l.Run.Usage.OutputTokens, l.Run.Limits.MaxTokens
 	}
@@ -236,10 +250,15 @@ func (l *Loop) inRunBudgetWrapUp() bool {
 
 // wrapUpOutcome maps the wrap-up dimension to the terminal outcome: an
 // exhausted resource budget is a normal soft landing, a stall is an
-// abnormal ending (docs/CONTEXT_DESIGN.md §4.4.2).
+// abnormal ending (docs/CONTEXT_DESIGN.md §4.4.2), and an output-cap
+// salvage completes unverified — the run was healthy, only its
+// generation style was not.
 func wrapUpOutcome(dimension string) domain.Outcome {
-	if dimension == dimensionStall {
+	switch dimension {
+	case dimensionStall:
 		return domain.OutcomeFailed
+	case dimensionMaxOutput:
+		return domain.OutcomeCompletedUnverified
 	}
 	return domain.OutcomeBudgetExhausted
 }
