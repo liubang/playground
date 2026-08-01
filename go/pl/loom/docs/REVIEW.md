@@ -34,7 +34,7 @@
 | M14 | `ui/update.go:192-195`                        | 任意 `tea.Msg`（按键/spinner tick）都触发 `layout()` 全量重建 transcript 字符串，streaming 高频下 CPU 可感知                                   | ✅ 已修复 |
 | M15 | `tool/webfetch/webfetch.go:382-392`           | `truncateAtBoundary` 按字节截断可切断 UTF-8（`boundedHeadTailString` 已有正确示范）                                                            | ✅ 已修复 |
 | M16 | `tool/builtin/search.go:261-268` | Go fallback 静默忽略 `glob/type/no_ignore` 参数，结果集包含模型明确排除的文件且无提示 | ✅ 已修复 |
-| M17 | `permission/policy.go:62`、`rules.go:384-397` | permission 硬编码 `"run_cmd"` 名字 + 独立 struct 重解析 canonical JSON，三处契约靠人肉保持一致，改名即静默降级                                 | ⬜ 未修复 |
+| M17 | `permission/policy.go:62`、`rules.go:384-397` | permission 硬编码 `"run_cmd"` 名字 + 独立 struct 重解析 canonical JSON，三处契约靠人肉保持一致，改名即静默降级                                 | ✅ 已修复 |
 
 ## 三、冗余代码
 
@@ -65,6 +65,12 @@
 | A8  | `domain/errors.go:80`          | `domain.As` 重复实现标准库且语义有偏差（As 返回 false 不再 unwrap、不支持 `Unwrap() []error`），建议删除改用 `errors.As`                                       | ✅ 已修复 |
 | A9  | `domain/context.go:85-97`      | `ContextManifest` 半数字段无生产者，YAGNI 过度设计                                                                                                             | ⬜ 未处理 |
 | A10 | `render/jsonl.go:89` | 注释称 encode 失败写 stderr，实际写 stdout 污染协议流，且 `err.Error()` 未 JSON 转义可产出非法 JSONL | ✅ 已修复 |
+
+### M17 permission 与工具名的字符串契约（2026-08-01 修复）
+
+- **方案（A2 的正解）**：`domain.PreparedCall` 新增类型化 `ExecRequest{Argv, Escalated, NeedsNetwork}` 字段；`run_cmd` 与新增的 `exec_session` 在 Prepare 填充并纳入各自 HMAC 签名指纹。permission 层新增唯一入口 `ExecInfoOf`：签名过的 `ExecRequest` 为权威来源，原始 JSON 解析（`ParseRunCmdCall`）仅作为 Prepare 之外构造的调用的兜底（测试、审批 UI 边界）。RuleDecider/DangerDecider/SessionDecider/BaselineDecider 与 `RuleApprover` 全部切换到 `ExecInfoOf`，`"run_cmd"` 工具名硬编码从判定路径消除——任何填充 `ExecRequest` 的工具自动获得 argv 前缀规则、danger 拦截与 session 记忆。`RememberCall`/`ApprovalRulePreview`/`RunCmdTrustPreview` 同时覆盖 `exec_session`。
+- **复现用例**：`permission/policy_test.go: TestExecRequestTypedContractPreferred`（JSON 与签名契约不一致时以契约为准）、`TestExecSessionMatchesArgvRules`（exec_session 走 argv 规则）。
+- **验证**：`go test ./pl/loom/...` 全绿，`bazel test //go/pl/loom/...` 33/33。
 
 ## 五、修复记录
 

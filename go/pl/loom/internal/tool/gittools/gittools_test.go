@@ -571,3 +571,475 @@ func mustMkdirAll(t *testing.T, path string) {
 		t.Fatalf("os.MkdirAll(%q) error = %v", path, err)
 	}
 }
+
+func TestGitMergeBaseToolReturnsAncestralCommit(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "base commit")
+
+	initialSHA := strings.TrimSpace(gitOutput(t, repoRoot, "rev-parse", "HEAD"))
+	defaultBranch := currentBranchName(t, repoRoot)
+
+	// Create a feature branch and add a commit.
+	gitRun(t, repoRoot, "checkout", "-b", "feature")
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\nfeature change\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "feature commit")
+
+	// Go back to default branch and add an independent commit.
+	gitRun(t, repoRoot, "checkout", defaultBranch)
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\nmain change\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "main commit")
+
+	tool, err := NewGitMergeBaseTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitMergeBaseTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_merge_base", gitMergeBaseArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+		Branch:   "feature",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+
+	var output gitMergeBaseOutput
+	decodeToolResult(t, result, &output)
+	if output.MergeBase != initialSHA {
+		t.Fatalf("merge_base = %q, want initial commit %q", output.MergeBase, initialSHA)
+	}
+	if output.Branch != "feature" {
+		t.Fatalf("branch = %q, want feature", output.Branch)
+	}
+	if output.BaseRef != "feature" {
+		t.Fatalf("base_ref = %q, want feature (no upstream)", output.BaseRef)
+	}
+}
+
+func TestGitDiffWithBaseRef(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("original\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "initial")
+
+	// Modify working tree — default diff shows working-tree vs index.
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("original\nmodified\n"))
+
+	tool, err := NewGitDiffTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitDiffTool() error = %v", err)
+	}
+
+	// Diff against HEAD should show the same change as working-tree vs HEAD.
+	headSHA := strings.TrimSpace(gitOutput(t, repoRoot, "rev-parse", "HEAD"))
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_diff", gitDiffArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+		Base:     headSHA,
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() with base error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output gitDiffOutput
+	decodeToolResult(t, result, &output)
+	if !strings.Contains(output.Diff, "modified") {
+		t.Fatalf("diff with base=HEAD should contain 'modified', got:\n%s", output.Diff)
+	}
+}
+
+func TestGitDiffWithMergeBasePrefix(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "base")
+
+	defaultBranch2 := currentBranchName(t, repoRoot)
+	gitRun(t, repoRoot, "checkout", "-b", "feature")
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\nfeature\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "feature")
+
+	gitRun(t, repoRoot, "checkout", defaultBranch2)
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\nmain\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "main")
+
+	tool, err := NewGitDiffTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitDiffTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_diff", gitDiffArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+		Base:     "merge-base:feature",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() with merge-base: error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output gitDiffOutput
+	decodeToolResult(t, result, &output)
+	if output.Base != "merge-base:feature" {
+		t.Fatalf("output.Base = %q, want merge-base:feature", output.Base)
+	}
+}
+
+func TestGitDiffBaseAndStagedMutuallyExclusive(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "init")
+
+	tool, err := NewGitDiffTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitDiffTool() error = %v", err)
+	}
+	_, err = tool.Prepare(context.Background(), newToolCall(t, "git_diff", gitDiffArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+		Staged:   true,
+		Base:     "HEAD",
+	}))
+	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+}
+
+func TestValidateGitRefRejectsDangerousInput(t *testing.T) {
+	tests := []struct {
+		name string
+		ref  string
+		ok   bool
+	}{
+		{"normal branch", "feature/foo", true},
+		{"remote ref", "origin/main", true},
+		{"leading dash", "-e", false},
+		{"double dot range", "main..feature", false},
+		{"shell metachar", "foo;rm", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateGitRef(tt.ref)
+			if tt.ok && err != nil {
+				t.Fatalf("validateGitRef(%q) unexpected error: %v", tt.ref, err)
+			}
+			if !tt.ok && err == nil {
+				t.Fatalf("validateGitRef(%q) expected error, got nil", tt.ref)
+			}
+		})
+	}
+}
+
+func TestGitStatusReportsRemoteURL(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "init")
+	// Add a fake remote — local-only path so no network is needed.
+	fakeRemote := t.TempDir()
+	gitRun(t, repoRoot, "remote", "add", "origin", fakeRemote)
+
+	tool, err := NewGitStatusTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitStatusTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_status", gitStatusArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output gitStatusOutput
+	decodeToolResult(t, result, &output)
+	if output.RemoteURL != fakeRemote {
+		t.Fatalf("RemoteURL = %q, want %q", output.RemoteURL, fakeRemote)
+	}
+}
+
+// setupRepoWithUpstream builds a repo whose branch tracks a local bare
+// remote, so upstream-dependent behavior can be tested without a network.
+func setupRepoWithUpstream(t *testing.T) (*workspacepkg.PathValidator, string, string) {
+	t.Helper()
+	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	gitRun(t, repoRoot, "checkout", "-b", "main")
+
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "init")
+
+	bare := filepath.Join(t.TempDir(), "origin.git")
+	gitRun(t, repoRoot, "init", "--bare", bare)
+	gitRun(t, repoRoot, "remote", "add", "origin", bare)
+	gitRun(t, repoRoot, "push", "-u", "origin", "main")
+	// origin/HEAD -> main, so default-branch resolution exercises the
+	// symbolic-ref path.
+	gitRun(t, repoRoot, "remote", "set-head", "origin", "main")
+	return validator, workspaceRoot, repoRoot
+}
+
+func TestGitStatusReportsUpstreamAndDefaultBranch(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, _ := setupRepoWithUpstream(t)
+
+	tool, err := NewGitStatusTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitStatusTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_status", gitStatusArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output gitStatusOutput
+	decodeToolResult(t, result, &output)
+	if output.Upstream != "origin/main" {
+		t.Fatalf("Upstream = %q, want origin/main", output.Upstream)
+	}
+	if output.DefaultBranch != "main" {
+		t.Fatalf("DefaultBranch = %q, want main", output.DefaultBranch)
+	}
+}
+
+func TestGitDiffToolUpstreamBase(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, repoRoot := setupRepoWithUpstream(t)
+
+	// A pushed commit (invisible to the upstream diff) plus an unpushed
+	// working-tree change (visible).
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\npushed\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "pushed commit")
+	gitRun(t, repoRoot, "push")
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\npushed\nunpushed\n"))
+
+	tool, err := NewGitDiffTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitDiffTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_diff", gitDiffArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+		Base:     "upstream",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output gitDiffOutput
+	decodeToolResult(t, result, &output)
+	if output.BaseRef != "origin/main" {
+		t.Fatalf("BaseRef = %q, want origin/main", output.BaseRef)
+	}
+	if !strings.Contains(output.Diff, "+unpushed") {
+		t.Fatalf("diff missing unpushed change: %q", output.Diff)
+	}
+	if strings.Contains(output.Diff, "+pushed") {
+		t.Fatalf("diff should not contain the pushed change: %q", output.Diff)
+	}
+}
+
+func TestGitDiffToolIncludeUntracked(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	mustWriteFile(t, filepath.Join(repoRoot, "tracked.txt"), []byte("base\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "init")
+	mustWriteFile(t, filepath.Join(repoRoot, "new.txt"), []byte("hello\nworld\n"))
+	mustWriteFile(t, filepath.Join(repoRoot, "bin.dat"), []byte{'a', 0, 'b'})
+
+	tool, err := NewGitDiffTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitDiffTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_diff", gitDiffArgs{
+		RepoRoot:         filepath.Join(workspaceRoot, "repo"),
+		IncludeUntracked: true,
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output gitDiffOutput
+	decodeToolResult(t, result, &output)
+	if len(output.UntrackedFiles) != 1 || output.UntrackedFiles[0] != "repo/new.txt" {
+		t.Fatalf("UntrackedFiles = %v, want [repo/new.txt]", output.UntrackedFiles)
+	}
+	if !strings.Contains(output.Diff, "new file mode 100644") || !strings.Contains(output.Diff, "+hello") {
+		t.Fatalf("diff missing synthesized untracked entry: %q", output.Diff)
+	}
+	if len(output.UntrackedSkipped) != 1 || !strings.Contains(output.UntrackedSkipped[0], "bin.dat") {
+		t.Fatalf("UntrackedSkipped = %v, want bin.dat (binary)", output.UntrackedSkipped)
+	}
+}
+
+func TestGitDiffToolSynthesizedUntrackedNoEOL(t *testing.T) {
+	entry := synthesizeNewFileDiff("f.txt", "one\ntwo")
+	want := "diff --git a/f.txt b/f.txt\nnew file mode 100644\nindex 0000000..0000000\n--- /dev/null\n+++ b/f.txt\n@@ -0,0 +1,2 @@\n+one\n+two\n\\ No newline at end of file\n"
+	if entry != want {
+		t.Fatalf("synthesized diff =\n%q\nwant\n%q", entry, want)
+	}
+}
+
+func TestGitBlameToolAttributesLines(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\ntwo\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "first")
+	firstSHA := strings.TrimSpace(gitOutput(t, repoRoot, "rev-parse", "HEAD"))
+
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\ntwo changed\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "second")
+	secondSHA := strings.TrimSpace(gitOutput(t, repoRoot, "rev-parse", "HEAD"))
+
+	// An uncommitted working-tree edit to line 1.
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one dirty\ntwo changed\n"))
+
+	tool, err := NewGitBlameTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitBlameTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_blame", gitBlameArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+		Path:     "repo/a.txt",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output gitBlameOutput
+	decodeToolResult(t, result, &output)
+	if len(output.Entries) != 2 {
+		t.Fatalf("len(Entries) = %d, want 2: %+v", len(output.Entries), output.Entries)
+	}
+	if !output.Entries[0].Uncommitted {
+		t.Fatalf("Entries[0] = %+v, want uncommitted working-tree line", output.Entries[0])
+	}
+	if output.Entries[1].Commit != secondSHA[:8] {
+		t.Fatalf("Entries[1].Commit = %q, want %q", output.Entries[1].Commit, secondSHA[:8])
+	}
+	if output.Entries[1].Author != "Loom Test" || output.Entries[1].Date == "" {
+		t.Fatalf("Entries[1] = %+v, want author and date filled", output.Entries[1])
+	}
+
+	// Historical rev blame: line 1 still belongs to the first commit.
+	prepared, err = tool.Prepare(context.Background(), newToolCall(t, "git_blame", gitBlameArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+		Path:     "repo/a.txt",
+		Rev:      secondSHA,
+	}))
+	if err != nil {
+		t.Fatalf("Prepare(rev) error = %v", err)
+	}
+	result = tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute(rev) status = %s, want success: %+v", result.Status, result.Error)
+	}
+	// Fresh variable: decoding into the reused struct would keep
+	// omitempty fields absent from this payload at their previous values.
+	var revOutput gitBlameOutput
+	decodeToolResult(t, result, &revOutput)
+	if revOutput.Entries[0].Commit != firstSHA[:8] || revOutput.Entries[0].Uncommitted {
+		t.Fatalf("rev blame Entries[0] = %+v, want first commit %q", revOutput.Entries[0], firstSHA[:8])
+	}
+}
+
+func TestGitBlameToolValidatesWindow(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "init")
+
+	tool, err := NewGitBlameTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitBlameTool() error = %v", err)
+	}
+	_, err = tool.Prepare(context.Background(), newToolCall(t, "git_blame", gitBlameArgs{
+		RepoRoot:  filepath.Join(workspaceRoot, "repo"),
+		Path:      "repo/a.txt",
+		StartLine: 10,
+		EndLine:   5,
+	}))
+	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+
+	_, err = tool.Prepare(context.Background(), newToolCall(t, "git_blame", gitBlameArgs{
+		RepoRoot:  filepath.Join(workspaceRoot, "repo"),
+		Path:      "repo/a.txt",
+		StartLine: 1,
+		EndLine:   maxBlameLines + 1,
+	}))
+	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+}
+
+func TestParseBlamePorcelainFillsRepeatedCommitFromCache(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	data := sha + " 1 1 2\n" +
+		"author Alice\n" +
+		"author-time 1700000000\n" +
+		"\tone\n" +
+		sha + " 2 2\n" +
+		"\ttwo\n"
+	entries, err := parseBlamePorcelain([]byte(data))
+	if err != nil {
+		t.Fatalf("parseBlamePorcelain() error = %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("len(entries) = %d, want 2", len(entries))
+	}
+	if entries[1].Author != "Alice" || entries[1].Date == "" {
+		t.Fatalf("entries[1] = %+v, want attribution filled from cache", entries[1])
+	}
+	if entries[0].Line != 1 || entries[1].Line != 2 {
+		t.Fatalf("lines = %d,%d, want 1,2", entries[0].Line, entries[1].Line)
+	}
+	if entries[0].Commit != "aaaaaaaa" {
+		t.Fatalf("entries[0].Commit = %q, want aaaaaaaa", entries[0].Commit)
+	}
+}

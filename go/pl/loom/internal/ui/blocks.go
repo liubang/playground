@@ -704,8 +704,15 @@ func RebuildTranscript(messages []domain.Message) *BlockIndex {
 
 		var text strings.Builder
 		for _, part := range message.Parts {
-			if part.Kind == domain.PartText {
+			switch part.Kind {
+			case domain.PartText:
 				text.WriteString(part.Text)
+			case domain.PartImage:
+				// Images cannot render in the terminal transcript; show a
+				// placeholder so the conversation stays legible.
+				if part.Image != nil {
+					fmt.Fprintf(&text, "[image: %s]", part.Image.MediaType)
+				}
 			}
 		}
 		if text.Len() > 0 {

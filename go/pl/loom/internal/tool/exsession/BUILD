@@ -12,31 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/22 21:10
-
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "gittools_lib",
+    name = "exsession_lib",
     srcs = [
-        "blame.go",
         "common.go",
-        "diff.go",
-        "log.go",
-        "merge_base.go",
-        "status.go",
+        "exec_session.go",
+        "manager.go",
+        "write_stdin.go",
     ],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/gittools",
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/exsession",
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/process:process_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )
 
 go_test(
-    name = "gittools_test",
-    srcs = ["gittools_test.go"],
-    embed = [":gittools_lib"],
+    name = "exsession_test",
+    srcs = ["exsession_test.go"],
+    embed = [":exsession_lib"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/process:process_lib",
+        "//go/pl/loom/internal/workspace:workspace_lib",
+    ],
 )

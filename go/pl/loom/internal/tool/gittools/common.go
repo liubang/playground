@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -361,43 +362,48 @@ func confirmRepoRoot(ctx context.Context, gitPath string, repoRoot repoRootResol
 	return nil
 }
 
-func buildRevParseArgs(repoRoot string) []string {
+// gitBaseArgs is the shared prefix of every git invocation: no pager, no
+// color, and — mirroring codex's git-utils operations.rs — hooks disabled
+// via core.hooksPath=/dev/null so a repository's hooks can never execute
+// in response to the agent's (read-only) git activity.
+func gitBaseArgs(repoRoot string) []string {
 	return []string{
 		"--no-pager",
 		"-c", "color.ui=false",
 		"-c", "core.pager=cat",
+		"-c", "core.hooksPath=/dev/null",
 		"-C", repoRoot,
-		"rev-parse",
-		"--show-toplevel",
 	}
 }
 
+func buildRevParseArgs(repoRoot string) []string {
+	return append(gitBaseArgs(repoRoot),
+		"rev-parse",
+		"--show-toplevel",
+	)
+}
+
 func buildStatusArgs(repoRoot string) []string {
-	return []string{
-		"--no-pager",
-		"-c", "color.ui=false",
-		"-c", "core.pager=cat",
-		"-C", repoRoot,
+	return append(gitBaseArgs(repoRoot),
 		"status",
 		"--porcelain=v2",
 		"-z",
 		"--branch",
-	}
+	)
 }
 
-func buildDiffArgs(repoRoot string, staged bool, unified int, repoRelativePath string) []string {
-	args := []string{
-		"--no-pager",
-		"-c", "color.ui=false",
-		"-c", "core.pager=cat",
-		"-C", repoRoot,
+func buildDiffArgs(repoRoot string, staged bool, unified int, base, repoRelativePath string) []string {
+	args := append(gitBaseArgs(repoRoot),
 		"diff",
 		"--no-ext-diff",
 		"--no-textconv",
 		fmt.Sprintf("--unified=%d", unified),
-	}
+	)
 	if staged {
 		args = append(args, "--cached")
+	}
+	if base != "" {
+		args = append(args, base)
 	}
 	if repoRelativePath != "" {
 		args = append(args, "--", literalGitPathspec(repoRelativePath))
@@ -405,8 +411,161 @@ func buildDiffArgs(repoRoot string, staged bool, unified int, repoRelativePath s
 	return args
 }
 
+func buildMergeBaseArgs(repoRoot, headRef, baseRef string) []string {
+	return append(gitBaseArgs(repoRoot), "merge-base", headRef, baseRef)
+}
+
+func buildRevParseVerifyArgs(repoRoot, rev string) []string {
+	return append(gitBaseArgs(repoRoot), "rev-parse", "--verify", "--quiet", rev)
+}
+
+func buildUpstreamArgs(repoRoot, branch string) []string {
+	return append(gitBaseArgs(repoRoot), "rev-parse", "--abbrev-ref", "--symbolic-full-name", branch+"@{upstream}")
+}
+
+func buildRemoteGetURLArgs(repoRoot, remote string) []string {
+	return append(gitBaseArgs(repoRoot), "remote", "get-url", remote)
+}
+
+func buildLsFilesOthersArgs(repoRoot string) []string {
+	return append(gitBaseArgs(repoRoot), "ls-files", "--others", "--exclude-standard", "-z")
+}
+
+func buildRefVerifyArgs(repoRoot, ref string) []string {
+	return append(gitBaseArgs(repoRoot), "rev-parse", "--verify", "--quiet", ref)
+}
+
+func buildRemoteHeadArgs(repoRoot, remote string) []string {
+	return append(gitBaseArgs(repoRoot), "symbolic-ref", "--quiet", "--short", "refs/remotes/"+remote+"/HEAD")
+}
+
+// resolveUpstream returns the upstream ref of the given local ref
+// ("" for HEAD), or "" when the ref has no upstream configured.
+func resolveUpstream(ctx context.Context, gitPath, repoRoot, ref string) string {
+	result, err := runGit(ctx, gitPath, buildUpstreamArgs(repoRoot, ref), maxGitRevParseStdoutBytes, maxGitStderrBytes)
+	if err != nil {
+		return ""
+	}
+	upstream := strings.TrimSpace(sanitizeUTF8(result.stdout))
+	if validateGitRef(upstream) != nil {
+		return ""
+	}
+	return upstream
+}
+
+// resolveDefaultBranch finds the repository's default branch name,
+// mirroring codex's git-utils info.rs default_branch_name fallback chain:
+// the origin remote's symbolic HEAD first, then a local main/master probe.
+// Returns "" when nothing resolves (a detached, remote-less repository).
+func resolveDefaultBranch(ctx context.Context, gitPath, repoRoot string) string {
+	if result, err := runGit(ctx, gitPath, buildRemoteHeadArgs(repoRoot, "origin"), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
+		short := strings.TrimSpace(sanitizeUTF8(result.stdout))
+		if branch, ok := strings.CutPrefix(short, "origin/"); ok && branch != "" && validateGitRef(branch) == nil {
+			return branch
+		}
+	}
+	for _, candidate := range []string{"main", "master"} {
+		if _, err := runGit(ctx, gitPath, buildRefVerifyArgs(repoRoot, "refs/heads/"+candidate), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// resolveUpstreamDiffBase picks the ref a "diff my work against the remote"
+// review should start from, mirroring codex's git_diff_to_remote: the
+// current branch's upstream when one exists, otherwise the merge-base with
+// the default branch. Returns the base ref and a human-readable baseRef
+// describing what was used; both empty when nothing resolves.
+func resolveUpstreamDiffBase(ctx context.Context, gitPath, repoRoot string) (string, string, error) {
+	if upstream := resolveUpstream(ctx, gitPath, repoRoot, "HEAD"); upstream != "" {
+		if err := verifyCommitRef(ctx, gitPath, repoRoot, upstream); err != nil {
+			return "", "", err
+		}
+		return upstream, upstream, nil
+	}
+	defaultBranch := resolveDefaultBranch(ctx, gitPath, repoRoot)
+	if defaultBranch == "" {
+		return "", "", domain.NewError(domain.ErrInvalidInput, "no upstream or default branch to diff against (set an upstream or pass an explicit base)")
+	}
+	sha, usedRef, err := resolveMergeBase(ctx, gitPath, repoRoot, defaultBranch)
+	if err != nil {
+		return "", "", err
+	}
+	return sha, mergeBasePrefix + usedRef, nil
+}
+
+// gitRefPattern is the whitelist for user-supplied refs and branch names:
+// letters, digits, and the punctuation git itself allows in refnames. The
+// leading-dash and ".." rejections keep refs from being interpreted as
+// flags or revision ranges.
+var gitRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/@+-]*$`)
+
+// validateGitRef bounds a user-supplied ref/branch to git's refname
+// alphabet, rejecting flag injection (leading '-') and range operators.
+func validateGitRef(ref string) error {
+	if ref == "" {
+		return domain.NewError(domain.ErrInvalidInput, "ref is required")
+	}
+	if len(ref) > 256 {
+		return domain.NewError(domain.ErrInvalidInput, "ref exceeds 256 bytes")
+	}
+	if strings.Contains(ref, "..") {
+		return domain.NewError(domain.ErrInvalidInput, "ref must not contain '..' (revision ranges are not supported)")
+	}
+	if !gitRefPattern.MatchString(ref) {
+		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("ref %q is not a valid git refname", ref))
+	}
+	return nil
+}
+
 func literalGitPathspec(path string) string {
 	return ":(literal)" + path
+}
+
+// resolveMergeBase computes the merge-base of HEAD and branch, following
+// codex's git-utils branch.rs: when the branch has an upstream that is
+// ahead of the local ref, the upstream's merge-base is the fresher review
+// base (the local branch is stale). Returns the base SHA and the ref that
+// produced it (branch or its upstream), so callers can show their work.
+func resolveMergeBase(ctx context.Context, gitPath, repoRoot, branch string) (string, string, error) {
+	if err := validateGitRef(branch); err != nil {
+		return "", "", err
+	}
+
+	usedRef := branch
+	if upstreamResult, err := runGit(ctx, gitPath, buildUpstreamArgs(repoRoot, branch), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
+		if upstream := strings.TrimSpace(sanitizeUTF8(upstreamResult.stdout)); upstream != "" && upstream != branch && validateGitRef(upstream) == nil {
+			countResult, countErr := runGit(ctx, gitPath, append(gitBaseArgs(repoRoot), "rev-list", "--count", branch+".."+upstream), maxGitRevParseStdoutBytes, maxGitStderrBytes)
+			if countErr == nil && strings.TrimSpace(sanitizeUTF8(countResult.stdout)) != "0" {
+				usedRef = upstream
+			}
+		}
+	}
+
+	result, err := runGit(ctx, gitPath, buildMergeBaseArgs(repoRoot, "HEAD", usedRef), maxGitRevParseStdoutBytes, maxGitStderrBytes)
+	if err != nil {
+		return "", "", classifyGitError(err, result.stderr, fmt.Sprintf("failed to compute merge-base of HEAD and %s", usedRef))
+	}
+	sha := strings.TrimSpace(sanitizeUTF8(result.stdout))
+	if sha == "" {
+		return "", "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("no merge-base between HEAD and %s (unrelated histories?)", usedRef))
+	}
+	return sha, usedRef, nil
+}
+
+// verifyCommitRef confirms that ref resolves to a commit, so a diff base
+// fails at prepare time with a clear error instead of inside git diff.
+func verifyCommitRef(ctx context.Context, gitPath, repoRoot, ref string) error {
+	if err := validateGitRef(ref); err != nil {
+		return err
+	}
+	result, err := runGit(ctx, gitPath, buildRevParseVerifyArgs(repoRoot, ref+"^{commit}"), maxGitRevParseStdoutBytes, maxGitStderrBytes)
+	if err != nil {
+		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("ref %q does not resolve to a commit", ref), domain.WithCause(err))
+	}
+	_ = result
+	return nil
 }
 
 func runGit(ctx context.Context, gitPath string, args []string, stdoutLimit, stderrLimit int64) (gitRunResult, error) {

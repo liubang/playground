@@ -118,12 +118,13 @@ type runCmdOutput struct {
 }
 
 type preparedFingerprint struct {
-	CallID     string                `json:"call_id"`
-	Arguments  json.RawMessage       `json:"arguments"`
-	ReadPaths  []string              `json:"read_paths"`
-	WritePaths []string              `json:"write_paths"`
-	Risk       domain.RiskLevel      `json:"risk"`
-	Definition domain.ToolDefinition `json:"definition"`
+	CallID      string                `json:"call_id"`
+	Arguments   json.RawMessage       `json:"arguments"`
+	ReadPaths   []string              `json:"read_paths"`
+	WritePaths  []string              `json:"write_paths"`
+	Risk        domain.RiskLevel      `json:"risk"`
+	Definition  domain.ToolDefinition `json:"definition"`
+	ExecRequest *domain.ExecRequest   `json:"exec_request,omitempty"`
 }
 
 type resolvedWorkingDir struct {
@@ -168,7 +169,8 @@ func NewRunCmdToolWithArtifacts(
 	}
 	def := domain.ToolDefinition{
 		Name: "run_cmd",
-		Description: "Execute a program in a sandbox. Prefer plain argv form (program + args + env) over shell wrappers: " +
+		Description: "Execute a program in a sandbox. Always set working_dir explicitly instead of wrapping the command in 'cd ... &&' — it keeps the approval summary accurate. " +
+			"Prefer plain argv form (program + args + env) over shell wrappers: " +
 			"program='sh' with args=['-c','...'] is elevated to R3 approval risk and prompts the user every time, so use it ONLY when pipes, redirection or '&&' are truly required. " +
 			"argv is executed directly without a shell: wildcards like '*.go' are passed to the program literally, " +
 			"so glob expansion is a legitimate reason to use the 'sh -c' form (or use the glob tool to find files first). " +
@@ -245,6 +247,13 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 		Risk:       riskForArgs(args, t.def.Risk()),
 		ReadPaths:  []string{root},
 		WritePaths: []string{root},
+		// The typed execution contract the policy layer classifies on
+		// (REVIEW M17/A2); covered by the signature below.
+		ExecRequest: &domain.ExecRequest{
+			Argv:         append([]string{args.Program}, args.Args...),
+			Escalated:    args.SandboxPermissions == sandboxRequireEscalated,
+			NeedsNetwork: args.NeedsNetwork,
+		},
 	}
 	// Sign before rendering the description so the displayed args_hash
 	// correlates with the ArgsHash recorded in permission events.
@@ -416,12 +425,13 @@ func (t *RunCmdTool) verifyPreparedCall(prepared domain.PreparedCall) error {
 
 func (t *RunCmdTool) signPrepared(prepared domain.PreparedCall) string {
 	fingerprint := preparedFingerprint{
-		CallID:     prepared.Call.ID.String(),
-		Arguments:  cloneRawMessage(prepared.Call.Arguments),
-		ReadPaths:  append([]string(nil), prepared.ReadPaths...),
-		WritePaths: append([]string(nil), prepared.WritePaths...),
-		Risk:       prepared.Risk,
-		Definition: prepared.Definition,
+		CallID:      prepared.Call.ID.String(),
+		Arguments:   cloneRawMessage(prepared.Call.Arguments),
+		ReadPaths:   append([]string(nil), prepared.ReadPaths...),
+		WritePaths:  append([]string(nil), prepared.WritePaths...),
+		Risk:        prepared.Risk,
+		Definition:  prepared.Definition,
+		ExecRequest: prepared.ExecRequest,
 	}
 	payload, _ := json.Marshal(fingerprint)
 	h := hmac.New(sha256.New, t.key[:])

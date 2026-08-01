@@ -97,6 +97,7 @@ type ResolvedConfig struct {
 	Storage   Storage
 	UI        UI
 	Subagent  ResolvedSubagent
+	MCP       ResolvedMCP
 }
 
 // ResolvedSubagent is the subagent section with defaults applied
@@ -316,6 +317,15 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		sub.Model = &ref
 	}
 	out.Subagent = sub
+
+	// MCP servers: validate config-level constraints; runtime startup
+	// (process spawning, tool discovery) happens in bootstrap.go.
+	resolvedMCP, err := resolveMCP(f.MCPServers)
+	if err != nil {
+		return nil, err
+	}
+	out.MCP = resolvedMCP
+
 	return out, nil
 }
 
@@ -694,4 +704,38 @@ func resolveTracing(in Tracing, lookup EnvLookup) (trace.Config, error) {
 		CostOutputPerMTok: in.CostOutputPerMTok,
 		Enabled:           in.Host != "" && publicKey != "" && secretKey != "",
 	}, nil
+}
+
+// ResolvedMCP holds the validated MCP server configuration. The map is
+// passed directly to mcp.StartServers in bootstrap.go; the resolve step
+// only validates config-level constraints (required fields, timeout
+// bounds) — process spawning and tool discovery are deferred to runtime.
+type ResolvedMCP struct {
+	Servers map[string]MCPServer
+}
+
+// resolveMCP validates the MCP server entries: each server must have a
+// non-empty command, and timeout overrides must be non-negative.
+func resolveMCP(in map[string]MCPServer) (ResolvedMCP, error) {
+	if len(in) == 0 {
+		return ResolvedMCP{}, nil
+	}
+	out := make(map[string]MCPServer, len(in))
+	for name, srv := range in {
+		ctx := fmt.Sprintf("mcp_servers.%s", name)
+		if strings.TrimSpace(name) == "" {
+			return ResolvedMCP{}, fmt.Errorf("config: mcp_servers: server name must not be empty")
+		}
+		if strings.TrimSpace(srv.Command) == "" {
+			return ResolvedMCP{}, fmt.Errorf("config: %s: command is required", ctx)
+		}
+		if srv.StartupTimeoutSec < 0 {
+			return ResolvedMCP{}, fmt.Errorf("config: %s: startup_timeout_sec must be >= 0", ctx)
+		}
+		if srv.ToolTimeoutSec < 0 {
+			return ResolvedMCP{}, fmt.Errorf("config: %s: tool_timeout_sec must be >= 0", ctx)
+		}
+		out[name] = srv
+	}
+	return ResolvedMCP{Servers: out}, nil
 }

@@ -626,3 +626,51 @@ func TestStreamErrorStatus(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestToolResultBlockWithImage(t *testing.T) {
+	result := domain.ToolResult{
+		CallID: domain.NewToolCallID(), Status: domain.ToolStatusSuccess,
+		Content: []domain.ContentPart{
+			{Kind: domain.PartText, Text: "image: shot.png"},
+			{Kind: domain.PartImage, Image: &domain.ImageContent{MediaType: "image/png", Data: "cG5n"}},
+		},
+	}
+	block := toolResultBlock(result)
+	content, ok := block["content"].([]map[string]any)
+	if !ok {
+		t.Fatalf("content type = %T, want []map[string]any", block["content"])
+	}
+	if len(content) != 2 || content[0]["type"] != "text" || content[1]["type"] != "image" {
+		t.Fatalf("content = %+v", content)
+	}
+	source, _ := content[1]["source"].(map[string]any)
+	if source["type"] != "base64" || source["media_type"] != "image/png" || source["data"] != "cG5n" {
+		t.Fatalf("image source = %+v", source)
+	}
+}
+
+func TestUserMessageBlocksWithImage(t *testing.T) {
+	msg := domain.Message{
+		Role: domain.RoleUser,
+		Parts: []domain.ContentPart{
+			{Kind: domain.PartText, Text: "look"},
+			{Kind: domain.PartImage, Image: &domain.ImageContent{MediaType: "image/webp", Data: "d2VicA=="}},
+		},
+	}
+	blocks, err := userMessageBlocks(msg)
+	if err != nil {
+		t.Fatalf("userMessageBlocks() error = %v", err)
+	}
+	if len(blocks) != 2 || blocks[0]["type"] != "text" || blocks[1]["type"] != "image" {
+		t.Fatalf("blocks = %+v", blocks)
+	}
+
+	// Pure text produces exactly one text block.
+	textOnly, err := userMessageBlocks(domain.Message{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}})
+	if err != nil {
+		t.Fatalf("userMessageBlocks() error = %v", err)
+	}
+	if len(textOnly) != 1 || textOnly[0]["type"] != "text" || textOnly[0]["text"] != "hi" {
+		t.Fatalf("text-only blocks = %+v", textOnly)
+	}
+}

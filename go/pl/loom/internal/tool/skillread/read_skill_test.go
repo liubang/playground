@@ -82,17 +82,16 @@ func prepare(t *testing.T, tool *ReadSkillTool, args map[string]any) domain.Prep
 	return prepared
 }
 
-func executeOK(t *testing.T, tool *ReadSkillTool, prepared domain.PreparedCall) readSkillOutput {
+func executeOK(t *testing.T, tool *ReadSkillTool, prepared domain.PreparedCall) string {
 	t.Helper()
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Execute() status = %s, error = %+v", result.Status, result.Error)
 	}
-	var out readSkillOutput
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
+	if len(result.Content) != 1 || result.Content[0].Kind != domain.PartText {
+		t.Fatalf("content = %+v, want a single text part", result.Content)
 	}
-	return out
+	return result.Content[0].Text
 }
 
 func executeErr(t *testing.T, tool *ReadSkillTool, prepared domain.PreparedCall) *domain.ToolError {
@@ -129,18 +128,21 @@ func TestReadSkillDefaultPath(t *testing.T) {
 	tool := newTool(t, loadCatalog(t, root))
 
 	out := executeOK(t, tool, prepare(t, tool, map[string]any{"name": "pandora"}))
-	if out.Name != "pandora" || out.Path != skill.FileName {
-		t.Fatalf("output identity = %+v", out)
+	if !strings.HasPrefix(out, "skill: pandora · path: "+skill.FileName+" · dir: ") {
+		t.Fatalf("output header = %q", out)
 	}
-	if out.TotalLines != 7 || out.Truncated {
-		t.Fatalf("TotalLines/Truncated = %d/%v", out.TotalLines, out.Truncated)
+	if !strings.Contains(out, "· lines 1-7 of 7 ·") {
+		t.Fatalf("output range = %q", out)
 	}
-	// Line 6 is the body line after frontmatter + blank line.
-	if out.Lines[len(out.Lines)-1].Text != "line two" {
-		t.Fatalf("last line = %q", out.Lines[len(out.Lines)-1].Text)
+	if strings.Contains(out, "[truncated:") {
+		t.Fatalf("unexpected truncation: %q", out)
 	}
-	if !filepath.IsAbs(out.Dir) || !strings.HasSuffix(out.Dir, "pandora") {
-		t.Fatalf("Dir = %q, want absolute skill dir", out.Dir)
+	// Line 7 is the body line after frontmatter + blank lines.
+	if !strings.Contains(out, "     7→line two") {
+		t.Fatalf("numbered lines = %q", out)
+	}
+	if !strings.Contains(out, "· dir: /") || !strings.Contains(out, "pandora · lines") {
+		t.Fatalf("dir in header = %q, want absolute skill dir", out)
 	}
 }
 
@@ -157,18 +159,21 @@ func TestReadSkillSubPathAndPagination(t *testing.T) {
 	out := executeOK(t, tool, prepare(t, tool, map[string]any{
 		"name": "pandora", "path": "references/cli.md", "offset": 4, "limit": 3,
 	}))
-	if out.TotalLines != 10 || !out.Truncated || len(out.Lines) != 3 {
-		t.Fatalf("pagination = %+v", out)
+	if !strings.Contains(out, "· lines 4-6 of 10 ·") {
+		t.Fatalf("pagination header = %q", out)
 	}
-	if out.Lines[0].Number != 4 || out.Lines[2].Number != 6 {
-		t.Fatalf("line numbers = %+v", out.Lines)
+	if !strings.Contains(out, "     4→ref line\n     5→ref line\n     6→ref line\n") {
+		t.Fatalf("numbered lines = %q", out)
+	}
+	if !strings.Contains(out, "[truncated: 4 more lines; call read_skill with offset=7 to continue]") {
+		t.Fatalf("truncation marker = %q", out)
 	}
 
 	out = executeOK(t, tool, prepare(t, tool, map[string]any{
 		"name": "pandora", "path": "references/cli.md", "offset": 8, "limit": 500,
 	}))
-	if out.Truncated || len(out.Lines) != 3 {
-		t.Fatalf("tail page = %+v", out)
+	if !strings.Contains(out, "· lines 8-10 of 10 ·") || strings.Contains(out, "[truncated:") {
+		t.Fatalf("tail page = %q", out)
 	}
 }
 
@@ -300,8 +305,11 @@ func TestReadSkillMultibyteCharacterAtSampleBoundary(t *testing.T) {
 	tool := newTool(t, loadCatalog(t, root))
 
 	out := executeOK(t, tool, prepare(t, tool, map[string]any{"name": "cjk-skill"}))
-	if out.SizeBytes < 8192 || out.TotalLines == 0 {
-		t.Fatalf("output = %+v, want the >8KB CJK file read successfully", out)
+	if !strings.Contains(out, "· 8.") && !strings.Contains(out, "· 9.") {
+		t.Fatalf("output header = %q, want the >8KB CJK file read successfully", out)
+	}
+	if !strings.Contains(out, "→"+strings.Repeat("a", 100)[:50]) {
+		t.Fatalf("numbered body missing: %.200q", out)
 	}
 }
 
