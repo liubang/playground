@@ -1098,6 +1098,107 @@ func TestResponsesIncompleteOtherReasonStillFails(t *testing.T) {
 	}
 }
 
+func TestChatUserContentWithImage(t *testing.T) {
+	msg := domain.Message{
+		Role: domain.RoleUser,
+		Parts: []domain.ContentPart{
+			{Kind: domain.PartText, Text: "what is this?"},
+			{Kind: domain.PartImage, Image: &domain.ImageContent{MediaType: "image/png", Data: "aGVsbG8="}},
+		},
+	}
+	content, err := chatUserContent(msg)
+	if err != nil {
+		t.Fatalf("chatUserContent() error = %v", err)
+	}
+	parts, ok := content.([]map[string]any)
+	if !ok {
+		t.Fatalf("content type = %T, want []map[string]any", content)
+	}
+	if len(parts) != 2 || parts[0]["type"] != "text" || parts[1]["type"] != "image_url" {
+		t.Fatalf("parts = %+v", parts)
+	}
+	url, _ := parts[1]["image_url"].(map[string]any)["url"].(string)
+	if url != "data:image/png;base64,aGVsbG8=" {
+		t.Fatalf("image url = %q", url)
+	}
+
+	// Pure-text messages keep the legacy string form.
+	textContent, err := chatUserContent(domain.Message{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}})
+	if err != nil {
+		t.Fatalf("chatUserContent() error = %v", err)
+	}
+	if s, ok := textContent.(string); !ok || s != "hi" {
+		t.Fatalf("text content = %v (%T), want string", textContent, textContent)
+	}
+}
+
+func TestToolResultImageMessageRehomesImages(t *testing.T) {
+	plain := domain.ToolResult{Content: []domain.ContentPart{{Kind: domain.PartText, Text: "ok"}}}
+	if got := toolResultImageMessage(plain); got != nil {
+		t.Fatalf("toolResultImageMessage(text-only) = %v, want nil", got)
+	}
+
+	withImage := domain.ToolResult{Content: []domain.ContentPart{
+		{Kind: domain.PartText, Text: "image: shot.png"},
+		{Kind: domain.PartImage, Image: &domain.ImageContent{MediaType: "image/jpeg", Data: "anBlZw=="}},
+	}}
+	msg := toolResultImageMessage(withImage)
+	if msg == nil {
+		t.Fatal("toolResultImageMessage() = nil, want user message")
+	}
+	if msg["role"] != "user" {
+		t.Fatalf("role = %v, want user", msg["role"])
+	}
+	parts, _ := msg["content"].([]map[string]any)
+	if len(parts) != 2 || parts[0]["type"] != "text" || parts[1]["type"] != "image_url" {
+		t.Fatalf("parts = %+v", parts)
+	}
+}
+
+func TestResponseFunctionCallOutputWithImage(t *testing.T) {
+	result := domain.ToolResult{Content: []domain.ContentPart{
+		{Kind: domain.PartText, Text: "image: shot.png"},
+		{Kind: domain.PartImage, Image: &domain.ImageContent{MediaType: "image/png", Data: "cG5n"}},
+	}}
+	out := responseFunctionCallOutput(result)
+	parts, ok := out.([]map[string]any)
+	if !ok {
+		t.Fatalf("output type = %T, want []map[string]any", out)
+	}
+	if len(parts) != 2 || parts[0]["type"] != "input_text" || parts[1]["type"] != "input_image" {
+		t.Fatalf("parts = %+v", parts)
+	}
+	if parts[1]["image_url"] != "data:image/png;base64,cG5n" {
+		t.Fatalf("image_url = %v", parts[1]["image_url"])
+	}
+
+	textOnly := responseFunctionCallOutput(domain.ToolResult{Content: []domain.ContentPart{{Kind: domain.PartText, Text: "ok"}}})
+	if s, ok := textOnly.(string); !ok || s != "ok" {
+		t.Fatalf("text-only output = %v (%T), want string", textOnly, textOnly)
+	}
+}
+
+func TestResponseUserImageItem(t *testing.T) {
+	msg := domain.Message{
+		Role: domain.RoleUser,
+		Parts: []domain.ContentPart{
+			{Kind: domain.PartText, Text: "see"},
+			{Kind: domain.PartImage, Image: &domain.ImageContent{MediaType: "image/gif", Data: "Z2lm"}},
+		},
+	}
+	item, err := responseUserImageItem(domain.RoleUser, msg)
+	if err != nil {
+		t.Fatalf("responseUserImageItem() error = %v", err)
+	}
+	if item["type"] != "message" || item["role"] != "user" {
+		t.Fatalf("item = %+v", item)
+	}
+	parts, _ := item["content"].([]map[string]any)
+	if len(parts) != 2 || parts[0]["type"] != "input_text" || parts[1]["type"] != "input_image" {
+		t.Fatalf("parts = %+v", parts)
+	}
+}
+
 type flakyRoundTripper struct {
 	base  http.RoundTripper
 	fail  int32

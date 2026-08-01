@@ -36,14 +36,17 @@ type gitStatusArgs struct {
 }
 
 type gitStatusOutput struct {
-	RepoRoot  string   `json:"repo_root"`
-	Branch    string   `json:"branch"`
-	Head      string   `json:"head"`
-	Ahead     int      `json:"ahead"`
-	Behind    int      `json:"behind"`
-	Staged    []string `json:"staged"`
-	Unstaged  []string `json:"unstaged"`
-	Untracked []string `json:"untracked"`
+	RepoRoot      string   `json:"repo_root"`
+	Branch        string   `json:"branch"`
+	Head          string   `json:"head"`
+	Upstream      string   `json:"upstream,omitempty"`
+	DefaultBranch string   `json:"default_branch,omitempty"`
+	RemoteURL     string   `json:"remote_url,omitempty"`
+	Ahead         int      `json:"ahead"`
+	Behind        int      `json:"behind"`
+	Staged        []string `json:"staged"`
+	Unstaged      []string `json:"unstaged"`
+	Untracked     []string `json:"untracked"`
 }
 
 // GitStatusTool implements git_status.
@@ -54,10 +57,13 @@ type GitStatusTool struct {
 // NewGitStatusTool creates a git_status tool.
 func NewGitStatusTool(validator *workspacepkg.PathValidator) (*GitStatusTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
-		Name:         "git_status",
-		Description:  "Read repository status (branch, head, ahead/behind counts, staged/unstaged/untracked files) using git status porcelain v2 with deterministic JSON output.",
+		Name: "git_status",
+		Description: "Read repository status (branch, head, upstream, default branch, origin remote URL, ahead/behind counts, " +
+			"staged/unstaged/untracked files) using git status porcelain v2 with deterministic JSON output. upstream is the " +
+			"tracking ref of the current branch; default_branch is the repository's default branch (origin's symbolic HEAD, " +
+			"else a local main/master probe). Both are omitted when they do not resolve.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1}},"required":[]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"branch":{"type":"string"},"head":{"type":"string"},"ahead":{"type":"integer"},"behind":{"type":"integer"},"staged":{"type":"array","items":{"type":"string"}},"unstaged":{"type":"array","items":{"type":"string"}},"untracked":{"type":"array","items":{"type":"string"}}},"required":["repo_root","branch","head","ahead","behind","staged","unstaged","untracked"]}`),
+		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"branch":{"type":"string"},"head":{"type":"string"},"upstream":{"type":"string"},"default_branch":{"type":"string"},"remote_url":{"type":"string"},"ahead":{"type":"integer"},"behind":{"type":"integer"},"staged":{"type":"array","items":{"type":"string"}},"unstaged":{"type":"array","items":{"type":"string"}},"untracked":{"type":"array","items":{"type":"string"}}},"required":["repo_root","branch","head","ahead","behind","staged","unstaged","untracked"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)
@@ -129,6 +135,14 @@ func (t *GitStatusTool) Execute(ctx context.Context, prepared domain.PreparedCal
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
+	// Remote URL is best-effort (a local-only repository has none), so a
+	// lookup failure never fails the call.
+	if remoteResult, err := runGit(ctx, t.base.gitPath, buildRemoteGetURLArgs(repoRoot.Absolute, "origin"), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
+		output.RemoteURL = strings.TrimSpace(sanitizeUTF8(remoteResult.stdout))
+	}
+	// Default branch resolution is likewise best-effort (codex's
+	// default_branch_name chain: origin's symbolic HEAD, then main/master).
+	output.DefaultBranch = resolveDefaultBranch(ctx, t.base.gitPath, repoRoot.Absolute)
 	return successResult(prepared.Call.ID, startedAt, output)
 }
 
@@ -181,6 +195,11 @@ func parseGitStatusOutput(repoRootDisplay string, data []byte) (gitStatusOutput,
 				oid = ""
 			}
 			output.Head = oid
+		case strings.HasPrefix(line, "# branch.upstream "):
+			upstream := strings.TrimSpace(strings.TrimPrefix(line, "# branch.upstream "))
+			if validateGitRef(upstream) == nil {
+				output.Upstream = upstream
+			}
 		case strings.HasPrefix(line, "# branch.ab "):
 			fields := strings.Fields(strings.TrimSpace(strings.TrimPrefix(line, "# branch.ab ")))
 			for _, field := range fields {

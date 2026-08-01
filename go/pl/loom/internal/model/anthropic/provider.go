@@ -293,12 +293,12 @@ func toAnthropicMessages(in []domain.Message) (string, []map[string]any, error) 
 		case domain.RoleSystem, domain.RoleUser:
 			// A non-leading system message is downgraded to user text: the
 			// Messages API accepts system only as the top-level parameter.
-			text, err := messageText(msg)
+			blocks, err := userMessageBlocks(msg)
 			if err != nil {
 				return "", nil, err
 			}
-			if text != "" {
-				appendBlock(string(domain.RoleUser), map[string]any{"type": "text", "text": text})
+			for _, block := range blocks {
+				appendBlock(string(domain.RoleUser), block)
 			}
 		case domain.RoleAssistant:
 			if err := appendAssistant(msg, appendBlock); err != nil {
@@ -382,6 +382,35 @@ func toolResultBlock(result domain.ToolResult) map[string]any {
 	}
 }
 
+// toolResultBlocks renders a tool result containing image parts as a block
+// array (the tool_result content field accepts either a string or blocks):
+// text coalesces into text blocks and images into image blocks, in order.
+func toolResultBlocks(result domain.ToolResult) []map[string]any {
+	var blocks []map[string]any
+	var text strings.Builder
+	flushText := func() {
+		if text.Len() > 0 {
+			blocks = append(blocks, map[string]any{"type": "text", "text": text.String()})
+			text.Reset()
+		}
+	}
+	for _, part := range result.Content {
+		switch part.Kind {
+		case domain.PartText:
+			text.WriteString(part.Text)
+		case domain.PartImage:
+			if part.Image != nil {
+				flushText()
+				blocks = append(blocks, imageBlock(*part.Image))
+			}
+		case domain.PartArtifact:
+			// See toolResultContent: refs stay in the canonical result only.
+		}
+	}
+	flushText()
+	return blocks
+}
+
 func messageText(msg domain.Message) (string, error) {
 	var b strings.Builder
 	for _, part := range msg.Parts {
@@ -391,6 +420,49 @@ func messageText(msg domain.Message) (string, error) {
 		b.WriteString(part.Text)
 	}
 	return b.String(), nil
+}
+
+// userMessageBlocks converts a user (or downgraded system) message into
+// content blocks: text parts coalesce into one text block, image parts
+// become base64 image blocks in order. Pure-text messages produce at most
+// one block, matching the previous wire shape.
+func userMessageBlocks(msg domain.Message) ([]map[string]any, error) {
+	var blocks []map[string]any
+	var text strings.Builder
+	flushText := func() {
+		if text.Len() > 0 {
+			blocks = append(blocks, map[string]any{"type": "text", "text": text.String()})
+			text.Reset()
+		}
+	}
+	for _, part := range msg.Parts {
+		switch part.Kind {
+		case domain.PartText:
+			text.WriteString(part.Text)
+		case domain.PartImage:
+			if part.Image == nil {
+				return nil, fmt.Errorf("anthropic provider: image part missing payload")
+			}
+			flushText()
+			blocks = append(blocks, imageBlock(*part.Image))
+		default:
+			return nil, fmt.Errorf("anthropic provider: role %q only supports text and image parts", msg.Role)
+		}
+	}
+	flushText()
+	return blocks, nil
+}
+
+// imageBlock renders one image part as a Messages API base64 image block.
+func imageBlock(img domain.ImageContent) map[string]any {
+	return map[string]any{
+		"type": "image",
+		"source": map[string]any{
+			"type":       "base64",
+			"media_type": img.MediaType,
+			"data":       img.Data,
+		},
+	}
 }
 
 func toAnthropicTools(defs []domain.ToolDefinition) ([]map[string]any, error) {
@@ -414,7 +486,7 @@ func toAnthropicTools(defs []domain.ToolDefinition) ([]map[string]any, error) {
 // toolResultContent mirrors the openai provider: plain text when the result
 // is purely textual, otherwise a structured JSON envelope — the model reads
 // either form.
-func toolResultContent(result domain.ToolResult) string {
+func toolResultContent(result domain.ToolResult) any {
 	if result.Error != nil {
 		payload, err := json.Marshal(map[string]any{
 			"status": result.Status,
@@ -427,6 +499,7 @@ func toolResultContent(result domain.ToolResult) string {
 	}
 
 	textAndArtifactRefs := true
+	hasImages := false
 	var text strings.Builder
 	for _, part := range result.Content {
 		switch part.Kind {
@@ -436,9 +509,16 @@ func toolResultContent(result domain.ToolResult) string {
 			// Artifact references are persisted in the canonical ToolResult;
 			// tools include model-safe reference metadata in their bounded
 			// text payload, so refs are not duplicated here.
+		case domain.PartImage:
+			hasImages = true
 		default:
 			textAndArtifactRefs = false
 		}
+	}
+	if hasImages {
+		// Images must ride as content blocks; the API accepts either a
+		// string or a block array in tool_result content.
+		return toolResultBlocks(result)
 	}
 	if textAndArtifactRefs && text.Len() > 0 {
 		return text.String()

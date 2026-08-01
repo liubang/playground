@@ -319,13 +319,13 @@ func toOpenAIMessages(messages []domain.Message) ([]map[string]any, error) {
 	for i, msg := range messages {
 		switch role := apiRole(msg, i); role {
 		case domain.RoleSystem, domain.RoleUser:
-			text, err := messageText(msg)
+			content, err := chatUserContent(msg)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, map[string]any{
 				"role":    string(role),
-				"content": text,
+				"content": content,
 			})
 		case domain.RoleAssistant:
 			assistantParts := newAssistantMessageParts()
@@ -351,6 +351,9 @@ func toOpenAIMessages(messages []domain.Message) ([]map[string]any, error) {
 					}
 					flushAssistant()
 					out = append(out, toolResultMessage(*part.ToolResult))
+					if extra := toolResultImageMessage(*part.ToolResult); extra != nil {
+						out = append(out, extra)
+					}
 				case domain.PartReasoning:
 					// Reasoning traces are transcript-local for OpenAI-compatible
 					// vendors: their APIs neither require nor accept prior
@@ -367,11 +370,107 @@ func toOpenAIMessages(messages []domain.Message) ([]map[string]any, error) {
 	return out, nil
 }
 
+// chatUserContent renders a user (or downgraded system) message for the
+// chat wire: a plain string when purely textual (the common case), or a
+// content-part array mixing text and image_url parts when the message
+// carries images.
+func chatUserContent(msg domain.Message) (any, error) {
+	hasImages := false
+	for _, part := range msg.Parts {
+		if part.Kind == domain.PartImage {
+			hasImages = true
+			break
+		}
+	}
+	if !hasImages {
+		return messageText(msg)
+	}
+
+	parts := make([]map[string]any, 0, len(msg.Parts))
+	var text strings.Builder
+	flushText := func() {
+		if text.Len() > 0 {
+			parts = append(parts, map[string]any{"type": "text", "text": text.String()})
+			text.Reset()
+		}
+	}
+	for _, part := range msg.Parts {
+		switch part.Kind {
+		case domain.PartText:
+			text.WriteString(part.Text)
+		case domain.PartImage:
+			if part.Image == nil {
+				return nil, fmt.Errorf("openai provider: image part missing payload")
+			}
+			flushText()
+			parts = append(parts, imageURLPart(*part.Image))
+		default:
+			return nil, fmt.Errorf("openai provider: role %q only supports text and image parts", msg.Role)
+		}
+	}
+	flushText()
+	return parts, nil
+}
+
+// imageURLPart renders one image as a chat-completions image_url part using
+// a data URL.
+func imageURLPart(img domain.ImageContent) map[string]any {
+	return map[string]any{
+		"type": "image_url",
+		"image_url": map[string]any{
+			"url": "data:" + img.MediaType + ";base64," + img.Data,
+		},
+	}
+}
+
+// toolResultImageMessage handles images inside a tool result on the chat
+// wire: a tool message's content cannot carry images, so the image is
+// re-homed into a following user message (the same workaround codex uses
+// for chat-completions vendors), with a pointer back to the tool call.
+func toolResultImageMessage(result domain.ToolResult) map[string]any {
+	var images []domain.ImageContent
+	for _, part := range result.Content {
+		if part.Kind == domain.PartImage && part.Image != nil {
+			images = append(images, *part.Image)
+		}
+	}
+	if len(images) == 0 {
+		return nil
+	}
+	parts := make([]map[string]any, 0, len(images)+1)
+	parts = append(parts, map[string]any{
+		"type": "text",
+		"text": "[image output from the tool call above]",
+	})
+	for _, img := range images {
+		parts = append(parts, imageURLPart(img))
+	}
+	return map[string]any{
+		"role":    string(domain.RoleUser),
+		"content": parts,
+	}
+}
+
 func toResponsesInput(messages []domain.Message) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(messages))
 	for i, msg := range messages {
 		switch role := apiRole(msg, i); role {
 		case domain.RoleSystem, domain.RoleUser:
+			hasImages := false
+			for _, part := range msg.Parts {
+				if part.Kind == domain.PartImage {
+					hasImages = true
+					break
+				}
+			}
+			if hasImages {
+				item, err := responseUserImageItem(role, msg)
+				if err != nil {
+					return nil, err
+				}
+				out = append(out, item)
+				break
+			}
 			text, err := messageText(msg)
 			if err != nil {
 				return nil, err
@@ -428,6 +527,42 @@ func responseMessageItem(role domain.Role, contentType, text string) map[string]
 	}
 }
 
+// responseUserImageItem renders a user message carrying images for the
+// responses wire: input_text and input_image parts in order.
+func responseUserImageItem(role domain.Role, msg domain.Message) (map[string]any, error) {
+	parts := make([]map[string]any, 0, len(msg.Parts))
+	var text strings.Builder
+	flushText := func() {
+		if text.Len() > 0 {
+			parts = append(parts, map[string]any{"type": "input_text", "text": text.String()})
+			text.Reset()
+		}
+	}
+	for _, part := range msg.Parts {
+		switch part.Kind {
+		case domain.PartText:
+			text.WriteString(part.Text)
+		case domain.PartImage:
+			if part.Image == nil {
+				return nil, fmt.Errorf("openai provider: image part missing payload")
+			}
+			flushText()
+			parts = append(parts, map[string]any{
+				"type":      "input_image",
+				"image_url": "data:" + part.Image.MediaType + ";base64," + part.Image.Data,
+			})
+		default:
+			return nil, fmt.Errorf("openai provider: role %q only supports text and image parts", msg.Role)
+		}
+	}
+	flushText()
+	return map[string]any{
+		"type":    "message",
+		"role":    string(role),
+		"content": parts,
+	}, nil
+}
+
 func responseFunctionCallItem(call domain.ToolCall) map[string]any {
 	return map[string]any{
 		"type":      "function_call",
@@ -441,8 +576,50 @@ func responseFunctionCallOutputItem(result domain.ToolResult) map[string]any {
 	return map[string]any{
 		"type":    "function_call_output",
 		"call_id": result.CallID.String(),
-		"output":  toolResultContent(result),
+		"output":  responseFunctionCallOutput(result),
 	}
+}
+
+// responseFunctionCallOutput renders a tool result for the responses wire:
+// a plain string when textual, or a content-part array mixing input_text
+// and input_image parts when the result carries images.
+func responseFunctionCallOutput(result domain.ToolResult) any {
+	hasImages := false
+	for _, part := range result.Content {
+		if part.Kind == domain.PartImage {
+			hasImages = true
+			break
+		}
+	}
+	if !hasImages {
+		return toolResultContent(result)
+	}
+	parts := make([]map[string]any, 0, len(result.Content))
+	var text strings.Builder
+	flushText := func() {
+		if text.Len() > 0 {
+			parts = append(parts, map[string]any{"type": "input_text", "text": text.String()})
+			text.Reset()
+		}
+	}
+	for _, part := range result.Content {
+		switch part.Kind {
+		case domain.PartText:
+			text.WriteString(part.Text)
+		case domain.PartImage:
+			if part.Image != nil {
+				flushText()
+				parts = append(parts, map[string]any{
+					"type":      "input_image",
+					"image_url": "data:" + part.Image.MediaType + ";base64," + part.Image.Data,
+				})
+			}
+		case domain.PartArtifact:
+			// See toolResultContent: refs stay in the canonical result only.
+		}
+	}
+	flushText()
+	return parts
 }
 
 func messageText(msg domain.Message) (string, error) {

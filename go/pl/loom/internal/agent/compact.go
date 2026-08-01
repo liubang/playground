@@ -478,6 +478,10 @@ func maskPlaceholder(originalBytes int, ref domain.ArtifactRef, artifacts domain
 		compactedPlaceholderMark, human, locator)
 }
 
+// imageTokenFootprint is the conservative byte footprint of one image in
+// estTokens' pre-division total (1500 tokens x 4 bytes/token).
+const imageTokenFootprint = 1500 * 4
+
 // estTokens approximates the token size of the transcript for before/after
 // reporting. It is not used for budget accounting.
 func estTokens(messages []domain.Message) int {
@@ -494,11 +498,19 @@ func estTokens(messages []domain.Message) int {
 			case domain.PartToolResult:
 				if part.ToolResult != nil {
 					for _, content := range part.ToolResult.Content {
-						if content.Kind == domain.PartText {
+						switch content.Kind {
+						case domain.PartText:
 							total += len(content.Text)
+						case domain.PartImage:
+							total += imageTokenFootprint
 						}
 					}
 				}
+			case domain.PartImage:
+				// A mid-size photo costs roughly 1.1-1.6k tokens with mainstream
+				// vision pricings; use a conservative per-image footprint so
+				// occupancy never underestimates.
+				total += imageTokenFootprint
 			case domain.PartReasoning:
 				// Reasoning replayed upstream consumes input budget; count it
 				// conservatively so occupancy never underestimates.

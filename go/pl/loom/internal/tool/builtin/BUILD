@@ -27,6 +27,7 @@ go_library(
         "rg.go",
         "search.go",
         "search_text.go",
+        "view_image.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/builtin",
     visibility = ["//visibility:public"],

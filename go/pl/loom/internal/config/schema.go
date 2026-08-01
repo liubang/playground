@@ -51,9 +51,10 @@ type File struct {
 	Rules    Rules    `yaml:"rules"`
 	Approval Approval `yaml:"approval"`
 	Tracing  Tracing  `yaml:"tracing"`
-	Storage  Storage  `yaml:"storage"`
-	UI       UI       `yaml:"ui"`
-	Subagent Subagent `yaml:"subagent"`
+	Storage    Storage              `yaml:"storage"`
+	UI         UI                   `yaml:"ui"`
+	Subagent   Subagent             `yaml:"subagent"`
+	MCPServers map[string]MCPServer `yaml:"mcp_servers"`
 }
 
 // Provider describes one model endpoint and its model catalog. Type selects
@@ -253,4 +254,23 @@ type Subagent struct {
 	// Model pins the sub-agent to a specific "provider/model" (or a bare
 	// model/provider name); empty follows the current turn's model.
 	Model string `yaml:"model"`
+}
+
+// MCPServer configures one MCP server subprocess connected over the stdio
+// transport. The key in MCPServers is the server name used for
+// log attribution and tool name qualification (mcp__{server}__{tool}).
+// Only the stdio transport is supported (SSE/streamable HTTP may follow).
+type MCPServer struct {
+	Command string            `yaml:"command"`
+	Args    []string          `yaml:"args"`
+	Env     map[string]string `yaml:"env"`
+	Cwd     string            `yaml:"cwd"`
+	// StartupTimeoutSec bounds spawn+initialize (default 30s);
+	// ToolTimeoutSec bounds one tools/call (default 300s).
+	StartupTimeoutSec float64 `yaml:"startup_timeout_sec"`
+	ToolTimeoutSec    float64 `yaml:"tool_timeout_sec"`
+	// EnabledTools/DisabledTools filter the discovered catalog by the
+	// server-local tool names. EnabledTools nil means "all".
+	EnabledTools  []string `yaml:"enabled_tools"`
+	DisabledTools []string `yaml:"disabled_tools"`
 }

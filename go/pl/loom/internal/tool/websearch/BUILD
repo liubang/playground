@@ -13,30 +13,33 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/22 21:10
+# Created: 2026/08/01
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "gittools_lib",
+    name = "websearch_lib",
     srcs = [
-        "blame.go",
+        "cache.go",
         "common.go",
-        "diff.go",
-        "log.go",
-        "merge_base.go",
-        "status.go",
+        "parse.go",
+        "provider.go",
+        "websearch.go",
     ],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/gittools",
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/websearch",
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/workspace:workspace_lib",
+        "//go/pl/loom/internal/tool/webfetch:webfetch_lib",
+        "@org_golang_x_net//html",
     ],
 )
 
 go_test(
-    name = "gittools_test",
-    srcs = ["gittools_test.go"],
-    embed = [":gittools_lib"],
+    name = "websearch_test",
+    srcs = ["websearch_test.go"],
+    embed = [":websearch_lib"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+    ],
 )
