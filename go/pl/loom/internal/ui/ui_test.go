@@ -376,13 +376,13 @@ func TestPlanPanelRendersChecklistAndHides(t *testing.T) {
 	if !strings.Contains(panel, "└ \uf046 read code") || !strings.Contains(panel, "\n  \uf0c8 implement feature") {
 		t.Fatalf("steps must indent under the title:\n%s", panel)
 	}
-	// Blank rows on both sides keep the panel from gluing to the transcript
-	// above and the composer below.
-	if !strings.HasPrefix(panel, "\n") || !strings.HasSuffix(panel, "\n") {
-		t.Fatalf("panel must carry a blank row on each side: %q", panel)
+	// The panel has a trailing blank row (separator to the next element);
+	// the leading blank is the global spacer row, not the panel's.
+	if !strings.HasSuffix(panel, "\n") {
+		t.Fatalf("panel must end with a trailing blank row: %q", panel)
 	}
-	if h := m.planPanelHeight(); h != 6 {
-		t.Fatalf("planPanelHeight = %d, want 6 (blank + title + 3 items + blank)", h)
+	if h := m.planPanelHeight(); h != 5 {
+		t.Fatalf("planPanelHeight = %d, want 5 (title + 3 items + trailing blank)", h)
 	}
 
 	// A model-authored plan title replaces the progress summary — even while
@@ -520,7 +520,7 @@ func TestPlanPanelCollapsesLongPlans(t *testing.T) {
 	if !strings.Contains(panel, "… +3 more") {
 		t.Fatalf("long plan must collapse into a +N line:\n%s", panel)
 	}
-	if h, want := m.planPanelHeight(), planPanelMaxItems+1+3; h != want {
+	if h, want := m.planPanelHeight(), planPanelMaxItems+1+2; h != want {
 		t.Fatalf("planPanelHeight = %d, want %d", h, want)
 	}
 }
