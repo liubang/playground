@@ -54,6 +54,47 @@ func TestMarkdownRenderingColored(t *testing.T) {
 	}
 }
 
+func TestEscapeLoneTildes(t *testing.T) {
+	cases := map[string]string{
+		"31~33°C，体感 38~41°C": "31&#126;33°C，体感 38&#126;41°C",
+		"~~strike~~":         "~~strike~~",            // deliberate strikethrough survives
+		"a~b and ~~c~~":      "a&#126;b and ~~c~~",    // lone escaped, pair kept
+		"`echo ~/bin` x~y":   "`echo ~/bin` x&#126;y", // code span exempt
+		"no tildes here":     "no tildes here",
+		"unclosed `code ~":   "unclosed `code ~", // unclosed span: rest literal
+	}
+	for in, want := range cases {
+		if got := escapeLoneTildes(in); got != want {
+			t.Errorf("escapeLoneTildes(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	// Fenced blocks (both fence styles) are exempt.
+	fenced := "```\nrm ~\n```\nout~side\n~~~\ntilde ~\n~~~"
+	want := "```\nrm ~\n```\nout&#126;side\n~~~\ntilde ~\n~~~"
+	if got := escapeLoneTildes(fenced); got != want {
+		t.Errorf("fenced block handling:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+// The reported bug: a weather-style temperature range must render as
+// plain text, not crossed out.
+func TestMarkdownTemperatureRangeNotStruck(t *testing.T) {
+	m := Model{theme: DefaultTheme(), width: 80}
+	block := &TranscriptBlock{Kind: BlockKindAssistant, Done: true,
+		Content: "注意：未来一周日均温在 31~33°C，午后体感可达 38~41°C。"}
+	view := m.renderBlock(block)
+	if strings.Contains(view, "\x1b[9m") || strings.Contains(view, ";9m") {
+		t.Fatalf("temperature range rendered with strikethrough SGR:\n%q", view)
+	}
+	plain := stripANSI(view)
+	for _, want := range []string{"31~33°C", "38~41°C"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("rendered view missing %q:\n%s", want, plain)
+		}
+	}
+}
+
 func TestMarkdownRenderingNoColor(t *testing.T) {
 	m := Model{theme: NoColorTheme(), width: 80}
 	block := &TranscriptBlock{Kind: BlockKindAssistant, Done: true, Content: markdownFixture}
