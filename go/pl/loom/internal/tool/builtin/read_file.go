@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -32,22 +33,6 @@ type readFileArgs struct {
 	Path   string `json:"path"`
 	Offset int    `json:"offset,omitempty"`
 	Limit  int    `json:"limit,omitempty"`
-}
-
-type readFileLine struct {
-	Number int    `json:"number"`
-	Text   string `json:"text"`
-}
-
-type readFileOutput struct {
-	Path        string         `json:"path"`
-	Offset      int            `json:"offset"`
-	Limit       int            `json:"limit"`
-	TotalLines  int            `json:"total_lines"`
-	Truncated   bool           `json:"truncated"`
-	Lines       []readFileLine `json:"lines"`
-	SizeBytes   int64          `json:"size_bytes"`
-	ContentHash string         `json:"content_hash"`
 }
 
 // ReadFileTool implements the builtin read-only file reader. Successful
@@ -62,10 +47,14 @@ type ReadFileTool struct {
 // A nil book disables state recording (used by tests).
 func NewReadFileTool(validator *workspacepkg.PathValidator, book *workspacepkg.FileStateBook) (*ReadFileTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
-		Name:         "read_file",
-		Description:  "Read a UTF-8 text file within the workspace with line numbers. Paginate large files with offset/limit (max 500 lines per call). Binary files are rejected. You MUST read a file before editing it.",
+		Name: "read_file",
+		Description: "Read a UTF-8 text file within the workspace. Output is cat -n style plain text: a header line " +
+			"(path, shown/total line range, size, sha256 content hash) followed by lines rendered as '<number>→<text>'. " +
+			"Paginate large files with offset/limit (max 500 lines per call); when the output ends with a truncated " +
+			"marker, keep reading with offset until it disappears. Binary files are rejected. " +
+			"You MUST read a file before editing it.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1},"offset":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["path"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"integer"},"limit":{"type":"integer"},"total_lines":{"type":"integer"},"truncated":{"type":"boolean"},"lines":{"type":"array"},"size_bytes":{"type":"integer"},"content_hash":{"type":"string"}},"required":["path","offset","limit","total_lines","truncated","lines","size_bytes","content_hash"]}`),
+		OutputSchema: json.RawMessage(`{"type":"string","description":"cat -n style numbered lines with a metadata header line and an optional trailing truncation marker"}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)
@@ -146,20 +135,11 @@ func (t *ReadFileTool) execute(ctx context.Context, prepared domain.PreparedCall
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	selected, truncated := sliceReadFileLines(lines, args.Offset, args.Limit)
+	selected, first, last, truncated := sliceReadFileLines(lines, args.Offset, args.Limit)
 	contentHash := sha256Hex(data)
 	t.book.Record(pathInfo.Absolute, contentHash)
-	output := readFileOutput{
-		Path:        args.Path,
-		Offset:      args.Offset,
-		Limit:       args.Limit,
-		TotalLines:  len(lines),
-		Truncated:   truncated,
-		Lines:       selected,
-		SizeBytes:   int64(len(data)),
-		ContentHash: contentHash,
-	}
-	return successResult(prepared.Call.ID, startedAt, output)
+	output := formatReadFileText(args.Path, selected, first, last, len(lines), truncated, args.Offset, args.Limit, int64(len(data)), contentHash)
+	return textResult(prepared.Call.ID, startedAt, output)
 }
 
 func validateReadFileArgs(validator *workspacepkg.PathValidator, args readFileArgs) (readFileArgs, pathResolution, error) {
@@ -191,12 +171,12 @@ func validateReadFileArgs(validator *workspacepkg.PathValidator, args readFileAr
 	return args, pathInfo, nil
 }
 
-func sliceReadFileLines(lines []string, offset, limit int) ([]readFileLine, bool) {
-	if len(lines) == 0 {
-		return []readFileLine{}, false
-	}
-	if offset > len(lines) {
-		return []readFileLine{}, false
+// sliceReadFileLines selects the [offset, offset+limit) window (1-based).
+// first/last are the 1-based numbers of the first and last selected line;
+// they are zero when the window is empty.
+func sliceReadFileLines(lines []string, offset, limit int) (selected []string, first, last int, truncated bool) {
+	if len(lines) == 0 || offset > len(lines) {
+		return nil, 0, 0, false
 	}
 
 	start := offset - 1
@@ -204,9 +184,55 @@ func sliceReadFileLines(lines []string, offset, limit int) ([]readFileLine, bool
 	if end > len(lines) {
 		end = len(lines)
 	}
-	out := make([]readFileLine, 0, end-start)
-	for i := start; i < end; i++ {
-		out = append(out, readFileLine{Number: i + 1, Text: lines[i]})
+	return lines[start:end], start + 1, end, end < len(lines)
+}
+
+// formatReadFileText renders the cat -n style plain-text output: a compact
+// metadata header, numbered lines, and a trailing truncation marker that
+// tells the model exactly how to continue.
+func formatReadFileText(path string, selected []string, first, last, total int, truncated bool, offset, limit int, sizeBytes int64, contentHash string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "path: %s · lines %d-%d of %d · %s · sha256:%s\n", path, first, last, total, formatByteSize(sizeBytes), contentHash)
+	switch {
+	case total == 0:
+		b.WriteString("(empty file)\n")
+	case len(selected) == 0:
+		fmt.Fprintf(&b, "(offset %d is beyond the end of file: %d lines total)\n", offset, total)
+	default:
+		for i, text := range selected {
+			fmt.Fprintf(&b, "%6d→%s\n", first+i, text)
+		}
 	}
-	return out, end < len(lines)
+	if truncated {
+		remaining := total - last
+		noun := "lines"
+		if remaining == 1 {
+			noun = "line"
+		}
+		fmt.Fprintf(&b, "[truncated: %d more %s; call read_file with offset=%d to continue]", remaining, noun, last+1)
+	}
+	return b.String()
+}
+
+// formatByteSize renders a byte count in compact human form (B/KB/MB).
+func formatByteSize(n int64) string {
+	switch {
+	case n < 1024:
+		return fmt.Sprintf("%d B", n)
+	case n < 1024*1024:
+		return fmt.Sprintf("%.1f KB", float64(n)/1024)
+	default:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1024*1024))
+	}
+}
+
+// textResult builds a successful plain-text tool result.
+func textResult(callID domain.ToolCallID, startedAt time.Time, text string) domain.ToolResult {
+	return domain.ToolResult{
+		CallID:     callID,
+		Status:     domain.ToolStatusSuccess,
+		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: text}},
+		StartedAt:  startedAt,
+		FinishedAt: time.Now(),
+	}
 }

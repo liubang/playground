@@ -217,6 +217,26 @@ type PreparedCall struct {
 	// fingerprint: grants are decided by the policy, never by the model.
 	// Zero value = the default sandbox.
 	Grant ExecGrant `json:"grant,omitempty"`
+	// ExecRequest is the typed execution contract of process-spawning
+	// tools (run_cmd, exec_session). The producing tool fills it during
+	// Prepare and covers it by its signature, so the policy layer
+	// classifies a typed field instead of re-parsing tool-specific
+	// argument JSON (REVIEW M17/A2): any tool that sets it is eligible
+	// for argv-prefix rules, the danger screen, and session memory
+	// without the policy layer knowing its name.
+	ExecRequest *ExecRequest `json:"exec_request,omitempty"`
+}
+
+// ExecRequest describes a process execution the policy layer can
+// classify uniformly, independent of which tool produced it.
+type ExecRequest struct {
+	// Argv is [program, ...args] as executed (before shell unwrapping).
+	Argv []string `json:"argv"`
+	// Escalated marks a request to run outside the sandbox.
+	Escalated bool `json:"escalated,omitempty"`
+	// NeedsNetwork marks a declared need for outbound network inside the
+	// sandbox.
+	NeedsNetwork bool `json:"needs_network,omitempty"`
 }
 
 // RecoverySpec describes durable evidence that can reconcile an interrupted

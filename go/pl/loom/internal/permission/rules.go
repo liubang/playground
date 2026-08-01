@@ -538,6 +538,29 @@ type RunCmdCall struct {
 	ShellUnwrapped bool
 }
 
+// ExecInfoOf resolves the policy-relevant execution shape of a prepared
+// call. The typed PreparedCall.ExecRequest (signed by the producing tool)
+// is authoritative; raw-argument parsing remains only as the fallback for
+// calls constructed outside Prepare — tests, and the approval UI boundary
+// where only the event payload's raw arguments survive. This is the single
+// entry point that frees the policy layer from tool-name coupling
+// (REVIEW M17): run_cmd and exec_session both flow through it.
+func ExecInfoOf(call domain.PreparedCall) (RunCmdCall, bool) {
+	if call.ExecRequest != nil && len(call.ExecRequest.Argv) > 0 {
+		info := RunCmdCall{
+			Argv:         append([]string(nil), call.ExecRequest.Argv...),
+			Escalated:    call.ExecRequest.Escalated,
+			NeedsNetwork: call.ExecRequest.NeedsNetwork,
+		}
+		if unwrapped, ok := process.UnwrapSimpleShell(info.Argv); ok {
+			info.Argv = unwrapped
+			info.ShellUnwrapped = true
+		}
+		return info, true
+	}
+	return ParseRunCmdCall(call.Call.Arguments)
+}
+
 // ParseRunCmdCall extracts the RunCmdCall from raw run_cmd arguments.
 func ParseRunCmdCall(raw json.RawMessage) (RunCmdCall, bool) {
 	var args struct {

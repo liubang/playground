@@ -68,23 +68,6 @@ type readSkillArgs struct {
 	ResolvedPath string `json:"resolved_path,omitempty"`
 }
 
-type readSkillLine struct {
-	Number int    `json:"number"`
-	Text   string `json:"text"`
-}
-
-type readSkillOutput struct {
-	Name       string          `json:"name"`
-	Path       string          `json:"path"`
-	Dir        string          `json:"dir"`
-	Offset     int             `json:"offset"`
-	Limit      int             `json:"limit"`
-	TotalLines int             `json:"total_lines"`
-	Truncated  bool            `json:"truncated"`
-	Lines      []readSkillLine `json:"lines"`
-	SizeBytes  int64           `json:"size_bytes"`
-}
-
 type preparedFingerprint struct {
 	CallID     string           `json:"call_id"`
 	ToolName   string           `json:"tool_name"`
@@ -111,13 +94,14 @@ func NewReadSkillTool(catalog *skill.AtomicCatalog) (*ReadSkillTool, error) {
 	}
 	def := domain.ToolDefinition{
 		Name: "read_skill",
-		Description: "Read a discovered skill's SKILL.md or a file inside its directory by skill name, " +
-			"with line numbers. Only 'name' is required: path defaults to 'SKILL.md' and must be a relative path inside the skill directory; " +
-			"offset/limit paginate long files (max 500 lines per call, read until truncated=false). " +
-			"The skills catalog in the system prompt lists the available names. The output 'dir' is the skill's absolute directory, " +
-			"usable to build absolute script paths for run_cmd.",
+		Description: "Read a discovered skill's SKILL.md or a file inside its directory by skill name. " +
+			"Output is cat -n style plain text: a header line (skill name, path, the skill's absolute 'dir' — usable " +
+			"to build absolute script paths for run_cmd — shown/total line range, size) followed by lines rendered " +
+			"as '<number>→<text>'. Only 'name' is required: path defaults to 'SKILL.md' and must be a relative path " +
+			"inside the skill directory; offset/limit paginate long files (max 500 lines per call, read until the " +
+			"truncated marker disappears). The skills catalog in the system prompt lists the available names.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"path":{"type":"string","maxLength":4096},"offset":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["name"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"name":{"type":"string"},"path":{"type":"string"},"dir":{"type":"string"},"offset":{"type":"integer"},"limit":{"type":"integer"},"total_lines":{"type":"integer"},"truncated":{"type":"boolean"},"lines":{"type":"array"},"size_bytes":{"type":"integer"}},"required":["name","path","dir","offset","limit","total_lines","truncated","lines","size_bytes"]}`),
+		OutputSchema: json.RawMessage(`{"type":"string","description":"cat -n style numbered lines with a metadata header line and an optional trailing truncation marker"}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
 	}
@@ -306,18 +290,48 @@ func (t *ReadSkillTool) Execute(ctx context.Context, prepared domain.PreparedCal
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	selected, truncated := sliceLines(lines, args.Offset, args.Limit)
-	return successResult(prepared.Call.ID, startedAt, readSkillOutput{
-		Name:       args.Name,
-		Path:       args.Path,
-		Dir:        sk.Dir,
-		Offset:     args.Offset,
-		Limit:      args.Limit,
-		TotalLines: len(lines),
-		Truncated:  truncated,
-		Lines:      selected,
-		SizeBytes:  int64(len(data)),
-	})
+	selected, first, last, truncated := sliceLines(lines, args.Offset, args.Limit)
+	return textResult(prepared.Call.ID, startedAt, formatReadSkillText(
+		args.Name, args.Path, sk.Dir, selected, first, last, len(lines), truncated, args.Offset, int64(len(data))))
+}
+
+// formatReadSkillText renders the cat -n style plain-text output, keeping
+// the skill's absolute directory in the header so the model can build
+// script paths for run_cmd without a second call.
+func formatReadSkillText(name, path, dir string, selected []string, first, last, total int, truncated bool, offset int, sizeBytes int64) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "skill: %s · path: %s · dir: %s · lines %d-%d of %d · %s\n", name, path, dir, first, last, total, formatByteSize(sizeBytes))
+	switch {
+	case total == 0:
+		b.WriteString("(empty file)\n")
+	case len(selected) == 0:
+		fmt.Fprintf(&b, "(offset %d is beyond the end of file: %d lines total)\n", offset, total)
+	default:
+		for i, text := range selected {
+			fmt.Fprintf(&b, "%6d→%s\n", first+i, text)
+		}
+	}
+	if truncated {
+		remaining := total - last
+		noun := "lines"
+		if remaining == 1 {
+			noun = "line"
+		}
+		fmt.Fprintf(&b, "[truncated: %d more %s; call read_skill with offset=%d to continue]", remaining, noun, last+1)
+	}
+	return b.String()
+}
+
+// formatByteSize renders a byte count in compact human form (B/KB/MB).
+func formatByteSize(n int64) string {
+	switch {
+	case n < 1024:
+		return fmt.Sprintf("%d B", n)
+	case n < 1024*1024:
+		return fmt.Sprintf("%.1f KB", float64(n)/1024)
+	default:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1024*1024))
+	}
 }
 
 func (t *ReadSkillTool) verifyPreparedCall(prepared domain.PreparedCall) error {
@@ -374,20 +388,18 @@ func hasSensitiveComponent(path string) bool {
 	return false
 }
 
-func sliceLines(lines []string, offset, limit int) ([]readSkillLine, bool) {
+// sliceLines selects the [offset, offset+limit) window (1-based); first
+// and last are the 1-based numbers of the selected range, zero when empty.
+func sliceLines(lines []string, offset, limit int) (selected []string, first, last int, truncated bool) {
 	if len(lines) == 0 || offset > len(lines) {
-		return []readSkillLine{}, false
+		return nil, 0, 0, false
 	}
 	start := offset - 1
 	end := start + limit
 	if end > len(lines) {
 		end = len(lines)
 	}
-	out := make([]readSkillLine, 0, end-start)
-	for i := start; i < end; i++ {
-		out = append(out, readSkillLine{Number: i + 1, Text: lines[i]})
-	}
-	return out, end < len(lines)
+	return lines[start:end], start + 1, end, end < len(lines)
 }
 
 func splitLines(data []byte) ([]string, error) {
@@ -456,15 +468,12 @@ func cloneRawMessage(raw json.RawMessage) json.RawMessage {
 	return append(json.RawMessage(nil), raw...)
 }
 
-func successResult(callID domain.ToolCallID, startedAt time.Time, payload any) domain.ToolResult {
-	content, err := json.Marshal(payload)
-	if err != nil {
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
-	}
+// textResult builds a successful plain-text tool result.
+func textResult(callID domain.ToolCallID, startedAt time.Time, text string) domain.ToolResult {
 	return domain.ToolResult{
 		CallID:     callID,
 		Status:     domain.ToolStatusSuccess,
-		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(content)}},
+		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: text}},
 		StartedAt:  startedAt,
 		FinishedAt: time.Now(),
 	}

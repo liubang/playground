@@ -38,10 +38,13 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/builtin"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/command"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/edit"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/exsession"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/lint"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
+	"github.com/liubang/playground/go/pl/loom/internal/mcp"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/websearch"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
 	"github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
@@ -113,6 +116,14 @@ type Bootstrap struct {
 	// so the frontend wiring can attach a lifecycle observer
 	// (WireSubagentObserver). Nil when the sub-agent is disabled.
 	SubagentFactory *subagent.Factory
+	// SessionManager owns every exec_session/write_stdin background
+	// process; Close reclaims surviving process groups before the store
+	// shuts down.
+	SessionManager *exsession.Manager
+	// MCPManager owns every running MCP server subprocess; Close
+	// terminates them. Nil when no MCP servers are configured or all
+	// fail to start (the agent runs with built-in tools only).
+	MCPManager *mcp.Manager
 
 	traceProvider *trace.Provider
 }
@@ -180,7 +191,13 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	if questioner == nil {
 		questioner = domain.AutonomousQuestioner{}
 	}
-	if err := registerBuiltinTools(registry, validator, runner, artStore, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, questioner, book); err != nil {
+	sessionManager, err := exsession.NewManager(runner, artStore, exsession.DefaultIdleTTL)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("create session manager: %w", err)
+	}
+	if err := registerBuiltinTools(registry, validator, runner, artStore, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, questioner, book, sessionManager); err != nil {
+		sessionManager.Close()
 		_ = store.Close()
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
@@ -250,6 +267,40 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		promptBuilder = prompt.NewBuilder(cfg.WorkspaceRoot, promptOpts...)
 	}
 
+	// MCP servers: start all configured server subprocesses and
+	// register their adapted tools into the registry. Startup is
+	// best-effort: a server that fails to start is logged and its
+	// tools are absent; the agent continues with built-in tools.
+	var mcpManager *mcp.Manager
+	if len(resolved.MCP.Servers) > 0 {
+		// Convert config.MCPServer → mcp.ServerConfig for the manager.
+		mcpCfgs := make(map[string]mcp.ServerConfig, len(resolved.MCP.Servers))
+		for name, srv := range resolved.MCP.Servers {
+			mcpCfgs[name] = mcp.ServerConfig{
+				Command:           srv.Command,
+				Args:              srv.Args,
+				Env:               srv.Env,
+				Cwd:               srv.Cwd,
+				StartupTimeoutSec: srv.StartupTimeoutSec,
+				ToolTimeoutSec:    srv.ToolTimeoutSec,
+				EnabledTools:      srv.EnabledTools,
+				DisabledTools:     srv.DisabledTools,
+			}
+		}
+		mgr, err := mcp.StartServers(ctx, mcpCfgs, logger)
+		if err != nil {
+			logger.Warn("mcp: no server could be started; running with built-in tools only", "error", err)
+		} else {
+			mcpManager = mgr
+			for _, tool := range mgr.Tools() {
+				if err := registry.Register(tool); err != nil {
+					logger.Warn("mcp: failed to register tool", "tool", tool.Definition().Name, "error", err)
+				}
+			}
+			logger.Info("mcp servers started", "servers", len(mgr.Tools()), "tools", len(mgr.Tools()))
+		}
+	}
+
 	// Sub-agent delegation (docs/SUBAGENT_DESIGN.md): register
 	// delegate_task against a read-only child registry. The child's
 	// system prompt is the built-in prompt plus the researcher
@@ -289,10 +340,12 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		}
 		delegateTool, err := subagent.NewDelegateTaskTool(factory)
 		if err != nil {
+			sessionManager.Close()
 			_ = store.Close()
 			return nil, fmt.Errorf("delegate_task: %w", err)
 		}
 		if err := registry.Register(delegateTool); err != nil {
+			sessionManager.Close()
 			_ = store.Close()
 			return nil, fmt.Errorf("register delegate_task: %w", err)
 		}
@@ -322,6 +375,8 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		SessionRules:    sessionRules,
 		SubagentModels:  subagentModels,
 		SubagentFactory: subagentFactory,
+		SessionManager:  sessionManager,
+		MCPManager:      mcpManager,
 		traceProvider:   traceProvider,
 	}, nil
 }
@@ -379,7 +434,7 @@ func defaultContextWindow(resolved *config.ResolvedConfig) int64 {
 }
 
 // registerBuiltinTools registers all built-in tools with the registry.
-func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook) error {
+func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager) error {
 	tools := []struct {
 		name string
 		mk   func() (domain.Tool, error)
@@ -388,13 +443,17 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 		{"list_dir", func() (domain.Tool, error) { return builtin.NewListDirTool(validator) }},
 		{"search", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
 		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
+		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator) }},
 		{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
 		{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
 		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator) }},
 		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator) }},
 		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator) }},
+		{"git_merge_base", func() (domain.Tool, error) { return gittools.NewGitMergeBaseTool(validator) }},
+		{"git_blame", func() (domain.Tool, error) { return gittools.NewGitBlameTool(validator) }},
 		{"lint", func() (domain.Tool, error) { return lint.NewLintTool(validator, runner) }},
 		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(artStore) }},
+		{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }},
 	}
 	for _, tt := range tools {
 		t, err := tt.mk()
@@ -412,6 +471,23 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 	}
 	if err := registry.Register(runCmd); err != nil {
 		return fmt.Errorf("register run_cmd: %w", err)
+	}
+	// exec_session/write_stdin share the process-level session manager:
+	// interactive background processes (dev servers, REPLs) that the model
+	// drives across multiple tool calls.
+	execSession, err := exsession.NewExecSessionTool(validator, sessionManager)
+	if err != nil {
+		return fmt.Errorf("exec_session: %w", err)
+	}
+	if err := registry.Register(execSession); err != nil {
+		return fmt.Errorf("register exec_session: %w", err)
+	}
+	writeStdin, err := exsession.NewWriteStdinTool(sessionManager)
+	if err != nil {
+		return fmt.Errorf("write_stdin: %w", err)
+	}
+	if err := registry.Register(writeStdin); err != nil {
+		return fmt.Errorf("register write_stdin: %w", err)
 	}
 	updateGoal, err := agent.NewUpdateGoalTool(goalCell)
 	if err != nil {
@@ -453,10 +529,14 @@ func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.R
 		{"list_dir", func() (domain.Tool, error) { return builtin.NewListDirTool(validator) }},
 		{"search", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
 		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
+		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator) }},
 		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator) }},
 		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator) }},
 		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator) }},
+		{"git_merge_base", func() (domain.Tool, error) { return gittools.NewGitMergeBaseTool(validator) }},
+		{"git_blame", func() (domain.Tool, error) { return gittools.NewGitBlameTool(validator) }},
 		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(artStore) }},
+		{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }},
 	}
 	for _, tt := range tools {
 		t, err := tt.mk()
@@ -472,6 +552,14 @@ func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.R
 
 // Close releases all resources held by the Bootstrap.
 func (b *Bootstrap) Close() {
+	if b.MCPManager != nil {
+		if err := b.MCPManager.Close(); err != nil && b.Logger != nil {
+			b.Logger.Warn("mcp manager shutdown failed", "error", err)
+		}
+	}
+	if b.SessionManager != nil {
+		b.SessionManager.Close()
+	}
 	if b.traceProvider != nil {
 		// Flush buffered spans with a bounded wait; tracing must never hang
 		// shutdown.

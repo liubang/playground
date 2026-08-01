@@ -21,6 +21,8 @@ go_test(
     name = "e2e_test",
     srcs = [
         "context_budget_e2e_test.go",
+        "exsession_e2e_test.go",
+        "mcp_e2e_test.go",
         "permission_e2e_test.go",
         "skills_e2e_test.go",
         "subagent_e2e_test.go",
@@ -42,7 +44,9 @@ go_test(
         "//go/pl/loom/internal/tool/builtin:builtin_lib",
         "//go/pl/loom/internal/tool/command:command_lib",
         "//go/pl/loom/internal/tool/edit:edit_lib",
+        "//go/pl/loom/internal/tool/exsession:exsession_lib",
         "//go/pl/loom/internal/tool/subagent:subagent_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
+        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )

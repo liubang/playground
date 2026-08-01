@@ -10,7 +10,7 @@ Loom 不是模型 API 的命令行包装器，而是一个 Agent Harness：模�
 - **Headless 模式**：`loom run` 单次执行，最终回答写 stdout、诊断写 stderr；非 TTY 下审批自动拒绝（fail-closed），适合管道与脚本。
 - **事件溯源会话**：所有会话事件与检查点持久化于 SQLite，支持崩溃恢复、跨进程 `resume`、完整历史回放。
 - **安全基座**：工作区路径边界、命令沙箱（macOS sandbox-exec/Seatbelt；Linux 沙箱尚未实现，fail-closed 拒绝执行）、环境变量白名单、R0–R4 风险分级与交互审批，"allow always" 生成类别化命令前缀规则。
-- **丰富的内置工具**：`read_file` / `list_dir` / `search` / `glob` / `edit` / `write` / `run_cmd` / `git_status` / `git_diff` / `git_log` / `lint` / `web_fetch` / `update_goal` / `update_plan` / `read_skill`。
+- **丰富的内置工具**：`read_file` / `list_dir` / `search` / `glob` / `edit` / `write` / `run_cmd` / `exec_session` / `write_stdin`（交互式后台进程会话）/ `git_status` / `git_diff` / `git_log` / `lint` / `web_fetch` / `update_goal` / `update_plan` / `read_skill`。
 - **Skills**：从工作区与用户目录发现 `SKILL.md` 技能，清单注入系统提示词，正文按需渐进披露。
 - **上下文工程**：上下文窗口占用感知、自动压缩（掩码 + 摘要交接）、预算提醒。
 - **可观测性**：OpenTelemetry / Langfuse 追踪（默认关闭），Context Manifest 审计每次模型请求的上下文构成。

@@ -13,30 +13,21 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/22 21:10
+# Created: 2026/08/01
 
-load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("@rules_go//go:def.bzl", "go_library")
 
 go_library(
-    name = "gittools_lib",
+    name = "mcp_lib",
     srcs = [
-        "blame.go",
-        "common.go",
-        "diff.go",
-        "log.go",
-        "merge_base.go",
-        "status.go",
+        "client.go",
+        "jsonrpc.go",
+        "manager.go",
+        "tool.go",
     ],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/gittools",
-    visibility = ["//visibility:public"],
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/mcp",
+    visibility = ["//go/pl/loom:__subpackages__"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/workspace:workspace_lib",
     ],
-)
-
-go_test(
-    name = "gittools_test",
-    srcs = ["gittools_test.go"],
-    embed = [":gittools_lib"],
 )

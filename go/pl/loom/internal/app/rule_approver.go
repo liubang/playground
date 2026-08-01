@@ -94,7 +94,9 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 		return RememberedRule{}, false
 	}
 	switch toolName {
-	case "run_cmd":
+	case "run_cmd", "exec_session":
+		// exec_session shares run_cmd's program/args/sandbox_permissions
+		// argument shape, so the same parser and prefix derivation apply.
 		info, parsed := permission.ParseRunCmdCall(arguments)
 		if !parsed {
 			return RememberedRule{}, false
@@ -148,18 +150,14 @@ func (r *RuleApprover) matches(call domain.PreparedCall) bool {
 	if r.session == nil {
 		return false
 	}
-	switch call.Call.Name {
-	case "run_cmd":
-		info, ok := permission.ParseRunCmdCall(call.Call.Arguments)
-		if !ok {
-			return false
-		}
+	if info, ok := permission.ExecInfoOf(call); ok {
 		grant, matched := r.session.Match(info.Argv)
 		// A remembered grant only auto-approves what it covers: a plain
 		// (zero-grant) memory must not silently approve an escalated or
 		// needs_network request — the user approved the sandboxed form.
 		return matched && permission.AllowGrantCovers(grant, info)
-	case "web_fetch":
+	}
+	if call.Call.Name == "web_fetch" {
 		host, ok := permission.ParseWebFetchHost(call.Call.Arguments)
 		return ok && r.session.MatchDomain(host)
 	}
@@ -182,7 +180,7 @@ func (r *RuleApprover) RunCmdRuleCount() int {
 // cannot be remembered.
 func ApprovalRulePreview(toolName string, arguments json.RawMessage) (preview string, grant domain.ExecGrant, ok bool) {
 	switch toolName {
-	case "run_cmd":
+	case "run_cmd", "exec_session":
 		info, parsed := permission.ParseRunCmdCall(arguments)
 		if !parsed || info.Escalated {
 			// Escalated calls offer only "allow once" and "always trust
@@ -209,7 +207,7 @@ func ApprovalRulePreview(toolName string, arguments json.RawMessage) (preview st
 // "always trust (unsandboxed)" option: escalated run_cmd calls whose
 // prefix is derivable.
 func RunCmdTrustPreview(toolName string, arguments json.RawMessage) bool {
-	if toolName != "run_cmd" {
+	if toolName != "run_cmd" && toolName != "exec_session" {
 		return false
 	}
 	info, ok := permission.ParseRunCmdCall(arguments)

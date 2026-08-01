@@ -235,7 +235,7 @@ type fetchOutcome struct {
 // and covers every redirect hop.
 func (t *WebFetchTool) fetch(ctx context.Context, args fetchArgs) (fetchOutcome, error) {
 	transport := &http.Transport{
-		DialContext:         t.guardedDial(args.AllowPrivate),
+		DialContext:         GuardedDialFunc(t.resolver, args.AllowPrivate),
 		TLSHandshakeTimeout: dialTimeout,
 		ForceAttemptHTTP2:   true,
 	}
@@ -302,16 +302,17 @@ func (t *WebFetchTool) fetch(ctx context.Context, args fetchArgs) (fetchOutcome,
 	}, nil
 }
 
-// guardedDial resolves the host, applies the IP policy to every answer, then
-// dials the first accepted address directly so the checked answer is the one
-// actually used.
-func (t *WebFetchTool) guardedDial(allowPrivate bool) func(ctx context.Context, network, addr string) (net.Conn, error) {
+// GuardedDialFunc returns a DialContext that resolves the host, applies the
+// IP policy to every answer, then dials the first accepted address directly
+// so the checked answer is the one actually used. Exported so other tools
+// (websearch, etc.) can share the same SSRF guard.
+func GuardedDialFunc(resolver *net.Resolver, allowPrivate bool) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, err
 		}
-		ips, err := t.resolver.LookupIPAddr(ctx, host)
+		ips, err := resolver.LookupIPAddr(ctx, host)
 		if err != nil {
 			return nil, fmt.Errorf("dns lookup failed for %s: %w", host, err)
 		}
@@ -323,12 +324,10 @@ func (t *WebFetchTool) guardedDial(allowPrivate bool) func(ctx context.Context, 
 			if !ok {
 				return nil, fmt.Errorf("dns lookup returned an invalid address for %s", host)
 			}
-			if !allowPrivate && !isPublicIP(ip.Unmap()) {
+			if !allowPrivate && !IsPublicIP(ip.Unmap()) {
 				return nil, fmt.Errorf("%w: %s resolves to %s", errBlockedAddress, host, ip.Unmap())
 			}
 		}
-		// Dial the checked addresses in order (e.g. localhost may resolve to
-		// ::1 first while the server only listens on 127.0.0.1).
 		dialer := &net.Dialer{Timeout: dialTimeout}
 		var lastErr error
 		for _, ipa := range ips {
@@ -508,6 +507,12 @@ func mapRequestError(err error) error {
 // broadcast, CGNAT, benchmarking, documentation, and reserved ranges are all
 // treated as non-public.
 func isPublicIP(ip netip.Addr) bool {
+	return IsPublicIP(ip)
+}
+
+// IsPublicIP reports whether the address is a globally routable unicast IP.
+// Exported so other tools (websearch, etc.) can share the same SSRF guard.
+func IsPublicIP(ip netip.Addr) bool {
 	if !ip.IsValid() {
 		return false
 	}

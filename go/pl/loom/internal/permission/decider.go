@@ -29,16 +29,17 @@ type RuleDecider struct {
 }
 
 // Evaluate returns the strictest matching rule's verdict, or nil when no
-// rule matches. run_cmd calls match argv-prefix rules; web_fetch calls
+// rule matches. Process-spawning calls (run_cmd, exec_session — anything
+// carrying a signed ExecRequest) match argv-prefix rules; web_fetch calls
 // match host rules; everything else is not rule-eligible.
 func (d RuleDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	if d.Rules == nil {
 		return nil
 	}
-	switch call.Call.Name {
-	case "run_cmd":
+	if _, ok := ExecInfoOf(call); ok {
 		return d.evaluateRunCmd(call)
-	case "web_fetch":
+	}
+	if call.Call.Name == "web_fetch" {
 		return d.evaluateWebFetch(call)
 	}
 	return nil
@@ -59,7 +60,7 @@ func (d RuleDecider) evaluateWebFetch(call domain.PreparedCall) *domain.Verdict 
 
 // evaluateRunCmd matches the call's argv against the prefix rules.
 func (d RuleDecider) evaluateRunCmd(call domain.PreparedCall) *domain.Verdict {
-	info, ok := ParseRunCmdCall(call.Call.Arguments)
+	info, ok := ExecInfoOf(call)
 	if !ok {
 		return nil
 	}
@@ -122,10 +123,7 @@ type DangerDecider struct {
 // Evaluate asks for (or, in never mode, denies) dangerous commands;
 // otherwise it has no opinion.
 func (d DangerDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
-	if call.Call.Name != "run_cmd" {
-		return nil
-	}
-	info, ok := ParseRunCmdCall(call.Call.Arguments)
+	info, ok := ExecInfoOf(call)
 	if !ok {
 		return nil
 	}
@@ -160,12 +158,9 @@ func (d SessionDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	if d.Session == nil {
 		return nil
 	}
-	switch call.Call.Name {
-	case "run_cmd":
-		info, ok := ParseRunCmdCall(call.Call.Arguments)
-		if !ok {
-			return nil
-		}
+	info, execOk := ExecInfoOf(call)
+	switch {
+	case execOk:
 		grant, ok := d.Session.Match(info.Argv)
 		if !ok || !AllowGrantCovers(grant, info) {
 			return nil
@@ -176,7 +171,7 @@ func (d SessionDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 			Source:   SourceSession,
 			Reason:   "remembered from an interactive loom approval",
 		}
-	case "web_fetch":
+	case call.Call.Name == "web_fetch":
 		host, ok := ParseWebFetchHost(call.Call.Arguments)
 		if !ok || !d.Session.MatchDomain(host) {
 			return nil
@@ -209,10 +204,8 @@ type BaselineDecider struct {
 // blast radius is bounded the same way a sandboxed command's is.
 func (d BaselineDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	v := &domain.Verdict{Source: SourceBaseline}
-	if call.Call.Name == "run_cmd" {
-		if info, ok := ParseRunCmdCall(call.Call.Arguments); ok {
-			return d.runCmdBaseline(v, call.Risk, info)
-		}
+	if info, ok := ExecInfoOf(call); ok {
+		return d.runCmdBaseline(v, call.Risk, info)
 	}
 	if d.Mode == ModeUnlessDangerous {
 		switch {
