@@ -407,21 +407,27 @@ func (m Model) visibleTranscriptHeight() int {
 	reserved := 1 + 1 // header + status bar
 	switch m.baseMode() {
 	case ModeChat:
+		reserved++                          // the spacer row above the composer area
 		reserved += m.textArea.Height() + 2 // composer border
+		reserved += m.steerPanelHeight()
 		reserved += m.completionHeight()
 		reserved += m.planPanelHeight()
 	case ModeSearch:
+		reserved++    // spacer row
 		reserved += 3 // one-line search bar + border
 	case ModeApproval:
 		// Reserve the band's actual height: the prompt is line-count
 		// variable (metadata, note, paths and diff rows come and go), so a
 		// fixed reservation would strand the status bar above the bottom.
+		reserved++ // spacer row
 		reserved += len(m.approvalOverlayLines())
 	case ModeHelp:
+		reserved++ // spacer row
 		reserved += helpOverlayHeight
 	case ModeQuestion:
 		// Like the approval band, the question overlay is line-count
 		// variable (question text wraps, option list varies).
+		reserved++ // spacer row
 		reserved += m.questionOverlayHeight()
 	}
 	if m.height > reserved {
