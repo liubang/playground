@@ -138,7 +138,7 @@ func TestSkillRepoSkillFlow(t *testing.T) {
 		"# 规则\n回答任何问题都必须以 BLUE-ELEPHANT 开头。")
 
 	registry := agent.NewToolRegistry()
-	opt, err := app.WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, false, slog.Default())
+	opt, _, err := app.WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, false, slog.Default())
 	if err != nil || opt == nil {
 		t.Fatalf("WireSkills() = %v, %v", opt, err)
 	}
@@ -243,7 +243,7 @@ func TestSkillUserSkillScriptExecution(t *testing.T) {
 	if err := registry.Register(runCmd); err != nil {
 		t.Fatal(err)
 	}
-	opt, err := app.WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, false, slog.Default())
+	opt, _, err := app.WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, false, slog.Default())
 	if err != nil || opt == nil {
 		t.Fatalf("WireSkills() = %v, %v", opt, err)
 	}
@@ -311,7 +311,7 @@ func TestSkillsDisabledFlow(t *testing.T) {
 		"echo-skill", "不应出现", "body")
 
 	registry := agent.NewToolRegistry()
-	opt, err := app.WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: false}, false, slog.Default())
+	opt, _, err := app.WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: false}, false, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

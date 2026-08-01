@@ -124,11 +124,11 @@ func writeMCPConfig(t *testing.T, dir string, mcpServers map[string]config.MCPSe
 	f := config.File{
 		Default: "test/test-model",
 		Providers: []config.Provider{{
-			Name:     "test",
-			Type:     "openai",
-			BaseURL:  "http://localhost:1",
-			APIKey:   "test-key",
-			Models:   []config.Model{{Name: "test-model", ContextWindow: 128000}},
+			Name:    "test",
+			Type:    "openai",
+			BaseURL: "http://localhost:1",
+			APIKey:  "test-key",
+			Models:  []config.Model{{Name: "test-model", ContextWindow: 128000}},
 		}},
 		MCPServers: mcpServers,
 	}
@@ -154,12 +154,12 @@ func TestE2EMCPConfigResolution(t *testing.T) {
 
 	configPath := writeMCPConfig(t, t.TempDir(), map[string]config.MCPServer{
 		"echo": {
-			Command:          cmd,
-			Args:             args,
-			Env:              env,
+			Command:           cmd,
+			Args:              args,
+			Env:               env,
 			StartupTimeoutSec: 15,
 			ToolTimeoutSec:    60,
-			EnabledTools:     []string{"echo"},
+			EnabledTools:      []string{"echo"},
 		},
 	})
 	resolved, err := config.Load(configPath, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
@@ -351,7 +351,8 @@ func TestE2EMCPToolFiltering(t *testing.T) {
 }
 
 // TestE2EMCPGracefulDegradation verifies that a nonexistent MCP server
-// command does not crash Bootstrap — the agent runs with built-in tools only.
+// command does not crash Bootstrap — the agent runs with built-in tools
+// only, while the manager is still kept so /mcp can report the failure.
 func TestE2EMCPGracefulDegradation(t *testing.T) {
 	ws := t.TempDir()
 
@@ -376,9 +377,26 @@ func TestE2EMCPGracefulDegradation(t *testing.T) {
 	}
 	defer bootstrap.Close()
 
-	// MCPManager should be nil (no server could start).
-	if bootstrap.MCPManager != nil {
-		t.Fatal("MCPManager should be nil when all servers fail to start")
+	// The manager is kept even when every server fails: it carries the
+	// per-server failure reasons the /mcp listing reports.
+	if bootstrap.MCPManager == nil {
+		t.Fatal("MCPManager should be kept to report per-server failures")
+	}
+	servers := bootstrap.MCPManager.Servers()
+	if len(servers) != 1 {
+		t.Fatalf("Servers() count = %d, want 1", len(servers))
+	}
+	if servers[0].Name != "broken" {
+		t.Fatalf("Servers()[0].Name = %q, want %q", servers[0].Name, "broken")
+	}
+	if servers[0].Connected {
+		t.Fatal("Servers()[0].Connected = true, want false for a failed server")
+	}
+	if servers[0].Error == "" {
+		t.Fatal("Servers()[0].Error is empty, want the startup failure reason")
+	}
+	if len(bootstrap.MCPManager.Tools()) != 0 {
+		t.Fatalf("Tools() count = %d, want 0 for a failed server", len(bootstrap.MCPManager.Tools()))
 	}
 	// Built-in tools still registered.
 	if _, ok := bootstrap.Registry.Lookup("read_file"); !ok {

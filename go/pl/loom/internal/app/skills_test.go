@@ -40,12 +40,15 @@ func TestWireSkillsDisabled(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			registry := agent.NewToolRegistry()
-			opt, err := WireSkills(registry, t.TempDir(), 0, tc.cfg, tc.systemPromptDisabled, nil)
+			opt, handle, err := WireSkills(registry, t.TempDir(), 0, tc.cfg, tc.systemPromptDisabled, nil)
 			if err != nil {
 				t.Fatalf("WireSkills() error = %v", err)
 			}
 			if opt != nil {
 				t.Fatal("WireSkills() option = non-nil, want nil when disabled")
+			}
+			if handle != nil {
+				t.Fatal("WireSkills() handle = non-nil, want nil when disabled")
 			}
 			if _, ok := registry.Lookup("read_skill"); ok {
 				t.Fatal("read_skill registered while skills are disabled")
@@ -68,12 +71,15 @@ func TestWireSkillsEnabledEndToEnd(t *testing.T) {
 	}
 
 	registry := agent.NewToolRegistry()
-	opt, err := WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, false, nil)
+	opt, handle, err := WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, false, nil)
 	if err != nil {
 		t.Fatalf("WireSkills() error = %v", err)
 	}
 	if opt == nil {
 		t.Fatal("WireSkills() option = nil, want skills provider option")
+	}
+	if handle == nil || handle.Loader == nil || handle.Catalog == nil {
+		t.Fatal("WireSkills() handle incomplete, want loader and catalog")
 	}
 	if _, ok := registry.Lookup("read_skill"); !ok {
 		t.Fatal("read_skill not registered")

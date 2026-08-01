@@ -18,6 +18,7 @@
 package permission
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -149,9 +150,9 @@ type RuleLoadOptions struct {
 
 // AttachRules loads declarative rules onto the given baseline policy: the
 // embedded builtin set, plus the user layer (~/.loom/rules) and the project
-// layer (<workspace>/.loom/rules). Rule loading never fails the agent —
-// broken files are logged and skipped.
-func AttachRules(policy Policy, workspaceRoot string, loadOpts RuleLoadOptions, logger *slog.Logger) Policy {
+// layer (<workspace>/.loom/rules), plus the SQLite remembered store. Rule
+// loading never fails the agent — broken files/stores are logged and skipped.
+func AttachRules(ctx context.Context, policy Policy, workspaceRoot string, loadOpts RuleLoadOptions, logger *slog.Logger) Policy {
 	if !loadOpts.Enabled {
 		return policy
 	}
@@ -178,6 +179,14 @@ func AttachRules(policy Policy, workspaceRoot string, loadOpts RuleLoadOptions, 
 		logger.Warn("loom rules: skipped a rule source", "error", err)
 	}
 	rules.merge(fileRules)
+	// Remembered store (SQLite): machine-managed "allow always" memory.
+	if userDir != "" {
+		if remembered, err := LoadRememberedRules(ctx, RememberedDBPath(userDir)); err != nil {
+			logger.Warn("loom rules: remembered store unreadable", "error", err)
+		} else if remembered.Size() > 0 {
+			rules.merge(remembered)
+		}
+	}
 	if rules.Size() > 0 {
 		logger.Info("loom rules loaded", "rules", rules.Size())
 	}

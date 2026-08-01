@@ -37,8 +37,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -176,36 +174,4 @@ func (s *SessionRules) Domains() []string {
 	return out
 }
 
-// AppendRememberedDomain persists an approved host into the user-layer
-// remembered.json "domains" section, creating the directory on first use.
-func AppendRememberedDomain(rulesDir, host string) error {
-	host, err := normalizeDomainHost(host)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(rulesDir, 0o700); err != nil {
-		return err
-	}
-	path := filepath.Join(rulesDir, RememberedRulesFile)
-	var f ruleFile
-	if data, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(data, &f); err != nil {
-			return fmt.Errorf("parse %s: %w", path, err)
-		}
-	}
-	for _, d := range f.Domains {
-		if d.Host == host && d.Decision == string(domain.DecisionAllow) {
-			return nil // already persisted
-		}
-	}
-	f.Domains = append(f.Domains, DomainRule{
-		Host:          host,
-		Decision:      string(domain.DecisionAllow),
-		Justification: "remembered from an interactive loom approval",
-	})
-	data, err := json.MarshalIndent(f, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o600)
-}
+
