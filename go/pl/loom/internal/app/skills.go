@@ -29,14 +29,24 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/skillread"
 )
 
+// SkillsHandle exposes the skills loader and shared catalog assembled by
+// WireSkills, so frontends can list and refresh the discovered skills
+// (the /skill command) against the same catalog the model sees.
+type SkillsHandle struct {
+	Loader  *skill.Loader
+	Catalog *skill.AtomicCatalog
+}
+
 // WireSkills builds the skills loader and shared catalog, registers the
 // read_skill tool, and returns the prompt option carrying the catalog
-// provider. It is the single wiring point shared by the headless (loom run)
-// and TUI entry paths so both behave identically.
+// provider plus a handle to the underlying loader/catalog. It is the
+// single wiring point shared by the headless (loom run) and TUI entry
+// paths so both behave identically.
 //
-// Skills are disabled (no tool, no prompt section; nil option returned) when
-// cfg.Enabled is false or the built-in system prompt is disabled — a
-// read_skill tool without a visible catalog would only mislead the model.
+// Skills are disabled (no tool, no prompt section; nil option and nil
+// handle returned) when cfg.Enabled is false or the built-in system
+// prompt is disabled — a read_skill tool without a visible catalog would
+// only mislead the model.
 func WireSkills(
 	registry *agent.ToolRegistry,
 	workspaceRoot string,
@@ -44,22 +54,23 @@ func WireSkills(
 	cfg config.ResolvedSkills,
 	systemPromptDisabled bool,
 	logger *slog.Logger,
-) (prompt.Option, error) {
+) (prompt.Option, *SkillsHandle, error) {
 	if registry == nil {
-		return nil, fmt.Errorf("tool registry is required")
+		return nil, nil, fmt.Errorf("tool registry is required")
 	}
 	if !cfg.Enabled || systemPromptDisabled {
-		return nil, nil
+		return nil, nil, nil
 	}
 	home, _ := os.UserHomeDir()
 	loader := skill.NewLoader(workspaceRoot, home, cfg.ExtraRoots, logger)
 	catalog := &skill.AtomicCatalog{}
 	readSkill, err := skillread.NewReadSkillTool(catalog)
 	if err != nil {
-		return nil, fmt.Errorf("read_skill: %w", err)
+		return nil, nil, fmt.Errorf("read_skill: %w", err)
 	}
 	if err := registry.Register(readSkill); err != nil {
-		return nil, fmt.Errorf("register read_skill: %w", err)
+		return nil, nil, fmt.Errorf("register read_skill: %w", err)
 	}
-	return prompt.WithSkillsProvider(skill.NewPromptProvider(loader, catalog, contextWindow)), nil
+	opt := prompt.WithSkillsProvider(skill.NewPromptProvider(loader, catalog, contextWindow))
+	return opt, &SkillsHandle{Loader: loader, Catalog: catalog}, nil
 }

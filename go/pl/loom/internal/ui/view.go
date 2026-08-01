@@ -65,7 +65,7 @@ func (m Model) baseMode() Mode {
 		return m.mode
 	}
 	switch m.mode {
-	case ModeHelp, ModeQuestion, ModeSessionPicker, ModeModelPicker, ModeReasoningPicker:
+	case ModeHelp, ModeQuestion, ModeSessionPicker, ModeModelPicker, ModeReasoningPicker, ModeListing:
 		return ModeChat
 	}
 	return m.mode
@@ -81,6 +81,8 @@ func (m Model) activeFloats() []Float {
 	switch m.mode {
 	case ModeHelp:
 		return []Float{centeredFloat(m.renderHelpOverlay(), m.width, m.height)}
+	case ModeListing:
+		return []Float{centeredFloat(m.renderListingOverlay(), m.width, m.height)}
 	case ModeQuestion:
 		if m.choiceList != nil {
 			return []Float{centeredFloat(m.renderQuestionOverlay(), m.width, m.height)}
@@ -155,6 +157,9 @@ func (m Model) renderBase() string {
 		}
 	case ModeHelp:
 		b.WriteString(m.renderHelpOverlay())
+		b.WriteString("\n")
+	case ModeListing:
+		b.WriteString(m.renderListingOverlay())
 		b.WriteString("\n")
 	case ModeSearch:
 		b.WriteString(m.renderSearchBar())
@@ -1281,6 +1286,199 @@ func (m Model) renderHelpOverlay() string {
 	width := min(m.dialogWidth(), 76)
 	width = max(width, 20)
 	return m.theme.DialogBorder.Width(width).Render(b.String())
+}
+
+// listingMaxVisibleRows bounds the content window of the listing dialog so
+// long lists scroll instead of walling off the transcript.
+const listingMaxVisibleRows = 18
+
+// renderListingOverlay renders the read-only listing dialog (/skill, /mcp):
+// a titled, scrollable content window framed like the help dialog.
+func (m Model) renderListingOverlay() string {
+	dim := m.theme.Dim
+	outer := m.listingDialogWidth()
+	contentWidth := max(outer-2, 10) // dialog border columns
+
+	var b strings.Builder
+	b.WriteString(m.theme.DialogTitle.Render(m.listing.title))
+	b.WriteString("\n\n")
+
+	rows := m.listingRows(contentWidth)
+	visible := m.listingVisibleRows()
+	start := min(m.listingScroll, max(0, len(rows)-visible))
+	end := min(start+visible, len(rows))
+	for _, row := range rows[start:end] {
+		b.WriteString(clampLineANSI(row, contentWidth))
+		b.WriteString("\n")
+	}
+	// Pad short content so the dialog keeps a stable geometry.
+	for i := end - start; i < visible; i++ {
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+
+	footer := "up/down scroll · esc close"
+	if len(rows) > visible {
+		footer = fmt.Sprintf("up/down scroll (%d-%d/%d) · esc close", start+1, end, len(rows))
+	}
+	b.WriteString(dim.Render(footer))
+
+	return m.theme.DialogBorder.Width(outer).Render(b.String())
+}
+
+// listingDialogWidth sizes the listing dialog: alt-screen gets a wide
+// centered float (like the pickers); inline spans the frame width.
+func (m Model) listingDialogWidth() int {
+	if m.altScreen {
+		width := min(max(m.width*4/5, 62), 110)
+		return min(width, max(m.width-2, 20))
+	}
+	return max(1, m.width-2)
+}
+
+// listingRows lays out the listing payload as one styled row per line,
+// each clipped to width cells by the caller (clampLineANSI), so the count
+// is width-independent and matches listingContentRows.
+func (m Model) listingRows(width int) []string {
+	switch m.listing.kind {
+	case listingSkills:
+		return m.listingSkillRows(width)
+	case listingMCP:
+		return m.listingMCPRows(width)
+	}
+	return nil
+}
+
+// listingSkillRows renders one card per skill: name + scope on the first
+// row, the cleaned description and the SKILL.md path indented below it.
+func (m Model) listingSkillRows(width int) []string {
+	key := m.theme.ApprovalKey
+	dim := m.theme.Dim
+	listing := m.listing.skills
+	if len(listing.Skills) == 0 {
+		return []string{
+			dim.Render("  No skills discovered."),
+			"",
+			dim.Render("  Skills are discovered under:"),
+			dim.Render("    <workspace>/.loom/skills  or  <workspace>/.agents/skills"),
+			dim.Render("    ~/.loom/skills  or  ~/.agents/skills"),
+			dim.Render("    (or skills.extra_roots in config)"),
+		}
+	}
+	var rows []string
+	for i, s := range listing.Skills {
+		if i > 0 {
+			rows = append(rows, "")
+		}
+		rows = append(rows,
+			"  "+key.Render(truncateDisplayWidth(s.Name, width-10))+" "+dim.Render("· "+s.Scope),
+			"    "+dim.Render(truncateDisplayWidth(cleanListingText(s.Description), width-4)),
+			"    "+dim.Render(truncateDisplayWidth(s.Path, width-4)),
+		)
+	}
+	if len(listing.Issues) > 0 {
+		rows = append(rows, "", m.theme.DialogTitle.Render("  Load issues"))
+		for _, issue := range listing.Issues {
+			rows = append(rows, "  "+m.theme.ToolError.Render("x "+truncateDisplayWidth(issue, width-6)))
+		}
+	}
+	return rows
+}
+
+// listingMCPRows renders one card per server: name + tool count (or the
+// startup error) on the first row, details indented below it.
+func (m Model) listingMCPRows(width int) []string {
+	key := m.theme.ApprovalKey
+	dim := m.theme.Dim
+	servers := m.listing.servers
+	if len(servers) == 0 {
+		return []string{
+			dim.Render("  No MCP servers configured."),
+			"",
+			dim.Render("  Add mcp_servers entries to ~/.loom/config.yaml."),
+		}
+	}
+	var rows []string
+	for i, srv := range servers {
+		if i > 0 {
+			rows = append(rows, "")
+		}
+		if srv.Connected {
+			header := fmt.Sprintf("%s · %d tool%s", srv.Name, len(srv.Tools), pluralS(len(srv.Tools)))
+			rows = append(rows,
+				"  "+m.theme.ToolSuccess.Render("+ ")+key.Render(header),
+				"    "+dim.Render(truncateDisplayWidth(strings.Join(srv.Tools, ", "), width-4)),
+			)
+			continue
+		}
+		errMsg := srv.Error
+		if errMsg == "" {
+			errMsg = "unknown error"
+		}
+		rows = append(rows,
+			"  "+m.theme.ToolError.Render("x ")+key.Render(srv.Name),
+			"    "+m.theme.ToolError.Render(truncateDisplayWidth(errMsg, width-4)),
+		)
+	}
+	return rows
+}
+
+// listingContentRows returns the number of content rows the listing dialog
+// renders for the current payload (width-independent: every field is one
+// clipped row), shared by the scroll handlers and the renderer.
+func (m Model) listingContentRows() int {
+	switch m.listing.kind {
+	case listingSkills:
+		n := len(m.listing.skills.Skills)
+		if n == 0 {
+			return 6
+		}
+		rows := n*3 + (n - 1) // card rows + blank separators
+		if issues := len(m.listing.skills.Issues); issues > 0 {
+			rows += 2 + issues // blank + header + issue rows
+		}
+		return rows
+	case listingMCP:
+		n := len(m.listing.servers)
+		if n == 0 {
+			return 3
+		}
+		return n*2 + (n - 1) // 2 rows per server + blank separators
+	}
+	return 0
+}
+
+// listingVisibleRows returns how many content rows the dialog window shows.
+func (m Model) listingVisibleRows() int {
+	return min(max(m.listingContentRows(), 1), listingMaxVisibleRows)
+}
+
+// listingOverlayHeight is the dialog's rendered height including its
+// border, reserved in-flow by the inline layout (alt-screen composes the
+// dialog as a float instead).
+func (m Model) listingOverlayHeight() int {
+	return m.listingVisibleRows() + 6 // title + 2 blanks + footer + border
+}
+
+// clampLineANSI clips a styled row to width display cells, appending an
+// ellipsis when content was cut. ANSI-aware via truncateANSI, so escape
+// sequences are never split and lipgloss never re-wraps the row.
+func clampLineANSI(s string, width int) string {
+	if lipgloss.Width(s) <= width {
+		return s
+	}
+	if width < 2 {
+		return truncateANSI(s, width)
+	}
+	return truncateANSI(s, width-1) + "…"
+}
+
+// cleanListingText flattens a free-form description onto one line: markdown
+// emphasis markers are dropped and all whitespace (including newlines) is
+// collapsed to single spaces.
+func cleanListingText(s string) string {
+	s = strings.ReplaceAll(s, "**", "")
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // Helper functions
