@@ -124,7 +124,13 @@ func run(ctx context.Context, args []string) error {
 		if len(args) >= 2 && args[1] == "check" {
 			return checkRules(args[2:])
 		}
-		return errors.New("usage: loom rules <list|check <program> [args...]>")
+		if len(args) >= 2 && args[1] == "forget" {
+			return forgetRules(args[2:])
+		}
+		if len(args) == 3 && args[1] == "import" {
+			return importRules(args[2])
+		}
+		return errors.New("usage: loom rules <list|check <program> [args...]|forget [--domain host] <program> [args...]|import <file.json>>")
 	case "config":
 		if len(args) == 2 && args[1] == "init" {
 			return initConfig()
@@ -571,9 +577,10 @@ func listRules() error {
 	if err != nil {
 		return err
 	}
-	policy := permission.AttachRules(permission.DefaultPolicy(), root, resolved.Rules.LoadOptions(), slog.Default())
+	policy := permission.AttachRules(context.Background(), permission.DefaultPolicy(), root, resolved.Rules.LoadOptions(), slog.Default())
 	rules := policy.Rules.Rules()
-	if len(rules) == 0 {
+	domains := policy.Rules.Domains()
+	if len(rules) == 0 && len(domains) == 0 {
 		fmt.Println("no rules in effect (rules.enabled/rules.builtin may be disabled)")
 		return nil
 	}
@@ -587,6 +594,13 @@ func listRules() error {
 			grant = " (" + g.Summary() + ")"
 		}
 		fmt.Printf("[%s] %-40s %s%s\n", r.Decision, strings.Join(r.ArgvPrefix, " ")+grant, r.Source, just)
+	}
+	for _, d := range domains {
+		just := ""
+		if d.Justification != "" {
+			just = " — " + d.Justification
+		}
+		fmt.Printf("[%s] %-40s %s%s\n", d.Decision, "host:"+d.Host, d.Source, just)
 	}
 	return nil
 }
@@ -623,7 +637,7 @@ func checkRules(argv []string) error {
 	if err != nil {
 		return err
 	}
-	policy := permission.AttachRules(permission.DefaultPolicy(), root, resolved.Rules.LoadOptions(), slog.Default())
+	policy := permission.AttachRules(context.Background(), permission.DefaultPolicy(), root, resolved.Rules.LoadOptions(), slog.Default())
 	callArgs := map[string]any{"program": argv[0], "args": argv[1:]}
 	risk := domain.R2
 	if escalated {
@@ -671,6 +685,78 @@ func checkRules(argv []string) error {
 			}
 		}
 	}
+	return nil
+}
+
+// forgetRules removes a remembered approval from the SQLite store.
+// Usage: loom rules forget [--domain host] <program> [args...]
+func forgetRules(argv []string) error {
+	if len(argv) == 0 {
+		return errors.New("usage: loom rules forget [--domain host] <program> [args...]")
+	}
+	if len(argv) >= 2 && argv[0] == "--domain" {
+		host := argv[1]
+		dir, err := permission.RulesDirUser()
+		if err != nil {
+			return fmt.Errorf("user rules dir: %w", err)
+		}
+		store, err := permission.OpenRememberedStore(context.Background(), permission.RememberedDBPath(dir))
+		if err != nil {
+			return fmt.Errorf("open remembered store: %w", err)
+		}
+		defer store.Close()
+		ok, err := store.ForgetDomain(context.Background(), host)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			fmt.Printf("no remembered domain for %q\n", host)
+		} else {
+			fmt.Printf("forgot domain %q\n", host)
+		}
+		return nil
+	}
+	// argv prefix rule
+	dir, err := permission.RulesDirUser()
+	if err != nil {
+		return fmt.Errorf("user rules dir: %w", err)
+	}
+	store, err := permission.OpenRememberedStore(context.Background(), permission.RememberedDBPath(dir))
+	if err != nil {
+		return fmt.Errorf("open remembered store: %w", err)
+	}
+	defer store.Close()
+	ok, err := store.ForgetRule(context.Background(), argv)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Printf("no remembered rule for %v\n", argv)
+	} else {
+		fmt.Printf("forgot rule %v\n", argv)
+	}
+	return nil
+}
+
+// importRules imports a declarative rule file (the user-layer JSON schema)
+// into the remembered store. Existing store entries win; the file itself is
+// left untouched (rename it aside manually to complete a migration).
+// Usage: loom rules import <file.json>
+func importRules(path string) error {
+	dir, err := permission.RulesDirUser()
+	if err != nil {
+		return fmt.Errorf("user rules dir: %w", err)
+	}
+	ctx := context.Background()
+	store, err := permission.OpenRememberedStore(ctx, permission.RememberedDBPath(dir))
+	if err != nil {
+		return fmt.Errorf("open remembered store: %w", err)
+	}
+	defer store.Close()
+	if err := store.ImportRuleFile(ctx, path); err != nil {
+		return fmt.Errorf("import %s: %w", path, err)
+	}
+	fmt.Printf("imported allow rules from %s into %s (existing entries kept)\n", path, store.Path())
 	return nil
 }
 

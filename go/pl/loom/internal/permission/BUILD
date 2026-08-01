@@ -26,6 +26,7 @@ go_library(
         "policy.go",
         "policy_trust_other.go",
         "policy_trust_unix.go",
+        "remembered_store.go",
         "rules.go",
         "verdict.go",
     ],
@@ -35,6 +36,7 @@ go_library(
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/process:process_lib",
+        "@org_modernc_sqlite//:sqlite",
     ],
 )
 
@@ -45,6 +47,7 @@ go_test(
         "domain_rules_test.go",
         "grant_test.go",
         "policy_test.go",
+        "remembered_store_test.go",
         "rules_test.go",
     ],
     embed = [":permission_lib"],

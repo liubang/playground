@@ -47,8 +47,12 @@ const (
 	ModeReasoningPicker Mode = "reasoning_picker"
 	ModeQuestion        Mode = "question"
 	ModeHelp            Mode = "help"
-	ModeSearch          Mode = "search"
-	ModeSubagent        Mode = "subagent"
+	// ModeListing is the read-only scrollable dialog used by informational
+	// commands (/skill, /mcp): a floating window in alt-screen mode, the
+	// composer-area panel inline, like the help overlay.
+	ModeListing  Mode = "listing"
+	ModeSearch   Mode = "search"
+	ModeSubagent Mode = "subagent"
 )
 
 // Model is the root Bubble Tea model for the Loom TUI.
@@ -222,6 +226,32 @@ type Model struct {
 	// subOverlay is the read-only sub-agent drill-in view (Ctrl+G), nil
 	// unless ModeSubagent is active.
 	subOverlay *subagentOverlay
+
+	// Listing overlay (/skill, /mcp): the read-only scrollable dialog
+	// active under ModeListing. listing holds the raw payload;
+	// renderListingOverlay lays it out for the current width, and
+	// listingScroll is the top visible content row.
+	listing       listingContent
+	listingScroll int
+}
+
+// listingKind identifies which payload listingContent carries.
+type listingKind int
+
+const (
+	listingNone listingKind = iota
+	listingSkills
+	listingMCP
+)
+
+// listingContent is the raw payload of the read-only listing dialog
+// (/skill, /mcp); the view lays it out at render time so resizing the
+// terminal re-flows the content.
+type listingContent struct {
+	kind    listingKind
+	title   string
+	skills  app.SkillsListing
+	servers []app.MCPServerInfo
 }
 
 // NewModel creates a new UI model with the given controller.

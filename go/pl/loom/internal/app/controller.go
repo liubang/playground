@@ -589,6 +589,80 @@ func (c *Controller) ListSessions(ctx context.Context, limit int) ([]SessionSumm
 	return result, nil
 }
 
+// SkillInfo is the frontend-safe projection of one discovered skill,
+// backing the /skill listing.
+type SkillInfo struct {
+	Name        string
+	Description string
+	Scope       string
+	Path        string
+}
+
+// SkillsListing is the result of a ListSkills call: the discovered skills
+// plus the load issues collected during discovery (a skill that fails to
+// parse never appears in Skills, so the issues are the only way to see
+// why it is missing).
+type SkillsListing struct {
+	Skills []SkillInfo
+	Issues []string
+}
+
+// ListSkills reloads the skill catalog from disk — so the listing reflects
+// files added or fixed since the last prompt build — stores the fresh
+// snapshot into the shared catalog (keeping read_skill consistent with
+// what the user just saw), and returns the projection. It reads the
+// bootstrap directly (like ListSessions): discovery is cheap and
+// read-only, so it needs no command-queue serialization.
+func (c *Controller) ListSkills(ctx context.Context) (SkillsListing, error) {
+	if c.bootstrap == nil || c.bootstrap.Skills == nil {
+		return SkillsListing{}, fmt.Errorf("skills are disabled (skills.enabled=false or the built-in system prompt is off)")
+	}
+	catalog := c.bootstrap.Skills.Loader.Load(ctx)
+	c.bootstrap.Skills.Catalog.Store(catalog)
+	listing := SkillsListing{Skills: make([]SkillInfo, 0, len(catalog.Skills()))}
+	for _, s := range catalog.Skills() {
+		listing.Skills = append(listing.Skills, SkillInfo{
+			Name:        s.Name,
+			Description: s.Description,
+			Scope:       s.Scope.String(),
+			Path:        s.Path,
+		})
+	}
+	for _, issue := range catalog.Issues() {
+		listing.Issues = append(listing.Issues, fmt.Sprintf("%s: %s", issue.Path, issue.Message))
+	}
+	return listing, nil
+}
+
+// MCPServerInfo is the frontend-safe projection of one configured MCP
+// server, backing the /mcp listing.
+type MCPServerInfo struct {
+	Name      string
+	Connected bool
+	Error     string
+	Tools     []string
+}
+
+// ListMCPServers returns the status of every configured MCP server.
+// Like ListSessions it reads runtime-owned state directly; the manager's
+// projection is assembled once at startup and immutable afterwards.
+func (c *Controller) ListMCPServers(ctx context.Context) ([]MCPServerInfo, error) {
+	if c.bootstrap == nil || c.bootstrap.MCPManager == nil {
+		return nil, fmt.Errorf("no mcp servers configured")
+	}
+	servers := c.bootstrap.MCPManager.Servers()
+	out := make([]MCPServerInfo, 0, len(servers))
+	for _, srv := range servers {
+		out = append(out, MCPServerInfo{
+			Name:      srv.Name,
+			Connected: srv.Connected,
+			Error:     srv.Error,
+			Tools:     append([]string(nil), srv.Tools...),
+		})
+	}
+	return out, nil
+}
+
 // SessionID returns the current session ID.
 func (c *Controller) SessionID() domain.SessionID {
 	c.mu.Lock()
@@ -655,13 +729,13 @@ func (c *Controller) steerCellPeek() []string {
 	return nil
 }
 
-// persistRememberedRules reports whether "allow always" prefixes should be
-// written to the user rules layer (rules.persist_remembered; default true).
-func (c *Controller) persistRememberedRules() bool {
-	if c.bootstrap == nil || c.bootstrap.Resolved == nil {
-		return true
+// rememberedStore returns the persistent "allow always" store, or nil when
+// persistence is disabled or unavailable.
+func (c *Controller) rememberedStore() *permission.RememberedStore {
+	if c.bootstrap == nil {
+		return nil
 	}
-	return c.bootstrap.Resolved.Rules.PersistRemembered
+	return c.bootstrap.RememberedStore
 }
 
 func (c *Controller) setState(s ControllerState) {
@@ -1154,23 +1228,23 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 			if summary := rule.Grant.Summary(); summary != "" {
 				note += " (" + summary + ")"
 			}
-			// Persist the memory to the user rules layer so future sessions
-			// inherit it (rules.persist_remembered=false opts out; a nil
-			// bootstrap in tests keeps the default). run_cmd remembers argv
-			// prefixes (with grants); web_fetch remembers exact hosts.
-			if c.persistRememberedRules() {
-				if dir, err := permission.RulesDirUser(); err == nil {
-					var persistErr error
-					if rule.Host != "" {
-						persistErr = permission.AppendRememberedDomain(dir, rule.Host)
-					} else {
-						persistErr = permission.AppendRememberedRule(dir, rule.Prefix, rule.Grant)
-					}
-					if persistErr != nil {
-						c.logger.Warn("persist remembered rule failed", "rule", note, "error", persistErr)
-					} else {
-						note += " (saved to " + dir + ")"
-					}
+			// Persist the memory to the remembered store so future sessions
+			// inherit it (rules.persist_remembered=false opts out by not
+			// opening the store). run_cmd remembers argv prefixes (with
+			// grants); web_fetch remembers exact hosts.
+			if store := c.rememberedStore(); store != nil {
+				persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				var persistErr error
+				if rule.Host != "" {
+					persistErr = store.RememberDomain(persistCtx, rule.Host)
+				} else {
+					persistErr = store.RememberRule(persistCtx, rule.Prefix, rule.Grant)
+				}
+				persistCancel()
+				if persistErr != nil {
+					c.logger.Warn("persist remembered rule failed", "rule", note, "error", persistErr)
+				} else {
+					note += " (saved to " + store.Path() + ")"
 				}
 			}
 		}

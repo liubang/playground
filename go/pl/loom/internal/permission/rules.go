@@ -168,6 +168,14 @@ func (s *RuleSet) Rules() []Rule {
 	return append([]Rule(nil), s.rules...)
 }
 
+// Domains returns the loaded domain rules (for `loom rules list` and tests).
+func (s *RuleSet) Domains() []DomainRule {
+	if s == nil {
+		return nil
+	}
+	return append([]DomainRule(nil), s.domains...)
+}
+
 // builtinJSON is the curated set of read-only commands that never deserve
 // an approval prompt. Inclusion bar (v1): no writes, no code execution, no
 // network — harmless even if the sandbox failed open. NOT included on
@@ -734,66 +742,4 @@ func stringSliceEqual(a, b []string) bool {
 	return true
 }
 
-// --- Persistence of remembered rules ---
 
-// RememberedRulesFile is the user-layer file "allow always" appends to.
-const RememberedRulesFile = "remembered.json"
-
-// AppendRememberedRule persists a categorical allow rule — with its
-// approved grant — to the user-layer remembered.json, creating the
-// directory on first use. The justification records that the rule came
-// from an interactive approval.
-func AppendRememberedRule(rulesDir string, prefix []string, grant domain.ExecGrant) error {
-	if err := os.MkdirAll(rulesDir, 0o700); err != nil {
-		return err
-	}
-	path := filepath.Join(rulesDir, RememberedRulesFile)
-	var f ruleFile
-	if data, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(data, &f); err != nil {
-			return fmt.Errorf("parse %s: %w", path, err)
-		}
-	}
-	for i, r := range f.Rules {
-		if stringSliceEqual(r.ArgvPrefix, prefix) && r.Decision == string(domain.DecisionAllow) {
-			existing := r.Grant.ExecGrant()
-			if execGrantsEqual(existing, grant) {
-				return nil // already persisted with the same grant
-			}
-			// Update the persisted grant to the latest approval — v1
-			// remembered entries (grant-less) must not silently block the
-			// grant a later interactive approval adds.
-			f.Rules[i].Grant = ruleGrantFromExec(grant)
-			data, err := json.MarshalIndent(f, "", "  ")
-			if err != nil {
-				return err
-			}
-			return os.WriteFile(path, data, 0o600)
-		}
-	}
-	rule := Rule{
-		ArgvPrefix:    prefix,
-		Decision:      string(domain.DecisionAllow),
-		Justification: "remembered from an interactive loom approval",
-		Grant:         ruleGrantFromExec(grant),
-	}
-	f.Rules = append(f.Rules, rule)
-	data, err := json.MarshalIndent(f, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o600)
-}
-
-// ruleGrantFromExec converts a domain grant into its rule-file form (nil
-// for the zero grant, keeping v1 files clean).
-func ruleGrantFromExec(grant domain.ExecGrant) *RuleGrant {
-	if grant.IsZero() {
-		return nil
-	}
-	rg := &RuleGrant{Unsandboxed: grant.Unsandboxed, Write: grant.WritablePaths}
-	if grant.NetworkFull {
-		rg.Network = "full"
-	}
-	return rg
-}

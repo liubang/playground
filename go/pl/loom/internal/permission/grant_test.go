@@ -18,6 +18,7 @@
 package permission
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -194,15 +195,21 @@ func TestRememberUpgradesGrant(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	if err := AppendRememberedRule(dir, []string{"mycli"}, domain.ExecGrant{}); err != nil {
+	ctx := context.Background()
+	store, err := OpenRememberedStore(ctx, RememberedDBPath(dir))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := AppendRememberedRule(dir, []string{"mycli"}, domain.ExecGrant{NetworkFull: true}); err != nil {
+	defer store.Close()
+	if err := store.RememberRule(ctx, []string{"mycli"}, domain.ExecGrant{}); err != nil {
 		t.Fatal(err)
 	}
-	set, errs := LoadRuleSets(dir, "", LoadOptions{})
-	if len(errs) != 0 {
-		t.Fatalf("errs = %v", errs)
+	if err := store.RememberRule(ctx, []string{"mycli"}, domain.ExecGrant{NetworkFull: true}); err != nil {
+		t.Fatal(err)
+	}
+	set, err := store.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if set.Size() != 1 {
 		t.Fatalf("rules = %d, want 1 (upgrade in place)", set.Size())

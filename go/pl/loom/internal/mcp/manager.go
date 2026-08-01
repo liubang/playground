@@ -86,17 +86,34 @@ func (c ServerConfig) allows(tool string) bool {
 	return true
 }
 
+// ServerStatus is the read-only projection of one configured MCP server,
+// backing frontend listings (/mcp). A server that failed to start or to
+// answer tools/list is reported with Connected=false and the failure
+// reason, so the listing can explain why its tools are absent.
+type ServerStatus struct {
+	Name      string
+	Connected bool
+	// Error carries the startup/tools-list failure when Connected is false.
+	Error string
+	// Tools lists the exposed (filter-passing, collision-surviving)
+	// qualified tool names when Connected is true.
+	Tools []string
+}
+
 // Manager owns every running MCP server and the tools adapted from them.
 type Manager struct {
 	clients []*Client
 	tools   []domain.Tool
+	servers []ServerStatus
 	logger  *slog.Logger
 }
 
 // StartServers launches every configured server concurrently, mirroring
 // codex's McpConnectionSet: one server's failure never blocks the others —
 // it is logged and its tools are simply absent. Returns (nil, nil) when no
-// servers are configured.
+// servers are configured. When EVERY server fails it returns a non-nil
+// Manager alongside the error so callers can still inspect Servers() for
+// the per-server failure reasons.
 func StartServers(ctx context.Context, cfgs map[string]ServerConfig, logger *slog.Logger) (*Manager, error) {
 	if len(cfgs) == 0 {
 		return nil, nil
@@ -115,6 +132,7 @@ func StartServers(ctx context.Context, cfgs map[string]ServerConfig, logger *slo
 		name   string
 		tool   domain.Tool
 		client *Client
+		err    error
 	}
 	results := make(chan outcome)
 	var wg sync.WaitGroup
@@ -126,12 +144,14 @@ func StartServers(ctx context.Context, cfgs map[string]ServerConfig, logger *slo
 			client, err := Start(ctx, cfg.clientConfig(name, logger))
 			if err != nil {
 				logger.Warn("mcp server failed to start; its tools are unavailable", "server", name, "error", err)
+				results <- outcome{name: name, err: fmt.Errorf("start: %w", err)}
 				return
 			}
 			specs, err := client.ListTools(ctx)
 			if err != nil {
 				logger.Warn("mcp server tools/list failed; its tools are unavailable", "server", name, "error", err)
 				_ = client.Close()
+				results <- outcome{name: name, err: fmt.Errorf("tools/list: %w", err)}
 				return
 			}
 			results <- outcome{name: name, client: client}
@@ -154,28 +174,50 @@ func StartServers(ctx context.Context, cfgs map[string]ServerConfig, logger *slo
 	}()
 
 	manager := &Manager{logger: logger}
+	statusByName := make(map[string]*ServerStatus, len(names))
 	toolNames := make(map[string]string) // qualified name -> "server/tool" for collision logging
 	for out := range results {
-		if out.client != nil {
-			manager.clients = append(manager.clients, out.client)
-			continue
+		status := statusByName[out.name]
+		if status == nil {
+			status = &ServerStatus{Name: out.name}
+			statusByName[out.name] = status
 		}
-		if out.tool != nil {
+		switch {
+		case out.err != nil:
+			status.Error = out.err.Error()
+		case out.client != nil:
+			status.Connected = true
+			manager.clients = append(manager.clients, out.client)
+		case out.tool != nil:
 			if prev, dup := toolNames[out.tool.Definition().Name]; dup {
 				manager.logger.Warn("mcp tool name collision; keeping the first", "tool", out.tool.Definition().Name, "kept", prev, "dropped", out.name)
 				continue
 			}
 			toolNames[out.tool.Definition().Name] = out.name
 			manager.tools = append(manager.tools, out.tool)
+			status.Tools = append(status.Tools, out.tool.Definition().Name)
 		}
 	}
 	sort.Slice(manager.tools, func(i, j int) bool {
 		return manager.tools[i].Definition().Name < manager.tools[j].Definition().Name
 	})
+	manager.servers = make([]ServerStatus, 0, len(names))
+	for _, name := range names {
+		status := statusByName[name]
+		if status != nil {
+			sort.Strings(status.Tools)
+			manager.servers = append(manager.servers, *status)
+		}
+	}
 	if len(manager.clients) == 0 {
-		return nil, fmt.Errorf("no mcp server could be started")
+		return manager, fmt.Errorf("no mcp server could be started")
 	}
 	return manager, nil
+}
+
+// Servers returns every configured server's status, ordered by server name.
+func (m *Manager) Servers() []ServerStatus {
+	return append([]ServerStatus(nil), m.servers...)
 }
 
 // Tools returns the adapted tools from every connected server.

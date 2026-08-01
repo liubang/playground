@@ -18,6 +18,7 @@
 package permission
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -408,50 +409,15 @@ func TestSessionAllowNeverOverridesFileDeny(t *testing.T) {
 func TestAttachRulesBuiltinSwitch(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	on := RuleLoadOptions{Enabled: true, Builtin: true, Project: true}
-	policy := AttachRules(DefaultPolicy(), t.TempDir(), on, logger)
+	policy := AttachRules(context.Background(), DefaultPolicy(), t.TempDir(), on, logger)
 	if d := policy.Decider(ModeUnlessTrusted).Evaluate(runCmdCall(t, "ls")).Decision; d != domain.DecisionAllow {
 		t.Fatalf("builtin should allow ls by default, got %v", d)
 	}
 	off := RuleLoadOptions{Enabled: true, Builtin: false, Project: true}
-	policy = AttachRules(DefaultPolicy(), t.TempDir(), off, logger)
+	policy = AttachRules(context.Background(), DefaultPolicy(), t.TempDir(), off, logger)
 	if d := policy.Decider(ModeUnlessTrusted).Evaluate(runCmdCall(t, "ls")).Decision; d != domain.DecisionAsk {
 		t.Fatalf("Builtin=false should disable builtin allows, got %v", d)
 	}
 }
 
-func TestAppendRememberedRule(t *testing.T) {
-	dir := t.TempDir()
-	if err := AppendRememberedRule(dir, []string{"go", "test"}, domain.ExecGrant{}); err != nil {
-		t.Fatal(err)
-	}
-	// Idempotent: appending the same prefix twice keeps one entry.
-	if err := AppendRememberedRule(dir, []string{"go", "test"}, domain.ExecGrant{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := AppendRememberedRule(dir, []string{"git", "status"}, domain.ExecGrant{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := AppendRememberedRule(dir, []string{"mycli"}, domain.ExecGrant{NetworkFull: true}); err != nil {
-		t.Fatal(err)
-	}
-	set, errs := LoadRuleSets(dir, "", LoadOptions{})
-	if len(errs) != 0 {
-		t.Fatalf("errs = %v", errs)
-	}
-	if set.Size() != 3 {
-		t.Fatalf("rules = %d, want 3", set.Size())
-	}
-	if d, _ := set.Evaluate([]string{"go", "test", "./..."}); d != domain.DecisionAllow {
-		t.Fatalf("persisted rule must evaluate: %v", d)
-	}
-	// The grant must round-trip through the file.
-	d, rule := set.Evaluate([]string{"mycli", "query"})
-	if d != domain.DecisionAllow || rule.Grant == nil || rule.Grant.Network != "full" {
-		t.Fatalf("persisted grant lost: %v %+v", d, rule.Grant)
-	}
-	// The file must carry the provenance justification.
-	data, _ := os.ReadFile(filepath.Join(dir, RememberedRulesFile))
-	if !json.Valid(data) || len(data) == 0 {
-		t.Fatal("remembered.json must be valid JSON")
-	}
-}
+
