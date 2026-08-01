@@ -40,6 +40,7 @@ const (
 	PartToolResult PartKind = "tool_result"
 	PartArtifact   PartKind = "artifact_ref"
 	PartReasoning  PartKind = "reasoning"
+	PartImage      PartKind = "image"
 )
 
 // MessageStatus identifies the lifecycle status of a logical message revision.
@@ -82,6 +83,29 @@ type ReasoningContent struct {
 	Redacted bool `json:"redacted,omitempty"`
 }
 
+// ImageContent carries one image for a vision-capable model: the media
+// type (image/png, image/jpeg, image/gif, image/webp) and the base64
+// payload. It appears in user messages (attached images) and inside tool
+// results (view_image); providers map it onto their wire form (Anthropic
+// image blocks, OpenAI image_url/input_image).
+type ImageContent struct {
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
+}
+
+// Validate ensures the image content is well-formed.
+func (c ImageContent) Validate() error {
+	switch c.MediaType {
+	case "image/png", "image/jpeg", "image/gif", "image/webp":
+	default:
+		return fmt.Errorf("unsupported image media type %q", c.MediaType)
+	}
+	if c.Data == "" {
+		return fmt.Errorf("image data required")
+	}
+	return nil
+}
+
 // ContentPart is a tagged union: exactly one field is populated based on Kind.
 type ContentPart struct {
 	PartIndex  int               `json:"part_index,omitempty"`
@@ -91,6 +115,7 @@ type ContentPart struct {
 	ToolResult *ToolResult       `json:"tool_result,omitempty"`
 	Artifact   *ArtifactRef      `json:"artifact,omitempty"`
 	Reasoning  *ReasoningContent `json:"reasoning,omitempty"`
+	Image      *ImageContent     `json:"image,omitempty"`
 }
 
 // Validate ensures the ContentPart is well-formed.
@@ -100,8 +125,8 @@ func (p ContentPart) Validate() error {
 	}
 	switch p.Kind {
 	case PartText:
-		if p.ToolCall != nil || p.ToolResult != nil || p.Artifact != nil || p.Reasoning != nil {
-			return fmt.Errorf("text part must not have tool_call/tool_result/artifact/reasoning")
+		if p.ToolCall != nil || p.ToolResult != nil || p.Artifact != nil || p.Reasoning != nil || p.Image != nil {
+			return fmt.Errorf("text part must not have tool_call/tool_result/artifact/reasoning/image")
 		}
 	case PartReasoning:
 		if p.Reasoning == nil {
@@ -124,6 +149,13 @@ func (p ContentPart) Validate() error {
 		}
 		if err := p.Artifact.Validate(); err != nil {
 			return fmt.Errorf("invalid artifact reference: %w", err)
+		}
+	case PartImage:
+		if p.Image == nil {
+			return fmt.Errorf("image part must have Image set")
+		}
+		if err := p.Image.Validate(); err != nil {
+			return fmt.Errorf("invalid image content: %w", err)
 		}
 	default:
 		return fmt.Errorf("unknown part kind %q", p.Kind)

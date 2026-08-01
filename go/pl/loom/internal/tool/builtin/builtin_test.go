@@ -18,12 +18,16 @@
 package builtin
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -63,29 +67,17 @@ func TestReadFileToolPrepareAndExecute(t *testing.T) {
 		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
 	}
 
-	var output readFileOutput
-	decodeToolResult(t, result, &output)
-	if output.Path != "dir/sample.txt" {
-		t.Fatalf("output.Path = %q, want %q", output.Path, "dir/sample.txt")
+	output := toolResultText(t, result)
+	wantHeader := fmt.Sprintf("path: dir/sample.txt · lines 2-3 of 4 · %s · sha256:%s\n",
+		formatByteSize(int64(len(content))), hexSHA256([]byte(content)))
+	if !strings.HasPrefix(output, wantHeader) {
+		t.Fatalf("output header = %q, want prefix %q", output, wantHeader)
 	}
-	if output.Offset != 2 || output.Limit != 2 {
-		t.Fatalf("unexpected window: offset=%d limit=%d", output.Offset, output.Limit)
+	if !strings.Contains(output, "     2→one\n     3→two\n") {
+		t.Fatalf("output missing numbered lines: %q", output)
 	}
-	if output.TotalLines != 4 {
-		t.Fatalf("output.TotalLines = %d, want 4", output.TotalLines)
-	}
-	if !output.Truncated {
-		t.Fatal("expected truncated output")
-	}
-	wantLines := []readFileLine{{Number: 2, Text: "one"}, {Number: 3, Text: "two"}}
-	if !reflect.DeepEqual(output.Lines, wantLines) {
-		t.Fatalf("output.Lines = %#v, want %#v", output.Lines, wantLines)
-	}
-	if output.SizeBytes != int64(len(content)) {
-		t.Fatalf("output.SizeBytes = %d, want %d", output.SizeBytes, len(content))
-	}
-	if output.ContentHash != hexSHA256([]byte(content)) {
-		t.Fatalf("output.ContentHash = %q, want %q", output.ContentHash, hexSHA256([]byte(content)))
+	if !strings.Contains(output, "[truncated: 1 more line; call read_file with offset=4 to continue]") {
+		t.Fatalf("output missing truncation marker: %q", output)
 	}
 }
 
@@ -889,6 +881,18 @@ func mustMarshalRaw[T any](t *testing.T, value T) json.RawMessage {
 	return data
 }
 
+// toolResultText extracts the single plain-text part of a tool result.
+func toolResultText(t *testing.T, result domain.ToolResult) string {
+	t.Helper()
+	if len(result.Content) != 1 {
+		t.Fatalf("len(result.Content) = %d, want 1", len(result.Content))
+	}
+	if result.Content[0].Kind != domain.PartText {
+		t.Fatalf("result.Content[0].Kind = %s, want text", result.Content[0].Kind)
+	}
+	return result.Content[0].Text
+}
+
 func decodeToolResult(t *testing.T, result domain.ToolResult, out any) {
 	t.Helper()
 	if len(result.Content) != 1 {
@@ -955,4 +959,109 @@ func mustSymlink(t *testing.T, target, link string) {
 func hexSHA256(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+// --- view_image ---
+
+func mustPNG(t *testing.T, width, height int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("png.Encode() error = %v", err)
+	}
+	return buf.Bytes()
+}
+
+func TestViewImageToolReturnsImagePart(t *testing.T) {
+	validator, root := newValidator(t)
+	pngData := mustPNG(t, 4, 2)
+	mustWriteFile(t, filepath.Join(root, "shot.png"), pngData)
+
+	tool, err := NewViewImageTool(validator)
+	if err != nil {
+		t.Fatalf("NewViewImageTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "view_image", viewImageArgs{Path: "shot.png"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.Risk != domain.R1 {
+		t.Fatalf("Risk = %v, want R1", prepared.Risk)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	if len(result.Content) != 2 {
+		t.Fatalf("len(Content) = %d, want 2 (text header + image)", len(result.Content))
+	}
+	header := result.Content[0]
+	if header.Kind != domain.PartText || !strings.Contains(header.Text, "image/png") || !strings.Contains(header.Text, "4x2") {
+		t.Fatalf("header part = %+v", header)
+	}
+	imagePart := result.Content[1]
+	if imagePart.Kind != domain.PartImage || imagePart.Image == nil {
+		t.Fatalf("image part = %+v", imagePart)
+	}
+	if imagePart.Image.MediaType != "image/png" {
+		t.Fatalf("MediaType = %q, want image/png", imagePart.Image.MediaType)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(imagePart.Image.Data)
+	if err != nil || !bytes.Equal(decoded, pngData) {
+		t.Fatalf("base64 round-trip mismatch (err=%v)", err)
+	}
+}
+
+func TestViewImageToolRejectsNonImageAndOversize(t *testing.T) {
+	validator, root := newValidator(t)
+	mustWriteFile(t, filepath.Join(root, "text.txt"), []byte("not an image"))
+	tool, err := NewViewImageTool(validator)
+	if err != nil {
+		t.Fatalf("NewViewImageTool() error = %v", err)
+	}
+
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "view_image", viewImageArgs{Path: "text.txt"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusError || result.Error == nil || result.Error.Code != string(domain.ErrInvalidInput) {
+		t.Fatalf("result = %+v, want invalid input for non-image", result)
+	}
+
+	// A file with valid magic but beyond the byte budget.
+	big := append(mustPNG(t, 1, 1), make([]byte, maxImageBytes)...)
+	mustWriteFile(t, filepath.Join(root, "big.png"), big)
+	prepared, err = tool.Prepare(context.Background(), newToolCall(t, "view_image", viewImageArgs{Path: "big.png"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result = tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusError || result.Error == nil || result.Error.Code != string(domain.ErrInvalidInput) {
+		t.Fatalf("result = %+v, want invalid input for oversize image", result)
+	}
+}
+
+func TestDetectImageMediaType(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{"png", mustPNG(t, 1, 1), "image/png"},
+		{"jpeg", []byte{0xFF, 0xD8, 0xFF, 0xE0, 0, 0}, "image/jpeg"},
+		{"gif87", []byte("GIF87a...."), "image/gif"},
+		{"gif89", []byte("GIF89a...."), "image/gif"},
+		{"webp", []byte("RIFF\x00\x00\x00\x00WEBP"), "image/webp"},
+		{"text", []byte("hello world"), ""},
+		{"short", []byte{0x89}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := detectImageMediaType(tt.data); got != tt.want {
+				t.Fatalf("detectImageMediaType() = %q, want %q", got, tt.want)
+			}
+		})
+	}
 }

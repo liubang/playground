@@ -107,6 +107,42 @@ func TestOnRequestAutoAllowsSandboxedRunCmd(t *testing.T) {
 	}
 }
 
+// TestExecRequestTypedContractPreferred proves the signed ExecRequest is
+// authoritative over the raw arguments: a prepared call whose JSON names a
+// harmless command but whose signed contract is dangerous must be
+// classified by the contract (REVIEW M17).
+func TestExecRequestTypedContractPreferred(t *testing.T) {
+	d := DefaultPolicy().Decider(ModeNever)
+	call := domain.PreparedCall{
+		Call: domain.ToolCall{Name: "exec_session", Arguments: []byte(`{"program":"true"}`)},
+		Risk: domain.R2,
+		ExecRequest: &domain.ExecRequest{
+			Argv: []string{"rm", "-rf", "/"},
+		},
+	}
+	v := d.Evaluate(call)
+	if v.Decision != domain.DecisionDeny || v.Source != SourceDanger {
+		t.Fatalf("dangerous ExecRequest in never = %s (%s), want deny from danger", v.Decision, v.Source)
+	}
+}
+
+// TestExecSessionMatchesArgvRules proves exec_session calls flow through
+// the same argv-prefix rules as run_cmd via the typed contract.
+func TestExecSessionMatchesArgvRules(t *testing.T) {
+	p := DefaultPolicy()
+	p.Rules = &RuleSet{rules: []Rule{{ArgvPrefix: []string{"git", "status"}, Decision: "allow"}}}
+	d := p.Decider(ModeUnlessTrusted)
+	call := domain.PreparedCall{
+		Call:        domain.ToolCall{Name: "exec_session", Arguments: []byte(`{"program":"git","args":["status"]}`)},
+		Risk:        domain.R2,
+		ExecRequest: &domain.ExecRequest{Argv: []string{"git", "status"}},
+	}
+	v := d.Evaluate(call)
+	if v.Decision != domain.DecisionAllow || v.Source != SourceRule {
+		t.Fatalf("exec_session git status = %s (%s), want allow from rule", v.Decision, v.Source)
+	}
+}
+
 func TestOnRequestNeedsNetworkAsksWithNetworkGrant(t *testing.T) {
 	d := DefaultPolicy().Decider(ModeOnRequest)
 	call := runCmdPrepared(t, "talos", "query", "submit")
