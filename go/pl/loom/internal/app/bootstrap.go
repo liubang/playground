@@ -31,6 +31,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/mcp"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
@@ -42,7 +43,6 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/lint"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
-	"github.com/liubang/playground/go/pl/loom/internal/mcp"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/websearch"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
@@ -107,6 +107,9 @@ type Bootstrap struct {
 	// SessionRules holds categorical run_cmd prefixes remembered from
 	// interactive "allow always" decisions; shared with Policy.Session.
 	SessionRules *permission.SessionRules
+	// RememberedStore persists "allow always" memories to SQLite; nil when
+	// rules.persist_remembered=false or open failed (session memory still works).
+	RememberedStore *permission.RememberedStore
 	// SubagentModels is the delegate_task model mailbox: the controller
 	// publishes each turn's model selection, the tool reads it at
 	// execution time (docs/SUBAGENT_DESIGN.md D7). Nil when the
@@ -121,9 +124,14 @@ type Bootstrap struct {
 	// shuts down.
 	SessionManager *exsession.Manager
 	// MCPManager owns every running MCP server subprocess; Close
-	// terminates them. Nil when no MCP servers are configured or all
-	// fail to start (the agent runs with built-in tools only).
+	// terminates them. Nil when no MCP servers are configured. When every
+	// server failed to start, the manager is still kept (with zero
+	// clients) so frontends can report the per-server failure reasons.
 	MCPManager *mcp.Manager
+	// Skills exposes the skills loader/catalog shared by the prompt
+	// provider and the read_skill tool; nil when skills are disabled
+	// (skills.enabled=false or the built-in system prompt is off).
+	Skills *SkillsHandle
 
 	traceProvider *trace.Provider
 }
@@ -208,9 +216,22 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	// chain applies the approval.* baseline mode (on-request by default:
 	// sandboxed non-dangerous commands run without prompting).
 	sessionRules := permission.NewSessionRules()
+	var rememberedStore *permission.RememberedStore
+	if resolved.Rules.PersistRemembered {
+		if dir, err := permission.RulesDirUser(); err != nil {
+			logger.Warn("remembered rules disabled: user rules dir unavailable", "error", err)
+		} else if store, err := permission.OpenRememberedStore(ctx, permission.RememberedDBPath(dir)); err != nil {
+			logger.Warn("remembered rules disabled: open store failed", "error", err)
+		} else {
+			if err := store.MigrateLegacyJSON(ctx, dir); err != nil {
+				logger.Warn("remembered rules: legacy migration incomplete", "error", err)
+			}
+			rememberedStore = store
+		}
+	}
 	policy := permission.DefaultPolicy()
 	policy.Session = sessionRules
-	policy = permission.AttachRules(policy, cfg.WorkspaceRoot, permission.RuleLoadOptions{
+	policy = permission.AttachRules(ctx, policy, cfg.WorkspaceRoot, permission.RuleLoadOptions{
 		Enabled:      resolved.Rules.Enabled,
 		Builtin:      resolved.Rules.Builtin,
 		Project:      resolved.Rules.Project,
@@ -245,7 +266,10 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		}
 	}
 
-	var promptBuilder agent.PromptBuilder
+	var (
+		promptBuilder agent.PromptBuilder
+		skills        *SkillsHandle
+	)
 	if !resolved.Prompt.DisableBuiltin {
 		promptOpts := []prompt.Option{prompt.WithExtraInstructions(resolved.Prompt.Extra)}
 		if opt := ResolveManagedPrompt(ctx, resolved.Prompt.Managed, traceCfg, resolved.Storage.SessionDB, logger); opt != nil {
@@ -256,7 +280,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		// never registered. The catalog budget tracks the startup model's
 		// window; switching models does not rebuild it (catalogs are far
 		// smaller than any window).
-		skillsOpt, err := WireSkills(registry, cfg.WorkspaceRoot, defaultContextWindow(resolved), resolved.Skills, resolved.Prompt.DisableBuiltin, logger)
+		skillsOpt, skillsHandle, err := WireSkills(registry, cfg.WorkspaceRoot, defaultContextWindow(resolved), resolved.Skills, resolved.Prompt.DisableBuiltin, logger)
 		if err != nil {
 			_ = store.Close()
 			return nil, fmt.Errorf("wire skills: %w", err)
@@ -264,6 +288,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		if skillsOpt != nil {
 			promptOpts = append(promptOpts, skillsOpt)
 		}
+		skills = skillsHandle
 		promptBuilder = prompt.NewBuilder(cfg.WorkspaceRoot, promptOpts...)
 	}
 
@@ -290,14 +315,17 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		mgr, err := mcp.StartServers(ctx, mcpCfgs, logger)
 		if err != nil {
 			logger.Warn("mcp: no server could be started; running with built-in tools only", "error", err)
-		} else {
-			mcpManager = mgr
+		}
+		// Keep the manager even on total failure: it carries the per-server
+		// startup errors the /mcp listing reports.
+		mcpManager = mgr
+		if err == nil {
 			for _, tool := range mgr.Tools() {
 				if err := registry.Register(tool); err != nil {
 					logger.Warn("mcp: failed to register tool", "tool", tool.Definition().Name, "error", err)
 				}
 			}
-			logger.Info("mcp servers started", "servers", len(mgr.Tools()), "tools", len(mgr.Tools()))
+			logger.Info("mcp servers started", "servers", len(mgr.Servers()), "tools", len(mgr.Tools()))
 		}
 	}
 
@@ -374,9 +402,11 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		Recorder:        traceRecorder,
 		SessionRules:    sessionRules,
 		SubagentModels:  subagentModels,
-		SubagentFactory: subagentFactory,
+		RememberedStore:   rememberedStore,
+		SubagentFactory:  subagentFactory,
 		SessionManager:  sessionManager,
 		MCPManager:      mcpManager,
+		Skills:          skills,
 		traceProvider:   traceProvider,
 	}, nil
 }
@@ -552,6 +582,11 @@ func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.R
 
 // Close releases all resources held by the Bootstrap.
 func (b *Bootstrap) Close() {
+	if b.RememberedStore != nil {
+		if err := b.RememberedStore.Close(); err != nil && b.Logger != nil {
+			b.Logger.Warn("remembered store shutdown failed", "error", err)
+		}
+	}
 	if b.MCPManager != nil {
 		if err := b.MCPManager.Close(); err != nil && b.Logger != nil {
 			b.Logger.Warn("mcp manager shutdown failed", "error", err)

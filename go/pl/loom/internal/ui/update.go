@@ -58,6 +58,8 @@ var slashCommands = []slashCommand{
 	{name: "/agent", usage: "/agent", desc: "View the sub-agent run (read-only)"},
 	{name: "/model", usage: "/model [name]", desc: "Show or switch the active model"},
 	{name: "/reasoning", usage: "/reasoning [level]", desc: "Show or adjust the reasoning level"},
+	{name: "/skill", usage: "/skill", desc: "List discovered skills"},
+	{name: "/mcp", usage: "/mcp", desc: "List MCP servers and their status"},
 	{name: "/exit", usage: "/exit", desc: "Exit"},
 }
 
@@ -104,6 +106,18 @@ type reasoningChangedMsg struct {
 type compactRequestedMsg struct {
 	result app.RequestCompactionResult
 	err    error
+}
+
+// skillsLoadedMsg reports the result of a /skill listing request.
+type skillsLoadedMsg struct {
+	listing app.SkillsListing
+	err     error
+}
+
+// mcpServersLoadedMsg reports the result of a /mcp listing request.
+type mcpServersLoadedMsg struct {
+	servers []app.MCPServerInfo
+	err     error
 }
 
 // questionAnsweredMsg reports the result of answering an ask_user question.
@@ -156,6 +170,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next = m.handleReasoningChanged(msg)
 	case compactRequestedMsg:
 		next = m.handleCompactRequested(msg)
+	case skillsLoadedMsg:
+		next = m.handleSkillsLoaded(msg)
+	case mcpServersLoadedMsg:
+		next = m.handleMCPServersLoaded(msg)
 	case questionAnsweredMsg:
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Answer delivery failed: %v", msg.err), true)
@@ -424,6 +442,10 @@ func (m Model) visibleTranscriptHeight() int {
 	case ModeHelp:
 		reserved++ // spacer row
 		reserved += helpOverlayHeight
+	case ModeListing:
+		// Like the approval band, the listing dialog is line-count variable.
+		reserved++ // spacer row
+		reserved += m.listingOverlayHeight()
 	case ModeQuestion:
 		// Like the approval band, the question overlay is line-count
 		// variable (question text wraps, option list varies).
@@ -524,6 +546,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case ModeHelp:
 		m.mode = ModeChat
 		return m, nil
+	case ModeListing:
+		return m.handleListingKey(msg)
 	case ModeSessionPicker:
 		return m.handleSessionFinderKey(msg)
 	case ModeModelPicker:
@@ -635,6 +659,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if m.mode == ModeListing {
+		// The wheel scrolls the listing dialog, not the transcript beneath.
+		if msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.scrollListing(-mouseWheelDelta)
+			case tea.MouseButtonWheelDown:
+				m.scrollListing(mouseWheelDelta)
+			}
+		}
+		return m, nil
+	}
 	if m.mode != ModeChat {
 		return m, nil
 	}
@@ -1141,6 +1177,22 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		}
 		m.textArea.Reset()
 		return m, m.compactCmd()
+	case "/skill":
+		if len(fields) != 1 {
+			m.setStatus("Usage: /skill", true)
+			return m, nil
+		}
+		m.textArea.Reset()
+		m.setStatus("Loading skills...", false)
+		return m, m.listSkillsCmd()
+	case "/mcp":
+		if len(fields) != 1 {
+			m.setStatus("Usage: /mcp", true)
+			return m, nil
+		}
+		m.textArea.Reset()
+		m.setStatus("Loading MCP servers...", false)
+		return m, m.listMCPServersCmd()
 	default:
 		m.setStatus(fmt.Sprintf("Unknown command: %s", fields[0]), true)
 	}
@@ -1215,6 +1267,105 @@ func (m Model) compactCmd() tea.Cmd {
 		result, err := m.controller.RequestCompaction(context.Background())
 		return compactRequestedMsg{result: result, err: err}
 	}
+}
+
+func (m Model) listSkillsCmd() tea.Cmd {
+	return func() tea.Msg {
+		listing, err := m.controller.ListSkills(context.Background())
+		return skillsLoadedMsg{listing: listing, err: err}
+	}
+}
+
+func (m Model) listMCPServersCmd() tea.Cmd {
+	return func() tea.Msg {
+		servers, err := m.controller.ListMCPServers(context.Background())
+		return mcpServersLoadedMsg{servers: servers, err: err}
+	}
+}
+
+func (m Model) handleSkillsLoaded(msg skillsLoadedMsg) tea.Model {
+	if msg.err != nil {
+		m.setStatus(fmt.Sprintf("Failed to load skills: %v", msg.err), true)
+		return m
+	}
+	return m.openListing(listingContent{
+		kind:   listingSkills,
+		title:  fmt.Sprintf("Skills (%d)", len(msg.listing.Skills)),
+		skills: msg.listing,
+	})
+}
+
+func (m Model) handleMCPServersLoaded(msg mcpServersLoadedMsg) tea.Model {
+	if msg.err != nil {
+		m.setStatus(fmt.Sprintf("Failed to load MCP servers: %v", msg.err), true)
+		return m
+	}
+	return m.openListing(listingContent{
+		kind:    listingMCP,
+		title:   fmt.Sprintf("MCP Servers (%d)", len(msg.servers)),
+		servers: msg.servers,
+	})
+}
+
+// openListing switches to the read-only listing dialog (ModeListing),
+// resetting the scroll to the top.
+func (m Model) openListing(c listingContent) tea.Model {
+	m.listing = c
+	m.listingScroll = 0
+	m.mode = ModeListing
+	m.setStatus("", false)
+	return m
+}
+
+// handleListingKey routes keys while the read-only listing dialog is
+// active: navigation scrolls, esc/q/enter closes.
+func (m Model) handleListingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	maxScroll := max(0, m.listingContentRows()-m.listingVisibleRows())
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyEnter, tea.KeyCtrlC:
+		m.mode = ModeChat
+		return m, nil
+	case tea.KeyUp:
+		m.listingScroll = max(0, m.listingScroll-1)
+	case tea.KeyDown:
+		m.listingScroll = min(maxScroll, m.listingScroll+1)
+	case tea.KeyPgUp:
+		m.listingScroll = max(0, m.listingScroll-m.listingVisibleRows())
+	case tea.KeyPgDown:
+		m.listingScroll = min(maxScroll, m.listingScroll+m.listingVisibleRows())
+	case tea.KeyHome:
+		m.listingScroll = 0
+	case tea.KeyEnd:
+		m.listingScroll = maxScroll
+	case tea.KeyRunes:
+		switch msg.String() {
+		case "q":
+			m.mode = ModeChat
+			return m, nil
+		case "k":
+			m.listingScroll = max(0, m.listingScroll-1)
+		case "j":
+			m.listingScroll = min(maxScroll, m.listingScroll+1)
+		case "g":
+			m.listingScroll = 0
+		case "G":
+			m.listingScroll = maxScroll
+		}
+	}
+	return m, nil
+}
+
+// scrollListing adjusts listingScroll by delta rows, clamped to [0, max].
+func (m *Model) scrollListing(delta int) {
+	maxScroll := max(0, m.listingContentRows()-m.listingVisibleRows())
+	m.listingScroll = max(0, min(maxScroll, m.listingScroll+delta))
+}
+
+func pluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // reasoningStatusText renders the /reasoning ack for the status line.

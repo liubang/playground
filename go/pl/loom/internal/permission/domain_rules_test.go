@@ -144,30 +144,4 @@ func TestDomainChainEvaluation(t *testing.T) {
 	}
 }
 
-func TestAppendRememberedDomain(t *testing.T) {
-	dir := t.TempDir()
-	if err := AppendRememberedDomain(dir, "WWW.weather.com.cn"); err != nil {
-		t.Fatal(err)
-	}
-	// Idempotent.
-	if err := AppendRememberedDomain(dir, "www.weather.com.cn"); err != nil {
-		t.Fatal(err)
-	}
-	if err := AppendRememberedDomain(dir, "example.com"); err != nil {
-		t.Fatal(err)
-	}
-	// Invalid hosts are rejected before touching the file.
-	if err := AppendRememberedDomain(dir, "https://bad/x"); err == nil {
-		t.Fatal("invalid host must fail")
-	}
-	set, errs := LoadRuleSets(dir, "", LoadOptions{})
-	if len(errs) != 0 {
-		t.Fatalf("errs = %v", errs)
-	}
-	if d, _ := set.EvaluateDomain("www.weather.com.cn"); d != domain.DecisionAllow {
-		t.Fatal("persisted domain must evaluate")
-	}
-	if d, _ := set.EvaluateDomain("example.com"); d != domain.DecisionAllow {
-		t.Fatal("second persisted domain must evaluate")
-	}
-}
+
