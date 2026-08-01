@@ -133,7 +133,10 @@ func (m Model) renderBase() string {
 		b.WriteString("\n")
 	} else {
 		b.WriteString(m.renderTranscript())
-		b.WriteString("\n")
+		// One blank spacer row separates the main area from whatever
+		// occupies the composer area (composer, panels, bands): the
+		// last message must never glue to the composer border.
+		b.WriteString("\n\n")
 	}
 
 	// Approval and help panels replace the composer area instead of being
@@ -753,8 +756,8 @@ const planPanelMaxItems = 6
 
 // planPanelHeight returns the rows reserved for the pinned plan panel above
 // the composer (0 when there is no plan or it is collapsed via ctrl+t).
-// Layout: blank, title, items, blank — the blank rows keep the panel from
-// gluing to the transcript above or the composer below.
+// Layout: title + items + trailing blank; the leading blank above the
+// panel is the global spacer row, reserved separately.
 func (m Model) planPanelHeight() int {
 	if len(m.plan.Items) == 0 || m.planHidden {
 		return 0
@@ -763,7 +766,7 @@ func (m Model) planPanelHeight() int {
 	if len(m.plan.Items) > items {
 		items++ // the "… +N more" line
 	}
-	return items + 3 // blank + title + items + blank
+	return items + 2 // title + items + trailing blank
 }
 
 // renderPlanPanel renders the pinned task-plan checklist, Claude Code style:
@@ -775,6 +778,10 @@ func (m Model) planPanelHeight() int {
 // the composer (codex's PendingInputPreview equivalent): messages the user
 // submitted while a turn was busy, waiting for the loop to inject them
 // before its next model call. Hidden when empty.
+//
+// Geometry: title + items + one trailing blank row; the leading blank is
+// the global spacer row written by renderBase (or the previous element's
+// trailing blank).
 func (m Model) renderSteerPanel() string {
 	if len(m.pendingSteers) == 0 {
 		return ""
@@ -784,14 +791,23 @@ func (m Model) renderSteerPanel() string {
 		width = 10
 	}
 	var b strings.Builder
-	b.WriteString("\n")
 	b.WriteString(m.theme.Dim.Render(fmt.Sprintf(
 		"  Steering (%d queued — injects before next model call, Ctrl+C flushes now):", len(m.pendingSteers),
 	)))
 	for _, text := range m.pendingSteers {
 		b.WriteString("\n  " + m.theme.Dim.Render("↳ "+truncateDisplayWidth(strings.ReplaceAll(text, "\n", " "), width-6)))
 	}
+	b.WriteString("\n") // separate from the next element below
 	return b.String()
+}
+
+// steerPanelHeight returns the rows the steer panel occupies: title +
+// items + trailing blank (0 when hidden).
+func (m Model) steerPanelHeight() int {
+	if len(m.pendingSteers) == 0 {
+		return 0
+	}
+	return len(m.pendingSteers) + 2
 }
 
 func (m Model) renderPlanPanel() string {
@@ -802,8 +818,10 @@ func (m Model) renderPlanPanel() string {
 	if width < 10 {
 		width = 10
 	}
+	// Geometry: title + items + one trailing blank row; the leading blank
+	// is the global spacer row (or the previous element's trailing
+	// blank), so the panel no longer writes its own.
 	var b strings.Builder
-	b.WriteString("\n") // separate from the transcript above
 	b.WriteString(m.planPanelTitle(width))
 	icons := m.iconSet()
 	shown := min(len(m.plan.Items), planPanelMaxItems)
