@@ -2357,6 +2357,33 @@ func TestSeqComplete(t *testing.T) {
 	}
 }
 
+func TestSparkleSpinner(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	sp := sparkleSpinner()
+	want := []string{"·", "✢", "✳", "✶", "✻", "✽"}
+	if strings.Join(sp.Frames, "") != strings.Join(want, "") {
+		t.Fatalf("frames = %q, want %q", sp.Frames, want)
+	}
+	// Every frame must stay single-width so the indicator never shifts the
+	// label that follows it.
+	for _, f := range sp.Frames {
+		if lipgloss.Width(f) != 1 {
+			t.Fatalf("frame %q width = %d, want 1", f, lipgloss.Width(f))
+		}
+	}
+	if sp.FPS <= 0 {
+		t.Fatalf("FPS = %v, want a positive interval", sp.FPS)
+	}
+}
+
+func TestSparkleSpinnerGhosttyDegrades(t *testing.T) {
+	t.Setenv("TERM", "xterm-ghostty")
+	sp := sparkleSpinner()
+	if got := sp.Frames[len(sp.Frames)-1]; got != "✻" {
+		t.Fatalf("ghostty peak frame = %q, want ✻ (U+273D mis-renders there)", got)
+	}
+}
+
 func TestGradientColors(t *testing.T) {
 	colors := gradientColors("#e69875", "#dbbc7f", 6)
 	if len(colors) != 6 {
