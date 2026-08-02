@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -684,4 +685,87 @@ func TestTruncateAtBoundary(t *testing.T) {
 	if got != strings.Repeat("a", 10) {
 		t.Fatalf("truncateAtBoundary = %q, want backoff to the rune boundary", got)
 	}
+}
+
+func TestIsFakeIPAddr(t *testing.T) {
+	tests := []struct {
+		ip   string
+		want bool
+	}{
+		{"198.18.0.1", true},
+		{"198.19.255.255", true},
+		{"198.17.0.1", false},
+		{"198.20.0.1", false},
+		{"8.8.8.8", false},
+		{"::1", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.ip, func(t *testing.T) {
+			ip, err := netip.ParseAddr(tt.ip)
+			if err != nil {
+				t.Fatalf("ParseAddr(%q) error = %v", tt.ip, err)
+			}
+			if got := isFakeIPAddr(ip); got != tt.want {
+				t.Fatalf("isFakeIPAddr(%s) = %v, want %v", tt.ip, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGuardedDialFuncFakeIPExempt(t *testing.T) {
+	// Inject a lookup that returns a fake-ip address (198.18.0.0/15).
+	// The guard must allow dialing it — TUN proxies intercept these
+	// addresses and route to the real destination.
+	fakeIP := mustParseIP("198.18.0.177")
+	lookup := func(_ context.Context, _ string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: fakeIP}}, nil
+	}
+
+	dial := guardedDialFunc(lookup, false)
+	// Use a short timeout so the test doesn't hang on networks without a
+	// TUN device (dial will fail fast with no-route or timeout).
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	_, err := dial(ctx, "tcp", "example.com:443")
+	// The key assertion: the guard must NOT block it as a private address.
+	if errors.Is(err, errBlockedAddress) {
+		t.Fatalf("fake-ip address must not be blocked, got: %v", err)
+	}
+	// Any other error (dial failure, timeout) is fine — we only test the
+	// guard decision.
+}
+
+func TestGuardedDialFuncPrivateBlocked(t *testing.T) {
+	privateIP := mustParseIP("10.0.0.1")
+	lookup := func(_ context.Context, _ string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: privateIP}}, nil
+	}
+
+	dial := guardedDialFunc(lookup, false)
+	_, err := dial(context.Background(), "tcp", "intranet:443")
+	if err == nil || !errors.Is(err, errBlockedAddress) {
+		t.Fatalf("private address must be blocked, got: %v", err)
+	}
+}
+
+func TestGuardedDialFuncMixedPrivateBlocked(t *testing.T) {
+	publicIP := mustParseIP("8.8.8.8")
+	privateIP := mustParseIP("10.0.0.1")
+	lookup := func(_ context.Context, _ string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: publicIP}, {IP: privateIP}}, nil
+	}
+
+	dial := guardedDialFunc(lookup, false)
+	_, err := dial(context.Background(), "tcp", "mixed:443")
+	if err == nil || !errors.Is(err, errBlockedAddress) {
+		t.Fatalf("mixed public+private must be blocked, got: %v", err)
+	}
+}
+
+func mustParseIP(s string) net.IP {
+	ip := net.ParseIP(s)
+	if ip == nil {
+		panic("mustParseIP: invalid " + s)
+	}
+	return ip
 }

@@ -35,13 +35,14 @@ import (
 )
 
 const (
-	defaultCount      = 5
-	maxCount          = 10
-	maxQueryBytes     = 1024
-	defaultTimeoutMs  = 15000
-	maxTimeoutMs      = 30000
-	dialTimeout       = 10 * time.Second
-	userAgent         = "loom-websearch/0.1 (+https://github.com/liubang/playground)"
+	defaultCount     = 5
+	maxCount         = 10
+	maxQueryBytes    = 1024
+	defaultTimeoutMs = 15000
+	maxTimeoutMs     = 30000
+	dialTimeout      = 10 * time.Second
+	// userAgent removed: keyless DDG now uses browserUserAgent (provider.go),
+	// and paid providers don't need a custom UA.
 	cacheTTL          = 5 * time.Minute
 	cacheMaxEntries   = 64
 	cacheMaxBodyBytes = 64 << 10
