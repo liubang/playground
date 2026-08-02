@@ -32,6 +32,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"golang.org/x/term"
 )
@@ -53,6 +54,7 @@ const (
 	ModeListing  Mode = "listing"
 	ModeSearch   Mode = "search"
 	ModeSubagent Mode = "subagent"
+	ModeRules    Mode = "rules"
 )
 
 // Model is the root Bubble Tea model for the Loom TUI.
@@ -180,6 +182,11 @@ type Model struct {
 	sessionFinder   *Finder[app.SessionSummary]
 	modelFinder     *Finder[ModelOption]
 	reasoningFinder *Finder[ReasoningLevel]
+	rulesFinder     *Finder[RuleEntry]
+
+	// Rules picker delete confirmation: when non-nil, the input line
+	// shows a y/n prompt and all other keys are ignored.
+	rulesDeletePending *RuleEntry
 
 	// Model picker (/model): the static catalog resolved at startup.
 	models []ModelOption
@@ -384,6 +391,20 @@ func (m Model) requestSessions() tea.Cmd {
 	}
 }
 
+func (m Model) requestRules() tea.Cmd {
+	return func() tea.Msg {
+		rules, err := m.controller.ListRules(context.Background())
+		return rulesLoadedMsg{rules: rules, err: err}
+	}
+}
+
+func (m Model) forgetRuleCmd(entry RuleEntry) tea.Cmd {
+	return func() tea.Msg {
+		err := m.controller.ForgetRule(context.Background(), entry.Kind, entry.Prefix, entry.Host)
+		return ruleForgottenMsg{entry: entry, err: err}
+	}
+}
+
 // runtimeEventMsg wraps a runtime event for Bubble Tea message passing.
 type runtimeEventMsg runtimeevent.RuntimeEvent
 
@@ -397,6 +418,16 @@ type snapshotMsg struct {
 type sessionsLoadedMsg struct {
 	sessions []app.SessionSummary
 	err      error
+}
+
+type rulesLoadedMsg struct {
+	rules *permission.RuleSet
+	err   error
+}
+
+type ruleForgottenMsg struct {
+	entry RuleEntry
+	err   error
 }
 
 // InitOptions configures the TUI at startup.

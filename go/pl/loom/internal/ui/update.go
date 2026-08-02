@@ -60,6 +60,7 @@ var slashCommands = []slashCommand{
 	{name: "/reasoning", usage: "/reasoning [level]", desc: "Show or adjust the reasoning level"},
 	{name: "/skill", usage: "/skill", desc: "List discovered skills"},
 	{name: "/mcp", usage: "/mcp", desc: "List MCP servers and their status"},
+	{name: "/rules", usage: "/rules", desc: "View and manage permission rules"},
 	{name: "/exit", usage: "/exit", desc: "Exit"},
 }
 
@@ -160,6 +161,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sessionFinder.Load(sessionFinderItems(msg.sessions), msg.err)
 		}
 		next = m
+	case rulesLoadedMsg:
+		if m.rulesFinder != nil {
+			// The picker is open (initial load or post-delete refresh):
+			// reload items in place so deletions become visible.
+			m.rulesFinder.Load(rulesFinderItems(msg.rules), msg.err)
+		} else if msg.err != nil {
+			m.setStatus(fmt.Sprintf("Load rules: %v", msg.err), true)
+			m.mode = ModeChat
+		} else {
+			m.rulesFinder = m.NewRulesFinder(msg.rules)
+		}
+		next = m
+	case ruleForgottenMsg:
+		if msg.err != nil {
+			m.setStatus(fmt.Sprintf("Delete failed: %v", msg.err), true)
+		} else {
+			m.setStatus(fmt.Sprintf("Deleted %s rule %q", msg.entry.Kind, msg.entry.Label), false)
+		}
+		m.rulesDeletePending = nil
+		// Refresh the rules list after deletion.
+		next = m
+		cmd = m.requestRules()
 	case promptSubmittedMsg:
 		next = m.handlePromptSubmitted(msg)
 	case sessionSwitchedMsg:
@@ -550,6 +573,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleListingKey(msg)
 	case ModeSessionPicker:
 		return m.handleSessionFinderKey(msg)
+	case ModeRules:
+		return m.handleRulesFinderKey(msg)
 	case ModeModelPicker:
 		return m.handleModelFinderKey(msg)
 	case ModeReasoningPicker:
@@ -996,6 +1021,77 @@ func (m Model) handleReasoningFinderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m2, m2.setReasoningCmd(level.Arg, "/reasoning "+level.Arg)
 }
 
+func (m Model) handleRulesFinderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.rulesFinder == nil {
+		m.mode = ModeChat
+		return m, nil
+	}
+	// Delete confirmation sub-mode: only y/n/Esc are accepted.
+	if m.rulesDeletePending != nil {
+		switch msg.Type {
+		case tea.KeyRunes:
+			switch msg.String() {
+			case "y", "Y":
+				entry := *m.rulesDeletePending
+				return m, m.forgetRuleCmd(entry)
+			case "n", "N":
+				m.rulesDeletePending = nil
+				return m, nil
+			}
+		case tea.KeyEsc:
+			m.rulesDeletePending = nil
+			return m, nil
+		}
+		return m, nil
+	}
+	// Paging works in both insert and normal mode; routeFinderKey does
+	// not handle PgUp/PgDn, so intercept them here.
+	switch msg.Type {
+	case tea.KeyPgUp:
+		m.rulesFinder.PageUp(m.rulesBodyHeight())
+		return m, nil
+	case tea.KeyPgDown:
+		m.rulesFinder.PageDown(m.rulesBodyHeight())
+		return m, nil
+	}
+	// Delete is normal-mode only so typing 'd' into the filter works.
+	if m.rulesFinder.Normal() && msg.Type == tea.KeyRunes && msg.String() == "d" {
+		sel := m.rulesFinder.Selected()
+		if sel == nil || !sel.Deletable {
+			return m, nil
+		}
+		entry := *sel
+		m.rulesDeletePending = &entry
+		return m, nil
+	}
+	m2, confirmed := routeFinderKey(m, msg, m.rulesFinder)
+	if confirmed {
+		// Enter on a rules entry just closes the picker (no action).
+		m2.mode = ModeChat
+		return m2, nil
+	}
+	return m2, nil
+}
+
+// rulesBodyHeight estimates the list body height for page navigation.
+func (m Model) rulesBodyHeight() int {
+	_, h := m.rulesFinderDimensions()
+	return max(h-4, 1)
+}
+
+// rulesFinderDimensions returns the inner content (width, height) of the
+// rules picker float. The frame formula matches pickerFloat; the inner
+// size subtracts the DialogBorder inset (4 horizontal, 2 vertical).
+func (m Model) rulesFinderDimensions() (int, int) {
+	w, h := m.width, m.height
+	fw := min(max(w*4/5, 62), 110)
+	if fw > w-2 {
+		fw = max(w-2, 20)
+	}
+	fh := min(max(h*3/5, 10), 26)
+	return fw - 4, fh - 2 // DialogBorder: border×2 + horizontal padding×2
+}
+
 // --- follow-tail helpers ---
 
 // followTailSnapLines bounds the "near bottom" zone: when the viewport is
@@ -1193,6 +1289,16 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		m.textArea.Reset()
 		m.setStatus("Loading MCP servers...", false)
 		return m, m.listMCPServersCmd()
+	case "/rules":
+		if len(fields) != 1 {
+			m.setStatus("Usage: /rules", true)
+			return m, nil
+		}
+		m.textArea.Reset()
+		m.mode = ModeRules
+		m.rulesFinder = nil
+		m.rulesDeletePending = nil
+		return m, m.requestRules()
 	default:
 		m.setStatus(fmt.Sprintf("Unknown command: %s", fields[0]), true)
 	}

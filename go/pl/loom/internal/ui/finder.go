@@ -222,6 +222,17 @@ func (f *Finder[T]) GotoBottom() {
 	}
 }
 
+// PageUp moves the cursor up by one page (bodyHeight rows).
+func (f *Finder[T]) PageUp(bodyHeight int) {
+	f.cursor = max(0, f.cursor-max(bodyHeight, 1))
+}
+
+// PageDown moves the cursor down by one page (bodyHeight rows). The
+// cursor never goes below zero, even when the filtered list is empty.
+func (f *Finder[T]) PageDown(bodyHeight int) {
+	f.cursor = max(0, min(len(f.filtered)-1, f.cursor+max(bodyHeight, 1)))
+}
+
 // Selected returns the highlighted item, or nil when the filtered list
 // is empty.
 func (f *Finder[T]) Selected() *T {

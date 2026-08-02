@@ -59,6 +59,22 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 )
 
+// RuleKind distinguishes argv-prefix rules from domain rules.
+type RuleKind int
+
+const (
+	RuleArgv   RuleKind = iota // argv-prefix command rule
+	RuleDomain                 // domain (host) rule
+)
+
+// String returns a short label for status messages ("argv" / "domain").
+func (k RuleKind) String() string {
+	if k == RuleDomain {
+		return "domain"
+	}
+	return "argv"
+}
+
 // Rule is one argv-prefix policy rule for run_cmd calls.
 type Rule struct {
 	// ArgvPrefix is the exact token prefix the command argv must start
@@ -741,5 +757,3 @@ func stringSliceEqual(a, b []string) bool {
 	}
 	return true
 }
-
-
