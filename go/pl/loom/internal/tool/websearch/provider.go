@@ -41,6 +41,10 @@ const (
 
 	maxResponseBytes = 1 << 20
 	maxSnippetBytes  = 512
+
+	// browserUserAgent is used for the keyless DuckDuckGo HTML endpoint,
+	// which challenges requests carrying an obvious bot UA.
+	browserUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
 // searchResult is one normalized hit independent of the provider wire format.
@@ -253,11 +257,20 @@ func (p *duckDuckGoProvider) Search(ctx context.Context, client *http.Client, qu
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "text/html")
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", browserUserAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, mapRequestError(err)
+	}
+	if resp.StatusCode == http.StatusAccepted {
+		// DuckDuckGo answers suspected bots with a 202 challenge page
+		// instead of search results; surface it as a rate limit with an
+		// actionable hint rather than a parse failure.
+		resp.Body.Close()
+		return nil, domain.NewError(domain.ErrRateLimited,
+			"duckduckgo keyless endpoint answered with an anti-bot challenge (status 202); set BRAVE_SEARCH_API_KEY or TAVILY_API_KEY for a reliable backend",
+			domain.WithRetryable(true))
 	}
 	data, err := readResponseBody(resp)
 	if err != nil {
@@ -265,7 +278,7 @@ func (p *duckDuckGoProvider) Search(ctx context.Context, client *http.Client, qu
 	}
 	results := parseDuckDuckGoHTML(data, count)
 	if len(results) == 0 {
-		return nil, domain.NewError(domain.ErrUnavailable, "no results parsed from duckduckgo response (markup may have changed)")
+		return nil, domain.NewError(domain.ErrUnavailable, "no results parsed from duckduckgo response (anti-bot page or markup change); set BRAVE_SEARCH_API_KEY or TAVILY_API_KEY for a reliable backend")
 	}
 	for i := range results {
 		results[i].Snippet = clipSnippet(results[i].Snippet)
