@@ -273,3 +273,24 @@ func TestWebSearchToolValidatesArgs(t *testing.T) {
 		t.Fatal("count > max should fail")
 	}
 }
+
+func TestDuckDuckGoProviderChallenge202(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`<html><body>challenge page</body></html>`))
+	}))
+	defer server.Close()
+
+	provider := &duckDuckGoProvider{endpoint: server.URL}
+	_, err := provider.Search(context.Background(), server.Client(), "golang", 5)
+	var agentErr *domain.AgentError
+	if err == nil || !errors.As(err, &agentErr) {
+		t.Fatalf("expected AgentError for 202 challenge, got: %v", err)
+	}
+	if agentErr.Code != domain.ErrRateLimited {
+		t.Fatalf("error code = %q, want %q", agentErr.Code, domain.ErrRateLimited)
+	}
+	if !strings.Contains(agentErr.Message, "202") || !strings.Contains(agentErr.Message, "BRAVE_SEARCH_API_KEY") {
+		t.Fatalf("error message should mention 202 and API key hint: %q", agentErr.Message)
+	}
+}
