@@ -261,6 +261,21 @@ type listingContent struct {
 	servers []app.MCPServerInfo
 }
 
+// sparkleSpinner returns the activity indicator: a blooming sparkle that
+// grows from a middle dot into a dense star and collapses back
+// (· ✢ ✳ ✶ ✻ ✽), rather than a rotating glyph. The frames are Zapf
+// Dingbats — single-width, text-presentation, and safe in any terminal
+// font. Ghostty mis-renders the final ✽ (U+273D), so under
+// TERM=xterm-ghostty the sequence peaks on ✻ twice instead, matching the
+// workaround other agent TUIs use for the same glyph.
+func sparkleSpinner() spinner.Spinner {
+	frames := []string{"·", "✢", "✳", "✶", "✻", "✽"}
+	if os.Getenv("TERM") == "xterm-ghostty" {
+		frames[5] = "✻"
+	}
+	return spinner.Spinner{Frames: frames, FPS: 120 * time.Millisecond}
+}
+
 // NewModel creates a new UI model with the given controller.
 func NewModel(controller *app.Controller, modelName, workspace string) Model {
 	ta := textarea.New()
@@ -282,7 +297,7 @@ func NewModel(controller *app.Controller, modelName, workspace string) Model {
 
 	theme := DetectTheme()
 	sp := spinner.New(
-		spinner.WithSpinner(spinner.MiniDot),
+		spinner.WithSpinner(sparkleSpinner()),
 		spinner.WithStyle(theme.SpinnerStyle),
 	)
 
