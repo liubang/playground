@@ -16,6 +16,7 @@
 # Created: 2026/07/22 21:10
 
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 go_library(
     name = "loom_lib",
@@ -40,6 +41,14 @@ go_binary(
     name = "loom",
     embed = [":loom_lib"],
     visibility = ["//visibility:public"],
+)
+
+# Installs the built loom binary into GOBIN (default: $(go env GOPATH)/bin).
+# Usage: bazel run //go/pl/loom/cmd/loom:install
+sh_binary(
+    name = "install",
+    srcs = ["install.sh"],
+    data = [":loom"],
 )
 
 go_test(
