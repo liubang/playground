@@ -233,10 +233,10 @@ tracing:
 # 存储
 # ------------------------------------------------------------------------------
 storage:
-  session_db: ""                # 会话数据库路径。空则按系统约定推导：
-                                #   macOS: ~/Library/Application Support/loom/sessions.db
-                                #   Linux: $XDG_STATE_HOME/loom/sessions.db
-                                #     或  ~/.local/state/loom/sessions.db
+  session_db: ""              # 会话数据库路径。空则按系统约定推导：
+                              #   macOS: ~/Library/Application Support/loom/sessions/sessions.db
+                              #   Linux: $XDG_STATE_HOME/loom/sessions/sessions.db
+                              #     或  ~/.local/state/loom/sessions/sessions.db
 
 # ------------------------------------------------------------------------------
 # 终端界面
