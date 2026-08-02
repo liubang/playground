@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
@@ -77,8 +78,14 @@ type Bootstrap struct {
 	Artifact      domain.ArtifactStore
 	Registry      *agent.ToolRegistry
 	// Policy is the assembled decider chain (docs/PERMISSION_DESIGN.md
-	// §4.4): rules → danger → session → mode-aware baseline.
-	Policy        agent.Policy
+	// §4.4): rules → danger → session → mode-aware baseline. Read it via
+	// CurrentPolicy: ReloadPolicy swaps it when rules change at runtime.
+	Policy           agent.Policy
+	permissionPolicy *permission.Policy
+	approvalMode     permission.ApprovalMode
+	// policyMu guards Policy and permissionPolicy against concurrent
+	// ReloadPolicy writes and run-construction/ListRules reads.
+	policyMu      sync.RWMutex
 	PromptBuilder agent.PromptBuilder
 	Logger        *slog.Logger
 	Validator     *workspace.PathValidator
@@ -382,33 +389,79 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	}
 
 	return &Bootstrap{
-		Resolved:        resolved,
-		Current:         resolved.Default,
-		WorkspaceRoot:   cfg.WorkspaceRoot,
-		Store:           store,
-		Artifact:        artStore,
-		Registry:        registry,
-		Policy:          decider,
-		PromptBuilder:   promptBuilder,
-		Logger:          logger,
-		Validator:       validator,
-		Runner:          runner,
-		Version:         cfg.Version,
-		SessionEnv:      sessionEnv,
-		GoalCell:        goalCell,
-		PlanCell:        planCell,
-		SteerCell:       steerCell,
-		Questioner:      questioner,
-		Recorder:        traceRecorder,
-		SessionRules:    sessionRules,
-		SubagentModels:  subagentModels,
-		RememberedStore:   rememberedStore,
+		Resolved:         resolved,
+		Current:          resolved.Default,
+		WorkspaceRoot:    cfg.WorkspaceRoot,
+		Store:            store,
+		Artifact:         artStore,
+		Registry:         registry,
+		Policy:           decider,
+		permissionPolicy: &policy,
+		approvalMode:     resolved.Approval.Mode,
+		PromptBuilder:    promptBuilder,
+		Logger:           logger,
+		Validator:        validator,
+		Runner:           runner,
+		Version:          cfg.Version,
+		SessionEnv:       sessionEnv,
+		GoalCell:         goalCell,
+		PlanCell:         planCell,
+		SteerCell:        steerCell,
+		Questioner:       questioner,
+		Recorder:         traceRecorder,
+		SessionRules:     sessionRules,
+		SubagentModels:   subagentModels,
+		RememberedStore:  rememberedStore,
 		SubagentFactory:  subagentFactory,
-		SessionManager:  sessionManager,
-		MCPManager:      mcpManager,
-		Skills:          skills,
-		traceProvider:   traceProvider,
+		SessionManager:   sessionManager,
+		MCPManager:       mcpManager,
+		Skills:           skills,
+		traceProvider:    traceProvider,
 	}, nil
+}
+
+// CurrentPolicy returns the active decider chain; safe for concurrent
+// use with ReloadPolicy.
+func (b *Bootstrap) CurrentPolicy() agent.Policy {
+	b.policyMu.RLock()
+	defer b.policyMu.RUnlock()
+	return b.Policy
+}
+
+// CurrentRules returns the active declarative rule set (nil when rules
+// are disabled); safe for concurrent use with ReloadPolicy.
+func (b *Bootstrap) CurrentRules() *permission.RuleSet {
+	b.policyMu.RLock()
+	defer b.policyMu.RUnlock()
+	if b.permissionPolicy == nil {
+		return nil
+	}
+	return b.permissionPolicy.Rules
+}
+
+// ReloadPolicy re-reads rules from files and the remembered store,
+// rebuilds the decider chain, and replaces b.Policy so subsequent
+// evaluations reflect the updated rule set. Runs already in flight keep
+// the decider they captured at construction.
+func (b *Bootstrap) ReloadPolicy(ctx context.Context) error {
+	if b.permissionPolicy == nil || b.Resolved == nil {
+		return nil
+	}
+	policy := permission.DefaultPolicy()
+	policy.Session = b.permissionPolicy.Session
+	// File and store I/O happens outside the lock; only the swap is
+	// serialized against readers.
+	policy = permission.AttachRules(ctx, policy, b.WorkspaceRoot, permission.RuleLoadOptions{
+		Enabled:      b.Resolved.Rules.Enabled,
+		Builtin:      b.Resolved.Rules.Builtin,
+		Project:      b.Resolved.Rules.Project,
+		ProjectAllow: b.Resolved.Rules.ProjectAllow,
+	}, b.Logger)
+	b.policyMu.Lock()
+	defer b.policyMu.Unlock()
+	*b.permissionPolicy = policy
+	b.Policy = policy.Decider(b.approvalMode)
+	return nil
 }
 
 // PublishSubagentSnapshot resolves the effective child-run model

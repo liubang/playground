@@ -32,6 +32,7 @@ go_library(
         "statusbar.go",
         "theme.go",
         "picker.go",
+        "rules_picker.go",
         "scroll.go",
         "subagent.go",
     ],
@@ -40,6 +41,7 @@ go_library(
     deps = [
         "//go/pl/loom/internal/app:app",
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/render:render",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
         "//go/pl/loom/internal/session:session_lib",

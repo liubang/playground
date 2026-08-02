@@ -65,7 +65,7 @@ func (m Model) baseMode() Mode {
 		return m.mode
 	}
 	switch m.mode {
-	case ModeHelp, ModeQuestion, ModeSessionPicker, ModeModelPicker, ModeReasoningPicker, ModeListing:
+	case ModeHelp, ModeQuestion, ModeSessionPicker, ModeModelPicker, ModeReasoningPicker, ModeListing, ModeRules:
 		return ModeChat
 	}
 	return m.mode
@@ -93,6 +93,8 @@ func (m Model) activeFloats() []Float {
 		return pickerFloat(m, m.modelFinder)
 	case ModeReasoningPicker:
 		return pickerFloat(m, m.reasoningFinder)
+	case ModeRules:
+		return m.rulesPickerFloat()
 	}
 	return nil
 }
@@ -111,6 +113,29 @@ func pickerFloat[T any](m Model, f *Finder[T]) []Float {
 	height := min(max(m.height*3/5, 10), 26)
 	content := m.theme.DialogBorder.Width(width).Render(f.Render(width-4, height-2))
 	return []Float{centeredFloat(content, m.width, m.height)}
+}
+
+// rulesPickerFloat renders the /rules picker, overlaying a delete
+// confirmation prompt when active.
+func (m Model) rulesPickerFloat() []Float {
+	if m.rulesFinder == nil {
+		return nil
+	}
+	innerW, innerH := m.rulesFinderDimensions()
+	content := m.rulesFinder.Render(innerW, innerH)
+	// Overlay the delete confirmation on the input line when pending.
+	if m.rulesDeletePending != nil {
+		prompt := rulesDeletePrompt(*m.rulesDeletePending)
+		lines := strings.Split(content, "\n")
+		if len(lines) > 0 {
+			lines[0] = m.theme.DialogLabel.Render("❯ ") + prompt
+			content = strings.Join(lines, "\n")
+		}
+	}
+	// DialogBorder adds 4 cells horizontally (border + padding×2), so the
+	// frame width is innerW+4 — same inset pickerFloat uses.
+	bordered := m.theme.DialogBorder.Width(innerW + 4).Render(content)
+	return []Float{centeredFloat(bordered, m.width, m.height)}
 }
 
 func (m Model) renderBase() string {

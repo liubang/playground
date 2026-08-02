@@ -738,6 +738,49 @@ func (c *Controller) rememberedStore() *permission.RememberedStore {
 	return c.bootstrap.RememberedStore
 }
 
+// ListRules returns the combined rule set (builtin + user + project +
+// remembered) for the /rules picker. A nil set means rules are disabled.
+func (c *Controller) ListRules(ctx context.Context) (*permission.RuleSet, error) {
+	if c.bootstrap == nil {
+		return nil, fmt.Errorf("policy not available")
+	}
+	return c.bootstrap.CurrentRules(), nil
+}
+
+// ForgetRule removes a remembered rule from the persistent store and
+// reloads the in-memory policy so the change takes effect immediately.
+func (c *Controller) ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host string) error {
+	store := c.rememberedStore()
+	if store == nil {
+		return fmt.Errorf("remembered store not available")
+	}
+	switch kind {
+	case permission.RuleArgv:
+		ok, err := store.ForgetRule(ctx, prefix)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("rule %v not found in remembered store", prefix)
+		}
+	case permission.RuleDomain:
+		ok, err := store.ForgetDomain(ctx, host)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("domain %q not found in remembered store", host)
+		}
+	default:
+		return fmt.Errorf("unknown rule kind %d", kind)
+	}
+	// Reload the policy so the in-memory ruleset reflects the deletion.
+	if err := c.bootstrap.ReloadPolicy(ctx); err != nil {
+		return fmt.Errorf("reload policy: %w", err)
+	}
+	return nil
+}
+
 func (c *Controller) setState(s ControllerState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1025,7 +1068,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 		ModelName:          current.Model,
 		Store:              &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
 		Approver:           c.rulesApprover,
-		Policy:             c.bootstrap.Policy,
+		Policy:             c.bootstrap.CurrentPolicy(),
 		Registry:           c.bootstrap.Registry,
 		Logger:             c.logger,
 		SystemPrompt:       c.bootstrap.PromptBuilder,

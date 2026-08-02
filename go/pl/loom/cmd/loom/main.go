@@ -195,14 +195,57 @@ func resolveSessionDB(resolved *config.ResolvedConfig, create bool) error {
 	if err != nil {
 		return err
 	}
-	directory := filepath.Join(base, "loom")
+	directory := filepath.Join(base, "loom", "sessions")
 	if create {
 		if err := preparePrivateDataDirectory(directory, true); err != nil {
 			return err
 		}
 	}
 	resolved.Storage.SessionDB = filepath.Join(directory, "sessions.db")
+	// Auto-migrate: if the legacy path (<base>/loom/sessions.db) exists
+	// and the new path does not yet, move the database files over.
+	if create {
+		migrateLegacySessionDB(base, directory)
+	}
 	return nil
+}
+
+// migrateLegacySessionDB moves sessions.db (plus WAL/SHM) from the old
+// flat layout (<base>/loom/) into the new sessions subdirectory when the
+// new location is still empty. Migrated entries keep their original
+// permissions after a rename, so they are tightened explicitly (files
+// 0600, directories 0700). Best-effort; errors are logged but not
+// fatal — the user can re-run or manually move files.
+func migrateLegacySessionDB(base, sessionsDir string) {
+	legacyDir := filepath.Join(base, "loom")
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		src := filepath.Join(legacyDir, "sessions.db"+suffix)
+		dst := filepath.Join(sessionsDir, "sessions.db"+suffix)
+		if fi, err := os.Stat(src); err == nil && !fi.IsDir() {
+			if _, err := os.Stat(dst); os.IsNotExist(err) {
+				if err := os.Rename(src, dst); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: migrate %s → %s: %v\n", src, dst, err)
+				} else if err := os.Chmod(dst, 0o600); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: secure %s: %v\n", dst, err)
+				}
+			}
+		}
+	}
+	// Also migrate the sibling artifact and prompt_cache directories
+	// when they exist beside the legacy database.
+	for _, subdir := range []string{"artifacts", "prompt_cache"} {
+		src := filepath.Join(legacyDir, subdir)
+		dst := filepath.Join(sessionsDir, subdir)
+		if fi, err := os.Stat(src); err == nil && fi.IsDir() {
+			if _, err := os.Stat(dst); os.IsNotExist(err) {
+				if err := os.Rename(src, dst); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: migrate %s → %s: %v\n", src, dst, err)
+				} else if err := os.Chmod(dst, 0o700); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: secure %s: %v\n", dst, err)
+				}
+			}
+		}
+	}
 }
 
 // initConfig writes the annotated starter config (loom config init).
@@ -416,7 +459,7 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	app.PublishSubagentSnapshot(bootstrap.SubagentModels, resolved, current, meta.Reasoning.DomainSpec(), run.SessionID)
 	loop := agent.Loop{
 		Run: run, Model: provider.ModelFor(current.Model), ModelName: current.Model, Store: bootstrap.Store,
-		Approver: &consoleApprover{}, Policy: bootstrap.Policy, Registry: bootstrap.Registry,
+		Approver: &consoleApprover{}, Policy: bootstrap.CurrentPolicy(), Registry: bootstrap.Registry,
 		Logger: slog.Default(), SystemPrompt: bootstrap.PromptBuilder, Artifacts: bootstrap.Artifact,
 		Recorder: bootstrap.Recorder, Prompt: userPrompt, Workspace: root,
 		Window:  agent.NewWindowModel(meta.ContextWindow, resolved.Limits.MaxInputTokens, contextCfg),
@@ -806,7 +849,7 @@ func preparePrivateDataDirectory(directory string, managePermissions bool) error
 			return fmt.Errorf("secure session data directory: %w", err)
 		}
 	} else if info.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("session data directory %q must not be accessible by group or other users", directory)
+		return fmt.Errorf("session data directory %q must not be accessible by group or other users (fix with: chmod 700 %s)", directory, directory)
 	}
 	return nil
 }
