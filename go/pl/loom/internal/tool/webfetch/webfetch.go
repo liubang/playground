@@ -302,17 +302,25 @@ func (t *WebFetchTool) fetch(ctx context.Context, args fetchArgs) (fetchOutcome,
 	}, nil
 }
 
+// lookupFunc resolves a host to IP addresses. It is abstracted from
+// *net.Resolver so tests can inject canned DNS answers.
+type lookupFunc func(ctx context.Context, host string) ([]net.IPAddr, error)
+
 // GuardedDialFunc returns a DialContext that resolves the host, applies the
 // IP policy to every answer, then dials the first accepted address directly
 // so the checked answer is the one actually used. Exported so other tools
 // (websearch, etc.) can share the same SSRF guard.
 func GuardedDialFunc(resolver *net.Resolver, allowPrivate bool) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return guardedDialFunc(resolver.LookupIPAddr, allowPrivate)
+}
+
+func guardedDialFunc(lookup lookupFunc, allowPrivate bool) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, err
 		}
-		ips, err := resolver.LookupIPAddr(ctx, host)
+		ips, err := lookup(ctx, host)
 		if err != nil {
 			return nil, fmt.Errorf("dns lookup failed for %s: %w", host, err)
 		}
@@ -324,9 +332,10 @@ func GuardedDialFunc(resolver *net.Resolver, allowPrivate bool) func(ctx context
 			if !ok {
 				return nil, fmt.Errorf("dns lookup returned an invalid address for %s", host)
 			}
-			if !allowPrivate && !IsPublicIP(ip.Unmap()) {
-				return nil, fmt.Errorf("%w: %s resolves to %s", errBlockedAddress, host, ip.Unmap())
+			if allowPrivate || IsPublicIP(ip.Unmap()) || isFakeIPAddr(ip.Unmap()) {
+				continue
 			}
+			return nil, fmt.Errorf("%w: %s resolves to %s", errBlockedAddress, host, ip.Unmap())
 		}
 		dialer := &net.Dialer{Timeout: dialTimeout}
 		var lastErr error
@@ -339,6 +348,22 @@ func GuardedDialFunc(resolver *net.Resolver, allowPrivate bool) func(ctx context
 		}
 		return nil, lastErr
 	}
+}
+
+// isFakeIPAddr reports whether ip is inside 198.18.0.0/15. TUN-mode proxies
+// (Clash/sing-box "fake-ip" DNS) answer every hostname with an address from
+// this benchmarking range: the answer carries no routing information, and
+// dialing it is intercepted by the TUN device, which resolves and reaches
+// the real destination through the proxy. Blocking it would break all
+// name-based egress on such machines without buying SSRF protection — the
+// proxy, not this process, resolves the real address, and a spoofed fake-ip
+// answer has no route outside the TUN device anyway.
+func isFakeIPAddr(ip netip.Addr) bool {
+	if !ip.Is4() {
+		return false
+	}
+	b := ip.As4()
+	return b[0] == 198 && b[1]&0xFE == 18
 }
 
 // buildOutput applies the output byte budget to a (possibly cached) body and
