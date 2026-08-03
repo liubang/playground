@@ -15,19 +15,30 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2026/08/01
 
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "mcp_lib",
     srcs = [
         "client.go",
+        "http.go",
         "jsonrpc.go",
         "manager.go",
+        "stdio.go",
         "tool.go",
+        "transport.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/mcp",
     visibility = ["//go/pl/loom:__subpackages__"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/model/httpc:httpc_lib",
+        "//go/pl/loom/internal/model/sse:sse_lib",
     ],
+)
+
+go_test(
+    name = "mcp_test",
+    srcs = ["http_test.go"],
+    embed = [":mcp_lib"],
 )

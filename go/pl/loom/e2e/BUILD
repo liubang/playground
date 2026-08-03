@@ -23,6 +23,7 @@ go_test(
         "context_budget_e2e_test.go",
         "exsession_e2e_test.go",
         "mcp_e2e_test.go",
+        "mcp_http_e2e_test.go",
         "permission_e2e_test.go",
         "skills_e2e_test.go",
         "subagent_e2e_test.go",
