@@ -31,7 +31,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 2
+const sqliteSchemaVersion = 3
 
 // SQLiteStore persists session events and checkpoints in a SQLite database.
 // A store serializes writes through one connection; optimistic versions still
@@ -40,21 +40,9 @@ type SQLiteStore struct {
 	db *sql.DB
 }
 
-// SessionSummary is a lightweight persisted session view for listing sessions.
-type SessionSummary struct {
-	ID        domain.SessionID `json:"id"`
-	Version   int64            `json:"version"`
-	CreatedAt time.Time        `json:"created_at"`
-	UpdatedAt time.Time        `json:"updated_at"`
-}
-
 // SessionInspection is a consistent read-only view of persisted session data.
-type SessionInspection struct {
-	Session    SessionSummary     `json:"session"`
-	Checkpoint *domain.Checkpoint `json:"checkpoint,omitempty"`
-	Transcript Transcript         `json:"transcript"`
-	Events     []domain.Event     `json:"events"`
-}
+// Deprecated: use domain.SessionInspection instead.
+type SessionInspection = domain.SessionInspection
 
 // OpenSQLiteStore opens or creates a SQLite event store and applies migrations.
 func OpenSQLiteStore(ctx context.Context, path string) (*SQLiteStore, error) {
@@ -185,6 +173,19 @@ CREATE TABLE IF NOT EXISTS artifact_refs (
 );
 CREATE INDEX IF NOT EXISTS idx_artifact_refs_artifact
     ON artifact_refs(artifact_id);
+CREATE TABLE IF NOT EXISTS file_changes (
+    rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    before_existed INTEGER NOT NULL,
+    before_hash TEXT NOT NULL DEFAULT '',
+    before_content BLOB,
+    after_hash TEXT NOT NULL DEFAULT '',
+    restorable INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_file_changes_session_rowid
+    ON file_changes(session_id, rowid);
 `
 	if _, err := s.db.ExecContext(ctx, schema); err != nil {
 		return storeError("apply sqlite schema", err)
@@ -199,6 +200,11 @@ CREATE INDEX IF NOT EXISTS idx_artifact_refs_artifact
 	}
 	if !newestVersion.Valid || newestVersion.Int64 < 2 {
 		if err := s.backfillArtifactRefs(ctx); err != nil {
+			return err
+		}
+	}
+	if !newestVersion.Valid || newestVersion.Int64 < 3 {
+		if err := s.migrateV3(ctx); err != nil {
 			return err
 		}
 	}
@@ -345,10 +351,16 @@ func (s *SQLiteStore) AppendEventsAndCheckpoint(ctx context.Context, sessionID d
 		return domain.NewError(domain.ErrInvalidInput, "encode checkpoint", domain.WithCause(err))
 	}
 	return s.appendEventsTx(ctx, sessionID, expectedVersion, events, func(ctx context.Context, tx *sql.Tx) error {
+		// Snapshot the current file-change ledger position so that rewind
+		// knows exactly which changes postdate this checkpoint.
+		ledgerSeq, err := ledgerPositionTx(ctx, tx, sessionID)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO checkpoints(checkpoint_id, session_id, sequence, data, created_at, created_at_unix_nano)
-VALUES (?, ?, ?, ?, ?, ?)`, checkpoint.ID.String(), sessionID.String(), checkpoint.Sequence,
-			data, formatTime(checkpoint.CreatedAt), checkpoint.CreatedAt.UTC().UnixNano()); err != nil {
+INSERT INTO checkpoints(checkpoint_id, session_id, sequence, ledger_seq, data, created_at, created_at_unix_nano)
+VALUES (?, ?, ?, ?, ?, ?, ?)`, checkpoint.ID.String(), sessionID.String(), checkpoint.Sequence,
+			ledgerSeq, data, formatTime(checkpoint.CreatedAt), checkpoint.CreatedAt.UTC().UnixNano()); err != nil {
 			if isUniqueConstraint(err) {
 				return domain.NewError(domain.ErrConflict, "checkpoint already exists", domain.WithCause(err))
 			}
@@ -416,7 +428,7 @@ FROM events WHERE session_id = ? AND sequence > ? ORDER BY sequence ASC`, sessio
 }
 
 // ListSessions returns persisted sessions ordered by most recent update.
-func (s *SQLiteStore) ListSessions(ctx context.Context, limit int) ([]SessionSummary, error) {
+func (s *SQLiteStore) ListSessions(ctx context.Context, limit int) ([]domain.SessionSummary, error) {
 	if limit <= 0 || limit > 1000 {
 		return nil, domain.NewError(domain.ErrInvalidInput, "session list limit must be between 1 and 1000")
 	}
@@ -428,7 +440,7 @@ FROM sessions ORDER BY updated_at_unix_nano DESC, session_id DESC LIMIT ?`, limi
 	}
 	defer rows.Close()
 
-	result := make([]SessionSummary, 0)
+	result := make([]domain.SessionSummary, 0)
 	for rows.Next() {
 		var id, createdAt, updatedAt string
 		var version int64
@@ -447,7 +459,7 @@ FROM sessions ORDER BY updated_at_unix_nano DESC, session_id DESC LIMIT ?`, limi
 		if err != nil {
 			return nil, storeError("decode session update time", err)
 		}
-		result = append(result, SessionSummary{
+		result = append(result, domain.SessionSummary{
 			ID: sessionID, Version: version, CreatedAt: created, UpdatedAt: updated,
 		})
 	}
@@ -459,17 +471,17 @@ FROM sessions ORDER BY updated_at_unix_nano DESC, session_id DESC LIMIT ?`, limi
 
 // InspectSession returns session metadata, its latest checkpoint, the recovered
 // transcript, and the complete event timeline from one consistent read snapshot.
-func (s *SQLiteStore) InspectSession(ctx context.Context, sessionID domain.SessionID) (SessionInspection, error) {
+func (s *SQLiteStore) InspectSession(ctx context.Context, sessionID domain.SessionID) (domain.SessionInspection, error) {
 	if sessionID.IsZero() {
-		return SessionInspection{}, domain.NewError(domain.ErrInvalidInput, "session ID is required")
+		return domain.SessionInspection{}, domain.NewError(domain.ErrInvalidInput, "session ID is required")
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return SessionInspection{}, storeError("begin session inspection", err)
+		return domain.SessionInspection{}, storeError("begin session inspection", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var summary SessionSummary
+	var summary domain.SessionSummary
 	var id, createdAt, updatedAt string
 	if err := tx.QueryRowContext(ctx, `
 SELECT session_id, version, created_at, updated_at
@@ -477,21 +489,21 @@ FROM sessions WHERE session_id = ?`, sessionID.String()).Scan(
 		&id, &summary.Version, &createdAt, &updatedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return SessionInspection{}, domain.NewError(domain.ErrInvalidInput, "session not found")
+			return domain.SessionInspection{}, domain.NewError(domain.ErrInvalidInput, "session not found")
 		}
-		return SessionInspection{}, storeError("load session metadata", err)
+		return domain.SessionInspection{}, storeError("load session metadata", err)
 	}
 	summary.ID, err = domain.ParseSessionID(id)
 	if err != nil {
-		return SessionInspection{}, storeError("decode session ID", err)
+		return domain.SessionInspection{}, storeError("decode session ID", err)
 	}
 	summary.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
 	if err != nil {
-		return SessionInspection{}, storeError("decode session creation time", err)
+		return domain.SessionInspection{}, storeError("decode session creation time", err)
 	}
 	summary.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
 	if err != nil {
-		return SessionInspection{}, storeError("decode session update time", err)
+		return domain.SessionInspection{}, storeError("decode session update time", err)
 	}
 
 	var checkpoint *domain.Checkpoint
@@ -500,15 +512,15 @@ FROM sessions WHERE session_id = ?`, sessionID.String()).Scan(
 SELECT data FROM checkpoints WHERE session_id = ?
 ORDER BY sequence DESC, created_at_unix_nano DESC, checkpoint_id DESC LIMIT 1`, sessionID.String()).Scan(&checkpointData)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return SessionInspection{}, storeError("load latest checkpoint", err)
+		return domain.SessionInspection{}, storeError("load latest checkpoint", err)
 	}
 	if err == nil {
 		var decoded domain.Checkpoint
 		if err := json.Unmarshal(checkpointData, &decoded); err != nil {
-			return SessionInspection{}, storeError("decode checkpoint", err)
+			return domain.SessionInspection{}, storeError("decode checkpoint", err)
 		}
 		if decoded.ID.IsZero() || decoded.SessionID != sessionID || decoded.Sequence > summary.Version {
-			return SessionInspection{}, storeError("validate persisted checkpoint", errors.New("checkpoint identity or sequence mismatch"))
+			return domain.SessionInspection{}, storeError("validate persisted checkpoint", errors.New("checkpoint identity or sequence mismatch"))
 		}
 		checkpoint = &decoded
 	}
@@ -517,14 +529,14 @@ ORDER BY sequence DESC, created_at_unix_nano DESC, checkpoint_id DESC LIMIT 1`, 
 SELECT event_id, sequence, type, timestamp, payload
 FROM events WHERE session_id = ? ORDER BY sequence ASC`, sessionID.String())
 	if err != nil {
-		return SessionInspection{}, storeError("load session events", err)
+		return domain.SessionInspection{}, storeError("load session events", err)
 	}
 	events, err := scanEvents(rows, sessionID)
 	if err != nil {
-		return SessionInspection{}, err
+		return domain.SessionInspection{}, err
 	}
 	if int64(len(events)) != summary.Version {
-		return SessionInspection{}, storeError("validate session event log",
+		return domain.SessionInspection{}, storeError("validate session event log",
 			fmt.Errorf("session version is %d but event count is %d", summary.Version, len(events)))
 	}
 
@@ -538,17 +550,24 @@ FROM events WHERE session_id = ? ORDER BY sequence ASC`, sessionID.String())
 		transcript = Transcript{SessionID: sessionID}
 	}
 	if err != nil {
-		return SessionInspection{}, storeError("recover session transcript", err)
+		return domain.SessionInspection{}, storeError("recover session transcript", err)
 	}
 	if transcript.LastEventSequence != summary.Version {
-		return SessionInspection{}, storeError("validate recovered transcript",
+		return domain.SessionInspection{}, storeError("validate recovered transcript",
 			fmt.Errorf("recovered sequence is %d but session version is %d", transcript.LastEventSequence, summary.Version))
 	}
 	if err := tx.Commit(); err != nil {
-		return SessionInspection{}, storeError("commit session inspection", err)
+		return domain.SessionInspection{}, storeError("commit session inspection", err)
 	}
-	return SessionInspection{
-		Session: summary, Checkpoint: checkpoint, Transcript: transcript, Events: events,
+	return domain.SessionInspection{
+		Session:    summary,
+		Checkpoint: checkpoint,
+		Transcript: domain.SessionTranscript{
+			SessionID:         transcript.SessionID,
+			Messages:          transcript.Messages,
+			LastEventSequence: transcript.LastEventSequence,
+		},
+		Events: events,
 	}, nil
 }
 
@@ -619,10 +638,15 @@ func (s *SQLiteStore) SaveCheckpoint(ctx context.Context, checkpoint domain.Chec
 		return domain.NewError(domain.ErrInvalidInput,
 			fmt.Sprintf("checkpoint sequence %d exceeds session version %d", checkpoint.Sequence, sessionVersion))
 	}
+	// Snapshot the current file-change ledger position for rewind.
+	ledgerSeq, err := ledgerPositionTx(ctx, tx, checkpoint.SessionID)
+	if err != nil {
+		return err
+	}
 	_, err = tx.ExecContext(ctx, `
-INSERT INTO checkpoints(checkpoint_id, session_id, sequence, data, created_at, created_at_unix_nano)
-VALUES (?, ?, ?, ?, ?, ?)`, checkpoint.ID.String(), checkpoint.SessionID.String(), checkpoint.Sequence,
-		data, formatTime(checkpoint.CreatedAt), checkpoint.CreatedAt.UTC().UnixNano())
+INSERT INTO checkpoints(checkpoint_id, session_id, sequence, ledger_seq, data, created_at, created_at_unix_nano)
+VALUES (?, ?, ?, ?, ?, ?, ?)`, checkpoint.ID.String(), checkpoint.SessionID.String(), checkpoint.Sequence,
+		ledgerSeq, data, formatTime(checkpoint.CreatedAt), checkpoint.CreatedAt.UTC().UnixNano())
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return domain.NewError(domain.ErrConflict, "checkpoint already exists", domain.WithCause(err))
@@ -688,6 +712,24 @@ SELECT artifact_id, MAX(size) FROM artifact_refs GROUP BY artifact_id ORDER BY a
 		return nil, storeError("iterate artifact references", err)
 	}
 	return refs, nil
+}
+
+// migrateV3 adds the ledger_seq column to the checkpoints table so that
+// each checkpoint snapshots the file-change ledger position it covers.
+// The column defaults to 0, which is the safe direction for rewind:
+// legacy checkpoints (without a position) revert every recorded change.
+func (s *SQLiteStore) migrateV3(ctx context.Context) error {
+	// SQLite ALTER TABLE ADD COLUMN does not support IF NOT EXISTS, so
+	// attempt the migration and ignore the "duplicate column" error.
+	_, err := s.db.ExecContext(ctx,
+		"ALTER TABLE checkpoints ADD COLUMN ledger_seq INTEGER NOT NULL DEFAULT 0")
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
+			return storeError("migrate v3: add ledger_seq to checkpoints", err)
+		}
+	}
+	return nil
 }
 
 func (s *SQLiteStore) backfillArtifactRefs(ctx context.Context) error {
@@ -810,3 +852,5 @@ func isUniqueConstraint(err error) bool {
 	return strings.Contains(message, "unique constraint failed") ||
 		strings.Contains(message, "primary key constraint failed")
 }
+
+
