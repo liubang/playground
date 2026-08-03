@@ -82,13 +82,14 @@ func NewRun(sessionID domain.SessionID, limits domain.Limits, clock domain.Clock
 // call that spawned it, forming the persistent delegation edge
 // (docs/SUBAGENT_DESIGN.md §6.1) — the loom equivalent of codex's
 // agent-graph-store spawn edge, carried by the existing event stream.
-func (r *Run) RecordDelegation(parent domain.SessionID, callID domain.ToolCallID) {
+func (r *Run) RecordDelegation(parent domain.SessionID, callID domain.ToolCallID, role string) {
 	r.appendEvent(domain.EventRunCreated, struct {
 		RunID           domain.RunID      `json:"run_id"`
 		Delegated       bool              `json:"delegated"`
 		ParentSessionID domain.SessionID  `json:"parent_session_id"`
 		ParentToolCall  domain.ToolCallID `json:"parent_tool_call_id"`
-	}{RunID: r.ID, Delegated: true, ParentSessionID: parent, ParentToolCall: callID})
+		Role            string            `json:"role,omitempty"`
+	}{RunID: r.ID, Delegated: true, ParentSessionID: parent, ParentToolCall: callID, Role: role})
 }
 
 // RestoreRun creates a Run from a checkpoint.
@@ -1754,6 +1755,21 @@ func (l *Loop) recordToolOutcome(ctx context.Context, item preparedExec, result 
 	if changed, ok := extractFileChanged(result, item.prepared); ok {
 		l.markProgress()
 		l.Run.appendEvent(domain.EventFileChanged, changed)
+		// Record the file change directly into the ledger with beforeContent
+		// from the PreparedCall's Recovery spec. This captures the original
+		// content for rewind, which the event stream alone cannot carry.
+		if l.Store != nil {
+			beforeExisted := changed.OldHash != ""
+			var beforeContent []byte
+			if item.prepared.Recovery != nil {
+				beforeContent = item.prepared.Recovery.BeforeContent
+			}
+			if err := l.Store.RecordFileChange(ctx, l.Run.SessionID, changed.Path, beforeExisted, changed.OldHash, beforeContent, changed.NewHash); err != nil {
+				if l.Logger != nil {
+					l.Logger.Warn("record file change in ledger", "path", changed.Path, "error", err)
+				}
+			}
+		}
 	}
 }
 

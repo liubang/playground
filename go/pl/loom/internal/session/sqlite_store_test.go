@@ -455,7 +455,7 @@ VALUES (?, ?, ?, ?, ?, ?)`, checkpoint.ID.String(), sessionID.String(), 0, data,
 	if _, err := store.db.ExecContext(ctx, "DELETE FROM artifact_refs"); err != nil {
 		t.Fatalf("clear artifact refs: %v", err)
 	}
-	if _, err := store.db.ExecContext(ctx, "DELETE FROM schema_migrations WHERE version = 2"); err != nil {
+	if _, err := store.db.ExecContext(ctx, "DELETE FROM schema_migrations WHERE version >= 2"); err != nil {
 		t.Fatalf("downgrade schema marker: %v", err)
 	}
 	if _, err := store.db.ExecContext(ctx, "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?)", formatTime(time.Now().UTC())); err != nil {
@@ -585,6 +585,242 @@ func testCheckpoint(sessionID domain.SessionID, sequence int64, createdAt time.T
 		Plan:      domain.Plan{Items: []domain.PlanItem{{Index: 0, Goal: "persist", Status: domain.PlanItemInProgress}}},
 		Usage:     domain.Usage{Turns: 1, ToolCalls: 2, InputTokens: 3, OutputTokens: 4},
 		CreatedAt: createdAt,
+	}
+}
+
+func TestSQLiteStoreRecordFileChangePersistsLedger(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := store.RecordFileChange(ctx, sessionID, "a.txt", true, "h1", []byte("old-a"), "h2"); err != nil {
+		t.Fatalf("RecordFileChange: %v", err)
+	}
+	if err := store.RecordFileChange(ctx, sessionID, "b.txt", false, "", nil, "h3"); err != nil {
+		t.Fatalf("RecordFileChange new file: %v", err)
+	}
+	if err := store.RecordFileChange(ctx, sessionID, "", true, "h1", nil, "h2"); errorCode(err) != domain.ErrInvalidInput {
+		t.Fatalf("empty path error = %v, want invalid_input", err)
+	}
+	if err := store.RecordFileChange(ctx, domain.SessionID{}, "a.txt", true, "h1", nil, "h2"); errorCode(err) != domain.ErrInvalidInput {
+		t.Fatalf("zero session error = %v, want invalid_input", err)
+	}
+}
+
+func TestSQLiteStoreRecordFileChangeCapsOversizedContent(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	oversized := make([]byte, MaxFileChangeSnapshotBytes+1)
+	for i := range oversized {
+		oversized[i] = 'X'
+	}
+	// First checkpoint at seq 1 (before any file changes).
+	events1 := []domain.Event{newEvent(sessionID, 1, domain.EventSessionCreated, nil)}
+	ckpt1 := testCheckpoint(sessionID, 1, time.Now().UTC())
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events1, ckpt1); err != nil {
+		t.Fatalf("AppendEventsAndCheckpoint 1: %v", err)
+	}
+	// Record oversized file change AFTER checkpoint 1.
+	if err := store.RecordFileChange(ctx, sessionID, "big.txt", true, "h1", oversized, "h2"); err != nil {
+		t.Fatalf("RecordFileChange oversized: %v", err)
+	}
+	// Second checkpoint at seq 2 (captures the ledger position after the file change).
+	events2 := []domain.Event{newEvent(sessionID, 2, domain.EventUserMessageAdded, nil)}
+	ckpt2 := testCheckpoint(sessionID, 2, time.Now().UTC().Add(time.Second))
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 1, events2, ckpt2); err != nil {
+		t.Fatalf("AppendEventsAndCheckpoint 2: %v", err)
+	}
+	// Rewind to checkpoint 1 — the oversized file change is after it.
+	result, err := store.RewindSession(ctx, sessionID, 1)
+	if err != nil {
+		t.Fatalf("RewindSession: %v", err)
+	}
+	if len(result.Changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(result.Changes))
+	}
+	if result.Changes[0].Restorable {
+		t.Fatalf("oversized content should be unrestorable")
+	}
+}
+
+func TestSQLiteStoreRewindSessionRestoresFilesAndTruncatesEvents(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "sessions.db")
+	store := openTestSQLiteStore(t, path)
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// Event 1, checkpoint at seq 1 (ledger position = 0, no file changes yet)
+	events1 := []domain.Event{newEvent(sessionID, 1, domain.EventSessionCreated, nil)}
+	ckpt1 := testCheckpoint(sessionID, 1, time.Now().UTC())
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events1, ckpt1); err != nil {
+		t.Fatalf("first checkpoint: %v", err)
+	}
+
+	// Record a file change AFTER checkpoint 1
+	if err := store.RecordFileChange(ctx, sessionID, "hello.go", true, "hash1", []byte("package main\n"), "hash2"); err != nil {
+		t.Fatalf("RecordFileChange: %v", err)
+	}
+
+	// Event 2-3, checkpoint at seq 3
+	events2 := []domain.Event{
+		newEvent(sessionID, 2, domain.EventUserMessageAdded, nil),
+		newEvent(sessionID, 3, domain.EventModelResponseCompleted, nil),
+	}
+	ckpt2 := testCheckpoint(sessionID, 3, time.Now().UTC().Add(time.Second))
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 1, events2, ckpt2); err != nil {
+		t.Fatalf("second checkpoint: %v", err)
+	}
+
+	// Rewind to checkpoint 1
+	result, err := store.RewindSession(ctx, sessionID, 1)
+	if err != nil {
+		t.Fatalf("RewindSession: %v", err)
+	}
+	if result.Checkpoint.ID != ckpt1.ID {
+		t.Fatalf("rewind checkpoint ID = %s, want %s", result.Checkpoint.ID, ckpt1.ID)
+	}
+	if len(result.Changes) != 1 || result.Changes[0].Path != "hello.go" {
+		t.Fatalf("unexpected rewind changes: %+v", result.Changes)
+	}
+	if !result.Changes[0].BeforeExisted || string(result.Changes[0].BeforeContent) != "package main\n" {
+		t.Fatalf("unexpected before content: existed=%v content=%q", result.Changes[0].BeforeExisted, result.Changes[0].BeforeContent)
+	}
+
+	// Verify events and checkpoints are truncated
+	inspection, err := store.InspectSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("InspectSession after rewind: %v", err)
+	}
+	if inspection.Session.Version != 1 {
+		t.Fatalf("session version after rewind = %d, want 1", inspection.Session.Version)
+	}
+	if len(inspection.Events) != 1 {
+		t.Fatalf("events after rewind = %d, want 1", len(inspection.Events))
+	}
+	if inspection.Checkpoint == nil || inspection.Checkpoint.Sequence != 1 {
+		t.Fatalf("checkpoint after rewind = %+v, want seq 1", inspection.Checkpoint)
+	}
+}
+
+func TestSQLiteStoreRewindSessionDeduplicatesByPath(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	// Event + checkpoint at seq 1
+	events1 := []domain.Event{newEvent(sessionID, 1, domain.EventSessionCreated, nil)}
+	ckpt1 := testCheckpoint(sessionID, 1, time.Now().UTC())
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events1, ckpt1); err != nil {
+		t.Fatalf("first checkpoint: %v", err)
+	}
+
+	// Multiple edits to the same file AFTER checkpoint 1
+	if err := store.RecordFileChange(ctx, sessionID, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
+		t.Fatalf("RecordFileChange 1: %v", err)
+	}
+	if err := store.RecordFileChange(ctx, sessionID, "a.go", true, "h2", []byte("v2"), "h3"); err != nil {
+		t.Fatalf("RecordFileChange 2: %v", err)
+	}
+	if err := store.RecordFileChange(ctx, sessionID, "b.go", true, "h4", []byte("v3"), "h5"); err != nil {
+		t.Fatalf("RecordFileChange 3: %v", err)
+	}
+
+	// Need another checkpoint to give us a rewind target past seq 1
+	events2 := []domain.Event{newEvent(sessionID, 2, domain.EventUserMessageAdded, nil)}
+	ckpt2 := testCheckpoint(sessionID, 2, time.Now().UTC().Add(time.Second))
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 1, events2, ckpt2); err != nil {
+		t.Fatalf("second checkpoint: %v", err)
+	}
+
+	result, err := store.RewindSession(ctx, sessionID, 1)
+	if err != nil {
+		t.Fatalf("RewindSession: %v", err)
+	}
+	// Should get 2 changes: a.go (earliest = v1) and b.go
+	if len(result.Changes) != 2 {
+		t.Fatalf("dedup changes = %d, want 2", len(result.Changes))
+	}
+	byPath := make(map[string]FileChange, len(result.Changes))
+	for _, c := range result.Changes {
+		byPath[c.Path] = c
+	}
+	if string(byPath["a.go"].BeforeContent) != "v1" {
+		t.Fatalf("a.go before content = %q, want v1", byPath["a.go"].BeforeContent)
+	}
+	if string(byPath["b.go"].BeforeContent) != "v3" {
+		t.Fatalf("b.go before content = %q, want v3", byPath["b.go"].BeforeContent)
+	}
+}
+
+func TestSQLiteStoreRewindSessionRejectsInvalidInput(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := store.RewindSession(ctx, domain.SessionID{}, 1); errorCode(err) != domain.ErrInvalidInput {
+		t.Fatalf("zero session error = %v, want invalid_input", err)
+	}
+	if _, err := store.RewindSession(ctx, sessionID, 0); errorCode(err) != domain.ErrInvalidInput {
+		t.Fatalf("zero sequence error = %v, want invalid_input", err)
+	}
+	if _, err := store.RewindSession(ctx, sessionID, 1); errorCode(err) != domain.ErrInvalidInput {
+		t.Fatalf("missing checkpoint error = %v, want invalid_input", err)
+	}
+}
+
+func TestSQLiteStoreListCheckpointsReturnsSummary(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	events := transcriptEvents(t, sessionID)
+	if err := store.AppendEvents(ctx, sessionID, 0, events); err != nil {
+		t.Fatalf("AppendEvents: %v", err)
+	}
+	base := time.Date(2026, 7, 23, 10, 0, 0, 0, time.UTC)
+	first := testCheckpoint(sessionID, 1, base)
+	second := testCheckpoint(sessionID, 3, base.Add(time.Second))
+	if err := store.SaveCheckpoint(ctx, first); err != nil {
+		t.Fatalf("SaveCheckpoint first: %v", err)
+	}
+	if err := store.SaveCheckpoint(ctx, second); err != nil {
+		t.Fatalf("SaveCheckpoint second: %v", err)
+	}
+	summaries, err := store.ListCheckpoints(ctx, sessionID, 10)
+	if err != nil {
+		t.Fatalf("ListCheckpoints: %v", err)
+	}
+	if len(summaries) != 2 {
+		t.Fatalf("expected 2 summaries, got %d", len(summaries))
+	}
+	// Most recent first
+	if summaries[0].Sequence != 3 {
+		t.Fatalf("first summary seq = %d, want 3", summaries[0].Sequence)
+	}
+	if summaries[1].Sequence != 1 {
+		t.Fatalf("second summary seq = %d, want 1", summaries[1].Sequence)
+	}
+	// Limit validation
+	if _, err := store.ListCheckpoints(ctx, sessionID, 0); errorCode(err) != domain.ErrInvalidInput {
+		t.Fatalf("zero limit error = %v, want invalid_input", err)
+	}
+	if _, err := store.ListCheckpoints(ctx, domain.SessionID{}, 10); errorCode(err) != domain.ErrInvalidInput {
+		t.Fatalf("zero session error = %v, want invalid_input", err)
 	}
 }
 

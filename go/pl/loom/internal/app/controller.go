@@ -264,9 +264,18 @@ type SubmitResult struct {
 // it before its next model call, and leftovers become the next turn's
 // prompt automatically (docs/STEER_DESIGN.md §3.1).
 func (c *Controller) SubmitPrompt(ctx context.Context, prompt string) (SubmitResult, error) {
+	return c.SubmitPromptWithImages(ctx, prompt, nil)
+}
+
+// SubmitPromptWithImages submits a user prompt with optional image attachments.
+// Images are encoded as ContentPart items alongside the text prompt in the
+// user message sent to the model. While the controller is busy, images are
+// dropped and only the text prompt is queued for steering (steer messages
+// are text-only).
+func (c *Controller) SubmitPromptWithImages(ctx context.Context, prompt string, images []domain.ImageContent) (SubmitResult, error) {
 	resultCh := make(chan controllerResult, 1)
 	select {
-	case c.cmdCh <- controllerCommand{Kind: cmdSubmitPrompt, Prompt: prompt, ResultCh: resultCh}:
+	case c.cmdCh <- controllerCommand{Kind: cmdSubmitPrompt, Prompt: prompt, Images: images, ResultCh: resultCh}:
 	case <-ctx.Done():
 		return SubmitResult{}, ctx.Err()
 	case <-c.doneCh:
@@ -290,6 +299,7 @@ func (c *Controller) SubmitPrompt(ctx context.Context, prompt string) (SubmitRes
 func (c *Controller) CancelTurn(ctx context.Context) error {
 	resultCh := make(chan controllerResult, 1)
 	select {
+	// Images are not carried on cancellation.
 	case c.cmdCh <- controllerCommand{Kind: cmdCancelTurn, ResultCh: resultCh}:
 	case <-ctx.Done():
 		return ctx.Err()
@@ -815,6 +825,10 @@ func (c *Controller) dispatch(cmd controllerCommand) {
 		c.handleAnswerQuestion(cmd)
 	case cmdRequestSnapshot:
 		c.handleRequestSnapshot(cmd)
+	case cmdListCheckpoints:
+		c.handleListCheckpoints(cmd)
+	case cmdRewind:
+		c.handleRewind(cmd)
 	case cmdShutdown:
 		c.handleShutdown()
 		if cmd.ResultCh != nil {
@@ -873,7 +887,7 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	go func() {
 		defer cancelTurn()
 		defer close(turnDone)
-		err := c.runTurn(turnCtx, cmd.Prompt, turnCounter)
+		err := c.runTurn(turnCtx, cmd.Prompt, cmd.Images, turnCounter)
 		c.onTurnFinished(turnID, turnCounter, err)
 	}()
 
@@ -960,7 +974,7 @@ func (c *Controller) SubagentView(ctx context.Context, sessionID domain.SessionI
 	}, nil
 }
 
-func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int) error {
+func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain.ImageContent, turnCounter int) error {
 	store := c.bootstrap.Store
 	clock := c.clock
 
@@ -1005,10 +1019,18 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, turnCounter int
 	}
 
 	// Add user message
+	parts := make([]domain.ContentPart, 0, 1+len(images))
+	parts = append(parts, domain.ContentPart{Kind: domain.PartText, Text: prompt})
+	for _, img := range images {
+		parts = append(parts, domain.ContentPart{Kind: domain.PartImage, Image: &domain.ImageContent{
+			MediaType: img.MediaType,
+			Data:      img.Data,
+		}})
+	}
 	userMsg := domain.Message{
 		ID:        domain.NewMessageID(),
 		Role:      domain.RoleUser,
-		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: prompt}},
+		Parts:     parts,
 		CreatedAt: clock.Now(),
 	}
 	run.AddUserMessage(userMsg)
@@ -1503,6 +1525,28 @@ func (c *Controller) handleShutdown() {
 		c.questioner.SkipAll()
 	}
 
+	// Drain in-flight async sub-agents; the Manager cancels their
+	// contexts and waits for their loops to persist a terminal state.
+	if c.bootstrap.SubagentManager != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		c.bootstrap.SubagentManager.Shutdown(ctx)
+		cancel()
+	}
+
+	// Extract memories from the current session before shutting down.
+	// Best-effort: failures are logged but don't block shutdown.
+	if c.bootstrap.MemoryExtractor != nil && !c.sessionID.IsZero() {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		if ckpt, err := c.bootstrap.Store.LoadLatestCheckpoint(ctx, c.sessionID); err == nil && len(ckpt.Messages) > 0 {
+			if result, err := c.bootstrap.MemoryExtractor.ExtractFromSession(ctx, c.sessionID, ckpt.Messages, c.bootstrap.WorkspaceRoot); err != nil {
+				c.logger.Warn("memory extraction failed", "error", err)
+			} else if result != nil {
+				c.logger.Info("memory extraction completed", "slug", result.RolloutSlug)
+			}
+		}
+		cancel()
+	}
+
 	// Cancel session context
 	if cancelSession != nil {
 		cancelSession()
@@ -1569,12 +1613,15 @@ const (
 	cmdRequestCompaction = "request_compaction"
 	cmdAnswerQuestion    = "answer_question"
 	cmdRequestSnapshot   = "request_snapshot"
+	cmdListCheckpoints   = "list_checkpoints"
+	cmdRewind            = "rewind"
 	cmdShutdown          = "shutdown"
 )
 
 type controllerCommand struct {
 	Kind       string
 	Prompt     string
+	Images     []domain.ImageContent
 	SessionID  domain.SessionID
 	ModelName  string
 	Reasoning  string
@@ -1583,7 +1630,11 @@ type controllerCommand struct {
 	RuleHint   *ApprovalRuleHint
 	QuestionID domain.EventID
 	Answer     domain.QuestionAnswer
-	ResultCh   chan<- controllerResult
+	// CheckpointSequence is the rewind target (cmdRewind); Limit bounds
+	// list-style queries (cmdListCheckpoints).
+	CheckpointSequence int64
+	Limit              int
+	ResultCh           chan<- controllerResult
 }
 
 type controllerResult struct {
@@ -1650,6 +1701,14 @@ func (s *publishingStore) SaveCheckpoint(ctx context.Context, ckpt domain.Checkp
 
 func (s *publishingStore) LoadLatestCheckpoint(ctx context.Context, sessionID domain.SessionID) (domain.Checkpoint, error) {
 	return s.inner.LoadLatestCheckpoint(ctx, sessionID)
+}
+
+func (s *publishingStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
+	return s.inner.RecordFileChange(ctx, sessionID, path, beforeExisted, beforeHash, beforeContent, afterHash)
+}
+
+func (s *publishingStore) InspectSession(ctx context.Context, sessionID domain.SessionID) (domain.SessionInspection, error) {
+	return s.inner.InspectSession(ctx, sessionID)
 }
 
 func (s *publishingStore) publishForEvents(sessionID domain.SessionID, events []domain.Event) {

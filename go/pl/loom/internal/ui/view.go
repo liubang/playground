@@ -206,6 +206,10 @@ func (m Model) renderBase() string {
 			b.WriteString(m.renderCompletion())
 			b.WriteString("\n")
 		}
+		if indicator := m.renderAttachmentIndicator(); indicator != "" {
+			b.WriteString(indicator)
+			b.WriteString("\n")
+		}
 		b.WriteString(m.theme.Composer.Render(m.textArea.View()))
 		b.WriteString("\n")
 	}
@@ -1504,6 +1508,43 @@ func clampLineANSI(s string, width int) string {
 func cleanListingText(s string) string {
 	s = strings.ReplaceAll(s, "**", "")
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// attachmentIndicatorHeight returns the rows reserved for the image
+// attachment indicator line above the composer (0 when no images are
+// attached or loading).
+func (m Model) attachmentIndicatorHeight() int {
+	if len(m.attachedImages) == 0 && m.pendingSubmitAttachTotal == 0 {
+		return 0
+	}
+	return 1
+}
+
+// renderAttachmentIndicator renders a compact line above the composer
+// showing attached image files. While images are loading, it shows
+// progress; once loaded, it shows the filenames. The indicator is
+// hidden when no images are attached.
+func (m Model) renderAttachmentIndicator() string {
+	if len(m.attachedImages) == 0 && m.pendingSubmitAttachTotal == 0 {
+		return ""
+	}
+	width := m.width - 2
+	if width < 10 {
+		width = 10
+	}
+	icons := m.iconSet()
+	if m.pendingSubmitAttachTotal > 0 && m.pendingSubmitAttachDone < m.pendingSubmitAttachTotal {
+		// Loading in progress
+		label := fmt.Sprintf("%s Loading images %d/%d", icons.Attachment, m.pendingSubmitAttachDone, m.pendingSubmitAttachTotal)
+		return m.theme.Dim.Render(truncateDisplayWidth(label, width))
+	}
+	// All loaded — show filenames
+	var names []string
+	for _, p := range m.attachedPaths {
+		names = append(names, filepath.Base(p))
+	}
+	label := fmt.Sprintf("%s %d image%s: %s", icons.Attachment, len(names), pluralS(len(names)), strings.Join(names, ", "))
+	return m.theme.Dim.Render(truncateDisplayWidth(label, width))
 }
 
 // Helper functions

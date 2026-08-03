@@ -252,15 +252,15 @@ if leftovers := c.steerCell().Take(); len(leftovers) > 0 {
 
 | # | 场景 | 分析 |
 |---|------|------|
-| B1 | 模型流式输出中提交 | cell 暂存；当前模型调用完成后，`executeTools`/`end_turn` 前无注入点——若模型返回 `end_turn`，turn 结束，走接力。若返回 tool_use，`executeTools` 后的下一轮 `prepare()` 注入 ✓ |
-| B2 | 工具执行中提交 | 同 B1 后半：工具批次完成 → `prepare()` → 注入 ✓（即 codex 的 "submitted after next tool call"） |
-| B3 | 审批挂起中提交 | cell 暂存；审批解决 → 工具执行 → `prepare()` → 注入；审批拒绝 → turn 继续或结束，语义一致 ✓ |
-| B4 | 取消中（cancelling）提交 | cell 暂存；turn 终结 → 接力 ✓ |
-| B5 | drain 与 Put 并发 | cell 内部 mutex；`Take()` 全量取走——drain 期间新 Put 的消息留在下一轮，顺序正确 ✓ |
-| B6 | 接力与 SubmitPrompt 并发 | 接力经 `cmdCh` 入队，与外部提交串行；先到先开 turn，后到入 cell ✓ |
+| B1 | 模型流式输出中提交 | cell 暂存；当前模型调用完成后，`executeTools`/`end_turn` 前无注入点——若模型返回 `end_turn`，turn 结束，走接力。若返回 tool_use，`executeTools` 后的下一轮 `prepare()` 注入 |
+| B2 | 工具执行中提交 | 同 B1 后半：工具批次完成 → `prepare()` → 注入（即 codex 的 "submitted after next tool call"） |
+| B3 | 审批挂起中提交 | cell 暂存；审批解决 → 工具执行 → `prepare()` → 注入；审批拒绝 → turn 继续或结束，语义一致 |
+| B4 | 取消中（cancelling）提交 | cell 暂存；turn 终结 → 接力 |
+| B5 | drain 与 Put 并发 | cell 内部 mutex；`Take()` 全量取走——drain 期间新 Put 的消息留在下一轮，顺序正确 |
+| B6 | 接力与 SubmitPrompt 并发 | 接力经 `cmdCh` 入队，与外部提交串行；先到先开 turn，后到入 cell |
 | B7 | 进程崩溃 | cell 未交付消息丢失（§3.3，与 codex 一致，可接受） |
-| B8 | steer 消息触发 budget/runaway | 注入是 `AddUserMessage`，usage 语义与普通 prompt 一致；接力 turn 独立预算窗口 ✓ |
-| B9 | compaction 与注入的相对顺序 | compaction 决策在 `prepare()` 前的阶段机顶部（`shouldCompact`），注入在 `prepare()`——压缩后注入的消息作为最新 user message 永远不被当轮压缩 ✓ |
+| B8 | steer 消息触发 budget/runaway | 注入是 `AddUserMessage`，usage 语义与普通 prompt 一致；接力 turn 独立预算窗口 |
+| B9 | compaction 与注入的相对顺序 | compaction 决策在 `prepare()` 前的阶段机顶部（`shouldCompact`），注入在 `prepare()`——压缩后注入的消息作为最新 user message 永远不被当轮压缩 |
 | B10 | cell 满（8 条） | `Put` 报错 → UI 恢复草稿并提示——软上限防脚本失控，人手速不可达 |
 
 ---

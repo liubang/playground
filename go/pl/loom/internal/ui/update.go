@@ -18,8 +18,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,6 +58,7 @@ var slashCommands = []slashCommand{
 	{name: "/resume", usage: "/resume <id>", desc: "Resume a session by ID"},
 	{name: "/clear", usage: "/clear", desc: "Clear transcript view (history retained)"},
 	{name: "/compact", usage: "/compact", desc: "Compact context before the next model call"},
+	{name: "/rewind", usage: "/rewind [seq]", desc: "List checkpoints, or rewind session and files to one"},
 	{name: "/agent", usage: "/agent", desc: "View the sub-agent run (read-only)"},
 	{name: "/model", usage: "/model [name]", desc: "Show or switch the active model"},
 	{name: "/reasoning", usage: "/reasoning [level]", desc: "Show or adjust the reasoning level"},
@@ -68,9 +72,11 @@ var slashCommands = []slashCommand{
 
 // promptSubmittedMsg reports the controller's ack for a submitted prompt.
 type promptSubmittedMsg struct {
-	prompt string
-	result app.SubmitResult
-	err    error
+	prompt     string
+	result     app.SubmitResult
+	err        error
+	imageCount int
+	imagePaths []string
 }
 
 // sessionAction describes an asynchronous new/resume session operation.
@@ -107,6 +113,21 @@ type reasoningChangedMsg struct {
 type compactRequestedMsg struct {
 	result app.RequestCompactionResult
 	err    error
+}
+
+// checkpointsListedMsg reports the result of a bare /rewind listing.
+type checkpointsListedMsg struct {
+	checkpoints []app.CheckpointInfo
+	err         error
+}
+
+// rewindFinishedMsg reports the result of a /rewind <seq> execution.
+// command carries the original composer input so a failure can restore
+// the draft.
+type rewindFinishedMsg struct {
+	command string
+	outcome app.RewindOutcome
+	err     error
 }
 
 // skillsLoadedMsg reports the result of a /skill listing request.
@@ -193,6 +214,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next = m.handleReasoningChanged(msg)
 	case compactRequestedMsg:
 		next = m.handleCompactRequested(msg)
+	case checkpointsListedMsg:
+		next = m.handleCheckpointsListed(msg)
+	case rewindFinishedMsg:
+		next, cmd = m.handleRewindFinished(msg)
 	case skillsLoadedMsg:
 		next = m.handleSkillsLoaded(msg)
 	case mcpServersLoadedMsg:
@@ -214,6 +239,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatus(fmt.Sprintf("Allowed; future %q commands auto-approved this session", msg.ruleNote), false)
 		}
 		next = m
+	case imageAttachedMsg:
+		next, cmd = m.handleImageAttached(msg)
 	case clipboardCopiedMsg:
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Copy failed: %v", msg.err), true)
@@ -453,6 +480,7 @@ func (m Model) visibleTranscriptHeight() int {
 		reserved += m.steerPanelHeight()
 		reserved += m.completionHeight()
 		reserved += m.planPanelHeight()
+		reserved += m.attachmentIndicatorHeight()
 	case ModeSearch:
 		reserved++    // spacer row
 		reserved += 3 // one-line search bar + border
@@ -1127,7 +1155,7 @@ func (m *Model) resumeFollowTail() {
 
 func (m Model) submitUserInput(raw string) (tea.Model, tea.Cmd) {
 	value := strings.TrimSpace(raw)
-	if value == "" {
+	if value == "" && len(m.attachedImages) == 0 {
 		return m, nil
 	}
 	if strings.HasPrefix(value, "/") {
@@ -1137,6 +1165,54 @@ func (m Model) submitUserInput(raw string) (tea.Model, tea.Cmd) {
 		m.setStatus("Cannot submit: runtime event stream is down. Press Ctrl+C to exit.", true)
 		return m, nil
 	}
+	// A previous submission is still waiting on image loads. Submitting
+	// again now would reset the pending counters while stale load results
+	// are still arriving, causing duplicate attachments and premature
+	// submission — ignore further submissions until the loads finish.
+	if m.pendingSubmitAttachTotal > 0 {
+		m.setStatus(fmt.Sprintf("Images still loading (%d/%d), please wait", m.pendingSubmitAttachDone, m.pendingSubmitAttachTotal), true)
+		return m, nil
+	}
+
+	// Scan the input text for local image file paths and load them
+	// asynchronously. Already-attached images are merged in (deduped by path).
+	var attachCmds []tea.Cmd
+	if value != "" {
+		for _, candidate := range extractImagePaths(value) {
+			// Skip paths that are already attached (dedup by path).
+			dup := false
+			for _, p := range m.attachedPaths {
+				if p == candidate {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				attachCmds = append(attachCmds, m.attachImageCmd(candidate))
+			}
+		}
+	}
+	// If there are images to load, defer submission until loading finishes;
+	// otherwise submit immediately with whatever is already attached.
+	if len(attachCmds) > 0 {
+		m.pendingSubmitDraft = raw
+		m.pendingSubmitAttachDone = 0
+		m.pendingSubmitAttachTotal = len(attachCmds)
+		// Kick off all loads in parallel.
+		return m, tea.Batch(attachCmds...)
+	}
+
+	return m.finishSubmitUserInput(raw)
+}
+
+// finishSubmitUserInput is the tail of submitUserInput, called once all
+// image loading is complete (or immediately if no images needed loading).
+func (m Model) finishSubmitUserInput(raw string) (tea.Model, tea.Cmd) {
+	// Capture attached images for this submission, then clear.
+	images := m.attachedImages
+	imagePaths := m.attachedPaths
+	m.attachedImages = nil
+	m.attachedPaths = nil
 	// Optimistic local echo; replaced by the durable turn.started confirmation
 	// or removed when the controller rejects the prompt.
 	m.pendingSubmitID = m.blocks.AddPendingUserBlock(raw)
@@ -1146,7 +1222,82 @@ func (m Model) submitUserInput(raw string) (tea.Model, tea.Cmd) {
 	m.setStatus("Prompt submitted", false)
 	m.setActivity("Waiting for the model")
 	m.quitConfirm = false
-	return m, m.submitPromptCmd(raw)
+	return m, m.submitPromptWithImagesCmd(raw, images, imagePaths)
+}
+
+// imageAttachedMsg reports the result of loading an image from a file path.
+type imageAttachedMsg struct {
+	path    string
+	content domain.ImageContent
+	err     error
+}
+
+// attachImageCmd loads an image file from the given path asynchronously.
+func (m Model) attachImageCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		const maxImageBytes = 20 * 1024 * 1024 // 20 MiB
+		content, err := domain.LoadImageFromPath(path, maxImageBytes)
+		return imageAttachedMsg{path: path, content: content, err: err}
+	}
+}
+
+// maxImageAttachments bounds the number of images that can be attached to a
+// single prompt to avoid blowing up the context size.
+const maxImageAttachments = 5
+
+// handleImageAttached processes the result of an asynchronous image load.
+// On success, the image is appended to m.attachedImages; on failure, a
+// warning is posted to the status line. When all pending loads complete,
+// the deferred prompt submission fires.
+func (m Model) handleImageAttached(msg imageAttachedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.setStatus(fmt.Sprintf("Failed to load image %s: %v", filepath.Base(msg.path), msg.err), true)
+	} else {
+		m.attachedImages = append(m.attachedImages, msg.content)
+		m.attachedPaths = append(m.attachedPaths, msg.path)
+		m.setStatus(fmt.Sprintf("Attached %s (%d/%d)", filepath.Base(msg.path), len(m.attachedImages), m.pendingSubmitAttachTotal), false)
+	}
+	m.pendingSubmitAttachDone++
+
+	// All loads finished — submit the prompt with whatever images loaded
+	// successfully.
+	if m.pendingSubmitAttachDone >= m.pendingSubmitAttachTotal && m.pendingSubmitDraft != "" {
+		draft := m.pendingSubmitDraft
+		m.pendingSubmitDraft = ""
+		m.pendingSubmitAttachDone = 0
+		m.pendingSubmitAttachTotal = 0
+		return m.finishSubmitUserInput(draft)
+	}
+	return m, nil
+}
+
+// extractImagePaths scans text for tokens that look like local file paths
+// with a supported image extension. It returns absolute paths for existing
+// files, skipping non-existent paths and unsupported extensions.
+func extractImagePaths(text string) []string {
+	var out []string
+	for _, field := range strings.Fields(text) {
+		candidate := field
+		// Strip surrounding quotes and prose punctuation. Quotes and
+		// punctuation can nest in either order (`"path".`, `("path")`),
+		// so trim both cutsets from both ends.
+		candidate = strings.Trim(candidate, `"'.,;:!?)]}([{`)
+		if !domain.IsImageExtension(candidate) {
+			continue
+		}
+		// Resolve relative paths against the workspace root.
+		if !filepath.IsAbs(candidate) {
+			continue // only absolute paths are auto-detected to avoid false positives
+		}
+		if _, err := os.Stat(candidate); err != nil {
+			continue
+		}
+		out = append(out, candidate)
+		if len(out) >= maxImageAttachments {
+			break
+		}
+	}
+	return out
 }
 
 func (m Model) handlePromptSubmitted(msg promptSubmittedMsg) tea.Model {
@@ -1158,7 +1309,13 @@ func (m Model) handlePromptSubmitted(msg promptSubmittedMsg) tea.Model {
 			if m.pendingSubmitID != "" {
 				m.blocks.Remove(m.pendingSubmitID)
 			}
-			m.setStatus(fmt.Sprintf("Queued (%d pending) — injects before the next model call; Ctrl+C flushes now", msg.result.QueueLen), false)
+			status := fmt.Sprintf("Queued (%d pending) — injects before the next model call; Ctrl+C flushes now", msg.result.QueueLen)
+			if msg.imageCount > 0 {
+				// Steer messages are text-only; the controller drops image
+				// attachments when queueing. Warn instead of losing them silently.
+				status += fmt.Sprintf(" — %d image%s dropped (steer is text-only)", msg.imageCount, pluralS(msg.imageCount))
+			}
+			m.setStatus(status, msg.imageCount > 0)
 		}
 		m.pendingSubmitID, m.pendingSubmitPrompt = "", ""
 		return m
@@ -1273,6 +1430,23 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		}
 		m.textArea.Reset()
 		return m, m.compactCmd()
+	case "/rewind":
+		if len(fields) > 2 {
+			m.setStatus("Usage: /rewind [checkpoint-sequence]", true)
+			return m, nil
+		}
+		m.textArea.Reset()
+		if len(fields) == 1 {
+			m.setStatus("Loading checkpoints...", false)
+			return m, m.listCheckpointsCmd()
+		}
+		sequence, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil || sequence <= 0 {
+			m.setStatus(fmt.Sprintf("Invalid checkpoint sequence: %s", fields[1]), true)
+			return m, nil
+		}
+		m.setStatus(fmt.Sprintf("Rewinding to checkpoint #%d...", sequence), false)
+		return m, m.rewindCmd(sequence, cmd)
 	case "/skill":
 		if len(fields) != 1 {
 			m.setStatus("Usage: /skill", true)
@@ -1372,6 +1546,86 @@ func (m Model) compactCmd() tea.Cmd {
 	return func() tea.Msg {
 		result, err := m.controller.RequestCompaction(context.Background())
 		return compactRequestedMsg{result: result, err: err}
+	}
+}
+
+// handleCheckpointsListed renders the bare /rewind listing as a compact
+// status summary: the most recent checkpoints with their labels, plus
+// the invocation hint. The full history stays in the session store; the
+// status line is a picker aid, not a pager.
+func (m Model) handleCheckpointsListed(msg checkpointsListedMsg) tea.Model {
+	if msg.err != nil {
+		m.setStatus(fmt.Sprintf("List checkpoints failed: %v", msg.err), true)
+		return m
+	}
+	if len(msg.checkpoints) == 0 {
+		m.setStatus("No checkpoints yet — checkpoints appear after the first turn", false)
+		return m
+	}
+	const maxShown = 3
+	var b strings.Builder
+	b.WriteString("Checkpoints: ")
+	for i, cp := range msg.checkpoints {
+		if i >= maxShown {
+			fmt.Fprintf(&b, " · (+%d more)", len(msg.checkpoints)-maxShown)
+			break
+		}
+		if i > 0 {
+			b.WriteString(" · ")
+		}
+		label := cp.Label
+		if label == "" {
+			label = "(no user message)"
+		}
+		fmt.Fprintf(&b, "#%d %q", cp.Sequence, label)
+	}
+	b.WriteString(" — /rewind <seq> to restore")
+	m.setStatus(b.String(), false)
+	return m
+}
+
+func (m Model) listCheckpointsCmd() tea.Cmd {
+	return func() tea.Msg {
+		checkpoints, err := m.controller.ListCheckpoints(context.Background(), 50)
+		return checkpointsListedMsg{checkpoints: checkpoints, err: err}
+	}
+}
+
+// handleRewindFinished applies the ack of a /rewind <seq>: on success the
+// transcript view resets (the truncated-away turns are gone) and the
+// restoration breakdown lands in the status line; on failure the draft
+// is restored so the user can fix a mistyped sequence.
+func (m Model) handleRewindFinished(msg rewindFinishedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.textArea.SetValue(msg.command)
+		m.setStatus(fmt.Sprintf("Rewind failed: %v", msg.err), true)
+		return m, nil
+	}
+	m.blocks = NewBlockIndex()
+	m.usage = domain.Usage{}
+	m.pendingApproval = nil
+	m.pendingQuestion = nil
+	m.choiceList = nil
+	m.pendingSteers = nil
+	m.subOverlay = nil
+	m.mode = ModeChat
+	out := msg.outcome
+	status := fmt.Sprintf("Rewound to checkpoint #%d: %d restored, %d deleted",
+		out.Checkpoint.Sequence, len(out.Restored), len(out.Deleted))
+	if len(out.Conflicts) > 0 {
+		status += fmt.Sprintf(", %d conflicts", len(out.Conflicts))
+	}
+	if len(out.Skipped) > 0 {
+		status += fmt.Sprintf(", %d unrestorable", len(out.Skipped))
+	}
+	m.setStatus(status, len(out.Conflicts) > 0 || len(out.Skipped) > 0)
+	return m, m.requestSnapshot()
+}
+
+func (m Model) rewindCmd(sequence int64, command string) tea.Cmd {
+	return func() tea.Msg {
+		outcome, err := m.controller.Rewind(context.Background(), sequence)
+		return rewindFinishedMsg{command: command, outcome: outcome, err: err}
 	}
 }
 
@@ -2052,9 +2306,16 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 // --- async controller commands ---
 
 func (m Model) submitPromptCmd(prompt string) tea.Cmd {
+	return m.submitPromptWithImagesCmd(prompt, nil, nil)
+}
+
+// submitPromptWithImagesCmd submits a prompt with optional image attachments.
+// Image loading is done asynchronously; on failure a warning is posted to the
+// status line but the text prompt still goes through.
+func (m Model) submitPromptWithImagesCmd(prompt string, images []domain.ImageContent, imagePaths []string) tea.Cmd {
 	return func() tea.Msg {
-		result, err := m.controller.SubmitPrompt(context.Background(), prompt)
-		return promptSubmittedMsg{prompt: prompt, result: result, err: err}
+		result, err := m.controller.SubmitPromptWithImages(context.Background(), prompt, images)
+		return promptSubmittedMsg{prompt: prompt, result: result, err: err, imageCount: len(images), imagePaths: imagePaths}
 	}
 }
 
