@@ -264,15 +264,24 @@ type Memory struct {
 	Enabled *bool `yaml:"enabled"`
 }
 
-// MCPServer configures one MCP server subprocess connected over the stdio
-// transport. The key in MCPServers is the server name used for
-// log attribution and tool name qualification (mcp__{server}__{tool}).
-// Only the stdio transport is supported (SSE/streamable HTTP may follow).
+// MCPServer configures one MCP server connection. The key in MCPServers
+// is the server name used for log attribution and tool name
+// qualification (mcp__{server}__{tool}). Two transports are supported,
+// selected by exactly one of Command or URL:
+//   - command: spawn a subprocess and speak MCP over its stdio pipes;
+//   - url:     POST JSON-RPC to a remote streamable HTTP endpoint.
 type MCPServer struct {
 	Command string            `yaml:"command"`
 	Args    []string          `yaml:"args"`
 	Env     map[string]string `yaml:"env"`
 	Cwd     string            `yaml:"cwd"`
+	// URL selects the streamable HTTP transport (mutually exclusive
+	// with Command). Headers carries static per-request headers such
+	// as Authorization; a ${VAR} reference in a value resolves the
+	// environment variable at load time (secret references, mirroring
+	// api_key_env, so tokens stay out of the file).
+	URL     string            `yaml:"url"`
+	Headers map[string]string `yaml:"headers"`
 	// StartupTimeoutSec bounds spawn+initialize (default 30s);
 	// ToolTimeoutSec bounds one tools/call (default 300s).
 	StartupTimeoutSec float64 `yaml:"startup_timeout_sec"`

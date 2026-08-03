@@ -263,20 +263,28 @@ subagent:
                                 # 空表示跟随当前轮次的模型
 
 # ------------------------------------------------------------------------------
-# MCP 服务器（Model Context Protocol，stdio 传输）
-# 配置后 loom 启动时自动拉起子进程、发现工具并注册到工具表中，
-# 工具名格式 mcp__{服务器名}__{工具名}，与内置工具隔离无冲突。
+# MCP 服务器（Model Context Protocol）
+# 两种传输二选一：command（stdio，loom 拉起子进程）或 url（streamable
+# HTTP，连接远程端点）。配置后 loom 启动时自动连接、发现工具并注册到
+# 工具表中，工具名格式 mcp__{服务器名}__{工具名}，与内置工具隔离无冲突。
 # 单个服务器启动失败仅记录警告，不影响其他服务器和内置工具。
 # ------------------------------------------------------------------------------
 mcp_servers: {}
-  # 示例：连接一个文件系统 MCP 服务器
+  # 示例：连接一个文件系统 MCP 服务器（stdio 传输）
   # filesystem:
   #   command: npx
   #   args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
   #   # env: {}                       # 额外环境变量（追加到当前进程环境）
   #   # cwd: ""                       # 子进程工作目录；空继承 loom 的工作目录
-  #   # startup_timeout_sec: 30       # 启动+握手超时（默认 30s）
+  #   # startup_timeout_sec: 30       # 连接+握手超时（默认 30s）
   #   # tool_timeout_sec: 300         # 单次 tools/call 超时（默认 300s）
   #   # enabled_tools: []             # 白名单：仅注册列出的工具；空=全部
   #   # disabled_tools: []            # 黑名单：跳过列出的工具
+  #
+  # 示例：连接一个远程 MCP 服务器（streamable HTTP 传输）
+  # remote:
+  #   url: https://mcp.example.com/mcp
+  #   headers:                      # 静态请求头；${VAR} 在加载时展开为环境
+  #     Authorization: Bearer ${MCP_TOKEN}  # 变量值（变量未设置则报错），
+  #                                   # 令牌不落盘，与 api_key_env 同理
 `

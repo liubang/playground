@@ -28,13 +28,18 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-// ServerConfig is one configured MCP server (from mcp_servers in the config
-// file). Only the stdio transport is supported.
+// ServerConfig is one configured MCP server (from mcp_servers in the
+// config file). Command selects the stdio transport, URL the streamable
+// HTTP transport; exactly one is set (the config loader enforces this).
 type ServerConfig struct {
 	Command string            `yaml:"command"`
 	Args    []string          `yaml:"args"`
 	Env     map[string]string `yaml:"env"`
 	Cwd     string            `yaml:"cwd"`
+	// URL/Headers configure the streamable HTTP transport; Headers
+	// carries static per-request headers such as Authorization.
+	URL     string            `yaml:"url"`
+	Headers map[string]string `yaml:"headers"`
 	// StartupTimeoutSec bounds spawn+initialize (default 30s);
 	// ToolTimeoutSec bounds one tools/call (default 300s).
 	StartupTimeoutSec float64 `yaml:"startup_timeout_sec"`
@@ -51,6 +56,8 @@ func (c ServerConfig) clientConfig(name string, logger *slog.Logger) ClientConfi
 		Args:           append([]string(nil), c.Args...),
 		Env:            c.Env,
 		Cwd:            c.Cwd,
+		URL:            c.URL,
+		Headers:        c.Headers,
 		StartupTimeout: secondsOr(c.StartupTimeoutSec, defaultStartupTimeout),
 		ToolTimeout:    secondsOr(c.ToolTimeoutSec, defaultToolTimeout),
 		Logger:         logger,

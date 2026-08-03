@@ -332,6 +332,8 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 				Args:              srv.Args,
 				Env:               srv.Env,
 				Cwd:               srv.Cwd,
+				URL:               srv.URL,
+				Headers:           srv.Headers,
 				StartupTimeoutSec: srv.StartupTimeoutSec,
 				ToolTimeoutSec:    srv.ToolTimeoutSec,
 				EnabledTools:      srv.EnabledTools,
