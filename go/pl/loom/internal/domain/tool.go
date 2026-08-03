@@ -246,4 +246,9 @@ type RecoverySpec struct {
 	Path         string `json:"path,omitempty"`
 	ExpectedHash string `json:"expected_hash,omitempty"`
 	ResultHash   string `json:"result_hash,omitempty"`
+	// BeforeContent holds the file content before mutation, for checkpoint
+	// rewind support. It is not JSON-serialized (too large for the event
+	// stream) and is populated only by file-writing tools (edit, write)
+	// during Prepare, then consumed by the agent loop's recordToolOutcome.
+	BeforeContent []byte `json:"-"`
 }

@@ -19,7 +19,13 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "subagent_lib",
-    srcs = ["delegate.go"],
+    srcs = [
+        "delegate.go",
+        "manager.go",
+        "resume.go",
+        "roles.go",
+        "wait.go",
+    ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/subagent",
     visibility = ["//visibility:public"],
     deps = [
@@ -31,7 +37,13 @@ go_library(
 
 go_test(
     name = "subagent_test",
-    srcs = ["delegate_test.go"],
+    srcs = [
+        "delegate_test.go",
+        "manager_test.go",
+        "resume_test.go",
+        "roles_test.go",
+        "wait_test.go",
+    ],
     embed = [":subagent_lib"],
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",

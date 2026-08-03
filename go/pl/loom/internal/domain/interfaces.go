@@ -197,6 +197,31 @@ type ArtifactStore interface {
 	Begin(context.Context) (StagedArtifact, error)
 }
 
+// --- Session store types (§13.2) ---
+
+// SessionSummary is a lightweight persisted session view for listing sessions.
+type SessionSummary struct {
+	ID        SessionID `json:"id"`
+	Version   int64     `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// SessionTranscript is the recovered message history of a session.
+type SessionTranscript struct {
+	SessionID         SessionID `json:"session_id"`
+	Messages          []Message `json:"messages"`
+	LastEventSequence int64     `json:"last_event_sequence"`
+}
+
+// SessionInspection is a consistent read-only view of persisted session data.
+type SessionInspection struct {
+	Session    SessionSummary     `json:"session"`
+	Checkpoint *Checkpoint        `json:"checkpoint,omitempty"`
+	Transcript SessionTranscript  `json:"transcript"`
+	Events     []Event            `json:"events"`
+}
+
 // --- SessionStore interface (§13.2) ---
 
 // Checkpoint is a snapshot of a session's state for efficient recovery.
@@ -222,6 +247,15 @@ type SessionStore interface {
 	LoadEvents(ctx context.Context, sessionID SessionID, after int64) ([]Event, error)
 	SaveCheckpoint(ctx context.Context, ckpt Checkpoint) error
 	LoadLatestCheckpoint(ctx context.Context, sessionID SessionID) (Checkpoint, error)
+	// RecordFileChange appends one file mutation to the session's change
+	// ledger for checkpoint/rewind support. beforeContent may be nil (file
+	// did not exist, or was not captured); beforeExisted distinguishes the
+	// two cases.
+	RecordFileChange(ctx context.Context, sessionID SessionID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error
+	// InspectSession returns session metadata, its latest checkpoint, the
+	// recovered transcript, and the complete event timeline from one
+	// consistent read snapshot.
+	InspectSession(ctx context.Context, sessionID SessionID) (SessionInspection, error)
 }
 
 // --- Approver interface (§12.2) ---

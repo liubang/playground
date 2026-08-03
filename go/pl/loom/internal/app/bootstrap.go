@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,6 +43,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/edit"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/exsession"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
+	"github.com/liubang/playground/go/pl/loom/internal/memory"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/lint"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
@@ -91,6 +93,10 @@ type Bootstrap struct {
 	Validator     *workspace.PathValidator
 	Runner        *process.Runner
 	Version       string
+	// FileStateBook is the shared read/write hash tracker used by
+	// read_file and edit for drift detection; rewind restoration updates
+	// it so a post-rewind edit measures drift from the restored content.
+	FileStateBook *workspace.FileStateBook
 	// SessionEnv holds the loom attribution variables (agent name/version,
 	// session ID) injected into every spawned command. The controller
 	// rewrites it on session create/resume; the runner reads it per
@@ -126,6 +132,10 @@ type Bootstrap struct {
 	// so the frontend wiring can attach a lifecycle observer
 	// (WireSubagentObserver). Nil when the sub-agent is disabled.
 	SubagentFactory *subagent.Factory
+	// SubagentManager is the V2 async delegation runtime; Close
+	// drains its in-flight children before the store shuts down. Nil
+	// when the sub-agent is disabled.
+	SubagentManager *subagent.Manager
 	// SessionManager owns every exec_session/write_stdin background
 	// process; Close reclaims surviving process groups before the store
 	// shuts down.
@@ -139,6 +149,15 @@ type Bootstrap struct {
 	// provider and the read_skill tool; nil when skills are disabled
 	// (skills.enabled=false or the built-in system prompt is off).
 	Skills *SkillsHandle
+	// MemoryStore is the persistent memory store (~/.loom/memories/);
+	// nil when memory is disabled (memory.enabled=false).
+	MemoryStore *memory.Store
+	// MemoryExtractor runs Phase 1 extraction at session end;
+	// nil when memory is disabled.
+	MemoryExtractor *memory.Extractor
+	// MemoryConsolidator runs Phase 2 consolidation;
+	// nil when memory is disabled.
+	MemoryConsolidator *memory.Consolidator
 
 	traceProvider *trace.Provider
 }
@@ -343,9 +362,10 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	var (
 		subagentModels  *subagent.ModelSource
 		subagentFactory *subagent.Factory
+		subagentManager *subagent.Manager
 	)
 	if resolved.Subagent.Enabled {
-		childRegistry, err := buildSubagentRegistry(validator, runner, artStore, book)
+		researcherRegistry, err := buildSubagentRegistry(validator, runner, artStore, book)
 		if err != nil {
 			_ = store.Close()
 			return nil, fmt.Errorf("build sub-agent registry: %w", err)
@@ -358,14 +378,42 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 			childLimits.MaxOutputTokens = resolved.Subagent.MaxOutputTokens
 		}
 		subagentModels = &subagent.ModelSource{}
+
+		// Assemble the role specs: researcher (read-only, R1) and coder
+		// (read-write, R3). The coder registry adds edit/write/run_cmd/lint.
+		researcherPrompt := prompt.NewBuilder(cfg.WorkspaceRoot,
+			prompt.WithExtraInstructions(subagent.ResearcherInstructions))
+		researcherSpec := &subagent.RoleSpec{
+			Registry: researcherRegistry,
+			Prompt:   researcherPrompt,
+			Risk:     domain.R1,
+		}
+
+		coderRegistry, err := buildCoderRegistry(validator, runner, artStore, book, int(resolved.Limits.MaxToolOutputBytes))
+		if err != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("build coder registry: %w", err)
+		}
+		coderPrompt := prompt.NewBuilder(cfg.WorkspaceRoot,
+			prompt.WithExtraInstructions(subagent.CoderInstructions))
+		coderSpec := &subagent.RoleSpec{
+			Registry: coderRegistry,
+			Prompt:   coderPrompt,
+			Risk:     domain.R3,
+		}
+
+		roles := map[subagent.Role]*subagent.RoleSpec{
+			subagent.RoleResearcher: researcherSpec,
+			subagent.RoleCoder:     coderSpec,
+		}
+
 		factory := &subagent.Factory{
-			Store:     store,
-			Artifacts: artStore,
-			Recorder:  traceRecorder,
-			Logger:    logger,
-			Registry:  childRegistry,
-			Prompt: prompt.NewBuilder(cfg.WorkspaceRoot,
-				prompt.WithExtraInstructions(subagent.ResearcherInstructions)),
+			Store:                store,
+			Artifacts:            artStore,
+			Recorder:             traceRecorder,
+			Logger:               logger,
+			Registry:             researcherRegistry,
+			Prompt:               researcherPrompt,
 			Workspace:            cfg.WorkspaceRoot,
 			Limits:               childLimits,
 			Runaway:              resolved.Runaway,
@@ -373,6 +421,17 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 			CostInputUSDPerMTok:  resolved.Tracing.CostInputPerMTok,
 			CostOutputUSDPerMTok: resolved.Tracing.CostOutputPerMTok,
 		}
+
+		// V2 Manager: async spawn/wait/resume for both roles.
+		// validator implements agent.FileStateReader for RecoverRun.
+		manager, err := subagent.NewManager(factory, roles, validator)
+		if err != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("create sub-agent manager: %w", err)
+		}
+		factory.Manager = manager
+		subagentManager = manager
+
 		delegateTool, err := subagent.NewDelegateTaskTool(factory)
 		if err != nil {
 			sessionManager.Close()
@@ -384,39 +443,112 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 			_ = store.Close()
 			return nil, fmt.Errorf("register delegate_task: %w", err)
 		}
+
+		// V2 companion tools: wait_subagent and resume_subagent.
+		waitTool, err := subagent.NewWaitSubagentTool(manager)
+		if err != nil {
+			sessionManager.Close()
+			_ = store.Close()
+			return nil, fmt.Errorf("wait_subagent: %w", err)
+		}
+		if err := registry.Register(waitTool); err != nil {
+			sessionManager.Close()
+			_ = store.Close()
+			return nil, fmt.Errorf("register wait_subagent: %w", err)
+		}
+		resumeTool, err := subagent.NewResumeSubagentTool(manager)
+		if err != nil {
+			sessionManager.Close()
+			_ = store.Close()
+			return nil, fmt.Errorf("resume_subagent: %w", err)
+		}
+		if err := registry.Register(resumeTool); err != nil {
+			sessionManager.Close()
+			_ = store.Close()
+			return nil, fmt.Errorf("register resume_subagent: %w", err)
+		}
+
 		subagentFactory = factory
-		logger.Info("sub-agent delegation enabled")
+		logger.Info("sub-agent delegation enabled", "roles", "researcher+coder", "async", true)
+	}
+
+	// Memory system: open the persistent memory store, register the
+	// memory tools, and wire the extraction/consolidation pipeline.
+	// All of this is gated by the memory.enabled config (default: true).
+	var (
+		memoryStore       *memory.Store
+		memoryExtractor   *memory.Extractor
+		memoryConsolidator *memory.Consolidator
+	)
+	if resolved.Memory.Enabled {
+		if memStore, err := memory.OpenStore(""); err != nil {
+			logger.Warn("memory system disabled: open store failed", "error", err)
+		} else {
+			memoryStore = memStore
+			// Initialize git for incremental diff detection.
+			if err := memStore.InitGit(ctx); err != nil {
+				logger.Warn("memory git init failed; consolidation will be disabled until git is available", "error", err)
+			}
+			// Register memory tools.
+			if err := registerMemoryTools(registry, memStore); err != nil {
+				logger.Warn("memory tools registration failed", "error", err)
+			}
+			// Wire extractor and consolidator with the current model.
+			provider := resolved.ProviderByName(resolved.Default.Provider)
+			if provider != nil {
+				model := provider.ModelFor(resolved.Default.Model)
+				modelName := resolved.Default.Model
+				memoryExtractor = memory.NewExtractor(memStore, model, modelName)
+				memoryConsolidator = memory.NewConsolidator(memStore, model, modelName)
+			}
+		}
+	}
+
+	// If memory is enabled, inject the memory prompt into the system
+	// prompt builder. This wraps the existing prompt builder with a
+	// memory-aware one.
+	if memoryStore != nil && promptBuilder != nil {
+		promptBuilder = &memoryPromptWrapper{
+			inner:  promptBuilder,
+			store:  memoryStore,
+			logger: logger,
+		}
 	}
 
 	return &Bootstrap{
-		Resolved:         resolved,
-		Current:          resolved.Default,
-		WorkspaceRoot:    cfg.WorkspaceRoot,
-		Store:            store,
-		Artifact:         artStore,
-		Registry:         registry,
-		Policy:           decider,
-		permissionPolicy: &policy,
-		approvalMode:     resolved.Approval.Mode,
-		PromptBuilder:    promptBuilder,
-		Logger:           logger,
-		Validator:        validator,
-		Runner:           runner,
-		Version:          cfg.Version,
-		SessionEnv:       sessionEnv,
-		GoalCell:         goalCell,
-		PlanCell:         planCell,
-		SteerCell:        steerCell,
-		Questioner:       questioner,
-		Recorder:         traceRecorder,
-		SessionRules:     sessionRules,
-		SubagentModels:   subagentModels,
-		RememberedStore:  rememberedStore,
-		SubagentFactory:  subagentFactory,
-		SessionManager:   sessionManager,
-		MCPManager:       mcpManager,
-		Skills:           skills,
-		traceProvider:    traceProvider,
+		Resolved:          resolved,
+		Current:           resolved.Default,
+		WorkspaceRoot:     cfg.WorkspaceRoot,
+		Store:             store,
+		Artifact:          artStore,
+		Registry:          registry,
+		Policy:            decider,
+		permissionPolicy:  &policy,
+		approvalMode:      resolved.Approval.Mode,
+		PromptBuilder:     promptBuilder,
+		Logger:            logger,
+		Validator:         validator,
+		Runner:            runner,
+		Version:           cfg.Version,
+		FileStateBook:     book,
+		SessionEnv:        sessionEnv,
+		GoalCell:          goalCell,
+		PlanCell:          planCell,
+		SteerCell:         steerCell,
+		Questioner:        questioner,
+		Recorder:          traceRecorder,
+		SessionRules:      sessionRules,
+		SubagentModels:    subagentModels,
+		RememberedStore:   rememberedStore,
+		SubagentFactory:   subagentFactory,
+		SubagentManager:   subagentManager,
+		SessionManager:    sessionManager,
+		MCPManager:        mcpManager,
+		Skills:            skills,
+		MemoryStore:       memoryStore,
+		MemoryExtractor:   memoryExtractor,
+		MemoryConsolidator: memoryConsolidator,
+		traceProvider:     traceProvider,
 	}, nil
 }
 
@@ -516,7 +648,30 @@ func defaultContextWindow(resolved *config.ResolvedConfig) int64 {
 	return 0
 }
 
-// registerBuiltinTools registers all built-in tools with the registry.
+// registerMemoryTools registers the memory tools (list, read, search,
+// add_note) with the tool registry.
+func registerMemoryTools(registry *agent.ToolRegistry, store *memory.Store) error {
+	tools := []struct {
+		name string
+		mk   func() (domain.Tool, error)
+	}{
+		{"memory_list", func() (domain.Tool, error) { return memory.NewListTool(store) }},
+		{"memory_read", func() (domain.Tool, error) { return memory.NewReadTool(store) }},
+		{"memory_search", func() (domain.Tool, error) { return memory.NewSearchTool(store) }},
+		{"memory_add_note", func() (domain.Tool, error) { return memory.NewAddNoteTool(store) }},
+	}
+	for _, tt := range tools {
+		t, err := tt.mk()
+		if err != nil {
+			return fmt.Errorf("%s: %w", tt.name, err)
+		}
+		if err := registry.Register(t); err != nil {
+			return fmt.Errorf("register %s: %w", tt.name, err)
+		}
+	}
+	return nil
+}
+
 func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager) error {
 	tools := []struct {
 		name string
@@ -633,8 +788,79 @@ func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.R
 	return registry, nil
 }
 
+// buildCoderRegistry assembles the read-write tool set for the coder
+// sub-agent role. It carries every researcher tool plus edit, write,
+// run_cmd, and lint — the tools that make code changes. Excluded by
+// design: update_goal/update_plan (parent-run state), ask_user (no one
+// to answer), exec_session/write_stdin (interactive sessions), and
+// delegate_task itself (no recursion).
+func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook, maxOutputBytes int) (*agent.ToolRegistry, error) {
+	// Start from the researcher registry and add the writable tools.
+	registry := agent.NewToolRegistry()
+	tools := []struct {
+		name string
+		mk   func() (domain.Tool, error)
+	}{
+		// Read-only tools (same as researcher).
+		{"read_file", func() (domain.Tool, error) { return builtin.NewReadFileTool(validator, book) }},
+		{"list_dir", func() (domain.Tool, error) { return builtin.NewListDirTool(validator) }},
+		{"search", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
+		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
+		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator) }},
+		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator) }},
+		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator) }},
+		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator) }},
+		{"git_merge_base", func() (domain.Tool, error) { return gittools.NewGitMergeBaseTool(validator) }},
+		{"git_blame", func() (domain.Tool, error) { return gittools.NewGitBlameTool(validator) }},
+		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(artStore) }},
+		{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }},
+		// Writable tools (coder-specific).
+		{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
+		{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
+		{"lint", func() (domain.Tool, error) { return lint.NewLintTool(validator, runner) }},
+	}
+	for _, tt := range tools {
+		t, err := tt.mk()
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", tt.name, err)
+		}
+		if err := registry.Register(t); err != nil {
+			return nil, fmt.Errorf("register %s: %w", tt.name, err)
+		}
+	}
+	// run_cmd needs the artifact store for output capture.
+	runCmd, err := command.NewRunCmdToolWithArtifacts(validator, runner, artStore, maxOutputBytes)
+	if err != nil {
+		return nil, fmt.Errorf("run_cmd: %w", err)
+	}
+	if err := registry.Register(runCmd); err != nil {
+		return nil, fmt.Errorf("register run_cmd: %w", err)
+	}
+	return registry, nil
+}
+
 // Close releases all resources held by the Bootstrap.
 func (b *Bootstrap) Close() {
+	// Drain in-flight sub-agents before closing the session store;
+	// child goroutines hold store references until they persist their
+	// final checkpoint.
+	if b.SubagentManager != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		b.SubagentManager.Shutdown(ctx)
+		cancel()
+	}
+	// Run Phase 2 consolidation before closing: merges raw memories
+	// into MEMORY.md and regenerates the summary. Best-effort — a
+	// consolidation failure must never hang shutdown.
+	if b.MemoryConsolidator != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		if changed, err := b.MemoryConsolidator.Consolidate(ctx); err != nil && b.Logger != nil {
+			b.Logger.Warn("memory consolidation failed", "error", err)
+		} else if changed && b.Logger != nil {
+			b.Logger.Info("memory consolidation completed")
+		}
+		cancel()
+	}
 	if b.RememberedStore != nil {
 		if err := b.RememberedStore.Close(); err != nil && b.Logger != nil {
 			b.Logger.Warn("remembered store shutdown failed", "error", err)
@@ -692,4 +918,47 @@ func ResolveManagedPrompt(ctx context.Context, managed config.ManagedPrompt, tra
 	logger.Info("using langfuse managed prompt",
 		"name", mp.Name, "version", mp.Version, "label", label, "fetched_at", mp.FetchedAt)
 	return prompt.WithManagedBase(mp.Name, mp.Version, mp.Content)
+}
+
+// memoryPromptWrapper wraps a PromptBuilder to inject the memory summary
+// and memory instructions into the system prompt. It reads the current
+// memory_summary.md on each Build call so updates between turns are
+// reflected.
+type memoryPromptWrapper struct {
+	inner  agent.PromptBuilder
+	store  *memory.Store
+	logger *slog.Logger
+}
+
+func (w *memoryPromptWrapper) Build(ctx context.Context) (string, []domain.ContextRuleRef, error) {
+	base, refs, err := w.inner.Build(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Inject memory summary (hot tier).
+	provider := memory.NewPromptProvider(w.store)
+	summary, err := provider.MemoryPrompt(ctx)
+	if err != nil && w.logger != nil {
+		w.logger.Warn("memory prompt injection failed", "error", err)
+	}
+
+	// Assemble the injected memory section in one place so the audit
+	// rule ref hashes exactly what was appended to the prompt.
+	var section strings.Builder
+	if summary != "" {
+		section.WriteString("\n\n# Memory\n\n")
+		section.WriteString(summary)
+	}
+	// Inject memory instructions so the model knows how to use memory tools.
+	section.WriteString("\n\n")
+	section.WriteString(memory.MemoryInstructions)
+	injected := section.String()
+	base += injected
+
+	// Add the memory rule ref for audit; the context manifest requires a
+	// non-empty hash per rule.
+	refs = append(refs, provider.RuleRef(injected))
+
+	return base, refs, nil
 }

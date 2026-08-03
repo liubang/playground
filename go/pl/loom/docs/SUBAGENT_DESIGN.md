@@ -259,13 +259,13 @@ subagent:
 
 | 共享设施 | 结论 |
 |----------|------|
-| `workspace.FileStateBook` | mutex 保护 ✓ |
-| `artifact.Store` | 每次调用私有 staging 文件 ✓ |
-| `webfetch.responseCache` | mutex 保护 ✓ |
-| `session.SQLiteStore` | 单连接串行写 + 每 session 乐观版本 ✓ |
-| `fakes.FakeStore` / `FakeModel` | mutex 保护 ✓ |
-| `process.Runner` | 每次调用独立进程；输出缓冲 mutex 保护 ✓ |
-| trace Recorder（otel） | 线程安全；`recordTool` 只在串行段调用 ✓ |
+| `workspace.FileStateBook` | mutex 保护 |
+| `artifact.Store` | 每次调用私有 staging 文件 |
+| `webfetch.responseCache` | mutex 保护 |
+| `session.SQLiteStore` | 单连接串行写 + 每 session 乐观版本 |
+| `fakes.FakeStore` / `FakeModel` | mutex 保护 |
+| `process.Runner` | 每次调用独立进程；输出缓冲 mutex 保护 |
+| trace Recorder（otel） | 线程安全；`recordTool` 只在串行段调用 |
 
 ---
 

@@ -2307,6 +2307,14 @@ func (s *contextCheckingStore) LoadLatestCheckpoint(ctx context.Context, id doma
 	return s.base.LoadLatestCheckpoint(ctx, id)
 }
 
+func (s *contextCheckingStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
+	return s.base.RecordFileChange(ctx, sessionID, path, beforeExisted, beforeHash, beforeContent, afterHash)
+}
+
+func (s *contextCheckingStore) InspectSession(ctx context.Context, sessionID domain.SessionID) (domain.SessionInspection, error) {
+	return s.base.InspectSession(ctx, sessionID)
+}
+
 type failingStore struct {
 	base       *fakes.FakeStore
 	failOnType domain.EventType
@@ -2345,6 +2353,14 @@ func (s *failingStore) SaveCheckpoint(ctx context.Context, ckpt domain.Checkpoin
 
 func (s *failingStore) LoadLatestCheckpoint(ctx context.Context, sessionID domain.SessionID) (domain.Checkpoint, error) {
 	return s.base.LoadLatestCheckpoint(ctx, sessionID)
+}
+
+func (s *failingStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
+	return s.base.RecordFileChange(ctx, sessionID, path, beforeExisted, beforeHash, beforeContent, afterHash)
+}
+
+func (s *failingStore) InspectSession(ctx context.Context, sessionID domain.SessionID) (domain.SessionInspection, error) {
+	return s.base.InspectSession(ctx, sessionID)
 }
 
 func newTestToolDefinition(name string, capabilities []domain.Capability) domain.ToolDefinition {

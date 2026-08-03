@@ -149,6 +149,19 @@ type Model struct {
 	// Composer
 	textArea textarea.Model
 
+	// attachedImages tracks image files the user has referenced in the
+	// composer draft. They are loaded and attached when the prompt is
+	// submitted, then cleared. The slice is nil when no images are
+	// pending.
+	attachedImages []domain.ImageContent
+	attachedPaths  []string // original file paths for display
+
+	// pendingSubmitDraft holds the draft text while image attachments are
+	// loading asynchronously; once all loads complete the prompt is submitted.
+	pendingSubmitDraft       string
+	pendingSubmitAttachDone  int
+	pendingSubmitAttachTotal int
+
 	// Slash command completion popup. completionDismissedFor ties a dismissal
 	// to the draft it was made on; any draft change re-arms the popup.
 	completionCursor       int

@@ -6,50 +6,50 @@
 
 | #   | 位置                                                       | 问题                                                                                                                                                                                                      | 状态      |
 | --- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| H1  | `agent/compact.go:271,403` ↔ `session/sqlite_store.go:783` | compaction 的 mask/archive 把 artifact ID 只写进占位文本，从不写入 `ContentPart.Artifact` 字段，GC 引用收集（`checkpointArtifactRefs`）看不到 → `loom gc` 会误删活跃会话的压缩产物，transcript 留下死指针 | ✅ 已修复 |
-| H2  | `domain/limits.go:103-104`                                 | `Usage.WallTime`/`Usage.CostUSD` 从无生产代码写入，`MaxWallTime`(30min)/`MaxEstimatedCostUSD`(5.0) 两条 runaway 硬限制永远不触发                                                                          | ✅ 已修复 |
-| H3  | `app/controller.go:863`（写）vs `:787,:1053`（读）         | `c.runID` 由 turn goroutine 持锁写、Run 循环 goroutine 无锁读，存在 data race（`-race` 可复现）                                                                                                           | ✅ 已修复 |
-| H4  | `agent/run.go:1222-1231`                                   | 审批流「先 flushEvents 发布 `approval.requested`，后 `RequestApproval` 注册 pending 槽」；窗口期内前端应答会因 binding 不匹配被拒，决策永久丢失（目前靠 UI 700ms guard 隐式掩盖）                         | ✅ 已修复 |
-| H5  | `tool/builtin/rg.go:59` + `process/sandbox_linux.go:23`    | `rgAvailable` 只探测 rg 二进制存在；Linux 沙箱未实现（fail-closed）时 `runner.Run` 必败，search/glob 整体报废且不回退 Go fallback                                                                         | ✅ 已修复 |
-| H6  | `config/resolve.go:322-345`                                | 模型级 `wire_api` 只校验并写入元数据，`buildProvider` 只用 provider 级 wireAPI 构建唯一实例 → 如 `deepseek-reasoner` 配 `wire_api: responses` 静默失效                                                    | ✅ 已修复 |
-| H7 | `process/runner.go:210-215` | `cmd.Wait()` 返回后立即 `closeReadPipe`，管道缓冲区尾部数据可静默丢失且不标 `Truncated` | ✅ 已修复 |
+| H1  | `agent/compact.go:271,403` ↔ `session/sqlite_store.go:783` | compaction 的 mask/archive 把 artifact ID 只写进占位文本，从不写入 `ContentPart.Artifact` 字段，GC 引用收集（`checkpointArtifactRefs`）看不到 → `loom gc` 会误删活跃会话的压缩产物，transcript 留下死指针 | 已修复 |
+| H2  | `domain/limits.go:103-104`                                 | `Usage.WallTime`/`Usage.CostUSD` 从无生产代码写入，`MaxWallTime`(30min)/`MaxEstimatedCostUSD`(5.0) 两条 runaway 硬限制永远不触发                                                                          | 已修复 |
+| H3  | `app/controller.go:863`（写）vs `:787,:1053`（读）         | `c.runID` 由 turn goroutine 持锁写、Run 循环 goroutine 无锁读，存在 data race（`-race` 可复现）                                                                                                           | 已修复 |
+| H4  | `agent/run.go:1222-1231`                                   | 审批流「先 flushEvents 发布 `approval.requested`，后 `RequestApproval` 注册 pending 槽」；窗口期内前端应答会因 binding 不匹配被拒，决策永久丢失（目前靠 UI 700ms guard 隐式掩盖）                         | 已修复 |
+| H5  | `tool/builtin/rg.go:59` + `process/sandbox_linux.go:23`    | `rgAvailable` 只探测 rg 二进制存在；Linux 沙箱未实现（fail-closed）时 `runner.Run` 必败，search/glob 整体报废且不回退 Go fallback                                                                         | 已修复 |
+| H6  | `config/resolve.go:322-345`                                | 模型级 `wire_api` 只校验并写入元数据，`buildProvider` 只用 provider 级 wireAPI 构建唯一实例 → 如 `deepseek-reasoner` 配 `wire_api: responses` 静默失效                                                    | 已修复 |
+| H7 | `process/runner.go:210-215` | `cmd.Wait()` 返回后立即 `closeReadPipe`，管道缓冲区尾部数据可静默丢失且不标 `Truncated` | 已修复 |
 
 ## 二、中严重度 Bug
 
 | #   | 位置                                          | 问题                                                                                                                                           | 状态      |
 | --- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| M1  | `agent/goal.go:91-95` vs `:197`               | goal 置 `budget_limited` 后 `update_goal complete` 被静默丢弃（仅 `Active` 时应用 Close），工具结果却返回 applied → 模型收到成功反馈但状态未变 | ✅ 已修复 |
-| M2  | `agent/run.go:1232-1237,1289-1295`            | 审批请求失败、执行前 flush 失败只 `return err`，Run 停留 active 无终态事件；与 `callModel` 的 `terminate(OutcomeFailed)` 语义不一致            | ✅ 已修复 |
-| M3  | `model/anthropic/provider.go:91-94`           | `base_url` 以 `/v1` 结尾时拼出 `/v1/v1/messages`（openai 侧已处理 `/v1` 后缀，两边不一致）                                                     | ✅ 已修复 |
-| M4  | `model/sse/sse.go:85-101`                     | 无冒号行/未知字段直接报错，违反 SSE 规范（应忽略），网关新增字段即整条流失败；`eventName` 在无 data 事件被跳过时泄漏给下一事件                 | ✅ 已修复 |
-| M5  | `model/anthropic/provider.go:571`             | 未知 SSE 事件名 `default` 报错——Anthropic 新增事件类型即炸，应忽略/降级 warning                                                                | ✅ 已修复 |
-| M6  | `model/openai/provider.go:209-239`            | Responses API 路径静默丢弃 `temperature`（chat 路径会发送），同一配置两种行为且无提示                                                          | ✅ 已修复 |
-| M7  | `tool/builtin/rg.go:96-105`                   | `runRipgrep` 丢弃 `Truncated` 信号：输出超限时 search 对拼接半行 JSON 解析失败整体报错；glob 产生接缝假路径且 `truncated=false`                | ✅ 已修复 |
-| M8  | `tool/builtin/rg.go:130`                      | rg 未传 `--max-columns`，单行超 1MB（minified JS）时 scanner token-too-long 整个 search 失败                                                   | ✅ 已修复 |
-| M9  | `tool/command/run_cmd.go:237-238`             | `buildApprovalDesc` 在 `ArgsHash` 赋值之前调用 → 审批描述里的 args_hash 永远走兜底（算法不同），与权限事件记录对不上，审计失效                 | ✅ 已修复 |
-| M10 | `process/runner.go:462-467` | 沙箱模式下模型传的 `env` 被 allowlist 静默丢弃，工具描述未说明，模型无法察觉会反复重试 | ✅ 已修复 |
-| M11 | `workspace/path.go:232-255`                   | `AtomicWrite` hash 复检与 rename 间 TOCTOU 窗口：新建文件场景下窗口内出现的同名文件被无提示覆盖                                                | ✅ 已修复 |
-| M12 | `ui/update.go:1341-1358`                      | `handleEventsClosed`：重订阅计数成功后永不复位（累计断 3 次输入永久锁死）；重订阅丢弃 unsubscribe 句柄，旧订阅泄漏到进程结束                   | ✅ 已修复 |
-| M13 | `cmd/loom/main.go:691-704`                    | `consoleApprover` 每次调用泄漏一个 stdin 读取 goroutine，且 `bufio.Reader` 重建吞预输入                                                        | ✅ 已修复 |
-| M14 | `ui/update.go:192-195`                        | 任意 `tea.Msg`（按键/spinner tick）都触发 `layout()` 全量重建 transcript 字符串，streaming 高频下 CPU 可感知                                   | ✅ 已修复 |
-| M15 | `tool/webfetch/webfetch.go:382-392`           | `truncateAtBoundary` 按字节截断可切断 UTF-8（`boundedHeadTailString` 已有正确示范）                                                            | ✅ 已修复 |
-| M16 | `tool/builtin/search.go:261-268` | Go fallback 静默忽略 `glob/type/no_ignore` 参数，结果集包含模型明确排除的文件且无提示 | ✅ 已修复 |
-| M17 | `permission/policy.go:62`、`rules.go:384-397` | permission 硬编码 `"run_cmd"` 名字 + 独立 struct 重解析 canonical JSON，三处契约靠人肉保持一致，改名即静默降级                                 | ✅ 已修复 |
+| M1  | `agent/goal.go:91-95` vs `:197`               | goal 置 `budget_limited` 后 `update_goal complete` 被静默丢弃（仅 `Active` 时应用 Close），工具结果却返回 applied → 模型收到成功反馈但状态未变 | 已修复 |
+| M2  | `agent/run.go:1232-1237,1289-1295`            | 审批请求失败、执行前 flush 失败只 `return err`，Run 停留 active 无终态事件；与 `callModel` 的 `terminate(OutcomeFailed)` 语义不一致            | 已修复 |
+| M3  | `model/anthropic/provider.go:91-94`           | `base_url` 以 `/v1` 结尾时拼出 `/v1/v1/messages`（openai 侧已处理 `/v1` 后缀，两边不一致）                                                     | 已修复 |
+| M4  | `model/sse/sse.go:85-101`                     | 无冒号行/未知字段直接报错，违反 SSE 规范（应忽略），网关新增字段即整条流失败；`eventName` 在无 data 事件被跳过时泄漏给下一事件                 | 已修复 |
+| M5  | `model/anthropic/provider.go:571`             | 未知 SSE 事件名 `default` 报错——Anthropic 新增事件类型即炸，应忽略/降级 warning                                                                | 已修复 |
+| M6  | `model/openai/provider.go:209-239`            | Responses API 路径静默丢弃 `temperature`（chat 路径会发送），同一配置两种行为且无提示                                                          | 已修复 |
+| M7  | `tool/builtin/rg.go:96-105`                   | `runRipgrep` 丢弃 `Truncated` 信号：输出超限时 search 对拼接半行 JSON 解析失败整体报错；glob 产生接缝假路径且 `truncated=false`                | 已修复 |
+| M8  | `tool/builtin/rg.go:130`                      | rg 未传 `--max-columns`，单行超 1MB（minified JS）时 scanner token-too-long 整个 search 失败                                                   | 已修复 |
+| M9  | `tool/command/run_cmd.go:237-238`             | `buildApprovalDesc` 在 `ArgsHash` 赋值之前调用 → 审批描述里的 args_hash 永远走兜底（算法不同），与权限事件记录对不上，审计失效                 | 已修复 |
+| M10 | `process/runner.go:462-467` | 沙箱模式下模型传的 `env` 被 allowlist 静默丢弃，工具描述未说明，模型无法察觉会反复重试 | 已修复 |
+| M11 | `workspace/path.go:232-255`                   | `AtomicWrite` hash 复检与 rename 间 TOCTOU 窗口：新建文件场景下窗口内出现的同名文件被无提示覆盖                                                | 已修复 |
+| M12 | `ui/update.go:1341-1358`                      | `handleEventsClosed`：重订阅计数成功后永不复位（累计断 3 次输入永久锁死）；重订阅丢弃 unsubscribe 句柄，旧订阅泄漏到进程结束                   | 已修复 |
+| M13 | `cmd/loom/main.go:691-704`                    | `consoleApprover` 每次调用泄漏一个 stdin 读取 goroutine，且 `bufio.Reader` 重建吞预输入                                                        | 已修复 |
+| M14 | `ui/update.go:192-195`                        | 任意 `tea.Msg`（按键/spinner tick）都触发 `layout()` 全量重建 transcript 字符串，streaming 高频下 CPU 可感知                                   | 已修复 |
+| M15 | `tool/webfetch/webfetch.go:382-392`           | `truncateAtBoundary` 按字节截断可切断 UTF-8（`boundedHeadTailString` 已有正确示范）                                                            | 已修复 |
+| M16 | `tool/builtin/search.go:261-268` | Go fallback 静默忽略 `glob/type/no_ignore` 参数，结果集包含模型明确排除的文件且无提示 | 已修复 |
+| M17 | `permission/policy.go:62`、`rules.go:384-397` | permission 硬编码 `"run_cmd"` 名字 + 独立 struct 重解析 canonical JSON，三处契约靠人肉保持一致，改名即静默降级                                 | 已修复 |
 
 ## 三、冗余代码
 
 | #   | 位置                                                                                          | 问题                                                                                                                                                                                                                 | 状态                                                                  |
 | --- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| R1  | `runtimeevent/aggregator.go`（全文件 226 行）                                                 | 是 `agent/stream_hooks.go` 的过期副本，除自身测试外零调用方，且不支持 reasoning 事件、无 malformed-arguments 兜底，已行为漂移                                                                                        | ✅ 已删除                                                             |
-| R2  | `session/sqlite_store.go:233-303` vs `307-387`                                                | `AppendEvents` 与 `AppendEventsAndCheckpoint` 约 70 行事务骨架完全重复，应抽 `appendEventsTx`                                                                                                                        | ✅ 已处理                                                             |
+| R1  | `runtimeevent/aggregator.go`（全文件 226 行）                                                 | 是 `agent/stream_hooks.go` 的过期副本，除自身测试外零调用方，且不支持 reasoning 事件、无 malformed-arguments 兜底，已行为漂移                                                                                        | 已删除                                                             |
+| R2  | `session/sqlite_store.go:233-303` vs `307-387`                                                | `AppendEvents` 与 `AppendEventsAndCheckpoint` 约 70 行事务骨架完全重复，应抽 `appendEventsTx`                                                                                                                        | 已处理                                                             |
 | R3  | 7 个工具包的 baseTool 骨架                                                                    | `prepareCall/verifyPreparedCall/signPrepared/decodeStrict/errorResult` 等逐字复制且已漂移（gittools `errorResult` 多分支、skillread 丢 context.Canceled 映射）                                                       | ⬜ 未处理                                                             |
-| R4  | `workspace/path.go:307`、`builtin/common.go:59`、`gittools/common.go:54`、`lint/common.go:41` | 敏感路径清单重复 4 份（skillread 唯一正确复用 `workspace.IsSensitive`）                                                                                                                                              | ✅ 已处理                                                             |
+| R4  | `workspace/path.go:307`、`builtin/common.go:59`、`gittools/common.go:54`、`lint/common.go:41` | 敏感路径清单重复 4 份（skillread 唯一正确复用 `workspace.IsSensitive`）                                                                                                                                              | 已处理                                                             |
 | R5  | anthropic vs openai provider                                                                  | `toolResultContent`/`messageText`/schema 解码/Stream 骨架/read-error 收尾大段重复，建议抽 `model/wireutil`                                                                                                           | ⬜ 未处理                                                             |
 | R6  | `app/controller.go:262-564`                                                                   | 11 个公开方法共享 ~20 行 RPC 样板（约 200 行），抽 `call(ctx, cmd)` 私有助手                                                                                                                                         | ⬜ 未处理                                                             |
 | R7  | `channel_approver.go` vs `channel_questioner.go`                                              | 注册-等待-删除、DenyAll/SkipAll 近乎对称，可抽泛型 `pendingHub[K,V]` 并统一注册/发布顺序                                                                                                                             | ⬜ 未处理                                                             |
-| R8  | ui 层                                                                                         | 三组 picker 窗口化逻辑相同；`formatTokens`≡`humanizeTokens`；`reasoningDialLabel`≡`describeReasoning`；预览常量双端各一份                                                                                            | ✅ 已处理                                                             |
-| R9  | 多处                                                                                          | 死代码/死配置：`CanTerminate` 恒 true；`MaxParallelTools`/`MaxRepeatedActions` 无消费方；`ControllerStateFatal` 从未赋值；`Message.MarshalJSON` 无操作；`contentResult` 未使用；edit 包 `hashBytes`/`sha256Hex` 双份 | 🔶 部分处理（MarshalJSON/contentResult/hashBytes 已删；其余留待后续） |
-| R10 | 5 处 | 字节截断切 UTF-8：`compact.go:149`、`goal.go:261`、`prompt.go:405`、`render/diff.go:142`、`webfetch.go:386`（应统一 rune 边界截断） | ✅ 已修复（webfetch 于 M15、其余 4 处于本轮） |
+| R8  | ui 层                                                                                         | 三组 picker 窗口化逻辑相同；`formatTokens`≡`humanizeTokens`；`reasoningDialLabel`≡`describeReasoning`；预览常量双端各一份                                                                                            | 已处理                                                             |
+| R9  | 多处                                                                                          | 死代码/死配置：`CanTerminate` 恒 true；`MaxParallelTools`/`MaxRepeatedActions` 无消费方；`ControllerStateFatal` 从未赋值；`Message.MarshalJSON` 无操作；`contentResult` 未使用；edit 包 `hashBytes`/`sha256Hex` 双份 | 部分处理（MarshalJSON/contentResult/hashBytes 已删；其余留待后续） |
+| R10 | 5 处 | 字节截断切 UTF-8：`compact.go:149`、`goal.go:261`、`prompt.go:405`、`render/diff.go:142`、`webfetch.go:386`（应统一 rune 边界截断） | 已修复（webfetch 于 M15、其余 4 处于本轮） |
 
 ## 四、抽象不合理
 
@@ -61,10 +61,10 @@
 | A4  | `model/stream/stream.go:33-43` | `Emitter` 的 false-中止契约无人遵守（anthropic pump 全部丢弃返回值），契约是假的                                                                               | ⬜ 未处理 |
 | A5  | `tool/command/run_cmd.go:631`  | `classifyRunError` 对 process 包错误文本做子串匹配，改文案即静默失灵，应导出 sentinel errors                                                                   | ⬜ 未处理 |
 | A6  | `tool/gittools/common.go:422`  | 绕过 `process.Runner` 直接 exec：不经沙箱、无进程组隔离、限流/超时逻辑平行重复                                                                                 | ⬜ 未处理 |
-| A7 | 注释与实现不符 | `run.go:1811,1823`「ArgsHash HMAC」实为截断 SHA-256 且 Execute 不校验；`policy.go:89`「root-owned」含 `/usr/local/bin`、`/opt/homebrew/bin`（均非 root-owned） | ✅ 已修复（trusted dirs 运行时校验；ArgsHash 部分经复核为 M9 修复后的误报——见修复记录） |
-| A8  | `domain/errors.go:80`          | `domain.As` 重复实现标准库且语义有偏差（As 返回 false 不再 unwrap、不支持 `Unwrap() []error`），建议删除改用 `errors.As`                                       | ✅ 已修复 |
+| A7 | 注释与实现不符 | `run.go:1811,1823`「ArgsHash HMAC」实为截断 SHA-256 且 Execute 不校验；`policy.go:89`「root-owned」含 `/usr/local/bin`、`/opt/homebrew/bin`（均非 root-owned） | 已修复（trusted dirs 运行时校验；ArgsHash 部分经复核为 M9 修复后的误报——见修复记录） |
+| A8  | `domain/errors.go:80`          | `domain.As` 重复实现标准库且语义有偏差（As 返回 false 不再 unwrap、不支持 `Unwrap() []error`），建议删除改用 `errors.As`                                       | 已修复 |
 | A9  | `domain/context.go:85-97`      | `ContextManifest` 半数字段无生产者，YAGNI 过度设计                                                                                                             | ⬜ 未处理 |
-| A10 | `render/jsonl.go:89` | 注释称 encode 失败写 stderr，实际写 stdout 污染协议流，且 `err.Error()` 未 JSON 转义可产出非法 JSONL | ✅ 已修复 |
+| A10 | `render/jsonl.go:89` | 注释称 encode 失败写 stderr，实际写 stdout 污染协议流，且 `err.Error()` 未 JSON 转义可产出非法 JSONL | 已修复 |
 
 ### M17 permission 与工具名的字符串契约（2026-08-01 修复）
 

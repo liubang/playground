@@ -54,6 +54,7 @@ type File struct {
 	Storage    Storage              `yaml:"storage"`
 	UI         UI                   `yaml:"ui"`
 	Subagent   Subagent             `yaml:"subagent"`
+	Memory     Memory               `yaml:"memory"`
 	MCPServers map[string]MCPServer `yaml:"mcp_servers"`
 }
 
@@ -254,6 +255,13 @@ type Subagent struct {
 	// Model pins the sub-agent to a specific "provider/model" (or a bare
 	// model/provider name); empty follows the current turn's model.
 	Model string `yaml:"model"`
+}
+
+// Memory configures the long-term memory system (docs/MEMORY_DESIGN.md).
+// Enabled is nil-typed so "absent" defaults to true while an explicit
+// false disables extraction, consolidation, and tool registration.
+type Memory struct {
+	Enabled *bool `yaml:"enabled"`
 }
 
 // MCPServer configures one MCP server subprocess connected over the stdio

@@ -44,20 +44,20 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 
 | 类别 | 变量 | 消费位置 | 迁移目标 |
 |------|------|----------|-----------|
-| 模型接入 | `LOOM_MODEL` / `LOOM_BASE_URL` / `LOOM_API_KEY` / `LOOM_WIRE_API` | `bootstrap.go` / `main.go` | ✅ 由 providers 取代 |
-| 模型窗口 | `LOOM_CONTEXT_WINDOW` | `main.go` | ✅ 下沉为模型级元数据 |
-| 运行预算 | `LOOM_MAX_TURNS` / `LOOM_MAX_TOOL_CALLS` / `LOOM_MAX_INPUT_TOKENS` / `LOOM_MAX_OUTPUT_TOKENS` / `LOOM_MAX_COST_USD` / `LOOM_MAX_WALL_TIME` / `LOOM_MAX_TOOL_OUTPUT_BYTES` / `LOOM_MAX_ARTIFACT_BYTES` / `LOOM_MAX_REPEATED_ACTIONS` | `domain/limits.go` `LimitsFromEnv` | ✅ `limits.*` |
-| 系统提示 | `LOOM_SYSTEM_PROMPT_EXTRA` / `LOOM_DISABLE_SYSTEM_PROMPT` | `bootstrap.go` / `main.go` | ✅ `prompt.*` |
-| Skills | `LOOM_SKILLS` / `LOOM_SKILLS_EXTRA_ROOTS` | `app/skills.go` | ✅ `skills.*` |
-| 权限规则 | `LOOM_RULES` / `LOOM_BUILTIN_RULES` / `LOOM_PROJECT_RULES` / `LOOM_PROJECT_RULES_ALLOW` / `LOOM_RULES_PERSIST` | `permission/policy.go` / `app/controller.go` | ✅ `rules.*` |
-| 追踪 | `LOOM_LANGFUSE_HOST`（fallback `LANGFUSE_HOST` / `LANGFUSE_BASE_URL`）/ `LOOM_LANGFUSE_PUBLIC_KEY` / `LOOM_LANGFUSE_SECRET_KEY` / `LOOM_LANGFUSE_ENVIRONMENT` / `LOOM_TRACE_CONTENT` / `LOOM_TRACE_USER` / `LOOM_COST_INPUT_USD_PER_MTOK` / `LOOM_COST_OUTPUT_USD_PER_MTOK` | `trace/config.go` | ✅ `tracing.*` |
-| 托管提示词 | `LOOM_PROMPT_NAME` / `LOOM_PROMPT_LABEL` | `bootstrap.go` | ✅ `prompt.managed.*` |
-| 存储 | `LOOM_SESSION_DB` | `main.go` | ✅ `storage.session_db` |
-| TUI | `LOOM_ICONS` / `LOOM_ALT_SCREEN` | `main.go` | ✅ `ui.*` |
-| 发布标记 | `LOOM_VERSION` | `main.go` / `process/types.go` / `trace` | ❌ 非用户配置；自我戳版机制改为装配层显式传入（§8） |
-| 配置定位 | `LOOM_CONFIG`（v3.2 新增） | `main.go` | ❌ 配置文件**路径**定位器（类比 `KUBECONFIG`），非配置本身；默认 `~/.loom/config.yaml` |
-| 系统标准 | `XDG_STATE_HOME` / `NO_COLOR` / `TERM` / `SHELL` / `USER` / `HOME` | 多处 | ❌ 社区/OS 标准，保持 env |
-| 归因注入 | `LOOM_SESSION_ID` / `LOOM_AGENT_NAME` / `LOOM_AGENT_VERSION`（由 loom 注入 spawned 命令） | `process/` | ❌ 运行时输出，非输入 |
+| 模型接入 | `LOOM_MODEL` / `LOOM_BASE_URL` / `LOOM_API_KEY` / `LOOM_WIRE_API` | `bootstrap.go` / `main.go` | 迁移：由 providers 取代 |
+| 模型窗口 | `LOOM_CONTEXT_WINDOW` | `main.go` | 迁移：下沉为模型级元数据 |
+| 运行预算 | `LOOM_MAX_TURNS` / `LOOM_MAX_TOOL_CALLS` / `LOOM_MAX_INPUT_TOKENS` / `LOOM_MAX_OUTPUT_TOKENS` / `LOOM_MAX_COST_USD` / `LOOM_MAX_WALL_TIME` / `LOOM_MAX_TOOL_OUTPUT_BYTES` / `LOOM_MAX_ARTIFACT_BYTES` / `LOOM_MAX_REPEATED_ACTIONS` | `domain/limits.go` `LimitsFromEnv` | 迁移：`limits.*` |
+| 系统提示 | `LOOM_SYSTEM_PROMPT_EXTRA` / `LOOM_DISABLE_SYSTEM_PROMPT` | `bootstrap.go` / `main.go` | 迁移：`prompt.*` |
+| Skills | `LOOM_SKILLS` / `LOOM_SKILLS_EXTRA_ROOTS` | `app/skills.go` | 迁移：`skills.*` |
+| 权限规则 | `LOOM_RULES` / `LOOM_BUILTIN_RULES` / `LOOM_PROJECT_RULES` / `LOOM_PROJECT_RULES_ALLOW` / `LOOM_RULES_PERSIST` | `permission/policy.go` / `app/controller.go` | 迁移：`rules.*` |
+| 追踪 | `LOOM_LANGFUSE_HOST`（fallback `LANGFUSE_HOST` / `LANGFUSE_BASE_URL`）/ `LOOM_LANGFUSE_PUBLIC_KEY` / `LOOM_LANGFUSE_SECRET_KEY` / `LOOM_LANGFUSE_ENVIRONMENT` / `LOOM_TRACE_CONTENT` / `LOOM_TRACE_USER` / `LOOM_COST_INPUT_USD_PER_MTOK` / `LOOM_COST_OUTPUT_USD_PER_MTOK` | `trace/config.go` | 迁移：`tracing.*` |
+| 托管提示词 | `LOOM_PROMPT_NAME` / `LOOM_PROMPT_LABEL` | `bootstrap.go` | 迁移：`prompt.managed.*` |
+| 存储 | `LOOM_SESSION_DB` | `main.go` | 迁移：`storage.session_db` |
+| TUI | `LOOM_ICONS` / `LOOM_ALT_SCREEN` | `main.go` | 迁移：`ui.*` |
+| 发布标记 | `LOOM_VERSION` | `main.go` / `process/types.go` / `trace` | 不迁移：非用户配置；自我戳版机制改为装配层显式传入（§8） |
+| 配置定位 | `LOOM_CONFIG`（v3.2 新增） | `main.go` | 不迁移：配置文件**路径**定位器（类比 `KUBECONFIG`），非配置本身；默认 `~/.loom/config.yaml` |
+| 系统标准 | `XDG_STATE_HOME` / `NO_COLOR` / `TERM` / `SHELL` / `USER` / `HOME` | 多处 | 不迁移：社区/OS 标准，保持 env |
+| 归因注入 | `LOOM_SESSION_ID` / `LOOM_AGENT_NAME` / `LOOM_AGENT_VERSION`（由 loom 注入 spawned 命令） | `process/` | 不迁移：运行时输出，非输入 |
 
 ### 2.2 已有地基
 
@@ -126,11 +126,11 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 
 | 字段类别 | 用户层 | 项目层 |
 |----------|--------|--------|
-| `default`（选择已定义的 provider/model） | ✅ | ✅（必须解析到用户层已定义的引用，否则报错） |
-| 非敏感覆盖：`limits.*` / `prompt.extra` / `ui.*` | ✅ | ✅ |
-| `providers[]`（含 `base_url` / `wire_api` / 任何密钥字段） | ✅ | ❌ 出现即报错 |
-| `tracing.*`（含 host 与密钥） | ✅ | ❌ 出现即报错（追踪数据外泄面等同 base_url） |
-| `storage.session_db` | ✅ | ❌ 出现即报错（路径劫持可污染会话存储） |
+| `default`（选择已定义的 provider/model） | 允许 | 允许（必须解析到用户层已定义的引用，否则报错） |
+| 非敏感覆盖：`limits.*` / `prompt.extra` / `ui.*` | 允许 | 允许 |
+| `providers[]`（含 `base_url` / `wire_api` / 任何密钥字段） | 允许 | 禁止，出现即报错 |
+| `tracing.*`（含 host 与密钥） | 允许 | 禁止，出现即报错（追踪数据外泄面等同 base_url） |
+| `storage.session_db` | 允许 | 禁止，出现即报错（路径劫持可污染会话存储） |
 
 边界由 `config.Load` 在合并前强制执行，规则与字段白名单集中在一张表内，新增字段时强制分类。
 
@@ -352,7 +352,7 @@ Current  ProviderModelRef       // 启动默认，即 config.default 解析结�
 
 这是一次 **breaking change**，不设兼容期：
 
-- **`LOOM_*` 配置 env 全部失效**（§2.1 表中“✅”行），不读、不映射、不提示——开发期项目无历史用户，不留迁移辅助代码；
+- **`LOOM_*` 配置 env 全部失效**（§2.1 表中标记“迁移”的行），不读、不映射、不提示——开发期项目无历史用户，不留迁移辅助代码；
 - **无配置文件时 fail fast**：错误信息内嵌最小可用示例，拷贝改密钥引用即可用：
 
   ```yaml
