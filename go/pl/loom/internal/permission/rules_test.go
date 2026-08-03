@@ -407,6 +407,11 @@ func TestSessionAllowNeverOverridesFileDeny(t *testing.T) {
 // TestAttachRulesBuiltinSwitch checks the builtin layer participates by
 // default and drops out when the load options disable it.
 func TestAttachRulesBuiltinSwitch(t *testing.T) {
+	// Isolate $HOME: AttachRules always loads the user layer
+	// (~/.loom/rules + remembered.db) — the builtin switch must not gate
+	// it — and a real "allow always" for ls from an interactive session
+	// would leak in and mask the builtin toggle.
+	t.Setenv("HOME", t.TempDir())
 	logger := slog.New(slog.DiscardHandler)
 	on := RuleLoadOptions{Enabled: true, Builtin: true, Project: true}
 	policy := AttachRules(context.Background(), DefaultPolicy(), t.TempDir(), on, logger)
