@@ -198,11 +198,11 @@ func TestE2EMCPConfigValidationErrors(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "missing command",
+			name: "missing command and url",
 			servers: map[string]config.MCPServer{
 				"bad": {Args: []string{"-test.run=TestMCPHelperProcess"}},
 			},
-			wantErr: "command is required",
+			wantErr: "command or url is required",
 		},
 		{
 			name: "negative startup timeout",

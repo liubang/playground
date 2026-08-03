@@ -20,6 +20,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -331,7 +332,7 @@ out.Memory = ResolvedMemory{
 
 // MCP servers: validate config-level constraints; runtime startup
 	// (process spawning, tool discovery) happens in bootstrap.go.
-	resolvedMCP, err := resolveMCP(f.MCPServers)
+	resolvedMCP, err := resolveMCP(f.MCPServers, lookup)
 	if err != nil {
 		return nil, err
 	}
@@ -725,9 +726,15 @@ type ResolvedMCP struct {
 	Servers map[string]MCPServer
 }
 
-// resolveMCP validates the MCP server entries: each server must have a
-// non-empty command, and timeout overrides must be non-negative.
-func resolveMCP(in map[string]MCPServer) (ResolvedMCP, error) {
+// headerEnvRef matches a ${VAR} environment reference in an MCP header
+// value; refs resolve secrets at load time, mirroring api_key_env.
+var headerEnvRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// resolveMCP validates the MCP server entries: each server selects its
+// transport with exactly one of command (stdio) or url (streamable
+// HTTP), transport-specific fields must not cross over, header ${VAR}
+// references must resolve, and timeout overrides must be non-negative.
+func resolveMCP(in map[string]MCPServer, lookup EnvLookup) (ResolvedMCP, error) {
 	if len(in) == 0 {
 		return ResolvedMCP{}, nil
 	}
@@ -737,8 +744,29 @@ func resolveMCP(in map[string]MCPServer) (ResolvedMCP, error) {
 		if strings.TrimSpace(name) == "" {
 			return ResolvedMCP{}, fmt.Errorf("config: mcp_servers: server name must not be empty")
 		}
-		if strings.TrimSpace(srv.Command) == "" {
-			return ResolvedMCP{}, fmt.Errorf("config: %s: command is required", ctx)
+		hasCommand := strings.TrimSpace(srv.Command) != ""
+		hasURL := strings.TrimSpace(srv.URL) != ""
+		switch {
+		case !hasCommand && !hasURL:
+			return ResolvedMCP{}, fmt.Errorf("config: %s: command or url is required", ctx)
+		case hasCommand && hasURL:
+			return ResolvedMCP{}, fmt.Errorf("config: %s: command and url are mutually exclusive", ctx)
+		}
+		if hasURL {
+			u, err := url.Parse(srv.URL)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+				return ResolvedMCP{}, fmt.Errorf("config: %s: url must be a valid http(s) URL", ctx)
+			}
+			if len(srv.Args) > 0 || len(srv.Env) > 0 || srv.Cwd != "" {
+				return ResolvedMCP{}, fmt.Errorf("config: %s: args/env/cwd only apply to command (stdio) servers", ctx)
+			}
+			headers, err := expandHeaderRefs(ctx, srv.Headers, lookup)
+			if err != nil {
+				return ResolvedMCP{}, err
+			}
+			srv.Headers = headers
+		} else if len(srv.Headers) > 0 {
+			return ResolvedMCP{}, fmt.Errorf("config: %s: headers only apply to url (streamable HTTP) servers", ctx)
 		}
 		if srv.StartupTimeoutSec < 0 {
 			return ResolvedMCP{}, fmt.Errorf("config: %s: startup_timeout_sec must be >= 0", ctx)
@@ -749,4 +777,35 @@ func resolveMCP(in map[string]MCPServer) (ResolvedMCP, error) {
 		out[name] = srv
 	}
 	return ResolvedMCP{Servers: out}, nil
+}
+
+// expandHeaderRefs resolves ${VAR} environment references in header
+// values; an unset variable is a load-time error, like api_key_env.
+func expandHeaderRefs(ctx string, headers map[string]string, lookup EnvLookup) (map[string]string, error) {
+	if len(headers) == 0 {
+		return nil, nil
+	}
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make(map[string]string, len(headers))
+	for _, k := range keys {
+		missing := ""
+		value := headerEnvRef.ReplaceAllStringFunc(headers[k], func(ref string) string {
+			name := headerEnvRef.FindStringSubmatch(ref)[1]
+			resolved, ok := lookup(name)
+			if !ok {
+				missing = name
+				return ""
+			}
+			return resolved
+		})
+		if missing != "" {
+			return nil, fmt.Errorf("config: %s: header %q references environment variable %s, which is not set", ctx, k, missing)
+		}
+		out[k] = value
+	}
+	return out, nil
 }

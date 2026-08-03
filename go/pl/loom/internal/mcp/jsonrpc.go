@@ -22,9 +22,9 @@ import (
 	"fmt"
 )
 
-// JSON-RPC 2.0 wire types for the MCP protocol. The stdio transport frames
-// messages as newline-delimited JSON (one message per line, no embedded
-// newlines), per the MCP spec.
+// JSON-RPC 2.0 wire types for the MCP protocol. Marshal helpers produce
+// one bare message; framing (a newline delimiter on stdio, one message
+// per POST body on streamable HTTP) is the transport's job.
 
 type rpcRequest struct {
 	JSONRPC string `json:"jsonrpc"`
@@ -64,7 +64,7 @@ func marshalRequest(id int64, method string, params any) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal %s request: %w", method, err)
 	}
-	return append(data, '\n'), nil
+	return data, nil
 }
 
 func marshalNotification(method string, params any) ([]byte, error) {
@@ -72,5 +72,5 @@ func marshalNotification(method string, params any) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal %s notification: %w", method, err)
 	}
-	return append(data, '\n'), nil
+	return data, nil
 }
