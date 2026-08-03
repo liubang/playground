@@ -2004,8 +2004,8 @@ func TestCompletionCandidatesFiltering(t *testing.T) {
 	for _, c := range m.completionCandidates() {
 		names = append(names, c.name)
 	}
-	if len(names) != 2 || names[0] != "/resume" || names[1] != "/reasoning" {
-		t.Fatalf("\"/re\" candidates = %v, want [/resume /reasoning]", names)
+	if len(names) != 3 || names[0] != "/resume" || names[1] != "/rewind" || names[2] != "/reasoning" {
+		t.Fatalf("\"/re\" candidates = %v, want [/resume /rewind /reasoning]", names)
 	}
 
 	m.textArea.SetValue("/resu")
@@ -2401,5 +2401,193 @@ func TestGradientColors(t *testing.T) {
 	}
 	if got := gradientColors("#e69875", "#dbbc7f", 1); len(got) != 1 || got[0] != "#e69875" {
 		t.Fatalf("single-step gradient = %v, want the start color", got)
+	}
+}
+
+// --- image attachments: paste path → deferred load → PartImage submission ---
+
+func writeTestImage(t *testing.T, dir, name string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("\x89PNG\r\n\x1a\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return path
+}
+
+func TestExtractImagePaths(t *testing.T) {
+	dir := t.TempDir()
+	img := writeTestImage(t, dir, "shot.png")
+	upper := writeTestImage(t, dir, "upper.PNG")
+
+	cases := []struct {
+		name string
+		text string
+		want []string
+	}{
+		{"bare absolute path", img, []string{img}},
+		{"path in prose", "look at " + img + " please", []string{img}},
+		{"quoted path", `see "` + img + `"`, []string{img}},
+		{"quoted path with trailing period", `check "` + img + `".`, []string{img}},
+		{"path in parens", "(" + img + ")", []string{img}},
+		{"trailing punctuation", img + ",", []string{img}},
+		{"uppercase extension", upper, []string{upper}},
+		{"relative path ignored", "open shot.png", nil},
+		{"missing file ignored", filepath.Join(dir, "missing.png"), nil},
+		{"unsupported extension ignored", filepath.Join(dir, "doc.pdf"), nil},
+	}
+	for _, tc := range cases {
+		got := extractImagePaths(tc.text)
+		if len(got) != len(tc.want) {
+			t.Errorf("%s: extractImagePaths(%q) = %v, want %v", tc.name, tc.text, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("%s: extractImagePaths(%q)[%d] = %q, want %q", tc.name, tc.text, i, got[i], tc.want[i])
+			}
+		}
+	}
+
+	// At most maxImageAttachments paths are collected.
+	var b strings.Builder
+	for i := 0; i < maxImageAttachments+2; i++ {
+		b.WriteString(writeTestImage(t, dir, fmt.Sprintf("bulk%d.png", i)))
+		b.WriteString(" ")
+	}
+	if got := extractImagePaths(b.String()); len(got) != maxImageAttachments {
+		t.Fatalf("cap: got %d paths, want %d", len(got), maxImageAttachments)
+	}
+}
+
+func TestImagePathSubmitDefersUntilLoaded(t *testing.T) {
+	ctrl := newTestController(t)
+	img := writeTestImage(t, t.TempDir(), "shot.png")
+
+	m := NewModel(ctrl, "model", "/ws")
+	m.textArea.SetValue("describe " + img)
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected async image load command")
+	}
+	if m.pendingSubmitAttachTotal != 1 || m.pendingSubmitAttachDone != 0 {
+		t.Fatalf("pending counters = %d/%d, want 0/1", m.pendingSubmitAttachDone, m.pendingSubmitAttachTotal)
+	}
+	if got := m.textArea.Value(); got == "" {
+		t.Fatal("composer cleared before image load finished")
+	}
+	if len(m.blocks.Order) != 0 {
+		t.Fatal("optimistic user block added before loads finished")
+	}
+
+	// A second Enter while loads are in flight must be ignored, not start
+	// a duplicate batch.
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("re-submit during image loading must not issue a command")
+	}
+	if !m.statusIsError {
+		t.Fatal("re-submit during image loading should post a warning status")
+	}
+	if m.pendingSubmitAttachTotal != 1 {
+		t.Fatalf("pending total disturbed: %d", m.pendingSubmitAttachTotal)
+	}
+
+	// Deliver the load result: the deferred submission fires.
+	updated, cmd = m.handleImageAttached(imageAttachedMsg{
+		path:    img,
+		content: domain.ImageContent{MediaType: "image/png", Data: "aGVsbG8="},
+	})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected deferred submit command after load finished")
+	}
+	if got := m.textArea.Value(); got != "" {
+		t.Fatalf("composer not cleared after deferred submit: %q", got)
+	}
+	if len(m.blocks.Order) != 1 {
+		t.Fatalf("optimistic user block missing after deferred submit: %v", m.blocks.Order)
+	}
+	if len(m.attachedImages) != 0 || len(m.attachedPaths) != 0 {
+		t.Fatal("attachments not cleared after submit")
+	}
+	if m.pendingSubmitAttachTotal != 0 || m.pendingSubmitDraft != "" {
+		t.Fatal("pending submit state not reset")
+	}
+}
+
+func TestImagePathSubmitLoadFailureStillSubmitsText(t *testing.T) {
+	ctrl := newTestController(t)
+	img := writeTestImage(t, t.TempDir(), "shot.png")
+
+	m := NewModel(ctrl, "model", "/ws")
+	m.textArea.SetValue("describe " + img)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	updated, cmd := m.handleImageAttached(imageAttachedMsg{path: img, err: fmt.Errorf("boom")})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("text prompt should still be submitted when the image fails to load")
+	}
+	if len(m.attachedImages) != 0 {
+		t.Fatal("failed load must not attach an image")
+	}
+	if len(m.blocks.Order) != 1 {
+		t.Fatalf("optimistic user block missing: %v", m.blocks.Order)
+	}
+}
+
+func TestImagePathDedupWithAlreadyAttached(t *testing.T) {
+	ctrl := newTestController(t)
+	img := writeTestImage(t, t.TempDir(), "shot.png")
+
+	m := NewModel(ctrl, "model", "/ws")
+	m.attachedImages = []domain.ImageContent{{MediaType: "image/png", Data: "aGVsbG8="}}
+	m.attachedPaths = []string{img}
+	m.textArea.SetValue("describe " + img)
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected immediate submit command")
+	}
+	if m.pendingSubmitAttachTotal != 0 {
+		t.Fatal("already-attached path must not be reloaded")
+	}
+	if len(m.blocks.Order) != 1 {
+		t.Fatalf("optimistic user block missing: %v", m.blocks.Order)
+	}
+}
+
+func TestSteeredSubmissionWarnsAboutDroppedImages(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model", "/ws")
+	m.pendingSubmitID = m.blocks.AddPendingUserBlock("queued with image")
+	m = m.handlePromptSubmitted(promptSubmittedMsg{
+		prompt:     "queued with image",
+		result:     app.SubmitResult{Steered: true, QueueLen: 1},
+		imageCount: 2,
+	}).(Model)
+	if !strings.Contains(m.statusMessage, "2 images dropped") {
+		t.Fatalf("status should warn about dropped images, got %q", m.statusMessage)
+	}
+	if !m.statusIsError {
+		t.Fatal("dropped-image warning should be flagged as an error status")
+	}
+	if len(m.blocks.Order) != 0 {
+		t.Fatal("steered submission must not leave an optimistic block")
+	}
+
+	// Without images the queued status stays informational.
+	m = NewModel(ctrl, "model", "/ws")
+	m.pendingSubmitID = m.blocks.AddPendingUserBlock("plain queued")
+	m = m.handlePromptSubmitted(promptSubmittedMsg{
+		prompt: "plain queued",
+		result: app.SubmitResult{Steered: true, QueueLen: 1},
+	}).(Model)
+	if strings.Contains(m.statusMessage, "dropped") || m.statusIsError {
+		t.Fatalf("text-only steer should not warn: %q err=%v", m.statusMessage, m.statusIsError)
 	}
 }

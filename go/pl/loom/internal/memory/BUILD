@@ -13,30 +13,36 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/22 21:10
+# Created: 2026/08/02
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "session_lib",
+    name = "memory_lib",
     srcs = [
-        "rewind.go",
-        "sqlite_store.go",
-        "transcript.go",
+        "store.go",
+        "tools.go",
+        "prompt.go",
+        "extract.go",
+        "consolidate.go",
     ],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/session",
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/memory",
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
-        "@org_modernc_sqlite//:sqlite",
     ],
 )
 
 go_test(
-    name = "session_test",
+    name = "memory_test",
     srcs = [
-        "sqlite_store_test.go",
-        "transcript_test.go",
+        "store_test.go",
+        "tools_test.go",
+        "prompt_test.go",
     ],
-    embed = [":session_lib"],
+    embed = [":memory_lib"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/fakes:fakes_lib",
+    ],
 )

@@ -33,6 +33,7 @@ type Icons struct {
 	PlanCurrent string // in-progress plan step
 	PlanTodo    string // pending plan step
 	Branch      string // git branch marker in the header band
+	Attachment  string // image/file attachment marker
 }
 
 // NerdIcons returns the Nerd Font glyph set (Font Awesome codepoints, the
@@ -49,6 +50,7 @@ func NerdIcons() Icons {
 		PlanCurrent: "\uf0c8", //  square
 		PlanTodo:    "\uf096", //  square-o
 		Branch:      "\ue0a0", //  powerline branch
+		Attachment:  "\uf0c6", //  paperclip
 	}
 }
 
@@ -67,6 +69,7 @@ func PlainIcons() Icons {
 		PlanCurrent: "[>]", // [>]
 		PlanTodo:    "[ ]", // [ ]
 		Branch:      "",    // bare branch name; no safe plain-text glyph
+		Attachment:  "📎",   // paperclip
 	}
 }
 

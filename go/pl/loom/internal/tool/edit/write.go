@@ -139,11 +139,19 @@ func (t *WriteTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.P
 		return domain.PreparedCall{}, err
 	}
 	if !canonical.Created {
+		// Read original content for checkpoint rewind. This is best-effort:
+		// if the read fails, the file change is still tracked by hash but
+		// the content will not be restorable.
+		var beforeContent []byte
+		if raw, readErr := os.ReadFile(pathInfo.Absolute); readErr == nil {
+			beforeContent = raw
+		}
 		prepared.Recovery = &domain.RecoverySpec{
-			Kind:         "file_replace",
-			Path:         pathInfo.Absolute,
-			ExpectedHash: canonical.OldHash,
-			ResultHash:   sha256Hex([]byte(canonical.Content)),
+			Kind:          "file_replace",
+			Path:          pathInfo.Absolute,
+			ExpectedHash:  canonical.OldHash,
+			ResultHash:    sha256Hex([]byte(canonical.Content)),
+			BeforeContent: beforeContent,
 		}
 	}
 	return prepared, nil

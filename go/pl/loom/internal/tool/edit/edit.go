@@ -90,10 +90,11 @@ func (t *EditTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.Pr
 	}
 	if recoveryErr == nil {
 		prepared.Recovery = &domain.RecoverySpec{
-			Kind:         "file_replace",
-			Path:         pathInfo.Absolute,
-			ExpectedHash: sha256Hex(data),
-			ResultHash:   sha256Hex([]byte(newContent)),
+			Kind:          "file_replace",
+			Path:          pathInfo.Absolute,
+			ExpectedHash:  sha256Hex(data),
+			ResultHash:    sha256Hex([]byte(newContent)),
+			BeforeContent: data,
 		}
 	}
 	return prepared, nil

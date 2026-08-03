@@ -163,6 +163,9 @@ type Factory struct {
 	// accounting matches what the fold-back adds to the parent.
 	CostInputUSDPerMTok  float64
 	CostOutputUSDPerMTok float64
+	// Manager is the V2 asynchronous delegation runtime; nil when only
+	// V1 synchronous delegation is configured.
+	Manager *Manager
 }
 
 // DelegateTaskTool lets the model delegate a self-contained read-only
@@ -179,15 +182,18 @@ func NewDelegateTaskTool(f *Factory) (*DelegateTaskTool, error) {
 	}
 	def := domain.ToolDefinition{
 		Name: "delegate_task",
-		Description: "Delegate a self-contained read-only research task to a sub-agent that explores the workspace " +
-			"in its own isolated context and returns a structured conclusion with evidence. Use it for large-codebase " +
-			"exploration, fact gathering across many files, or independent review — work that would flood this " +
-			"conversation with intermediate search/read output. The sub-agent sees NO conversation history, so the " +
-			"task must be fully self-contained; it cannot modify files, run commands, ask questions, or delegate " +
-			"further, and its token consumption counts against this run's budget. Act on its conclusion yourself " +
-			"(verification, edits, commands) rather than asking it to.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"task":{"type":"string","minLength":1,"maxLength":16384,"description":"Complete, self-contained task description with all necessary context."},"focus":{"type":"array","items":{"type":"string","maxLength":512},"maxItems":16,"description":"Optional paths or symbols to prioritize."}},"required":["task"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"conclusion":{"type":"string"},"outcome":{"type":"string"},"child_session_id":{"type":"string"},"usage":{"type":"object"}},"required":["conclusion","outcome","child_session_id"]}`),
+		Description: "Delegate a self-contained task to a sub-agent that works in its own isolated context and " +
+			"returns a structured conclusion. Roles: \"researcher\" (default, read-only: explores, reviews, gathers " +
+			"facts — it cannot modify files or run commands) and \"coder\" (read-write: edits files and runs " +
+			"sandboxed commands in the workspace; spawning one is an R3 approval because its writes are real). " +
+			"Use it for large-codebase exploration, multi-file fact gathering, independent review, or a focused " +
+			"implementation task — work that would flood this conversation with intermediate output. The sub-agent " +
+			"sees NO conversation history, so the task must be fully self-contained; it cannot ask questions or " +
+			"delegate further, and its token consumption counts against this run's budget. With async=true the " +
+			"call returns a child_session_id immediately: collect the result with wait_subagent, refine it with " +
+			"resume_subagent. Act on the conclusion yourself rather than asking the sub-agent to.",
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"task":{"type":"string","minLength":1,"maxLength":16384,"description":"Complete, self-contained task description with all necessary context."},"focus":{"type":"array","items":{"type":"string","maxLength":512},"maxItems":16,"description":"Optional paths or symbols to prioritize."},"role":{"type":"string","enum":["researcher","coder"],"description":"Sub-agent role: researcher (read-only, R1) or coder (read-write, R3). Default: researcher."},"async":{"type":"boolean","description":"If true, spawn the sub-agent asynchronously and return its session reference immediately. Use wait_subagent to collect the result later. Default: false (synchronous, V1 behavior)."}},"required":["task"]}`),
+		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"conclusion":{"type":"string"},"outcome":{"type":"string"},"child_session_id":{"type":"string"},"role":{"type":"string"},"usage":{"type":"object"},"status":{"type":"string","enum":["completed","spawned"]}},"required":["child_session_id","status"]}`),
 		// No agent.delegate capability: it maps to R4, while this tool's
 		// calls are R1 by construction (see Prepare) — and the loop's
 		// execution-time drift guard rejects a prepared risk BELOW the
@@ -211,16 +217,20 @@ func (t *DelegateTaskTool) ConcurrentSafe() bool { return true }
 
 // Prepare validates and canonicalizes the call; it is side-effect-free.
 //
-// The reported risk is R1: the child is read-only by construction, so a
-// delegation's only side effects are a new session record and bounded,
-// budget-folded token spend. R1 keeps crash recovery on the "never
-// started / read-only" path — RecoverRun closes an interrupted R≤1
-// call explicitly instead of blocking on an uncertain non-idempotent
-// outcome (docs/SUBAGENT_DESIGN.md D5). Reporting R1 above the
-// definition's capability-free default (R0) is a legitimate elevation,
-// the same shape as run_cmd's per-argument R2→R3 escalation.
+// The reported risk follows the delegated role: R1 for the read-only
+// researcher, R3 for the read-write coder whose edits land in the real
+// workspace (riskOf). For the researcher, R1 keeps crash recovery on the
+// "never started / read-only" path — RecoverRun closes an interrupted
+// R≤1 call explicitly instead of blocking on an uncertain non-idempotent
+// outcome (docs/SUBAGENT_DESIGN.md D5). Reporting above the definition's
+// capability-free default (R0) is a legitimate elevation, the same shape
+// as run_cmd's per-argument R2→R3 escalation.
 func (t *DelegateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	args, err := decodeDelegateArgs(call.Arguments)
+	if err != nil {
+		return domain.PreparedCall{}, err
+	}
+	role, err := ParseRole(args.Role)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -230,35 +240,123 @@ func (t *DelegateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (dom
 	}
 	call.Arguments = canonical
 	sum := sha256.Sum256(canonical)
+	risk := riskOf(role)
 	desc := "Delegate task"
 	if task := args.Task; len([]rune(task)) > 60 {
-		desc = fmt.Sprintf("Delegate task: %s", truncateRunes(task, 60))
+		desc = fmt.Sprintf("Delegate task (%s): %s", role, truncateRunes(task, 60))
 	} else {
-		desc = fmt.Sprintf("Delegate task: %s", task)
+		desc = fmt.Sprintf("Delegate task (%s): %s", role, task)
 	}
 	return domain.PreparedCall{
 		Call:         call,
 		Definition:   t.def,
-		Risk:         domain.R1,
+		Risk:         risk,
 		ApprovalDesc: desc,
 		ArgsHash:     hex.EncodeToString(sum[:])[:16],
 	}, nil
 }
 
-// Execute runs the child loop synchronously to a terminal state and
-// returns its conclusion. The caller's ctx derives from the turn
-// context, so cancelling the parent turn cancels the child run through
-// the standard path (docs/SUBAGENT_DESIGN.md §4.4).
+// Execute runs the child loop. When args.Async is true and the
+// factory has a V2 Manager, it delegates to Manager.Spawn and returns
+// immediately with the child session reference. Otherwise it runs the
+// child synchronously to a terminal state and returns its conclusion.
+// The caller's ctx derives from the turn context, so cancelling the
+// parent turn cancels a synchronous child run through the standard
+// path (docs/SUBAGENT_DESIGN.md §4.4).
 func (t *DelegateTaskTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
 	args, err := decodeDelegateArgs(prepared.Call.Arguments)
 	if err != nil {
 		return delegateError(prepared.Call.ID, startedAt, err, nil)
 	}
+	role, err := ParseRole(args.Role)
+	if err != nil {
+		return delegateError(prepared.Call.ID, startedAt, err, nil)
+	}
+
+	// V2 async path: spawn the sub-agent and return immediately.
+	if args.Async && t.f.Manager != nil {
+		return t.executeAsync(ctx, prepared, args, role, startedAt)
+	}
+
+	// V1 synchronous path (also the fallback when Manager is nil even
+	// if async was requested).
+	return t.executeSync(ctx, prepared, args, role, startedAt)
+}
+
+// executeAsync spawns a sub-agent through the V2 Manager and returns
+// a spawned result with the child session reference.
+func (t *DelegateTaskTool) executeAsync(_ context.Context, prepared domain.PreparedCall, args delegateArgs, role Role, startedAt time.Time) domain.ToolResult {
 	snap, ok := t.f.Models.Get()
 	if !ok || snap.Model == nil {
 		return delegateError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput,
 			"sub-agent is unavailable: no model selection is active for this turn"), nil)
+	}
+	if !t.f.Manager.HasRole(role) {
+		return delegateError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput,
+			fmt.Sprintf("sub-agent role %q is not available for async delegation", role)), nil)
+	}
+	childSessionID, err := t.f.Manager.Spawn(SpawnSpec{
+		Task:          args.Task,
+		Focus:         args.Focus,
+		Role:          role,
+		ParentSession: snap.ParentSession,
+		ParentCall:    prepared.Call.ID,
+	})
+	if err != nil {
+		return delegateError(prepared.Call.ID, startedAt, err, nil)
+	}
+	payload := map[string]any{
+		"status":           "spawned",
+		"child_session_id": childSessionID.String(),
+		"role":             string(role),
+	}
+	raw, jsonErr := json.Marshal(payload)
+	if jsonErr != nil {
+		return delegateError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode spawned result", domain.WithCause(jsonErr)), nil)
+	}
+	return domain.ToolResult{
+		CallID:     prepared.Call.ID,
+		Status:     domain.ToolStatusSuccess,
+		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(raw)}},
+		StartedAt:  startedAt,
+		FinishedAt: time.Now(),
+		Metadata: map[string]string{
+			"child_session_id": childSessionID.String(),
+			"spawn_status":     "spawned",
+			"role":             string(role),
+		},
+	}
+}
+
+// executeSync runs the child loop synchronously to a terminal state
+// and returns its conclusion — the V1 behavior.
+func (t *DelegateTaskTool) executeSync(ctx context.Context, prepared domain.PreparedCall, args delegateArgs, role Role, startedAt time.Time) domain.ToolResult {
+	snap, ok := t.f.Models.Get()
+	if !ok || snap.Model == nil {
+		return delegateError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput,
+			"sub-agent is unavailable: no model selection is active for this turn"), nil)
+	}
+
+	// Resolve the role spec: when the Manager is present, use the
+	// role-aware registry and prompt; otherwise fall back to the V1
+	// factory-level defaults (researcher-only).
+	var childRegistry *agent.ToolRegistry
+	var childPrompt agent.PromptBuilder
+	if t.f.Manager != nil {
+		// Manager carries the role specs; look up from there.
+		// If the role is not in the manager's spec map, the V1
+		// factory defaults apply (backward compatibility).
+		// We access the roles map through a helper to avoid
+		// exposing it publicly.
+		childRegistry = t.f.Manager.RoleRegistry(role)
+		childPrompt = t.f.Manager.RolePrompt(role)
+	}
+	if childRegistry == nil {
+		childRegistry = t.f.Registry
+	}
+	if childPrompt == nil {
+		childPrompt = t.f.Prompt
 	}
 
 	childSessionID := domain.NewSessionID()
@@ -280,7 +378,7 @@ func (t *DelegateTaskTool) Execute(ctx context.Context, prepared domain.Prepared
 	run := agent.NewRun(childSessionID, t.f.Limits, clock)
 	// The delegation edge (parent session + spawning call) is the first
 	// durable fact of the child session, ahead of the task message.
-	run.RecordDelegation(snap.ParentSession, prepared.Call.ID)
+	run.RecordDelegation(snap.ParentSession, prepared.Call.ID, string(role))
 	run.AddUserMessage(domain.Message{
 		ID:        domain.NewMessageID(),
 		Role:      domain.RoleUser,
@@ -296,10 +394,10 @@ func (t *DelegateTaskTool) Execute(ctx context.Context, prepared domain.Prepared
 		// The child policy never escalates to Ask, so this approver is
 		// pure defense-in-depth against a policy regression.
 		Approver:     denyApprover{},
-		Policy:       childPolicyFor(t.f.Registry),
-		Registry:     t.f.Registry,
+		Policy:       childPolicyFor(childRegistry),
+		Registry:     childRegistry,
 		Logger:       t.logger(),
-		SystemPrompt: t.f.Prompt,
+		SystemPrompt: childPrompt,
 		Artifacts:    t.f.Artifacts,
 		Recorder:     t.f.Recorder,
 		Prompt:       args.Task,
@@ -364,6 +462,7 @@ func (t *DelegateTaskTool) successResult(callID domain.ToolCallID, startedAt tim
 	payload := map[string]any{
 		"conclusion":       conclusion,
 		"outcome":          string(run.State.Outcome),
+		"status":           "completed",
 		"child_session_id": run.SessionID.String(),
 		"usage": map[string]any{
 			"input_tokens":  run.Usage.InputTokens,
@@ -441,8 +540,10 @@ func lastAssistantText(messages []domain.Message) string {
 }
 
 type delegateArgs struct {
-	Task  string   `json:"task"`
-	Focus []string `json:"focus"`
+	Task   string   `json:"task"`
+	Focus  []string `json:"focus"`
+	Role   string   `json:"role"`
+	Async  bool     `json:"async"`
 }
 
 func decodeDelegateArgs(raw json.RawMessage) (delegateArgs, error) {

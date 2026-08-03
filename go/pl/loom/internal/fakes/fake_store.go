@@ -143,3 +143,46 @@ func (s *FakeStore) Version(id domain.SessionID) (int64, bool) {
 	v, ok := s.versions[id]
 	return v, ok
 }
+
+// RecordFileChange is a no-op stub that satisfies the extended SessionStore
+// interface. The fake store does not support rewind; all file changes are
+// silently accepted.
+func (s *FakeStore) RecordFileChange(_ context.Context, _ domain.SessionID, _ string, _ bool, _ string, _ []byte, _ string) error {
+	return nil
+}
+
+// InspectSession returns a reconstructed session inspection for testing.
+// The fake store builds a minimal inspection suitable for sub-agent resume
+// and role recovery; it does not reconstruct the full message transcript.
+func (s *FakeStore) InspectSession(_ context.Context, id domain.SessionID) (domain.SessionInspection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.sessions[id] {
+		return domain.SessionInspection{}, fmt.Errorf("session %s not found", id)
+	}
+
+	events := s.events[id]
+	version := s.versions[id]
+	summary := domain.SessionSummary{
+		ID:      id,
+		Version: version,
+	}
+
+	var checkpoint *domain.Checkpoint
+	ckpts := s.checkpoints[id]
+	if len(ckpts) > 0 {
+		latest := ckpts[len(ckpts)-1]
+		checkpoint = &latest
+	}
+
+	return domain.SessionInspection{
+		Session:    summary,
+		Checkpoint: checkpoint,
+		Transcript: domain.SessionTranscript{
+			SessionID:         id,
+			LastEventSequence: version,
+		},
+		Events: events,
+	}, nil
+}

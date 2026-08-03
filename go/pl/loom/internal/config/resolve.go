@@ -97,7 +97,13 @@ type ResolvedConfig struct {
 	Storage   Storage
 	UI        UI
 	Subagent  ResolvedSubagent
+	Memory    ResolvedMemory
 	MCP       ResolvedMCP
+}
+
+// ResolvedMemory is the memory section with defaults applied.
+type ResolvedMemory struct {
+	Enabled bool
 }
 
 // ResolvedSubagent is the subagent section with defaults applied
@@ -316,9 +322,14 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		}
 		sub.Model = &ref
 	}
-	out.Subagent = sub
+out.Subagent = sub
 
-	// MCP servers: validate config-level constraints; runtime startup
+// Memory: default enabled when absent or explicitly true.
+out.Memory = ResolvedMemory{
+	Enabled: f.Memory.Enabled == nil || *f.Memory.Enabled,
+}
+
+// MCP servers: validate config-level constraints; runtime startup
 	// (process spawning, tool discovery) happens in bootstrap.go.
 	resolvedMCP, err := resolveMCP(f.MCPServers)
 	if err != nil {
