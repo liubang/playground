@@ -15,26 +15,21 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/08/01
 
-// Package mcp implements a Model Context Protocol client over the stdio
-// transport: it spawns MCP servers as child processes, performs the
-// initialize handshake, discovers tools, and proxies tool calls over
-// newline-delimited JSON-RPC. Discovered tools are adapted into
-// domain.Tool values so MCP servers plug into loom's permission,
-// signing, and approval machinery like any built-in tool.
+// Package mcp implements a Model Context Protocol client: it connects to
+// MCP servers over the stdio transport (spawning them as child
+// processes) or the streamable HTTP transport (POSTing JSON-RPC to a
+// remote endpoint), performs the initialize handshake, discovers tools,
+// and proxies tool calls. Discovered tools are adapted into domain.Tool
+// values so MCP servers plug into loom's permission, signing, and
+// approval machinery like any built-in tool.
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"os"
-	"os/exec"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -54,7 +49,9 @@ const (
 	maxMessageBytes = 16 << 20
 )
 
-// ClientConfig describes one MCP server subprocess.
+// ClientConfig describes one MCP server connection. Exactly one of
+// Command (stdio transport: spawn a child process) or URL (streamable
+// HTTP transport: POST to a remote endpoint) must be set.
 type ClientConfig struct {
 	Command string
 	Args    []string
@@ -64,11 +61,15 @@ type ClientConfig struct {
 	// user's shell).
 	Env map[string]string
 	Cwd string
-	// StartupTimeout bounds spawn+initialize; ToolTimeout bounds one
+	// URL selects the streamable HTTP transport; Headers carries static
+	// per-request headers such as Authorization.
+	URL     string
+	Headers map[string]string
+	// StartupTimeout bounds connect+initialize; ToolTimeout bounds one
 	// tools/call. Zero selects the defaults (30s / 300s).
 	StartupTimeout time.Duration
 	ToolTimeout    time.Duration
-	// Logger receives server stderr lines and protocol anomalies; nil
+	// Logger receives server diagnostics and protocol anomalies; nil
 	// selects slog.Default().
 	Logger *slog.Logger
 	// name is set by the manager for log attribution.
@@ -100,25 +101,24 @@ type CallToolResult struct {
 
 // Client is one running MCP server connection.
 type Client struct {
-	cfg    ClientConfig
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	logger *slog.Logger
+	cfg       ClientConfig
+	transport transport
+	logger    *slog.Logger
 
-	nextID  atomic.Int64
-	mu      sync.Mutex // guards pending + closed
-	pending map[int64]chan rpcMessage
-	closed  bool
+	nextID atomic.Int64
+	closed atomic.Bool
 
 	serverName    string
 	serverVersion string
 }
 
-// Start launches the server subprocess and performs the initialize
-// handshake within cfg.StartupTimeout.
+// Start connects to the server and performs the initialize handshake
+// within cfg.StartupTimeout.
 func Start(ctx context.Context, cfg ClientConfig) (*Client, error) {
-	if strings.TrimSpace(cfg.Command) == "" {
-		return nil, domain.NewError(domain.ErrInvalidInput, "mcp server command is required")
+	hasCommand := strings.TrimSpace(cfg.Command) != ""
+	hasURL := strings.TrimSpace(cfg.URL) != ""
+	if hasCommand == hasURL {
+		return nil, domain.NewError(domain.ErrInvalidInput, "mcp: exactly one of command or url is required")
 	}
 	if cfg.StartupTimeout <= 0 {
 		cfg.StartupTimeout = defaultStartupTimeout
@@ -131,37 +131,18 @@ func Start(ctx context.Context, cfg ClientConfig) (*Client, error) {
 		logger = slog.Default()
 	}
 
-	cmd := exec.Command(cfg.Command, cfg.Args...)
-	if cfg.Cwd != "" {
-		cmd.Dir = cfg.Cwd
+	var tr transport
+	var err error
+	if hasURL {
+		tr, err = newHTTPTransport(cfg, logger)
+	} else {
+		tr, err = startStdioTransport(cfg, logger)
 	}
-	cmd.Env = mergeEnv(os.Environ(), cfg.Env)
-	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, domain.NewError(domain.ErrUnavailable, "mcp: stdin pipe failed", domain.WithCause(err))
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, domain.NewError(domain.ErrUnavailable, "mcp: stdout pipe failed", domain.WithCause(err))
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, domain.NewError(domain.ErrUnavailable, "mcp: stderr pipe failed", domain.WithCause(err))
-	}
-	if err := cmd.Start(); err != nil {
-		return nil, domain.NewError(domain.ErrUnavailable, fmt.Sprintf("mcp: failed to start %q", cfg.Command), domain.WithCause(err))
+		return nil, err
 	}
 
-	client := &Client{
-		cfg:     cfg,
-		cmd:     cmd,
-		stdin:   stdin,
-		logger:  logger,
-		pending: make(map[int64]chan rpcMessage),
-	}
-	go client.readLoop(stdout)
-	go client.logStderr(stderr)
-
+	client := &Client{cfg: cfg, transport: tr, logger: logger}
 	handshakeCtx, cancel := context.WithTimeout(ctx, cfg.StartupTimeout)
 	defer cancel()
 	if err := client.initialize(handshakeCtx); err != nil {
@@ -169,67 +150,6 @@ func Start(ctx context.Context, cfg ClientConfig) (*Client, error) {
 		return nil, err
 	}
 	return client, nil
-}
-
-func mergeEnv(base []string, extra map[string]string) []string {
-	if len(extra) == 0 {
-		return base
-	}
-	out := append([]string(nil), base...)
-	for k, v := range extra {
-		out = append(out, k+"="+v)
-	}
-	return out
-}
-
-func (c *Client) logStderr(stderr io.Reader) {
-	scanner := bufio.NewScanner(stderr)
-	scanner.Buffer(make([]byte, 64<<10), 1<<20)
-	for scanner.Scan() {
-		c.logger.Debug("mcp server stderr", "server", c.cfg.name, "line", scanner.Text())
-	}
-}
-
-// readLoop dispatches inbound messages: responses resolve their pending
-// channel; notifications and server->client requests are logged and
-// dropped (loom advertises no client capabilities).
-func (c *Client) readLoop(stdout io.Reader) {
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 1<<20), maxMessageBytes)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var msg rpcMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			c.logger.Warn("mcp: dropping malformed message", "server", c.cfg.name, "error", err)
-			continue
-		}
-		if msg.ID == nil {
-			continue // notification
-		}
-		if msg.Method != "" {
-			c.logger.Debug("mcp: dropping unsupported server request", "server", c.cfg.name, "method", msg.Method)
-			continue
-		}
-		c.mu.Lock()
-		ch, ok := c.pending[*msg.ID]
-		delete(c.pending, *msg.ID)
-		c.mu.Unlock()
-		if ok {
-			ch <- msg
-			close(ch)
-		}
-	}
-	// Transport died: fail every pending call so waiters never hang.
-	c.mu.Lock()
-	for id, ch := range c.pending {
-		ch <- rpcMessage{Error: &rpcError{Code: -32000, Message: "mcp: server closed the connection"}}
-		close(ch)
-		delete(c.pending, id)
-	}
-	c.mu.Unlock()
 }
 
 func (c *Client) initialize(ctx context.Context) error {
@@ -245,8 +165,12 @@ func (c *Client) initialize(ctx context.Context) error {
 			Version string `json:"version"`
 		} `json:"serverInfo"`
 	}
+	target := c.cfg.Command
+	if target == "" {
+		target = c.cfg.URL
+	}
 	if err := c.call(ctx, "initialize", params, &result); err != nil {
-		return domain.NewError(domain.ErrUnavailable, fmt.Sprintf("mcp: initialize handshake with %q failed", c.cfg.Command), domain.WithCause(err))
+		return domain.NewError(domain.ErrUnavailable, fmt.Sprintf("mcp: initialize handshake with %q failed", target), domain.WithCause(err))
 	}
 	c.serverName = result.ServerInfo.Name
 	c.serverVersion = result.ServerInfo.Version
@@ -255,52 +179,32 @@ func (c *Client) initialize(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := c.stdin.Write(notification); err != nil {
-		return domain.NewError(domain.ErrUnavailable, "mcp: failed to send initialized notification", domain.WithCause(err))
-	}
-	return nil
+	return c.transport.notify(ctx, notification)
 }
 
 // call sends one request and waits for the matching response, honoring ctx.
 func (c *Client) call(ctx context.Context, method string, params any, out any) error {
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
+	if c.closed.Load() {
 		return domain.NewError(domain.ErrUnavailable, "mcp: client is closed")
 	}
 	id := c.nextID.Add(1)
-	ch := make(chan rpcMessage, 1)
-	c.pending[id] = ch
-	c.mu.Unlock()
-
 	request, err := marshalRequest(id, method, params)
 	if err != nil {
 		return domain.NewError(domain.ErrInternal, "mcp: failed to encode request", domain.WithCause(err))
 	}
-	if _, err := c.stdin.Write(request); err != nil {
-		c.mu.Lock()
-		delete(c.pending, id)
-		c.mu.Unlock()
-		return domain.NewError(domain.ErrUnavailable, "mcp: failed to write request", domain.WithCause(err))
+	msg, err := c.transport.roundTrip(ctx, id, request)
+	if err != nil {
+		return err
 	}
-
-	select {
-	case <-ctx.Done():
-		c.mu.Lock()
-		delete(c.pending, id)
-		c.mu.Unlock()
-		return ctx.Err()
-	case msg := <-ch:
-		if msg.Error != nil {
-			return domain.NewError(domain.ErrUnavailable, fmt.Sprintf("mcp: %s failed: %s", method, msg.Error.Message))
-		}
-		if out != nil && len(msg.Result) > 0 {
-			if err := json.Unmarshal(msg.Result, out); err != nil {
-				return domain.NewError(domain.ErrUnavailable, fmt.Sprintf("mcp: malformed %s result", method), domain.WithCause(err))
-			}
-		}
-		return nil
+	if msg.Error != nil {
+		return domain.NewError(domain.ErrUnavailable, fmt.Sprintf("mcp: %s failed: %s", method, msg.Error.Message))
 	}
+	if out != nil && len(msg.Result) > 0 {
+		if err := json.Unmarshal(msg.Result, out); err != nil {
+			return domain.NewError(domain.ErrUnavailable, fmt.Sprintf("mcp: malformed %s result", method), domain.WithCause(err))
+		}
+	}
+	return nil
 }
 
 // ListTools discovers every tool the server offers.
@@ -340,26 +244,10 @@ func (c *Client) ServerInfo() (string, string) {
 	return c.serverName, c.serverVersion
 }
 
-// Close terminates the connection and the subprocess.
+// Close terminates the connection (and the subprocess, for stdio).
 func (c *Client) Close() error {
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
-		return nil
-	}
-	c.closed = true
-	c.mu.Unlock()
-
-	_ = c.stdin.Close()
-	if c.cmd.Process != nil {
-		_ = c.cmd.Process.Kill()
-	}
-	err := c.cmd.Wait()
-	if err != nil && !errors.Is(err, os.ErrProcessDone) {
-		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) {
-			return err
-		}
+	if c.closed.CompareAndSwap(false, true) {
+		return c.transport.close()
 	}
 	return nil
 }
