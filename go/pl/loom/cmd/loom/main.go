@@ -20,6 +20,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,6 +45,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
+	"github.com/liubang/playground/go/pl/loom/internal/server"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 	"github.com/liubang/playground/go/pl/loom/internal/ui"
 )
@@ -71,7 +74,7 @@ func run(ctx context.Context, args []string) error {
 		if isTTY(os.Stdout) && isTTY(os.Stdin) {
 			return runChat(ctx, "", nil)
 		}
-		return errors.New("usage: loom <run|resume|chat|sessions|inspect|gc|rules|config|version> [args]")
+		return errors.New("usage: loom <run|resume|chat|serve|sessions|inspect|gc|rules|config|version> [args]")
 	}
 	switch args[0] {
 	case "version":
@@ -132,6 +135,8 @@ func run(ctx context.Context, args []string) error {
 			return importRules(args[2])
 		}
 		return errors.New("usage: loom rules <list|check <program> [args...]|forget [--domain host] <program> [args...]|import <file.json>>")
+	case "serve":
+		return runServe(ctx, args[1:])
 	case "config":
 		if len(args) == 2 && args[1] == "init" {
 			return initConfig()
@@ -376,6 +381,146 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 		broker.Close()
 	}()
 	return ui.StartTUI(sessionClient, bootstrap.Current.String(), root, opts)
+}
+
+// runServe starts the headless server mode (loom serve): a single-instance
+// daemon exposing the REST+SSE protocol (docs/SERVE_DESIGN.md §5).
+func runServe(ctx context.Context, args []string) error {
+	var listen, token, allowOrigin string
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--listen" && i+1 < len(args):
+			i++
+			listen = args[i]
+		case args[i] == "--token" && i+1 < len(args):
+			i++
+			token = args[i]
+		case args[i] == "--allow-origin" && i+1 < len(args):
+			i++
+			allowOrigin = args[i]
+		default:
+			return fmt.Errorf("usage: loom serve [--listen <addr|unix:path>] [--token <token>] [--allow-origin <origin>]")
+		}
+	}
+	if listen == "" {
+		listen = "127.0.0.1:7680"
+	}
+
+	root, err := resolveWorkspace("")
+	if err != nil {
+		return err
+	}
+	resolved, err := loadConfig(true, slog.Default())
+	if err != nil {
+		return err
+	}
+	if err := resolveSessionDB(resolved, true); err != nil {
+		return err
+	}
+	dataDir := filepath.Dir(resolved.Storage.SessionDB)
+
+	// Single-instance discipline (docs/SERVE_DESIGN.md §3.2): the data
+	// directory flock must be taken BEFORE anything touches the store.
+	lock, err := server.AcquireDataDirLock(dataDir)
+	if err != nil {
+		if errors.Is(err, server.ErrDataDirLocked) {
+			return fmt.Errorf("another loom process already owns %s (stop it or use a different data dir)", dataDir)
+		}
+		return err
+	}
+	defer lock.Release()
+
+	// Resolve the bearer token: explicit flag, else the persisted token
+	// file, else generate one (printed ONCE to stderr, never logged).
+	tokenFile := filepath.Join(dataDir, "serve.token")
+	generated := false
+	if token == "" {
+		if raw, err := os.ReadFile(tokenFile); err == nil {
+			token = strings.TrimSpace(string(raw))
+		} else if errors.Is(err, os.ErrNotExist) {
+			token, err = generateServeToken(tokenFile)
+			if err != nil {
+				return err
+			}
+			generated = true
+		} else {
+			return fmt.Errorf("read serve token: %w", err)
+		}
+	}
+
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
+		WorkspaceRoot: root,
+		ArtifactDir:   filepath.Join(dataDir, artifactDirectoryName),
+		Version:       version,
+		Logger:        logger,
+	})
+	if err != nil {
+		return fmt.Errorf("bootstrap: %w", err)
+	}
+	defer bootstrap.Close()
+
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
+	app.WireSubagentObserver(bootstrap.SubagentFactory, broker, bootstrap.Store, logger)
+	service := app.NewSessionService(bootstrap, broker, app.SessionServiceConfig{Logger: logger})
+	srv, err := server.New(server.Config{
+		Listen:      listen,
+		Token:       token,
+		AllowOrigin: allowOrigin,
+		Version:     version,
+		Service:     service,
+		Logger:      logger,
+	})
+	if err != nil {
+		return err
+	}
+	if err := srv.Listen(); err != nil {
+		return err
+	}
+
+	if generated {
+		// One-time convenience hint (never repeated, never in logs).
+		scheme := "http"
+		fmt.Fprintf(os.Stderr, "loom: serve token written to %s\n", tokenFile)
+		fmt.Fprintf(os.Stderr, "loom: connect with: curl -H 'Authorization: Bearer %s' %s://%s/v1/meta/version\n", token, scheme, srv.Addr())
+	}
+	logger.Info("loom serve ready", "addr", srv.Addr(), "instance", srv.Instance())
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- srv.Serve() }()
+
+	select {
+	case <-ctx.Done():
+	case err := <-serveErr:
+		return err
+	}
+	// Graceful stop (docs/SERVE_DESIGN.md §7.3): stop accepting HTTP, then
+	// drain the session service (turns finish or get cancelled at the
+	// deadline), then close the broker and store.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("http shutdown", "error", err)
+	}
+	if err := service.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("service shutdown", "error", err)
+	}
+	broker.Close()
+	return nil
+}
+
+// generateServeToken creates a random bearer token and persists it
+// owner-only (docs/SERVE_DESIGN.md §5.2).
+func generateServeToken(path string) (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generate token: %w", err)
+	}
+	token := hex.EncodeToString(raw)
+	if err := os.WriteFile(path, []byte(token+"\n"), 0o600); err != nil {
+		return "", fmt.Errorf("write serve token: %w", err)
+	}
+	return token, nil
 }
 
 // runAgent executes a single prompt headlessly (loom run / loom resume).
