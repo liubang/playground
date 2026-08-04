@@ -15,6 +15,7 @@
 package process
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -72,8 +73,8 @@ type Session struct {
 
 // StartSessionWithGrant starts a session with the sandbox mapped from a
 // policy grant, mirroring RunWithGrant for the asynchronous path.
-func (r *Runner) StartSessionWithGrant(spec CommandSpec, grant Grant) (*Session, error) {
-	return r.StartSession(spec, r.sandboxForGrant(grant))
+func (r *Runner) StartSessionWithGrant(ctx context.Context, spec CommandSpec, grant Grant) (*Session, error) {
+	return r.StartSession(ctx, spec, r.sandboxForGrant(grant))
 }
 
 // StartSession launches spec under sandbox (nil falls back to the runner's
@@ -82,7 +83,7 @@ func (r *Runner) StartSessionWithGrant(spec CommandSpec, grant Grant) (*Session,
 // governed by the caller via Kill, not by a wall clock. StdoutWriter and
 // StderrWriter, when set, receive the full untruncated streams exactly as
 // in Run (e.g. artifact staging).
-func (r *Runner) StartSession(spec CommandSpec, sandbox Sandbox) (*Session, error) {
+func (r *Runner) StartSession(ctx context.Context, spec CommandSpec, sandbox Sandbox) (*Session, error) {
 	if sandbox == nil {
 		sandbox = r.sandbox
 	}
@@ -94,7 +95,7 @@ func (r *Runner) StartSession(spec CommandSpec, sandbox Sandbox) (*Session, erro
 		return nil, err
 	}
 	env, droppedEnv := r.envForSandbox(spec.Env, sandbox)
-	validated.env = r.applySessionEnv(env)
+	validated.env = r.applySessionEnv(ctx, env)
 	launch, cleanup, isolation, err := r.prepareLaunch(validated, sandbox)
 	if err != nil {
 		return nil, err

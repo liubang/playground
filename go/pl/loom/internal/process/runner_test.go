@@ -612,7 +612,7 @@ func TestRunnerInjectsSessionEnv(t *testing.T) {
 		Sandbox:      ExplicitTestSandbox{},
 		EnvAllowlist: []string{"PATH", "SAFE_VALUE", "LOOM_SESSION_ID"},
 		LookPath:     fixedLookPath(executable),
-		SessionEnv:   sessionEnv.Get,
+		SessionEnv:   func(context.Context) map[string]string { return sessionEnv.Get() },
 	})
 
 	// The model attempts to spoof the attribution variables; the allowlist
@@ -674,7 +674,7 @@ func TestRunnerSessionEnvSkipsMalformedEntries(t *testing.T) {
 	runner := newRunner(t, validator, RunnerOptions{
 		Sandbox:  ExplicitTestSandbox{},
 		LookPath: fixedLookPath(executable),
-		SessionEnv: func() map[string]string {
+		SessionEnv: func(context.Context) map[string]string {
 			return map[string]string{
 				"":           "empty-key",
 				"BAD=KEY":    "has-equals",

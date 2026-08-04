@@ -37,6 +37,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
+	"github.com/liubang/playground/go/pl/loom/internal/client"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
@@ -316,41 +317,32 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	artifactDir := filepath.Join(filepath.Dir(resolved.Storage.SessionDB), artifactDirectoryName)
 
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	// The questioner is shared: the bootstrap injects it into the ask_user
-	// tool, the controller bridges it to the TUI's question overlay.
-	questioner := app.NewChannelQuestioner(nil)
 	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
 		WorkspaceRoot: root,
 		ArtifactDir:   artifactDir,
 		Version:       version,
 		Logger:        discard,
-		Questioner:    questioner,
 	})
 	if err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
 	}
 	defer bootstrap.Close()
 
-	broker := runtimeevent.NewBroker()
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	// Bridge delegate_task child-run lifecycle onto the event stream so the
 	// TUI can show live sub-agent progress and the read-only drill-in view.
 	app.WireSubagentObserver(bootstrap.SubagentFactory, broker, bootstrap.Store, discard)
-	controller := app.NewController(app.ControllerConfig{
-		Bootstrap:  bootstrap,
-		Broker:     broker,
-		Approver:   app.NewChannelApprover(),
-		Questioner: questioner,
-		Logger:     discard,
-	})
-
-	// Start the controller before issuing its serialized commands.
-	go controller.Run(ctx)
+	// The TUI is a peer client of the runtime (docs/SERVE_DESIGN.md §10):
+	// same SessionService + in-proc client assembly that `loom serve` uses,
+	// so every frontend shares one behavior.
+	service := app.NewSessionService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
+	sessionClient := client.NewInProc(service)
 
 	if resumeSessionID != nil {
-		if err := controller.ResumeSession(ctx, *resumeSessionID); err != nil {
+		if err := sessionClient.ResumeSession(ctx, *resumeSessionID); err != nil {
 			return fmt.Errorf("resume session: %w", err)
 		}
-	} else if err := controller.NewSession(ctx); err != nil {
+	} else if err := sessionClient.NewSession(ctx); err != nil {
 		return fmt.Errorf("new session: %w", err)
 	}
 
@@ -380,10 +372,10 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = controller.Shutdown(shutdownCtx)
+		_ = service.Shutdown(shutdownCtx)
 		broker.Close()
 	}()
-	return ui.StartTUI(controller, bootstrap.Current.String(), root, opts)
+	return ui.StartTUI(sessionClient, bootstrap.Current.String(), root, opts)
 }
 
 // runAgent executes a single prompt headlessly (loom run / loom resume).
