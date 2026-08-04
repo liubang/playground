@@ -455,6 +455,75 @@ func (s *SessionService) Snapshot(ctx context.Context, id domain.SessionID) (Sna
 	return h.Controller.RequestSnapshot(ctx)
 }
 
+// SetModel switches the session's model from the next turn on.
+func (s *SessionService) SetModel(ctx context.Context, id domain.SessionID, ref string) (SetModelResult, error) {
+	h, err := s.handle(id)
+	if err != nil {
+		return SetModelResult{}, err
+	}
+	h.touch()
+	return h.Controller.SetModel(ctx, ref)
+}
+
+// SetReasoning sets the session-scoped reasoning dial.
+func (s *SessionService) SetReasoning(ctx context.Context, id domain.SessionID, arg string) (SetReasoningResult, error) {
+	h, err := s.handle(id)
+	if err != nil {
+		return SetReasoningResult{}, err
+	}
+	h.touch()
+	return h.Controller.SetReasoning(ctx, arg)
+}
+
+// RequestCompaction schedules a forced compaction for the session's next turn.
+func (s *SessionService) RequestCompaction(ctx context.Context, id domain.SessionID) (RequestCompactionResult, error) {
+	h, err := s.handle(id)
+	if err != nil {
+		return RequestCompactionResult{}, err
+	}
+	h.touch()
+	return h.Controller.RequestCompaction(ctx)
+}
+
+// Inspect returns the persisted metadata of a session (no events).
+func (s *SessionService) Inspect(ctx context.Context, id domain.SessionID) (domain.SessionInspection, error) {
+	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
+	if !ok {
+		return domain.SessionInspection{}, fmt.Errorf("session inspection is unavailable for this store")
+	}
+	inspection, err := store.InspectSession(ctx, id)
+	if err != nil {
+		return domain.SessionInspection{}, err
+	}
+	inspection.Events = nil
+	return inspection, nil
+}
+
+// Transcript returns one page of the session's canonical transcript
+// projection (default limit 200, capped at 1000).
+func (s *SessionService) Transcript(ctx context.Context, id domain.SessionID, after int64, limit int) (session.TranscriptPage, error) {
+	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
+	if !ok {
+		return session.TranscriptPage{}, fmt.Errorf("transcript is unavailable for this store")
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	inspection, err := store.InspectSession(ctx, id)
+	if err != nil {
+		return session.TranscriptPage{}, err
+	}
+	transcript := session.Transcript{
+		SessionID:         inspection.Transcript.SessionID,
+		Messages:          inspection.Transcript.Messages,
+		LastEventSequence: inspection.Transcript.LastEventSequence,
+	}
+	return transcript.Page(after, limit)
+}
+
 // SubscribeEvents returns a channel of the session's runtime events with
 // Sequence > afterSeq, replaying the buffered tail first and then
 // streaming live — the catch-up and the subscription are stitched

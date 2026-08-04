@@ -13,43 +13,41 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/08/03
+# Created: 2026/08/04
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "client",
+    name = "server",
     srcs = [
-        "client.go",
-        "http.go",
-        "inproc.go",
+        "auth.go",
+        "errors.go",
+        "handlers_events.go",
+        "handlers_sessions.go",
+        "lock.go",
+        "server.go",
     ],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/client",
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/server",
     visibility = ["//go/pl/loom:__subpackages__"],
     deps = [
         "//go/pl/loom/internal/app",
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "@org_golang_x_sys//unix",
     ],
 )
 
 go_test(
-    name = "client_test",
-    srcs = [
-        "client_test.go",
-        "contract_test.go",
-    ],
-    embed = [":client"],
+    name = "server_test",
+    srcs = ["server_test.go"],
+    embed = [":server"],
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/app",
         "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/fakes:fakes_lib",
-        "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
-        "//go/pl/loom/internal/server:server",
         "//go/pl/loom/internal/session:session_lib",
     ],
 )
