@@ -18,6 +18,7 @@
 package process
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -131,9 +132,12 @@ type RunnerOptions struct {
 	// They are merged into the child environment after the minimal env is
 	// built and always win over allowlisted passthrough and CommandSpec.Env
 	// overrides, so neither the parent environment nor model-supplied
-	// overrides can spoof them. The hook is re-evaluated per execution so a
-	// long-lived runner observes session switches (TUI new/resume).
-	SessionEnv func() map[string]string
+	// overrides can spoof them. The hook receives the execution context so
+	// per-session attribution can ride the turn context (see
+	// ContextWithSessionEnv, docs/SERVE_DESIGN.md §4.3); implementations
+	// typically check the context first, then fall back to a process-level
+	// default for context-less paths.
+	SessionEnv func(ctx context.Context) map[string]string
 }
 
 // Loom attribution environment variable names injected into every command
@@ -163,6 +167,38 @@ func LoomSessionEnv(version, sessionID string) map[string]string {
 		env[EnvSessionID] = sessionID
 	}
 	return env
+}
+
+// sessionEnvContextKey carries per-turn loom attribution variables through
+// the turn context (docs/SERVE_DESIGN.md §4.3). Unexported: use
+// ContextWithSessionEnv / SessionEnvFromContext.
+type sessionEnvContextKey struct{}
+
+// ContextWithSessionEnv attaches loom attribution variables to ctx so the
+// runner's SessionEnv hook can attribute spawned commands to the owning
+// session without touching any process-level shared value. The map is
+// cloned; an empty map returns ctx unchanged.
+func ContextWithSessionEnv(ctx context.Context, env map[string]string) context.Context {
+	if len(env) == 0 {
+		return ctx
+	}
+	cloned := make(map[string]string, len(env))
+	for key, value := range env {
+		cloned[key] = value
+	}
+	return context.WithValue(ctx, sessionEnvContextKey{}, cloned)
+}
+
+// SessionEnvFromContext returns the attribution environment attached via
+// ContextWithSessionEnv, or nil when the context carries none.
+func SessionEnvFromContext(ctx context.Context) map[string]string {
+	if ctx == nil {
+		return nil
+	}
+	if env, ok := ctx.Value(sessionEnvContextKey{}).(map[string]string); ok {
+		return env
+	}
+	return nil
 }
 
 // AtomicSessionEnv is a concurrency-safe holder for the loom attribution

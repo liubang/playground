@@ -233,6 +233,9 @@ type ApprovalResolvedPayload struct {
 	ApprovalID domain.EventID    `json:"approval_id"`
 	CallID     domain.ToolCallID `json:"call_id"`
 	Decision   domain.Decision   `json:"decision"`
+	// Actor identifies who resolved the approval (e.g. a named serve client,
+	// or "system:timeout"); empty for the local interactive frontend.
+	Actor string `json:"actor,omitempty"`
 }
 
 // QuestionAskedPayload carries a model question to the interactive

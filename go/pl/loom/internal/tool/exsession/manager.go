@@ -150,7 +150,7 @@ func (m *Manager) Start(ctx context.Context, spec process.CommandSpec, grant pro
 	spec.StdoutWriter = stdoutStage
 	spec.StderrWriter = stderrStage
 
-	session, err := m.runner.StartSessionWithGrant(spec, grant)
+	session, err := m.runner.StartSessionWithGrant(ctx, spec, grant)
 	if err != nil {
 		if stdoutStage != nil {
 			_ = stdoutStage.Abort()

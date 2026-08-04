@@ -26,6 +26,7 @@ go_library(
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/app:app",
+        "//go/pl/loom/internal/client:client",
         "//go/pl/loom/internal/artifact:artifact_lib",
         "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
