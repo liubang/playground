@@ -39,8 +39,9 @@ go_library(
     importpath = "github.com/liubang/playground/go/pl/loom/internal/ui",
     visibility = ["//go/pl/loom:__subpackages__"],
     deps = [
-        "//go/pl/loom/internal/app:app",
-        "//go/pl/loom/internal/domain:domain_lib",
+"//go/pl/loom/internal/app:app",
+"//go/pl/loom/internal/client:client",
+"//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/render:render",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
@@ -80,6 +81,7 @@ go_test(
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/app:app",
+        "//go/pl/loom/internal/client:client",
         "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/fakes:fakes_lib",

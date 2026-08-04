@@ -31,6 +31,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
+	"github.com/liubang/playground/go/pl/loom/internal/client"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
@@ -71,9 +72,15 @@ type Model struct {
 	// overlay layout.
 	altScreen bool
 
-	// Controller (runtime interface)
-	controller *app.Controller
+	// Session control client (internal/client.Client): the TUI is a pure
+	// rendering peer of the runtime and never touches app.Controller
+	// directly (docs/SERVE_DESIGN.md §10). Named `controller` because it
+	// is the model's control handle for the bound session.
+	controller client.Client
 	eventsCh   <-chan runtimeevent.RuntimeEvent
+	// lastEventSeq is the highest applied event sequence; re-subscriptions
+	// resume from it so a reconnect never replays already-applied deltas.
+	lastEventSeq uint64
 
 	// UI state
 	mode      Mode
@@ -289,8 +296,8 @@ func sparkleSpinner() spinner.Spinner {
 	return spinner.Spinner{Frames: frames, FPS: 120 * time.Millisecond}
 }
 
-// NewModel creates a new UI model with the given controller.
-func NewModel(controller *app.Controller, modelName, workspace string) Model {
+// NewModel creates a new UI model with the given session control client.
+func NewModel(controller client.Client, modelName, workspace string) Model {
 	ta := textarea.New()
 	ta.Placeholder = "Type your message... (Enter to send, Alt+Enter for newline)"
 	ta.CharLimit = MaxPasteBytes
@@ -381,7 +388,7 @@ func (m Model) Init() tea.Cmd {
 	// StartTUI subscribes before creating the Bubble Tea program. Keeping this
 	// fallback makes a directly constructed Model safe in tests as well.
 	if m.eventsCh == nil {
-		eventsCh, _ := m.controller.Subscribe()
+		eventsCh, _ := subscribeEvents(m.controller, m.lastEventSeq)
 		m.eventsCh = eventsCh
 	}
 
@@ -479,14 +486,32 @@ type InitOptions struct {
 	Keymap map[string]map[string]string
 }
 
+// subscribeEvents opens an event subscription on the client's bound
+// session at the given cursor, adapting ctx cancellation to the TUI's
+// unsubscribe-func shape. On failure it returns a CLOSED channel (not
+// nil): a closed channel surfaces as runtimeEventsClosedMsg and drives
+// the bounded resubscribe path, whereas a nil channel would hang
+// waitForEvent forever.
+func subscribeEvents(c client.Client, afterSeq uint64) (<-chan runtimeevent.RuntimeEvent, func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := c.SubscribeEvents(ctx, afterSeq)
+	if err != nil {
+		cancel()
+		closed := make(chan runtimeevent.RuntimeEvent)
+		close(closed)
+		return closed, func() {}
+	}
+	return ch, cancel
+}
+
 // StartTUI starts the Bubble Tea program. Blocks until the TUI exits.
-func StartTUI(controller *app.Controller, modelName, workspace string, opts InitOptions) error {
+func StartTUI(controller client.Client, modelName, workspace string, opts InitOptions) error {
 	m := NewModel(controller, modelName, workspace)
 	// The header band shows the workspace's git branch. Detection is a
 	// one-shot, bounded probe: a slow or missing git must never delay
 	// startup, and branch switches mid-session are rare enough to ignore.
 	m.gitBranch = detectGitBranch(workspace)
-	eventsCh, unsubscribe := controller.Subscribe()
+	eventsCh, unsubscribe := subscribeEvents(controller, 0)
 	m.eventsCh = eventsCh
 	m.unsubscribeEvents = unsubscribe
 	m.SetIcons(ResolveIcons(opts.Icons))

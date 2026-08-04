@@ -908,10 +908,15 @@ type Loop struct {
 	planRevisedThisRun bool
 }
 
-// ToolRegistry looks up tools by name.
+// ToolRegistry looks up tools by name. A registry may have a parent:
+// lookups fall through to it, while registrations always land in the
+// local map — registering a name that exists in the parent shadows it
+// for this registry without mutating the shared parent (used by
+// per-session overlays, see docs/SERVE_DESIGN.md §4.2).
 type ToolRegistry struct {
-	mu    sync.RWMutex
-	tools map[string]domain.Tool
+	mu     sync.RWMutex
+	tools  map[string]domain.Tool
+	parent *ToolRegistry
 }
 
 // NewToolRegistry creates a new registry.
@@ -919,7 +924,16 @@ func NewToolRegistry() *ToolRegistry {
 	return &ToolRegistry{tools: make(map[string]domain.Tool)}
 }
 
-// Register adds a validated tool to the registry without allowing replacement.
+// NewOverlayRegistry returns a registry whose lookups fall through to
+// parent. Registrations land in the overlay only; the shared parent is
+// never mutated after bootstrap.
+func NewOverlayRegistry(parent *ToolRegistry) *ToolRegistry {
+	return &ToolRegistry{tools: make(map[string]domain.Tool), parent: parent}
+}
+
+// Register adds a validated tool to the registry without allowing
+// replacement. In an overlay, a name already present in the parent is
+// shadowed locally; only a duplicate in the local map is an error.
 func (r *ToolRegistry) Register(t domain.Tool) error {
 	if t == nil {
 		return fmt.Errorf("register nil tool")
@@ -937,21 +951,39 @@ func (r *ToolRegistry) Register(t domain.Tool) error {
 	return nil
 }
 
-// Lookup returns a tool by name.
+// Lookup returns a tool by name: local registrations first, then the
+// parent chain.
 func (r *ToolRegistry) Lookup(name string) (domain.Tool, bool) {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 	t, ok := r.tools[name]
-	return t, ok
+	parent := r.parent
+	r.mu.RUnlock()
+	if ok {
+		return t, true
+	}
+	if parent != nil {
+		return parent.Lookup(name)
+	}
+	return nil, false
 }
 
-// List returns all registered tool definitions.
+// List returns all registered tool definitions: the parent's set merged
+// with local registrations, local shadowing parent entries by name.
 func (r *ToolRegistry) List() []domain.ToolDefinition {
+	merged := make(map[string]domain.ToolDefinition)
+	if r.parent != nil {
+		for _, def := range r.parent.List() {
+			merged[def.Name] = def
+		}
+	}
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]domain.ToolDefinition, 0, len(r.tools))
-	for _, t := range r.tools {
-		out = append(out, t.Definition())
+	for name, t := range r.tools {
+		merged[name] = t.Definition()
+	}
+	r.mu.RUnlock()
+	out := make([]domain.ToolDefinition, 0, len(merged))
+	for _, def := range merged {
+		out = append(out, def)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

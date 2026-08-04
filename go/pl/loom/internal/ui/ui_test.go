@@ -21,16 +21,19 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
+	"github.com/liubang/playground/go/pl/loom/internal/client"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
-// newTestController starts a real controller loop so state-dependent key
-// handling can be exercised without fakes. The bootstrap carries one fake
-// provider with two models so /model switching works in tests.
-func newTestController(t *testing.T) *app.Controller {
+// newTestController starts a real session service with an in-proc client
+// bound to a fresh session, so state-dependent key handling can be
+// exercised without fakes (docs/SERVE_DESIGN.md §10: the TUI only ever
+// sees client.Client). The bootstrap carries one fake provider with two
+// models so /model switching works in tests.
+func newTestController(t *testing.T) client.Client {
 	t.Helper()
 	resolved := &config.ResolvedConfig{
 		Providers: []config.ResolvedProvider{{
@@ -45,20 +48,21 @@ func newTestController(t *testing.T) *app.Controller {
 		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
 		Limits:  domain.DefaultLimits(),
 	}
-	ctrl := app.NewController(app.ControllerConfig{
-		Bootstrap: &app.Bootstrap{
-			Resolved: resolved,
-			Current:  resolved.Default,
-			Store:    fakes.NewFakeStore(),
-			Registry: agent.NewToolRegistry(),
-		},
-		Broker:     runtimeevent.NewBroker(),
-		Approver:   app.NewChannelApprover(),
-		Questioner: app.NewChannelQuestioner(nil),
-	})
+	broker := runtimeevent.NewBroker()
+	t.Cleanup(broker.Close)
+	svc := app.NewSessionService(&app.Bootstrap{
+		Resolved: resolved,
+		Current:  resolved.Default,
+		Store:    fakes.NewFakeStore(),
+		Registry: agent.NewToolRegistry(),
+	}, broker, app.SessionServiceConfig{})
+	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
+	ctrl := client.NewInProc(svc)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go ctrl.Run(ctx)
+	if err := ctrl.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
 	deadline := time.Now().Add(2 * time.Second)
 	for ctrl.State() != app.ControllerStateIdle {
 		if time.Now().After(deadline) {
@@ -1114,12 +1118,13 @@ func TestEnterSubmitsAndAltEnterInsertsNewline(t *testing.T) {
 }
 
 func TestCtrlCStateTable(t *testing.T) {
-	// booting/fatal/closed: Ctrl+C quits immediately.
-	booting := app.NewController(app.ControllerConfig{
-		Broker:   runtimeevent.NewBroker(),
-		Approver: app.NewChannelApprover(),
-	})
-	m := NewModel(booting, "model", "/ws")
+	// booting/fatal/closed: Ctrl+C quits immediately. An unbound client
+	// reports the booting state.
+	bootingBroker := runtimeevent.NewBroker()
+	defer bootingBroker.Close()
+	bootingSvc := app.NewSessionService(&app.Bootstrap{}, bootingBroker, app.SessionServiceConfig{})
+	defer func() { _ = bootingSvc.Shutdown(context.Background()) }()
+	m := NewModel(client.NewInProc(bootingSvc), "model", "/ws")
 	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC}); !isQuitCmd(cmd) {
 		t.Fatal("Ctrl+C in booting state did not quit")
 	}

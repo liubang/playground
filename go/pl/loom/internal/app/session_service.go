@@ -1,0 +1,734 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+// Created: 2026/08/03
+
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
+	"github.com/liubang/playground/go/pl/loom/internal/session"
+)
+
+// Typed sentinel errors of the protocol-agnostic application layer
+// (docs/SERVE_DESIGN.md §17.5): transport adapters map them to their own
+// error model (HTTP status codes today, JSON-RPC/gRPC codes tomorrow).
+var (
+	// ErrDraining reports that the service is shutting down and rejects new
+	// sessions and prompts.
+	ErrDraining = errors.New("session service is draining")
+	// ErrSessionNotFound reports a command against a session with no live handle.
+	ErrSessionNotFound = errors.New("session not found")
+	// ErrCursorInvalid reports that a SubscribeEvents cursor can no longer be
+	// honored (rotated out, or from a previous process lifetime); the caller
+	// must resync via Snapshot.
+	ErrCursorInvalid = errors.New("event cursor can no longer be honored")
+	// ErrTooManySessions reports that the live-session limit is reached.
+	ErrTooManySessions = errors.New("live session limit reached")
+	// ErrTooManyTurns reports that the global active-turn gate rejected a new turn.
+	ErrTooManyTurns = errors.New("too many active turns")
+)
+
+// SessionService resource defaults (docs/SERVE_DESIGN.md §7.2).
+const (
+	defaultMaxSessions     = 32
+	defaultIdleTTL         = 30 * time.Minute
+	defaultMaxActiveTurns  = 4
+	defaultSubscriberQueue = 256
+	idempotencyCap         = 128
+)
+
+// SessionServiceConfig tunes a SessionService; zero fields take defaults.
+type SessionServiceConfig struct {
+	// MaxSessions bounds concurrently live session handles.
+	MaxSessions int
+	// IdleTTL reclaims idle handles after this inactivity; <= 0 disables sweeping.
+	IdleTTL time.Duration
+	// ReplayCap is the per-session replay ring capacity.
+	ReplayCap int
+	// MaxActiveTurns gates globally concurrent turns; <= 0 means unlimited.
+	MaxActiveTurns int
+	// SubscriberQueue is the per-subscription live-event buffer; a slow
+	// subscriber that fills it is disconnected (and resyncs via cursor).
+	SubscriberQueue int
+	Logger          *slog.Logger
+}
+
+// SessionHandle owns one live session: its controller, isolated runtime,
+// replay log, subscription fan-out, and idempotency cache.
+type SessionHandle struct {
+	ID         domain.SessionID
+	Controller *Controller
+	Approver   *ChannelApprover
+	Runtime    *SessionRuntime
+	Replay     *runtimeevent.ReplayLog
+
+	mu           sync.Mutex
+	subscribers  map[uint64]chan runtimeevent.RuntimeEvent
+	nextSubID    uint64
+	idem         map[string]SubmitResult
+	idemOrder    []string
+	idemInFlight map[string]*idemFlight
+
+	lastActiveNanos atomic.Int64
+}
+
+// idemFlight is the single-flight slot for an in-progress idempotent
+// submission: concurrent retries wait on done and share the first result
+// instead of re-executing the turn (review M7).
+type idemFlight struct {
+	done chan struct{}
+	res  SubmitResult
+	err  error
+}
+
+func (h *SessionHandle) touch() {
+	h.lastActiveNanos.Store(time.Now().UnixNano())
+}
+
+func (h *SessionHandle) removeSubscriber(id uint64) {
+	h.mu.Lock()
+	delete(h.subscribers, id)
+	h.mu.Unlock()
+}
+
+// dropSubscribers closes every live subscription channel of this handle
+// (idle reclaim, pump resync, service shutdown); forwarders observe the
+// close and exit, and clients resync.
+func (h *SessionHandle) dropSubscribers() {
+	h.mu.Lock()
+	channels := make([]chan runtimeevent.RuntimeEvent, 0, len(h.subscribers))
+	for id, ch := range h.subscribers {
+		channels = append(channels, ch)
+		delete(h.subscribers, id)
+	}
+	h.mu.Unlock()
+	for _, ch := range channels {
+		close(ch)
+	}
+}
+
+func (h *SessionHandle) rememberIdem(key string, res SubmitResult) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, exists := h.idem[key]; !exists {
+		h.idemOrder = append(h.idemOrder, key)
+	}
+	h.idem[key] = res
+	for len(h.idemOrder) > idempotencyCap {
+		oldest := h.idemOrder[0]
+		h.idemOrder = h.idemOrder[1:]
+		delete(h.idem, oldest)
+	}
+}
+
+// SessionService owns every live session in a process. It replaces the
+// single-Controller assumption in cmd/loom with a registry that any
+// transport (in-process client today, HTTP/SSE tomorrow) multiplexes
+// (docs/SERVE_DESIGN.md §4.1). It also owns the single event pump:
+// subscribers never touch the broker directly, so a slow client can never
+// stall the runtime.
+type SessionService struct {
+	bootstrap *Bootstrap
+	broker    *runtimeevent.Broker
+	logger    *slog.Logger
+
+	maxSessions     int
+	idleTTL         time.Duration
+	replayCap       int
+	maxActiveTurns  int
+	subscriberQueue int
+
+	mu       sync.Mutex
+	sessions map[domain.SessionID]*SessionHandle
+	closing  bool
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+}
+
+// NewSessionService creates the service and starts its event pump and idle
+// sweeper. The broker should be constructed with a generous durable queue
+// (e.g. runtimeevent.WithDurableQueue(4096)) — the pump is the only broker
+// subscriber that must never fall behind.
+func NewSessionService(bootstrap *Bootstrap, broker *runtimeevent.Broker, cfg SessionServiceConfig) *SessionService {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	s := &SessionService{
+		bootstrap:       bootstrap,
+		broker:          broker,
+		logger:          logger,
+		maxSessions:     cfg.MaxSessions,
+		idleTTL:         cfg.IdleTTL,
+		replayCap:       cfg.ReplayCap,
+		maxActiveTurns:  cfg.MaxActiveTurns,
+		subscriberQueue: cfg.SubscriberQueue,
+		sessions:        make(map[domain.SessionID]*SessionHandle),
+	}
+	if s.maxSessions <= 0 {
+		s.maxSessions = defaultMaxSessions
+	}
+	if s.idleTTL == 0 {
+		s.idleTTL = defaultIdleTTL
+	}
+	if s.maxActiveTurns == 0 {
+		s.maxActiveTurns = defaultMaxActiveTurns
+	}
+	if s.subscriberQueue <= 0 {
+		s.subscriberQueue = defaultSubscriberQueue
+	}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.wg.Add(1)
+	go s.pump()
+	if s.idleTTL > 0 {
+		s.wg.Add(1)
+		go s.sweeper()
+	}
+	return s
+}
+
+// newHandle assembles one live session: isolated runtime (fresh cells),
+// its own approver/questioner, and a controller running on the service
+// lifetime context.
+func (s *SessionService) newHandle() (*SessionHandle, error) {
+	questioner := NewChannelQuestioner(nil)
+	runtime, err := NewIsolatedSessionRuntime(s.bootstrap, questioner)
+	if err != nil {
+		return nil, fmt.Errorf("build session runtime: %w", err)
+	}
+	approver := NewChannelApprover()
+	controller := NewController(ControllerConfig{
+		Bootstrap: s.bootstrap,
+		Broker:    s.broker,
+		Approver:  approver,
+		Runtime:   runtime,
+		Logger:    s.logger,
+	})
+	h := &SessionHandle{
+		Controller:   controller,
+		Approver:     approver,
+		Runtime:      runtime,
+		Replay:       runtimeevent.NewReplayLog(s.replayCap),
+		subscribers:  make(map[uint64]chan runtimeevent.RuntimeEvent),
+		idem:         make(map[string]SubmitResult),
+		idemInFlight: make(map[string]*idemFlight),
+	}
+	go controller.Run(s.ctx)
+	h.touch()
+	return h, nil
+}
+
+// CreateSession starts a brand-new session and returns its live handle.
+func (s *SessionService) CreateSession(ctx context.Context) (*SessionHandle, error) {
+	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
+		return nil, ErrDraining
+	}
+	if len(s.sessions) >= s.maxSessions {
+		s.mu.Unlock()
+		return nil, ErrTooManySessions
+	}
+	s.mu.Unlock()
+
+	h, err := s.newHandle()
+	if err != nil {
+		return nil, err
+	}
+	if err := h.Controller.NewSession(ctx); err != nil {
+		_ = h.Controller.Shutdown(context.Background())
+		return nil, fmt.Errorf("create session: %w", err)
+	}
+	h.ID = h.Controller.SessionID()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closing {
+		_ = h.Controller.Shutdown(context.Background())
+		return nil, ErrDraining
+	}
+	s.sessions[h.ID] = h
+	return h, nil
+}
+
+// ResumeSession attaches to an existing persisted session; when the session
+// is already live it returns the existing handle (one SessionID has at most
+// one Controller process-wide).
+func (s *SessionService) ResumeSession(ctx context.Context, id domain.SessionID) (*SessionHandle, error) {
+	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
+		return nil, ErrDraining
+	}
+	if h, ok := s.sessions[id]; ok {
+		s.mu.Unlock()
+		h.touch()
+		return h, nil
+	}
+	if len(s.sessions) >= s.maxSessions {
+		s.mu.Unlock()
+		return nil, ErrTooManySessions
+	}
+	s.mu.Unlock()
+
+	h, err := s.newHandle()
+	if err != nil {
+		return nil, err
+	}
+	if err := h.Controller.ResumeSession(ctx, id); err != nil {
+		_ = h.Controller.Shutdown(context.Background())
+		return nil, fmt.Errorf("resume session: %w", err)
+	}
+	h.ID = id
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closing {
+		_ = h.Controller.Shutdown(context.Background())
+		return nil, ErrDraining
+	}
+	if existing, ok := s.sessions[id]; ok {
+		// Lost a resume race against another caller; discard ours.
+		go func() { _ = h.Controller.Shutdown(context.Background()) }()
+		return existing, nil
+	}
+	s.sessions[id] = h
+	return h, nil
+}
+
+// Get returns the live handle for id without creating it.
+func (s *SessionService) Get(id domain.SessionID) (*SessionHandle, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, ok := s.sessions[id]
+	return h, ok
+}
+
+func (s *SessionService) handle(id domain.SessionID) (*SessionHandle, error) {
+	h, ok := s.Get(id)
+	if !ok {
+		return nil, ErrSessionNotFound
+	}
+	return h, nil
+}
+
+// ListSessions returns recent persisted sessions, including non-live ones.
+func (s *SessionService) ListSessions(ctx context.Context, limit int) ([]SessionSummary, error) {
+	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
+	if !ok {
+		return nil, fmt.Errorf("session listing is unavailable for this store")
+	}
+	summaries, err := store.ListSessions(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SessionSummary, len(summaries))
+	for i, summary := range summaries {
+		result[i] = SessionSummary{ID: summary.ID, Version: summary.Version, CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt}
+	}
+	return result, nil
+}
+
+// SubmitPrompt forwards a prompt to the session's controller. While the
+// session is busy the prompt steers the active turn (TUI semantics,
+// docs/SERVE_DESIGN.md §16.3 D1). idemKey, when non-empty, makes the call
+// idempotent within this process: a repeat returns the first result with
+// deduplicated=true (§4.7).
+func (s *SessionService) SubmitPrompt(ctx context.Context, id domain.SessionID, prompt string, images []domain.ImageContent, idemKey string) (result SubmitResult, deduplicated bool, err error) {
+	if s.isClosing() {
+		return SubmitResult{}, false, ErrDraining
+	}
+	h, err := s.handle(id)
+	if err != nil {
+		return SubmitResult{}, false, err
+	}
+	if idemKey != "" {
+		h.mu.Lock()
+		if res, ok := h.idem[idemKey]; ok {
+			h.mu.Unlock()
+			h.touch()
+			return res, true, nil
+		}
+		if flight, ok := h.idemInFlight[idemKey]; ok {
+			// A concurrent retry of the same key is already executing:
+			// wait for it and share its result instead of running twice.
+			h.mu.Unlock()
+			select {
+			case <-flight.done:
+				h.touch()
+				return flight.res, true, flight.err
+			case <-ctx.Done():
+				return SubmitResult{}, false, ctx.Err()
+			}
+		}
+		flight := &idemFlight{done: make(chan struct{})}
+		h.idemInFlight[idemKey] = flight
+		h.mu.Unlock()
+		defer func() {
+			h.mu.Lock()
+			delete(h.idemInFlight, idemKey)
+			flight.res, flight.err = result, err
+			close(flight.done)
+			h.mu.Unlock()
+		}()
+	}
+	// Global active-turn gate: only brand-new turns count; steering a busy
+	// session is always allowed. This is a soft TOCTOU gate (state may
+	// change between the check and the controller command) — a backpressure
+	// hint, not a hard concurrency guarantee.
+	if s.maxActiveTurns > 0 && h.Controller.State() == ControllerStateIdle && s.activeTurns() >= s.maxActiveTurns {
+		return SubmitResult{}, false, ErrTooManyTurns
+	}
+	result, err = h.Controller.SubmitPromptWithImages(ctx, prompt, images)
+	if err != nil {
+		return SubmitResult{}, false, err
+	}
+	if idemKey != "" {
+		h.rememberIdem(idemKey, result)
+	}
+	h.touch()
+	return result, false, nil
+}
+
+// CancelTurn cancels the session's active turn.
+func (s *SessionService) CancelTurn(ctx context.Context, id domain.SessionID) error {
+	h, err := s.handle(id)
+	if err != nil {
+		return err
+	}
+	h.touch()
+	return h.Controller.CancelTurn(ctx)
+}
+
+// ResolveApproval resolves a pending approval with the resolving actor's
+// identity (audit + approval.resolved payload, §4.6).
+func (s *SessionService) ResolveApproval(ctx context.Context, id domain.SessionID, binding ApprovalBinding, decision domain.Decision, hint *ApprovalRuleHint, actor string) (string, error) {
+	h, err := s.handle(id)
+	if err != nil {
+		return "", err
+	}
+	h.touch()
+	return h.Controller.ResolveApprovalWithActor(ctx, binding, decision, hint, actor)
+}
+
+// AnswerQuestion resolves a pending ask_user question.
+func (s *SessionService) AnswerQuestion(ctx context.Context, id domain.SessionID, questionID domain.EventID, answer domain.QuestionAnswer) (AnswerQuestionResult, error) {
+	h, err := s.handle(id)
+	if err != nil {
+		return AnswerQuestionResult{}, err
+	}
+	h.touch()
+	return h.Controller.AnswerQuestion(ctx, questionID, answer)
+}
+
+// Snapshot returns the session's live projection, including the event
+// watermark (Snapshot.EventSeq) for a gapless snapshot+delta handoff.
+func (s *SessionService) Snapshot(ctx context.Context, id domain.SessionID) (Snapshot, error) {
+	h, err := s.handle(id)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return h.Controller.RequestSnapshot(ctx)
+}
+
+// SubscribeEvents returns a channel of the session's runtime events with
+// Sequence > afterSeq, replaying the buffered tail first and then
+// streaming live — the catch-up and the subscription are stitched
+// atomically (docs/SERVE_DESIGN.md §4.5). afterSeq is compared against the
+// GLOBAL broker sequence: a cursor beyond it comes from a previous process
+// lifetime and is rejected with ErrCursorInvalid (the caller resyncs via
+// Snapshot, then SubscribeLatest); a cursor between the session's own max
+// and the global max simply means "up to date". The channel closes when
+// ctx is cancelled, the service shuts down, or the subscription falls too
+// far behind.
+func (s *SessionService) SubscribeEvents(ctx context.Context, id domain.SessionID, afterSeq uint64) (<-chan runtimeevent.RuntimeEvent, error) {
+	h, err := s.handle(id)
+	if err != nil {
+		return nil, err
+	}
+	if s.broker != nil && afterSeq > s.broker.Sequence() {
+		return nil, ErrCursorInvalid
+	}
+	h.mu.Lock()
+	replay, ok := h.Replay.Since(afterSeq)
+	if !ok {
+		h.mu.Unlock()
+		return nil, ErrCursorInvalid
+	}
+	return s.subscribeLocked(ctx, h, replay), nil
+}
+
+// SubscribeLatest attaches a live-only subscription, skipping the replay
+// tail entirely. It is the resync companion of SubscribeEvents: after
+// ErrCursorInvalid the caller rebuilds its state from a fresh Snapshot
+// (which is always complete — the projection is updated synchronously at
+// persistence time, not via the event stream) and then needs only future
+// events.
+func (s *SessionService) SubscribeLatest(ctx context.Context, id domain.SessionID) (<-chan runtimeevent.RuntimeEvent, error) {
+	h, err := s.handle(id)
+	if err != nil {
+		return nil, err
+	}
+	h.mu.Lock()
+	return s.subscribeLocked(ctx, h, nil), nil
+}
+
+// subscribeLocked registers a live subscription on h and returns the
+// stitched output channel. Callers must hold h.mu. Replay events (nil for
+// live-only) are delivered before live ones; ordering is exact because the
+// pump appends to the ring and forwards to live queues under the same lock.
+func (s *SessionService) subscribeLocked(ctx context.Context, h *SessionHandle, replay []runtimeevent.RuntimeEvent) <-chan runtimeevent.RuntimeEvent {
+	subID := h.nextSubID
+	h.nextSubID++
+	live := make(chan runtimeevent.RuntimeEvent, s.subscriberQueue)
+	h.subscribers[subID] = live
+	h.mu.Unlock()
+	h.touch()
+
+	out := make(chan runtimeevent.RuntimeEvent, s.subscriberQueue)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer close(out)
+		defer h.removeSubscriber(subID)
+		for _, evt := range replay {
+			select {
+			case out <- evt:
+			case <-ctx.Done():
+				return
+			case <-s.ctx.Done():
+				return
+			}
+		}
+		for {
+			select {
+			case evt, ok := <-live:
+				if !ok {
+					return
+				}
+				select {
+				case out <- evt:
+				case <-ctx.Done():
+					return
+				case <-s.ctx.Done():
+					return
+				}
+			case <-ctx.Done():
+				return
+			case <-s.ctx.Done():
+				return
+			}
+		}
+	}()
+	return out
+}
+
+// Shutdown stops accepting new sessions/prompts, disconnects all
+// subscribers, and gracefully shuts every controller down.
+func (s *SessionService) Shutdown(ctx context.Context) error {
+	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
+		return nil
+	}
+	s.closing = true
+	handles := make([]*SessionHandle, 0, len(s.sessions))
+	for _, h := range s.sessions {
+		handles = append(handles, h)
+	}
+	s.mu.Unlock()
+
+	s.cancel()
+	s.dropAllSubscribers()
+	var firstErr error
+	for _, h := range handles {
+		if err := h.Controller.Shutdown(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	s.wg.Wait()
+	return firstErr
+}
+
+func (s *SessionService) isClosing() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closing
+}
+
+func (s *SessionService) activeTurns() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	active := 0
+	for _, h := range s.sessions {
+		switch h.Controller.State() {
+		case ControllerStateRunning, ControllerStateAwaitingApproval, ControllerStateCancelling:
+			active++
+		}
+	}
+	return active
+}
+
+// pump is the service's single broker subscriber (§4.5): it appends every
+// event to the owning session's replay log and fans out to live
+// subscriptions, all non-blocking. A subscriber whose queue is full is
+// disconnected — it resyncs via its cursor; the broker always sees a
+// healthy subscriber.
+func (s *SessionService) pump() {
+	defer s.wg.Done()
+	for {
+		events, unsubscribe := s.broker.Subscribe()
+		broken := false
+		for !broken {
+			select {
+			case <-s.ctx.Done():
+				unsubscribe()
+				return
+			case evt, ok := <-events:
+				if !ok {
+					broken = true
+					break
+				}
+				s.dispatch(evt)
+			}
+		}
+		select {
+		case <-s.ctx.Done():
+			return
+		default:
+		}
+		// The broker disconnected the pump (extreme backpressure) — by
+		// design this should never happen; alert loudly, poison every
+		// pre-gap cursor (the gap's events never reached any ring, so
+		// serving them would be silent loss), drop all live streams so
+		// clients resync via snapshot, and resubscribe.
+		s.logger.Error("event pump lost its broker subscription; clients must resync")
+		s.invalidateAll()
+		s.dropAllSubscribers()
+		select {
+		case <-time.After(time.Second):
+		case <-s.ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *SessionService) dispatch(evt runtimeevent.RuntimeEvent) {
+	s.mu.Lock()
+	h, ok := s.sessions[evt.SessionID]
+	s.mu.Unlock()
+	if !ok {
+		return
+	}
+	h.mu.Lock()
+	h.Replay.Append(evt)
+	var slow []chan runtimeevent.RuntimeEvent
+	for id, ch := range h.subscribers {
+		select {
+		case ch <- evt:
+		default:
+			slow = append(slow, ch)
+			delete(h.subscribers, id)
+		}
+	}
+	h.mu.Unlock()
+	for _, ch := range slow {
+		close(ch)
+	}
+}
+
+func (s *SessionService) dropAllSubscribers() {
+	s.mu.Lock()
+	handles := make([]*SessionHandle, 0, len(s.sessions))
+	for _, h := range s.sessions {
+		handles = append(handles, h)
+	}
+	s.mu.Unlock()
+	for _, h := range handles {
+		h.dropSubscribers()
+	}
+}
+
+// invalidateAll poisons every handle's replay cursors below the current
+// global broker sequence (pump resync path): subscribers holding pre-gap
+// cursors get ErrCursorInvalid and resync via snapshot instead of silently
+// missing the gap's events.
+func (s *SessionService) invalidateAll() {
+	if s.broker == nil {
+		return
+	}
+	floor := s.broker.Sequence()
+	s.mu.Lock()
+	handles := make([]*SessionHandle, 0, len(s.sessions))
+	for _, h := range s.sessions {
+		handles = append(handles, h)
+	}
+	s.mu.Unlock()
+	for _, h := range handles {
+		h.Replay.Invalidate(floor)
+	}
+}
+
+// sweeper reclaims handles that have been idle longer than the TTL; a
+// handle with a non-idle controller is never reclaimed.
+func (s *SessionService) sweeper() {
+	defer s.wg.Done()
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.sweepIdle()
+		}
+	}
+}
+
+func (s *SessionService) sweepIdle() {
+	cutoff := time.Now().Add(-s.idleTTL).UnixNano()
+	var victims []*SessionHandle
+	s.mu.Lock()
+	for id, h := range s.sessions {
+		if h.Controller.State() == ControllerStateIdle && h.lastActiveNanos.Load() < cutoff {
+			delete(s.sessions, id)
+			victims = append(victims, h)
+		}
+	}
+	s.mu.Unlock()
+	for _, h := range victims {
+		// Close live subscriptions first: clients must see the stream end
+		// (and resync) rather than a silently dead session (review M4).
+		h.dropSubscribers()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := h.Controller.Shutdown(ctx); err != nil {
+			s.logger.Warn("idle session shutdown failed", "session_id", h.ID, "error", err)
+		}
+		cancel()
+		s.logger.Info("idle session reclaimed", "session_id", h.ID)
+	}
+}

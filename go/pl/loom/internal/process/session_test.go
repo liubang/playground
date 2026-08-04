@@ -36,7 +36,7 @@ func TestSessionIncrementalReadAndExit(t *testing.T) {
 		LookPath:     fixedLookPath(executable),
 	})
 
-	session, err := runner.StartSession(CommandSpec{Program: "session_basic", Cwd: root}, nil)
+	session, err := runner.StartSession(t.Context(), CommandSpec{Program: "session_basic", Cwd: root}, nil)
 	if err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
@@ -87,7 +87,7 @@ func TestSessionWriteStdin(t *testing.T) {
 		LookPath:     fixedLookPath(executable),
 	})
 
-	session, err := runner.StartSession(CommandSpec{Program: "session_echo", Cwd: root}, nil)
+	session, err := runner.StartSession(t.Context(), CommandSpec{Program: "session_echo", Cwd: root}, nil)
 	if err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
@@ -120,7 +120,7 @@ func TestSessionKillReclaimsProcessGroup(t *testing.T) {
 		LookPath:     fixedLookPath(executable),
 	})
 
-	session, err := runner.StartSession(CommandSpec{Program: "session_sleep", Cwd: root}, nil)
+	session, err := runner.StartSession(t.Context(), CommandSpec{Program: "session_sleep", Cwd: root}, nil)
 	if err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
@@ -150,7 +150,7 @@ func TestSessionReadMaxBytesKeepsTail(t *testing.T) {
 		LookPath:     fixedLookPath(executable),
 	})
 
-	session, err := runner.StartSession(CommandSpec{Program: "session_volume", Cwd: root}, nil)
+	session, err := runner.StartSession(t.Context(), CommandSpec{Program: "session_volume", Cwd: root}, nil)
 	if err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
@@ -183,7 +183,7 @@ func TestSessionBufferCapDropsOldest(t *testing.T) {
 		LookPath:     fixedLookPath(executable),
 	})
 
-	session, err := runner.StartSession(CommandSpec{Program: "session_flood", Cwd: root}, nil)
+	session, err := runner.StartSession(t.Context(), CommandSpec{Program: "session_flood", Cwd: root}, nil)
 	if err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}

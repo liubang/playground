@@ -1497,7 +1497,17 @@ func (m Model) handleSessionSwitched(msg sessionSwitchedMsg) (tea.Model, tea.Cmd
 	m.subOverlay = nil
 	m.mode = ModeChat
 	m.setStatus(msg.action.success, false)
-	return m, m.requestSnapshot()
+	// The subscription is bound to a session: after a switch the old stream
+	// only carries the previous session's events, so re-attach to the new
+	// session. The cursor stays at the last applied sequence (global
+	// sequence space), so nothing is replayed and nothing is missed.
+	if m.unsubscribeEvents != nil {
+		m.unsubscribeEvents()
+	}
+	eventsCh, unsubscribe := subscribeEvents(m.controller, m.lastEventSeq)
+	m.eventsCh = eventsCh
+	m.unsubscribeEvents = unsubscribe
+	return m, tea.Batch(m.waitForEvent(), m.requestSnapshot())
 }
 
 // handleReasoningChanged applies the ack of a /reasoning command: on
@@ -2070,7 +2080,7 @@ func (m Model) handleEventsClosed() (tea.Model, tea.Cmd) {
 	if m.unsubscribeEvents != nil {
 		m.unsubscribeEvents()
 	}
-	eventsCh, unsubscribe := m.controller.Subscribe()
+	eventsCh, unsubscribe := subscribeEvents(m.controller, m.lastEventSeq)
 	m.eventsCh = eventsCh
 	m.unsubscribeEvents = unsubscribe
 	m.setStatus("Event stream interrupted; resubscribed, refreshing view from snapshot", true)
@@ -2082,6 +2092,9 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 	// consecutive-recovery budget so a long-lived session is never locked
 	// out by ancient, already-recovered disconnects.
 	m.resubscribes = 0
+	if evt.Sequence > m.lastEventSeq {
+		m.lastEventSeq = evt.Sequence
+	}
 	// Drop events belonging to other sessions (for example stale events from
 	// before /new or /resume); adopt a session only while unbound.
 	if !evt.SessionID.IsZero() {
@@ -2314,7 +2327,7 @@ func (m Model) submitPromptCmd(prompt string) tea.Cmd {
 // status line but the text prompt still goes through.
 func (m Model) submitPromptWithImagesCmd(prompt string, images []domain.ImageContent, imagePaths []string) tea.Cmd {
 	return func() tea.Msg {
-		result, err := m.controller.SubmitPromptWithImages(context.Background(), prompt, images)
+		result, err := m.controller.SubmitPrompt(context.Background(), prompt, images)
 		return promptSubmittedMsg{prompt: prompt, result: result, err: err, imageCount: len(images), imagePaths: imagePaths}
 	}
 }

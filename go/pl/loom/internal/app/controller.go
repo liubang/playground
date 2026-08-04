@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -69,8 +70,36 @@ type Snapshot struct {
 	Usage               domain.Usage     `json:"usage"`
 	Messages            []domain.Message `json:"messages,omitempty"`
 	PendingApprovals    []domain.EventID `json:"pending_approvals,omitempty"`
-	PendingSteers       []string         `json:"pending_steers,omitempty"`
-	Timestamp           time.Time        `json:"timestamp"`
+	// PendingRequests projects in-flight approvals and ask_user questions
+	// with their full card payloads, so a (re)connecting client can rebuild
+	// its UI from the snapshot alone (docs/SERVE_DESIGN.md §4.4).
+	PendingRequests []PendingRequest `json:"pending_requests,omitempty"`
+	PendingSteers   []string         `json:"pending_steers,omitempty"`
+	// EventSeq is the broker-sequence watermark this projection has
+	// applied: subscribe with it as cursor for a gapless snapshot+delta
+	// handoff (docs/SERVE_DESIGN.md §4.4).
+	EventSeq  uint64    `json:"event_seq"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// PendingRequestKind identifies a resolvable request surfaced to frontends.
+type PendingRequestKind string
+
+const (
+	// PendingRequestApproval is a tool-call approval (resolve via ResolveApproval).
+	PendingRequestApproval PendingRequestKind = "approval"
+	// PendingRequestQuestion is an ask_user question (resolve via AnswerQuestion).
+	PendingRequestQuestion PendingRequestKind = "question"
+)
+
+// PendingRequest is a pending, one-shot-resolvable request (approval or
+// ask_user question) projected for Snapshot consumers — the reconnect-safe
+// companion to the ephemeral approval.requested / question.asked events.
+type PendingRequest struct {
+	Kind     PendingRequestKind                     `json:"kind"`
+	ID       domain.EventID                         `json:"id"`
+	Approval *runtimeevent.ApprovalRequestedPayload `json:"approval,omitempty"`
+	Question *domain.Question                       `json:"question,omitempty"`
 }
 
 // SessionSummary is the frontend-safe metadata used by session pickers.
@@ -103,10 +132,24 @@ type Controller struct {
 	runID       domain.RunID
 	turnCounter int
 	questioner  *ChannelQuestioner
-	lastUsage   domain.Usage
-	messages    []domain.Message
-	resumedRun  *agent.Run
-	resumed     bool
+	// runtime holds the per-session mutable state (cells, questioner,
+	// registry overlay). It is the controller's ONLY source of session
+	// state (docs/SERVE_DESIGN.md §4.2, single-construction-path rule).
+	runtime   *SessionRuntime
+	lastUsage domain.Usage
+	messages  []domain.Message
+	// appliedSeq is the broker-sequence watermark sampled inside the
+	// projection-update critical section (docs/SERVE_DESIGN.md §4.4).
+	appliedSeq uint64
+	// pendingCards/pendingQuestions project in-flight approval requests
+	// and ask_user questions with full payloads for Snapshot.PendingRequests.
+	pendingCards     map[domain.EventID]runtimeevent.ApprovalRequestedPayload
+	pendingQuestions map[domain.EventID]domain.Question
+	// approvalActors remembers who resolved each approval until the
+	// resolution event is published.
+	approvalActors map[domain.EventID]string
+	resumedRun     *agent.Run
+	resumed        bool
 	// current overrides Bootstrap.Current after a /model switch; the zero
 	// value means the bootstrap default is still in effect. Provider
 	// instances are prebuilt, so a switch is just a reference swap applied
@@ -150,10 +193,16 @@ type ControllerConfig struct {
 	Approver  *ChannelApprover
 	// Questioner bridges ask_user questions to the frontend; nil disables
 	// the bridge (questions then resolve through the bootstrap's
-	// questioner, e.g. the autonomous one when headless).
+	// questioner, e.g. the autonomous one when headless). Ignored when
+	// Runtime is provided — the runtime's questioner wins.
 	Questioner *ChannelQuestioner
-	Clock      domain.Clock
-	Logger     *slog.Logger
+	// Runtime carries per-session state (docs/SERVE_DESIGN.md §4.2). When
+	// nil (legacy TUI/tests assembly), one is derived from the bootstrap,
+	// reusing its cells; serve's SessionService always passes an explicit
+	// per-session Runtime.
+	Runtime *SessionRuntime
+	Clock   domain.Clock
+	Logger  *slog.Logger
 }
 
 // NewController creates a new Controller in the booting state.
@@ -174,26 +223,42 @@ func NewController(cfg ControllerConfig) *Controller {
 	if cfg.Bootstrap != nil && cfg.Bootstrap.SessionRules != nil {
 		sessionRules = cfg.Bootstrap.SessionRules
 	}
+	runtime := cfg.Runtime
+	if runtime == nil {
+		var err error
+		runtime, err = NewSessionRuntime(cfg.Bootstrap, cfg.Questioner)
+		if err != nil {
+			// NewSessionRuntime only errors on nil cells/questioner, which it
+			// never passes by construction; reaching this is a programming error.
+			panic(fmt.Sprintf("derive session runtime: %v", err))
+		}
+	}
 	c := &Controller{
-		bootstrap:     cfg.Bootstrap,
-		broker:        cfg.Broker,
-		approver:      cfg.Approver,
-		rulesApprover: NewRuleApprover(cfg.Approver, sessionRules),
-		questioner:    cfg.Questioner,
-		clock:         clock,
-		logger:        logger,
-		state:         ControllerStateBooting,
-		sessionCtx:    sessionCtx,
-		cancelSession: cancelSession,
-		cmdCh:         make(chan controllerCommand, 64),
-		doneCh:        make(chan struct{}),
+		bootstrap:        cfg.Bootstrap,
+		broker:           cfg.Broker,
+		approver:         cfg.Approver,
+		rulesApprover:    NewRuleApprover(cfg.Approver, sessionRules),
+		questioner:       runtime.Questioner,
+		clock:            clock,
+		logger:           logger,
+		state:            ControllerStateBooting,
+		sessionCtx:       sessionCtx,
+		cancelSession:    cancelSession,
+		cmdCh:            make(chan controllerCommand, 64),
+		doneCh:           make(chan struct{}),
+		runtime:          runtime,
+		pendingCards:     make(map[domain.EventID]runtimeevent.ApprovalRequestedPayload),
+		pendingQuestions: make(map[domain.EventID]domain.Question),
+		approvalActors:   make(map[domain.EventID]string),
 	}
 	// Bridge model questions onto the runtime event stream: the agent loop
 	// blocks in ask_user until a frontend answers via AnswerQuestion.
-	if cfg.Questioner != nil {
-		cfg.Questioner.BindPublish(func(q domain.Question) {
+	if runtime.Questioner != nil {
+		runtime.Questioner.BindPublish(func(q domain.Question) {
 			c.mu.Lock()
 			sessionID, runID, turn := c.sessionID, c.runID, c.turnCounter
+			c.pendingQuestions[q.ID] = q
+			c.noteProjectionLocked()
 			c.mu.Unlock()
 			c.publishEphemeral(sessionID, runID, turn, runtimeevent.KindQuestionAsked, runtimeevent.QuestionAskedPayload{
 				QuestionID:    q.ID,
@@ -256,6 +321,9 @@ type SubmitResult struct {
 	Steered bool
 	// QueueLen is the resulting pending-steer count (0 when started).
 	QueueLen int
+	// Turn is the session's turn counter after the submission (the new
+	// turn when started, the busy turn when steered).
+	Turn int
 }
 
 // SubmitPrompt submits a user prompt. While the controller is idle it
@@ -322,9 +390,17 @@ func (c *Controller) CancelTurn(ctx context.Context) error {
 // categorical rule ("allow always") and returns a short note describing it;
 // the note is empty when nothing was remembered.
 func (c *Controller) ResolveApproval(ctx context.Context, binding ApprovalBinding, decision domain.Decision, ruleHint *ApprovalRuleHint) (string, error) {
+	return c.ResolveApprovalWithActor(ctx, binding, decision, ruleHint, "")
+}
+
+// ResolveApprovalWithActor is ResolveApproval plus the identity of who
+// resolved (docs/SERVE_DESIGN.md §4.6): the actor lands in the audit log
+// and the approval.resolved event payload. An empty actor means the local
+// interactive frontend (TUI).
+func (c *Controller) ResolveApprovalWithActor(ctx context.Context, binding ApprovalBinding, decision domain.Decision, ruleHint *ApprovalRuleHint, actor string) (string, error) {
 	resultCh := make(chan controllerResult, 1)
 	select {
-	case c.cmdCh <- controllerCommand{Kind: cmdResolveApproval, Approval: binding, Decision: decision, RuleHint: ruleHint, ResultCh: resultCh}:
+	case c.cmdCh <- controllerCommand{Kind: cmdResolveApproval, Approval: binding, Decision: decision, RuleHint: ruleHint, Actor: actor, ResultCh: resultCh}:
 	case <-ctx.Done():
 		return "", ctx.Err()
 	case <-c.doneCh:
@@ -575,11 +651,6 @@ func (c *Controller) Shutdown(ctx context.Context) error {
 	case <-c.doneCh:
 		return nil
 	}
-}
-
-// Subscribe returns a channel of runtime events and an unsubscribe function.
-func (c *Controller) Subscribe() (<-chan runtimeevent.RuntimeEvent, func()) {
-	return c.broker.Subscribe()
 }
 
 // ListSessions returns recent persisted sessions for a frontend picker.
@@ -891,7 +962,7 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 		c.onTurnFinished(turnID, turnCounter, err)
 	}()
 
-	cmd.ResultCh <- controllerResult{Value: SubmitResult{}}
+	cmd.ResultCh <- controllerResult{Value: SubmitResult{Turn: turnCounter}}
 }
 
 // handleSteer queues a prompt submitted while a turn is busy into the
@@ -917,16 +988,17 @@ func (c *Controller) handleSteer(cmd controllerCommand) {
 		Text:     cmd.Prompt,
 		QueueLen: n,
 	})
-	cmd.ResultCh <- controllerResult{Value: SubmitResult{Steered: true, QueueLen: n}}
+	cmd.ResultCh <- controllerResult{Value: SubmitResult{Steered: true, QueueLen: n, Turn: turnCounter}}
 }
 
-// steerCell returns the shared steer mailbox; nil in tests that assemble a
-// bare Controller.
+// steerCell returns the session's steer mailbox from its runtime (never
+// nil after NewController; the nil check is defensive for hand-assembled
+// zero-value controllers).
 func (c *Controller) steerCell() *agent.SteerCell {
-	if c.bootstrap == nil {
+	if c.runtime == nil {
 		return nil
 	}
-	return c.bootstrap.SteerCell
+	return c.runtime.SteerCell
 }
 
 // subagentModelSource returns the delegate_task model mailbox; nil when
@@ -989,7 +1061,12 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 	// loop and is cleared here so later turns compact on pressure only.
 	forceCompact := c.forceCompact
 	c.forceCompact = false
+	sessionID := c.sessionID
 	c.mu.Unlock()
+	// Attribute every command this turn spawns to this session via ctx
+	// (docs/SERVE_DESIGN.md §4.3): concurrent sessions never share the
+	// process-level AtomicSessionEnv.
+	ctx = process.ContextWithSessionEnv(ctx, process.LoomSessionEnv(c.bootstrap.Version, sessionID.String()))
 	provider := c.bootstrap.Resolved.ProviderByName(current.Provider)
 	if provider == nil {
 		// Cannot happen through Load/SetModel (both validate the ref), but a
@@ -1045,6 +1122,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 	c.runID = run.ID
 	c.messages = append([]domain.Message(nil), run.Messages...)
 	c.lastUsage = run.Usage
+	c.noteProjectionLocked()
 	c.mu.Unlock()
 
 	// Publish session opened when the first turn in this frontend starts.
@@ -1091,7 +1169,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 		Store:              &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
 		Approver:           c.rulesApprover,
 		Policy:             c.bootstrap.CurrentPolicy(),
-		Registry:           c.bootstrap.Registry,
+		Registry:           c.runtime.Registry,
 		Logger:             c.logger,
 		SystemPrompt:       c.bootstrap.PromptBuilder,
 		Artifacts:          c.bootstrap.Artifact,
@@ -1103,9 +1181,9 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 		Reasoning:          reasoning,
 		ForceCompact:       forceCompact,
 		CompactTriggerHint: triggerHint,
-		GoalCell:           c.bootstrap.GoalCell,
-		PlanCell:           c.bootstrap.PlanCell,
-		SteerCell:          c.bootstrap.SteerCell,
+		GoalCell:           c.runtime.GoalCell,
+		PlanCell:           c.runtime.PlanCell,
+		SteerCell:          c.runtime.SteerCell,
 		// Reuse the tracing cost rates for the cost budget; zero when the
 		// user never configured pricing, which disables cost accounting.
 		CostInputUSDPerMTok:  c.bootstrap.Resolved.Tracing.CostInputPerMTok,
@@ -1221,6 +1299,14 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 	if c.state != ControllerStateClosed && c.state != ControllerStateFatal {
 		c.state = ControllerStateIdle
 	}
+	// A finished turn has no resolvable requests left: a cancelled turn
+	// skips the resolved-event cleanup path, so drop the projections here
+	// or ghost approvals/questions would linger in snapshots forever
+	// (review M2).
+	c.pendingCards = make(map[domain.EventID]runtimeevent.ApprovalRequestedPayload)
+	c.pendingQuestions = make(map[domain.EventID]domain.Question)
+	c.approvalActors = make(map[domain.EventID]string)
+	c.noteProjectionLocked()
 	c.mu.Unlock()
 
 	var payload any
@@ -1281,10 +1367,30 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 		return
 	}
 
+	// Record the actor BEFORE resolving: the resolution wakes the turn
+	// goroutine, which may persist and publish the resolved event
+	// immediately — the actor must already be projected by then (review
+	// M1). Rolled back when the binding does not match.
+	if cmd.Actor != "" {
+		c.mu.Lock()
+		c.approvalActors[cmd.Approval.ApprovalID] = cmd.Actor
+		c.mu.Unlock()
+	}
 	if !c.approver.ResolveApproval(cmd.Approval, cmd.Decision) {
+		if cmd.Actor != "" {
+			c.mu.Lock()
+			delete(c.approvalActors, cmd.Approval.ApprovalID)
+			c.mu.Unlock()
+		}
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("approval binding does not match a pending request")}
 		return
 	}
+
+	actor := cmd.Actor
+	if actor == "" {
+		actor = "local"
+	}
+	c.logger.Info("approval resolved", "approval_id", cmd.Approval.ApprovalID, "decision", cmd.Decision, "actor", actor)
 
 	var note string
 	if cmd.Decision == domain.DecisionAllow && cmd.RuleHint != nil {
@@ -1331,6 +1437,9 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	c.lastUsage = domain.Usage{}
 	c.resumedRun = nil
 	c.resumed = false
+	c.pendingCards = make(map[domain.EventID]runtimeevent.ApprovalRequestedPayload)
+	c.pendingQuestions = make(map[domain.EventID]domain.Question)
+	c.approvalActors = make(map[domain.EventID]string)
 	// A compaction is requested against a specific transcript; it must not
 	// leak into a different session's first turn.
 	c.forceCompact = false
@@ -1342,7 +1451,6 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("create session: %w", err)}
 		return
 	}
-	c.publishSessionEnv(sessionID)
 	c.logger.Info("new session created", "session_id", sessionID)
 	cmd.ResultCh <- controllerResult{}
 }
@@ -1353,10 +1461,15 @@ func (c *Controller) handleAnswerQuestion(cmd controllerCommand) {
 		return
 	}
 	resolved := c.questioner.Resolve(cmd.QuestionID, cmd.Answer)
+	// Drop the projection entry regardless of the resolve outcome: an
+	// unknown/already-resolved id can only refer to a stale card (review
+	// M2 self-heal).
+	c.mu.Lock()
+	delete(c.pendingQuestions, cmd.QuestionID)
+	c.noteProjectionLocked()
+	sessionID, runID, turn := c.sessionID, c.runID, c.turnCounter
+	c.mu.Unlock()
 	if resolved {
-		c.mu.Lock()
-		sessionID, runID, turn := c.sessionID, c.runID, c.turnCounter
-		c.mu.Unlock()
 		c.publishEphemeral(sessionID, runID, turn, runtimeevent.KindQuestionAnswered, runtimeevent.QuestionAnsweredPayload{
 			QuestionID: cmd.QuestionID,
 			Skipped:    cmd.Answer.Skipped,
@@ -1452,24 +1565,29 @@ func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	c.resumedRun = run
 	c.resumed = true
 	// Same as handleNewSession: a pending compaction belongs to the
-	// transcript it was requested against.
+	// transcript it was requested against, and stale request projections
+	// belong to the previous session's lifetime (review L2).
 	c.forceCompact = false
+	c.pendingCards = make(map[domain.EventID]runtimeevent.ApprovalRequestedPayload)
+	c.pendingQuestions = make(map[domain.EventID]domain.Question)
+	c.approvalActors = make(map[domain.EventID]string)
 	c.state = ControllerStateIdle
 	c.mu.Unlock()
 
-	c.publishSessionEnv(c.sessionID)
 	c.logger.Info("session resumed", "session_id", c.sessionID)
 	cmd.ResultCh <- controllerResult{}
 }
 
-// publishSessionEnv points the runner's attribution environment at the given
-// session, so commands spawned from here on carry its identity. The holder
-// may be nil in tests that assemble a Bootstrap by hand.
-func (c *Controller) publishSessionEnv(sessionID domain.SessionID) {
-	if c.bootstrap == nil || c.bootstrap.SessionEnv == nil {
-		return
+// noteProjectionLocked samples the broker sequence as the applied
+// watermark. Callers must hold c.mu and have just updated the snapshot
+// projection: the watermark must never run ahead of the projection it
+// describes, otherwise a client subscribing at the watermark would miss
+// effects whose events already carry a smaller sequence
+// (docs/SERVE_DESIGN.md §4.4).
+func (c *Controller) noteProjectionLocked() {
+	if c.broker != nil {
+		c.appliedSeq = c.broker.Sequence()
 	}
-	c.bootstrap.SessionEnv.Store(process.LoomSessionEnv(c.bootstrap.Version, sessionID.String()))
 }
 
 func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
@@ -1482,6 +1600,28 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 		}
 	}
 	reasoning, overridden := c.reasoningLocked(current)
+	pending := make([]PendingRequest, 0, len(c.pendingCards)+len(c.pendingQuestions))
+	for id, card := range c.pendingCards {
+		card := card
+		// Deep-copy the mutable fields: snapshots cross the client boundary
+		// where callers must never share mutable state with the runtime
+		// (docs/SERVE_DESIGN.md §17.5, review L4).
+		card.ReadPaths = append([]string(nil), card.ReadPaths...)
+		card.WritePaths = append([]string(nil), card.WritePaths...)
+		card.Arguments = append(json.RawMessage(nil), card.Arguments...)
+		pending = append(pending, PendingRequest{Kind: PendingRequestApproval, ID: id, Approval: &card})
+	}
+	for id, q := range c.pendingQuestions {
+		q := q
+		q.Options = append([]domain.QuestionOption(nil), q.Options...)
+		pending = append(pending, PendingRequest{Kind: PendingRequestQuestion, ID: id, Question: &q})
+	}
+	sort.Slice(pending, func(i, j int) bool {
+		if pending[i].Kind != pending[j].Kind {
+			return pending[i].Kind < pending[j].Kind
+		}
+		return pending[i].ID.String() < pending[j].ID.String()
+	})
 	snap := Snapshot{
 		State:               c.state,
 		SessionID:           c.sessionID,
@@ -1496,7 +1636,9 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 		Usage:               c.lastUsage,
 		Messages:            append([]domain.Message(nil), c.messages...),
 		PendingApprovals:    c.approver.PendingApprovals(),
+		PendingRequests:     pending,
 		PendingSteers:       c.steerCellPeek(),
+		EventSeq:            c.appliedSeq,
 		Timestamp:           c.clock.Now(),
 	}
 	c.mu.Unlock()
@@ -1634,7 +1776,9 @@ type controllerCommand struct {
 	// list-style queries (cmdListCheckpoints).
 	CheckpointSequence int64
 	Limit              int
-	ResultCh           chan<- controllerResult
+	// Actor identifies who resolved an approval (cmdResolveApproval).
+	Actor    string
+	ResultCh chan<- controllerResult
 }
 
 type controllerResult struct {
@@ -1687,6 +1831,7 @@ func (s *publishingStore) AppendEventsAndCheckpoint(ctx context.Context, session
 	s.controller.mu.Lock()
 	s.controller.messages = append([]domain.Message(nil), checkpoint.Messages...)
 	s.controller.lastUsage = checkpoint.Usage
+	s.controller.noteProjectionLocked()
 	s.controller.mu.Unlock()
 	return nil
 }
@@ -1793,7 +1938,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 	case domain.EventPermissionRequested:
 		var payload toolCallAuditDTO
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
-			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindApprovalRequested, runtimeevent.ApprovalRequestedPayload{
+			card := runtimeevent.ApprovalRequestedPayload{
 				ApprovalID:  ev.ID,
 				CallID:      payload.CallID,
 				ToolName:    payload.Tool,
@@ -1804,16 +1949,32 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				WritePaths:  payload.WritePaths,
 				Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffMaxLines),
 				Arguments:   s.pendingArgs[payload.CallID],
-			})
+			}
+			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindApprovalRequested, card)
+			// Project the card so reconnecting clients can rebuild it from
+			// the snapshot (the requested event itself is not replayed into
+			// the projection path). No watermark sampling here: mid-batch
+			// sampling would push the watermark past projection updates that
+			// only happen at batch end (review M3); a lagging watermark is
+			// always safe (at worst a redundant replay).
+			s.controller.mu.Lock()
+			s.controller.pendingCards[ev.ID] = card
+			s.controller.mu.Unlock()
 			s.controller.SetAwaitingApproval()
 		}
 	case domain.EventPermissionResolved:
 		var payload permissionResolvedDTO
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+			s.controller.mu.Lock()
+			actor := s.controller.approvalActors[ev.ID]
+			delete(s.controller.approvalActors, ev.ID)
+			delete(s.controller.pendingCards, ev.ID)
+			s.controller.mu.Unlock()
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindApprovalResolved, runtimeevent.ApprovalResolvedPayload{
 				ApprovalID: ev.ID,
 				CallID:     payload.CallID,
 				Decision:   payload.Decision,
+				Actor:      actor,
 			})
 			s.controller.SetRunning()
 		}

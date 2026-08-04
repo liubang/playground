@@ -112,7 +112,34 @@ func TestControllerContinuesSessionForFollowUpPrompt(t *testing.T) {
 	}
 }
 
-func TestControllerPublishesSessionEnv(t *testing.T) {
+// ctxCaptureModel records the loom attribution env attached to the turn
+// context of its first Stream call (docs/SERVE_DESIGN.md §4.3).
+type ctxCaptureModel struct {
+	inner *fakes.FakeModel
+	mu    sync.Mutex
+	env   map[string]string
+}
+
+func (m *ctxCaptureModel) Stream(ctx context.Context, req domain.ModelRequest) (domain.ModelStream, error) {
+	m.mu.Lock()
+	if m.env == nil {
+		m.env = process.SessionEnvFromContext(ctx)
+	}
+	m.mu.Unlock()
+	return m.inner.Stream(ctx, req)
+}
+
+func (m *ctxCaptureModel) capturedEnv() map[string]string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.env
+}
+
+// TestControllerInjectsSessionEnvViaTurnContext pins the per-session
+// attribution channel: the turn context carries the env (so concurrent
+// sessions never share a process-level value), and the Controller path
+// never writes the process-level AtomicSessionEnv.
+func TestControllerInjectsSessionEnvViaTurnContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -123,7 +150,8 @@ func TestControllerPublishesSessionEnv(t *testing.T) {
 	defer store.Close()
 
 	sessionEnv := &process.AtomicSessionEnv{}
-	bootstrap := testBootstrap(store, fakes.NewFakeModel())
+	model := &ctxCaptureModel{inner: fakes.NewFakeModel(fakes.ScriptEntry{Text: "answer", StopReason: domain.StopEndTurn})}
+	bootstrap := testBootstrap(store, model)
 	bootstrap.Version = "0.2.0-dev"
 	bootstrap.SessionEnv = sessionEnv
 	controller := NewController(ControllerConfig{
@@ -142,7 +170,15 @@ func TestControllerPublishesSessionEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RequestSnapshot: %v", err)
 	}
-	env := sessionEnv.Get()
+	if _, err := controller.SubmitPrompt(ctx, "question"); err != nil {
+		t.Fatalf("SubmitPrompt: %v", err)
+	}
+	waitForIdle(t, controller)
+
+	env := model.capturedEnv()
+	if env == nil {
+		t.Fatalf("model was never called with a session-env context")
+	}
 	if got := env[process.EnvSessionID]; got != snapshot.SessionID.String() {
 		t.Fatalf("LOOM_SESSION_ID = %q, want session %q", got, snapshot.SessionID)
 	}
@@ -152,17 +188,10 @@ func TestControllerPublishesSessionEnv(t *testing.T) {
 	if got := env[process.EnvAgentVersion]; got != "0.2.0-dev" {
 		t.Fatalf("LOOM_AGENT_VERSION = %q, want 0.2.0-dev", got)
 	}
-
-	// A session switch rewrites the attribution environment.
-	if err := controller.NewSession(ctx); err != nil {
-		t.Fatalf("NewSession(second): %v", err)
-	}
-	snapshot, err = controller.RequestSnapshot(ctx)
-	if err != nil {
-		t.Fatalf("RequestSnapshot(second): %v", err)
-	}
-	if got := sessionEnv.Get()[process.EnvSessionID]; got != snapshot.SessionID.String() {
-		t.Fatalf("LOOM_SESSION_ID after switch = %q, want session %q", got, snapshot.SessionID)
+	// The process-level holder stays untouched on the Controller path —
+	// the global write channel was removed in favor of ctx injection.
+	if got := sessionEnv.Get(); len(got) != 0 {
+		t.Fatalf("process-level session env = %v, want untouched", got)
 	}
 }
 
