@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | Draft v1（含一轮自审修订，见 §15） |
-| 日期 | 2026-07-26 |
+| 状态 | Draft v3（v1 自审 §15；v2 现状核对 §16；v3 架构定案 §17） |
+| 日期 | 2026-08-03（v1：2026-07-26；v2/v3：2026-08-03） |
 | 关联文档 | `DESIGN.md`（§4 总体架构、§15 扩展与前端协议、§31 Runtime Ownership 与 Daemon）、`TUI_DESIGN.md` |
 | 目标读者 | loom 运行时与前端贡献者 |
 
@@ -41,7 +41,10 @@ loom 当前只有一个真实前端：TUI（`internal/ui`，Bubble Tea），外�
 
 | 能力 | 位置 | 说明 |
 |------|------|------|
-| 无头会话控制器 | `internal/app/controller.go` | `Controller` 提供 `SubmitPrompt/CancelTurn/ResolveApproval/NewSession/ResumeSession/RequestSnapshot/Shutdown/Subscribe/ListSessions`，全部经 `cmdCh` 串行化，天然并发安全。这就是 RPC 方法集的原型。 |
+| 无头会话控制器 | `internal/app/controller.go` | `Controller` 提供 `SubmitPrompt/CancelTurn/ResolveApproval/AnswerQuestion/NewSession/ResumeSession/RequestSnapshot/RequestCompaction/SetModel/SetReasoning/SubagentView/ListSessions/ListSkills/ListMCPServers/Shutdown/Subscribe`，全部经 `cmdCh` 串行化，天然并发安全。这就是 RPC 方法集的原型（注意：v1 之后 API 面已扩张，见 G12）。 |
+| 忙时投稿（steer） | `app/controller.go` `handleSteer` + `agent.SteerCell` | turn 忙时的新投稿进入 SteerCell 排队、由运行中的 loop 在下一次模型调用前注入；满了软拒绝（`SubmitResult{Steered, QueueLen}`）。server 端点应复用该语义而非简单 409（见 §5.3 与 §16.3 D1）。 |
+| 问答桥 | `app.ChannelQuestioner` + `Controller.AnswerQuestion` | `ask_user` 的挂起/决议通道，与 `ChannelApprover` 同构（pending map + 一次性 `Resolve` + `SkipAll`）。 |
+| 子代理事件桥 | `app.WireSubagentObserver` | 子 run 的 started/progress/finished 事件**挂父 session envelope** 发布——SSE 按会话过滤与 per-session ReplayLog 天然兼容，无需特殊路由。 |
 | 版本化事件协议 | `internal/runtimeevent/` | `RuntimeEvent{Version, Sequence, SessionID, RunID, Turn, Kind, Durable, Payload}`，JSON 可直接上线；durable/ephemeral 分离；`ModelResponseCompletedPayload.Text` 携带 canonical 文本用于草稿校正。 |
 | 非阻塞事件扇出 | `runtimeevent.Broker` | 慢订阅者 ephemeral 丢弃、durable 断连，绝不阻塞 agent。 |
 | 审批桥 | `app.ChannelApprover` | channel 解耦 + `ApprovalBinding{ApprovalID, CallID, ArgsHash}` 一次性 CAS，防重复决议。 |
@@ -56,15 +59,17 @@ loom 当前只有一个真实前端：TUI（`internal/ui`，Bubble Tea），外�
 | # | 差距 | 根因（代码位置） | 后果（若不改） |
 |---|------|------|------|
 | G1 | 无会话注册表 | `cmd/loom/main.go` 每进程只建 1 个 Controller | server 无法承载多会话 |
-| G2 | Goal/Plan cells 是进程级单例 | `Bootstrap.GoalCell/PlanCell`（`bootstrap.go:181-183`），`update_goal/update_plan` 工具注册时绑定 cell | 多会话并发互相覆盖 goal/plan |
-| G3 | SessionEnv 是进程级单值 | `process.AtomicSessionEnv` + `RunnerOptions.SessionEnv func() map[string]string`（无 ctx 参数），`controller.publishSessionEnv` 全局覆盖 | 并发时 spawned 命令归因到错误的 session |
+| G2 | 会话态工具绑定进程级单例（v2 扩围） | `Bootstrap.GoalCell/PlanCell/SteerCell/Questioner`（`bootstrap.go:221-224`），`update_goal/update_plan/ask_user` 注册时各自绑定；`handleSteer` 亦直读 `bootstrap.SteerCell` | 多会话并发互相覆盖 goal/plan/steer 队列，ask_user 问题路由错会话 |
+| G3 | SessionEnv 是进程级单值 | `process.AtomicSessionEnv` + `RunnerOptions.SessionEnv func() map[string]string`（无 ctx 参数）；v2 核对：v1 所述 `controller.publishSessionEnv` 已不存在，现仅 headless `runAgent` 写该原子值（`main.go:443`），chat 路径根本未设置归因 | server 引入归因必须走 ctx 注入，不能复活全局写入 |
 | G4 | 事件无回放层 | Broker 只做在线扇出，不存历史 | SSE 断线重连丢 durable 事件 |
 | G5 | Snapshot 无事件水位 | `app.Snapshot` 不含 broker sequence | 客户端无法无缝衔接"快照 + 增量" |
 | G6 | 审批无 actor、无超时 | `ResolveApproval` 不记录操作者 | 审计缺失；挂起审批无兜底 |
 | G7 | 命令无幂等键 | `SubmitPrompt` 重复提交即重复 turn | 网络重试/双击产生重复 turn |
-| G8 | 装配逻辑两份 | `runChat` 走 `Bootstrap`，`runAgent` 手工装配（`main.go:240-475`） | server 将成为第三份，腐化风险 |
+| G8 | 装配逻辑两份 | v2 核对：已部分收敛——`runAgent` 现复用 `Bootstrap`（store/registry/runner/policy 共享），仅 `agent.Loop` 装配仍手工（`main.go:460-469`） | 残留风险低；server 走 Controller 路径即完全绕开 |
 | G9 | 无传输/认证/治理层 | 不存在 | — |
 | G10 | serve 与 direct 模式可同时写同一数据目录 | 无实例互斥（DESIGN.md §31 要求排他锁） | 两进程并发写 SQLite，状态不可预期 |
+| G11 | 挂起问题无快照兜底（v2 新增） | `question.asked` 经 `publishEphemeral` 发布（`NewController` 的 `BindPublish`），`Snapshot` 有 `PendingApprovals` 却无 `PendingQuestions` | 客户端重连后丢失进行中的 ask_user 卡片，问题挂起到 turn 结束 |
+| G12 | 协议面未覆盖已扩张的 Controller API（v2 新增） | v1 之后新增 steer、`AnswerQuestion`、`SetModel/SetReasoning`、`RequestCompaction`、`SubagentView`、`ListSkills/ListMCPServers` | 照 v1 端点表实现则 Web 客户端能力显著弱于 TUI |
 
 ---
 
@@ -73,47 +78,54 @@ loom 当前只有一个真实前端：TUI（`internal/ui`，Bubble Tea），外�
 ### 3.1 进程拓扑
 
 ```text
-┌──────────────────────────── loom serve（单实例守护进程）──────────────────────────┐
+┌─────────────────────── loom 进程（chat 与 serve 同一套装配）──────────────────────┐
 │                                                                                  │
-│  ┌──────────────┐   HTTP/SSE (127.0.0.1:PORT or UDS)                            │
-│  │  Web SPA     │◄──────────┐        ┌──────────────► 任意第三方客户端（curl/SDK）│
-│  │ (embed.FS)   │           │        │                                          │
-│  └──────────────┘           ▼        ▼                                          │
-│                    ┌─────────────────────────┐                                  │
-│                    │ internal/server         │  适配层：认证、路由、限流、        │
-│                    │ (handlers + sse hub)    │  REST↔SessionService、SSE↔Replay  │
-│                    └───────────┬─────────────┘                                  │
-│                                │ 进程内调用（Go 接口，无序列化）                  │
-│                    ┌───────────▼─────────────┐                                  │
-│                    │ app.SessionService      │  会话注册表、生命周期、幂等键、    │
-│                    │  map[SessionID]*Handle  │  空闲回收、并发闸门               │
-│                    └───────────┬─────────────┘                                  │
-│            ┌───────────────────┼───────────────────┐                           │
-│            ▼                   ▼                   ▼                           │
-│     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                    │
-│     │ Controller  │     │ Controller  │     │ Controller  │  每会话一个         │
-│     │ +Approver   │     │ +Approver   │     │ +Approver   │  （现有代码）       │
-│     │ +Cells      │     │ +Cells      │     │ +Cells      │                    │
-│     │ +ReplayLog  │     │ +ReplayLog  │     │ +ReplayLog  │                    │
-│     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘                    │
-│            └───────────────────┼───────────────────┘                           │
-│                    ┌───────────▼─────────────┐                                 │
-│                    │ runtimeevent.Broker     │  全局单例：唯一事件总线          │
-│                    │  (全局单调 sequence)    │                                 │
-│                    └───────────┬─────────────┘                                 │
-│                    ┌───────────▼─────────────┐                                 │
-│                    │ app.Bootstrap           │  共享资源：Store / Artifact /    │
-│                    │                         │  Model / Runner / Policy /       │
-│                    │                         │  BaseRegistry / SessionRules     │
-│                    └─────────────────────────┘                                 │
+│  客户端层（全部平权，只依赖 internal/client.Client）                              │
+│  ┌──────────────┐    ┌──────────────┐              ┌────────────────────────┐    │
+│  │ TUI          │    │ Web SPA      │              │ curl / 第三方 SDK      │    │
+│  │ (loom chat)  │    │ (embed.FS)   │              │                        │    │
+│  └──────┬───────┘    └──────┬───────┘              └───────────┬────────────┘    │
+│         │ inproc            │ HTTP/SSE（127.0.0.1:PORT / UDS） │                  │
+│         │（零序列化）        ▼                                 ▼                  │
+│         │            ┌───────────────────────────────────────────────┐           │
+│         │            │ 传输适配层（可插拔；只做格式映射+连接管理）      │           │
+│         │            │ internal/server：REST+SSE（适配器 #1）           │           │
+│         │            │ 未来：JSON-RPC/WS、gRPC（适配器 #2/#3，§5.6）    │           │
+│         │            └───────────────────────┬───────────────────────┘           │
+│         │                                    │ 进程内调用（Go 接口）              │
+│         ▼                                    ▼                                  │
+│                    ┌─────────────────────────────────────────┐                   │
+│                    │ app.SessionService（协议无关应用层）       │                   │
+│                    │ 会话注册表/生命周期/幂等/typed errors/     │                   │
+│                    │ SubscribeEvents（pump+ReplayLog 在此层）   │                   │
+│                    └───────────────────┬─────────────────────┘                   │
+│            ┌───────────────────────────┼───────────────────┐                     │
+│            ▼                           ▼                   ▼                     │
+│     ┌─────────────┐             ┌─────────────┐     ┌─────────────┐              │
+│     │ Controller  │             │ Controller  │     │ Controller  │ 每会话一个    │
+│     │ +Approver   │             │ +Approver   │     │ +Approver   │（现有代码）   │
+│     │ +Runtime    │             │ +Runtime    │     │ +Runtime    │              │
+│     │(cells/qr/reg)│            │(cells/qr/reg)│    │(cells/qr/reg)│             │
+│     └──────┬──────┘             └──────┬──────┘     └──────┬──────┘              │
+│            └───────────────────────────┼───────────────────┘                     │
+│                        ┌───────────────▼─────────────┐                           │
+│                        │ runtimeevent.Broker         │ 全局单例：唯一事件总线      │
+│                        │  (全局单调 sequence)        │                           │
+│                        └───────────────┬─────────────┘                           │
+│                        ┌───────────────▼─────────────┐                           │
+│                        │ app.Bootstrap               │ 共享资源：Store/Artifact/  │
+│                        │                             │ Model/Runner/Policy/       │
+│                        │                             │ BaseRegistry/SessionRules  │
+│                        └─────────────────────────────┘                           │
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 关键决策：
 
-- **单 Broker 全局序号**：`RuntimeEvent.Sequence` 在 server 内全局单调。它兼作 SSE 的 `Last-Event-ID` cursor，跨会话唯一、可比较。会话过滤发生在 server 分发层。
-- **server 不直接让 SSE 客户端挂 Broker**：server 内部用一个永不阻塞的 pump 订阅 Broker，写入 per-session `ReplayLog` 并向本连接的 SSE 客户端扇出（§4.5）。慢客户端由 server 自己断开，Broker 看到的永远是一个健康订阅者。
-- **TUI 暂不走 server**：第一阶段 TUI 保持进程内直连（`loom chat` 不变）；协议收敛（TUI 改走 HTTP client）作为独立里程碑 M5（§10）。
+- **单 Broker 全局序号**：`RuntimeEvent.Sequence` 在 server 内全局单调。它兼作 SSE 的 `Last-Event-ID` cursor，跨会话唯一、可比较。会话过滤发生在 SessionService 分发层。
+- **事件订阅下沉应用层**（v3）：SessionService 内部唯一 pump 订阅 Broker，写 per-session `ReplayLog`，经 `SubscribeEvents(id, cursor)` 对上层暴露"补拉-订阅原子衔接"的流（§4.5）。SSE handler 只负责格式化；未来 JSON-RPC/gRPC 适配器复用同一流。
+- **TUI 是 client，不是特殊公民**（v3 定案）：`loom chat` 通过 `client.NewInProc(service)` 消费同一接口，协议从 M1' 起即一等公民；`loom chat --attach` 走 HTTP。v1/v2 的"TUI 直连 + M5 收敛"路线废弃（§17.4）。
+- **单一构造路径**（v3 定案）：Controller 的会话态只来自 SessionRuntime，无 nil 回落；headless `loom run` 不经 Controller，保留自己的装配（§17.4）。
 
 ### 3.2 与 DESIGN.md §31 的对齐与偏离
 
@@ -134,32 +146,34 @@ loom 当前只有一个真实前端：TUI（`internal/ui`，Bubble Tea），外�
 
 ```text
 go/pl/loom/internal/
+├── client/                     # M1' 新增：Client 接口 + inproc 实现（M2 加 http 实现）
+│   ├── client.go               #   Client 接口（协议无关；全部类型 JSON 可序列化）
+│   └── inproc.go               #   委托 SessionService；拷贝语义（禁共享可变引用）
 ├── app/
-│   ├── session_service.go      # 新增：SessionService（会话注册表/生命周期/幂等）
-│   ├── session_runtime.go      # 新增：SessionRuntime（per-session cells + registry overlay + env）
-│   └── controller.go           # 改造：cells 注入、Snapshot 带事件水位、actor
+│   ├── session_service.go      # 新增：SessionService + pump + SubscribeEvents
+│   ├── session_runtime.go      # 新增：SessionRuntime（per-session cells/questioner/registry overlay）
+│   └── controller.go           # 改造：Runtime 必填（单一路径）、Snapshot 水位+PendingRequests、actor
 ├── agent/
 │   └── run.go                  # 改造：ToolRegistry 支持 parent overlay
 ├── process/
 │   └── types.go                # 改造：SessionEnv 函数签名带 ctx
 ├── runtimeevent/
 │   └── replay.go               # 新增：ReplayLog（per-session 有界环形缓冲）
-├── server/                     # 新增：HTTP/SSE 适配层
+├── server/                     # M2 新增：REST+SSE 适配层（适配器 #1）
 │   ├── server.go               #   Server 装配、监听（TCP/UDS）、优雅停机
 │   ├── auth.go                 #   token 中间件
-│   ├── handlers_sessions.go    #   REST 端点
-│   ├── handlers_events.go      #   SSE 端点 + pump/hub
-│   ├── idempotency.go          #   幂等键缓存
+│   ├── handlers_sessions.go    #   REST 端点（参数解码+typed error 映射，无业务语义）
+│   ├── handlers_events.go      #   SSE 格式化层（消费 SubscribeEvents 流，无 pump/hub 逻辑）
 │   ├── lock.go                 #   数据目录排他锁
-│   └── web/                    #   内嵌 SPA（embed.FS）
-└── client/                     # M5 新增：Go client SDK（TUI 收敛用）
+│   └── web/                    #   内嵌 SPA（embed.FS，M3）
+└── rpc/（预留）                # M5+：JSON-RPC/WS 或 gRPC 适配器（§5.6）
 ```
 
 `server` 只允许依赖 `app`/`runtimeevent`/`domain`/`session` 的公开 API，禁止触碰 `agent` 内部。这保证"客户端不能直接访问 SQLite 表"（DESIGN.md §15）在代码组织层面被依赖规则固化。
 
 ---
 
-## 4. 运行时改造（M1，与传输层无关，先行落地）
+## 4. 运行时与应用层改造（M1'，与传输层无关，先行落地）
 
 ### 4.1 SessionService（`app/session_service.go`）
 
@@ -202,6 +216,7 @@ type SessionHandle struct {
 | `ListSessions(ctx, limit)` | 透传 store |
 | `SubmitPrompt(ctx, id, prompt, idemKey) (turn int, err error)` | 幂等包装 `Controller.SubmitPrompt` |
 | `CancelTurn(ctx, id)` / `ResolveApproval(ctx, id, binding, decision, hint, actor)` / `Snapshot(ctx, id)` | 透传 + actor/水位扩展 |
+| `SubscribeEvents(ctx, id, afterSeq) (<-chan RuntimeEvent, error)` | 补拉-订阅原子衔接的事件流（§4.5）；cursor 失效返回 `ErrCursorInvalid`，调用方走 snapshot resync |
 | `Shutdown(ctx)` | 停收新会话与 prompt → 全部 Controller 优雅关闭 |
 
 不变量：
@@ -210,10 +225,11 @@ type SessionHandle struct {
 - handle 创建/获取在 `mu` 下完成，`ResumeSession` 与 `Get` 竞态不会产生第二个 Controller；
 - 空闲回收：后台 sweeper 每分钟扫描，`idle && now-lastActive > idleTTL` 的 handle 执行 `Controller.Shutdown` 并摘除；`Controller.State() != idle` 的 handle 永不回收；
 - `closing=true` 后 `CreateSession/ResumeSession/SubmitPrompt` 返回 `ErrDraining`（映射 HTTP 503）。
+- **协议无关硬约束**（v3，§17.5）：错误全部为导出哨兵错误（`ErrDraining/ErrSessionNotFound/ErrNotIdle/ErrCursorInvalid/ErrBindingMismatch`…），由各传输适配器自行映射；幂等键、actor 为方法一等参数。应用层不出现任何传输层概念。
 
-### 4.2 per-session Goal/Plan cells 与注册表 overlay（G2）
+### 4.2 per-session 会话态与注册表 overlay（G2）
 
-**问题**：`update_goal`/`update_plan` 工具在 `Bootstrap.registerBuiltinTools` 里绑定进程级 cells；`Controller.runTurn` 把这两个 cells 传给每个 `agent.Loop`。
+**问题**（v2 扩围：从两处 cells 扩大到全部四处进程级会话态）：`update_goal`/`update_plan`/`ask_user` 在 `Bootstrap.registerBuiltinTools` 里分别绑定进程级 `GoalCell`/`PlanCell`/`Questioner`；`Controller.runTurn` 把 cells 传给每个 `agent.Loop`，`handleSteer` 直读 `bootstrap.SteerCell`。四处单例在多会话下全部串台。
 
 **方案**：
 
@@ -227,29 +243,33 @@ func NewOverlayRegistry(parent *ToolRegistry) *ToolRegistry
 func (r *ToolRegistry) Lookup(name string) (domain.Tool, bool) // local → parent
 ```
 
-2. `Bootstrap.registerBuiltinTools` 不再注册 `update_goal`/`update_plan`；base registry 只含无状态工具（这些工具本身无会话状态，共享安全）。
+2. base registry 的处理（M1' 落地修订）：`registerBuiltinTools` **保留**三工具的注册（headless `runAgent` 直接使用 base registry + bootstrap cells，改动为零）；serve/TUI 路径经 overlay **遮蔽（shadow）**三工具为会话级绑定——隔离由"会话 loop 只使用 overlay"保证，而非由 base registry 不含会话态工具保证。
 3. 新增 `SessionRuntime`，每次 `CreateSession/ResumeSession` 时构建：
 
 ```go
 type SessionRuntime struct {
-    GoalCell *agent.GoalCell
-    PlanCell *agent.PlanCell
-    Registry *agent.ToolRegistry // overlay(base)：update_goal/update_plan 绑定本 session 的 cells
+    GoalCell   *agent.GoalCell
+    PlanCell   *agent.PlanCell
+    SteerCell  *agent.SteerCell   // handleSteer 改读这里
+    Questioner *ChannelQuestioner // ask_user 的会话级问答通道
+    Registry   *agent.ToolRegistry // overlay(base)：三工具绑定本 session 的 cells/questioner
 }
 ```
 
-4. `Controller` 增加可选字段 `Runtime *SessionRuntime`（`ControllerConfig.Runtime`）；`runTurn` 中 `Loop.GoalCell/PlanCell/Registry` 优先取 `c.Runtime`，为 nil 时回落到现状（`bootstrap.GoalCell/...`），保证 headless `runAgent` 路径与现有测试零改动。
+`SessionHandle.Questioner` 即 `SessionRuntime.Questioner`；其 `BindPublish` 在该 session 的 Controller 构造时挂到事件流（逻辑同现有 `NewController`，只是 questioner 来源从外部注入变为 runtime 持有）。
+
+4. `Controller` 的会话态**只**来自 `Runtime *SessionRuntime`（`ControllerConfig.Runtime`，必填——v3 定案：单一路径，无 nil 回落，§17.4）。`runChat` 与 `loom serve` 都经 SessionService 构造 Runtime，行为天然一致；headless `runAgent` 不经 Controller（直接装配 `agent.Loop`），保留使用 bootstrap 的进程级 cells，不受影响。现有 controller 测试经 `NewSessionRuntime(bootstrap)` helper 适配。
 
 ### 4.3 per-session SessionEnv（G3）
 
-**问题**：`RunnerOptions.SessionEnv func() map[string]string` 无 ctx 参数，`Controller.publishSessionEnv` 在 create/resume 时覆盖全局原子值。
+**问题**：`RunnerOptions.SessionEnv func() map[string]string` 无 ctx 参数，进程内只能有一个生效归因值。v2 核对：v1 所述 `Controller.publishSessionEnv` 已不存在，现仅 headless `runAgent` 写 `AtomicSessionEnv` 原子值（`main.go:443`），chat 路径根本未设置归因；serve 多会话若沿用该通道必然互相覆盖。
 
 **方案**（ctx 传递，不动 runner 执行语义）：
 
 1. `process` 包签名升级：`SessionEnv func(ctx context.Context) map[string]string`；runner 在每次执行处把已有的 `ctx` 传入（runner 的 Run/Start 均已持有 ctx，改动为内部一线）。
 2. 新增 `process.ContextWithSessionEnv(ctx, env) ctx` 与 `process.SessionEnvFromContext(ctx) map[string]string`。
-3. `Controller.runTurn` 开头：`ctx = process.ContextWithSessionEnv(ctx, process.LoomSessionEnv(c.sessionID.String()))`。agent loop 的工具执行 ctx 派生自 turn ctx，归因自然正确，且**并发 session 互不影响**。
-4. `Bootstrap.SessionEnv`/`AtomicSessionEnv` 保留给 headless `runAgent` 路径（其 boot 装配不变），server 路径不再使用；`Controller.publishSessionEnv` 改为 ctx 注入，原原子值写入删除。runner 的 `SessionEnv` 实现变为"先查 ctx，再回落原子值（兼容）"。
+3. `Controller.runTurn` 开头：`ctx = process.ContextWithSessionEnv(ctx, process.LoomSessionEnv(version, c.sessionID.String()))`。agent loop 的工具执行 ctx 派生自 turn ctx，归因自然正确，且**并发 session 互不影响**（纯新增——controller 现无任何全局写入）。
+4. `Bootstrap.SessionEnv`/`AtomicSessionEnv` 保留给 headless `runAgent` 路径（其 boot 装配不变），Controller 路径不再使用；runner 的 `SessionEnv` 实现变为"先查 ctx，再回落原子值（兼容 runAgent 与既有 runner 测试）"。
 
 ### 4.4 Controller 扩展（G5/G6/G7 的服务端部分）
 
@@ -267,9 +287,10 @@ type Snapshot struct {
 客户端首屏协议：`GET snapshot` → 以 `event_seq` 为 cursor 打开 SSE，不重不漏（回放层对"快照后、订阅前"的事件窗口负责，见 §4.5）。
 
 2. `ResolveApproval` 增加 actor：`ResolveApprovalWithActor(ctx, binding, decision, hint, actor string)`；原方法委托空 actor 保持 TUI 兼容。actor 进入审计日志，并透传到 `ApprovalResolvedPayload`（见 §4.6）。
-3. `Controller` 不再在 `publishSessionEnv` 写全局原子值（§4.3）。
+3. `Snapshot` 增加 `PendingRequests`（G11 + v3 统一抽象）：审批与问答在应用层统一为"挂起的、一次性可决议的请求"——`PendingRequest{Kind: approval|question, ID, Payload}`，吞并现有 `PendingApprovals`（TUI 在 M1' 迁移时同步切换）。`approval.requested` 与 `question.asked` 均为 ephemeral 事件，重连即丢；快照兜底让客户端据此重建审批卡/问答卡。REST 适配器暴露 `POST .../approvals|questions/{id}` 决议，未来 JSON-RPC 适配器映射为 `ServerRequest`/`ClientResponse`——两种表达打到同一个一次性 `Resolve`（§4.6、§17.2）。
+4. `Controller` 的 turn ctx 注入 per-session SessionEnv（§4.3）；v2 核对：controller 本就无全局写入（v1 所述 `publishSessionEnv` 已移除），本改造为纯新增。
 
-### 4.5 事件回放层（G4）：per-session ReplayLog + server pump
+### 4.5 事件回放层（G4）：per-session ReplayLog + SessionService pump（v3：下沉应用层）
 
 **问题**：Broker 断线不补；`render.JSONL` 证明协议可序列化，但缺"先补拉再订阅"的持久 cursor 机制。
 
@@ -288,9 +309,9 @@ func (l *ReplayLog) Append(evt RuntimeEvent)
 func (l *ReplayLog) Since(seq uint64) (events []RuntimeEvent, ok bool)
 ```
 
-2. server 启动唯一 **pump** goroutine：订阅全局 Broker（队列容量调到 4096，是普通订阅者的 16 倍），对每个事件：`SessionHandle.Replay.Append` + 写入该 session 的在线 SSE 客户端队列。pump 内所有写都非阻塞；慢 SSE 客户端（队列满，默认 256）被 server 主动断开——客户端用 `Last-Event-ID` 重连自愈。
-3. **补拉-订阅原子衔接**：hub 对每 session 持一把锁；SSE attach 流程 = `lock { events, ok := Replay.Since(cursor); register(client) } unlock` → 先 flush 补发再进入实时流。pump 分发走同一把锁，保证补发窗口内的事件不会同时出现在两侧。
-4. **pump 被 Broker 断开**（极端背压）：server 进入 resync 流程——重新 `Subscribe()`，并向所有 SSE 客户端发送 `event: server.resync` 后断开；客户端按"snapshot + 新 cursor"恢复。此路径计入 metrics 与告警日志（设计预期：永不发生；发生即容量或负载异常）。
+2. **SessionService**（而非传输层）启动唯一 **pump** goroutine：订阅全局 Broker（`WithDurableQueue(4096)`，普通订阅者的 16 倍），对每个事件：`SessionHandle.Replay.Append` + 扇出到该 session 的活跃订阅队列。pump 内所有写都非阻塞；慢订阅（队列满，默认 256）由 SessionService 主动断开——各传输层自行表现（SSE 断开靠 `Last-Event-ID` 重连自愈；inproc client 走 cursor 重订阅）。
+3. **补拉-订阅原子衔接**：SessionService 对每 session 持一把锁；`SubscribeEvents(id, cursor)` = `lock { events, ok := Replay.Since(cursor); register(subscriber) } unlock` → 先 flush 补发再进入实时流。pump 分发走同一把锁，保证补发窗口内的事件不会同时出现在两侧。**任何传输适配器（SSE/未来 JSON-RPC/gRPC）消费同一接口，重连语义只有一份实现。**
+4. **pump 被 Broker 断开**（极端背压）：SessionService 进入 resync 流程——重新 `Subscribe()`，并向所有活跃订阅发送 `server.resync` 后断开；客户端按"snapshot + 新 cursor"恢复。此路径计入 metrics 与告警日志（设计预期：永不发生；发生即容量或负载异常）。
 5. cursor 失效检测（两种，均触发 `server.resync` 后断开，客户端重走 snapshot）：
    - **旋转出界**：cursor 小于 ring 中现存最小 seq（`Since` 返回 `ok=false`）；
    - **cursor 来自未来**：cursor 大于 pump 已见的最大 seq。这只可能发生在 server 重启后——broker sequence 是进程内从 0 开始的内存计数，重启即重置，客户端持有的旧 cursor 在新 seq 空间里无意义。仅靠"空补发"会静默丢失整个重启窗口，因此必须显式判负。
@@ -313,7 +334,7 @@ func (l *ReplayLog) Since(seq uint64) (events []RuntimeEvent, ok bool)
 
 ## 5. Wire 协议 v1
 
-设计原则：端点是 §4 应用层 API 的机械映射；事件格式就是 `runtimeevent.RuntimeEvent` 本身，零翻译成本；所有响应 JSON；错误模型统一。
+设计原则：REST+SSE 是 SessionService 的**传输适配器 #1**——端点是 §4 应用层 API 的机械映射，事件格式就是 `runtimeevent.RuntimeEvent` 本身（零翻译成本），所有响应 JSON，错误模型统一。适配器只做四件事：认证、参数解码、typed error → 状态码映射、SSE 格式化；不含任何业务语义。多协议演进路线见 §5.6。
 
 ### 5.1 传输与监听
 
@@ -338,10 +359,15 @@ func (l *ReplayLog) Since(seq uint64) (events []RuntimeEvent, ok bool)
 | `POST /v1/sessions` | `{resume?: session_id}` | `201 {session_id, state}` 或 `200`（已存活） | 幂等：对存活 session 的 resume 直接返回现状 |
 | `GET /v1/sessions/{id}` | — | `SessionInspection`（不含 events）| 会话元数据 + checkpoint 摘要 |
 | `GET /v1/sessions/{id}/transcript?after=&limit=` | — | `TranscriptPage` | 历史分页（复用 store 投影，默认 limit=200，上限 1000） |
-| `GET /v1/sessions/{id}/snapshot` | — | `app.Snapshot`（含 `event_seq`） | 实时状态 + 当前消息投影 + pending approvals |
-| `POST /v1/sessions/{id}/prompts` | `{prompt}` + `Idempotency-Key` | `202 {turn}` / `200 {turn, deduplicated:true}` | 提交 turn；非 idle → 409 |
+| `GET /v1/sessions/{id}/snapshot` | — | `app.Snapshot`（含 `event_seq`、`pending_requests`） | 实时状态 + 当前消息投影 + 挂起审批/问答 |
+| `POST /v1/sessions/{id}/prompts` | `{prompt}` + `Idempotency-Key` | `202 {turn}` / `202 {steered:true, queue_len}` / `200 {turn, deduplicated:true}` | 投稿：idle → 新 turn；busy → steer 入队（对齐 TUI，§16.3 D1）；SteerCell 满 → 409 |
 | `POST /v1/sessions/{id}/cancel` | — | `202` | 取消当前 turn；无可取消 → 409 |
 | `POST /v1/sessions/{id}/approvals/{approval_id}` | `{call_id, args_hash, decision, rule_hint?:{tool_name, arguments}, client?}` | `200 {note}` | binding 不匹配 → 409；重复决议 → 409 |
+| `POST /v1/sessions/{id}/questions/{question_id}` | `{answers:[..], skipped?:bool}` | `200` / 未知或已决议 → 409 | ask_user 决议（`ChannelQuestioner.Resolve` 一次性语义，G12） |
+| `POST /v1/sessions/{id}/model` | `{provider, model}` | `200 {model_name}` | 会话级切模型，下个 turn 生效（透传 `SetModel`） |
+| `POST /v1/sessions/{id}/reasoning` | `{effort}` | `200 {reasoning_effort}` | 会话级 reasoning 拨盘（透传 `SetReasoning`） |
+| `POST /v1/sessions/{id}/compact` | — | `202` | 请求下个 turn 强制 compaction（透传 `RequestCompaction`） |
+| `GET /v1/sessions/{id}/subagents/{child_session_id}` | — | `SubagentView` | 子 run 只读钻取视图（可裁切到 M3） |
 | `GET /v1/sessions/{id}/events?after=<seq>` | SSE | 事件流 | §5.4 |
 | `GET /v1/events?sessions={id},{id}` | SSE | 多会话合并流 | 会话列表页的实时徽标；可按 M2 范围裁切到 M3 |
 | `GET /healthz` / `GET /readyz` | — | `200 {status:"ok"}` | readyz 检查 store 可写、broker 未关闭 |
@@ -382,6 +408,17 @@ data: {…}
 - 协议主版本 = 路径前缀 `/v1` + `RuntimeEvent.Version`；破坏性变更（字段删除/语义变化）→ `/v2`。
 - v1 内允许：新增端点、新增 optional 请求/响应字段、新增事件 kind、新增 optional payload 字段（如 `actor`）。客户端必须忽略未知字段与未知事件 kind（写入 Web 客户端契约 §9）。
 - `GET /v1/meta/version` 供客户端启动时校验；server 对未知 `X-Loom-Protocol` major 版本请求返回 `426`（预留，一期可不实现）。
+
+### 5.6 多协议演进路线（v3）
+
+SessionService 协议无关 ⇒ 新协议 = 新增适配器，不重设协议语义（§17.3 选型记录）。候选与触发条件：
+
+| 适配器 | 触发条件 | 要点 | 量级 |
+|---|---|---|---|
+| JSON-RPC 2.0 / WebSocket | Web 端需要内嵌终端等真双向交互；或要与 codex 生态互操作 | 审批/问答映射为 `ServerRequest`/`ClientResponse`（应用层 PendingRequest 语义已对齐）；事件 = notification 直接包 `RuntimeEvent`；重连复用 `SubscribeEvents(cursor)` | 3–4 人日 |
+| gRPC（server-streaming） | 出现机器对机器消费者（CI 编排、Go/Rust IDE 插件） | `SubscribeEvents` → server-streaming RPC；需 .proto 镜像 `RuntimeEvent`（双 schema 税）；浏览器仍需 grpc-web 翻译层，故不做首适配器 | 2–3 人日 |
+
+不做首适配器的理由：本期客户端图谱 = TUI（inproc）+ 浏览器 SPA + curl，REST+SSE 对三者全优（EventSource 自动重连、零新依赖、事件 JSON 零翻译、seq cursor 增量重连）。
 
 ---
 
@@ -440,25 +477,26 @@ data: {…}
   1. 状态来源仅两个：`GET snapshot`（首屏）+ SSE（此后全部）；不本地推导 agent 状态机；
   2. 未知事件 kind / 未知 payload 字段必须忽略；
   3. 流式文本以 delta 拼草稿，`model.response_completed.payload.text` 到达即替换草稿（canonical 校正）；
-  4. 审批卡片完全由 `approval.requested` payload 渲染（含 `diff`、`risk`、`description`），决议提交 binding 三元组；收到 `approval.resolved` 即撤卡；
+  4. 审批卡片完全由 `approval.requested` payload 渲染（含 `diff`、`risk`、`description`），决议提交 binding 三元组；收到 `approval.resolved` 即撤卡；问答卡片同理：首屏由 `snapshot.pending_requests`（`kind=question` 的条目）重建、此后由 `question.asked` 驱动，收到 `question.answered` 即撤卡；
   5. `server.resync` → 清本地状态重走 snapshot；SSE 首帧 `instance` 与上一连接不同 → 等同 resync 处理；`server.draining` → 停止重连并提示；
   6. 所有模型/工具文本输出经 sanitize 后渲染；diff 用服务端给的 `diff` 字符串做语法着色即可；
   7. token 存 `sessionStorage`（关页即清），不落 `localStorage`。
 - MVP 功能：token 引导页、会话列表（含实时状态徽标）、新会话/恢复、消息流（text/reasoning 折叠块/tool 块折叠展开、diff 视图、approval 卡片）、输入框（IME 安全）、取消按钮、usage/ctx 占用条、重连状态条。
 
-## 10. TUI 协议收敛（M5，可选但强烈建议）
+## 10. Client 层与 TUI 平权（M1' 交付，v3 由 M5 提前）
 
-- 新增 `internal/client`：Go SDK，接口对齐 §4.1 应用层 API（`Events()` 返回事件 channel + 命令方法），两个实现：`inproc`（包 `app.SessionService`）与 `http`（包 §5 协议）。
-- TUI 的依赖从 `*app.Controller` 收窄到该接口（UI 实际只用 9 个方法 + Subscribe，收口成本低），`loom chat` 默认 inproc，`loom chat --attach <addr>` 走 http。
-- 收益：协议永远是一等公民（TUI 新特性必经 wire 协议），web/TUI 能力自动对齐；DESIGN.md 的"IDE 客户端无需链接内部包"同步达成。
+- `internal/client`：`Client` 接口对齐 §4.1 应用层 API（命令方法 + `SubscribeEvents` + `Snapshot`）。**接口硬约束**（§17.5）：所有请求/响应类型 JSON 可序列化（roundtrip property test 守护）；inproc 实现禁止返回调用方可变写的共享引用（Snapshot/Messages 一律拷贝），保证 inproc 与 http 行为一致。
+- 两个实现：`inproc`（M1'，委托 `app.SessionService`）与 `http`（M2，包 §5 协议）。**同一套契约测试打两个实现**（M2 起 CI 双跑），保证永不漂移。
+- TUI 的依赖从 `*app.Controller` 收窄到 `client.Client`：迁移为纯依赖注入改动（`update.go`/`view.go` 状态机与渲染不动；`app.Snapshot`/`app.SubmitResult` 等类型挪入 client 包或别名）。`loom chat` 默认 inproc，`loom chat --attach <addr>` 走 http。验收 = 现有 `ui_test.go` 原样跑绿。
+- 收益：协议从第一天就是一等公民（TUI 新特性必经 client 接口）；web/TUI/未来 IDE 插件能力自动对齐；接口完整性由最难的消费者（TUI）验证后，REST+SSE 适配器只剩机械映射；DESIGN.md 的"IDE 客户端无需链接内部包"同步达成。
 
 ## 11. 测试策略
 
 | 层 | 内容 | 工具 |
 |---|---|---|
-| 单元 | ReplayLog 环形/旋转语义（property-based：随机 seq 写入，`Since` 不重不漏）；overlay registry；ctx SessionEnv 注入；幂等 LRU | `go test`，fakes |
+| 单元 | ReplayLog 环形/旋转语义（property-based：随机 seq 写入，`Since` 不重不漏）；overlay registry；ctx SessionEnv 注入；幂等 LRU；client 类型 JSON roundtrip（序列化硬约束，§17.5） | `go test`，fakes |
 | 契约 | 每端点表驱动：正常/错误码/错误体 schema；事件 kind↔payload JSON schema golden | `httptest` + `fakes`（已有 fake model/tool/store/approver） |
-| 串台回归 | 两 session 并发 turn，断言 goal/plan/SessionEnv/审批各自隔离（**G2/G3 的防回归锁**，CI 必跑） | fakes + 并发 orchestrator |
+| 串台回归 | 两 session 并发 turn，断言 goal/plan/steer/question/SessionEnv/审批六路各自隔离（**G2/G3 的防回归锁**，CI 必跑） | fakes + 并发 orchestrator |
 | 断连恢复 | SSE 中途断 → `Last-Event-ID` 重连 durable 不丢不重；cursor 旋转出界 → `server.resync` | e2e（真实 server + httptest client） |
 | 审批 | 双客户端竞决恰好一个成功；超时自动 deny；actor 落审计 | e2e |
 | 停机 | draining 拒绝新 prompt；活动 turn 完成/超时取消；runner 进程树无残留；锁释放后第二个实例可启动 | e2e |
@@ -472,13 +510,13 @@ Bazel：新增 `//go/pl/loom/internal/server/...` 目标与 `go test` 目标纳�
 
 | 里程碑 | 范围 | 验收标准 | 量级 |
 |---|---|---|---|
-| **M1 运行时多会话化** | §4.1–4.4、§4.7 应用层部分；`runAgent` 收敛到 Bootstrap+Controller（G8，顺手消灭第三份装配） | 串台回归测试绿；TUI 行为零变化（现有测试全绿）；`loom run/chat` 手工冒烟通过 | 2–3 人日 |
-| **M2 serve 骨架** | `internal/server`：监听（TCP/UDS）、flock、token、REST 全端点、SSE+pump+ReplayLog、幂等、优雅停机、审计日志 | `curl` 全流程脚本（建会话→prompt→SSE 流→审批→取消→恢复→断线重连）；契约/断连/停机/互斥/负例测试绿 | 3–4 人日 |
-| **M3 Web SPA** | §9 MVP；多会话合并事件流端点（若 M2 裁切） | 浏览器完整跑通：chat/流式/工具块/diff/审批/取消/恢复/刷新重连/resync；XSS 负例（payload 注入 markdown/HTML）不执行 | 3–5 人日 |
+| **M1' client 化**（v3 重排：原 M1 + 原 M5 主体） | §4 全部（SessionService/SessionRuntime 单一路径/ctx env/Snapshot 水位+PendingRequests/SubscribeEvents 下沉/幂等应用层）+ `internal/client`（接口+inproc）+ **TUI 迁移** + 序列化硬约束测试 | `ui_test.go` 原样全绿（走 client 接口）；串台回归六路隔离绿；JSON roundtrip property test 绿；`loom run/chat` 冒烟通过 | 4–5 人日 |
+| **M2 REST+SSE 适配器** | `internal/server`：监听（TCP/UDS）、flock、token、REST 全端点、SSE 格式化层、优雅停机、审计日志 + **契约测试双跑**（inproc/http） | `curl` 全流程脚本（建会话→prompt→SSE 流→审批→问答→取消→恢复→断线重连）；契约/断连/停机/互斥/负例测试绿 | 3–4 人日 |
+| **M3 Web SPA** | §9 MVP；多会话合并事件流端点（若 M2 裁切） | 浏览器完整跑通：chat/流式/工具块/diff/审批/问答/取消/恢复/刷新重连/resync；XSS 负例不执行 | 3–5 人日 |
 | **M4 生产加固** | 资源闸门、metrics、trace span、性能基线、故障注入（kill -9 恢复、ENOSPC）、运维文档 | SLO 基线报告；故障注入后 session 恢复率 100%（durable 无丢）；`loom serve` 运行手册入库 | 2–3 人日 |
-| **M5 TUI 收敛**（可选） | `internal/client` 双实现 + TUI 改造 | `loom chat --attach` 与 web 同时操作同一会话；协议一致性测试（inproc/http 双实现跑同一契约套件） | 3–4 人日 |
+| **M5+ 多协议适配器**（按需） | JSON-RPC/WS 或 gRPC 适配器（§5.6 触发条件） | 契约测试三跑；新适配器零 SessionService 改动 | 2–4 人日/个 |
 
-总计约 13–19 人日（M5 计入）。M1+M2 即可交付"curl 可驱动的 headless server"，M3 交付"类似 Codex App 的网页版"。
+总计约 12–17 人日（M5+ 按需另计）。M1' 把最大不确定性（接口正确性）消灭在无网络、有现成测试网的阶段；M1'+M2 交付"curl 可驱动的 headless server"且 TUI 已是协议公民；M3 交付"类似 Codex App 的网页版"。
 
 ## 13. 风险登记册
 
@@ -499,7 +537,7 @@ Bazel：新增 `//go/pl/loom/internal/server/...` 目标与 `go test` 目标纳�
 | # | 问题 | 默认倾向 |
 |---|------|----------|
 | O1 | Web 技术栈：vanilla embed vs React 构建链 | 先 vanilla；交互复杂后迁 React（embed 产物） |
-| O2 | 是否引入 WebSocket（为将来 web 端内嵌终端/双向通道） | 暂不；SSE+POST 覆盖当前全部交互，WS 作为 `/v2` 演进选项 |
+| O2 | 是否引入 WebSocket / gRPC | 暂不（v3 定案）；SSE+POST 覆盖当前全部交互；多协议走"新增适配器"路线，触发条件与要点见 §5.6 |
 | O3 | 多客户端审批 owner 语义（指定/认领） | 一期广播先到先得；按真实多窗使用反馈再定 |
 | O4 | artifact 内容下载端点（大输出查看） | 一期用 transcript/preview 足够；M4 后按需加 `GET /v1/sessions/{id}/artifacts/{aid}`（流式 + 范围请求） |
 | O5 | 远程/团队部署（TLS、SSO、多用户隔离） | 明确出范围；协议设计已预留（header 认证可换 OIDC，无 cookie 依赖） |
@@ -537,3 +575,150 @@ Bazel：新增 `//go/pl/loom/internal/server/...` 目标与 `go test` 目标纳�
 
 - G2/G3 的改造依赖"所有会话态都经 cells/env 两通道传递"这一现状判断；若未来新增携带会话态的工具，R1 的 CI 回归是唯一防线，需在 review checklist 中固化。
 - 性能数字（2048 ring、256 客户端队列、4 并发 turn）均为经验初值，M4 基线后可能调整；协议不受其影响（全部走配置）。
+
+---
+
+## 16. v2 现状核对与修订记录（2026-08-03）
+
+### 16.1 核对方式
+
+对照 v1 的"现状断言"逐条重读当前代码（`controller.go`、`bootstrap.go`、`process/types.go`、`runtimeevent/broker.go`、`subagent_bridge.go`、`cmd/loom/main.go`），确认哪些 gap 仍在、哪些已漂移、哪些是 v1 遗漏。
+
+### 16.2 核对结论
+
+| # | v1 断言 | v2 核对结果 | 处置 |
+|---|---------|-------------|------|
+| V1 | G1 无会话注册表 | 仍成立（`cmd/loom` 每进程 1 个 Controller） | 设计不变 |
+| V2 | G2 仅 Goal/Plan cells 串台 | **范围扩大**：`SteerCell`（`bootstrap.go:223`，`handleSteer` 直读）与 `Questioner`（`ask_user` 注册时绑定）同为进程级会话态，v1 遗漏 | §2.2/§4.2 扩为四处；串台回归改为六路隔离断言 |
+| V3 | G3 `controller.publishSessionEnv` 全局覆盖 | **v2 核对有误**（grep 遗漏）：该方法当时仍存在，`handleNewSession/handleResumeSession` 均调用它写全局原子值 | M1' 已删除该方法及其调用点，改为 runTurn ctx 注入（§18）；v2 的结论（chat 路径归因问题）以更准的方式成立 |
+| V4 | G4–G7、G9、G10 | 仍成立（无 ReplayLog / Snapshot 水位 / actor / 幂等 / server 包 / flock） | 设计不变 |
+| V5 | G8 `runAgent` 手工装配 | **部分收敛**：已复用 `Bootstrap`，仅 `agent.Loop` 装配仍手工 | G8 降级为低风险残留；M1 不再含 runAgent 收敛 |
+| V6 | Broker 仅 channel 订阅 | 新增 `Observer` 接口与 `WithDurableQueue` 选项 | pump 直接用 `WithDurableQueue(4096)`，设计不变 |
+| V7 | Controller API = v1 列出的 9 个方法 | **已扩张**：steer、`AnswerQuestion`、`SetModel/SetReasoning`、`RequestCompaction`、`SubagentView`、`ListSkills/ListMCPServers` | G12；§5.3 端点表扩展 |
+| V8 | v1 未考虑 ask_user 重连 | `question.asked` 为 ephemeral 且快照无 `PendingQuestions` | G11；§4.4 加快照兜底、§9 契约同步 |
+| V9 | v1 未考虑子代理事件路由 | `WireSubagentObserver` 把子 run 事件挂**父 session envelope** | 与 per-session 过滤/ReplayLog 天然兼容，无需新设计（§2.1 记录） |
+
+### 16.3 v2 引入的待拍板决策
+
+| # | 决策点 | 建议 |
+|---|--------|------|
+| D1 | `POST prompts` 在 turn busy 时的语义：v1 的 409 vs 对齐 TUI 的 steer 入队 | steer 入队（协议与 TUI 行为一致，Web 端无需发明新交互；响应体 `{steered:true, queue_len}` 直接映射 `SubmitResult`） |
+| D2 | model/reasoning/compact/subagent/skills/mcp 端点的里程碑归属 | questions+steer 必须 M2（核心交互闭环）；model/reasoning/compact 建议 M2（均为 Controller 透传，成本极低）；subagent view/skills/mcp 可 M3 |
+| D3 | `Snapshot.PendingQuestions` | 做（M1，与 `EventSeq` 同批落地） |
+| D4 | 本期实施范围 | 建议先 M1+M2（curl 可驱动的 headless server 即达成本期"大活"的最小可用形态），M3 Web SPA 视反馈再启 |
+
+> v3 注：D1–D3 采纳；D4 被 §17.4 的重排取代（TUI 先迁，M1' 取代原 M1）。
+
+---
+
+## 17. v3 架构定案记录（2026-08-03）
+
+### 17.1 定案背景
+
+v2 评审中围绕四个问题展开讨论并定案：(a) Controller 兼容策略（nil 回落 vs 单一路径）；(b) 是否对齐 codex 的 JSON-RPC/WS；(c) 是否抽象协议无关应用层、TUI 与其他 UI 平权；(d) 落地顺序（HTTP 先行 vs TUI 先迁）；(e) gRPC 可行性。本节记录结论与理由。
+
+### 17.2 codex 对照要点（OpenAI codex，Rust 实现）
+
+| codex 做法 | 对本设计的影响 |
+|---|---|
+| TUI 从第一天走 `AppServerClient`（InProcess/Remote 两实现），core 之上永远隔着 app-server 层 | 证明"TUI 平权 + 单一构造路径"终态正确；v3 采纳为 M1' 目标 |
+| app-server 为每个 thread 显式构造 SessionConfiguration，无线程级 fallback | 终结 A/B 之争：Controller 会话态只来自 SessionRuntime |
+| 审批建模为 JSON-RPC `ServerRequest`（带 request_id 等响应） | **语义采纳**（PendingRequest 统一抽象 + 一次性 Resolve），**传输不采纳**（见 §17.3） |
+| 断线重连 = 全量历史快照 + 原子订阅 + 挂起请求重放（无全局事件序号） | 我们的 Broker seq + ReplayLog 增量补发更优，保留；G11 的 PendingRequests 快照兜底与其"挂起请求重放"同构 |
+| Submission ID 用 UUID v7 兼作对外 turn_id | 记录备选；当前 `Idempotency-Key` 已够用 |
+
+### 17.3 传输协议选型：REST+SSE 为适配器 #1
+
+讨论过 JSON-RPC/WS（对齐 codex）与 gRPC（repo 已有工具链）两个替代，结论均为"作为后续适配器，不做首适配器"：
+
+- **JSON-RPC/WS 不首选**：审批的 ServerRequest 语义我们用 PendingRequest + 一次性 Resolve 等价获得；WS 丢失 EventSource 自动重连、握手期 token 传递变丑、引入新依赖；我们也没有存量 JSON-RPC 客户端要兼容。触发条件见 §5.6。
+- **gRPC 不首选**：明星客户端是浏览器（grpc-web 需翻译层且不支持 bidi streaming）；事件模型是 JSON 原生，proto 镜像带来双 schema 税。机器客户端出现时再加（§5.6）。
+- **REST+SSE 首选**：本期客户端图谱（TUI-inproc / 浏览器 / curl）全优；零新依赖；事件零翻译；seq cursor 增量重连是 codex 不具备的优势。
+
+### 17.4 落地顺序：TUI 先迁（原 M5 提前为 M1' 主体）
+
+理由：(1) 接口从最难的真实消费者长出，完整性被证明而非先验设计；(2) 验收标准现成且严格——`ui_test.go` 原样跑绿；(3) 迁移是纯依赖注入改动，渲染/状态机不动；(4) 之后 REST+SSE 适配器沦为机械映射；(5) 顺序本身消解 A/B 之争——TUI 经 SessionService 拿会话后，fallback 路径没有存在机会，单一路径自然成立。
+
+### 17.5 接口硬约束（防抽象泄漏）
+
+1. client 接口全部请求/响应/事件类型 JSON 可序列化，roundtrip property test 守护；
+2. inproc 实现禁共享可变引用（拷贝语义），保证 inproc/http 行为一致；
+3. 应用层只出 typed 哨兵错误；幂等键、actor 为一等参数，不得藏在传输层概念里；
+4. 事件订阅（pump/ReplayLog/补拉-订阅）实现于 SessionService，传输适配器只消费 `SubscribeEvents`。
+
+---
+
+## 18. M1' 落地记录（2026-08-03）
+
+M1'（client 化）已完成并全量测试绿。本节记录与设计正文有出入的实现决策，正文相应处已同步修订。
+
+### 18.1 落地内容对照
+
+| 设计项 | 落地 | 偏差 |
+|---|---|---|
+| ToolRegistry overlay | `agent.NewOverlayRegistry`：Lookup 落穿 parent、Register 仅本地、List 合并且本地遮蔽 | 无 |
+| SessionRuntime 四件套 | `app/session_runtime.go`：`NewSessionRuntime`（复用 bootstrap cells，存量路径）/ `NewIsolatedSessionRuntime`（全新 cells，serve 路径） | 新增隔离构造变体 |
+| Controller 单一路径 | `c.runtime` 为唯一会话态来源；`ControllerConfig.Runtime` 为 nil 时从 bootstrap **派生**（复用其 cells），存量测试零改动；SessionService 恒传 isolated Runtime | "必填"软化为"派生"，单一路径不变量在 Controller 内部成立（永远只读 `c.runtime`） |
+| ctx SessionEnv | `process.ContextWithSessionEnv/SessionEnvFromContext`；runner hook 签名升级为 `func(ctx)`；bootstrap hook 实现"ctx 优先、原子值回落"；runTurn 注入；`publishSessionEnv` 及其调用点已删除 | `StartSession/StartSessionWithGrant` 原无 ctx 参数（设计假设有），已补；调用链（exsession Manager.Start 本就有 ctx）已贯通 |
+| Snapshot 水位 | `appliedSeq` 在全部投影更新临界区采样（checkpoint、runTurn、审批卡、问答卡）；`Snapshot.EventSeq` | 无 |
+| PendingRequests | `Snapshot.PendingRequests`（审批卡含完整 `ApprovalRequestedPayload`，问答含完整 `domain.Question`），投影源为 controller 的 `pendingCards/pendingQuestions` | 保留 `PendingApprovals` 字段（TUI 消费中），统一抽象以新增字段方式落地 |
+| actor | `ResolveApprovalWithActor`；actor 经 `approvalActors` 投影透传进 `approval.resolved` payload（新增 optional `actor` 字段）并落审计日志 | 无 |
+| ReplayLog | `runtimeevent/replay.go`：`Since` 按量值比较（允许洞）；`maxEvicted`/`maxSeen` 双判负（旋转出界/未来 cursor）；property 测试覆盖 500 seq × 全 cursor 扫描 | 无 |
+| SessionService | `app/session_service.go`：注册表/单例不变量/幂等 LRU(128)/全局并发 turn 闸门(4)/空闲回收(30min)/pump+补拉-订阅原子衔接/慢订阅断开/pump 断连重订阅+全量断流 | 幂等命中返回 `deduplicated=true`；闸门仅拦新 turn（steer 不受限） |
+| internal/client | `client.Client`（21 方法，session 作用域）+ 类型别名（app 类型为 canonical）+ `NewInProc`；JSON roundtrip 约束测试（含 Snapshot/PendingRequest 全字段样本） | 接口方法集按 TUI 真实用量定稿（含 ListCheckpoints/Rewind/SubagentView/ListSkills/ListMCPServers/ListRules/ForgetRule） |
+| TUI 迁移 | ui 的 `controller` 字段类型改为 `client.Client`（名称保留）；`subscribeEvents` 适配器把 ctx 取消包装为 unsubscribe func；`loom chat` 装配 = SessionService + inproc（与 serve 同一套） | SubmitPromptWithImages 在 client 接口中统一为 `SubmitPrompt(ctx, prompt, images)` |
+
+### 18.2 测试证据
+
+- `ui_test.go` 原样全绿（2594 行，走 client 接口）；
+- `TestServeSessionsDoNotCrossTalk`：六路隔离回归锁（goal/plan/steer/question/SessionEnv/approval），bootstrap 携带 trap cells 捕获任何进程级泄漏；
+- `TestControllerInjectsSessionEnvViaTurnContext`：ctx 归因 + 进程级原子值零写入；
+- ReplayLog property 测试（500 seq 全 cursor 扫描，不重不漏）；
+- client 类型 JSON roundtrip 约束测试；
+- `bazel test //go/...` 全绿。
+
+### 18.3 遗留到 M2 的已知事项
+
+- `SubscribeEvents` 尚不携带 `server.resync`/`server.draining` 线级事件与 instance ID（M2 SSE 适配层补，应用层语义已具备）；
+- `loom serve` 子命令、flock、token、审计日志未开始（M2 范围）；
+- direct 模式（chat/run）数据目录 flock 未加（R5/O7，M4）；
+- 审批超时自动 deny（§4.6，`LOOM_SERVE_APPROVAL_TIMEOUT`）未实现，属 M2 server 侧定时器。
+
+---
+
+## 19. M1' 审查修复与真实模型验收记录（2026-08-04）
+
+### 19.1 独立审查与处置
+
+M1' 落地后经过一轮独立代码审查（并发正确性/overlay/迁移/兼容性六个风险面），全部发现与处置：
+
+| # | 发现 | 严重度 | 处置 |
+|---|------|--------|------|
+| H1 | TUI 会话切换（/new、/resume、选择器）后事件流断裂：client 订阅绑定会话，旧实现订阅 broker 全局流 | 高 | `handleSessionSwitched` 成功分支重建订阅（`update.go`）；订阅语义差异是本次迁移唯一真实行为变化 |
+| H2 | `ReplayLog.Since` 的"未来 cursor 判负"基于 per-session maxSeen，与 `Snapshot.EventSeq` 的全局水位契约矛盾——多会话下"快照→订阅"必然误拒 | 高 | 判负上移：`Since` 只管旋转出界；`SubscribeEvents` 对"超全局 broker 水位"判负（前一世代 cursor）；回归锁 `TestSessionServiceSnapshotWatermarkHandoff` |
+| M1 | actor 在 ResolveApproval 之后写入，与 turn goroutine 的持久化存在时序竞态 | 中 | actor 先写、失败回滚（`handleResolveApproval`） |
+| M2 | turn 取消时 pendingCards/pendingQuestions/approvalActors 幽灵残留 | 中 | `onTurnFinished` 统一清空三投影；`handleAnswerQuestion` 未命中也清（自愈）；`handleResumeSession` 对称重置 |
+| M3 | `publishForEvent` 权限分支的中间采样使水位瞬态越过 messages 投影 | 中 | 批次内只更新投影不采样，统一由批次末（checkpoint/runTurn）采样——水位宁落后不超前 |
+| M4 | sweeper 回收会话不断开订阅者 | 中 | 回收先 `dropSubscribers` |
+| M5 | TUI 断线重订阅恒从 0 全量回放，delta 重复追加 | 中 | Model 跟踪 `lastEventSeq`，重订阅/会话切换从该 cursor 续订 |
+| M6 | pump 断连重订阅间隙静默丢事件 | 中 | `ReplayLog.Invalidate(floor)` 毒化 pre-gap cursor + `SubscribeLatest` 快照后纯直播重挂 + inproc 自动回落 |
+| M7 | 幂等键 check-then-act 竞态 | 中 | single-flight（`idemInFlight`），并发重试共享首个执行结果 |
+| L1–L9 | gofmt、快照深拷贝、nil channel 挂起、roundtrip 样本不全等 | 低 | 已修（`Controller.Subscribe` 死代码已删；订阅失败返回 closed channel 驱动重试路径） |
+
+### 19.2 真实模型验收（LOOM_E2E_LLM=1，真实 provider）
+
+`go test -run TestServeRealModelE2E ./pl/loom/e2e/`（52s）七项全过：
+
+1. 真实工具循环：模型经 read_file 读出只有读文件才能知道的口令（49 个事件）；
+2. 事件流经 SessionService pump/订阅（turn.started/response_completed/turn.finished/tool.*）；
+3. 快照水位衔接：以 `Snapshot.EventSeq` 订阅成功且直播不断；
+4. steer：忙时投稿入队并注入后续模型调用；
+5. 幂等：同 key 重投 `deduplicated=true`，不新增 turn；
+6. 恢复：新 client ResumeSession 后 5 个 turn 的 transcript 完整；
+7. 审批/问答请求自动决议链路可用（审批在策略要求时经事件→决议闭环）。
+
+headless 路径冒烟：`loom run` 真实模型应答正常（session 持久化、MCP/rules/subagent 装配无回归）。
+
+### 19.3 验收结论
+
+M1' 达到 §12 验收标准：ui_test 原样全绿（走 client 接口）、六路串台回归绿、JSON roundtrip 约束绿、`bazel test //go/...` 全绿、真实模型 e2e 验收通过。可以开工 M2。

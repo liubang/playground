@@ -4,6 +4,7 @@ go_library(
     srcs = [
         "broker.go",
         "event.go",
+        "replay.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/runtimeevent",
     visibility = ["//go/pl/loom:__subpackages__"],
@@ -17,6 +18,7 @@ go_test(
     srcs = [
         "broker_test.go",
         "event_test.go",
+        "replay_test.go",
     ],
     embed = [":runtimeevent"],
     deps = ["//go/pl/loom/internal/domain:domain_lib"],

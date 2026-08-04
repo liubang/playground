@@ -34,6 +34,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/mcp"
+	"github.com/liubang/playground/go/pl/loom/internal/memory"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
@@ -43,7 +44,6 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/edit"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/exsession"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
-	"github.com/liubang/playground/go/pl/loom/internal/memory"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/lint"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
@@ -206,7 +206,16 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 			"PATH", "LANG", "LC_ALL", "TMPDIR", "HOME",
 			"GOCACHE", "GOPATH", "GOMODCACHE", "GOPROXY", "GOSUMDB", "GOFLAGS",
 		},
-		SessionEnv: sessionEnv.Get,
+		// Per-session attribution rides the turn context (Controller
+		// path, docs/SERVE_DESIGN.md §4.3); the process-level atomic
+		// value remains the fallback for context-less paths (headless
+		// runAgent, runner tests).
+		SessionEnv: func(ctx context.Context) map[string]string {
+			if env := process.SessionEnvFromContext(ctx); len(env) > 0 {
+				return env
+			}
+			return sessionEnv.Get()
+		},
 	})
 	if err != nil {
 		_ = store.Close()
@@ -406,7 +415,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 
 		roles := map[subagent.Role]*subagent.RoleSpec{
 			subagent.RoleResearcher: researcherSpec,
-			subagent.RoleCoder:     coderSpec,
+			subagent.RoleCoder:      coderSpec,
 		}
 
 		factory := &subagent.Factory{
@@ -478,8 +487,8 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	// memory tools, and wire the extraction/consolidation pipeline.
 	// All of this is gated by the memory.enabled config (default: true).
 	var (
-		memoryStore       *memory.Store
-		memoryExtractor   *memory.Extractor
+		memoryStore        *memory.Store
+		memoryExtractor    *memory.Extractor
 		memoryConsolidator *memory.Consolidator
 	)
 	if resolved.Memory.Enabled {
@@ -518,39 +527,39 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	}
 
 	return &Bootstrap{
-		Resolved:          resolved,
-		Current:           resolved.Default,
-		WorkspaceRoot:     cfg.WorkspaceRoot,
-		Store:             store,
-		Artifact:          artStore,
-		Registry:          registry,
-		Policy:            decider,
-		permissionPolicy:  &policy,
-		approvalMode:      resolved.Approval.Mode,
-		PromptBuilder:     promptBuilder,
-		Logger:            logger,
-		Validator:         validator,
-		Runner:            runner,
-		Version:           cfg.Version,
-		FileStateBook:     book,
-		SessionEnv:        sessionEnv,
-		GoalCell:          goalCell,
-		PlanCell:          planCell,
-		SteerCell:         steerCell,
-		Questioner:        questioner,
-		Recorder:          traceRecorder,
-		SessionRules:      sessionRules,
-		SubagentModels:    subagentModels,
-		RememberedStore:   rememberedStore,
-		SubagentFactory:   subagentFactory,
-		SubagentManager:   subagentManager,
-		SessionManager:    sessionManager,
-		MCPManager:        mcpManager,
-		Skills:            skills,
-		MemoryStore:       memoryStore,
-		MemoryExtractor:   memoryExtractor,
+		Resolved:           resolved,
+		Current:            resolved.Default,
+		WorkspaceRoot:      cfg.WorkspaceRoot,
+		Store:              store,
+		Artifact:           artStore,
+		Registry:           registry,
+		Policy:             decider,
+		permissionPolicy:   &policy,
+		approvalMode:       resolved.Approval.Mode,
+		PromptBuilder:      promptBuilder,
+		Logger:             logger,
+		Validator:          validator,
+		Runner:             runner,
+		Version:            cfg.Version,
+		FileStateBook:      book,
+		SessionEnv:         sessionEnv,
+		GoalCell:           goalCell,
+		PlanCell:           planCell,
+		SteerCell:          steerCell,
+		Questioner:         questioner,
+		Recorder:           traceRecorder,
+		SessionRules:       sessionRules,
+		SubagentModels:     subagentModels,
+		RememberedStore:    rememberedStore,
+		SubagentFactory:    subagentFactory,
+		SubagentManager:    subagentManager,
+		SessionManager:     sessionManager,
+		MCPManager:         mcpManager,
+		Skills:             skills,
+		MemoryStore:        memoryStore,
+		MemoryExtractor:    memoryExtractor,
 		MemoryConsolidator: memoryConsolidator,
-		traceProvider:     traceProvider,
+		traceProvider:      traceProvider,
 	}, nil
 }
 

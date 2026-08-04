@@ -85,7 +85,7 @@ type Runner struct {
 	terminationGrace time.Duration
 	lookPath         func(string) (string, error)
 	now              func() time.Time
-	sessionEnv       func() map[string]string
+	sessionEnv       func(ctx context.Context) map[string]string
 }
 
 // NewRunner creates a process runner bound to a workspace validator.
@@ -145,7 +145,7 @@ func (r *Runner) RunWithSandbox(ctx context.Context, spec CommandSpec, sandbox S
 		return Result{}, err
 	}
 	env, droppedEnv := r.envForSandbox(spec.Env, sandbox)
-	validated.env = r.applySessionEnv(env)
+	validated.env = r.applySessionEnv(ctx, env)
 	launch, cleanup, isolation, err := r.prepareLaunch(validated, sandbox)
 	result := Result{
 		Isolation:      isolation.Name(),
@@ -534,11 +534,11 @@ func buildMinimalEnv(overrides map[string]string, allowlist map[string]struct{})
 // passthrough nor model-supplied CommandSpec.Env overrides may shadow them.
 // Malformed hook entries are skipped — attribution must never break command
 // execution.
-func (r *Runner) applySessionEnv(env []string) []string {
+func (r *Runner) applySessionEnv(ctx context.Context, env []string) []string {
 	if r.sessionEnv == nil {
 		return env
 	}
-	extra := r.sessionEnv()
+	extra := r.sessionEnv(ctx)
 	if len(extra) == 0 {
 		return env
 	}
