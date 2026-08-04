@@ -33,6 +33,7 @@ go_library(
         "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/process:process_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "//go/pl/loom/internal/server:server",
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/ui:ui",
     ],

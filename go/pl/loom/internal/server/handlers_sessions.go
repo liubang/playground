@@ -1,0 +1,383 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+// Created: 2026/08/04
+
+package server
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"strconv"
+
+	"github.com/liubang/playground/go/pl/loom/internal/app"
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
+)
+
+// decodeBody decodes a JSON request body with the global size cap.
+func decodeBody(w http.ResponseWriter, r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(v); err != nil {
+		return invalidInput("invalid request body: " + err.Error())
+	}
+	return nil
+}
+
+// auditf writes one audit record.
+func (s *Server) auditf(action string, sessionID domain.SessionID, kv ...any) {
+	args := append([]any{"action", action, "session_id", sessionID.String()}, kv...)
+	s.audit.Info("audit", args...)
+}
+
+// --- session lifecycle ---
+
+func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n <= 0 {
+			writeError(w, invalidInput("limit must be a positive integer"))
+			return
+		}
+		limit = n
+	}
+	summaries, err := s.svc.ListSessions(r.Context(), limit)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": summaries})
+}
+
+type createSessionRequest struct {
+	Resume string `json:"resume,omitempty"`
+}
+
+func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
+	var req createSessionRequest
+	// An empty body means "new session"; a body may carry a resume target.
+	if r.ContentLength > 0 {
+		if err := decodeBody(w, r, &req); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
+	if req.Resume != "" {
+		id, err := domain.ParseSessionID(req.Resume)
+		if err != nil || !domain.HasPrefix(id, "sess_") {
+			writeError(w, invalidInput("invalid resume session id"))
+			return
+		}
+		if h, ok := s.svc.Get(id); ok {
+			writeJSON(w, http.StatusOK, map[string]any{"session_id": h.ID, "state": h.Controller.State()})
+			return
+		}
+		h, err := s.svc.ResumeSession(r.Context(), id)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		s.auditf("session.resume", h.ID)
+		writeJSON(w, http.StatusCreated, map[string]any{"session_id": h.ID, "state": h.Controller.State()})
+		return
+	}
+	h, err := s.svc.CreateSession(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("session.create", h.ID)
+	writeJSON(w, http.StatusCreated, map[string]any{"session_id": h.ID, "state": h.Controller.State()})
+}
+
+func (s *Server) handleInspectSession(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	inspection, err := s.svc.Inspect(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, inspection)
+}
+
+func (s *Server) handleTranscript(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var after, limit int64
+	if raw := r.URL.Query().Get("after"); raw != "" {
+		if after, err = strconv.ParseInt(raw, 10, 64); err != nil || after < 0 {
+			writeError(w, invalidInput("after must be a non-negative integer"))
+			return
+		}
+	}
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if limit, err = strconv.ParseInt(raw, 10, 64); err != nil || limit <= 0 {
+			writeError(w, invalidInput("limit must be a positive integer"))
+			return
+		}
+	}
+	page, err := s.svc.Transcript(r.Context(), id, after, int(limit))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	snap, err := s.svc.Snapshot(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
+}
+
+// --- turn control ---
+
+type submitPromptRequest struct {
+	Prompt         string               `json:"prompt"`
+	Images         []domain.ImageContent `json:"images,omitempty"`
+	IdempotencyKey string               `json:"idempotency_key,omitempty"`
+}
+
+func (s *Server) handleSubmitPrompt(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var req submitPromptRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	if req.Prompt == "" && len(req.Images) == 0 {
+		writeError(w, invalidInput("prompt is required"))
+		return
+	}
+	idemKey := r.Header.Get("Idempotency-Key")
+	if idemKey == "" {
+		idemKey = req.IdempotencyKey
+	}
+	result, deduplicated, err := s.svc.SubmitPrompt(r.Context(), id, req.Prompt, req.Images, idemKey)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	promptHash := sha256.Sum256([]byte(req.Prompt))
+	s.auditf("prompt.submit", id, "prompt_len", len(req.Prompt), "prompt_hash", hex.EncodeToString(promptHash[:8]), "steered", result.Steered, "deduplicated", deduplicated)
+	status := http.StatusAccepted
+	if deduplicated {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, map[string]any{
+		"turn":         result.Turn,
+		"steered":      result.Steered,
+		"queue_len":    result.QueueLen,
+		"deduplicated": deduplicated,
+	})
+}
+
+func (s *Server) handleCancelTurn(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.svc.CancelTurn(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("turn.cancel", id)
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "cancelling"})
+}
+
+// --- approvals & questions ---
+
+type resolveApprovalRequest struct {
+	CallID   string `json:"call_id"`
+	ArgsHash string `json:"args_hash"`
+	Decision string `json:"decision"`
+	RuleHint *struct {
+		ToolName  string          `json:"tool_name"`
+		Arguments json.RawMessage `json:"arguments"`
+		Trust     string          `json:"trust,omitempty"`
+	} `json:"rule_hint,omitempty"`
+	Client string `json:"client,omitempty"`
+}
+
+func (s *Server) handleResolveApproval(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	approvalID, err := parseEventParam(r, "approvalID")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var req resolveApprovalRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	decision := domain.Decision(req.Decision)
+	if decision != domain.DecisionAllow && decision != domain.DecisionDeny {
+		writeError(w, invalidInput("decision must be allow or deny"))
+		return
+	}
+	callID, err := domain.ParseToolCallID(req.CallID)
+	if err != nil {
+		writeError(w, invalidInput("invalid call_id"))
+		return
+	}
+	var hint *app.ApprovalRuleHint
+	if req.RuleHint != nil {
+		hint = &app.ApprovalRuleHint{ToolName: req.RuleHint.ToolName, Arguments: req.RuleHint.Arguments, Trust: req.RuleHint.Trust}
+	}
+	note, err := s.svc.ResolveApproval(r.Context(), id, app.ApprovalBinding{
+		ApprovalID: approvalID, CallID: callID, ArgsHash: req.ArgsHash,
+	}, decision, hint, req.Client)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("approval.resolve", id, "approval_id", approvalID, "decision", decision, "actor", req.Client)
+	writeJSON(w, http.StatusOK, map[string]string{"note": note})
+}
+
+type answerQuestionRequest struct {
+	Selected   []string `json:"selected,omitempty"`
+	CustomText string   `json:"custom_text,omitempty"`
+	Skipped    bool     `json:"skipped,omitempty"`
+}
+
+func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	questionID, err := parseEventParam(r, "questionID")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var req answerQuestionRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	result, err := s.svc.AnswerQuestion(r.Context(), id, questionID, domain.QuestionAnswer{
+		Selected:   req.Selected,
+		CustomText: req.CustomText,
+		Skipped:    req.Skipped,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !result.Resolved {
+		writeError(w, &statusError{status: http.StatusConflict, code: "binding_mismatch", message: "question unknown or already resolved"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"resolved": true})
+}
+
+// --- session configuration ---
+
+type setModelRequest struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+}
+
+func (s *Server) handleSetModel(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var req setModelRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	if req.Provider == "" || req.Model == "" {
+		writeError(w, invalidInput("provider and model are required"))
+		return
+	}
+	result, err := s.svc.SetModel(r.Context(), id, req.Provider+"/"+req.Model)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("session.set_model", id, "model", req.Provider+"/"+req.Model)
+	writeJSON(w, http.StatusOK, result)
+}
+
+type setReasoningRequest struct {
+	Effort string `json:"effort"`
+}
+
+func (s *Server) handleSetReasoning(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var req setReasoningRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	result, err := s.svc.SetReasoning(r.Context(), id, req.Effort)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleRequestCompaction(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	result, err := s.svc.RequestCompaction(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, result)
+}
