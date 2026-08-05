@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<!-- Loom Web SPA (docs/WEB_DESIGN.md). Zero build chain: native ES modules
+     served from embed.FS. Token gate and app shell share one document. -->
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>loom</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<!-- Token gate (first visit / 401). Rendered standalone, no app chrome. -->
+<div id="gate" class="gate-wrap" hidden>
+  <form id="gate-form" class="gate">
+    <div class="brand">◆ loom</div>
+    <p>Enter the serve token to connect.</p>
+    <input id="gate-token" type="password" autocomplete="off" placeholder="token" required>
+    <div id="gate-error" class="gate-error" hidden></div>
+    <button class="btn btn-primary" type="submit" style="width:100%">Connect</button>
+    <div class="hint">
+      Stored in sessionStorage only.<br>
+      The token is printed on first <code>loom serve</code> start, or see
+      <code>serve.token</code> in the loom data directory.
+    </div>
+  </form>
+</div>
+
+<!-- App shell -->
+<div id="app" class="shell" hidden>
+  <div class="app-body">
+    <aside id="sidebar" class="sidebar">
+      <button id="new-session" class="new-session">+ 新会话</button>
+      <div id="session-list" class="session-list"></div>
+      <div class="sidebar-foot">
+        <button id="toggle-archived" class="foot-btn" title="查看归档会话">归档</button>
+        <span class="sidebar-foot-brand">◆ loom</span>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="app-header">
+        <button id="hdr-sidebar" class="icon-btn" title="折叠/展开侧栏">☰</button>
+        <button id="hdr-theme" class="icon-btn" title="切换主题">☾</button>
+        <button id="hdr-session" class="sess mono" title="copy session id" hidden></button>
+        <span id="hdr-readonly" class="badge is-awaiting" hidden><span class="dot"></span><span class="txt">sub-agent · read-only</span></span>
+        <span id="hdr-state" class="badge"><span class="dot"></span><span class="txt"></span></span>
+        <span class="spacer"></span>
+        <span id="hdr-conn" class="badge"><span class="dot"></span><span class="txt"></span></span>
+      </header>
+
+      <div id="transcript" class="transcript">
+        <div id="blocks" class="transcript-inner"></div>
+        <div id="empty-state" class="empty-state" hidden>
+          <div class="brand">◆ loom</div>
+          <p>No session selected. Start a new one, or pick one from the list.</p>
+        </div>
+        <button id="follow-btn" class="follow-btn" hidden>↓ back to bottom</button>
+      </div>
+
+      <div class="composer">
+        <details id="plan-panel" class="plan-panel disclosure" open hidden></details>
+        <div class="composer-box">
+          <textarea id="composer-input" rows="1" placeholder="输入消息…"></textarea>
+          <div class="composer-bar">
+            <div class="composer-tools">
+              <button id="model-btn" class="picker-btn" title="切换模型">
+                <span class="picker-label">model</span><span class="picker-caret">▾</span>
+              </button>
+              <button id="reasoning-btn" class="picker-btn" title="设置 reasoning">
+                <span class="picker-label">reasoning</span><span class="picker-caret">▾</span>
+              </button>
+            </div>
+            <div class="composer-actions">
+              <button id="cancel-btn" class="icon-btn-circle btn-danger" title="cancel turn" hidden>■</button>
+              <button id="send-btn" class="send-btn" title="发送 (Enter)">↑</button>
+            </div>
+          </div>
+        </div>
+        <div class="hint" id="composer-hint">Enter 发送 · Shift+Enter 换行</div>
+      </div>
+    </main>
+  </div>
+
+  <div id="banner" class="banner" hidden></div>
+  <footer class="statusbar">
+    <span id="sb-ctx"></span>
+    <span id="sb-usage" class="mono"></span>
+    <span id="sb-turn"></span>
+    <span class="spacer"></span>
+    <span id="sb-version"></span>
+  </footer>
+</div>
+
+<!-- 下拉菜单浮层（模型 / reasoning 共用） -->
+<div id="menu" class="menu" hidden></div>
+
+<!-- 确认弹窗（删除会话等破坏性操作） -->
+<div id="confirm-modal" class="modal-wrap" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <div class="modal-title" id="confirm-title"></div>
+    <div class="modal-body" id="confirm-body"></div>
+    <div class="modal-actions">
+      <button id="confirm-cancel" class="btn btn-secondary" type="button">取消</button>
+      <button id="confirm-ok" class="btn btn-danger" type="button">删除</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>

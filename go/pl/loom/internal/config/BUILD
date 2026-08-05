@@ -28,6 +28,7 @@ go_library(
     visibility = ["//go/pl/loom:__subpackages__"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/logging:logging",
         "//go/pl/loom/internal/model/anthropic:anthropic_lib",
         "//go/pl/loom/internal/model/openai:openai_lib",
         "//go/pl/loom/internal/permission:permission_lib",

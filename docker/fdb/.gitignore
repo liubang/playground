@@ -1,0 +1,2 @@
+# bootstrap.sh 生成的客户端连接文件（含随机 cluster ID）
+fdb.cluster

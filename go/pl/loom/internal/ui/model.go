@@ -245,10 +245,14 @@ type Model struct {
 	// successfully received event resets it); eventsDead locks prompt
 	// submission once the stream cannot be recovered. unsubscribeEvents
 	// releases the current broker subscription; handleEventsClosed calls it
-	// before resubscribing so old subscriptions do not leak.
+	// before resubscribing so old subscriptions do not leak. eventsGen
+	// identifies the current subscription generation: a waitForEvent that
+	// outlives its channel (session switch replaced it) reports the close
+	// with a stale generation and must be ignored.
 	resubscribes      int
 	eventsDead        bool
 	unsubscribeEvents func()
+	eventsGen         uint64
 
 	// subOverlay is the read-only sub-agent drill-in view (Ctrl+G), nil
 	// unless ModeSubagent is active.
@@ -389,7 +393,7 @@ func (m Model) Init() tea.Cmd {
 	// fallback makes a directly constructed Model safe in tests as well.
 	if m.eventsCh == nil {
 		eventsCh, _ := subscribeEvents(m.controller, m.lastEventSeq)
-		m.eventsCh = eventsCh
+		m.adoptEvents(eventsCh, func() {})
 	}
 
 	// The spinner is started lazily once a turn becomes busy; idling sessions
@@ -401,12 +405,23 @@ func (m Model) Init() tea.Cmd {
 	)
 }
 
+// adoptEvents installs a freshly opened event subscription and bumps the
+// stream generation, so a waitForEvent still blocked on a replaced channel
+// reports its closure as stale instead of triggering a recovery cascade.
+func (m *Model) adoptEvents(ch <-chan runtimeevent.RuntimeEvent, unsubscribe func()) {
+	m.eventsGen++
+	m.eventsCh = ch
+	m.unsubscribeEvents = unsubscribe
+}
+
 // waitForEvent returns a command that waits for the next runtime event.
 func (m Model) waitForEvent() tea.Cmd {
+	ch := m.eventsCh
+	gen := m.eventsGen
 	return func() tea.Msg {
-		evt, ok := <-m.eventsCh
+		evt, ok := <-ch
 		if !ok {
-			return runtimeEventsClosedMsg{}
+			return runtimeEventsClosedMsg{gen: gen}
 		}
 		return runtimeEventMsg(evt)
 	}
@@ -443,7 +458,14 @@ func (m Model) forgetRuleCmd(entry RuleEntry) tea.Cmd {
 // runtimeEventMsg wraps a runtime event for Bubble Tea message passing.
 type runtimeEventMsg runtimeevent.RuntimeEvent
 
-type runtimeEventsClosedMsg struct{}
+// runtimeEventsClosedMsg reports that the event channel captured by a
+// waitForEvent command closed. gen identifies the subscription
+// generation the wait belonged to: a session switch replaces the channel
+// while the old wait is still in flight, and that stale report must be
+// ignored — treating it as a loss killed the freshly installed healthy
+// subscription, and the cascade burned the resubscribe budget until
+// input locked ("Runtime event stream lost") on every /resume and /new.
+type runtimeEventsClosedMsg struct{ gen uint64 }
 
 type snapshotMsg struct {
 	snapshot app.Snapshot
@@ -512,8 +534,7 @@ func StartTUI(controller client.Client, modelName, workspace string, opts InitOp
 	// startup, and branch switches mid-session are rare enough to ignore.
 	m.gitBranch = detectGitBranch(workspace)
 	eventsCh, unsubscribe := subscribeEvents(controller, 0)
-	m.eventsCh = eventsCh
-	m.unsubscribeEvents = unsubscribe
+	m.adoptEvents(eventsCh, unsubscribe)
 	m.SetIcons(ResolveIcons(opts.Icons))
 	m.SetLimits(opts.Limits)
 	m.SetContextWindow(opts.ContextWindow)

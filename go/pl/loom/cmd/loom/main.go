@@ -42,6 +42,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/client"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/logging"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
@@ -182,6 +183,24 @@ func loadConfig(requireProviders bool, logger *slog.Logger) (*config.ResolvedCon
 // path (made absolute) when set, otherwise the platform default. create
 // controls whether the private data directory is prepared on disk — agent
 // entries create it; offline read commands leave the filesystem untouched.
+// newFileLogger builds loom's unified file logger: glog-style records in
+// <state>/loom/logs/loom.YYYY-MM-DD.log, rotated at local midnight. Both
+// the TUI and serve modes share it (the TUI previously discarded all
+// logs). fallback applies when the log directory cannot be opened — the
+// TUI passes a discard logger, serve passes a stderr glog handler.
+func newFileLogger(resolved *config.ResolvedConfig, fallback *slog.Logger) *slog.Logger {
+	// SessionDB = <state>/loom/sessions/sessions.db → logs 在其两级之上。
+	logsDir := filepath.Join(filepath.Dir(filepath.Dir(resolved.Storage.SessionDB)), "logs")
+	logger, err := logging.NewFileLogger(logsDir, nil, logging.Quotas{
+		MaxFileBytes:  resolved.Logging.MaxFileBytes,
+		MaxTotalBytes: resolved.Logging.MaxTotalBytes,
+	})
+	if err != nil {
+		return fallback
+	}
+	return logger
+}
+
 func resolveSessionDB(resolved *config.ResolvedConfig, create bool) error {
 	configured := strings.TrimSpace(resolved.Storage.SessionDB)
 	if configured != "" {
@@ -321,12 +340,14 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	}
 	artifactDir := filepath.Join(filepath.Dir(resolved.Storage.SessionDB), artifactDirectoryName)
 
-	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// 统一文件日志（~/.loom/logs/loom.YYYY-MM-DD.log，glog 风格）；TUI 占屏，
+	// 打不开日志目录时静默降级为丢弃，绝不影响交互。
+	logger := newFileLogger(resolved, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
 		WorkspaceRoot: root,
 		ArtifactDir:   artifactDir,
 		Version:       version,
-		Logger:        discard,
+		Logger:        logger,
 	})
 	if err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
@@ -336,11 +357,11 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	// Bridge delegate_task child-run lifecycle onto the event stream so the
 	// TUI can show live sub-agent progress and the read-only drill-in view.
-	app.WireSubagentObserver(bootstrap.SubagentFactory, broker, bootstrap.Store, discard)
+	app.WireSubagentObserver(bootstrap.SubagentFactory, broker, bootstrap.Store, logger)
 	// The TUI is a peer client of the runtime (docs/SERVE_DESIGN.md §10):
 	// same SessionService + in-proc client assembly that `loom serve` uses,
 	// so every frontend shares one behavior.
-	service := app.NewSessionService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
+	service := app.NewSessionService(bootstrap, broker, app.SessionServiceConfig{Logger: logger})
 	sessionClient := client.NewInProc(service)
 
 	if resumeSessionID != nil {
@@ -387,6 +408,7 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 // daemon exposing the REST+SSE protocol (docs/SERVE_DESIGN.md §5).
 func runServe(ctx context.Context, args []string) error {
 	var listen, token, allowOrigin string
+	var noWeb bool
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--listen" && i+1 < len(args):
@@ -398,8 +420,10 @@ func runServe(ctx context.Context, args []string) error {
 		case args[i] == "--allow-origin" && i+1 < len(args):
 			i++
 			allowOrigin = args[i]
+		case args[i] == "--no-web":
+			noWeb = true
 		default:
-			return fmt.Errorf("usage: loom serve [--listen <addr|unix:path>] [--token <token>] [--allow-origin <origin>]")
+			return fmt.Errorf("usage: loom serve [--listen <addr|unix:path>] [--token <token>] [--allow-origin <origin>] [--no-web]")
 		}
 	}
 	if listen == "" {
@@ -448,7 +472,7 @@ func runServe(ctx context.Context, args []string) error {
 		}
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	logger := newFileLogger(resolved, slog.New(logging.NewGlogHandler(os.Stderr, nil)))
 	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
 		WorkspaceRoot: root,
 		ArtifactDir:   filepath.Join(dataDir, artifactDirectoryName),
@@ -467,6 +491,7 @@ func runServe(ctx context.Context, args []string) error {
 		Listen:      listen,
 		Token:       token,
 		AllowOrigin: allowOrigin,
+		NoWeb:       noWeb,
 		Version:     version,
 		Service:     service,
 		Logger:      logger,
@@ -699,7 +724,7 @@ func listSessions(ctx context.Context) error {
 		return fmt.Errorf("open session store: %w", err)
 	}
 	defer store.Close()
-	summaries, err := store.ListSessions(ctx, 100)
+	summaries, _, err := store.ListSessions(ctx, "", 100, false)
 	if err != nil {
 		return err
 	}

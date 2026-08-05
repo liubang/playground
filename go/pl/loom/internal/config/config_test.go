@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/logging"
 )
 
 // noEnv rejects every secret reference; tests that need secrets inject
@@ -404,6 +405,32 @@ rules:
 	}
 	if !cfg.Rules.Enabled || !cfg.Rules.Builtin {
 		t.Fatalf("untouched rule defaults flipped: %+v", cfg.Rules)
+	}
+}
+
+func TestResolveLoggingDefaultsAndOverrides(t *testing.T) {
+	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if def.Logging.MaxFileBytes != logging.DefaultMaxFileBytes ||
+		def.Logging.MaxTotalBytes != logging.DefaultMaxTotalBytes {
+		t.Fatalf("default logging quotas = %+v", def.Logging)
+	}
+
+	cfg := loadFile(t, twoProviderYAML+`
+logging:
+  max_file_mb: 100
+  max_total_mb: 500
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if cfg.Logging.MaxFileBytes != 100<<20 || cfg.Logging.MaxTotalBytes != 500<<20 {
+		t.Fatalf("logging quotas = %+v, want 100MiB/500MiB in bytes", cfg.Logging)
+	}
+
+	// Negative disables the limit (passed through as negative bytes).
+	cfg = loadFile(t, twoProviderYAML+`
+logging:
+  max_file_mb: -1
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if cfg.Logging.MaxFileBytes >= 0 {
+		t.Fatalf("negative max_file_mb must pass through as unlimited: %+v", cfg.Logging)
 	}
 }
 

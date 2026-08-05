@@ -195,6 +195,25 @@ func TestMetaVersion(t *testing.T) {
 	}
 }
 
+// TestMetaModels: the catalog endpoint exposes every configured model plus
+// the process default, so the SPA model picker has its data source.
+func TestMetaModels(t *testing.T) {
+	ts, _ := newTestServer(t, fakes.NewFakeModel())
+	_, body := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/meta/models", "")
+	def, _ := body["default"].(string)
+	if def == "" {
+		t.Fatalf("default missing in %v", body)
+	}
+	models, _ := body["models"].([]any)
+	if len(models) == 0 {
+		t.Fatalf("models empty in %v", body)
+	}
+	first, _ := models[0].(map[string]any)
+	if first["provider"] == "" || first["name"] == "" {
+		t.Fatalf("model entry malformed: %v", first)
+	}
+}
+
 func TestSessionLifecycleEndpoints(t *testing.T) {
 	model := fakes.NewFakeModel(fakes.ScriptEntry{Text: "hello world", StopReason: domain.StopEndTurn})
 	ts, _ := newTestServer(t, model)
@@ -459,6 +478,106 @@ drained:
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatalf("Shutdown did not return promptly with a live SSE stream")
+	}
+}
+
+// TestWebStaticAndSecurityHeaders covers the embedded SPA mount and the
+// uniform security headers (docs/WEB_DESIGN.md §7.1/§7.2).
+func TestWebStaticAndSecurityHeaders(t *testing.T) {
+	ts, _ := newTestServer(t, fakes.NewFakeModel())
+
+	// Static assets are reachable without a token (the token gate must be
+	// anonymous), and every response carries the security headers.
+	resp, err := ts.Client().Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET / status = %d", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), `id="gate"`) {
+		t.Fatalf("index missing the token gate")
+	}
+	for header, want := range map[string]string{
+		"Content-Security-Policy": "default-src 'self'",
+		"X-Content-Type-Options":  "nosniff",
+		"X-Frame-Options":         "DENY",
+	} {
+		if got := resp.Header.Get(header); !strings.Contains(got, want) {
+			t.Fatalf("%s = %q, want substring %q", header, got, want)
+		}
+	}
+
+	// API responses carry the headers too (uniform middleware).
+	req, _ := http.NewRequest("GET", ts.URL+"/v1/meta/version", nil)
+	authed(t, req)
+	apiResp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("GET /v1/meta/version: %v", err)
+	}
+	apiResp.Body.Close()
+	if apiResp.Header.Get("X-Frame-Options") != "DENY" {
+		t.Fatalf("API response missing X-Frame-Options")
+	}
+}
+
+// TestNoWebDisablesSPA: --no-web serves pure API (docs/WEB_DESIGN.md §7.1).
+func TestNoWebDisablesSPA(t *testing.T) {
+	svc := newTestService(t, fakes.NewFakeModel())
+	srv, err := New(Config{Token: testToken, Version: "test", Service: svc, NoWeb: true})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+	resp, err := ts.Client().Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET / with NoWeb status = %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestSessionListEnrichment locks the enriched SessionSummary wire shape
+// (docs/WEB_DESIGN.md §7.6/§7.7): snake_case keys, live state/model, title
+// from the first user prompt.
+func TestSessionListEnrichment(t *testing.T) {
+	model := fakes.NewFakeModel(fakes.ScriptEntry{Text: "answer", StopReason: domain.StopEndTurn})
+	ts, _ := newTestServer(t, model)
+	id := createTestSession(t, ts)
+
+	if status, body := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/prompts", `{"prompt":"fix the flaky test in sstv2"}`); status != http.StatusAccepted {
+		t.Fatalf("submit = (%d, %v)", status, body)
+	}
+	waitIdle(t, ts, id)
+
+	_, listing := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions", "")
+	sessions, _ := listing["sessions"].([]any)
+	if len(sessions) != 1 {
+		t.Fatalf("sessions = %v, want exactly 1", listing)
+	}
+	entry, _ := sessions[0].(map[string]any)
+	if entry["id"] != id {
+		t.Fatalf("entry id = %v (snake_case key check)", entry)
+	}
+	if entry["state"] != "idle" {
+		t.Fatalf("state = %v, want idle (live session)", entry["state"])
+	}
+	if entry["model_name"] != "model-a" {
+		t.Fatalf("model_name = %v", entry["model_name"])
+	}
+	if entry["turn_count"] != float64(1) {
+		t.Fatalf("turn_count = %v", entry["turn_count"])
+	}
+	if entry["title"] != "fix the flaky test in sstv2" {
+		t.Fatalf("title = %v", entry["title"])
+	}
+	if _, hasCapitalized := entry["ID"]; hasCapitalized {
+		t.Fatalf("legacy capitalized keys must be gone: %v", entry)
 	}
 }
 

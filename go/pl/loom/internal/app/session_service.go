@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -336,21 +337,131 @@ func (s *SessionService) handle(id domain.SessionID) (*SessionHandle, error) {
 	return h, nil
 }
 
-// ListSessions returns recent persisted sessions, including non-live ones.
-func (s *SessionService) ListSessions(ctx context.Context, limit int) ([]SessionSummary, error) {
+// sessionTitleMaxRunes bounds the picker title derived from the first
+// user prompt (docs/WEB_DESIGN.md §7.7).
+const sessionTitleMaxRunes = 50
+
+// ModelCatalogEntry is one selectable model in the picker wire shape.
+type ModelCatalogEntry struct {
+	Provider      string `json:"provider"`
+	Name          string `json:"name"`
+	ContextWindow int64  `json:"context_window,omitempty"`
+}
+
+// ModelCatalog is the wire shape of GET /v1/meta/models: every selectable
+// model plus the process default (docs/WEB_DESIGN.md — 模型切换器数据源)。
+type ModelCatalog struct {
+	Models []ModelCatalogEntry `json:"models"`
+	// Default is the configured default selection, "provider/model".
+	Default string `json:"default"`
+}
+
+// ModelCatalog returns the configured model catalog for frontend pickers.
+func (s *SessionService) ModelCatalog() ModelCatalog {
+	resolved := s.bootstrap.Resolved
+	catalog := ModelCatalog{Default: resolved.Default.String()}
+	for i := range resolved.Providers {
+		p := &resolved.Providers[i]
+		for _, m := range p.Models {
+			catalog.Models = append(catalog.Models, ModelCatalogEntry{
+				Provider: p.Name, Name: m.Name, ContextWindow: m.ContextWindow,
+			})
+		}
+	}
+	return catalog
+}
+
+// summarizeSessionTitle collapses whitespace and rune-truncates a first
+// user prompt into a one-line picker title.
+func summarizeSessionTitle(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	runes := []rune(text)
+	if len(runes) > sessionTitleMaxRunes {
+		return string(runes[:sessionTitleMaxRunes-1]) + "…"
+	}
+	return text
+}
+
+// ListSessions returns one page of persisted sessions, including non-live
+// ones, enriched for frontend pickers (docs/WEB_DESIGN.md §7.7): every row
+// gets a title (first user prompt); live sessions additionally report their
+// controller state, model and turn count — non-live rows report
+// state=closed. archived selects the archived view. cursor ("" = first
+// page) enables keyset pagination for infinite-scroll pickers; nextCursor
+// is "" when the page is the last one.
+func (s *SessionService) ListSessions(ctx context.Context, cursor string, limit int, archived bool) ([]SessionSummary, string, error) {
 	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
 	if !ok {
-		return nil, fmt.Errorf("session listing is unavailable for this store")
+		return nil, "", fmt.Errorf("session listing is unavailable for this store")
 	}
-	summaries, err := store.ListSessions(ctx, limit)
+	summaries, nextCursor, err := store.ListSessions(ctx, cursor, limit, archived)
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	ids := make([]domain.SessionID, len(summaries))
+	for i, summary := range summaries {
+		ids[i] = summary.ID
+	}
+	// Titles are best-effort enrichment: a title failure must not fail the
+	// listing itself.
+	titles, err := store.FirstUserMessageTexts(ctx, ids)
+	if err != nil {
+		titles = nil
 	}
 	result := make([]SessionSummary, len(summaries))
 	for i, summary := range summaries {
-		result[i] = SessionSummary{ID: summary.ID, Version: summary.Version, CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt}
+		item := SessionSummary{
+			ID: summary.ID, Version: summary.Version,
+			CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt,
+			State: ControllerStateClosed,
+			Title: summarizeSessionTitle(titles[summary.ID]),
+		}
+		if !summary.ParentSessionID.IsZero() {
+			item.ParentSessionID = summary.ParentSessionID.String()
+		}
+		if h, ok := s.Get(summary.ID); ok {
+			item.State = h.Controller.State()
+			if snap, err := h.Controller.RequestSnapshot(ctx); err == nil {
+				item.ModelName = snap.ModelName
+				item.TurnCount = snap.TurnCount
+			}
+		}
+		result[i] = item
 	}
-	return result, nil
+	return result, nextCursor, nil
+}
+
+// DeleteSession removes a session and all its persisted data. A live
+// handle is shut down first so no in-flight turn keeps writing into a
+// deleted session.
+func (s *SessionService) DeleteSession(ctx context.Context, id domain.SessionID) error {
+	s.mu.Lock()
+	h, live := s.sessions[id]
+	if live {
+		delete(s.sessions, id)
+	}
+	s.mu.Unlock()
+	if live {
+		h.dropSubscribers()
+		if err := h.Controller.Shutdown(ctx); err != nil {
+			s.logger.Warn("shutdown before delete failed", "session_id", id, "error", err)
+		}
+	}
+	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
+	if !ok {
+		return fmt.Errorf("session deletion is unavailable for this store")
+	}
+	return store.DeleteSession(ctx, id)
+}
+
+// SetSessionArchived marks a session archived (hidden from default session
+// listings) or restores it to active. The live runtime is unaffected.
+func (s *SessionService) SetSessionArchived(ctx context.Context, id domain.SessionID, archived bool) error {
+	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
+	if !ok {
+		return fmt.Errorf("session archiving is unavailable for this store")
+	}
+	return store.SetSessionArchived(ctx, id, archived)
 }
 
 // SubmitPrompt forwards a prompt to the session's controller. While the

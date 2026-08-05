@@ -191,7 +191,10 @@ func (c *inprocClient) RequestCompaction(ctx context.Context) (RequestCompaction
 }
 
 func (c *inprocClient) ListSessions(ctx context.Context, limit int) ([]SessionSummary, error) {
-	return c.service.ListSessions(ctx, limit)
+	// The client contract stays cursor-less: the first page is what
+	// pickers display; HTTP consumers paginate via the cursor query param.
+	summaries, _, err := c.service.ListSessions(ctx, "", limit, false)
+	return summaries, err
 }
 
 func (c *inprocClient) ListCheckpoints(ctx context.Context, limit int) ([]CheckpointInfo, error) {

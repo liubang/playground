@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/logging"
 	"github.com/liubang/playground/go/pl/loom/internal/model/anthropic"
 	"github.com/liubang/playground/go/pl/loom/internal/model/openai"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
@@ -96,10 +97,18 @@ type ResolvedConfig struct {
 	Approval  ResolvedApproval
 	Tracing   trace.Config
 	Storage   Storage
+	Logging   ResolvedLogging
 	UI        UI
 	Subagent  ResolvedSubagent
 	Memory    ResolvedMemory
 	MCP       ResolvedMCP
+}
+
+// ResolvedLogging is the logging section with defaults applied and MiB
+// converted to bytes (logging.Quotas 直接可用）。
+type ResolvedLogging struct {
+	MaxFileBytes  int64
+	MaxTotalBytes int64
 }
 
 // ResolvedMemory is the memory section with defaults applied.
@@ -285,6 +294,7 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		Approval: approval,
 		Tracing:  tracing,
 		Storage:  f.Storage,
+		Logging:  resolveLogging(f.Logging),
 		UI:       f.UI,
 	}
 	if len(providers) > 0 {
@@ -323,14 +333,14 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		}
 		sub.Model = &ref
 	}
-out.Subagent = sub
+	out.Subagent = sub
 
-// Memory: default enabled when absent or explicitly true.
-out.Memory = ResolvedMemory{
-	Enabled: f.Memory.Enabled == nil || *f.Memory.Enabled,
-}
+	// Memory: default enabled when absent or explicitly true.
+	out.Memory = ResolvedMemory{
+		Enabled: f.Memory.Enabled == nil || *f.Memory.Enabled,
+	}
 
-// MCP servers: validate config-level constraints; runtime startup
+	// MCP servers: validate config-level constraints; runtime startup
 	// (process spawning, tool discovery) happens in bootstrap.go.
 	resolvedMCP, err := resolveMCP(f.MCPServers, lookup)
 	if err != nil {
@@ -685,6 +695,22 @@ func resolveRules(in Rules) ResolvedRules {
 		ProjectAllow:      in.ProjectAllow != nil && *in.ProjectAllow,
 		PersistRemembered: in.PersistRemembered == nil || *in.PersistRemembered,
 	}
+}
+
+// resolveLogging converts the MiB quotas to bytes, keeping the built-in
+// defaults for absent fields and passing negatives through (unlimited).
+func resolveLogging(in Logging) ResolvedLogging {
+	out := ResolvedLogging{
+		MaxFileBytes:  logging.DefaultMaxFileBytes,
+		MaxTotalBytes: logging.DefaultMaxTotalBytes,
+	}
+	if in.MaxFileMB != 0 {
+		out.MaxFileBytes = int64(in.MaxFileMB) << 20
+	}
+	if in.MaxTotalMB != 0 {
+		out.MaxTotalBytes = int64(in.MaxTotalMB) << 20
+	}
+	return out
 }
 
 // resolveTracing builds trace.Config; tracing is enabled only when host

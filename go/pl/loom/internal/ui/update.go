@@ -170,7 +170,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case runtimeEventMsg:
 		next, cmd = m.handleRuntimeEvent(runtimeevent.RuntimeEvent(msg))
 	case runtimeEventsClosedMsg:
-		next, cmd = m.handleEventsClosed()
+		next, cmd = m.handleEventsClosed(msg)
 	case snapshotMsg:
 		next, cmd = m.handleSnapshot(msg)
 	case subagentViewMsg:
@@ -1500,13 +1500,14 @@ func (m Model) handleSessionSwitched(msg sessionSwitchedMsg) (tea.Model, tea.Cmd
 	// The subscription is bound to a session: after a switch the old stream
 	// only carries the previous session's events, so re-attach to the new
 	// session. The cursor stays at the last applied sequence (global
-	// sequence space), so nothing is replayed and nothing is missed.
+	// sequence space), so nothing is replayed and nothing is missed. The
+	// cancelled old subscription's waitForEvent is still in flight; its
+	// close report arrives with a stale generation and is ignored.
 	if m.unsubscribeEvents != nil {
 		m.unsubscribeEvents()
 	}
 	eventsCh, unsubscribe := subscribeEvents(m.controller, m.lastEventSeq)
-	m.eventsCh = eventsCh
-	m.unsubscribeEvents = unsubscribe
+	m.adoptEvents(eventsCh, unsubscribe)
 	return m, tea.Batch(m.waitForEvent(), m.requestSnapshot())
 }
 
@@ -2061,7 +2062,14 @@ func hasEquivalentBlock(idx *BlockIndex, candidate *TranscriptBlock) bool {
 // handleEventsClosed recovers from the broker disconnecting this subscriber
 // (slow consumer) by re-subscribing and refreshing from a snapshot. Input is
 // locked when the runtime is gone or recovery attempts are exhausted.
-func (m Model) handleEventsClosed() (tea.Model, tea.Cmd) {
+func (m Model) handleEventsClosed(msg runtimeEventsClosedMsg) (tea.Model, tea.Cmd) {
+	// A stale close report belongs to a subscription that has already been
+	// replaced (session switch, or an earlier recovery): the live
+	// waitForEvent is healthy, and "recovering" here would kill it and
+	// cascade until the budget locked input.
+	if msg.gen != m.eventsGen {
+		return m, nil
+	}
 	select {
 	case <-m.controller.Done():
 		m.eventsDead = true
@@ -2081,8 +2089,7 @@ func (m Model) handleEventsClosed() (tea.Model, tea.Cmd) {
 		m.unsubscribeEvents()
 	}
 	eventsCh, unsubscribe := subscribeEvents(m.controller, m.lastEventSeq)
-	m.eventsCh = eventsCh
-	m.unsubscribeEvents = unsubscribe
+	m.adoptEvents(eventsCh, unsubscribe)
 	m.setStatus("Event stream interrupted; resubscribed, refreshing view from snapshot", true)
 	return m, tea.Batch(m.waitForEvent(), m.requestSnapshot())
 }

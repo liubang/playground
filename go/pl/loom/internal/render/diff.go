@@ -53,8 +53,8 @@ func DiffForToolCall(toolName string, args json.RawMessage, maxLines int) string
 	return ""
 }
 
-// Bounds for diff rendering: inputs are capped before the O(n·m) LCS, and the
-// rendered output is capped per line and in total.
+// Bounds for diff rendering: bounded outputs cap the O(n·m) LCS inputs and
+// the per-line width. Unbounded output (maxLines <= 0) skips both caps.
 const (
 	diffMaxInputLines = 400
 	diffMaxLineWidth  = 200
@@ -67,17 +67,26 @@ type diffOp struct {
 }
 
 // DiffTexts renders a compact line diff between oldText and newText for
-// terminal display. Changed regions keep one line of context on each side;
-// unchanged runs collapse into a "..." separator. The output is bounded to
-// maxLines lines; truncation is marked with a trailing "…" line. Identical
+// display. Changed regions keep one line of context on each side; unchanged
+// runs collapse into a "..." separator. A positive maxLines bounds the output
+// (truncation marked with a trailing "…" line) and caps per-line width;
+// maxLines <= 0 renders the full diff with untruncated lines. Identical
 // inputs produce an empty string.
 func DiffTexts(oldText, newText string, maxLines int) string {
 	if oldText == newText {
 		return ""
 	}
-	oldLines := capLines(splitDiffLines(oldText), diffMaxInputLines)
-	newLines := capLines(splitDiffLines(newText), diffMaxInputLines)
-	ops := lcsDiff(oldLines, newLines)
+	bounded := maxLines > 0
+	var ops []diffOp
+	if oldText == "" || newText == "" {
+		// Pure addition/removal (e.g. write creating a file): the diff is
+		// trivial and needs neither the LCS nor its input bound.
+		ops = trivialDiff(splitDiffLines(oldText), splitDiffLines(newText))
+	} else {
+		oldLines := capLines(splitDiffLines(oldText), diffMaxInputLines)
+		newLines := capLines(splitDiffLines(newText), diffMaxInputLines)
+		ops = lcsDiff(oldLines, newLines)
+	}
 
 	// Keep changed rows plus one context row around each change.
 	show := make([]bool, len(ops))
@@ -112,13 +121,30 @@ func DiffTexts(oldText, newText string, maxLines int) string {
 		case '+':
 			prefix = "+ "
 		}
-		out = append(out, prefix+truncateDiffLine(op.line))
-		if maxLines > 0 && len(out) >= maxLines {
+		line := op.line
+		if bounded {
+			line = truncateDiffLine(line)
+		}
+		out = append(out, prefix+line)
+		if bounded && len(out) >= maxLines {
 			out = append(out, "…")
 			break
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+// trivialDiff diffs two texts where at least one side is empty: every line
+// is a removal or an addition, so no LCS computation is required.
+func trivialDiff(oldLines, newLines []string) []diffOp {
+	ops := make([]diffOp, 0, len(oldLines)+len(newLines))
+	for _, l := range oldLines {
+		ops = append(ops, diffOp{'-', l})
+	}
+	for _, l := range newLines {
+		ops = append(ops, diffOp{'+', l})
+	}
+	return ops
 }
 
 // splitDiffLines splits text into lines without keeping a trailing empty row

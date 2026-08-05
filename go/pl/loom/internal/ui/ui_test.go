@@ -473,7 +473,7 @@ func TestHandleEventsClosedReleasesOldSubscription(t *testing.T) {
 	released := 0
 	m.unsubscribeEvents = func() { released++ }
 
-	next, _ := m.handleEventsClosed()
+	next, _ := m.handleEventsClosed(runtimeEventsClosedMsg{gen: m.eventsGen})
 	if released != 1 {
 		t.Fatalf("old subscription released %d times, want 1", released)
 	}
@@ -486,6 +486,80 @@ func TestHandleEventsClosedReleasesOldSubscription(t *testing.T) {
 	}
 	if nm.resubscribes != 1 {
 		t.Fatalf("resubscribes = %d, want 1", nm.resubscribes)
+	}
+}
+
+// Regression: a session switch cancels the old event subscription while
+// its waitForEvent is still in flight; that close report used to be
+// indistinguishable from a genuine stream loss, so the UI "recovered"
+// from a self-inflicted close — killing the fresh subscription it had
+// just installed — and the cascade burned the resubscribe budget until
+// input locked with "Runtime event stream lost" on every /resume and
+// /new. Close reports now carry the subscription generation, and stale
+// ones must be ignored without touching the live subscription.
+func TestStaleEventsClosedReportIsIgnored(t *testing.T) {
+	m := NewModel(newTestController(t), "test-model", "/ws")
+	released := 0
+	m.adoptEvents(make(chan runtimeevent.RuntimeEvent), func() { released++ })
+
+	// Every generation below the current one is stale; even a burst of
+	// them must not consume the recovery budget or lock input.
+	for range maxEventResubscribes + 2 {
+		updated, cmd := m.Update(runtimeEventsClosedMsg{gen: m.eventsGen - 1})
+		m = updated.(Model)
+		if cmd != nil {
+			t.Fatal("stale close scheduled a recovery command")
+		}
+	}
+	if released != 0 {
+		t.Fatalf("stale closes released the live subscription %d times", released)
+	}
+	if m.resubscribes != 0 || m.eventsDead {
+		t.Fatalf("stale closes consumed recovery state: resubscribes = %d, eventsDead = %v",
+			m.resubscribes, m.eventsDead)
+	}
+
+	// A close report for the CURRENT generation still recovers.
+	updated, cmd := m.Update(runtimeEventsClosedMsg{gen: m.eventsGen})
+	m = updated.(Model)
+	if released != 1 {
+		t.Fatalf("current close released %d subscriptions, want 1", released)
+	}
+	if m.resubscribes != 1 {
+		t.Fatalf("resubscribes = %d, want 1", m.resubscribes)
+	}
+	if cmd == nil {
+		t.Fatal("current close must schedule recovery")
+	}
+}
+
+// The session-switch path itself must keep the event stream alive: the
+// re-attached subscription gets a new generation, and the cancelled old
+// subscription's in-flight close report is ignored.
+func TestSessionSwitchIgnoresReplacedSubscriptionClose(t *testing.T) {
+	m := NewModel(newTestController(t), "test-model", "/ws")
+	m.adoptEvents(make(chan runtimeevent.RuntimeEvent), func() {})
+	genBefore := m.eventsGen
+
+	updated, cmd := m.handleSessionSwitched(sessionSwitchedMsg{
+		action: sessionAction{name: "Resume", success: "Session resumed"},
+	})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("session switch must reattach the event stream")
+	}
+	if m.eventsGen <= genBefore {
+		t.Fatalf("session switch must bump the stream generation: %d -> %d", genBefore, m.eventsGen)
+	}
+
+	updated, cmd = m.Update(runtimeEventsClosedMsg{gen: genBefore})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("replaced subscription's close scheduled a recovery")
+	}
+	if m.resubscribes != 0 || m.eventsDead {
+		t.Fatalf("replaced subscription's close consumed recovery state: resubscribes = %d, eventsDead = %v",
+			m.resubscribes, m.eventsDead)
 	}
 }
 
@@ -2281,7 +2355,7 @@ func TestAnsiSeqReaderWaitsForSlowTail(t *testing.T) {
 		if _, err := w.Write([]byte("\x1b")); err != nil {
 			return
 		}
-		time.Sleep(fragmentTimeout / 2)
+		time.Sleep(escapeKeyTimeout / 2)
 		_, _ = w.Write([]byte("[<65;47;16M"))
 	}()
 

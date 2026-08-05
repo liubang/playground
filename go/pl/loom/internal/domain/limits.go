@@ -29,6 +29,10 @@ const (
 	ToolPreviewMaxLines = 12
 	ToolPreviewMaxBytes = 1200
 	ToolDiffMaxLines    = 40
+	// ToolDiffUnbounded renders the complete diff (no line cap, no per-line
+	// width cut): the web frontend folds long diffs into a collapsible block
+	// instead of truncating them.
+	ToolDiffUnbounded = 0
 )
 
 // TruncateAtRuneBoundary returns the longest prefix of s within maxBytes
