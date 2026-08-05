@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/app"
+	"github.com/liubang/playground/go/pl/loom/internal/server/web"
 )
 
 // ProtocolVersion is the wire protocol major version (docs/SERVE_DESIGN.md
@@ -59,6 +60,8 @@ type Config struct {
 	// AllowOrigin, when non-empty, is echoed as Access-Control-Allow-Origin;
 	// empty denies all cross-origin requests (the default).
 	AllowOrigin string
+	// NoWeb disables the embedded SPA (pure API mode, docs/WEB_DESIGN.md §7.1).
+	NoWeb bool
 	// Version is the build version reported by /v1/meta/version.
 	Version string
 	// Service is the application layer.
@@ -219,9 +222,12 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 	mux.HandleFunc("GET /v1/meta/version", s.handleMetaVersion)
+	mux.HandleFunc("GET /v1/meta/models", s.handleMetaModels)
 	mux.HandleFunc("GET /v1/sessions", s.handleListSessions)
 	mux.HandleFunc("POST /v1/sessions", s.handleCreateSession)
 	mux.HandleFunc("GET /v1/sessions/{id}", s.handleInspectSession)
+mux.HandleFunc("POST /v1/sessions/{id}/archive", s.handleArchiveSession)
+mux.HandleFunc("DELETE /v1/sessions/{id}", s.handleDeleteSession)
 	mux.HandleFunc("GET /v1/sessions/{id}/transcript", s.handleTranscript)
 	mux.HandleFunc("GET /v1/sessions/{id}/snapshot", s.handleSnapshot)
 	mux.HandleFunc("POST /v1/sessions/{id}/prompts", s.handleSubmitPrompt)
@@ -232,21 +238,35 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/sessions/{id}/reasoning", s.handleSetReasoning)
 	mux.HandleFunc("POST /v1/sessions/{id}/compact", s.handleRequestCompaction)
 	mux.HandleFunc("GET /v1/sessions/{id}/events", s.handleSessionEvents)
+	if !s.cfg.NoWeb {
+		// Catch-all for the embedded SPA; ServeMux gives the /v1 patterns
+		// precedence (docs/WEB_DESIGN.md §7.1).
+		mux.Handle("GET /", web.Handler())
+	}
 }
 
 // withMiddleware chains auth, body limits, CORS denial, and panic
 // containment around the router.
 func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Security headers on every response, static and API alike
+		// (docs/WEB_DESIGN.md §7.2): CSP is the second XSS line of defense
+		// behind DOMPurify; X-Frame-Options blocks clickjacking.
+		header := w.Header()
+		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+		header.Set("X-Content-Type-Options", "nosniff")
+		header.Set("Referrer-Policy", "no-referrer")
+		header.Set("X-Frame-Options", "DENY")
 		// CORS: deny cross-origin by default (no ACAO header at all);
 		// --allow-origin whitelists one origin for remote-frontend
 		// development (docs/SERVE_DESIGN.md §5.2).
 		if origin := r.Header.Get("Origin"); origin != "" && s.cfg.AllowOrigin != "" && origin == s.cfg.AllowOrigin {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
-		// Auth: /healthz and /readyz are exempt (no session data); every
-		// other endpoint requires the bearer token.
-		if !isHealthRoute(r.URL.Path) && !s.authorized(r) {
+		// The SPA's static assets are not sensitive: the token gate page
+		// must be reachable anonymously, and every /v1 endpoint still
+		// requires the bearer token (docs/WEB_DESIGN.md §7.1).
+		if !isHealthRoute(r.URL.Path) && !isStaticRoute(r.URL.Path) && !s.authorized(r) {
 			writeError(w, errUnauthorized)
 			return
 		}
@@ -256,6 +276,12 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 
 func isHealthRoute(path string) bool {
 	return path == "/healthz" || path == "/readyz"
+}
+
+// isStaticRoute reports whether the path targets the embedded SPA rather
+// than the API.
+func isStaticRoute(path string) bool {
+	return !strings.HasPrefix(path, "/v1/")
 }
 
 // acquireSSE registers one SSE connection for the session; false when the
@@ -294,4 +320,9 @@ func (s *Server) handleMetaVersion(w http.ResponseWriter, _ *http.Request) {
 		"version":  s.cfg.Version,
 		"instance": s.instance,
 	})
+}
+
+// handleMetaModels serves the model catalog for frontend pickers.
+func (s *Server) handleMetaModels(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.svc.ModelCatalog())
 }

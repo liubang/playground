@@ -332,7 +332,7 @@ func TestSQLiteStoreReadOnlyOpenDoesNotAllowWrites(t *testing.T) {
 		t.Fatalf("OpenSQLiteStoreReadOnly: %v", err)
 	}
 	defer readOnly.Close()
-	if summaries, err := readOnly.ListSessions(ctx, 10); err != nil || len(summaries) != 1 {
+	if summaries, _, err := readOnly.ListSessions(ctx, "", 10, false); err != nil || len(summaries) != 1 {
 		t.Fatalf("ListSessions summaries=%+v error=%v", summaries, err)
 	}
 	if inspection, err := readOnly.InspectSession(ctx, sessionID); err != nil || inspection.Session.ID != sessionID {
@@ -359,15 +359,227 @@ func TestSQLiteStoreListSessionsMostRecentlyUpdatedFirst(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AppendEvents first: %v", err)
 	}
-	summaries, err := store.ListSessions(ctx, 10)
+	summaries, _, err := store.ListSessions(ctx, "", 10, false)
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
 	if len(summaries) != 2 || summaries[0].ID != first || summaries[0].Version != 1 || summaries[1].ID != second {
 		t.Fatalf("unexpected summaries: %+v", summaries)
 	}
-	if _, err := store.ListSessions(ctx, 0); errorCode(err) != domain.ErrInvalidInput {
+	if _, _, err := store.ListSessions(ctx, "", 0, false); errorCode(err) != domain.ErrInvalidInput {
 		t.Fatalf("ListSessions invalid limit error = %v", err)
+	}
+	if _, _, err := store.ListSessions(ctx, "bogus-cursor", 10, false); errorCode(err) != domain.ErrInvalidInput {
+		t.Fatalf("ListSessions invalid cursor error = %v", err)
+	}
+}
+
+// Keyset pagination: pages stitch without overlap or loss, and the final
+// page reports an empty next cursor.
+func TestSQLiteStoreListSessionsPagination(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	ids := make([]domain.SessionID, 5)
+	for i := range ids {
+		ids[i] = domain.NewSessionID()
+		if err := store.CreateSession(ctx, ids[i]); err != nil {
+			t.Fatalf("CreateSession %d: %v", i, err)
+		}
+		// Distinct update order: append one event per session in id order.
+		if err := store.AppendEvents(ctx, ids[i], 0, []domain.Event{
+			newEvent(ids[i], 1, domain.EventSessionCreated, nil),
+		}); err != nil {
+			t.Fatalf("AppendEvents %d: %v", i, err)
+		}
+	}
+	var seen []domain.SessionID
+	cursor := ""
+	for page := 0; page < 10; page++ {
+		summaries, next, err := store.ListSessions(ctx, cursor, 2, false)
+		if err != nil {
+			t.Fatalf("ListSessions page %d: %v", page, err)
+		}
+		for _, s := range seen {
+			for _, got := range summaries {
+				if got.ID == s {
+					t.Fatalf("page overlap: session %s listed twice", s)
+				}
+			}
+		}
+		for _, s := range summaries {
+			seen = append(seen, s.ID)
+		}
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	if len(seen) != len(ids) {
+		t.Fatalf("paginated listing covered %d sessions, want %d", len(seen), len(ids))
+	}
+}
+
+// The delegation edge persisted in the child's run.created event must
+// surface as ParentSessionID in listings (hierarchical pickers).
+func TestSQLiteStoreListSessionsProjectsDelegationParent(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	parent := domain.NewSessionID()
+	child := domain.NewSessionID()
+	for _, id := range []domain.SessionID{parent, child} {
+		if err := store.CreateSession(ctx, id); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+	}
+	delegation := struct {
+		RunID           domain.RunID      `json:"run_id"`
+		Delegated       bool              `json:"delegated"`
+		ParentSessionID domain.SessionID  `json:"parent_session_id"`
+		ParentToolCall  domain.ToolCallID `json:"parent_tool_call_id"`
+	}{RunID: domain.NewRunID(), Delegated: true, ParentSessionID: parent, ParentToolCall: domain.NewToolCallID()}
+	payload, err := json.Marshal(delegation)
+	if err != nil {
+		t.Fatalf("marshal delegation payload: %v", err)
+	}
+	if err := store.AppendEvents(ctx, child, 0, []domain.Event{
+		newEvent(child, 1, domain.EventRunCreated, payload),
+	}); err != nil {
+		t.Fatalf("AppendEvents child: %v", err)
+	}
+	summaries, _, err := store.ListSessions(ctx, "", 10, false)
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	byID := make(map[domain.SessionID]domain.SessionSummary, len(summaries))
+	for _, s := range summaries {
+		byID[s.ID] = s
+	}
+	if got := byID[child].ParentSessionID; got != parent {
+		t.Fatalf("child ParentSessionID = %q, want %q", got, parent)
+	}
+	if got := byID[parent].ParentSessionID; !got.IsZero() {
+		t.Fatalf("parent ParentSessionID = %q, want zero", got)
+	}
+}
+
+// DeleteSession removes the session row (events/checkpoints/artifact_refs
+// cascade) and the FK-less file_changes rows.
+func TestSQLiteStoreDeleteSession(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	keep := domain.NewSessionID()
+	doomed := domain.NewSessionID()
+	for _, id := range []domain.SessionID{keep, doomed} {
+		if err := store.CreateSession(ctx, id); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+		if err := store.AppendEvents(ctx, id, 0, []domain.Event{
+			newEvent(id, 1, domain.EventSessionCreated, nil),
+		}); err != nil {
+			t.Fatalf("AppendEvents: %v", err)
+		}
+	}
+	if err := store.DeleteSession(ctx, doomed); err != nil {
+		t.Fatalf("DeleteSession: %v", err)
+	}
+	summaries, _, err := store.ListSessions(ctx, "", 10, false)
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(summaries) != 1 || summaries[0].ID != keep {
+		t.Fatalf("after delete, summaries = %+v, want only %s", summaries, keep)
+	}
+	if _, err := store.InspectSession(ctx, doomed); err == nil {
+		t.Fatal("deleted session is still inspectable")
+	}
+	if err := store.DeleteSession(ctx, doomed); err == nil {
+		t.Fatal("double delete must report session not found")
+	}
+}
+
+// Archived sessions are hidden from the default listing and surface in the
+// archived view; unarchiving restores them.
+func TestSQLiteStoreArchiveSession(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	active := domain.NewSessionID()
+	archived := domain.NewSessionID()
+	for _, id := range []domain.SessionID{active, archived} {
+		if err := store.CreateSession(ctx, id); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+	}
+	if err := store.SetSessionArchived(ctx, archived, true); err != nil {
+		t.Fatalf("SetSessionArchived: %v", err)
+	}
+	def, _, err := store.ListSessions(ctx, "", 10, false)
+	if err != nil {
+		t.Fatalf("ListSessions default: %v", err)
+	}
+	if len(def) != 1 || def[0].ID != active {
+		t.Fatalf("default listing = %+v, want only the active session", def)
+	}
+	arch, _, err := store.ListSessions(ctx, "", 10, true)
+	if err != nil {
+		t.Fatalf("ListSessions archived: %v", err)
+	}
+	if len(arch) != 1 || arch[0].ID != archived {
+		t.Fatalf("archived listing = %+v, want only the archived session", arch)
+	}
+	if err := store.SetSessionArchived(ctx, archived, false); err != nil {
+		t.Fatalf("SetSessionArchived(false): %v", err)
+	}
+	def, _, err = store.ListSessions(ctx, "", 10, false)
+	if err != nil {
+		t.Fatalf("ListSessions after unarchive: %v", err)
+	}
+	if len(def) != 2 {
+		t.Fatalf("default listing after unarchive = %+v, want both sessions", def)
+	}
+	if err := store.SetSessionArchived(ctx, domain.NewSessionID(), true); err == nil {
+		t.Fatal("archiving a missing session must fail")
+	}
+}
+
+func TestSQLiteStoreFirstUserMessageTexts(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	withPrompt := domain.NewSessionID()
+	noPrompt := domain.NewSessionID()
+	for _, id := range []domain.SessionID{withPrompt, noPrompt} {
+		if err := store.CreateSession(ctx, id); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+	}
+	user := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleUser,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "fix the flaky test"}},
+		CreatedAt: time.Now().UTC(),
+	}
+	second := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 2, Role: domain.RoleUser,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "follow-up prompt"}},
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := store.AppendEvents(ctx, withPrompt, 0, []domain.Event{
+		newEvent(withPrompt, 1, domain.EventSessionCreated, nil),
+		newEvent(withPrompt, 2, domain.EventUserMessageAdded, messagePayload(t, user)),
+		newEvent(withPrompt, 3, domain.EventUserMessageAdded, messagePayload(t, second)),
+	}); err != nil {
+		t.Fatalf("AppendEvents: %v", err)
+	}
+
+	titles, err := store.FirstUserMessageTexts(ctx, []domain.SessionID{withPrompt, noPrompt})
+	if err != nil {
+		t.Fatalf("FirstUserMessageTexts: %v", err)
+	}
+	if titles[withPrompt] != "fix the flaky test" {
+		t.Fatalf("title = %q, want the FIRST user message", titles[withPrompt])
+	}
+	if _, ok := titles[noPrompt]; ok {
+		t.Fatalf("session without user message must be absent, got %q", titles[noPrompt])
 	}
 }
 

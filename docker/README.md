@@ -10,6 +10,7 @@
 | ----------------------- | --------------------------------------------------------- | ------------------------------ |
 | [`bigdata/`](./bigdata) | 大数据全栈：HDFS + MySQL + Hive + Spark + Trino + Iceberg | `cd bigdata && ./bootstrap.sh` |
 | [`doris/`](./doris)     | Apache Doris 集群：1 FE + 2 BE                            | `cd doris && ./bootstrap.sh`   |
+| [`fdb/`](./fdb)         | FoundationDB 集群：3 节点 × 2 进程，double 副本，含自动 E2E | `cd fdb && ./bootstrap.sh`     |
 | [`hermes/`](./hermes)   | Hermes Agent 网关 + Dashboard                             | `cd hermes && ./bootstrap.sh`  |
 | [`kerberos/`](./kerberos) | Kerberos 实验室：KDC + GSSAPI demo 服务 + 客户端，含自动 E2E | `cd kerberos && ./bootstrap.sh` |
 | [`monitor/`](./monitor) | Prometheus + Grafana 监控栈                               | `cd monitor && ./bootstrap.sh` |
@@ -320,6 +321,35 @@ SHOW BACKENDS\G
 - 组网依赖固定 IP（`172.28.10.0/24` 网段），如与本机其他 Docker 网络冲突，请修改 `docker-compose.yml` 中的 `subnet` 与各服务 `ipv4_address`
 - SQL 查询端口 `9030` 使用 root 密码认证，但 HTTP/内部端口仍可能包含无认证接口；所有入口均无 TLS，仅适合开发测试
 - FE 单节点，无高可用；如需体验多 FE 选举，可仿照 `FE_SERVERS` 格式自行扩展
+
+---
+
+## fdb/
+
+FoundationDB 实验集群：3 个节点容器，每节点由 `fdbmonitor`（生产同款进程监管）托管 2 个 `fdbserver` 进程，共 6 进程；3 个 coordinator，`double` 副本 + `ssd`（SQLite）引擎，数据持久化在命名卷。
+
+| 服务       | 容器内地址               | 角色                          |
+| ---------- | ------------------------ | ----------------------------- |
+| fdb-node-1 | 172.28.11.11:4500/4501   | coordinator + storage/tlog 等 |
+| fdb-node-2 | 172.28.11.12:4500/4501   | coordinator + storage/tlog 等 |
+| fdb-node-3 | 172.28.11.13:4500/4501   | coordinator + storage/tlog 等 |
+
+FDB 客户端需要直连集群中的**每个**进程（coordinator、proxy、storage server），macOS 宿主机无法路由到容器 IP，且 fdbserver 的双 public address 必须分属不同 TLS 状态，因此本模块不做宿主机端口映射，客户端一律通过容器网络访问：
+
+```bash
+cd fdb
+./bootstrap.sh        # 启动集群并初始化（configure new double ssd）
+./tests/e2e.sh all    # 状态/读写/独立客户端 + 单节点故障容错 + 重启持久化
+
+# 交互式 fdbcli（独立客户端容器，profile 默认不启动）
+docker compose run --rm client
+docker compose run --rm client --exec "status"
+
+# 节点容器内
+docker compose exec fdb-node-1 fdbcli -C /var/fdb/fdb.cluster
+```
+
+每个 fdbserver 的 `--memory` 限制为 1GiB（`--cache-memory` 256MiB），单容器资源上限 2.5 GB / 2 CPU。Trace 日志在容器 `/var/fdb/logs/<端口>/`（命名卷持久化）。FDB 未启用认证与 TLS，仅限本地开发测试。
 
 ---
 

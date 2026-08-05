@@ -205,6 +205,10 @@ type SessionSummary struct {
 	Version   int64     `json:"version"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// ParentSessionID is non-zero for delegated sub-agent sessions: the
+	// delegation edge persisted in the child's run.created event
+	// (docs/SUBAGENT_DESIGN.md §6.1), surfaced for hierarchical pickers.
+	ParentSessionID SessionID `json:"parent_session_id"`
 }
 
 // SessionTranscript is the recovered message history of a session.
