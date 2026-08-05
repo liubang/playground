@@ -30,7 +30,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -180,16 +179,17 @@ func loadConfig(requireProviders bool, logger *slog.Logger) (*config.ResolvedCon
 }
 
 // resolveSessionDB fills ResolvedConfig.Storage.SessionDB: the configured
-// path (made absolute) when set, otherwise the platform default. create
-// controls whether the private data directory is prepared on disk — agent
-// entries create it; offline read commands leave the filesystem untouched.
+// path (made absolute) when set, otherwise ~/.loom/sessions/sessions.db.
+// create controls whether the private data directory is prepared on disk —
+// agent entries create it; offline read commands leave the filesystem
+// untouched.
 // newFileLogger builds loom's unified file logger: glog-style records in
-// <state>/loom/logs/loom.YYYY-MM-DD.log, rotated at local midnight. Both
+// ~/.loom/logs/loom.YYYY-MM-DD.log, rotated at local midnight. Both
 // the TUI and serve modes share it (the TUI previously discarded all
 // logs). fallback applies when the log directory cannot be opened — the
 // TUI passes a discard logger, serve passes a stderr glog handler.
 func newFileLogger(resolved *config.ResolvedConfig, fallback *slog.Logger) *slog.Logger {
-	// SessionDB = <state>/loom/sessions/sessions.db → logs 在其两级之上。
+	// SessionDB = ~/.loom/sessions/sessions.db → logs 在其两级之上（~/.loom/logs）。
 	logsDir := filepath.Join(filepath.Dir(filepath.Dir(resolved.Storage.SessionDB)), "logs")
 	logger, err := logging.NewFileLogger(logsDir, nil, logging.Quotas{
 		MaxFileBytes:  resolved.Logging.MaxFileBytes,
@@ -216,61 +216,18 @@ func resolveSessionDB(resolved *config.ResolvedConfig, create bool) error {
 		resolved.Storage.SessionDB = path
 		return nil
 	}
-	base, err := defaultStateDirectory()
+	base, err := defaultLoomHome()
 	if err != nil {
 		return err
 	}
-	directory := filepath.Join(base, "loom", "sessions")
+	directory := filepath.Join(base, "sessions")
 	if create {
 		if err := preparePrivateDataDirectory(directory, true); err != nil {
 			return err
 		}
 	}
 	resolved.Storage.SessionDB = filepath.Join(directory, "sessions.db")
-	// Auto-migrate: if the legacy path (<base>/loom/sessions.db) exists
-	// and the new path does not yet, move the database files over.
-	if create {
-		migrateLegacySessionDB(base, directory)
-	}
 	return nil
-}
-
-// migrateLegacySessionDB moves sessions.db (plus WAL/SHM) from the old
-// flat layout (<base>/loom/) into the new sessions subdirectory when the
-// new location is still empty. Migrated entries keep their original
-// permissions after a rename, so they are tightened explicitly (files
-// 0600, directories 0700). Best-effort; errors are logged but not
-// fatal — the user can re-run or manually move files.
-func migrateLegacySessionDB(base, sessionsDir string) {
-	legacyDir := filepath.Join(base, "loom")
-	for _, suffix := range []string{"", "-wal", "-shm"} {
-		src := filepath.Join(legacyDir, "sessions.db"+suffix)
-		dst := filepath.Join(sessionsDir, "sessions.db"+suffix)
-		if fi, err := os.Stat(src); err == nil && !fi.IsDir() {
-			if _, err := os.Stat(dst); os.IsNotExist(err) {
-				if err := os.Rename(src, dst); err != nil {
-					fmt.Fprintf(os.Stderr, "warning: migrate %s → %s: %v\n", src, dst, err)
-				} else if err := os.Chmod(dst, 0o600); err != nil {
-					fmt.Fprintf(os.Stderr, "warning: secure %s: %v\n", dst, err)
-				}
-			}
-		}
-	}
-	// Also migrate the sibling artifact and prompt_cache directories
-	// when they exist beside the legacy database.
-	for _, subdir := range []string{"artifacts", "prompt_cache"} {
-		src := filepath.Join(legacyDir, subdir)
-		dst := filepath.Join(sessionsDir, subdir)
-		if fi, err := os.Stat(src); err == nil && fi.IsDir() {
-			if _, err := os.Stat(dst); os.IsNotExist(err) {
-				if err := os.Rename(src, dst); err != nil {
-					fmt.Fprintf(os.Stderr, "warning: migrate %s → %s: %v\n", src, dst, err)
-				} else if err := os.Chmod(dst, 0o700); err != nil {
-					fmt.Fprintf(os.Stderr, "warning: secure %s: %v\n", dst, err)
-				}
-			}
-		}
-	}
 }
 
 // initConfig writes the annotated starter config (loom config init).
@@ -981,18 +938,14 @@ func parseSessionID(rawSessionID string) (domain.SessionID, error) {
 	return sessionID, nil
 }
 
-func defaultStateDirectory() (string, error) {
+// defaultLoomHome returns ~/.loom — the single home for all loom data:
+// config.yaml, sessions/, memories/, rules/, skills/, logs/.
+func defaultLoomHome() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user home: %w", err)
 	}
-	if runtime.GOOS == "darwin" {
-		return filepath.Join(home, "Library", "Application Support"), nil
-	}
-	if stateHome := strings.TrimSpace(os.Getenv("XDG_STATE_HOME")); filepath.IsAbs(stateHome) {
-		return filepath.Clean(stateHome), nil
-	}
-	return filepath.Join(home, ".local", "state"), nil
+	return filepath.Join(home, ".loom"), nil
 }
 
 func preparePrivateDataDirectory(directory string, managePermissions bool) error {

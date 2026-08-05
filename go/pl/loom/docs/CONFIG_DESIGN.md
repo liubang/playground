@@ -67,7 +67,7 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 | Provider 实现 | `internal/model/openai`、`internal/model/anthropic` | `openai.New(Config{BaseURL, APIKey, WireAPI, MaxRetries})`；OpenAI-compatible 网关（deepseek/豆包/vLLM 等）均可复用；`anthropic.New(Config{BaseURL, APIKey, Version, MaxRetries})` 覆盖 Claude Messages API |
 | 运行时切换通道 | `app.Controller.SetModel` / TUI `/model` | 已落地：controller 经 `cmdCh` 串行化换模型名，下一 turn 生效；本设计把它升级为 provider-aware |
 | YAML 依赖 | `gopkg.in/yaml.v3` | 已在 `MODULE.bazel` 与 `internal/skill/parse.go` 使用，**零新增依赖** |
-| 用户数据目录约定 | `~/.loom/`（rules、sessions.db、artifacts） | `permission.RulesDirUser()`、`preparePrivateDataDirectory`（0700 私有目录）直接复用 |
+| 用户数据目录约定 | `~/.loom/`（config.yaml、sessions/、memories/、rules/、skills/、logs/） | `permission.RulesDirUser()`、`preparePrivateDataDirectory`（0700 私有目录）直接复用 |
 | 项目层信任先例 | `permission/policy.go` | 项目层 rules 默认不收 allow 规则，需 `LOOM_PROJECT_RULES_ALLOW=1` 显式开启——配置文件的信任边界沿用同一哲学 |
 | 密钥不入库先例 | `run_cmd` 沙箱 env allowlist | spawned 命令只放行白名单 env，配置文件的密钥引用解析发生在进程内，不扩散 |
 
@@ -209,7 +209,7 @@ tracing:                                    # Langfuse；密钥字段规则同 �
   cost_output_usd_per_mtok: 0.60
 
 storage:
-  session_db: /Users/me/.loom/sessions.db   # LOOM_SESSION_DB
+  session_db: /Users/me/.loom/sessions/sessions.db   # 空则默认 ~/.loom/sessions/sessions.db
 
 ui:
   icons: nerd                               # LOOM_ICONS：nerd | plain
@@ -230,14 +230,14 @@ subagent:                                   # delegate_task 子 Agent（docs/SUB
 - **`default` 解析**（按序）：① 含 `/` → `provider/model` 精确匹配；② 裸名 → 先按 provider 名匹配（取该 provider 的 `default_model`），再按模型名全局唯一匹配；③ 任一步歧义或不命中即报错并列出候选；
 - **`default` 缺省**：取 `providers[0]` 的 `default_model`（其再缺省取 `models[0]`）——单 provider 场景可以不写 `default`；
 - **`base_url` 必填**：`openai.New` 对空 `BaseURL` 静默回退官方端点（`provider.go` `defaultBaseURL`）——deepseek 配置漏写会把密钥与对话发往 `api.openai.com`。显式必填消除这整类静默错配；
-- **`storage.session_db` 缺省**：保留现有推导（`XDG_STATE_HOME` → 默认状态目录，`main.go` `defaultStateDirectory`）；
+- **`storage.session_db` 缺省**：默认 `~/.loom/sessions/sessions.db`（`main.go` `defaultLoomHome`）；旧版本平台状态目录布局已废弃，不再推导；
 - **duration / 数字**：duration 用 Go 字符串（`30m`、`1h`）；token/字节数用整数（不支持 `10k` 之类后缀，保持简单）。
 
 ---
 
 ## 5. 密钥管理
 
-密钥直接放配置文件是**正式支持**的方式（loom 是单机个人工具，配置文件本身就是私有数据，与 `~/.loom/sessions.db` 同目录取决于同一文件系统权限）：
+密钥直接放配置文件是**正式支持**的方式（loom 是单机个人工具，配置文件本身就是私有数据，与 `~/.loom/sessions/sessions.db` 同目录取决于同一文件系统权限）：
 
 | 方式 | 语法 | 说明 |
 |------|------|------|
