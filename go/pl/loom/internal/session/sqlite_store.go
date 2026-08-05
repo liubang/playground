@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,7 +32,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 3
+const sqliteSchemaVersion = 4
 
 // SQLiteStore persists session events and checkpoints in a SQLite database.
 // A store serializes writes through one connection; optimistic versions still
@@ -205,6 +206,11 @@ CREATE INDEX IF NOT EXISTS idx_file_changes_session_rowid
 	}
 	if !newestVersion.Valid || newestVersion.Int64 < 3 {
 		if err := s.migrateV3(ctx); err != nil {
+			return err
+		}
+	}
+	if !newestVersion.Valid || newestVersion.Int64 < 4 {
+		if err := s.migrateV4(ctx); err != nil {
 			return err
 		}
 	}
@@ -427,44 +433,123 @@ FROM events WHERE session_id = ? AND sequence > ? ORDER BY sequence ASC`, sessio
 	return result, nil
 }
 
-// ListSessions returns persisted sessions ordered by most recent update.
-func (s *SQLiteStore) ListSessions(ctx context.Context, limit int) ([]domain.SessionSummary, error) {
+// ListSessions returns one page of persisted sessions ordered by most
+// recent update, each row carrying its delegation parent when the session
+// is a sub-agent child (read off the child's run.created event payload,
+// no schema migration). archived selects the archived view instead of the
+// default active listing. cursor is the previous page's nextCursor (""
+// selects the first page); the returned nextCursor is "" once the last
+// page has been served.
+func (s *SQLiteStore) ListSessions(ctx context.Context, cursor string, limit int, archived bool) ([]domain.SessionSummary, string, error) {
 	if limit <= 0 || limit > 1000 {
-		return nil, domain.NewError(domain.ErrInvalidInput, "session list limit must be between 1 and 1000")
+		return nil, "", domain.NewError(domain.ErrInvalidInput, "session list limit must be between 1 and 1000")
+	}
+	// Keyset pagination over (updated_at_unix_nano DESC, session_id DESC);
+	// cursorNano = -1 marks the first page.
+	cursorNano := int64(-1)
+	cursorID := ""
+	if cursor != "" {
+		nano, id, ok := strings.Cut(cursor, ":")
+		n, err := strconv.ParseInt(nano, 10, 64)
+		if !ok || err != nil || id == "" {
+			return nil, "", domain.NewError(domain.ErrInvalidInput, "invalid session list cursor")
+		}
+		cursorNano, cursorID = n, id
+	}
+	archivedFlag := 0
+	if archived {
+		archivedFlag = 1
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT session_id, version, created_at, updated_at
-FROM sessions ORDER BY updated_at_unix_nano DESC, session_id DESC LIMIT ?`, limit)
+SELECT s.session_id, s.version, s.created_at, s.updated_at, s.updated_at_unix_nano,
+       (SELECT json_extract(CAST(e.payload AS TEXT), '$.parent_session_id')
+        FROM events e
+        WHERE e.session_id = s.session_id AND e.type = 'run.created'
+        LIMIT 1) AS parent_session_id
+FROM sessions s
+WHERE ((s.archived_at_unix_nano IS NOT NULL) = ?4)
+  AND ((?1 < 0)
+   OR (s.updated_at_unix_nano < ?1)
+   OR (s.updated_at_unix_nano = ?1 AND s.session_id < ?2))
+ORDER BY s.updated_at_unix_nano DESC, s.session_id DESC
+LIMIT ?3`, cursorNano, cursorID, limit, archivedFlag)
 	if err != nil {
-		return nil, storeError("list sessions", err)
+		return nil, "", storeError("list sessions", err)
 	}
 	defer rows.Close()
 
 	result := make([]domain.SessionSummary, 0)
+	var lastNano int64
+	var lastID string
 	for rows.Next() {
 		var id, createdAt, updatedAt string
 		var version int64
-		if err := rows.Scan(&id, &version, &createdAt, &updatedAt); err != nil {
-			return nil, storeError("scan session", err)
+		var parent sql.NullString
+		if err := rows.Scan(&id, &version, &createdAt, &updatedAt, &lastNano, &parent); err != nil {
+			return nil, "", storeError("scan session", err)
 		}
+		lastID = id
 		sessionID, err := domain.ParseSessionID(id)
 		if err != nil {
-			return nil, storeError("decode session ID", err)
+			return nil, "", storeError("decode session ID", err)
 		}
 		created, err := time.Parse(time.RFC3339Nano, createdAt)
 		if err != nil {
-			return nil, storeError("decode session creation time", err)
+			return nil, "", storeError("decode session creation time", err)
 		}
 		updated, err := time.Parse(time.RFC3339Nano, updatedAt)
 		if err != nil {
-			return nil, storeError("decode session update time", err)
+			return nil, "", storeError("decode session update time", err)
 		}
-		result = append(result, domain.SessionSummary{
+		summary := domain.SessionSummary{
 			ID: sessionID, Version: version, CreatedAt: created, UpdatedAt: updated,
-		})
+		}
+		if parent.Valid && parent.String != "" {
+			parentID, err := domain.ParseSessionID(parent.String)
+			if err != nil {
+				return nil, "", storeError("decode parent session ID", err)
+			}
+			summary.ParentSessionID = parentID
+		}
+		result = append(result, summary)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, storeError("iterate sessions", err)
+		return nil, "", storeError("iterate sessions", err)
+	}
+	nextCursor := ""
+	if len(result) == limit {
+		nextCursor = strconv.FormatInt(lastNano, 10) + ":" + lastID
+	}
+	return result, nextCursor, nil
+}
+
+// FirstUserMessageTexts returns the text of each session's first user
+// message (the user.message_added event with the lowest sequence), keyed
+// by session ID. Sessions without a user message are absent from the map.
+// One indexed lookup per session — cheap enough for list-endpoint
+// enrichment (docs/WEB_DESIGN.md §7.7).
+func (s *SQLiteStore) FirstUserMessageTexts(ctx context.Context, ids []domain.SessionID) (map[domain.SessionID]string, error) {
+	result := make(map[domain.SessionID]string, len(ids))
+	for _, id := range ids {
+		var payload []byte
+		err := s.db.QueryRowContext(ctx, `
+SELECT payload FROM events WHERE session_id = ? AND type = ? ORDER BY sequence LIMIT 1`,
+			id.String(), string(domain.EventUserMessageAdded)).Scan(&payload)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, storeError("query first user message", err)
+		}
+		var env domain.MessageEventPayload
+		if err := json.Unmarshal(payload, &env); err != nil {
+			continue // malformed payloads must not break listing
+		}
+		parts := env.Message.TextParts()
+		if len(parts) == 0 || parts[0] == "" {
+			continue
+		}
+		result[id] = parts[0]
 	}
 	return result, nil
 }
@@ -732,6 +817,66 @@ func (s *SQLiteStore) migrateV3(ctx context.Context) error {
 	return nil
 }
 
+// migrateV4 adds the archived_at_unix_nano column to the sessions table
+// (NULL = active); archived sessions are hidden from default listings.
+func (s *SQLiteStore) migrateV4(ctx context.Context) error {
+	// Same duplicate-column tolerance as migrateV3.
+	_, err := s.db.ExecContext(ctx,
+		"ALTER TABLE sessions ADD COLUMN archived_at_unix_nano INTEGER")
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
+			return storeError("migrate v4: add archived_at_unix_nano to sessions", err)
+		}
+	}
+	return nil
+}
+
+// DeleteSession removes a session and all of its persisted data. Events,
+// checkpoints and artifact_refs cascade from the sessions row; file_changes
+// carries no foreign key and is deleted explicitly.
+func (s *SQLiteStore) DeleteSession(ctx context.Context, sessionID domain.SessionID) error {
+	if _, err := s.db.ExecContext(ctx,
+		"DELETE FROM file_changes WHERE session_id = ?", sessionID.String()); err != nil {
+		return storeError("delete session file changes", err)
+	}
+	res, err := s.db.ExecContext(ctx,
+		"DELETE FROM sessions WHERE session_id = ?", sessionID.String())
+	if err != nil {
+		return storeError("delete session", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return storeError("delete session result", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+	return nil
+}
+
+// SetSessionArchived marks a session archived (hidden from default listings)
+// or restores it to active.
+func (s *SQLiteStore) SetSessionArchived(ctx context.Context, sessionID domain.SessionID, archived bool) error {
+	var at any
+	if archived {
+		at = time.Now().UTC().UnixNano()
+	}
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE sessions SET archived_at_unix_nano = ? WHERE session_id = ?", at, sessionID.String())
+	if err != nil {
+		return storeError("archive session", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return storeError("archive session result", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+	return nil
+}
+
 func (s *SQLiteStore) backfillArtifactRefs(ctx context.Context) error {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT session_id, data FROM checkpoints ORDER BY session_id, sequence, created_at_unix_nano, checkpoint_id`)
@@ -852,5 +997,3 @@ func isUniqueConstraint(err error) bool {
 	return strings.Contains(message, "unique constraint failed") ||
 		strings.Contains(message, "primary key constraint failed")
 }
-
-

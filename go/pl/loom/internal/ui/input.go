@@ -25,11 +25,20 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// fragmentTimeout bounds how long the reader waits for the tail of an
-// incomplete escape sequence before giving up and forwarding the bytes
-// as-is. It only ever delays a genuine manual ESC press; sequence
-// fragments from any half-decent terminal arrive far sooner.
-const fragmentTimeout = 50 * time.Millisecond
+// escapeKeyTimeout bounds how long a LONE ESC byte is held while
+// waiting for bytes that would turn it into a sequence: a human Escape
+// press must stay snappy.
+const escapeKeyTimeout = 50 * time.Millisecond
+
+// sequenceTimeout bounds how long an incomplete escape SEQUENCE (two or
+// more bytes, so provably not a bare keypress) is held while waiting for
+// its tail. IPC-fronted terminals (IDE embedded ones) deliver mouse
+// reports in fragments tens of milliseconds apart; the human-ESC budget
+// would forward a fragment like "\x1b[<6" early, and — being shorter
+// than the parser's 6-byte mouse-probe minimum — it degrades into
+// alt+"[" plus literal runes in the composer. A genuinely severed
+// sequence is rare, so the budget is generous.
+const sequenceTimeout = 2 * time.Second
 
 // debugInputDumpEnv names the variable that, when set to a file path,
 // makes the input reader dump every byte it forwards, together with
@@ -46,7 +55,8 @@ const debugInputDumpEnv = "LOOM_DEBUG_INPUT_DUMP"
 // milliseconds between fragments. This reader instead understands the
 // *shape* of ANSI sequences (CSI, SS3, OSC, X10 mouse, Alt+char) and
 // holds back an incomplete tail until the rest arrives, regardless of
-// how long it takes (bounded by fragmentTimeout as an escape hatch).
+// how long it takes (bounded by escapeKeyTimeout for a lone ESC and by
+// sequenceTimeout for a sequence in progress, as escape hatches).
 type ansiSeqReader struct {
 	f       *os.File
 	pending []byte
@@ -78,6 +88,35 @@ func (r *ansiSeqReader) Read(p []byte) (int, error) {
 }
 
 func (r *ansiSeqReader) readBuffered(p []byte) (int, error) {
+	if len(r.pending) > 0 {
+		// Drain buffered bytes before touching the file again: pending
+		// may already hold complete sequences (e.g. what did not fit into
+		// the caller's buffer last time) that must not wait behind a
+		// blocking read.
+		if m := r.forwardComplete(p); m > 0 {
+			return m, nil
+		}
+		// The whole buffer is one incomplete tail: wait for the rest. A
+		// lone ESC gets the short human-key budget; anything longer is
+		// provably a sequence in progress and gets a generous one.
+		timeout := escapeKeyTimeout
+		if len(r.pending) > 1 {
+			timeout = sequenceTimeout
+		}
+		ready, serr := fdReady(r.f.Fd(), timeout)
+		if serr != nil {
+			return 0, serr
+		}
+		if !ready {
+			// Escape hatch: forward the bytes anyway so a manual ESC
+			// never gets stuck; the parser's lone-ESC behavior is the
+			// best we can do for a truly severed sequence.
+			m := copy(p, r.pending)
+			r.pending = append([]byte(nil), r.pending[m:]...)
+			r.debugf("-> fwd %d %q (timeout, incomplete)\n", m, p[:m])
+			return m, nil
+		}
+	}
 	scratch := make([]byte, 256)
 	n, err := r.f.Read(scratch)
 	if n > 0 {
@@ -87,37 +126,27 @@ func (r *ansiSeqReader) readBuffered(p []byte) (int, error) {
 	if len(r.pending) == 0 {
 		return 0, err
 	}
-	complete, tailStart := splitCompletePrefix(r.pending)
-	if complete {
-		out := r.pending
-		r.pending = nil
-		m := copy(p, out)
-		r.debugf("-> fwd %d %q\n", m, p[:m])
-		return m, nil
+	// (0, nil) means everything available is an incomplete sequence
+	// tail: Read loops and the wait path above handles it from here.
+	return r.forwardComplete(p), nil
+}
+
+// forwardComplete copies the complete prefix of pending into p and keeps
+// the remainder buffered — bytes that do not fit into p are never
+// dropped. It returns 0 when the whole pending buffer is one incomplete
+// escape-sequence tail.
+func (r *ansiSeqReader) forwardComplete(p []byte) int {
+	// splitCompletePrefix reports tailStart == len(buf) when the buffer
+	// ends on a sequence boundary, so tailStart alone selects the
+	// forwardable prefix in both the complete and the held-tail case.
+	_, tailStart := splitCompletePrefix(r.pending)
+	if tailStart == 0 {
+		return 0
 	}
-	// The tail is incomplete: hold it and forward the complete prefix
-	// when there is one.
-	if tailStart > 0 {
-		m := copy(p, r.pending[:tailStart])
-		r.pending = append([]byte(nil), r.pending[tailStart:]...)
-		r.debugf("-> fwd %d %q (tail %q held)\n", m, p[:m], r.pending)
-		return m, nil
-	}
-	// The whole buffer is one incomplete tail: wait briefly for the rest.
-	ready, serr := fdReady(r.f.Fd(), fragmentTimeout)
-	if serr != nil {
-		return 0, serr
-	}
-	if !ready {
-		// Escape hatch: forward the bytes anyway so a manual ESC never
-		// gets stuck; the parser's lone-ESC behavior is the best we can
-		// do for a truly severed sequence.
-		m := copy(p, r.pending)
-		r.pending = nil
-		r.debugf("-> fwd %d %q (timeout, incomplete)\n", m, p[:m])
-		return m, nil
-	}
-	return 0, nil
+	m := copy(p, r.pending[:tailStart])
+	r.pending = append([]byte(nil), r.pending[m:]...)
+	r.debugf("-> fwd %d %q\n", m, p[:m])
+	return m
 }
 
 func (r *ansiSeqReader) debugf(format string, args ...any) {

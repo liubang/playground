@@ -19,6 +19,7 @@ package render
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -121,5 +122,49 @@ func TestDiffTextsBoundsOutput(t *testing.T) {
 	}
 	if !strings.HasSuffix(got, "…") {
 		t.Fatalf("truncated diff should end with ellipsis")
+	}
+}
+
+// Unbounded mode (web frontend): the full diff must render — no line cap,
+// no ellipsis, no input bound for the pure-addition (write) path.
+func TestDiffTextsUnboundedNewFile(t *testing.T) {
+	var newB strings.Builder
+	for i := 0; i < diffMaxInputLines+50; i++ {
+		newB.WriteString("line\n")
+	}
+	got := DiffTexts("", newB.String(), 0)
+	lines := strings.Split(got, "\n")
+	if len(lines) != diffMaxInputLines+50 {
+		t.Fatalf("unbounded diff lines = %d, want %d", len(lines), diffMaxInputLines+50)
+	}
+	if strings.Contains(got, "…") {
+		t.Fatalf("unbounded diff must not carry a truncation marker")
+	}
+}
+
+// Unbounded mode keeps full-width lines (bounded mode cuts at
+// diffMaxLineWidth for terminal display).
+func TestDiffTextsUnboundedKeepsLongLines(t *testing.T) {
+	long := strings.Repeat("x", diffMaxLineWidth+100)
+	got := DiffTexts("a\n", "a\n"+long+"\n", 0)
+	if !strings.Contains(got, long) {
+		t.Fatalf("unbounded diff must keep full-width lines")
+	}
+}
+
+// DiffForToolCall with ToolDiffUnbounded (the web event payloads) renders a
+// write call's full content.
+func TestDiffForToolCallUnboundedWrite(t *testing.T) {
+	var content strings.Builder
+	for i := 0; i < 60; i++ {
+		content.WriteString("line\n")
+	}
+	args := json.RawMessage(`{"path":"x.txt","content":` + strconv.Quote(content.String()) + `}`)
+	got := DiffForToolCall("write", args, 0)
+	if n := strings.Count(got, "\n") + 1; n != 60 {
+		t.Fatalf("unbounded write diff lines = %d, want 60", n)
+	}
+	if strings.Contains(got, "…") {
+		t.Fatalf("unbounded write diff must not carry a truncation marker")
 	}
 }

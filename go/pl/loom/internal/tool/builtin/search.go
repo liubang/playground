@@ -21,9 +21,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -65,6 +67,44 @@ type searchOutput struct {
 
 var typeNamePattern = regexp.MustCompile(`^[A-Za-z0-9_+-]+$`)
 
+// rgTypeSet probes `rg --type-list` once per process and caches the valid
+// type-name set. A nil set means ripgrep is unavailable (or the probe
+// failed); callers then fall back to syntax-only validation — acceptable
+// because the Go fallback engine does not apply type filters either.
+var rgTypeSet = sync.OnceValue(func() map[string]bool {
+	path, ok := rgLocator()
+	if !ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "--type-list").Output()
+	if err != nil {
+		return nil
+	}
+	set := make(map[string]bool)
+	for line := range strings.Lines(string(out)) {
+		name, _, _ := strings.Cut(line, ":")
+		if name = strings.TrimSpace(name); name != "" {
+			set[name] = true
+		}
+	}
+	return set
+})
+
+// normalizeTypeFilter maps model-sentinel values to unset and strips stray
+// quoting: some models serialize an unset field as the string "null"/"none",
+// or double-encode the value with literal quotes (e.g. "\"go\"").
+func normalizeTypeFilter(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.Trim(v, `"'`)
+	v = strings.TrimSpace(v)
+	if strings.EqualFold(v, "null") || strings.EqualFold(v, "none") {
+		return ""
+	}
+	return v
+}
+
 // SearchTool implements content search with a ripgrep engine and a Go fallback.
 type SearchTool struct {
 	base   baseTool
@@ -80,7 +120,8 @@ func NewSearchTool(validator *workspacepkg.PathValidator, runner rgRunner) (*Sea
 			"(use fixed_strings=true for literal text). " +
 			"Filter with glob (a pattern without '/' matches the file name at any depth, one with '/' matches the " +
 			"workspace-relative path; prefix with '!' to exclude; multiple patterns union) or with type (a ripgrep " +
-			"type name like 'go', not a glob). " +
+			"type name like 'go'; omit it when unsure — prefer glob for file-name filtering and never pass null " +
+			"or quoted values). " +
 			"Files matched by .gitignore are skipped by default. " +
 			"Uses the ripgrep engine when available and falls back to a built-in literal search otherwise (the " +
 			"fallback treats 'pattern' as literal text; unapplied filters are disclosed in the output's note).",
@@ -161,8 +202,18 @@ func validateSearchArgs(validator *workspacepkg.PathValidator, args searchArgs) 
 	if args.Context < 0 || args.Context > maxSearchContextLines {
 		return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("context must be between 0 and %d", maxSearchContextLines))
 	}
-	if args.Type != "" && !typeNamePattern.MatchString(args.Type) {
-		return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, "type must be an alphanumeric ripgrep type name")
+	args.Type = normalizeTypeFilter(args.Type)
+	if args.Type != "" {
+		if !typeNamePattern.MatchString(args.Type) {
+			return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, "type must be an alphanumeric ripgrep type name")
+		}
+		// Syntax-valid names can still be unknown to rg (e.g. "null" slips
+		// past the pattern above and rg exits 2). Validate against the
+		// probed type list and tell the model how to recover, so a bad
+		// call is correctable instead of retried blind.
+		if types := rgTypeSet(); types != nil && !types[args.Type] {
+			return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("unknown ripgrep type %q; omit the type filter or use glob for file-name filtering (valid names: see `rg --type-list`)", args.Type))
+		}
 	}
 	for i, g := range args.Glob {
 		if strings.TrimSpace(g) == "" || len(g) > 256 {
