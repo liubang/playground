@@ -18,6 +18,7 @@
 package ui
 
 import (
+	"bytes"
 	"os"
 	"testing"
 	"time"
@@ -85,5 +86,108 @@ func TestFdReadySurvivesSignalStorm(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed < 50*time.Millisecond {
 		t.Fatalf("fdReady returned after %v, want the full timeout budget", elapsed)
+	}
+}
+
+func inputPipe(t *testing.T) (*ansiSeqReader, *os.File) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		r.Close()
+		w.Close()
+	})
+	return newInputReader(r), w
+}
+
+// Regression: an SGR mouse report fragmented with more than the
+// human-ESC budget between pieces (IPC-fronted terminals put tens of
+// milliseconds between fragments) used to be forwarded early, and —
+// shorter than the parser's 6-byte mouse-probe minimum — leaked into the
+// composer as literal text ("[<6"). The reader must hold the incomplete
+// tail until the rest arrives.
+func TestAnsiSeqReaderReassemblesSlowMouseFragment(t *testing.T) {
+	reader, w := inputPipe(t)
+	event := []byte("\x1b[<65;47;16M")
+	go func() {
+		_, _ = w.Write(event[:4]) // "\x1b[<6"
+		time.Sleep(150 * time.Millisecond)
+		_, _ = w.Write(event[4:])
+	}()
+
+	buf := make([]byte, 64)
+	n, err := reader.Read(buf)
+	if err != nil {
+		t.Fatalf("Read error = %v", err)
+	}
+	if got := buf[:n]; !bytes.Equal(got, event) {
+		t.Fatalf("Read forwarded %q, want the reassembled %q", got, event)
+	}
+}
+
+// A bare ESC press must still surface within the human-key budget: the
+// generous sequence hold must not apply to a lone ESC byte.
+func TestAnsiSeqReaderLoneEscapeStaysSnappy(t *testing.T) {
+	reader, w := inputPipe(t)
+	if _, err := w.Write([]byte("\x1b")); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	buf := make([]byte, 8)
+	n, err := reader.Read(buf)
+	if err != nil {
+		t.Fatalf("Read error = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("lone ESC held for %v, want roughly the escape-key budget", elapsed)
+	}
+	if n != 1 || buf[0] != 0x1b {
+		t.Fatalf("Read forwarded %q, want a lone ESC", buf[:n])
+	}
+}
+
+// Bytes that do not fit into the caller's buffer must be preserved for
+// the next Read, not dropped (a fast scroll burst can exceed the parser's
+// 256-byte read buffer).
+func TestAnsiSeqReaderPreservesOverflow(t *testing.T) {
+	reader, w := inputPipe(t)
+	event := []byte("\x1b[<65;47;16M\x1b[<64;47;16M") // two reports, 26 bytes
+	if _, err := w.Write(event); err != nil {
+		t.Fatal(err)
+	}
+
+	var got []byte
+	buf := make([]byte, 8) // deliberately smaller than the input
+	for len(got) < len(event) {
+		n, err := reader.Read(buf)
+		if err != nil {
+			t.Fatalf("Read error = %v after %d/%d bytes", err, len(got), len(event))
+		}
+		got = append(got, buf[:n]...)
+	}
+	if !bytes.Equal(got, event) {
+		t.Fatalf("reassembled stream %q, want %q — bytes were dropped", got, event)
+	}
+}
+
+// Text typed ahead of an incomplete sequence must be delivered
+// immediately; only the incomplete tail is held.
+func TestAnsiSeqReaderForwardsCompletePrefix(t *testing.T) {
+	reader, w := inputPipe(t)
+	tail := []byte("\x1b[<6")
+	if _, err := w.Write(append([]byte("hi"), tail...)); err != nil {
+		t.Fatal(err)
+	}
+
+	buf := make([]byte, 8)
+	n, err := reader.Read(buf)
+	if err != nil {
+		t.Fatalf("Read error = %v", err)
+	}
+	if got := string(buf[:n]); got != "hi" {
+		t.Fatalf("Read forwarded %q, want the complete prefix %q", got, "hi")
 	}
 }

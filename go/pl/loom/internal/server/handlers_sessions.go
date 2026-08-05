@@ -57,16 +57,62 @@ func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = n
 	}
-	summaries, err := s.svc.ListSessions(r.Context(), limit)
+	cursor := r.URL.Query().Get("cursor")
+	archived := r.URL.Query().Get("archived") == "1"
+	summaries, nextCursor, err := s.svc.ListSessions(r.Context(), cursor, limit, archived)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": summaries})
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": summaries, "next_cursor": nextCursor})
 }
 
 type createSessionRequest struct {
 	Resume string `json:"resume,omitempty"`
+}
+
+type archiveSessionRequest struct {
+	Archived *bool `json:"archived"`
+}
+
+// handleArchiveSession marks a session archived (hidden from default
+// listings) or restores it.
+func (s *Server) handleArchiveSession(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var req archiveSessionRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	if req.Archived == nil {
+		writeError(w, invalidInput("archived is required"))
+		return
+	}
+	if err := s.svc.SetSessionArchived(r.Context(), id, *req.Archived); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("archive_session", id, "archived", *req.Archived)
+	writeJSON(w, http.StatusOK, map[string]any{"archived": *req.Archived})
+}
+
+// handleDeleteSession removes a session and all its persisted data.
+func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.svc.DeleteSession(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("delete_session", id)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {

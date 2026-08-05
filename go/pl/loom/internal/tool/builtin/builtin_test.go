@@ -359,6 +359,47 @@ func TestSearchGoFallbackNotesUnappliedFilters(t *testing.T) {
 	}
 }
 
+// Regression: models serialize unset fields as "null"/"none" or double-encode
+// quotes ("\"go\""); the type filter must normalize these instead of feeding
+// the garbage to rg (observed: rg exit 2 "unrecognized file type: null").
+func TestSearchTypeFilterNormalization(t *testing.T) {
+	validator, _ := newValidator(t)
+	cases := map[string]string{
+		"null":   "",
+		"NULL":   "",
+		"none":   "",
+		`"null"`: "",
+		`"go"`:   "go",
+		"'rust'": "rust",
+		"  go  ": "go",
+	}
+	for in, want := range cases {
+		args, _, err := validateSearchArgs(validator, searchArgs{Pattern: "x", Type: in})
+		if err != nil {
+			t.Fatalf("validateSearchArgs(type=%q) error = %v", in, err)
+		}
+		if args.Type != want {
+			t.Fatalf("validateSearchArgs(type=%q) = %q, want %q", in, args.Type, want)
+		}
+	}
+}
+
+// Regression: a syntax-valid but unknown type name must be rejected at
+// prepare time with recovery guidance, not handed to rg to die with exit 2.
+func TestSearchTypeFilterUnknownRejected(t *testing.T) {
+	if rgTypeSet() == nil {
+		t.Skip("ripgrep unavailable; type-list validation disabled")
+	}
+	validator, _ := newValidator(t)
+	_, _, err := validateSearchArgs(validator, searchArgs{Pattern: "x", Type: "notarealtype"})
+	if err == nil || !strings.Contains(err.Error(), "unknown ripgrep type") {
+		t.Fatalf("validateSearchArgs() error = %v, want unknown ripgrep type", err)
+	}
+	if !strings.Contains(err.Error(), "glob") {
+		t.Fatalf("error must suggest the glob alternative: %v", err)
+	}
+}
+
 func TestSearchGoFallbackTruncateStrictJSONAndCancelled(t *testing.T) {
 	validator, root := newValidator(t)
 	var builder strings.Builder

@@ -43,15 +43,16 @@ type File struct {
 	// Providers is the only required section: at least one entry.
 	Providers []Provider `yaml:"providers"`
 
-	Limits   Limits   `yaml:"limits"`
-	Context  Context  `yaml:"context"`
-	Runaway  Runaway  `yaml:"runaway"`
-	Prompt   Prompt   `yaml:"prompt"`
-	Skills   Skills   `yaml:"skills"`
-	Rules    Rules    `yaml:"rules"`
-	Approval Approval `yaml:"approval"`
-	Tracing  Tracing  `yaml:"tracing"`
+	Limits     Limits               `yaml:"limits"`
+	Context    Context              `yaml:"context"`
+	Runaway    Runaway              `yaml:"runaway"`
+	Prompt     Prompt               `yaml:"prompt"`
+	Skills     Skills               `yaml:"skills"`
+	Rules      Rules                `yaml:"rules"`
+	Approval   Approval             `yaml:"approval"`
+	Tracing    Tracing              `yaml:"tracing"`
 	Storage    Storage              `yaml:"storage"`
+	Logging    Logging              `yaml:"logging"`
 	UI         UI                   `yaml:"ui"`
 	Subagent   Subagent             `yaml:"subagent"`
 	Memory     Memory               `yaml:"memory"`
@@ -222,6 +223,18 @@ type Tracing struct {
 // Storage configures on-disk locations.
 type Storage struct {
 	SessionDB string `yaml:"session_db"`
+}
+
+// Logging configures file logging quotas (glog-style daily files under
+// <state>/loom/logs). Zero values keep the built-in defaults; negative
+// values disable the corresponding limit.
+type Logging struct {
+	// MaxFileMB caps one log file in MiB; past the cap the writer rolls to
+	// a same-day sequence file. 0 = default (2048).
+	MaxFileMB int `yaml:"max_file_mb"`
+	// MaxTotalMB caps the logs directory total in MiB; the oldest files are
+	// garbage-collected past the cap. 0 = default (10240).
+	MaxTotalMB int `yaml:"max_total_mb"`
 }
 
 // UI configures the terminal frontend.

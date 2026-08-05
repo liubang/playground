@@ -75,6 +75,15 @@ type Snapshot struct {
 	// its UI from the snapshot alone (docs/SERVE_DESIGN.md §4.4).
 	PendingRequests []PendingRequest `json:"pending_requests,omitempty"`
 	PendingSteers   []string         `json:"pending_steers,omitempty"`
+	// Plan is the run's latest task plan (update_plan), projected so a
+	// (re)connecting client can render the plan panel from the snapshot
+	// alone instead of waiting for the next plan.updated event.
+	Plan *domain.Plan `json:"plan,omitempty"`
+	// Delegated marks a sub-agent child session: read-only for frontends —
+	// prompts are rejected; approvals/questions stay resolvable.
+	Delegated bool `json:"delegated,omitempty"`
+	// ParentSessionID is the delegating parent when Delegated is true.
+	ParentSessionID string `json:"parent_session_id,omitempty"`
 	// EventSeq is the broker-sequence watermark this projection has
 	// applied: subscribe with it as cursor for a gapless snapshot+delta
 	// handoff (docs/SERVE_DESIGN.md §4.4).
@@ -104,10 +113,23 @@ type PendingRequest struct {
 
 // SessionSummary is the frontend-safe metadata used by session pickers.
 type SessionSummary struct {
-	ID        domain.SessionID
-	Version   int64
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID        domain.SessionID `json:"id"`
+	Version   int64            `json:"version"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+	// State is the live controller state, or "closed" for sessions without
+	// a live runtime in this process (docs/WEB_DESIGN.md §7.7).
+	State ControllerState `json:"state"`
+	// ModelName/TurnCount are populated for live sessions only (they come
+	// from the controller projection, not the store).
+	ModelName string `json:"model_name,omitempty"`
+	TurnCount int    `json:"turn_count,omitempty"`
+	// Title is the session's first user prompt: whitespace-collapsed and
+	// rune-truncated; empty when the session never received a prompt.
+	Title string `json:"title,omitempty"`
+	// ParentSessionID is set for delegated sub-agent sessions (the child's
+	// run.created delegation edge), for hierarchical pickers.
+	ParentSessionID string `json:"parent_session_id,omitempty"`
 }
 
 // Controller is the per-frontend-session unique Runtime owner. It serializes
@@ -138,6 +160,15 @@ type Controller struct {
 	runtime   *SessionRuntime
 	lastUsage domain.Usage
 	messages  []domain.Message
+	// plan/hasPlan project the run's latest task plan (domain.EventPlanRevised)
+	// for Snapshot consumers; seeded from the checkpoint on session resume.
+	plan    domain.Plan
+	hasPlan bool
+	// delegated/parentSessionID mark a resumed sub-agent child session (the
+	// run.created delegation edge). Delegated sessions are read-only:
+	// prompts are rejected; approvals and questions stay resolvable.
+	delegated       bool
+	parentSessionID domain.SessionID
 	// appliedSeq is the broker-sequence watermark sampled inside the
 	// projection-update critical section (docs/SERVE_DESIGN.md §4.4).
 	appliedSeq uint64
@@ -659,13 +690,16 @@ func (c *Controller) ListSessions(ctx context.Context, limit int) ([]SessionSumm
 	if !ok {
 		return nil, fmt.Errorf("session listing is unavailable for this store")
 	}
-	summaries, err := store.ListSessions(ctx, limit)
+	summaries, _, err := store.ListSessions(ctx, "", limit, false)
 	if err != nil {
 		return nil, err
 	}
 	result := make([]SessionSummary, len(summaries))
 	for i, summary := range summaries {
 		result[i] = SessionSummary{ID: summary.ID, Version: summary.Version, CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt}
+		if !summary.ParentSessionID.IsZero() {
+			result[i].ParentSessionID = summary.ParentSessionID.String()
+		}
 	}
 	return result, nil
 }
@@ -810,6 +844,13 @@ func (c *Controller) steerCellPeek() []string {
 	return nil
 }
 
+// recordPlan stores the latest task plan for Snapshot projection.
+func (c *Controller) recordPlan(p domain.Plan) {
+	c.mu.Lock()
+	c.plan, c.hasPlan = p, true
+	c.mu.Unlock()
+}
+
 // rememberedStore returns the persistent "allow always" store, or nil when
 // persistence is disabled or unavailable.
 func (c *Controller) rememberedStore() *permission.RememberedStore {
@@ -913,7 +954,12 @@ func (c *Controller) dispatch(cmd controllerCommand) {
 func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	c.mu.Lock()
 	state := c.state
+	delegated := c.delegated
 	c.mu.Unlock()
+	if delegated {
+		cmd.ResultCh <- controllerResult{Err: domain.NewError(domain.ErrInvalidInput, "session is a delegated sub-agent session (read-only): prompts are not accepted")}
+		return
+	}
 	switch state {
 	case ControllerStateRunning, ControllerStateAwaitingApproval, ControllerStateCancelling:
 		c.handleSteer(cmd)
@@ -1434,6 +1480,10 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	c.runID = domain.RunID{}
 	c.turnCounter = 0
 	c.messages = nil
+	c.plan = domain.Plan{}
+	c.hasPlan = false
+	c.delegated = false
+	c.parentSessionID = domain.SessionID{}
 	c.lastUsage = domain.Usage{}
 	c.resumedRun = nil
 	c.resumed = false
@@ -1562,6 +1612,33 @@ func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	c.turnCounter = 0
 	c.messages = append([]domain.Message(nil), inspection.Transcript.Messages...)
 	c.lastUsage = run.Usage
+	// Seed the plan projection from the checkpoint: the plan survives prompt
+	// boundaries like the goal does, and no EventPlanRevised is re-emitted
+	// for recovered state.
+	c.plan = domain.Plan{}
+	c.hasPlan = false
+	if inspection.Checkpoint != nil && len(inspection.Checkpoint.Plan.Items) > 0 {
+		c.plan = inspection.Checkpoint.Plan
+		c.hasPlan = true
+	}
+	// Detect the delegation edge: a sub-agent child's first run.created
+	// event carries delegated=true and the parent session.
+	c.delegated = false
+	c.parentSessionID = domain.SessionID{}
+	for _, ev := range inspection.Events {
+		if ev.Type != domain.EventRunCreated {
+			continue
+		}
+		var p struct {
+			Delegated       bool             `json:"delegated"`
+			ParentSessionID domain.SessionID `json:"parent_session_id"`
+		}
+		if err := json.Unmarshal(ev.Payload, &p); err == nil && p.Delegated {
+			c.delegated = true
+			c.parentSessionID = p.ParentSessionID
+		}
+		break // only the first run.created carries the delegation edge
+	}
 	c.resumedRun = run
 	c.resumed = true
 	// Same as handleNewSession: a pending compaction belongs to the
@@ -1640,6 +1717,14 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 		PendingSteers:       c.steerCellPeek(),
 		EventSeq:            c.appliedSeq,
 		Timestamp:           c.clock.Now(),
+	}
+	if c.hasPlan {
+		p := c.plan
+		snap.Plan = &p
+	}
+	if c.delegated {
+		snap.Delegated = true
+		snap.ParentSessionID = c.parentSessionID.String()
 	}
 	c.mu.Unlock()
 	cmd.ResultCh <- controllerResult{Value: snap}
@@ -1932,7 +2017,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ToolName: payload.Tool,
 				Risk:     payload.Risk,
 				Target:   toolCallTarget(payload),
-				Diff:     render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffMaxLines),
+				Diff:     render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffUnbounded),
 			})
 		}
 	case domain.EventPermissionRequested:
@@ -1947,7 +2032,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ArgsHash:    payload.ArgsHash,
 				ReadPaths:   payload.ReadPaths,
 				WritePaths:  payload.WritePaths,
-				Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffMaxLines),
+				Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffUnbounded),
 				Arguments:   s.pendingArgs[payload.CallID],
 			}
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindApprovalRequested, card)
@@ -2067,6 +2152,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 	case domain.EventPlanRevised:
 		var plan domain.Plan
 		if err := json.Unmarshal(ev.Payload, &plan); err == nil {
+			s.controller.recordPlan(plan)
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindPlanUpdated, plan)
 		}
 	case domain.EventRunCompleted:

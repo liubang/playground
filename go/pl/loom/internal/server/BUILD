@@ -33,6 +33,7 @@ go_library(
         "//go/pl/loom/internal/app",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "//go/pl/loom/internal/server/web",
         "@org_golang_x_sys//unix",
     ],
 )

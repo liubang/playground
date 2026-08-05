@@ -1,0 +1,120 @@
+services:
+  # 3 个节点，每节点 fdbmonitor 托管 2 个 fdbserver 进程（4500/4501）
+  # FDB 客户端需要直连每个进程（coordinator/proxy/storage），macOS 宿主机
+  # 无法路由到容器 IP，因此不做宿主机端口映射；客户端通过容器网络访问。
+  fdb-node-1:
+    image: foundationdb/foundationdb:${FDB_VERSION:-7.3.63}
+    container_name: fdb-node-1
+    hostname: fdb-node-1
+    restart: unless-stopped
+    entrypoint: ["/usr/bin/tini", "-g", "--", "/var/fdb/scripts/entrypoint.sh"]
+    environment:
+      NODE_NAME: fdb-node-1
+      NODE_IP: 172.28.11.11
+      FDB_COORDINATORS: 172.28.11.11:4500,172.28.11.12:4500,172.28.11.13:4500
+      FDB_CLUSTER_ID: ${FDB_CLUSTER_ID:?Run ./bootstrap.sh to generate .env}
+    volumes:
+      - ./entrypoint.sh:/var/fdb/scripts/entrypoint.sh:ro
+      - node1-data:/var/fdb/data
+      - node1-logs:/var/fdb/logs
+    networks:
+      fdb:
+        ipv4_address: 172.28.11.11
+    healthcheck:
+      test: ["CMD-SHELL", "fdbcli -C /var/fdb/fdb.cluster --exec 'status minimal' 2>/dev/null | grep -q 'The database is available'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2560m
+          cpus: '2'
+
+  fdb-node-2:
+    image: foundationdb/foundationdb:${FDB_VERSION:-7.3.63}
+    container_name: fdb-node-2
+    hostname: fdb-node-2
+    restart: unless-stopped
+    entrypoint: ["/usr/bin/tini", "-g", "--", "/var/fdb/scripts/entrypoint.sh"]
+    environment:
+      NODE_NAME: fdb-node-2
+      NODE_IP: 172.28.11.12
+      FDB_COORDINATORS: 172.28.11.11:4500,172.28.11.12:4500,172.28.11.13:4500
+      FDB_CLUSTER_ID: ${FDB_CLUSTER_ID:?Run ./bootstrap.sh to generate .env}
+    volumes:
+      - ./entrypoint.sh:/var/fdb/scripts/entrypoint.sh:ro
+      - node2-data:/var/fdb/data
+      - node2-logs:/var/fdb/logs
+    networks:
+      fdb:
+        ipv4_address: 172.28.11.12
+    healthcheck:
+      test: ["CMD-SHELL", "fdbcli -C /var/fdb/fdb.cluster --exec 'status minimal' 2>/dev/null | grep -q 'The database is available'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2560m
+          cpus: '2'
+
+  fdb-node-3:
+    image: foundationdb/foundationdb:${FDB_VERSION:-7.3.63}
+    container_name: fdb-node-3
+    hostname: fdb-node-3
+    restart: unless-stopped
+    entrypoint: ["/usr/bin/tini", "-g", "--", "/var/fdb/scripts/entrypoint.sh"]
+    environment:
+      NODE_NAME: fdb-node-3
+      NODE_IP: 172.28.11.13
+      FDB_COORDINATORS: 172.28.11.11:4500,172.28.11.12:4500,172.28.11.13:4500
+      FDB_CLUSTER_ID: ${FDB_CLUSTER_ID:?Run ./bootstrap.sh to generate .env}
+    volumes:
+      - ./entrypoint.sh:/var/fdb/scripts/entrypoint.sh:ro
+      - node3-data:/var/fdb/data
+      - node3-logs:/var/fdb/logs
+    networks:
+      fdb:
+        ipv4_address: 172.28.11.13
+    healthcheck:
+      test: ["CMD-SHELL", "fdbcli -C /var/fdb/fdb.cluster --exec 'status minimal' 2>/dev/null | grep -q 'The database is available'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2560m
+          cpus: '2'
+
+  # 独立客户端容器（profile，默认不启动）：
+  #   docker compose run --rm client            # 交互式 fdbcli
+  #   docker compose run --rm client --exec "status"
+  client:
+    image: foundationdb/foundationdb:${FDB_VERSION:-7.3.63}
+    container_name: fdb-client
+    profiles: ["client"]
+    entrypoint: ["/usr/bin/fdbcli", "-C", "/var/fdb/fdb.cluster"]
+    volumes:
+      - ./fdb.cluster:/var/fdb/fdb.cluster:ro
+    networks:
+      fdb:
+
+volumes:
+  node1-data:
+  node1-logs:
+  node2-data:
+  node2-logs:
+  node3-data:
+  node3-logs:
+
+networks:
+  fdb:
+    ipam:
+      config:
+        - subnet: 172.28.11.0/24

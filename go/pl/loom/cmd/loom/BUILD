@@ -30,6 +30,7 @@ go_library(
         "//go/pl/loom/internal/artifact:artifact_lib",
         "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/logging:logging",
         "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/process:process_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
