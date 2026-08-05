@@ -92,52 +92,23 @@ func TestResolveSessionDBRejectsSymlinkDirectory(t *testing.T) {
 	}
 }
 
-func TestMigrateLegacySessionDBSecuresMigratedEntries(t *testing.T) {
-	base := t.TempDir()
-	legacyDir := filepath.Join(base, "loom")
-	if err := os.MkdirAll(legacyDir, 0o700); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
+func TestResolveSessionDBDefaultUsesLoomHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	resolved := &config.ResolvedConfig{}
+	if err := resolveSessionDB(resolved, true); err != nil {
+		t.Fatalf("resolveSessionDB: %v", err)
 	}
-	sessionsDir := filepath.Join(legacyDir, "sessions")
-	if err := os.MkdirAll(sessionsDir, 0o700); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
+	want := filepath.Join(home, ".loom", "sessions", "sessions.db")
+	if resolved.Storage.SessionDB != want {
+		t.Fatalf("SessionDB = %q, want %q", resolved.Storage.SessionDB, want)
 	}
-	// Legacy database files and the artifact tree with loose permissions
-	// (as produced by an older release under a permissive umask).
-	for _, name := range []string{"sessions.db", "sessions.db-wal"} {
-		path := filepath.Join(legacyDir, name)
-		if err := os.WriteFile(path, []byte("data"), 0o600); err != nil {
-			t.Fatalf("WriteFile: %v", err)
-		}
-		if err := os.Chmod(path, 0o644); err != nil {
-			t.Fatalf("Chmod: %v", err)
-		}
-	}
-	artifactsDir := filepath.Join(legacyDir, "artifacts")
-	if err := os.MkdirAll(artifactsDir, 0o700); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.Chmod(artifactsDir, 0o755); err != nil {
-		t.Fatalf("Chmod: %v", err)
-	}
-
-	migrateLegacySessionDB(base, sessionsDir)
-
-	for _, name := range []string{"sessions.db", "sessions.db-wal"} {
-		info, err := os.Stat(filepath.Join(sessionsDir, name))
-		if err != nil {
-			t.Fatalf("Stat migrated %s: %v", name, err)
-		}
-		if info.Mode().Perm() != 0o600 {
-			t.Fatalf("migrated %s mode = %o, want 600", name, info.Mode().Perm())
-		}
-	}
-	info, err := os.Stat(filepath.Join(sessionsDir, "artifacts"))
+	fi, err := os.Stat(filepath.Dir(resolved.Storage.SessionDB))
 	if err != nil {
-		t.Fatalf("Stat migrated artifacts: %v", err)
+		t.Fatalf("stat sessions dir: %v", err)
 	}
-	if info.Mode().Perm() != 0o700 {
-		t.Fatalf("migrated artifacts mode = %o, want 700", info.Mode().Perm())
+	if fi.Mode().Perm() != 0o700 {
+		t.Fatalf("sessions dir mode = %v; want 0700", fi.Mode().Perm())
 	}
 }
 
