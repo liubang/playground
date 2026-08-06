@@ -160,7 +160,8 @@ func bootstrapWithMCP(t *testing.T, servers map[string]config.MCPServer, lookup 
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	resolved.Storage.SessionDB = filepath.Join(ws, "sessions.db")
+	resolved.Storage.BaseDir = ws
+	prepareSessionsDir(t, resolved)
 
 	bootstrap, err := app.NewBootstrap(context.Background(), resolved, app.BootstrapConfig{
 		WorkspaceRoot: ws,

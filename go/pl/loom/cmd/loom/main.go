@@ -155,11 +155,11 @@ func configPath() (string, error) {
 	if p := strings.TrimSpace(os.Getenv(configPathEnv)); p != "" {
 		return filepath.Abs(p)
 	}
-	home, err := os.UserHomeDir()
+	base, err := config.DefaultBaseDir()
 	if err != nil {
-		return "", fmt.Errorf("locate home dir: %w", err)
+		return "", err
 	}
-	return filepath.Join(home, ".loom", config.FileName), nil
+	return filepath.Join(base, config.FileName), nil
 }
 
 // loadConfig is the single configuration entry point for every command.
@@ -178,20 +178,13 @@ func loadConfig(requireProviders bool, logger *slog.Logger) (*config.ResolvedCon
 	return resolved, nil
 }
 
-// resolveSessionDB fills ResolvedConfig.Storage.SessionDB: the configured
-// path (made absolute) when set, otherwise ~/.loom/sessions/sessions.db.
-// create controls whether the private data directory is prepared on disk —
-// agent entries create it; offline read commands leave the filesystem
-// untouched.
 // newFileLogger builds loom's unified file logger: glog-style records in
-// ~/.loom/logs/loom.YYYY-MM-DD.log, rotated at local midnight. Both
+// <base_dir>/logs/loom.YYYY-MM-DD.log, rotated at local midnight. Both
 // the TUI and serve modes share it (the TUI previously discarded all
 // logs). fallback applies when the log directory cannot be opened — the
 // TUI passes a discard logger, serve passes a stderr glog handler.
 func newFileLogger(resolved *config.ResolvedConfig, fallback *slog.Logger) *slog.Logger {
-	// SessionDB = ~/.loom/sessions/sessions.db → logs 在其两级之上（~/.loom/logs）。
-	logsDir := filepath.Join(filepath.Dir(filepath.Dir(resolved.Storage.SessionDB)), "logs")
-	logger, err := logging.NewFileLogger(logsDir, nil, logging.Quotas{
+	logger, err := logging.NewFileLogger(resolved.Storage.LogsDir(), nil, logging.Quotas{
 		MaxFileBytes:  resolved.Logging.MaxFileBytes,
 		MaxTotalBytes: resolved.Logging.MaxTotalBytes,
 	})
@@ -201,33 +194,18 @@ func newFileLogger(resolved *config.ResolvedConfig, fallback *slog.Logger) *slog
 	return logger
 }
 
-func resolveSessionDB(resolved *config.ResolvedConfig, create bool) error {
-	configured := strings.TrimSpace(resolved.Storage.SessionDB)
-	if configured != "" {
-		path, err := filepath.Abs(configured)
-		if err != nil {
-			return fmt.Errorf("resolve storage.session_db: %w", err)
-		}
-		if create {
-			if err := preparePrivateDataDirectory(filepath.Dir(path), false); err != nil {
-				return err
-			}
-		}
-		resolved.Storage.SessionDB = path
+// prepareStorage creates loom's private data directories (the base dir
+// and its sessions subdirectory) when create is set — agent entries
+// create them; offline read commands leave the filesystem untouched.
+// Both directories are loom-owned, so they are tightened to 0700.
+func prepareStorage(resolved *config.ResolvedConfig, create bool) error {
+	if !create {
 		return nil
 	}
-	base, err := defaultLoomHome()
-	if err != nil {
+	if err := preparePrivateDataDirectory(resolved.Storage.BaseDir); err != nil {
 		return err
 	}
-	directory := filepath.Join(base, "sessions")
-	if create {
-		if err := preparePrivateDataDirectory(directory, true); err != nil {
-			return err
-		}
-	}
-	resolved.Storage.SessionDB = filepath.Join(directory, "sessions.db")
-	return nil
+	return preparePrivateDataDirectory(resolved.Storage.SessionsDir())
 }
 
 // initConfig writes the annotated starter config (loom config init).
@@ -292,12 +270,12 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	if err != nil {
 		return err
 	}
-	if err := resolveSessionDB(resolved, true); err != nil {
+	if err := prepareStorage(resolved, true); err != nil {
 		return err
 	}
-	artifactDir := filepath.Join(filepath.Dir(resolved.Storage.SessionDB), artifactDirectoryName)
+	artifactDir := filepath.Join(resolved.Storage.SessionsDir(), artifactDirectoryName)
 
-	// 统一文件日志（~/.loom/logs/loom.YYYY-MM-DD.log，glog 风格）；TUI 占屏，
+	// 统一文件日志（<base_dir>/logs/loom.YYYY-MM-DD.log，glog 风格）；TUI 占屏，
 	// 打不开日志目录时静默降级为丢弃，绝不影响交互。
 	logger := newFileLogger(resolved, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
@@ -395,10 +373,10 @@ func runServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := resolveSessionDB(resolved, true); err != nil {
+	if err := prepareStorage(resolved, true); err != nil {
 		return err
 	}
-	dataDir := filepath.Dir(resolved.Storage.SessionDB)
+	dataDir := resolved.Storage.SessionsDir()
 
 	// Single-instance discipline (docs/SERVE_DESIGN.md §3.2): the data
 	// directory flock must be taken BEFORE anything touches the store.
@@ -517,10 +495,10 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	if err != nil {
 		return err
 	}
-	if err := resolveSessionDB(resolved, true); err != nil {
+	if err := prepareStorage(resolved, true); err != nil {
 		return err
 	}
-	artifactDir := filepath.Join(filepath.Dir(resolved.Storage.SessionDB), artifactDirectoryName)
+	artifactDir := filepath.Join(resolved.Storage.SessionsDir(), artifactDirectoryName)
 
 	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
 		WorkspaceRoot: root,
@@ -634,10 +612,10 @@ func collectArtifactGarbage(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := resolveSessionDB(resolved, true); err != nil {
+	if err := prepareStorage(resolved, true); err != nil {
 		return err
 	}
-	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDB)
+	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDBPath())
 	if err != nil {
 		return fmt.Errorf("open session store: %w", err)
 	}
@@ -647,7 +625,7 @@ func collectArtifactGarbage(ctx context.Context) error {
 		return fmt.Errorf("list artifact references: %w", err)
 	}
 	artifactStore, err := artifact.Open(
-		filepath.Join(filepath.Dir(resolved.Storage.SessionDB), artifactDirectoryName),
+		filepath.Join(resolved.Storage.SessionsDir(), artifactDirectoryName),
 		resolved.Limits.MaxArtifactBytes,
 	)
 	if err != nil {
@@ -667,10 +645,10 @@ func listSessions(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := resolveSessionDB(resolved, false); err != nil {
+	if err := prepareStorage(resolved, false); err != nil {
 		return err
 	}
-	dbPath := resolved.Storage.SessionDB
+	dbPath := resolved.Storage.SessionDBPath()
 	if _, err := os.Stat(dbPath); errors.Is(err, os.ErrNotExist) {
 		return nil
 	} else if err != nil {
@@ -700,10 +678,10 @@ func inspectSession(ctx context.Context, rawSessionID string) error {
 	if err != nil {
 		return err
 	}
-	if err := resolveSessionDB(resolved, false); err != nil {
+	if err := prepareStorage(resolved, false); err != nil {
 		return err
 	}
-	dbPath := resolved.Storage.SessionDB
+	dbPath := resolved.Storage.SessionDBPath()
 	if _, err := os.Stat(dbPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return errors.New("session store does not exist")
@@ -739,7 +717,7 @@ func listRules() error {
 	if err != nil {
 		return err
 	}
-	policy := permission.AttachRules(context.Background(), permission.DefaultPolicy(), root, resolved.Rules.LoadOptions(), slog.Default())
+	policy := permission.AttachRules(context.Background(), permission.DefaultPolicy(), root, resolved.Storage.RulesDir(), resolved.Rules.LoadOptions(), slog.Default())
 	rules := policy.Rules.Rules()
 	domains := policy.Rules.Domains()
 	if len(rules) == 0 && len(domains) == 0 {
@@ -799,7 +777,7 @@ func checkRules(argv []string) error {
 	if err != nil {
 		return err
 	}
-	policy := permission.AttachRules(context.Background(), permission.DefaultPolicy(), root, resolved.Rules.LoadOptions(), slog.Default())
+	policy := permission.AttachRules(context.Background(), permission.DefaultPolicy(), root, resolved.Storage.RulesDir(), resolved.Rules.LoadOptions(), slog.Default())
 	callArgs := map[string]any{"program": argv[0], "args": argv[1:]}
 	risk := domain.R2
 	if escalated {
@@ -856,17 +834,17 @@ func forgetRules(argv []string) error {
 	if len(argv) == 0 {
 		return errors.New("usage: loom rules forget [--domain host] <program> [args...]")
 	}
+	resolved, err := loadConfig(false, slog.Default())
+	if err != nil {
+		return err
+	}
+	store, err := permission.OpenRememberedStore(context.Background(), permission.RememberedDBPath(resolved.Storage.RulesDir()))
+	if err != nil {
+		return fmt.Errorf("open remembered store: %w", err)
+	}
+	defer store.Close()
 	if len(argv) >= 2 && argv[0] == "--domain" {
 		host := argv[1]
-		dir, err := permission.RulesDirUser()
-		if err != nil {
-			return fmt.Errorf("user rules dir: %w", err)
-		}
-		store, err := permission.OpenRememberedStore(context.Background(), permission.RememberedDBPath(dir))
-		if err != nil {
-			return fmt.Errorf("open remembered store: %w", err)
-		}
-		defer store.Close()
 		ok, err := store.ForgetDomain(context.Background(), host)
 		if err != nil {
 			return err
@@ -879,15 +857,6 @@ func forgetRules(argv []string) error {
 		return nil
 	}
 	// argv prefix rule
-	dir, err := permission.RulesDirUser()
-	if err != nil {
-		return fmt.Errorf("user rules dir: %w", err)
-	}
-	store, err := permission.OpenRememberedStore(context.Background(), permission.RememberedDBPath(dir))
-	if err != nil {
-		return fmt.Errorf("open remembered store: %w", err)
-	}
-	defer store.Close()
 	ok, err := store.ForgetRule(context.Background(), argv)
 	if err != nil {
 		return err
@@ -905,12 +874,12 @@ func forgetRules(argv []string) error {
 // left untouched (rename it aside manually to complete a migration).
 // Usage: loom rules import <file.json>
 func importRules(path string) error {
-	dir, err := permission.RulesDirUser()
+	resolved, err := loadConfig(false, slog.Default())
 	if err != nil {
-		return fmt.Errorf("user rules dir: %w", err)
+		return err
 	}
 	ctx := context.Background()
-	store, err := permission.OpenRememberedStore(ctx, permission.RememberedDBPath(dir))
+	store, err := permission.OpenRememberedStore(ctx, permission.RememberedDBPath(resolved.Storage.RulesDir()))
 	if err != nil {
 		return fmt.Errorf("open remembered store: %w", err)
 	}
@@ -938,33 +907,21 @@ func parseSessionID(rawSessionID string) (domain.SessionID, error) {
 	return sessionID, nil
 }
 
-// defaultLoomHome returns ~/.loom — the single home for all loom data:
-// config.yaml, sessions/, memories/, rules/, skills/, logs/.
-func defaultLoomHome() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user home: %w", err)
-	}
-	return filepath.Join(home, ".loom"), nil
-}
-
-func preparePrivateDataDirectory(directory string, managePermissions bool) error {
+// preparePrivateDataDirectory creates one loom-owned data directory,
+// rejecting symlinks and tightening permissions to 0700.
+func preparePrivateDataDirectory(directory string) error {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return fmt.Errorf("create session data directory: %w", err)
+		return fmt.Errorf("create loom data directory: %w", err)
 	}
 	info, err := os.Lstat(directory)
 	if err != nil {
-		return fmt.Errorf("inspect session data directory: %w", err)
+		return fmt.Errorf("inspect loom data directory: %w", err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return errors.New("session data directory must be a real directory")
+		return errors.New("loom data directory must be a real directory")
 	}
-	if managePermissions {
-		if err := os.Chmod(directory, 0o700); err != nil {
-			return fmt.Errorf("secure session data directory: %w", err)
-		}
-	} else if info.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("session data directory %q must not be accessible by group or other users (fix with: chmod 700 %s)", directory, directory)
+	if err := os.Chmod(directory, 0o700); err != nil {
+		return fmt.Errorf("secure loom data directory: %w", err)
 	}
 	return nil
 }

@@ -46,20 +46,11 @@ func TestOpenStoreCreatesDirs(t *testing.T) {
 	}
 }
 
-func TestOpenStoreDefaultPath(t *testing.T) {
-	// Set HOME so this works in Bazel sandbox.
-	orig := os.Getenv("HOME")
-	os.Setenv("HOME", t.TempDir())
-	defer os.Setenv("HOME", orig)
-
-	s, err := OpenStore("")
-	if err != nil {
-		t.Fatalf("OpenStore with empty path: %v", err)
-	}
-	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".loom", DirName)
-	if s.Root() != want {
-		t.Errorf("Root() = %q, want %q", s.Root(), want)
+func TestOpenStoreRequiresRoot(t *testing.T) {
+	// The store performs no path conventions of its own: an empty root is
+	// an error, and the caller derives it from the storage base_dir.
+	if _, err := OpenStore(""); err == nil {
+		t.Fatal("OpenStore with empty root = nil error, want error")
 	}
 }
 

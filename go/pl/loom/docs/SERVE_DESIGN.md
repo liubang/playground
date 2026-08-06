@@ -339,7 +339,7 @@ func (l *ReplayLog) Since(seq uint64) (events []RuntimeEvent, ok bool)
 ### 5.1 传输与监听
 
 - `loom serve --listen 127.0.0.1:7680`（默认）或 `--listen unix:<datadir>/loom.sock`。
-- `<datadir>` 即会话数据库所在目录，默认 `~/.loom/sessions`（由 `storage.session_db` 派生）；`serve.token`、`loom.lock`、artifacts 均位于该目录。
+- `<datadir>` 即会话数据库所在目录，默认 `~/.loom/sessions`（由 `storage.base_dir` 派生）；`serve.token`、`loom.lock`、artifacts 均位于该目录。
 - TCP 与 UDS 共用同一个 `http.ServeMux` 与 handler 集；UDS 模式下 socket 文件权限 `0600`。
 - Go 标准库 `net/http`（Go 1.25 的 method-based pattern routing），**不引入 HTTP 框架**；SSE 用 `http.Flusher` 实现，零新依赖。
 - HTTP server 参数：`ReadHeaderTimeout=10s`、`MaxHeaderBytes=1MB`、请求体上限 4MB（prompt 可能粘贴大段文本）；SSE 响应无写超时（长连接），其余端点 `WriteTimeout=30s`。

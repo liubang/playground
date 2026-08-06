@@ -31,7 +31,8 @@ import (
 	"time"
 )
 
-// DirName is the memories directory under ~/.loom/.
+// DirName is the memories directory name under the loom base directory
+// (config.ResolvedStorage.MemoriesDir).
 const DirName = "memories"
 
 // SummaryFile is the hot-tier memory injected into the system prompt.
@@ -55,20 +56,16 @@ const NotesDir = "extensions/ad_hoc/notes"
 // errLimitReached is the sentinel for Search early termination.
 var errLimitReached = errors.New("limit reached")
 
-// Store manages the ~/.loom/memories/ directory tree.
+// Store manages the memory directory tree (by default <base_dir>/memories).
 type Store struct {
 	root string
 }
 
-// OpenStore creates or opens the memory store at the given root.
-// If root is empty, it defaults to ~/.loom/memories/.
+// OpenStore creates or opens the memory store at the given root; the root
+// is required (the caller derives it from the configured storage base_dir).
 func OpenStore(root string) (*Store, error) {
 	if root == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("cannot determine home directory: %w", err)
-		}
-		root = filepath.Join(home, ".loom", DirName)
+		return nil, fmt.Errorf("memory store root is required")
 	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, fmt.Errorf("create memory root: %w", err)

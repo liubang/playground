@@ -30,22 +30,21 @@ import (
 // (a few readdir calls plus one small read per skill).
 type Loader struct {
 	workspaceRoot string
-	homeDir       string
-	extraRoots    []string
+	userRoots     []string
 	logger        *slog.Logger
 }
 
-// NewLoader builds a Loader. homeDir is injected (instead of reading
-// os.UserHomeDir internally) so tests and e2e can redirect HOME. A nil
-// logger discards diagnostics.
-func NewLoader(workspaceRoot, homeDir string, extraRoots []string, logger *slog.Logger) *Loader {
+// NewLoader builds a Loader. Discovery roots are fully injected (the caller
+// derives them from the workspace and the configured storage base_dir), so
+// the loader itself performs no path conventions of its own. A nil logger
+// discards diagnostics.
+func NewLoader(workspaceRoot string, userRoots []string, logger *slog.Logger) *Loader {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
 	return &Loader{
 		workspaceRoot: workspaceRoot,
-		homeDir:       homeDir,
-		extraRoots:    append([]string(nil), extraRoots...),
+		userRoots:     append([]string(nil), userRoots...),
 		logger:        logger,
 	}
 }
@@ -67,12 +66,8 @@ func (l *Loader) roots() []skillRoot {
 	}
 	add(filepath.Join(l.workspaceRoot, ".loom", "skills"), ScopeRepo)
 	add(filepath.Join(l.workspaceRoot, ".agents", "skills"), ScopeRepo)
-	if l.homeDir != "" {
-		add(filepath.Join(l.homeDir, ".loom", "skills"), ScopeUser)
-		add(filepath.Join(l.homeDir, ".agents", "skills"), ScopeUser)
-	}
-	for _, extra := range l.extraRoots {
-		add(extra, ScopeUser)
+	for _, root := range l.userRoots {
+		add(root, ScopeUser)
 	}
 
 	seen := map[string]struct{}{}

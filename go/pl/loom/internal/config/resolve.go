@@ -20,6 +20,8 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -96,7 +98,7 @@ type ResolvedConfig struct {
 	Rules     ResolvedRules
 	Approval  ResolvedApproval
 	Tracing   trace.Config
-	Storage   Storage
+	Storage   ResolvedStorage
 	Logging   ResolvedLogging
 	UI        UI
 	Subagent  ResolvedSubagent
@@ -114,6 +116,66 @@ type ResolvedLogging struct {
 // ResolvedMemory is the memory section with defaults applied.
 type ResolvedMemory struct {
 	Enabled bool
+}
+
+// ResolvedStorage is the storage section with the base directory resolved
+// to an absolute path. BaseDir is the single root for every loom data
+// location — the derived accessors below are the only sanctioned way to
+// compute them, so no other code may hard-code ~/.loom.
+type ResolvedStorage struct {
+	BaseDir string
+}
+
+// DefaultBaseDir returns ~/.loom — the default root for all loom data.
+func DefaultBaseDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("config: resolve user home: %w", err)
+	}
+	return filepath.Join(home, ".loom"), nil
+}
+
+// SessionsDir is the session data directory: sessions.db plus its
+// sibling artifacts/, prompt_cache/, serve.token, and loom.lock.
+func (s ResolvedStorage) SessionsDir() string { return filepath.Join(s.BaseDir, "sessions") }
+
+// SessionDBPath is the SQLite session store path.
+func (s ResolvedStorage) SessionDBPath() string {
+	return filepath.Join(s.SessionsDir(), "sessions.db")
+}
+
+// LogsDir is the file-log directory (loom.YYYY-MM-DD.log).
+func (s ResolvedStorage) LogsDir() string { return filepath.Join(s.BaseDir, "logs") }
+
+// MemoriesDir is the long-term memory store root.
+func (s ResolvedStorage) MemoriesDir() string { return filepath.Join(s.BaseDir, "memories") }
+
+// RulesDir is the user-layer permission rules directory (plus the
+// remembered-approvals store).
+func (s ResolvedStorage) RulesDir() string { return filepath.Join(s.BaseDir, "rules") }
+
+// SkillsDir is the user-scope skills discovery root.
+func (s ResolvedStorage) SkillsDir() string { return filepath.Join(s.BaseDir, "skills") }
+
+// LoomMDPath is the user-global rule file injected into every prompt.
+func (s ResolvedStorage) LoomMDPath() string { return filepath.Join(s.BaseDir, "LOOM.md") }
+
+// resolveStorage resolves the base directory: the configured path made
+// absolute, or ~/.loom when empty.
+func resolveStorage(in Storage) (ResolvedStorage, error) {
+	base := strings.TrimSpace(in.BaseDir)
+	if base == "" {
+		var err error
+		base, err = DefaultBaseDir()
+		if err != nil {
+			return ResolvedStorage{}, err
+		}
+	}
+	abs, err := filepath.Abs(base)
+	if err != nil {
+		return ResolvedStorage{}, fmt.Errorf("config: storage.base_dir: %w", err)
+	}
+	return ResolvedStorage{BaseDir: abs}, nil
 }
 
 // ResolvedSubagent is the subagent section with defaults applied
@@ -280,6 +342,10 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	approval := ResolvedApproval{Mode: mode}
+	storage, err := resolveStorage(f.Storage)
+	if err != nil {
+		return nil, err
+	}
 	out := &ResolvedConfig{
 		Providers: providers,
 		Limits:    limits,
@@ -293,7 +359,7 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		Rules:    resolveRules(f.Rules),
 		Approval: approval,
 		Tracing:  tracing,
-		Storage:  f.Storage,
+		Storage:  storage,
 		Logging:  resolveLogging(f.Logging),
 		UI:       f.UI,
 	}
