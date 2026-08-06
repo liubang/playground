@@ -149,7 +149,7 @@ type Bootstrap struct {
 	// provider and the read_skill tool; nil when skills are disabled
 	// (skills.enabled=false or the built-in system prompt is off).
 	Skills *SkillsHandle
-	// MemoryStore is the persistent memory store (~/.loom/memories/);
+	// MemoryStore is the persistent memory store (<base_dir>/memories/);
 	// nil when memory is disabled (memory.enabled=false).
 	MemoryStore *memory.Store
 	// MemoryExtractor runs Phase 1 extraction at session end;
@@ -174,7 +174,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	}
 
 	// Open session store
-	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDB)
+	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDBPath())
 	if err != nil {
 		return nil, fmt.Errorf("open session store: %w", err)
 	}
@@ -253,12 +253,11 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	sessionRules := permission.NewSessionRules()
 	var rememberedStore *permission.RememberedStore
 	if resolved.Rules.PersistRemembered {
-		if dir, err := permission.RulesDirUser(); err != nil {
-			logger.Warn("remembered rules disabled: user rules dir unavailable", "error", err)
-		} else if store, err := permission.OpenRememberedStore(ctx, permission.RememberedDBPath(dir)); err != nil {
+		rulesDir := resolved.Storage.RulesDir()
+		if store, err := permission.OpenRememberedStore(ctx, permission.RememberedDBPath(rulesDir)); err != nil {
 			logger.Warn("remembered rules disabled: open store failed", "error", err)
 		} else {
-			if err := store.MigrateLegacyJSON(ctx, dir); err != nil {
+			if err := store.MigrateLegacyJSON(ctx, rulesDir); err != nil {
 				logger.Warn("remembered rules: legacy migration incomplete", "error", err)
 			}
 			rememberedStore = store
@@ -266,7 +265,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	}
 	policy := permission.DefaultPolicy()
 	policy.Session = sessionRules
-	policy = permission.AttachRules(ctx, policy, cfg.WorkspaceRoot, permission.RuleLoadOptions{
+	policy = permission.AttachRules(ctx, policy, cfg.WorkspaceRoot, resolved.Storage.RulesDir(), permission.RuleLoadOptions{
 		Enabled:      resolved.Rules.Enabled,
 		Builtin:      resolved.Rules.Builtin,
 		Project:      resolved.Rules.Project,
@@ -306,8 +305,11 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		skills        *SkillsHandle
 	)
 	if !resolved.Prompt.DisableBuiltin {
-		promptOpts := []prompt.Option{prompt.WithExtraInstructions(resolved.Prompt.Extra)}
-		if opt := ResolveManagedPrompt(ctx, resolved.Prompt.Managed, traceCfg, resolved.Storage.SessionDB, logger); opt != nil {
+		promptOpts := []prompt.Option{
+			prompt.WithExtraInstructions(resolved.Prompt.Extra),
+			prompt.WithRulesProvider(prompt.NewFileRulesProvider(cfg.WorkspaceRoot, resolved.Storage.LoomMDPath())),
+		}
+		if opt := ResolveManagedPrompt(ctx, resolved.Prompt.Managed, traceCfg, resolved.Storage.SessionsDir(), logger); opt != nil {
 			promptOpts = append(promptOpts, opt)
 		}
 		// Skills: registers read_skill and appends the catalog provider.
@@ -315,7 +317,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		// never registered. The catalog budget tracks the startup model's
 		// window; switching models does not rebuild it (catalogs are far
 		// smaller than any window).
-		skillsOpt, skillsHandle, err := WireSkills(registry, cfg.WorkspaceRoot, defaultContextWindow(resolved), resolved.Skills, resolved.Prompt.DisableBuiltin, logger)
+		skillsOpt, skillsHandle, err := WireSkills(registry, cfg.WorkspaceRoot, defaultContextWindow(resolved), resolved.Skills, resolved.Storage.SkillsDir(), resolved.Prompt.DisableBuiltin, logger)
 		if err != nil {
 			_ = store.Close()
 			return nil, fmt.Errorf("wire skills: %w", err)
@@ -393,7 +395,8 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		// Assemble the role specs: researcher (read-only, R1) and coder
 		// (read-write, R3). The coder registry adds edit/write/run_cmd/lint.
 		researcherPrompt := prompt.NewBuilder(cfg.WorkspaceRoot,
-			prompt.WithExtraInstructions(subagent.ResearcherInstructions))
+			prompt.WithExtraInstructions(subagent.ResearcherInstructions),
+			prompt.WithRulesProvider(prompt.NewFileRulesProvider(cfg.WorkspaceRoot, resolved.Storage.LoomMDPath())))
 		researcherSpec := &subagent.RoleSpec{
 			Registry: researcherRegistry,
 			Prompt:   researcherPrompt,
@@ -406,7 +409,8 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 			return nil, fmt.Errorf("build coder registry: %w", err)
 		}
 		coderPrompt := prompt.NewBuilder(cfg.WorkspaceRoot,
-			prompt.WithExtraInstructions(subagent.CoderInstructions))
+			prompt.WithExtraInstructions(subagent.CoderInstructions),
+			prompt.WithRulesProvider(prompt.NewFileRulesProvider(cfg.WorkspaceRoot, resolved.Storage.LoomMDPath())))
 		coderSpec := &subagent.RoleSpec{
 			Registry: coderRegistry,
 			Prompt:   coderPrompt,
@@ -492,7 +496,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		memoryConsolidator *memory.Consolidator
 	)
 	if resolved.Memory.Enabled {
-		if memStore, err := memory.OpenStore(""); err != nil {
+		if memStore, err := memory.OpenStore(resolved.Storage.MemoriesDir()); err != nil {
 			logger.Warn("memory system disabled: open store failed", "error", err)
 		} else {
 			memoryStore = memStore
@@ -594,7 +598,7 @@ func (b *Bootstrap) ReloadPolicy(ctx context.Context) error {
 	policy.Session = b.permissionPolicy.Session
 	// File and store I/O happens outside the lock; only the swap is
 	// serialized against readers.
-	policy = permission.AttachRules(ctx, policy, b.WorkspaceRoot, permission.RuleLoadOptions{
+	policy = permission.AttachRules(ctx, policy, b.WorkspaceRoot, b.Resolved.Storage.RulesDir(), permission.RuleLoadOptions{
 		Enabled:      b.Resolved.Rules.Enabled,
 		Builtin:      b.Resolved.Rules.Builtin,
 		Project:      b.Resolved.Rules.Project,
@@ -904,7 +908,8 @@ func (b *Bootstrap) Close() {
 // ResolveManagedPrompt fetches the Langfuse-managed system prompt when the
 // config file names one and tracing is enabled. Any failure degrades to nil
 // (built-in prompt) — a prompt-management outage must never block the agent.
-func ResolveManagedPrompt(ctx context.Context, managed config.ManagedPrompt, traceCfg trace.Config, sessionDBPath string, logger *slog.Logger) prompt.Option {
+// sessionsDir hosts the on-disk prompt cache (prompt_cache/).
+func ResolveManagedPrompt(ctx context.Context, managed config.ManagedPrompt, traceCfg trace.Config, sessionsDir string, logger *slog.Logger) prompt.Option {
 	if managed.Name == "" || !traceCfg.Enabled {
 		return nil
 	}
@@ -912,7 +917,7 @@ func ResolveManagedPrompt(ctx context.Context, managed config.ManagedPrompt, tra
 	if label == "" {
 		label = "production"
 	}
-	cacheDir := filepath.Join(filepath.Dir(sessionDBPath), "prompt_cache")
+	cacheDir := filepath.Join(sessionsDir, "prompt_cache")
 	client := trace.NewPromptClient(traceCfg, cacheDir)
 	mp, err := client.Get(ctx, managed.Name, label)
 	if err != nil {

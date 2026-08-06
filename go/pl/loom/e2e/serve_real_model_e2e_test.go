@@ -76,8 +76,8 @@ func TestServeRealModelE2E(t *testing.T) {
 	// Isolate all writable state in a temp dir: the user's session store
 	// and workspace are never touched.
 	tmp := t.TempDir()
-	resolved.Storage.SessionDB = filepath.Join(tmp, "sessions", "sessions.db")
-	if err := os.MkdirAll(filepath.Dir(resolved.Storage.SessionDB), 0o700); err != nil {
+	resolved.Storage.BaseDir = tmp
+	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	workspace := filepath.Join(tmp, "ws")
