@@ -52,6 +52,9 @@ export function createApi({ getToken, onUnauthorized }) {
     browseDirectories: (path) => req("GET", `/v1/files/browse?path=${encodeURIComponent(path || "")}`),
     archiveSession: (id, archived) => req("POST", `/v1/sessions/${id}/archive`, { archived }),
     deleteSession: (id) => req("DELETE", `/v1/sessions/${id}`),
+    // 用户反馈：对某一轮（run）投 赞=1/踩=0，落为 Langfuse BOOLEAN 分数
+    submitFeedback: (id, runId, value, comment = "") =>
+      req("POST", `/v1/sessions/${id}/feedback`, { run_id: runId, value, comment }),
     // createSession / resumeSession share POST /v1/sessions. createSession
     // takes an optional workspaceId (empty = the server's default workspace).
     createSession: (workspaceId = "") => req("POST", "/v1/sessions", workspaceId ? { workspace_id: workspaceId } : {}),

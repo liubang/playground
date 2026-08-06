@@ -41,6 +41,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/edit"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/exsession"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/imagegen"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/lint"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
@@ -184,7 +185,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 	if err != nil {
 		return nil, fmt.Errorf("create session manager: %w", err)
 	}
-	if err := registerBuiltinTools(registry, validator, runner, proc.Artifact, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, proc.Questioner, book, sessionManager); err != nil {
+	if err := registerBuiltinTools(registry, validator, runner, proc.Artifact, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, proc.Questioner, book, sessionManager, resolved.Image); err != nil {
 		sessionManager.Close()
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
@@ -520,7 +521,7 @@ func registerMemoryTools(registry *agent.ToolRegistry, store *memory.Store) erro
 	return nil
 }
 
-func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager) error {
+func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager, imageCfg config.ResolvedImage) error {
 	tools := []struct {
 		name string
 		mk   func() (domain.Tool, error)
@@ -557,6 +558,23 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 	}
 	if err := registry.Register(runCmd); err != nil {
 		return fmt.Errorf("register run_cmd: %w", err)
+	}
+	// generate_image is registered only when the image section is enabled
+	// (config.image): generation costs money per call, so an unconfigured
+	// deployment must not advertise the tool to the model. Main-agent only
+	// — sub-agent registries stay text-only by design.
+	if imageCfg.Enabled && imageCfg.Generator != nil {
+		genImage, err := imagegen.NewGenerateImageTool(imageCfg.Generator, artStore, imagegen.Options{
+			Model:   imageCfg.Model,
+			Size:    imageCfg.Size,
+			Quality: imageCfg.Quality,
+		})
+		if err != nil {
+			return fmt.Errorf("generate_image: %w", err)
+		}
+		if err := registry.Register(genImage); err != nil {
+			return fmt.Errorf("register generate_image: %w", err)
+		}
 	}
 	// exec_session/write_stdin share the process-level session manager:
 	// interactive background processes (dev servers, REPLs) that the model

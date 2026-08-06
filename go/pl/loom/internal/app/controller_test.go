@@ -539,12 +539,36 @@ func TestToolResultPreviewExtractsAndBounds(t *testing.T) {
 			},
 		}},
 	}
-	gotID, preview := toolResultPreview(msg)
+	gotID, preview, artifacts := toolResultPreview(msg)
 	if gotID != callID {
 		t.Fatalf("call ID = %v, want %v", gotID, callID)
 	}
 	if preview != "line1\nline2" {
 		t.Fatalf("preview = %q, want joined text", preview)
+	}
+	if len(artifacts) != 0 {
+		t.Fatalf("artifacts = %v, want none for a text-only result", artifacts)
+	}
+
+	// A result carrying an artifact reference surfaces it for live rendering.
+	ref := domain.ArtifactRef{ID: domain.NewArtifactID(), Size: 42}
+	artMsg := domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleAssistant,
+		Parts: []domain.ContentPart{{
+			Kind: domain.PartToolResult,
+			ToolResult: &domain.ToolResult{
+				CallID: callID,
+				Status: domain.ToolStatusSuccess,
+				Content: []domain.ContentPart{
+					{Kind: domain.PartText, Text: "header"},
+					{Kind: domain.PartArtifact, Artifact: &ref},
+				},
+			},
+		}},
+	}
+	gotID, _, gotArtifacts := toolResultPreview(artMsg)
+	if gotID != callID || len(gotArtifacts) != 1 || gotArtifacts[0] != ref {
+		t.Fatalf("artifact extraction = (%v, %v), want (%v, [%v])", gotID, gotArtifacts, callID, ref)
 	}
 
 	errMsg := domain.Message{
@@ -558,7 +582,7 @@ func TestToolResultPreviewExtractsAndBounds(t *testing.T) {
 			},
 		}},
 	}
-	if _, preview := toolResultPreview(errMsg); preview != "boom" {
+	if _, preview, _ := toolResultPreview(errMsg); preview != "boom" {
 		t.Fatalf("error preview = %q, want error message", preview)
 	}
 }

@@ -36,6 +36,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
+	"github.com/liubang/playground/go/pl/loom/internal/trace"
 )
 
 // ControllerState represents the high-level state of the SessionController.
@@ -630,6 +631,40 @@ func (c *Controller) SetModel(ctx context.Context, ref string) (SetModelResult, 
 	}
 }
 
+// FeedbackScoreName is the Langfuse score name user votes are recorded
+// under (BOOLEAN: 1 = thumbs up, 0 = thumbs down).
+const FeedbackScoreName = "user_feedback"
+
+// SubmitFeedback records a user vote for one run's trace. value is 1 (up)
+// or 0 (down); comment is optional free text. The run → trace binding
+// travels in assistant-message metadata, so the lookup scans the live
+// transcript projection — the same messages the client renders, hence
+// exactly the set a user can vote on.
+func (c *Controller) SubmitFeedback(ctx context.Context, runID string, value float64, comment string) error {
+	resultCh := make(chan controllerResult, 1)
+	select {
+	case c.cmdCh <- controllerCommand{
+		Kind:            cmdSubmitFeedback,
+		FeedbackRunID:   runID,
+		FeedbackValue:   value,
+		FeedbackComment: comment,
+		ResultCh:        resultCh,
+	}:
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.doneCh:
+		return fmt.Errorf("controller is closed")
+	}
+	select {
+	case result := <-resultCh:
+		return result.Err
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.doneCh:
+		return fmt.Errorf("controller is closed")
+	}
+}
+
 // ResumeSession resumes an existing session.
 func (c *Controller) ResumeSession(ctx context.Context, sessionID domain.SessionID) error {
 	resultCh := make(chan controllerResult, 1)
@@ -957,6 +992,8 @@ func (c *Controller) dispatch(cmd controllerCommand) {
 		c.handleAnswerQuestion(cmd)
 	case cmdRequestSnapshot:
 		c.handleRequestSnapshot(cmd)
+	case cmdSubmitFeedback:
+		c.handleSubmitFeedback(cmd)
 	case cmdListCheckpoints:
 		c.handleListCheckpoints(cmd)
 	case cmdRewind:
@@ -1233,7 +1270,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 		Run:                run,
 		Model:              provider.ModelFor(current.Model),
 		ModelName:          current.Model,
-		Store:              &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
+		Store:              &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), artifacts: make(map[domain.ToolCallID][]domain.ArtifactRef), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
 		Approver:           c.rulesApprover,
 		Policy:             c.bootstrap.CurrentPolicy(),
 		Registry:           c.runtime.Registry,
@@ -1771,6 +1808,38 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 	cmd.ResultCh <- controllerResult{Value: snap}
 }
 
+// handleSubmitFeedback resolves the run's trace ID from the stamped
+// assistant-message metadata and forwards the vote to the trace backend.
+// The scan runs newest-first: feedback almost always targets a recent turn.
+func (c *Controller) handleSubmitFeedback(cmd controllerCommand) {
+	c.mu.Lock()
+	traceID := ""
+	for i := len(c.messages) - 1; i >= 0; i-- {
+		m := c.messages[i]
+		if m.Role == domain.RoleAssistant && m.Metadata["run_id"] == cmd.FeedbackRunID {
+			traceID = m.Metadata["trace_id"]
+			break
+		}
+	}
+	var recorder trace.Recorder
+	if c.bootstrap != nil {
+		recorder = c.bootstrap.Recorder
+	}
+	c.mu.Unlock()
+
+	if traceID == "" {
+		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("%w: %s", ErrFeedbackTargetUnknown, cmd.FeedbackRunID)}
+		return
+	}
+	// ScoreTrace is fire-and-forget by contract; a background context keeps
+	// the submission alive even if the HTTP request's context is done.
+	if recorder == nil || !recorder.ScoreTrace(context.Background(), traceID, FeedbackScoreName, cmd.FeedbackValue, cmd.FeedbackComment) {
+		cmd.ResultCh <- controllerResult{Err: ErrTracingDisabled}
+		return
+	}
+	cmd.ResultCh <- controllerResult{}
+}
+
 func (c *Controller) handleShutdown() {
 	c.mu.Lock()
 	if c.state == ControllerStateClosed {
@@ -1882,6 +1951,7 @@ const (
 	cmdRequestSnapshot   = "request_snapshot"
 	cmdListCheckpoints   = "list_checkpoints"
 	cmdRewind            = "rewind"
+	cmdSubmitFeedback    = "submit_feedback"
 	cmdShutdown          = "shutdown"
 )
 
@@ -1902,8 +1972,13 @@ type controllerCommand struct {
 	CheckpointSequence int64
 	Limit              int
 	// Actor identifies who resolved an approval (cmdResolveApproval).
-	Actor    string
-	ResultCh chan<- controllerResult
+	Actor string
+	// Feedback carries the user-feedback vote (cmdSubmitFeedback): the
+	// target run, the 0/1 vote, and an optional free-text comment.
+	FeedbackRunID   string
+	FeedbackValue   float64
+	FeedbackComment string
+	ResultCh        chan<- controllerResult
 }
 
 type controllerResult struct {
@@ -1927,6 +2002,11 @@ type publishingStore struct {
 	// EventToolResultAdded and EventToolExecutionCompleted, so the runtime
 	// ToolCompleted event can carry a displayable preview.
 	previews map[domain.ToolCallID]string
+
+	// artifacts stashes the artifact references of a tool result keyed by call
+	// ID over the same window, so the runtime ToolCompleted event can carry
+	// them for live rendering (e.g. generate_image output).
+	artifacts map[domain.ToolCallID][]domain.ArtifactRef
 
 	// pendingArgs stashes raw tool-call arguments keyed by call ID between
 	// EventModelResponseCompleted (which carries them in the assistant
@@ -2116,9 +2196,15 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 	case domain.EventToolResultAdded:
 		var payload domain.MessageEventPayload
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
-			callID, preview := toolResultPreview(payload.Message)
-			if !callID.IsZero() && preview != "" && s.previews != nil {
+			callID, preview, artifacts := toolResultPreview(payload.Message)
+			if callID.IsZero() {
+				break
+			}
+			if preview != "" && s.previews != nil {
 				s.previews[callID] = preview
+			}
+			if len(artifacts) > 0 && s.artifacts != nil {
+				s.artifacts[callID] = artifacts
 			}
 		}
 	case domain.EventToolExecutionStarted:
@@ -2136,6 +2222,8 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			durationMs := payload.FinishedAt.Sub(payload.StartedAt).Milliseconds()
 			preview := s.previews[payload.CallID]
 			delete(s.previews, payload.CallID)
+			artifacts := s.artifacts[payload.CallID]
+			delete(s.artifacts, payload.CallID)
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindToolCompleted, runtimeevent.ToolCompletedPayload{
 				CallID:       payload.CallID,
 				ToolName:     payload.ToolName,
@@ -2145,6 +2233,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ErrorMessage: payload.ErrorMessage,
 				FinishedAt:   payload.FinishedAt,
 				Preview:      preview,
+				Artifacts:    artifacts,
 			})
 		}
 	case domain.EventBudgetUpdated:
@@ -2283,26 +2372,33 @@ func toolCallTarget(audit toolCallAuditDTO) string {
 const pendingArgsCap = 256
 
 // toolResultPreview extracts a bounded text excerpt from a tool-result
-// message: the joined text parts, falling back to the error message.
-func toolResultPreview(msg domain.Message) (domain.ToolCallID, string) {
+// message (the joined text parts, falling back to the error message) plus
+// the artifact references carried by the result content.
+func toolResultPreview(msg domain.Message) (domain.ToolCallID, string, []domain.ArtifactRef) {
 	for _, part := range msg.Parts {
 		if part.Kind != domain.PartToolResult || part.ToolResult == nil {
 			continue
 		}
 		result := part.ToolResult
 		var b strings.Builder
+		var artifacts []domain.ArtifactRef
 		for _, cp := range result.Content {
-			if cp.Kind == domain.PartText {
+			switch cp.Kind {
+			case domain.PartText:
 				b.WriteString(cp.Text)
+			case domain.PartArtifact:
+				if cp.Artifact != nil {
+					artifacts = append(artifacts, *cp.Artifact)
+				}
 			}
 		}
 		text := b.String()
 		if strings.TrimSpace(text) == "" && result.Error != nil {
 			text = result.Error.Message
 		}
-		return result.CallID, boundPreviewLines(text, domain.ToolPreviewMaxLines, domain.ToolPreviewMaxBytes)
+		return result.CallID, boundPreviewLines(text, domain.ToolPreviewMaxLines, domain.ToolPreviewMaxBytes), artifacts
 	}
-	return domain.ToolCallID{}, ""
+	return domain.ToolCallID{}, "", nil
 }
 
 // boundPreviewLines trims text to at most maxLines lines and maxBytes bytes,

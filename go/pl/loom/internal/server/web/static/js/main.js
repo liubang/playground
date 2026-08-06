@@ -16,6 +16,9 @@ import { shortId, estTranscriptTokens } from "./format.js";
 const TOKEN_KEY = "loom_token";
 const THEME_KEY = "loom_theme";
 const SIDEBAR_KEY = "loom_sidebar_collapsed";
+// 反馈投票本地态：key 带 session+run，存 "up"/"down"。仅作 UI 恢复用，
+// 真源在 Langfuse（score id 幂等覆盖，重投不产生重复分数）。
+const fbKey = (sessionId, runId) => `loom_fb_${sessionId}_${runId}`;
 
 const $ = (id) => document.getElementById(id);
 
@@ -171,6 +174,24 @@ function onUnauthorized() {
   sessionStorage.removeItem(TOKEN_KEY);
   app.token = "";
   showGate("token invalid or expired — paste the current serve token");
+}
+
+// artifact 图片加载：<img> 无法携带 Authorization 头，而 /v1/* 需要
+// Bearer 鉴权，因此用 fetch 拉取后生成 blob URL。artifact 是内容寻址的
+// 不可变 blob，按 id+size 缓存可避免同一图片在 snapshot/实时两条路径
+// 重复下载；缓存随页面生命周期存续（规模受生成图片数量约束）。
+const artifactURLCache = new Map();
+async function fetchArtifactURL(id, size) {
+  const key = `${id}:${size}`;
+  const cached = artifactURLCache.get(key);
+  if (cached) return cached;
+  const res = await fetch(`/v1/artifacts/${encodeURIComponent(id)}?size=${size}`, {
+    headers: { Authorization: "Bearer " + app.token },
+  });
+  if (!res.ok) throw new Error(`artifact fetch failed (HTTP ${res.status})`);
+  const url = URL.createObjectURL(await res.blob());
+  artifactURLCache.set(key, url);
+  return url;
 }
 
 // 复制完整工具输出：实时 tool.completed 事件只带有界 preview，
@@ -572,6 +593,16 @@ async function boot() {
     answerQuestion: (questionId, answer) =>
       app.api.answerQuestion(app.sessionId, questionId, answer),
     fetchToolOutput,
+    fetchArtifactURL,
+    // 反馈投票：成功才写 localStorage（块内选中态由 transcript 维护）；
+    // tracing 未开启 / run 无 trace 时后端返回错误码，抛回让块内回滚。
+    sendFeedback: async (runId, value) => {
+      await app.api.submitFeedback(app.sessionId, runId, value);
+      try { localStorage.setItem(fbKey(app.sessionId, runId), value === 1 ? "up" : "down"); } catch { /* 隐私模式等：忽略 */ }
+    },
+    getFeedback: (runId) => {
+      try { return localStorage.getItem(fbKey(app.sessionId, runId)) || ""; } catch { return ""; }
+    },
     onError: (e) => toast(e.message),
   });
   app.transcript.setFollowButton($("follow-btn"));

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/app"
@@ -91,8 +92,30 @@ func mapError(err error) *statusError {
 		return &statusError{status: http.StatusConflict, code: "cursor_invalid", message: err.Error()}
 	case errors.Is(err, app.ErrTooManySessions), errors.Is(err, app.ErrTooManyTurns):
 		return &statusError{status: http.StatusTooManyRequests, code: "rate_limited", message: err.Error()}
+	case errors.Is(err, app.ErrTracingDisabled):
+		return &statusError{status: http.StatusServiceUnavailable, code: "tracing_disabled", message: err.Error()}
+	case errors.Is(err, app.ErrFeedbackTargetUnknown):
+		return &statusError{status: http.StatusNotFound, code: "feedback_target_unknown", message: err.Error()}
 	}
 	msg := err.Error()
+	// Domain typed errors (artifact store, etc.).
+	var agentErr *domain.AgentError
+	if errors.As(err, &agentErr) {
+		switch agentErr.Code {
+		case domain.ErrUnavailable:
+			// A missing artifact blob surfaces as unavailable wrapping
+			// os.ErrNotExist; only that case is a client-visible 404.
+			// Generic unavailability (e.g. store not configured) is a 503.
+			if errors.Is(err, os.ErrNotExist) {
+				return &statusError{status: http.StatusNotFound, code: "not_found", message: msg}
+			}
+			return &statusError{status: http.StatusServiceUnavailable, code: "unavailable", message: msg}
+		case domain.ErrConflict:
+			return &statusError{status: http.StatusConflict, code: "conflict", message: msg}
+		case domain.ErrBudget:
+			return &statusError{status: http.StatusRequestEntityTooLarge, code: "too_large", message: msg}
+		}
+	}
 	switch {
 	case strings.Contains(msg, "cannot submit prompt in state"),
 		strings.Contains(msg, "cannot cancel in state"),

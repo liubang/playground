@@ -63,6 +63,12 @@ type Run struct {
 	// means no wrap-up is pending. In-memory only; crash recovery re-arms
 	// it from the budget.wrapup_started event or the transcript tail.
 	WrapUpPending string
+	// TraceID is the observability backend's trace identifier for this run,
+	// set by the loop right after StartRun ("" when tracing is disabled).
+	// In-memory only — it travels to persistence via the stamped message
+	// metadata (AddAssistantMessage), which is what late-arriving user
+	// feedback uses to find the trace again.
+	TraceID string
 }
 
 // NewRun creates a new Run in the preparing phase.
@@ -497,6 +503,17 @@ func (r *Run) AddBudgetNotice(payload domain.BudgetNoticePayload) domain.Event {
 // AddAssistantMessage appends an assistant message.
 func (r *Run) AddAssistantMessage(msg domain.Message) domain.Event {
 	r.normalizeMessage(&msg)
+	// Stamp the run/trace identity so both frontends (per-turn feedback
+	// targeting) and the feedback endpoint (run_id → trace_id lookup) can
+	// correlate this message with its observability trace after restart —
+	// the metadata persists with checkpoints and events.
+	if msg.Metadata == nil {
+		msg.Metadata = make(map[string]string, 2)
+	}
+	msg.Metadata["run_id"] = r.ID.String()
+	if r.TraceID != "" {
+		msg.Metadata["trace_id"] = r.TraceID
+	}
 	r.Messages = append(r.Messages, msg)
 	r.Version++
 	evt := r.newEvent(domain.EventModelResponseCompleted, domain.MessageEventPayload{Message: msg})
@@ -1029,6 +1046,9 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 		Prompt:    l.Prompt,
 		Workspace: l.Workspace,
 	})
+	// Publish the trace identity onto the run so every assistant message
+	// persisted this turn carries it (see AddAssistantMessage).
+	l.Run.TraceID = l.traceRun.TraceID()
 	defer func() {
 		result := trace.RunResult{
 			Outcome: string(l.Run.State.Outcome),

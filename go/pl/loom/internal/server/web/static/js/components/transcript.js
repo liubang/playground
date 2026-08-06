@@ -5,6 +5,7 @@ import {
   el, userBlock, assistantBlock, streamBlock, reasoningBlock, thinkingBlock,
   toolBlock, attachDiff, approvalCard, questionCard, resolvedNotice,
   noticeBlock, fatalBlock, histTarget, histCompletion, compactBlock,
+  imageBlock, artifactImageBlock,
 } from "./blocks.js";
 import { diffForToolCall } from "../diff.js";
 
@@ -26,6 +27,9 @@ export class Transcript {
     this.steers = [];              // pending steer notice（{el, text}，FIFO）
     this.following = true;
     this._rafPending = false;
+    this._pendingStreamTs = "";   // 首个 text_delta 事件时间，收笔注入草稿操作行
+    this._turnAssistant = null;    // 本轮最新 assistant 块（操作行只挂在这一块上）
+    this._turnRunID = "";         // 本轮 run id（turn.started 信封），反馈投票目标
 
     scroller.addEventListener("scroll", () => {
       const gap = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
@@ -53,6 +57,9 @@ export class Transcript {
     this.questions.clear();
     this.steers = [];
     this.following = true;
+    this._pendingStreamTs = "";
+    this._turnAssistant = null;
+    this._turnRunID = "";
     if (this.followBtn) this.followBtn.hidden = true;
   }
 
@@ -78,6 +85,31 @@ export class Transcript {
     this._maybeFollow();
   }
 
+  // 操作行只跟随本轮最新 assistant 块：新的 assistant 文本出现时，
+  // 摘掉上一块的操作行（一轮里「文本→工具→文本」只在最后一段保留）。
+  _stripTurnAssistantRow() {
+    this._turnAssistant?.querySelector(":scope > .msg-actions")?.remove();
+    this._turnAssistant = null;
+  }
+
+  // 反馈上下文：runId 为空（无 trace 的旧消息）时不渲染赞/踩。
+  // onFeedback 失败在块内回滚选中态，这里同时弹出错误提示。
+  _fbOpts(runId) {
+    if (!runId || !this.io.sendFeedback) return null;
+    return {
+      runId,
+      feedback: this.io.getFeedback ? this.io.getFeedback(runId) : "",
+      onFeedback: async (id, value) => {
+        try {
+          await this.io.sendFeedback(id, value);
+        } catch (e) {
+          if (this.io.onError) this.io.onError(e);
+          throw e;
+        }
+      },
+    };
+  }
+
   // --- thinking 动画（等待模型输出） ---
 
   _showThinking() {
@@ -97,14 +129,28 @@ export class Transcript {
   applySnapshot(snap) {
     this.clear();
     const histTools = new Map(); // call_id → tool block api（跨消息配对 tool_result）
+    let lastAssistant = null;    // 本轮最新 assistant 块：新段出现时摘旧段操作行
+    let lastRunId = "";          // 最后一条 assistant 消息的 run_id（反馈接力用）
+    const stripRow = () => {
+      lastAssistant?.querySelector(":scope > .msg-actions")?.remove();
+    };
     for (const m of snap.messages || []) {
       let textRun = [];
+      const createdAt = m.created_at || "";
       const flushText = () => {
         if (textRun.length === 0) return;
         const text = textRun.join("\n");
         textRun = [];
-        if (m.role === "user") this._append(userBlock(text));
-        else this._append(assistantBlock(text));
+        if (m.role === "user") {
+          this._append(userBlock(text, createdAt));
+        } else {
+          stripRow();
+          // 反馈目标：消息落盘时 agent loop 已打上 run_id metadata
+          const runId = (m.metadata && m.metadata.run_id) || "";
+          if (runId) lastRunId = runId;
+          lastAssistant = assistantBlock(text, createdAt, this._fbOpts(runId));
+          this._append(lastAssistant);
+        }
       };
       for (const p of m.parts || []) {
         switch (p.kind) {
@@ -122,7 +168,10 @@ export class Transcript {
           case "tool_call":
             flushText();
             if (p.tool_call) {
-              const tb = toolBlock({ tool_name: p.tool_call.name, target: histTarget(p.tool_call) });
+              const tb = toolBlock(
+                { tool_name: p.tool_call.name, target: histTarget(p.tool_call) },
+                { resolveArtifactURL: this.io.fetchArtifactURL },
+              );
               if (p.tool_call.id) histTools.set(p.tool_call.id, tb);
               // diff 不落盘（只在实时 tool.prepared 载荷里）：历史重建时从
               // edit/write 参数本地重算（diff.js diffForToolCall）
@@ -140,10 +189,18 @@ export class Transcript {
             break;
           case "image":
             flushText();
-            this._append(noticeBlock("[image]"));
+            if (p.image) {
+              this._append(imageBlock(p.image.media_type, p.image.data));
+            }
+            break;
+          case "artifact_ref":
+            flushText();
+            if (p.artifact) {
+              this._append(artifactImageBlock(p.artifact.id, p.artifact.size, this.io.fetchArtifactURL));
+            }
             break;
           default:
-            break; // artifact_ref 等：忽略
+            break;
         }
       }
       flushText();
@@ -154,6 +211,10 @@ export class Transcript {
     }
     // pending steer 队列重建（STEER_DESIGN §4.5：snapshot 兜底）
     for (const text of snap.pending_steers || []) this._addSteerNotice(text);
+    // 快照可能截在轮次中途（会话仍在 running）：让实时路径能接力摘除
+    // 这一块的操作行——新 assistant 段到达时行会迁移到最新段上。
+    this._turnAssistant = lastAssistant;
+    this._turnRunID = lastRunId;
     this._scrollToBottom();
   }
 
@@ -165,7 +226,11 @@ export class Transcript {
       case "turn.started":
         this._hideThinking();
         this._drainSteerNotices(p.prompt || "");
-        this._append(userBlock(p.prompt || ""));
+        this._append(userBlock(p.prompt || "", evt.time || ""));
+        // 新一轮开始：上一轮末尾的操作行保留（作为该轮结束标志），
+        // 本轮从新起算；记录 run id 作为本轮反馈投票目标
+        this._turnAssistant = null;
+        this._turnRunID = evt.run_id || "";
         this._showThinking();
         break;
       case "turn.finished":
@@ -175,6 +240,8 @@ export class Transcript {
         break;
       case "model.text_delta":
         this._hideThinking();
+        // 记录首个 delta 的事件时间，供草稿收笔时注入消息时间提示
+        if (!this._pendingStreamTs && evt.time) this._pendingStreamTs = evt.time;
         this._ensureStream().append(p.delta || "");
         this._maybeFollow();
         break;
@@ -188,7 +255,9 @@ export class Transcript {
         // canonical 校正：以 completed.text 整段替换草稿（§3.2 铁律 3）
         if (p.text) {
           this._discardStream();
-          this._append(assistantBlock(p.text));
+          this._stripTurnAssistantRow();
+          this._turnAssistant = assistantBlock(p.text, evt.time || "", this._fbOpts(this._turnRunID));
+          this._append(this._turnAssistant);
         } else {
           this._finalizeStream();
         }
@@ -205,6 +274,7 @@ export class Transcript {
           onCopy: this.io.fetchToolOutput
             ? () => this.io.fetchToolOutput(p.call_id)
             : null,
+          resolveArtifactURL: this.io.fetchArtifactURL,
         });
         if (p.call_id) this.tools.set(p.call_id, tb);
         if (p.diff) attachDiff(tb.el, p.diff);
@@ -243,7 +313,7 @@ export class Transcript {
         // cell 严格 FIFO：移除头部第一条 queued notice，转为正式 user block
         const head = this.steers.shift();
         if (head) head.el.remove();
-        if (p.text) this._append(userBlock(p.text));
+        if (p.text) this._append(userBlock(p.text, evt.time || ""));
         this._showThinking();
         break;
       }
@@ -302,7 +372,11 @@ export class Transcript {
 
   _ensureStream() {
     if (!this.stream) {
-      this.stream = streamBlock();
+      // 新草稿开始：操作行从上一段迁移过来（收笔时由 finalize 注入）
+      this._stripTurnAssistantRow();
+      this.stream = streamBlock(this._pendingStreamTs || "", this._fbOpts(this._turnRunID));
+      this._pendingStreamTs = "";
+      this._turnAssistant = this.stream.el;
       this._append(this.stream.el);
     }
     return this.stream;
@@ -320,6 +394,7 @@ export class Transcript {
     if (!this.stream) return;
     const s = this.stream;
     this.stream = null;
+    this._pendingStreamTs = "";
     // 草稿已是 markdown 实时渲染：收笔做最终渲染即可，不再整体替换节点
     if (s.text().trim()) s.finalize();
     else s.el.remove();
@@ -331,6 +406,7 @@ export class Transcript {
     this.stream.discard();
     this.stream.el.remove();
     this.stream = null;
+    this._pendingStreamTs = "";
   }
 
   _finalizeReasoning() {

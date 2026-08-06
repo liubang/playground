@@ -54,6 +54,7 @@ go_library(
         "//go/pl/loom/internal/tool/edit:edit_lib",
         "//go/pl/loom/internal/tool/exsession:exsession_lib",
         "//go/pl/loom/internal/tool/gittools:gittools_lib",
+        "//go/pl/loom/internal/tool/imagegen:imagegen_lib",
         "//go/pl/loom/internal/tool/lint:lint_lib",
         "//go/pl/loom/internal/tool/skillread:skillread_lib",
         "//go/pl/loom/internal/tool/subagent:subagent_lib",

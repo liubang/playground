@@ -90,6 +90,12 @@ type Recorder interface {
 	// StartRun opens the root span for one run. The returned context carries
 	// the span so generation/tool spans parent to it.
 	StartRun(ctx context.Context, meta RunMeta) (context.Context, RunHandle)
+	// ScoreTrace submits a score for a trace by ID, independent of any
+	// active run handle — user feedback arrives after the run ended and its
+	// handle is gone. delivered reports whether a backend accepted the
+	// submission; the noop recorder returns false so callers can surface
+	// "tracing disabled" instead of silently dropping the vote.
+	ScoreTrace(ctx context.Context, traceID, name string, value float64, comment string) (delivered bool)
 }
 
 // RunHandle records child observations and closes the root span.
@@ -105,6 +111,10 @@ type RunHandle interface {
 	// Implementations report asynchronously; failures are logged, never
 	// propagated.
 	Score(ctx context.Context, name string, value float64, comment string)
+	// TraceID returns the backend trace identifier for this run ("" for the
+	// noop handle). The ID stays valid after End: scores submitted later
+	// (user feedback) link to the same trace by ID.
+	TraceID() string
 	// End closes the root span with the terminal outcome.
 	End(result RunResult)
 }
@@ -125,4 +135,9 @@ func (noopRun) RecordGeneration(context.Context, GenerationRecord)     {}
 func (noopRun) RecordTool(context.Context, ToolRecord)                 {}
 func (noopRun) RecordEvent(context.Context, string, map[string]string) {}
 func (noopRun) Score(context.Context, string, float64, string)         {}
+func (noopRun) TraceID() string                                        { return "" }
 func (noopRun) End(RunResult)                                          {}
+
+func (noopRecorder) ScoreTrace(context.Context, string, string, float64, string) bool {
+	return false
+}
