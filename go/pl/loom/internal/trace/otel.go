@@ -328,14 +328,31 @@ func (run *otelRun) RecordEvent(_ context.Context, name string, attrs map[string
 	run.span.AddEvent(name, oteltrace.WithAttributes(kvs...))
 }
 
+// ScoreTrace implements Recorder.ScoreTrace: user feedback for a finished
+// run arrives with only the trace ID (recovered from the persisted message
+// metadata), so scoring must not depend on a live run handle.
+func (r *otelRecorder) ScoreTrace(_ context.Context, traceID, name string, value float64, comment string) bool {
+	if r.scores == nil || traceID == "" {
+		return false
+	}
+	r.scores.submitFeedback(traceID, name, value, comment)
+	return true
+}
+
 // Score reports a numeric trace score through Langfuse's scores API. The
 // call is fire-and-forget: reporting must never block or fail the loop.
 func (run *otelRun) Score(ctx context.Context, name string, value float64, comment string) {
 	if run.rec.scores == nil {
 		return
 	}
-	traceID := run.span.SpanContext().TraceID().String()
+	traceID := run.TraceID()
 	run.rec.scores.submit(name, traceID, value, comment)
+}
+
+// TraceID implements RunHandle.TraceID. The span context outlives End, so
+// the ID remains readable for late-arriving scores.
+func (run *otelRun) TraceID() string {
+	return run.span.SpanContext().TraceID().String()
 }
 
 func (run *otelRun) End(result RunResult) {

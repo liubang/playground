@@ -57,6 +57,7 @@ type File struct {
 	UI         UI                   `yaml:"ui"`
 	Subagent   Subagent             `yaml:"subagent"`
 	Memory     Memory               `yaml:"memory"`
+	Image      Image                `yaml:"image"`
 	MCPServers map[string]MCPServer `yaml:"mcp_servers"`
 	// Workspaces pre-registers project workspaces at startup
 	// (docs/WORKSPACE_DESIGN.md §10). Optional; the startup directory is
@@ -282,6 +283,22 @@ type Subagent struct {
 	// Model pins the sub-agent to a specific "provider/model" (or a bare
 	// model/provider name); empty follows the current turn's model.
 	Model string `yaml:"model"`
+}
+
+// Image configures text-to-image generation (the generate_image tool).
+// Generation reuses the named provider's base_url/api_key, so only
+// openai-type providers qualify; the tool is registered only when the
+// section is enabled. Enabled is nil-typed: absent means "enabled when
+// provider and model are both set", an explicit false always disables.
+type Image struct {
+	Enabled  *bool  `yaml:"enabled"`
+	Provider string `yaml:"provider"`
+	Model    string `yaml:"model"`
+	// Size/Quality are the generation defaults (OpenAI Images API
+	// vocabulary: "auto", "1024x1024", ... / "low", "medium", "high");
+	// empty means "auto".
+	Size    string `yaml:"size"`
+	Quality string `yaml:"quality"`
 }
 
 // Memory configures the long-term memory system (docs/MEMORY_DESIGN.md).

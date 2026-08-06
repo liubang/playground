@@ -207,9 +207,15 @@ type StagedArtifact interface {
 	Abort() error
 }
 
-// ArtifactStore starts independent staged artifact writes.
+// ArtifactStore starts independent staged artifact writes and reads back
+// committed blobs by content-derived reference.
 type ArtifactStore interface {
 	Begin(context.Context) (StagedArtifact, error)
+	// Read returns the full content of a committed artifact, verifying
+	// its content hash against the reference. It is used by transport
+	// adapters to serve artifact bytes to clients (e.g. inline images
+	// stored during tool execution).
+	Read(ctx context.Context, ref ArtifactRef) ([]byte, error)
 }
 
 // --- Session store types (§13.2) ---

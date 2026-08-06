@@ -282,10 +282,15 @@ type ToolCompletedPayload struct {
 	Error      string            `json:"error,omitempty"`
 	// ErrorMessage is the human-readable failure reason (e.g. "request
 	// failed with status 418"), shown inline next to the error code.
-	ErrorMessage string    `json:"error_message,omitempty"`
-	FinishedAt   time.Time `json:"finished_at,omitempty"`
-	// Preview is a bounded excerpt of the tool output for expandable display.
-	Preview string `json:"preview,omitempty"`
+ErrorMessage string    `json:"error_message,omitempty"`
+FinishedAt   time.Time `json:"finished_at,omitempty"`
+// Preview is a bounded excerpt of the tool output for expandable display.
+Preview string `json:"preview,omitempty"`
+// Artifacts carries the artifact references found in the tool result
+// content (e.g. generate_image output), so live clients can render them
+// without waiting for a snapshot rebuild. References are tiny (id + size);
+// the blob bytes never travel on the event stream.
+Artifacts []domain.ArtifactRef `json:"artifacts,omitempty"`
 }
 
 // ToolProgressPayload describes bounded progress.
