@@ -48,9 +48,11 @@ func testResolvedConfig(model domain.Model) *config.ResolvedConfig {
 func testBootstrap(store domain.SessionStore, model domain.Model) *Bootstrap {
 	resolved := testResolvedConfig(model)
 	return &Bootstrap{
-		Resolved:  resolved,
-		Current:   resolved.Default,
-		Store:     store,
+		ProcessRuntime: &ProcessRuntime{
+			Resolved: resolved,
+			Current:  resolved.Default,
+			Store:    store,
+		},
 		Registry:  agent.NewToolRegistry(),
 		SteerCell: agent.NewSteerCell(),
 	}
@@ -724,9 +726,11 @@ func TestControllerSetReasoning(t *testing.T) {
 	}
 	controller := NewController(ControllerConfig{
 		Bootstrap: &Bootstrap{
-			Resolved:  resolved,
-			Current:   resolved.Default,
-			Store:     store,
+			ProcessRuntime: &ProcessRuntime{
+				Resolved: resolved,
+				Current:  resolved.Default,
+				Store:    store,
+			},
 			Registry:  agent.NewToolRegistry(),
 			SteerCell: agent.NewSteerCell(),
 		},

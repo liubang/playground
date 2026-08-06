@@ -275,13 +275,19 @@ func TestE2EMCPBootstrapIntegration(t *testing.T) {
 	resolved.Storage.BaseDir = ws
 	prepareSessionsDir(t, resolved)
 
-	bootstrap, err := app.NewBootstrap(context.Background(), resolved, app.BootstrapConfig{
-		WorkspaceRoot: ws,
-		ArtifactDir:   filepath.Join(ws, "artifacts"),
-		Version:       "e2e-test",
+	proc, err := app.NewProcessRuntime(context.Background(), resolved, app.ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(ws, "artifacts"),
+		Version:     "e2e-test",
 	})
 	if err != nil {
-		t.Fatalf("NewBootstrap() error = %v", err)
+		t.Fatalf("NewProcessRuntime() error = %v", err)
+	}
+	defer proc.Close()
+	bootstrap, err := app.NewWorkspaceBootstrap(context.Background(), proc, app.BootstrapConfig{
+		WorkspaceRoot: ws,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkspaceBootstrap() error = %v", err)
 	}
 	defer bootstrap.Close()
 
@@ -353,13 +359,19 @@ func TestE2EMCPToolFiltering(t *testing.T) {
 	resolved.Storage.BaseDir = ws
 	prepareSessionsDir(t, resolved)
 
-	bootstrap, err := app.NewBootstrap(context.Background(), resolved, app.BootstrapConfig{
-		WorkspaceRoot: ws,
-		ArtifactDir:   filepath.Join(ws, "artifacts"),
-		Version:       "e2e-test",
+	proc, err := app.NewProcessRuntime(context.Background(), resolved, app.ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(ws, "artifacts"),
+		Version:     "e2e-test",
 	})
 	if err != nil {
-		t.Fatalf("NewBootstrap() error = %v", err)
+		t.Fatalf("NewProcessRuntime() error = %v", err)
+	}
+	defer proc.Close()
+	bootstrap, err := app.NewWorkspaceBootstrap(context.Background(), proc, app.BootstrapConfig{
+		WorkspaceRoot: ws,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkspaceBootstrap() error = %v", err)
 	}
 	defer bootstrap.Close()
 
@@ -388,13 +400,19 @@ func TestE2EMCPGracefulDegradation(t *testing.T) {
 	resolved.Storage.BaseDir = ws
 	prepareSessionsDir(t, resolved)
 
-	bootstrap, err := app.NewBootstrap(context.Background(), resolved, app.BootstrapConfig{
-		WorkspaceRoot: ws,
-		ArtifactDir:   filepath.Join(ws, "artifacts"),
-		Version:       "e2e-test",
+	proc, err := app.NewProcessRuntime(context.Background(), resolved, app.ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(ws, "artifacts"),
+		Version:     "e2e-test",
 	})
 	if err != nil {
-		t.Fatalf("NewBootstrap() error = %v, want graceful degradation", err)
+		t.Fatalf("NewProcessRuntime() error = %v, want graceful degradation", err)
+	}
+	defer proc.Close()
+	bootstrap, err := app.NewWorkspaceBootstrap(context.Background(), proc, app.BootstrapConfig{
+		WorkspaceRoot: ws,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkspaceBootstrap() error = %v, want graceful degradation", err)
 	}
 	defer bootstrap.Close()
 

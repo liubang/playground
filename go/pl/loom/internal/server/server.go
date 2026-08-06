@@ -95,7 +95,7 @@ type Server struct {
 	done     chan struct{}
 	doneOnce sync.Once
 
-	sseMu   sync.Mutex
+	sseMu    sync.Mutex
 	sseConns map[string]int
 }
 
@@ -223,11 +223,15 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 	mux.HandleFunc("GET /v1/meta/version", s.handleMetaVersion)
 	mux.HandleFunc("GET /v1/meta/models", s.handleMetaModels)
+	mux.HandleFunc("GET /v1/workspaces", s.handleListWorkspaces)
+	mux.HandleFunc("POST /v1/workspaces", s.handleRegisterWorkspace)
+	mux.HandleFunc("GET /v1/workspaces/{id}", s.handleGetWorkspace)
+	mux.HandleFunc("GET /v1/files/browse", s.handleBrowseDirectories)
 	mux.HandleFunc("GET /v1/sessions", s.handleListSessions)
 	mux.HandleFunc("POST /v1/sessions", s.handleCreateSession)
 	mux.HandleFunc("GET /v1/sessions/{id}", s.handleInspectSession)
-mux.HandleFunc("POST /v1/sessions/{id}/archive", s.handleArchiveSession)
-mux.HandleFunc("DELETE /v1/sessions/{id}", s.handleDeleteSession)
+	mux.HandleFunc("POST /v1/sessions/{id}/archive", s.handleArchiveSession)
+	mux.HandleFunc("DELETE /v1/sessions/{id}", s.handleDeleteSession)
 	mux.HandleFunc("GET /v1/sessions/{id}/transcript", s.handleTranscript)
 	mux.HandleFunc("GET /v1/sessions/{id}/snapshot", s.handleSnapshot)
 	mux.HandleFunc("POST /v1/sessions/{id}/prompts", s.handleSubmitPrompt)

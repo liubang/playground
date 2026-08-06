@@ -31,7 +31,10 @@
 <div id="app" class="shell" hidden>
   <div class="app-body">
     <aside id="sidebar" class="sidebar">
-      <button id="new-session" class="new-session">+ 新会话</button>
+      <div class="ws-bar">
+        <span class="ws-bar-title">工作区</span>
+        <button id="ws-add" class="icon-btn" title="添加工作区">+</button>
+      </div>
       <div id="session-list" class="session-list"></div>
       <div class="sidebar-foot">
         <button id="toggle-archived" class="foot-btn" title="查看归档会话">归档</button>
@@ -72,6 +75,13 @@
               </button>
             </div>
             <div class="composer-actions">
+              <span id="ctx-gauge" class="ctx-gauge" hidden>
+                <svg class="ctx-ring" viewBox="0 0 18 18" aria-hidden="true">
+                  <circle class="ctx-ring-bg" cx="9" cy="9" r="7"></circle>
+                  <circle class="ctx-ring-fg" cx="9" cy="9" r="7"></circle>
+                </svg>
+                <span class="ctx-gauge-pct"></span>
+              </span>
               <button id="cancel-btn" class="icon-btn-circle btn-danger" title="cancel turn" hidden>■</button>
               <button id="send-btn" class="send-btn" title="发送 (Enter)">↑</button>
             </div>
@@ -84,7 +94,6 @@
 
   <div id="banner" class="banner" hidden></div>
   <footer class="statusbar">
-    <span id="sb-ctx"></span>
     <span id="sb-usage" class="mono"></span>
     <span id="sb-turn"></span>
     <span class="spacer"></span>
@@ -103,6 +112,22 @@
     <div class="modal-actions">
       <button id="confirm-cancel" class="btn btn-secondary" type="button">取消</button>
       <button id="confirm-ok" class="btn btn-danger" type="button">删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 目录浏览弹窗（添加工作区选择目录） -->
+<div id="dir-modal" class="modal-wrap" hidden>
+  <div class="modal dir-modal" role="dialog" aria-modal="true" aria-labelledby="dir-title">
+    <div class="modal-title" id="dir-title">选择工作区目录</div>
+    <div class="dir-current">
+      <button id="dir-up" class="icon-btn" title="上一级" type="button">‹</button>
+      <nav id="dir-path" class="dir-crumbs" aria-label="当前目录"></nav>
+    </div>
+    <div id="dir-list" class="dir-list"></div>
+    <div class="modal-actions">
+      <button id="dir-cancel" class="btn btn-secondary" type="button">取消</button>
+      <button id="dir-select" class="btn btn-primary" type="button">选择此目录</button>
     </div>
   </div>
 </div>

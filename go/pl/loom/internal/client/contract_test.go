@@ -60,9 +60,11 @@ func testBootstrapForContract(t *testing.T, model domain.Model) (*app.Bootstrap,
 		Limits:  domain.DefaultLimits(),
 	}
 	return &app.Bootstrap{
-		Resolved: resolved,
-		Current:  resolved.Default,
-		Store:    store,
+		ProcessRuntime: &app.ProcessRuntime{
+			Resolved: resolved,
+			Current:  resolved.Default,
+			Store:    store,
+		},
 		Registry: agent.NewToolRegistry(),
 	}, store
 }
@@ -72,7 +74,7 @@ func inprocFactory(t *testing.T, model domain.Model) Client {
 	bootstrap, _ := testBootstrapForContract(t, model)
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	t.Cleanup(broker.Close)
-	svc := app.NewSessionService(bootstrap, broker, app.SessionServiceConfig{})
+	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{})
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
 	return NewInProc(svc)
 }
@@ -82,7 +84,7 @@ func httpFactory(t *testing.T, model domain.Model) Client {
 	bootstrap, _ := testBootstrapForContract(t, model)
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	t.Cleanup(broker.Close)
-	svc := app.NewSessionService(bootstrap, broker, app.SessionServiceConfig{})
+	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{})
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
 	srv, err := server.New(server.Config{Token: "contract-token", Version: "test", Service: svc})
 	if err != nil {

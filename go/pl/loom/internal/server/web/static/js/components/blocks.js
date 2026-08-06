@@ -4,6 +4,7 @@
 
 import { renderMarkdownInto } from "../markdown.js";
 import { renderDiff } from "../diff.js";
+import { fmtTokens, fmtBytes } from "../format.js";
 
 export function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -352,6 +353,24 @@ export function renderPlanInto(panel, plan) {
 
 export function noticeBlock(text, warn) {
   return el("div", "notice" + (warn ? " is-warn" : ""), text);
+}
+
+// context.compacted 明细卡片：压缩前后估值 + 触发原因 + 各级动作明细。
+export function compactBlock(p) {
+  const wrap = el("div", "notice compact");
+  const before = fmtTokens(p.est_tokens_before) || "?";
+  const after = fmtTokens(p.est_tokens_after) || "?";
+  wrap.appendChild(el("div", "compact-head", `⚡ context compacted · ${before} → ${after}`));
+  const details = [];
+  if (p.trigger) details.push("trigger: " + p.trigger);
+  if (p.masked_outputs) {
+    const bytes = p.masked_bytes ? ` (${fmtBytes(p.masked_bytes)})` : "";
+    details.push(`mask ${p.masked_outputs} outputs${bytes}`);
+  }
+  if (p.archived_messages) details.push(`archive ${p.archived_messages} msgs`);
+  if (p.summarized) details.push("summary handoff");
+  if (details.length) wrap.appendChild(el("div", "compact-detail", details.join(" · ")));
+  return wrap;
 }
 
 export function fatalBlock(text) {

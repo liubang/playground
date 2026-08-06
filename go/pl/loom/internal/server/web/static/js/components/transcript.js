@@ -4,7 +4,7 @@
 import {
   el, userBlock, assistantBlock, streamBlock, reasoningBlock, thinkingBlock,
   toolBlock, attachDiff, approvalCard, questionCard, resolvedNotice,
-  noticeBlock, fatalBlock, histTarget, histCompletion,
+  noticeBlock, fatalBlock, histTarget, histCompletion, compactBlock,
 } from "./blocks.js";
 import { diffForToolCall } from "../diff.js";
 
@@ -256,10 +256,11 @@ export class Transcript {
         this._finalizeStream();
         break;
       case "context.compacted":
-        this._append(noticeBlock("context compacted"));
+        this._append(compactBlock(p));
         break;
       case "budget.notice":
-        this._append(noticeBlock("budget notice", true));
+        // 后端已生成具体文案（梯度提醒 / 软着陆），直接展示
+        this._append(noticeBlock(p.text || "budget notice", true));
         break;
       case "runtime.warning":
         this._append(noticeBlock(p.message || "runtime warning", true));

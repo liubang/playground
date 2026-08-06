@@ -59,6 +59,14 @@ type Snapshot struct {
 	ModelName     string           `json:"model_name"`
 	ProviderName  string           `json:"provider_name,omitempty"`
 	ContextWindow int64            `json:"context_window,omitempty"`
+	// Window projects the session's context-window thresholds
+	// (docs/CONTEXT_DESIGN.md §4.1) so frontends can render occupancy
+	// against the compaction trigger without re-deriving ratios; nil when
+	// the model declares no usable window.
+	Window *WindowInfo `json:"window,omitempty"`
+	// Occupancy is the current transcript size estimate in tokens (bytes/4),
+	// on the same scale as ContextUsagePayload.EstTokens.
+	Occupancy int64 `json:"occupancy,omitempty"`
 	// ReasoningEffort is the effective reasoning dial ("off"/"low"/... or
 	// "budget:N"); empty means the provider decides. ReasoningOverridden
 	// marks that it comes from the session override rather than the model's
@@ -91,6 +99,15 @@ type Snapshot struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// WindowInfo is the wire projection of agent.WindowModel: every threshold a
+// frontend needs to render context occupancy against the compaction trigger.
+type WindowInfo struct {
+	Nominal        int64 `json:"nominal"`
+	Effective      int64 `json:"effective"`
+	CompactTrigger int64 `json:"compact_trigger"`
+	CompactTarget  int64 `json:"compact_target"`
+}
+
 // PendingRequestKind identifies a resolvable request surfaced to frontends.
 type PendingRequestKind string
 
@@ -117,6 +134,9 @@ type SessionSummary struct {
 	Version   int64            `json:"version"`
 	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
+	// WorkspaceID is the owning workspace (docs/WORKSPACE_DESIGN.md W1),
+	// empty for pre-v5 sessions not yet backfilled.
+	WorkspaceID string `json:"workspace_id,omitempty"`
 	// State is the live controller state, or "closed" for sessions without
 	// a live runtime in this process (docs/WEB_DESIGN.md §7.7).
 	State ControllerState `json:"state"`
@@ -690,7 +710,7 @@ func (c *Controller) ListSessions(ctx context.Context, limit int) ([]SessionSumm
 	if !ok {
 		return nil, fmt.Errorf("session listing is unavailable for this store")
 	}
-	summaries, _, err := store.ListSessions(ctx, "", limit, false)
+	summaries, _, err := store.ListSessions(ctx, "", limit, false, c.bootstrap.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1130,8 +1150,9 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 	}
 	if run == nil {
 		run = agent.NewRun(c.sessionID, c.bootstrap.Resolved.Limits, clock)
-		// A fresh session may not exist until its first prompt.
-		if err := store.CreateSession(ctx, c.sessionID); err != nil {
+		// A fresh session may not exist until its first prompt; bind it to
+		// this controller's workspace (docs/WORKSPACE_DESIGN.md W1).
+		if err := store.CreateSession(ctx, c.sessionID, c.bootstrap.WorkspaceID); err != nil {
 			c.logger.Debug("create session", "error", err)
 		}
 	}
@@ -1497,7 +1518,7 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	c.state = ControllerStateIdle
 	c.mu.Unlock()
 
-	if err := c.bootstrap.Store.CreateSession(c.sessionCtx, sessionID); err != nil {
+	if err := c.bootstrap.Store.CreateSession(c.sessionCtx, sessionID, c.bootstrap.WorkspaceID); err != nil {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("create session: %w", err)}
 		return
 	}
@@ -1671,9 +1692,27 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 	c.mu.Lock()
 	current := c.currentLocked()
 	var contextWindow int64
+	var windowInfo *WindowInfo
+	var occupancy int64
 	if c.bootstrap != nil && c.bootstrap.Resolved != nil {
 		if meta, ok := c.bootstrap.Resolved.ModelMeta(current); ok {
 			contextWindow = meta.ContextWindow
+			// Same derivation as the turn runner: configured ratios with an
+			// optional per-model utilization override.
+			contextCfg := c.bootstrap.Resolved.Context
+			if meta.WindowUtilization != nil {
+				contextCfg.Utilization = *meta.WindowUtilization
+			}
+			window := agent.NewWindowModel(meta.ContextWindow, c.bootstrap.Resolved.Limits.MaxInputTokens, contextCfg)
+			if window.Usable() {
+				windowInfo = &WindowInfo{
+					Nominal:        window.Nominal,
+					Effective:      window.Effective,
+					CompactTrigger: window.CompactTrigger,
+					CompactTarget:  window.CompactTarget,
+				}
+				occupancy = int64(agent.EstimateTokens(c.messages))
+			}
 		}
 	}
 	reasoning, overridden := c.reasoningLocked(current)
@@ -1706,6 +1745,8 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 		ModelName:           current.Model,
 		ProviderName:        current.Provider,
 		ContextWindow:       contextWindow,
+		Window:              windowInfo,
+		Occupancy:           occupancy,
 		ReasoningEffort:     reasoning.Label(),
 		ReasoningOverridden: overridden,
 		WorkspaceRoot:       c.workspaceLocked(),
@@ -1739,6 +1780,7 @@ func (c *Controller) handleShutdown() {
 	c.state = ControllerStateClosed
 	cancelSession := c.cancelSession
 	cancelTurn := c.cancelTurn
+	delegated := c.delegated
 	c.mu.Unlock()
 
 	// Cancel current turn
@@ -1760,16 +1802,14 @@ func (c *Controller) handleShutdown() {
 		cancel()
 	}
 
-	// Extract memories from the current session before shutting down.
-	// Best-effort: failures are logged but don't block shutdown.
-	if c.bootstrap.MemoryExtractor != nil && !c.sessionID.IsZero() {
-		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-		if ckpt, err := c.bootstrap.Store.LoadLatestCheckpoint(ctx, c.sessionID); err == nil && len(ckpt.Messages) > 0 {
-			if result, err := c.bootstrap.MemoryExtractor.ExtractFromSession(ctx, c.sessionID, ckpt.Messages, c.bootstrap.WorkspaceRoot); err != nil {
-				c.logger.Warn("memory extraction failed", "error", err)
-			} else if result != nil {
-				c.logger.Info("memory extraction completed", "slug", result.RolloutSlug)
-			}
+	// Enqueue the session for background memory extraction (P0-A): a cheap
+	// upsert is all the shutdown path pays for; the startup/interval
+	// pipeline drains the queue. Sub-agent sessions are skipped — their
+	// content rolls up into the parent's transcript.
+	if c.bootstrap.MemoryJobQueue != nil && !c.sessionID.IsZero() && !delegated {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := c.bootstrap.MemoryJobQueue.EnqueueMemoryJob(ctx, c.sessionID, c.bootstrap.WorkspaceRoot); err != nil {
+			c.logger.Warn("memory job enqueue failed", "error", err)
 		}
 		cancel()
 	}
@@ -1895,8 +1935,8 @@ type publishingStore struct {
 	pendingArgs map[domain.ToolCallID]json.RawMessage
 }
 
-func (s *publishingStore) CreateSession(ctx context.Context, sessionID domain.SessionID) error {
-	return s.inner.CreateSession(ctx, sessionID)
+func (s *publishingStore) CreateSession(ctx context.Context, sessionID domain.SessionID, workspaceID domain.WorkspaceID) error {
+	return s.inner.CreateSession(ctx, sessionID, workspaceID)
 }
 
 func (s *publishingStore) AppendEvents(ctx context.Context, sessionID domain.SessionID, expectedVersion int64, events []domain.Event) error {

@@ -73,6 +73,7 @@ type (
 	eventIDT      string //nolint:unused
 	artifactIDT   string //nolint:unused
 	checkpointIDT string //nolint:unused
+	workspaceIDT  string //nolint:unused
 )
 
 type (
@@ -84,6 +85,7 @@ type (
 	EventID      = ID[eventIDT]
 	ArtifactID   = ID[artifactIDT]
 	CheckpointID = ID[checkpointIDT]
+	WorkspaceID  = ID[workspaceIDT]
 )
 
 func NewSessionID() SessionID       { return newID[sessionIDT]("sess") }
@@ -94,6 +96,7 @@ func NewToolCallID() ToolCallID     { return newID[toolCallIDT]("tc") }
 func NewEventID() EventID           { return newID[eventIDT]("evt") }
 func NewArtifactID() ArtifactID     { return newID[artifactIDT]("art") }
 func NewCheckpointID() CheckpointID { return newID[checkpointIDT]("ckpt") }
+func NewWorkspaceID() WorkspaceID   { return newID[workspaceIDT]("ws") }
 
 func ParseSessionID(s string) (SessionID, error)       { return ParseID[sessionIDT](s) }
 func ParseRunID(s string) (RunID, error)               { return ParseID[runIDT](s) }
@@ -103,6 +106,7 @@ func ParseToolCallID(s string) (ToolCallID, error)     { return ParseID[toolCall
 func ParseEventID(s string) (EventID, error)           { return ParseID[eventIDT](s) }
 func ParseArtifactID(s string) (ArtifactID, error)     { return ParseID[artifactIDT](s) }
 func ParseCheckpointID(s string) (CheckpointID, error) { return ParseID[checkpointIDT](s) }
+func ParseWorkspaceID(s string) (WorkspaceID, error)   { return ParseID[workspaceIDT](s) }
 
 // HasPrefix reports whether the ID string starts with the given prefix.
 func HasPrefix[T ~string](id ID[T], prefix string) bool {

@@ -128,14 +128,14 @@ func TestServeSessionsDoNotCrossTalk(t *testing.T) {
 
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	defer broker.Close()
-	svc := NewSessionService(bootstrap, broker, SessionServiceConfig{})
+	svc := NewSingletonWorkspaceService(bootstrap, broker, SessionServiceConfig{})
 	defer func() { _ = svc.Shutdown(context.Background()) }()
 
-	hA, err := svc.CreateSession(ctx)
+	hA, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession(A): %v", err)
 	}
-	hB, err := svc.CreateSession(ctx)
+	hB, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession(B): %v", err)
 	}

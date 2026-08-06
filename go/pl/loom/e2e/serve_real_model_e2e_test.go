@@ -90,20 +90,26 @@ func TestServeRealModelE2E(t *testing.T) {
 	}
 
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
-		WorkspaceRoot: workspace,
-		ArtifactDir:   filepath.Join(tmp, "artifacts"),
-		Version:       "e2e",
-		Logger:        discard,
+	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(tmp, "artifacts"),
+		Version:     "e2e",
+		Logger:      discard,
 	})
 	if err != nil {
-		t.Fatalf("NewBootstrap: %v", err)
+		t.Fatalf("NewProcessRuntime: %v", err)
+	}
+	defer proc.Close()
+	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{
+		WorkspaceRoot: workspace,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkspaceBootstrap: %v", err)
 	}
 	defer bootstrap.Close()
 
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	defer broker.Close()
-	svc := app.NewSessionService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
+	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()

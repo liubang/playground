@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
+	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
@@ -63,10 +65,22 @@ func newTestService(t *testing.T, model domain.Model) *app.SessionService {
 	}
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	t.Cleanup(broker.Close)
-	svc := app.NewSessionService(&app.Bootstrap{
-		Resolved: resolved,
-		Current:  resolved.Default,
-		Store:    store,
+	// The artifact store is process-level; a workspace assembled on demand
+	// (registering a new workspace builds its runtime) needs a real one.
+	artStore, err := artifact.Open(filepath.Join(t.TempDir(), "artifacts"), resolved.Limits.MaxArtifactBytes)
+	if err != nil {
+		t.Fatalf("open artifact store: %v", err)
+	}
+	svc := app.NewSingletonWorkspaceService(&app.Bootstrap{
+		ProcessRuntime: &app.ProcessRuntime{
+			Resolved: resolved,
+			Current:  resolved.Default,
+			Store:    store,
+			Artifact: artStore,
+			// A workspace assembled on demand (registering a new one) wires the
+			// ask_user tool, which requires a non-nil questioner.
+			Questioner: domain.AutonomousQuestioner{},
+		},
 		Registry: agent.NewToolRegistry(),
 	}, broker, app.SessionServiceConfig{})
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
@@ -599,4 +613,234 @@ func (m *gateModel) Stream(ctx context.Context, req domain.ModelRequest) (domain
 		}
 	}
 	return m.inner.Stream(ctx, req)
+}
+
+// TestWorkspaceEndpoints locks the workspace REST contract
+// (docs/WORKSPACE_DESIGN.md §8.1): register (idempotent by canonical root),
+// list, get-by-id, workspace-scoped session create and list filtering.
+func TestWorkspaceEndpoints(t *testing.T) {
+	ts, _ := newTestServer(t, fakes.NewFakeModel())
+	// Roots are stored canonicalized (EvalSymlinks resolves macOS /var →
+	// /private/var), so compare against canonicalized temp dirs.
+	rootA := canonicalTempDir(t)
+	rootB := canonicalTempDir(t)
+
+	status, body := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/workspaces", fmt.Sprintf(`{"root_path":%q,"name":"alpha"}`, rootA))
+	if status != http.StatusOK {
+		t.Fatalf("register A = (%d, %v)", status, body)
+	}
+	wsA, _ := body["workspace"].(map[string]any)
+	idA, _ := wsA["id"].(string)
+	if idA == "" || wsA["name"] != "alpha" || wsA["root_path"] != rootA {
+		t.Fatalf("bad workspace A: %v", wsA)
+	}
+
+	// Re-registering the same canonical root reuses the workspace ID.
+	_, reuse := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/workspaces", fmt.Sprintf(`{"root_path":%q}`, rootA))
+	if got, _ := reuse["workspace"].(map[string]any)["id"].(string); got != idA {
+		t.Fatalf("re-register id = %s, want reuse %s", got, idA)
+	}
+
+	_, bodyB := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/workspaces", fmt.Sprintf(`{"root_path":%q,"name":"beta"}`, rootB))
+	idB, _ := bodyB["workspace"].(map[string]any)["id"].(string)
+
+	_, list := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/workspaces", "")
+	names := map[string]string{}
+	for _, w := range list["workspaces"].([]any) {
+		m := w.(map[string]any)
+		names[m["id"].(string)], _ = m["name"].(string)
+	}
+	if names[idA] != "alpha" || names[idB] != "beta" {
+		t.Fatalf("list missing workspaces: %v", names)
+	}
+
+	_, one := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/workspaces/"+idA, "")
+	if got, _ := one["workspace"].(map[string]any)["root_path"].(string); got != rootA {
+		t.Fatalf("get by id root = %q, want %q", got, rootA)
+	}
+
+	// Create a session in workspace A; the response carries workspace_id.
+	status, created := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions", fmt.Sprintf(`{"workspace_id":%q}`, idA))
+	if status != http.StatusCreated {
+		t.Fatalf("create in A = (%d, %v)", status, created)
+	}
+	sessA, _ := created["session_id"].(string)
+	if created["workspace_id"] != idA {
+		t.Fatalf("session workspace_id = %v, want %s", created["workspace_id"], idA)
+	}
+	if _, cB := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions", fmt.Sprintf(`{"workspace_id":%q}`, idB)); cB["workspace_id"] != idB {
+		t.Fatalf("session in B workspace_id = %v", cB["workspace_id"])
+	}
+
+	// List filtered by workspace A returns only A's session.
+	_, filtered := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions?workspace_id="+idA, "")
+	var ids []string
+	for _, s := range filtered["sessions"].([]any) {
+		ids = append(ids, s.(map[string]any)["id"].(string))
+	}
+	if len(ids) != 1 || ids[0] != sessA {
+		t.Fatalf("filter A ids = %v, want [%s]", ids, sessA)
+	}
+
+	// Unknown workspace id → 404; malformed → 400.
+	if status, body := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions", `{"workspace_id":"ws_00000000000000000000000000000000"}`); status != http.StatusNotFound {
+		t.Fatalf("unknown workspace = (%d, %v), want 404", status, body)
+	}
+	if status, _ := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions", `{"workspace_id":"bogus"}`); status != http.StatusBadRequest {
+		t.Fatalf("invalid workspace id = %d, want 400", status)
+	}
+}
+
+// canonicalTempDir returns t.TempDir() with symlinks resolved (the store
+// persists canonical workspace roots).
+func canonicalTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		return resolved
+	}
+	return dir
+}
+
+// TestBrowseDirectories locks the directory-browse contract used by the
+// workspace picker (docs/WORKSPACE_DESIGN.md §11.3): hidden dirs excluded,
+// home-relative default, non-existent path rejected.
+func TestBrowseDirectories(t *testing.T) {
+	ts, _ := newTestServer(t, fakes.NewFakeModel())
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+
+	// Default path resolves to $HOME.
+	_, body := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/files/browse", "")
+	if body["home"] != home || body["path"] != home {
+		t.Fatalf("default browse = %v, want home %s", body, home)
+	}
+
+	// A temp dir with a visible and a hidden subdirectory.
+	tmp := t.TempDir()
+	if err := os.Mkdir(filepath.Join(tmp, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(tmp, ".secret"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, b2 := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/files/browse?path="+tmp, "")
+	sawSub := false
+	for _, e := range b2["entries"].([]any) {
+		name := e.(map[string]any)["name"].(string)
+		if name == "sub" {
+			sawSub = true
+		}
+		if name == ".secret" {
+			t.Fatal("hidden directory must be excluded")
+		}
+	}
+	if !sawSub {
+		t.Fatalf("sub not listed in %v", b2["entries"])
+	}
+
+	// Non-existent path → 400.
+	if status, _ := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/files/browse?path=/no/such/dir/xyz", ""); status != http.StatusBadRequest {
+		t.Fatalf("missing path = %d, want 400", status)
+	}
+}
+
+// newWorkspaceScopedServer builds a server backed by a real WorkspaceRegistry
+// (RegisterDefault yields a real default workspace ID), so the workspace_id
+// default-scope behavior is testable end to end.
+func newWorkspaceScopedServer(t *testing.T, model domain.Model) (*httptest.Server, *app.WorkspaceRegistry) {
+	t.Helper()
+	ctx := context.Background()
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	resolved := &config.ResolvedConfig{
+		Providers: []config.ResolvedProvider{{
+			Name:         "test",
+			Model:        model,
+			Models:       []config.Model{{Name: "model-a", ContextWindow: 128000}},
+			DefaultModel: "model-a",
+		}},
+		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
+		Limits:  domain.DefaultLimits(),
+		Storage: config.ResolvedStorage{BaseDir: t.TempDir()},
+	}
+	artStore, err := artifact.Open(filepath.Join(t.TempDir(), "artifacts"), resolved.Limits.MaxArtifactBytes)
+	if err != nil {
+		t.Fatalf("open artifact store: %v", err)
+	}
+	proc := &app.ProcessRuntime{
+		Resolved:   resolved,
+		Current:    resolved.Default,
+		Store:      store,
+		Artifact:   artStore,
+		Questioner: domain.AutonomousQuestioner{},
+	}
+	registry, err := app.NewWorkspaceRegistry(proc)
+	if err != nil {
+		t.Fatalf("NewWorkspaceRegistry: %v", err)
+	}
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
+	t.Cleanup(broker.Close)
+	svc := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{})
+	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
+	srv, err := New(Config{Token: testToken, Version: "test", Service: svc})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv.http.Handler)
+	t.Cleanup(ts.Close)
+	return ts, registry
+}
+
+func sessionIDs(body map[string]any) []string {
+	var ids []string
+	for _, s := range body["sessions"].([]any) {
+		ids = append(ids, s.(map[string]any)["id"].(string))
+	}
+	return ids
+}
+
+// TestListSessionsDefaultScope locks the TUI-facing default (the reported
+// bug): GET /v1/sessions with no workspace_id returns only the default
+// workspace's sessions (the single-workspace picker view), while
+// workspace_id=all spans every workspace (the tree view).
+func TestListSessionsDefaultScope(t *testing.T) {
+	ts, registry := newWorkspaceScopedServer(t, fakes.NewFakeModel())
+	ctx := context.Background()
+
+	defWs, err := registry.RegisterDefault(ctx, canonicalTempDir(t))
+	if err != nil {
+		t.Fatalf("RegisterDefault: %v", err)
+	}
+	wsB, err := registry.Register(ctx, canonicalTempDir(t), "beta")
+	if err != nil {
+		t.Fatalf("Register beta: %v", err)
+	}
+
+	// One session in the default workspace (empty body), one in workspace B.
+	_, bodyA := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions", "")
+	if bodyA["workspace_id"] != defWs.WorkspaceID.String() {
+		t.Fatalf("default create workspace_id = %v, want %s", bodyA["workspace_id"], defWs.WorkspaceID)
+	}
+	sessA, _ := bodyA["session_id"].(string)
+	_, bodyB := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions", fmt.Sprintf(`{"workspace_id":%q}`, wsB.WorkspaceID.String()))
+	if bodyB["workspace_id"] != wsB.WorkspaceID.String() {
+		t.Fatalf("B create workspace_id = %v", bodyB["workspace_id"])
+	}
+
+	// Default scope: only the default workspace's session.
+	_, defList := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions", "")
+	if ids := sessionIDs(defList); len(ids) != 1 || ids[0] != sessA {
+		t.Fatalf("default-scope ids = %v, want [%s]", ids, sessA)
+	}
+	// all scope: both.
+	_, allList := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions?workspace_id=all", "")
+	if ids := sessionIDs(allList); len(ids) != 2 {
+		t.Fatalf("all-scope ids = %v, want 2 sessions", ids)
+	}
 }

@@ -70,7 +70,7 @@ func TestE2ESubagentV2SpawnAndWait(t *testing.T) {
 
 	models := &subagent.ModelSource{}
 	parentSession := domain.NewSessionID()
-	if err := store.CreateSession(context.Background(), parentSession); err != nil {
+	if err := store.CreateSession(context.Background(), parentSession, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	models.Set(subagent.ModelSnapshot{
@@ -165,7 +165,7 @@ func TestE2ESubagentV2CoderRole(t *testing.T) {
 
 	models := &subagent.ModelSource{}
 	parentSession := domain.NewSessionID()
-	if err := store.CreateSession(context.Background(), parentSession); err != nil {
+	if err := store.CreateSession(context.Background(), parentSession, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	models.Set(subagent.ModelSnapshot{
@@ -250,7 +250,7 @@ func TestE2EDelegateTaskAsyncInLoop(t *testing.T) {
 	researcherPrompt := &stubPromptBuilder{}
 	models := &subagent.ModelSource{}
 	parentSession := domain.NewSessionID()
-	if err := store.CreateSession(context.Background(), parentSession); err != nil {
+	if err := store.CreateSession(context.Background(), parentSession, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	models.Set(subagent.ModelSnapshot{
@@ -410,7 +410,7 @@ func TestE2ERewindRestoreFiles(t *testing.T) {
 	}
 
 	run := newBudgetRun(t, domain.DefaultLimits())
-	if err := store.CreateSession(context.Background(), run.SessionID); err != nil {
+	if err := store.CreateSession(context.Background(), run.SessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	models.Set(subagent.ModelSnapshot{
@@ -495,7 +495,7 @@ func TestE2ERewindSessionTruncation(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 

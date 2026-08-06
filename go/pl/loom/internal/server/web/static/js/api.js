@@ -44,12 +44,17 @@ export function createApi({ getToken, onUnauthorized }) {
   return {
     metaVersion: () => req("GET", "/v1/meta/version"),
     metaModels: () => req("GET", "/v1/meta/models"),
-    listSessions: (limit = 50, cursor = "", archived = false) =>
-      req("GET", `/v1/sessions?limit=${limit}${cursor ? "&cursor=" + encodeURIComponent(cursor) : ""}${archived ? "&archived=1" : ""}`),
+    listSessions: (limit = 50, cursor = "", archived = false, workspaceId = "") =>
+      req("GET", `/v1/sessions?limit=${limit}${cursor ? "&cursor=" + encodeURIComponent(cursor) : ""}${archived ? "&archived=1" : ""}${workspaceId ? "&workspace_id=" + encodeURIComponent(workspaceId) : ""}`),
+    // workspaces（docs/WORKSPACE_DESIGN.md §8.1）
+    listWorkspaces: () => req("GET", "/v1/workspaces"),
+    registerWorkspace: (rootPath, name) => req("POST", "/v1/workspaces", { root_path: rootPath, name }),
+    browseDirectories: (path) => req("GET", `/v1/files/browse?path=${encodeURIComponent(path || "")}`),
     archiveSession: (id, archived) => req("POST", `/v1/sessions/${id}/archive`, { archived }),
     deleteSession: (id) => req("DELETE", `/v1/sessions/${id}`),
-    // createSession / resumeSession share POST /v1/sessions.
-    createSession: () => req("POST", "/v1/sessions"),
+    // createSession / resumeSession share POST /v1/sessions. createSession
+    // takes an optional workspaceId (empty = the server's default workspace).
+    createSession: (workspaceId = "") => req("POST", "/v1/sessions", workspaceId ? { workspace_id: workspaceId } : {}),
     resumeSession: (id) => req("POST", "/v1/sessions", { resume: id }),
     snapshot: (id) => req("GET", `/v1/sessions/${id}/snapshot`),
     transcript: (id, after = 0, limit = 200) =>
