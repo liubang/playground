@@ -186,6 +186,10 @@ func (failingArtifactWriter) Begin(context.Context) (domain.StagedArtifact, erro
 	return nil, errors.New("injected artifact failure")
 }
 
+func (failingArtifactWriter) Read(_ context.Context, _ domain.ArtifactRef) ([]byte, error) {
+	return nil, errors.New("injected artifact failure")
+}
+
 func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)

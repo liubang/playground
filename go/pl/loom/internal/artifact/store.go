@@ -417,6 +417,11 @@ func (s *Store) ReadAll(ctx context.Context, ref domain.ArtifactRef) ([]byte, er
 	return data, nil
 }
 
+// Read implements domain.ArtifactStore.Read, delegating to ReadAll.
+func (s *Store) Read(ctx context.Context, ref domain.ArtifactRef) ([]byte, error) {
+	return s.ReadAll(ctx, ref)
+}
+
 func (s *Store) commitStaged(stagingPath, digest string, size int64) (domain.ArtifactRef, error) {
 	id, _ := domain.ParseArtifactID(idPrefix + digest)
 	ref := domain.ArtifactRef{ID: id, Size: size}

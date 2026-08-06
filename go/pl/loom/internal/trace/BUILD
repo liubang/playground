@@ -45,6 +45,7 @@ go_test(
     srcs = [
         "otel_test.go",
         "prompts_test.go",
+        "scores_test.go",
     ],
     embed = [":trace"],
     deps = [

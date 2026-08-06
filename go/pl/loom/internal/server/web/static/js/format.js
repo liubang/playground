@@ -64,6 +64,25 @@ export function relTime(iso) {
   return t.toLocaleDateString();
 }
 
+// 消息时间展示：与截图风格一致（如 "8月6日 14:34"）。
+export function fmtMsgTime(iso) {
+  const t = new Date(iso);
+  if (isNaN(t)) return "";
+  const m = t.getMonth() + 1;
+  const d = t.getDate();
+  const hh = String(t.getHours()).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  return `${m}月${d}日 ${hh}:${mm}`;
+}
+
+// 悬浮提示用的完整时间（含年份与秒），便于精确定位。
+export function fmtMsgTimeTitle(iso) {
+  const t = new Date(iso);
+  if (isNaN(t)) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())} ${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+}
+
 export function shortId(id) {
   if (!id) return "";
   return id.length > 12 ? id.slice(0, 12) + "…" : id;

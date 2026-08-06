@@ -4,7 +4,7 @@
 
 import { renderMarkdownInto } from "../markdown.js";
 import { renderDiff } from "../diff.js";
-import { fmtTokens, fmtBytes } from "../format.js";
+import { fmtTokens, fmtBytes, fmtMsgTime, fmtMsgTimeTitle } from "../format.js";
 
 export function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -16,19 +16,28 @@ export function el(tag, cls, text) {
 // --- user ---
 
 // 右侧气泡，无标签（参考截图样式）。
-export function userBlock(text) {
+// createdAt: 可选 ISO/RFC 时间戳，用于悬浮显示该条消息的时间。
+// 结构：容器 .block-user（无背景）→ 气泡 .user-bubble + 操作行
+// （复制 + 时间），操作行在气泡下方右对齐，不占用气泡内部空间。
+export function userBlock(text, createdAt) {
   const b = el("div", "block block-user");
-  b.appendChild(el("div", "user-text", text));
+  const bubble = el("div", "user-bubble");
+  bubble.appendChild(el("div", "user-text", text));
+  b.appendChild(bubble);
+  b.appendChild(messageActions(b, "user", { createdAt, getText: () => text }));
   return b;
 }
 
 // --- assistant（完成态，markdown 渲染） ---
 // 无标签，左侧纯文本（参考截图样式）。
-export function assistantBlock(text) {
+// createdAt: 可选时间戳，用于悬浮显示对话时间。
+// fb: 可选反馈上下文 {runId, feedback, onFeedback}（见 messageActions）。
+export function assistantBlock(text, createdAt, fb) {
   const b = el("div", "block block-assistant");
   const md = el("div", "md");
   renderMarkdownInto(md, text);
   b.appendChild(md);
+  b.appendChild(messageActions(b, "assistant", { createdAt, getText: () => md.innerText, fb }));
   return b;
 }
 
@@ -38,7 +47,7 @@ export function assistantBlock(text) {
 // 最小间隔节流，避免长文本下每帧全量解析造成卡顿。
 const STREAM_RENDER_MIN_INTERVAL_MS = 60;
 
-export function streamBlock() {
+export function streamBlock(createdAt, fb) {
   const b = el("div", "block block-assistant");
   const md = el("div", "md");
   const cursor = el("span", "stream-cursor", "▍");
@@ -47,6 +56,8 @@ export function streamBlock() {
   let scheduled = false;
   let destroyed = false;
   let lastRender = 0;
+  // 草稿期间不挂 actions；收笔时由 finalize() 注入完成态操作行。
+  let actionsEl = null;
   const render = () => {
     scheduled = false;
     if (destroyed) return;
@@ -67,15 +78,107 @@ export function streamBlock() {
     el: b,
     append(delta) { buf += delta; schedule(); },
     text: () => buf,
-    // 收笔：取消未执行的合帧，同步做最终渲染并移除光标。
+    // 收笔：取消未执行的合帧，同步做最终渲染并移除光标，随后注入
+    // 完成态操作行（复制/反馈 + 悬浮时间）。
     finalize() {
       destroyed = true;
       renderMarkdownInto(md, buf);
       cursor.remove();
+      if (!actionsEl) {
+        actionsEl = messageActions(b, "assistant", { createdAt, getText: () => md.innerText, fb });
+        b.appendChild(actionsEl);
+      }
     },
     // 丢弃（canonical 文本整段替换时）：停止后续合帧渲染。
     discard() { destroyed = true; },
   };
+}
+
+// --- 消息操作行（复制 / 点赞 / 踩） + 时间 ---
+// 挂在 block 末尾、对话结束后常显：既是反馈/复制入口，也是本条消息
+// 已结束的标志。role: "user" 仅显示复制；"assistant" 显示复制 + 点赞/踩。
+// 图标为静态常量 SVG（非模型/工具文本，不触碰 textContent 铁律）。
+//
+// fb（可选反馈上下文）：{ runId, feedback, onFeedback }
+//   runId      本轮 run id；空则不渲染赞/踩（旧消息无 trace 可投）
+//   feedback   初始态 "up" | "down" | ""（localStorage 恢复）
+//   onFeedback async (runId, value) —— value 1=赞 0=踩；失败时操作行回滚
+// 投票语义：已激活的按钮再点无效；点另一个按钮覆盖上一票（后端按
+// 确定性 score id 幂等覆盖，不产生重复分数）。
+const ICONS = {
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>',
+};
+
+function iconBtn(cls, icon, label) {
+  const b = el("button", "msg-action " + cls);
+  b.type = "button";
+  b.title = label;
+  b.setAttribute("aria-label", label);
+  b.innerHTML = icon; // 常量 SVG，无用户输入
+  return b;
+}
+
+function messageActions(blockEl, role, { createdAt, getText, fb }) {
+  const row = el("div", "msg-actions");
+
+  // 时间：常显短格式（8月6日 14:34），原生 tooltip 提供完整时间。
+  // user 消息：时间在左、复制在右（整体右对齐于气泡下方）；
+  // assistant 消息：按钮在左，时间靠行尾。
+  let tip = null;
+  if (createdAt) {
+    tip = el("span", "msg-time-tip", fmtMsgTime(createdAt));
+    tip.title = fmtMsgTimeTitle(createdAt);
+  }
+  if (tip && role === "user") row.appendChild(tip);
+
+  const copy = iconBtn("msg-copy", ICONS.copy, "复制该条消息");
+  copy.onclick = async (e) => {
+    e.stopPropagation();
+    try {
+      const text = typeof getText === "function" ? await getText() : "";
+      await navigator.clipboard.writeText(text);
+      copy.classList.add("is-done");
+      copy.innerHTML = ICONS.check;
+    } catch {
+      copy.classList.add("is-fail");
+    }
+    setTimeout(() => {
+      copy.classList.remove("is-done", "is-fail");
+      copy.innerHTML = ICONS.copy;
+    }, 1500);
+  };
+  row.appendChild(copy);
+
+  if (role === "assistant" && fb && fb.runId && fb.onFeedback) {
+    const vote = (btn, other, value) => async (e) => {
+      e.stopPropagation();
+      if (btn.classList.contains("is-active")) return; // 已投该票：no-op
+      const wasOther = other.classList.contains("is-active");
+      btn.classList.add("is-active");
+      other.classList.remove("is-active");
+      try {
+        await fb.onFeedback(fb.runId, value);
+      } catch {
+        // 提交失败：回滚到点击前的选中态
+        btn.classList.remove("is-active");
+        if (wasOther) other.classList.add("is-active");
+      }
+    };
+    const up = iconBtn("msg-up", ICONS.up, "赞");
+    const down = iconBtn("msg-down", ICONS.down, "踩");
+    if (fb.feedback === "up") up.classList.add("is-active");
+    else if (fb.feedback === "down") down.classList.add("is-active");
+    up.onclick = vote(up, down, 1);
+    down.onclick = vote(down, up, 0);
+    row.appendChild(up);
+    row.appendChild(down);
+  }
+
+  if (tip && role !== "user") row.appendChild(tip);
+  return row;
 }
 
 // --- thinking（等待模型首个 token / 工具间等待的三点动画） ---
@@ -142,6 +245,13 @@ export function toolBlock(payload, hooks = {}) {
           return p.preview; // server 取不到时兜底复制摘要
         }));
       }
+      // 渲染工具结果中的图片（内联 base64 和 artifact 引用）
+      for (const img of p.images || []) {
+        b.appendChild(imageBlock(img.media_type, img.data));
+      }
+      for (const art of p.artifacts || []) {
+        b.appendChild(artifactImageBlock(art.id, art.size, hooks.resolveArtifactURL));
+      }
     },
   };
 }
@@ -195,7 +305,8 @@ export function histTarget(call) {
 // preview 有界（600 chars）用于展示；full_text 完整保留用于复制。
 export function histCompletion(r) {
   const status = r.status === "success" ? "success" : (r.status === "cancelled" ? "canceled" : "error");
-  const texts = (r.content || []).filter((c) => c.kind === "text" && c.text).map((c) => c.text);
+  const content = r.content || [];
+  const texts = content.filter((c) => c.kind === "text" && c.text).map((c) => c.text);
   const fullText = texts.join("\n");
   let preview = fullText;
   if (preview.length > 600) preview = preview.slice(0, 600) + "\n…";
@@ -204,12 +315,16 @@ export function histCompletion(r) {
     const ms = new Date(r.finished_at) - new Date(r.started_at);
     if (Number.isFinite(ms) && ms >= 0) durationMs = ms;
   }
+  const images = content.filter((c) => c.kind === "image" && c.image).map((c) => c.image);
+  const artifacts = content.filter((c) => c.kind === "artifact_ref" && c.artifact).map((c) => c.artifact);
   return {
     status,
     duration_ms: durationMs,
     preview,
     full_text: fullText,
     error_message: r.error?.message || "",
+    images,
+    artifacts,
   };
 }
 
@@ -350,6 +465,44 @@ export function renderPlanInto(panel, plan) {
 }
 
 // --- notice / fatal ---
+
+// imageBlock 渲染一个内联图片（base64 data URI），用于 transcript 中的
+// image part（用户附件或工具结果中的内联图片）。
+export function imageBlock(mediaType, base64Data) {
+  const b = el("div", "block block-image");
+  const img = document.createElement("img");
+  img.className = "inline-image";
+  img.loading = "lazy";
+  img.alt = "image";
+  img.onerror = () => b.replaceChildren(el("div", "notice is-warn", "图片加载失败"));
+  img.src = `data:${mediaType || "image/png"};base64,${base64Data}`;
+  b.appendChild(img);
+  return b;
+}
+
+// artifactImageBlock 渲染一个引用 artifact endpoint 的图片，用于
+// artifact_ref part（generate_image 等工具产出的大型图片，避免在
+// transcript JSON 中内嵌多 MB base64）。
+// <img> 无法携带 Authorization 头，而 /v1/* 需要 Bearer 鉴权，因此实际
+// 加载走 resolveURL(id, size) => Promise<blobURL>（由 main.js 注入，
+// fetch 带鉴权后 createObjectURL）；无 resolveURL 时退回直链（仅适用于
+// 无鉴权部署）。
+export function artifactImageBlock(artifactId, size, resolveURL) {
+  const b = el("div", "block block-image");
+  const fail = () => b.replaceChildren(el("div", "notice is-warn", "图片加载失败"));
+  const img = document.createElement("img");
+  img.className = "inline-image";
+  img.loading = "lazy";
+  img.alt = "generated image";
+  img.onerror = fail;
+  b.appendChild(img);
+  if (resolveURL) {
+    resolveURL(artifactId, size).then((url) => { img.src = url; }, fail);
+  } else {
+    img.src = `/v1/artifacts/${encodeURIComponent(artifactId)}?size=${size}`;
+  }
+  return b;
+}
 
 export function noticeBlock(text, warn) {
   return el("div", "notice" + (warn ? " is-warn" : ""), text);

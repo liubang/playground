@@ -20,7 +20,9 @@ package trace
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -39,12 +41,21 @@ func basicAuthHeader(publicKey, secretKey string) string {
 // the trace's langfuse.environment or the score lands in the "default"
 // environment and disappears from environment-filtered dashboards.
 type scoreRequest struct {
+	// ID, when set, makes ingestion idempotent: re-posting the same ID
+	// overwrites the previous score instead of piling up duplicates
+	// (user re-votes, retries).
+	ID          string  `json:"id,omitempty"`
 	TraceID     string  `json:"traceId"`
 	Name        string  `json:"name"`
 	Value       float64 `json:"value"`
+	DataType    string  `json:"dataType,omitempty"`
 	Comment     string  `json:"comment,omitempty"`
 	Environment string  `json:"environment,omitempty"`
 }
+
+// scoreDataTypeBoolean marks 0/1 scores as BOOLEAN so Langfuse renders
+// thumbs-style votes as true/false rather than a numeric axis.
+const scoreDataTypeBoolean = "BOOLEAN"
 
 // scoreClient posts numeric trace scores to Langfuse's scores API. All
 // submissions are fire-and-forget: the client never blocks the caller for
@@ -79,6 +90,22 @@ func newScoreClient(host, publicKey, secretKey, environment string, logger *slog
 // must not invoke submit concurrently with waitIdle (loom scores runs before
 // shutdown starts, so this holds by construction).
 func (c *scoreClient) submit(name, traceID string, value float64, comment string) {
+	c.submitRequest(scoreRequest{TraceID: traceID, Name: name, Value: value, Comment: comment, Environment: c.env})
+}
+
+// submitFeedback queues a BOOLEAN user-feedback score with a deterministic
+// ID derived from (traceID, name): a re-vote on the same run overwrites the
+// previous score in place instead of accumulating duplicates.
+func (c *scoreClient) submitFeedback(traceID, name string, value float64, comment string) {
+	sum := sha256.Sum256([]byte(traceID + ":" + name))
+	id := "loom-fb-" + hex.EncodeToString(sum[:])[:24]
+	c.submitRequest(scoreRequest{
+		ID: id, TraceID: traceID, Name: name, Value: value,
+		DataType: scoreDataTypeBoolean, Comment: comment, Environment: c.env,
+	})
+}
+
+func (c *scoreClient) submitRequest(req scoreRequest) {
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
@@ -89,9 +116,8 @@ func (c *scoreClient) submit(name, traceID string, value float64, comment string
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 		defer cancel()
-		req := scoreRequest{TraceID: traceID, Name: name, Value: value, Comment: comment, Environment: c.env}
 		if err := c.post(ctx, req); err != nil {
-			c.logger.Warn("langfuse score report failed", "score", name, "error", err)
+			c.logger.Warn("langfuse score report failed", "score", req.Name, "error", err)
 		}
 	}()
 }

@@ -13,33 +13,31 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/26
+# Created: 2026/08/06
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
+
 go_library(
-    name = "config_lib",
+    name = "imagegen_lib",
     srcs = [
-        "init.go",
-        "load.go",
-        "resolve.go",
-        "schema.go",
+        "common.go",
+        "generate_image.go",
     ],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/config",
-    visibility = ["//go/pl/loom:__subpackages__"],
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/imagegen",
+    visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/logging:logging",
-        "//go/pl/loom/internal/model/anthropic:anthropic_lib",
         "//go/pl/loom/internal/model/images:images_lib",
-        "//go/pl/loom/internal/model/openai:openai_lib",
-        "//go/pl/loom/internal/permission:permission_lib",
-        "//go/pl/loom/internal/trace",
-        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
 
 go_test(
-    name = "config_test",
-    srcs = ["config_test.go"],
-    embed = [":config_lib"],
+    name = "imagegen_test",
+    srcs = ["generate_image_test.go"],
+    embed = [":imagegen_lib"],
+    deps = [
+        "//go/pl/loom/internal/artifact:artifact_lib",
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/model/images:images_lib",
+    ],
 )
