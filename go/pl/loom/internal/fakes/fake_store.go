@@ -44,7 +44,7 @@ func NewFakeStore() *FakeStore {
 	}
 }
 
-func (s *FakeStore) CreateSession(_ context.Context, id domain.SessionID) error {
+func (s *FakeStore) CreateSession(_ context.Context, id domain.SessionID, _ domain.WorkspaceID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.sessions[id] {

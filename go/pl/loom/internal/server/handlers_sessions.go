@@ -59,7 +59,24 @@ func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 	archived := r.URL.Query().Get("archived") == "1"
-	summaries, nextCursor, err := s.svc.ListSessions(r.Context(), cursor, limit, archived)
+	// workspace_id 三态（docs/WORKSPACE_DESIGN.md §8.1）：缺省 = default
+	// workspace（单 workspace 前端，如 TUI 的 picker）；"all" = 全部（多
+	// workspace 树形）；<id> = 指定 workspace。
+	var wsID domain.WorkspaceID
+	switch raw := r.URL.Query().Get("workspace_id"); raw {
+	case "":
+		wsID = s.svc.DefaultWorkspaceID()
+	case "all":
+		wsID = domain.WorkspaceID{}
+	default:
+		var err error
+		wsID, err = parseWorkspaceIDParam(raw)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+	}
+	summaries, nextCursor, err := s.svc.ListSessions(r.Context(), cursor, limit, archived, wsID)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -69,6 +86,8 @@ func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 
 type createSessionRequest struct {
 	Resume string `json:"resume,omitempty"`
+	// WorkspaceID selects the owning workspace; empty = default workspace.
+	WorkspaceID string `json:"workspace_id,omitempty"`
 }
 
 type archiveSessionRequest struct {
@@ -139,17 +158,22 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 			writeError(w, err)
 			return
 		}
-		s.auditf("session.resume", h.ID)
-		writeJSON(w, http.StatusCreated, map[string]any{"session_id": h.ID, "state": h.Controller.State()})
+		s.auditf("session.resume", h.ID, "workspace_id", h.WorkspaceID.String())
+		writeJSON(w, http.StatusCreated, map[string]any{"session_id": h.ID, "state": h.Controller.State(), "workspace_id": h.WorkspaceID.String()})
 		return
 	}
-	h, err := s.svc.CreateSession(r.Context())
+	wsID, err := parseWorkspaceIDParam(req.WorkspaceID)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	s.auditf("session.create", h.ID)
-	writeJSON(w, http.StatusCreated, map[string]any{"session_id": h.ID, "state": h.Controller.State()})
+	h, err := s.svc.CreateSession(r.Context(), wsID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("session.create", h.ID, "workspace_id", h.WorkspaceID.String())
+	writeJSON(w, http.StatusCreated, map[string]any{"session_id": h.ID, "state": h.Controller.State(), "workspace_id": h.WorkspaceID.String()})
 }
 
 func (s *Server) handleInspectSession(w http.ResponseWriter, r *http.Request) {
@@ -210,9 +234,9 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 // --- turn control ---
 
 type submitPromptRequest struct {
-	Prompt         string               `json:"prompt"`
+	Prompt         string                `json:"prompt"`
 	Images         []domain.ImageContent `json:"images,omitempty"`
-	IdempotencyKey string               `json:"idempotency_key,omitempty"`
+	IdempotencyKey string                `json:"idempotency_key,omitempty"`
 }
 
 func (s *Server) handleSubmitPrompt(w http.ResponseWriter, r *http.Request) {

@@ -23,11 +23,14 @@ go_library(
         "rewind.go",
         "sqlite_store.go",
         "transcript.go",
+        "workspace_store.go",
+        "memory_jobs.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/session",
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/memory:memory_lib",
         "@org_modernc_sqlite//:sqlite",
     ],
 )
@@ -37,6 +40,12 @@ go_test(
     srcs = [
         "sqlite_store_test.go",
         "transcript_test.go",
+        "workspace_store_test.go",
+        "memory_jobs_test.go",
     ],
     embed = [":session_lib"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/memory:memory_lib",
+    ],
 )

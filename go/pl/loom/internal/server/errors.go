@@ -81,6 +81,10 @@ func mapError(err error) *statusError {
 	switch {
 	case errors.Is(err, app.ErrSessionNotFound):
 		return &statusError{status: http.StatusNotFound, code: "not_found", message: err.Error()}
+	case errors.Is(err, app.ErrWorkspaceNotFound):
+		return &statusError{status: http.StatusNotFound, code: "workspace_not_found", message: err.Error()}
+	case errors.Is(err, app.ErrWorkspaceUnavailable):
+		return &statusError{status: http.StatusGone, code: "workspace_unavailable", message: err.Error()}
 	case errors.Is(err, app.ErrDraining):
 		return &statusError{status: http.StatusServiceUnavailable, code: "draining", message: err.Error()}
 	case errors.Is(err, app.ErrCursorInvalid):
@@ -121,6 +125,19 @@ func parseSessionParam(r *http.Request) (domain.SessionID, error) {
 	id, err := domain.ParseSessionID(raw)
 	if err != nil || !domain.HasPrefix(id, "sess_") {
 		return domain.SessionID{}, invalidInput("invalid session id")
+	}
+	return id, nil
+}
+
+// parseWorkspaceIDParam validates an optional workspace-ID query/body value;
+// empty maps to the zero ID (callers then use the default workspace).
+func parseWorkspaceIDParam(raw string) (domain.WorkspaceID, error) {
+	if strings.TrimSpace(raw) == "" {
+		return domain.WorkspaceID{}, nil
+	}
+	id, err := domain.ParseWorkspaceID(raw)
+	if err != nil || !domain.HasPrefix(id, "ws_") {
+		return domain.WorkspaceID{}, invalidInput("invalid workspace id")
 	}
 	return id, nil
 }

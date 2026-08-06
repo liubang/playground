@@ -130,7 +130,7 @@ func TestSaveTerminalCheckpointSurvivesCancelledContext(t *testing.T) {
 	}
 	defer store.Close()
 	run := agent.NewRun(domain.NewSessionID(), domain.DefaultLimits(), domain.RealClock{})
-	if err := store.CreateSession(ctx, run.SessionID); err != nil {
+	if err := store.CreateSession(ctx, run.SessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	run.State = domain.RunState{Lifecycle: domain.LifecycleTerminal, Outcome: domain.OutcomeCancelled}
@@ -171,7 +171,7 @@ func TestListSessionsCommandReadsPersistentStore(t *testing.T) {
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if err := store.Close(); err != nil {
@@ -253,7 +253,7 @@ func TestContinueRunPersistsAtExistingSessionVersion(t *testing.T) {
 	}
 	defer store.Close()
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	// Build a terminal checkpoint over an empty persisted session; continuation
@@ -307,7 +307,7 @@ func TestInspectSessionCommandOutputsRecoveredJSON(t *testing.T) {
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	checkpoint := domain.Checkpoint{

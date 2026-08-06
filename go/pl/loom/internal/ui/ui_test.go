@@ -50,10 +50,12 @@ func newTestController(t *testing.T) client.Client {
 	}
 	broker := runtimeevent.NewBroker()
 	t.Cleanup(broker.Close)
-	svc := app.NewSessionService(&app.Bootstrap{
-		Resolved: resolved,
-		Current:  resolved.Default,
-		Store:    fakes.NewFakeStore(),
+	svc := app.NewSingletonWorkspaceService(&app.Bootstrap{
+		ProcessRuntime: &app.ProcessRuntime{
+			Resolved: resolved,
+			Current:  resolved.Default,
+			Store:    fakes.NewFakeStore(),
+		},
 		Registry: agent.NewToolRegistry(),
 	}, broker, app.SessionServiceConfig{})
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
@@ -1196,7 +1198,7 @@ func TestCtrlCStateTable(t *testing.T) {
 	// reports the booting state.
 	bootingBroker := runtimeevent.NewBroker()
 	defer bootingBroker.Close()
-	bootingSvc := app.NewSessionService(&app.Bootstrap{}, bootingBroker, app.SessionServiceConfig{})
+	bootingSvc := app.NewSingletonWorkspaceService(&app.Bootstrap{ProcessRuntime: &app.ProcessRuntime{}}, bootingBroker, app.SessionServiceConfig{})
 	defer func() { _ = bootingSvc.Shutdown(context.Background()) }()
 	m := NewModel(client.NewInProc(bootingSvc), "model", "/ws")
 	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC}); !isQuitCmd(cmd) {

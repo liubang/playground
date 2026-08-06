@@ -604,6 +604,98 @@ subagent:
 	}
 }
 
+func TestResolveMemoryDefaultsAndOverrides(t *testing.T) {
+	// Absent: enabled, follows the default model, built-in pipeline tuning.
+	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if !def.Memory.Enabled {
+		t.Fatal("memory must default to enabled")
+	}
+	if def.Memory.ExtractModel != nil || def.Memory.ConsolidationModel != nil {
+		t.Fatalf("memory models = %+v/%+v, want nil (follow default)", def.Memory.ExtractModel, def.Memory.ConsolidationModel)
+	}
+	if def.Memory.MaxJobsPerRun != 8 {
+		t.Fatalf("max_jobs_per_run = %d, want 8", def.Memory.MaxJobsPerRun)
+	}
+	if def.Memory.RunInterval != 30*time.Minute {
+		t.Fatalf("run_interval = %v, want 30m", def.Memory.RunInterval)
+	}
+	if def.Memory.MinSessionIdle != time.Hour {
+		t.Fatalf("min_session_idle = %v, want 1h", def.Memory.MinSessionIdle)
+	}
+	if def.Memory.MaxSessionAge != 30*24*time.Hour {
+		t.Fatalf("max_session_age = %v, want 720h", def.Memory.MaxSessionAge)
+	}
+
+	cfg := loadFile(t, twoProviderYAML+`
+memory:
+  extract_model: openai/gpt-5
+  consolidation_model: deepseek/deepseek-chat
+  max_jobs_per_run: 4
+  run_interval: "10m"
+  min_session_idle: "2h"
+  max_session_age: "168h"
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if cfg.Memory.ExtractModel == nil || cfg.Memory.ExtractModel.String() != "openai/gpt-5" {
+		t.Fatalf("extract_model = %v, want openai/gpt-5", cfg.Memory.ExtractModel)
+	}
+	if cfg.Memory.ConsolidationModel == nil || cfg.Memory.ConsolidationModel.String() != "deepseek/deepseek-chat" {
+		t.Fatalf("consolidation_model = %v, want deepseek/deepseek-chat", cfg.Memory.ConsolidationModel)
+	}
+	if cfg.Memory.MaxJobsPerRun != 4 {
+		t.Fatalf("max_jobs_per_run = %d, want 4", cfg.Memory.MaxJobsPerRun)
+	}
+	if cfg.Memory.RunInterval != 10*time.Minute {
+		t.Fatalf("run_interval = %v, want 10m", cfg.Memory.RunInterval)
+	}
+	if cfg.Memory.MinSessionIdle != 2*time.Hour {
+		t.Fatalf("min_session_idle = %v, want 2h", cfg.Memory.MinSessionIdle)
+	}
+	if cfg.Memory.MaxSessionAge != 7*24*time.Hour {
+		t.Fatalf("max_session_age = %v, want 168h", cfg.Memory.MaxSessionAge)
+	}
+
+	// run_interval "0" runs the pipeline once at startup only.
+	once := loadFile(t, twoProviderYAML+`
+memory:
+  run_interval: "0"
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if once.Memory.RunInterval != 0 {
+		t.Fatalf("run_interval = %v, want 0 (startup only)", once.Memory.RunInterval)
+	}
+
+	disabled := loadFile(t, twoProviderYAML+`
+memory:
+  enabled: false
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if disabled.Memory.Enabled {
+		t.Fatal("memory.enabled = false must resolve to disabled")
+	}
+
+	_, err := Load(writeConfig(t, twoProviderYAML+`
+memory:
+  extract_model: nope/ghost
+`), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if err == nil || !strings.Contains(err.Error(), "memory.extract_model") {
+		t.Fatalf("err = %v, want memory.extract_model validation error", err)
+	}
+
+	_, err = Load(writeConfig(t, twoProviderYAML+`
+memory:
+  max_jobs_per_run: 0
+`), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if err == nil || !strings.Contains(err.Error(), "memory.max_jobs_per_run") {
+		t.Fatalf("err = %v, want memory.max_jobs_per_run validation error", err)
+	}
+
+	_, err = Load(writeConfig(t, twoProviderYAML+`
+memory:
+  run_interval: "soon"
+`), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if err == nil || !strings.Contains(err.Error(), "memory.run_interval") {
+		t.Fatalf("err = %v, want memory.run_interval validation error", err)
+	}
+}
+
 func TestResolveTracing(t *testing.T) {
 	// Disabled by default (no host/keys).
 	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))

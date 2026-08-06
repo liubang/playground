@@ -173,6 +173,32 @@ button { font: inherit; cursor: pointer; }
 .sidebar-foot { display: flex; align-items: center; gap: 8px; padding: 8px 6px 2px; border-top: 1px solid var(--bg2); margin-top: 6px; }
 .sidebar-foot-brand { font-size: 12px; font-weight: 600; color: var(--primary); }
 
+/* 工作区树形侧栏：顶层是工作区文件夹节点，组内是该工作区的会话 */
+.ws-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex: none; padding: 0 4px; }
+.ws-bar-title { font-size: var(--text-xs); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.ws-bar .icon-btn { flex: none; }
+
+.ws-group { margin-bottom: 2px; }
+.ws-node {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 5px 6px; border-radius: var(--radius-md); cursor: pointer;
+  color: var(--fg); font-size: var(--text-md); font-weight: 600; user-select: none;
+}
+.ws-node:hover { background: var(--bg2); }
+.ws-node .ws-caret { flex: none; width: 12px; color: var(--muted); font-size: 10px; }
+.ws-node .ws-icon { flex: none; color: var(--primary); font-size: 12px; }
+.ws-node .ws-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-node .ws-count { flex: none; font-size: var(--text-xs); color: var(--muted); font-weight: 400; }
+.ws-node .ws-new {
+  flex: none; display: none; background: none; border: none; color: var(--muted);
+  font-size: 15px; line-height: 1; padding: 0 3px; border-radius: 4px; cursor: pointer;
+}
+.ws-node:hover .ws-new { display: block; }
+.ws-node .ws-new:hover { color: var(--fg); background: var(--bg1); }
+/* 组内会话：左侧层级导线 + 缩进，与子 agent 缩进叠加 */
+.ws-sessions { margin: 0 0 4px 9px; padding-left: 9px; border-left: 1px solid var(--bg2); display: flex; flex-direction: column; gap: 1px; }
+.ws-empty { padding: 4px 10px; color: var(--muted); font-size: var(--text-xs); }
+
 /* 主区域 */
 .main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
 .app-header {
@@ -182,8 +208,11 @@ button { font: inherit; cursor: pointer; }
 .app-header .sess { background: none; border: none; color: var(--muted); font-size: var(--text-sm); padding: 2px 4px; border-radius: 4px; }
 .app-header .sess:hover { color: var(--primary); background: var(--bg2); }
 .app-header .spacer { flex: 1; }
-.app-header .icon-btn { background: none; border: none; color: var(--muted); font-size: 15px; padding: 4px 6px; border-radius: var(--radius-sm); }
-.app-header .icon-btn:hover { color: var(--fg); background: var(--bg2); }
+/* 幽灵图标按钮：透明底，hover 才淡入背景；全局可用（头部/侧栏/弹窗） */
+.icon-btn { background: none; border: none; color: var(--muted); font-size: 15px; padding: 4px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+.icon-btn:hover { color: var(--fg); background: var(--bg2); }
+.icon-btn:disabled { opacity: .4; cursor: default; background: none; }
+.icon-btn:focus-visible { outline: 1px solid var(--primary); outline-offset: 1px; }
 
 /* transcript */
 .transcript { overflow-y: auto; position: relative; }
@@ -442,8 +471,30 @@ button { font: inherit; cursor: pointer; }
   font-size: var(--text-xs); color: var(--muted);
 }
 .statusbar .spacer { flex: 1; }
-.statusbar .ctx-warn { color: var(--warning); }
-.statusbar .ctx-crit { color: var(--error); }
+
+/* ctx 占用环（composer 右侧，渐进披露：默认安静，随水位变色） */
+.ctx-gauge {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  color: var(--muted); font-size: var(--text-xs); line-height: 1;
+  padding: 0 2px; user-select: none;
+}
+.ctx-ring { width: 16px; height: 16px; transform: rotate(-90deg); }
+.ctx-ring circle { fill: none; stroke-width: 2.2; }
+.ctx-ring-bg { stroke: var(--bg2); }
+.ctx-ring-fg {
+  stroke: var(--muted); stroke-linecap: round;
+  transition: stroke-dashoffset .35s ease, stroke .2s ease;
+}
+.ctx-gauge.is-warm { color: var(--warning); }
+.ctx-gauge.is-warm .ctx-ring-fg { stroke: var(--warning); }
+.ctx-gauge.is-hot { color: var(--error); }
+.ctx-gauge.is-hot .ctx-ring-fg { stroke: var(--error); animation: ctx-pulse 1.6s ease-in-out infinite; }
+@keyframes ctx-pulse { 50% { opacity: .4; } }
+
+/* context.compacted 明细卡片 */
+.notice.compact { font-style: normal; }
+.notice.compact .compact-head { color: var(--fg); }
+.notice.compact .compact-detail { font-size: var(--text-xs); color: var(--muted); margin-top: 2px; }
 
 .banner {
   background: color-mix(in srgb, var(--highlight) 14%, var(--bg1));
@@ -466,6 +517,28 @@ button { font: inherit; cursor: pointer; }
 .modal .modal-title { font-size: var(--text-lg); font-weight: 600; margin-bottom: 8px; }
 .modal .modal-body { color: var(--muted); font-size: var(--text-md); line-height: 1.6; margin-bottom: 18px; word-break: break-word; }
 .modal .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+/* 目录浏览弹窗（添加工作区） */
+.dir-modal { width: min(520px, 92vw); }
+.dir-current { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
+/* 面包屑：路径拆段，每段可点直接跳任意上级；当前段高亮不可点 */
+.dir-crumbs { flex: 1; min-width: 0; display: flex; align-items: center; overflow-x: auto; white-space: nowrap; font-size: var(--text-sm); }
+.dir-crumbs::-webkit-scrollbar { height: 0; }
+.dir-crumb { background: none; border: none; color: var(--muted); font: inherit; padding: 2px 4px; border-radius: var(--radius-sm); cursor: pointer; flex: none; }
+.dir-crumb:hover { color: var(--fg); background: var(--bg2); }
+.dir-crumb.is-current { color: var(--fg); font-weight: 600; cursor: default; background: none; }
+.dir-sep { flex: none; color: var(--muted); opacity: .5; user-select: none; }
+.dir-list {
+  max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px;
+  border: 1px solid var(--bg2); border-radius: var(--radius-md); padding: 4px; margin-bottom: 16px;
+}
+.dir-item {
+  display: flex; align-items: center; width: 100%; text-align: left;
+  background: none; border: none; padding: 7px 10px; border-radius: var(--radius-sm);
+  color: var(--fg); font-size: var(--text-md);
+}
+.dir-item:hover { background: var(--bg2); }
+.dir-empty { padding: 18px; text-align: center; color: var(--muted); font-size: var(--text-sm); }
 
 /* toast */
 #toasts { position: fixed; top: 56px; right: 16px; z-index: var(--z-toasts); display: flex; flex-direction: column; gap: 8px; }

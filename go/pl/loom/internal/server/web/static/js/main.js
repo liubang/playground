@@ -9,8 +9,9 @@ import { renderPlanInto } from "./components/blocks.js";
 import { Sidebar } from "./components/sidebar.js";
 import { Composer } from "./components/composer.js";
 import { Statusbar } from "./components/statusbar.js";
+import { CtxGauge } from "./components/ctxgauge.js";
 import { Picker } from "./components/picker.js";
-import { shortId } from "./format.js";
+import { shortId, estTranscriptTokens } from "./format.js";
 
 const TOKEN_KEY = "loom_token";
 const THEME_KEY = "loom_theme";
@@ -103,6 +104,7 @@ const app = {
   sidebar: null,
   composer: null,
   statusbar: null,
+  ctxgauge: null,
   picker: null,
   models: [],          // [{provider, name, context_window}]
   defaultModelRef: "", // "provider/model"
@@ -115,6 +117,7 @@ const app = {
   sessLoading: false,
   showArchived: false, // 侧栏归档视图开关
   readOnly: false,   // 当前会话为只读子 agent 会话
+  workspaces: [],    // 已注册工作区 [{id, name, root_path, session_count}]
 };
 
 function setBadge(el, cls, text) {
@@ -227,10 +230,10 @@ const SESSION_PAGE_SIZE = 30;
 async function refreshSessions() {
   try {
     const limit = Math.max(app.sessionList.length, SESSION_PAGE_SIZE);
-    const { sessions, next_cursor } = await app.api.listSessions(limit, "", app.showArchived);
+    const { sessions, next_cursor } = await app.api.listSessions(limit, "", app.showArchived, "all");
     app.sessionList = sessions || [];
     app.sessCursor = next_cursor || "";
-    app.sidebar.render(app.sessionList);
+    app.sidebar.render(app.sessionList, app.workspaces);
     if (app.sessionId) app.sidebar.setActive(app.sessionId);
   } catch (e) {
     if (e.status !== 401) console.warn("list sessions:", e);
@@ -242,10 +245,10 @@ async function loadMoreSessions() {
   if (app.sessLoading || !app.sessCursor) return;
   app.sessLoading = true;
   try {
-    const { sessions, next_cursor } = await app.api.listSessions(SESSION_PAGE_SIZE, app.sessCursor, app.showArchived);
+    const { sessions, next_cursor } = await app.api.listSessions(SESSION_PAGE_SIZE, app.sessCursor, app.showArchived, "all");
     app.sessionList = app.sessionList.concat(sessions || []);
     app.sessCursor = next_cursor || "";
-    app.sidebar.render(app.sessionList);
+    app.sidebar.render(app.sessionList, app.workspaces);
     if (app.sessionId) app.sidebar.setActive(app.sessionId);
   } catch (e) {
     if (e.status !== 401) console.warn("load more sessions:", e);
@@ -272,6 +275,7 @@ async function onSessionAction(id, action) {
         app.stream.detach();
         app.sessionId = null;
         app.transcript.clear();
+        app.ctxgauge.reset();
         renderPlanInto($("plan-panel"), null);
         $("hdr-session").hidden = true;
         $("empty-state").hidden = false;
@@ -325,13 +329,117 @@ async function openSession(id) {
   setReadOnly(snap);
   setSessionState(snap.state);
   applySnapshotMeta(snap);
-  app.statusbar.setUsage(snap.usage, snap.context_window);
+  app.statusbar.setUsage(snap.usage);
   app.statusbar.setTurns(snap.turn_count);
+  // ctx 占用环：snapshot.window 优先（旧服务端回退名义窗口推导）；
+  // occupancy 缺省时按 snapshot 消息本地估算（与后端 estTokens 同算法）
+  app.ctxgauge.setWindow(snap.window, snap.context_window);
+  app.ctxgauge.setOccupancy(snap.occupancy || estTranscriptTokens(snap.messages));
   app.stream.attach(id, snap.event_seq || 0);
 }
 
-async function newSession() {
-  const { session_id } = await app.api.createSession();
+// ---------- workspace 管理 ----------
+
+async function loadWorkspaces() {
+  try {
+    const { workspaces } = await app.api.listWorkspaces();
+    app.workspaces = workspaces || [];
+  } catch (e) {
+    if (e.status !== 401) console.warn("list workspaces:", e);
+  }
+}
+
+// 目录浏览弹窗（添加工作区）：从 $HOME 起逐级下钻，选择目录即注册。
+const dirPicker = { path: "", parent: "" };
+
+function openDirPicker() {
+  $("dir-modal").hidden = false;
+  browseDir("");
+}
+
+// 面包屑：把当前路径拆成可点段，根段在 $HOME 内显示为 ~，否则为 /。
+// 点击任意段直接跳转到该上级目录。
+function renderDirCrumbs(path, home) {
+  const nav = $("dir-path");
+  nav.textContent = "";
+  const inHome = !!home && (path === home || path.startsWith(home + "/"));
+  const rootLabel = inHome ? "~" : "/";
+  const rootPath = inHome ? home : "/";
+  const rel = inHome ? path.slice(home.length) : path.slice(1);
+  const parts = rel.split("/").filter(Boolean);
+
+  addCrumb(nav, rootLabel, rootPath, parts.length === 0);
+  let acc = rootPath;
+  parts.forEach((p, i) => {
+    acc = (acc === "/" ? "" : acc) + "/" + p;
+    addSep(nav);
+    addCrumb(nav, p, acc, i === parts.length - 1);
+  });
+  // 让最深一级（当前目录）滚入可视区。
+  nav.scrollLeft = nav.scrollWidth;
+}
+
+function addCrumb(nav, label, path, isCurrent) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "dir-crumb" + (isCurrent ? " is-current" : "");
+  b.textContent = label;
+  if (!isCurrent) b.onclick = () => browseDir(path);
+  nav.appendChild(b);
+}
+
+function addSep(nav) {
+  const s = document.createElement("span");
+  s.className = "dir-sep";
+  s.textContent = "/";
+  nav.appendChild(s);
+}
+
+async function browseDir(path) {
+  try {
+    const r = await app.api.browseDirectories(path);
+    dirPicker.path = r.path;
+    dirPicker.parent = r.parent || "";
+    renderDirCrumbs(r.path, r.home);
+    $("dir-up").disabled = !r.parent;
+    const list = $("dir-list");
+    list.textContent = "";
+    if (!r.entries || r.entries.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "dir-empty";
+      empty.textContent = "（无子目录）";
+      list.appendChild(empty);
+      return;
+    }
+    for (const e of r.entries) {
+      const item = document.createElement("button");
+      item.className = "dir-item";
+      item.type = "button";
+      item.textContent = e.name;
+      item.onclick = () => browseDir(e.path);
+      list.appendChild(item);
+    }
+  } catch (e) {
+    if (e.status !== 401) toast("浏览目录失败: " + e.message);
+  }
+}
+
+async function confirmDirPicker() {
+  const rootPath = dirPicker.path;
+  if (!rootPath) return;
+  try {
+    const { workspace } = await app.api.registerWorkspace(rootPath, "");
+    $("dir-modal").hidden = true;
+    toast("已添加工作区 " + (workspace.name || rootPath), true);
+    await loadWorkspaces();
+    await refreshSessions();
+  } catch (e) {
+    if (e.status !== 401) toast("添加工作区失败: " + e.message);
+  }
+}
+
+async function newSession(workspaceId) {
+  const { session_id } = await app.api.createSession(workspaceId || "");
   await refreshSessions();
   await openSession(session_id);
 }
@@ -348,7 +456,9 @@ async function pickModel(ref) {
     syncPickerLabels();
     const meta = r.Meta || r.meta || {};
     if (meta.context_window || meta.ContextWindow) {
-      app.statusbar.setUsage(null, meta.context_window || meta.ContextWindow);
+      // 模型切换后窗口阈值变化：按新名义窗口重推导，等下一次
+      // context.usage / snapshot 刷新精确值
+      app.ctxgauge.setWindow(null, meta.context_window || meta.ContextWindow);
     }
     toast("模型已切换为 " + modelLabel(app.curModelRef), true);
   } catch (e) {
@@ -381,7 +491,7 @@ function onRuntimeEvent(evt) {
       break;
     case "turn.finished":
       setSessionState("idle");
-      if (evt.payload?.usage) app.statusbar.setUsage(evt.payload.usage, null);
+      if (evt.payload?.usage) app.statusbar.setUsage(evt.payload.usage);
       refreshSessions();
       break;
     case "approval.requested":
@@ -398,7 +508,15 @@ function onRuntimeEvent(evt) {
       setSessionState("idle");
       break;
     case "usage.updated":
-      app.statusbar.setUsage(evt.payload, null);
+      app.statusbar.setUsage(evt.payload);
+      break;
+    case "context.usage":
+      // 实时 context 占用：驱动 composer 旁的占用环
+      app.ctxgauge.onContextUsage(evt.payload);
+      break;
+    case "context.compacted":
+      // 压缩后占用立即回落（transcript 明细卡片由 transcript.handleEvent 渲染）
+      app.ctxgauge.onCompacted(evt.payload);
       break;
     case "plan.updated":
       renderPlanInto($("plan-panel"), evt.payload);
@@ -471,6 +589,7 @@ async function boot() {
       openSession(id).catch((e) => { if (e.status !== 401) toast("open session: " + e.message); });
     },
     onAction: (id, action) => { onSessionAction(id, action); },
+    onNewSession: (wsId) => { newSession(wsId).catch((e) => { if (e.status !== 401) toast("new session: " + e.message); }); },
   });
   // 归档视图切换：重置分页状态后整列重拉
   $("toggle-archived").onclick = () => {
@@ -482,12 +601,14 @@ async function boot() {
     btn.textContent = app.showArchived ? "← 返回" : "归档";
     btn.title = app.showArchived ? "返回会话列表" : "查看归档会话";
     btn.classList.toggle("is-active", app.showArchived);
-    $("new-session").hidden = app.showArchived;
     refreshSessions();
   };
-  $("new-session").onclick = () => {
-    newSession().catch((e) => { if (e.status !== 401) toast("new session: " + e.message); });
-  };
+  // 添加工作区（目录浏览弹窗）
+  $("ws-add").onclick = () => { openDirPicker(); };
+  $("dir-up").onclick = () => { if (dirPicker.parent) browseDir(dirPicker.parent); };
+  $("dir-cancel").onclick = () => { $("dir-modal").hidden = true; };
+  $("dir-select").onclick = () => { confirmDirPicker(); };
+  $("dir-modal").onclick = (e) => { if (e.target === $("dir-modal")) $("dir-modal").hidden = true; };
 
   app.composer = new Composer({
     textarea: $("composer-input"),
@@ -504,8 +625,9 @@ async function boot() {
   });
 
   app.statusbar = new Statusbar({
-    ctxEl: $("sb-ctx"), usageEl: $("sb-usage"), turnEl: $("sb-turn"), versionEl: $("sb-version"),
+    usageEl: $("sb-usage"), turnEl: $("sb-turn"), versionEl: $("sb-version"),
   });
+  app.ctxgauge = new CtxGauge($("ctx-gauge"));
 
   // 模型 / reasoning 切换器
   app.picker = new Picker($("menu"));
@@ -573,9 +695,10 @@ async function enter() {
       if (e.status !== 401) console.warn("load models:", e);
     }
     showApp();
+    await loadWorkspaces();
     await refreshSessions();
     // 首入落地态：最近更新的会话；无会话则空态
-    const { sessions } = await app.api.listSessions(1);
+    const { sessions } = await app.api.listSessions(1, "", false, "all");
     if (sessions && sessions.length > 0) {
       await openSession(sessions[0].id);
     } else {
@@ -604,7 +727,7 @@ async function submitPrompt(text) {
   }
   app.lastSubmit = { text, key };
   try {
-    if (!app.sessionId) await newSession();
+    if (!app.sessionId) await newSession("");
     await app.api.submitPrompt(app.sessionId, text, key);
     app.composer.clearDraft();
     app.lastSubmit = null;

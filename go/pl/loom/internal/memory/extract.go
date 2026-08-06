@@ -43,6 +43,25 @@ type ExtractionResult struct {
 // (most recent context) with a head marker.
 const maxTranscriptBytes = 200 * 1024 // 200 KB
 
+// maxPartBytes caps one serialized message part. A single pasted log or
+// file dump must not dominate the extraction input; the head of the part
+// carries the signal.
+const maxPartBytes = 4 * 1024 // 4 KB
+
+// extractionResponseSchema is the JSON schema requested from providers
+// whose wire API supports structured outputs (P4). extractJSON stays as
+// the lenient fallback for providers that ignore ResponseFormat.
+var extractionResponseSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"rollout_summary": map[string]any{"type": "string"},
+		"rollout_slug":    map[string]any{"type": []string{"string", "null"}},
+		"raw_memory":      map[string]any{"type": "string"},
+	},
+	"required":             []string{"rollout_summary", "rollout_slug", "raw_memory"},
+	"additionalProperties": false,
+}
+
 // slugPattern is the set of characters allowed in a model-provided slug.
 // Anything else is replaced with '-'.
 var slugPattern = regexp.MustCompile(`[^a-z0-9-]`)
@@ -54,12 +73,17 @@ type Extractor struct {
 	store     *Store
 	model     domain.Model
 	modelName string
+	// structuredOutput requests JSON-schema-constrained output (P4); enable
+	// only for providers whose wire API honors ResponseFormat.
+	structuredOutput bool
 }
 
 // NewExtractor creates a Phase 1 extractor. modelName is the real model
-// identifier to send in API requests (not a placeholder).
-func NewExtractor(store *Store, model domain.Model, modelName string) *Extractor {
-	return &Extractor{store: store, model: model, modelName: modelName}
+// identifier to send in API requests (not a placeholder). structuredOutput
+// should be true only when the provider's wire API supports JSON-schema
+// response formats (the OpenAI chat/responses families).
+func NewExtractor(store *Store, model domain.Model, modelName string, structuredOutput bool) *Extractor {
+	return &Extractor{store: store, model: model, modelName: modelName, structuredOutput: structuredOutput}
 }
 
 // ExtractFromSession extracts memories from a completed session's
@@ -79,8 +103,10 @@ func (e *Extractor) ExtractFromSession(ctx context.Context, sessionID domain.Ses
 		return nil, nil // nothing to extract
 	}
 
-	// Cap the transcript to avoid blowing the extraction model context.
+	// Cap the transcript to avoid blowing the extraction model context,
+	// and scrub secrets before anything leaves the process (P3).
 	rolloutContent = capTranscript(rolloutContent, maxTranscriptBytes)
+	rolloutContent = RedactSecrets(rolloutContent)
 
 	// Generate a slug from the session ID and timestamp.
 	slug := generateSlug(sessionID, time.Now())
@@ -95,6 +121,13 @@ func (e *Extractor) ExtractFromSession(ctx context.Context, sessionID domain.Ses
 		Messages:    buildExtractionMessages(systemPrompt, userPrompt),
 		MaxTokens:   4096,
 		Temperature: 0.0,
+	}
+	if e.structuredOutput {
+		req.ResponseFormat = &domain.ResponseFormat{
+			Name:   "memory_extraction",
+			Schema: extractionResponseSchema,
+			Strict: true,
+		}
 	}
 
 	stream, err := e.model.Stream(ctx, req)
@@ -135,6 +168,12 @@ func (e *Extractor) ExtractFromSession(ctx context.Context, sessionID domain.Ses
 		return nil, nil
 	}
 
+	// Scrub secrets from the model output before persisting (P3): the
+	// model may echo transcript fragments verbatim.
+	result.RawMemory = RedactSecrets(result.RawMemory)
+	result.RolloutSummary = RedactSecrets(result.RolloutSummary)
+	result.RolloutSlug = RedactSecrets(result.RolloutSlug)
+
 	// Sanitize the model-provided slug (prevent path traversal).
 	if result.RolloutSlug != "" {
 		result.RolloutSlug = sanitizeSlug(result.RolloutSlug)
@@ -173,12 +212,12 @@ func serializeMessages(messages []domain.Message) string {
 		case domain.RoleUser:
 			text := strings.Join(msg.TextParts(), "")
 			if text != "" {
-				fmt.Fprintf(&b, "\n[User]: %s\n", text)
+				fmt.Fprintf(&b, "\n[User]: %s\n", capPart(text))
 			}
 		case domain.RoleAssistant:
 			// Include text parts.
 			if text := strings.Join(msg.TextParts(), ""); text != "" {
-				fmt.Fprintf(&b, "\n[Assistant]: %s\n", text)
+				fmt.Fprintf(&b, "\n[Assistant]: %s\n", capPart(text))
 			}
 			// Include tool call names (arguments are omitted for brevity).
 			for _, part := range msg.Parts {
@@ -189,6 +228,20 @@ func serializeMessages(messages []domain.Message) string {
 		}
 	}
 	return b.String()
+}
+
+// capPart truncates one serialized message part to maxPartBytes, keeping
+// the head (the beginning of a paste identifies what it is).
+func capPart(s string) string {
+	if len(s) <= maxPartBytes {
+		return s
+	}
+	cut := s[:maxPartBytes]
+	// Do not split a multi-byte rune at the cut boundary.
+	for len(cut) > 0 && !utf8.ValidString(cut) {
+		cut = cut[:len(cut)-1]
+	}
+	return cut + "\n[... part truncated ...]"
 }
 
 // capTranscript truncates the transcript to at most maxBytes, keeping the

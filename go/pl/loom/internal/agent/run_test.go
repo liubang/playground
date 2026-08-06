@@ -1324,7 +1324,7 @@ func TestLoopTracksUsageManifestAndPersistsEvents(t *testing.T) {
 	})
 	store := fakes.NewFakeStore()
 	run := newTestRun(domain.DefaultLimits())
-	if err := store.CreateSession(context.Background(), run.SessionID); err != nil {
+	if err := store.CreateSession(context.Background(), run.SessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	run.AddUserMessage(domain.Message{
@@ -2277,8 +2277,8 @@ type contextCheckingStore struct {
 	base *fakes.FakeStore
 }
 
-func (s *contextCheckingStore) CreateSession(ctx context.Context, id domain.SessionID) error {
-	return s.base.CreateSession(ctx, id)
+func (s *contextCheckingStore) CreateSession(ctx context.Context, id domain.SessionID, workspaceID domain.WorkspaceID) error {
+	return s.base.CreateSession(ctx, id, workspaceID)
 }
 
 func (s *contextCheckingStore) AppendEvents(ctx context.Context, id domain.SessionID, expectedVersion int64, events []domain.Event) error {
@@ -2321,8 +2321,8 @@ type failingStore struct {
 	err        error
 }
 
-func (s *failingStore) CreateSession(ctx context.Context, sessionID domain.SessionID) error {
-	return s.base.CreateSession(ctx, sessionID)
+func (s *failingStore) CreateSession(ctx context.Context, sessionID domain.SessionID, workspaceID domain.WorkspaceID) error {
+	return s.base.CreateSession(ctx, sessionID, workspaceID)
 }
 
 func (s *failingStore) AppendEvents(ctx context.Context, sessionID domain.SessionID, expectedVersion int64, events []domain.Event) error {
@@ -2402,7 +2402,7 @@ func addUserTextMessage(run *Run, text string) {
 
 func mustCreateSession(t *testing.T, store domain.SessionStore, sessionID domain.SessionID) {
 	t.Helper()
-	if err := store.CreateSession(context.Background(), sessionID); err != nil {
+	if err := store.CreateSession(context.Background(), sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 }

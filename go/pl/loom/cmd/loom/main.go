@@ -111,6 +111,20 @@ func run(ctx context.Context, args []string) error {
 			return errors.New("usage: loom sessions")
 		}
 		return listSessions(ctx)
+	case "workspace":
+		if len(args) == 2 && args[1] == "list" {
+			return listWorkspaces(ctx)
+		}
+		if len(args) >= 3 && args[1] == "add" {
+			name := ""
+			for i := 3; i+1 < len(args); i++ {
+				if args[i] == "--name" {
+					name = args[i+1]
+				}
+			}
+			return addWorkspace(ctx, args[2], name)
+		}
+		return errors.New("usage: loom workspace <list|add <path> [--name N]>")
 	case "inspect":
 		if len(args) != 2 {
 			return errors.New("usage: loom inspect <session-id>")
@@ -255,6 +269,51 @@ func resolveWorkspace(explicit string) (string, error) {
 	return root, nil
 }
 
+// assembleRuntime wires the shared ProcessRuntime, the workspace registry,
+// and the default workspace (the startup root), then backfills the pre-v5
+// session tail onto the default workspace (docs/WORKSPACE_DESIGN.md §7.2).
+// The three entry points (chat/run/serve) share it so they assemble
+// identically. The returned *Bootstrap is the default workspace's runtime;
+// callers that need workspace resolution use the registry.
+func assembleRuntime(ctx context.Context, resolved *config.ResolvedConfig, root string, logger *slog.Logger) (*app.ProcessRuntime, *app.WorkspaceRegistry, *app.Bootstrap, error) {
+	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(resolved.Storage.SessionsDir(), artifactDirectoryName),
+		Version:     version,
+		Logger:      logger,
+	})
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("process runtime: %w", err)
+	}
+	registry, err := app.NewWorkspaceRegistry(proc)
+	if err != nil {
+		proc.Close()
+		return nil, nil, nil, fmt.Errorf("workspace registry: %w", err)
+	}
+	defaultWs, err := registry.RegisterDefault(ctx, root)
+	if err != nil {
+		registry.Close()
+		proc.Close()
+		return nil, nil, nil, fmt.Errorf("default workspace: %w", err)
+	}
+	// Pre-register configured workspaces (docs/WORKSPACE_DESIGN.md §10).
+	// Best-effort: an unreachable root is logged and skipped, never fatal.
+	for _, wc := range resolved.Workspaces {
+		if _, err := registry.Register(ctx, wc.Root, wc.Name); err != nil {
+			logger.Warn("workspace pre-register skipped", "root", wc.Root, "error", err)
+		}
+	}
+	// Backfill the pre-v5 session tail (workspace_id='') onto the default
+	// workspace. Idempotent; safe to run on every boot.
+	if store, ok := proc.Store.(domain.WorkspaceStore); ok {
+		if n, err := store.BackfillSessionWorkspaces(ctx, defaultWs.WorkspaceID); err != nil {
+			logger.Warn("session workspace backfill failed", "error", err)
+		} else if n > 0 {
+			logger.Info("assigned legacy sessions to default workspace", "count", n, "workspace_id", defaultWs.WorkspaceID.String())
+		}
+	}
+	return proc, registry, defaultWs, nil
+}
+
 // --- agent entries ---
 
 // runChat starts the interactive TUI chat session.
@@ -273,21 +332,15 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	if err := prepareStorage(resolved, true); err != nil {
 		return err
 	}
-	artifactDir := filepath.Join(resolved.Storage.SessionsDir(), artifactDirectoryName)
-
 	// 统一文件日志（<base_dir>/logs/loom.YYYY-MM-DD.log，glog 风格）；TUI 占屏，
 	// 打不开日志目录时静默降级为丢弃，绝不影响交互。
 	logger := newFileLogger(resolved, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
-		WorkspaceRoot: root,
-		ArtifactDir:   artifactDir,
-		Version:       version,
-		Logger:        logger,
-	})
+	proc, registry, bootstrap, err := assembleRuntime(ctx, resolved, root, logger)
 	if err != nil {
-		return fmt.Errorf("bootstrap: %w", err)
+		return err
 	}
-	defer bootstrap.Close()
+	defer proc.Close()
+	defer registry.Close()
 
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	// Bridge delegate_task child-run lifecycle onto the event stream so the
@@ -296,7 +349,7 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	// The TUI is a peer client of the runtime (docs/SERVE_DESIGN.md §10):
 	// same SessionService + in-proc client assembly that `loom serve` uses,
 	// so every frontend shares one behavior.
-	service := app.NewSessionService(bootstrap, broker, app.SessionServiceConfig{Logger: logger})
+	service := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{Logger: logger})
 	sessionClient := client.NewInProc(service)
 
 	if resumeSessionID != nil {
@@ -408,20 +461,16 @@ func runServe(ctx context.Context, args []string) error {
 	}
 
 	logger := newFileLogger(resolved, slog.New(logging.NewGlogHandler(os.Stderr, nil)))
-	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
-		WorkspaceRoot: root,
-		ArtifactDir:   filepath.Join(dataDir, artifactDirectoryName),
-		Version:       version,
-		Logger:        logger,
-	})
+	proc, registry, bootstrap, err := assembleRuntime(ctx, resolved, root, logger)
 	if err != nil {
-		return fmt.Errorf("bootstrap: %w", err)
+		return err
 	}
-	defer bootstrap.Close()
+	defer proc.Close()
+	defer registry.Close()
 
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	app.WireSubagentObserver(bootstrap.SubagentFactory, broker, bootstrap.Store, logger)
-	service := app.NewSessionService(bootstrap, broker, app.SessionServiceConfig{Logger: logger})
+	service := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{Logger: logger})
 	srv, err := server.New(server.Config{
 		Listen:      listen,
 		Token:       token,
@@ -498,18 +547,12 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	if err := prepareStorage(resolved, true); err != nil {
 		return err
 	}
-	artifactDir := filepath.Join(resolved.Storage.SessionsDir(), artifactDirectoryName)
-
-	bootstrap, err := app.NewBootstrap(ctx, resolved, app.BootstrapConfig{
-		WorkspaceRoot: root,
-		ArtifactDir:   artifactDir,
-		Version:       version,
-		Logger:        slog.Default(),
-	})
+	proc, registry, bootstrap, err := assembleRuntime(ctx, resolved, root, slog.Default())
 	if err != nil {
-		return fmt.Errorf("bootstrap: %w", err)
+		return err
 	}
-	defer bootstrap.Close()
+	defer proc.Close()
+	defer registry.Close()
 
 	sqliteStore, ok := bootstrap.Store.(*session.SQLiteStore)
 	if !ok {
@@ -519,7 +562,7 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	var run *agent.Run
 	if resumeSessionID == nil {
 		run = agent.NewRun(domain.NewSessionID(), resolved.Limits, domain.RealClock{})
-		if err := sqliteStore.CreateSession(ctx, run.SessionID); err != nil {
+		if err := sqliteStore.CreateSession(ctx, run.SessionID, bootstrap.WorkspaceID); err != nil {
 			return fmt.Errorf("create session: %w", err)
 		}
 	} else {
@@ -659,13 +702,97 @@ func listSessions(ctx context.Context) error {
 		return fmt.Errorf("open session store: %w", err)
 	}
 	defer store.Close()
-	summaries, _, err := store.ListSessions(ctx, "", 100, false)
+	summaries, _, err := store.ListSessions(ctx, "", 100, false, domain.WorkspaceID{})
 	if err != nil {
 		return err
 	}
 	for _, summary := range summaries {
 		fmt.Printf("%s\t%d\t%s\n", summary.ID, summary.Version, summary.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	}
+	return nil
+}
+
+// listWorkspaces prints every registered workspace (loom workspace list).
+// Read-only path: works without a running serve process.
+func listWorkspaces(ctx context.Context) error {
+	resolved, err := loadConfig(false, slog.Default())
+	if err != nil {
+		return err
+	}
+	if err := prepareStorage(resolved, false); err != nil {
+		return err
+	}
+	dbPath := resolved.Storage.SessionDBPath()
+	if _, err := os.Stat(dbPath); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("inspect session store: %w", err)
+	}
+	store, err := session.OpenSQLiteStoreReadOnly(ctx, dbPath)
+	if err != nil {
+		return fmt.Errorf("open session store: %w", err)
+	}
+	defer store.Close()
+	workspaces, err := store.ListWorkspaces(ctx)
+	if err != nil {
+		return err
+	}
+	for _, ws := range workspaces {
+		fmt.Printf("%s\t%s\t%s\n", ws.ID, ws.Name, ws.RootPath)
+	}
+	return nil
+}
+
+// addWorkspace registers a workspace entity (loom workspace add <path>).
+// It writes through the local store under the data-dir flock — mutually
+// exclusive with a running serve, so a live serve means "use the Web UI or
+// POST /v1/workspaces instead". The workspace's runtime is assembled lazily
+// on the next Resolve (chat/serve startup), not in this short-lived process.
+func addWorkspace(ctx context.Context, root, name string) error {
+	resolved, err := loadConfig(false, slog.Default())
+	if err != nil {
+		return err
+	}
+	if err := prepareStorage(resolved, true); err != nil {
+		return err
+	}
+	// Canonical validation mirrors the registry's (docs/WORKSPACE_DESIGN.md W2).
+	abs, err := filepath.Abs(strings.TrimSpace(root))
+	if err != nil {
+		return fmt.Errorf("workspace root: %w", err)
+	}
+	canonical, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return fmt.Errorf("workspace root: %w", err)
+	}
+	if info, err := os.Stat(canonical); err != nil || !info.IsDir() {
+		return fmt.Errorf("workspace root %q is not an existing directory", canonical)
+	}
+	lock, err := server.AcquireDataDirLock(resolved.Storage.SessionsDir())
+	if err != nil {
+		if errors.Is(err, server.ErrDataDirLocked) {
+			return errors.New("a loom serve process owns the data directory; add the workspace via the Web UI or POST /v1/workspaces instead")
+		}
+		return err
+	}
+	defer lock.Release()
+	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDBPath())
+	if err != nil {
+		return fmt.Errorf("open session store: %w", err)
+	}
+	defer store.Close()
+	if name == "" {
+		name = filepath.Base(canonical)
+	}
+	ws, err := store.UpsertWorkspace(ctx, domain.Workspace{
+		ID:       domain.NewWorkspaceID(),
+		Name:     name,
+		RootPath: canonical,
+	})
+	if err != nil {
+		return fmt.Errorf("register workspace: %w", err)
+	}
+	fmt.Printf("%s\t%s\t%s\n", ws.ID, ws.Name, ws.RootPath)
 	return nil
 }
 

@@ -482,6 +482,10 @@ func maskPlaceholder(originalBytes int, ref domain.ArtifactRef, artifacts domain
 // estTokens' pre-division total (1500 tokens x 4 bytes/token).
 const imageTokenFootprint = 1500 * 4
 
+// EstimateTokens exposes estTokens for read-only projections outside the
+// agent package (e.g. the session snapshot's occupancy field).
+func EstimateTokens(messages []domain.Message) int { return estTokens(messages) }
+
 // estTokens approximates the token size of the transcript for before/after
 // reporting. It is not used for budget accounting.
 func estTokens(messages []domain.Message) int {

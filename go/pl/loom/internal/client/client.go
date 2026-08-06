@@ -90,8 +90,12 @@ const (
 type Client interface {
 	// --- session lifecycle ---
 
-	// NewSession starts a fresh session and binds the client to it.
+	// NewSession starts a fresh session and binds the client to it. The
+	// session is created in the process's default workspace.
 	NewSession(ctx context.Context) error
+	// NewSessionIn starts a fresh session in the given workspace (a zero
+	// workspaceID selects the default workspace) and binds the client to it.
+	NewSessionIn(ctx context.Context, workspaceID domain.WorkspaceID) error
 	// ResumeSession binds the client to an existing persisted session.
 	ResumeSession(ctx context.Context, id domain.SessionID) error
 	// SessionID returns the bound session (zero before New/Resume).
@@ -141,8 +145,14 @@ type Client interface {
 
 	// --- history ---
 
-	// ListSessions returns recent persisted sessions, live or not.
+	// ListSessions returns recent persisted sessions of the process's default
+	// workspace (the launch directory) — the single-workspace frontend view
+	// (TUI/CLI picker).
 	ListSessions(ctx context.Context, limit int) ([]SessionSummary, error)
+	// ListSessionsIn returns recent persisted sessions of the given workspace;
+	// a zero workspaceID lists across all workspaces (the multi-workspace
+	// tree view).
+	ListSessionsIn(ctx context.Context, limit int, workspaceID domain.WorkspaceID) ([]SessionSummary, error)
 	// ListCheckpoints returns the bound session's checkpoints.
 	ListCheckpoints(ctx context.Context, limit int) ([]CheckpointInfo, error)
 	// Rewind rolls the bound session back to a checkpoint.
@@ -161,4 +171,11 @@ type Client interface {
 	ListRules(ctx context.Context) (*permission.RuleSet, error)
 	// ForgetRule removes a remembered approval rule.
 	ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host string) error
+
+	// --- workspaces ---
+
+	// ListWorkspaces returns every registered workspace, newest first.
+	ListWorkspaces(ctx context.Context) ([]domain.Workspace, error)
+	// RegisterWorkspace registers (or reuses by canonical root) a workspace.
+	RegisterWorkspace(ctx context.Context, root, name string) (domain.Workspace, error)
 }

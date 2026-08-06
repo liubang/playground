@@ -7,6 +7,52 @@ export function fmtTokens(n) {
   return String(n);
 }
 
+export function fmtBytes(n) {
+  if (n == null || isNaN(n)) return "";
+  if (n >= 1 << 20) return (n / (1 << 20)).toFixed(1) + " MB";
+  if (n >= 1 << 10) return (n / (1 << 10)).toFixed(1) + " KB";
+  return n + " B";
+}
+
+// 与后端 agent.estTokens 同算法（bytes/4，图片按 1500 token 保守估计），
+// 用于 snapshot 未带 occupancy 字段时的首屏兜底估算。
+export function estTranscriptTokens(messages) {
+  let total = 0;
+  for (const m of messages || []) {
+    for (const p of m.parts || []) {
+      switch (p.kind) {
+        case "text":
+          total += (p.text || "").length;
+          break;
+        case "reasoning":
+          total += ((p.reasoning && p.reasoning.text) || "").length;
+          break;
+        case "tool_call": {
+          // arguments 是 json.RawMessage，到前端已是解析后的对象；
+          // Go 端按原始 JSON 字节计，这里用序列化长度对齐口径
+          const args = p.tool_call ? p.tool_call.arguments : null;
+          if (args != null) {
+            total += typeof args === "string" ? args.length : JSON.stringify(args).length;
+          }
+          break;
+        }
+        case "tool_result":
+          for (const c of (p.tool_result && p.tool_result.content) || []) {
+            if (c.kind === "text") total += (c.text || "").length;
+            else if (c.kind === "image") total += 1500 * 4;
+          }
+          break;
+        case "image":
+          total += 1500 * 4;
+          break;
+        default:
+          break;
+      }
+    }
+  }
+  return Math.round(total / 4);
+}
+
 export function relTime(iso) {
   const t = new Date(iso);
   if (isNaN(t)) return "";

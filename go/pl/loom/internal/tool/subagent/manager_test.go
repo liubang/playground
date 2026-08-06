@@ -314,7 +314,7 @@ func TestManagerWaitTimeout(t *testing.T) {
 
 	// Manually insert a "running" entry to simulate a long-running child.
 	childID := domain.NewSessionID()
-	if err := mgr.factory.Store.CreateSession(context.Background(), childID); err != nil {
+	if err := mgr.factory.Store.CreateSession(context.Background(), childID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
 	mgr.mu.Lock()

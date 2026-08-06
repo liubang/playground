@@ -58,6 +58,17 @@ type File struct {
 	Subagent   Subagent             `yaml:"subagent"`
 	Memory     Memory               `yaml:"memory"`
 	MCPServers map[string]MCPServer `yaml:"mcp_servers"`
+	// Workspaces pre-registers project workspaces at startup
+	// (docs/WORKSPACE_DESIGN.md §10). Optional; the startup directory is
+	// always registered as the default workspace regardless of this list.
+	Workspaces []WorkspaceSpec `yaml:"workspaces"`
+}
+
+// WorkspaceSpec names one pre-registered workspace. Root supports a leading
+// "~" for the user's home directory; existence is validated at registration.
+type WorkspaceSpec struct {
+	Name string `yaml:"name"`
+	Root string `yaml:"root"`
 }
 
 // Provider describes one model endpoint and its model catalog. Type selects
@@ -276,8 +287,33 @@ type Subagent struct {
 // Memory configures the long-term memory system (docs/MEMORY_DESIGN.md).
 // Enabled is nil-typed so "absent" defaults to true while an explicit
 // false disables extraction, consolidation, and tool registration.
+//
+// The extraction/consolidation pipeline runs in the background at process
+// startup (and every run_interval afterwards), draining a persistent job
+// queue — never on the shutdown path.
 type Memory struct {
 	Enabled *bool `yaml:"enabled"`
+	// ExtractModel pins the Phase 1 extraction model ("provider/model" or
+	// a bare model/provider name); empty follows the default model. A
+	// cheap/fast model is recommended.
+	ExtractModel string `yaml:"extract_model"`
+	// ConsolidationModel pins the Phase 2 consolidation model; empty
+	// follows the default model.
+	ConsolidationModel string `yaml:"consolidation_model"`
+	// MaxJobsPerRun bounds extraction jobs claimed per pipeline pass;
+	// nil keeps the default (8).
+	MaxJobsPerRun *int `yaml:"max_jobs_per_run"`
+	// RunInterval re-runs the pipeline periodically (Go duration syntax,
+	// e.g. "30m"); empty keeps the default ("30m"), "0" runs the pipeline
+	// once at startup only.
+	RunInterval string `yaml:"run_interval"`
+	// MinSessionIdle skips sessions touched more recently than this (Go
+	// duration); empty keeps the default ("1h"). Prevents extracting
+	// sessions that may still be active.
+	MinSessionIdle string `yaml:"min_session_idle"`
+	// MaxSessionAge skips sessions last touched longer ago than this (Go
+	// duration); empty keeps the default ("720h", 30 days).
+	MaxSessionAge string `yaml:"max_session_age"`
 }
 
 // MCPServer configures one MCP server connection. The key in MCPServers
