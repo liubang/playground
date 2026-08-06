@@ -38,6 +38,15 @@ import (
 // real Bootstrap assembly, and the real tool registry — the same code
 // path a user hits when they add mcp_servers to ~/.loom/config.yaml.
 
+// TestMain guarantees a $HOME: hermetic runners (bazel) unset it, and
+// resolving the default storage base_dir (~/.loom) requires it.
+func TestMain(m *testing.M) {
+	if os.Getenv("HOME") == "" {
+		_ = os.Setenv("HOME", os.TempDir())
+	}
+	os.Exit(m.Run())
+}
+
 // -----------------------------------------------------------------------
 // Minimal MCP echo server (runs as a child process via TestMCPHelperProcess)
 // -----------------------------------------------------------------------
@@ -115,6 +124,15 @@ func helperCommand(t *testing.T) (string, []string, map[string]string) {
 	return os.Args[0],
 		[]string{"-test.run=TestMCPHelperProcess"},
 		map[string]string{"GO_WANT_HELPER_PROCESS": "1"}
+}
+
+// prepareSessionsDir creates the sessions subdirectory under the resolved
+// storage base_dir (bootstrap opens the store but does not create it).
+func prepareSessionsDir(t *testing.T, resolved *config.ResolvedConfig) {
+	t.Helper()
+	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
+		t.Fatalf("MkdirAll(sessions dir) error = %v", err)
+	}
 }
 
 // writeMCPConfig serializes a config.File with a provider and the given
@@ -254,7 +272,8 @@ func TestE2EMCPBootstrapIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	resolved.Storage.SessionDB = filepath.Join(ws, "sessions.db")
+	resolved.Storage.BaseDir = ws
+	prepareSessionsDir(t, resolved)
 
 	bootstrap, err := app.NewBootstrap(context.Background(), resolved, app.BootstrapConfig{
 		WorkspaceRoot: ws,
@@ -331,7 +350,8 @@ func TestE2EMCPToolFiltering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	resolved.Storage.SessionDB = filepath.Join(ws, "sessions.db")
+	resolved.Storage.BaseDir = ws
+	prepareSessionsDir(t, resolved)
 
 	bootstrap, err := app.NewBootstrap(context.Background(), resolved, app.BootstrapConfig{
 		WorkspaceRoot: ws,
@@ -365,7 +385,8 @@ func TestE2EMCPGracefulDegradation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	resolved.Storage.SessionDB = filepath.Join(ws, "sessions.db")
+	resolved.Storage.BaseDir = ws
+	prepareSessionsDir(t, resolved)
 
 	bootstrap, err := app.NewBootstrap(context.Background(), resolved, app.BootstrapConfig{
 		WorkspaceRoot: ws,

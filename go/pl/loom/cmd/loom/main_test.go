@@ -36,47 +36,65 @@ import (
 )
 
 // writeTestConfig points LOOM_CONFIG at a minimal offline config whose
-// storage.session_db is the given path.
-func writeTestConfig(t *testing.T, sessionDB string) {
+// storage.base_dir is the given directory.
+func writeTestConfig(t *testing.T, baseDir string) {
 	t.Helper()
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	content := "storage:\n  session_db: '" + sessionDB + "'\n"
+	content := "storage:\n  base_dir: '" + baseDir + "'\n"
 	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("write test config: %v", err)
 	}
 	t.Setenv(configPathEnv, cfgPath)
 }
 
-func TestResolveSessionDBConfiguredPrivateDirectory(t *testing.T) {
-	directory := filepath.Join(t.TempDir(), "private")
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
+// testSessionDB returns the session store path inside base's sessions
+// subdirectory (the layout SessionDBPath derives from storage.base_dir).
+func testSessionDB(base string) string {
+	return filepath.Join(base, "sessions", "sessions.db")
+}
+
+func TestPrepareStorageCreatesPrivateDirectories(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "loom")
+	resolved := &config.ResolvedConfig{Storage: config.ResolvedStorage{BaseDir: base}}
+	if err := prepareStorage(resolved, true); err != nil {
+		t.Fatalf("prepareStorage: %v", err)
 	}
-	path := filepath.Join(directory, "custom.db")
-	resolved := &config.ResolvedConfig{Storage: config.Storage{SessionDB: path}}
-	if err := resolveSessionDB(resolved, true); err != nil {
-		t.Fatalf("resolveSessionDB: %v", err)
+	for _, dir := range []string{base, resolved.Storage.SessionsDir()} {
+		fi, err := os.Stat(dir)
+		if err != nil {
+			t.Fatalf("stat %s: %v", dir, err)
+		}
+		if fi.Mode().Perm() != 0o700 {
+			t.Fatalf("%s mode = %v; want 0700", dir, fi.Mode().Perm())
+		}
 	}
-	if resolved.Storage.SessionDB != path {
-		t.Fatalf("path = %q, want %q", resolved.Storage.SessionDB, path)
+	if got, want := resolved.Storage.SessionDBPath(), testSessionDB(base); got != want {
+		t.Fatalf("SessionDBPath() = %q, want %q", got, want)
 	}
 }
 
-func TestResolveSessionDBRejectsInsecureConfiguredDirectory(t *testing.T) {
-	directory := filepath.Join(t.TempDir(), "shared")
-	if err := os.MkdirAll(directory, 0o755); err != nil {
+func TestPrepareStorageTightensBaseDirPermissions(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "loom")
+	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	if err := os.Chmod(directory, 0o755); err != nil {
+	if err := os.Chmod(base, 0o755); err != nil {
 		t.Fatalf("Chmod: %v", err)
 	}
-	resolved := &config.ResolvedConfig{Storage: config.Storage{SessionDB: filepath.Join(directory, "sessions.db")}}
-	if err := resolveSessionDB(resolved, true); err == nil || !strings.Contains(err.Error(), "must not be accessible") {
-		t.Fatalf("resolveSessionDB error = %v, want insecure directory error", err)
+	resolved := &config.ResolvedConfig{Storage: config.ResolvedStorage{BaseDir: base}}
+	if err := prepareStorage(resolved, true); err != nil {
+		t.Fatalf("prepareStorage: %v", err)
+	}
+	fi, err := os.Stat(base)
+	if err != nil {
+		t.Fatalf("stat base dir: %v", err)
+	}
+	if fi.Mode().Perm() != 0o700 {
+		t.Fatalf("base dir mode = %v; want 0700 (loom-owned dirs are tightened)", fi.Mode().Perm())
 	}
 }
 
-func TestResolveSessionDBRejectsSymlinkDirectory(t *testing.T) {
+func TestPrepareStorageRejectsSymlinkBaseDir(t *testing.T) {
 	root := t.TempDir()
 	realDirectory := filepath.Join(root, "real")
 	if err := os.MkdirAll(realDirectory, 0o700); err != nil {
@@ -86,29 +104,20 @@ func TestResolveSessionDBRejectsSymlinkDirectory(t *testing.T) {
 	if err := os.Symlink(realDirectory, link); err != nil {
 		t.Fatalf("Symlink: %v", err)
 	}
-	resolved := &config.ResolvedConfig{Storage: config.Storage{SessionDB: filepath.Join(link, "sessions.db")}}
-	if err := resolveSessionDB(resolved, true); err == nil || !strings.Contains(err.Error(), "real directory") {
-		t.Fatalf("resolveSessionDB error = %v, want symlink error", err)
+	resolved := &config.ResolvedConfig{Storage: config.ResolvedStorage{BaseDir: link}}
+	if err := prepareStorage(resolved, true); err == nil || !strings.Contains(err.Error(), "real directory") {
+		t.Fatalf("prepareStorage error = %v, want symlink error", err)
 	}
 }
 
-func TestResolveSessionDBDefaultUsesLoomHome(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	resolved := &config.ResolvedConfig{}
-	if err := resolveSessionDB(resolved, true); err != nil {
-		t.Fatalf("resolveSessionDB: %v", err)
+func TestPrepareStorageNoCreateLeavesFilesystemUntouched(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "loom")
+	resolved := &config.ResolvedConfig{Storage: config.ResolvedStorage{BaseDir: base}}
+	if err := prepareStorage(resolved, false); err != nil {
+		t.Fatalf("prepareStorage: %v", err)
 	}
-	want := filepath.Join(home, ".loom", "sessions", "sessions.db")
-	if resolved.Storage.SessionDB != want {
-		t.Fatalf("SessionDB = %q, want %q", resolved.Storage.SessionDB, want)
-	}
-	fi, err := os.Stat(filepath.Dir(resolved.Storage.SessionDB))
-	if err != nil {
-		t.Fatalf("stat sessions dir: %v", err)
-	}
-	if fi.Mode().Perm() != 0o700 {
-		t.Fatalf("sessions dir mode = %v; want 0700", fi.Mode().Perm())
+	if _, err := os.Stat(base); !os.IsNotExist(err) {
+		t.Fatalf("prepareStorage(create=false) created %s unexpectedly: %v", base, err)
 	}
 }
 
@@ -140,25 +149,24 @@ func TestSaveTerminalCheckpointSurvivesCancelledContext(t *testing.T) {
 }
 
 func TestListSessionsDoesNotCreateMissingStore(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "missing", "sessions.db")
-	writeTestConfig(t, path)
+	base := filepath.Join(t.TempDir(), "missing")
+	writeTestConfig(t, base)
 	if err := run(context.Background(), []string{"sessions"}); err != nil {
 		t.Fatalf("run sessions: %v", err)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(testSessionDB(base)); !os.IsNotExist(err) {
 		t.Fatalf("sessions created store unexpectedly: %v", err)
 	}
 }
 
 func TestListSessionsCommandReadsPersistentStore(t *testing.T) {
 	ctx := context.Background()
-	directory := filepath.Join(t.TempDir(), "private")
-	if err := os.MkdirAll(directory, 0o700); err != nil {
+	base := filepath.Join(t.TempDir(), "private")
+	if err := os.MkdirAll(filepath.Dir(testSessionDB(base)), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	path := filepath.Join(directory, "sessions.db")
-	writeTestConfig(t, path)
-	store, err := session.OpenSQLiteStore(ctx, path)
+	writeTestConfig(t, base)
+	store, err := session.OpenSQLiteStore(ctx, testSessionDB(base))
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
@@ -182,20 +190,19 @@ func TestListSessionsCommandReadsPersistentStore(t *testing.T) {
 
 func TestGCCommandDeletesOnlyOldUnreferencedArtifacts(t *testing.T) {
 	ctx := context.Background()
-	directory := filepath.Join(t.TempDir(), "private")
-	if err := os.MkdirAll(directory, 0o700); err != nil {
+	base := filepath.Join(t.TempDir(), "private")
+	if err := os.MkdirAll(filepath.Dir(testSessionDB(base)), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	path := filepath.Join(directory, "sessions.db")
-	writeTestConfig(t, path)
-	store, err := session.OpenSQLiteStore(ctx, path)
+	writeTestConfig(t, base)
+	store, err := session.OpenSQLiteStore(ctx, testSessionDB(base))
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
 	if err := store.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	artifactStore, err := artifact.Open(filepath.Join(directory, artifactDirectoryName), domain.DefaultLimits().MaxArtifactBytes)
+	artifactStore, err := artifact.Open(filepath.Join(filepath.Dir(testSessionDB(base)), artifactDirectoryName), domain.DefaultLimits().MaxArtifactBytes)
 	if err != nil {
 		t.Fatalf("artifact.Open: %v", err)
 	}
@@ -290,13 +297,12 @@ func (*failingModel) Stream(context.Context, domain.ModelRequest) (domain.ModelS
 
 func TestInspectSessionCommandOutputsRecoveredJSON(t *testing.T) {
 	ctx := context.Background()
-	directory := filepath.Join(t.TempDir(), "private")
-	if err := os.MkdirAll(directory, 0o700); err != nil {
+	base := filepath.Join(t.TempDir(), "private")
+	if err := os.MkdirAll(filepath.Dir(testSessionDB(base)), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	path := filepath.Join(directory, "sessions.db")
-	writeTestConfig(t, path)
-	store, err := session.OpenSQLiteStore(ctx, path)
+	writeTestConfig(t, base)
+	store, err := session.OpenSQLiteStore(ctx, testSessionDB(base))
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
@@ -337,13 +343,12 @@ func TestInspectSessionCommandRejectsInvalidAndMissingSession(t *testing.T) {
 		!strings.Contains(err.Error(), "parse session ID") {
 		t.Fatalf("invalid session error = %v", err)
 	}
-	directory := filepath.Join(t.TempDir(), "private")
-	if err := os.MkdirAll(directory, 0o700); err != nil {
+	base := filepath.Join(t.TempDir(), "private")
+	if err := os.MkdirAll(filepath.Dir(testSessionDB(base)), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	path := filepath.Join(directory, "sessions.db")
-	writeTestConfig(t, path)
-	store, err := session.OpenSQLiteStore(context.Background(), path)
+	writeTestConfig(t, base)
+	store, err := session.OpenSQLiteStore(context.Background(), testSessionDB(base))
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
@@ -357,13 +362,13 @@ func TestInspectSessionCommandRejectsInvalidAndMissingSession(t *testing.T) {
 }
 
 func TestInspectSessionDoesNotCreateMissingStore(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "missing", "sessions.db")
-	writeTestConfig(t, path)
+	base := filepath.Join(t.TempDir(), "missing")
+	writeTestConfig(t, base)
 	err := run(context.Background(), []string{"inspect", domain.NewSessionID().String()})
 	if err == nil || !strings.Contains(err.Error(), "session store does not exist") {
 		t.Fatalf("inspect error = %v", err)
 	}
-	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(testSessionDB(base)); !os.IsNotExist(statErr) {
 		t.Fatalf("inspect created store unexpectedly: %v", statErr)
 	}
 }

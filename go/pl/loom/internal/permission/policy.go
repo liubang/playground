@@ -149,10 +149,11 @@ type RuleLoadOptions struct {
 }
 
 // AttachRules loads declarative rules onto the given baseline policy: the
-// embedded builtin set, plus the user layer (~/.loom/rules) and the project
-// layer (<workspace>/.loom/rules), plus the SQLite remembered store. Rule
-// loading never fails the agent — broken files/stores are logged and skipped.
-func AttachRules(ctx context.Context, policy Policy, workspaceRoot string, loadOpts RuleLoadOptions, logger *slog.Logger) Policy {
+// embedded builtin set, plus the user layer (userDir, i.e. <base_dir>/rules)
+// and the project layer (<workspace>/.loom/rules), plus the SQLite
+// remembered store under userDir. Rule loading never fails the agent —
+// broken files/stores are logged and skipped.
+func AttachRules(ctx context.Context, policy Policy, workspaceRoot, userDir string, loadOpts RuleLoadOptions, logger *slog.Logger) Policy {
 	if !loadOpts.Enabled {
 		return policy
 	}
@@ -164,10 +165,6 @@ func AttachRules(ctx context.Context, policy Policy, workspaceRoot string, loadO
 		} else {
 			rules.merge(builtin)
 		}
-	}
-	var userDir string
-	if dir, err := RulesDirUser(); err == nil {
-		userDir = dir
 	}
 	projectDir := ""
 	if loadOpts.Project {

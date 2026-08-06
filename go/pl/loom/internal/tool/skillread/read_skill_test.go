@@ -51,7 +51,7 @@ func writeSkill(t *testing.T, root, dir, name, body string) string {
 func loadCatalog(t *testing.T, root string) *skill.AtomicCatalog {
 	t.Helper()
 	var atomic skill.AtomicCatalog
-	atomic.Store(skill.NewLoader(root, t.TempDir(), nil, nil).Load(context.Background()))
+	atomic.Store(skill.NewLoader(root, nil, nil).Load(context.Background()))
 	return &atomic
 }
 
@@ -286,7 +286,7 @@ func TestReadSkillExecuteFailsClosedOnCatalogDrift(t *testing.T) {
 	prepared = prepare(t, tool, map[string]any{"name": "weather"})
 	rootB := t.TempDir()
 	writeSkill(t, rootB, "weather", "weather", "body B")
-	atomic.Store(skill.NewLoader(rootB, t.TempDir(), nil, nil).Load(context.Background()))
+	atomic.Store(skill.NewLoader(rootB, nil, nil).Load(context.Background()))
 	if err := executeErr(t, tool, prepared); err.Code != string(domain.ErrSecurity) || !strings.Contains(err.Message, "binding mismatch") {
 		t.Fatalf("moved skill: error = %+v, want security binding mismatch", err)
 	}

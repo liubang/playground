@@ -220,8 +220,9 @@ section 位置：workspace rules 之后、环境快照之前（属于动态段�
 `internal/skill` 提供：
 
 ```go
-// NewLoader 构建发现器；homeDir 注入便于 e2e 用 HOME 覆盖（os.UserHomeDir 读 $HOME）。
-func NewLoader(workspaceRoot, homeDir string, extraRoots []string, logger *slog.Logger) *Loader
+// NewLoader 构建发现器；userRoots 由装配层注入（<base_dir>/skills、~/.agents/skills、
+// skills.extra_roots），loader 自身不含任何路径约定。
+func NewLoader(workspaceRoot string, userRoots []string, logger *slog.Logger) *Loader
 // NewPromptProvider 返回 prompt.SkillsProvider：每次 Build 重新 Load、刷新 AtomicCatalog、渲染。
 func NewPromptProvider(loader *Loader, catalog *AtomicCatalog, contextWindow int64) prompt.SkillsProvider
 type AtomicCatalog struct{ /* atomic.Value 存 *Catalog；零值可用（空 Catalog） */ }

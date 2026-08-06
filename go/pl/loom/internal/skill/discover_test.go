@@ -51,6 +51,15 @@ func newEnv(t *testing.T) (workspace, home string) {
 	return t.TempDir(), t.TempDir()
 }
 
+// defaultUserRoots mirrors the production wiring (app.WireSkills): the
+// loom skills dir plus the cross-tool ~/.agents/skills convention.
+func defaultUserRoots(home string) []string {
+	return []string{
+		filepath.Join(home, ".loom", "skills"),
+		filepath.Join(home, ".agents", "skills"),
+	}
+}
+
 func loadAll(t *testing.T, loader *Loader) *Catalog {
 	t.Helper()
 	return loader.Load(context.Background())
@@ -65,7 +74,7 @@ func TestLoaderDiscoversAllRoots(t *testing.T) {
 	extra := t.TempDir()
 	writeSkill(t, filepath.Join(extra, "e"), "extra-one", "d")
 
-	cat := loadAll(t, NewLoader(ws, home, []string{extra}, nil))
+	cat := loadAll(t, NewLoader(ws, append(defaultUserRoots(home), extra), nil))
 	if got := cat.Names(); len(got) != 5 {
 		t.Fatalf("Names() = %v, want 5 skills", got)
 	}
@@ -97,7 +106,7 @@ func TestLoaderScopesOrderAndConflictResolution(t *testing.T) {
 	writeSkill(t, filepath.Join(home, ".agents", "skills", "beta"), "beta", "d")
 	writeSkill(t, filepath.Join(ws, ".loom", "skills", "zeta"), "zeta", "d")
 
-	cat := loadAll(t, NewLoader(ws, home, nil, nil))
+	cat := loadAll(t, NewLoader(ws, defaultUserRoots(home), nil))
 	if got := cat.Find("weather"); got == nil || got.Description != "repo copy" {
 		t.Fatalf("weather = %+v, want repo copy", got)
 	}
@@ -125,7 +134,7 @@ func TestLoaderScopesOrderAndConflictResolution(t *testing.T) {
 }
 
 func TestLoaderSkipsHiddenAndLowercase(t *testing.T) {
-	ws, home := newEnv(t)
+	ws := t.TempDir()
 	writeSkill(t, filepath.Join(ws, ".loom", "skills", ".hidden", "x"), "hidden-skill", "d")
 	lower := filepath.Join(ws, ".loom", "skills", "lower")
 	if err := os.MkdirAll(lower, 0o755); err != nil {
@@ -135,14 +144,14 @@ func TestLoaderSkipsHiddenAndLowercase(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cat := loadAll(t, NewLoader(ws, home, nil, nil))
+	cat := loadAll(t, NewLoader(ws, nil, nil))
 	if len(cat.Skills()) != 0 {
 		t.Fatalf("Skills() = %v, want empty (hidden dir + lowercase filename skipped)", cat.Names())
 	}
 }
 
 func TestLoaderFollowsSymlinks(t *testing.T) {
-	ws, home := newEnv(t)
+	ws := t.TempDir()
 	realDir := filepath.Join(t.TempDir(), "real-weather")
 	realPath := writeSkill(t, realDir, "weather", "d")
 	root := filepath.Join(ws, ".loom", "skills")
@@ -164,7 +173,7 @@ func TestLoaderFollowsSymlinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cat := loadAll(t, NewLoader(ws, home, nil, nil))
+	cat := loadAll(t, NewLoader(ws, nil, nil))
 	weather := cat.Find("weather")
 	if weather == nil {
 		t.Fatal("symlinked skill directory not discovered")
@@ -179,12 +188,12 @@ func TestLoaderFollowsSymlinks(t *testing.T) {
 }
 
 func TestLoaderDepthLimit(t *testing.T) {
-	ws, home := newEnv(t)
+	ws := t.TempDir()
 	deep := filepath.Join(ws, ".loom", "skills", "a", "b", "c", "d")
 	writeSkill(t, deep, "at-limit", "d")
 	writeSkill(t, filepath.Join(deep, "e"), "too-deep", "d")
 
-	cat := loadAll(t, NewLoader(ws, home, nil, nil))
+	cat := loadAll(t, NewLoader(ws, nil, nil))
 	if cat.Find("at-limit") == nil {
 		t.Fatal("skill at depth limit not discovered")
 	}
@@ -194,7 +203,7 @@ func TestLoaderDepthLimit(t *testing.T) {
 }
 
 func TestLoaderIssuesDoNotBlock(t *testing.T) {
-	ws, home := newEnv(t)
+	ws := t.TempDir()
 	writeSkill(t, filepath.Join(ws, ".loom", "skills", "good"), "good", "d")
 	bad := filepath.Join(ws, ".loom", "skills", "bad")
 	if err := os.MkdirAll(bad, 0o755); err != nil {
@@ -204,7 +213,7 @@ func TestLoaderIssuesDoNotBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cat := loadAll(t, NewLoader(ws, home, nil, nil))
+	cat := loadAll(t, NewLoader(ws, nil, nil))
 	if cat.Find("good") == nil {
 		t.Fatal("valid skill blocked by a broken sibling")
 	}
@@ -219,7 +228,7 @@ func TestLoaderExtraRootDeduplicated(t *testing.T) {
 	// Passing the same root again (via symlink-free path) must not produce a
 	// spurious conflict issue.
 	extra := canonical(t, filepath.Join(home, ".loom", "skills"))
-	cat := loadAll(t, NewLoader(ws, home, []string{extra}, nil))
+	cat := loadAll(t, NewLoader(ws, append(defaultUserRoots(home), extra), nil))
 	if len(cat.Skills()) != 1 || len(cat.Issues()) != 0 {
 		t.Fatalf("Skills/Issues = %d/%d, want 1/0 (duplicate root deduped)", len(cat.Skills()), len(cat.Issues()))
 	}

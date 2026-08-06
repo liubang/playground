@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
@@ -47,11 +48,16 @@ type SkillsHandle struct {
 // handle returned) when cfg.Enabled is false or the built-in system
 // prompt is disabled — a read_skill tool without a visible catalog would
 // only mislead the model.
+//
+// loomSkillsDir is the user-scope root under the storage base_dir; the
+// cross-tool ~/.agents/skills convention (anchored to $HOME, not the
+// base_dir) and cfg.ExtraRoots complete the user-scope roots.
 func WireSkills(
 	registry *agent.ToolRegistry,
 	workspaceRoot string,
 	contextWindow int64,
 	cfg config.ResolvedSkills,
+	loomSkillsDir string,
 	systemPromptDisabled bool,
 	logger *slog.Logger,
 ) (prompt.Option, *SkillsHandle, error) {
@@ -61,8 +67,15 @@ func WireSkills(
 	if !cfg.Enabled || systemPromptDisabled {
 		return nil, nil, nil
 	}
-	home, _ := os.UserHomeDir()
-	loader := skill.NewLoader(workspaceRoot, home, cfg.ExtraRoots, logger)
+	userRoots := make([]string, 0, 2+len(cfg.ExtraRoots))
+	if loomSkillsDir != "" {
+		userRoots = append(userRoots, loomSkillsDir)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		userRoots = append(userRoots, filepath.Join(home, ".agents", "skills"))
+	}
+	userRoots = append(userRoots, cfg.ExtraRoots...)
+	loader := skill.NewLoader(workspaceRoot, userRoots, logger)
 	catalog := &skill.AtomicCatalog{}
 	readSkill, err := skillread.NewReadSkillTool(catalog)
 	if err != nil {

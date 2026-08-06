@@ -36,12 +36,13 @@
 //     silently applies.
 //   - When several rules match, the strictest decision wins:
 //     deny > ask > allow.
-//   - Layers are merged: user dir (~/.loom/rules) plus, optionally, the
-//     project dir (<workspace>/.loom/rules). Because a checked-out
+//   - Layers are merged: the user dir (<base_dir>/rules, passed in by the
+//     caller) plus, optionally, the project dir (<workspace>/.loom/rules).
+//     Because a checked-out
 //     repository is not fully trusted, project-layer "allow" rules are
-//     ignored unless explicitly enabled (LOOM_PROJECT_RULES_ALLOW=1) —
-//     untrusted layers may only tighten, never loosen (same shape as
-//     codex's requirements overlay).
+//     ignored unless explicitly enabled (rules.project_allow) — untrusted
+//     layers may only tighten, never loosen (same shape as codex's
+//     requirements overlay).
 package permission
 
 import (
@@ -277,22 +278,16 @@ func (s *RuleSet) Size() int {
 	return len(s.rules)
 }
 
-// RulesDirUser is the user-layer rules directory (~/.loom/rules).
-func RulesDirUser() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("locate home dir: %w", err)
-	}
-	return filepath.Join(home, ".loom", "rules"), nil
-}
-
 // RulesDirProject is the project-layer rules directory for a workspace.
+// (The user-layer directory is not computed here: it derives from the
+// configured storage base_dir — config.ResolvedStorage.RulesDir — and is
+// passed in by the caller.)
 func RulesDirProject(workspaceRoot string) string {
 	return filepath.Join(workspaceRoot, ".loom", "rules")
 }
 
 // LoadOptions controls rule loading. ProjectAllows enables "allow" rules
-// from the project layer (LOOM_PROJECT_RULES_ALLOW=1); off by default so an
+// from the project layer (rules.project_allow); off by default so an
 // untrusted checkout can only tighten policy.
 type LoadOptions struct {
 	ProjectAllows bool

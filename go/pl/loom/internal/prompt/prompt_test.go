@@ -234,14 +234,14 @@ func TestSystemEnvProviderDetectsGitRepository(t *testing.T) {
 }
 
 func TestFileRulesProviderDiscoversLayeredFiles(t *testing.T) {
-	home := t.TempDir()
+	base := t.TempDir()
 	ws := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".loom"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(home, ".loom", "LOOM.md"), []byte("全局规则"), 0o600))
+	globalFile := filepath.Join(base, "LOOM.md")
+	require.NoError(t, os.WriteFile(globalFile, []byte("全局规则"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(ws, "LOOM.md"), []byte("项目规则"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(ws, "CLAUDE.md"), []byte("兼容规则"), 0o600))
 
-	p := &FileRulesProvider{workspaceRoot: ws, homeDir: home}
+	p := &FileRulesProvider{workspaceRoot: ws, globalFile: globalFile}
 	files, err := p.Discover(context.Background())
 	require.NoError(t, err)
 	require.Len(t, files, 3)
@@ -253,7 +253,7 @@ func TestFileRulesProviderDiscoversLayeredFiles(t *testing.T) {
 func TestFileRulesProviderSkipsMissingAndEmptyFiles(t *testing.T) {
 	ws := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(ws, "LOOM.md"), []byte("  \n"), 0o600))
-	p := &FileRulesProvider{workspaceRoot: ws, homeDir: t.TempDir()}
+	p := &FileRulesProvider{workspaceRoot: ws, globalFile: filepath.Join(t.TempDir(), "LOOM.md")}
 	files, err := p.Discover(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, files)
@@ -263,7 +263,7 @@ func TestFileRulesProviderTruncatesOversizedFile(t *testing.T) {
 	ws := t.TempDir()
 	oversized := strings.Repeat("甲", maxRuleFileBytes*2)
 	require.NoError(t, os.WriteFile(filepath.Join(ws, "LOOM.md"), []byte(oversized), 0o600))
-	p := &FileRulesProvider{workspaceRoot: ws, homeDir: ""}
+	p := &FileRulesProvider{workspaceRoot: ws, globalFile: ""}
 	files, err := p.Discover(context.Background())
 	require.NoError(t, err)
 	require.Len(t, files, 1)
