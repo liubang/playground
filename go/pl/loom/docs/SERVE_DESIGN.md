@@ -27,7 +27,7 @@ loom 当前只有一个真实前端：TUI（`internal/ui`，Bubble Tea），外�
 **非目标（本期不做）**：
 
 - 多用户/多租户与真实身份体系（server 面向单机单用户，token 仅为防本机误连与浏览器误提交）；
-- 多 workspace（server 启动时绑定单一 workspace，与 `PathValidator` 一致）；
+- ~~多 workspace~~ **已实现**（docs/WORKSPACE_DESIGN.md）：serve 单进程承载多 workspace，session 按 workspace 归属、过滤与隔离；
 - 公网/局域网远程部署（仅 `127.0.0.1` 或 UDS；远程部署需要 TLS + 真鉴权，留作后续）;
 - 会话删除/归档/purge API（只读历史 + 追加式会话，管理类 API 后续补）;
 - Web 端内嵌终端（`run_cmd` 实时输出交互）。若未来需要，事件通道可平滑升级到 WebSocket（见 §14 开放问题）；

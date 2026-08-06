@@ -75,6 +75,17 @@ func (p *ResolvedProvider) ModelFor(modelName string) domain.Model {
 	return p.Model
 }
 
+// WireAPIFor returns the effective wire API short name for the named
+// model ("chat"/"responses"/"messages"); model entries already inherit
+// the provider default at resolve time. Unknown names conservatively
+// report "messages" (no structured-output support assumed).
+func (p *ResolvedProvider) WireAPIFor(modelName string) string {
+	if meta, ok := p.modelMeta(modelName); ok {
+		return meta.WireAPI
+	}
+	return "messages"
+}
+
 // modelMeta returns the metadata for the named model.
 func (p *ResolvedProvider) modelMeta(name string) (Model, bool) {
 	for _, m := range p.Models {
@@ -104,6 +115,16 @@ type ResolvedConfig struct {
 	Subagent  ResolvedSubagent
 	Memory    ResolvedMemory
 	MCP       ResolvedMCP
+	// Workspaces are the pre-registered project workspaces (docs/WORKSPACE_DESIGN.md §10).
+	Workspaces []ResolvedWorkspace
+}
+
+// ResolvedWorkspace is one pre-registered workspace with its root resolved
+// to an absolute path ("~" expanded). Existence and canonicalization are
+// enforced at registration time, not load time.
+type ResolvedWorkspace struct {
+	Name string
+	Root string
 }
 
 // ResolvedLogging is the logging section with defaults applied and MiB
@@ -116,6 +137,20 @@ type ResolvedLogging struct {
 // ResolvedMemory is the memory section with defaults applied.
 type ResolvedMemory struct {
 	Enabled bool
+	// ExtractModel pins the Phase 1 extraction model; nil follows Default.
+	ExtractModel *ProviderModelRef
+	// ConsolidationModel pins the Phase 2 consolidation model; nil follows
+	// Default.
+	ConsolidationModel *ProviderModelRef
+	// MaxJobsPerRun bounds Phase 1 jobs claimed per pipeline pass.
+	MaxJobsPerRun int
+	// RunInterval re-runs the pipeline periodically; 0 runs it once at
+	// startup only.
+	RunInterval time.Duration
+	// MinSessionIdle skips sessions touched more recently than this.
+	MinSessionIdle time.Duration
+	// MaxSessionAge skips sessions last touched longer ago than this.
+	MaxSessionAge time.Duration
 }
 
 // ResolvedStorage is the storage section with the base directory resolved
@@ -176,6 +211,44 @@ func resolveStorage(in Storage) (ResolvedStorage, error) {
 		return ResolvedStorage{}, fmt.Errorf("config: storage.base_dir: %w", err)
 	}
 	return ResolvedStorage{BaseDir: abs}, nil
+}
+
+// resolveWorkspaces validates the workspaces section and resolves each root
+// to an absolute path (with "~" home expansion, docs/WORKSPACE_DESIGN.md §10).
+// Existence/canonicalization are enforced at registration, not here.
+func resolveWorkspaces(in []WorkspaceSpec) ([]ResolvedWorkspace, error) {
+	out := make([]ResolvedWorkspace, 0, len(in))
+	for i, ws := range in {
+		root := strings.TrimSpace(ws.Root)
+		if root == "" {
+			return nil, fmt.Errorf("config: workspaces[%d]: root is required", i)
+		}
+		expanded, err := expandHomeDir(root)
+		if err != nil {
+			return nil, fmt.Errorf("config: workspaces[%d]: %w", i, err)
+		}
+		abs, err := filepath.Abs(expanded)
+		if err != nil {
+			return nil, fmt.Errorf("config: workspaces[%d]: %w", i, err)
+		}
+		out = append(out, ResolvedWorkspace{Name: strings.TrimSpace(ws.Name), Root: abs})
+	}
+	return out, nil
+}
+
+// expandHomeDir replaces a leading "~" with the user's home directory.
+func expandHomeDir(path string) (string, error) {
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if path == "~" {
+		return home, nil
+	}
+	return filepath.Join(home, path[2:]), nil
 }
 
 // ResolvedSubagent is the subagent section with defaults applied
@@ -402,9 +475,11 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 	out.Subagent = sub
 
 	// Memory: default enabled when absent or explicitly true.
-	out.Memory = ResolvedMemory{
-		Enabled: f.Memory.Enabled == nil || *f.Memory.Enabled,
+	memory, err := resolveMemory(f.Memory, out)
+	if err != nil {
+		return nil, err
 	}
+	out.Memory = memory
 
 	// MCP servers: validate config-level constraints; runtime startup
 	// (process spawning, tool discovery) happens in bootstrap.go.
@@ -413,6 +488,12 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		return nil, err
 	}
 	out.MCP = resolvedMCP
+
+	workspaces, err := resolveWorkspaces(f.Workspaces)
+	if err != nil {
+		return nil, err
+	}
+	out.Workspaces = workspaces
 
 	return out, nil
 }
@@ -712,6 +793,62 @@ func resolveContext(in Context) (domain.ContextConfig, error) {
 		return domain.ContextConfig{}, fmt.Errorf("config: %w", err)
 	}
 	return out, nil
+}
+
+// resolveMemory overlays the file's memory section onto the built-in
+// defaults. Model references resolve against the already-validated
+// providers (mirroring subagent.model); the pipeline scheduling knobs use
+// Go duration syntax.
+func resolveMemory(in Memory, out *ResolvedConfig) (ResolvedMemory, error) {
+	resolved := ResolvedMemory{
+		Enabled:        in.Enabled == nil || *in.Enabled,
+		MaxJobsPerRun:  8,
+		RunInterval:    30 * time.Minute,
+		MinSessionIdle: time.Hour,
+		MaxSessionAge:  30 * 24 * time.Hour,
+	}
+	if m := strings.TrimSpace(in.ExtractModel); m != "" {
+		ref, err := out.ResolveRef(m)
+		if err != nil {
+			return ResolvedMemory{}, fmt.Errorf("config: memory.extract_model: %w", err)
+		}
+		resolved.ExtractModel = &ref
+	}
+	if m := strings.TrimSpace(in.ConsolidationModel); m != "" {
+		ref, err := out.ResolveRef(m)
+		if err != nil {
+			return ResolvedMemory{}, fmt.Errorf("config: memory.consolidation_model: %w", err)
+		}
+		resolved.ConsolidationModel = &ref
+	}
+	if in.MaxJobsPerRun != nil {
+		if *in.MaxJobsPerRun < 1 || *in.MaxJobsPerRun > 128 {
+			return ResolvedMemory{}, fmt.Errorf("config: memory.max_jobs_per_run must be between 1 and 128")
+		}
+		resolved.MaxJobsPerRun = *in.MaxJobsPerRun
+	}
+	for _, d := range []struct {
+		name  string
+		raw   string
+		field *time.Duration
+	}{
+		{"memory.run_interval", in.RunInterval, &resolved.RunInterval},
+		{"memory.min_session_idle", in.MinSessionIdle, &resolved.MinSessionIdle},
+		{"memory.max_session_age", in.MaxSessionAge, &resolved.MaxSessionAge},
+	} {
+		if d.raw == "" {
+			continue
+		}
+		v, err := time.ParseDuration(d.raw)
+		if err != nil {
+			return ResolvedMemory{}, fmt.Errorf("config: %s: expected a Go duration (e.g. \"30m\"), got %q", d.name, d.raw)
+		}
+		if v < 0 {
+			return ResolvedMemory{}, fmt.Errorf("config: %s must be >= 0", d.name)
+		}
+		*d.field = v
+	}
+	return resolved, nil
 }
 
 // resolveRunaway overlays the file's runaway section onto the built-in

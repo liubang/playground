@@ -198,6 +198,16 @@ func marshalChatCompletionsRequest(req domain.ModelRequest) ([]byte, error) {
 		}
 		payload["tools"] = tools
 	}
+	if rf := req.ResponseFormat; rf != nil {
+		payload["response_format"] = map[string]any{
+			"type": "json_schema",
+			"json_schema": map[string]any{
+				"name":   rf.Name,
+				"schema": rf.Schema,
+				"strict": rf.Strict,
+			},
+		}
+	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -232,6 +242,16 @@ func marshalResponsesRequest(req domain.ModelRequest) ([]byte, error) {
 			return nil, err
 		}
 		payload["tools"] = tools
+	}
+	if rf := req.ResponseFormat; rf != nil {
+		payload["text"] = map[string]any{
+			"format": map[string]any{
+				"type":   "json_schema",
+				"name":   rf.Name,
+				"schema": rf.Schema,
+				"strict": rf.Strict,
+			},
+		}
 	}
 
 	body, err := json.Marshal(payload)

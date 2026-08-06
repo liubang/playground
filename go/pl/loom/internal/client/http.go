@@ -146,10 +146,18 @@ func mapWireError(status int, code, message string) error {
 // --- session lifecycle ---
 
 func (c *httpClient) NewSession(ctx context.Context) error {
+	return c.NewSessionIn(ctx, domain.WorkspaceID{})
+}
+
+func (c *httpClient) NewSessionIn(ctx context.Context, workspaceID domain.WorkspaceID) error {
 	var out struct {
 		SessionID domain.SessionID `json:"session_id"`
 	}
-	if err := c.do(ctx, http.MethodPost, "/v1/sessions", struct{}{}, &out); err != nil {
+	body := map[string]any{}
+	if !workspaceID.IsZero() {
+		body["workspace_id"] = workspaceID.String()
+	}
+	if err := c.do(ctx, http.MethodPost, "/v1/sessions", body, &out); err != nil {
 		return err
 	}
 	c.mu.Lock()
@@ -210,9 +218,9 @@ func (c *httpClient) SubmitPrompt(ctx context.Context, prompt string, images []d
 		return SubmitResult{}, err
 	}
 	var out struct {
-		Turn      int  `json:"turn"`
-		Steered   bool `json:"steered"`
-		QueueLen  int  `json:"queue_len"`
+		Turn     int  `json:"turn"`
+		Steered  bool `json:"steered"`
+		QueueLen int  `json:"queue_len"`
 	}
 	if err := c.do(ctx, http.MethodPost, path+"/prompts", map[string]any{"prompt": prompt, "images": images}, &out); err != nil {
 		return SubmitResult{}, err
@@ -404,6 +412,8 @@ func (c *httpClient) RequestCompaction(ctx context.Context) (RequestCompactionRe
 // --- history ---
 
 func (c *httpClient) ListSessions(ctx context.Context, limit int) ([]SessionSummary, error) {
+	// The bare /v1/sessions endpoint defaults to the process's default
+	// workspace — matching the inproc client (single-workspace frontend view).
 	var out struct {
 		Sessions []SessionSummary `json:"sessions"`
 	}
@@ -411,6 +421,42 @@ func (c *httpClient) ListSessions(ctx context.Context, limit int) ([]SessionSumm
 		return nil, err
 	}
 	return out.Sessions, nil
+}
+
+func (c *httpClient) ListSessionsIn(ctx context.Context, limit int, workspaceID domain.WorkspaceID) ([]SessionSummary, error) {
+	var out struct {
+		Sessions []SessionSummary `json:"sessions"`
+	}
+	path := fmt.Sprintf("/v1/sessions?limit=%d", limit)
+	if workspaceID.IsZero() {
+		path += "&workspace_id=all" // 零值 = 全部 workspace（树形视图）
+	} else {
+		path += "&workspace_id=" + workspaceID.String()
+	}
+	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Sessions, nil
+}
+
+func (c *httpClient) ListWorkspaces(ctx context.Context) ([]domain.Workspace, error) {
+	var out struct {
+		Workspaces []domain.Workspace `json:"workspaces"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/v1/workspaces", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Workspaces, nil
+}
+
+func (c *httpClient) RegisterWorkspace(ctx context.Context, root, name string) (domain.Workspace, error) {
+	var out struct {
+		Workspace domain.Workspace `json:"workspace"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/v1/workspaces", map[string]string{"root_path": root, "name": name}, &out); err != nil {
+		return domain.Workspace{}, err
+	}
+	return out.Workspace, nil
 }
 
 func (c *httpClient) ListCheckpoints(ctx context.Context, limit int) ([]CheckpointInfo, error) {

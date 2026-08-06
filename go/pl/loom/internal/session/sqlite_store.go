@@ -32,7 +32,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 4
+const sqliteSchemaVersion = 6
 
 // SQLiteStore persists session events and checkpoints in a SQLite database.
 // A store serializes writes through one connection; optimistic versions still
@@ -187,6 +187,37 @@ CREATE TABLE IF NOT EXISTS file_changes (
 );
 CREATE INDEX IF NOT EXISTS idx_file_changes_session_rowid
     ON file_changes(session_id, rowid);
+CREATE TABLE IF NOT EXISTS workspaces (
+    workspace_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    root_path TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    created_at_unix_nano INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_at_unix_nano INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_jobs (
+    session_id TEXT PRIMARY KEY,
+    workspace_root TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    claim_token TEXT NOT NULL DEFAULT '',
+    claimed_at_unix_nano INTEGER NOT NULL DEFAULT 0,
+    next_retry_at_unix_nano INTEGER NOT NULL DEFAULT 0,
+    extracted_version INTEGER NOT NULL DEFAULT -1,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    created_at_unix_nano INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_at_unix_nano INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_jobs_claimable
+    ON memory_jobs(status, next_retry_at_unix_nano, updated_at_unix_nano);
+CREATE TABLE IF NOT EXISTS memory_phase2_lease (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    claim_token TEXT NOT NULL DEFAULT '',
+    claimed_at_unix_nano INTEGER NOT NULL DEFAULT 0
+);
 `
 	if _, err := s.db.ExecContext(ctx, schema); err != nil {
 		return storeError("apply sqlite schema", err)
@@ -214,6 +245,11 @@ CREATE INDEX IF NOT EXISTS idx_file_changes_session_rowid
 			return err
 		}
 	}
+	if !newestVersion.Valid || newestVersion.Int64 < 5 {
+		if err := s.migrateV5(ctx); err != nil {
+			return err
+		}
+	}
 	_, err := s.db.ExecContext(ctx,
 		"INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
 		sqliteSchemaVersion, formatTime(time.Now().UTC()))
@@ -223,15 +259,16 @@ CREATE INDEX IF NOT EXISTS idx_file_changes_session_rowid
 	return nil
 }
 
-// CreateSession creates an empty session with version zero.
-func (s *SQLiteStore) CreateSession(ctx context.Context, sessionID domain.SessionID) error {
+// CreateSession creates an empty session with version zero, bound to the
+// given workspace (docs/WORKSPACE_DESIGN.md W1).
+func (s *SQLiteStore) CreateSession(ctx context.Context, sessionID domain.SessionID, workspaceID domain.WorkspaceID) error {
 	if sessionID.IsZero() {
 		return domain.NewError(domain.ErrInvalidInput, "session ID is required")
 	}
 	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO sessions(session_id, version, created_at, created_at_unix_nano, updated_at, updated_at_unix_nano)
-VALUES (?, 0, ?, ?, ?, ?)`, sessionID.String(), formatTime(now), now.UnixNano(), formatTime(now), now.UnixNano())
+INSERT INTO sessions(session_id, version, created_at, created_at_unix_nano, updated_at, updated_at_unix_nano, workspace_id)
+VALUES (?, 0, ?, ?, ?, ?, ?)`, sessionID.String(), formatTime(now), now.UnixNano(), formatTime(now), now.UnixNano(), workspaceID.String())
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return domain.NewError(domain.ErrConflict, "session already exists", domain.WithCause(err))
@@ -440,7 +477,10 @@ FROM events WHERE session_id = ? AND sequence > ? ORDER BY sequence ASC`, sessio
 // default active listing. cursor is the previous page's nextCursor (""
 // selects the first page); the returned nextCursor is "" once the last
 // page has been served.
-func (s *SQLiteStore) ListSessions(ctx context.Context, cursor string, limit int, archived bool) ([]domain.SessionSummary, string, error) {
+// ListSessions returns a page of session summaries in reverse-update order.
+// workspaceID, when non-zero, restricts the listing to that workspace
+// (docs/WORKSPACE_DESIGN.md §8.1); zero lists across all workspaces.
+func (s *SQLiteStore) ListSessions(ctx context.Context, cursor string, limit int, archived bool, workspaceID domain.WorkspaceID) ([]domain.SessionSummary, string, error) {
 	if limit <= 0 || limit > 1000 {
 		return nil, "", domain.NewError(domain.ErrInvalidInput, "session list limit must be between 1 and 1000")
 	}
@@ -461,18 +501,19 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, cursor string, limit int
 		archivedFlag = 1
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT s.session_id, s.version, s.created_at, s.updated_at, s.updated_at_unix_nano,
+SELECT s.session_id, s.version, s.created_at, s.updated_at, s.updated_at_unix_nano, s.workspace_id,
        (SELECT json_extract(CAST(e.payload AS TEXT), '$.parent_session_id')
         FROM events e
         WHERE e.session_id = s.session_id AND e.type = 'run.created'
         LIMIT 1) AS parent_session_id
 FROM sessions s
 WHERE ((s.archived_at_unix_nano IS NOT NULL) = ?4)
+  AND (?5 = '' OR s.workspace_id = ?5)
   AND ((?1 < 0)
    OR (s.updated_at_unix_nano < ?1)
    OR (s.updated_at_unix_nano = ?1 AND s.session_id < ?2))
 ORDER BY s.updated_at_unix_nano DESC, s.session_id DESC
-LIMIT ?3`, cursorNano, cursorID, limit, archivedFlag)
+LIMIT ?3`, cursorNano, cursorID, limit, archivedFlag, workspaceID.String())
 	if err != nil {
 		return nil, "", storeError("list sessions", err)
 	}
@@ -482,10 +523,10 @@ LIMIT ?3`, cursorNano, cursorID, limit, archivedFlag)
 	var lastNano int64
 	var lastID string
 	for rows.Next() {
-		var id, createdAt, updatedAt string
+		var id, createdAt, updatedAt, rawWorkspace string
 		var version int64
 		var parent sql.NullString
-		if err := rows.Scan(&id, &version, &createdAt, &updatedAt, &lastNano, &parent); err != nil {
+		if err := rows.Scan(&id, &version, &createdAt, &updatedAt, &lastNano, &rawWorkspace, &parent); err != nil {
 			return nil, "", storeError("scan session", err)
 		}
 		lastID = id
@@ -503,6 +544,9 @@ LIMIT ?3`, cursorNano, cursorID, limit, archivedFlag)
 		}
 		summary := domain.SessionSummary{
 			ID: sessionID, Version: version, CreatedAt: created, UpdatedAt: updated,
+		}
+		if wsID, err := domain.ParseWorkspaceID(rawWorkspace); err == nil {
+			summary.WorkspaceID = wsID
 		}
 		if parent.Valid && parent.String != "" {
 			parentID, err := domain.ParseSessionID(parent.String)
@@ -832,13 +876,42 @@ func (s *SQLiteStore) migrateV4(ctx context.Context) error {
 	return nil
 }
 
+// migrateV5 adds the workspace_id ownership column to the sessions table
+// (docs/WORKSPACE_DESIGN.md §7.1). The workspaces table itself is created by
+// the idempotent schema block above; this only handles the pre-existing
+// sessions-table ALTER. The column defaults to ” — the upgrade tail that
+// BackfillSessionWorkspaces reassigns to the process's default workspace.
+func (s *SQLiteStore) migrateV5(ctx context.Context) error {
+	// Same duplicate-column tolerance as migrateV3/V4.
+	_, err := s.db.ExecContext(ctx,
+		"ALTER TABLE sessions ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''")
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
+			return storeError("migrate v5: add workspace_id to sessions", err)
+		}
+	}
+	// The index must be created here — after the column exists — not in the
+	// idempotent schema block: a fresh database builds the v1 sessions table
+	// (no workspace_id) and only gains the column via this migration.
+	if _, err := s.db.ExecContext(ctx,
+		"CREATE INDEX IF NOT EXISTS idx_sessions_workspace_updated ON sessions(workspace_id, updated_at_unix_nano DESC)"); err != nil {
+		return storeError("migrate v5: index sessions workspace_id", err)
+	}
+	return nil
+}
+
 // DeleteSession removes a session and all of its persisted data. Events,
 // checkpoints and artifact_refs cascade from the sessions row; file_changes
-// carries no foreign key and is deleted explicitly.
+// and memory_jobs carry no foreign key and are deleted explicitly.
 func (s *SQLiteStore) DeleteSession(ctx context.Context, sessionID domain.SessionID) error {
 	if _, err := s.db.ExecContext(ctx,
 		"DELETE FROM file_changes WHERE session_id = ?", sessionID.String()); err != nil {
 		return storeError("delete session file changes", err)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		"DELETE FROM memory_jobs WHERE session_id = ?", sessionID.String()); err != nil {
+		return storeError("delete session memory job", err)
 	}
 	res, err := s.db.ExecContext(ctx,
 		"DELETE FROM sessions WHERE session_id = ?", sessionID.String())

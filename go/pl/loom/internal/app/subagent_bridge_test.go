@@ -81,7 +81,7 @@ func TestSubagentBridgePublishesLifecycleAndProgress(t *testing.T) {
 	}
 
 	// Once the child has a checkpoint, the ticker republishes its counters.
-	if err := store.CreateSession(context.Background(), info.SessionID); err != nil {
+	if err := store.CreateSession(context.Background(), info.SessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SaveCheckpoint(context.Background(), domain.Checkpoint{
@@ -149,7 +149,7 @@ func TestWireSubagentObserverNilSafe(t *testing.T) {
 func TestControllerSubagentView(t *testing.T) {
 	store := fakes.NewFakeStore()
 	childID := domain.NewSessionID()
-	if err := store.CreateSession(context.Background(), childID); err != nil {
+	if err := store.CreateSession(context.Background(), childID, domain.WorkspaceID{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SaveCheckpoint(context.Background(), domain.Checkpoint{
@@ -168,7 +168,7 @@ func TestControllerSubagentView(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	controller := NewController(ControllerConfig{Bootstrap: &Bootstrap{Store: store}})
+	controller := NewController(ControllerConfig{Bootstrap: &Bootstrap{ProcessRuntime: &ProcessRuntime{Store: store}}})
 	view, err := controller.SubagentView(context.Background(), childID)
 	if err != nil {
 		t.Fatalf("SubagentView: %v", err)

@@ -1,10 +1,10 @@
-// statusbar.js — 状态栏：ctx 占用 / token usage / turn 数 / 版本。
+// statusbar.js — 状态栏：token usage / turn 数 / 版本。
+// ctx 占用已迁移到 composer 旁的 CtxGauge（components/ctxgauge.js）。
 
 import { fmtTokens } from "../format.js";
 
 export class Statusbar {
-  constructor({ ctxEl, usageEl, turnEl, versionEl }) {
-    this.ctxEl = ctxEl;
+  constructor({ usageEl, turnEl, versionEl }) {
     this.usageEl = usageEl;
     this.turnEl = turnEl;
     this.versionEl = versionEl;
@@ -12,17 +12,10 @@ export class Statusbar {
 
   setVersion(v) { this.versionEl.textContent = v || ""; }
 
-  // snapshot.usage 与 snapshot.context_window 驱动
-  setUsage(usage, contextWindow) {
-    if (!usage) { this.usageEl.textContent = ""; this.ctxEl.textContent = ""; return; }
+  // snapshot.usage / usage.updated / turn.finished.usage 驱动（累计口径）
+  setUsage(usage) {
+    if (!usage) { this.usageEl.textContent = ""; return; }
     this.usageEl.textContent = `${fmtTokens(usage.input_tokens)} in / ${fmtTokens(usage.output_tokens)} out`;
-    if (contextWindow > 0 && usage.input_tokens != null) {
-      const pct = Math.round((usage.input_tokens / contextWindow) * 100);
-      this.ctxEl.textContent = `ctx ${pct}%`;
-      this.ctxEl.className = pct > 90 ? "ctx-crit" : pct > 80 ? "ctx-warn" : "";
-    } else {
-      this.ctxEl.textContent = "";
-    }
   }
 
   setTurns(n) {

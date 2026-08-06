@@ -24,6 +24,7 @@ go_library(
         "errors.go",
         "handlers_events.go",
         "handlers_sessions.go",
+        "handlers_workspaces.go",
         "lock.go",
         "server.go",
     ],
@@ -45,6 +46,7 @@ go_test(
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/app",
+        "//go/pl/loom/internal/artifact:artifact_lib",
         "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/fakes:fakes_lib",

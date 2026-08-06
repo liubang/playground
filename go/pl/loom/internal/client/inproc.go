@@ -63,7 +63,13 @@ func (c *inprocClient) bind(h *app.SessionHandle) {
 }
 
 func (c *inprocClient) NewSession(ctx context.Context) error {
-	h, err := c.service.CreateSession(ctx)
+	return c.NewSessionIn(ctx, domain.WorkspaceID{})
+}
+
+// NewSessionIn starts a fresh session in the given workspace (zero = the
+// process's default workspace) and binds the client to it.
+func (c *inprocClient) NewSessionIn(ctx context.Context, workspaceID domain.WorkspaceID) error {
+	h, err := c.service.CreateSession(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
@@ -191,10 +197,27 @@ func (c *inprocClient) RequestCompaction(ctx context.Context) (RequestCompaction
 }
 
 func (c *inprocClient) ListSessions(ctx context.Context, limit int) ([]SessionSummary, error) {
+	// The TUI is a single-workspace frontend bound to the default workspace
+	// (the launch directory): its picker lists only that workspace's sessions
+	// (docs/WORKSPACE_DESIGN.md W5), not every workspace's.
+	return c.ListSessionsIn(ctx, limit, c.service.DefaultWorkspaceID())
+}
+
+// ListSessionsIn returns recent persisted sessions of the given workspace
+// (zero = across all workspaces).
+func (c *inprocClient) ListSessionsIn(ctx context.Context, limit int, workspaceID domain.WorkspaceID) ([]SessionSummary, error) {
 	// The client contract stays cursor-less: the first page is what
 	// pickers display; HTTP consumers paginate via the cursor query param.
-	summaries, _, err := c.service.ListSessions(ctx, "", limit, false)
+	summaries, _, err := c.service.ListSessions(ctx, "", limit, false, workspaceID)
 	return summaries, err
+}
+
+func (c *inprocClient) ListWorkspaces(ctx context.Context) ([]domain.Workspace, error) {
+	return c.service.ListWorkspaces(ctx)
+}
+
+func (c *inprocClient) RegisterWorkspace(ctx context.Context, root, name string) (domain.Workspace, error) {
+	return c.service.RegisterWorkspace(ctx, root, name)
 }
 
 func (c *inprocClient) ListCheckpoints(ctx context.Context, limit int) ([]CheckpointInfo, error) {

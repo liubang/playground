@@ -35,7 +35,7 @@ func TestSQLiteStorePersistsEventsAcrossReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.db")
 	store := openTestSQLiteStore(t, path)
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	events := transcriptEvents(t, sessionID)
@@ -74,7 +74,7 @@ func TestSQLiteStoreLoadEventsAfterSequence(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if err := store.AppendEvents(ctx, sessionID, 0, transcriptEvents(t, sessionID)); err != nil {
@@ -93,7 +93,7 @@ func TestSQLiteStoreRejectsStaleVersionAndInvalidBatchAtomically(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	first := transcriptEvents(t, sessionID)[:1]
@@ -124,7 +124,7 @@ func TestSQLiteStoreAppendEventsAndCheckpointIsAtomic(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	events := []domain.Event{newEvent(sessionID, 1, domain.EventSessionCreated, nil)}
@@ -158,7 +158,7 @@ func TestSQLiteStoreConcurrentAppendHasSingleWinner(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
@@ -200,7 +200,7 @@ func TestSQLiteStoreCheckpointRoundTripAndLatest(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.db")
 	store := openTestSQLiteStore(t, path)
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if err := store.AppendEvents(ctx, sessionID, 0, transcriptEvents(t, sessionID)); err != nil {
@@ -236,7 +236,7 @@ func TestSQLiteStoreLatestCheckpointUsesChronologicalNanoseconds(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if err := store.AppendEvents(ctx, sessionID, 0, transcriptEvents(t, sessionID)); err != nil {
@@ -264,7 +264,7 @@ func TestSQLiteStoreInspectSessionRecoversFromLatestCheckpoint(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	events := transcriptEvents(t, sessionID)
@@ -300,7 +300,7 @@ func TestSQLiteStoreInspectEmptySessionWithoutCheckpoint(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	inspection, err := store.InspectSession(ctx, sessionID)
@@ -321,7 +321,7 @@ func TestSQLiteStoreReadOnlyOpenDoesNotAllowWrites(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.db")
 	store := openTestSQLiteStore(t, path)
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if err := store.Close(); err != nil {
@@ -332,13 +332,13 @@ func TestSQLiteStoreReadOnlyOpenDoesNotAllowWrites(t *testing.T) {
 		t.Fatalf("OpenSQLiteStoreReadOnly: %v", err)
 	}
 	defer readOnly.Close()
-	if summaries, _, err := readOnly.ListSessions(ctx, "", 10, false); err != nil || len(summaries) != 1 {
+	if summaries, _, err := readOnly.ListSessions(ctx, "", 10, false, domain.WorkspaceID{}); err != nil || len(summaries) != 1 {
 		t.Fatalf("ListSessions summaries=%+v error=%v", summaries, err)
 	}
 	if inspection, err := readOnly.InspectSession(ctx, sessionID); err != nil || inspection.Session.ID != sessionID {
 		t.Fatalf("InspectSession inspection=%+v error=%v", inspection, err)
 	}
-	if err := readOnly.CreateSession(ctx, domain.NewSessionID()); err == nil {
+	if err := readOnly.CreateSession(ctx, domain.NewSessionID(), domain.WorkspaceID{}); err == nil {
 		t.Fatal("read-only store allowed session creation")
 	}
 }
@@ -348,10 +348,10 @@ func TestSQLiteStoreListSessionsMostRecentlyUpdatedFirst(t *testing.T) {
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	first := domain.NewSessionID()
 	second := domain.NewSessionID()
-	if err := store.CreateSession(ctx, first); err != nil {
+	if err := store.CreateSession(ctx, first, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession first: %v", err)
 	}
-	if err := store.CreateSession(ctx, second); err != nil {
+	if err := store.CreateSession(ctx, second, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession second: %v", err)
 	}
 	if err := store.AppendEvents(ctx, first, 0, []domain.Event{
@@ -359,17 +359,17 @@ func TestSQLiteStoreListSessionsMostRecentlyUpdatedFirst(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AppendEvents first: %v", err)
 	}
-	summaries, _, err := store.ListSessions(ctx, "", 10, false)
+	summaries, _, err := store.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
 	if len(summaries) != 2 || summaries[0].ID != first || summaries[0].Version != 1 || summaries[1].ID != second {
 		t.Fatalf("unexpected summaries: %+v", summaries)
 	}
-	if _, _, err := store.ListSessions(ctx, "", 0, false); errorCode(err) != domain.ErrInvalidInput {
+	if _, _, err := store.ListSessions(ctx, "", 0, false, domain.WorkspaceID{}); errorCode(err) != domain.ErrInvalidInput {
 		t.Fatalf("ListSessions invalid limit error = %v", err)
 	}
-	if _, _, err := store.ListSessions(ctx, "bogus-cursor", 10, false); errorCode(err) != domain.ErrInvalidInput {
+	if _, _, err := store.ListSessions(ctx, "bogus-cursor", 10, false, domain.WorkspaceID{}); errorCode(err) != domain.ErrInvalidInput {
 		t.Fatalf("ListSessions invalid cursor error = %v", err)
 	}
 }
@@ -382,7 +382,7 @@ func TestSQLiteStoreListSessionsPagination(t *testing.T) {
 	ids := make([]domain.SessionID, 5)
 	for i := range ids {
 		ids[i] = domain.NewSessionID()
-		if err := store.CreateSession(ctx, ids[i]); err != nil {
+		if err := store.CreateSession(ctx, ids[i], domain.WorkspaceID{}); err != nil {
 			t.Fatalf("CreateSession %d: %v", i, err)
 		}
 		// Distinct update order: append one event per session in id order.
@@ -395,7 +395,7 @@ func TestSQLiteStoreListSessionsPagination(t *testing.T) {
 	var seen []domain.SessionID
 	cursor := ""
 	for page := 0; page < 10; page++ {
-		summaries, next, err := store.ListSessions(ctx, cursor, 2, false)
+		summaries, next, err := store.ListSessions(ctx, cursor, 2, false, domain.WorkspaceID{})
 		if err != nil {
 			t.Fatalf("ListSessions page %d: %v", page, err)
 		}
@@ -427,7 +427,7 @@ func TestSQLiteStoreListSessionsProjectsDelegationParent(t *testing.T) {
 	parent := domain.NewSessionID()
 	child := domain.NewSessionID()
 	for _, id := range []domain.SessionID{parent, child} {
-		if err := store.CreateSession(ctx, id); err != nil {
+		if err := store.CreateSession(ctx, id, domain.WorkspaceID{}); err != nil {
 			t.Fatalf("CreateSession: %v", err)
 		}
 	}
@@ -446,7 +446,7 @@ func TestSQLiteStoreListSessionsProjectsDelegationParent(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AppendEvents child: %v", err)
 	}
-	summaries, _, err := store.ListSessions(ctx, "", 10, false)
+	summaries, _, err := store.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
@@ -470,7 +470,7 @@ func TestSQLiteStoreDeleteSession(t *testing.T) {
 	keep := domain.NewSessionID()
 	doomed := domain.NewSessionID()
 	for _, id := range []domain.SessionID{keep, doomed} {
-		if err := store.CreateSession(ctx, id); err != nil {
+		if err := store.CreateSession(ctx, id, domain.WorkspaceID{}); err != nil {
 			t.Fatalf("CreateSession: %v", err)
 		}
 		if err := store.AppendEvents(ctx, id, 0, []domain.Event{
@@ -482,7 +482,7 @@ func TestSQLiteStoreDeleteSession(t *testing.T) {
 	if err := store.DeleteSession(ctx, doomed); err != nil {
 		t.Fatalf("DeleteSession: %v", err)
 	}
-	summaries, _, err := store.ListSessions(ctx, "", 10, false)
+	summaries, _, err := store.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
@@ -505,21 +505,21 @@ func TestSQLiteStoreArchiveSession(t *testing.T) {
 	active := domain.NewSessionID()
 	archived := domain.NewSessionID()
 	for _, id := range []domain.SessionID{active, archived} {
-		if err := store.CreateSession(ctx, id); err != nil {
+		if err := store.CreateSession(ctx, id, domain.WorkspaceID{}); err != nil {
 			t.Fatalf("CreateSession: %v", err)
 		}
 	}
 	if err := store.SetSessionArchived(ctx, archived, true); err != nil {
 		t.Fatalf("SetSessionArchived: %v", err)
 	}
-	def, _, err := store.ListSessions(ctx, "", 10, false)
+	def, _, err := store.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("ListSessions default: %v", err)
 	}
 	if len(def) != 1 || def[0].ID != active {
 		t.Fatalf("default listing = %+v, want only the active session", def)
 	}
-	arch, _, err := store.ListSessions(ctx, "", 10, true)
+	arch, _, err := store.ListSessions(ctx, "", 10, true, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("ListSessions archived: %v", err)
 	}
@@ -529,7 +529,7 @@ func TestSQLiteStoreArchiveSession(t *testing.T) {
 	if err := store.SetSessionArchived(ctx, archived, false); err != nil {
 		t.Fatalf("SetSessionArchived(false): %v", err)
 	}
-	def, _, err = store.ListSessions(ctx, "", 10, false)
+	def, _, err = store.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("ListSessions after unarchive: %v", err)
 	}
@@ -547,7 +547,7 @@ func TestSQLiteStoreFirstUserMessageTexts(t *testing.T) {
 	withPrompt := domain.NewSessionID()
 	noPrompt := domain.NewSessionID()
 	for _, id := range []domain.SessionID{withPrompt, noPrompt} {
-		if err := store.CreateSession(ctx, id); err != nil {
+		if err := store.CreateSession(ctx, id, domain.WorkspaceID{}); err != nil {
 			t.Fatalf("CreateSession: %v", err)
 		}
 	}
@@ -587,7 +587,7 @@ func TestSQLiteStoreIndexesArtifactReferencesAcrossCheckpoints(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	firstID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("1", 64))
@@ -620,7 +620,7 @@ func TestSQLiteStoreTracksCompactionMetadataArtifactRefs(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	firstID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("4", 64))
@@ -648,7 +648,7 @@ func TestSQLiteStoreMigratesVersionOneArtifactReferences(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.db")
 	store := openTestSQLiteStore(t, path)
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	artifactID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("3", 64))
@@ -690,7 +690,7 @@ func TestSQLiteStoreRejectsCheckpointAheadOfSession(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	checkpoint := testCheckpoint(sessionID, 1, time.Now().UTC())
@@ -722,10 +722,10 @@ func TestSQLiteStoreContextCancellationAndDuplicateSession(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if err := store.CreateSession(ctx, sessionID); errorCode(err) != domain.ErrConflict {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); errorCode(err) != domain.ErrConflict {
 		t.Fatalf("duplicate session error = %v, want conflict", err)
 	}
 	cancelled, cancel := context.WithCancel(ctx)
@@ -804,7 +804,7 @@ func TestSQLiteStoreRecordFileChangePersistsLedger(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if err := store.RecordFileChange(ctx, sessionID, "a.txt", true, "h1", []byte("old-a"), "h2"); err != nil {
@@ -825,7 +825,7 @@ func TestSQLiteStoreRecordFileChangeCapsOversizedContent(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	oversized := make([]byte, MaxFileChangeSnapshotBytes+1)
@@ -866,7 +866,7 @@ func TestSQLiteStoreRewindSessionRestoresFilesAndTruncatesEvents(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.db")
 	store := openTestSQLiteStore(t, path)
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
@@ -927,7 +927,7 @@ func TestSQLiteStoreRewindSessionDeduplicatesByPath(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	// Event + checkpoint at seq 1
@@ -979,7 +979,7 @@ func TestSQLiteStoreRewindSessionRejectsInvalidInput(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if _, err := store.RewindSession(ctx, domain.SessionID{}, 1); errorCode(err) != domain.ErrInvalidInput {
@@ -997,7 +997,7 @@ func TestSQLiteStoreListCheckpointsReturnsSummary(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID); err != nil {
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	events := transcriptEvents(t, sessionID)

@@ -163,13 +163,19 @@ func bootstrapWithMCP(t *testing.T, servers map[string]config.MCPServer, lookup 
 	resolved.Storage.BaseDir = ws
 	prepareSessionsDir(t, resolved)
 
-	bootstrap, err := app.NewBootstrap(context.Background(), resolved, app.BootstrapConfig{
-		WorkspaceRoot: ws,
-		ArtifactDir:   filepath.Join(ws, "artifacts"),
-		Version:       "e2e-test",
+	proc, err := app.NewProcessRuntime(context.Background(), resolved, app.ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(ws, "artifacts"),
+		Version:     "e2e-test",
 	})
 	if err != nil {
-		t.Fatalf("NewBootstrap() error = %v", err)
+		t.Fatalf("NewProcessRuntime() error = %v", err)
+	}
+	t.Cleanup(proc.Close)
+	bootstrap, err := app.NewWorkspaceBootstrap(context.Background(), proc, app.BootstrapConfig{
+		WorkspaceRoot: ws,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkspaceBootstrap() error = %v", err)
 	}
 	t.Cleanup(bootstrap.Close)
 	return bootstrap

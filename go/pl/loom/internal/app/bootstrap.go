@@ -30,15 +30,12 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
-	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
-	"github.com/liubang/playground/go/pl/loom/internal/mcp"
 	"github.com/liubang/playground/go/pl/loom/internal/memory"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
-	"github.com/liubang/playground/go/pl/loom/internal/session"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/builtin"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/command"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/edit"
@@ -52,32 +49,31 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-// BootstrapConfig carries the entry-point-specific inputs that do not live
-// in the config file: process paths, the build version, and logging.
+// BootstrapConfig carries the workspace-specific inputs for assembling one
+// workspace-scoped Bootstrap on top of a shared ProcessRuntime
+// (docs/WORKSPACE_DESIGN.md §5.1).
 type BootstrapConfig struct {
 	// WorkspaceRoot is the absolute path to the workspace directory.
 	WorkspaceRoot string
-	// ArtifactDir is the path to the artifact directory.
-	ArtifactDir string
-	// Version is the build version stamped into traces and the attribution
-	// environment of spawned commands.
-	Version string
-	// Logger is the slog.Logger to use; if nil, a default is created.
-	Logger *slog.Logger
-	// Questioner resolves ask_user questions; nil selects the autonomous
-	// questioner (headless-safe: every question is skipped immediately).
-	Questioner domain.Questioner
+	// WorkspaceID is the owning workspace entity's ID (docs/WORKSPACE_DESIGN
+	// W1); zero only in hand-assembled test bootstraps.
+	WorkspaceID domain.WorkspaceID
 }
 
-// Bootstrap assembles the runtime components for a Loom session from a
-// resolved configuration file. It owns the lifecycle of the session store,
-// artifact store, tool registry, and tracing.
+// Bootstrap assembles the workspace-scoped runtime components for one
+// workspace (docs/WORKSPACE_DESIGN.md §5.1): the path validator, process
+// runner, base tool registry, approval policy, prompt builder, skills, and
+// sub-agent runtime — all bound to WorkspaceRoot. It embeds the shared
+// *ProcessRuntime, so process-level resources (Store/Artifact/Resolved/
+// Recorder/MCPManager/Memory*/...) stay reachable through the workspace
+// handle with no call-site churn. One Bootstrap exists per workspace; the
+// WorkspaceRegistry manages them.
 type Bootstrap struct {
-	Resolved      *config.ResolvedConfig
-	Current       config.ProviderModelRef
+	*ProcessRuntime
+
+	// WorkspaceID is the owning workspace entity's ID (W1).
+	WorkspaceID   domain.WorkspaceID
 	WorkspaceRoot string
-	Store         domain.SessionStore
-	Artifact      domain.ArtifactStore
 	Registry      *agent.ToolRegistry
 	// Policy is the assembled decider chain (docs/PERMISSION_DESIGN.md
 	// §4.4): rules → danger → session → mode-aware baseline. Read it via
@@ -89,19 +85,12 @@ type Bootstrap struct {
 	// ReloadPolicy writes and run-construction/ListRules reads.
 	policyMu      sync.RWMutex
 	PromptBuilder agent.PromptBuilder
-	Logger        *slog.Logger
 	Validator     *workspace.PathValidator
 	Runner        *process.Runner
-	Version       string
 	// FileStateBook is the shared read/write hash tracker used by
 	// read_file and edit for drift detection; rewind restoration updates
 	// it so a post-rewind edit measures drift from the restored content.
 	FileStateBook *workspace.FileStateBook
-	// SessionEnv holds the loom attribution variables (agent name/version,
-	// session ID) injected into every spawned command. The controller
-	// rewrites it on session create/resume; the runner reads it per
-	// execution.
-	SessionEnv *process.AtomicSessionEnv
 	// GoalCell ferries update_goal mutations from the tool to each turn's
 	// agent loop.
 	GoalCell *agent.GoalCell
@@ -112,17 +101,6 @@ type Bootstrap struct {
 	// loop's next model call (docs/STEER_DESIGN.md). Shared across turns so
 	// leftovers relay into the next turn's prompt.
 	SteerCell *agent.SteerCell
-	// Questioner is the ask_user tool's answer source (a ChannelQuestioner
-	// bridged to the TUI, or the autonomous questioner when headless).
-	Questioner domain.Questioner
-	// Recorder is the Langfuse observability sink (no-op when unconfigured).
-	Recorder trace.Recorder
-	// SessionRules holds categorical run_cmd prefixes remembered from
-	// interactive "allow always" decisions; shared with Policy.Session.
-	SessionRules *permission.SessionRules
-	// RememberedStore persists "allow always" memories to SQLite; nil when
-	// rules.persist_remembered=false or open failed (session memory still works).
-	RememberedStore *permission.RememberedStore
 	// SubagentModels is the delegate_task model mailbox: the controller
 	// publishes each turn's model selection, the tool reads it at
 	// execution time (docs/SUBAGENT_DESIGN.md D7). Nil when the
@@ -140,56 +118,30 @@ type Bootstrap struct {
 	// process; Close reclaims surviving process groups before the store
 	// shuts down.
 	SessionManager *exsession.Manager
-	// MCPManager owns every running MCP server subprocess; Close
-	// terminates them. Nil when no MCP servers are configured. When every
-	// server failed to start, the manager is still kept (with zero
-	// clients) so frontends can report the per-server failure reasons.
-	MCPManager *mcp.Manager
 	// Skills exposes the skills loader/catalog shared by the prompt
 	// provider and the read_skill tool; nil when skills are disabled
 	// (skills.enabled=false or the built-in system prompt is off).
 	Skills *SkillsHandle
-	// MemoryStore is the persistent memory store (<base_dir>/memories/);
-	// nil when memory is disabled (memory.enabled=false).
-	MemoryStore *memory.Store
-	// MemoryExtractor runs Phase 1 extraction at session end;
-	// nil when memory is disabled.
-	MemoryExtractor *memory.Extractor
-	// MemoryConsolidator runs Phase 2 consolidation;
-	// nil when memory is disabled.
-	MemoryConsolidator *memory.Consolidator
-
-	traceProvider *trace.Provider
 }
 
-// NewBootstrap creates a new Bootstrap and assembles all runtime components.
-// The caller is responsible for calling Close when done.
-func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg BootstrapConfig) (*Bootstrap, error) {
-	if resolved == nil {
-		return nil, fmt.Errorf("resolved config is required")
+// NewWorkspaceBootstrap assembles the workspace-scoped runtime components
+// for one workspace on top of the shared ProcessRuntime
+// (docs/WORKSPACE_DESIGN.md §5.1). The ProcessRuntime owns the session/
+// artifact stores and tracing; a workspace-assembly failure never closes
+// them. The caller closes the returned Bootstrap on workspace teardown.
+func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg BootstrapConfig) (*Bootstrap, error) {
+	if proc == nil || proc.Resolved == nil {
+		return nil, fmt.Errorf("process runtime is required")
 	}
-	logger := cfg.Logger
+	resolved := proc.Resolved
+	logger := proc.Logger
 	if logger == nil {
 		logger = slog.Default()
-	}
-
-	// Open session store
-	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDBPath())
-	if err != nil {
-		return nil, fmt.Errorf("open session store: %w", err)
-	}
-
-	// Open artifact store
-	artStore, err := artifact.Open(cfg.ArtifactDir, resolved.Limits.MaxArtifactBytes)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("open artifact store: %w", err)
 	}
 
 	// Create workspace validator
 	validator, err := workspace.NewPathValidator(cfg.WorkspaceRoot)
 	if err != nil {
-		_ = store.Close()
 		return nil, fmt.Errorf("create path validator: %w", err)
 	}
 
@@ -199,7 +151,6 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	// redirectable for go vet to work at all). SessionEnv injects the loom
 	// attribution variables (see process.LoomSessionEnv) into every spawned
 	// command so downstream CLIs can attribute traffic to this session.
-	sessionEnv := &process.AtomicSessionEnv{}
 	runner, err := process.NewRunner(validator, process.RunnerOptions{
 		Sandbox: process.NewPlatformSandbox(process.PlatformSandboxOptions{}),
 		EnvAllowlist: []string{
@@ -208,17 +159,16 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		},
 		// Per-session attribution rides the turn context (Controller
 		// path, docs/SERVE_DESIGN.md §4.3); the process-level atomic
-		// value remains the fallback for context-less paths (headless
-		// runAgent, runner tests).
+		// value (ProcessRuntime.SessionEnv) remains the fallback for
+		// context-less paths (headless runAgent, runner tests).
 		SessionEnv: func(ctx context.Context) map[string]string {
 			if env := process.SessionEnvFromContext(ctx); len(env) > 0 {
 				return env
 			}
-			return sessionEnv.Get()
+			return proc.SessionEnv.Get()
 		},
 	})
 	if err != nil {
-		_ = store.Close()
 		return nil, fmt.Errorf("create process runner: %w", err)
 	}
 
@@ -230,41 +180,21 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 	goalCell := agent.NewGoalCell()
 	planCell := agent.NewPlanCell()
 	steerCell := agent.NewSteerCell()
-	questioner := cfg.Questioner
-	if questioner == nil {
-		questioner = domain.AutonomousQuestioner{}
-	}
-	sessionManager, err := exsession.NewManager(runner, artStore, exsession.DefaultIdleTTL)
+	sessionManager, err := exsession.NewManager(runner, proc.Artifact, exsession.DefaultIdleTTL)
 	if err != nil {
-		_ = store.Close()
 		return nil, fmt.Errorf("create session manager: %w", err)
 	}
-	if err := registerBuiltinTools(registry, validator, runner, artStore, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, questioner, book, sessionManager); err != nil {
+	if err := registerBuiltinTools(registry, validator, runner, proc.Artifact, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, proc.Questioner, book, sessionManager); err != nil {
 		sessionManager.Close()
-		_ = store.Close()
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
 
-	// Session-remembered approvals ("allow always") share one store with the
-	// policy layer; declarative user/project rules load on top of the
-	// baseline per the config file's rules.* section. The assembled decider
-	// chain applies the approval.* baseline mode (on-request by default:
-	// sandboxed non-dangerous commands run without prompting).
-	sessionRules := permission.NewSessionRules()
-	var rememberedStore *permission.RememberedStore
-	if resolved.Rules.PersistRemembered {
-		rulesDir := resolved.Storage.RulesDir()
-		if store, err := permission.OpenRememberedStore(ctx, permission.RememberedDBPath(rulesDir)); err != nil {
-			logger.Warn("remembered rules disabled: open store failed", "error", err)
-		} else {
-			if err := store.MigrateLegacyJSON(ctx, rulesDir); err != nil {
-				logger.Warn("remembered rules: legacy migration incomplete", "error", err)
-			}
-			rememberedStore = store
-		}
-	}
+	// Approval policy: the decider chain (rules → danger → session →
+	// mode-aware baseline). Session/user-layer rules and the remembered
+	// store are process-shared (held by the ProcessRuntime, WORKSPACE_DESIGN
+	// D4); the project layer is loaded per workspace from cfg.WorkspaceRoot.
 	policy := permission.DefaultPolicy()
-	policy.Session = sessionRules
+	policy.Session = proc.SessionRules
 	policy = permission.AttachRules(ctx, policy, cfg.WorkspaceRoot, resolved.Storage.RulesDir(), permission.RuleLoadOptions{
 		Enabled:      resolved.Rules.Enabled,
 		Builtin:      resolved.Rules.Builtin,
@@ -272,33 +202,12 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		ProjectAllow: resolved.Rules.ProjectAllow,
 	}, logger)
 	decider := policy.Decider(resolved.Approval.Mode)
-	logger.Info("approval mode", "mode", resolved.Approval.Mode)
 
-	// Langfuse tracing comes from the config file's tracing.* section.
-	// Setup failure degrades to a no-op recorder — observability must never
-	// break the agent.
+	// traceCfg is rebuilt from the resolved config for ResolveManagedPrompt;
+	// the recorder/provider themselves are process-level (ProcessRuntime).
 	traceCfg := resolved.Tracing
-	// Route exporter/client failures into the (discardable) TUI logger:
-	// anything written to stderr tears the TUI rendering.
 	traceCfg.Logger = logger
-	traceCfg.Release = cfg.Version
-	var (
-		traceRecorder trace.Recorder = trace.Noop()
-		traceProvider *trace.Provider
-	)
-	if traceCfg.Enabled {
-		provider, err := trace.Setup(ctx, traceCfg)
-		if err != nil {
-			logger.Warn("langfuse tracing disabled: setup failed", "error", err)
-		} else {
-			traceProvider = provider
-			traceRecorder = provider.Recorder()
-			logger.Info("langfuse tracing enabled",
-				"host", traceCfg.Host,
-				"environment", traceCfg.Environment,
-				"include_content", traceCfg.IncludeContent)
-		}
-	}
+	traceCfg.Release = proc.Version
 
 	var (
 		promptBuilder agent.PromptBuilder
@@ -319,7 +228,7 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		// smaller than any window).
 		skillsOpt, skillsHandle, err := WireSkills(registry, cfg.WorkspaceRoot, defaultContextWindow(resolved), resolved.Skills, resolved.Storage.SkillsDir(), resolved.Prompt.DisableBuiltin, logger)
 		if err != nil {
-			_ = store.Close()
+			sessionManager.Close()
 			return nil, fmt.Errorf("wire skills: %w", err)
 		}
 		if skillsOpt != nil {
@@ -329,42 +238,15 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		promptBuilder = prompt.NewBuilder(cfg.WorkspaceRoot, promptOpts...)
 	}
 
-	// MCP servers: start all configured server subprocesses and
-	// register their adapted tools into the registry. Startup is
-	// best-effort: a server that fails to start is logged and its
-	// tools are absent; the agent continues with built-in tools.
-	var mcpManager *mcp.Manager
-	if len(resolved.MCP.Servers) > 0 {
-		// Convert config.MCPServer → mcp.ServerConfig for the manager.
-		mcpCfgs := make(map[string]mcp.ServerConfig, len(resolved.MCP.Servers))
-		for name, srv := range resolved.MCP.Servers {
-			mcpCfgs[name] = mcp.ServerConfig{
-				Command:           srv.Command,
-				Args:              srv.Args,
-				Env:               srv.Env,
-				Cwd:               srv.Cwd,
-				URL:               srv.URL,
-				Headers:           srv.Headers,
-				StartupTimeoutSec: srv.StartupTimeoutSec,
-				ToolTimeoutSec:    srv.ToolTimeoutSec,
-				EnabledTools:      srv.EnabledTools,
-				DisabledTools:     srv.DisabledTools,
+	// MCP tools: the shared process-level manager (ProcessRuntime) owns the
+	// server subprocesses (WORKSPACE_DESIGN D2); each workspace registers the
+	// adapted tools into its own registry. Tools are stateless adapters over
+	// the shared manager, so registering them per workspace is safe.
+	if proc.MCPManager != nil {
+		for _, tool := range proc.MCPManager.Tools() {
+			if err := registry.Register(tool); err != nil {
+				logger.Warn("mcp: failed to register tool", "tool", tool.Definition().Name, "error", err)
 			}
-		}
-		mgr, err := mcp.StartServers(ctx, mcpCfgs, logger)
-		if err != nil {
-			logger.Warn("mcp: no server could be started; running with built-in tools only", "error", err)
-		}
-		// Keep the manager even on total failure: it carries the per-server
-		// startup errors the /mcp listing reports.
-		mcpManager = mgr
-		if err == nil {
-			for _, tool := range mgr.Tools() {
-				if err := registry.Register(tool); err != nil {
-					logger.Warn("mcp: failed to register tool", "tool", tool.Definition().Name, "error", err)
-				}
-			}
-			logger.Info("mcp servers started", "servers", len(mgr.Servers()), "tools", len(mgr.Tools()))
 		}
 	}
 
@@ -378,9 +260,8 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		subagentManager *subagent.Manager
 	)
 	if resolved.Subagent.Enabled {
-		researcherRegistry, err := buildSubagentRegistry(validator, runner, artStore, book)
+		researcherRegistry, err := buildSubagentRegistry(validator, runner, proc.Artifact, book)
 		if err != nil {
-			_ = store.Close()
 			return nil, fmt.Errorf("build sub-agent registry: %w", err)
 		}
 		childLimits := resolved.Limits
@@ -403,9 +284,8 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 			Risk:     domain.R1,
 		}
 
-		coderRegistry, err := buildCoderRegistry(validator, runner, artStore, book, int(resolved.Limits.MaxToolOutputBytes))
+		coderRegistry, err := buildCoderRegistry(validator, runner, proc.Artifact, book, int(resolved.Limits.MaxToolOutputBytes))
 		if err != nil {
-			_ = store.Close()
 			return nil, fmt.Errorf("build coder registry: %w", err)
 		}
 		coderPrompt := prompt.NewBuilder(cfg.WorkspaceRoot,
@@ -423,13 +303,14 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		}
 
 		factory := &subagent.Factory{
-			Store:                store,
-			Artifacts:            artStore,
-			Recorder:             traceRecorder,
+			Store:                proc.Store,
+			Artifacts:            proc.Artifact,
+			Recorder:             proc.Recorder,
 			Logger:               logger,
 			Registry:             researcherRegistry,
 			Prompt:               researcherPrompt,
 			Workspace:            cfg.WorkspaceRoot,
+			WorkspaceID:          cfg.WorkspaceID,
 			Limits:               childLimits,
 			Runaway:              resolved.Runaway,
 			Models:               subagentModels,
@@ -441,7 +322,6 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		// validator implements agent.FileStateReader for RecoverRun.
 		manager, err := subagent.NewManager(factory, roles, validator)
 		if err != nil {
-			_ = store.Close()
 			return nil, fmt.Errorf("create sub-agent manager: %w", err)
 		}
 		factory.Manager = manager
@@ -450,12 +330,10 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		delegateTool, err := subagent.NewDelegateTaskTool(factory)
 		if err != nil {
 			sessionManager.Close()
-			_ = store.Close()
 			return nil, fmt.Errorf("delegate_task: %w", err)
 		}
 		if err := registry.Register(delegateTool); err != nil {
 			sessionManager.Close()
-			_ = store.Close()
 			return nil, fmt.Errorf("register delegate_task: %w", err)
 		}
 
@@ -463,23 +341,19 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		waitTool, err := subagent.NewWaitSubagentTool(manager)
 		if err != nil {
 			sessionManager.Close()
-			_ = store.Close()
 			return nil, fmt.Errorf("wait_subagent: %w", err)
 		}
 		if err := registry.Register(waitTool); err != nil {
 			sessionManager.Close()
-			_ = store.Close()
 			return nil, fmt.Errorf("register wait_subagent: %w", err)
 		}
 		resumeTool, err := subagent.NewResumeSubagentTool(manager)
 		if err != nil {
 			sessionManager.Close()
-			_ = store.Close()
 			return nil, fmt.Errorf("resume_subagent: %w", err)
 		}
 		if err := registry.Register(resumeTool); err != nil {
 			sessionManager.Close()
-			_ = store.Close()
 			return nil, fmt.Errorf("register resume_subagent: %w", err)
 		}
 
@@ -487,83 +361,42 @@ func NewBootstrap(ctx context.Context, resolved *config.ResolvedConfig, cfg Boot
 		logger.Info("sub-agent delegation enabled", "roles", "researcher+coder", "async", true)
 	}
 
-	// Memory system: open the persistent memory store, register the
-	// memory tools, and wire the extraction/consolidation pipeline.
-	// All of this is gated by the memory.enabled config (default: true).
-	var (
-		memoryStore        *memory.Store
-		memoryExtractor    *memory.Extractor
-		memoryConsolidator *memory.Consolidator
-	)
-	if resolved.Memory.Enabled {
-		if memStore, err := memory.OpenStore(resolved.Storage.MemoriesDir()); err != nil {
-			logger.Warn("memory system disabled: open store failed", "error", err)
-		} else {
-			memoryStore = memStore
-			// Initialize git for incremental diff detection.
-			if err := memStore.InitGit(ctx); err != nil {
-				logger.Warn("memory git init failed; consolidation will be disabled until git is available", "error", err)
-			}
-			// Register memory tools.
-			if err := registerMemoryTools(registry, memStore); err != nil {
-				logger.Warn("memory tools registration failed", "error", err)
-			}
-			// Wire extractor and consolidator with the current model.
-			provider := resolved.ProviderByName(resolved.Default.Provider)
-			if provider != nil {
-				model := provider.ModelFor(resolved.Default.Model)
-				modelName := resolved.Default.Model
-				memoryExtractor = memory.NewExtractor(memStore, model, modelName)
-				memoryConsolidator = memory.NewConsolidator(memStore, model, modelName)
-			}
+	// Memory tools: the store is process-shared (ProcessRuntime,
+	// WORKSPACE_DESIGN D5); register the tools into each workspace's registry
+	// and wrap that workspace's prompt builder with the memory-aware one.
+	if proc.MemoryStore != nil {
+		if err := registerMemoryTools(registry, proc.MemoryStore); err != nil {
+			logger.Warn("memory tools registration failed", "error", err)
 		}
-	}
-
-	// If memory is enabled, inject the memory prompt into the system
-	// prompt builder. This wraps the existing prompt builder with a
-	// memory-aware one.
-	if memoryStore != nil && promptBuilder != nil {
-		promptBuilder = &memoryPromptWrapper{
-			inner:  promptBuilder,
-			store:  memoryStore,
-			logger: logger,
+		if promptBuilder != nil {
+			promptBuilder = &memoryPromptWrapper{
+				inner:  promptBuilder,
+				store:  proc.MemoryStore,
+				logger: logger,
+			}
 		}
 	}
 
 	return &Bootstrap{
-		Resolved:           resolved,
-		Current:            resolved.Default,
-		WorkspaceRoot:      cfg.WorkspaceRoot,
-		Store:              store,
-		Artifact:           artStore,
-		Registry:           registry,
-		Policy:             decider,
-		permissionPolicy:   &policy,
-		approvalMode:       resolved.Approval.Mode,
-		PromptBuilder:      promptBuilder,
-		Logger:             logger,
-		Validator:          validator,
-		Runner:             runner,
-		Version:            cfg.Version,
-		FileStateBook:      book,
-		SessionEnv:         sessionEnv,
-		GoalCell:           goalCell,
-		PlanCell:           planCell,
-		SteerCell:          steerCell,
-		Questioner:         questioner,
-		Recorder:           traceRecorder,
-		SessionRules:       sessionRules,
-		SubagentModels:     subagentModels,
-		RememberedStore:    rememberedStore,
-		SubagentFactory:    subagentFactory,
-		SubagentManager:    subagentManager,
-		SessionManager:     sessionManager,
-		MCPManager:         mcpManager,
-		Skills:             skills,
-		MemoryStore:        memoryStore,
-		MemoryExtractor:    memoryExtractor,
-		MemoryConsolidator: memoryConsolidator,
-		traceProvider:      traceProvider,
+		ProcessRuntime:   proc,
+		WorkspaceID:      cfg.WorkspaceID,
+		WorkspaceRoot:    cfg.WorkspaceRoot,
+		Registry:         registry,
+		Policy:           decider,
+		permissionPolicy: &policy,
+		approvalMode:     resolved.Approval.Mode,
+		PromptBuilder:    promptBuilder,
+		Validator:        validator,
+		Runner:           runner,
+		FileStateBook:    book,
+		GoalCell:         goalCell,
+		PlanCell:         planCell,
+		SteerCell:        steerCell,
+		SubagentModels:   subagentModels,
+		SubagentFactory:  subagentFactory,
+		SubagentManager:  subagentManager,
+		SessionManager:   sessionManager,
+		Skills:           skills,
 	}, nil
 }
 
@@ -854,54 +687,19 @@ func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runn
 	return registry, nil
 }
 
-// Close releases all resources held by the Bootstrap.
+// Close releases the workspace-scoped resources held by the Bootstrap: it
+// drains in-flight sub-agents (child goroutines hold store references until
+// they persist their final checkpoint) and reclaims surviving background
+// process groups. The embedded ProcessRuntime is closed separately at
+// process teardown (ProcessRuntime.Close), after every workspace Bootstrap.
 func (b *Bootstrap) Close() {
-	// Drain in-flight sub-agents before closing the session store;
-	// child goroutines hold store references until they persist their
-	// final checkpoint.
 	if b.SubagentManager != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		b.SubagentManager.Shutdown(ctx)
 		cancel()
 	}
-	// Run Phase 2 consolidation before closing: merges raw memories
-	// into MEMORY.md and regenerates the summary. Best-effort — a
-	// consolidation failure must never hang shutdown.
-	if b.MemoryConsolidator != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		if changed, err := b.MemoryConsolidator.Consolidate(ctx); err != nil && b.Logger != nil {
-			b.Logger.Warn("memory consolidation failed", "error", err)
-		} else if changed && b.Logger != nil {
-			b.Logger.Info("memory consolidation completed")
-		}
-		cancel()
-	}
-	if b.RememberedStore != nil {
-		if err := b.RememberedStore.Close(); err != nil && b.Logger != nil {
-			b.Logger.Warn("remembered store shutdown failed", "error", err)
-		}
-	}
-	if b.MCPManager != nil {
-		if err := b.MCPManager.Close(); err != nil && b.Logger != nil {
-			b.Logger.Warn("mcp manager shutdown failed", "error", err)
-		}
-	}
 	if b.SessionManager != nil {
 		b.SessionManager.Close()
-	}
-	if b.traceProvider != nil {
-		// Flush buffered spans with a bounded wait; tracing must never hang
-		// shutdown.
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if err := b.traceProvider.Shutdown(ctx); err != nil && b.Logger != nil {
-			b.Logger.Warn("langfuse tracing shutdown failed", "error", err)
-		}
-	}
-	if b.Store != nil {
-		if closer, ok := b.Store.(interface{ Close() error }); ok {
-			_ = closer.Close()
-		}
 	}
 }
 
