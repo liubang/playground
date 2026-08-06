@@ -407,19 +407,18 @@ func TestSessionAllowNeverOverridesFileDeny(t *testing.T) {
 // TestAttachRulesBuiltinSwitch checks the builtin layer participates by
 // default and drops out when the load options disable it.
 func TestAttachRulesBuiltinSwitch(t *testing.T) {
-	// Isolate $HOME: AttachRules always loads the user layer
-	// (~/.loom/rules + remembered.db) — the builtin switch must not gate
-	// it — and a real "allow always" for ls from an interactive session
-	// would leak in and mask the builtin toggle.
-	t.Setenv("HOME", t.TempDir())
+	// An empty temp user dir stands in for <base_dir>/rules: the builtin
+	// switch must not gate the user layer, and a real "allow always" for
+	// ls from an interactive session would leak in and mask the toggle.
+	userDir := t.TempDir()
 	logger := slog.New(slog.DiscardHandler)
 	on := RuleLoadOptions{Enabled: true, Builtin: true, Project: true}
-	policy := AttachRules(context.Background(), DefaultPolicy(), t.TempDir(), on, logger)
+	policy := AttachRules(context.Background(), DefaultPolicy(), t.TempDir(), userDir, on, logger)
 	if d := policy.Decider(ModeUnlessTrusted).Evaluate(runCmdCall(t, "ls")).Decision; d != domain.DecisionAllow {
 		t.Fatalf("builtin should allow ls by default, got %v", d)
 	}
 	off := RuleLoadOptions{Enabled: true, Builtin: false, Project: true}
-	policy = AttachRules(context.Background(), DefaultPolicy(), t.TempDir(), off, logger)
+	policy = AttachRules(context.Background(), DefaultPolicy(), t.TempDir(), userDir, off, logger)
 	if d := policy.Decider(ModeUnlessTrusted).Evaluate(runCmdCall(t, "ls")).Decision; d != domain.DecisionAsk {
 		t.Fatalf("Builtin=false should disable builtin allows, got %v", d)
 	}

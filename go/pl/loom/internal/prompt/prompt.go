@@ -161,7 +161,7 @@ func NewBuilder(workspaceRoot string, opts ...Option) *Builder {
 		b.env = systemEnvProvider{workspaceRoot: workspaceRoot, clock: b.clock}
 	}
 	if b.rules == nil {
-		b.rules = NewFileRulesProvider(workspaceRoot)
+		b.rules = NewFileRulesProvider(workspaceRoot, "")
 	}
 	return b
 }
@@ -359,28 +359,29 @@ const (
 // workspace root, in precedence order.
 var ruleFileNames = []string{"LOOM.md", "AGENTS.md", "CLAUDE.md"}
 
-// FileRulesProvider discovers layered rule files: the user-global
-// ~/.loom/LOOM.md first (lowest precedence), then the workspace-root
-// LOOM.md/AGENTS.md/CLAUDE.md. Missing, empty, and unreadable files are
-// skipped silently.
+// FileRulesProvider discovers layered rule files: the user-global rule
+// file (globalFile, i.e. <base_dir>/LOOM.md) first (lowest precedence),
+// then the workspace-root LOOM.md/AGENTS.md/CLAUDE.md. Missing, empty,
+// and unreadable files are skipped silently.
 type FileRulesProvider struct {
 	workspaceRoot string
-	homeDir       string
+	globalFile    string
 }
 
-// NewFileRulesProvider creates the default rules provider rooted at the
-// workspace and the current user's home directory.
-func NewFileRulesProvider(workspaceRoot string) *FileRulesProvider {
-	home, _ := os.UserHomeDir()
-	return &FileRulesProvider{workspaceRoot: workspaceRoot, homeDir: home}
+// NewFileRulesProvider creates a rules provider rooted at the workspace,
+// with an optional user-global rule file (empty disables the global
+// layer). The caller derives globalFile from the configured storage
+// base_dir (config.ResolvedStorage.LoomMDPath).
+func NewFileRulesProvider(workspaceRoot, globalFile string) *FileRulesProvider {
+	return &FileRulesProvider{workspaceRoot: workspaceRoot, globalFile: globalFile}
 }
 
 // Discover returns the rule files in precedence order. It never fails:
 // individual file errors simply skip the offending file.
 func (p *FileRulesProvider) Discover(context.Context) ([]RuleFile, error) {
 	var files []RuleFile
-	if p.homeDir != "" {
-		if f, ok := readRuleFile(filepath.Join(p.homeDir, ".loom", "LOOM.md")); ok {
+	if p.globalFile != "" {
+		if f, ok := readRuleFile(p.globalFile); ok {
 			files = append(files, f)
 		}
 	}

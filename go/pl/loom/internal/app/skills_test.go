@@ -40,7 +40,7 @@ func TestWireSkillsDisabled(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			registry := agent.NewToolRegistry()
-			opt, handle, err := WireSkills(registry, t.TempDir(), 0, tc.cfg, tc.systemPromptDisabled, nil)
+			opt, handle, err := WireSkills(registry, t.TempDir(), 0, tc.cfg, "", tc.systemPromptDisabled, nil)
 			if err != nil {
 				t.Fatalf("WireSkills() error = %v", err)
 			}
@@ -58,8 +58,7 @@ func TestWireSkillsDisabled(t *testing.T) {
 }
 
 func TestWireSkillsEnabledEndToEnd(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home) // os.UserHomeDir reads $HOME on unix
+	t.Setenv("HOME", t.TempDir()) // ~/.agents/skills resolves against $HOME
 	ws := t.TempDir()
 	skillDir := filepath.Join(ws, ".loom", "skills", "demo-skill")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
@@ -71,7 +70,7 @@ func TestWireSkillsEnabledEndToEnd(t *testing.T) {
 	}
 
 	registry := agent.NewToolRegistry()
-	opt, handle, err := WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, false, nil)
+	opt, handle, err := WireSkills(registry, ws, 0, config.ResolvedSkills{Enabled: true}, filepath.Join(t.TempDir(), "skills"), false, nil)
 	if err != nil {
 		t.Fatalf("WireSkills() error = %v", err)
 	}

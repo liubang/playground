@@ -29,6 +29,15 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/logging"
 )
 
+// TestMain guarantees a $HOME: hermetic runners (bazel) unset it, and
+// resolving the default storage base_dir (~/.loom) requires it.
+func TestMain(m *testing.M) {
+	if os.Getenv("HOME") == "" {
+		_ = os.Setenv("HOME", os.TempDir())
+	}
+	os.Exit(m.Run())
+}
+
 // noEnv rejects every secret reference; tests that need secrets inject
 // their own lookup.
 func noEnv(string) (string, bool) { return "", false }
@@ -125,6 +134,64 @@ providers:
 `, noEnv)
 	if cfg.Default != (ProviderModelRef{Provider: "only", Model: "m1"}) {
 		t.Fatalf("implicit default = %+v, want only/m1", cfg.Default)
+	}
+}
+
+func TestResolveStorageDefaultsToLoomHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home) // os.UserHomeDir reads $HOME on unix
+	// A missing config file still resolves the storage layout (offline
+	// commands run without providers).
+	cfg, err := Load(filepath.Join(t.TempDir(), "absent.yaml"), LoadOptions{}, noEnv)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := filepath.Join(home, ".loom")
+	if cfg.Storage.BaseDir != want {
+		t.Fatalf("BaseDir = %q, want %q", cfg.Storage.BaseDir, want)
+	}
+	derived := map[string]string{
+		"SessionsDir":   cfg.Storage.SessionsDir(),
+		"SessionDBPath": cfg.Storage.SessionDBPath(),
+		"LogsDir":       cfg.Storage.LogsDir(),
+		"MemoriesDir":   cfg.Storage.MemoriesDir(),
+		"RulesDir":      cfg.Storage.RulesDir(),
+		"SkillsDir":     cfg.Storage.SkillsDir(),
+		"LoomMDPath":    cfg.Storage.LoomMDPath(),
+	}
+	wantDerived := map[string]string{
+		"SessionsDir":   filepath.Join(want, "sessions"),
+		"SessionDBPath": filepath.Join(want, "sessions", "sessions.db"),
+		"LogsDir":       filepath.Join(want, "logs"),
+		"MemoriesDir":   filepath.Join(want, "memories"),
+		"RulesDir":      filepath.Join(want, "rules"),
+		"SkillsDir":     filepath.Join(want, "skills"),
+		"LoomMDPath":    filepath.Join(want, "LOOM.md"),
+	}
+	for name, got := range derived {
+		if got != wantDerived[name] {
+			t.Errorf("%s = %q, want %q", name, got, wantDerived[name])
+		}
+	}
+}
+
+func TestResolveStorageConfiguredBaseDir(t *testing.T) {
+	base := t.TempDir()
+	cfg := loadFile(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+storage:
+  base_dir: '`+base+`'
+`, noEnv)
+	if cfg.Storage.BaseDir != base {
+		t.Fatalf("BaseDir = %q, want %q", cfg.Storage.BaseDir, base)
+	}
+	if got, want := cfg.Storage.SessionDBPath(), filepath.Join(base, "sessions", "sessions.db"); got != want {
+		t.Fatalf("SessionDBPath() = %q, want %q", got, want)
 	}
 }
 

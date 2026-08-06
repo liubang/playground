@@ -71,10 +71,9 @@ func TestAtomicCatalog(t *testing.T) {
 
 func TestPromptProviderRefreshesSharedCatalog(t *testing.T) {
 	ws := t.TempDir()
-	home := t.TempDir()
 	writeSkill(t, ws+"/.loom/skills/demo", "demo", "d")
 	var atomic AtomicCatalog
-	provider := NewPromptProvider(NewLoader(ws, home, nil, nil), &atomic, 0)
+	provider := NewPromptProvider(NewLoader(ws, nil, nil), &atomic, 0)
 
 	body, err := provider.Skills(context.Background())
 	if err != nil {
