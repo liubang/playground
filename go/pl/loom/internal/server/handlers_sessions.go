@@ -291,6 +291,47 @@ func (s *Server) handleCancelTurn(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "cancelling"})
 }
 
+// --- feedback ---
+
+type submitFeedbackRequest struct {
+	RunID string `json:"run_id"`
+	// Value is the vote: 1 = thumbs up, 0 = thumbs down (BOOLEAN score).
+	Value   float64 `json:"value"`
+	Comment string  `json:"comment,omitempty"`
+}
+
+// handleSubmitFeedback records a user vote for one run as a Langfuse score
+// on the run's trace. The endpoint is deliberately cheap: the controller
+// resolves run_id → trace_id from the transcript projection and the score
+// submission itself is fire-and-forget.
+func (s *Server) handleSubmitFeedback(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var req submitFeedbackRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	runID, err := domain.ParseRunID(req.RunID)
+	if err != nil || !domain.HasPrefix(runID, "run_") {
+		writeError(w, invalidInput("invalid run_id"))
+		return
+	}
+	if req.Value != 0 && req.Value != 1 {
+		writeError(w, invalidInput("value must be 0 (down) or 1 (up)"))
+		return
+	}
+	if err := s.svc.SubmitFeedback(r.Context(), id, runID.String(), req.Value, req.Comment); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("feedback.submit", id, "run_id", runID.String(), "value", req.Value)
+	writeJSON(w, http.StatusOK, map[string]bool{"recorded": true})
+}
+
 // --- approvals & questions ---
 
 type resolveApprovalRequest struct {

@@ -236,12 +236,14 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/sessions/{id}/snapshot", s.handleSnapshot)
 	mux.HandleFunc("POST /v1/sessions/{id}/prompts", s.handleSubmitPrompt)
 	mux.HandleFunc("POST /v1/sessions/{id}/cancel", s.handleCancelTurn)
+	mux.HandleFunc("POST /v1/sessions/{id}/feedback", s.handleSubmitFeedback)
 	mux.HandleFunc("POST /v1/sessions/{id}/approvals/{approvalID}", s.handleResolveApproval)
 	mux.HandleFunc("POST /v1/sessions/{id}/questions/{questionID}", s.handleAnswerQuestion)
 	mux.HandleFunc("POST /v1/sessions/{id}/model", s.handleSetModel)
 	mux.HandleFunc("POST /v1/sessions/{id}/reasoning", s.handleSetReasoning)
 	mux.HandleFunc("POST /v1/sessions/{id}/compact", s.handleRequestCompaction)
 	mux.HandleFunc("GET /v1/sessions/{id}/events", s.handleSessionEvents)
+	mux.HandleFunc("GET /v1/artifacts/{id}", s.handleArtifact)
 	if !s.cfg.NoWeb {
 		// Catch-all for the embedded SPA; ServeMux gives the /v1 patterns
 		// precedence (docs/WEB_DESIGN.md §7.1).

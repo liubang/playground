@@ -22,6 +22,7 @@ go_library(
     srcs = [
         "auth.go",
         "errors.go",
+        "handlers_artifacts.go",
         "handlers_events.go",
         "handlers_sessions.go",
         "handlers_workspaces.go",
@@ -41,7 +42,10 @@ go_library(
 
 go_test(
     name = "server_test",
-    srcs = ["server_test.go"],
+    srcs = [
+        "handlers_artifacts_test.go",
+        "server_test.go",
+    ],
     embed = [":server"],
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
@@ -52,5 +56,6 @@ go_test(
         "//go/pl/loom/internal/fakes:fakes_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
         "//go/pl/loom/internal/session:session_lib",
+        "//go/pl/loom/internal/trace",
     ],
 )

@@ -56,6 +56,39 @@ func TestNewRunStartsPreparing(t *testing.T) {
 	}
 }
 
+func TestAddAssistantMessageStampsRunAndTrace(t *testing.T) {
+	run := newTestRun(domain.DefaultLimits())
+	run.TraceID = "trace-abc123"
+	run.AddAssistantMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleAssistant,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}},
+		CreatedAt: run.Clock.Now(),
+	})
+	got := run.Messages[len(run.Messages)-1]
+	if got.Metadata["run_id"] != run.ID.String() {
+		t.Fatalf("run_id metadata = %q, want %q", got.Metadata["run_id"], run.ID.String())
+	}
+	if got.Metadata["trace_id"] != "trace-abc123" {
+		t.Fatalf("trace_id metadata = %q, want trace-abc123", got.Metadata["trace_id"])
+	}
+}
+
+func TestAddAssistantMessageOmitsTraceIDWhenTracingOff(t *testing.T) {
+	run := newTestRun(domain.DefaultLimits())
+	run.AddAssistantMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleAssistant,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}},
+		CreatedAt: run.Clock.Now(),
+	})
+	got := run.Messages[len(run.Messages)-1]
+	if got.Metadata["run_id"] != run.ID.String() {
+		t.Fatalf("run_id metadata = %q, want %q", got.Metadata["run_id"], run.ID.String())
+	}
+	if _, ok := got.Metadata["trace_id"]; ok {
+		t.Fatalf("trace_id must be omitted when the run has no trace, got %q", got.Metadata["trace_id"])
+	}
+}
+
 func TestContinueRunFromTerminalCheckpoint(t *testing.T) {
 	clock := domain.NewFakeClock(time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC))
 	sessionID := domain.NewSessionID()

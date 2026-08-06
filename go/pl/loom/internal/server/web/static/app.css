@@ -231,9 +231,13 @@ button { font: inherit; cursor: pointer; }
 .block { animation: fadein .12s ease; }
 @keyframes fadein { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 
-/* user 消息：右侧气泡 */
+/* user 消息：右侧气泡（容器无背景，气泡样式在 .user-bubble 上，
+   操作行/时间显示在气泡下方，不占气泡内部空间） */
 .block-user {
   align-self: flex-end; max-width: 72%;
+  display: flex; flex-direction: column;
+}
+.user-bubble {
   background: var(--bubble-user); color: var(--fg);
   border-radius: 14px 14px 4px 14px; padding: 9px 14px;
 }
@@ -272,6 +276,41 @@ button { font: inherit; cursor: pointer; }
 /* stream 草稿光标（草稿为 markdown 实时渲染，光标跟随渲染内容末尾） */
 .stream-cursor { display: inline-block; color: var(--primary); animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
+
+/* 消息操作行：复制 / 点赞 / 踩 + 时间。
+   对话结束后常显——既是反馈/复制入口，也是该条消息已结束的标志。 */
+.msg-actions {
+  display: flex; align-items: center; gap: 4px; margin-top: 6px;
+  font-size: var(--text-xs); color: var(--muted);
+}
+
+.msg-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 24px; padding: 0;
+  background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: var(--muted); user-select: none;
+  transition: color .12s ease, background .12s ease;
+}
+.msg-action svg { width: 15px; height: 15px; display: block; }
+.msg-action:hover { color: var(--fg); background: var(--bg2); }
+.msg-action:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.msg-action.msg-copy.is-done { color: var(--success); }
+.msg-action.msg-copy.is-fail { color: var(--error); }
+.msg-action.msg-up.is-active { color: var(--primary); }
+.msg-action.msg-up.is-active svg { fill: var(--primary); }
+.msg-action.msg-down.is-active { color: var(--error); }
+.msg-action.msg-down.is-active svg { fill: var(--error); }
+
+/* user 气泡：操作行右对齐于气泡下方，时间在左、复制在右 */
+.block-user .msg-actions { justify-content: flex-end; }
+.block-user .msg-time-tip { margin-left: 0; margin-right: 4px; }
+
+/* 消息时间：常显短格式（8月6日 14:34），悬浮由原生 title 给完整时间 */
+.msg-time-tip {
+  margin-left: auto; padding-left: 6px;
+  color: var(--muted); font-size: var(--text-xs); white-space: nowrap;
+  cursor: default; opacity: .7;
+}
 
 /* thinking：等待模型输出的三点动画 */
 .block-thinking { display: flex; align-items: center; gap: 6px; padding: 6px 2px; }
@@ -325,6 +364,13 @@ button { font: inherit; cursor: pointer; }
   max-height: 200px; overflow-y: auto;
 }
 .block-tool .tool-error { margin-top: 8px; font-size: var(--text-sm); color: var(--error); white-space: pre-wrap; }
+
+/* image 块（内联图片 / artifact 引用图片） */
+.block-image { margin: 4px 0; }
+.block-image .inline-image {
+  max-width: 100%; border-radius: var(--radius-md);
+  border: 1px solid var(--bg2);
+}
 
 /* diff */
 .diff { margin-top: 8px; border: 1px solid var(--bg2); border-radius: var(--radius-sm); overflow: hidden; font-size: var(--text-sm); line-height: 1.55; }

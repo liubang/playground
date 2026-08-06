@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +40,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
+	"github.com/liubang/playground/go/pl/loom/internal/trace"
 )
 
 const testToken = "test-token-0123456789abcdef"
@@ -46,6 +48,13 @@ const testToken = "test-token-0123456789abcdef"
 // newTestService builds a SessionService over a real SQLite store with a
 // fake model.
 func newTestService(t *testing.T, model domain.Model) *app.SessionService {
+	t.Helper()
+	return newTestServiceWithRecorder(t, model, nil)
+}
+
+// newTestServiceWithRecorder is newTestService with an optional trace
+// recorder wired into the process runtime (nil = tracing disabled).
+func newTestServiceWithRecorder(t *testing.T, model domain.Model, rec trace.Recorder) *app.SessionService {
 	t.Helper()
 	ctx := context.Background()
 	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
@@ -77,6 +86,7 @@ func newTestService(t *testing.T, model domain.Model) *app.SessionService {
 			Current:  resolved.Default,
 			Store:    store,
 			Artifact: artStore,
+			Recorder: rec,
 			// A workspace assembled on demand (registering a new one) wires the
 			// ask_user tool, which requires a non-nil questioner.
 			Questioner: domain.AutonomousQuestioner{},
@@ -91,7 +101,13 @@ func newTestService(t *testing.T, model domain.Model) *app.SessionService {
 // fake model, and an httptest server running the adapter against it.
 func newTestServer(t *testing.T, model domain.Model) (*httptest.Server, *app.SessionService) {
 	t.Helper()
-	svc := newTestService(t, model)
+	return newTestServerWithRecorder(t, model, nil)
+}
+
+// newTestServerWithRecorder is newTestServer with an optional trace recorder.
+func newTestServerWithRecorder(t *testing.T, model domain.Model, rec trace.Recorder) (*httptest.Server, *app.SessionService) {
+	t.Helper()
+	svc := newTestServiceWithRecorder(t, model, rec)
 	srv, err := New(Config{
 		Token:   testToken,
 		Version: "test",
@@ -842,5 +858,167 @@ func TestListSessionsDefaultScope(t *testing.T) {
 	_, allList := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions?workspace_id=all", "")
 	if ids := sessionIDs(allList); len(ids) != 2 {
 		t.Fatalf("all-scope ids = %v, want 2 sessions", ids)
+	}
+}
+
+// --- feedback ---
+
+// feedbackRecorder is a fake trace.Recorder: every run gets a deterministic
+// trace id ("trace-<runID>") and ScoreTrace captures submissions.
+type feedbackRecorder struct {
+	mu      sync.Mutex
+	scores  []capturedScore
+	deliver bool
+}
+
+type capturedScore struct {
+	traceID string
+	name    string
+	value   float64
+	comment string
+}
+
+func (f *feedbackRecorder) StartRun(ctx context.Context, meta trace.RunMeta) (context.Context, trace.RunHandle) {
+	return ctx, feedbackRunHandle{traceID: "trace-" + meta.RunID}
+}
+
+func (f *feedbackRecorder) ScoreTrace(_ context.Context, traceID, name string, value float64, comment string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.deliver {
+		return false
+	}
+	f.scores = append(f.scores, capturedScore{traceID: traceID, name: name, value: value, comment: comment})
+	return true
+}
+
+// setDeliver flips delivery mid-test (e.g. simulating a backend outage);
+// it goes through the mutex because ScoreTrace runs on handler goroutines.
+func (f *feedbackRecorder) setDeliver(v bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deliver = v
+}
+
+func (f *feedbackRecorder) captured() []capturedScore {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]capturedScore(nil), f.scores...)
+}
+
+type feedbackRunHandle struct{ traceID string }
+
+func (h feedbackRunHandle) RecordGeneration(context.Context, trace.GenerationRecord) {}
+func (h feedbackRunHandle) RecordTool(context.Context, trace.ToolRecord)             {}
+func (h feedbackRunHandle) RecordEvent(context.Context, string, map[string]string)   {}
+func (h feedbackRunHandle) Score(context.Context, string, float64, string)           {}
+func (h feedbackRunHandle) TraceID() string                                          { return h.traceID }
+func (h feedbackRunHandle) End(trace.RunResult)                                      {}
+
+// snapshotAssistantMeta extracts (run_id, trace_id) from the last assistant
+// message in a snapshot body. The session state flips to idle before the
+// final message projection lands, so poll briefly instead of reading once.
+func snapshotAssistantMeta(t *testing.T, ts *httptest.Server, sessionID string) (string, string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		_, body := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions/"+sessionID+"/snapshot", "")
+		msgs, _ := body["messages"].([]any)
+		for i := len(msgs) - 1; i >= 0; i-- {
+			m, _ := msgs[i].(map[string]any)
+			if m["role"] != "assistant" {
+				continue
+			}
+			meta, _ := m["metadata"].(map[string]any)
+			runID, _ := meta["run_id"].(string)
+			traceID, _ := meta["trace_id"].(string)
+			if runID != "" {
+				return runID, traceID
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("no assistant message with run_id metadata in snapshot")
+	return "", ""
+}
+
+func TestSubmitFeedbackEndpoint(t *testing.T) {
+	rec := &feedbackRecorder{deliver: true}
+	ts, _ := newTestServerWithRecorder(t, fakes.NewFakeModel(fakes.ScriptEntry{Text: "hello world", StopReason: domain.StopEndTurn}), rec)
+
+	id := createTestSession(t, ts)
+	status, _ := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/prompts", `{"prompt":"hello"}`)
+	if status != http.StatusAccepted {
+		t.Fatalf("submit prompt status = %d, want 202", status)
+	}
+	waitIdle(t, ts, id)
+
+	runID, traceID := snapshotAssistantMeta(t, ts, id)
+	if traceID != "trace-"+runID {
+		t.Fatalf("stamped trace_id = %q, want trace-%s", traceID, runID)
+	}
+
+	// Happy path: a vote lands on the run's trace as a user_feedback score.
+	status, body := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/feedback",
+		fmt.Sprintf(`{"run_id":%q,"value":1,"comment":"nice"}`, runID))
+	if status != http.StatusOK || body["recorded"] != true {
+		t.Fatalf("feedback status = %d body = %v, want 200 recorded=true", status, body)
+	}
+	scores := rec.captured()
+	if len(scores) != 1 {
+		t.Fatalf("captured scores = %v, want exactly 1", scores)
+	}
+	got := scores[0]
+	if got.traceID != traceID || got.name != app.FeedbackScoreName || got.value != 1 || got.comment != "nice" {
+		t.Fatalf("captured score = %+v, want trace=%s name=user_feedback value=1", got, traceID)
+	}
+
+	// Re-vote (down) overwrites: another submission, same trace.
+	status, _ = doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/feedback",
+		fmt.Sprintf(`{"run_id":%q,"value":0}`, runID))
+	if status != http.StatusOK {
+		t.Fatalf("re-vote status = %d, want 200", status)
+	}
+	if scores = rec.captured(); len(scores) != 2 || scores[1].value != 0 {
+		t.Fatalf("captured scores after re-vote = %v", scores)
+	}
+
+	// Unknown run → 404 feedback_target_unknown.
+	status, body = doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/feedback",
+		fmt.Sprintf(`{"run_id":%q,"value":1}`, domain.NewRunID().String()))
+	if status != http.StatusNotFound || body["error"].(map[string]any)["code"] != "feedback_target_unknown" {
+		t.Fatalf("unknown run status = %d body = %v, want 404 feedback_target_unknown", status, body)
+	}
+
+	// Bad inputs → 400.
+	status, _ = doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/feedback", `{"run_id":"bogus","value":1}`)
+	if status != http.StatusBadRequest {
+		t.Fatalf("bad run_id status = %d, want 400", status)
+	}
+	status, _ = doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/feedback",
+		fmt.Sprintf(`{"run_id":%q,"value":2}`, runID))
+	if status != http.StatusBadRequest {
+		t.Fatalf("bad value status = %d, want 400", status)
+	}
+}
+
+// TestSubmitFeedbackTracingDisabled: the turn ran with a trace id stamped,
+// but the score backend refuses delivery → 503 tracing_disabled.
+func TestSubmitFeedbackTracingDisabled(t *testing.T) {
+	rec := &feedbackRecorder{deliver: true}
+	ts, _ := newTestServerWithRecorder(t, fakes.NewFakeModel(fakes.ScriptEntry{Text: "hello world", StopReason: domain.StopEndTurn}), rec)
+
+	id := createTestSession(t, ts)
+	if status, _ := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/prompts", `{"prompt":"hello"}`); status != http.StatusAccepted {
+		t.Fatalf("submit prompt status = %d, want 202", status)
+	}
+	waitIdle(t, ts, id)
+	runID, _ := snapshotAssistantMeta(t, ts, id)
+
+	rec.setDeliver(false)
+	status, body := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/feedback",
+		fmt.Sprintf(`{"run_id":%q,"value":1}`, runID))
+	if status != http.StatusServiceUnavailable || body["error"].(map[string]any)["code"] != "tracing_disabled" {
+		t.Fatalf("status = %d body = %v, want 503 tracing_disabled", status, body)
 	}
 }

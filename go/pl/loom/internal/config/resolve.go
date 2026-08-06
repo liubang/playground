@@ -30,6 +30,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/logging"
 	"github.com/liubang/playground/go/pl/loom/internal/model/anthropic"
+	"github.com/liubang/playground/go/pl/loom/internal/model/images"
 	"github.com/liubang/playground/go/pl/loom/internal/model/openai"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
@@ -114,6 +115,7 @@ type ResolvedConfig struct {
 	UI        UI
 	Subagent  ResolvedSubagent
 	Memory    ResolvedMemory
+	Image     ResolvedImage
 	MCP       ResolvedMCP
 	// Workspaces are the pre-registered project workspaces (docs/WORKSPACE_DESIGN.md §10).
 	Workspaces []ResolvedWorkspace
@@ -249,6 +251,19 @@ func expandHomeDir(path string) (string, error) {
 		return home, nil
 	}
 	return filepath.Join(home, path[2:]), nil
+}
+
+// ResolvedImage is the image section with defaults applied. Generator is
+// the prebuilt images client (constructed at load time like chat
+// providers); it is nil whenever Enabled is false.
+type ResolvedImage struct {
+	Enabled  bool
+	Provider string
+	Model    string
+	// Size/Quality are the generation defaults; empty means "auto".
+	Size      string
+	Quality   string
+	Generator images.Generator
 }
 
 // ResolvedSubagent is the subagent section with defaults applied
@@ -390,7 +405,7 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 	if lookup == nil {
 		return nil, fmt.Errorf("config: env lookup is required")
 	}
-	providers, err := resolveProviders(f.Providers, lookup)
+	providers, auths, err := resolveProviders(f.Providers, lookup)
 	if err != nil {
 		return nil, err
 	}
@@ -481,6 +496,13 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 	}
 	out.Memory = memory
 
+	// Text-to-image: reuses a named provider's endpoint and credentials.
+	image, err := resolveImage(f.Image, auths)
+	if err != nil {
+		return nil, err
+	}
+	out.Image = image
+
 	// MCP servers: validate config-level constraints; runtime startup
 	// (process spawning, tool discovery) happens in bootstrap.go.
 	resolvedMCP, err := resolveMCP(f.MCPServers, lookup)
@@ -498,9 +520,30 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 	return out, nil
 }
 
+// providerAuth carries a resolved provider's connection credentials for
+// sibling clients that share the endpoint (the images generator); the API
+// key never leaves the config package except inside prebuilt clients.
+type providerAuth struct {
+	pType   string
+	baseURL string
+	apiKey  string
+}
+
 // resolveProviders validates uniqueness and required fields, resolves each
-// API key, and prebuilds one domain.Model per provider.
-func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, error) {
+// API key, and prebuilds one domain.Model per provider. It also returns the
+// per-provider credentials for endpoint-sharing clients (image generation).
+func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, map[string]providerAuth, error) {
+	auths := make(map[string]providerAuth, len(in))
+	out, err := resolveProviderList(in, lookup, auths)
+	if err != nil {
+		return nil, nil, err
+	}
+	return out, auths, nil
+}
+
+// resolveProviderList is the validation/assembly loop; resolved
+// credentials are recorded into auths for endpoint-sharing clients.
+func resolveProviderList(in []Provider, lookup EnvLookup, auths map[string]providerAuth) ([]ResolvedProvider, error) {
 	seen := make(map[string]bool, len(in))
 	out := make([]ResolvedProvider, 0, len(in))
 	for i := range in {
@@ -629,6 +672,7 @@ func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, erro
 			}
 			wireModels[name] = inst
 		}
+		auths[p.Name] = providerAuth{pType: pType, baseURL: strings.TrimSpace(p.BaseURL), apiKey: apiKey}
 		out = append(out, ResolvedProvider{
 			Name:         p.Name,
 			Model:        instance,
@@ -638,6 +682,55 @@ func resolveProviders(in []Provider, lookup EnvLookup) ([]ResolvedProvider, erro
 		})
 	}
 	return out, nil
+}
+
+// resolveImage validates the image section and prebuilds the images client
+// from the named provider's endpoint and credentials. Generation is opt-in:
+// the section stays disabled when entirely absent or when enabled is
+// explicitly false.
+func resolveImage(in Image, auths map[string]providerAuth) (ResolvedImage, error) {
+	provider := strings.TrimSpace(in.Provider)
+	model := strings.TrimSpace(in.Model)
+	if in.Enabled != nil && !*in.Enabled {
+		return ResolvedImage{}, nil
+	}
+	if provider == "" && model == "" {
+		if in.Enabled != nil {
+			return ResolvedImage{}, fmt.Errorf("config: image: provider and model are required when enabled")
+		}
+		if in.Size != "" || in.Quality != "" {
+			return ResolvedImage{}, fmt.Errorf("config: image: size/quality require provider and model")
+		}
+		return ResolvedImage{}, nil
+	}
+	if provider == "" || model == "" {
+		return ResolvedImage{}, fmt.Errorf("config: image: provider and model must both be set")
+	}
+	auth, ok := auths[provider]
+	if !ok {
+		return ResolvedImage{}, fmt.Errorf("config: image: unknown provider %q", provider)
+	}
+	if auth.pType != "openai" {
+		return ResolvedImage{}, fmt.Errorf("config: image: provider %q is %q; only openai-type providers expose an Images API", provider, auth.pType)
+	}
+	if in.Size != "" && !images.ValidSize(in.Size) {
+		return ResolvedImage{}, fmt.Errorf("config: image: invalid size %q", in.Size)
+	}
+	if in.Quality != "" && !images.ValidQuality(in.Quality) {
+		return ResolvedImage{}, fmt.Errorf("config: image: invalid quality %q", in.Quality)
+	}
+	gen, err := images.NewOpenAI(images.Config{BaseURL: auth.baseURL, APIKey: auth.apiKey})
+	if err != nil {
+		return ResolvedImage{}, fmt.Errorf("config: image: %w", err)
+	}
+	return ResolvedImage{
+		Enabled:   true,
+		Provider:  provider,
+		Model:     model,
+		Size:      in.Size,
+		Quality:   in.Quality,
+		Generator: gen,
+	}, nil
 }
 
 // resolveSecret implements the inline-or-env-reference rule for a secret
