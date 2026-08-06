@@ -105,6 +105,11 @@ func (c *Consolidator) Consolidate(ctx context.Context) (bool, error) {
 		newSummary = truncateToSummary(newMain)
 	}
 
+	// Scrub secrets before persisting (P3): existing MEMORY.md content may
+	// predate transcript redaction and the model may echo it verbatim.
+	newMain = RedactSecrets(newMain)
+	newSummary = RedactSecrets(newSummary)
+
 	// Write the updated files.
 	if err := c.store.WriteMain(newMain); err != nil {
 		return false, fmt.Errorf("write MEMORY.md: %w", err)

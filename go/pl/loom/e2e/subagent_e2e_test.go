@@ -96,7 +96,7 @@ func TestE2EDelegateTask(t *testing.T) {
 	}
 
 	run := newBudgetRun(t, domain.DefaultLimits())
-	if err := store.CreateSession(context.Background(), run.SessionID); err != nil {
+	if err := store.CreateSession(context.Background(), run.SessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	models.Set(subagent.ModelSnapshot{
@@ -225,7 +225,7 @@ func TestE2EDelegateTaskParallel(t *testing.T) {
 	}
 
 	run := newBudgetRun(t, domain.DefaultLimits())
-	if err := store.CreateSession(context.Background(), run.SessionID); err != nil {
+	if err := store.CreateSession(context.Background(), run.SessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	models.Set(subagent.ModelSnapshot{Model: model, ModelName: "mock-model", ParentSession: run.SessionID})
@@ -342,7 +342,7 @@ func TestE2EDelegateTaskObservability(t *testing.T) {
 	}
 
 	run := newBudgetRun(t, domain.DefaultLimits())
-	if err := store.CreateSession(context.Background(), run.SessionID); err != nil {
+	if err := store.CreateSession(context.Background(), run.SessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	models.Set(subagent.ModelSnapshot{Model: model, ModelName: "mock-model", ParentSession: run.SessionID})
@@ -391,7 +391,7 @@ drained:
 	}
 
 	// The drill-in projection reads the child checkpoint directly.
-	controller := app.NewController(app.ControllerConfig{Bootstrap: &app.Bootstrap{Store: store}})
+	controller := app.NewController(app.ControllerConfig{Bootstrap: &app.Bootstrap{ProcessRuntime: &app.ProcessRuntime{Store: store}}})
 	view, err := controller.SubagentView(context.Background(), startedPayload.ChildSessionID)
 	if err != nil {
 		t.Fatalf("SubagentView() error = %v", err)

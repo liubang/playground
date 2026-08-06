@@ -913,6 +913,65 @@ func TestMarshalResponsesRequestIncludesTemperature(t *testing.T) {
 	}
 }
 
+// ResponseFormat wiring (P4): both wire APIs must carry the JSON schema
+// constraint in their respective shapes.
+func TestMarshalChatCompletionsRequestIncludesResponseFormat(t *testing.T) {
+	body, err := marshalChatCompletionsRequest(domain.ModelRequest{
+		ModelName: "gpt-test",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "hi")},
+		ResponseFormat: &domain.ResponseFormat{
+			Name:   "memory_extraction",
+			Schema: map[string]any{"type": "object"},
+			Strict: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshalChatCompletionsRequest: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	rf, ok := payload["response_format"].(map[string]any)
+	if !ok {
+		t.Fatalf("response_format missing: %v", payload)
+	}
+	if rf["type"] != "json_schema" {
+		t.Fatalf("response_format.type = %v, want json_schema", rf["type"])
+	}
+	js, ok := rf["json_schema"].(map[string]any)
+	if !ok || js["name"] != "memory_extraction" || js["strict"] != true {
+		t.Fatalf("json_schema = %v", rf["json_schema"])
+	}
+}
+
+func TestMarshalResponsesRequestIncludesResponseFormat(t *testing.T) {
+	body, err := marshalResponsesRequest(domain.ModelRequest{
+		ModelName: "gpt-test",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "hi")},
+		ResponseFormat: &domain.ResponseFormat{
+			Name:   "memory_extraction",
+			Schema: map[string]any{"type": "object"},
+			Strict: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshalResponsesRequest: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	text, ok := payload["text"].(map[string]any)
+	if !ok {
+		t.Fatalf("text missing: %v", payload)
+	}
+	format, ok := text["format"].(map[string]any)
+	if !ok || format["type"] != "json_schema" || format["name"] != "memory_extraction" || format["strict"] != true {
+		t.Fatalf("text.format = %v", text["format"])
+	}
+}
+
 func textMessage(role domain.Role, text string) domain.Message {
 	return domain.Message{
 		ID:        domain.NewMessageID(),

@@ -30,7 +30,7 @@ func TestFakeStoreCreateAndAppend(t *testing.T) {
 	ctx := context.Background()
 	sid := domain.NewSessionID()
 
-	if err := store.CreateSession(ctx, sid); err != nil {
+	if err := store.CreateSession(ctx, sid, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession error: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestFakeStoreVersionMismatch(t *testing.T) {
 	ctx := context.Background()
 	sid := domain.NewSessionID()
 
-	_ = store.CreateSession(ctx, sid)
+	_ = store.CreateSession(ctx, sid, domain.WorkspaceID{})
 
 	err := store.AppendEvents(ctx, sid, 999, nil)
 	if err == nil {
@@ -80,8 +80,8 @@ func TestFakeStoreDuplicateSession(t *testing.T) {
 	ctx := context.Background()
 	sid := domain.NewSessionID()
 
-	_ = store.CreateSession(ctx, sid)
-	err := store.CreateSession(ctx, sid)
+	_ = store.CreateSession(ctx, sid, domain.WorkspaceID{})
+	err := store.CreateSession(ctx, sid, domain.WorkspaceID{})
 	if err == nil {
 		t.Fatal("expected duplicate session error")
 	}
@@ -92,7 +92,7 @@ func TestFakeStoreLoadEvents(t *testing.T) {
 	ctx := context.Background()
 	sid := domain.NewSessionID()
 
-	_ = store.CreateSession(ctx, sid)
+	_ = store.CreateSession(ctx, sid, domain.WorkspaceID{})
 
 	evts := []domain.Event{
 		{ID: domain.NewEventID(), Sequence: 1, SessionID: sid, Type: domain.EventSessionCreated, Timestamp: time.Now()},
@@ -114,7 +114,7 @@ func TestFakeStoreLoadEventsAfterSequence(t *testing.T) {
 	ctx := context.Background()
 	sid := domain.NewSessionID()
 
-	_ = store.CreateSession(ctx, sid)
+	_ = store.CreateSession(ctx, sid, domain.WorkspaceID{})
 
 	evts := []domain.Event{
 		{ID: domain.NewEventID(), Sequence: 1, SessionID: sid, Type: domain.EventSessionCreated, Timestamp: time.Now()},
@@ -136,7 +136,7 @@ func TestFakeStoreCheckpoint(t *testing.T) {
 	ctx := context.Background()
 	sid := domain.NewSessionID()
 
-	_ = store.CreateSession(ctx, sid)
+	_ = store.CreateSession(ctx, sid, domain.WorkspaceID{})
 
 	ckpt := domain.Checkpoint{
 		ID:        domain.NewCheckpointID(),

@@ -103,6 +103,19 @@ func (s ReasoningSpec) Enabled() bool {
 	return s.BudgetTokens > 0 || (s.Effort != "" && s.Effort != ReasoningEffortOff)
 }
 
+// ResponseFormat constrains the model response to a JSON schema. Only
+// providers whose wire API supports structured outputs honor it; the rest
+// silently ignore it, so callers must keep a prompt-level description of
+// the format and a lenient parse fallback.
+type ResponseFormat struct {
+	// Name is a short identifier for the schema (provider-side bookkeeping).
+	Name string
+	// Schema is a JSON Schema document (already decoded for easy building).
+	Schema map[string]any
+	// Strict requests exact schema conformance where the wire API supports it.
+	Strict bool
+}
+
 // ModelRequest is the unified input to a model provider.
 type ModelRequest struct {
 	ID              EventID
@@ -113,6 +126,8 @@ type ModelRequest struct {
 	Temperature     float64
 	Reasoning       ReasoningSpec
 	ContextManifest ContextManifest
+	// ResponseFormat optionally requests schema-constrained JSON output.
+	ResponseFormat *ResponseFormat
 }
 
 // StopReason classifies why the model stopped generating.
@@ -205,6 +220,9 @@ type SessionSummary struct {
 	Version   int64     `json:"version"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// WorkspaceID is the owning workspace (docs/WORKSPACE_DESIGN.md W1);
+	// zero only for pre-v5 rows not yet backfilled.
+	WorkspaceID WorkspaceID `json:"workspace_id"`
 	// ParentSessionID is non-zero for delegated sub-agent sessions: the
 	// delegation edge persisted in the child's run.created event
 	// (docs/SUBAGENT_DESIGN.md §6.1), surfaced for hierarchical pickers.
@@ -220,10 +238,10 @@ type SessionTranscript struct {
 
 // SessionInspection is a consistent read-only view of persisted session data.
 type SessionInspection struct {
-	Session    SessionSummary     `json:"session"`
-	Checkpoint *Checkpoint        `json:"checkpoint,omitempty"`
-	Transcript SessionTranscript  `json:"transcript"`
-	Events     []Event            `json:"events"`
+	Session    SessionSummary    `json:"session"`
+	Checkpoint *Checkpoint       `json:"checkpoint,omitempty"`
+	Transcript SessionTranscript `json:"transcript"`
+	Events     []Event           `json:"events"`
 }
 
 // --- SessionStore interface (§13.2) ---
@@ -245,7 +263,9 @@ type Checkpoint struct {
 
 // SessionStore persists events and checkpoints.
 type SessionStore interface {
-	CreateSession(ctx context.Context, sessionID SessionID) error
+	// CreateSession creates an empty session bound to workspaceID
+	// (docs/WORKSPACE_DESIGN.md W1); workspaceID must be non-zero.
+	CreateSession(ctx context.Context, sessionID SessionID, workspaceID WorkspaceID) error
 	AppendEvents(ctx context.Context, sessionID SessionID, expectedVersion int64, events []Event) error
 	AppendEventsAndCheckpoint(ctx context.Context, sessionID SessionID, expectedVersion int64, events []Event, checkpoint Checkpoint) error
 	LoadEvents(ctx context.Context, sessionID SessionID, after int64) ([]Event, error)

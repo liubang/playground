@@ -34,6 +34,7 @@ go_library(
         "plan.go",
         "question.go",
         "tool.go",
+        "workspace.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/domain",
     visibility = ["//visibility:public"],

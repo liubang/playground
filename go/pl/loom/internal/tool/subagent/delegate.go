@@ -153,6 +153,9 @@ type Factory struct {
 	// ResearcherInstructions; no skills catalog, no managed prompt).
 	Prompt    agent.PromptBuilder
 	Workspace string
+	// WorkspaceID is the owning workspace entity; child sessions inherit it
+	// so they share the parent's workspace (docs/WORKSPACE_DESIGN.md W1).
+	WorkspaceID domain.WorkspaceID
 	// Limits is the child run's budget (derived from the resolved
 	// limits with subagent.max_tokens applied); the child's runaway
 	// detection reuses the parent configuration.
@@ -360,7 +363,7 @@ func (t *DelegateTaskTool) executeSync(ctx context.Context, prepared domain.Prep
 	}
 
 	childSessionID := domain.NewSessionID()
-	if err := t.f.Store.CreateSession(ctx, childSessionID); err != nil {
+	if err := t.f.Store.CreateSession(ctx, childSessionID, t.f.WorkspaceID); err != nil {
 		return delegateError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal,
 			"failed to create sub-agent session", domain.WithCause(err)), nil)
 	}
@@ -540,10 +543,10 @@ func lastAssistantText(messages []domain.Message) string {
 }
 
 type delegateArgs struct {
-	Task   string   `json:"task"`
-	Focus  []string `json:"focus"`
-	Role   string   `json:"role"`
-	Async  bool     `json:"async"`
+	Task  string   `json:"task"`
+	Focus []string `json:"focus"`
+	Role  string   `json:"role"`
+	Async bool     `json:"async"`
 }
 
 func decodeDelegateArgs(raw json.RawMessage) (delegateArgs, error) {

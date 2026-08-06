@@ -41,7 +41,7 @@ func newTestService(t *testing.T, model domain.Model) (*SessionService, *runtime
 	t.Cleanup(func() { store.Close() })
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	t.Cleanup(broker.Close)
-	svc := NewSessionService(testBootstrap(store, model), broker, SessionServiceConfig{})
+	svc := NewSingletonWorkspaceService(testBootstrap(store, model), broker, SessionServiceConfig{})
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
 	return svc, broker
 }
@@ -64,7 +64,7 @@ func TestSessionServiceCreateAndSingleton(t *testing.T) {
 	svc, _ := newTestService(t, fakes.NewFakeModel())
 	ctx := context.Background()
 
-	h, err := svc.CreateSession(ctx)
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestSessionServiceSubmitPromptAndIdempotency(t *testing.T) {
 	svc, _ := newTestService(t, model)
 	ctx := context.Background()
 
-	h, err := svc.CreateSession(ctx)
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -125,11 +125,11 @@ func TestSessionServiceIsolatesSessionState(t *testing.T) {
 	svc, _ := newTestService(t, fakes.NewFakeModel())
 	ctx := context.Background()
 
-	h1, err := svc.CreateSession(ctx)
+	h1, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession(1): %v", err)
 	}
-	h2, err := svc.CreateSession(ctx)
+	h2, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession(2): %v", err)
 	}
@@ -149,7 +149,7 @@ func TestSessionServiceSubscribeEventsReplayAndLive(t *testing.T) {
 	svc, _ := newTestService(t, model)
 	ctx := context.Background()
 
-	h, err := svc.CreateSession(ctx)
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestSessionServiceSubscribeCursorInvalid(t *testing.T) {
 	svc, _ := newTestService(t, fakes.NewFakeModel())
 	ctx := context.Background()
 
-	h, err := svc.CreateSession(ctx)
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestSessionServiceResumeFromStore(t *testing.T) {
 	svc, _ := newTestService(t, model)
 	ctx := context.Background()
 
-	h, err := svc.CreateSession(ctx)
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -253,11 +253,11 @@ func TestSessionServiceSnapshotWatermarkHandoff(t *testing.T) {
 	svc, broker := newTestService(t, model)
 	ctx := context.Background()
 
-	busy, err := svc.CreateSession(ctx)
+	busy, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession(busy): %v", err)
 	}
-	quiet, err := svc.CreateSession(ctx)
+	quiet, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession(quiet): %v", err)
 	}
@@ -305,7 +305,7 @@ func TestSessionServiceSubscribeLatestAfterInvalidate(t *testing.T) {
 	svc, _ := newTestService(t, model)
 	ctx := context.Background()
 
-	h, err := svc.CreateSession(ctx)
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestSessionServiceConcurrentIdempotentSubmit(t *testing.T) {
 	svc, _ := newTestService(t, model)
 	ctx := context.Background()
 
-	h, err := svc.CreateSession(ctx)
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -381,14 +381,14 @@ func TestSessionServiceDraining(t *testing.T) {
 	svc, _ := newTestService(t, fakes.NewFakeModel())
 	ctx := context.Background()
 
-	h, err := svc.CreateSession(ctx)
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if err := svc.Shutdown(ctx); err != nil {
 		t.Fatalf("Shutdown: %v", err)
 	}
-	if _, err := svc.CreateSession(ctx); !errors.Is(err, ErrDraining) {
+	if _, err := svc.CreateSession(ctx, domain.WorkspaceID{}); !errors.Is(err, ErrDraining) {
 		t.Fatalf("CreateSession after shutdown error = %v, want ErrDraining", err)
 	}
 	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "q", nil, ""); !errors.Is(err, ErrDraining) {

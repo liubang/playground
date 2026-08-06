@@ -192,7 +192,7 @@ func (m *Manager) Spawn(spec SpawnSpec) (domain.SessionID, error) {
 	m.mu.Unlock()
 
 	childSessionID := domain.NewSessionID()
-	if err := m.factory.Store.CreateSession(m.rootCtx, childSessionID); err != nil {
+	if err := m.factory.Store.CreateSession(m.rootCtx, childSessionID, m.factory.WorkspaceID); err != nil {
 		<-m.slots
 		return domain.SessionID{}, domain.NewError(domain.ErrInternal,
 			"failed to create sub-agent session", domain.WithCause(err))

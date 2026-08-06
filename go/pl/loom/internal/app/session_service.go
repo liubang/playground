@@ -79,11 +79,13 @@ type SessionServiceConfig struct {
 // SessionHandle owns one live session: its controller, isolated runtime,
 // replay log, subscription fan-out, and idempotency cache.
 type SessionHandle struct {
-	ID         domain.SessionID
-	Controller *Controller
-	Approver   *ChannelApprover
-	Runtime    *SessionRuntime
-	Replay     *runtimeevent.ReplayLog
+	ID domain.SessionID
+	// WorkspaceID is the owning workspace (docs/WORKSPACE_DESIGN.md W1).
+	WorkspaceID domain.WorkspaceID
+	Controller  *Controller
+	Approver    *ChannelApprover
+	Runtime     *SessionRuntime
+	Replay      *runtimeevent.ReplayLog
 
 	mu           sync.Mutex
 	subscribers  map[uint64]chan runtimeevent.RuntimeEvent
@@ -151,9 +153,10 @@ func (h *SessionHandle) rememberIdem(key string, res SubmitResult) {
 // subscribers never touch the broker directly, so a slow client can never
 // stall the runtime.
 type SessionService struct {
-	bootstrap *Bootstrap
-	broker    *runtimeevent.Broker
-	logger    *slog.Logger
+	proc     *ProcessRuntime
+	registry *WorkspaceRegistry
+	broker   *runtimeevent.Broker
+	logger   *slog.Logger
 
 	maxSessions     int
 	idleTTL         time.Duration
@@ -173,14 +176,16 @@ type SessionService struct {
 // NewSessionService creates the service and starts its event pump and idle
 // sweeper. The broker should be constructed with a generous durable queue
 // (e.g. runtimeevent.WithDurableQueue(4096)) — the pump is the only broker
-// subscriber that must never fall behind.
-func NewSessionService(bootstrap *Bootstrap, broker *runtimeevent.Broker, cfg SessionServiceConfig) *SessionService {
+// subscriber that must never fall behind. Sessions are assembled against
+// workspaces resolved through reg (docs/WORKSPACE_DESIGN.md §5.3).
+func NewSessionService(proc *ProcessRuntime, reg *WorkspaceRegistry, broker *runtimeevent.Broker, cfg SessionServiceConfig) *SessionService {
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 	s := &SessionService{
-		bootstrap:       bootstrap,
+		proc:            proc,
+		registry:        reg,
 		broker:          broker,
 		logger:          logger,
 		maxSessions:     cfg.MaxSessions,
@@ -212,24 +217,25 @@ func NewSessionService(bootstrap *Bootstrap, broker *runtimeevent.Broker, cfg Se
 	return s
 }
 
-// newHandle assembles one live session: isolated runtime (fresh cells),
-// its own approver/questioner, and a controller running on the service
-// lifetime context.
-func (s *SessionService) newHandle() (*SessionHandle, error) {
+// newHandle assembles one live session on the given workspace's bootstrap:
+// isolated runtime (fresh cells), its own approver/questioner, and a
+// controller running on the service lifetime context.
+func (s *SessionService) newHandle(ws *Bootstrap) (*SessionHandle, error) {
 	questioner := NewChannelQuestioner(nil)
-	runtime, err := NewIsolatedSessionRuntime(s.bootstrap, questioner)
+	runtime, err := NewIsolatedSessionRuntime(ws, questioner)
 	if err != nil {
 		return nil, fmt.Errorf("build session runtime: %w", err)
 	}
 	approver := NewChannelApprover()
 	controller := NewController(ControllerConfig{
-		Bootstrap: s.bootstrap,
+		Bootstrap: ws,
 		Broker:    s.broker,
 		Approver:  approver,
 		Runtime:   runtime,
 		Logger:    s.logger,
 	})
 	h := &SessionHandle{
+		WorkspaceID:  ws.WorkspaceID,
 		Controller:   controller,
 		Approver:     approver,
 		Runtime:      runtime,
@@ -243,8 +249,90 @@ func (s *SessionService) newHandle() (*SessionHandle, error) {
 	return h, nil
 }
 
-// CreateSession starts a brand-new session and returns its live handle.
-func (s *SessionService) CreateSession(ctx context.Context) (*SessionHandle, error) {
+// workspaceStore returns the process store as a WorkspaceStore when it
+// implements the workspace persistence contract (session.SQLiteStore does).
+func (s *SessionService) workspaceStore() (domain.WorkspaceStore, bool) {
+	store, ok := s.proc.Store.(domain.WorkspaceStore)
+	return store, ok
+}
+
+// DefaultWorkspaceID returns the process's default workspace (the launch
+// directory), zero when none was registered (hand-assembled test services).
+func (s *SessionService) DefaultWorkspaceID() domain.WorkspaceID {
+	return s.registry.DefaultID()
+}
+
+// ListWorkspaces returns every registered workspace, newest first.
+func (s *SessionService) ListWorkspaces(ctx context.Context) ([]domain.Workspace, error) {
+	return s.registry.List(ctx)
+}
+
+// RegisterWorkspace registers (or reuses by canonical root) a workspace and
+// returns its persisted entity (docs/WORKSPACE_DESIGN.md §8.1).
+func (s *SessionService) RegisterWorkspace(ctx context.Context, root, name string) (domain.Workspace, error) {
+	rt, err := s.registry.Register(ctx, root, name)
+	if err != nil {
+		return domain.Workspace{}, err
+	}
+	store, ok := s.workspaceStore()
+	if !ok {
+		return domain.Workspace{ID: rt.WorkspaceID, Name: name, RootPath: rt.WorkspaceRoot}, nil
+	}
+	return store.GetWorkspace(ctx, rt.WorkspaceID)
+}
+
+// GetWorkspace returns the workspace with the given ID.
+func (s *SessionService) GetWorkspace(ctx context.Context, id domain.WorkspaceID) (domain.Workspace, error) {
+	store, ok := s.workspaceStore()
+	if !ok {
+		return domain.Workspace{}, ErrWorkspaceNotFound
+	}
+	return store.GetWorkspace(ctx, id)
+}
+
+// CountSessionsPerWorkspace returns per-workspace session counts for the
+// list-workspaces endpoint.
+func (s *SessionService) CountSessionsPerWorkspace(ctx context.Context) (map[domain.WorkspaceID]int, error) {
+	store, ok := s.workspaceStore()
+	if !ok {
+		return map[domain.WorkspaceID]int{}, nil
+	}
+	return store.CountSessionsPerWorkspace(ctx)
+}
+
+// resolveWorkspace resolves the workspace a session is assembled against.
+// A zero ID falls back to the process's default workspace (legacy clients,
+// docs/WORKSPACE_DESIGN.md W5).
+func (s *SessionService) resolveWorkspace(ctx context.Context, id domain.WorkspaceID) (*Bootstrap, error) {
+	if id.IsZero() {
+		if ws := s.registry.Default(); ws != nil {
+			return ws, nil
+		}
+		return nil, ErrWorkspaceNotFound
+	}
+	return s.registry.Resolve(ctx, id)
+}
+
+// sessionWorkspace looks up a session's owning workspace for resume. A
+// lookup failure (session not found, or a pre-v5 row still carrying the
+// migration default ”) resolves to the zero ID — the caller falls back to
+// the default workspace and the controller reports the authoritative
+// resume error for a genuinely missing session.
+func (s *SessionService) sessionWorkspace(ctx context.Context, id domain.SessionID) domain.WorkspaceID {
+	store, ok := s.proc.Store.(domain.WorkspaceStore)
+	if !ok {
+		return domain.WorkspaceID{}
+	}
+	wsID, err := store.SessionWorkspace(ctx, id)
+	if err != nil {
+		return domain.WorkspaceID{}
+	}
+	return wsID
+}
+
+// CreateSession starts a brand-new session in the given workspace and
+// returns its live handle. A zero workspaceID uses the default workspace.
+func (s *SessionService) CreateSession(ctx context.Context, workspaceID domain.WorkspaceID) (*SessionHandle, error) {
 	s.mu.Lock()
 	if s.closing {
 		s.mu.Unlock()
@@ -256,7 +344,11 @@ func (s *SessionService) CreateSession(ctx context.Context) (*SessionHandle, err
 	}
 	s.mu.Unlock()
 
-	h, err := s.newHandle()
+	ws, err := s.resolveWorkspace(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	h, err := s.newHandle(ws)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +388,14 @@ func (s *SessionService) ResumeSession(ctx context.Context, id domain.SessionID)
 	}
 	s.mu.Unlock()
 
-	h, err := s.newHandle()
+	// Assemble against the session's owning workspace (W1): the persisted
+	// workspace_id determines which PathValidator/policy/prompt assembly the
+	// resumed runtime binds to.
+	ws, err := s.resolveWorkspace(ctx, s.sessionWorkspace(ctx, id))
+	if err != nil {
+		return nil, err
+	}
+	h, err := s.newHandle(ws)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +457,7 @@ type ModelCatalog struct {
 
 // ModelCatalog returns the configured model catalog for frontend pickers.
 func (s *SessionService) ModelCatalog() ModelCatalog {
-	resolved := s.bootstrap.Resolved
+	resolved := s.proc.Resolved
 	catalog := ModelCatalog{Default: resolved.Default.String()}
 	for i := range resolved.Providers {
 		p := &resolved.Providers[i]
@@ -389,12 +488,12 @@ func summarizeSessionTitle(text string) string {
 // state=closed. archived selects the archived view. cursor ("" = first
 // page) enables keyset pagination for infinite-scroll pickers; nextCursor
 // is "" when the page is the last one.
-func (s *SessionService) ListSessions(ctx context.Context, cursor string, limit int, archived bool) ([]SessionSummary, string, error) {
-	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
+func (s *SessionService) ListSessions(ctx context.Context, cursor string, limit int, archived bool, workspaceID domain.WorkspaceID) ([]SessionSummary, string, error) {
+	store, ok := s.proc.Store.(*session.SQLiteStore)
 	if !ok {
 		return nil, "", fmt.Errorf("session listing is unavailable for this store")
 	}
-	summaries, nextCursor, err := store.ListSessions(ctx, cursor, limit, archived)
+	summaries, nextCursor, err := store.ListSessions(ctx, cursor, limit, archived, workspaceID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -413,8 +512,9 @@ func (s *SessionService) ListSessions(ctx context.Context, cursor string, limit 
 		item := SessionSummary{
 			ID: summary.ID, Version: summary.Version,
 			CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt,
-			State: ControllerStateClosed,
-			Title: summarizeSessionTitle(titles[summary.ID]),
+			WorkspaceID: summary.WorkspaceID.String(),
+			State:       ControllerStateClosed,
+			Title:       summarizeSessionTitle(titles[summary.ID]),
 		}
 		if !summary.ParentSessionID.IsZero() {
 			item.ParentSessionID = summary.ParentSessionID.String()
@@ -447,7 +547,7 @@ func (s *SessionService) DeleteSession(ctx context.Context, id domain.SessionID)
 			s.logger.Warn("shutdown before delete failed", "session_id", id, "error", err)
 		}
 	}
-	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
+	store, ok := s.proc.Store.(*session.SQLiteStore)
 	if !ok {
 		return fmt.Errorf("session deletion is unavailable for this store")
 	}
@@ -457,7 +557,7 @@ func (s *SessionService) DeleteSession(ctx context.Context, id domain.SessionID)
 // SetSessionArchived marks a session archived (hidden from default session
 // listings) or restores it to active. The live runtime is unaffected.
 func (s *SessionService) SetSessionArchived(ctx context.Context, id domain.SessionID, archived bool) error {
-	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
+	store, ok := s.proc.Store.(*session.SQLiteStore)
 	if !ok {
 		return fmt.Errorf("session archiving is unavailable for this store")
 	}
@@ -598,7 +698,7 @@ func (s *SessionService) RequestCompaction(ctx context.Context, id domain.Sessio
 
 // Inspect returns the persisted metadata of a session (no events).
 func (s *SessionService) Inspect(ctx context.Context, id domain.SessionID) (domain.SessionInspection, error) {
-	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
+	store, ok := s.proc.Store.(*session.SQLiteStore)
 	if !ok {
 		return domain.SessionInspection{}, fmt.Errorf("session inspection is unavailable for this store")
 	}
@@ -613,7 +713,7 @@ func (s *SessionService) Inspect(ctx context.Context, id domain.SessionID) (doma
 // Transcript returns one page of the session's canonical transcript
 // projection (default limit 200, capped at 1000).
 func (s *SessionService) Transcript(ctx context.Context, id domain.SessionID, after int64, limit int) (session.TranscriptPage, error) {
-	store, ok := s.bootstrap.Store.(*session.SQLiteStore)
+	store, ok := s.proc.Store.(*session.SQLiteStore)
 	if !ok {
 		return session.TranscriptPage{}, fmt.Errorf("transcript is unavailable for this store")
 	}
