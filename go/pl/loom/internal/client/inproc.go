@@ -220,6 +220,10 @@ func (c *inprocClient) RegisterWorkspace(ctx context.Context, root, name string)
 	return c.service.RegisterWorkspace(ctx, root, name)
 }
 
+func (c *inprocClient) DeleteWorkspace(ctx context.Context, id domain.WorkspaceID) error {
+	return c.service.DeleteWorkspace(ctx, id)
+}
+
 func (c *inprocClient) ListCheckpoints(ctx context.Context, limit int) ([]CheckpointInfo, error) {
 	h, err := c.bound()
 	if err != nil {

@@ -138,6 +138,31 @@ func scanWorkspace(row workspaceScanner) (domain.Workspace, error) {
 	return domain.Workspace{ID: wsID, Name: name, RootPath: root, CreatedAt: created, UpdatedAt: updated}, nil
 }
 
+// DeleteWorkspace removes the workspace entity with the given ID. It deletes
+// the workspaces row only: the on-disk root directory is never touched, and
+// sessions keep their workspace_id as a dangling reference — there is no
+// foreign key by design (docs/WORKSPACE_DESIGN.md §7.1), so their persisted
+// history (transcript/inspect) survives the deletion. A missing row is an
+// error, mirroring DeleteSession.
+func (s *SQLiteStore) DeleteWorkspace(ctx context.Context, id domain.WorkspaceID) error {
+	if id.IsZero() {
+		return domain.NewError(domain.ErrInvalidInput, "workspace ID is required")
+	}
+	res, err := s.db.ExecContext(ctx,
+		"DELETE FROM workspaces WHERE workspace_id = ?", id.String())
+	if err != nil {
+		return storeError("delete workspace", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return storeError("delete workspace result", err)
+	}
+	if affected == 0 {
+		return domain.NewError(domain.ErrUnavailable, "workspace not found")
+	}
+	return nil
+}
+
 // SessionWorkspace returns the owning workspace of a session without loading
 // its events (docs/WORKSPACE_DESIGN.md §7.3).
 func (s *SQLiteStore) SessionWorkspace(ctx context.Context, sessionID domain.SessionID) (domain.WorkspaceID, error) {

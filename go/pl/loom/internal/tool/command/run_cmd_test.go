@@ -68,6 +68,12 @@ func TestRunCmdToolExternalizesLargeOutput(t *testing.T) {
 		result.Content[2].Kind != domain.PartArtifact || result.Content[2].Artifact == nil {
 		t.Fatalf("content = %+v, want preview and stdout/stderr artifacts", result.Content)
 	}
+	// stdout/stderr artifacts are process output (text), not images: the
+	// declared media type keeps renderers from treating them as pictures.
+	if result.Content[1].Artifact.MediaType != "text/plain" || result.Content[2].Artifact.MediaType != "text/plain" {
+		t.Fatalf("artifact media types = %q/%q, want text/plain",
+			result.Content[1].Artifact.MediaType, result.Content[2].Artifact.MediaType)
+	}
 	var preview runCmdOutput
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &preview); err != nil {
 		t.Fatalf("decode preview: %v", err)
@@ -1015,6 +1021,77 @@ func stringPtr(value string) *string { return &value }
 
 func boolPtr(value bool) *bool    { return &value }
 func int64Ptr(value int64) *int64 { return &value }
+
+func TestRunCmdApprovalDescSurfacesExternalPathRefs(t *testing.T) {
+	python := ensurePython3(t)
+	validator, _ := newValidator(t)
+	// macOS temp dirs are symlinked (/var → /private/var); the validator
+	// stores the resolved root, so workspace-internal paths in this test
+	// must be built from validator.Root() to match.
+	root := validator.Root()
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: fixedLookPath(python),
+	})
+	tool := newTool(t, validator, runner)
+
+	refsSegment := func(t *testing.T, desc string) string {
+		t.Helper()
+		idx := strings.Index(desc, "refs[")
+		if idx < 0 {
+			t.Fatalf("approval desc missing refs segment: %q", desc)
+		}
+		end := strings.Index(desc[idx:], "]")
+		if end < 0 {
+			t.Fatalf("approval desc refs segment unterminated: %q", desc)
+		}
+		return desc[idx : idx+end+1]
+	}
+
+	t.Run("plain argv", func(t *testing.T) {
+		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Program: stringPtr("ls"),
+			Args:    &[]string{filepath.Join(root, "internal"), "/etc/hosts"},
+		}))
+		if err != nil {
+			t.Fatalf("Prepare() error = %v", err)
+		}
+		seg := refsSegment(t, prepared.ApprovalDesc)
+		if !strings.Contains(seg, "/etc/hosts") {
+			t.Fatalf("refs segment missing external path: %q", seg)
+		}
+		if strings.Contains(seg, root) {
+			t.Fatalf("refs segment leaked workspace path: %q", seg)
+		}
+	})
+
+	t.Run("shell payload", func(t *testing.T) {
+		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Program: stringPtr("sh"),
+			Args:    &[]string{"-c", "cat /etc/hosts | head -5"},
+		}))
+		if err != nil {
+			t.Fatalf("Prepare() error = %v", err)
+		}
+		seg := refsSegment(t, prepared.ApprovalDesc)
+		if !strings.Contains(seg, "/etc/hosts") {
+			t.Fatalf("refs segment missing shell-payload path: %q", seg)
+		}
+	})
+
+	t.Run("workspace only", func(t *testing.T) {
+		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Program: stringPtr("ls"),
+			Args:    &[]string{root},
+		}))
+		if err != nil {
+			t.Fatalf("Prepare() error = %v", err)
+		}
+		if strings.Contains(prepared.ApprovalDesc, "refs[") {
+			t.Fatalf("approval desc must omit refs for workspace-only paths: %q", prepared.ApprovalDesc)
+		}
+	})
+}
 
 func TestRunCmdToolApprovalDescShowsDangerousPayloadAndTruncation(t *testing.T) {
 	python := ensurePython3(t)

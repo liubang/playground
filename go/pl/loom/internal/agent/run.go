@@ -1557,6 +1557,22 @@ func prepareErrorMessage(tc domain.ToolCall, err error) string {
 	if hint, ok := malformedArgumentsHint(tc.Arguments); ok {
 		return hint
 	}
+	return actionablePrepareError(err)
+}
+
+// actionablePrepareError appends recovery guidance to well-known prepare
+// failures so the model can correct course instead of retrying blindly or
+// giving up. Workspace-escape rejections are the common case: the built-in
+// file tools are workspace-scoped by design (docs/PERMISSION_DESIGN.md G4),
+// and without guidance models tend to re-emit the same out-of-workspace
+// path or abandon the search.
+func actionablePrepareError(err error) string {
+	var ae *domain.AgentError
+	if errors.As(err, &ae) && ae.Code == domain.ErrSecurity && strings.Contains(ae.Message, "escapes workspace") {
+		return err.Error() + "; the built-in file tools are restricted to the workspace root. " +
+			"If the target likely lives inside the workspace, locate it with glob/search first. " +
+			"To inspect paths outside the workspace, use run_cmd instead (sandboxed; may require user approval)."
+	}
 	return err.Error()
 }
 

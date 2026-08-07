@@ -127,7 +127,7 @@ func TestPrepareApprovalDescContainsPrompt(t *testing.T) {
 		t.Fatalf("unexpected approval description: %q", prepared.ApprovalDesc)
 	}
 	if prepared.Risk != domain.R3 {
-		t.Fatalf("network capability should map to R3, got %s", prepared.Risk)
+		t.Fatalf("network capability should map to R3, got %v", prepared.Risk)
 	}
 }
 
@@ -184,6 +184,11 @@ func TestExecuteSuccessStoresArtifactAndInlinesImage(t *testing.T) {
 	}
 	if artifactPart.Artifact.Size != int64(len(testPNG)) {
 		t.Fatalf("artifact size = %d", artifactPart.Artifact.Size)
+	}
+	// The declared media type lets renderers dispatch without fetching the
+	// blob (and keeps text artifacts from being rendered as images).
+	if artifactPart.Artifact.MediaType != "image/png" {
+		t.Fatalf("artifact media type = %q, want image/png", artifactPart.Artifact.MediaType)
 	}
 	if imagePart.Image.MediaType != "image/png" ||
 		imagePart.Image.Data != base64.StdEncoding.EncodeToString(testPNG) {
