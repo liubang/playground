@@ -53,6 +53,18 @@ body {
   --z-follow: 10; --z-drawer: 55; --z-menu: 60; --z-modal: 65; --z-toasts: 70;
 }
 code, pre, .mono { font-family: var(--font-mono); }
+
+/* ============================== 图标基类（js/icons.js，FA solid 内联 SVG） ============================== */
+/* fill=currentColor 继承文字颜色；1em 继承上下文字号，跨平台渲染一致。 */
+.icon { width: 1em; height: 1em; fill: currentColor; display: inline-block; vertical-align: -0.125em; flex: none; }
+/* 场景微调：星标覆盖标记、plan 状态图标等需要比 1em 更收敛的尺寸/间距 */
+.picker-label .icon { font-size: 10px; margin-left: 4px; }
+.plan-panel .plan-icon .icon { font-size: 11px; }
+.tool-status .icon { font-size: 11px; }
+.banner .icon { margin-right: 2px; }
+.follow-btn .icon { margin-right: 2px; }
+.sess-item .act { display: inline-flex; align-items: center; justify-content: center; }
+.ws-node .ws-caret, .ws-node .ws-icon { display: inline-flex; align-items: center; justify-content: center; }
 ::selection { background: color-mix(in srgb, var(--primary) 30%, transparent); }
 a { color: var(--primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -478,7 +490,6 @@ body.lightbox-open { overflow: hidden; }
 .composer-bar { display: flex; align-items: center; gap: 8px; padding: 4px 8px 6px; }
 .composer-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .composer-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.composer .hint { max-width: var(--content-width); margin: 6px auto 0; font-size: var(--text-xs); color: var(--muted); text-align: center; }
 
 /* picker 按钮 */
 .picker-btn {
@@ -658,7 +669,7 @@ font-size: var(--text-xs); color: var(--muted);
   /* 覆盖桌面折叠规则的 display:none，抽屉改由 transform 隐藏 */
   .shell.sidebar-collapsed .sidebar { display: flex; }
   .shell:not(.sidebar-collapsed) .sidebar { transform: none; }
-  .transcript-inner, .composer-box, .composer .hint, .plan-panel { max-width: none; }
+  .transcript-inner, .composer-box, .plan-panel { max-width: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -2,12 +2,12 @@
 
 export class Composer {
   // callbacks: onSubmit(text), onCancel()
-  constructor({ textarea, sendBtn, cancelBtn, hint, onSubmit, onCancel }) {
+  constructor({ textarea, sendBtn, cancelBtn, onSubmit, onCancel }) {
     this.ta = textarea;
-    this.hint = hint;
     this.running = false;
     this.readOnly = false;
     this.composing = false;
+    this.focused = false;
 
     const submit = () => {
       if (this.readOnly) return; // 只读会话（子 agent）：不允许追问
@@ -28,6 +28,8 @@ export class Composer {
       }
     });
     this.ta.addEventListener("input", () => this._autosize());
+    this.ta.addEventListener("focus", () => { this.focused = true; this._applyState(); });
+    this.ta.addEventListener("blur", () => { this.focused = false; this._applyState(); });
   }
 
   _autosize() {
@@ -60,16 +62,19 @@ export class Composer {
     this._applyState();
   }
 
+  // placeholder 随焦点切换：聚焦时显示按键提示，失焦时显示引导文案。
   _applyState() {
     if (this.readOnly) {
       this.ta.placeholder = "子 agent 会话 · 只读";
-      this.hint.textContent = "只读子 agent 会话：不能追问；审批与提问仍可处理";
       return;
     }
-    this.ta.placeholder = this.running ? "Steer this turn…" : "Message loom…";
-    this.hint.textContent = this.running
-      ? "Enter to steer the running turn · Shift+Enter for newline"
-      : "Enter to send · Shift+Enter for newline";
+    if (this.focused) {
+      this.ta.placeholder = this.running
+        ? "Enter to steer the running turn · Shift+Enter for newline"
+        : "Enter to send · Shift+Enter for newline";
+    } else {
+      this.ta.placeholder = this.running ? "Steer this turn…" : "Message loom…";
+    }
   }
 
   setCancellable(cancellable, btn) {

@@ -12,6 +12,7 @@ import { Statusbar } from "./components/statusbar.js";
 import { CtxGauge } from "./components/ctxgauge.js";
 import { Picker } from "./components/picker.js";
 import { shortId, estTranscriptTokens, randomId, copyText } from "./format.js";
+import { icon, hydrateIcons } from "./icons.js";
 
 const TOKEN_KEY = "loom_token";
 const THEME_KEY = "loom_theme";
@@ -28,12 +29,12 @@ function initTheme() {
   const saved = sessionStorage.getItem(THEME_KEY);
   const dark = saved !== "light";
   document.documentElement.dataset.theme = dark ? "dark" : "light";
-  $("hdr-theme").textContent = dark ? "☾" : "☀";
+  $("hdr-theme").innerHTML = icon(dark ? "moon" : "sun");
   $("hdr-theme").onclick = () => {
     const nowDark = document.documentElement.dataset.theme === "dark";
     document.documentElement.dataset.theme = nowDark ? "light" : "dark";
     sessionStorage.setItem(THEME_KEY, nowDark ? "light" : "dark");
-    $("hdr-theme").textContent = nowDark ? "☀" : "☾";
+    $("hdr-theme").innerHTML = icon(nowDark ? "sun" : "moon");
   };
 }
 
@@ -223,12 +224,13 @@ function modelLabel(ref) {
 function reasoningLabel(effort, overridden) {
   const e = effort || "default";
   const map = { default: "reasoning", off: "reasoning: off", low: "reasoning: low", medium: "reasoning: medium", high: "reasoning: high" };
-  return map[e] + (overridden && e !== "default" ? " ★" : "");
+  // ★ 覆盖标记为静态图标（icons.js），拼接处无用户输入
+  return map[e] + (overridden && e !== "default" ? icon("star") : "");
 }
 
 function syncPickerLabels() {
   $("model-btn").querySelector(".picker-label").textContent = modelLabel(app.curModelRef);
-  $("reasoning-btn").querySelector(".picker-label").textContent = reasoningLabel(app.curReasoning, app.reasoningOverridden);
+  $("reasoning-btn").querySelector(".picker-label").innerHTML = reasoningLabel(app.curReasoning, app.reasoningOverridden);
 }
 
 function applySnapshotMeta(snap) {
@@ -577,6 +579,7 @@ async function resync(reason) {
 // ---------- boot ----------
 
 async function boot() {
+  hydrateIcons(); // index.html 中 data-icon 占位的静态按钮
   initTheme();
   initSidebarToggle();
 
@@ -631,7 +634,7 @@ async function boot() {
     app.sessionList = [];
     app.sessCursor = "";
     const btn = $("toggle-archived");
-    btn.textContent = app.showArchived ? "← 返回" : "归档";
+    btn.innerHTML = app.showArchived ? icon("arrow-left") + " 返回" : "归档";
     btn.title = app.showArchived ? "返回会话列表" : "查看归档会话";
     btn.classList.toggle("is-active", app.showArchived);
     refreshSessions();
@@ -647,7 +650,6 @@ async function boot() {
     textarea: $("composer-input"),
     sendBtn: $("send-btn"),
     cancelBtn: $("cancel-btn"),
-    hint: $("composer-hint"),
     onSubmit: submitPrompt,
     onCancel: () => {
       if (!app.sessionId) return;
@@ -689,7 +691,7 @@ async function boot() {
     onDraining: () => {
       setConn("draining");
       const b = $("banner");
-      b.textContent = "⚠ server is draining (restart in progress) — reconnect paused; refresh later";
+      b.innerHTML = icon("triangle-exclamation") + " server is draining (restart in progress) — reconnect paused; refresh later";
       b.hidden = false;
     },
     onConn: (state, detail) => {
