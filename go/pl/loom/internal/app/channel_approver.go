@@ -118,6 +118,20 @@ func (a *ChannelApprover) RequestApproval(ctx context.Context, req domain.Approv
 	}
 }
 
+// PendingBinding returns the binding registered for the given approval ID,
+// or ok=false when no request with that ID is currently waiting. Callers use
+// it to validate a frontend decision BEFORE acting on it (e.g. persisting an
+// "allow always" memory) without consuming the pending slot.
+func (a *ChannelApprover) PendingBinding(id domain.EventID) (ApprovalBinding, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	pending, ok := a.pending[id]
+	if !ok {
+		return ApprovalBinding{}, false
+	}
+	return pending.binding, true
+}
+
 // ResolveApproval resolves a pending approval only when the binding returned
 // by the frontend still matches the canonical prepared call.
 func (a *ChannelApprover) ResolveApproval(binding ApprovalBinding, decision domain.Decision) bool {

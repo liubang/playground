@@ -117,6 +117,54 @@ func TestChannelApproverEarlyDecisionBindingMismatch(t *testing.T) {
 	}
 }
 
+// PendingBinding peeks a registered request without consuming it, so the
+// controller can validate a frontend decision before acting on it.
+func TestChannelApproverPendingBinding(t *testing.T) {
+	approver := NewChannelApprover()
+	if _, ok := approver.PendingBinding(domain.NewEventID()); ok {
+		t.Fatal("reported a binding for an unknown approval ID")
+	}
+
+	approvalID := domain.NewEventID()
+	callID := domain.NewToolCallID()
+	want := ApprovalBinding{ApprovalID: approvalID, CallID: callID, ArgsHash: "canonical-args-hash"}
+	result := make(chan domain.Decision, 1)
+	go func() {
+		decision, _ := approver.RequestApproval(context.Background(), domain.ApprovalRequest{
+			ID:   approvalID,
+			Call: domain.PreparedCall{Call: domain.ToolCall{ID: callID}, ArgsHash: "canonical-args-hash"},
+		})
+		result <- decision
+	}()
+	deadline := time.After(time.Second)
+	for approver.PendingCount() != 1 {
+		select {
+		case <-deadline:
+			t.Fatal("approval was not registered")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	got, ok := approver.PendingBinding(approvalID)
+	if !ok || got != want {
+		t.Fatalf("PendingBinding = %+v, %v; want %+v, true", got, ok, want)
+	}
+	if approver.PendingCount() != 1 {
+		t.Fatal("PendingBinding consumed the pending slot")
+	}
+
+	if !approver.ResolveApproval(want, domain.DecisionAllow) {
+		t.Fatal("rejected exact approval binding")
+	}
+	if decision := <-result; decision != domain.DecisionAllow {
+		t.Fatalf("decision = %q, want allow", decision)
+	}
+	if _, ok := approver.PendingBinding(approvalID); ok {
+		t.Fatal("resolved approval still reports a pending binding")
+	}
+}
+
 func TestChannelApproverDenyAllIsIdempotent(t *testing.T) {
 	approver := NewChannelApprover()
 	approver.DenyAll()
