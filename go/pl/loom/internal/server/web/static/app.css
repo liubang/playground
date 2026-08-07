@@ -79,8 +79,8 @@ button { font: inherit; cursor: pointer; }
   cursor: pointer; user-select: none; color: var(--muted);
 }
 .disclosure summary::-webkit-details-marker { display: none; }
-.disclosure summary::before { content: "\25B8"; flex: none; }
-.disclosure[open] summary::before { content: "\25BE"; }
+.disclosure summary::before { content: "\25B6"; flex: none; }
+.disclosure[open] summary::before { content: "\25BC"; }
 .disclosure summary:hover { color: var(--fg); }
 
 /* ============================== 徽标 ============================== */
@@ -185,7 +185,7 @@ button { font: inherit; cursor: pointer; }
   color: var(--fg); font-size: var(--text-md); font-weight: 600; user-select: none;
 }
 .ws-node:hover { background: var(--bg2); }
-.ws-node .ws-caret { flex: none; width: 12px; color: var(--muted); font-size: 10px; }
+.ws-node .ws-caret { flex: none; width: 12px; color: var(--muted); font-size: 11px; }
 .ws-node .ws-icon { flex: none; color: var(--primary); font-size: 12px; }
 .ws-node .ws-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-node .ws-count { flex: none; font-size: var(--text-xs); color: var(--muted); font-weight: 400; }
@@ -365,12 +365,29 @@ button { font: inherit; cursor: pointer; }
 }
 .block-tool .tool-error { margin-top: 8px; font-size: var(--text-sm); color: var(--error); white-space: pre-wrap; }
 
-/* image 块（内联图片 / artifact 引用图片） */
+/* image 块（内联图片 / artifact 引用图片）：缩略展示，点击放大（灯箱） */
 .block-image { margin: 4px 0; }
 .block-image .inline-image {
-  max-width: 100%; border-radius: var(--radius-md);
+  max-width: min(360px, 100%); max-height: 360px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--bg2);
+  cursor: zoom-in;
 }
+.block-image .inline-image:hover { border-color: var(--muted); }
+.block-image .inline-image:focus-visible { outline: 2px solid var(--accent, var(--muted)); outline-offset: 1px; }
+
+/* 图片灯箱：点击遮罩或 ESC 关闭；打开期间锁定页面滚动 */
+.lightbox {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  background: rgba(0,0,0,.72);
+  display: grid; place-items: center;
+  cursor: zoom-out; animation: fadein .12s ease;
+}
+.lightbox img {
+  max-width: 92vw; max-height: 92vh; object-fit: contain;
+  border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+}
+body.lightbox-open { overflow: hidden; }
 
 /* diff */
 .diff { margin-top: 8px; border: 1px solid var(--bg2); border-radius: var(--radius-sm); overflow: hidden; font-size: var(--text-sm); line-height: 1.55; }
@@ -509,6 +526,25 @@ button { font: inherit; cursor: pointer; }
 .menu .menu-item.is-active { color: var(--primary); }
 .menu .menu-item .check { flex: none; width: 16px; text-align: center; color: var(--primary); font-size: var(--text-md); }
 .menu .menu-item .ctx { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+/* ============================== 分享页（/share/{token} 只读） ============================== */
+.share-body { height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.share-header {
+display: flex; align-items: center; gap: 10px; padding: 0 20px; min-height: 44px;
+background: var(--bg0); border-bottom: 1px solid var(--bg2); font-size: var(--text-md);
+}
+.share-header .brand { font-weight: 700; color: var(--primary); flex: none; }
+.share-header .spacer { flex: 1; }
+.share-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-meta { flex: none; font-size: var(--text-xs); color: var(--muted); }
+.share-transcript { min-height: 0; }
+.share-error { text-align: center; padding: 80px 20px; color: var(--muted); }
+.share-error .brand { font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 8px; }
+.share-footer {
+padding: 6px 16px; text-align: center;
+background: var(--bg1); border-top: 1px solid var(--bg2);
+font-size: var(--text-xs); color: var(--muted);
+}
 
 /* ============================== statusbar / banner ============================== */
 .statusbar {

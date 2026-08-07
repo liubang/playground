@@ -42,8 +42,10 @@ type asset struct {
 	mime    string
 }
 
-// Handler returns the SPA static file handler for the site root.
-func Handler() http.Handler {
+// buildAssets snapshots the embedded static tree into memory with strong
+// ETags (embed.FS content is compile-time fixed, so hashing once at
+// startup is exact).
+func buildAssets() map[string]asset {
 	assets := map[string]asset{}
 	root, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -68,6 +70,12 @@ func Handler() http.Handler {
 	if err != nil {
 		panic(err)
 	}
+	return assets
+}
+
+// Handler returns the SPA static file handler for the site root.
+func Handler() http.Handler {
+	assets := buildAssets()
 	index := assets["/index.html"]
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +90,16 @@ func Handler() http.Handler {
 			return
 		}
 		serve(w, r, a, "no-cache")
+	})
+}
+
+// SharePageHandler serves the read-only shared-transcript page for
+// /share/{token} links. The page itself is a static asset (the token only
+// reaches the API via fetch), so validity is checked client-side.
+func SharePageHandler() http.Handler {
+	page := buildAssets()["/share.html"]
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serve(w, r, page, "no-store")
 	})
 }
 

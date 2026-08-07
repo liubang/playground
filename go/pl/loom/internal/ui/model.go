@@ -450,7 +450,7 @@ func (m Model) requestRules() tea.Cmd {
 
 func (m Model) forgetRuleCmd(entry RuleEntry) tea.Cmd {
 	return func() tea.Msg {
-		err := m.controller.ForgetRule(context.Background(), entry.Kind, entry.Prefix, entry.Host)
+		err := m.controller.ForgetRule(context.Background(), entry.Kind, entry.Prefix, entry.Host, entry.Tool)
 		return ruleForgottenMsg{entry: entry, err: err}
 	}
 }

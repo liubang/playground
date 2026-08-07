@@ -229,6 +229,11 @@ type ApprovalRequestedPayload struct {
 	// can derive a categorical approval rule. It is display-safe (the
 	// approval description already shows the same information).
 	Arguments json.RawMessage `json:"arguments,omitempty"`
+	// RulePreview renders what "allow always" would remember for this call
+	// (an argv prefix, an exact host, or the bare tool name). Empty means
+	// the call cannot be remembered; frontends should hide the "allow
+	// always" affordance rather than offer a no-op.
+	RulePreview string `json:"rule_preview,omitempty"`
 }
 
 // ApprovalResolvedPayload describes an approval resolution.
@@ -285,15 +290,21 @@ type ToolCompletedPayload struct {
 	Error      string            `json:"error,omitempty"`
 	// ErrorMessage is the human-readable failure reason (e.g. "request
 	// failed with status 418"), shown inline next to the error code.
-ErrorMessage string    `json:"error_message,omitempty"`
-FinishedAt   time.Time `json:"finished_at,omitempty"`
-// Preview is a bounded excerpt of the tool output for expandable display.
-Preview string `json:"preview,omitempty"`
-// Artifacts carries the artifact references found in the tool result
-// content (e.g. generate_image output), so live clients can render them
-// without waiting for a snapshot rebuild. References are tiny (id + size);
-// the blob bytes never travel on the event stream.
-Artifacts []domain.ArtifactRef `json:"artifacts,omitempty"`
+	ErrorMessage string    `json:"error_message,omitempty"`
+	FinishedAt   time.Time `json:"finished_at,omitempty"`
+	// Preview is a bounded excerpt of the tool output for expandable display.
+	Preview string `json:"preview,omitempty"`
+	// Artifacts carries the artifact references found in the tool result
+	// content (e.g. generate_image output), so live clients can render them
+	// without waiting for a snapshot rebuild. References are tiny (id + size);
+	// the blob bytes never travel on the event stream.
+	Artifacts []domain.ArtifactRef `json:"artifacts,omitempty"`
+	// Images carries the inline image content parts found in the tool result
+	// (e.g. view_image output), so live clients can render them without waiting
+	// for a snapshot rebuild. Each entry carries a base64 payload; only tools
+	// that produce inline images (view_image, generate_image when under the
+	// inline size limit) populate this field.
+	Images []domain.ImageContent `json:"images,omitempty"`
 }
 
 // ToolProgressPayload describes bounded progress.

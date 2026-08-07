@@ -60,18 +60,22 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 )
 
-// RuleKind distinguishes argv-prefix rules from domain rules.
+// RuleKind distinguishes argv-prefix rules from domain and tool rules.
 type RuleKind int
 
 const (
 	RuleArgv   RuleKind = iota // argv-prefix command rule
 	RuleDomain                 // domain (host) rule
+	RuleTool                   // tool-name rule
 )
 
-// String returns a short label for status messages ("argv" / "domain").
+// String returns a short label for status messages ("argv" / "domain" / "tool").
 func (k RuleKind) String() string {
-	if k == RuleDomain {
+	switch k {
+	case RuleDomain:
 		return "domain"
+	case RuleTool:
+		return "tool"
 	}
 	return "argv"
 }
@@ -171,10 +175,12 @@ func decisionStrictness(d domain.Decision) int {
 }
 
 // RuleSet is an ordered collection of rules from one or more layers:
-// argv-prefix rules for run_cmd plus host rules for web_fetch.
+// argv-prefix rules for run_cmd, host rules for web_fetch, and tool-name
+// rules for the fixed-blast-radius tools (tool_rules.go).
 type RuleSet struct {
 	rules   []Rule
 	domains []DomainRule
+	tools   []ToolRule
 }
 
 // Rules returns the loaded rules (for `loom rules list` and tests).
@@ -191,6 +197,14 @@ func (s *RuleSet) Domains() []DomainRule {
 		return nil
 	}
 	return append([]DomainRule(nil), s.domains...)
+}
+
+// Tools returns the loaded tool-name rules (for `loom rules list` and tests).
+func (s *RuleSet) Tools() []ToolRule {
+	if s == nil {
+		return nil
+	}
+	return append([]ToolRule(nil), s.tools...)
 }
 
 // builtinJSON is the curated set of read-only commands that never deserve
@@ -237,6 +251,7 @@ func (s *RuleSet) merge(other *RuleSet) {
 	}
 	s.rules = append(s.rules, other.rules...)
 	s.domains = append(s.domains, other.domains...)
+	s.tools = append(s.tools, other.tools...)
 }
 
 // Evaluate returns the strictest decision among matching rules, or "" when
@@ -468,6 +483,7 @@ type SessionRules struct {
 	mu      sync.RWMutex
 	rules   []sessionRule
 	domains map[string]struct{}
+	tools   map[string]struct{}
 }
 
 // sessionRule is one remembered prefix plus its approved grant.
@@ -521,6 +537,22 @@ func (s *SessionRules) Match(argv []string) (domain.ExecGrant, bool) {
 		}
 	}
 	return domain.ExecGrant{}, false
+}
+
+// ForgetRunCmd removes a remembered argv prefix. ok=false means the prefix
+// was not in the session store. Forgetting mirrors RememberRunCmd: the
+// caller passes the DERIVED categorical prefix (as returned by
+// DeriveRunCmdPrefix / RememberedRule.Prefix), not a raw argv.
+func (s *SessionRules) ForgetRunCmd(prefix []string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, r := range s.rules {
+		if stringSliceEqual(r.prefix, prefix) {
+			s.rules = append(s.rules[:i], s.rules[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 // Prefixes returns a copy of the remembered prefixes (status display, tests).

@@ -4,7 +4,7 @@
 
 import { renderMarkdownInto } from "../markdown.js";
 import { renderDiff } from "../diff.js";
-import { fmtTokens, fmtBytes, fmtMsgTime, fmtMsgTimeTitle } from "../format.js";
+import { fmtTokens, fmtBytes, fmtMsgTime, fmtMsgTimeTitle, copyText } from "../format.js";
 
 export function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -140,15 +140,16 @@ function messageActions(blockEl, role, { createdAt, getText, fb }) {
   if (tip && role === "user") row.appendChild(tip);
 
   const copy = iconBtn("msg-copy", ICONS.copy, "复制该条消息");
-  copy.onclick = async (e) => {
-    e.stopPropagation();
-    try {
-      const text = typeof getText === "function" ? await getText() : "";
-      await navigator.clipboard.writeText(text);
-      copy.classList.add("is-done");
-      copy.innerHTML = ICONS.check;
-    } catch {
-      copy.classList.add("is-fail");
+copy.onclick = async (e) => {
+e.stopPropagation();
+try {
+const text = typeof getText === "function" ? await getText() : "";
+// copyText 内置非安全上下文（内网 IP）降级；失败抛错走 is-fail
+if (!(await copyText(text))) throw new Error("clipboard unavailable");
+copy.classList.add("is-done");
+copy.innerHTML = ICONS.check;
+} catch {
+copy.classList.add("is-fail");
     }
     setTimeout(() => {
       copy.classList.remove("is-done", "is-fail");
@@ -250,12 +251,20 @@ export function toolBlock(payload, hooks = {}) {
           return p.preview; // server 取不到时兜底复制摘要
         }));
       }
-      // 渲染工具结果中的图片（内联 base64 和 artifact 引用）
-      for (const img of p.images || []) {
-        b.appendChild(imageBlock(img.media_type, img.data));
-      }
-      for (const art of p.artifacts || []) {
-        b.appendChild(artifactImageBlock(art.id, art.size, hooks.resolveArtifactURL));
+      // 渲染工具结果中的图片。generate_image 的结果同时携带内联 base64
+      // 图片和同一图片的 artifact 引用（前者供模型回看，后者供展示），
+      // 两条都渲染会把同一张图显示两遍，因此内联图片优先（data: URI
+      // 同步可用、无需带鉴权的二次请求）；仅当没有内联图片时（如超过
+      // 内联大小上限的图）才走 artifact 路径。
+      const resultImages = p.images || [];
+      if (resultImages.length > 0) {
+        for (const img of resultImages) {
+          b.appendChild(imageBlock(img.media_type, img.data));
+        }
+      } else {
+        for (const art of p.artifacts || []) {
+          b.appendChild(artifactImageBlock(art.id, art.size, hooks.resolveArtifactURL));
+        }
       }
     },
   };
@@ -275,13 +284,13 @@ function toolOutput(preview, getFullText) {
   copyBtn.onclick = async (e) => {
     e.preventDefault(); // 不触发 details 展开/收起
     e.stopPropagation();
-    try {
-      const text = await getFullText();
-      await navigator.clipboard.writeText(text);
-      copyBtn.textContent = "✓ copied";
-    } catch {
-      copyBtn.textContent = "copy failed";
-    }
+try {
+const text = await getFullText();
+if (!(await copyText(text))) throw new Error("clipboard unavailable");
+copyBtn.textContent = "✓ copied";
+} catch {
+copyBtn.textContent = "copy failed";
+}
     setTimeout(() => { copyBtn.textContent = "copy"; }, 1500);
   };
   summary.appendChild(copyBtn);
@@ -361,14 +370,17 @@ export function approvalCard(payload, { onResolve }) {
   const allow = el("button", "btn btn-primary", "Allow");
   const always = el("button", "btn btn-secondary", "Allow always");
   const deny = el("button", "btn btn-danger", "Deny");
-  const memo = el("span", "memo", "allow always remembers this command for the workspace");
+  // rule_preview 为空表示该调用不可记忆（后端 ApprovalRulePreview），
+  // 此时隐藏 Allow always，避免提供一个静默无效的选项。
+  const preview = payload.rule_preview || "";
+  const memo = el("span", "memo", preview ? `allow always remembers "${preview}" for the workspace` : "");
   allow.onclick = () => onResolve({ decision: "allow", always: false });
   always.onclick = () => onResolve({ decision: "allow", always: true });
   deny.onclick = () => onResolve({ decision: "deny", always: false });
   actions.appendChild(allow);
-  actions.appendChild(always);
+  if (preview) actions.appendChild(always);
   actions.appendChild(deny);
-  actions.appendChild(memo);
+  if (preview) actions.appendChild(memo);
   card.appendChild(actions);
   return {
     el: card,
@@ -469,7 +481,50 @@ export function renderPlanInto(panel, plan) {
   panel.appendChild(list);
 }
 
-// --- notice / fatal ---
+// --- image（内联图片 / artifact 图片 + 灯箱） ---
+
+// 图片灯箱（点击放大）：单例 overlay，点击任一 inline-image 时以近原尺寸
+// 展示；点击遮罩或按 ESC 关闭，打开期间锁定 body 滚动。复用现有
+// --z-modal 层级与 fadein 动画。
+let lightboxEl = null;
+
+function openImageLightbox(src, alt) {
+  if (!src) return;
+  closeImageLightbox();
+  const overlay = el("div", "lightbox");
+  const img = document.createElement("img");
+  img.src = src;
+  img.alt = alt || "image";
+  overlay.appendChild(img);
+  overlay.onclick = () => closeImageLightbox();
+  document.body.appendChild(overlay);
+  document.body.classList.add("lightbox-open");
+  lightboxEl = overlay;
+}
+
+function closeImageLightbox() {
+  if (!lightboxEl) return;
+  lightboxEl.remove();
+  lightboxEl = null;
+  document.body.classList.remove("lightbox-open");
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeImageLightbox();
+});
+
+// makeZoomable 给缩略图挂上「点击/回车放大」交互。
+function makeZoomable(img) {
+  img.tabIndex = 0;
+  img.title = "点击放大";
+  img.onclick = () => openImageLightbox(img.src, img.alt);
+  img.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openImageLightbox(img.src, img.alt);
+    }
+  };
+}
 
 // imageBlock 渲染一个内联图片（base64 data URI），用于 transcript 中的
 // image part（用户附件或工具结果中的内联图片）。
@@ -481,6 +536,7 @@ export function imageBlock(mediaType, base64Data) {
   img.alt = "image";
   img.onerror = () => b.replaceChildren(el("div", "notice is-warn", "图片加载失败"));
   img.src = `data:${mediaType || "image/png"};base64,${base64Data}`;
+  makeZoomable(img);
   b.appendChild(img);
   return b;
 }
@@ -500,6 +556,7 @@ export function artifactImageBlock(artifactId, size, resolveURL) {
   img.loading = "lazy";
   img.alt = "generated image";
   img.onerror = fail;
+  makeZoomable(img);
   b.appendChild(img);
   if (resolveURL) {
     resolveURL(artifactId, size).then((url) => { img.src = url; }, fail);
@@ -508,6 +565,8 @@ export function artifactImageBlock(artifactId, size, resolveURL) {
   }
   return b;
 }
+
+// --- notice / fatal ---
 
 export function noticeBlock(text, warn) {
   return el("div", "notice" + (warn ? " is-warn" : ""), text);

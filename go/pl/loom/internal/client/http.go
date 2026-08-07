@@ -485,6 +485,6 @@ func (c *httpClient) ListRules(ctx context.Context) (*permission.RuleSet, error)
 	return nil, ErrUnsupported
 }
 
-func (c *httpClient) ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host string) error {
+func (c *httpClient) ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host, tool string) error {
 	return ErrUnsupported
 }

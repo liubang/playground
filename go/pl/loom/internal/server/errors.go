@@ -96,6 +96,10 @@ func mapError(err error) *statusError {
 		return &statusError{status: http.StatusServiceUnavailable, code: "tracing_disabled", message: err.Error()}
 	case errors.Is(err, app.ErrFeedbackTargetUnknown):
 		return &statusError{status: http.StatusNotFound, code: "feedback_target_unknown", message: err.Error()}
+	case errors.Is(err, app.ErrShareNotFound):
+		return &statusError{status: http.StatusNotFound, code: "share_not_found", message: err.Error()}
+	case errors.Is(err, app.ErrSharedArtifactUnknown):
+		return &statusError{status: http.StatusNotFound, code: "shared_artifact_not_found", message: err.Error()}
 	}
 	msg := err.Error()
 	// Domain typed errors (artifact store, etc.).

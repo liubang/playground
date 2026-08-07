@@ -268,10 +268,10 @@ func (c *inprocClient) ListRules(ctx context.Context) (*permission.RuleSet, erro
 	return h.Controller.ListRules(ctx)
 }
 
-func (c *inprocClient) ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host string) error {
+func (c *inprocClient) ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host, tool string) error {
 	h, err := c.bound()
 	if err != nil {
 		return err
 	}
-	return h.Controller.ForgetRule(ctx, kind, prefix, host)
+	return h.Controller.ForgetRule(ctx, kind, prefix, host, tool)
 }

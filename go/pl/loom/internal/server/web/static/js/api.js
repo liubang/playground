@@ -52,6 +52,9 @@ export function createApi({ getToken, onUnauthorized }) {
     browseDirectories: (path) => req("GET", `/v1/files/browse?path=${encodeURIComponent(path || "")}`),
     archiveSession: (id, archived) => req("POST", `/v1/sessions/${id}/archive`, { archived }),
     deleteSession: (id) => req("DELETE", `/v1/sessions/${id}`),
+    // 分享链接：创建幂等（重复调用返回同一 token）；撤销后原链接立即失效
+    shareSession: (id) => req("POST", `/v1/sessions/${id}/share`),
+    revokeShare: (id) => req("DELETE", `/v1/sessions/${id}/share`),
     // 用户反馈：对某一轮（run）投 赞=1/踩=0，落为 Langfuse BOOLEAN 分数
     submitFeedback: (id, runId, value, comment = "") =>
       req("POST", `/v1/sessions/${id}/feedback`, { run_id: runId, value, comment }),

@@ -31,7 +31,9 @@ type RuleDecider struct {
 // Evaluate returns the strictest matching rule's verdict, or nil when no
 // rule matches. Process-spawning calls (run_cmd, exec_session — anything
 // carrying a signed ExecRequest) match argv-prefix rules; web_fetch calls
-// match host rules; everything else is not rule-eligible.
+// match host rules; other tools match tool-name rules (tool_rules.go) —
+// which is why run_cmd/web_fetch can never be remembered by tool name:
+// they never reach the tool-rule evaluation.
 func (d RuleDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	if d.Rules == nil {
 		return nil
@@ -42,7 +44,16 @@ func (d RuleDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	if call.Call.Name == "web_fetch" {
 		return d.evaluateWebFetch(call)
 	}
-	return nil
+	return d.evaluateTool(call)
+}
+
+// evaluateTool matches the call's tool name against the tool rules.
+func (d RuleDecider) evaluateTool(call domain.PreparedCall) *domain.Verdict {
+	best, rule := d.Rules.EvaluateTool(call.Call.Name)
+	if best == "" {
+		return nil
+	}
+	return &domain.Verdict{Decision: best, Source: SourceRule, Reason: rule.Justification}
 }
 
 // evaluateWebFetch matches the call's URL host against the domain rules.
@@ -153,7 +164,8 @@ type SessionDecider struct {
 
 // Evaluate returns an allow verdict when a session memory matches:
 // remembered argv prefixes (with grant coverage) for run_cmd, remembered
-// hosts for web_fetch.
+// hosts for web_fetch, remembered tool names for the eligible
+// fixed-blast-radius tools (SessionRules.RememberTool gates eligibility).
 func (d SessionDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	if d.Session == nil {
 		return nil
@@ -181,8 +193,16 @@ func (d SessionDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 			Source:   SourceSession,
 			Reason:   "remembered from an interactive loom approval",
 		}
+	default:
+		if !d.Session.MatchTool(call.Call.Name) {
+			return nil
+		}
+		return &domain.Verdict{
+			Decision: domain.DecisionAllow,
+			Source:   SourceSession,
+			Reason:   "remembered from an interactive loom approval",
+		}
 	}
-	return nil
 }
 
 // BaselineDecider is the chain's terminal decider: it always has an

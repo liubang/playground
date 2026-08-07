@@ -76,13 +76,16 @@ type ApprovalRuleHint struct {
 const TrustUnsandboxed = "unsandboxed"
 
 // RememberedRule is the categorical memory created by an interactive
-// approval: an argv prefix (with grant) for run_cmd, or an exact host
-// for web_fetch. Label is the display form; Prefix/Host carry the
-// structured form for persistence (never re-split from the label).
+// approval: an argv prefix (with grant) for run_cmd, an exact host for
+// web_fetch, or a bare tool name for the eligible fixed-blast-radius
+// tools (permission.ToolMemoryEligible). Label is the display form;
+// Prefix/Host/Tool carry the structured form for persistence (never
+// re-split from the label).
 type RememberedRule struct {
 	Label  string
 	Prefix []string
 	Host   string
+	Tool   string
 	Grant  domain.ExecGrant
 }
 
@@ -124,8 +127,16 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 			return RememberedRule{}, false
 		}
 		return RememberedRule{Label: host, Host: host}, true
+	default:
+		// Tool-name memory: SessionRules.RememberTool gates eligibility, so
+		// path/host-varying tools (edit, write, view_image, ...) keep their
+		// per-call approvals.
+		name, remembered := r.session.RememberTool(toolName)
+		if !remembered {
+			return RememberedRule{}, false
+		}
+		return RememberedRule{Label: name, Tool: name}, true
 	}
-	return RememberedRule{}, false
 }
 
 // DeriveRememberGrant computes the grant a remembered rule should carry
@@ -161,7 +172,7 @@ func (r *RuleApprover) matches(call domain.PreparedCall) bool {
 		host, ok := permission.ParseWebFetchHost(call.Call.Arguments)
 		return ok && r.session.MatchDomain(host)
 	}
-	return false
+	return r.session.MatchTool(call.Call.Name)
 }
 
 // RunCmdRuleCount reports how many run_cmd prefixes are remembered (for
@@ -176,8 +187,9 @@ func (r *RuleApprover) RunCmdRuleCount() int {
 // ApprovalRulePreview renders the categorical rule that "allow always"
 // would create for a call, plus the grant it would carry, for display in
 // the approval overlay: an argv prefix ("go test") for run_cmd, an exact
-// host ("www.weather.com.cn") for web_fetch. ok=false means the call
-// cannot be remembered.
+// host ("www.weather.com.cn") for web_fetch, the bare tool name for the
+// eligible fixed-blast-radius tools. ok=false means the call cannot be
+// remembered.
 func ApprovalRulePreview(toolName string, arguments json.RawMessage) (preview string, grant domain.ExecGrant, ok bool) {
 	switch toolName {
 	case "run_cmd", "exec_session":
@@ -199,8 +211,13 @@ func ApprovalRulePreview(toolName string, arguments json.RawMessage) (preview st
 			return "", domain.ExecGrant{}, false
 		}
 		return host, domain.ExecGrant{}, true
+	default:
+		canonical, ok := permission.ToolMemoryEligible(toolName)
+		if !ok {
+			return "", domain.ExecGrant{}, false
+		}
+		return canonical, domain.ExecGrant{}, true
 	}
-	return "", domain.ExecGrant{}, false
 }
 
 // RunCmdTrustPreview reports whether the approval overlay should offer the

@@ -19,6 +19,7 @@ package permission
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -407,5 +408,117 @@ func TestImportRuleFile(t *testing.T) {
 	// import must not overwrite it.
 	if r3.Justification != rememberedJustif {
 		t.Fatalf("DB justification = %q, want %q (DB wins)", r3.Justification, rememberedJustif)
+	}
+}
+
+func TestRememberedStoreToolLifecycle(t *testing.T) {
+	store, ctx := openTestStore(t)
+	if err := store.RememberTool(ctx, "generate_image"); err != nil {
+		t.Fatal(err)
+	}
+	// Idempotent.
+	if err := store.RememberTool(ctx, "generate_image"); err != nil {
+		t.Fatal(err)
+	}
+	// Ineligible tools can never enter the store.
+	if err := store.RememberTool(ctx, "run_cmd"); err == nil {
+		t.Fatal("run_cmd must be rejected from tool memory")
+	}
+	if err := store.RememberTool(ctx, "edit"); err == nil {
+		t.Fatal("edit must be rejected from tool memory")
+	}
+
+	set, err := store.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools := set.Tools()
+	if len(tools) != 1 || tools[0].Name != "generate_image" {
+		t.Fatalf("tools = %+v, want [generate_image]", tools)
+	}
+	if tools[0].Decision != string(domain.DecisionAllow) || tools[0].Source != RememberedSource {
+		t.Fatalf("tool rule = %+v, want allow from remembered", tools[0])
+	}
+	if d, _ := set.EvaluateTool("generate_image"); d != domain.DecisionAllow {
+		t.Fatalf("EvaluateTool = %v, want allow", d)
+	}
+
+	ok, err := store.ForgetTool(ctx, "generate_image")
+	if err != nil || !ok {
+		t.Fatalf("forget tool: ok=%v err=%v", ok, err)
+	}
+	ok, err = store.ForgetTool(ctx, "generate_image")
+	if err != nil || ok {
+		t.Fatalf("second forget tool: ok=%v err=%v, want false", ok, err)
+	}
+	set, err = store.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(set.Tools()) != 0 {
+		t.Fatalf("tools after forget = %+v, want empty", set.Tools())
+	}
+}
+
+func TestRememberedStoreToolPersistenceAcrossReopen(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	path := RememberedDBPath(dir)
+	store, err := OpenRememberedStore(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RememberTool(ctx, "generate_image"); err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	store.Close()
+
+	// The read-only loader (AttachRules path) sees the tool rule too.
+	set, err := LoadRememberedRules(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := set.EvaluateTool("generate_image"); d != domain.DecisionAllow {
+		t.Fatalf("reopened EvaluateTool = %v, want allow", d)
+	}
+}
+
+// TestLoadRememberedRulesLegacySchema covers databases written before the
+// remembered_tools table existed: the read-only loader must degrade to
+// "no tool rules" instead of failing the whole policy load.
+func TestLoadRememberedRulesLegacySchema(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	path := RememberedDBPath(dir)
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.ExecContext(ctx, `
+CREATE TABLE remembered_rules (
+    prefix TEXT PRIMARY KEY,
+    grant TEXT NOT NULL DEFAULT '',
+    justification TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE remembered_domains (
+    host TEXT PRIMARY KEY,
+    justification TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);`)
+	if err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	db.Close()
+
+	set, err := LoadRememberedRules(ctx, path)
+	if err != nil {
+		t.Fatalf("legacy schema must load: %v", err)
+	}
+	if len(set.Tools()) != 0 {
+		t.Fatalf("legacy schema tools = %+v, want empty", set.Tools())
 	}
 }
