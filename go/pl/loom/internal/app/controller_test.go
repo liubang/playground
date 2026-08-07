@@ -7,9 +7,11 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1043,5 +1045,201 @@ func TestControllerSetReasoningAppliesFromNextTurn(t *testing.T) {
 	}
 	if calls[1].Reasoning.Effort != domain.ReasoningEffortLow {
 		t.Errorf("turn 2 reasoning = %+v, want low (override)", calls[1].Reasoning)
+	}
+}
+
+// startPendingApproval registers a web_fetch approval request on approver
+// and returns its binding once the slot is visible.
+func startPendingApproval(t *testing.T, approver *ChannelApprover, url, argsHash string) (ApprovalBinding, <-chan domain.Decision) {
+	t.Helper()
+	approvalID := domain.NewEventID()
+	callID := domain.NewToolCallID()
+	result := make(chan domain.Decision, 1)
+	go func() {
+		decision, _ := approver.RequestApproval(context.Background(), domain.ApprovalRequest{
+			ID: approvalID,
+			Call: domain.PreparedCall{
+				Call:     domain.ToolCall{ID: callID, Name: "web_fetch", Arguments: json.RawMessage(`{"url":` + strconv.Quote(url) + `}`)},
+				ArgsHash: argsHash,
+			},
+		})
+		result <- decision
+	}()
+	deadline := time.After(2 * time.Second)
+	for {
+		if _, ok := approver.PendingBinding(approvalID); ok {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("approval was not registered")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	return ApprovalBinding{ApprovalID: approvalID, CallID: callID, ArgsHash: argsHash}, result
+}
+
+// forceAwaitingApproval puts the controller into awaiting_approval the way
+// the publishing store would when a permission.requested event persists.
+func forceAwaitingApproval(controller *Controller) {
+	controller.mu.Lock()
+	controller.state = ControllerStateAwaitingApproval
+	controller.mu.Unlock()
+}
+
+// Regression: the "allow always" memory must land BEFORE the decision wakes
+// the agent loop — the woken loop re-evaluates the batch's remaining calls
+// against session memory immediately, and a late memory re-prompts a call
+// the user just approved categorically (which then auto-resolves underneath
+// its still-visible card).
+func TestControllerResolveApprovalRemembersBeforeWakingLoop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	approver := NewChannelApprover()
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, fakes.NewFakeModel()),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  approver,
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	forceAwaitingApproval(controller)
+
+	binding, result := startPendingApproval(t, approver, "https://example.com/a", "hash-a")
+	note, err := controller.ResolveApproval(ctx, binding, domain.DecisionAllow, &ApprovalRuleHint{
+		ToolName:  "web_fetch",
+		Arguments: json.RawMessage(`{"url":"https://example.com/a"}`),
+	})
+	if err != nil {
+		t.Fatalf("ResolveApproval: %v", err)
+	}
+	if !strings.Contains(note, "example.com") {
+		t.Fatalf("note = %q, want the remembered host", note)
+	}
+	select {
+	case decision := <-result:
+		if decision != domain.DecisionAllow {
+			t.Fatalf("decision = %q, want allow", decision)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("pending approval was not resolved")
+	}
+	if !controller.sessionRules.MatchDomain("example.com") {
+		t.Fatal("domain was not remembered in session rules")
+	}
+
+	// The loop's re-evaluation path: a follow-up call on the remembered host
+	// auto-allows without ever registering a pending slot.
+	followUp, followUpResult := domain.ApprovalRequest{
+		ID: domain.NewEventID(),
+		Call: domain.PreparedCall{
+			Call:     domain.ToolCall{ID: domain.NewToolCallID(), Name: "web_fetch", Arguments: json.RawMessage(`{"url":"https://example.com/b"}`)},
+			ArgsHash: "hash-b",
+		},
+	}, make(chan domain.Decision, 1)
+	go func() {
+		decision, _ := controller.rulesApprover.RequestApproval(ctx, followUp)
+		followUpResult <- decision
+	}()
+	select {
+	case decision := <-followUpResult:
+		if decision != domain.DecisionAllow {
+			t.Fatalf("follow-up decision = %q, want auto-allow", decision)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("follow-up request reached the user instead of auto-allowing")
+	}
+	if got := approver.PendingCount(); got != 0 {
+		t.Fatalf("pending = %d, want 0 (no user-facing request for the follow-up)", got)
+	}
+}
+
+// A decision whose binding belongs to nobody's pending request must not
+// write an "allow always" memory.
+func TestControllerResolveApprovalMismatchedBindingDoesNotRemember(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	approver := NewChannelApprover()
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, fakes.NewFakeModel()),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  approver,
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	forceAwaitingApproval(controller)
+
+	binding, result := startPendingApproval(t, approver, "https://example.com/a", "hash-a")
+	tampered := binding
+	tampered.ArgsHash = "tampered"
+	if _, err := controller.ResolveApproval(ctx, tampered, domain.DecisionAllow, &ApprovalRuleHint{
+		ToolName:  "web_fetch",
+		Arguments: json.RawMessage(`{"url":"https://example.com/a"}`),
+	}); err == nil {
+		t.Fatal("mismatched binding was accepted")
+	}
+	if controller.sessionRules.MatchDomain("example.com") {
+		t.Fatal("mismatched binding wrote an allow-always memory")
+	}
+	if got := approver.PendingCount(); got != 1 {
+		t.Fatalf("pending = %d, want 1 (the mismatched resolve must not consume the slot)", got)
+	}
+
+	// The genuine resolve still works afterwards.
+	if _, err := controller.ResolveApproval(ctx, binding, domain.DecisionAllow, nil); err != nil {
+		t.Fatalf("ResolveApproval: %v", err)
+	}
+	if decision := <-result; decision != domain.DecisionAllow {
+		t.Fatalf("decision = %q, want allow", decision)
+	}
+}
+
+// The controller must stay in awaiting_approval until the LAST pending card
+// resolves: a batch can hold several asks, and flipping back to running on
+// the first resolved event makes the state gate reject the rest.
+func TestControllerSetRunningWaitsForLastPendingCard(t *testing.T) {
+	cardA, cardB := domain.NewEventID(), domain.NewEventID()
+	controller := &Controller{
+		state: ControllerStateAwaitingApproval,
+		pendingCards: map[domain.EventID]runtimeevent.ApprovalRequestedPayload{
+			cardA: {},
+			cardB: {},
+		},
+	}
+
+	// The persister deletes the card before calling SetRunning.
+	delete(controller.pendingCards, cardA)
+	controller.SetRunning()
+	if controller.state != ControllerStateAwaitingApproval {
+		t.Fatalf("state = %q with one card still pending, want awaiting_approval", controller.state)
+	}
+
+	delete(controller.pendingCards, cardB)
+	controller.SetRunning()
+	if controller.state != ControllerStateRunning {
+		t.Fatalf("state = %q after the last card resolved, want running", controller.state)
 	}
 }
