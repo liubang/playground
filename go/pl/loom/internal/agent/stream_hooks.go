@@ -63,10 +63,15 @@ type StreamAggregator struct {
 	reasoningBlocks []domain.ReasoningContent
 	tools           map[int]*streamToolCall
 	seenIDs         map[string]struct{}
-	stop            domain.StopReason
-	inputTokens     int64
-	outputTokens    int64
-	responseEnded   bool
+	// idTaken reports whether a tool call id already appears in the
+	// transcript (installed via WithIDRewrite); rewritten records every
+	// collision rewrite (original → replacement) for observability.
+	idTaken       func(string) bool
+	rewritten     map[string]string
+	stop          domain.StopReason
+	inputTokens   int64
+	outputTokens  int64
+	responseEnded bool
 }
 
 type streamResponse struct {
@@ -92,6 +97,26 @@ func NewStreamAggregator(clock domain.Clock, hooks StreamHooks) *StreamAggregato
 		tools:   make(map[int]*streamToolCall),
 		seenIDs: make(map[string]struct{}),
 	}
+}
+
+// WithIDRewrite installs a transcript-level conflict detector. Providers
+// like kimi reset their tool-call counters every turn ("run_cmd_0",
+// "run_cmd_1", ...), so a fresh response can reuse an id from an earlier
+// turn. Loom pairs calls with results and keys prepared-call maps by id,
+// so collisions silently drop executions and leave the replay history
+// dangling. Colliding ids are rewritten to fresh unique ones; hooks and
+// the persisted message observe only the rewritten id, keeping live UI
+// and replay consistent. The provider is unaffected: it only requires
+// call/result id consistency within the replayed history.
+func (a *StreamAggregator) WithIDRewrite(taken func(id string) bool) *StreamAggregator {
+	a.idTaken = taken
+	return a
+}
+
+// RewrittenIDs returns the collision rewrites applied so far
+// (original → replacement); empty when no provider id collided.
+func (a *StreamAggregator) RewrittenIDs() map[string]string {
+	return a.rewritten
 }
 
 // Apply processes a single model event.
@@ -135,11 +160,17 @@ func (a *StreamAggregator) Apply(evt domain.ModelEvent) error {
 		if evt.ToolID == "" || evt.ToolName == "" {
 			return fmt.Errorf("tool call start requires id and name")
 		}
-		if _, exists := a.seenIDs[evt.ToolID]; exists {
-			return fmt.Errorf("duplicate tool call id %q", evt.ToolID)
+		id := evt.ToolID
+		_, dup := a.seenIDs[id]
+		if dup || (a.idTaken != nil && a.idTaken(id)) {
+			id = domain.NewToolCallID().String()
+			if a.rewritten == nil {
+				a.rewritten = make(map[string]string)
+			}
+			a.rewritten[evt.ToolID] = id
 		}
-		a.seenIDs[evt.ToolID] = struct{}{}
-		a.tools[evt.ToolIndex] = &streamToolCall{index: evt.ToolIndex, id: evt.ToolID, name: evt.ToolName}
+		a.seenIDs[id] = struct{}{}
+		a.tools[evt.ToolIndex] = &streamToolCall{index: evt.ToolIndex, id: id, name: evt.ToolName}
 	case domain.ModelEventToolArgsDelta:
 		tool, ok := a.tools[evt.ToolIndex]
 		if !ok {

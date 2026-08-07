@@ -204,9 +204,12 @@ type ModelResponseCompletedPayload struct {
 
 // ModelRequestFailedPayload describes a model request failure.
 type ModelRequestFailedPayload struct {
-	RequestID domain.EventID `json:"request_id"`
-	Stage     string         `json:"stage"`
-	Code      string         `json:"code"`
+RequestID domain.EventID `json:"request_id"`
+Stage     string         `json:"stage"`
+Code      string         `json:"code"`
+// Message carries the underlying error text (rate limit, network
+// failure, ...) so clients can show a diagnosable reason.
+Message string `json:"message,omitempty"`
 }
 
 // ApprovalRequestedPayload describes an approval request.
