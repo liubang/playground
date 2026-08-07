@@ -116,8 +116,9 @@ type SearchTool struct {
 func NewSearchTool(validator *workspacepkg.PathValidator, runner rgRunner) (*SearchTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "search",
-		Description: "Search file contents recursively within the workspace. 'pattern' is a ripgrep regular expression " +
+		Description: "Search file contents within the workspace. 'pattern' is a ripgrep regular expression " +
 			"(use fixed_strings=true for literal text). " +
+			"'path' defaults to the workspace root and may point to a directory (searched recursively) or a single file. " +
 			"Filter with glob (a pattern without '/' matches the file name at any depth, one with '/' matches the " +
 			"workspace-relative path; prefix with '!' to exclude; multiple patterns union) or with type (a ripgrep " +
 			"type name like 'go'; omit it when unsure — prefer glob for file-name filtering and never pass null " +
@@ -182,8 +183,8 @@ func (t *SearchTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	if pathInfo.Display != args.Path {
 		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 	}
-	if !pathInfo.Info.IsDir() {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "path must refer to a directory"))
+	if !pathInfo.Info.IsDir() && !pathInfo.Info.Mode().IsRegular() {
+		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "path must refer to a file or directory"))
 	}
 
 	if rgAvailable(t.runner) {
@@ -227,8 +228,10 @@ func validateSearchArgs(validator *workspacepkg.PathValidator, args searchArgs) 
 	if err != nil {
 		return searchArgs{}, pathResolution{}, err
 	}
-	if !pathInfo.Info.IsDir() {
-		return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, "path must refer to a directory")
+	// Accept single files as well as directories: models routinely scope a
+	// search to one file (rg handles file targets natively).
+	if !pathInfo.Info.IsDir() && !pathInfo.Info.Mode().IsRegular() {
+		return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, "path must refer to a file or directory")
 	}
 	args.Path = pathInfo.Display
 	return args, pathInfo, nil
@@ -242,7 +245,12 @@ func (t *SearchTool) executeRipgrep(ctx context.Context, prepared domain.Prepare
 	argv := rgCommonArgs(args.Context, args.CaseSensitive, args.FixedStrings, args.NoIgnore, args.Glob, args.Type, rgMaxCountHint)
 	argv = append(argv, "--", args.Pattern, root.Absolute)
 
-	stdout, rgTruncated, err := runRipgrep(ctx, t.runner, root.Absolute, argv)
+	// cwd must be a directory: a single-file target runs from its parent.
+	cwd := root.Absolute
+	if !root.Info.IsDir() {
+		cwd = filepath.Dir(root.Absolute)
+	}
+	stdout, rgTruncated, err := runRipgrep(ctx, t.runner, cwd, argv)
 	if err != nil {
 		if isSandboxFailure(err) {
 			// The sandbox cannot execute anything on this platform (e.g.
@@ -331,7 +339,13 @@ func (t *SearchTool) executeGoFallback(ctx context.Context, prepared domain.Prep
 		Before:        args.Context,
 		After:         args.Context,
 	}
-	output, err := searchDirectory(ctx, t.base.validator, root, legacy)
+	var output searchTextOutput
+	var err error
+	if root.Info.IsDir() {
+		output, err = searchDirectory(ctx, t.base.validator, root, legacy)
+	} else {
+		output, err = searchSingleFile(ctx, root, legacy)
+	}
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}

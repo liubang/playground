@@ -152,8 +152,16 @@ func validateReadFileArgs(validator *workspacepkg.PathValidator, args readFileAr
 	if args.Offset < 1 {
 		return readFileArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, "offset must be at least 1")
 	}
-	if args.Limit < 1 || args.Limit > maxReadFileLimit {
-		return readFileArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("limit must be between 1 and %d", maxReadFileLimit))
+	if args.Limit < 1 {
+		return readFileArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, "limit must be at least 1")
+	}
+	if args.Limit > maxReadFileLimit {
+		// Models routinely ask for "the rest of the file" with an oversized
+		// limit (e.g. the exact remaining line count, 683 > 500 observed in
+		// the wild). The output header always reports the actual shown range
+		// and total line count, so clamping is transparent and saves a wasted
+		// model round trip over a reject-retry cycle.
+		args.Limit = maxReadFileLimit
 	}
 
 	pathInfo, err := resolveExistingPath(validator, args.Path)
