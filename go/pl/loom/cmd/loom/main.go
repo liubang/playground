@@ -847,7 +847,8 @@ func listRules() error {
 	policy := permission.AttachRules(context.Background(), permission.DefaultPolicy(), root, resolved.Storage.RulesDir(), resolved.Rules.LoadOptions(), slog.Default())
 	rules := policy.Rules.Rules()
 	domains := policy.Rules.Domains()
-	if len(rules) == 0 && len(domains) == 0 {
+	tools := policy.Rules.Tools()
+	if len(rules) == 0 && len(domains) == 0 && len(tools) == 0 {
 		fmt.Println("no rules in effect (rules.enabled/rules.builtin may be disabled)")
 		return nil
 	}
@@ -868,6 +869,13 @@ func listRules() error {
 			just = " — " + d.Justification
 		}
 		fmt.Printf("[%s] %-40s %s%s\n", d.Decision, "host:"+d.Host, d.Source, just)
+	}
+	for _, t := range tools {
+		just := ""
+		if t.Justification != "" {
+			just = " — " + t.Justification
+		}
+		fmt.Printf("[%s] %-40s %s%s\n", t.Decision, "tool:"+t.Name, t.Source, just)
 	}
 	return nil
 }
@@ -956,10 +964,10 @@ func checkRules(argv []string) error {
 }
 
 // forgetRules removes a remembered approval from the SQLite store.
-// Usage: loom rules forget [--domain host] <program> [args...]
+// Usage: loom rules forget [--domain host | --tool name] <program> [args...]
 func forgetRules(argv []string) error {
 	if len(argv) == 0 {
-		return errors.New("usage: loom rules forget [--domain host] <program> [args...]")
+		return errors.New("usage: loom rules forget [--domain host | --tool name] <program> [args...]")
 	}
 	resolved, err := loadConfig(false, slog.Default())
 	if err != nil {
@@ -970,16 +978,32 @@ func forgetRules(argv []string) error {
 		return fmt.Errorf("open remembered store: %w", err)
 	}
 	defer store.Close()
-	if len(argv) >= 2 && argv[0] == "--domain" {
-		host := argv[1]
-		ok, err := store.ForgetDomain(context.Background(), host)
+	if argv[0] == "--domain" || argv[0] == "--tool" {
+		if len(argv) < 2 || strings.HasPrefix(argv[1], "--") {
+			return fmt.Errorf("%s requires a value\nusage: loom rules forget [--domain host | --tool name] <program> [args...]", argv[0])
+		}
+		if argv[0] == "--domain" {
+			host := argv[1]
+			ok, err := store.ForgetDomain(context.Background(), host)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				fmt.Printf("no remembered domain for %q\n", host)
+			} else {
+				fmt.Printf("forgot domain %q\n", host)
+			}
+			return nil
+		}
+		name := argv[1]
+		ok, err := store.ForgetTool(context.Background(), name)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			fmt.Printf("no remembered domain for %q\n", host)
+			fmt.Printf("no remembered tool rule for %q\n", name)
 		} else {
-			fmt.Printf("forgot domain %q\n", host)
+			fmt.Printf("forgot tool rule %q\n", name)
 		}
 		return nil
 	}

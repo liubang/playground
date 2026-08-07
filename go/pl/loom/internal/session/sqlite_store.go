@@ -19,7 +19,9 @@ package session
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,7 +34,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 7
+const sqliteSchemaVersion = 8
 
 // SQLiteStore persists session events and checkpoints in a SQLite database.
 // A store serializes writes through one connection; optimistic versions still
@@ -225,6 +227,17 @@ CREATE TABLE IF NOT EXISTS memory_phase2_lease (
 CREATE TABLE IF NOT EXISTS app_prefs (
     pref_key TEXT PRIMARY KEY,
     pref_value TEXT NOT NULL DEFAULT ''
+);
+-- session_shares: one active share link per session (schema v8). The
+-- 128-bit random token is the capability — anyone holding the link can
+-- read the session transcript via the public /share/{token} routes until
+-- the share is revoked or the session is deleted (cascade).
+CREATE TABLE IF NOT EXISTS session_shares (
+    session_id TEXT PRIMARY KEY,
+    share_token TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    created_at_unix_nano INTEGER NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
 `
 	if _, err := s.db.ExecContext(ctx, schema); err != nil {
@@ -1105,4 +1118,99 @@ ON CONFLICT(pref_key) DO UPDATE SET pref_value = excluded.pref_value`, key, valu
 		return storeError("set app pref", err)
 	}
 	return nil
+}
+
+// --- session_shares: public read-only share links (schema v8) ---
+
+// GetOrCreateShare returns the session's active share token, creating one
+// on first use (idempotent: repeated calls return the same token until the
+// share is revoked). The token is 128 bits of randomness, hex-encoded.
+func (s *SQLiteStore) GetOrCreateShare(ctx context.Context, sessionID domain.SessionID) (string, error) {
+	if sessionID.IsZero() {
+		return "", domain.NewError(domain.ErrInvalidInput, "session ID is required")
+	}
+	var token string
+	err := s.db.QueryRowContext(ctx,
+		"SELECT share_token FROM session_shares WHERE session_id = ?", sessionID.String()).Scan(&token)
+	if err == nil {
+		return token, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", storeError("load session share", err)
+	}
+	var exists int
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT 1 FROM sessions WHERE session_id = ?", sessionID.String()).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", domain.NewError(domain.ErrInvalidInput, "session not found")
+		}
+		return "", storeError("find session", err)
+	}
+	var tokenBytes [16]byte
+	if _, err := rand.Read(tokenBytes[:]); err != nil {
+		return "", storeError("generate share token", err)
+	}
+	token = hex.EncodeToString(tokenBytes[:])
+	now := time.Now().UTC()
+	if _, err := s.db.ExecContext(ctx, `
+INSERT INTO session_shares(session_id, share_token, created_at, created_at_unix_nano)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(session_id) DO UPDATE SET share_token = excluded.share_token,
+    created_at = excluded.created_at, created_at_unix_nano = excluded.created_at_unix_nano`,
+		sessionID.String(), token, formatTime(now), now.UnixNano()); err != nil {
+		return "", storeError("create session share", err)
+	}
+	return token, nil
+}
+
+// ResolveShare maps a share token back to its session. A revoked or never
+// created share yields ErrInvalidInput("share not found").
+func (s *SQLiteStore) ResolveShare(ctx context.Context, token string) (domain.SessionID, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return domain.SessionID{}, domain.NewError(domain.ErrInvalidInput, "share not found")
+	}
+	var rawSession string
+	err := s.db.QueryRowContext(ctx,
+		"SELECT session_id FROM session_shares WHERE share_token = ?", token).Scan(&rawSession)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.SessionID{}, domain.NewError(domain.ErrInvalidInput, "share not found")
+	}
+	if err != nil {
+		return domain.SessionID{}, storeError("resolve share token", err)
+	}
+	sessionID, err := domain.ParseSessionID(rawSession)
+	if err != nil {
+		return domain.SessionID{}, storeError("decode shared session ID", err)
+	}
+	return sessionID, nil
+}
+
+// DeleteShare revokes the session's share link (idempotent).
+func (s *SQLiteStore) DeleteShare(ctx context.Context, sessionID domain.SessionID) error {
+	if sessionID.IsZero() {
+		return domain.NewError(domain.ErrInvalidInput, "session ID is required")
+	}
+	if _, err := s.db.ExecContext(ctx,
+		"DELETE FROM session_shares WHERE session_id = ?", sessionID.String()); err != nil {
+		return storeError("delete session share", err)
+	}
+	return nil
+}
+
+// HasArtifactRef reports whether the session's durable projections reference
+// the artifact — the authorization check for serving artifact bytes through
+// a share link (only artifacts the shared session actually rendered).
+func (s *SQLiteStore) HasArtifactRef(ctx context.Context, sessionID domain.SessionID, artifactID domain.ArtifactID) (bool, error) {
+	var exists int
+	err := s.db.QueryRowContext(ctx,
+		"SELECT 1 FROM artifact_refs WHERE session_id = ? AND artifact_id = ?",
+		sessionID.String(), artifactID.String()).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, storeError("check shared artifact reference", err)
+	}
+	return true, nil
 }

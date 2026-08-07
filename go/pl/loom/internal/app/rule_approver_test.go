@@ -281,3 +281,59 @@ func TestRunCmdTrustPreview(t *testing.T) {
 		t.Fatal("non-run_cmd must not offer the trust option")
 	}
 }
+
+// TestRememberToolByName covers tool-name memory: eligible tools
+// (generate_image) are remembered categorically and auto-approved on
+// later calls; path/host-varying tools (edit) stay per-call.
+func TestRememberToolByName(t *testing.T) {
+	inner := &recordingApprover{}
+	rules := NewRuleApprover(inner, permission.NewSessionRules())
+
+	genArgs := json.RawMessage(`{"prompt":"a cat"}`)
+	rule, ok := rules.RememberCall("generate_image", genArgs, "")
+	if !ok || rule.Tool != "generate_image" || rule.Label != "generate_image" {
+		t.Fatalf("remember = %+v ok=%v, want tool generate_image", rule, ok)
+	}
+	if !rule.Grant.IsZero() || rule.Prefix != nil || rule.Host != "" {
+		t.Fatalf("tool memory must not carry prefix/host/grant: %+v", rule)
+	}
+
+	genCall := domain.PreparedCall{Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "generate_image", Arguments: genArgs}}
+	decision, err := rules.RequestApproval(context.Background(), domain.ApprovalRequest{Call: genCall})
+	if err != nil || decision != domain.DecisionAllow || inner.calls != 0 {
+		t.Fatalf("remembered tool: decision=%v err=%v inner=%d, want allow without prompting", decision, err, inner.calls)
+	}
+
+	// Ineligible tools are never remembered and keep prompting.
+	if _, ok := rules.RememberCall("edit", json.RawMessage(`{"path":"x.go"}`), ""); ok {
+		t.Fatal("edit must not be rememberable by tool name")
+	}
+	if _, ok := rules.RememberCall("view_image", json.RawMessage(`{"path":"x.png"}`), ""); ok {
+		t.Fatal("view_image must not be rememberable by tool name")
+	}
+	editCall := domain.PreparedCall{Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "edit", Arguments: json.RawMessage(`{"path":"x.go"}`)}}
+	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{Call: editCall})
+	if err != nil || decision != domain.DecisionAsk || inner.calls != 1 {
+		t.Fatalf("edit call must delegate: decision=%v inner=%d", decision, inner.calls)
+	}
+}
+
+func TestApprovalRulePreviewTool(t *testing.T) {
+	preview, grant, ok := ApprovalRulePreview("generate_image", json.RawMessage(`{"prompt":"a cat"}`))
+	if !ok || preview != "generate_image" {
+		t.Fatalf("preview = %q ok=%v, want generate_image", preview, ok)
+	}
+	if !grant.IsZero() {
+		t.Fatalf("grant = %+v, want zero", grant)
+	}
+	// The preview is the canonical (normalized) tool name.
+	preview, _, ok = ApprovalRulePreview("Generate_Image", json.RawMessage(`{"prompt":"a cat"}`))
+	if !ok || preview != "generate_image" {
+		t.Fatalf("preview = %q ok=%v, want canonical generate_image", preview, ok)
+	}
+	for _, name := range []string{"edit", "write", "view_image", "websearch"} {
+		if _, _, ok := ApprovalRulePreview(name, json.RawMessage(`{}`)); ok {
+			t.Errorf("%s must not have a tool-name rule preview", name)
+		}
+	}
+}

@@ -25,6 +25,7 @@ go_library(
         "handlers_artifacts.go",
         "handlers_events.go",
         "handlers_sessions.go",
+        "handlers_share.go",
         "handlers_workspaces.go",
         "lock.go",
         "server.go",
@@ -44,6 +45,7 @@ go_test(
     name = "server_test",
     srcs = [
         "handlers_artifacts_test.go",
+        "handlers_share_test.go",
         "server_test.go",
     ],
     embed = [":server"],

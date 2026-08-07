@@ -169,8 +169,9 @@ type Client interface {
 	ListMCPServers(ctx context.Context) ([]MCPServerInfo, error)
 	// ListRules returns the effective approval ruleset.
 	ListRules(ctx context.Context) (*permission.RuleSet, error)
-	// ForgetRule removes a remembered approval rule.
-	ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host string) error
+	// ForgetRule removes a remembered approval rule. Exactly one of
+	// prefix/host/tool is consulted, selected by kind.
+	ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host, tool string) error
 
 	// --- workspaces ---
 
