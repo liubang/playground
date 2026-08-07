@@ -66,12 +66,15 @@ type StreamAggregator struct {
 	// idTaken reports whether a tool call id already appears in the
 	// transcript (installed via WithIDRewrite); rewritten records every
 	// collision rewrite (original → replacement) for observability.
-	idTaken       func(string) bool
-	rewritten     map[string]string
-	stop          domain.StopReason
-	inputTokens   int64
-	outputTokens  int64
-	responseEnded bool
+	idTaken      func(string) bool
+	rewritten    map[string]string
+	stop         domain.StopReason
+	inputTokens  int64
+	outputTokens int64
+	// cachedInputTokens accumulates provider-reported prompt-cache hits
+	// (observability only; inputTokens already includes them).
+	cachedInputTokens int64
+	responseEnded     bool
 }
 
 type streamResponse struct {
@@ -195,6 +198,7 @@ func (a *StreamAggregator) Apply(evt domain.ModelEvent) error {
 		}
 		a.inputTokens = evt.InputTokens
 		a.outputTokens = evt.OutputTokens
+		a.cachedInputTokens = evt.CachedInputTokens
 		if a.hooks.OnModelUsage != nil {
 			a.hooks.OnModelUsage(evt.InputTokens, evt.OutputTokens)
 		}
@@ -297,6 +301,11 @@ func malformedArgumentsPlaceholder(raw string) json.RawMessage {
 	}
 	return payload
 }
+
+// CachedInputTokens reports provider-reported prompt-cache hits for the
+// completed call (0 when the provider does not report them). The value is
+// observability-only: inputTokens already includes cached tokens.
+func (a *StreamAggregator) CachedInputTokens() int64 { return a.cachedInputTokens }
 
 // InterruptedMessage creates an interrupted message from partial text.
 func (a *StreamAggregator) InterruptedMessage() domain.Message {

@@ -1089,9 +1089,10 @@ func (s *canonicalState) applyChatChunk(chunk chatCompletionChunk, emit func(dom
 
 	if chunk.Usage != nil {
 		emit(domain.ModelEvent{
-			Kind:         domain.ModelEventUsage,
-			InputTokens:  chunk.Usage.PromptTokens,
-			OutputTokens: chunk.Usage.CompletionTokens,
+			Kind:              domain.ModelEventUsage,
+			InputTokens:       chunk.Usage.PromptTokens,
+			OutputTokens:      chunk.Usage.CompletionTokens,
+			CachedInputTokens: chunk.Usage.cachedInputTokens(),
 		})
 	}
 
@@ -1215,9 +1216,10 @@ func (s *canonicalState) flushBufferedTerminal(emit func(domain.ModelEvent) bool
 	}
 	if s.bufferedUsage != nil {
 		emit(domain.ModelEvent{
-			Kind:         domain.ModelEventUsage,
-			InputTokens:  s.bufferedUsage.PromptTokens,
-			OutputTokens: s.bufferedUsage.CompletionTokens,
+			Kind:              domain.ModelEventUsage,
+			InputTokens:       s.bufferedUsage.PromptTokens,
+			OutputTokens:      s.bufferedUsage.CompletionTokens,
+			CachedInputTokens: s.bufferedUsage.cachedInputTokens(),
 		})
 	}
 	emit(domain.ModelEvent{
@@ -1398,6 +1400,28 @@ type usageInfo struct {
 	CompletionTokens int64 `json:"completion_tokens,omitempty"`
 	InputTokens      int64 `json:"input_tokens,omitempty"`
 	OutputTokens     int64 `json:"output_tokens,omitempty"`
+	// Chat Completions nests cache hits under prompt_tokens_details; the
+	// Responses API nests them under input_tokens_details.
+	PromptTokensDetails *cachedTokenDetails `json:"prompt_tokens_details,omitempty"`
+	InputTokensDetails  *cachedTokenDetails `json:"input_tokens_details,omitempty"`
+}
+
+type cachedTokenDetails struct {
+	CachedTokens int64 `json:"cached_tokens,omitempty"`
+}
+
+// cachedInputTokens extracts the prompt-cache hit count (0 when absent).
+func (u *usageInfo) cachedInputTokens() int64 {
+	if u == nil {
+		return 0
+	}
+	if u.PromptTokensDetails != nil && u.PromptTokensDetails.CachedTokens > 0 {
+		return u.PromptTokensDetails.CachedTokens
+	}
+	if u.InputTokensDetails != nil {
+		return u.InputTokensDetails.CachedTokens
+	}
+	return 0
 }
 
 type responsesEventEnvelope struct {
@@ -1447,13 +1471,17 @@ func responseUsage(resp *responsesResponse) *usageInfo {
 	}
 	if resp.Usage.PromptTokens == 0 && resp.Usage.CompletionTokens == 0 {
 		return &usageInfo{
-			PromptTokens:     resp.Usage.InputTokens,
-			CompletionTokens: resp.Usage.OutputTokens,
+			PromptTokens:        resp.Usage.InputTokens,
+			CompletionTokens:    resp.Usage.OutputTokens,
+			InputTokensDetails:  resp.Usage.InputTokensDetails,
+			PromptTokensDetails: resp.Usage.PromptTokensDetails,
 		}
 	}
 	return &usageInfo{
-		PromptTokens:     resp.Usage.PromptTokens,
-		CompletionTokens: resp.Usage.CompletionTokens,
+		PromptTokens:        resp.Usage.PromptTokens,
+		CompletionTokens:    resp.Usage.CompletionTokens,
+		PromptTokensDetails: resp.Usage.PromptTokensDetails,
+		InputTokensDetails:  resp.Usage.InputTokensDetails,
 	}
 }
 

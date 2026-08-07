@@ -172,16 +172,21 @@ type ModelEvent struct {
 	// (Anthropic thinking signature / redacted payload) needed to replay the
 	// reasoning block in later tool-use turns. ReasoningRedacted marks the
 	// block as provider-redacted (no visible text, opaque payload only).
-	ReasoningSignature string     `json:"reasoning_signature,omitempty"`
-	ReasoningRedacted  bool       `json:"reasoning_redacted,omitempty"`
-	ToolIndex          int        `json:"tool_index,omitempty"`
-	ToolID             string     `json:"tool_id,omitempty"`
-	ToolName           string     `json:"tool_name,omitempty"`
-	ToolArgs           string     `json:"tool_args,omitempty"`
-	InputTokens        int64      `json:"input_tokens,omitempty"`
-	OutputTokens       int64      `json:"output_tokens,omitempty"`
-	StopReason         StopReason `json:"stop_reason,omitempty"`
-	Error              string     `json:"error,omitempty"`
+	ReasoningSignature string `json:"reasoning_signature,omitempty"`
+	ReasoningRedacted  bool   `json:"reasoning_redacted,omitempty"`
+	ToolIndex          int    `json:"tool_index,omitempty"`
+	ToolID             string `json:"tool_id,omitempty"`
+	ToolName           string `json:"tool_name,omitempty"`
+	ToolArgs           string `json:"tool_args,omitempty"`
+	InputTokens        int64  `json:"input_tokens,omitempty"`
+	OutputTokens       int64  `json:"output_tokens,omitempty"`
+	// CachedInputTokens reports provider-side prompt-cache hits (Anthropic
+	// cache_read_input_tokens, OpenAI prompt_tokens_details.cached_tokens).
+	// Observability only. Caveat: OpenAI's InputTokens already includes cached
+	// tokens, Anthropic's does not — see Usage.CachedInputTokens.
+	CachedInputTokens int64      `json:"cached_input_tokens,omitempty"`
+	StopReason        StopReason `json:"stop_reason,omitempty"`
+	Error             string     `json:"error,omitempty"`
 }
 
 // ModelStream is a pull-based stream of model events.
