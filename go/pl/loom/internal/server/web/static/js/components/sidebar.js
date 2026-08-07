@@ -78,7 +78,7 @@ export class Sidebar {
     const group = el("div", "ws-group");
 
     const node = el("div", "ws-node" + (collapsed ? " is-collapsed" : ""));
-    node.appendChild(el("span", "ws-caret", collapsed ? "▸" : "▾"));
+    node.appendChild(el("span", "ws-caret", collapsed ? "▶" : "▼"));
     node.appendChild(el("span", "ws-icon", "▤"));
     const nameEl = el("span", "ws-name", name);
     if (ws && ws.root_path) nameEl.title = ws.root_path;

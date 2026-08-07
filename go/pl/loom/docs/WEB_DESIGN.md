@@ -415,7 +415,7 @@ unified diff 字符串有三个来源：`approval.requested.payload.diff`（审�
 | # | 改动 | 说明 |
 |---|---|---|
 | 7.1 | `internal/server/web/web.go`：`//go:embed static` + `GET /` 静态服务 | `index.html` `Cache-Control: no-store`；其余资产 `?v=<version>` 查询串缓存；`--no-web` 时 404（纯 API 模式）；静态资源**不要求 token**（引导页必须匿名可达，敏感数据全在 /v1/*）。Bazel 侧：静态文件走 `embedsrcs`（gazelle 识别 `//go:embed` 指令自动生成） |
-| 7.2 | 安全响应头（静态 + API 统一） | `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'`（`unsafe-inline` 仅限 style：组件内联样式少量使用；script 严格 self，内联脚本零容忍）；`X-Content-Type-Options: nosniff`；`Referrer-Policy: no-referrer`；`X-Frame-Options: DENY`（防点击劫持，见 §8） |
+| 7.2 | 安全响应头（静态 + API 统一） | `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'`（`unsafe-inline` 仅限 style：组件内联样式少量使用；script 严格 self，内联脚本零容忍；`img-src` 的 `blob:` 供 artifact 图片经 `URL.createObjectURL` 渲染——`<img>` 无法携带 Authorization 头）；`X-Content-Type-Options: nosniff`；`Referrer-Policy: no-referrer`；`X-Frame-Options: DENY`（防点击劫持，见 §8） |
 | 7.3 | CORS preflight（`OPTIONS`）处理 | M2 审查遗留：`--allow-origin` 设置时响应 preflight（`Allow-Headers: Authorization, Content-Type`，`Allow-Methods` 按路由）；未设置时维持全拒。**仅远程前端开发场景需要**；内嵌 SPA 同源无需 CORS |
 | 7.4 | `GET /v1/events?sessions=a,b` 多会话合并流（M3c） | SERVE_DESIGN §5.3/F8：侧栏徽标单连接驱动，规避浏览器每域 6 连接限制（R9）；M3a 以轮询兜底先行 |
 | 7.5 | `GET /v1/sessions/{id}/subagents/{child}` 钻取端点（M3c） | §5.3 已列（可裁切项）；MVP 子 agent 以折叠块降级呈现 |

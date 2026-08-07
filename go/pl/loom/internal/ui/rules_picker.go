@@ -24,12 +24,12 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 )
 
-// RuleEntry is one row in the /rules picker: either an argv-prefix rule
-// or a domain rule, with enough data to render, filter, and (for
+// RuleEntry is one row in the /rules picker: an argv-prefix, domain, or
+// tool-name rule, with enough data to render, filter, and (for
 // remembered entries) delete.
 type RuleEntry struct {
-	Kind          permission.RuleKind // Argv or Domain
-	Label         string              // display text: joined prefix or @host
+	Kind          permission.RuleKind // Argv, Domain, or Tool
+	Label         string              // display text: joined prefix, @host, or #tool
 	Decision      string
 	Source        string
 	Grant         string // grant summary (e.g. "network=full, write=2 paths")
@@ -38,6 +38,7 @@ type RuleEntry struct {
 	// Deletion keys (only valid when Deletable):
 	Prefix []string // argv prefix (Kind == Argv)
 	Host   string   // domain host  (Kind == Domain)
+	Tool   string   // tool name    (Kind == Tool)
 }
 
 // NewRulesFinder creates the /rules picker populated with the combined
@@ -55,7 +56,7 @@ func (m Model) NewRulesFinder(rules *permission.RuleSet) *Finder[RuleEntry] {
 // rulesFinderItems flattens the combined rule set into finder rows.
 // A nil rule set (rules disabled) yields no rows.
 func rulesFinderItems(rules *permission.RuleSet) []FinderItem[RuleEntry] {
-	items := make([]FinderItem[RuleEntry], 0, len(rules.Rules())+len(rules.Domains()))
+	items := make([]FinderItem[RuleEntry], 0, len(rules.Rules())+len(rules.Domains())+len(rules.Tools()))
 	for _, r := range rules.Rules() {
 		e := RuleEntry{
 			Kind:          permission.RuleArgv,
@@ -91,6 +92,22 @@ func rulesFinderItems(rules *permission.RuleSet) []FinderItem[RuleEntry] {
 			Hint:  rulesRowHint(e),
 		})
 	}
+	for _, t := range rules.Tools() {
+		e := RuleEntry{
+			Kind:          permission.RuleTool,
+			Label:         "#" + t.Name,
+			Decision:      t.Decision,
+			Source:        t.Source,
+			Justification: t.Justification,
+			Deletable:     t.Source == permission.RememberedSource,
+			Tool:          t.Name,
+		}
+		items = append(items, FinderItem[RuleEntry]{
+			Value: e,
+			Text:  e.Label,
+			Hint:  rulesRowHint(e),
+		})
+	}
 	return items
 }
 
@@ -105,10 +122,14 @@ func rulesRowHint(e RuleEntry) string {
 
 func rulePreview(e RuleEntry) string {
 	var b strings.Builder
-	if e.Kind == permission.RuleDomain {
+	switch e.Kind {
+	case permission.RuleDomain:
 		b.WriteString("Kind:     domain\n")
 		b.WriteString("Host:     " + e.Host + "\n")
-	} else {
+	case permission.RuleTool:
+		b.WriteString("Kind:     tool\n")
+		b.WriteString("Tool:     " + e.Tool + "\n")
+	default:
 		b.WriteString("Kind:     argv\n")
 		b.WriteString("Prefix:   " + e.Label + "\n")
 	}

@@ -166,8 +166,12 @@ type Controller struct {
 	// ("allow always") before delegating to approver. The agent loop sees
 	// only this wrapper.
 	rulesApprover *RuleApprover
-	clock         domain.Clock
-	logger        *slog.Logger
+	// sessionRules is the in-memory "allow always" store shared with the
+	// policy layer; ForgetRule must evict from it too, or a forgotten rule
+	// would keep auto-approving until process restart.
+	sessionRules *permission.SessionRules
+	clock        domain.Clock
+	logger       *slog.Logger
 
 	mu          sync.Mutex
 	state       ControllerState
@@ -290,6 +294,7 @@ func NewController(cfg ControllerConfig) *Controller {
 		broker:           cfg.Broker,
 		approver:         cfg.Approver,
 		rulesApprover:    NewRuleApprover(cfg.Approver, sessionRules),
+		sessionRules:     sessionRules,
 		questioner:       runtime.Questioner,
 		clock:            clock,
 		logger:           logger,
@@ -952,7 +957,8 @@ func (c *Controller) ListRules(ctx context.Context) (*permission.RuleSet, error)
 
 // ForgetRule removes a remembered rule from the persistent store and
 // reloads the in-memory policy so the change takes effect immediately.
-func (c *Controller) ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host string) error {
+// Exactly one of prefix/host/tool is consulted, selected by kind.
+func (c *Controller) ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host, tool string) error {
 	store := c.rememberedStore()
 	if store == nil {
 		return fmt.Errorf("remembered store not available")
@@ -974,8 +980,29 @@ func (c *Controller) ForgetRule(ctx context.Context, kind permission.RuleKind, p
 		if !ok {
 			return fmt.Errorf("domain %q not found in remembered store", host)
 		}
+	case permission.RuleTool:
+		ok, err := store.ForgetTool(ctx, tool)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("tool %q not found in remembered store", tool)
+		}
 	default:
 		return fmt.Errorf("unknown rule kind %d", kind)
+	}
+	// Evict the session-memory twin too: ReloadPolicy only rebuilds the
+	// declarative/store layers, and a session-remembered entry would
+	// otherwise keep auto-approving until process restart.
+	if c.sessionRules != nil {
+		switch kind {
+		case permission.RuleArgv:
+			c.sessionRules.ForgetRunCmd(prefix)
+		case permission.RuleDomain:
+			c.sessionRules.ForgetDomain(host)
+		case permission.RuleTool:
+			c.sessionRules.ForgetTool(tool)
+		}
 	}
 	// Reload the policy so the in-memory ruleset reflects the deletion.
 	if err := c.bootstrap.ReloadPolicy(ctx); err != nil {
@@ -1300,7 +1327,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 		Run:                run,
 		Model:              provider.ModelFor(current.Model),
 		ModelName:          current.Model,
-		Store:              &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), artifacts: make(map[domain.ToolCallID][]domain.ArtifactRef), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
+		Store:              &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), artifacts: make(map[domain.ToolCallID][]domain.ArtifactRef), images: make(map[domain.ToolCallID][]domain.ImageContent), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
 		Approver:           c.rulesApprover,
 		Policy:             c.bootstrap.CurrentPolicy(),
 		Registry:           c.runtime.Registry,
@@ -1536,13 +1563,17 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 			// Persist the memory to the remembered store so future sessions
 			// inherit it (rules.persist_remembered=false opts out by not
 			// opening the store). run_cmd remembers argv prefixes (with
-			// grants); web_fetch remembers exact hosts.
+			// grants); web_fetch remembers exact hosts; eligible tools are
+			// remembered by name.
 			if store := c.rememberedStore(); store != nil {
 				persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				var persistErr error
-				if rule.Host != "" {
+				switch {
+				case rule.Tool != "":
+					persistErr = store.RememberTool(persistCtx, rule.Tool)
+				case rule.Host != "":
 					persistErr = store.RememberDomain(persistCtx, rule.Host)
-				} else {
+				default:
 					persistErr = store.RememberRule(persistCtx, rule.Prefix, rule.Grant)
 				}
 				persistCancel()
@@ -2041,6 +2072,11 @@ type publishingStore struct {
 	// them for live rendering (e.g. generate_image output).
 	artifacts map[domain.ToolCallID][]domain.ArtifactRef
 
+	// images stashes the inline image content parts of a tool result keyed
+	// by call ID over the same window, so the runtime ToolCompleted event
+	// can carry them for live rendering (e.g. view_image output).
+	images map[domain.ToolCallID][]domain.ImageContent
+
 	// pendingArgs stashes raw tool-call arguments keyed by call ID between
 	// EventModelResponseCompleted (which carries them in the assistant
 	// message) and tool preparation/approval, so edit calls can render a
@@ -2177,18 +2213,23 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 	case domain.EventPermissionRequested:
 		var payload toolCallAuditDTO
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
-			card := runtimeevent.ApprovalRequestedPayload{
-				ApprovalID:  ev.ID,
-				CallID:      payload.CallID,
-				ToolName:    payload.Tool,
-				Risk:        payload.Risk,
-				Description: payload.ApprovalDesc,
-				ArgsHash:    payload.ArgsHash,
-				ReadPaths:   payload.ReadPaths,
-				WritePaths:  payload.WritePaths,
-				Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffUnbounded),
-				Arguments:   s.pendingArgs[payload.CallID],
-			}
+		card := runtimeevent.ApprovalRequestedPayload{
+			ApprovalID:  ev.ID,
+			CallID:      payload.CallID,
+			ToolName:    payload.Tool,
+			Risk:        payload.Risk,
+			Description: payload.ApprovalDesc,
+			ArgsHash:    payload.ArgsHash,
+			ReadPaths:   payload.ReadPaths,
+			WritePaths:  payload.WritePaths,
+			Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffUnbounded),
+			Arguments:   s.pendingArgs[payload.CallID],
+		}
+		// Surface what "allow always" would remember so frontends can label
+		// (or hide) the option honestly instead of offering a no-op.
+		if preview, _, ok := ApprovalRulePreview(payload.Tool, card.Arguments); ok {
+			card.RulePreview = preview
+		}
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindApprovalRequested, card)
 			// Project the card so reconnecting clients can rebuild it from
 			// the snapshot (the requested event itself is not replayed into
@@ -2240,6 +2281,10 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			if len(artifacts) > 0 && s.artifacts != nil {
 				s.artifacts[callID] = artifacts
 			}
+			imgs := imagesFromToolResult(payload.Message)
+			if len(imgs) > 0 && s.images != nil {
+				s.images[callID] = imgs
+			}
 		}
 	case domain.EventToolExecutionStarted:
 		var payload toolCallAuditDTO
@@ -2258,6 +2303,8 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			delete(s.previews, payload.CallID)
 			artifacts := s.artifacts[payload.CallID]
 			delete(s.artifacts, payload.CallID)
+			imgs := s.images[payload.CallID]
+			delete(s.images, payload.CallID)
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindToolCompleted, runtimeevent.ToolCompletedPayload{
 				CallID:       payload.CallID,
 				ToolName:     payload.ToolName,
@@ -2268,6 +2315,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				FinishedAt:   payload.FinishedAt,
 				Preview:      preview,
 				Artifacts:    artifacts,
+				Images:       imgs,
 			})
 		}
 	case domain.EventBudgetUpdated:
@@ -2434,6 +2482,25 @@ func toolResultPreview(msg domain.Message) (domain.ToolCallID, string, []domain.
 		return result.CallID, boundPreviewLines(text, domain.ToolPreviewMaxLines, domain.ToolPreviewMaxBytes), artifacts
 	}
 	return domain.ToolCallID{}, "", nil
+}
+
+// imagesFromToolResult extracts inline image content parts from the first
+// tool_result part of msg. It is used to stash images for the runtime
+// ToolCompleted event so live clients can render them (e.g. view_image).
+func imagesFromToolResult(msg domain.Message) []domain.ImageContent {
+	for _, part := range msg.Parts {
+		if part.Kind != domain.PartToolResult || part.ToolResult == nil {
+			continue
+		}
+		var imgs []domain.ImageContent
+		for _, cp := range part.ToolResult.Content {
+			if cp.Kind == domain.PartImage && cp.Image != nil {
+				imgs = append(imgs, *cp.Image)
+			}
+		}
+		return imgs
+	}
+	return nil
 }
 
 // boundPreviewLines trims text to at most maxLines lines and maxBytes bytes,

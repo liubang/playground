@@ -244,6 +244,16 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/sessions/{id}/compact", s.handleRequestCompaction)
 	mux.HandleFunc("GET /v1/sessions/{id}/events", s.handleSessionEvents)
 	mux.HandleFunc("GET /v1/artifacts/{id}", s.handleArtifact)
+	// Share links: create/revoke are owner operations (bearer-gated);
+	// the /v1/shared/* reads and the /share/{token} page are public —
+	// the unguessable token in the URL is the capability.
+	mux.HandleFunc("POST /v1/sessions/{id}/share", s.handleShareSession)
+	mux.HandleFunc("DELETE /v1/sessions/{id}/share", s.handleRevokeShare)
+	mux.HandleFunc("GET /v1/shared/{token}", s.handleSharedView)
+	mux.HandleFunc("GET /v1/shared/{token}/artifacts/{id}", s.handleSharedArtifact)
+	if !s.cfg.NoWeb {
+		mux.Handle("GET /share/{token}", web.SharePageHandler())
+	}
 	if !s.cfg.NoWeb {
 		// Catch-all for the embedded SPA; ServeMux gives the /v1 patterns
 		// precedence (docs/WEB_DESIGN.md §7.1).
@@ -259,7 +269,10 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		// (docs/WEB_DESIGN.md §7.2): CSP is the second XSS line of defense
 		// behind DOMPurify; X-Frame-Options blocks clickjacking.
 		header := w.Header()
-		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+		// img-src allows blob: because artifact images are fetched with the
+		// bearer token and rendered through URL.createObjectURL — <img> cannot
+		// carry the Authorization header itself (see artifactImageBlock).
+		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'")
 		header.Set("X-Content-Type-Options", "nosniff")
 		header.Set("Referrer-Policy", "no-referrer")
 		header.Set("X-Frame-Options", "DENY")
@@ -272,7 +285,7 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		// The SPA's static assets are not sensitive: the token gate page
 		// must be reachable anonymously, and every /v1 endpoint still
 		// requires the bearer token (docs/WEB_DESIGN.md §7.1).
-		if !isHealthRoute(r.URL.Path) && !isStaticRoute(r.URL.Path) && !s.authorized(r) {
+		if !isHealthRoute(r.URL.Path) && !isStaticRoute(r.URL.Path) && !isSharedRoute(r.URL.Path) && !s.authorized(r) {
 			writeError(w, errUnauthorized)
 			return
 		}
@@ -288,6 +301,13 @@ func isHealthRoute(path string) bool {
 // than the API.
 func isStaticRoute(path string) bool {
 	return !strings.HasPrefix(path, "/v1/")
+}
+
+// isSharedRoute reports whether the path is a public share-link read: the
+// 128-bit token embedded in the URL is the credential, so these routes
+// skip bearer auth (read-only by construction).
+func isSharedRoute(path string) bool {
+	return strings.HasPrefix(path, "/v1/shared/")
 }
 
 // acquireSSE registers one SSE connection for the session; false when the
