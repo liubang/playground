@@ -763,9 +763,31 @@ type memoryPromptWrapper struct {
 }
 
 func (w *memoryPromptWrapper) Build(ctx context.Context) (string, []domain.ContextRuleRef, error) {
-	base, refs, err := w.inner.Build(ctx)
+	secs, err := w.BuildSections(ctx)
 	if err != nil {
 		return "", nil, err
+	}
+	return joinTexts(secs.Static, secs.Dynamic), secs.Refs, nil
+}
+
+// BuildSections splits the wrapped prompt for prompt caching: the memory
+// instructions (a constant) join the cacheable static part; the memory
+// summary (re-read from disk every turn) joins the per-request dynamic
+// part. See agent.SectionedPromptBuilder.
+func (w *memoryPromptWrapper) BuildSections(ctx context.Context) (prompt.Sections, error) {
+	var secs prompt.Sections
+	if sb, ok := w.inner.(agent.SectionedPromptBuilder); ok {
+		s, err := sb.BuildSections(ctx)
+		if err != nil {
+			return prompt.Sections{}, err
+		}
+		secs = s
+	} else {
+		base, refs, err := w.inner.Build(ctx)
+		if err != nil {
+			return prompt.Sections{}, err
+		}
+		secs = prompt.Sections{Static: base, Refs: refs}
 	}
 
 	// Inject memory summary (hot tier).
@@ -775,22 +797,32 @@ func (w *memoryPromptWrapper) Build(ctx context.Context) (string, []domain.Conte
 		w.logger.Warn("memory prompt injection failed", "error", err)
 	}
 
-	// Assemble the injected memory section in one place so the audit
-	// rule ref hashes exactly what was appended to the prompt.
-	var section strings.Builder
+	// Assemble the injected memory sections in one place so the audit rule
+	// ref hashes exactly what was appended to the prompt.
+	staticSection := memory.MemoryInstructions
+	var dynamicBody string
 	if summary != "" {
-		section.WriteString("\n\n# Memory\n\n")
-		section.WriteString(summary)
+		dynamicBody = "# Memory\n\n" + summary
 	}
-	// Inject memory instructions so the model knows how to use memory tools.
-	section.WriteString("\n\n")
-	section.WriteString(memory.MemoryInstructions)
-	injected := section.String()
-	base += injected
+	secs.Static = strings.TrimRight(secs.Static, "\n") + "\n\n" + staticSection + "\n"
+	if dynamicBody != "" {
+		secs.Dynamic = strings.TrimRight(secs.Dynamic, "\n") + "\n\n" + dynamicBody + "\n"
+	}
 
 	// Add the memory rule ref for audit; the context manifest requires a
 	// non-empty hash per rule.
-	refs = append(refs, provider.RuleRef(injected))
+	secs.Refs = append(secs.Refs, provider.RuleRef(staticSection+dynamicBody))
 
-	return base, refs, nil
+	return secs, nil
+}
+
+func joinTexts(static, dynamic string) string {
+	switch {
+	case strings.TrimSpace(static) == "":
+		return dynamic
+	case strings.TrimSpace(dynamic) == "":
+		return static
+	default:
+		return static + "\n\n" + dynamic
+	}
 }

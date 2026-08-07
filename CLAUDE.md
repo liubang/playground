@@ -51,6 +51,7 @@ cpp/features/    C++17/20 language feature experiments
 cpp/algo/        Algorithms
 java/pl/         Spring Boot services
 go/              Go utilities, cgo examples
+go/pl/loom/      Loom — AI coding agent (TUI + WebUI; agent loop, sessions, memory, skills, permissions)
 python/          pybind11 bindings, Manim animations, crawlers
 proto/           Shared Protobuf definitions
 tla/             TLA+ formal specifications

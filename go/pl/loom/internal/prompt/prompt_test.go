@@ -20,6 +20,7 @@ package prompt
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,7 +70,7 @@ func TestBuildContainsAllBuiltinSectionsInOrder(t *testing.T) {
 	text, rules, err := b.Build(context.Background())
 	require.NoError(t, err)
 
-	titles := []string{"身份与角色", "核心工作方式", "任务计划", "代码修改规范", "沟通规范", "运行环境约束", "终端与 Git 安全约束", "环境与上下文"}
+	titles := []string{"Identity & Role", "Core Workflow", "Task Planning", "Code Change Guidelines", "Communication", "Runtime Environment", "Terminal & Git Safety", "Environment & Context"}
 	last := -1
 	for _, title := range titles {
 		idx := strings.Index(text, "# "+title)
@@ -93,10 +94,10 @@ func TestBuildDeclaresWebFetchCapabilityAndNoGatekeeping(t *testing.T) {
 	// The model must learn from the prompt — not from a refusal loop — that
 	// web_fetch has direct network access outside the run_cmd sandbox.
 	assert.Contains(t, text, "web_fetch")
-	assert.Contains(t, text, "不经沙箱")
+	assert.Contains(t, text, "bypassing the sandbox")
 	// Anti-gatekeeping: fulfill any tool-completable request instead of
 	// refusing on identity grounds.
-	assert.Contains(t, text, "不以“编程助手”的身份自我设限")
+	assert.Contains(t, text, "do not self-limit by your \"coding assistant\" role")
 }
 
 func TestBuildDeclaresWorkflowAndConciseRules(t *testing.T) {
@@ -104,22 +105,23 @@ func TestBuildDeclaresWorkflowAndConciseRules(t *testing.T) {
 	text, _, err := b.Build(context.Background())
 	require.NoError(t, err)
 	// Preamble narration and validation discipline from the workflow section.
-	assert.Contains(t, text, "行动先播报")
-	assert.Contains(t, text, "不要重读文件确认")
+	assert.Contains(t, text, "Narrate before acting")
+	assert.Contains(t, text, "do not re-read the file to confirm")
 	// Codex-style concise final-answer rules.
-	assert.Contains(t, text, "不超过 10 行")
-	assert.Contains(t, text, "不展示已写入文件的全文")
+	assert.Contains(t, text, "within 10 lines")
+	assert.Contains(t, text, "do not dump the full contents of files")
 }
 
 func TestBuildRendersEnvironmentSnapshot(t *testing.T) {
 	b := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: testEnvironment()}), noRules)
 	text, _, err := b.Build(context.Background())
 	require.NoError(t, err)
-	assert.Contains(t, text, "工作区根目录: /ws")
-	assert.Contains(t, text, "当前分支 main，HEAD 为 abc1234")
+	assert.Contains(t, text, "Workspace root: /ws")
+	assert.Contains(t, text, "branch main, HEAD abc1234")
 	assert.Contains(t, text, "darwin/arm64")
 	assert.Contains(t, text, "/bin/zsh")
-	assert.Contains(t, text, "2026-07-24 12:00:00 UTC")
+	// Date-level granularity keeps the dynamic section cache-friendly.
+	assert.Contains(t, text, "Current date: 2026-07-24 UTC")
 }
 
 func TestBuildRendersNonGitWorkspace(t *testing.T) {
@@ -128,7 +130,7 @@ func TestBuildRendersNonGitWorkspace(t *testing.T) {
 	b := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: env}), noRules)
 	text, _, err := b.Build(context.Background())
 	require.NoError(t, err)
-	assert.Contains(t, text, "非 Git 仓库")
+	assert.Contains(t, text, "not a Git repository")
 }
 
 func TestBuildAppendsExtraInstructions(t *testing.T) {
@@ -138,7 +140,7 @@ func TestBuildAppendsExtraInstructions(t *testing.T) {
 		WithExtraInstructions("始终使用 Bazel 构建。"))
 	text, rules, err := b.Build(context.Background())
 	require.NoError(t, err)
-	assert.Contains(t, text, "# 附加指令\n始终使用 Bazel 构建。")
+	assert.Contains(t, text, "# Additional Instructions\n始终使用 Bazel 构建。")
 	assertRuleSourcePresent(t, rules, "loom://config/extra-instructions")
 }
 
@@ -150,9 +152,9 @@ func TestBuildIncludesWorkspaceRules(t *testing.T) {
 		}}))
 	text, rules, err := b.Build(context.Background())
 	require.NoError(t, err)
-	assert.Contains(t, text, "# 工作区规则（/ws/LOOM.md）")
+	assert.Contains(t, text, "# Workspace Rules (/ws/LOOM.md)")
 	assert.Contains(t, text, "一律使用 Bazel 构建。")
-	assert.Contains(t, text, "不能提升权限")
+	assert.Contains(t, text, "must never raise privileges")
 	assertRuleSourcePresent(t, rules, "file:///ws/LOOM.md")
 }
 
@@ -165,9 +167,9 @@ func TestBuildOrdersSectionsByContextPriority(t *testing.T) {
 		WithExtraInstructions("附加X"))
 	text, _, err := b.Build(context.Background())
 	require.NoError(t, err)
-	extraIdx := strings.Index(text, "# 附加指令")
-	rulesIdx := strings.Index(text, "# 工作区规则")
-	envIdx := strings.Index(text, "# 环境与上下文")
+	extraIdx := strings.Index(text, "# Additional Instructions")
+	rulesIdx := strings.Index(text, "# Workspace Rules")
+	envIdx := strings.Index(text, "# Environment & Context")
 	require.GreaterOrEqual(t, extraIdx, 0)
 	require.Greater(t, rulesIdx, extraIdx, "workspace rules should follow user preferences")
 	require.Greater(t, envIdx, rulesIdx, "environment snapshot should come last")
@@ -179,7 +181,7 @@ func TestBuildSkipsWorkspaceRulesOnProviderError(t *testing.T) {
 		WithRulesProvider(staticRulesProvider{err: errors.New("boom")}))
 	text, _, err := b.Build(context.Background())
 	require.NoError(t, err)
-	assert.NotContains(t, text, "工作区规则")
+	assert.NotContains(t, text, "Workspace Rules")
 }
 
 func TestBuildDegradesWhenEnvironmentCollectionFails(t *testing.T) {
@@ -189,8 +191,8 @@ func TestBuildDegradesWhenEnvironmentCollectionFails(t *testing.T) {
 		WithClock(domain.NewFakeClock(time.Date(2026, 7, 24, 0, 0, 0, 0, time.UTC))))
 	text, rules, err := b.Build(context.Background())
 	require.NoError(t, err)
-	assert.Contains(t, text, "工作区根目录: /ws")
-	assert.Contains(t, text, "环境信息采集不完整")
+	assert.Contains(t, text, "Workspace root: /ws")
+	assert.Contains(t, text, "environment collection incomplete")
 	assert.NotEmpty(t, rules)
 }
 
@@ -291,7 +293,7 @@ func TestBuilderManagedBaseReplacesBuiltinSections(t *testing.T) {
 	if !strings.Contains(text, "managed identity") {
 		t.Fatalf("managed content missing:\n%s", text)
 	}
-	if strings.Contains(text, "身份与角色") {
+	if strings.Contains(text, "Identity & Role") {
 		t.Fatalf("builtin sections must be replaced:\n%s", text)
 	}
 	if !strings.Contains(text, "no emoji") {
@@ -348,10 +350,10 @@ func TestBuildInjectsSkillsSection(t *testing.T) {
 	text, rules, err := b.Build(context.Background())
 	require.NoError(t, err)
 
-	skillsIdx := strings.Index(text, "# 可用技能（Skills）")
+	skillsIdx := strings.Index(text, "# Available Skills")
 	require.Greater(t, skillsIdx, -1, "skills section missing")
 	assert.True(t, strings.Index(text, "rule") < skillsIdx, "skills section must follow workspace rules")
-	assert.True(t, skillsIdx < strings.Index(text, "# 环境与上下文"), "skills section must precede the environment section")
+	assert.True(t, skillsIdx < strings.Index(text, "# Environment & Context"), "skills section must precede the environment section")
 	assert.Contains(t, text, "skill catalog body")
 
 	var sources []string
@@ -370,7 +372,7 @@ func TestBuildSkillsProviderFailureDegradesToNoSection(t *testing.T) {
 	)
 	text, rules, err := b.Build(context.Background())
 	require.NoError(t, err)
-	assert.NotContains(t, text, "可用技能")
+	assert.NotContains(t, text, "Available Skills")
 	// Every other section keeps its audit ref.
 	for _, r := range rules {
 		assert.NotEqual(t, "loom://skills/catalog", r.Source)
@@ -387,7 +389,7 @@ func TestBuildSkillsEmptyBodyOmitsSection(t *testing.T) {
 	)
 	text, _, err := b.Build(context.Background())
 	require.NoError(t, err)
-	assert.NotContains(t, text, "可用技能")
+	assert.NotContains(t, text, "Available Skills")
 }
 
 func TestBuildManagedPromptKeepsSkillsSection(t *testing.T) {
@@ -401,12 +403,105 @@ func TestBuildManagedPromptKeepsSkillsSection(t *testing.T) {
 	text, rules, err := b.Build(context.Background())
 	require.NoError(t, err)
 	// Managed base replaces builtin sections but dynamic sections survive.
-	assert.NotContains(t, text, "身份与角色")
+	assert.NotContains(t, text, "Identity & Role")
 	assert.Contains(t, text, "managed body")
-	assert.Contains(t, text, "# 可用技能（Skills）")
+	assert.Contains(t, text, "# Available Skills")
 	var sources []string
 	for _, r := range rules {
 		sources = append(sources, r.Source)
 	}
 	assert.Contains(t, sources, "loom://skills/catalog")
+}
+
+func TestBuildRendersWorkspaceOverview(t *testing.T) {
+	env := testEnvironment()
+	env.WorkspaceOverview = "go/\n  pl/"
+	b := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: env}), noRules)
+	text, _, err := b.Build(context.Background())
+	require.NoError(t, err)
+	assert.Contains(t, text, "Workspace overview")
+	assert.Contains(t, text, "go/\n  pl/")
+}
+
+func TestWorkspaceOverviewListsThreeLevelsAndSkipsNoise(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "go", "pl", "loom"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cpp"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "node_modules"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".hidden"), []byte("x"), 0o644))
+	// Level-3 files are omitted (orientation only); level-3 dirs are listed.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go", "pl", "BUILD"), []byte("x"), 0o644))
+
+	overview := workspaceOverview(root)
+	assert.Contains(t, overview, "go/")
+	assert.Contains(t, overview, "  pl/")
+	assert.Contains(t, overview, "    loom/")
+	assert.Contains(t, overview, "cpp/")
+	assert.Contains(t, overview, "README.md")
+	assert.NotContains(t, overview, "BUILD")
+	assert.NotContains(t, overview, ".git")
+	assert.NotContains(t, overview, "node_modules")
+	assert.NotContains(t, overview, ".hidden")
+}
+
+func TestWorkspaceOverviewUnreadableRootReturnsEmpty(t *testing.T) {
+	assert.Empty(t, workspaceOverview(filepath.Join(t.TempDir(), "missing")))
+}
+
+func TestWorkspaceOverviewCapsLongListings(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < overviewMaxLines+20; i++ {
+		require.NoError(t, os.WriteFile(filepath.Join(root, fmt.Sprintf("f%04d.txt", i)), []byte("x"), 0o644))
+	}
+	overview := workspaceOverview(root)
+	// 80 content lines + 1 truncation marker line.
+	assert.LessOrEqual(t, len(strings.Split(overview, "\n")), overviewMaxLines+1)
+	assert.Contains(t, overview, "…")
+}
+
+func TestBuildSectionsSplitsStaticAndDynamic(t *testing.T) {
+	b := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: testEnvironment()}), noRules)
+	secs, err := b.BuildSections(context.Background())
+	require.NoError(t, err)
+
+	assert.Contains(t, secs.Static, "# Identity & Role")
+	assert.NotContains(t, secs.Static, "Workspace root")
+	assert.Contains(t, secs.Dynamic, "# Environment & Context")
+	assert.Contains(t, secs.Dynamic, "Workspace root: /ws")
+
+	// Build() stays the concatenation of the two parts, with all refs.
+	text, refs, err := b.Build(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, secs.Static+"\n\n"+secs.Dynamic, text)
+	assert.Equal(t, secs.Refs, refs)
+
+	// The static part is byte-stable across builds (prompt-cache prefix).
+	again, err := b.BuildSections(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, secs.Static, again.Static)
+}
+
+func TestFamilyPatch(t *testing.T) {
+	familyPatches["anthropic"] = "Always think step by step."
+	defer delete(familyPatches, "anthropic")
+
+	patch, ref := FamilyPatch("anthropic/claude-sonnet-4-5")
+	assert.Equal(t, "Always think step by step.", patch)
+	require.NotNil(t, ref)
+	assert.Equal(t, "loom://builtin/model-family/anthropic", ref.Source)
+	assert.True(t, strings.HasPrefix(ref.Hash, "sha256:"))
+
+	patch, ref = FamilyPatch("openai/gpt-5.2")
+	assert.Empty(t, patch)
+	assert.Nil(t, ref)
+}
+
+func TestModelFamilyNormalization(t *testing.T) {
+	assert.Equal(t, "anthropic", modelFamily("claude-sonnet-4-5"))
+	assert.Equal(t, "openai", modelFamily("GPT-5.2"))
+	assert.Equal(t, "openai", modelFamily("openai/o4-mini"))
+	assert.Equal(t, "deepseek", modelFamily("deepseek-chat"))
+	assert.Equal(t, "custom-model", modelFamily("custom-model"))
 }

@@ -1271,3 +1271,43 @@ func (rt *flakyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	}
 	return rt.base.RoundTrip(req)
 }
+
+func TestProviderStreamReportsCachedInputTokens(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"}}]}\n\n")
+		fmt.Fprint(w, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		fmt.Fprint(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":3,\"prompt_tokens_details\":{\"cached_tokens\":64}}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	provider := newTestProvider(t, server, server.Client(), 0)
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "gpt-test",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "hi")},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	defer stream.Close()
+	var usage *domain.ModelEvent
+	for {
+		evt, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		if evt.Kind == domain.ModelEventUsage {
+			e := evt
+			usage = &e
+		}
+	}
+	if usage == nil {
+		t.Fatal("usage event missing")
+	}
+	if usage.InputTokens != 100 || usage.CachedInputTokens != 64 {
+		t.Fatalf("usage = %+v, want input=100 cached=64", usage)
+	}
+}
