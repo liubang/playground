@@ -404,6 +404,45 @@ func TestSessionAllowNeverOverridesFileDeny(t *testing.T) {
 	}
 }
 
+func TestSessionForgetRunCmd(t *testing.T) {
+	s := NewSessionRules()
+	prefix, ok := s.RememberRunCmd([]string{"go", "test", "./..."}, domain.ExecGrant{})
+	if !ok {
+		t.Fatal("go test must be rememberable")
+	}
+	if _, ok := s.Match([]string{"go", "test", "./pl/..."}); !ok {
+		t.Fatal("remembered prefix must match")
+	}
+	if !s.ForgetRunCmd(prefix) {
+		t.Fatal("ForgetRunCmd must report the eviction")
+	}
+	if _, ok := s.Match([]string{"go", "test", "./pl/..."}); ok {
+		t.Fatal("forgotten prefix must no longer match")
+	}
+	if s.ForgetRunCmd(prefix) {
+		t.Fatal("second ForgetRunCmd must report false")
+	}
+}
+
+func TestSessionForgetDomain(t *testing.T) {
+	s := NewSessionRules()
+	if _, ok := s.RememberDomain("example.com"); !ok {
+		t.Fatal("host must be rememberable")
+	}
+	if !s.MatchDomain("example.com") {
+		t.Fatal("remembered host must match")
+	}
+	if !s.ForgetDomain("example.com") {
+		t.Fatal("ForgetDomain must report the eviction")
+	}
+	if s.MatchDomain("example.com") {
+		t.Fatal("forgotten host must no longer match")
+	}
+	if s.ForgetDomain("example.com") {
+		t.Fatal("second ForgetDomain must report false")
+	}
+}
+
 // TestAttachRulesBuiltinSwitch checks the builtin layer participates by
 // default and drops out when the load options disable it.
 func TestAttachRulesBuiltinSwitch(t *testing.T) {
