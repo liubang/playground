@@ -35,6 +35,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/model/httpc:httpc_lib",
         "//go/pl/loom/internal/trace",
     ],
 )
@@ -55,6 +56,7 @@ go_test(
     deps = [
         "//go/pl/loom/internal/artifact:artifact_lib",
         "//go/pl/loom/internal/fakes:fakes_lib",
+        "//go/pl/loom/internal/model/httpc:httpc_lib",
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/tool/builtin:builtin_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
