@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +37,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
+	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/builtin"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
@@ -3497,5 +3499,143 @@ func TestLoopFoldsExternalToolUsageIntoBudget(t *testing.T) {
 	if run.Usage.InputTokens != 600 || run.Usage.OutputTokens != 150 {
 		t.Fatalf("usage = %d/%d, want 600/150 (model + folded external)",
 			run.Usage.InputTokens, run.Usage.OutputTokens)
+	}
+}
+
+// Regression: a reverse proxy in front of the provider (an internal
+// openresty gateway) rejects oversized request bodies with HTTP 413 long
+// before token occupancy trips the model's context window. The loop must
+// read that as a fit failure (forced compaction + retry), not a hard
+// error — otherwise every subsequent turn fails identically because the
+// failed request stays in the transcript.
+func TestIsContextOverflowErrorClassifiesGateway413(t *testing.T) {
+	t.Parallel()
+
+	// Typed path: providers wrap httpc.StatusError with %w, the loop wraps
+	// again ("model stream: %w") — errors.As must see through both.
+	typed := fmt.Errorf("model stream: %w",
+		fmt.Errorf("anthropic provider: %w",
+			&httpc.StatusError{Code: http.StatusRequestEntityTooLarge, Status: "413 Request Entity Too Large"}))
+	if !isRequestTooLargeError(typed) {
+		t.Fatal("typed 413 StatusError must classify as request-too-large")
+	}
+	if !isContextOverflowError(typed) {
+		t.Fatal("typed 413 StatusError must classify as a fit failure")
+	}
+
+	// String-degraded path: mid-stream errors lose the error chain, so
+	// the nginx/openresty phrasing must match by needle.
+	degraded := errors.New("anthropic provider: HTTP 413 413 Payload Too Large: <html><head><title>413 Request Entity Too Large</title></head></html>")
+	if !isContextOverflowError(degraded) {
+		t.Fatal("string-degraded 413 (payload too large) must classify as a fit failure")
+	}
+}
+
+func TestIsContextOverflowErrorIgnoresOtherFailures(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []int{400, 401, 403, 404, 429, 500, 502} {
+		err := fmt.Errorf("openai provider: %w", &httpc.StatusError{Code: code, Status: fmt.Sprintf("%d Some Status", code)})
+		if isRequestTooLargeError(err) {
+			t.Fatalf("status %d must not classify as request-too-large", code)
+		}
+		if isContextOverflowError(err) {
+			t.Fatalf("status %d without overflow wording must not trigger compaction", code)
+		}
+	}
+	if isContextOverflowError(nil) || isRequestTooLargeError(nil) {
+		t.Fatal("nil error must not classify")
+	}
+	// A semantic provider overflow (400 with window wording) still
+	// classifies via the needles.
+	if !isContextOverflowError(errors.New("openai provider: HTTP 400: prompt is too long")) {
+		t.Fatal("semantic context overflow must still classify")
+	}
+}
+
+func TestHandleContextOverflow413ForcesCompactionThenTerminates(t *testing.T) {
+	run := newTestRun(domain.DefaultLimits())
+	if _, err := run.TransitionTo(domain.PhaseCallingModel); err != nil {
+		t.Fatalf("TransitionTo: %v", err)
+	}
+	loop := &Loop{Run: run}
+	cause := fmt.Errorf("anthropic provider: %w",
+		&httpc.StatusError{Code: http.StatusRequestEntityTooLarge, Status: "413 Request Entity Too Large"})
+
+	if err := loop.handleContextOverflow(context.Background(), cause); err != nil {
+		t.Fatalf("first 413 = %v, want forced compaction instead of an error", err)
+	}
+	if !loop.ForceCompact {
+		t.Fatal("first 413 must arm ForceCompact")
+	}
+
+	// The retry goes through a fresh model call (PhaseCallingModel) before
+	// the second rejection arrives.
+	if _, err := run.TransitionTo(domain.PhaseCallingModel); err != nil {
+		t.Fatalf("TransitionTo: %v", err)
+	}
+	err := loop.handleContextOverflow(context.Background(), cause)
+	if err == nil || !strings.Contains(err.Error(), "HTTP 413") {
+		t.Fatalf("second 413 = %v, want a 413-specific terminal message", err)
+	}
+	if run.State.Outcome != domain.OutcomeBudgetExhausted {
+		t.Fatalf("outcome = %s, want budget_exhausted", run.State.Outcome)
+	}
+
+	// A semantic overflow keeps the context-window wording.
+	run2 := newTestRun(domain.DefaultLimits())
+	if _, err := run2.TransitionTo(domain.PhaseCallingModel); err != nil {
+		t.Fatalf("TransitionTo: %v", err)
+	}
+	loop2 := &Loop{Run: run2}
+	if err := loop2.handleContextOverflow(context.Background(), errors.New("prompt is too long")); err != nil {
+		t.Fatalf("first overflow = %v, want forced compaction", err)
+	}
+	if _, err := run2.TransitionTo(domain.PhaseCallingModel); err != nil {
+		t.Fatalf("TransitionTo: %v", err)
+	}
+	err = loop2.handleContextOverflow(context.Background(), errors.New("prompt is too long"))
+	if err == nil || !strings.Contains(err.Error(), "context size twice") {
+		t.Fatalf("second overflow = %v, want the context-window terminal message", err)
+	}
+}
+
+// Regression: the trace output of a failed run must not inherit the
+// previous run's reply from the shared session transcript (observed in
+// Langfuse: four consecutive 413-failed runs all reported an earlier
+// successful run's answer as their output).
+func TestRunAssistantTextScopesToCurrentRun(t *testing.T) {
+	t.Parallel()
+	run := newTestRun(domain.DefaultLimits())
+
+	prior := textMessage(domain.RoleAssistant, "上一轮的答复")
+	prior.Metadata = map[string]string{"run_id": domain.NewRunID().String()}
+	run.Messages = append(run.Messages,
+		textMessage(domain.RoleAssistant, "更老的答复"), // legacy, unstamped
+		prior,
+		textMessage(domain.RoleUser, "再试一次"),
+	)
+	if got := runAssistantText(run.Messages, run.ID); got != "" {
+		t.Fatalf("failed run must report empty output, got %q", got)
+	}
+
+	// Once this run produces a reply it becomes the trace output.
+	run.AddAssistantMessage(textMessage(domain.RoleAssistant, "本轮的答复"))
+	if got := runAssistantText(run.Messages, run.ID); got != "本轮的答复" {
+		t.Fatalf("output = %q, want the current run's reply", got)
+	}
+
+	// A text-less assistant message (pure tool call) does not shadow the
+	// reply.
+	run.AddAssistantMessage(domain.Message{
+		ID:   domain.NewMessageID(),
+		Role: domain.RoleAssistant,
+		Parts: []domain.ContentPart{{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{
+			ID: domain.NewToolCallID(), Name: "run_cmd",
+		}}},
+		CreatedAt: time.Now(),
+	})
+	if got := runAssistantText(run.Messages, run.ID); got != "本轮的答复" {
+		t.Fatalf("output = %q, want to skip empty assistant text", got)
 	}
 }
