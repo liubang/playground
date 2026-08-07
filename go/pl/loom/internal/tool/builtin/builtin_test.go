@@ -81,6 +81,39 @@ func TestReadFileToolPrepareAndExecute(t *testing.T) {
 	}
 }
 
+func TestReadFileToolClampsOversizedLimit(t *testing.T) {
+	validator, root := newValidator(t)
+	var sb strings.Builder
+	for i := 1; i <= 600; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	mustWriteFile(t, filepath.Join(root, "big.txt"), []byte(sb.String()))
+
+	tool, err := NewReadFileTool(validator, nil)
+	if err != nil {
+		t.Fatalf("NewReadFileTool() error = %v", err)
+	}
+	// Models asking for "the rest of the file" can exceed maxReadFileLimit;
+	// clamp instead of failing the call (the header reports the real range).
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "read_file", readFileArgs{
+		Path: filepath.Join(root, "big.txt"), Offset: 1, Limit: 683,
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s: %+v", result.Status, result.Error)
+	}
+	output := toolResultText(t, result)
+	if !strings.Contains(output, "lines 1-500 of 600") {
+		t.Fatalf("output header = %q, want clamped range", strings.Split(output, "\n")[0])
+	}
+	if !strings.Contains(output, "offset=501") {
+		t.Fatalf("output missing continuation hint: %q", output)
+	}
+}
+
 func TestReadFileToolRejectsSensitiveComponent(t *testing.T) {
 	validator, root := newValidator(t)
 	mustWriteFile(t, filepath.Join(root, "safe", ".git", "config"), []byte("secret"))
@@ -279,6 +312,39 @@ func TestSearchGoFallbackSkipsBinaryAndSymlink(t *testing.T) {
 	}
 	if !reflect.DeepEqual(output.Matches, wantMatches) {
 		t.Fatalf("output.Matches = %#v, want %#v", output.Matches, wantMatches)
+	}
+}
+
+// The search path may point to a single file (models routinely scope a
+// search to one file; rg accepts file targets natively).
+func TestSearchAcceptsSingleFilePath(t *testing.T) {
+	validator, root := newValidator(t)
+	target := filepath.Join(root, "docs", "guide.md")
+	mustWriteFile(t, target, []byte("nothing here\nbind to host\nlast line\n"))
+	mustWriteFile(t, filepath.Join(root, "docs", "other.md"), []byte("bind elsewhere\n"))
+
+	tool, err := NewSearchTool(validator, nil) // nil runner → go fallback
+	if err != nil {
+		t.Fatalf("NewSearchTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+		Pattern: "bind",
+		Path:    target,
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output searchOutput
+	decodeToolResult(t, result, &output)
+	if output.MatchCount != 1 || len(output.Matches) != 1 {
+		t.Fatalf("matches = %+v, want exactly the single-file hit", output.Matches)
+	}
+	if output.Matches[0].Path != "docs/guide.md" || output.Matches[0].Line != 2 {
+		t.Fatalf("match = %+v, want docs/guide.md:2", output.Matches[0])
 	}
 }
 

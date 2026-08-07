@@ -161,6 +161,44 @@ func searchDirectory(ctx context.Context, validator *workspacepkg.PathValidator,
 	return output, nil
 }
 
+// searchSingleFile runs the fallback matcher over one regular file (the
+// search tool accepts single-file targets, matching rg semantics). Binary
+// and oversized files are reported through the skip counters, exactly as in
+// the directory walk; hard I/O failures propagate as errors.
+func searchSingleFile(ctx context.Context, file pathResolution, args searchTextArgs) (searchTextOutput, error) {
+	output := searchTextOutput{
+		Path:          args.Path,
+		Query:         args.Query,
+		CaseSensitive: args.CaseSensitive,
+		Before:        args.Before,
+		After:         args.After,
+		Matches:       []searchTextMatch{},
+	}
+	needle := args.Query
+	if !args.CaseSensitive {
+		needle = strings.ToLower(args.Query)
+	}
+	status, matches, err := searchFile(ctx, file, needle, args)
+	if err != nil {
+		return searchTextOutput{}, err
+	}
+	switch status {
+	case fileSearchBinary:
+		output.SkippedBinary = 1
+	case fileSearchTooLarge:
+		output.SkippedTooLarge = 1
+	default:
+		output.ScannedFiles = 1
+		if len(matches) > maxSearchMatches {
+			matches = matches[:maxSearchMatches]
+			output.Truncated = true
+		}
+		output.Matches = append(output.Matches, matches...)
+	}
+	output.MatchCount = len(output.Matches)
+	return output, nil
+}
+
 func searchFile(ctx context.Context, file pathResolution, needle string, args searchTextArgs) (fileSearchStatus, []searchTextMatch, error) {
 	if !file.Info.Mode().IsRegular() {
 		return fileSearchScanned, nil, nil
