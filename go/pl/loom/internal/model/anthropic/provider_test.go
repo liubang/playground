@@ -486,7 +486,7 @@ func TestStreamPrematureEOF(t *testing.T) {
 func TestMarshalNonLeadingSystemDowngraded(t *testing.T) {
 	t.Parallel()
 
-	system, messages, err := toAnthropicMessages([]domain.Message{
+	systemBlocks, messages, err := toAnthropicMessages([]domain.Message{
 		{Role: domain.RoleSystem, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "prompt"}}},
 		{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "one"}}},
 		{Role: domain.RoleSystem, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "compaction marker"}}},
@@ -494,8 +494,8 @@ func TestMarshalNonLeadingSystemDowngraded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("toAnthropicMessages: %v", err)
 	}
-	if system != "prompt" {
-		t.Fatalf("system = %q", system)
+	if len(systemBlocks) != 1 || systemBlocks[0]["text"] != "prompt" {
+		t.Fatalf("system = %+v", systemBlocks)
 	}
 	if len(messages) != 1 {
 		t.Fatalf("messages = %+v (consecutive user messages must merge)", messages)
@@ -672,5 +672,93 @@ func TestUserMessageBlocksWithImage(t *testing.T) {
 	}
 	if len(textOnly) != 1 || textOnly[0]["type"] != "text" || textOnly[0]["text"] != "hi" {
 		t.Fatalf("text-only blocks = %+v", textOnly)
+	}
+}
+
+func TestMarshalLeadingSystemBlocksCarryCacheControl(t *testing.T) {
+	t.Parallel()
+
+	body, err := marshalRequest(domain.ModelRequest{
+		ModelName: "claude-test", MaxTokens: 16,
+		Messages: []domain.Message{
+			{
+				Role:     domain.RoleSystem,
+				Parts:    []domain.ContentPart{{Kind: domain.PartText, Text: "static part"}},
+				Metadata: map[string]string{domain.MetadataPromptCache: domain.PromptCacheEphemeral},
+			},
+			{Role: domain.RoleSystem, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "dynamic part"}}},
+			{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshalRequest: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	system, ok := payload["system"].([]any)
+	if !ok || len(system) != 2 {
+		t.Fatalf("system = %+v, want two leading system blocks", payload["system"])
+	}
+	first := system[0].(map[string]any)
+	cc, ok := first["cache_control"].(map[string]any)
+	if !ok || cc["type"] != "ephemeral" {
+		t.Fatalf("static block missing cache_control: %+v", first)
+	}
+	second := system[1].(map[string]any)
+	if second["cache_control"] != nil {
+		t.Fatalf("dynamic block must not carry cache_control: %+v", second)
+	}
+}
+
+func TestMarshalSingleUnmarkedSystemStaysString(t *testing.T) {
+	t.Parallel()
+
+	body, err := marshalRequest(domain.ModelRequest{
+		ModelName: "claude-test", MaxTokens: 16,
+		Messages: []domain.Message{
+			{Role: domain.RoleSystem, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "prompt"}}},
+			{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshalRequest: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload["system"] != "prompt" {
+		t.Fatalf("system = %+v, want the plain-string form", payload["system"])
+	}
+}
+
+func TestStreamReportsCachedInputTokens(t *testing.T) {
+	t.Parallel()
+
+	server := sseServer(t,
+		"event: message_start\ndata: {\"message\":{\"usage\":{\"input_tokens\":100,\"output_tokens\":1,\"cache_read_input_tokens\":80,\"cache_creation_input_tokens\":20}}}\n\n"+
+			"event: message_stop\ndata: {}\n\n")
+	defer server.Close()
+
+	provider, err := New(Config{BaseURL: server.URL, APIKey: "sk-ant"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "claude-test", MaxTokens: 16,
+		Messages: []domain.Message{{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	events := collectEvents(t, stream)
+	usage, ok := findEvent(events, domain.ModelEventUsage)
+	if !ok {
+		t.Fatal("usage event missing")
+	}
+	if usage.InputTokens != 100 || usage.CachedInputTokens != 80 {
+		t.Fatalf("usage = %+v, want input=100 cached=80", usage)
 	}
 }

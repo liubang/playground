@@ -52,6 +52,19 @@ const (
 	MessageStatusInterrupted MessageStatus = "interrupted"
 )
 
+// Metadata keys with cross-package meaning.
+const (
+	// MetadataPromptCache marks an ephemeral system-prompt message as safe
+	// for provider-side prompt caching (value PromptCacheEphemeral). It is
+	// set by the agent loop on the stable static part; providers that
+	// support caching translate it (Anthropic cache_control), others
+	// ignore it.
+	MetadataPromptCache = "prompt_cache"
+	// PromptCacheEphemeral requests short-lived (provider-default TTL)
+	// caching of the marked block and everything before it.
+	PromptCacheEphemeral = "ephemeral"
+)
+
 // ArtifactRef references a large content blob stored externally.
 type ArtifactRef struct {
 	ID   ArtifactID `json:"id"`

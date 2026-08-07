@@ -173,7 +173,7 @@ func TestSkillRepoSkillFlow(t *testing.T) {
 
 	// The discovered skill was listed in the system prompt of call #1.
 	system := systemPromptOf(t, model, 0)
-	if !strings.Contains(system, "可用技能") || !strings.Contains(system, "echo-skill") {
+	if !strings.Contains(system, "Available Skills") || !strings.Contains(system, "echo-skill") {
 		t.Fatalf("skills section missing from system prompt")
 	}
 	// read_skill is R1: auto-approved, never reaches the approver.
@@ -338,7 +338,7 @@ func TestSkillsDisabledFlow(t *testing.T) {
 	if err := loop.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if system := systemPromptOf(t, model, 0); strings.Contains(system, "可用技能") || strings.Contains(system, "echo-skill") {
+	if system := systemPromptOf(t, model, 0); strings.Contains(system, "Available Skills") || strings.Contains(system, "echo-skill") {
 		t.Fatalf("skills must not appear with LOOM_SKILLS=0")
 	}
 }
