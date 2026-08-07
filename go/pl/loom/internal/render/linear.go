@@ -100,11 +100,15 @@ func (r *Linear) ObserveDurable(evt runtimeevent.RuntimeEvent) error {
 				r.lastInputTokens, r.lastOutputTokens = 0, 0
 			}
 		}
-	case runtimeevent.KindModelRequestFailed:
-		var payload runtimeevent.ModelRequestFailedPayload
-		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
-			fmt.Fprintf(r.out, "\n[model error] %s: %s\n", payload.Stage, payload.Code)
-		}
+case runtimeevent.KindModelRequestFailed:
+var payload runtimeevent.ModelRequestFailedPayload
+if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+if payload.Message != "" {
+fmt.Fprintf(r.out, "\n[model error] %s: %s — %s\n", payload.Stage, payload.Code, domain.TruncateAtRuneBoundary(payload.Message, 200))
+} else {
+fmt.Fprintf(r.out, "\n[model error] %s: %s\n", payload.Stage, payload.Code)
+}
+}
 	case runtimeevent.KindApprovalRequested:
 		var payload runtimeevent.ApprovalRequestedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {

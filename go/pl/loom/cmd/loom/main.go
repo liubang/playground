@@ -366,7 +366,7 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	if icons == "" && os.Getenv("TERM") == "dumb" {
 		icons = "plain"
 	}
-	meta, _ := resolved.ModelMeta(bootstrap.Current)
+	meta, _ := resolved.ModelMeta(bootstrap.CurrentModel())
 	contextCfg := resolved.Context
 	if meta.WindowUtilization != nil {
 		contextCfg.Utilization = *meta.WindowUtilization
@@ -389,7 +389,7 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 		_ = service.Shutdown(shutdownCtx)
 		broker.Close()
 	}()
-	return ui.StartTUI(sessionClient, bootstrap.Current.String(), root, opts)
+	return ui.StartTUI(sessionClient, bootstrap.CurrentModel().String(), root, opts)
 }
 
 // runServe starts the headless server mode (loom serve): a single-instance

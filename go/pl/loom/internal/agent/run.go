@@ -735,6 +735,10 @@ type modelRequestFailedPayload struct {
 	RequestID domain.EventID `json:"request_id"`
 	Stage     string         `json:"stage"`
 	Code      string         `json:"code"`
+	// Message carries the underlying error text (rate limit, network
+	// failure, ...), so the failure is diagnosable from the event log
+	// alone instead of requiring server logs.
+	Message string `json:"message,omitempty"`
 }
 
 type permissionResolvedPayload struct {
@@ -1210,8 +1214,14 @@ func (l *Loop) callModel(ctx context.Context) error {
 			RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
 			Input: messages, StartTime: startedAt, EndTime: l.Run.Clock.Now(), Err: err,
 		})
+		if errors.Is(err, context.Canceled) {
+			// Cancellation is a user action, not a request failure: skip the
+			// request_failed audit event and terminate as cancelled.
+			l.terminate(ctx, domain.OutcomeCancelled)
+			return fmt.Errorf("model stream: %w", err)
+		}
 		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
-			RequestID: req.ID, Stage: "start", Code: errorCodeForAudit(err),
+			RequestID: req.ID, Stage: "start", Code: errorCodeForAudit(err), Message: err.Error(),
 		})
 		if isContextOverflowError(err) {
 			return l.handleContextOverflow(ctx, err)
@@ -1221,7 +1231,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	}
 	defer stream.Close()
 
-	agg := NewStreamAggregator(l.Run.Clock, l.StreamHooks)
+	agg := NewStreamAggregator(l.Run.Clock, l.StreamHooks).WithIDRewrite(l.toolCallIDTaken())
 	aggErr := consumeStream(stream, agg)
 	if aggErr != nil {
 		if agg.HasPartialContent() {
@@ -1231,8 +1241,14 @@ func (l *Loop) callModel(ctx context.Context) error {
 			RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
 			Input: messages, StartTime: startedAt, EndTime: l.Run.Clock.Now(), Err: aggErr,
 		})
+		if errors.Is(aggErr, context.Canceled) {
+			// Same cancellation routing as the start stage: cancelled, not
+			// failed, and no request_failed event.
+			l.terminate(ctx, domain.OutcomeCancelled)
+			return fmt.Errorf("model stream consumption: %w", aggErr)
+		}
 		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
-			RequestID: req.ID, Stage: "stream", Code: errorCodeForAudit(aggErr),
+			RequestID: req.ID, Stage: "stream", Code: errorCodeForAudit(aggErr), Message: aggErr.Error(),
 		})
 		if isContextOverflowError(aggErr) {
 			return l.handleContextOverflow(ctx, aggErr)
@@ -1249,14 +1265,21 @@ func (l *Loop) callModel(ctx context.Context) error {
 			RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
 			Input: messages, StartTime: startedAt, EndTime: l.Run.Clock.Now(), Err: err,
 		})
+		if errors.Is(err, context.Canceled) {
+			l.terminate(ctx, domain.OutcomeCancelled)
+			return fmt.Errorf("model stream finalization: %w", err)
+		}
 		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
-			RequestID: req.ID, Stage: "finalize", Code: errorCodeForAudit(err),
+			RequestID: req.ID, Stage: "finalize", Code: errorCodeForAudit(err), Message: err.Error(),
 		})
 		if isContextOverflowError(err) {
 			return l.handleContextOverflow(ctx, err)
 		}
 		l.terminate(ctx, domain.OutcomeFailed)
 		return fmt.Errorf("model stream finalization: %w", err)
+	}
+	if rewritten := agg.RewrittenIDs(); len(rewritten) > 0 && l.Logger != nil {
+		l.Logger.Warn("rewrote colliding provider tool call ids", "count", len(rewritten))
 	}
 	if text := strings.Join(response.TextParts(), ""); strings.TrimSpace(text) != "" {
 		l.markProgress()
@@ -2295,6 +2318,29 @@ func (l *Loop) isToolResultRecorded(callID domain.ToolCallID) bool {
 	return false
 }
 
+// toolCallIDTaken builds a conflict detector over the transcript: it
+// reports whether a tool call id already appears as a call or a result.
+// Providers whose tool-call ids are per-turn counters (kimi's
+// "run_cmd_0", ...) collide across turns; the StreamAggregator rewrites
+// such ids so loom-internal pairing stays globally unique.
+func (l *Loop) toolCallIDTaken() func(string) bool {
+	taken := make(map[string]struct{})
+	for _, msg := range l.Run.Messages {
+		for _, tc := range msg.ToolCalls() {
+			taken[tc.ID.String()] = struct{}{}
+		}
+		for _, p := range msg.Parts {
+			if p.Kind == domain.PartToolResult && p.ToolResult != nil {
+				taken[p.ToolResult.CallID.String()] = struct{}{}
+			}
+		}
+	}
+	return func(id string) bool {
+		_, ok := taken[id]
+		return ok
+	}
+}
+
 // recordToolError persists an error result for a call that never reached
 // execution (denied, unknown tool, prepare failure, interruption) and emits
 // the matching trace observation: policy denials are security-relevant and
@@ -2351,6 +2397,12 @@ func errorCodeForAudit(err error) string {
 	var agentErr *domain.AgentError
 	if errors.As(err, &agentErr) {
 		return string(agentErr.Code)
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return string(domain.ErrTimeout)
+	case errors.Is(err, context.Canceled):
+		return string(domain.ErrCancelled)
 	}
 	return string(domain.ErrInternal)
 }
