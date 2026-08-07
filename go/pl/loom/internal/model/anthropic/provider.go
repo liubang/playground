@@ -185,7 +185,7 @@ func marshalRequest(req domain.ModelRequest) ([]byte, error) {
 		return nil, err
 	}
 
-	system, messages, err := toAnthropicMessages(req.Messages)
+	systemBlocks, messages, err := toAnthropicMessages(req.Messages)
 	if err != nil {
 		return nil, err
 	}
@@ -199,8 +199,12 @@ func marshalRequest(req domain.ModelRequest) ([]byte, error) {
 		"messages":   messages,
 		"stream":     true,
 	}
-	if system != "" {
-		payload["system"] = system
+	switch {
+	case len(systemBlocks) == 1 && systemBlocks[0]["cache_control"] == nil:
+		// Single unmarked block keeps the plain-string form (back-compat).
+		payload["system"] = systemBlocks[0]["text"]
+	case len(systemBlocks) > 0:
+		payload["system"] = systemBlocks
 	}
 	// Extended thinking pins temperature to 1; any caller-tuned value would
 	// be rejected by the API, so it is only sent when thinking is off.
@@ -255,15 +259,18 @@ func thinkingBudgetFor(spec domain.ReasoningSpec, maxTokens int64) (int64, error
 	return budget, nil
 }
 
-// toAnthropicMessages converts the canonical transcript. The leading system
-// message is hoisted into the top-level system parameter (a system message
-// anywhere else is downgraded to user text, mirroring the openai provider's
-// GLM-class workaround); tool results become tool_result blocks inside a
-// user message; signed reasoning blocks are replayed as thinking blocks so
-// tool-use continuations stay valid; consecutive same-role messages are
-// merged because the API requires role alternation.
-func toAnthropicMessages(in []domain.Message) (string, []map[string]any, error) {
-	var systemParts []string
+// toAnthropicMessages converts the canonical transcript. Leading system
+// messages are hoisted into the top-level system parameter as text blocks
+// (a system message anywhere after the first non-system message is
+// downgraded to user text, mirroring the openai provider's GLM-class
+// workaround); a block whose message carries domain.MetadataPromptCache gets
+// cache_control so Anthropic caches the stable prompt prefix; tool results
+// become tool_result blocks inside a user message; signed reasoning blocks
+// are replayed as thinking blocks so tool-use continuations stay valid;
+// consecutive same-role messages are merged because the API requires role
+// alternation.
+func toAnthropicMessages(in []domain.Message) ([]map[string]any, []map[string]any, error) {
+	var systemBlocks []map[string]any
 	var out []map[string]any
 
 	appendBlock := func(role string, block map[string]any) {
@@ -277,17 +284,23 @@ func toAnthropicMessages(in []domain.Message) (string, []map[string]any, error) 
 		})
 	}
 
-	for i, msg := range in {
-		if i == 0 && msg.Role == domain.RoleSystem {
+	leading := true
+	for _, msg := range in {
+		if leading && msg.Role == domain.RoleSystem {
 			text, err := messageText(msg)
 			if err != nil {
-				return "", nil, err
+				return nil, nil, err
 			}
 			if text != "" {
-				systemParts = append(systemParts, text)
+				block := map[string]any{"type": "text", "text": text}
+				if msg.Metadata[domain.MetadataPromptCache] == domain.PromptCacheEphemeral {
+					block["cache_control"] = map[string]any{"type": "ephemeral"}
+				}
+				systemBlocks = append(systemBlocks, block)
 			}
 			continue
 		}
+		leading = false
 
 		switch msg.Role {
 		case domain.RoleSystem, domain.RoleUser:
@@ -295,20 +308,20 @@ func toAnthropicMessages(in []domain.Message) (string, []map[string]any, error) 
 			// Messages API accepts system only as the top-level parameter.
 			blocks, err := userMessageBlocks(msg)
 			if err != nil {
-				return "", nil, err
+				return nil, nil, err
 			}
 			for _, block := range blocks {
 				appendBlock(string(domain.RoleUser), block)
 			}
 		case domain.RoleAssistant:
 			if err := appendAssistant(msg, appendBlock); err != nil {
-				return "", nil, err
+				return nil, nil, err
 			}
 		default:
-			return "", nil, fmt.Errorf("anthropic provider: unsupported role %q", msg.Role)
+			return nil, nil, fmt.Errorf("anthropic provider: unsupported role %q", msg.Role)
 		}
 	}
-	return strings.Join(systemParts, "\n\n"), out, nil
+	return systemBlocks, out, nil
 }
 
 // appendAssistant converts one assistant message: text and signed reasoning
@@ -550,7 +563,10 @@ type streamState struct {
 	stop            domain.StopReason
 	inputTokens     int64
 	outputTokens    int64
-	blocks          map[int]*blockState
+	// cachedInputTokens tracks cache_read_input_tokens (prompt-cache hits;
+	// observability only, already included in inputTokens).
+	cachedInputTokens int64
+	blocks            map[int]*blockState
 }
 
 // wire event payloads (subset of the Messages streaming schema).
@@ -604,6 +620,11 @@ type errorEvent struct {
 type usagePayload struct {
 	InputTokens  int64 `json:"input_tokens,omitempty"`
 	OutputTokens int64 `json:"output_tokens,omitempty"`
+	// Prompt-cache accounting, present when the request used cache_control.
+	// Read hits are what we track for observability; creation writes are
+	// reported for completeness.
+	CacheReadInputTokens     int64 `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens,omitempty"`
 }
 
 // pump converts one Messages SSE body into canonical events; it runs inside
@@ -679,6 +700,7 @@ func (s *streamState) onMessageStart(data string, emit stream.Emitter) error {
 	if evt.Message.Usage != nil {
 		s.inputTokens = evt.Message.Usage.InputTokens
 		s.outputTokens = evt.Message.Usage.OutputTokens
+		s.cachedInputTokens = evt.Message.Usage.CacheReadInputTokens
 	}
 	s.responseStarted = true
 	emit(domain.ModelEvent{Kind: domain.ModelEventResponseStart})
@@ -828,6 +850,9 @@ func (s *streamState) onMessageDelta(data string) error {
 		if evt.Usage.InputTokens > 0 {
 			s.inputTokens = evt.Usage.InputTokens
 		}
+		if evt.Usage.CacheReadInputTokens > 0 {
+			s.cachedInputTokens = evt.Usage.CacheReadInputTokens
+		}
 	}
 	return nil
 }
@@ -838,9 +863,10 @@ func (s *streamState) finish(emit stream.Emitter) {
 	s.closeOpenBlocks(emit)
 	if s.inputTokens > 0 || s.outputTokens > 0 {
 		emit(domain.ModelEvent{
-			Kind:         domain.ModelEventUsage,
-			InputTokens:  s.inputTokens,
-			OutputTokens: s.outputTokens,
+			Kind:              domain.ModelEventUsage,
+			InputTokens:       s.inputTokens,
+			OutputTokens:      s.outputTokens,
+			CachedInputTokens: s.cachedInputTokens,
 		})
 	}
 	stop := s.stop

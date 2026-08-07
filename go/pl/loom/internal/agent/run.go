@@ -35,6 +35,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
+	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
 )
 
@@ -810,6 +811,17 @@ type PromptBuilder interface {
 	Build(ctx context.Context) (string, []domain.ContextRuleRef, error)
 }
 
+// SectionedPromptBuilder is an optional PromptBuilder extension that splits
+// the system prompt into a cacheable static part and a per-request dynamic
+// part. The loop prefers it when available: the static part rides at the
+// head of the request with a cache hint (domain.MetadataPromptCache) so
+// providers can apply prompt caching (Anthropic cache_control; OpenAI
+// automatic prefix caching just needs the stable head), while the dynamic
+// part follows unmarked.
+type SectionedPromptBuilder interface {
+	BuildSections(ctx context.Context) (prompt.Sections, error)
+}
+
 // Loop drives the main agent loop for a Run.
 type Loop struct {
 	Run          *Run
@@ -1303,7 +1315,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	}
 	response.Metadata["request_id"] = req.ID.String()
 	response.Metadata["stop_reason"] = string(stop)
-	l.accountUsage(inputTokens, outputTokens)
+	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens())
 	l.Run.AddAssistantMessage(response)
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 	l.lastCallInput = inputTokens
@@ -1328,26 +1340,32 @@ func (l *Loop) reportContextUsage() {
 // effectiveMessages returns the transcript with the ephemeral system prompt
 // prepended, together with the prompt's audit rule references. A build
 // failure degrades to the bare transcript rather than failing the turn.
+//
+// The prompt rides as up to three leading system messages: the cacheable
+// static part (marked domain.MetadataPromptCache), the per-request dynamic
+// part, and the plan note. Providers decide placement: Anthropic hoists all
+// leading system messages into the system parameter (honoring the cache
+// hint); OpenAI-compatible vendors keep the head system and downgrade the
+// rest to user text (GLM-class constraint, see openai.apiRole) — which
+// conveniently matches the codex "dynamic context as user fragments" model.
 func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domain.ContextRuleRef) {
 	messages := append([]domain.Message(nil), l.Run.Messages...)
+	var prefix []domain.Message
 	var rules []domain.ContextRuleRef
 	if l.SystemPrompt != nil {
-		text, refs, err := l.SystemPrompt.Build(ctx)
+		static, dynamic, refs, err := l.systemPromptParts(ctx)
 		switch {
 		case err != nil:
 			if l.Logger != nil {
 				l.Logger.Warn("build system prompt failed; continuing without it", "error", err)
 			}
-		case strings.TrimSpace(text) != "":
-			system := domain.Message{
-				ID:        domain.NewMessageID(),
-				Role:      domain.RoleSystem,
-				Status:    domain.MessageStatusFinal,
-				Revision:  1,
-				Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: text}},
-				CreatedAt: l.Run.Clock.Now(),
+		default:
+			if s := strings.TrimSpace(static); s != "" {
+				prefix = append(prefix, l.systemMessage(s, true))
 			}
-			messages = append([]domain.Message{system}, messages...)
+			if d := strings.TrimSpace(dynamic); d != "" {
+				prefix = append(prefix, l.systemMessage(d, false))
+			}
 			rules = refs
 		}
 	}
@@ -1356,21 +1374,55 @@ func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domai
 	// awareness across context compactions and crash recovery — a summary
 	// replacement that drops message history cannot lose the plan.
 	if plan := l.Run.Plan; len(plan.Items) > 0 && !plan.IsComplete() {
-		note := domain.Message{
-			ID:        domain.NewMessageID(),
-			Role:      domain.RoleSystem,
-			Status:    domain.MessageStatusFinal,
-			Revision:  1,
-			Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: planStatusNote(plan)}},
-			CreatedAt: l.Run.Clock.Now(),
-		}
-		insertAt := 0
-		if len(messages) > 0 && messages[0].Role == domain.RoleSystem {
-			insertAt = 1
-		}
-		messages = append(messages[:insertAt:insertAt], append([]domain.Message{note}, messages[insertAt:]...)...)
+		prefix = append(prefix, l.systemMessage(planStatusNote(plan), false))
 	}
-	return messages, rules
+	return append(prefix, messages...), rules
+}
+
+// systemPromptParts renders the system prompt split for caching. Builders
+// implementing SectionedPromptBuilder provide the split directly and get
+// the model-family patch folded into the static part; legacy single-string
+// builders are treated as fully static (their content is what it is — the
+// loop cannot split what it cannot see).
+func (l *Loop) systemPromptParts(ctx context.Context) (string, string, []domain.ContextRuleRef, error) {
+	if sb, ok := l.SystemPrompt.(SectionedPromptBuilder); ok {
+		secs, err := sb.BuildSections(ctx)
+		if err != nil {
+			return "", "", nil, err
+		}
+		static := secs.Static
+		refs := secs.Refs
+		if patch, ref := prompt.FamilyPatch(l.ModelName); patch != "" {
+			if strings.TrimSpace(static) != "" {
+				static = strings.TrimRight(static, "\n") + "\n\n" + patch + "\n"
+			} else {
+				static = patch + "\n"
+			}
+			if ref != nil {
+				refs = append(refs, *ref)
+			}
+		}
+		return static, secs.Dynamic, refs, nil
+	}
+	text, refs, err := l.SystemPrompt.Build(ctx)
+	return text, "", refs, err
+}
+
+// systemMessage wraps one ephemeral system-prompt part. cacheable marks the
+// stable static part for provider prompt caching.
+func (l *Loop) systemMessage(text string, cacheable bool) domain.Message {
+	msg := domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleSystem,
+		Status:    domain.MessageStatusFinal,
+		Revision:  1,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: text}},
+		CreatedAt: l.Run.Clock.Now(),
+	}
+	if cacheable {
+		msg.Metadata = map[string]string{domain.MetadataPromptCache: domain.PromptCacheEphemeral}
+	}
+	return msg
 }
 
 // reconcilePlanIfUnfinished gives the model exactly one extra turn to
@@ -1557,7 +1609,7 @@ func prepareErrorMessage(tc domain.ToolCall, err error) string {
 	if hint, ok := malformedArgumentsHint(tc.Arguments); ok {
 		return hint
 	}
-	return actionablePrepareError(err)
+	return actionablePrepareError(tc, err)
 }
 
 // actionablePrepareError appends recovery guidance to well-known prepare
@@ -1565,15 +1617,23 @@ func prepareErrorMessage(tc domain.ToolCall, err error) string {
 // giving up. Workspace-escape rejections are the common case: the built-in
 // file tools are workspace-scoped by design (docs/PERMISSION_DESIGN.md G4),
 // and without guidance models tend to re-emit the same out-of-workspace
-// path or abandon the search.
-func actionablePrepareError(err error) string {
+// path or abandon the search. run_cmd gets its own wording: suggesting
+// "use run_cmd instead" inside a run_cmd error would be circular — its
+// working_dir is workspace-scoped, but the command body may reference
+// external absolute paths.
+func actionablePrepareError(tc domain.ToolCall, err error) string {
 	var ae *domain.AgentError
-	if errors.As(err, &ae) && ae.Code == domain.ErrSecurity && strings.Contains(ae.Message, "escapes workspace") {
-		return err.Error() + "; the built-in file tools are restricted to the workspace root. " +
-			"If the target likely lives inside the workspace, locate it with glob/search first. " +
-			"To inspect paths outside the workspace, use run_cmd instead (sandboxed; may require user approval)."
+	if !errors.As(err, &ae) || ae.Code != domain.ErrSecurity || !strings.Contains(ae.Message, "escapes workspace") {
+		return err.Error()
 	}
-	return err.Error()
+	if tc.Name == "run_cmd" {
+		return err.Error() + "; run_cmd's working_dir must stay inside the workspace root. " +
+			"Keep working_dir at the default (or a workspace subdirectory) — the command itself may still " +
+			"reference absolute paths outside the workspace (sandboxed; may require user approval)."
+	}
+	return err.Error() + "; the built-in file tools are restricted to the workspace root. " +
+		"If the target likely lives inside the workspace, locate it with glob/search first. " +
+		"To inspect paths outside the workspace, use run_cmd instead (sandboxed; may require user approval)."
 }
 
 // malformedArgumentsHint extracts the model-facing guidance embedded in
@@ -2035,7 +2095,7 @@ func (l *Loop) summarizeForCompaction(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	l.accountUsage(inputTokens, outputTokens)
+	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens())
 	l.recordGeneration(ctx, trace.GenerationRecord{
 		RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
 		Input: messages, Output: response, StopReason: "compaction",
@@ -2053,9 +2113,10 @@ func (l *Loop) summarizeForCompaction(ctx context.Context) (string, error) {
 // cumulative token counts, the estimated cost (when rates are configured —
 // without it the cost_usd limit can never fire), the goal meter, and the
 // wall-time window.
-func (l *Loop) accountUsage(inputTokens, outputTokens int64) {
+func (l *Loop) accountUsage(inputTokens, outputTokens, cachedInputTokens int64) {
 	l.Run.Usage.InputTokens += inputTokens
 	l.Run.Usage.OutputTokens += outputTokens
+	l.Run.Usage.CachedInputTokens += cachedInputTokens
 	if l.CostInputUSDPerMTok > 0 || l.CostOutputUSDPerMTok > 0 {
 		l.Run.Usage.CostUSD = float64(l.Run.Usage.InputTokens)*l.CostInputUSDPerMTok/1e6 +
 			float64(l.Run.Usage.OutputTokens)*l.CostOutputUSDPerMTok/1e6
@@ -2083,7 +2144,7 @@ func (l *Loop) foldExternalUsage(result domain.ToolResult) {
 	if inputTokens <= 0 && outputTokens <= 0 {
 		return
 	}
-	l.accountUsage(inputTokens, outputTokens)
+	l.accountUsage(inputTokens, outputTokens, 0)
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 }
 

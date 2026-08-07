@@ -38,6 +38,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
 	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
+	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/builtin"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
@@ -1639,6 +1640,82 @@ func TestLoopPrependsSystemPromptToModelRequest(t *testing.T) {
 	}
 	if err := manifest.Validate(); err != nil {
 		t.Fatalf("invalid context manifest: %v", err)
+	}
+}
+
+// stubSectionedPromptBuilder exercises the SectionedPromptBuilder path:
+// split static/dynamic parts instead of one flat string.
+type stubSectionedPromptBuilder struct {
+	static  string
+	dynamic string
+	rules   []domain.ContextRuleRef
+}
+
+func (s stubSectionedPromptBuilder) Build(context.Context) (string, []domain.ContextRuleRef, error) {
+	text := s.static
+	if s.dynamic != "" {
+		text = strings.TrimRight(text, "\n") + "\n\n" + s.dynamic
+	}
+	return text, s.rules, nil
+}
+
+func (s stubSectionedPromptBuilder) BuildSections(context.Context) (prompt.Sections, error) {
+	return prompt.Sections{Static: s.static, Dynamic: s.dynamic, Refs: s.rules}, nil
+}
+
+func TestLoopSplitsSystemPromptForCaching(t *testing.T) {
+	model := fakes.NewFakeModel(fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn})
+	run := newTestRun(domain.DefaultLimits())
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "question"}},
+		CreatedAt: run.Clock.Now(),
+	})
+	run.Plan = domain.Plan{Items: []domain.PlanItem{
+		{Index: 0, Goal: "step one", Status: domain.PlanItemInProgress},
+	}}
+	loop := &Loop{
+		Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default(),
+		SystemPrompt: stubSectionedPromptBuilder{
+			static:  "STATIC PART",
+			dynamic: "DYNAMIC PART",
+			rules:   []domain.ContextRuleRef{{Source: "loom://builtin/test", Hash: "sha256:abc"}},
+		},
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	calls := model.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 model call, got %d", len(calls))
+	}
+	msgs := calls[0].Messages
+	// [static system (cache-marked), dynamic system, plan note, user].
+	if len(msgs) != 4 {
+		t.Fatalf("expected 4 request messages, got %+v", msgs)
+	}
+	if msgs[0].Role != domain.RoleSystem || msgs[0].Parts[0].Text != "STATIC PART" {
+		t.Fatalf("static system message = %+v", msgs[0])
+	}
+	if msgs[0].Metadata[domain.MetadataPromptCache] != domain.PromptCacheEphemeral {
+		t.Fatalf("static part must carry the cache marker, metadata = %+v", msgs[0].Metadata)
+	}
+	if msgs[1].Role != domain.RoleSystem || msgs[1].Parts[0].Text != "DYNAMIC PART" {
+		t.Fatalf("dynamic system message = %+v", msgs[1])
+	}
+	if len(msgs[1].Metadata) != 0 {
+		t.Fatalf("dynamic part must not be cache-marked, metadata = %+v", msgs[1].Metadata)
+	}
+	if msgs[2].Role != domain.RoleSystem || !strings.Contains(msgs[2].Parts[0].Text, "[task plan]") {
+		t.Fatalf("plan note = %+v", msgs[2])
+	}
+	if msgs[3].Role != domain.RoleUser {
+		t.Fatalf("transcript head = %+v", msgs[3])
+	}
+	// The audit refs flow through the split path unchanged.
+	if len(calls[0].ContextManifest.Rules) != 1 || calls[0].ContextManifest.Rules[0].Source != "loom://builtin/test" {
+		t.Fatalf("manifest rules = %+v", calls[0].ContextManifest.Rules)
 	}
 }
 
@@ -3643,7 +3720,8 @@ func TestRunAssistantTextScopesToCurrentRun(t *testing.T) {
 func TestActionablePrepareErrorGuidesWorkspaceEscape(t *testing.T) {
 	escapeErr := domain.NewError(domain.ErrSecurity, "path escapes workspace or is invalid",
 		domain.WithCause(fmt.Errorf("path %q escapes workspace root %q", "/outside", "/ws")))
-	msg := actionablePrepareError(escapeErr)
+	fileToolCall := domain.ToolCall{ID: domain.NewToolCallID(), Name: "list_dir"}
+	msg := actionablePrepareError(fileToolCall, escapeErr)
 	if !strings.Contains(msg, escapeErr.Error()) {
 		t.Fatalf("guidance must keep the original error, got %q", msg)
 	}
@@ -3651,12 +3729,26 @@ func TestActionablePrepareErrorGuidesWorkspaceEscape(t *testing.T) {
 		t.Fatalf("guidance missing actionable advice, got %q", msg)
 	}
 
+	// run_cmd gets its own wording: "use run_cmd instead" would be circular.
+	// Its working_dir is workspace-scoped while the command body may
+	// reference external paths.
+	runCmdCall := domain.ToolCall{ID: domain.NewToolCallID(), Name: "run_cmd"}
+	workingDirErr := domain.NewError(domain.ErrSecurity, "working_dir escapes workspace or is invalid",
+		domain.WithCause(fmt.Errorf("path %q escapes workspace root %q", "/outside", "/ws")))
+	msg = actionablePrepareError(runCmdCall, workingDirErr)
+	if !strings.Contains(msg, "working_dir must stay inside the workspace") {
+		t.Fatalf("run_cmd guidance missing working_dir advice, got %q", msg)
+	}
+	if strings.Contains(msg, "use run_cmd instead") {
+		t.Fatalf("run_cmd guidance must not suggest run_cmd itself, got %q", msg)
+	}
+
 	// Non-security failures and unrelated security failures stay verbatim.
-	if got := actionablePrepareError(errors.New("boom")); got != "boom" {
+	if got := actionablePrepareError(fileToolCall, errors.New("boom")); got != "boom" {
 		t.Fatalf("plain error changed: %q", got)
 	}
 	other := domain.NewError(domain.ErrSecurity, "path contains a sensitive component")
-	if got := actionablePrepareError(other); got != other.Error() {
+	if got := actionablePrepareError(fileToolCall, other); got != other.Error() {
 		t.Fatalf("unrelated security error changed: %q", got)
 	}
 }

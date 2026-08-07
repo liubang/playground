@@ -90,7 +90,7 @@ func TestWireSkillsEnabledEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
-	if !strings.Contains(text, "demo-skill") || !strings.Contains(text, "可用技能") {
+	if !strings.Contains(text, "demo-skill") || !strings.Contains(text, "Available Skills") {
 		t.Fatalf("skills section missing from built prompt")
 	}
 	found := false

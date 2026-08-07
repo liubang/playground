@@ -76,7 +76,7 @@ const MemoryInstructions = `You have access to a persistent memory system that s
 
 ## Memory layout
 
-- ` + "`memory_summary.md`" + ` — injected above (hot tier, always available)
+- ` + "`memory_summary.md`" + ` — injected below (hot tier, refreshed every turn)
 - ` + "`MEMORY.md`" + ` — searchable handbook with structured entries (warm tier)
 - ` + "`rollout_summaries/`" + ` — per-session recaps (cold tier)
 - ` + "`skills/`" + ` — reusable procedures (cold tier)

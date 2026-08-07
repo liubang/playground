@@ -70,7 +70,7 @@ func TestRenderFullListWithinBudget(t *testing.T) {
 	if strings.Index(body, "- review:") > strings.Index(body, "- weather:") {
 		t.Fatalf("repo skill must render before user skill:\n%s", body)
 	}
-	if !strings.Contains(body, "read_skill") || !strings.Contains(body, "不可信内容") {
+	if !strings.Contains(body, "read_skill") || !strings.Contains(body, "untrusted content") {
 		t.Fatalf("body missing usage instructions or untrusted-content notice:\n%s", body)
 	}
 }
@@ -123,7 +123,7 @@ func TestRenderMinimalAndSkipOverflow(t *testing.T) {
 	if !strings.Contains(body, "z-cheap") {
 		t.Fatalf("cheap entry must be kept:\n%s", body)
 	}
-	if !strings.Contains(body, "1 个技能因提示词预算限制未列出") {
+	if !strings.Contains(body, "1 more skills omitted due to the prompt budget") {
 		t.Fatalf("omission must be noted:\n%s", body)
 	}
 	// Descriptions are gone at this degradation level.
@@ -171,7 +171,7 @@ func TestRenderCJKCostIsByteBased(t *testing.T) {
 func TestRenderIssueNote(t *testing.T) {
 	cat := newCatalog(nil, []LoadIssue{{Path: "/x/SKILL.md", Message: "bad yaml"}})
 	body := Render(cat, 0)
-	if !strings.Contains(body, "1 个技能加载失败") {
+	if !strings.Contains(body, "1 skills failed to load") {
 		t.Fatalf("issue note missing:\n%s", body)
 	}
 }

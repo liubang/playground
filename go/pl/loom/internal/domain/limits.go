@@ -104,8 +104,15 @@ type Usage struct {
 	ToolCalls    int
 	InputTokens  int64
 	OutputTokens int64
-	CostUSD      float64
-	WallTime     time.Duration
+	// CachedInputTokens accumulates provider-reported prompt-cache hits.
+	// Observability only (cache efficiency indicator), never a budget
+	// dimension. Provider semantics DIVERGE: OpenAI's prompt_tokens already
+	// includes cached tokens, while Anthropic's input_tokens EXCLUDES them
+	// (full input = input_tokens + cache_read + cache_creation) — so treat
+	// the field as a ratio-free indicator, not a subset of InputTokens.
+	CachedInputTokens int64
+	CostUSD           float64
+	WallTime          time.Duration
 }
 
 // CheckResult reports soft/hard threshold breaches.
