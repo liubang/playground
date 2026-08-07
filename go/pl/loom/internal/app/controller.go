@@ -1528,6 +1528,24 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 		return
 	}
 
+	// "Allow always" memory must land BEFORE the decision wakes the agent
+	// loop: the woken loop immediately re-evaluates the batch's remaining
+	// calls against session memory, and a late memory re-prompts calls the
+	// user just approved categorically (the duplicate request then
+	// auto-resolves underneath its still-visible card). Remembering is
+	// skipped only when the binding provably cannot be accepted — a pending
+	// request holding a DIFFERENT binding; with no pending slot the decision
+	// is early-cached (or the card is stale, where remembering is idempotent
+	// anyway), so the user's explicit intent is honored either way.
+	var note string
+	rememberable := cmd.Decision == domain.DecisionAllow && cmd.RuleHint != nil
+	if pending, ok := c.approver.PendingBinding(cmd.Approval.ApprovalID); ok && pending != cmd.Approval {
+		rememberable = false
+	}
+	if rememberable {
+		note = c.rememberApprovalRule(cmd.RuleHint)
+	}
+
 	// Record the actor BEFORE resolving: the resolution wakes the turn
 	// goroutine, which may persist and publish the resolved event
 	// immediately — the actor must already be projected by then (review
@@ -1552,40 +1570,45 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 		actor = "local"
 	}
 	c.logger.Info("approval resolved", "approval_id", cmd.Approval.ApprovalID, "decision", cmd.Decision, "actor", actor)
-
-	var note string
-	if cmd.Decision == domain.DecisionAllow && cmd.RuleHint != nil {
-		if rule, ok := c.rulesApprover.RememberCall(cmd.RuleHint.ToolName, cmd.RuleHint.Arguments, cmd.RuleHint.Trust); ok {
-			note = rule.Label
-			if summary := rule.Grant.Summary(); summary != "" {
-				note += " (" + summary + ")"
-			}
-			// Persist the memory to the remembered store so future sessions
-			// inherit it (rules.persist_remembered=false opts out by not
-			// opening the store). run_cmd remembers argv prefixes (with
-			// grants); web_fetch remembers exact hosts; eligible tools are
-			// remembered by name.
-			if store := c.rememberedStore(); store != nil {
-				persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				var persistErr error
-				switch {
-				case rule.Tool != "":
-					persistErr = store.RememberTool(persistCtx, rule.Tool)
-				case rule.Host != "":
-					persistErr = store.RememberDomain(persistCtx, rule.Host)
-				default:
-					persistErr = store.RememberRule(persistCtx, rule.Prefix, rule.Grant)
-				}
-				persistCancel()
-				if persistErr != nil {
-					c.logger.Warn("persist remembered rule failed", "rule", note, "error", persistErr)
-				} else {
-					note += " (saved to " + store.Path() + ")"
-				}
-			}
-		}
-	}
 	cmd.ResultCh <- controllerResult{Value: note}
+}
+
+// rememberApprovalRule derives and stores the categorical "allow always"
+// memory for an approved call: session memory first (shared with the policy
+// chain, so re-evaluations see it at once), then the remembered store so
+// future sessions inherit it (rules.persist_remembered=false opts out by not
+// opening the store). run_cmd remembers argv prefixes (with grants);
+// web_fetch remembers exact hosts; eligible tools are remembered by name.
+// Returns the display note, empty when the call is not rememberable.
+func (c *Controller) rememberApprovalRule(hint *ApprovalRuleHint) string {
+	rule, ok := c.rulesApprover.RememberCall(hint.ToolName, hint.Arguments, hint.Trust)
+	if !ok {
+		return ""
+	}
+	note := rule.Label
+	if summary := rule.Grant.Summary(); summary != "" {
+		note += " (" + summary + ")"
+	}
+	store := c.rememberedStore()
+	if store == nil {
+		return note
+	}
+	persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer persistCancel()
+	var persistErr error
+	switch {
+	case rule.Tool != "":
+		persistErr = store.RememberTool(persistCtx, rule.Tool)
+	case rule.Host != "":
+		persistErr = store.RememberDomain(persistCtx, rule.Host)
+	default:
+		persistErr = store.RememberRule(persistCtx, rule.Prefix, rule.Grant)
+	}
+	if persistErr != nil {
+		c.logger.Warn("persist remembered rule failed", "rule", note, "error", persistErr)
+		return note
+	}
+	return note + " (saved to " + store.Path() + ")"
 }
 
 func (c *Controller) handleNewSession(cmd controllerCommand) {
@@ -1984,11 +2007,15 @@ func (c *Controller) SetAwaitingApproval() {
 }
 
 // SetRunning transitions the controller back to running state.
-// Called by the publishing store when a permission.resolved event is persisted.
+// Called by the publishing store when a permission.resolved event is
+// persisted — after the card was removed from pendingCards. A batch (or
+// concurrent runs) can hold several pending approvals, so the state only
+// leaves awaiting_approval once the LAST card resolves; flipping early
+// would make the state gate reject the remaining resolves.
 func (c *Controller) SetRunning() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.state == ControllerStateAwaitingApproval {
+	if c.state == ControllerStateAwaitingApproval && len(c.pendingCards) == 0 {
 		c.state = ControllerStateRunning
 	}
 }
