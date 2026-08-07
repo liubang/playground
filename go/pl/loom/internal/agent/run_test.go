@@ -688,6 +688,74 @@ func TestLoopRoutesToolCallsWhenBudgetNoticeFires(t *testing.T) {
 	}
 }
 
+// Regression: kimi-style providers reset their tool-call id counters every
+// turn ("run_cmd_0", "run_cmd_1", ...). The second turn's "run_cmd_0"
+// collided with the first turn's recorded result, the replay guard skipped
+// its execution, and the next provider request died with "invalid replay
+// history: unresolved tool_call ids". Colliding ids are now rewritten to
+// fresh unique ones at stream aggregation time.
+func TestLoopRewritesCollidingProviderToolCallIDs(t *testing.T) {
+	readTool := fakes.ReadFileTool()
+	id0, _ := domain.ParseToolCallID("run_cmd_0")
+	id1, _ := domain.ParseToolCallID("run_cmd_1")
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls:  []domain.ToolCall{{ID: id0, Name: "read_file", Arguments: json.RawMessage(`{"path":"a.go"}`)}},
+			StopReason: domain.StopToolUse,
+			UsageIn:    10, UsageOut: 5,
+		},
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{
+				{ID: id0, Name: "read_file", Arguments: json.RawMessage(`{"path":"b.go"}`)},
+				{ID: id1, Name: "read_file", Arguments: json.RawMessage(`{"path":"c.go"}`)},
+			},
+			StopReason: domain.StopToolUse,
+			UsageIn:    20, UsageOut: 10,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn, UsageIn: 30, UsageOut: 5},
+	)
+	registry := NewToolRegistry()
+	if err := registry.Register(readTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	run := newTestRun(domain.DefaultLimits())
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "read files"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if run.State.Lifecycle != domain.LifecycleTerminal || run.State.Outcome == domain.OutcomeFailed {
+		t.Fatalf("run ended as %s/%s, want a successful terminal state", run.State.Lifecycle, run.State.Outcome)
+	}
+	if run.Usage.ToolCalls != 3 {
+		t.Fatalf("tool calls executed = %d, want 3 (turn 2's colliding call must not be skipped)", run.Usage.ToolCalls)
+	}
+	if dangling := unresolvedToolCalls(run.Messages); len(dangling) > 0 {
+		t.Fatalf("transcript still has unresolved tool calls: %+v", dangling)
+	}
+	// The colliding second-turn "run_cmd_0" must have been rewritten: the
+	// transcript carries exactly one call with the original id.
+	count := 0
+	for _, msg := range run.Messages {
+		for _, tc := range msg.ToolCalls() {
+			if tc.ID == id0 {
+				count++
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("transcript carries %d calls with id run_cmd_0, want 1 (the colliding one rewritten)", count)
+	}
+}
+
 // Regression: a provider that streams malformed tool-call arguments
 // (pretty-printed JSON with literal newlines, truncated payloads, empty
 // arguments) used to kill the whole run at stream finalization
@@ -1106,6 +1174,117 @@ func TestLoopExecuteCancelledPersistsTerminalEvent(t *testing.T) {
 	}
 	if eventIndex(events, domain.EventRunCancelled) < 0 {
 		t.Fatalf("cancelled terminal event was not persisted: %v", collectEventTypes(events))
+	}
+}
+
+// midStreamModel emits one text delta, then blocks until the context is
+// done (or fails with failErr): a provider stream interrupted mid-flight.
+type midStreamModel struct {
+	onFirst func()
+	failErr error
+}
+
+func (m *midStreamModel) Stream(ctx context.Context, _ domain.ModelRequest) (domain.ModelStream, error) {
+	return &midStream{ctx: ctx, onFirst: m.onFirst, failErr: m.failErr}, nil
+}
+
+type midStream struct {
+	ctx     context.Context
+	onFirst func()
+	failErr error
+	sent    bool
+}
+
+func (s *midStream) Recv() (domain.ModelEvent, error) {
+	if !s.sent {
+		s.sent = true
+		if s.onFirst != nil {
+			s.onFirst()
+		}
+		return domain.ModelEvent{Kind: domain.ModelEventTextDelta, TextDelta: "partial"}, nil
+	}
+	if s.failErr != nil {
+		return domain.ModelEvent{}, s.failErr
+	}
+	<-s.ctx.Done()
+	return domain.ModelEvent{}, s.ctx.Err()
+}
+
+func (s *midStream) Close() error { return nil }
+
+// TestLoopExecuteCancelledMidStream locks the cancellation routing (the
+// reported bug): cancelling while the model stream is in flight must
+// terminate the run as cancelled — not emit model.request_failed with a
+// misleading "internal" code and a failed outcome.
+func TestLoopExecuteCancelledMidStream(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	model := &midStreamModel{onFirst: func() { close(started) }}
+
+	loop := &Loop{Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default()}
+	go func() {
+		<-started
+		cancel()
+	}()
+	err := loop.Execute(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+	if run.State.Outcome != domain.OutcomeCancelled {
+		t.Fatalf("outcome = %s, want cancelled", run.State.Outcome)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	if eventIndex(events, domain.EventRunCancelled) < 0 {
+		t.Fatalf("run.cancelled not persisted: %v", collectEventTypes(events))
+	}
+	if eventIndex(events, domain.EventModelRequestFailed) >= 0 {
+		t.Fatalf("cancellation must not emit model.request_failed: %v", collectEventTypes(events))
+	}
+}
+
+// TestLoopExecuteModelFailureCarriesMessage locks the failure-audit
+// contract: a genuine mid-stream provider error terminates as failed and
+// the persisted request_failed event carries the underlying message, so
+// the failure is diagnosable without server logs.
+func TestLoopExecuteModelFailureCarriesMessage(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+
+	model := &midStreamModel{failErr: errors.New("provider exploded: quota exhausted")}
+	loop := &Loop{Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default()}
+	if err := loop.Execute(context.Background()); err == nil {
+		t.Fatal("expected error from failing model stream")
+	}
+	if run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("outcome = %s, want failed", run.State.Outcome)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	idx := eventIndex(events, domain.EventModelRequestFailed)
+	if idx < 0 {
+		t.Fatalf("model.request_failed not persisted: %v", collectEventTypes(events))
+	}
+	var payload struct {
+		Stage   string `json:"stage"`
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(events[idx].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Stage != "stream" || payload.Code != "internal" || !strings.Contains(payload.Message, "quota exhausted") {
+		t.Fatalf("payload = %+v, want stage=stream code=internal with the provider message", payload)
 	}
 }
 

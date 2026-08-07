@@ -463,9 +463,11 @@ type ModelCatalog struct {
 }
 
 // ModelCatalog returns the configured model catalog for frontend pickers.
+// Default reflects the runtime-current selection (a persisted manual
+// switch wins over the configured default).
 func (s *SessionService) ModelCatalog() ModelCatalog {
 	resolved := s.proc.Resolved
-	catalog := ModelCatalog{Default: resolved.Default.String()}
+	catalog := ModelCatalog{Default: s.proc.CurrentModel().String()}
 	for i := range resolved.Providers {
 		p := &resolved.Providers[i]
 		for _, m := range p.Models {
@@ -685,24 +687,37 @@ func (s *SessionService) Snapshot(ctx context.Context, id domain.SessionID) (Sna
 	return h.Controller.RequestSnapshot(ctx)
 }
 
-// SetModel switches the session's model from the next turn on.
+// SetModel switches the session's model from the next turn on. The choice
+// also becomes the process-level preference (persisted), so sessions
+// created afterwards start from it.
 func (s *SessionService) SetModel(ctx context.Context, id domain.SessionID, ref string) (SetModelResult, error) {
 	h, err := s.handle(id)
 	if err != nil {
 		return SetModelResult{}, err
 	}
 	h.touch()
-	return h.Controller.SetModel(ctx, ref)
+	result, err := h.Controller.SetModel(ctx, ref)
+	if err != nil {
+		return SetModelResult{}, err
+	}
+	s.proc.SetModelPreference(ctx, result.Cur)
+	return result, nil
 }
 
-// SetReasoning sets the session-scoped reasoning dial.
+// SetReasoning sets the session-scoped reasoning dial. Like SetModel, the
+// choice is persisted as the process-level preference for future sessions.
 func (s *SessionService) SetReasoning(ctx context.Context, id domain.SessionID, arg string) (SetReasoningResult, error) {
 	h, err := s.handle(id)
 	if err != nil {
 		return SetReasoningResult{}, err
 	}
 	h.touch()
-	return h.Controller.SetReasoning(ctx, arg)
+	result, err := h.Controller.SetReasoning(ctx, arg)
+	if err != nil {
+		return SetReasoningResult{}, err
+	}
+	s.proc.SetReasoningPreference(ctx, strings.TrimSpace(arg))
+	return result, nil
 }
 
 // RequestCompaction schedules a forced compaction for the session's next turn.

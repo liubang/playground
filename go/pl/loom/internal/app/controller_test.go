@@ -58,6 +58,62 @@ func testBootstrap(store domain.SessionStore, model domain.Model) *Bootstrap {
 	}
 }
 
+// TestControllerNewSessionReSeedsPreference: a controller is reused across
+// /new; if another session moved the global preference in between, the new
+// session must start from the CURRENT preference, not the stale value the
+// controller was constructed (or previously diverged) with.
+func TestControllerNewSessionReSeedsPreference(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	bs := testBootstrap(store, fakes.NewFakeModel())
+	controller := NewController(ControllerConfig{
+		Bootstrap: bs,
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	snap, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snap.ModelName != "test-model" {
+		t.Fatalf("initial model = %q, want configured default test-model", snap.ModelName)
+	}
+
+	// Another session moves the global preference mid-flight.
+	bs.SetModelPreference(ctx, config.ProviderModelRef{Provider: "test", Model: "new-model"})
+	bs.SetReasoningPreference(ctx, "low")
+
+	// Reusing the same controller for /new must re-seed from the preference.
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession 2: %v", err)
+	}
+	snap2, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot 2: %v", err)
+	}
+	if snap2.ModelName != "new-model" {
+		t.Fatalf("reused controller model = %q, want re-seeded new-model", snap2.ModelName)
+	}
+	if snap2.ReasoningEffort != "low" || !snap2.ReasoningOverridden {
+		t.Fatalf("reused controller reasoning = %q overridden=%v, want low/true",
+			snap2.ReasoningEffort, snap2.ReasoningOverridden)
+	}
+}
+
 func TestControllerContinuesSessionForFollowUpPrompt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

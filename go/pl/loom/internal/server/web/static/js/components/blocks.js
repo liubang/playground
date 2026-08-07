@@ -29,16 +29,27 @@ export function userBlock(text, createdAt) {
 }
 
 // --- assistant（完成态，markdown 渲染） ---
-// 无标签，左侧纯文本（参考截图样式）。
-// createdAt: 可选时间戳，用于悬浮显示对话时间。
-// fb: 可选反馈上下文 {runId, feedback, onFeedback}（见 messageActions）。
-export function assistantBlock(text, createdAt, fb) {
+// 无标签，左侧纯文本（参考截图样式）。操作行不在建块时挂载——一轮里
+// 「文本→工具→文本」有多段，由 transcript 在轮结束时一次性挂到末段
+// （attachAssistantActions），避免中间段出现又消失的闪烁。
+export function assistantBlock(text) {
   const b = el("div", "block block-assistant");
   const md = el("div", "md");
   renderMarkdownInto(md, text);
   b.appendChild(md);
-  b.appendChild(messageActions(b, "assistant", { createdAt, getText: () => md.innerText, fb }));
   return b;
+}
+
+// attachAssistantActions 给已渲染的 assistant 块补挂操作行（复制/反馈 + 时间）。
+// createdAt 为该块内容的事件时间；fb 为反馈上下文（见 messageActions）。
+// 幂等：已挂过的块直接跳过。
+export function attachAssistantActions(blockEl, { createdAt, fb }) {
+  if (!blockEl || blockEl.querySelector(":scope > .msg-actions")) return;
+  const md = blockEl.querySelector(":scope > .md");
+  if (!md) return;
+  blockEl.appendChild(messageActions(blockEl, "assistant", {
+    createdAt, fb, getText: () => md.innerText,
+  }));
 }
 
 // --- stream（进行中草稿，markdown 实时渲染） ---
@@ -47,7 +58,7 @@ export function assistantBlock(text, createdAt, fb) {
 // 最小间隔节流，避免长文本下每帧全量解析造成卡顿。
 const STREAM_RENDER_MIN_INTERVAL_MS = 60;
 
-export function streamBlock(createdAt, fb) {
+export function streamBlock() {
   const b = el("div", "block block-assistant");
   const md = el("div", "md");
   const cursor = el("span", "stream-cursor", "▍");
@@ -56,8 +67,6 @@ export function streamBlock(createdAt, fb) {
   let scheduled = false;
   let destroyed = false;
   let lastRender = 0;
-  // 草稿期间不挂 actions；收笔时由 finalize() 注入完成态操作行。
-  let actionsEl = null;
   const render = () => {
     scheduled = false;
     if (destroyed) return;
@@ -78,16 +87,12 @@ export function streamBlock(createdAt, fb) {
     el: b,
     append(delta) { buf += delta; schedule(); },
     text: () => buf,
-    // 收笔：取消未执行的合帧，同步做最终渲染并移除光标，随后注入
-    // 完成态操作行（复制/反馈 + 悬浮时间）。
+    // 收笔：取消未执行的合帧，同步做最终渲染并移除光标。操作行由
+    // transcript 在轮结束时统一挂载（attachAssistantActions）。
     finalize() {
       destroyed = true;
       renderMarkdownInto(md, buf);
       cursor.remove();
-      if (!actionsEl) {
-        actionsEl = messageActions(b, "assistant", { createdAt, getText: () => md.innerText, fb });
-        b.appendChild(actionsEl);
-      }
     },
     // 丢弃（canonical 文本整段替换时）：停止后续合帧渲染。
     discard() { destroyed = true; },
