@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
@@ -46,6 +47,10 @@ import (
 // registry, policy, prompt builder, skills and sub-agent runtime on top.
 type ProcessRuntime struct {
 	Resolved *config.ResolvedConfig
+	// Current is the configured default model (config file / launch flag).
+	// Reads of the effective selection must go through CurrentModel: a
+	// manual switch updates the runtime-current value (and persists it),
+	// which may differ from Current afterwards.
 	Current  config.ProviderModelRef
 	Store    domain.SessionStore
 	Artifact domain.ArtifactStore
@@ -75,8 +80,92 @@ type ProcessRuntime struct {
 	// session-level ChannelQuestioner takes precedence when present.
 	Questioner domain.Questioner
 
+	// prefMu guards currentModel/reasoningPref: written when the user
+	// switches model or reasoning (and persisted to the store), read by
+	// every session's controller when resolving the effective selection.
+	prefMu             sync.RWMutex
+	currentModel       config.ProviderModelRef
+	reasoningPref      string
 	traceProvider      *trace.Provider
 	memoryPipelineStop context.CancelFunc
+}
+
+// Preference keys stored in the session store's app_prefs table.
+const (
+	prefKeyModel     = "model"
+	prefKeyReasoning = "reasoning"
+)
+
+// CurrentModel returns the runtime-effective model selection: the user's
+// latest manual switch when one happened, otherwise the configured default.
+func (p *ProcessRuntime) CurrentModel() config.ProviderModelRef {
+	p.prefMu.RLock()
+	defer p.prefMu.RUnlock()
+	if p.currentModel != (config.ProviderModelRef{}) {
+		return p.currentModel
+	}
+	// Hand-assembled runtimes (tests) set only Current: fall back to it.
+	return p.Current
+}
+
+// ReasoningPreference returns the persisted reasoning dial ("off"/"low"/
+// "medium"/"high"/"default"); "" or "default" means no override — the
+// selected model's configured reasoning applies.
+func (p *ProcessRuntime) ReasoningPreference() string {
+	p.prefMu.RLock()
+	defer p.prefMu.RUnlock()
+	return p.reasoningPref
+}
+
+// SetModelPreference records a manual model switch as the runtime current
+// selection and persists it so future sessions (and restarts) inherit it.
+// Persistence failure is logged, not fatal: the in-memory choice stands.
+func (p *ProcessRuntime) SetModelPreference(ctx context.Context, ref config.ProviderModelRef) {
+	p.prefMu.Lock()
+	p.currentModel = ref
+	p.prefMu.Unlock()
+	p.persistPref(ctx, prefKeyModel, ref.String())
+}
+
+// SetReasoningPreference records a manual reasoning switch ("default"
+// clears the override) and persists it.
+func (p *ProcessRuntime) SetReasoningPreference(ctx context.Context, effort string) {
+	p.prefMu.Lock()
+	p.reasoningPref = effort
+	p.prefMu.Unlock()
+	p.persistPref(ctx, prefKeyReasoning, effort)
+}
+
+// persistPref writes one preference when the store supports it; failures
+// only cost the restart-survival of the choice, never the live selection.
+func (p *ProcessRuntime) persistPref(ctx context.Context, key, value string) {
+	store, ok := p.Store.(*session.SQLiteStore)
+	if !ok {
+		return
+	}
+	if err := store.SetPref(ctx, key, value); err != nil && p.Logger != nil {
+		p.Logger.Warn("persist preference failed", "key", key, "error", err)
+	}
+}
+
+// loadPrefs restores the persisted model/reasoning preferences over the
+// configured defaults. Unresolvable or absent values are ignored — config
+// changes (renamed providers/models) must never break startup.
+func (p *ProcessRuntime) loadPrefs(ctx context.Context) {
+	store, ok := p.Store.(*session.SQLiteStore)
+	if !ok {
+		return
+	}
+	if raw, err := store.GetPref(ctx, prefKeyModel); err == nil && raw != "" {
+		if ref, err := p.Resolved.ResolveRef(raw); err == nil {
+			p.currentModel = ref
+		} else if p.Logger != nil {
+			p.Logger.Warn("ignoring unresolvable persisted model preference", "value", raw, "error", err)
+		}
+	}
+	if raw, err := store.GetPref(ctx, prefKeyReasoning); err == nil {
+		p.reasoningPref = raw
+	}
 }
 
 // ProcessRuntimeConfig carries the entry-point-specific inputs that do not
@@ -261,7 +350,7 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 		}
 	}
 
-	return &ProcessRuntime{
+	p := &ProcessRuntime{
 		Resolved:           resolved,
 		Current:            resolved.Default,
 		Store:              store,
@@ -280,7 +369,12 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 		Questioner:         questioner,
 		traceProvider:      traceProvider,
 		memoryPipelineStop: memoryPipelineStop,
-	}, nil
+	}
+	// The runtime-current selection starts at the configured default, then
+	// the persisted manual choice (if any) overrides it.
+	p.currentModel = resolved.Default
+	p.loadPrefs(ctx)
+	return p, nil
 }
 
 // Close releases the process-level resources. It must run after every

@@ -60,6 +60,94 @@ func nextEvent(t *testing.T, ch <-chan runtimeevent.RuntimeEvent) runtimeevent.R
 	}
 }
 
+// TestSessionServicePreferenceInheritance: a manual model/reasoning switch
+// becomes the process-level preference — sessions created afterwards start
+// from it, and the model catalog's default follows.
+func TestSessionServicePreferenceInheritance(t *testing.T) {
+	svc, _ := newTestService(t, fakes.NewFakeModel())
+	ctx := context.Background()
+
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	snap, err := svc.Snapshot(ctx, h.ID)
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if snap.ModelName != "test-model" {
+		t.Fatalf("initial model = %q, want configured default test-model", snap.ModelName)
+	}
+
+	if _, err := svc.SetModel(ctx, h.ID, "test/new-model"); err != nil {
+		t.Fatalf("SetModel: %v", err)
+	}
+	if _, err := svc.SetReasoning(ctx, h.ID, "high"); err != nil {
+		t.Fatalf("SetReasoning: %v", err)
+	}
+
+	h2, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("CreateSession 2: %v", err)
+	}
+	snap2, err := svc.Snapshot(ctx, h2.ID)
+	if err != nil {
+		t.Fatalf("Snapshot 2: %v", err)
+	}
+	if snap2.ModelName != "new-model" {
+		t.Fatalf("new session model = %q, want inherited new-model", snap2.ModelName)
+	}
+	if snap2.ReasoningEffort != "high" || !snap2.ReasoningOverridden {
+		t.Fatalf("new session reasoning = %q overridden=%v, want high/true",
+			snap2.ReasoningEffort, snap2.ReasoningOverridden)
+	}
+	if cat := svc.ModelCatalog(); cat.Default != "test/new-model" {
+		t.Fatalf("catalog default = %q, want test/new-model", cat.Default)
+	}
+}
+
+// TestProcessRuntimeLoadPrefs: persisted preferences are restored over the
+// configured defaults; unresolvable values (e.g. a model removed from the
+// config) are ignored without breaking startup.
+func TestProcessRuntimeLoadPrefs(t *testing.T) {
+	ctx := context.Background()
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	resolved := testResolvedConfig(fakes.NewFakeModel())
+
+	proc := &ProcessRuntime{Resolved: resolved, Current: resolved.Default, Store: store}
+	if got := proc.CurrentModel(); got != resolved.Default {
+		t.Fatalf("CurrentModel before prefs = %v, want configured default", got)
+	}
+
+	if err := store.SetPref(ctx, "model", "test/third-model"); err != nil {
+		t.Fatalf("SetPref model: %v", err)
+	}
+	if err := store.SetPref(ctx, "reasoning", "low"); err != nil {
+		t.Fatalf("SetPref reasoning: %v", err)
+	}
+	proc.loadPrefs(ctx)
+	if got := proc.CurrentModel(); got.String() != "test/third-model" {
+		t.Fatalf("CurrentModel after load = %v, want test/third-model", got)
+	}
+	if got := proc.ReasoningPreference(); got != "low" {
+		t.Fatalf("ReasoningPreference after load = %q, want low", got)
+	}
+
+	// An unresolvable persisted model leaves the configured default intact.
+	if err := store.SetPref(ctx, "model", "ghost/removed-model"); err != nil {
+		t.Fatalf("SetPref ghost: %v", err)
+	}
+	proc2 := &ProcessRuntime{Resolved: resolved, Current: resolved.Default, Store: store}
+	proc2.loadPrefs(ctx)
+	if got := proc2.CurrentModel(); got != resolved.Default {
+		t.Fatalf("CurrentModel with ghost pref = %v, want configured default", got)
+	}
+}
+
 func TestSessionServiceCreateAndSingleton(t *testing.T) {
 	svc, _ := newTestService(t, fakes.NewFakeModel())
 	ctx := context.Background()

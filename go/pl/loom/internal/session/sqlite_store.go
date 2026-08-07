@@ -32,7 +32,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 6
+const sqliteSchemaVersion = 7
 
 // SQLiteStore persists session events and checkpoints in a SQLite database.
 // A store serializes writes through one connection; optimistic versions still
@@ -217,6 +217,14 @@ CREATE TABLE IF NOT EXISTS memory_phase2_lease (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     claim_token TEXT NOT NULL DEFAULT '',
     claimed_at_unix_nano INTEGER NOT NULL DEFAULT 0
+);
+-- app_prefs: process-level key-value preferences (schema v7). Current
+-- keys: "model" ("provider/model") and "reasoning" (effort or "default"),
+-- written when the user switches either one so later sessions — including
+-- after a restart — inherit the manual choice.
+CREATE TABLE IF NOT EXISTS app_prefs (
+    pref_key TEXT PRIMARY KEY,
+    pref_value TEXT NOT NULL DEFAULT ''
 );
 `
 	if _, err := s.db.ExecContext(ctx, schema); err != nil {
@@ -1069,4 +1077,32 @@ func isUniqueConstraint(err error) bool {
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "unique constraint failed") ||
 		strings.Contains(message, "primary key constraint failed")
+}
+
+// --- app_prefs: process-level preferences (schema v7) ---
+
+// GetPref returns the value stored for key, or "" when the key was never
+// set. Unknown keys are not an error — preferences are optional by design.
+func (s *SQLiteStore) GetPref(ctx context.Context, key string) (string, error) {
+	var value string
+	err := s.db.QueryRowContext(ctx,
+		"SELECT pref_value FROM app_prefs WHERE pref_key = ?", key).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", storeError("get app pref", err)
+	}
+	return value, nil
+}
+
+// SetPref upserts a process-level preference value.
+func (s *SQLiteStore) SetPref(ctx context.Context, key, value string) error {
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO app_prefs(pref_key, pref_value) VALUES(?, ?)
+ON CONFLICT(pref_key) DO UPDATE SET pref_value = excluded.pref_value`, key, value)
+	if err != nil {
+		return storeError("set app pref", err)
+	}
+	return nil
 }

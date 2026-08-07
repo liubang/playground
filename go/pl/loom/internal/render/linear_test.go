@@ -221,10 +221,12 @@ func TestLinear_ObserveDurable_ModelRequestFailed(t *testing.T) {
 		RequestID: domain.NewEventID(),
 		Stage:     "stream",
 		Code:      "rate_limited",
+		Message:   "project TPM limit reached",
 	})
 	err := r.ObserveDurable(evt)
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "[model error] stream: rate_limited")
+	assert.Contains(t, buf.String(), "project TPM limit reached")
 }
 
 func TestLinear_ObserveDurable_RunCancelled(t *testing.T) {

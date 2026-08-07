@@ -303,6 +303,11 @@ func NewController(cfg ControllerConfig) *Controller {
 		pendingQuestions: make(map[domain.EventID]domain.Question),
 		approvalActors:   make(map[domain.EventID]string),
 	}
+	// Seed the process-level model/reasoning preference as this session's
+	// initial selection: a manual switch persists globally and every new
+	// session starts from it (the session can still diverge afterwards via
+	// /model and /reasoning, which re-persist the global preference).
+	c.seedPrefsLocked()
 	// Bridge model questions onto the runtime event stream: the agent loop
 	// blocks in ask_user until a frontend answers via AnswerQuestion.
 	if runtime.Questioner != nil {
@@ -321,6 +326,27 @@ func NewController(cfg ControllerConfig) *Controller {
 		})
 	}
 	return c
+}
+
+// seedPrefsLocked applies the process-level model/reasoning preference as
+// the session's selection. Called at construction and on every new session
+// (a controller is reused across /new), so a switch made in another session
+// is picked up; a resumed session keeps whatever it already had.
+// Callers must hold c.mu (construction is single-threaded).
+func (c *Controller) seedPrefsLocked() {
+	if c.bootstrap == nil {
+		return
+	}
+	if ref := c.bootstrap.CurrentModel(); ref != (config.ProviderModelRef{}) {
+		c.current = ref
+	}
+	switch effort := c.bootstrap.ReasoningPreference(); effort {
+	case "", "default":
+		// no override: the selected model's configured reasoning applies
+		c.reasoningOverride = nil
+	default:
+		c.reasoningOverride = &domain.ReasoningSpec{Effort: domain.ReasoningEffort(effort)}
+	}
 }
 
 // Run starts the command processing loop. It blocks until the controller
@@ -1042,6 +1068,10 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	c.mu.Unlock()
 
 	// Publish turn started event
+	// Note: the envelope runID here is the PREVIOUS turn's (zero on the
+	// first turn) — the new run is only created later in executeTurn.
+	// Consumers needing the current run id must follow later events
+	// (loop-emitted events via publishingStore carry the real one).
 	c.publishDurable(sessionID, runID, turnCounter, runtimeevent.KindTurnStarted, runtimeevent.TurnStartedPayload{
 		TurnIndex: turnCounter,
 		Prompt:    cmd.Prompt,
@@ -1551,6 +1581,9 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	// A compaction is requested against a specific transcript; it must not
 	// leak into a different session's first turn.
 	c.forceCompact = false
+	// A new session starts from the CURRENT global preference, not whatever
+	// the previous session on this controller diverged to.
+	c.seedPrefsLocked()
 	sessionID := c.sessionID
 	c.state = ControllerStateIdle
 	c.mu.Unlock()
@@ -2127,6 +2160,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				RequestID: payload.RequestID,
 				Stage:     payload.Stage,
 				Code:      payload.Code,
+				Message:   payload.Message,
 			})
 		}
 	case domain.EventToolCallPrepared:
@@ -2310,6 +2344,7 @@ type modelRequestFailedDTO struct {
 	RequestID domain.EventID `json:"request_id"`
 	Stage     string         `json:"stage"`
 	Code      string         `json:"code"`
+	Message   string         `json:"message,omitempty"`
 }
 
 // contextCompactedDTO mirrors the agent's unexported compaction payload.

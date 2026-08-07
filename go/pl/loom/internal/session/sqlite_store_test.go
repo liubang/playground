@@ -30,6 +30,42 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
+func TestSQLiteStoreAppPrefs(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "sessions.db")
+	store := openTestSQLiteStore(t, path)
+
+	// Unset keys read as empty without error.
+	if v, err := store.GetPref(ctx, "model"); err != nil || v != "" {
+		t.Fatalf("GetPref(unset) = %q, %v; want empty, nil", v, err)
+	}
+	// Set then read back.
+	if err := store.SetPref(ctx, "model", "test/model-a"); err != nil {
+		t.Fatalf("SetPref: %v", err)
+	}
+	if err := store.SetPref(ctx, "reasoning", "high"); err != nil {
+		t.Fatalf("SetPref: %v", err)
+	}
+	if v, _ := store.GetPref(ctx, "model"); v != "test/model-a" {
+		t.Fatalf("GetPref(model) = %q", v)
+	}
+	// Upsert overwrites.
+	if err := store.SetPref(ctx, "model", "test/model-b"); err != nil {
+		t.Fatalf("SetPref upsert: %v", err)
+	}
+	// Preferences survive a reopen (the whole point: restart persistence).
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	store = openTestSQLiteStore(t, path)
+	if v, _ := store.GetPref(ctx, "model"); v != "test/model-b" {
+		t.Fatalf("GetPref(model) after reopen = %q, want test/model-b", v)
+	}
+	if v, _ := store.GetPref(ctx, "reasoning"); v != "high" {
+		t.Fatalf("GetPref(reasoning) after reopen = %q, want high", v)
+	}
+}
+
 func TestSQLiteStorePersistsEventsAcrossReopen(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "sessions.db")
