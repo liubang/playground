@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +34,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
 )
 
@@ -1056,7 +1058,10 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 	defer func() {
 		result := trace.RunResult{
 			Outcome: string(l.Run.State.Outcome),
-			Output:  lastAssistantText(l.Run.Messages),
+			// Scope the output to messages this run produced: a run that
+			// failed before its first model call must not inherit the
+			// previous run's reply from the shared transcript.
+			Output: runAssistantText(l.Run.Messages, l.Run.ID),
 		}
 		if execErr != nil {
 			result.Error = execErr.Error()
@@ -1901,9 +1906,29 @@ var contextOverflowNeedles = []string{
 	"context overflow",
 }
 
+// requestTooLargeNeedles fingerprints gateway/reverse-proxy body-size
+// rejections. The wire body grows with the transcript (base64 images,
+// tool schemas, history) and can trip a proxy limit long before token
+// occupancy reaches the model's context window, so an HTTP 413 is the
+// same "the request does not fit" signal as a semantic context-window
+// rejection and warrants the same remedy: compact, then retry.
+var requestTooLargeNeedles = []string{
+	"payload too large", "request entity too large",
+}
+
+// isContextOverflowError reports whether the provider — or a gateway in
+// front of it — rejected the request because it does not fit. Both
+// flavors converge on handleContextOverflow (forced compaction + retry);
+// its two-strike guard bounds the cases compaction cannot shrink, e.g.
+// one huge inline image in the newest message or a tools schema that by
+// itself exceeds a proxy body limit: after one unhelpful compaction pass
+// the run terminates with a clear error instead of looping.
 func isContextOverflowError(err error) bool {
 	if err == nil {
 		return false
+	}
+	if isRequestTooLargeError(err) {
+		return true
 	}
 	msg := strings.ToLower(err.Error())
 	for _, needle := range contextOverflowNeedles {
@@ -1914,19 +1939,47 @@ func isContextOverflowError(err error) bool {
 	return false
 }
 
-// handleContextOverflow degrades a provider context-window rejection into a
-// forced compaction plus retry instead of killing the run. Two consecutive
-// failures to fit mean the window genuinely cannot hold the request.
+// isRequestTooLargeError reports whether err is an HTTP 413 (Request
+// Entity Too Large) rejection. The typed check survives the providers'
+// %w wrapping of httpc.StatusError; the needle fallback covers
+// string-degraded paths whose error chain was lost (stream events).
+// These error strings originate from provider/gateway responses, never
+// from user content, so the phrases cannot false-positive on
+// conversation text.
+func isRequestTooLargeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var statusErr *httpc.StatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.Code == http.StatusRequestEntityTooLarge
+	}
+	msg := strings.ToLower(err.Error())
+	for _, needle := range requestTooLargeNeedles {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// handleContextOverflow degrades a provider/gateway fit rejection into a
+// forced compaction plus retry instead of killing the run. Two
+// consecutive failures to fit mean the request genuinely cannot be made
+// to fit.
 func (l *Loop) handleContextOverflow(ctx context.Context, cause error) error {
 	l.compactFitFailures++
 	if l.compactFitFailures >= 2 {
 		l.terminate(ctx, domain.OutcomeBudgetExhausted)
+		if isRequestTooLargeError(cause) {
+			return fmt.Errorf("the gateway rejected the request body as too large (HTTP 413) twice in a row (last: %v); compaction cannot shrink a single oversized element (inline image, huge tool result, or the tools schema) — raise the gateway body limit or reduce the payload", cause)
+		}
 		return fmt.Errorf("model rejected the request for context size twice in a row (last: %v); start a new session or check the model's context_window configuration", cause)
 	}
 	l.ForceCompact = true
 	l.CompactTriggerHint = "overflow"
 	if l.Logger != nil {
-		l.Logger.Warn("provider rejected request for context size; forcing compaction", "error", cause)
+		l.Logger.Warn("provider rejected the request as too large; forcing compaction", "error", cause)
 	}
 	_, err := l.Run.TransitionTo(domain.PhasePreparing)
 	return err
@@ -2251,8 +2304,8 @@ func cutAtRuneBoundary(s string, maxBytes int) string {
 	return domain.TruncateAtRuneBoundary(s, maxBytes)
 }
 
-// lastAssistantText returns the text of the most recent assistant message,
-// used as the trace output when the run ends.
+// lastAssistantText returns the text of the most recent assistant message.
+// Kept for test assertions; production trace output uses runAssistantText.
 func lastAssistantText(messages []domain.Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == domain.RoleAssistant {
@@ -2260,6 +2313,28 @@ func lastAssistantText(messages []domain.Message) string {
 			if strings.TrimSpace(text) != "" {
 				return text
 			}
+		}
+	}
+	return ""
+}
+
+// runAssistantText returns the text of the most recent assistant message
+// produced by THIS run, used as the trace output when the run ends.
+// AddAssistantMessage stamps every message the run appends with its
+// run_id, and compaction never invents stamped messages
+// (buildSummaryReplacement emits only user-role messages plus a bridge),
+// so the stamp is a precise boundary: a run that failed before its first
+// successful model call has no stamped message and reports no output,
+// where scanning the raw transcript would misattribute the previous
+// run's reply to it (observed with consecutive HTTP 413 failures).
+func runAssistantText(messages []domain.Message, runID domain.RunID) string {
+	id := runID.String()
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role != domain.RoleAssistant || messages[i].Metadata["run_id"] != id {
+			continue
+		}
+		if text := strings.Join(messages[i].TextParts(), ""); strings.TrimSpace(text) != "" {
+			return text
 		}
 	}
 	return ""
