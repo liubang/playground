@@ -11,7 +11,7 @@ import { Composer } from "./components/composer.js";
 import { Statusbar } from "./components/statusbar.js";
 import { CtxGauge } from "./components/ctxgauge.js";
 import { Picker } from "./components/picker.js";
-import { shortId, estTranscriptTokens } from "./format.js";
+import { shortId, estTranscriptTokens, randomId, copyText } from "./format.js";
 
 const TOKEN_KEY = "loom_token";
 const THEME_KEY = "loom_theme";
@@ -299,6 +299,7 @@ async function onSessionAction(id, action) {
         app.ctxgauge.reset();
         renderPlanInto($("plan-panel"), null);
         $("hdr-session").hidden = true;
+        $("hdr-share").hidden = true;
         $("empty-state").hidden = false;
         setSessionState("closed");
       }
@@ -331,6 +332,7 @@ async function openSession(id) {
   app.sidebar.setActive(id);
   $("empty-state").hidden = true;
   $("hdr-session").hidden = false;
+  $("hdr-share").hidden = false;
   $("hdr-session").textContent = shortId(id);
 
   let snap;
@@ -697,8 +699,40 @@ async function boot() {
     onAuthError: onUnauthorized,
   });
 
-  $("hdr-session").onclick = () => {
-    if (app.sessionId) navigator.clipboard?.writeText(app.sessionId).then(() => toast("session id copied", true));
+  $("hdr-session").onclick = async () => {
+    if (!app.sessionId) return;
+    if (await copyText(app.sessionId)) toast("session id copied", true);
+    else toast("剪贴板不可用，session id: " + app.sessionId);
+  };
+
+  // 分享会话：点击复制公开只读链接（创建幂等，重复分享返回同一链接）；
+  // Shift+点击撤销分享，原链接立即失效。
+  $("hdr-share").onclick = async (e) => {
+    if (!app.sessionId) return;
+    try {
+      if (e.shiftKey) {
+        const ok = await confirmDialog({
+          title: "撤销分享",
+          body: "撤销后，已发出的分享链接将立即失效（再次分享会生成新链接）。",
+          okLabel: "撤销分享",
+        });
+        if (!ok) return;
+        await app.api.revokeShare(app.sessionId);
+        toast("分享已撤销", true);
+        return;
+      }
+      const { path } = await app.api.shareSession(app.sessionId);
+      const url = location.origin + path;
+      if (await copyText(url)) {
+        toast("分享链接已复制：任何持有链接的人可只读查看本会话", true);
+      } else {
+        // 剪贴板不可用（非安全上下文）：打开分享页，从地址栏复制
+        window.open(url, "_blank", "noopener");
+        toast("剪贴板不可用，已在新标签页打开分享页（可从地址栏复制链接）");
+      }
+    } catch (err) {
+      if (err.status !== 401) toast("分享失败: " + err.message);
+    }
   };
 
   // 侧栏轮询（页面可见时，5s）
@@ -735,6 +769,7 @@ async function enter() {
     } else {
       $("empty-state").hidden = false;
       $("hdr-session").hidden = true;
+      $("hdr-share").hidden = true;
       // 无会话时 picker 显示默认模型
       app.curModelRef = app.defaultModelRef;
       syncPickerLabels();
@@ -754,7 +789,7 @@ async function submitPrompt(text) {
   if (app.lastSubmit && app.lastSubmit.text === text) {
     key = app.lastSubmit.key;
   } else {
-    key = crypto.randomUUID();
+    key = randomId();
   }
   app.lastSubmit = { text, key };
   try {

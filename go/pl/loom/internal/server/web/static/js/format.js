@@ -87,3 +87,37 @@ export function shortId(id) {
   if (!id) return "";
   return id.length > 12 ? id.slice(0, 12) + "…" : id;
 }
+
+// randomId 生成 UUIDv4。crypto.randomUUID 是 Secure-Context-Only API，
+// 内网 IP（http://192.168.x.x）访问时不存在；getRandomValues 不受此限，
+// 用它手工拼 UUIDv4 作降级（WebUI 需支持非回环地址访问）。
+export function randomId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 1
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// copyText 复制到剪贴板，返回是否成功。navigator.clipboard 同样是
+// Secure-Context-Only：内网 IP 访问时为 undefined，降级到 execCommand；
+// 两者都失败返回 false，由调用方决定兜底（不允许静默假成功）。
+export async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch { /* 权限拒绝等，走降级 */ }
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { /* 忽略 */ }
+  ta.remove();
+  return ok;
+}

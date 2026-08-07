@@ -56,6 +56,12 @@ var (
 	// matches no traced assistant message in the transcript (e.g. a turn
 	// from before trace stamping, or compacted away).
 	ErrFeedbackTargetUnknown = errors.New("no trace found for run")
+	// ErrShareNotFound reports a share link that was revoked or never
+	// created (the token is the only credential for the public routes).
+	ErrShareNotFound = errors.New("share not found")
+	// ErrSharedArtifactUnknown reports an artifact read through a share
+	// link for a blob the shared session never referenced.
+	ErrSharedArtifactUnknown = errors.New("shared artifact not found")
 )
 
 // SessionService resource defaults (docs/SERVE_DESIGN.md §7.2).
@@ -752,6 +758,125 @@ func (s *SessionService) ReadArtifact(ctx context.Context, ref domain.ArtifactRe
 		return nil, domain.NewError(domain.ErrUnavailable, "artifact store is not configured")
 	}
 	return s.proc.Artifact.Read(ctx, ref)
+}
+
+// --- share links (public read-only transcript views) ---
+
+// SharedSessionView is the wire shape served to anyone holding a share
+// link: the recovered transcript plus display metadata. It is deliberately
+// a read-only store projection — no live handle is resumed, so viewing a
+// share never spins up a runtime.
+type SharedSessionView struct {
+	SessionID domain.SessionID `json:"session_id"`
+	Title     string           `json:"title"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+	Messages  []domain.Message `json:"messages"`
+}
+
+// shareStore narrows the persisted-store capabilities the share flow needs.
+type shareStore interface {
+	GetOrCreateShare(ctx context.Context, sessionID domain.SessionID) (string, error)
+	ResolveShare(ctx context.Context, token string) (domain.SessionID, error)
+	DeleteShare(ctx context.Context, sessionID domain.SessionID) error
+	HasArtifactRef(ctx context.Context, sessionID domain.SessionID, artifactID domain.ArtifactID) (bool, error)
+}
+
+func (s *SessionService) shareStore() (shareStore, error) {
+	store, ok := s.proc.Store.(shareStore)
+	if !ok {
+		return nil, fmt.Errorf("session sharing is unavailable for this store")
+	}
+	return store, nil
+}
+
+// ShareSession returns the session's public share token, creating the
+// share on first use (idempotent).
+func (s *SessionService) ShareSession(ctx context.Context, id domain.SessionID) (string, error) {
+	store, err := s.shareStore()
+	if err != nil {
+		return "", err
+	}
+	return store.GetOrCreateShare(ctx, id)
+}
+
+// RevokeShare deletes the session's share link; existing links stop
+// resolving immediately (idempotent).
+func (s *SessionService) RevokeShare(ctx context.Context, id domain.SessionID) error {
+	store, err := s.shareStore()
+	if err != nil {
+		return err
+	}
+	return store.DeleteShare(ctx, id)
+}
+
+// resolveShare maps a token to its session, normalizing the not-found
+// case to ErrShareNotFound for transport mapping.
+func (s *SessionService) resolveShare(ctx context.Context, store shareStore, token string) (domain.SessionID, error) {
+	sessionID, err := store.ResolveShare(ctx, token)
+	if err != nil {
+		var agentErr *domain.AgentError
+		if errors.As(err, &agentErr) && agentErr.Code == domain.ErrInvalidInput {
+			return domain.SessionID{}, ErrShareNotFound
+		}
+		return domain.SessionID{}, err
+	}
+	return sessionID, nil
+}
+
+// SharedView returns the read-only transcript view for a share token.
+func (s *SessionService) SharedView(ctx context.Context, token string) (SharedSessionView, error) {
+	store, err := s.shareStore()
+	if err != nil {
+		return SharedSessionView{}, err
+	}
+	sessionID, err := s.resolveShare(ctx, store, token)
+	if err != nil {
+		return SharedSessionView{}, err
+	}
+	sqlite, ok := s.proc.Store.(*session.SQLiteStore)
+	if !ok {
+		return SharedSessionView{}, fmt.Errorf("session sharing is unavailable for this store")
+	}
+	inspection, err := sqlite.InspectSession(ctx, sessionID)
+	if err != nil {
+		return SharedSessionView{}, err
+	}
+	view := SharedSessionView{
+		SessionID: sessionID,
+		CreatedAt: inspection.Session.CreatedAt,
+		UpdatedAt: inspection.Session.UpdatedAt,
+		Messages:  inspection.Transcript.Messages,
+	}
+	// Title enrichment mirrors the session listing: first user prompt,
+	// best-effort (failure must not fail the view).
+	if titles, err := sqlite.FirstUserMessageTexts(ctx, []domain.SessionID{sessionID}); err == nil {
+		view.Title = summarizeSessionTitle(titles[sessionID])
+	}
+	return view, nil
+}
+
+// ReadSharedArtifact serves artifact bytes through a share link, but only
+// for blobs the shared session's durable projections actually reference —
+// the token must not become a read-anything capability for the
+// content-addressed store.
+func (s *SessionService) ReadSharedArtifact(ctx context.Context, token string, ref domain.ArtifactRef) ([]byte, error) {
+	store, err := s.shareStore()
+	if err != nil {
+		return nil, err
+	}
+	sessionID, err := s.resolveShare(ctx, store, token)
+	if err != nil {
+		return nil, err
+	}
+	ok, err := store.HasArtifactRef(ctx, sessionID, ref.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrSharedArtifactUnknown
+	}
+	return s.ReadArtifact(ctx, ref)
 }
 
 // Transcript returns one page of the session's canonical transcript

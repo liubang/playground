@@ -163,6 +163,22 @@ func (s *SessionRules) MatchDomain(host string) bool {
 	return ok
 }
 
+// ForgetDomain removes a session-remembered host. ok=false means the host
+// was not in the session store.
+func (s *SessionRules) ForgetDomain(host string) bool {
+	host, err := normalizeDomainHost(host)
+	if err != nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.domains[host]; !ok {
+		return false
+	}
+	delete(s.domains, host)
+	return true
+}
+
 // Domains returns the remembered hosts (status display, tests).
 func (s *SessionRules) Domains() []string {
 	s.mu.RLock()

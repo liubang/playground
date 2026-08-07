@@ -66,6 +66,72 @@ func TestSQLiteStoreAppPrefs(t *testing.T) {
 	}
 }
 
+func TestSQLiteStoreSessionShares(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "sessions.db")
+	store := openTestSQLiteStore(t, path)
+	sessionID := domain.NewSessionID()
+
+	// Sharing a missing session is an explicit not-found error.
+	if _, err := store.GetOrCreateShare(ctx, sessionID); err == nil || !strings.Contains(err.Error(), "session not found") {
+		t.Fatalf("GetOrCreateShare(missing session) error = %v, want session not found", err)
+	}
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// Create is idempotent: the same token comes back until revoked.
+	token, err := store.GetOrCreateShare(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetOrCreateShare: %v", err)
+	}
+	if len(token) != 32 {
+		t.Fatalf("share token = %q, want 32 hex chars", token)
+	}
+	again, err := store.GetOrCreateShare(ctx, sessionID)
+	if err != nil || again != token {
+		t.Fatalf("GetOrCreateShare repeat = %q, %v; want idempotent %q", again, err, token)
+	}
+	resolved, err := store.ResolveShare(ctx, token)
+	if err != nil || resolved != sessionID {
+		t.Fatalf("ResolveShare = %v, %v; want %s", resolved, err, sessionID)
+	}
+
+	// Shares survive a reopen (restart persistence).
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	store = openTestSQLiteStore(t, path)
+	if resolved, err := store.ResolveShare(ctx, token); err != nil || resolved != sessionID {
+		t.Fatalf("ResolveShare after reopen = %v, %v; want %s", resolved, err, sessionID)
+	}
+
+	// Revoke is idempotent and kills the link.
+	if err := store.DeleteShare(ctx, sessionID); err != nil {
+		t.Fatalf("DeleteShare: %v", err)
+	}
+	if _, err := store.ResolveShare(ctx, token); err == nil || !strings.Contains(err.Error(), "share not found") {
+		t.Fatalf("ResolveShare(revoked) error = %v, want share not found", err)
+	}
+	if err := store.DeleteShare(ctx, sessionID); err != nil {
+		t.Fatalf("DeleteShare repeat: %v", err)
+	}
+
+	// A re-share after revoke mints a fresh token.
+	fresh, err := store.GetOrCreateShare(ctx, sessionID)
+	if err != nil || fresh == token {
+		t.Fatalf("re-share after revoke = %q, %v; want a new token", fresh, err)
+	}
+
+	// Deleting the session cascades to its share.
+	if err := store.DeleteSession(ctx, sessionID); err != nil {
+		t.Fatalf("DeleteSession: %v", err)
+	}
+	if _, err := store.ResolveShare(ctx, fresh); err == nil {
+		t.Fatalf("ResolveShare(deleted session) = nil error, want share not found")
+	}
+}
+
 func TestSQLiteStorePersistsEventsAcrossReopen(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "sessions.db")
