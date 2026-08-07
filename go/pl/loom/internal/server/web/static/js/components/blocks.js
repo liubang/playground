@@ -5,6 +5,7 @@
 import { renderMarkdownInto } from "../markdown.js";
 import { renderDiff } from "../diff.js";
 import { fmtTokens, fmtBytes, fmtMsgTime, fmtMsgTimeTitle, copyText } from "../format.js";
+import { icon } from "../icons.js";
 
 export function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -110,19 +111,21 @@ export function streamBlock() {
 //   onFeedback async (runId, value) —— value 1=赞 0=踩；失败时操作行回滚
 // 投票语义：已激活的按钮再点无效；点另一个按钮覆盖上一票（后端按
 // 确定性 score id 幂等覆盖，不产生重复分数）。
+// 图标统一走 icons.js（FA solid 内联 SVG，与 TUI NerdIcons 同族）；
+// 均为静态常量，不触碰 textContent 铁律。
 const ICONS = {
-  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
-  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>',
-  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>',
+  copy: icon("copy"),
+  check: icon("check"),
+  up: icon("thumbs-up"),
+  down: icon("thumbs-down"),
 };
 
-function iconBtn(cls, icon, label) {
+function iconBtn(cls, iconHtml, label) {
   const b = el("button", "msg-action " + cls);
   b.type = "button";
   b.title = label;
   b.setAttribute("aria-label", label);
-  b.innerHTML = icon; // 常量 SVG，无用户输入
+  b.innerHTML = iconHtml; // 常量 SVG，无用户输入
   return b;
 }
 
@@ -218,7 +221,8 @@ export function reasoningBlock() {
 
 // --- tool ---
 
-const TOOL_STATUS_TEXT = { ok: "✓ ok", error: "✗ error", canceled: "⊘ canceled" };
+// st → [图标, 文案]；注意 className 用 err（CSS 类）而 status 文本用 error
+const TOOL_STATUS = { ok: ["check", "ok"], err: ["xmark", "error"], canceled: ["ban", "canceled"] };
 
 // hooks.onCopy: async () => string —— 复制完整输出用。实时事件的 preview
 // 是有界摘要，完整内容需向 server 取；snapshot 重建路径有 full_text，用不到。
@@ -238,7 +242,9 @@ export function toolBlock(payload, hooks = {}) {
     complete(p) {
       const st = p.status === "success" ? "ok" : (p.status === "error" ? "err" : "canceled");
       status.className = "tool-status " + st;
-      status.textContent = TOOL_STATUS_TEXT[st] || p.status || "done";
+      const meta = TOOL_STATUS[st];
+      status.innerHTML = meta ? icon(meta[0]) + " " + meta[1] : "";
+      if (!meta) status.textContent = p.status || "done";
       if (p.duration_ms != null) dur.textContent = fmtDuration(p.duration_ms);
       if (p.error_message || p.error) {
         errEl = el("div", "tool-error", p.error_message || p.error);
@@ -287,7 +293,7 @@ function toolOutput(preview, getFullText) {
 try {
 const text = await getFullText();
 if (!(await copyText(text))) throw new Error("clipboard unavailable");
-copyBtn.textContent = "✓ copied";
+copyBtn.innerHTML = ICONS.check + " copied";
 } catch {
 copyBtn.textContent = "copy failed";
 }
@@ -353,7 +359,9 @@ export function attachDiff(blockEl, diffText) {
 export function approvalCard(payload, { onResolve }) {
   const card = el("div", "block card-approval");
   const title = el("div", "card-title");
-  title.appendChild(el("span", "", "⚠ Approval required"));
+  const titleLabel = el("span", "card-title-label");
+  titleLabel.innerHTML = icon("circle-question") + " Approval required";
+  title.appendChild(titleLabel);
   title.appendChild(el("span", "risk", "R" + (payload.risk ?? "?")));
   title.appendChild(el("span", "mono", payload.tool_name || ""));
   card.appendChild(title);
@@ -393,7 +401,9 @@ export function approvalCard(payload, { onResolve }) {
 // resolved 收编 notice
 export function resolvedNotice(ok, text) {
   const n = el("div", "resolved");
-  n.appendChild(el("span", ok ? "ok" : "no", ok ? "✓" : "✗"));
+  const st = el("span", ok ? "ok" : "no");
+  st.innerHTML = icon(ok ? "check" : "xmark");
+  n.appendChild(st);
   const t = el("span");
   t.appendChild(el("b", "", (ok ? "Allowed" : "Denied") + " "));
   t.appendChild(document.createTextNode("(" + text.actor + ") · " + text.what));
@@ -454,7 +464,7 @@ export function questionCard(payload, { onAnswer }) {
 
 // --- plan 面板（plan.updated 驱动；钉在 composer 上方，Claude Code 风格清单） ---
 
-const PLAN_STATUS_ICON = { todo: "○", in_progress: "▶", done: "✓" };
+const PLAN_STATUS_ICON = { todo: "square-o", in_progress: "square", done: "square-check" };
 
 // renderPlanInto 就地重绘面板内容；不触碰 details.open，保留用户的折叠状态。
 // plan 为空（无 items）时隐藏面板。
@@ -474,7 +484,9 @@ export function renderPlanInto(panel, plan) {
   const list = el("ul", "plan-items");
   for (const item of items) {
     const li = el("li", "plan-item is-" + (item.status || "todo"));
-    li.appendChild(el("span", "plan-icon", PLAN_STATUS_ICON[item.status] || "○"));
+    const ic = el("span", "plan-icon");
+    ic.innerHTML = icon(PLAN_STATUS_ICON[item.status] || "square-o");
+    li.appendChild(ic);
     li.appendChild(el("span", "plan-goal", item.goal || ""));
     list.appendChild(li);
   }
@@ -577,7 +589,9 @@ export function compactBlock(p) {
   const wrap = el("div", "notice compact");
   const before = fmtTokens(p.est_tokens_before) || "?";
   const after = fmtTokens(p.est_tokens_after) || "?";
-  wrap.appendChild(el("div", "compact-head", `⚡ context compacted · ${before} → ${after}`));
+  const head = el("div", "compact-head");
+  head.innerHTML = icon("bolt") + ` context compacted · ${before} → ${after}`;
+  wrap.appendChild(head);
   const details = [];
   if (p.trigger) details.push("trigger: " + p.trigger);
   if (p.masked_outputs) {
