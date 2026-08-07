@@ -38,7 +38,7 @@ loom 今天的"工作区"不是一个实体，而是启动时解析出的一个�
 - session 跨 workspace 迁移（§3.3 论证不可变绑定；提供 fork 语义属后续）；
 - workspace 级配额（session/turn 配额仍为进程级，user 化时再按归属拆分）；
 - workspace 间资源共享（artifact、memory 的归属维持现状，见 §9 矩阵）；
-- workspace 删除/归档的生命周期管理（MVP 只注册与列举，见 §16 开放问题）。
+- workspace 归档的生命周期管理（删除已实现为纯元数据移除，见 §16.1；归档暂不提供）。
 
 ## 3. 核心概念与领域模型
 
@@ -321,6 +321,7 @@ type WorkspaceStore interface {
 GET    /v1/workspaces              # 列举（含每 workspace 的 session 计数）
 POST   /v1/workspaces              # 注册 {root_path, name?} → 201（新建）/ 200（canonical 复用）/ 400（root 不存在、非目录或 canonical 解析失败）
 GET    /v1/workspaces/{id}         # 详情
+DELETE /v1/workspaces/{id}         # 删除元数据（§16.1）→ 204 / 404（未知 id）/ 409（default workspace 或有存活会话）
 POST   /v1/sessions                # 请求体新增可选 workspace_id；省略 → default workspace
 GET    /v1/sessions?workspace_id=  # 过滤（与既有 archived/limit/cursor 参数正交，handlers_sessions.go:50-62）
 
@@ -340,6 +341,7 @@ GET    /v1/sessions?workspace_id=  # 过滤（与既有 archived/limit/cursor �
 ```go
 ListWorkspaces(ctx context.Context) ([]domain.Workspace, error)
 RegisterWorkspace(ctx context.Context, root, name string) (domain.Workspace, error)
+DeleteWorkspace(ctx context.Context, id domain.WorkspaceID) error          // §16.1
 CreateSessionIn(ctx context.Context, workspaceID domain.WorkspaceID) error // CreateSession 的带参版
 ```
 
@@ -401,6 +403,7 @@ workspaces:
 ```
 loom workspace list                     # 只读，直接走 OpenSQLiteStoreReadOnly（sqlite_store.go:81 的 mode=ro 路径），无需 serve 运行
 loom workspace add <path> [--name N]    # 写操作，需 serve 运行中，走 HTTP POST /v1/workspaces；serve 未运行时明确报错并提示启动
+loom workspace rm <id>                  # 删除元数据（§16.1）；与 add 同路径：serve 运行中时走 Web UI 或 DELETE /v1/workspaces/{id}
 ```
 
 `list` 不依赖 serve：只读路径本来就为 inspect 类场景存在（不含写），session/workspace 列表是典型只读查询。`add` 必须经 serve 的 `WorkspaceRegistry.Register`（需要 canonical 校验 + 并发 dedupe + 装配触发），不走第二条写路径——这与 SERVE_DESIGN §17 的单一写者原则一致。
@@ -445,7 +448,7 @@ M2 是工作量主体，涉及 `bootstrap.go` 的拆分搬运与 `app` 包全部
 
 ## 16. 开放问题
 
-1. **workspace 生命周期**：删除/归档语义（有 session 引用时拒绝 vs 软删除保留历史）？MVP 不提供删除，待真实需求出现；
+1. **workspace 生命周期**（删除已落地，归档未做）：删除采用**纯元数据移除**——只删 `workspaces` 行，磁盘目录不动；其 session 保留为只读历史（`workspace_id` 悬空，transcript/inspect 可读，resume 拒绝），这正是 §7.1 不加外键的预设场景。两类拒绝（409 `workspace_in_use`）：default workspace（W5，旧客户端的回落目标）、有存活 session 的 workspace（先删除/关闭其 session）。实现：`WorkspaceRegistry.Delete`（buildMu 与 Resolve 互斥，防懒装配复活；返回被摘除的 runtime 由调用方在锁外 Close）、`SessionService.DeleteWorkspace`（存活会话检查与删除在同一 s.mu 临界区；CreateSession/ResumeSession 在 handle 插入点复核 workspace 仍在注册表，双向串行化关闭 TOCTOU）、`DELETE /v1/workspaces/{id}`、`loom workspace rm`；list 响应带 `is_default` 标记供前端隐藏删除入口。归档语义待真实需求出现；
 2. **root 换绑（repair）**：目录移动是真实操作（磁盘迁移、worktree 调整）。换绑会使历史 `file_changes` 相对路径指向新内容，rewind 风险需要在设计层面解决（如换绑时冻结历史 session 的 rewind 能力）。本期 W4 禁止换绑；
 3. **Web 端目录浏览 picker**：注册 workspace 需要输入绝对路径，体验欠佳；server 端文件浏览 API 涉及路径探测面，单独设计；
 4. **per-workspace MCP**：MCP server 的 `cwd` 为空时继承进程 cwd 的语义在多 workspace 下可能不符合直觉（MCP 工具读的是 default workspace 的相对路径）。选项：a) 文档化现状；b) `srv.Cwd` 为空时填 default workspace root；c) workspace 级 MCP 装配。倾向 b)（一行改动），实施期定；

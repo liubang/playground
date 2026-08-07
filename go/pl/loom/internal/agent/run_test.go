@@ -3639,3 +3639,24 @@ func TestRunAssistantTextScopesToCurrentRun(t *testing.T) {
 		t.Fatalf("output = %q, want to skip empty assistant text", got)
 	}
 }
+
+func TestActionablePrepareErrorGuidesWorkspaceEscape(t *testing.T) {
+	escapeErr := domain.NewError(domain.ErrSecurity, "path escapes workspace or is invalid",
+		domain.WithCause(fmt.Errorf("path %q escapes workspace root %q", "/outside", "/ws")))
+	msg := actionablePrepareError(escapeErr)
+	if !strings.Contains(msg, escapeErr.Error()) {
+		t.Fatalf("guidance must keep the original error, got %q", msg)
+	}
+	if !strings.Contains(msg, "restricted to the workspace root") || !strings.Contains(msg, "run_cmd") {
+		t.Fatalf("guidance missing actionable advice, got %q", msg)
+	}
+
+	// Non-security failures and unrelated security failures stay verbatim.
+	if got := actionablePrepareError(errors.New("boom")); got != "boom" {
+		t.Fatalf("plain error changed: %q", got)
+	}
+	other := domain.NewError(domain.ErrSecurity, "path contains a sensitive component")
+	if got := actionablePrepareError(other); got != other.Error() {
+		t.Fatalf("unrelated security error changed: %q", got)
+	}
+}

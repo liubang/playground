@@ -14,7 +14,9 @@ document.documentElement.dataset.theme = saved !== "light" ? "dark" : "light";
 const token = location.pathname.split("/").filter(Boolean).pop() || "";
 
 // 分享页 artifact 走公开端点（/v1/shared/* 免 bearer）；内容寻址 + 不可变，
-// 按 id+size 缓存避免重复下载。
+// 按 id+size 缓存避免重复下载。返回 {url, mediaType, blob}（同 main.js 契约），
+// mediaType 取自响应 Content-Type，供渲染层区分图片与文本 artifact；blob
+// 本体用于文本预览。
 const artifactURLCache = new Map();
 async function fetchArtifactURL(id, size) {
   const key = `${id}:${size}`;
@@ -24,9 +26,10 @@ async function fetchArtifactURL(id, size) {
     `/v1/shared/${encodeURIComponent(token)}/artifacts/${encodeURIComponent(id)}?size=${size}`,
   );
   if (!res.ok) throw new Error(`artifact fetch failed (HTTP ${res.status})`);
-  const url = URL.createObjectURL(await res.blob());
-  artifactURLCache.set(key, url);
-  return url;
+  const blob = await res.blob();
+  const entry = { url: URL.createObjectURL(blob), mediaType: blob.type || "", blob };
+  artifactURLCache.set(key, entry);
+  return entry;
 }
 
 function showError(text) {

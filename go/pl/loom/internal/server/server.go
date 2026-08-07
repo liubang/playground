@@ -226,6 +226,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/workspaces", s.handleListWorkspaces)
 	mux.HandleFunc("POST /v1/workspaces", s.handleRegisterWorkspace)
 	mux.HandleFunc("GET /v1/workspaces/{id}", s.handleGetWorkspace)
+	mux.HandleFunc("DELETE /v1/workspaces/{id}", s.handleDeleteWorkspace)
 	mux.HandleFunc("GET /v1/files/browse", s.handleBrowseDirectories)
 	mux.HandleFunc("GET /v1/sessions", s.handleListSessions)
 	mux.HandleFunc("POST /v1/sessions", s.handleCreateSession)
@@ -271,7 +272,7 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		header := w.Header()
 		// img-src allows blob: because artifact images are fetched with the
 		// bearer token and rendered through URL.createObjectURL — <img> cannot
-		// carry the Authorization header itself (see artifactImageBlock).
+		// carry the Authorization header itself (see artifactBlock).
 		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'")
 		header.Set("X-Content-Type-Options", "nosniff")
 		header.Set("Referrer-Policy", "no-referrer")

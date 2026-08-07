@@ -133,6 +133,12 @@ func mapWireError(status int, code, message string) error {
 	switch code {
 	case "not_found":
 		return app.ErrSessionNotFound
+	case "workspace_not_found":
+		return app.ErrWorkspaceNotFound
+	case "workspace_unavailable":
+		return app.ErrWorkspaceUnavailable
+	case "workspace_in_use":
+		return app.ErrWorkspaceInUse
 	case "draining":
 		return app.ErrDraining
 	case "cursor_invalid":
@@ -457,6 +463,10 @@ func (c *httpClient) RegisterWorkspace(ctx context.Context, root, name string) (
 		return domain.Workspace{}, err
 	}
 	return out.Workspace, nil
+}
+
+func (c *httpClient) DeleteWorkspace(ctx context.Context, id domain.WorkspaceID) error {
+	return c.do(ctx, http.MethodDelete, "/v1/workspaces/"+id.String(), nil, nil)
 }
 
 func (c *httpClient) ListCheckpoints(ctx context.Context, limit int) ([]CheckpointInfo, error) {

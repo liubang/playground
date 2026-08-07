@@ -49,6 +49,9 @@ export function createApi({ getToken, onUnauthorized }) {
     // workspaces（docs/WORKSPACE_DESIGN.md §8.1）
     listWorkspaces: () => req("GET", "/v1/workspaces"),
     registerWorkspace: (rootPath, name) => req("POST", "/v1/workspaces", { root_path: rootPath, name }),
+    // 删除工作区：仅移除元数据（磁盘目录与历史会话保留）；默认工作区与有
+    // 存活会话的工作区不可删（409 workspace_in_use）
+    deleteWorkspace: (id) => req("DELETE", `/v1/workspaces/${id}`),
     browseDirectories: (path) => req("GET", `/v1/files/browse?path=${encodeURIComponent(path || "")}`),
     archiveSession: (id, archived) => req("POST", `/v1/sessions/${id}/archive`, { archived }),
     deleteSession: (id) => req("DELETE", `/v1/sessions/${id}`),

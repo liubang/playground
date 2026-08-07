@@ -707,6 +707,125 @@ func TestWorkspaceEndpoints(t *testing.T) {
 	}
 }
 
+// doDelete issues a bare DELETE and returns the status code (204 responses
+// carry no body, so doJSON's decode step does not apply).
+func doDelete(t *testing.T, client *http.Client, url string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	authed(t, req)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+// TestDeleteWorkspaceEndpoint locks the workspace-deletion contract
+// (docs/WORKSPACE_DESIGN.md §16): metadata-only removal; the default
+// workspace and workspaces with live sessions are refused (409); unknown
+// IDs 404; the workspace's sessions survive as read-only history with a
+// dangling workspace_id.
+func TestDeleteWorkspaceEndpoint(t *testing.T) {
+	ts, registry, store := newWorkspaceScopedServer(t, fakes.NewFakeModel())
+	ctx := context.Background()
+
+	defWs, err := registry.RegisterDefault(ctx, canonicalTempDir(t))
+	if err != nil {
+		t.Fatalf("RegisterDefault: %v", err)
+	}
+	wsB, err := registry.Register(ctx, canonicalTempDir(t), "beta")
+	if err != nil {
+		t.Fatalf("Register beta: %v", err)
+	}
+	idB := wsB.WorkspaceID.String()
+
+	// The list endpoint marks the default workspace (frontends hide its
+	// delete affordance; the server refuses its deletion regardless).
+	_, list := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/workspaces", "")
+	for _, w := range list["workspaces"].([]any) {
+		m := w.(map[string]any)
+		isDefault, _ := m["is_default"].(bool)
+		if want := m["id"] == defWs.WorkspaceID.String(); isDefault != want {
+			t.Fatalf("is_default for %v = %v, want %v", m["id"], isDefault, want)
+		}
+	}
+
+	// A historical (persisted but not live) session in workspace B: it must
+	// survive the workspace deletion with its dangling workspace_id.
+	histID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, histID, wsB.WorkspaceID); err != nil {
+		t.Fatalf("CreateSession historical: %v", err)
+	}
+
+	// A live session in B blocks deletion with 409 workspace_in_use.
+	_, bodyB := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions", fmt.Sprintf(`{"workspace_id":%q}`, idB))
+	sessB, _ := bodyB["session_id"].(string)
+	status, body := doJSON(t, ts.Client(), "DELETE", ts.URL+"/v1/workspaces/"+idB, "")
+	if status != http.StatusConflict {
+		t.Fatalf("delete with live session = (%d, %v), want 409", status, body)
+	}
+	if code, _ := body["error"].(map[string]any)["code"].(string); code != "workspace_in_use" {
+		t.Fatalf("error code = %q, want workspace_in_use", code)
+	}
+
+	// The default workspace is never deletable (legacy clients fall back to it).
+	status, body = doJSON(t, ts.Client(), "DELETE", ts.URL+"/v1/workspaces/"+defWs.WorkspaceID.String(), "")
+	if status != http.StatusConflict {
+		t.Fatalf("delete default = (%d, %v), want 409", status, body)
+	}
+
+	// Malformed / unknown IDs: 400 and 404 respectively.
+	if status := doDelete(t, ts.Client(), ts.URL+"/v1/workspaces/bogus"); status != http.StatusBadRequest {
+		t.Fatalf("delete malformed id = %d, want 400", status)
+	}
+	status, _ = doJSON(t, ts.Client(), "DELETE", ts.URL+"/v1/workspaces/ws_00000000000000000000000000000000", "")
+	if status != http.StatusNotFound {
+		t.Fatalf("delete unknown id = %d, want 404", status)
+	}
+
+	// Remove the live session; deletion now succeeds (204, empty body).
+	if status := doDelete(t, ts.Client(), ts.URL+"/v1/sessions/"+sessB); status != http.StatusNoContent {
+		t.Fatalf("delete live session = %d, want 204", status)
+	}
+	if status := doDelete(t, ts.Client(), ts.URL+"/v1/workspaces/"+idB); status != http.StatusNoContent {
+		t.Fatalf("delete workspace = %d, want 204", status)
+	}
+	status, body = doJSON(t, ts.Client(), "GET", ts.URL+"/v1/workspaces/"+idB, "")
+	if status != http.StatusNotFound {
+		t.Fatalf("get after delete = (%d, %v), want 404", status, body)
+	}
+	// A second delete is not idempotent: not-found.
+	status, _ = doJSON(t, ts.Client(), "DELETE", ts.URL+"/v1/workspaces/"+idB, "")
+	if status != http.StatusNotFound {
+		t.Fatalf("re-delete = %d, want 404", status)
+	}
+
+	// The historical session survives, still carrying the dangling workspace_id.
+	_, allList := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions?workspace_id=all", "")
+	found := false
+	for _, s := range allList["sessions"].([]any) {
+		m := s.(map[string]any)
+		if m["id"] == histID.String() {
+			found = true
+			if m["workspace_id"] != idB {
+				t.Fatalf("historical session workspace_id = %v, want dangling %s", m["workspace_id"], idB)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("historical session %s missing after workspace delete", histID)
+	}
+
+	// The on-disk root directory is never touched by the deletion.
+	if info, err := os.Stat(wsB.WorkspaceRoot); err != nil || !info.IsDir() {
+		t.Fatalf("workspace root must survive deletion: %v", err)
+	}
+}
+
 // canonicalTempDir returns t.TempDir() with symlinks resolved (the store
 // persists canonical workspace roots).
 func canonicalTempDir(t *testing.T) string {
@@ -766,7 +885,7 @@ func TestBrowseDirectories(t *testing.T) {
 // newWorkspaceScopedServer builds a server backed by a real WorkspaceRegistry
 // (RegisterDefault yields a real default workspace ID), so the workspace_id
 // default-scope behavior is testable end to end.
-func newWorkspaceScopedServer(t *testing.T, model domain.Model) (*httptest.Server, *app.WorkspaceRegistry) {
+func newWorkspaceScopedServer(t *testing.T, model domain.Model) (*httptest.Server, *app.WorkspaceRegistry, *session.SQLiteStore) {
 	t.Helper()
 	ctx := context.Background()
 	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
@@ -810,7 +929,7 @@ func newWorkspaceScopedServer(t *testing.T, model domain.Model) (*httptest.Serve
 	}
 	ts := httptest.NewServer(srv.http.Handler)
 	t.Cleanup(ts.Close)
-	return ts, registry
+	return ts, registry, store
 }
 
 func sessionIDs(body map[string]any) []string {
@@ -826,7 +945,7 @@ func sessionIDs(body map[string]any) []string {
 // workspace's sessions (the single-workspace picker view), while
 // workspace_id=all spans every workspace (the tree view).
 func TestListSessionsDefaultScope(t *testing.T) {
-	ts, registry := newWorkspaceScopedServer(t, fakes.NewFakeModel())
+	ts, registry, _ := newWorkspaceScopedServer(t, fakes.NewFakeModel())
 	ctx := context.Background()
 
 	defWs, err := registry.RegisterDefault(ctx, canonicalTempDir(t))

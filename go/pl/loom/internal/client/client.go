@@ -179,4 +179,9 @@ type Client interface {
 	ListWorkspaces(ctx context.Context) ([]domain.Workspace, error)
 	// RegisterWorkspace registers (or reuses by canonical root) a workspace.
 	RegisterWorkspace(ctx context.Context, root, name string) (domain.Workspace, error)
+	// DeleteWorkspace removes a workspace entity (metadata only — the
+	// on-disk root directory is never touched). Its sessions survive as
+	// read-only history. The default workspace and workspaces with live
+	// sessions cannot be deleted.
+	DeleteWorkspace(ctx context.Context, id domain.WorkspaceID) error
 }
