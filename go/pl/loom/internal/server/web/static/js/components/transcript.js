@@ -455,7 +455,9 @@ export class Transcript {
           await this.io.resolveApproval(p, { decision, always });
           this._collapseApproval(p.approval_id, decision === "allow", "you");
         } catch (e) {
-          if (e.code === "binding_mismatch") {
+          // binding_mismatch / not_idle 都意味着该审批已被处理或已过期
+          // （例如同域名的重复申请已被记住的规则自动放行），静默收起即可
+          if (e.code === "binding_mismatch" || e.code === "not_idle") {
             this._collapseApproval(p.approval_id, true, "another client");
           } else {
             this.io.onError(e);
