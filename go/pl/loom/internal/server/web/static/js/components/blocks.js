@@ -261,7 +261,9 @@ export function toolBlock(payload, hooks = {}) {
       // 图片和同一图片的 artifact 引用（前者供模型回看，后者供展示），
       // 两条都渲染会把同一张图显示两遍，因此内联图片优先（data: URI
       // 同步可用、无需带鉴权的二次请求）；仅当没有内联图片时（如超过
-      // 内联大小上限的图）才走 artifact 路径。
+      // 内联大小上限的图）才走 artifact 路径。artifact 不一定是图片
+      // （run_cmd 的 stdout/stderr artifact 是文本），由 artifactBlock
+      // 按媒体类型分发渲染。
       const resultImages = p.images || [];
       if (resultImages.length > 0) {
         for (const img of resultImages) {
@@ -269,7 +271,7 @@ export function toolBlock(payload, hooks = {}) {
         }
       } else {
         for (const art of p.artifacts || []) {
-          b.appendChild(artifactImageBlock(art.id, art.size, hooks.resolveArtifactURL));
+          b.appendChild(artifactBlock(art, hooks.resolveArtifactURL));
         }
       }
     },
@@ -553,29 +555,75 @@ export function imageBlock(mediaType, base64Data) {
   return b;
 }
 
-// artifactImageBlock 渲染一个引用 artifact endpoint 的图片，用于
-// artifact_ref part（generate_image 等工具产出的大型图片，避免在
-// transcript JSON 中内嵌多 MB base64）。
+// artifactBlock 渲染 artifact_ref part，按媒体类型分发：
+// - image/*：内联图片（generate_image 的大型图片，避免在 transcript JSON
+//   中内嵌多 MB base64）；
+// - 文本类（run_cmd 的 stdout/stderr artifact、compact 外化的工具输出
+//   等）：可展开的全文预览 + 下载；
+// - 其他二进制：仅下载。
+// 媒体类型优先取后端在 artifact 上声明的 media_type；历史数据没有该字
+// 段，回退到 fetch 响应的 Content-Type（服务端 DetectContentType 嗅探）。
 // <img> 无法携带 Authorization 头，而 /v1/* 需要 Bearer 鉴权，因此实际
-// 加载走 resolveURL(id, size) => Promise<blobURL>（由 main.js 注入，
-// fetch 带鉴权后 createObjectURL）；无 resolveURL 时退回直链（仅适用于
-// 无鉴权部署）。
-export function artifactImageBlock(artifactId, size, resolveURL) {
-  const b = el("div", "block block-image");
-  const fail = () => b.replaceChildren(el("div", "notice is-warn", "图片加载失败"));
-  const img = document.createElement("img");
-  img.className = "inline-image";
-  img.loading = "lazy";
-  img.alt = "generated image";
-  img.onerror = fail;
-  makeZoomable(img);
-  b.appendChild(img);
-  if (resolveURL) {
-    resolveURL(artifactId, size).then((url) => { img.src = url; }, fail);
-  } else {
-    img.src = `/v1/artifacts/${encodeURIComponent(artifactId)}?size=${size}`;
-  }
+// 加载走 resolveURL(id, size) => Promise<{url, mediaType, blob}>（main.js
+// 注入，fetch 带鉴权后 createObjectURL）；无 resolveURL 时退回直链 fetch
+// （仅适用于无鉴权部署）。文本预览读 blob.text() 而非再 fetch blobURL：
+// CSP connect-src 'self' 不覆盖 blob: scheme，二次 fetch 可能被拦。
+export function artifactBlock(artifact, resolveURL) {
+  const b = el("div", "block block-artifact");
+  const fail = () => b.replaceChildren(el("div", "notice is-warn", "artifact 加载失败"));
+  const resolve = resolveURL || ((id, size) =>
+    fetch(`/v1/artifacts/${encodeURIComponent(id)}?size=${size}`).then((r) => {
+      if (!r.ok) throw new Error(`artifact fetch failed (HTTP ${r.status})`);
+      return r.blob();
+    }).then((blob) => ({ url: URL.createObjectURL(blob), mediaType: blob.type || "", blob })));
+  resolve(artifact.id, artifact.size).then(({ url, mediaType, blob }) => {
+    const type = artifact.media_type || mediaType || "";
+    if (type.startsWith("image/")) {
+      const img = document.createElement("img");
+      img.className = "inline-image";
+      img.loading = "lazy";
+      img.alt = "artifact image";
+      img.onerror = () => b.replaceChildren(el("div", "notice is-warn", "图片加载失败"));
+      img.src = url;
+      makeZoomable(img);
+      b.replaceChildren(img);
+      return;
+    }
+    b.replaceChildren(artifactFileBlock(url, type, artifact.size, blob));
+  }, fail);
   return b;
+}
+
+// artifactFileBlock 渲染非图片 artifact：summary 行（类型 + 大小 + 下载
+// 链接）；文本类展开后从 blob 懒加载全文（鉴权问题已在 resolve 阶段解决）。
+function artifactFileBlock(url, mediaType, size, blob) {
+  const d = document.createElement("details");
+  d.className = "artifact-file disclosure";
+  const summary = el("summary");
+  const isText = mediaType.startsWith("text/") || mediaType === "application/json";
+  summary.appendChild(el("span", "artifact-file-label",
+    `${isText ? "output artifact" : "artifact"} · ${mediaType || "binary"} · ${fmtBytes(size)}`));
+  const dl = el("a", "artifact-download", "download");
+  dl.href = url;
+  dl.download = "";
+  dl.title = "下载完整内容";
+  dl.onclick = (e) => e.stopPropagation(); // 不触发 details 展开/收起
+  summary.appendChild(dl);
+  d.appendChild(summary);
+  if (isText) {
+    const preview = el("div", "tool-preview mono");
+    let loaded = false;
+    d.addEventListener("toggle", () => {
+      if (!d.open || loaded) return;
+      loaded = true;
+      blob.text().then(
+        (t) => { preview.textContent = t; },
+        () => { preview.textContent = "(读取失败)"; },
+      );
+    });
+    d.appendChild(preview);
+  }
+  return d;
 }
 
 // --- notice / fatal ---

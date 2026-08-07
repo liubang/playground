@@ -298,6 +298,7 @@ func (c Condenser) maskMessageOutputs(ctx context.Context, msg *domain.Message, 
 			// providers skip PartArtifact when rendering tool results, so the
 			// wire form is unchanged.
 			artifactRef := ref
+			artifactRef.MediaType = "text/plain" // masked tool output is text
 			part.ToolResult.Content = append(part.ToolResult.Content, domain.ContentPart{Kind: domain.PartArtifact, Artifact: &artifactRef})
 			result.bytesMasked += original
 			result.outputs = append(result.outputs, maskedOutput{

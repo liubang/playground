@@ -178,6 +178,7 @@ func (t *GenerateImageTool) Execute(ctx context.Context, prepared domain.Prepare
 
 	content := make([]domain.ContentPart, 0, 3)
 	if ref, ok := t.storeArtifact(ctx, res.Data); ok {
+		ref.MediaType = res.MediaType
 		out.Artifact = &ref
 		content = append(content, domain.ContentPart{Kind: domain.PartArtifact, Artifact: &ref})
 	}

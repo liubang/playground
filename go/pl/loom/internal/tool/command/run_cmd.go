@@ -258,7 +258,7 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 	// Sign before rendering the description so the displayed args_hash
 	// correlates with the ArgsHash recorded in permission events.
 	prepared.ArgsHash = t.signPrepared(prepared)
-	prepared.ApprovalDesc = buildApprovalDesc(args, prepared)
+	prepared.ApprovalDesc = buildApprovalDesc(args, prepared, t.validator.Root())
 	return prepared, nil
 }
 
@@ -900,12 +900,16 @@ func contentResultWithArtifacts(
 	}
 	parts := []domain.ContentPart{{Kind: domain.PartText, Text: string(content)}}
 	metadata := map[string]string{}
+	// stdout/stderr artifacts are captured process output — declare them as
+	// text so renderers don't mistake them for images.
 	if stdoutRef != nil {
+		stdoutRef.MediaType = "text/plain"
 		parts = append(parts, domain.ContentPart{Kind: domain.PartArtifact, Artifact: stdoutRef})
 		metadata["stdout_artifact_id"] = stdoutRef.ID.String()
 		metadata["stdout_artifact_size"] = fmt.Sprintf("%d", stdoutRef.Size)
 	}
 	if stderrRef != nil {
+		stderrRef.MediaType = "text/plain"
 		parts = append(parts, domain.ContentPart{Kind: domain.PartArtifact, Artifact: stderrRef})
 		metadata["stderr_artifact_id"] = stderrRef.ID.String()
 		metadata["stderr_artifact_size"] = fmt.Sprintf("%d", stderrRef.Size)
@@ -1028,7 +1032,7 @@ func displayPath(rel string) string {
 	return filepath.ToSlash(clean)
 }
 
-func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall) string {
+func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall, root string) string {
 	parts := []string{"Run"}
 	command := append([]string{args.Program}, args.Args...)
 	quoted := make([]string, 0, len(command))
@@ -1063,6 +1067,21 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall) string {
 		}
 	}
 
+	// Surface workspace-external absolute paths referenced by argv (e.g.
+	// 'ls ~/.loom'): ReadPaths stays the workspace-root enforcement
+	// contract, so without this hint the summary under-reports what the
+	// command may read. Display-only; enforcement is the sandbox's job.
+	if refs := referencedExternalPaths(args, root); len(refs) > 0 {
+		const maxRefCount = 6
+		shown := refs
+		marker := ""
+		if len(refs) > maxRefCount {
+			shown = refs[:maxRefCount]
+			marker = ", …"
+		}
+		parts = append(parts, "refs["+strings.Join(shown, ", ")+marker+"]")
+	}
+
 	base := strings.Join(parts, "; ")
 	// Display a prefix of the signed HMAC ArgsHash: compact, yet correlates
 	// with the full hash recorded in permission audit events.
@@ -1073,6 +1092,46 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall) string {
 	suffix := fmt.Sprintf("; args_hash=%s", argsHash)
 	truncated := truncateWithMarker(base, maxApprovalDescBytes-len(suffix))
 	return truncated + suffix
+}
+
+// referencedExternalPaths best-effort extracts absolute paths outside the
+// workspace from argv (shell -c payloads are split on shell metacharacters
+// first). Used only to keep the approval summary honest about what a
+// command may touch; it is not an enforcement boundary.
+func referencedExternalPaths(args runCmdArgs, root string) []string {
+	tokens := append([]string(nil), args.Args...)
+	if process.IsShellProgram(args.Program) {
+		var split []string
+		for _, a := range args.Args {
+			split = append(split, strings.FieldsFunc(a, func(r rune) bool {
+				switch r {
+				case ' ', '\t', '\n', '"', '\'', ';', '|', '&', '(', ')', '<', '>', '=', ',', '`':
+					return true
+				}
+				return false
+			})...)
+		}
+		tokens = append(tokens, split...)
+	}
+	rootClean := filepath.Clean(root)
+	seen := map[string]bool{}
+	out := make([]string, 0, 4)
+	for _, tok := range tokens {
+		if !filepath.IsAbs(tok) {
+			continue
+		}
+		cleaned := filepath.Clean(tok)
+		if cleaned == rootClean || strings.HasPrefix(cleaned, rootClean+string(filepath.Separator)) {
+			continue // workspace 内路径已由 ReadPaths 声明
+		}
+		if seen[cleaned] {
+			continue
+		}
+		seen[cleaned] = true
+		out = append(out, cleaned)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func sortedEnvKeys(env map[string]string) []string {

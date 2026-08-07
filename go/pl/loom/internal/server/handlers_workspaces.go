@@ -28,10 +28,13 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-// workspaceEntry is the wire shape of one workspace, with its session count.
+// workspaceEntry is the wire shape of one workspace, with its session count
+// and a default-workspace marker (the default cannot be deleted; frontends
+// use it to hide the delete affordance).
 type workspaceEntry struct {
 	domain.Workspace
-	SessionCount int `json:"session_count"`
+	SessionCount int  `json:"session_count"`
+	IsDefault    bool `json:"is_default"`
 }
 
 // handleListWorkspaces serves GET /v1/workspaces: every registered workspace
@@ -47,9 +50,10 @@ func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 		// Counts are best-effort enrichment; a failure must not fail listing.
 		counts = map[domain.WorkspaceID]int{}
 	}
+	defaultID := s.svc.DefaultWorkspaceID()
 	out := make([]workspaceEntry, len(workspaces))
 	for i, ws := range workspaces {
-		out[i] = workspaceEntry{Workspace: ws, SessionCount: counts[ws.ID]}
+		out[i] = workspaceEntry{Workspace: ws, SessionCount: counts[ws.ID], IsDefault: ws.ID == defaultID}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"workspaces": out})
 }
@@ -94,6 +98,29 @@ func (s *Server) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"workspace": ws})
+}
+
+// handleDeleteWorkspace serves DELETE /v1/workspaces/{id}: removes the
+// workspace entity (metadata only — the on-disk root directory is never
+// touched). The workspace's sessions survive as read-only history
+// (docs/WORKSPACE_DESIGN.md §7.1). The default workspace and workspaces
+// with live sessions cannot be deleted (409 workspace_in_use).
+func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
+	id, err := parseWorkspaceIDParam(r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if id.IsZero() {
+		writeError(w, invalidInput("invalid workspace id"))
+		return
+	}
+	if err := s.svc.DeleteWorkspace(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("workspace.delete", domain.SessionID{}, "workspace_id", id.String())
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- directory browsing (workspace picker, docs/WORKSPACE_DESIGN.md §11.3) ---

@@ -173,6 +173,54 @@ func TestListSessionsFiltersByWorkspace(t *testing.T) {
 	}
 }
 
+// TestDeleteWorkspace locks the deletion semantics (docs/WORKSPACE_DESIGN.md
+// §7.1): the workspace row goes away while its sessions survive as read-only
+// history — their workspace_id dangles (no foreign key by design), so
+// SessionWorkspace and ListSessions keep resolving them afterwards.
+func TestDeleteWorkspace(t *testing.T) {
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	ctx := context.Background()
+
+	ws, err := store.UpsertWorkspace(ctx, domain.Workspace{
+		ID: domain.NewWorkspaceID(), Name: "doomed", RootPath: filepath.Join(t.TempDir(), "doomed"),
+	})
+	if err != nil {
+		t.Fatalf("UpsertWorkspace: %v", err)
+	}
+	sid := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sid, ws.ID); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// Deleting an unknown workspace is an error.
+	if err := store.DeleteWorkspace(ctx, domain.NewWorkspaceID()); err == nil {
+		t.Fatal("DeleteWorkspace unknown ID should fail")
+	}
+
+	if err := store.DeleteWorkspace(ctx, ws.ID); err != nil {
+		t.Fatalf("DeleteWorkspace: %v", err)
+	}
+	if _, err := store.GetWorkspace(ctx, ws.ID); err == nil {
+		t.Fatal("GetWorkspace after delete should fail")
+	}
+	if _, err := store.GetWorkspaceByRoot(ctx, ws.RootPath); err == nil {
+		t.Fatal("GetWorkspaceByRoot after delete should fail")
+	}
+	// Idempotency is NOT a goal: a second delete reports not-found.
+	if err := store.DeleteWorkspace(ctx, ws.ID); err == nil {
+		t.Fatal("second DeleteWorkspace should fail")
+	}
+
+	// The session survives with its dangling workspace_id.
+	if got, err := store.SessionWorkspace(ctx, sid); err != nil || got != ws.ID {
+		t.Fatalf("SessionWorkspace after delete: %s err=%v, want dangling %s", got, err, ws.ID)
+	}
+	summaries, _, err := store.ListSessions(ctx, "", 10, false, ws.ID)
+	if err != nil || len(summaries) != 1 || summaries[0].ID != sid {
+		t.Fatalf("ListSessions after delete: %+v err=%v, want the surviving session", summaries, err)
+	}
+}
+
 // TestMigrateV5FromV4 drives the upgrade path: a hand-built v4 database (no
 // workspace_id column) opened by the current store must gain the column and
 // the workspaces table, and accept workspace-bound sessions afterwards.

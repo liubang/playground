@@ -37,6 +37,10 @@ var (
 	// ErrWorkspaceUnavailable reports that a registered workspace's root is
 	// no longer reachable (moved/deleted) or no longer canonical-consistent.
 	ErrWorkspaceUnavailable = errors.New("workspace root is unavailable")
+	// ErrWorkspaceInUse rejects deleting a workspace that is still referenced
+	// by the running process: the default workspace (the launch directory,
+	// W5) or one with live sessions. Transports map it to 409 Conflict.
+	ErrWorkspaceInUse = errors.New("workspace is in use")
 )
 
 // WorkspaceRegistry manages the per-workspace Bootstraps of a process
@@ -164,6 +168,18 @@ func (m *memWorkspaceStore) ListWorkspaces(_ context.Context) ([]domain.Workspac
 		out = append(out, ws)
 	}
 	return out, nil
+}
+
+func (m *memWorkspaceStore) DeleteWorkspace(_ context.Context, id domain.WorkspaceID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ws, ok := m.byID[id]
+	if !ok {
+		return ErrWorkspaceNotFound
+	}
+	delete(m.byID, id)
+	delete(m.byRoot, ws.RootPath)
+	return nil
 }
 
 func (m *memWorkspaceStore) SessionWorkspace(_ context.Context, sessionID domain.SessionID) (domain.WorkspaceID, error) {
@@ -312,6 +328,49 @@ func (r *WorkspaceRegistry) Resolve(ctx context.Context, id domain.WorkspaceID) 
 // List returns every registered workspace, newest first.
 func (r *WorkspaceRegistry) List(ctx context.Context) ([]domain.Workspace, error) {
 	return r.store.ListWorkspaces(ctx)
+}
+
+// Delete removes a workspace entity: the persisted row and the in-memory
+// indexes. The on-disk root directory is never touched; the workspace's
+// sessions survive as read-only history (their workspace_id dangles by
+// design, docs/WORKSPACE_DESIGN.md §7.1). The default workspace (W5) cannot
+// be deleted — every legacy entry point falls back to it. Live-session
+// occupancy is checked by the caller (SessionService owns the live handles).
+//
+// Delete returns the evicted runtime WITHOUT closing it: the caller
+// (SessionService.DeleteWorkspace) holds its session lock across this call
+// to serialize against concurrent session creation, and closing the runtime
+// inside that critical section would stall it — the caller closes the
+// returned runtime after releasing the lock.
+func (r *WorkspaceRegistry) Delete(ctx context.Context, id domain.WorkspaceID) (*Bootstrap, error) {
+	if id.IsZero() {
+		return nil, ErrWorkspaceNotFound
+	}
+	r.mu.Lock()
+	if id == r.def {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("%w: default workspace", ErrWorkspaceInUse)
+	}
+	r.mu.Unlock()
+
+	// Serialize against a concurrent lazy assembly (Resolve): the workspace
+	// must not re-appear in the indexes after its row is gone.
+	r.buildMu.Lock()
+	defer r.buildMu.Unlock()
+
+	ws, err := r.store.GetWorkspace(ctx, id)
+	if err != nil || ws.IsZero() {
+		return nil, ErrWorkspaceNotFound
+	}
+	if err := r.store.DeleteWorkspace(ctx, id); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	rt := r.byID[id]
+	delete(r.byID, id)
+	delete(r.byRoot, ws.RootPath)
+	r.mu.Unlock()
+	return rt, nil
 }
 
 // RegisterDefault registers root as the process's default workspace (the

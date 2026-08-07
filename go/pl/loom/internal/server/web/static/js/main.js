@@ -177,10 +177,13 @@ function onUnauthorized() {
   showGate("token invalid or expired — paste the current serve token");
 }
 
-// artifact 图片加载：<img> 无法携带 Authorization 头，而 /v1/* 需要
-// Bearer 鉴权，因此用 fetch 拉取后生成 blob URL。artifact 是内容寻址的
-// 不可变 blob，按 id+size 缓存可避免同一图片在 snapshot/实时两条路径
-// 重复下载；缓存随页面生命周期存续（规模受生成图片数量约束）。
+// artifact 加载：<img>/fetch 无法携带 Authorization 头，而 /v1/* 需要
+// Bearer 鉴权，因此用 fetch 拉取后生成 blob URL。返回 {url, mediaType, blob}
+// ——mediaType 取自响应 Content-Type（服务端 DetectContentType 嗅探），供
+// 渲染层区分图片与文本 artifact（如 run_cmd 的 stdout）；blob 本体用于文
+// 本预览（blob.text()，规避 CSP connect-src 对 blob: fetch 的限制）。
+// artifact 是内容寻址的不可变 blob，按 id+size 缓存可避免同一 blob 在
+// snapshot/实时两条路径重复下载；缓存随页面生命周期存续。
 const artifactURLCache = new Map();
 async function fetchArtifactURL(id, size) {
   const key = `${id}:${size}`;
@@ -190,9 +193,10 @@ async function fetchArtifactURL(id, size) {
     headers: { Authorization: "Bearer " + app.token },
   });
   if (!res.ok) throw new Error(`artifact fetch failed (HTTP ${res.status})`);
-  const url = URL.createObjectURL(await res.blob());
-  artifactURLCache.set(key, url);
-  return url;
+  const blob = await res.blob();
+  const entry = { url: URL.createObjectURL(blob), mediaType: blob.type || "", blob };
+  artifactURLCache.set(key, entry);
+  return entry;
 }
 
 // 复制完整工具输出：实时 tool.completed 事件只带有界 preview，
@@ -469,6 +473,28 @@ async function newSession(workspaceId) {
   await openSession(session_id);
 }
 
+// 删除工作区（侧栏工作区节点操作）：仅移除元数据，磁盘目录不动；其会话
+// 保留为只读历史（侧边栏归入「已删除的工作区」分组）。
+async function deleteWorkspace(wsId) {
+  const ws = app.workspaces.find((w) => w.id === wsId);
+  const name = (ws && (ws.name || ws.root_path)) || wsId;
+  const ok = await confirmDialog({
+    title: "删除工作区",
+    body: `「${name}」将从工作区列表移除。磁盘目录不受影响；其会话保留为只读历史（不可恢复运行）。`,
+    okLabel: "删除",
+  });
+  if (!ok) return;
+  try {
+    await app.api.deleteWorkspace(wsId);
+    toast("工作区已删除", true);
+  } catch (e) {
+    if (e.status !== 401) toast("删除工作区失败: " + e.message);
+    return;
+  }
+  await loadWorkspaces();
+  await refreshSessions();
+}
+
 // ---------- model / reasoning 切换 ----------
 
 async function pickModel(ref) {
@@ -626,6 +652,7 @@ async function boot() {
     },
     onAction: (id, action) => { onSessionAction(id, action); },
     onNewSession: (wsId) => { newSession(wsId).catch((e) => { if (e.status !== 401) toast("new session: " + e.message); }); },
+    onDeleteWorkspace: (wsId) => { deleteWorkspace(wsId); },
   });
   // 归档视图切换：重置分页状态后整列重拉
   $("toggle-archived").onclick = () => {

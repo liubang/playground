@@ -343,6 +343,7 @@ func renderEnvironment(env Environment, collectErr error) string {
 	fmt.Fprintf(&sb, "- 运行平台: %s, Shell: %s\n", platform, shell)
 	fmt.Fprintf(&sb, "- 当前时间: %s\n", env.Now.Format("2006-01-02 15:04:05 MST"))
 	sb.WriteString("- 路径操作一律限定在工作区内，优先使用绝对路径。")
+	sb.WriteString("\n- 用户提到的代码/项目优先假设就在当前工作区内：先用 glob/search 定位，确认不在后再考虑工作区外路径（内建文件工具仅限工作区内，外部路径只能用 run_cmd）。")
 	if collectErr != nil {
 		fmt.Fprintf(&sb, "\n- 注意: 环境信息采集不完整: %v", collectErr)
 	}

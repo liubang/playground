@@ -11,11 +11,13 @@ const COLLAPSE_KEY = "loom_ws_collapsed";
 export class Sidebar {
   // onSelect(id, action 由 onAction 处理)：action ∈ "archive" | "unarchive" | "delete"
   // onNewSession(workspaceId)：在该工作区下新建会话（"" = 默认工作区）。
-  constructor(listEl, { onSelect, onAction, onNewSession }) {
+  // onDeleteWorkspace(workspaceId)：删除工作区元数据（历史会话保留为只读）。
+  constructor(listEl, { onSelect, onAction, onNewSession, onDeleteWorkspace }) {
     this.listEl = listEl;
     this.onSelect = onSelect;
     this.onAction = onAction;
     this.onNewSession = onNewSession;
+    this.onDeleteWorkspace = onDeleteWorkspace;
     this.activeId = null;
     this.archivedView = false; // 归档视图：条目显示取消归档而非归档
     this.workspaces = [];
@@ -74,7 +76,8 @@ export class Sidebar {
   }
 
   _appendGroup(wsId, ws, wsSessions, ids) {
-    const name = ws ? ws.name : "默认工作区";
+    // wsId 非空但查无实体 = 所属工作区已被删除，会话作为只读历史保留
+    const name = ws ? ws.name : (wsId ? "已删除的工作区" : "默认工作区");
     const collapsed = this.collapsed.has(wsId);
     const group = el("div", "ws-group");
 
@@ -100,6 +103,19 @@ export class Sidebar {
         this.onNewSession(wsId);
       };
       node.appendChild(newBtn);
+      // 删除入口只对已注册且非 default 的工作区显示（default 不可删；
+      // 悬空工作区组没有实体可删）。
+      if (ws && !ws.is_default) {
+        const delBtn = el("button", "ws-del");
+        delBtn.innerHTML = icon("trash");
+        delBtn.type = "button";
+        delBtn.title = "删除工作区（磁盘目录与历史会话保留）";
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          this.onDeleteWorkspace(wsId);
+        };
+        node.appendChild(delBtn);
+      }
     }
     node.onclick = () => this._toggle(wsId);
     group.appendChild(node);

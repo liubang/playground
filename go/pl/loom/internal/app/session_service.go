@@ -294,13 +294,24 @@ func (s *SessionService) RegisterWorkspace(ctx context.Context, root, name strin
 	return store.GetWorkspace(ctx, rt.WorkspaceID)
 }
 
-// GetWorkspace returns the workspace with the given ID.
+// GetWorkspace returns the workspace with the given ID. A missing row —
+// which the SQLite store reports as ErrUnavailable("workspace not found") —
+// is normalized to ErrWorkspaceNotFound so transports map it to 404
+// (docs/WORKSPACE_DESIGN.md §8.1); genuine store failures pass through.
 func (s *SessionService) GetWorkspace(ctx context.Context, id domain.WorkspaceID) (domain.Workspace, error) {
 	store, ok := s.workspaceStore()
 	if !ok {
 		return domain.Workspace{}, ErrWorkspaceNotFound
 	}
-	return store.GetWorkspace(ctx, id)
+	ws, err := store.GetWorkspace(ctx, id)
+	if err != nil {
+		var agentErr *domain.AgentError
+		if errors.As(err, &agentErr) && agentErr.Code == domain.ErrUnavailable && agentErr.Message == "workspace not found" {
+			return domain.Workspace{}, ErrWorkspaceNotFound
+		}
+		return domain.Workspace{}, err
+	}
+	return ws, nil
 }
 
 // CountSessionsPerWorkspace returns per-workspace session counts for the
@@ -311,6 +322,46 @@ func (s *SessionService) CountSessionsPerWorkspace(ctx context.Context) (map[dom
 		return map[domain.WorkspaceID]int{}, nil
 	}
 	return store.CountSessionsPerWorkspace(ctx)
+}
+
+// DeleteWorkspace removes a workspace entity (docs/WORKSPACE_DESIGN.md §16):
+// the persisted row, the registry's in-memory indexes, and the assembled
+// runtime. The on-disk root directory is never touched, and the workspace's
+// sessions survive as read-only history (their workspace_id dangles by
+// design, §7.1) — transcript/inspect keep working, resume is rejected. The
+// default workspace and workspaces with live sessions cannot be deleted
+// (ErrWorkspaceInUse): shut down or delete those sessions first.
+//
+// Concurrency: the live-session check and the registry deletion run inside
+// one s.mu critical section, and CreateSession/ResumeSession re-verify the
+// workspace's registry membership when they insert their handle under the
+// same lock — a session can therefore never come alive on a deleted
+// workspace in either interleaving. The evicted runtime is closed after
+// the lock is released so the critical section stays non-blocking.
+func (s *SessionService) DeleteWorkspace(ctx context.Context, id domain.WorkspaceID) error {
+	if id.IsZero() {
+		return ErrWorkspaceNotFound
+	}
+	s.mu.Lock()
+	live := 0
+	for _, h := range s.sessions {
+		if h.WorkspaceID == id {
+			live++
+		}
+	}
+	if live > 0 {
+		s.mu.Unlock()
+		return fmt.Errorf("%w: %d live session(s)", ErrWorkspaceInUse, live)
+	}
+	rt, err := s.registry.Delete(ctx, id)
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if rt != nil {
+		rt.Close()
+	}
+	return nil
 }
 
 // resolveWorkspace resolves the workspace a session is assembled against.
@@ -377,6 +428,14 @@ func (s *SessionService) CreateSession(ctx context.Context, workspaceID domain.W
 		_ = h.Controller.Shutdown(context.Background())
 		return nil, ErrDraining
 	}
+	// The workspace may have been deleted while this handle was being built
+	// (DeleteWorkspace holds s.mu across its live-check and registry
+	// eviction, so this insertion is serialized against it): never bring a
+	// session alive on a deleted workspace.
+	if _, ok := s.registry.Get(h.WorkspaceID); !ok {
+		_ = h.Controller.Shutdown(context.Background())
+		return nil, ErrWorkspaceNotFound
+	}
 	s.sessions[h.ID] = h
 	return h, nil
 }
@@ -423,6 +482,11 @@ func (s *SessionService) ResumeSession(ctx context.Context, id domain.SessionID)
 	if s.closing {
 		_ = h.Controller.Shutdown(context.Background())
 		return nil, ErrDraining
+	}
+	// Same workspace-deletion race guard as CreateSession (see above).
+	if _, ok := s.registry.Get(h.WorkspaceID); !ok {
+		_ = h.Controller.Shutdown(context.Background())
+		return nil, ErrWorkspaceNotFound
 	}
 	if existing, ok := s.sessions[id]; ok {
 		// Lost a resume race against another caller; discard ours.

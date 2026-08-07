@@ -86,6 +86,8 @@ func mapError(err error) *statusError {
 		return &statusError{status: http.StatusNotFound, code: "workspace_not_found", message: err.Error()}
 	case errors.Is(err, app.ErrWorkspaceUnavailable):
 		return &statusError{status: http.StatusGone, code: "workspace_unavailable", message: err.Error()}
+	case errors.Is(err, app.ErrWorkspaceInUse):
+		return &statusError{status: http.StatusConflict, code: "workspace_in_use", message: err.Error()}
 	case errors.Is(err, app.ErrDraining):
 		return &statusError{status: http.StatusServiceUnavailable, code: "draining", message: err.Error()}
 	case errors.Is(err, app.ErrCursorInvalid):

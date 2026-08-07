@@ -5,7 +5,7 @@ import {
   el, userBlock, assistantBlock, attachAssistantActions, streamBlock, reasoningBlock, thinkingBlock,
   toolBlock, attachDiff, approvalCard, questionCard, resolvedNotice,
   noticeBlock, fatalBlock, histTarget, histCompletion, compactBlock,
-  imageBlock, artifactImageBlock,
+  imageBlock, artifactBlock,
 } from "./blocks.js";
 import { diffForToolCall } from "../diff.js";
 
@@ -208,7 +208,7 @@ export class Transcript {
           case "artifact_ref":
             flushText();
             if (p.artifact) {
-              this._append(artifactImageBlock(p.artifact.id, p.artifact.size, this.io.fetchArtifactURL));
+              this._append(artifactBlock(p.artifact, this.io.fetchArtifactURL));
             }
             break;
           default:
