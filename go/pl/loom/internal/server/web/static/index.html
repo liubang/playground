@@ -33,7 +33,7 @@
     <aside id="sidebar" class="sidebar">
       <div class="ws-bar">
         <span class="ws-bar-title">工作区</span>
-        <button id="ws-add" class="icon-btn" title="添加工作区">+</button>
+        <button id="ws-add" class="icon-btn" title="添加工作区" data-icon="plus"></button>
       </div>
       <div id="session-list" class="session-list"></div>
       <div class="sidebar-foot">
@@ -43,10 +43,10 @@
     </aside>
     <main class="main">
       <header class="app-header">
-        <button id="hdr-sidebar" class="icon-btn" title="折叠/展开侧栏">☰</button>
-        <button id="hdr-theme" class="icon-btn" title="切换主题">☾</button>
+        <button id="hdr-sidebar" class="icon-btn" title="折叠/展开侧栏" data-icon="bars"></button>
+        <button id="hdr-theme" class="icon-btn" title="切换主题" data-icon="moon"></button>
         <button id="hdr-session" class="sess mono" title="copy session id" hidden></button>
-        <button id="hdr-share" class="icon-btn" title="分享会话：复制公开只读链接（Shift+点击撤销分享）" hidden>⤴</button>
+        <button id="hdr-share" class="icon-btn" title="分享会话：复制公开只读链接（Shift+点击撤销分享）" data-icon="share" hidden></button>
         <span id="hdr-readonly" class="badge is-awaiting" hidden><span class="dot"></span><span class="txt">sub-agent · read-only</span></span>
         <span id="hdr-state" class="badge"><span class="dot"></span><span class="txt"></span></span>
         <span class="spacer"></span>
@@ -59,20 +59,20 @@
           <div class="brand">◆ loom</div>
           <p>No session selected. Start a new one, or pick one from the list.</p>
         </div>
-        <button id="follow-btn" class="follow-btn" hidden>↓ back to bottom</button>
+        <button id="follow-btn" class="follow-btn" hidden><span data-icon="arrow-down"></span> back to bottom</button>
       </div>
 
       <div class="composer">
         <details id="plan-panel" class="plan-panel disclosure" open hidden></details>
         <div class="composer-box">
-          <textarea id="composer-input" rows="1" placeholder="输入消息…"></textarea>
+          <textarea id="composer-input" rows="1" placeholder="Message loom…"></textarea>
           <div class="composer-bar">
             <div class="composer-tools">
               <button id="model-btn" class="picker-btn" title="切换模型">
-                <span class="picker-label">model</span><span class="picker-caret">▼</span>
+                <span class="picker-label">model</span><span class="picker-caret" data-icon="caret-down"></span>
               </button>
               <button id="reasoning-btn" class="picker-btn" title="设置 reasoning">
-                <span class="picker-label">reasoning</span><span class="picker-caret">▼</span>
+                <span class="picker-label">reasoning</span><span class="picker-caret" data-icon="caret-down"></span>
               </button>
             </div>
             <div class="composer-actions">
@@ -83,12 +83,11 @@
                 </svg>
                 <span class="ctx-gauge-pct"></span>
               </span>
-              <button id="cancel-btn" class="icon-btn-circle btn-danger" title="cancel turn" hidden>■</button>
-              <button id="send-btn" class="send-btn" title="发送 (Enter)">↑</button>
+              <button id="cancel-btn" class="icon-btn-circle btn-danger" title="cancel turn" data-icon="stop" hidden></button>
+              <button id="send-btn" class="send-btn" title="发送 (Enter)" data-icon="arrow-up"></button>
             </div>
           </div>
         </div>
-        <div class="hint" id="composer-hint">Enter 发送 · Shift+Enter 换行</div>
       </div>
     </main>
   </div>
@@ -122,7 +121,7 @@
   <div class="modal dir-modal" role="dialog" aria-modal="true" aria-labelledby="dir-title">
     <div class="modal-title" id="dir-title">选择工作区目录</div>
     <div class="dir-current">
-      <button id="dir-up" class="icon-btn" title="上一级" type="button">‹</button>
+      <button id="dir-up" class="icon-btn" title="上一级" type="button" data-icon="turn-up"></button>
       <nav id="dir-path" class="dir-crumbs" aria-label="当前目录"></nav>
     </div>
     <div id="dir-list" class="dir-list"></div>

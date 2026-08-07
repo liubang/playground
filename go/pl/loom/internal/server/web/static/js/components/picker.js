@@ -1,6 +1,8 @@
 // picker.js — 模型 / Reasoning 下拉切换器。
 // 复用一个 #menu 浮层：点击按钮 → 锚定定位 → 列表项 → 选中回调。
 
+import { icon } from "../icons.js";
+
 const REASONING_OPTIONS = [
   { value: "default", label: "默认（跟随模型）" },
   { value: "off", label: "Off" },
@@ -82,7 +84,7 @@ export class Picker {
         // ✓ 槽位始终占位（未选中留空），保持所有行右侧对齐
         const chk = document.createElement("span");
         chk.className = "check";
-        chk.textContent = ref === currentRef ? "✓" : "";
+        chk.innerHTML = ref === currentRef ? icon("check") : "";
         item.appendChild(chk);
         item.onclick = () => {
           this.close();
@@ -112,7 +114,7 @@ export class Picker {
       item.appendChild(document.createTextNode(opt.label));
       const chk = document.createElement("span");
       chk.className = "check";
-      chk.textContent = opt.value === eff ? "✓" : "";
+      chk.innerHTML = opt.value === eff ? icon("check") : "";
       item.appendChild(chk);
       item.onclick = () => {
         this.close();

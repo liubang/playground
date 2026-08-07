@@ -4,6 +4,7 @@
 
 import { el } from "./blocks.js";
 import { relTime, shortId } from "../format.js";
+import { icon } from "../icons.js";
 
 const COLLAPSE_KEY = "loom_ws_collapsed";
 
@@ -78,15 +79,20 @@ export class Sidebar {
     const group = el("div", "ws-group");
 
     const node = el("div", "ws-node" + (collapsed ? " is-collapsed" : ""));
-    node.appendChild(el("span", "ws-caret", collapsed ? "▶" : "▼"));
-    node.appendChild(el("span", "ws-icon", "▤"));
+    const caret = el("span", "ws-caret");
+    caret.innerHTML = icon(collapsed ? "caret-right" : "caret-down");
+    node.appendChild(caret);
+    const wsIc = el("span", "ws-icon");
+    wsIc.innerHTML = icon("folder");
+    node.appendChild(wsIc);
     const nameEl = el("span", "ws-name", name);
     if (ws && ws.root_path) nameEl.title = ws.root_path;
     node.appendChild(nameEl);
     node.appendChild(el("span", "ws-count", String(wsSessions.length)));
     // 新建入口只在活跃视图显示（归档视图是只读历史）。
     if (!this.archivedView) {
-      const newBtn = el("button", "ws-new", "+");
+      const newBtn = el("button", "ws-new");
+      newBtn.innerHTML = icon("plus");
       newBtn.type = "button";
       newBtn.title = "在该工作区新建会话";
       newBtn.onclick = (e) => {
@@ -141,18 +147,24 @@ export class Sidebar {
     const item = el("button", "sess-item" + (s.id === this.activeId ? " is-active" : "") + (isChild ? " is-child" : ""));
     item.dataset.id = s.id;
     item.title = (s.title || shortId(s.id)) + (s.model_name ? ` · ${s.model_name}` : "");
-    if (isChild) item.appendChild(el("span", "child-mark", "↳"));
+    if (isChild) {
+      const cm = el("span", "child-mark");
+      cm.innerHTML = icon("turn-down");
+      item.appendChild(cm);
+    }
     item.appendChild(el("span", "t", s.title || shortId(s.id)));
     item.appendChild(el("span", "rt", relTime(s.updated_at)));
     // 悬停操作：归档/取消归档 + 删除（不占常态宽度，hover 时替换时间戳）
     const acts = el("span", "acts");
-    const archBtn = el("button", "act", this.archivedView ? "↩" : "⤓");
+    const archBtn = el("button", "act");
+    archBtn.innerHTML = icon(this.archivedView ? "rotate-left" : "box-archive");
     archBtn.title = this.archivedView ? "取消归档" : "归档";
     archBtn.onclick = (e) => {
       e.stopPropagation();
       this.onAction(s.id, this.archivedView ? "unarchive" : "archive");
     };
-    const delBtn = el("button", "act act-del", "×");
+    const delBtn = el("button", "act act-del");
+    delBtn.innerHTML = icon("trash");
     delBtn.title = "删除会话";
     delBtn.onclick = (e) => {
       e.stopPropagation();
