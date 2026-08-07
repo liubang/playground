@@ -122,9 +122,12 @@ func run(ctx context.Context, args []string) error {
 					name = args[i+1]
 				}
 			}
-			return addWorkspace(ctx, args[2], name)
-		}
-		return errors.New("usage: loom workspace <list|add <path> [--name N]>")
+		return addWorkspace(ctx, args[2], name)
+	}
+	if len(args) == 3 && args[1] == "rm" {
+		return removeWorkspace(ctx, args[2])
+	}
+	return errors.New("usage: loom workspace <list|add <path> [--name N]|rm <id>>")
 	case "inspect":
 		if len(args) != 2 {
 			return errors.New("usage: loom inspect <session-id>")
@@ -793,6 +796,49 @@ func addWorkspace(ctx context.Context, root, name string) error {
 		return fmt.Errorf("register workspace: %w", err)
 	}
 	fmt.Printf("%s\t%s\t%s\n", ws.ID, ws.Name, ws.RootPath)
+	return nil
+}
+
+// removeWorkspace deletes a workspace entity (loom workspace rm <id>). Only
+// the metadata row is removed — the on-disk root directory is never touched
+// and the workspace's sessions survive as read-only history
+// (docs/WORKSPACE_DESIGN.md §7.1). Like `add`, it writes through the local
+// store under the data-dir flock: a running serve owns the directory, so
+// deletion then goes through the Web UI or DELETE /v1/workspaces/{id}
+// (which additionally guards the default workspace and live sessions).
+func removeWorkspace(ctx context.Context, rawID string) error {
+	id, err := domain.ParseWorkspaceID(rawID)
+	if err != nil || !domain.HasPrefix(id, "ws_") {
+		return fmt.Errorf("invalid workspace id %q", rawID)
+	}
+	resolved, err := loadConfig(false, slog.Default())
+	if err != nil {
+		return err
+	}
+	if err := prepareStorage(resolved, true); err != nil {
+		return err
+	}
+	lock, err := server.AcquireDataDirLock(resolved.Storage.SessionsDir())
+	if err != nil {
+		if errors.Is(err, server.ErrDataDirLocked) {
+			return errors.New("a loom serve process owns the data directory; delete the workspace via the Web UI or DELETE /v1/workspaces/{id} instead")
+		}
+		return err
+	}
+	defer lock.Release()
+	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDBPath())
+	if err != nil {
+		return fmt.Errorf("open session store: %w", err)
+	}
+	defer store.Close()
+	ws, err := store.GetWorkspace(ctx, id)
+	if err != nil {
+		return fmt.Errorf("workspace not found: %s", id)
+	}
+	if err := store.DeleteWorkspace(ctx, id); err != nil {
+		return fmt.Errorf("delete workspace: %w", err)
+	}
+	fmt.Printf("deleted\t%s\t%s\t%s\n", ws.ID, ws.Name, ws.RootPath)
 	return nil
 }
 

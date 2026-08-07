@@ -201,12 +201,14 @@ button { font: inherit; cursor: pointer; }
 .ws-node .ws-icon { flex: none; color: var(--primary); font-size: 12px; }
 .ws-node .ws-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-node .ws-count { flex: none; font-size: var(--text-xs); color: var(--muted); font-weight: 400; }
-.ws-node .ws-new {
+.ws-node .ws-new, .ws-node .ws-del {
   flex: none; display: none; background: none; border: none; color: var(--muted);
   font-size: 15px; line-height: 1; padding: 0 3px; border-radius: 4px; cursor: pointer;
 }
-.ws-node:hover .ws-new { display: block; }
+.ws-node .ws-del { font-size: 12px; }
+.ws-node:hover .ws-new, .ws-node:hover .ws-del { display: block; }
 .ws-node .ws-new:hover { color: var(--fg); background: var(--bg1); }
+.ws-node .ws-del:hover { color: var(--error); background: var(--bg1); }
 /* 组内会话：左侧层级导线 + 缩进，与子 agent 缩进叠加 */
 .ws-sessions { margin: 0 0 4px 9px; padding-left: 9px; border-left: 1px solid var(--bg2); display: flex; flex-direction: column; gap: 1px; }
 .ws-empty { padding: 4px 10px; color: var(--muted); font-size: var(--text-xs); }
@@ -378,15 +380,30 @@ button { font: inherit; cursor: pointer; }
 .block-tool .tool-error { margin-top: 8px; font-size: var(--text-sm); color: var(--error); white-space: pre-wrap; }
 
 /* image 块（内联图片 / artifact 引用图片）：缩略展示，点击放大（灯箱） */
-.block-image { margin: 4px 0; }
-.block-image .inline-image {
+.block-image, .block-artifact { margin: 4px 0; }
+.block-image .inline-image, .block-artifact .inline-image {
   max-width: min(360px, 100%); max-height: 360px;
   border-radius: var(--radius-md);
   border: 1px solid var(--bg2);
   cursor: zoom-in;
 }
-.block-image .inline-image:hover { border-color: var(--muted); }
-.block-image .inline-image:focus-visible { outline: 2px solid var(--accent, var(--muted)); outline-offset: 1px; }
+.block-image .inline-image:hover, .block-artifact .inline-image:hover { border-color: var(--muted); }
+.block-image .inline-image:focus-visible, .block-artifact .inline-image:focus-visible { outline: 2px solid var(--accent, var(--muted)); outline-offset: 1px; }
+
+/* 非图片 artifact（run_cmd stdout 等文本输出）：可展开预览 + 下载 */
+.artifact-file summary { font-size: 12px; }
+.artifact-file .artifact-download {
+  margin-left: auto; flex: none; text-decoration: none;
+  background: none; border: 1px solid var(--bg2); border-radius: 5px;
+  color: var(--muted); padding: 1px 10px; font-size: var(--text-xs);
+}
+.artifact-file .artifact-download:hover { color: var(--primary); border-color: var(--primary); }
+.artifact-file .tool-preview {
+  margin-top: 6px; font-size: var(--text-sm); line-height: 1.55;
+  background: var(--bg0); border-radius: var(--radius-sm); padding: 8px 12px;
+  white-space: pre-wrap; word-break: break-word; color: var(--fg);
+  max-height: 200px; overflow-y: auto;
+}
 
 /* 图片灯箱：点击遮罩或 ESC 关闭；打开期间锁定页面滚动 */
 .lightbox {

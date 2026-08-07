@@ -56,6 +56,11 @@ const (
 type ArtifactRef struct {
 	ID   ArtifactID `json:"id"`
 	Size int64      `json:"size"`
+	// MediaType declares the blob's media type (e.g. image/png, text/plain)
+	// so renderers can pick a presentation without fetching the bytes.
+	// Optional: older records lack it; consumers should fall back to
+	// server-side content sniffing.
+	MediaType string `json:"media_type,omitempty"`
 }
 
 // Validate ensures the artifact reference is well-formed.
