@@ -59,13 +59,14 @@ func testBootstrapForContract(t *testing.T, model domain.Model) (*app.Bootstrap,
 		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
 		Limits:  domain.DefaultLimits(),
 	}
+	proc := &app.ProcessRuntime{
+		Current: resolved.Default,
+		Store:   store,
+	}
+	proc.SwapResolved(resolved)
 	return &app.Bootstrap{
-		ProcessRuntime: &app.ProcessRuntime{
-			Resolved: resolved,
-			Current:  resolved.Default,
-			Store:    store,
-		},
-		Registry: agent.NewToolRegistry(),
+		ProcessRuntime: proc,
+		Registry:       agent.NewToolRegistry(),
 	}, store
 }
 

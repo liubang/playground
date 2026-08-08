@@ -101,6 +101,10 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	cfgPath, err := configPath()
+	if err != nil {
+		return err
+	}
 	resolved, err := loadConfig()
 	if err != nil {
 		return err
@@ -177,11 +181,12 @@ func run(ctx context.Context, args []string) error {
 	// response writer has no http.Flusher, so SSE streaming is impossible
 	// (docs/DESKTOP_DESIGN.md §2.3, R-B2 materialized).
 	uiSrv, err := server.New(server.Config{
-		Listen:  "127.0.0.1:0",
-		Token:   token,
-		Version: version.Version,
-		Service: service,
-		Logger:  logger,
+		Listen:     "127.0.0.1:0",
+		Token:      token,
+		Version:    version.Version,
+		Service:    service,
+		Logger:     logger,
+		ConfigPath: cfgPath,
 	})
 	if err != nil {
 		return err
@@ -216,6 +221,7 @@ func run(ctx context.Context, args []string) error {
 			Service:       service,
 			Logger:        logger,
 			PublicBaseURL: publicBase,
+			ConfigPath:    cfgPath,
 		}); err != nil {
 			return err
 		}

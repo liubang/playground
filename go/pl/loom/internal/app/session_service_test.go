@@ -123,7 +123,8 @@ func TestProcessRuntimeLoadPrefs(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 	resolved := testResolvedConfig(fakes.NewFakeModel())
 
-	proc := &ProcessRuntime{Resolved: resolved, Current: resolved.Default, Store: store}
+	proc := &ProcessRuntime{Current: resolved.Default, Store: store}
+	proc.SwapResolved(resolved)
 	if got := proc.CurrentModel(); got != resolved.Default {
 		t.Fatalf("CurrentModel before prefs = %v, want configured default", got)
 	}
@@ -146,7 +147,8 @@ func TestProcessRuntimeLoadPrefs(t *testing.T) {
 	if err := store.SetPref(ctx, "model", "ghost/removed-model"); err != nil {
 		t.Fatalf("SetPref ghost: %v", err)
 	}
-	proc2 := &ProcessRuntime{Resolved: resolved, Current: resolved.Default, Store: store}
+	proc2 := &ProcessRuntime{Current: resolved.Default, Store: store}
+	proc2.SwapResolved(resolved)
 	proc2.loadPrefs(ctx)
 	if got := proc2.CurrentModel(); got != resolved.Default {
 		t.Fatalf("CurrentModel with ghost pref = %v, want configured default", got)

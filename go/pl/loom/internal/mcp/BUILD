@@ -41,6 +41,7 @@ go_test(
     name = "mcp_test",
     srcs = [
         "http_test.go",
+        "manager_test.go",
         "tool_test.go",
     ],
     embed = [":mcp_lib"],
