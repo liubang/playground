@@ -28,8 +28,12 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 go_library(
     name = "loom_desktop_lib",
     srcs = [
+        "dialogs_darwin.go",
         "frameworks_darwin.go",
         "main.go",
+        "notifications.go",
+        "notify_darwin.go",
+        "windowstate.go",
     ],
     cgo = True,
     # Upstream gap: wails v2.13's darwin frontend references UTType without
@@ -54,6 +58,7 @@ go_library(
         "//go/pl/loom/internal/logging:logging",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
         "//go/pl/loom/internal/server:server",
+        "//go/pl/loom/internal/version",
         "@com_github_wailsapp_wails_v2//:wails",
         "@com_github_wailsapp_wails_v2//pkg/options",
         "@com_github_wailsapp_wails_v2//pkg/options/assetserver",
@@ -93,11 +98,29 @@ pkg_files(
     tags = ["manual"],
 )
 
+# Renders Info.plist from the template, injecting @VERSION@/@RELEASE@ from
+# the canonical //go/pl/loom/internal/version:VERSION file so bundle
+# metadata can never drift from the Go binaries.
+genrule(
+    name = "info_plist",
+    srcs = [
+        "macos/Info.plist.tmpl",
+        "//go/pl/loom/internal/version:version_file",
+    ],
+    outs = ["Info.plist"],
+    cmd = """
+VERSION=$$(tr -d '[:space:]' < $(location //go/pl/loom/internal/version:version_file)); \\
+RELEASE=$${VERSION%%-*}; \\
+sed -e "s/@VERSION@/$$VERSION/g" -e "s/@RELEASE@/$$RELEASE/g" $(location macos/Info.plist.tmpl) > $@
+""",
+    tags = ["manual"],
+)
+
 pkg_files(
     name = "app_metadata",
-    srcs = ["macos/Info.plist"],
+    srcs = [":info_plist"],
     prefix = "Contents",
-    strip_prefix = strip_prefix.from_pkg("macos"),
+    renames = {":info_plist": "Info.plist"},
     tags = ["manual"],
 )
 
@@ -125,10 +148,19 @@ pkg_zip(
 )
 
 # Unpacks the bundle zip into dist/Loom.app and ad-hoc codesigns it.
-# Usage: bazel run //go/pl/loom/cmd/loom-desktop:package_app
+# Usage: bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_app
 sh_binary(
     name = "package_app",
     srcs = ["package_app.sh"],
+    data = [":loom_desktop_app"],
+    tags = ["manual"],
+)
+
+# Universal2 (arm64+amd64) bundle + DMG in dist/.
+# Usage: bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_release
+sh_binary(
+    name = "package_release",
+    srcs = ["package_release.sh"],
     data = [":loom_desktop_app"],
     tags = ["manual"],
 )

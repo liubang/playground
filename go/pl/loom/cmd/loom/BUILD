@@ -37,6 +37,7 @@ go_library(
         "//go/pl/loom/internal/server:server",
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/ui:ui",
+        "//go/pl/loom/internal/version",
     ],
 )
 
