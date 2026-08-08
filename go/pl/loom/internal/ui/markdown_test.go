@@ -81,8 +81,10 @@ func TestEscapeLoneTildes(t *testing.T) {
 // plain text, not crossed out.
 func TestMarkdownTemperatureRangeNotStruck(t *testing.T) {
 	m := Model{theme: DefaultTheme(), width: 80}
-	block := &TranscriptBlock{Kind: BlockKindAssistant, Done: true,
-		Content: "注意：未来一周日均温在 31~33°C，午后体感可达 38~41°C。"}
+	block := &TranscriptBlock{
+		Kind: BlockKindAssistant, Done: true,
+		Content: "注意：未来一周日均温在 31~33°C，午后体感可达 38~41°C。",
+	}
 	view := m.renderBlock(block)
 	if strings.Contains(view, "\x1b[9m") || strings.Contains(view, ";9m") {
 		t.Fatalf("temperature range rendered with strikethrough SGR:\n%q", view)

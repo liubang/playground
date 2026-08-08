@@ -16,6 +16,7 @@
 # Created: 2023/04/14 14:00
 
 load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 licenses(["notice"])
 
@@ -92,4 +93,15 @@ refresh_compile_commands(
     targets = {
         "//cpp/...": "",
     },
+)
+
+# Uniformly format all Go sources under //go with gofumpt:
+#   bazel run //:gofumpt            # format in place
+#   bazel run //:gofumpt -- --check # fail if any file is unformatted (for CI)
+sh_binary(
+    name = "gofumpt",
+    srcs = ["gofumpt.sh"],
+    args = ["$(rlocationpath @cc_mvdan_gofumpt//:gofumpt)"],
+    data = ["@cc_mvdan_gofumpt//:gofumpt"],
+    deps = ["@bazel_tools//tools/bash/runfiles"],
 )

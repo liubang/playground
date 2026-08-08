@@ -107,7 +107,8 @@ func TestRenderSubagentProgress(t *testing.T) {
 		t.Fatalf("running progress = %q", line)
 	}
 	finished := &TranscriptBlock{Subagent: &SubagentBlockState{
-		ToolCalls: 7, InputTokens: 20_000, OutputTokens: 5_000, Outcome: "succeeded"}}
+		ToolCalls: 7, InputTokens: 20_000, OutputTokens: 5_000, Outcome: "succeeded",
+	}}
 	if line := m.renderSubagentProgress(finished); !strings.Contains(line, "succeeded") ||
 		!strings.Contains(line, "Ctrl+G") {
 		t.Fatalf("finished progress = %q", line)
