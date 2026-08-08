@@ -48,10 +48,10 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/server"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 	"github.com/liubang/playground/go/pl/loom/internal/ui"
+	"github.com/liubang/playground/go/pl/loom/internal/version"
 )
 
 const (
-	version               = "0.2.0-dev"
 	artifactDirectoryName = "artifacts"
 	artifactGCGracePeriod = 24 * time.Hour
 	// configPathEnv points at an alternative config file. It is a config
@@ -78,7 +78,7 @@ func run(ctx context.Context, args []string) error {
 	}
 	switch args[0] {
 	case "version":
-		fmt.Println("loom", version)
+		fmt.Println("loom", version.Version)
 		return nil
 	case "chat":
 		if len(args) == 1 {
@@ -281,7 +281,7 @@ func resolveWorkspace(explicit string) (string, error) {
 func assembleRuntime(ctx context.Context, resolved *config.ResolvedConfig, root string, logger *slog.Logger) (*app.ProcessRuntime, *app.WorkspaceRegistry, *app.Bootstrap, error) {
 	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
 		ArtifactDir: filepath.Join(resolved.Storage.SessionsDir(), artifactDirectoryName),
-		Version:     version,
+		Version:     version.Version,
 		Logger:      logger,
 	})
 	if err != nil {
@@ -479,7 +479,7 @@ func runServe(ctx context.Context, args []string) error {
 		Token:       token,
 		AllowOrigin: allowOrigin,
 		NoWeb:       noWeb,
-		Version:     version,
+		Version:     version.Version,
 		Service:     service,
 		Logger:      logger,
 	})
@@ -583,7 +583,7 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 		// per-prompt budget window (same semantics as agent.ContinueRun).
 		run.ResetUsageForNewTurn()
 	}
-	bootstrap.SessionEnv.Store(process.LoomSessionEnv(version, run.SessionID.String()))
+	bootstrap.SessionEnv.Store(process.LoomSessionEnv(version.Version, run.SessionID.String()))
 	run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: userPrompt}},

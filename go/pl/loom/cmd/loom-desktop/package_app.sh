@@ -21,10 +21,12 @@
 set -euo pipefail
 
 # Under `bazel run` the working directory is the runfiles root; the main
-# repo appears as _main on Bazel 7+, and as the plain path otherwise.
+# repo appears as _main on Bazel 7+, and as the plain path otherwise. The
+# bazel-bin fallback keeps the script usable when invoked directly from the
+# workspace root.
 ZIP_REL="go/pl/loom/cmd/loom-desktop/loom_desktop_app.zip"
 ZIP=""
-for base in "${RUNFILES_DIR:-$PWD}/_main" "${RUNFILES_DIR:-$PWD}"; do
+for base in "${RUNFILES_DIR:-$PWD}/_main" "${RUNFILES_DIR:-$PWD}" "${BUILD_WORKSPACE_DIRECTORY:-$PWD}/bazel-bin"; do
   if [[ -f "${base}/${ZIP_REL}" ]]; then
     ZIP="${base}/${ZIP_REL}"
     break
@@ -41,7 +43,9 @@ mkdir -p "${DEST}"
 unzip -q "${ZIP}" -d "${DEST}"
 chmod +x "${DEST}/Loom.app/Contents/MacOS/loom-desktop"
 
-codesign --force --deep --sign - "${DEST}/Loom.app"
+# No --deep: the bundle holds a single Mach-O, and Apple discourages
+# --deep (signing order becomes unpredictable with nested code).
+codesign --force --sign - "${DEST}/Loom.app"
 # Bust Finder/LaunchServices' icon cache so a rebuilt bundle shows the
 # current AppIcon.icns instead of a stale cached icon.
 touch "${DEST}/Loom.app"
