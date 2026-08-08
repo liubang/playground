@@ -40,36 +40,36 @@ type File struct {
 	// Default selects the startup model: "provider/model", a bare model
 	// name (must be unique across providers), or a bare provider name (its
 	// default_model). Empty means providers[0]'s default model.
-	Default string `yaml:"default"`
+	Default string `yaml:"default,omitempty"`
 
 	// Providers is the only required section: at least one entry.
 	Providers []Provider `yaml:"providers"`
 
-	Limits     Limits               `yaml:"limits"`
-	Context    Context              `yaml:"context"`
-	Runaway    Runaway              `yaml:"runaway"`
-	Prompt     Prompt               `yaml:"prompt"`
-	Skills     Skills               `yaml:"skills"`
-	Rules      Rules                `yaml:"rules"`
-	Approval   Approval             `yaml:"approval"`
-	Tracing    Tracing              `yaml:"tracing"`
-	Storage    Storage              `yaml:"storage"`
-	Logging    Logging              `yaml:"logging"`
-	UI         UI                   `yaml:"ui"`
-	Subagent   Subagent             `yaml:"subagent"`
-	Memory     Memory               `yaml:"memory"`
-	Image      Image                `yaml:"image"`
-	MCPServers map[string]MCPServer `yaml:"mcp_servers"`
+	Limits     Limits               `yaml:"limits,omitempty"`
+	Context    Context              `yaml:"context,omitempty"`
+	Runaway    Runaway              `yaml:"runaway,omitempty"`
+	Prompt     Prompt               `yaml:"prompt,omitempty"`
+	Skills     Skills               `yaml:"skills,omitempty"`
+	Rules      Rules                `yaml:"rules,omitempty"`
+	Approval   Approval             `yaml:"approval,omitempty"`
+	Tracing    Tracing              `yaml:"tracing,omitempty"`
+	Storage    Storage              `yaml:"storage,omitempty"`
+	Logging    Logging              `yaml:"logging,omitempty"`
+	UI         UI                   `yaml:"ui,omitempty"`
+	Subagent   Subagent             `yaml:"subagent,omitempty"`
+	Memory     Memory               `yaml:"memory,omitempty"`
+	Image      Image                `yaml:"image,omitempty"`
+	MCPServers map[string]MCPServer `yaml:"mcp_servers,omitempty"`
 	// Workspaces pre-registers project workspaces at startup
 	// (docs/WORKSPACE_DESIGN.md §10). Optional; the startup directory is
 	// always registered as the default workspace regardless of this list.
-	Workspaces []WorkspaceSpec `yaml:"workspaces"`
+	Workspaces []WorkspaceSpec `yaml:"workspaces,omitempty"`
 }
 
 // WorkspaceSpec names one pre-registered workspace. Root supports a leading
 // "~" for the user's home directory; existence is validated at registration.
 type WorkspaceSpec struct {
-	Name string `yaml:"name"`
+	Name string `yaml:"name,omitempty"`
 	Root string `yaml:"root"`
 }
 
@@ -78,43 +78,43 @@ type WorkspaceSpec struct {
 // default) or "anthropic" (Messages API).
 type Provider struct {
 	Name    string `yaml:"name"`
-	Type    string `yaml:"type"`
+	Type    string `yaml:"type,omitempty"`
 	BaseURL string `yaml:"base_url"`
 	// APIKey holds the secret inline; APIKeyEnv names an environment
 	// variable to read it from. The two are mutually exclusive.
-	APIKey    string `yaml:"api_key"`
-	APIKeyEnv string `yaml:"api_key_env"`
+	APIKey    string `yaml:"api_key,omitempty"`
+	APIKeyEnv string `yaml:"api_key_env,omitempty"`
 	// APIVersion is the protocol version header for providers that version
 	// their API out-of-band (Anthropic's anthropic-version); empty selects
 	// the provider implementation's pinned default.
-	APIVersion string `yaml:"api_version"`
+	APIVersion string `yaml:"api_version,omitempty"`
 	// AuthType selects the credential header for providers with more than
 	// one authentication convention: "x-api-key" (default) or "bearer".
 	// Only meaningful for anthropic providers today.
-	AuthType string `yaml:"auth_type"`
+	AuthType string `yaml:"auth_type,omitempty"`
 	// WireAPI is the provider-level default ("chat" or "responses");
 	// models may override it. Empty means "chat".
-	WireAPI      string `yaml:"wire_api"`
-	MaxRetries   *int   `yaml:"max_retries"`
-	DefaultModel string `yaml:"default_model"`
+	WireAPI      string `yaml:"wire_api,omitempty"`
+	MaxRetries   *int   `yaml:"max_retries,omitempty"`
+	DefaultModel string `yaml:"default_model,omitempty"`
 	// Reasoning is the provider-level default reasoning (thinking) intent;
 	// models may override it.
-	Reasoning Reasoning `yaml:"reasoning"`
+	Reasoning Reasoning `yaml:"reasoning,omitempty"`
 	Models    []Model   `yaml:"models"`
 }
 
 // Model is one selectable model with its metadata.
 type Model struct {
 	Name          string `yaml:"name"`
-	ContextWindow int64  `yaml:"context_window"`
+	ContextWindow int64  `yaml:"context_window,omitempty"`
 	// WindowUtilization overrides context.utilization for this model (e.g.
 	// when a gateway overstates the window); nil inherits the global value.
-	WindowUtilization *float64 `yaml:"window_utilization"`
+	WindowUtilization *float64 `yaml:"window_utilization,omitempty"`
 	// MaxOutputTokens caps the request parameter (model capability); the
 	// agent budget guardrail lives in limits.max_output_tokens.
-	MaxOutputTokens int64     `yaml:"max_output_tokens"`
-	WireAPI         string    `yaml:"wire_api"`
-	Reasoning       Reasoning `yaml:"reasoning"`
+	MaxOutputTokens int64     `yaml:"max_output_tokens,omitempty"`
+	WireAPI         string    `yaml:"wire_api,omitempty"`
+	Reasoning       Reasoning `yaml:"reasoning,omitempty"`
 }
 
 // Reasoning configures the model's reasoning (thinking) intent in
@@ -123,10 +123,10 @@ type Model struct {
 type Reasoning struct {
 	// Effort is "off", "low", "medium", or "high"; empty means the
 	// provider decides.
-	Effort string `yaml:"effort"`
+	Effort string `yaml:"effort,omitempty"`
 	// BudgetTokens is an explicit reasoning token budget; it wins over the
 	// effort-derived budget where the wire API supports one.
-	BudgetTokens int64 `yaml:"budget_tokens"`
+	BudgetTokens int64 `yaml:"budget_tokens,omitempty"`
 }
 
 // DomainSpec converts the configuration into the vendor-neutral domain spec.
@@ -143,65 +143,65 @@ func (r Reasoning) DomainSpec() domain.ReasoningSpec {
 // removed by design (docs/CONTEXT_DESIGN.md §4.4.3) and are rejected as
 // unknown fields at load.
 type Limits struct {
-	MaxInputTokens  *int64   `yaml:"max_input_tokens"`
-	MaxOutputTokens *int64   `yaml:"max_output_tokens"`
-	MaxCostUSD      *float64 `yaml:"max_cost_usd"`
+	MaxInputTokens  *int64   `yaml:"max_input_tokens,omitempty"`
+	MaxOutputTokens *int64   `yaml:"max_output_tokens,omitempty"`
+	MaxCostUSD      *float64 `yaml:"max_cost_usd,omitempty"`
 	// MaxTokens budgets session-cumulative metered tokens; nil keeps the
 	// default (0 = unlimited, opt-in).
-	MaxTokens          *int64 `yaml:"max_tokens"`
-	MaxToolOutputBytes *int64 `yaml:"max_tool_output_bytes"`
-	MaxArtifactBytes   *int64 `yaml:"max_artifact_bytes"`
+	MaxTokens          *int64 `yaml:"max_tokens,omitempty"`
+	MaxToolOutputBytes *int64 `yaml:"max_tool_output_bytes,omitempty"`
+	MaxArtifactBytes   *int64 `yaml:"max_artifact_bytes,omitempty"`
 }
 
 // Context mirrors domain.ContextConfig; nil fields keep the built-in
 // default. All values are ratios of the model's effective context window.
 type Context struct {
-	Utilization         *float64  `yaml:"utilization"`
-	CompactTriggerRatio *float64  `yaml:"compact_trigger_ratio"`
-	CompactTargetRatio  *float64  `yaml:"compact_target_ratio"`
-	NoticeLevels        []float64 `yaml:"notice_levels"`
+	Utilization         *float64  `yaml:"utilization,omitempty"`
+	CompactTriggerRatio *float64  `yaml:"compact_trigger_ratio,omitempty"`
+	CompactTargetRatio  *float64  `yaml:"compact_target_ratio,omitempty"`
+	NoticeLevels        []float64 `yaml:"notice_levels,omitempty"`
 }
 
 // Runaway mirrors domain.RunawayConfig; nil fields keep the built-in
 // default.
 type Runaway struct {
-	MaxRepeatedCalls       *int `yaml:"max_repeated_calls"`
-	MaxConsecutiveFailures *int `yaml:"max_consecutive_failures"`
-	StallWarnTurns         *int `yaml:"stall_warn_turns"`
+	MaxRepeatedCalls       *int `yaml:"max_repeated_calls,omitempty"`
+	MaxConsecutiveFailures *int `yaml:"max_consecutive_failures,omitempty"`
+	StallWarnTurns         *int `yaml:"stall_warn_turns,omitempty"`
 	// StallTimeout uses Go duration syntax ("15m", "1h"); empty keeps the
 	// default, "0" disables the stall watchdog.
-	StallTimeout string `yaml:"stall_timeout"`
+	StallTimeout string `yaml:"stall_timeout,omitempty"`
 }
 
 // Prompt configures the system prompt.
 type Prompt struct {
-	Extra          string        `yaml:"extra"`
-	DisableBuiltin bool          `yaml:"disable_builtin"`
-	Managed        ManagedPrompt `yaml:"managed"`
+	Extra          string        `yaml:"extra,omitempty"`
+	DisableBuiltin bool          `yaml:"disable_builtin,omitempty"`
+	Managed        ManagedPrompt `yaml:"managed,omitempty"`
 }
 
 // ManagedPrompt selects a Langfuse-managed prompt (requires tracing).
 type ManagedPrompt struct {
-	Name  string `yaml:"name"`
-	Label string `yaml:"label"`
+	Name  string `yaml:"name,omitempty"`
+	Label string `yaml:"label,omitempty"`
 }
 
 // Skills configures skill discovery. Enabled is nil-typed so "absent"
 // defaults to true while an explicit false disables.
 type Skills struct {
-	Enabled    *bool    `yaml:"enabled"`
-	ExtraRoots []string `yaml:"extra_roots"`
+	Enabled    *bool    `yaml:"enabled,omitempty"`
+	ExtraRoots []string `yaml:"extra_roots,omitempty"`
 }
 
 // Rules configures the declarative permission rule layers. All bools are
 // nil-typed: absent keeps the built-in default (documented per field in
 // resolve.go).
 type Rules struct {
-	Enabled           *bool `yaml:"enabled"`
-	Builtin           *bool `yaml:"builtin"`
-	Project           *bool `yaml:"project"`
-	ProjectAllow      *bool `yaml:"project_allow"`
-	PersistRemembered *bool `yaml:"persist_remembered"`
+	Enabled           *bool `yaml:"enabled,omitempty"`
+	Builtin           *bool `yaml:"builtin,omitempty"`
+	Project           *bool `yaml:"project,omitempty"`
+	ProjectAllow      *bool `yaml:"project_allow,omitempty"`
+	PersistRemembered *bool `yaml:"persist_remembered,omitempty"`
 }
 
 // Approval configures the baseline approval strategy
@@ -214,31 +214,31 @@ type Rules struct {
 // "unless-trusted" (legacy: every unmatched R2+ call prompts), or
 // "never" (unattended: sandboxed calls run, escalations are denied).
 type Approval struct {
-	Mode string `yaml:"mode"`
+	Mode string `yaml:"mode,omitempty"`
 }
 
 // Tracing configures Langfuse observability. Keys follow the same
 // inline-or-env-reference rule as provider API keys.
 type Tracing struct {
-	Host           string `yaml:"host"`
-	PublicKey      string `yaml:"public_key"`
-	PublicKeyEnv   string `yaml:"public_key_env"`
-	SecretKey      string `yaml:"secret_key"`
-	SecretKeyEnv   string `yaml:"secret_key_env"`
-	Environment    string `yaml:"environment"`
-	IncludeContent *bool  `yaml:"include_content"`
-	User           string `yaml:"user"`
+	Host           string `yaml:"host,omitempty"`
+	PublicKey      string `yaml:"public_key,omitempty"`
+	PublicKeyEnv   string `yaml:"public_key_env,omitempty"`
+	SecretKey      string `yaml:"secret_key,omitempty"`
+	SecretKeyEnv   string `yaml:"secret_key_env,omitempty"`
+	Environment    string `yaml:"environment,omitempty"`
+	IncludeContent *bool  `yaml:"include_content,omitempty"`
+	User           string `yaml:"user,omitempty"`
 	// Cost rates are USD per million tokens; non-positive disables cost
 	// attribution.
-	CostInputPerMTok  float64 `yaml:"cost_input_usd_per_mtok"`
-	CostOutputPerMTok float64 `yaml:"cost_output_usd_per_mtok"`
+	CostInputPerMTok  float64 `yaml:"cost_input_usd_per_mtok,omitempty"`
+	CostOutputPerMTok float64 `yaml:"cost_output_usd_per_mtok,omitempty"`
 }
 
 // Storage configures on-disk locations. BaseDir is the single knob:
 // every loom data location (sessions/, logs/, memories/, rules/,
 // skills/, LOOM.md) derives from it; see ResolvedStorage.
 type Storage struct {
-	BaseDir string `yaml:"base_dir"`
+	BaseDir string `yaml:"base_dir,omitempty"`
 }
 
 // Logging configures file logging quotas (glog-style daily files under
@@ -247,21 +247,21 @@ type Storage struct {
 type Logging struct {
 	// MaxFileMB caps one log file in MiB; past the cap the writer rolls to
 	// a same-day sequence file. 0 = default (2048).
-	MaxFileMB int `yaml:"max_file_mb"`
+	MaxFileMB int `yaml:"max_file_mb,omitempty"`
 	// MaxTotalMB caps the logs directory total in MiB; the oldest files are
 	// garbage-collected past the cap. 0 = default (10240).
-	MaxTotalMB int `yaml:"max_total_mb"`
+	MaxTotalMB int `yaml:"max_total_mb,omitempty"`
 }
 
 // UI configures the terminal frontend.
 type UI struct {
-	Icons     string `yaml:"icons"`
-	AltScreen bool   `yaml:"alt_screen"`
+	Icons     string `yaml:"icons,omitempty"`
+	AltScreen bool   `yaml:"alt_screen,omitempty"`
 	// Keymap overrides default key bindings (docs/VIM_UI_DESIGN.md §5.2):
 	// context → action → replacement key, e.g.
 	// {chat: {search_transcript: "ctrl+s"}}. Unknown contexts/actions
 	// and conflicting keys are ignored with a status-bar warning.
-	Keymap map[string]map[string]string `yaml:"keymap"`
+	Keymap map[string]map[string]string `yaml:"keymap,omitempty"`
 }
 
 // Subagent configures the delegate_task sub-agent
@@ -269,21 +269,21 @@ type UI struct {
 // defaults to true while an explicit false removes the tool from the
 // registry entirely.
 type Subagent struct {
-	Enabled *bool `yaml:"enabled"`
+	Enabled *bool `yaml:"enabled,omitempty"`
 	// MaxTokens caps the child run's session-cumulative metered tokens;
 	// nil/0 inherits limits.max_tokens. The child's consumption is also
 	// folded back into the parent run's budget, so delegation is never a
 	// budget loophole.
-	MaxTokens *int64 `yaml:"max_tokens"`
+	MaxTokens *int64 `yaml:"max_tokens,omitempty"`
 	// MaxOutputTokens caps each child model RESPONSE. Sub-agent answers
 	// should be concise; the per-request cap is also a latency knob — a
 	// truncation is only discovered after the whole output budget has
 	// streamed. nil = 8192 (reasoning headroom included); explicit 0
 	// inherits limits.max_output_tokens.
-	MaxOutputTokens *int64 `yaml:"max_output_tokens"`
+	MaxOutputTokens *int64 `yaml:"max_output_tokens,omitempty"`
 	// Model pins the sub-agent to a specific "provider/model" (or a bare
 	// model/provider name); empty follows the current turn's model.
-	Model string `yaml:"model"`
+	Model string `yaml:"model,omitempty"`
 }
 
 // Image configures text-to-image generation (the generate_image tool).
@@ -292,14 +292,14 @@ type Subagent struct {
 // section is enabled. Enabled is nil-typed: absent means "enabled when
 // provider and model are both set", an explicit false always disables.
 type Image struct {
-	Enabled  *bool  `yaml:"enabled"`
-	Provider string `yaml:"provider"`
-	Model    string `yaml:"model"`
+	Enabled  *bool  `yaml:"enabled,omitempty"`
+	Provider string `yaml:"provider,omitempty"`
+	Model    string `yaml:"model,omitempty"`
 	// Size/Quality are the generation defaults (OpenAI Images API
 	// vocabulary: "auto", "1024x1024", ... / "low", "medium", "high");
 	// empty means "auto".
-	Size    string `yaml:"size"`
-	Quality string `yaml:"quality"`
+	Size    string `yaml:"size,omitempty"`
+	Quality string `yaml:"quality,omitempty"`
 }
 
 // Memory configures the long-term memory system (docs/MEMORY_DESIGN.md).
@@ -310,28 +310,28 @@ type Image struct {
 // startup (and every run_interval afterwards), draining a persistent job
 // queue — never on the shutdown path.
 type Memory struct {
-	Enabled *bool `yaml:"enabled"`
+	Enabled *bool `yaml:"enabled,omitempty"`
 	// ExtractModel pins the Phase 1 extraction model ("provider/model" or
 	// a bare model/provider name); empty follows the default model. A
 	// cheap/fast model is recommended.
-	ExtractModel string `yaml:"extract_model"`
+	ExtractModel string `yaml:"extract_model,omitempty"`
 	// ConsolidationModel pins the Phase 2 consolidation model; empty
 	// follows the default model.
-	ConsolidationModel string `yaml:"consolidation_model"`
+	ConsolidationModel string `yaml:"consolidation_model,omitempty"`
 	// MaxJobsPerRun bounds extraction jobs claimed per pipeline pass;
 	// nil keeps the default (8).
-	MaxJobsPerRun *int `yaml:"max_jobs_per_run"`
+	MaxJobsPerRun *int `yaml:"max_jobs_per_run,omitempty"`
 	// RunInterval re-runs the pipeline periodically (Go duration syntax,
 	// e.g. "30m"); empty keeps the default ("30m"), "0" runs the pipeline
 	// once at startup only.
-	RunInterval string `yaml:"run_interval"`
+	RunInterval string `yaml:"run_interval,omitempty"`
 	// MinSessionIdle skips sessions touched more recently than this (Go
 	// duration); empty keeps the default ("1h"). Prevents extracting
 	// sessions that may still be active.
-	MinSessionIdle string `yaml:"min_session_idle"`
+	MinSessionIdle string `yaml:"min_session_idle,omitempty"`
 	// MaxSessionAge skips sessions last touched longer ago than this (Go
 	// duration); empty keeps the default ("720h", 30 days).
-	MaxSessionAge string `yaml:"max_session_age"`
+	MaxSessionAge string `yaml:"max_session_age,omitempty"`
 }
 
 // MCPServer configures one MCP server connection. The key in MCPServers

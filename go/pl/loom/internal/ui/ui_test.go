@@ -50,13 +50,14 @@ func newTestController(t *testing.T) client.Client {
 	}
 	broker := runtimeevent.NewBroker()
 	t.Cleanup(broker.Close)
+	proc := &app.ProcessRuntime{
+		Current: resolved.Default,
+		Store:   fakes.NewFakeStore(),
+	}
+	proc.SwapResolved(resolved)
 	svc := app.NewSingletonWorkspaceService(&app.Bootstrap{
-		ProcessRuntime: &app.ProcessRuntime{
-			Resolved: resolved,
-			Current:  resolved.Default,
-			Store:    fakes.NewFakeStore(),
-		},
-		Registry: agent.NewToolRegistry(),
+		ProcessRuntime: proc,
+		Registry:       agent.NewToolRegistry(),
 	}, broker, app.SessionServiceConfig{})
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
 	ctrl := client.NewInProc(svc)

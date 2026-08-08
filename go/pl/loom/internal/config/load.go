@@ -18,14 +18,11 @@
 package config
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-
-	"gopkg.in/yaml.v3"
 )
 
 // LoadOptions controls loading behavior.
@@ -61,20 +58,19 @@ func Load(path string, opts LoadOptions, lookup EnvLookup) (*ResolvedConfig, err
 		return nil, fmt.Errorf("read config: %w", err)
 	}
 
-	var f File
-	dec := yaml.NewDecoder(bytes.NewReader(raw))
-	dec.KnownFields(true) // unknown keys are typos — fail fast, never ignore
-	if err := dec.Decode(&f); err != nil && !errors.Is(err, io.EOF) {
-		// io.EOF means an empty (or comment-only) file: treat it as "no
-		// content" so offline commands keep working with defaults; agent
-		// entries still fail below on the missing providers.
+	// ParseFile treats an empty (or comment-only) file as "no content" so
+	// offline commands keep working with defaults; agent entries still
+	// fail below on the missing providers. Unknown keys are typos —
+	// fail fast, never ignore.
+	f, err := ParseFile(raw)
+	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if opts.RequireProviders && len(f.Providers) == 0 {
 		return nil, fmt.Errorf("%s: at least one provider is required\n\nminimal example:\n\n%s", path, minimalExample)
 	}
-	warnPlaintextKeyPermissions(path, f, logger)
-	return resolve(&f, lookup)
+	warnPlaintextKeyPermissions(path, *f, logger)
+	return resolve(f, lookup)
 }
 
 // warnPlaintextKeyPermissions nudges the user toward 0600 when the file

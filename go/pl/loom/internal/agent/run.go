@@ -991,6 +991,16 @@ func (r *ToolRegistry) Register(t domain.Tool) error {
 	return nil
 }
 
+// Unregister removes a locally-registered tool; unknown names are no-ops.
+// Parent entries are never touched. In-flight turns that already captured
+// the tool instance keep it — unregistration only affects subsequent
+// Lookup/List calls (used by MCP server hot-removal).
+func (r *ToolRegistry) Unregister(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.tools, name)
+}
+
 // Lookup returns a tool by name: local registrations first, then the
 // parent chain.
 func (r *ToolRegistry) Lookup(name string) (domain.Tool, bool) {

@@ -44,6 +44,13 @@ export function createApi({ getToken, onUnauthorized }) {
   return {
     metaVersion: () => req("GET", "/v1/meta/version"),
     metaModels: () => req("GET", "/v1/meta/models"),
+    // 配置（设置面板）：GET 返回 {path, exists, revision, config}（密钥已脱敏）；
+    // PUT 携带 revision 乐观锁，409 config_conflict 表示文件被外部修改
+    getConfig: () => req("GET", "/v1/config"),
+    putConfig: (revision, config) => req("PUT", "/v1/config", { revision, config }),
+    // MCP 服务器实时状态与重连（设置面板）
+    listMcpServers: () => req("GET", "/v1/mcp/servers"),
+    reconnectMcpServer: (name) => req("POST", `/v1/mcp/servers/${encodeURIComponent(name)}/reconnect`, {}),
     listSessions: (limit = 50, cursor = "", archived = false, workspaceId = "") =>
       req("GET", `/v1/sessions?limit=${limit}${cursor ? "&cursor=" + encodeURIComponent(cursor) : ""}${archived ? "&archived=1" : ""}${workspaceId ? "&workspace_id=" + encodeURIComponent(workspaceId) : ""}`),
     // workspaces（docs/WORKSPACE_DESIGN.md §8.1）

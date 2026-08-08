@@ -19,6 +19,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "config_lib",
     srcs = [
+        "edit.go",
         "init.go",
         "load.go",
         "resolve.go",
@@ -41,6 +42,9 @@ go_library(
 
 go_test(
     name = "config_test",
-    srcs = ["config_test.go"],
+    srcs = [
+        "config_test.go",
+        "edit_test.go",
+    ],
     embed = [":config_lib"],
 )

@@ -189,7 +189,7 @@ func (c *Controller) handleRewind(cmd controllerCommand) {
 	}
 	run, err := agent.RecoverRun(inspection.Session.ID, inspection.Checkpoint,
 		inspection.Transcript.Messages, inspection.Events, inspection.Session.Version,
-		c.bootstrap.Resolved.Limits, c.clock, c.bootstrap.Validator)
+		c.bootstrap.Resolved().Limits, c.clock, c.bootstrap.Validator)
 	if err != nil {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("recover rewound session: %w", err)}
 		return
