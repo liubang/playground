@@ -80,18 +80,19 @@ func newTestServiceWithRecorder(t *testing.T, model domain.Model, rec trace.Reco
 	if err != nil {
 		t.Fatalf("open artifact store: %v", err)
 	}
+	proc := &app.ProcessRuntime{
+		Current:  resolved.Default,
+		Store:    store,
+		Artifact: artStore,
+		Recorder: rec,
+		// A workspace assembled on demand (registering a new one) wires the
+		// ask_user tool, which requires a non-nil questioner.
+		Questioner: domain.AutonomousQuestioner{},
+	}
+	proc.SwapResolved(resolved)
 	svc := app.NewSingletonWorkspaceService(&app.Bootstrap{
-		ProcessRuntime: &app.ProcessRuntime{
-			Resolved: resolved,
-			Current:  resolved.Default,
-			Store:    store,
-			Artifact: artStore,
-			Recorder: rec,
-			// A workspace assembled on demand (registering a new one) wires the
-			// ask_user tool, which requires a non-nil questioner.
-			Questioner: domain.AutonomousQuestioner{},
-		},
-		Registry: agent.NewToolRegistry(),
+		ProcessRuntime: proc,
+		Registry:       agent.NewToolRegistry(),
 	}, broker, app.SessionServiceConfig{})
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
 	return svc
@@ -921,12 +922,12 @@ func newWorkspaceScopedServer(t *testing.T, model domain.Model) (*httptest.Serve
 		t.Fatalf("open artifact store: %v", err)
 	}
 	proc := &app.ProcessRuntime{
-		Resolved:   resolved,
 		Current:    resolved.Default,
 		Store:      store,
 		Artifact:   artStore,
 		Questioner: domain.AutonomousQuestioner{},
 	}
+	proc.SwapResolved(resolved)
 	registry, err := app.NewWorkspaceRegistry(proc)
 	if err != nil {
 		t.Fatalf("NewWorkspaceRegistry: %v", err)

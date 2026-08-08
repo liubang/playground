@@ -45,6 +45,7 @@
       <header class="app-header">
         <button id="hdr-sidebar" class="icon-btn" title="折叠/展开侧栏" data-icon="bars"></button>
         <button id="hdr-theme" class="icon-btn" title="切换主题" data-icon="moon"></button>
+        <button id="hdr-settings" class="icon-btn" title="设置" data-icon="gear"></button>
         <button id="hdr-session" class="sess mono" title="copy session id" hidden></button>
         <button id="hdr-share" class="icon-btn" title="分享会话：复制公开只读链接（Shift+点击撤销分享）" data-icon="share" hidden></button>
         <span id="hdr-readonly" class="badge is-awaiting" hidden><span class="dot"></span><span class="txt">sub-agent · read-only</span></span>
@@ -104,6 +105,28 @@
 
 <!-- 下拉菜单浮层（模型 / reasoning 共用） -->
 <div id="menu" class="menu" hidden></div>
+
+<!-- 设置面板：左侧 tab 导航 + 右侧表单区；保存即热更新（分级生效） -->
+<div id="settings-wrap" class="settings-wrap" hidden>
+  <div class="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <header class="settings-head">
+      <span class="settings-title" id="settings-title">设置</span>
+      <span id="settings-path" class="settings-path mono" title="配置文件路径"></span>
+      <span class="spacer"></span>
+      <button id="settings-close" class="icon-btn" title="关闭 (Esc)" data-icon="xmark"></button>
+    </header>
+    <div class="settings-body">
+      <nav id="settings-tabs" class="settings-tabs" aria-label="设置分类"></nav>
+      <div id="settings-content" class="settings-content"></div>
+    </div>
+    <footer class="settings-foot">
+      <span id="settings-msg" class="settings-msg"></span>
+      <span class="spacer"></span>
+      <button id="settings-reload" class="btn btn-secondary" type="button">重新加载</button>
+      <button id="settings-save" class="btn btn-primary" type="button">保存</button>
+    </footer>
+  </div>
+</div>
 
 <!-- 确认弹窗（删除会话等破坏性操作） -->
 <div id="confirm-modal" class="modal-wrap" hidden>

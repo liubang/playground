@@ -23,7 +23,9 @@ go_library(
         "auth.go",
         "errors.go",
         "handlers_artifacts.go",
+        "handlers_config.go",
         "handlers_events.go",
+        "handlers_mcp.go",
         "handlers_sessions.go",
         "handlers_share.go",
         "handlers_workspaces.go",
@@ -34,7 +36,9 @@ go_library(
     visibility = ["//go/pl/loom:__subpackages__"],
     deps = [
         "//go/pl/loom/internal/app",
+        "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/mcp:mcp_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
         "//go/pl/loom/internal/server/web",
         "@org_golang_x_sys//unix",
@@ -46,6 +50,7 @@ go_test(
     srcs = [
         "errors_test.go",
         "handlers_artifacts_test.go",
+        "handlers_config_test.go",
         "handlers_share_test.go",
         "middleware_test.go",
         "server_test.go",

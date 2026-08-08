@@ -11,6 +11,7 @@ import { Composer } from "./components/composer.js";
 import { Statusbar } from "./components/statusbar.js";
 import { CtxGauge } from "./components/ctxgauge.js";
 import { Picker } from "./components/picker.js";
+import { SettingsPanel } from "./components/settings.js";
 import { shortId, estTranscriptTokens, randomId, copyText } from "./format.js";
 import { icon, hydrateIcons } from "./icons.js";
 
@@ -714,6 +715,10 @@ async function boot() {
     usageEl: $("sb-usage"), turnEl: $("sb-turn"), versionEl: $("sb-version"),
   });
   app.ctxgauge = new CtxGauge($("ctx-gauge"));
+
+  // 设置面板（config.yaml 图形化编辑，保存即热更新，响应带分级生效报告）
+  app.settings = new SettingsPanel({ api: app.api, toast, confirm: confirmDialog });
+  $("hdr-settings").onclick = () => app.settings.open();
 
   // 模型 / reasoning 切换器
   app.picker = new Picker($("menu"));

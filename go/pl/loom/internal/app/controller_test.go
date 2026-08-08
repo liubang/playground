@@ -49,14 +49,15 @@ func testResolvedConfig(model domain.Model) *config.ResolvedConfig {
 // testBootstrap assembles the minimal Bootstrap a controller test needs.
 func testBootstrap(store domain.SessionStore, model domain.Model) *Bootstrap {
 	resolved := testResolvedConfig(model)
+	proc := &ProcessRuntime{
+		Current: resolved.Default,
+		Store:   store,
+	}
+	proc.SwapResolved(resolved)
 	return &Bootstrap{
-		ProcessRuntime: &ProcessRuntime{
-			Resolved: resolved,
-			Current:  resolved.Default,
-			Store:    store,
-		},
-		Registry:  agent.NewToolRegistry(),
-		SteerCell: agent.NewSteerCell(),
+		ProcessRuntime: proc,
+		Registry:       agent.NewToolRegistry(),
+		SteerCell:      agent.NewSteerCell(),
 	}
 }
 
@@ -877,15 +878,16 @@ func TestControllerSetReasoning(t *testing.T) {
 		Default: config.ProviderModelRef{Provider: "test", Model: "test-model"},
 		Limits:  domain.DefaultLimits(),
 	}
+	proc := &ProcessRuntime{
+		Current: resolved.Default,
+		Store:   store,
+	}
+	proc.SwapResolved(resolved)
 	controller := NewController(ControllerConfig{
 		Bootstrap: &Bootstrap{
-			ProcessRuntime: &ProcessRuntime{
-				Resolved: resolved,
-				Current:  resolved.Default,
-				Store:    store,
-			},
-			Registry:  agent.NewToolRegistry(),
-			SteerCell: agent.NewSteerCell(),
+			ProcessRuntime: proc,
+			Registry:       agent.NewToolRegistry(),
+			SteerCell:      agent.NewSteerCell(),
 		},
 		Broker:   runtimeevent.NewBroker(),
 		Approver: NewChannelApprover(),

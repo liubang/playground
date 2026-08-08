@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
@@ -46,11 +47,17 @@ import (
 // call-site churn; each workspace assembles only its own validator, runner,
 // registry, policy, prompt builder, skills and sub-agent runtime on top.
 type ProcessRuntime struct {
-	Resolved *config.ResolvedConfig
+	// resolved is the live configuration, swapped atomically by
+	// SwapResolved when a config save is hot-applied (PUT /v1/config).
+	// Readers must go through Resolved() and not retain the pointer
+	// beyond a single unit of work (turn construction, policy reload).
+	resolved atomic.Pointer[config.ResolvedConfig]
 	// Current is the configured default model (config file / launch flag).
 	// Reads of the effective selection must go through CurrentModel: a
 	// manual switch updates the runtime-current value (and persists it),
-	// which may differ from Current afterwards.
+	// which may differ from Current afterwards. Writes after construction
+	// go through SetConfiguredDefault (config hot-reload); reads through
+	// CurrentDefault — both under prefMu.
 	Current  config.ProviderModelRef
 	Store    domain.SessionStore
 	Artifact domain.ArtifactStore
@@ -80,14 +87,18 @@ type ProcessRuntime struct {
 	// session-level ChannelQuestioner takes precedence when present.
 	Questioner domain.Questioner
 
-	// prefMu guards currentModel/reasoningPref: written when the user
-	// switches model or reasoning (and persisted to the store), read by
+	// prefMu guards Current/currentModel/reasoningPref: written when the
+	// user switches model or reasoning (and persisted to the store) or
+	// when a hot-applied config changes the configured default, read by
 	// every session's controller when resolving the effective selection.
 	prefMu             sync.RWMutex
 	currentModel       config.ProviderModelRef
 	reasoningPref      string
 	traceProvider      *trace.Provider
 	memoryPipelineStop context.CancelFunc
+	// mcpMu guards MCPManager: created on demand when a hot-applied
+	// config introduces the first MCP server, swapped on shutdown.
+	mcpMu sync.RWMutex
 }
 
 // Preference keys stored in the session store's app_prefs table.
@@ -95,6 +106,67 @@ const (
 	prefKeyModel     = "model"
 	prefKeyReasoning = "reasoning"
 )
+
+// Resolved returns the live resolved configuration; see the resolved
+// field comment for the retention contract.
+func (p *ProcessRuntime) Resolved() *config.ResolvedConfig {
+	return p.resolved.Load()
+}
+
+// SwapResolved atomically replaces the resolved configuration. Components
+// that read Resolved() per unit of work (turn construction, policy
+// reload, prompt builds) pick up the new values on their next cycle;
+// components that captured fields at assembly time keep the old ones
+// until explicitly rebuilt (see SessionService.ApplyConfig).
+func (p *ProcessRuntime) SwapResolved(next *config.ResolvedConfig) {
+	p.resolved.Store(next)
+}
+
+// CurrentDefault returns the configured default model (hot-reload safe).
+func (p *ProcessRuntime) CurrentDefault() config.ProviderModelRef {
+	p.prefMu.RLock()
+	defer p.prefMu.RUnlock()
+	return p.Current
+}
+
+// SetConfiguredDefault updates the configured default model after a
+// config hot-reload. A persisted manual preference still wins in
+// CurrentModel; it is dropped (memory and store) when it no longer
+// resolves against the new configuration (e.g. its provider was
+// removed).
+func (p *ProcessRuntime) SetConfiguredDefault(ctx context.Context, ref config.ProviderModelRef) {
+	p.prefMu.Lock()
+	p.Current = ref
+	dropPref := false
+	if p.currentModel != (config.ProviderModelRef{}) {
+		if rc := p.resolved.Load(); rc != nil {
+			if _, err := rc.ResolveRef(p.currentModel.String()); err != nil {
+				p.currentModel = config.ProviderModelRef{}
+				dropPref = true
+			}
+		}
+	}
+	p.prefMu.Unlock()
+	if dropPref {
+		// Clear the persisted value too, so a restart does not warn about
+		// the same unresolvable preference again.
+		p.persistPref(ctx, prefKeyModel, "")
+	}
+}
+
+// MCP returns the shared MCP manager (nil when no server is configured).
+func (p *ProcessRuntime) MCP() *mcp.Manager {
+	p.mcpMu.RLock()
+	defer p.mcpMu.RUnlock()
+	return p.MCPManager
+}
+
+// SetMCPManager installs (or clears) the shared MCP manager.
+func (p *ProcessRuntime) SetMCPManager(m *mcp.Manager) {
+	p.mcpMu.Lock()
+	defer p.mcpMu.Unlock()
+	p.MCPManager = m
+}
 
 // CurrentModel returns the runtime-effective model selection: the user's
 // latest manual switch when one happened, otherwise the configured default.
@@ -157,7 +229,7 @@ func (p *ProcessRuntime) loadPrefs(ctx context.Context) {
 		return
 	}
 	if raw, err := store.GetPref(ctx, prefKeyModel); err == nil && raw != "" {
-		if ref, err := p.Resolved.ResolveRef(raw); err == nil {
+		if ref, err := p.Resolved().ResolveRef(raw); err == nil {
 			p.currentModel = ref
 		} else if p.Logger != nil {
 			p.Logger.Warn("ignoring unresolvable persisted model preference", "value", raw, "error", err)
@@ -338,7 +410,6 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 	}
 
 	p := &ProcessRuntime{
-		Resolved:           resolved,
 		Current:            resolved.Default,
 		Store:              store,
 		Artifact:           artStore,
@@ -358,8 +429,11 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 		memoryPipelineStop: memoryPipelineStop,
 	}
 	// The runtime-current selection starts at the configured default, then
-	// the persisted manual choice (if any) overrides it.
-	p.currentModel = resolved.Default
+	// the persisted manual choice (if any) overrides it. currentModel is
+	// deliberately NOT seeded from the default: it must only ever hold a
+	// manual/persisted preference, so a hot-applied new default takes
+	// effect for processes that never made a manual choice.
+	p.resolved.Store(resolved)
 	p.loadPrefs(ctx)
 	return p, nil
 }
@@ -382,8 +456,8 @@ func (p *ProcessRuntime) Close() {
 			p.Logger.Warn("remembered store shutdown failed", "error", err)
 		}
 	}
-	if p.MCPManager != nil {
-		if err := p.MCPManager.Close(); err != nil && p.Logger != nil {
+	if mgr := p.MCP(); mgr != nil {
+		if err := mgr.Close(); err != nil && p.Logger != nil {
 			p.Logger.Warn("mcp manager shutdown failed", "error", err)
 		}
 	}

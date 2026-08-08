@@ -91,12 +91,21 @@ type Bootstrap struct {
 	Policy           agent.Policy
 	permissionPolicy *permission.Policy
 	approvalMode     permission.ApprovalMode
-	// policyMu guards Policy and permissionPolicy against concurrent
-	// ReloadPolicy writes and run-construction/ListRules reads.
-	policyMu      sync.RWMutex
+	// policyMu guards Policy/permissionPolicy/approvalMode against
+	// concurrent ReloadPolicy/SetApprovalMode writes and
+	// run-construction/ListRules reads.
+	policyMu sync.RWMutex
+	// PromptBuilder is set at assembly; reads go through CurrentPrompt,
+	// hot-reload rebuilds through RebuildPrompt — both under promptMu.
 	PromptBuilder agent.PromptBuilder
-	Validator     *workspace.PathValidator
-	Runner        *process.Runner
+	// promptMu guards PromptBuilder swaps.
+	promptMu sync.RWMutex
+	// skillsPromptOpt caches the skills catalog prompt option captured at
+	// assembly (WireSkills also registers read_skill, which stays fixed);
+	// prompt rebuilds reuse it.
+	skillsPromptOpt prompt.Option
+	Validator       *workspace.PathValidator
+	Runner          *process.Runner
 	// FileStateBook is the shared read/write hash tracker used by
 	// read_file and edit for drift detection; rewind restoration updates
 	// it so a post-rewind edit measures drift from the restored content.
@@ -140,10 +149,10 @@ type Bootstrap struct {
 // artifact stores and tracing; a workspace-assembly failure never closes
 // them. The caller closes the returned Bootstrap on workspace teardown.
 func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg BootstrapConfig) (_ *Bootstrap, retErr error) {
-	if proc == nil || proc.Resolved == nil {
+	if proc == nil || proc.Resolved() == nil {
 		return nil, fmt.Errorf("process runtime is required")
 	}
-	resolved := proc.Resolved
+	resolved := proc.Resolved()
 	logger := proc.Logger
 	if logger == nil {
 		logger = slog.Default()
@@ -223,46 +232,33 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 	}, logger)
 	decider := policy.Decider(resolved.Approval.Mode)
 
-	// traceCfg is rebuilt from the resolved config for ResolveManagedPrompt;
-	// the recorder/provider themselves are process-level (ProcessRuntime).
-	traceCfg := resolved.Tracing
-	traceCfg.Logger = logger
-	traceCfg.Release = proc.Version
-
+	// Skills assembly (read_skill tool + catalog prompt option) happens
+	// once here; the option is cached on the Bootstrap so prompt rebuilds
+	// (config hot-reload) reuse it without re-scanning or re-registering.
+	// Inside the system-prompt guard so a catalog-less read_skill is
+	// never registered. The catalog budget tracks the startup model's
+	// window; switching models does not rebuild it (catalogs are far
+	// smaller than any window).
 	var (
-		promptBuilder agent.PromptBuilder
-		skills        *SkillsHandle
+		skills    *SkillsHandle
+		skillsOpt prompt.Option
 	)
 	if !resolved.Prompt.DisableBuiltin {
-		promptOpts := []prompt.Option{
-			prompt.WithExtraInstructions(resolved.Prompt.Extra),
-			prompt.WithRulesProvider(prompt.NewFileRulesProvider(cfg.WorkspaceRoot, resolved.Storage.LoomMDPath())),
-		}
-		if opt := ResolveManagedPrompt(ctx, resolved.Prompt.Managed, traceCfg, resolved.Storage.SessionsDir(), logger); opt != nil {
-			promptOpts = append(promptOpts, opt)
-		}
-		// Skills: registers read_skill and appends the catalog provider.
-		// Inside the system-prompt guard so a catalog-less read_skill is
-		// never registered. The catalog budget tracks the startup model's
-		// window; switching models does not rebuild it (catalogs are far
-		// smaller than any window).
-		skillsOpt, skillsHandle, err := WireSkills(registry, cfg.WorkspaceRoot, defaultContextWindow(resolved), resolved.Skills, resolved.Storage.SkillsDir(), resolved.Prompt.DisableBuiltin, logger)
+		opt, skillsHandle, err := WireSkills(registry, cfg.WorkspaceRoot, defaultContextWindow(resolved), resolved.Skills, resolved.Storage.SkillsDir(), resolved.Prompt.DisableBuiltin, logger)
 		if err != nil {
 			return nil, fmt.Errorf("wire skills: %w", err)
 		}
-		if skillsOpt != nil {
-			promptOpts = append(promptOpts, skillsOpt)
-		}
+		skillsOpt = opt
 		skills = skillsHandle
-		promptBuilder = prompt.NewBuilder(cfg.WorkspaceRoot, promptOpts...)
 	}
 
 	// MCP tools: the shared process-level manager (ProcessRuntime) owns the
 	// server subprocesses (WORKSPACE_DESIGN D2); each workspace registers the
 	// adapted tools into its own registry. Tools are stateless adapters over
-	// the shared manager, so registering them per workspace is safe.
-	if proc.MCPManager != nil {
-		for _, tool := range proc.MCPManager.Tools() {
+	// the shared manager, so registering them per workspace is safe. Later
+	// changes (config hot-reload) flow through SyncMCPTools.
+	if mcpMgr := proc.MCP(); mcpMgr != nil {
+		for _, tool := range mcpMgr.Tools() {
 			if err := registry.Register(tool); err != nil {
 				logger.Warn("mcp: failed to register tool", "tool", tool.Definition().Name, "error", err)
 			}
@@ -384,22 +380,16 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 	}
 
 	// Memory tools: the store is process-shared (ProcessRuntime,
-	// WORKSPACE_DESIGN D5); register the tools into each workspace's registry
-	// and wrap that workspace's prompt builder with the memory-aware one.
+	// WORKSPACE_DESIGN D5); register the tools into each workspace's
+	// registry. The prompt-side injection is part of buildPrompt (the
+	// memoryPromptWrapper), so prompt rebuilds keep it.
 	if proc.MemoryStore != nil {
 		if err := registerMemoryTools(registry, proc.MemoryStore); err != nil {
 			logger.Warn("memory tools registration failed", "error", err)
 		}
-		if promptBuilder != nil {
-			promptBuilder = &memoryPromptWrapper{
-				inner:  promptBuilder,
-				store:  proc.MemoryStore,
-				logger: logger,
-			}
-		}
 	}
 
-	return &Bootstrap{
+	b := &Bootstrap{
 		ProcessRuntime:   proc,
 		WorkspaceID:      cfg.WorkspaceID,
 		WorkspaceRoot:    cfg.WorkspaceRoot,
@@ -407,7 +397,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		Policy:           decider,
 		permissionPolicy: &policy,
 		approvalMode:     resolved.Approval.Mode,
-		PromptBuilder:    promptBuilder,
+		skillsPromptOpt:  skillsOpt,
 		Validator:        validator,
 		Runner:           runner,
 		FileStateBook:    book,
@@ -419,7 +409,59 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		SubagentManager:  subagentManager,
 		SessionManager:   sessionManager,
 		Skills:           skills,
-	}, nil
+	}
+	b.PromptBuilder = b.buildPrompt(ctx, resolved)
+	return b, nil
+}
+
+// buildPrompt assembles the system prompt builder from the given resolved
+// config. Called at assembly and by RebuildPrompt on config hot-reload.
+func (b *Bootstrap) buildPrompt(ctx context.Context, resolved *config.ResolvedConfig) agent.PromptBuilder {
+	if resolved.Prompt.DisableBuiltin {
+		return nil
+	}
+	logger := b.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	promptOpts := []prompt.Option{
+		prompt.WithExtraInstructions(resolved.Prompt.Extra),
+		prompt.WithRulesProvider(prompt.NewFileRulesProvider(b.WorkspaceRoot, resolved.Storage.LoomMDPath())),
+	}
+	// traceCfg is rebuilt from the resolved config for ResolveManagedPrompt;
+	// the recorder/provider themselves are process-level (ProcessRuntime).
+	traceCfg := resolved.Tracing
+	traceCfg.Logger = logger
+	traceCfg.Release = b.Version
+	if opt := ResolveManagedPrompt(ctx, resolved.Prompt.Managed, traceCfg, resolved.Storage.SessionsDir(), logger); opt != nil {
+		promptOpts = append(promptOpts, opt)
+	}
+	if b.skillsPromptOpt != nil {
+		promptOpts = append(promptOpts, b.skillsPromptOpt)
+	}
+	var pb agent.PromptBuilder = prompt.NewBuilder(b.WorkspaceRoot, promptOpts...)
+	if b.MemoryStore != nil {
+		pb = &memoryPromptWrapper{inner: pb, store: b.MemoryStore, logger: logger}
+	}
+	return pb
+}
+
+// CurrentPrompt returns the active prompt builder; safe for concurrent
+// use with RebuildPrompt.
+func (b *Bootstrap) CurrentPrompt() agent.PromptBuilder {
+	b.promptMu.RLock()
+	defer b.promptMu.RUnlock()
+	return b.PromptBuilder
+}
+
+// RebuildPrompt reassembles the prompt builder from the live resolved
+// config (extra instructions, managed prompt, memory wrapper) and swaps
+// it in; subsequent turns build their system prompt from the new values.
+func (b *Bootstrap) RebuildPrompt(ctx context.Context) {
+	pb := b.buildPrompt(ctx, b.Resolved())
+	b.promptMu.Lock()
+	b.PromptBuilder = pb
+	b.promptMu.Unlock()
 }
 
 // CurrentPolicy returns the active decider chain; safe for concurrent
@@ -444,26 +486,77 @@ func (b *Bootstrap) CurrentRules() *permission.RuleSet {
 // ReloadPolicy re-reads rules from files and the remembered store,
 // rebuilds the decider chain, and replaces b.Policy so subsequent
 // evaluations reflect the updated rule set. Runs already in flight keep
-// the decider they captured at construction.
+// the decider they captured at construction. Rule-load switches and the
+// approval mode read from the live resolved config, so a hot-applied
+// config takes effect here too.
 func (b *Bootstrap) ReloadPolicy(ctx context.Context) error {
-	if b.permissionPolicy == nil || b.Resolved == nil {
+	resolved := b.Resolved()
+	b.policyMu.RLock()
+	if b.permissionPolicy == nil || resolved == nil {
+		b.policyMu.RUnlock()
 		return nil
 	}
+	session := b.permissionPolicy.Session
+	b.policyMu.RUnlock()
 	policy := permission.DefaultPolicy()
-	policy.Session = b.permissionPolicy.Session
+	policy.Session = session
 	// File and store I/O happens outside the lock; only the swap is
 	// serialized against readers.
-	policy = permission.AttachRules(ctx, policy, b.WorkspaceRoot, b.Resolved.Storage.RulesDir(), permission.RuleLoadOptions{
-		Enabled:      b.Resolved.Rules.Enabled,
-		Builtin:      b.Resolved.Rules.Builtin,
-		Project:      b.Resolved.Rules.Project,
-		ProjectAllow: b.Resolved.Rules.ProjectAllow,
+	policy = permission.AttachRules(ctx, policy, b.WorkspaceRoot, resolved.Storage.RulesDir(), permission.RuleLoadOptions{
+		Enabled:      resolved.Rules.Enabled,
+		Builtin:      resolved.Rules.Builtin,
+		Project:      resolved.Rules.Project,
+		ProjectAllow: resolved.Rules.ProjectAllow,
 	}, b.Logger)
 	b.policyMu.Lock()
 	defer b.policyMu.Unlock()
 	*b.permissionPolicy = policy
 	b.Policy = policy.Decider(b.approvalMode)
 	return nil
+}
+
+// SetApprovalMode updates the baseline approval mode and rebuilds the
+// decider chain so subsequent evaluations use it (config hot-reload).
+func (b *Bootstrap) SetApprovalMode(ctx context.Context, mode permission.ApprovalMode) error {
+	b.policyMu.Lock()
+	b.approvalMode = mode
+	b.policyMu.Unlock()
+	return b.ReloadPolicy(ctx)
+}
+
+// SyncMCPTools reconciles the workspace registry with the shared MCP
+// manager's live tool set: tools of removed/failed servers are
+// unregistered, tools of newly connected servers registered. MCP tool
+// names carry the mcp__{server}__ prefix, so registry diffing never
+// touches built-in tools. Note: a turn that already captured a removed
+// server's tool keeps the adapter, but its client is closed — an
+// in-flight call to a removed server fails; the tool simply disappears
+// from subsequent turns.
+func (b *Bootstrap) SyncMCPTools() {
+	want := make(map[string]domain.Tool)
+	if mcpMgr := b.MCP(); mcpMgr != nil {
+		for _, t := range mcpMgr.Tools() {
+			want[t.Definition().Name] = t
+		}
+	}
+	have := make(map[string]bool)
+	for _, def := range b.Registry.List() {
+		if strings.HasPrefix(def.Name, "mcp__") {
+			have[def.Name] = true
+		}
+	}
+	for name := range have {
+		if _, ok := want[name]; !ok {
+			b.Registry.Unregister(name)
+		}
+	}
+	for name, t := range want {
+		if !have[name] {
+			if err := b.Registry.Register(t); err != nil && b.Logger != nil {
+				b.Logger.Warn("mcp: failed to register tool", "tool", name, "error", err)
+			}
+		}
+	}
 }
 
 // PublishSubagentSnapshot resolves the effective child-run model

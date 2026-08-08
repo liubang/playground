@@ -53,7 +53,7 @@ type WorkspaceRegistry struct {
 	proc  *ProcessRuntime
 	store domain.WorkspaceStore
 
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	byID   map[domain.WorkspaceID]*Bootstrap
 	byRoot map[string]domain.WorkspaceID
 	def    domain.WorkspaceID
@@ -408,6 +408,18 @@ func (r *WorkspaceRegistry) Get(id domain.WorkspaceID) (*Bootstrap, bool) {
 	defer r.mu.Unlock()
 	rt, ok := r.byID[id]
 	return rt, ok
+}
+
+// Bootstraps returns every assembled workspace runtime (config hot-reload
+// iterates them to re-apply policy, prompt, and MCP tool changes).
+func (r *WorkspaceRegistry) Bootstraps() []*Bootstrap {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*Bootstrap, 0, len(r.byID))
+	for _, rt := range r.byID {
+		out = append(out, rt)
+	}
+	return out
 }
 
 // Close closes every assembled workspace Bootstrap (docs/WORKSPACE_DESIGN.md

@@ -852,12 +852,13 @@ type MCPServerInfo struct {
 
 // ListMCPServers returns the status of every configured MCP server.
 // Like ListSessions it reads runtime-owned state directly; the manager's
-// projection is assembled once at startup and immutable afterwards.
+// projection reflects live reconnects (config hot-reload, /v1/mcp
+// reconnect endpoint).
 func (c *Controller) ListMCPServers(ctx context.Context) ([]MCPServerInfo, error) {
-	if c.bootstrap == nil || c.bootstrap.MCPManager == nil {
+	if c.bootstrap == nil || c.bootstrap.MCP() == nil {
 		return nil, fmt.Errorf("no mcp servers configured")
 	}
-	servers := c.bootstrap.MCPManager.Servers()
+	servers := c.bootstrap.MCP().Servers()
 	out := make([]MCPServerInfo, 0, len(servers))
 	for _, srv := range servers {
 		out = append(out, MCPServerInfo{
@@ -899,7 +900,7 @@ func (c *Controller) currentLocked() config.ProviderModelRef {
 		return c.current
 	}
 	if c.bootstrap != nil {
-		return c.bootstrap.Current
+		return c.bootstrap.CurrentDefault()
 	}
 	return config.ProviderModelRef{}
 }
@@ -912,8 +913,8 @@ func (c *Controller) reasoningLocked(current config.ProviderModelRef) (domain.Re
 	if c.reasoningOverride != nil {
 		return *c.reasoningOverride, true
 	}
-	if c.bootstrap != nil && c.bootstrap.Resolved != nil {
-		if meta, ok := c.bootstrap.Resolved.ModelMeta(current); ok {
+	if c.bootstrap != nil && c.bootstrap.Resolved() != nil {
+		if meta, ok := c.bootstrap.Resolved().ModelMeta(current); ok {
 			return meta.Reasoning.DomainSpec(), false
 		}
 	}
@@ -1244,14 +1245,14 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 	// (docs/SERVE_DESIGN.md §4.3): concurrent sessions never share the
 	// process-level AtomicSessionEnv.
 	ctx = process.ContextWithSessionEnv(ctx, process.LoomSessionEnv(c.bootstrap.Version, sessionID.String()))
-	provider := c.bootstrap.Resolved.ProviderByName(current.Provider)
+	provider := c.bootstrap.Resolved().ProviderByName(current.Provider)
 	if provider == nil {
 		// Cannot happen through Load/SetModel (both validate the ref), but a
 		// hand-assembled bootstrap in tests can mismatch — fail the turn
 		// loudly instead of panicking on provider.Model.
 		return fmt.Errorf("provider %q is not configured", current.Provider)
 	}
-	modelMeta, _ := c.bootstrap.Resolved.ModelMeta(current)
+	modelMeta, _ := c.bootstrap.Resolved().ModelMeta(current)
 	if run == nil && turnCounter > 1 {
 		var err error
 		run, err = c.continueRun(ctx)
@@ -1260,7 +1261,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 		}
 	}
 	if run == nil {
-		run = agent.NewRun(c.sessionID, c.bootstrap.Resolved.Limits, clock)
+		run = agent.NewRun(c.sessionID, c.bootstrap.Resolved().Limits, clock)
 		// A fresh session may not exist until its first prompt; bind it to
 		// this controller's workspace (docs/WORKSPACE_DESIGN.md W1).
 		if err := store.CreateSession(ctx, c.sessionID, c.bootstrap.WorkspaceID); err != nil {
@@ -1316,11 +1317,11 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 	// Derive the model's context thresholds: the declared window (or the
 	// limits fallback) scaled by the configured ratios, with an optional
 	// per-model utilization override.
-	contextCfg := c.bootstrap.Resolved.Context
+	contextCfg := c.bootstrap.Resolved().Context
 	if modelMeta.WindowUtilization != nil {
 		contextCfg.Utilization = *modelMeta.WindowUtilization
 	}
-	window := agent.NewWindowModel(modelMeta.ContextWindow, c.bootstrap.Resolved.Limits.MaxInputTokens, contextCfg)
+	window := agent.NewWindowModel(modelMeta.ContextWindow, c.bootstrap.Resolved().Limits.MaxInputTokens, contextCfg)
 	// Label the first compaction of this turn: a manual /compact request,
 	// or a switch to a smaller-window model (ModelDownshift).
 	c.mu.Lock()
@@ -1337,7 +1338,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 
 	// Publish this turn's model selection for delegate_task's child
 	// loops (subagent.ModelSource mailbox; docs/SUBAGENT_DESIGN.md D7).
-	PublishSubagentSnapshot(c.subagentModelSource(), c.bootstrap.Resolved, current, reasoning, c.sessionID)
+	PublishSubagentSnapshot(c.subagentModelSource(), c.bootstrap.Resolved(), current, reasoning, c.sessionID)
 
 	// Build the loop
 	loop := &agent.Loop{
@@ -1349,13 +1350,13 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 		Policy:             c.bootstrap.CurrentPolicy(),
 		Registry:           c.runtime.Registry,
 		Logger:             c.logger,
-		SystemPrompt:       c.bootstrap.PromptBuilder,
+		SystemPrompt:       c.bootstrap.CurrentPrompt(),
 		Artifacts:          c.bootstrap.Artifact,
 		Recorder:           c.bootstrap.Recorder,
 		Prompt:             prompt,
 		Workspace:          c.bootstrap.WorkspaceRoot,
 		Window:             window,
-		Runaway:            c.bootstrap.Resolved.Runaway,
+		Runaway:            c.bootstrap.Resolved().Runaway,
 		Reasoning:          reasoning,
 		ForceCompact:       forceCompact,
 		CompactTriggerHint: triggerHint,
@@ -1364,8 +1365,8 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 		SteerCell:          c.runtime.SteerCell,
 		// Reuse the tracing cost rates for the cost budget; zero when the
 		// user never configured pricing, which disables cost accounting.
-		CostInputUSDPerMTok:  c.bootstrap.Resolved.Tracing.CostInputPerMTok,
-		CostOutputUSDPerMTok: c.bootstrap.Resolved.Tracing.CostOutputPerMTok,
+		CostInputUSDPerMTok:  c.bootstrap.Resolved().Tracing.CostInputPerMTok,
+		CostOutputUSDPerMTok: c.bootstrap.Resolved().Tracing.CostOutputPerMTok,
 		StreamHooks: agent.StreamHooks{
 			OnContextUsage: func(estTokens int, lastCallInputTokens int64) {
 				c.publishDurable(c.sessionID, run.ID, turnCounter, runtimeevent.KindContextUsage, runtimeevent.ContextUsagePayload{
@@ -1426,7 +1427,7 @@ func (c *Controller) continueRun(ctx context.Context) (*agent.Run, error) {
 		*inspection.Checkpoint,
 		inspection.Transcript.Messages,
 		inspection.Session.Version,
-		c.bootstrap.Resolved.Limits,
+		c.bootstrap.Resolved().Limits,
 		c.clock,
 	)
 	if err != nil {
@@ -1733,12 +1734,12 @@ func (c *Controller) handleSetModel(cmd controllerCommand) {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("model switching is unavailable: no providers configured")}
 		return
 	}
-	ref, err := c.bootstrap.Resolved.ResolveRef(cmd.ModelName)
+	ref, err := c.bootstrap.Resolved().ResolveRef(cmd.ModelName)
 	if err != nil {
 		cmd.ResultCh <- controllerResult{Err: err}
 		return
 	}
-	meta, _ := c.bootstrap.Resolved.ModelMeta(ref)
+	meta, _ := c.bootstrap.Resolved().ModelMeta(ref)
 	c.mu.Lock()
 	prev := c.currentLocked()
 	c.current = ref
@@ -1768,7 +1769,7 @@ func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	}
 	run, err := agent.RecoverRun(inspection.Session.ID, inspection.Checkpoint,
 		inspection.Transcript.Messages, inspection.Events, inspection.Session.Version,
-		c.bootstrap.Resolved.Limits, c.clock, c.bootstrap.Validator)
+		c.bootstrap.Resolved().Limits, c.clock, c.bootstrap.Validator)
 	if err != nil {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("recover session: %w", err)}
 		return
@@ -1841,16 +1842,16 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 	var contextWindow int64
 	var windowInfo *WindowInfo
 	var occupancy int64
-	if c.bootstrap != nil && c.bootstrap.Resolved != nil {
-		if meta, ok := c.bootstrap.Resolved.ModelMeta(current); ok {
+	if c.bootstrap != nil && c.bootstrap.Resolved() != nil {
+		if meta, ok := c.bootstrap.Resolved().ModelMeta(current); ok {
 			contextWindow = meta.ContextWindow
 			// Same derivation as the turn runner: configured ratios with an
 			// optional per-model utilization override.
-			contextCfg := c.bootstrap.Resolved.Context
+			contextCfg := c.bootstrap.Resolved().Context
 			if meta.WindowUtilization != nil {
 				contextCfg.Utilization = *meta.WindowUtilization
 			}
-			window := agent.NewWindowModel(meta.ContextWindow, c.bootstrap.Resolved.Limits.MaxInputTokens, contextCfg)
+			window := agent.NewWindowModel(meta.ContextWindow, c.bootstrap.Resolved().Limits.MaxInputTokens, contextCfg)
 			if window.Usable() {
 				windowInfo = &WindowInfo{
 					Nominal:        window.Nominal,
