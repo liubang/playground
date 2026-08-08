@@ -548,6 +548,11 @@ func resolveProviderList(in []Provider, lookup EnvLookup, auths map[string]provi
 	out := make([]ResolvedProvider, 0, len(in))
 	for i := range in {
 		p := in[i]
+		// The inheritance expansion below writes defaults back into model
+		// entries (wire_api, reasoning); a slice-header copy would share the
+		// caller's backing array and mutate the File it passed in — which
+		// Validate callers then serialize to disk (PUT /v1/config).
+		p.Models = append([]Model(nil), p.Models...)
 		ctx := fmt.Sprintf("providers[%d] (%q)", i, p.Name)
 		if p.Name == "" {
 			return nil, fmt.Errorf("config: providers[%d]: name is required", i)
@@ -1065,6 +1070,12 @@ func resolveMCP(in map[string]MCPServer, lookup EnvLookup) (ResolvedMCP, error) 
 		ctx := fmt.Sprintf("mcp_servers.%s", name)
 		if strings.TrimSpace(name) == "" {
 			return ResolvedMCP{}, fmt.Errorf("config: mcp_servers: server name must not be empty")
+		}
+		// The name travels into tool names (mcp__{name}__{tool}) and the
+		// reconnect endpoint's path segment — keep it URL- and
+		// identifier-safe.
+		if strings.ContainsAny(name, "/ \\?#%") {
+			return ResolvedMCP{}, fmt.Errorf("config: %s: server name must not contain slashes, spaces, or URL-reserved characters", ctx)
 		}
 		hasCommand := strings.TrimSpace(srv.Command) != ""
 		hasURL := strings.TrimSpace(srv.URL) != ""

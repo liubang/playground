@@ -69,6 +69,10 @@ type Config struct {
 	PublicBaseURL string
 	// NoWeb disables the embedded SPA (pure API mode, docs/WEB_DESIGN.md §7.1).
 	NoWeb bool
+	// ConfigPath is the active config file path (the same locator the
+	// process loaded from: LOOM_CONFIG or the default). Empty disables the
+	// /v1/config endpoints (they answer 503 config_unavailable).
+	ConfigPath string
 	// Version is the build version reported by /v1/meta/version.
 	Version string
 	// Service is the application layer.
@@ -104,6 +108,9 @@ type Server struct {
 
 	sseMu    sync.Mutex
 	sseConns map[string]int
+
+	// configMu serializes the config endpoints' read-modify-write cycle.
+	configMu sync.Mutex
 }
 
 // New creates the server (no listening yet).
@@ -236,6 +243,10 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 	mux.HandleFunc("GET /v1/meta/version", s.handleMetaVersion)
 	mux.HandleFunc("GET /v1/meta/models", s.handleMetaModels)
+	mux.HandleFunc("GET /v1/config", s.handleGetConfig)
+	mux.HandleFunc("PUT /v1/config", s.handlePutConfig)
+	mux.HandleFunc("GET /v1/mcp/servers", s.handleListMCPServers)
+	mux.HandleFunc("POST /v1/mcp/servers/{name}/reconnect", s.handleReconnectMCPServer)
 	mux.HandleFunc("GET /v1/workspaces", s.handleListWorkspaces)
 	mux.HandleFunc("POST /v1/workspaces", s.handleRegisterWorkspace)
 	mux.HandleFunc("GET /v1/workspaces/{id}", s.handleGetWorkspace)
@@ -317,7 +328,7 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 			// the whitelisted Origin falls through to the normal flow
 			// (REVIEW M24).
 			if r.Method == http.MethodOptions {
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, PATCH")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH")
 				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key")
 				w.WriteHeader(http.StatusNoContent)
 				return

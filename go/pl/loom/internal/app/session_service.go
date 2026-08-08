@@ -181,6 +181,10 @@ type SessionService struct {
 	sessions map[domain.SessionID]*SessionHandle
 	closing  bool
 
+	// applyMu serializes config hot-applies and MCP reconnects (they may
+	// block on MCP connect timeouts; two applies must never interleave).
+	applyMu sync.Mutex
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -536,7 +540,7 @@ type ModelCatalog struct {
 // Default reflects the runtime-current selection (a persisted manual
 // switch wins over the configured default).
 func (s *SessionService) ModelCatalog() ModelCatalog {
-	resolved := s.proc.Resolved
+	resolved := s.proc.Resolved()
 	catalog := ModelCatalog{Default: s.proc.CurrentModel().String()}
 	for i := range resolved.Providers {
 		p := &resolved.Providers[i]

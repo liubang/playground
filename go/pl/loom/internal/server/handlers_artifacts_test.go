@@ -63,15 +63,16 @@ func newArtifactTestServer(t *testing.T) (*httptest.Server, *artifact.Store) {
 	}
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	t.Cleanup(broker.Close)
+	proc := &app.ProcessRuntime{
+		Current:    resolved.Default,
+		Store:      store,
+		Artifact:   artStore,
+		Questioner: domain.AutonomousQuestioner{},
+	}
+	proc.SwapResolved(resolved)
 	svc := app.NewSingletonWorkspaceService(&app.Bootstrap{
-		ProcessRuntime: &app.ProcessRuntime{
-			Resolved:   resolved,
-			Current:    resolved.Default,
-			Store:      store,
-			Artifact:   artStore,
-			Questioner: domain.AutonomousQuestioner{},
-		},
-		Registry: agent.NewToolRegistry(),
+		ProcessRuntime: proc,
+		Registry:       agent.NewToolRegistry(),
 	}, broker, app.SessionServiceConfig{})
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
 	srv, err := New(Config{

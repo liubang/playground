@@ -425,6 +425,10 @@ func runServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	cfgPath, err := configPath()
+	if err != nil {
+		return err
+	}
 	resolved, err := loadConfig(true, slog.Default())
 	if err != nil {
 		return err
@@ -482,6 +486,7 @@ func runServe(ctx context.Context, args []string) error {
 		Version:     version.Version,
 		Service:     service,
 		Logger:      logger,
+		ConfigPath:  cfgPath,
 	})
 	if err != nil {
 		return err
@@ -608,7 +613,7 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 	loop := agent.Loop{
 		Run: run, Model: provider.ModelFor(current.Model), ModelName: current.Model, Store: bootstrap.Store,
 		Approver: &consoleApprover{}, Policy: bootstrap.CurrentPolicy(), Registry: bootstrap.Registry,
-		Logger: slog.Default(), SystemPrompt: bootstrap.PromptBuilder, Artifacts: bootstrap.Artifact,
+		Logger: slog.Default(), SystemPrompt: bootstrap.CurrentPrompt(), Artifacts: bootstrap.Artifact,
 		Recorder: bootstrap.Recorder, Prompt: userPrompt, Workspace: root,
 		Window:  agent.NewWindowModel(meta.ContextWindow, resolved.Limits.MaxInputTokens, contextCfg),
 		Runaway: resolved.Runaway, Reasoning: meta.Reasoning.DomainSpec(),
