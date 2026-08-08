@@ -1,6 +1,6 @@
 # Loom Desktop 设计（M4）
 
-- 状态：Implemented v4（M4.0~M4.4 已落地并经实机验收。v4：R-B2 实锤——AssetServer 通道 ContentLength 恒为 -1 且 responseWriter 无 http.Flusher（SSE 不可能），前后端通道从「AssetServer 进程内挂载」改为「常驻 loopback 监听 + bootstrap 跳转」（原 §2.3 降级方案转正）；token 注入主通道随之回到 URL fragment。v3：token 注入定稿 meta 标签（已随通道更换退役）；R-B1 三项 Bazel 适配；.app 打包签名验证通过。v2：前后端通道更正为 AssetServer 挂载（后被 v4 取代）；分享复制点更正为 main.js）
+- 状态：Implemented v5（M4.0~M4.5 已落地。v5：macOS 平台集成与发布工程——版本号单源化（`internal/version`）、squircle 图标、TCC usage descriptions、单实例 GUI 提示、Finder 启动 workspace 选择、窗口几何持久化、Notification Center 镜像、release 四产物（macOS 双架构 DMG + Linux CLI deb）与 strip（-s -w），见 §3.5/§6.5。v4：R-B2 实锤——AssetServer 通道 ContentLength 恒为 -1 且 responseWriter 无 http.Flusher（SSE 不可能），前后端通道从「AssetServer 进程内挂载」改为「常驻 loopback 监听 + bootstrap 跳转」（原 §2.3 降级方案转正）；token 注入主通道随之回到 URL fragment。v3：token 注入定稿 meta 标签（已随通道更换退役）；R-B1 三项 Bazel 适配；.app 打包签名验证通过。v2：前后端通道更正为 AssetServer 挂载（后被 v4 取代）；分享复制点更正为 main.js）
 - 日期：2026-08-08
 - 前置文档：`SERVE_DESIGN.md`（§5 协议、§10 客户端契约）、`WEB_DESIGN.md`（§3.4 api.js、§7 静态托管与安全头）、`WORKSPACE_DESIGN.md`
 - 范围：基于 Wails 的桌面应用前端（`loom-desktop`），与 TUI、WebUI 三种 UI 并存；内网监听与会话分享；Bazel 直接产出 macOS `.app`
@@ -115,23 +115,28 @@ loom-desktop (单一进程)
 
 ```
 1. 解析参数：--listen（默认空 = 仅进程内，无 TCP）、--advertise（可选，§5）
-2. loadConfig(true) / prepareStorage / newFileLogger        ← 与 runServe 相同
-3. AcquireDataDirLock(dataDir)                               ← 与 runServe 相同；冲突即报错退出
-4. assembleRuntime(ctx, resolved, root, logger)              ← 原样复用
-5. broker := runtimeevent.NewBroker(WithDurableQueue(4096))
+2. workspace 解析：终端启动用 cwd（与 loom 语义一致）；Finder 启动（cwd=/）
+   弹原生目录选择框，取消即干净退出（v5，§3.5）
+3. loadConfig(true) / prepareStorage / newFileLogger        ← 与 runServe 相同
+4. AcquireDataDirLock(dataDir)                               ← 与 runServe 相同；冲突时弹原生
+                                                              警告框再退出（v5，§3.5）
+5. assembleRuntime(ctx, resolved, root, logger)              ← 原样复用
+6. broker := runtimeevent.NewBroker(WithDurableQueue(4096))
    app.WireSubagentObserver(...)
    service := app.NewSessionService(...)
-6. token := 32 字节随机（crypto/rand，进程内存，不落盘不打印）
-7. uiSrv := server.New(Config{Listen: "127.0.0.1:0", Token: token, ...})
+   go watchNotifications(ctx, broker, logger)                ← v5，§3.5：事件镜像到通知中心
+7. token := 32 字节随机（crypto/rand，进程内存，不落盘不打印）
+8. uiSrv := server.New(Config{Listen: "127.0.0.1:0", Token: token, ...})
    uiSrv.Listen(); go uiSrv.Serve()                            ← UI 常驻 loopback
    if --listen 非空 {                                          ← 可选内网分享（第二监听）
        shareSrv := server.New(Config{Listen, PublicBaseURL: derive(...), ...})
        shareSrv.Listen(); go shareSrv.Serve()
    }
-8. wails.Run(&options.App{Title: "Loom", Width, Height,
+9. wails.Run(&options.App{Title: "Loom", Width/Height ← 持久化窗口几何（v5，§3.5）,
        AssetServer: &assetserver.Options{
            Handler: bootstrapHandler(uiBase + "/#token=" + token)},  ← §4.2
        Mac: &mac.Options{...},
+       OnStartup: 恢复窗口位置 + 启动几何持久化轮询,
        OnShutdown: 优雅退出序列（§3.4）})
 ```
 
@@ -149,6 +154,19 @@ lock.Release()
 ```
 
 同时保留 `signal.NotifyContext`（SIGINT/SIGTERM 走同一路径），保证 `kill` 与点关闭按钮语义一致。`srv.Shutdown` 在未调用 `Listen` 时退化为标记 draining + 关闭空闲连接，安全幂等（实现时验证该路径，必要时在 desktop 侧跳过该调用）。
+
+**wails 关闭时序（v5 排障记录）**：wails v2 的 `App.Run` 顺序是 `frontend.Run → RunMainLoop → WindowClose() → shutdownCallback`——`OnShutdown` 执行时原生窗口上下文已 `ReleaseContext` 释放，在其中调用 `WindowGetSize/Position` 是 use-after-free。因此窗口几何不在退出时采集，改为运行期轮询落盘（§3.5）。
+
+### 3.5 macOS 平台集成（v5）
+
+四项集成都经 AppleScript（osascript）而非直接 Cocoa 调用：这些弹窗运行在 wails GUI 循环启动之前/之外，NSAlert/NSOpenPanel 有主线程 + runloop 前置条件，AppleScript 无此约束，且 Finder/终端启动行为一致。
+
+| 能力 | 实现 | 要点 |
+|---|---|---|
+| 单实例提示 | flock 冲突时 `display dialog` 警告（`dialogs_darwin.go`） | Finder 启动的第二实例无可见 stderr，弹窗替代静默退出；osascript 失败按 stderr 是否含 "User canceled" 区分「用户取消」与「基础设施失败」（后者回退 home 目录，SSH 无 window server 场景不误判） |
+| workspace 选择 | Finder 启动（cwd=`/`）时 `choose folder` | 取消 = 干净退出；不再静默把 `$HOME` 当 workspace（agent 工具的文件操作范围过大）；终端启动行为不变 |
+| 窗口几何持久化 | `windowstate.go`：运行期每 2s 轮询、变更即写 `desktop-window.json`；启动时恢复尺寸与位置 | 位置校验当前屏幕可达性（拔掉外接屏不会在屏幕外复活）；wails 坐标是**当前屏 visibleFrame 相对值**（左上原点），跨屏移动无需特判 |
+| 通知中心镜像 | `notifications.go` 订阅 broker：`approval.requested`/`question.asked`/`turn.finished/failed` → `display notification` | v1 不做前台检测（`NSApp.isActive` 只能主线程安全读）；通知频率低（每 turn/审批一条），误报成本为一条自动消失的横幅 |
 
 ---
 
@@ -275,10 +293,11 @@ go_binary(
 ```
 Loom.app/
 └── Contents/
-    ├── Info.plist            # CFBundleExecutable/CFBundleIdentifier/
-    │                         # NSHighResolutionCapable/LSMinimumSystemVersion
+    ├── Info.plist            # 由 macos/Info.plist.tmpl 经 genrule 渲染（v5，§6.5）：
+    │                         # CFBundleExecutable/CFBundleIdentifier/CFBundleIconFile/
+    │                         # TCC usage descriptions/LSApplicationCategoryType 等
     ├── MacOS/loom-desktop    # ← go_binary 产物
-    └── Resources/icon.icns
+    └── Resources/AppIcon.icns  # ← macos/generate_icon.sh 生成并入库（v5）
 ```
 
 用 `rules_pkg` 的 `pkg_files`（`prefix` + `renames` 摆好布局）+ `pkg_zip` 产出解压即 `.app` 的 zip（实现见 `cmd/loom-desktop/BUILD`）：
@@ -287,23 +306,48 @@ Loom.app/
 pkg_files(name = "app_binary", srcs = [":loom-desktop"], prefix = "Contents/MacOS",
           renames = {":loom-desktop": "loom-desktop"},
           attributes = pkg_attributes(mode = "0755"))
-pkg_files(name = "app_metadata", srcs = ["macos/Info.plist"], prefix = "Contents",
-          strip_prefix = strip_prefix.from_pkg("macos"))
-pkg_zip(name = "loom_desktop_app", srcs = [":app_binary", ":app_metadata"],
+pkg_files(name = "app_metadata", srcs = [":info_plist"], prefix = "Contents",
+          renames = {":info_plist": "Info.plist"})
+pkg_files(name = "app_resources", srcs = ["macos/AppIcon.icns"],
+          prefix = "Contents/Resources", strip_prefix = strip_prefix.from_pkg("macos"))
+pkg_zip(name = "loom_desktop_app",
+        srcs = [":app_binary", ":app_metadata", ":app_resources"],
         package_dir = "Loom.app")
 ```
 
-产物 `bazel-bin/go/pl/loom/cmd/loom-desktop/loom_desktop_app.zip`；`bazel run :package_app` 解包到 `dist/Loom.app` 并 ad-hoc 签名（已验证 `codesign -v` 通过、二进制可运行）。新增静态文件：`cmd/loom-desktop/macos/Info.plist`。应用图标暂未提供（无 .icns 资产；macOS 用默认图标，后续补设计资产后挂 `CFBundleIconFile`）。
+产物 `bazel-bin/go/pl/loom/cmd/loom-desktop/loom_desktop_app.zip`；`bazel run :package_app` 解包到 `dist/Loom.app` 并 ad-hoc 签名（已验证 `codesign -v` 通过、二进制可运行）。
+
+**图标（v5）**：`macos/generate_icon.sh` 用一次性 Swift/CoreGraphics 程序把 favicon 菱形标渲染到 squircle 底板（深色渐变 + 青色菱形环，按 Apple 图标栅格占画布 ~66%），`iconutil` 打成全尺寸 `AppIcon.icns` 入库；换设计后重跑脚本提交即可。plist 挂 `CFBundleIconFile=AppIcon`。
 
 ### 6.3 签名
 
 - 本机构建不签名即可运行（Gatekeeper 只管带 quarantine 的下载文件）；
-- bundle 规则内附带 ad-hoc 签名一步（`codesign --force --deep --sign -`），换取防火墙授权、TCC 权限的身份稳定；
+- bundle 规则内附带 ad-hoc 签名一步（v5 起为 `codesign --force --sign -`；去掉了 `--deep`——单 Mach-O bundle 没有嵌套代码，Apple 已不推荐该旗标），换取防火墙授权、TCC 权限的身份稳定；
 - Developer ID 签名 + 公证属分发工程，出范围（§1.2）。
 
 ### 6.4 CI
 
 桌面 target 标记 `manual`，不进默认 `bazel build //go/...`（已验证通配符排除）；`.github/workflows/build_go.yml` 新增独立 `desktop` job（macOS runner）：`bazel build --config=ci --config=desktop //go/pl/loom/cmd/loom-desktop:loom_desktop_app`。Linux/Windows 桌面构建不进 CI（§1.2）。
+
+### 6.5 版本单源与 release 打包（v5）
+
+**版本单源**：`internal/version/VERSION` 是唯一权威版本字符串。Go 侧经 `//go:embed` 暴露 `version.Version`（完整串，如 `0.2.0-dev`）与 `version.Release`（去预发布后缀，如 `0.2.0`），`cmd/loom` 与 `cmd/loom-desktop` 全部改引用；bundle 侧由 genrule 把 `macos/Info.plist.tmpl` 的 `@VERSION@`/`@RELEASE@` 渲染成 Info.plist——二进制与 bundle 元数据不会漂移。改版本只动 VERSION 一个文件。
+
+**release 四产物**：`bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_release` 一次产出：
+
+| 产物 | 架构 | 内容 |
+|---|---|---|
+| `dist/Loom-<ver>-macos-arm64.dmg` | darwin/arm64（thin） | `.app` + `/Applications` 软链 |
+| `dist/Loom-<ver>-macos-x86_64.dmg` | darwin/amd64（thin） | 同上 |
+| `dist/loom_<debver>_amd64.deb` | linux/amd64 | CLI → `/usr/bin/loom` |
+| `dist/loom_<debver>_arm64.deb` | linux/arm64 | 同上 |
+
+要点：
+
+- **交叉编译走 Go 工具链而非 Bazel**：Bazel 自动检测的 cc toolchain 只覆盖宿主机 arch（交叉平台 cgo 会被禁用，wails 编不过）；Xcode clang 同 SDK 直接接受双 `-arch`。bundle 元数据/图标仍来自 Bazel zip，只替换 Mach-O。
+- **release 一律 strip（`-s -w`）**：universal 时代 68M → per-arch 23M 级；DMG 体积约半减。dev 路径（`package_app`）保留符号。
+- **deb 手工组装**（`ar` + `tar`，无 dpkg-deb 依赖）：Debian 版本规范化 `0.2.0-dev` → `0.2.0~dev-1`（无 revision 不得含连字符；`~` 使预发布排序先于正式版）。**坑**：macOS 的 `ar rc` 会隐式调 ranlib，非 Mach-O 成员被全部丢弃（产物只剩 `__.SYMDEF`），必须 `ar rcS`。
+- **Linux GUI 不出包**：需 Linux 构建环境 + webkit2gtk + §2.3 通道适配，单独立项（§8 第 4 项）；deb 只装 CLI。
 
 ---
 
@@ -322,6 +366,15 @@ pkg_zip(name = "loom_desktop_app", srcs = [":app_binary", ":app_metadata"],
 | 修改 | `go/go.mod`、`MODULE.bazel` | wails v2.13 依赖 + `use_repo` + `gazelle_override` | ✅ |
 | 修改 | `.bazelrc` | `build:desktop` 配置段（全局 production tag） | ✅ |
 | 修改 | `.github/workflows/build_go.yml` | macOS desktop 打包 job | ✅ |
+| 新增（v5） | `internal/version/` | VERSION 单源 + embed 包 + 形态测试 | ✅ |
+| 新增（v5） | `cmd/loom-desktop/dialogs_darwin.go` | osascript 原生对话框（单实例提示 / workspace 选择） | ✅ |
+| 新增（v5） | `cmd/loom-desktop/windowstate.go` | 窗口几何轮询持久化与恢复 | ✅ |
+| 新增（v5） | `cmd/loom-desktop/notifications.go`、`notify_darwin.go` | broker 事件 → Notification Center | ✅ |
+| 新增（v5） | `cmd/loom-desktop/macos/Info.plist.tmpl`、`AppIcon.icns`、`generate_icon.sh` | plist 模板化（TCC/元数据）+ squircle 图标 | ✅ |
+| 新增（v5） | `cmd/loom-desktop/package_release.sh` | release 四产物打包 | ✅ |
+| 修改（v5） | `cmd/loom/main.go`、`cmd/loom-desktop/main.go` | 版本切换 `version.Version`；平台集成接线 | ✅ |
+| 修改（v5） | `cmd/loom-desktop/package_app.sh` | 去 `--deep`；bazel-bin 回退；图标缓存 touch | ✅ |
+| 修改（v5） | `cmd/loom-desktop/main_test.go` | 转义/截断/窗口状态/通知过滤/回写回环 | ✅ 全绿 |
 
 TUI（`internal/ui`）、WebUI 浏览器路径、`cmd/loom/main.go`、`internal/server/web/static/js/share.js`、agent/app/session 核心：**零改动**。
 
@@ -330,9 +383,10 @@ TUI（`internal/ui`）、WebUI 浏览器路径、`cmd/loom/main.go`、`internal/
 ## 8. 后续演进（非本里程碑）
 
 1. **Wails 原生绑定**：将 `client.Client` 方法 `Bind` 给前端（`window.go.main.Client.*`），事件经 `runtime.EventsEmit` 推送，进一步消掉 handler 调用开销。需重写 `api.js`/`sse.js` 桥接薄层，其余 UI 组件保留。前置条件：桌面端用户量证明体验瓶颈真实存在。
-2. **桌面能力增强**：系统托盘、Dock 未读徽标、原生通知（turn 完成/审批待办）、「复制分享地址」菜单项。
+2. **桌面能力增强**：系统托盘、Dock 未读徽标、「复制分享地址」菜单项（原生通知已于 v5 落地，§3.5）；通知前台去重（`NSApp.isActive` 需主线程安全读取方案）。
 3. **Wails v3 升级**：GA 后评估，变更收敛在 `cmd/loom-desktop` 内。
-4. **Linux/Windows 桌面**：Linux 需 CI 镜像预装 webkit2gtk 开发包；Windows 除 WebView2 运行时外，还受 AssetServer 不支持流式响应限制（§2.3），届时走 §2.3 的 TCP loopback 降级路径。
+4. **Linux/Windows 桌面**：Linux 需 CI 镜像预装 webkit2gtk 开发包；Windows 除 WebView2 运行时外，还受 AssetServer 不支持流式响应限制（§2.3），届时走 §2.3 的 TCP loopback 降级路径。Linux **CLI** 的 deb 已于 v5 随 release 打包产出（§6.5）；GUI 版单独立项。
+5. **分发工程**：Developer ID 签名 + 公证（hardened runtime + entitlements 为前置）；Sparkle 自动更新；`loom://` URL scheme 与深链（注册 plist 容易，handler 需配合分享链路设计）。
 
 ---
 
@@ -355,5 +409,6 @@ TUI（`internal/ui`）、WebUI 浏览器路径、`cmd/loom/main.go`、`internal/
 | M4.2 | `main.js` token 注入 | ✅（定稿 meta 注入，fragment 兼容） |
 | M4.3 | `cmd/loom-desktop` cmd，`go build -tags production` 跑通 | ✅ 冒烟通过（healthz/SPA/401/分享页/token 不泄漏） |
 | M4.4 | Bazel cgo target + `.app` 打包 + ad-hoc 签名 + CI job | ✅ `loom_desktop_app.zip` 产出、`codesign -v` 通过 |
+| M4.5 | macOS 平台集成 + 版本单源 + release 四产物（v5） | ✅ 43/43 测试绿；DMG/deb 产物实机验证（架构、签名、deb 结构） |
 
 人工验收清单（交付后）：窗口内完整流式对话一轮、审批卡片交互、`--listen 0.0.0.0:PORT` 下从内网另一台机器打开分享链接。
