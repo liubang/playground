@@ -18,10 +18,18 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
 func TestResolveListenPort(t *testing.T) {
@@ -98,6 +106,145 @@ func TestBootstrapHandler(t *testing.T) {
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/", nil))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status = %d, want 405", rec.Code)
+	}
+}
+
+func TestAppleScriptString(t *testing.T) {
+	if got := appleScriptString(`plain`); got != `"plain"` {
+		t.Fatalf("plain = %s", got)
+	}
+	got := appleScriptString(`a"b\\c`)
+	if got != `"a\"b\\\\c"` {
+		t.Fatalf("escaped = %s", got)
+	}
+}
+
+func TestTruncateRunes(t *testing.T) {
+	if got := truncateRunes("short", 10); got != "short" {
+		t.Fatalf("short = %q", got)
+	}
+	if got := truncateRunes(strings.Repeat("x", 200), 120); len([]rune(got)) != 120 {
+		t.Fatalf("truncated rune len = %d, want 120", len([]rune(got)))
+	}
+	// Multibyte content must be truncated by runes, not bytes.
+	got := truncateRunes(strings.Repeat("中", 50), 10)
+	if len([]rune(got)) != 10 || !strings.HasSuffix(got, "…") {
+		t.Fatalf("multibyte = %q", got)
+	}
+}
+
+func TestLoadWindowState(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "desktop-window.json")
+
+	if _, ok := loadWindowState(path); ok {
+		t.Fatal("missing file: want ok=false")
+	}
+	write := func(s string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write(`{"width":1400,"height":900,"x":10,"y":20}`)
+	ws, ok := loadWindowState(path)
+	if !ok || ws.Width != 1400 || ws.Height != 900 || ws.X != 10 || ws.Y != 20 {
+		t.Fatalf("valid = %+v, ok=%v", ws, ok)
+	}
+	write(`{"width":10,"height":10}`)
+	if _, ok := loadWindowState(path); ok {
+		t.Fatal("below minimum: want ok=false")
+	}
+	write(`not json`)
+	if _, ok := loadWindowState(path); ok {
+		t.Fatal("corrupt: want ok=false")
+	}
+}
+
+func TestWriteWindowStateRoundtrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "desktop-window.json")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	want := windowState{Width: 1440, Height: 900, X: 30, Y: 40}
+	writeWindowState(path, want, logger)
+	got, ok := loadWindowState(path)
+	if !ok || got != want {
+		t.Fatalf("roundtrip = %+v, ok=%v, want %+v", got, ok, want)
+	}
+}
+
+// captureNotifications swaps notifyFunc for a recorder and restores it.
+func captureNotifications(t *testing.T) *struct {
+	mu    sync.Mutex
+	calls []string
+} {
+	t.Helper()
+	rec := &struct {
+		mu    sync.Mutex
+		calls []string
+	}{}
+	orig := notifyFunc
+	notifyFunc = func(title, body string) {
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		rec.calls = append(rec.calls, title+"|"+body)
+	}
+	t.Cleanup(func() { notifyFunc = orig })
+	return rec
+}
+
+func TestNotifyForEvent(t *testing.T) {
+	rec := captureNotifications(t)
+	payload := func(v any) json.RawMessage {
+		t.Helper()
+		raw, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+
+	// Approval carries tool + description.
+	if err := notifyForEvent(runtimeevent.RuntimeEvent{
+		Kind:    runtimeevent.KindApprovalRequested,
+		Payload: payload(runtimeevent.ApprovalRequestedPayload{ToolName: "shell", Description: "run tests"}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Turn failure surfaces the error; clean finish is a plain banner.
+	_ = notifyForEvent(runtimeevent.RuntimeEvent{
+		Kind:    runtimeevent.KindTurnFinished,
+		Payload: payload(runtimeevent.TurnFinishedPayload{Error: "boom"}),
+	})
+	_ = notifyForEvent(runtimeevent.RuntimeEvent{
+		Kind:    runtimeevent.KindTurnFinished,
+		Payload: payload(runtimeevent.TurnFinishedPayload{}),
+	})
+	_ = notifyForEvent(runtimeevent.RuntimeEvent{
+		Kind:    runtimeevent.KindQuestionAsked,
+		Payload: payload(runtimeevent.QuestionAskedPayload{Text: "which option?"}),
+	})
+	// Noise kinds never notify.
+	_ = notifyForEvent(runtimeevent.RuntimeEvent{
+		Kind:    runtimeevent.KindModelTextDelta,
+		Payload: payload(runtimeevent.ModelTextDeltaPayload{Delta: "hi"}),
+	})
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	want := []string{
+		"Approval needed|shell: run tests",
+		"Turn failed|boom",
+		"Turn finished|Loom finished the current turn.",
+		"Loom has a question|which option?",
+	}
+	if len(rec.calls) != len(want) {
+		t.Fatalf("calls = %v, want %v", rec.calls, want)
+	}
+	for i := range want {
+		if rec.calls[i] != want[i] {
+			t.Fatalf("call[%d] = %q, want %q", i, rec.calls[i], want[i])
+		}
 	}
 }
 

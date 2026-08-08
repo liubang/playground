@@ -56,10 +56,10 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/logging"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/server"
+	"github.com/liubang/playground/go/pl/loom/internal/version"
 )
 
 const (
-	version               = "0.2.0-dev"
 	artifactDirectoryName = "artifacts"
 	// configPathEnv points at an alternative config file (same locator
 	// semantics as cmd/loom).
@@ -89,7 +89,7 @@ func run(ctx context.Context, args []string) error {
 		case args[i] == "--print-connection":
 			printConn = true
 		case args[i] == "version":
-			fmt.Println("loom-desktop", version)
+			fmt.Println("loom-desktop", version.Version)
 			return nil
 		default:
 			return fmt.Errorf("usage: loom-desktop [--listen <addr>] [--advertise <base-url>] [--print-connection] | loom-desktop version")
@@ -101,11 +101,23 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 	// A Finder-launched .app gets "/" as cwd, which would make the default
-	// workspace useless; fall back to the home directory. Terminal launches
-	// keep the project directory, matching `loom` semantics.
+	// workspace useless. Ask for a project directory instead of silently
+	// adopting one; a cancel exits cleanly. Terminal launches keep the
+	// project directory, matching `loom` semantics.
 	if root == "/" {
-		if home, herr := os.UserHomeDir(); herr == nil {
-			root = home
+		picked, perr := chooseFolder("Choose a workspace directory for Loom")
+		switch {
+		case perr == nil:
+			root = picked
+		case errors.Is(perr, errPickCancelled):
+			return nil
+		default:
+			// AppleScript unavailable (stripped-down system): fall back to
+			// the home directory rather than refuse to start.
+			fmt.Fprintf(os.Stderr, "loom-desktop: folder picker unavailable (%v), using home directory\n", perr)
+			if home, herr := os.UserHomeDir(); herr == nil {
+				root = home
+			}
 		}
 	}
 	resolved, err := loadConfig()
@@ -121,6 +133,10 @@ func run(ctx context.Context, args []string) error {
 	lock, err := server.AcquireDataDirLock(dataDir)
 	if err != nil {
 		if errors.Is(err, server.ErrDataDirLocked) {
+			// A Finder-launched second instance has no visible stderr; tell
+			// the user instead of dying silently.
+			showAlert("Loom is already running",
+				fmt.Sprintf("Another Loom process already owns the data directory:\n%s\n\nStop it first, then relaunch Loom.", dataDir))
 			return fmt.Errorf("another loom process already owns %s (stop it first)", dataDir)
 		}
 		return err
@@ -139,6 +155,9 @@ func run(ctx context.Context, args []string) error {
 	app.WireSubagentObserver(bootstrap.SubagentFactory, broker, bootstrap.Store, logger)
 	service := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{Logger: logger})
 
+	// Mirror attention-worthy agent milestones to Notification Center.
+	go watchNotifications(ctx, broker, logger)
+
 	// In-process token: random per launch, never persisted or printed.
 	token, err := generateToken()
 	if err != nil {
@@ -153,7 +172,7 @@ func run(ctx context.Context, args []string) error {
 	uiSrv, err := server.New(server.Config{
 		Listen:  "127.0.0.1:0",
 		Token:   token,
-		Version: version,
+		Version: version.Version,
 		Service: service,
 		Logger:  logger,
 	})
@@ -186,7 +205,7 @@ func run(ctx context.Context, args []string) error {
 		if shareSrv, err = server.New(server.Config{
 			Listen:        listen,
 			Token:         token,
-			Version:       version,
+			Version:       version.Version,
 			Service:       service,
 			Logger:        logger,
 			PublicBaseURL: publicBase,
@@ -248,13 +267,22 @@ func run(ctx context.Context, args []string) error {
 		}
 	}()
 
-	logger.Info("loom-desktop starting", "version", version, "share_listen", listen != "")
+	// Restore the previous window geometry when it still fits a connected
+	// display; otherwise fall back to the defaults.
+	width, height := defaultWindowWidth, defaultWindowHeight
+	wsPath := windowStatePath(resolved)
+	savedWs, hasSavedWs := loadWindowState(wsPath)
+	if hasSavedWs {
+		width, height = savedWs.Width, savedWs.Height
+	}
+
+	logger.Info("loom-desktop starting", "version", version.Version, "share_listen", listen != "")
 	return wails.Run(&options.App{
 		Title:     "Loom",
-		Width:     1280,
-		Height:    860,
-		MinWidth:  960,
-		MinHeight: 640,
+		Width:     width,
+		Height:    height,
+		MinWidth:  minWindowWidth,
+		MinHeight: minWindowHeight,
 		AssetServer: &assetserver.Options{
 			Handler: handler,
 		},
@@ -262,7 +290,7 @@ func run(ctx context.Context, args []string) error {
 			TitleBar: mac.TitleBarDefault(),
 			About: &mac.AboutInfo{
 				Title:   "Loom",
-				Message: "Loom Desktop " + version,
+				Message: "Loom Desktop " + version.Version,
 			},
 		},
 		OnStartup: func(wctx context.Context) {
@@ -270,6 +298,10 @@ func run(ctx context.Context, args []string) error {
 			case wailsReady <- wctx:
 			default:
 			}
+			if hasSavedWs {
+				restoreWindowPosition(wctx, savedWs)
+			}
+			go persistWindowState(ctx, wctx, wsPath, logger)
 		},
 		OnShutdown: func(context.Context) {
 			shutdown()
@@ -456,7 +488,7 @@ func resolveWorkspace(explicit string) (string, error) {
 func assembleRuntime(ctx context.Context, resolved *config.ResolvedConfig, root string, logger *slog.Logger) (*app.ProcessRuntime, *app.WorkspaceRegistry, *app.Bootstrap, error) {
 	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
 		ArtifactDir: filepath.Join(resolved.Storage.SessionsDir(), artifactDirectoryName),
-		Version:     version,
+		Version:     version.Version,
 		Logger:      logger,
 	})
 	if err != nil {
