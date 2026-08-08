@@ -258,6 +258,17 @@ go_sdk.download(version = "1.26.4")
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//go:go.mod")
 
+# wails v2 gates its real frontend behind the custom `production` build tag;
+# without this directive gazelle evaluates the tag as unsatisfied when
+# generating the repo BUILD files and drops app_production.go from srcs
+# (//go/pl/loom/cmd/loom-desktop, docs/DESKTOP_DESIGN.md §6.1 R-B1).
+go_deps.gazelle_override(
+    directives = [
+        "gazelle:build_tags production",
+    ],
+    path = "github.com/wailsapp/wails/v2",
+)
+
 # All *direct* Go dependencies of the module have to be listed explicitly.
 use_repo(
     go_deps,
@@ -271,6 +282,7 @@ use_repo(
     "com_github_rivo_uniseg",
     "com_github_sirupsen_logrus",
     "com_github_stretchr_testify",
+    "com_github_wailsapp_wails_v2",
     "in_gopkg_yaml_v3",
     "io_opentelemetry_go_otel",
     "io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracehttp",

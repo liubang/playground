@@ -65,6 +65,12 @@ build:macos --macos_minimum_os=13.3
 build:macos --cxxopt=-Wno-error=unused-but-set-variable
 build:macos --cxxopt=-Wno-error=unused-but-set-parameter
 
+# for //go/pl/loom/cmd/loom-desktop (wails v2 requires the `production` build
+# tag; rules_go's per-target gotags attr does not propagate to external dep
+# compiles, so set it globally for desktop builds).
+# Usage: bazel build --config=desktop //go/pl/loom/cmd/loom-desktop:loom_desktop_app
+build:desktop --@rules_go//go/config:tags=production
+
 # test in Release mode
 test -c opt
 # gtest

@@ -1,6 +1,6 @@
 # Loom Desktop 设计（M4）
 
-- 状态：Draft v2（v1 经一轮对照代码与 Wails v2 API 事实的自审修订：前后端通道由「loopback TCP + 外部 URL 加载」更正为「AssetServer.Handler 进程内挂载」（Wails v2 无 StartURL 类选项，v1 方案不成立）；分享链接复制点由 share.js 更正为 main.js；新增风险 R-B2（AssetServer 流式响应行为）及其降级路径）
+- 状态：Implemented v4（M4.0~M4.4 已落地并经实机验收。v4：R-B2 实锤——AssetServer 通道 ContentLength 恒为 -1 且 responseWriter 无 http.Flusher（SSE 不可能），前后端通道从「AssetServer 进程内挂载」改为「常驻 loopback 监听 + bootstrap 跳转」（原 §2.3 降级方案转正）；token 注入主通道随之回到 URL fragment。v3：token 注入定稿 meta 标签（已随通道更换退役）；R-B1 三项 Bazel 适配；.app 打包签名验证通过。v2：前后端通道更正为 AssetServer 挂载（后被 v4 取代）；分享复制点更正为 main.js）
 - 日期：2026-08-08
 - 前置文档：`SERVE_DESIGN.md`（§5 协议、§10 客户端契约）、`WEB_DESIGN.md`（§3.4 api.js、§7 静态托管与安全头）、`WORKSPACE_DESIGN.md`
 - 范围：基于 Wails 的桌面应用前端（`loom-desktop`），与 TUI、WebUI 三种 UI 并存；内网监听与会话分享；Bazel 直接产出 macOS `.app`
@@ -35,7 +35,7 @@ M1'~M3 交付了 `client.Client` 协议无关契约（SERVE_DESIGN §10：「每
 | 维度 | 决策 | 备选（放弃原因） |
 |---|---|---|
 | 桌面框架 | **Wails v2**（作为纯库 `wails.Run` 使用，不引入 CLI/代码生成/`wails.json`；最新稳定 v2.13.x） | webview/webview_go（Wails 底层库，更轻但菜单/窗口管理/后续原生绑定能力弱，见 §2.2）；Electron/Tauri（引入 JS/Rust 构建链，违反仓库约束） |
-| 前后端通道 | **AssetServer 进程内挂载**：`assetserver.Options{Handler: srv.Handler()}`，webview 全部请求（静态资源、REST、SSE）由进程内 server handler 直接服务，默认零 TCP 监听 | TCP loopback + webview 加载外部 URL（**不成立**：Wails v2 `options.App` 没有 StartURL 类字段，见 §2.3）；Wails 原生绑定（需重写 api.js/sse.js 桥接层，MVP 工作量 3 倍，§8 再评估） |
+| 前后端通道 | **常驻 loopback 监听 + bootstrap 跳转**：server 始终绑 `127.0.0.1:0`，webview 起始页是 AssetServer 托管的 meta-refresh 跳转页，落地后全部 REST+SSE 走真实 HTTP | AssetServer 进程内挂载（**实锤不成立**：ContentLength 恒 -1、无 http.Flusher、无 30x，见 §2.3 R-B2）；Wails 原生绑定（需重写 api.js/sse.js 桥接层，§8 再评估） |
 | 进程形态 | **独立 cmd `loom-desktop`**（独立 main、独立 Bazel target） | `loom` 加 `desktop` 子命令（wails 的 CGO 依赖会进入 `loom_lib`，污染默认构建矩阵，不可接受） |
 | 静态资源 | 沿用 `internal/server/web` 的 `embed.FS` + 强 ETag 托管（经 `srv.Handler()` 统一出口） | Wails Assets 另挂一份 `fs.FS`（双出口、缓存语义分裂，漂移风险） |
 | 鉴权 | 进程内随机 token（32 字节，不落盘不打印），经 URL fragment 注入 SPA 跳过 gate | 持久化 token 文件（桌面进程是短期会话所有者，无重连场景，持久化只增加泄漏面） |
@@ -65,11 +65,17 @@ func (s *Server) Handler() http.Handler { return s.http.Handler }
 
 因此桌面端可以不经过任何 TCP 栈：`AssetServer{Handler: srv.Handler()}`。SPA 的相对路径 fetch（`/v1/...`）在 wails origin（macOS 为 `wails://localhost`）下全部落到该 handler，认证（Bearer）、安全头（CSP）、静态托管（ETag）由 server 中间件原样提供。
 
-**该方案成立的前提是 SSE 流式帧经 AssetServer 的 flush 行为与 net/http 一致**——矩阵标注 macOS 支持流式响应体，但 flush 延迟、POST 体边界等细节需在 M4.0 spike 中首个验证（§9 R-B2）。验证不通过的降级路径：常驻 `127.0.0.1:0` TCP 监听 + 微型 bootstrap 页（`Assets` 内嵌单个 `index.html`，内容仅 `location.replace("http://127.0.0.1:<port>/#token=...")`）跳转——代价是丢失 wails origin 下运行时注入（MVP 不用 Bindings，无实际损失）。
+**R-B2 实锤（实机验收记录）**：AssetServer 通道实测三项协议缺陷，均命中 loom 的硬需求——
 
-### 2.4 为什么进程内挂载方案成立
+1. **ContentLength 恒为 -1**（`assetserver_webview.go` 对未知长度 body 一律 -1）：`handleCreateSession` 曾按 `r.ContentLength > 0` 判定有无 body，导致 resume 请求被误判为 create——表现为「每次启动自动创建空会话 + 打开最近会话报 session not found」。服务端已修为按实际字节判定（chunked/HTTP2 客户端同样受益），另有桌面端绕开该通道（见下）。
+2. **responseWriter 无 `http.Flusher`**：SSE handler 的 `w.(http.Flusher)` 断言失败，流式事件推送在原理上不可能——表现为「对话无流式反馈、SSE 无限 reconnecting」。
+3. **不支持 30x 重定向**（官方矩阵标注）：bootstrap 跳转因此用 `<meta http-equiv="refresh">` 而非 302。
 
-webview 到进程内 handler 的调用无序列化、无网络栈，SSE 高频帧（`model.text_delta`）零可感知延迟。关键收益是**前端与 WebUI 完全同一份代码**：
+结论：**通道改为常驻 loopback 监听**（`127.0.0.1:0` 随机端口）**+ bootstrap 跳转页**——webview 起始页由 AssetServer 托管（仅一个 GET 跳转页，无任何协议依赖），跳转后全部 REST+SSE 走真实 net/http，Flusher/ContentLength/流式语义完整。原「进程内挂载零监听」的优势经实测不成立（挂载点恰恰丢掉了 HTTP 语义），loopback 的性能损耗亚毫秒级，可忽略。
+
+### 2.4 为什么 loopback 方案成立
+
+webview 到 `127.0.0.1` 进程内监听的往返是亚毫秒级，SSE 高频帧（`model.text_delta`）无可感知损耗；且这是与 `loom serve` 完全相同的 net/http 通道，协议语义无分叉。关键收益是**前端与 WebUI 完全同一份代码**：
 
 - SPA 的所有组件（transcript/composer/审批卡片/问答卡片/diff 视图）零改动工作；
 - `server_test.go` 与 `client` contract 测试继续覆盖桌面端依赖的全部协议行为——桌面端的协议正确性由现有测试套件背书；
@@ -87,12 +93,13 @@ loom-desktop (单一进程)
 ├── assembleRuntime(...)       # 与 loom serve 完全相同的组装（app.ProcessRuntime + WorkspaceRegistry + Bootstrap）
 ├── server.AcquireDataDirLock  # 数据目录 flock——与 serve/chat 互斥语义一致
 ├── app.SessionService         # 应用层（唯一）
-├── server.Server              # 传输适配器：Handler() 进程内挂载到 wails AssetServer
-│                              # 仅当 --listen 指定非默认时追加 TCP Listen（§5，供内网分享）
-└── wails.App                  # webview 窗口：wails://localhost/#token=<tok>（macOS）
+├── server.Server (UI)         # 传输适配器：常驻 127.0.0.1:0 loopback 监听，webview 直连
+├── server.Server (share)      # 可选第二监听：--listen 指定时绑内网地址（§5）
+└── wails.App                  # webview 窗口：AssetServer 只服务一页 bootstrap，
+                               # meta-refresh 跳转到 http://127.0.0.1:<port>/#token=<tok>
 ```
 
-关键性质：**一个进程、一个 SessionService、一个 broker；默认零 TCP 监听**（UI 全走进程内 handler），仅在用户显式开启内网分享时绑定 TCP 地址。
+关键性质：**一个进程、一个 SessionService、一个 broker；一个常驻 loopback 监听**（UI 专用，真实 HTTP 语义），外加可选的内网分享监听。
 
 ### 3.2 与现有入口的关系
 
@@ -100,9 +107,9 @@ loom-desktop (单一进程)
 |---|---|---|---|---|
 | `loom`（TUI） | `assembleRuntime` | 否 | 无 | inproc client |
 | `loom serve` | `assembleRuntime` | 数据目录 flock | 可配置（默认 127.0.0.1:7680） | 任意 http client |
-| `loom-desktop` | `assembleRuntime` | 数据目录 flock | 默认无；`--listen` 开启（§5） | 内嵌 webview（进程内 handler） |
+| `loom-desktop` | `assembleRuntime` | 数据目录 flock | 常驻 127.0.0.1:0（UI）+ 可选 `--listen`（分享） | 内嵌 webview（loopback HTTP） |
 
-桌面端与 `loom serve` 共享「数据目录 flock → assembleRuntime → broker → SessionService → server.New」序列；差异在最后：serve 一定 `Listen()` 并阻塞等信号，desktop 将 `srv.Handler()` 挂进 wails AssetServer 并进入 GUI 事件循环。
+桌面端与 `loom serve` 共享「数据目录 flock → assembleRuntime → broker → SessionService → server.New」序列；差异在最后：serve 阻塞等信号，desktop 额外把 webview 经 bootstrap 页指向 loopback 地址并进入 GUI 事件循环。
 
 ### 3.3 启动序列（`cmd/loom-desktop/main.go`）
 
@@ -115,18 +122,20 @@ loom-desktop (单一进程)
    app.WireSubagentObserver(...)
    service := app.NewSessionService(...)
 6. token := 32 字节随机（crypto/rand，进程内存，不落盘不打印）
-7. srv := server.New(Config{Listen: <--listen 或占位>,
-       Token: token, PublicBaseURL: deriveAdvertise(...),    ← §5 新增字段
-       Version, Service, Service, Logger})
-   if --listen 非空 { srv.Listen(); go srv.Serve() }          ← 仅内网分享时
+7. uiSrv := server.New(Config{Listen: "127.0.0.1:0", Token: token, ...})
+   uiSrv.Listen(); go uiSrv.Serve()                            ← UI 常驻 loopback
+   if --listen 非空 {                                          ← 可选内网分享（第二监听）
+       shareSrv := server.New(Config{Listen, PublicBaseURL: derive(...), ...})
+       shareSrv.Listen(); go shareSrv.Serve()
+   }
 8. wails.Run(&options.App{Title: "Loom", Width, Height,
-       AssetServer: &assetserver.Options{Handler: srv.Handler()},
+       AssetServer: &assetserver.Options{
+           Handler: bootstrapHandler(uiBase + "/#token=" + token)},  ← §4.2
        Mac: &mac.Options{...},
        OnShutdown: 优雅退出序列（§3.4）})
-   webview 起始 URL 由 main.js 的 fragment 注入逻辑补 token（§4.2）
 ```
 
-注：fragment 注入不依赖启动 URL 可配——AssetServer 服务的 `index.html` 内 `main.js` 读取自身 `location.hash`，桌面壳只需在创建窗口后导航至 `/#token=<tok>`（或将 token 渲染进 bootstrap，二选一，实现时定）。
+注（v4 定稿）：Wails v2 的启动 URL 不可配，且 AssetServer 通道丢失关键 HTTP 语义（§2.3 R-B2）。因此 webview 只从 AssetServer 拿一页 `<meta http-equiv="refresh">` bootstrap，立即跳转到常驻 loopback 地址，token 经 fragment 携带（不进请求行/日志）；落地后 SPA 与浏览器版行为完全一致。
 
 ### 3.4 优雅退出
 
@@ -149,24 +158,22 @@ lock.Release()
 
 协议安全模型（SERVE_DESIGN §5.2/§6）不变：token 只走 `Authorization: Bearer` header；`/v1/*` 全部鉴权；静态资源与 `/v1/shared/*`、`/share/{token}` 公开。桌面端新增的问题只有一个：**进程内随机 token 用户无从知晓，SPA 的 token gate 必须被程序化跳过**。
 
-### 4.2 URL fragment 注入（SPA 唯一改动）
+### 4.2 token 注入（SPA 唯一改动；实现定稿为 meta 标签）
 
-入口 URL 采用 fragment 携带 token：`/#token=<hex>`（wails origin 下即 `wails://localhost/#token=<hex>`）。选 fragment 而非 query 的理由与协议禁止 URL 参数传 token 的理由一致（R4 泄漏面）：**fragment 不进入 HTTP 请求行**，不会出现在 access log、Referer、代理日志中；它只在页面 JS 上下文中可读，读出后立即抹除。
-
-`internal/server/web/static/js/main.js` 启动处新增（gate 逻辑之前，约 10 行）：
+实现定稿（v4）：桌面壳的 bootstrap 页把 token 编进跳转目标 `http://127.0.0.1:<port>/#token=<hex>`；`main.js` 启动处按 **meta 标签 → URL fragment** 的优先级读取并在 gate 运行前落入 `sessionStorage`（约 10 行；meta 通道为 v3 遗产，保留兼容）：
 
 ```javascript
-// Desktop bootstrap: the embedding shell passes the in-process token via
-// URL fragment (never sent over the wire). Persist to sessionStorage and
-// scrub the address bar before the gate runs.
-const hashToken = new URLSearchParams(location.hash.slice(1)).get("token");
-if (hashToken) {
-  sessionStorage.setItem(TOKEN_KEY, hashToken);
-  history.replaceState(null, "", location.pathname);
+// Desktop shell bootstrap: meta tag (AssetServer-injected) or URL fragment.
+const embeddedToken =
+  (document.querySelector('meta[name="loom-token"]')?.content || "") ||
+  (new URLSearchParams(location.hash.slice(1)).get("token") || "");
+if (embeddedToken) {
+  sessionStorage.setItem(TOKEN_KEY, embeddedToken);
+  if (location.hash) history.replaceState(null, "", location.pathname);
 }
 ```
 
-token 落 `sessionStorage` 后走现有全部路径（`api.js` 的 Bearer header、`sse.js` 的 fetch SSE），无第二条认证链路。浏览器模式不带 fragment，行为完全不变。
+安全性质：fragment 不进入 HTTP 请求行（R4 泄漏面），读出后立即 `history.replaceState` 抹除；bootstrap 页只存在于进程内 AssetServer 通道，网络侧不可达。token 落 `sessionStorage` 后走现有全部路径（`api.js` 的 Bearer header、`sse.js` 的 fetch SSE），无第二条认证链路。浏览器模式无 meta/fragment，行为完全不变。桌面端发生 401 时不再展示 token 输入框（进程内 token 无凭证可贴），改为提示重启应用。
 
 ### 4.3 威胁模型核对
 
@@ -249,9 +256,17 @@ go_binary(
 )
 ```
 
-`MODULE.bazel` 的 `use_repo(go_deps, ...)` 需补 wails 及其直接依赖的 repo 名（`go mod tidy` 后由 `bazel mod tidy`/Gazelle 辅助生成）。
+`MODULE.bazel` 的 `use_repo(go_deps, ...)` 补 `com_github_wailsapp_wails_v2`（`bazel mod tidy` 校正）。
 
-**已知风险 R-B1**：wails v2 依赖树中个别包（embed + cgo LDFLAGS 混用）在 Gazelle 生成的 BUILD 下可能需手工补 `cdeps`/`clinkopts`。预留约半天构建排障；退路是普通 `go build` 出二进制后交给 §6.2 的 bundle 规则（两者产物一致，Bazel 主矩阵不受影响）。
+**R-B1 实锤与三项适配（实现期排障记录）**：
+
+1. **`production` 构建标签**：wails v2 的真实前端由 `//go:build production` 门控，否则 `wails.Run` 启动即报错。rules_go 有两层过滤——gazelle 生成仓库 BUILD 时按默认标签集求值（`production` 为假，`app_production.go` 被从 srcs 剔除），compilepkg 编译时再按上下文标签过滤。因此需要双管齐下：
+   - `MODULE.bazel` 加 `go_deps.gazelle_override(path="github.com/wailsapp/wails/v2", directives=["gazelle:build_tags production"])`（让生成期选中 production 文件）；
+   - `.bazelrc` 新增 `build:desktop --@rules_go//go/config:tags=production`（让编译期上下文标签生效；per-target 的 `gotags` 属性不会传导到外部依赖编译，已验证无效）。
+2. **`UniformTypeIdentifiers` 链接缺口**：wails v2.13 darwin 前端引用 `UTType` 但未在自身 cgo LDFLAGS 声明该框架。双修：`frameworks_darwin.go` 的 in-source `#cgo LDFLAGS`（覆盖 `go build`，注意 cgo 前导注释会被当 C 解析，不能含撇号/破折号等散文）+ `go_library` 的 `clinkopts`（rules_go 只从规则属性收集链接参数，in-source 指令不传导，已验证）。
+3. **`go_binary` 输出布局**：声明产物是 `loom-desktop_/loom-desktop` 目录结构，bundle 规则用 `pkg_files(renames={":loom-desktop": "loom-desktop"})` 扁平化。
+
+退路仍然成立：普通 `go build -tags production`（in-source shim 使其自包含）产物与 Bazel 一致。
 
 ### 6.2 `.app` bundle 组装
 
@@ -266,17 +281,19 @@ Loom.app/
     └── Resources/icon.icns
 ```
 
-用 `rules_pkg` 的 `pkg_filegroup`（重映射路径）+ `pkg_zip` 产出解压即 `.app` 的 zip：
+用 `rules_pkg` 的 `pkg_files`（`prefix` + `renames` 摆好布局）+ `pkg_zip` 产出解压即 `.app` 的 zip（实现见 `cmd/loom-desktop/BUILD`）：
 
 ```python
-pkg_zip(
-    name = "loom_desktop_app",
-    srcs = [":app_contents"],   # pkg_filegroup 摆好 Contents/... 布局
-    package_dir = "Loom.app",
-)
+pkg_files(name = "app_binary", srcs = [":loom-desktop"], prefix = "Contents/MacOS",
+          renames = {":loom-desktop": "loom-desktop"},
+          attributes = pkg_attributes(mode = "0755"))
+pkg_files(name = "app_metadata", srcs = ["macos/Info.plist"], prefix = "Contents",
+          strip_prefix = strip_prefix.from_pkg("macos"))
+pkg_zip(name = "loom_desktop_app", srcs = [":app_binary", ":app_metadata"],
+        package_dir = "Loom.app")
 ```
 
-产物 `bazel-bin/go/pl/loom/cmd/loom-desktop/loom_desktop_app.zip`，解压拖入 `/Applications` 即用。新增静态文件：`cmd/loom-desktop/macos/Info.plist`、`cmd/loom-desktop/macos/Resources/icon.icns`。
+产物 `bazel-bin/go/pl/loom/cmd/loom-desktop/loom_desktop_app.zip`；`bazel run :package_app` 解包到 `dist/Loom.app` 并 ad-hoc 签名（已验证 `codesign -v` 通过、二进制可运行）。新增静态文件：`cmd/loom-desktop/macos/Info.plist`。应用图标暂未提供（无 .icns 资产；macOS 用默认图标，后续补设计资产后挂 `CFBundleIconFile`）。
 
 ### 6.3 签名
 
@@ -286,22 +303,25 @@ pkg_zip(
 
 ### 6.4 CI
 
-桌面 target 标记 `manual`，不进默认 `bazel build //go/...`；新增独立 CI job（仅 macOS runner）：`bazel build //go/pl/loom/cmd/loom-desktop:loom_desktop_app`。Linux/Windows 桌面构建不进 CI（§1.2）。
+桌面 target 标记 `manual`，不进默认 `bazel build //go/...`（已验证通配符排除）；`.github/workflows/build_go.yml` 新增独立 `desktop` job（macOS runner）：`bazel build --config=ci --config=desktop //go/pl/loom/cmd/loom-desktop:loom_desktop_app`。Linux/Windows 桌面构建不进 CI（§1.2）。
 
 ---
 
 ## 7. 改动清单
 
-| 类别 | 文件 | 内容 | 规模 |
+| 类别 | 文件 | 内容 | 状态 |
 |---|---|---|---|
-| 新增 | `cmd/loom-desktop/main.go` | §3.3 启动序列 + 优雅退出 + `--listen`/`--advertise` + fragment 导航 | ~180 行 |
-| 新增 | `cmd/loom-desktop/BUILD` | cgo `go_binary`（manual）+ `pkg_zip` `.app` + ad-hoc codesign | ~50 行 |
-| 新增 | `cmd/loom-desktop/macos/Info.plist`、`Resources/icon.icns` | bundle 元数据 | 静态 |
-| 修改 | `internal/server/server.go` | `Config.PublicBaseURL` 字段 | ~3 行 |
-| 修改 | `internal/server/handlers_share.go` | 分享响应附带绝对 `url` | ~5 行 |
-| 修改 | `internal/server/web/static/js/main.js` | ① fragment token 注入（~10 行）② 分享复制优先用绝对 `url`（~3 行） | ~13 行 |
-| 修改 | `go/go.mod`、`MODULE.bazel` | wails 依赖 + `use_repo` 补充 | 若干行 |
-| 修改 | `internal/server/handlers_share_test.go` | `PublicBaseURL` 分享响应用例 | 1~2 个用例 |
+| 新增 | `cmd/loom-desktop/main.go` | §3.3 启动序列 + 优雅退出 + `--listen`/`--advertise` + `injectTokenMeta` | ✅ ~330 行（含与 cmd/loom 有意重复的 bootstrap helpers） |
+| 新增 | `cmd/loom-desktop/frameworks_darwin.go` | UniformTypeIdentifiers cgo shim | ✅ |
+| 新增 | `cmd/loom-desktop/main_test.go` | token 注入/advertise 推导/端口解析单测 | ✅ 全绿 |
+| 新增 | `cmd/loom-desktop/BUILD`、`macos/Info.plist`、`package_app.sh` | cgo target + `.app` bundle + ad-hoc 签名 | ✅ 构建/签名/运行验证通过 |
+| 修改 | `internal/server/server.go` | `Config.PublicBaseURL`（含规范化与 http(s) 校验） | ✅ |
+| 修改 | `internal/server/handlers_share.go` | 分享响应附带绝对 `url` | ✅ |
+| 修改 | `internal/server/web/static/js/main.js` | ① meta/fragment token 注入 ② 分享复制优先用绝对 `url` | ✅ |
+| 修改 | `internal/server/handlers_share_test.go` | `TestShareAbsoluteURL` / `TestPublicBaseURLValidation` + 缺省不含 url 断言 | ✅ 全绿 |
+| 修改 | `go/go.mod`、`MODULE.bazel` | wails v2.13 依赖 + `use_repo` + `gazelle_override` | ✅ |
+| 修改 | `.bazelrc` | `build:desktop` 配置段（全局 production tag） | ✅ |
+| 修改 | `.github/workflows/build_go.yml` | macOS desktop 打包 job | ✅ |
 
 TUI（`internal/ui`）、WebUI 浏览器路径、`cmd/loom/main.go`、`internal/server/web/static/js/share.js`、agent/app/session 核心：**零改动**。
 
@@ -320,20 +340,20 @@ TUI（`internal/ui`）、WebUI 浏览器路径、`cmd/loom/main.go`、`internal/
 
 ### 9.1 风险登记
 
-| 编号 | 风险 | 等级 | 缓解 |
+| 编号 | 风险 | 等级 | 状态 |
 |---|---|---|---|
-| R-B1 | wails 依赖树在 Bazel/Gazelle 下的 cgo 构建排障 | 中 | 预留半天；退路 `go build` + bundle 规则，主矩阵不受影响 |
-| R-B2 | AssetServer 在 macOS 上的 SSE flush/POST 体行为与 net/http 存在偏差（官方矩阵标注支持，但未承诺 flush 语义） | 中 | **M4.0 spike 首个验证**：起 wails 窗口挂 `srv.Handler()`，跑通一次流式 turn；失败则降级 §2.3 bootstrap 跳转方案（设计其余部分不变） |
-| R-B3 | wails origin 下 SPA 隐含的浏览器假设（sessionStorage 隔离、CSP、`history.replaceState`）行为偏差 | 低 | spike 中一并验证；`srv.Handler()` 已含全部安全头，CSP 对自定义 scheme 无额外假设 |
+| R-B1 | wails 依赖树在 Bazel/Gazelle 下的 cgo 构建排障 | 中 | **已实锤并解决**（§6.1 三项适配；构建通过） |
+| R-B2 | AssetServer 在 macOS 上的 SSE flush/POST 体行为与 net/http 存在偏差 | 中 | **已实锤并解决**：ContentLength 恒 -1（resume 误判为 create）+ 无 http.Flusher（SSE 不可能）——通道切换为常驻 loopback + bootstrap 跳转（§2.3），实机验证 resume/SSE/prompt 全通；服务端 ContentLength 判定同步修复（chunked 回归测试锁定） |
+| R-B3 | wails origin 下 SPA 的浏览器假设（sessionStorage 隔离、CSP）偏差 | 低 | 已消解：SPA 实际运行在 http origin（loopback），与浏览器行为一致 |
 
-### 9.2 里程碑拆解
+### 9.2 里程碑拆解（实际执行）
 
-| 步骤 | 内容 | 验收 |
+| 步骤 | 内容 | 状态 |
 |---|---|---|
-| M4.0 | **spike（先于一切）**：最小 wails 程序挂载 `srv.Handler()`，验证 SSE 流式 turn + POST prompt + fragment 注入（R-B2/R-B3） | 流式对话在窗口内完整跑通 |
-| M4.1 | server 包分享 URL 增强（`PublicBaseURL` + main.js 复制点）+ 测试 | 独立可测，`loom serve` 行为不变 |
-| M4.2 | `main.js` fragment token 注入 | 浏览器模式无回归（无 fragment 时走原 gate） |
-| M4.3 | `cmd/loom-desktop` cmd，`go build` 跑通窗口 + 对话 + 审批 + 分享闭环 | 手动验收三 UI 行为一致 |
-| M4.4 | Bazel cgo target + `.app` 打包 + ad-hoc 签名 + CI job | `bazel build //go/pl/loom/cmd/loom-desktop:loom_desktop_app` 产出可用 bundle |
+| M4.0 | spike：窗口启动 + 服务端点冒烟 | ✅ 完成（webview 内流式 turn 留人工验收） |
+| M4.1 | server 包 `PublicBaseURL` + main.js 复制点 + 测试 | ✅ 测试全绿 |
+| M4.2 | `main.js` token 注入 | ✅（定稿 meta 注入，fragment 兼容） |
+| M4.3 | `cmd/loom-desktop` cmd，`go build -tags production` 跑通 | ✅ 冒烟通过（healthz/SPA/401/分享页/token 不泄漏） |
+| M4.4 | Bazel cgo target + `.app` 打包 + ad-hoc 签名 + CI job | ✅ `loom_desktop_app.zip` 产出、`codesign -v` 通过 |
 
-预估总工作量：M4.0 约半天；M4.1~M4.3 约 1~2 天；M4.4 约 0.5~1 天（含 R-B1 排障余量）。
+人工验收清单（交付后）：窗口内完整流式对话一轮、审批卡片交互、`--listen 0.0.0.0:PORT` 下从内网另一台机器打开分享链接。

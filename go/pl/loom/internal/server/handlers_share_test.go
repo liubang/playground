@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
@@ -78,6 +79,11 @@ func TestShareLinkLifecycle(t *testing.T) {
 	}
 	if path, _ := share["path"].(string); path != "/share/"+token {
 		t.Fatalf("share path = %v, want /share/<token>", share["path"])
+	}
+	// No PublicBaseURL configured: the absolute url field must be absent so
+	// clients fall back to their own origin (docs/DESKTOP_DESIGN.md §5.2).
+	if _, ok := share["url"]; ok {
+		t.Fatalf("share response unexpectedly carries url: %v", share["url"])
 	}
 	_, again := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/share", "")
 	if again["token"] != token {
@@ -145,6 +151,82 @@ func TestShareLinkLifecycle(t *testing.T) {
 	_, reshared := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/share", "")
 	if reshared["token"] == token {
 		t.Fatalf("re-share after revoke returned the revoked token %q", token)
+	}
+}
+
+// TestResumeSessionUnknownContentLength: the create-vs-resume decision must
+// not depend on ContentLength — chunked clients (and in-process mounts like
+// the Wails AssetServer) send ContentLength=-1 with a perfectly good body.
+// Regression guard for docs/DESKTOP_DESIGN.md §9 R-B2.
+func TestResumeSessionUnknownContentLength(t *testing.T) {
+	ts, _ := newTestServer(t, fakes.NewFakeModel())
+	id := createTestSession(t, ts)
+
+	req, err := http.NewRequest("POST", ts.URL+"/v1/sessions", strings.NewReader(`{"resume":"`+id+`"}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.ContentLength = -1 // forces chunked transfer encoding
+	authed(t, req)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("POST resume (chunked): %v", err)
+	}
+	defer resp.Body.Close()
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["session_id"] != id {
+		t.Fatalf("chunked resume returned session_id=%v, want the resumed %s (a new session means the body was ignored)", body["session_id"], id)
+	}
+}
+
+// TestShareAbsoluteURL locks the PublicBaseURL contract
+// (docs/DESKTOP_DESIGN.md §5.2): when an external base URL is configured,
+// share responses carry an absolute "url" so clients on a non-HTTP origin
+// (the desktop webview) can hand out working links.
+func TestShareAbsoluteURL(t *testing.T) {
+	svc := newTestServiceWithRecorder(t, fakes.NewFakeModel(), nil)
+	srv, err := New(Config{
+		Token:   testToken,
+		Version: "test",
+		Service: svc,
+		// Trailing slash: New normalizes it away.
+		PublicBaseURL: "http://192.168.1.5:7680/",
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv.http.Handler)
+	t.Cleanup(ts.Close)
+	id := createTestSession(t, ts)
+
+	status, share := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/share", "")
+	if status != http.StatusOK {
+		t.Fatalf("POST share status = %d, want 200 (%v)", status, share)
+	}
+	token, _ := share["token"].(string)
+	want := "http://192.168.1.5:7680/share/" + token
+	if share["url"] != want {
+		t.Fatalf("share url = %v, want %q", share["url"], want)
+	}
+	if share["path"] != "/share/"+token {
+		t.Fatalf("share path = %v, want /share/<token>", share["path"])
+	}
+}
+
+// TestPublicBaseURLValidation: only http(s) base URLs are accepted —
+// anything else would mint broken or surprising share links.
+func TestPublicBaseURLValidation(t *testing.T) {
+	svc := newTestServiceWithRecorder(t, fakes.NewFakeModel(), nil)
+	for _, base := range []string{"ftp://x", "192.168.1.5:7680", "//x"} {
+		if _, err := New(Config{
+			Token: testToken, Version: "test", Service: svc, PublicBaseURL: base,
+		}); err == nil {
+			t.Fatalf("New(PublicBaseURL=%q): want validation error", base)
+		}
 	}
 }
 

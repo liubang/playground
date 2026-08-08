@@ -60,6 +60,13 @@ type Config struct {
 	// AllowOrigin, when non-empty, is echoed as Access-Control-Allow-Origin;
 	// empty denies all cross-origin requests (the default).
 	AllowOrigin string
+	// PublicBaseURL, when non-empty, is the externally reachable base URL of
+	// this server (e.g. "http://192.168.1.5:7680" for LAN sharing). Share-link
+	// responses then carry an absolute "url" field so clients embedding the
+	// SPA in a non-HTTP origin (the desktop webview) can hand out working
+	// links (docs/DESKTOP_DESIGN.md §5.2). Must include the scheme; normalized
+	// (trailing slashes stripped) by New.
+	PublicBaseURL string
 	// NoWeb disables the embedded SPA (pure API mode, docs/WEB_DESIGN.md §7.1).
 	NoWeb bool
 	// Version is the build version reported by /v1/meta/version.
@@ -109,6 +116,12 @@ func New(cfg Config) (*Server, error) {
 	}
 	if cfg.Listen == "" {
 		cfg.Listen = "127.0.0.1:7680"
+	}
+	if cfg.PublicBaseURL != "" {
+		cfg.PublicBaseURL = strings.TrimRight(cfg.PublicBaseURL, "/")
+		if !strings.HasPrefix(cfg.PublicBaseURL, "http://") && !strings.HasPrefix(cfg.PublicBaseURL, "https://") {
+			return nil, errors.New("server: PublicBaseURL must start with http:// or https://")
+		}
 	}
 	logger := cfg.Logger
 	if logger == nil {

@@ -18,9 +18,11 @@
 package server
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -137,9 +139,17 @@ func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	var req createSessionRequest
 	// An empty body means "new session"; a body may carry a resume target.
-	if r.ContentLength > 0 {
-		if err := decodeBody(w, r, &req); err != nil {
-			writeError(w, err)
+	// ContentLength is not a reliable emptiness signal on every transport —
+	// chunked/HTTP2 clients and in-process mounts (the Wails AssetServer)
+	// report -1 — so decide on the actual bytes.
+	if body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes)); err != nil {
+		writeError(w, invalidInput("invalid request body: "+err.Error()))
+		return
+	} else if len(bytes.TrimSpace(body)) > 0 {
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			writeError(w, invalidInput("invalid request body: "+err.Error()))
 			return
 		}
 	}
