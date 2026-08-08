@@ -12,6 +12,7 @@ import { Statusbar } from "./components/statusbar.js";
 import { CtxGauge } from "./components/ctxgauge.js";
 import { Picker } from "./components/picker.js";
 import { SettingsPanel } from "./components/settings.js";
+import { initTooltips } from "./components/tooltip.js";
 import { shortId, estTranscriptTokens, randomId, copyText } from "./format.js";
 import { icon, hydrateIcons } from "./icons.js";
 
@@ -34,6 +35,38 @@ const embeddedToken =
 // In the desktop shell the token is the process's random in-process one —
 // no user-pasteable credential exists, so the token gate is pointless there.
 const isDesktopShell = embeddedToken !== "";
+// 桌面端隐藏了原生标题栏（mac.TitleBarHidden），红绿灯悬浮在内容之上；
+// body.is-desktop 用于开启让位/拖动区样式（见 app.css 末尾）。
+if (isDesktopShell) {
+  document.body.classList.add("is-desktop");
+  // 窗口拖动：Wails 的 --wails-draggable 在其前端 runtime（/wails/runtime.js）
+  // 里实现，但桌面端 SPA 跑在 loopback origin（SSE 需要真实 HTTP，见
+  // DESKTOP_DESIGN.md §2.3），加载不到该文件，这里自行实现等价逻辑。
+  // 原生链路：external message handler 注册在 WKUserContentController 上
+  // （与 origin 无关），收到 "drag" 即 performWindowDragWithEvent:，
+  // mouseEvent 由 NSEvent 本地监听器跟踪（WailsContext.m）。
+  const wailsDrag = window.webkit?.messageHandlers?.external;
+  if (wailsDrag) {
+    let dragArmed = false;
+    window.addEventListener("mousedown", (e) => {
+      // 仅左键单击命中 drag 区域时武装；双击保留给系统（窗口缩放）
+      dragArmed = e.buttons === 1 && e.detail === 1 &&
+        getComputedStyle(e.target).getPropertyValue("--wails-draggable").trim() === "drag";
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (dragArmed && e.buttons === 1) {
+        dragArmed = false;
+        wailsDrag.postMessage("drag");
+      }
+    });
+    window.addEventListener("mouseup", () => { dragArmed = false; });
+  }
+  // 失焦时 macOS 会把红绿灯绘成非激活态（透明标题栏下呈黑色，由 AppKit
+  // 绘制，web 层改不了按钮本身）；同步给顶行加淡化样式，呈现统一的原生
+  // 非激活观感。
+  window.addEventListener("blur", () => document.body.classList.add("is-inactive"));
+  window.addEventListener("focus", () => document.body.classList.remove("is-inactive"));
+}
 if (embeddedToken) {
   sessionStorage.setItem(TOKEN_KEY, embeddedToken);
   if (location.hash) history.replaceState(null, "", location.pathname);
@@ -42,16 +75,21 @@ if (embeddedToken) {
 // ---------- theme ----------
 function initTheme() {
   // 默认深色（用户偏好）；仅当显式存了 "light" 才用浅色。
-  const saved = sessionStorage.getItem(THEME_KEY);
-  const dark = saved !== "light";
-  document.documentElement.dataset.theme = dark ? "dark" : "light";
-  $("hdr-theme").innerHTML = icon(dark ? "moon" : "sun");
-  $("hdr-theme").onclick = () => {
-    const nowDark = document.documentElement.dataset.theme === "dark";
-    document.documentElement.dataset.theme = nowDark ? "light" : "dark";
-    sessionStorage.setItem(THEME_KEY, nowDark ? "light" : "dark");
-    $("hdr-theme").innerHTML = icon(nowDark ? "sun" : "moon");
-  };
+const saved = sessionStorage.getItem(THEME_KEY);
+const dark = saved !== "light";
+document.documentElement.dataset.theme = dark ? "dark" : "light";
+// 图标固定为对比度圆（sun 在浅色模式下与设置齿轮撞脸）；当前模式的
+// 指示由动态 title 承担（tooltip.js 会接管为自绘提示）
+const syncTitle = () => {
+  $("hdr-theme").title = document.documentElement.dataset.theme === "dark" ? "切换到浅色模式" : "切换到深色模式";
+};
+syncTitle();
+$("hdr-theme").onclick = () => {
+const nowDark = document.documentElement.dataset.theme === "dark";
+document.documentElement.dataset.theme = nowDark ? "light" : "dark";
+sessionStorage.setItem(THEME_KEY, nowDark ? "light" : "dark");
+syncTitle();
+};
 }
 
 // ---------- sidebar 折叠 ----------
@@ -629,9 +667,10 @@ async function resync(reason) {
 // ---------- boot ----------
 
 async function boot() {
-  hydrateIcons(); // index.html 中 data-icon 占位的静态按钮
-  initTheme();
-  initSidebarToggle();
+hydrateIcons(); // index.html 中 data-icon 占位的静态按钮
+initTheme();
+initSidebarToggle();
+initTooltips(); // 全局接管 title 属性 → 主题化悬浮提示
 
   app.api = createApi({ getToken: () => app.token, onUnauthorized });
 

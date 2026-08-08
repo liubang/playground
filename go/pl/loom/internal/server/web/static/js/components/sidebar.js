@@ -110,10 +110,10 @@ export class Sidebar {
     node.appendChild(el("span", "ws-count", String(wsSessions.length)));
     // 新建入口只在活跃视图显示（归档视图是只读历史）。
     if (!this.archivedView) {
-      const newBtn = el("button", "ws-new");
-      newBtn.innerHTML = icon("plus");
-      newBtn.type = "button";
-      newBtn.title = "在该工作区新建会话";
+const newBtn = el("button", "ws-new");
+newBtn.innerHTML = icon("square-plus");
+newBtn.type = "button";
+newBtn.title = "在该工作区新建会话";
       newBtn.onclick = (e) => {
         e.stopPropagation();
         this.onNewSession(wsId);

@@ -96,6 +96,13 @@ func (c ServerConfig) allows(tool string) bool {
 	return true
 }
 
+// ToolInfo is one exposed tool's qualified name and its description as
+// advertised by the server's tools/list response.
+type ToolInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
 // ServerStatus is the read-only projection of one configured MCP server,
 // backing frontend listings (/mcp). A server that failed to start or to
 // answer tools/list is reported with Connected=false and the failure
@@ -106,8 +113,8 @@ type ServerStatus struct {
 	// Error carries the startup/tools-list failure when Connected is false.
 	Error string `json:"error,omitempty"`
 	// Tools lists the exposed (filter-passing, collision-surviving)
-	// qualified tool names when Connected is true.
-	Tools []string `json:"tools,omitempty"`
+	// tools with their qualified names when Connected is true.
+	Tools []ToolInfo `json:"tools,omitempty"`
 }
 
 // serverEntry is one configured server's live state.
@@ -121,9 +128,10 @@ type serverEntry struct {
 func (e *serverEntry) status(name string) ServerStatus {
 	s := ServerStatus{Name: name, Connected: e.client != nil, Error: e.err}
 	for _, t := range e.tools {
-		s.Tools = append(s.Tools, t.Definition().Name)
+		def := t.Definition()
+		s.Tools = append(s.Tools, ToolInfo{Name: def.Name, Description: def.Description})
 	}
-	sort.Strings(s.Tools)
+	sort.Slice(s.Tools, func(i, j int) bool { return s.Tools[i].Name < s.Tools[j].Name })
 	return s
 }
 
