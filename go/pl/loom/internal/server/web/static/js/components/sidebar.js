@@ -179,11 +179,12 @@ newBtn.title = "在该工作区新建会话";
     const item = el("button", "sess-item" + (s.id === this.activeId ? " is-active" : "") + (isChild ? " is-child" : ""));
     item.dataset.id = s.id;
     item.title = (s.title || shortId(s.id)) + (s.model_name ? ` · ${s.model_name}` : "");
-    if (isChild) {
-      const cm = el("span", "child-mark");
-      cm.innerHTML = icon("turn-down");
-      item.appendChild(cm);
-    }
+if (isChild) {
+const cm = el("span", "child-mark");
+cm.innerHTML = icon("robot");
+cm.title = "子智能体会话";
+item.appendChild(cm);
+}
     item.appendChild(el("span", "t", s.title || shortId(s.id)));
     item.appendChild(el("span", "rt", relTime(s.created_at)));
     // 悬停操作：归档/取消归档 + 删除（不占常态宽度，hover 时替换时间戳）
