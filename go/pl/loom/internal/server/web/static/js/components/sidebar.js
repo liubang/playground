@@ -185,7 +185,7 @@ export class Sidebar {
       item.appendChild(cm);
     }
     item.appendChild(el("span", "t", s.title || shortId(s.id)));
-    item.appendChild(el("span", "rt", relTime(s.updated_at)));
+    item.appendChild(el("span", "rt", relTime(s.created_at)));
     // 悬停操作：归档/取消归档 + 删除（不占常态宽度，hover 时替换时间戳）
     const acts = el("span", "acts");
     const archBtn = el("button", "act");
