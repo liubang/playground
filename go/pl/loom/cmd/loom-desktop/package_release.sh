@@ -53,9 +53,12 @@ trap 'rm -rf "${TMP}"' EXIT
 # toolchain only covers the host arch (the cross platform builds cgo
 # packages with CGO_ENABLED=0 and fails). The `production` tag mirrors
 # --config=desktop.
+# -s -w strips the symbol table and DWARF (~28% smaller); release
+# diagnostics rely on the file logger, so debuggability is unaffected.
+# Dev builds via :package_app keep their symbols.
 for arch in arm64 amd64; do
   echo "package_release: building darwin_${arch} ..." 1>&2
-  (cd "${WS}/go" && GOOS=darwin GOARCH="${arch}" CGO_ENABLED=1 go build -tags production -o "${TMP}/loom-desktop-${arch}" ./pl/loom/cmd/loom-desktop) 1>&2
+  (cd "${WS}/go" && GOOS=darwin GOARCH="${arch}" CGO_ENABLED=1 go build -tags production -ldflags="-s -w" -o "${TMP}/loom-desktop-${arch}" ./pl/loom/cmd/loom-desktop) 1>&2
 done
 lipo -create -output "${TMP}/loom-desktop" "${TMP}/loom-desktop-arm64" "${TMP}/loom-desktop-amd64"
 lipo -info "${TMP}/loom-desktop" 1>&2
