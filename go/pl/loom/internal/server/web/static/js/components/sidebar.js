@@ -46,6 +46,22 @@ export class Sidebar {
     }
   }
 
+  // focusWorkspace 把最近活跃的工作区组设为视觉焦点：展开它、收起其他组。
+  // 启动时调用一次（desktop 每次启动都是新的页面会话，折叠态不带入）。
+  // wsId 为空（无历史会话）时不做任何事，保持全部展开。
+  focusWorkspace(wsId) {
+    if (!wsId) return;
+    let found = false;
+    for (const w of this.workspaces) {
+      if (w.id === wsId) found = true;
+      else this.collapsed.add(w.id);
+    }
+    if (!found) return;
+    this.collapsed.delete(wsId);
+    this._saveCollapsed();
+    this.render(this._lastSessions, this.workspaces);
+  }
+
   // render(sessions, workspaces)：sessions 携带 workspace_id；workspaces 为
   // [{id, name, root_path, ...}]（newest first）。顶层按工作区分组渲染。
   render(sessions, workspaces) {

@@ -691,6 +691,7 @@ async function boot() {
   };
   // 添加工作区（目录浏览弹窗）
   $("ws-add").onclick = () => { openDirPicker(); };
+  $("empty-add-ws").onclick = () => { openDirPicker(); };
   $("dir-up").onclick = () => { if (dirPicker.parent) browseDir(dirPicker.parent); };
   $("dir-cancel").onclick = () => { $("dir-modal").hidden = true; };
   $("dir-select").onclick = () => { confirmDirPicker(); };
@@ -801,13 +802,27 @@ async function boot() {
   }
 }
 
-// 首入空态落地页：无会话或最新会话不可达时的归宿（picker 显示默认模型）。
+// 首入落地页：不自动打开任何会话（桌面端启动应是廉价且可预期的）。
+// 零会话时给出首次引导（添加工作区 CTA）；有会话时提示从侧栏选择。
 function showLandingState() {
+  const hasSessions = app.sessionList.length > 0;
+  $("empty-hint").textContent = hasSessions
+    ? "Pick a session from the sidebar, or just start typing."
+    : "No sessions yet — add a workspace, or just start typing.";
+  $("empty-add-ws").hidden = hasSessions;
   $("empty-state").hidden = false;
   $("hdr-session").hidden = true;
   $("hdr-share").hidden = true;
   app.curModelRef = app.defaultModelRef;
   syncPickerLabels();
+}
+
+// 最近活跃工作区：会话列表按更新时间排序（newest first），取第一项的归属。
+// 新建会话（直接打字/回车）的默认落点，避免落到进程默认工作区（桌面端
+// 通常是 $HOME）。
+function recentWorkspaceId() {
+  const s = app.sessionList.find((s) => s.workspace_id);
+  return s ? s.workspace_id : "";
 }
 
 async function enter() {
@@ -825,23 +840,11 @@ async function enter() {
     showApp();
     await loadWorkspaces();
     await refreshSessions();
-    // 首入落地态：最近更新的会话；无会话则空态
-    const { sessions } = await app.api.listSessions(1, "", false, "all");
-    if (sessions && sessions.length > 0) {
-      try {
-        await openSession(sessions[0].id);
-      } catch (e) {
-        // 最新会话打不开（如刚被另一客户端删除）不是连接/鉴权问题——
-        // 落到空态而不是误进 token gate。
-        if (e.status === 401) throw e;
-        console.warn("open latest session:", e);
-        toast("最近的会话打开失败: " + e.message);
-        app.sessionId = null;
-        showLandingState();
-      }
-    } else {
-      showLandingState();
-    }
+    // 首入落地页：不自动打开会话（自动恢复要拉起整个 controller 运行时，
+    // 且多工作区场景下「最新会话」大概率不是用户当下想做的）；侧栏定位到
+    // 最近活跃工作区，由用户点选继续。
+    showLandingState();
+    app.sidebar.focusWorkspace(recentWorkspaceId());
   } catch (e) {
     if (e.status !== 401) showGate("connect failed: " + e.message);
   }
@@ -861,7 +864,7 @@ async function submitPrompt(text) {
   }
   app.lastSubmit = { text, key };
   try {
-    if (!app.sessionId) await newSession("");
+    if (!app.sessionId) await newSession(recentWorkspaceId());
     await app.api.submitPrompt(app.sessionId, text, key);
     app.composer.clearDraft();
     app.lastSubmit = null;

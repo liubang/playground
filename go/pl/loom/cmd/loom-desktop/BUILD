@@ -58,6 +58,7 @@ go_library(
         "//go/pl/loom/internal/logging:logging",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
         "//go/pl/loom/internal/server:server",
+        "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/version",
         "@com_github_wailsapp_wails_v2//:wails",
         "@com_github_wailsapp_wails_v2//pkg/options",
@@ -83,6 +84,10 @@ go_test(
     srcs = ["main_test.go"],
     embed = [":loom_desktop_lib"],
     tags = ["manual"],
+    deps = [
+        "//go/pl/loom/internal/config:config_lib",
+        "//go/pl/loom/internal/runtimeevent:runtimeevent",
+    ],
 )
 
 # --- .app bundle (docs/DESKTOP_DESIGN.md §6.2) ---
