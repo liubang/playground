@@ -47,7 +47,7 @@ func TestLoadImageFromPath(t *testing.T) {
 	dir := t.TempDir()
 	content := []byte("\x89PNG\r\n\x1a\n")
 	imgPath := filepath.Join(dir, "test.png")
-	if err := os.WriteFile(imgPath, content, 0644); err != nil {
+	if err := os.WriteFile(imgPath, content, 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -88,7 +88,7 @@ func TestLoadImageFromPath(t *testing.T) {
 func TestLoadImageFromPathJPEGExtension(t *testing.T) {
 	dir := t.TempDir()
 	jpgPath := filepath.Join(dir, "photo.jpeg")
-	if err := os.WriteFile(jpgPath, []byte("fake jpeg"), 0644); err != nil {
+	if err := os.WriteFile(jpgPath, []byte("fake jpeg"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	img, err := LoadImageFromPath(jpgPath, 1024*1024)
