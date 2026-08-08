@@ -13,12 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# package_release.sh — build a universal2 (arm64 + amd64) Loom.app and wrap
-# it in a distributable DMG (dist/Loom-<version>.dmg).
+# package_release.sh — build the four release artifacts into dist/:
 #
-# Steps: cross-build the binary for both architectures, lipo them together,
-# swap the result into the bundle produced by :loom_desktop_app (metadata +
-# icon stay Bazel-built), ad-hoc sign, then pack with hdiutil.
+#   Loom-<version>-macos-arm64.dmg    desktop app, Apple silicon
+#   Loom-<version>-macos-x86_64.dmg   desktop app, Intel
+#   loom_<deb-version>_amd64.deb      CLI (loom chat/run/serve), Linux x86_64
+#   loom_<deb-version>_arm64.deb      CLI, Linux arm64
+#
+# macOS bundles take their metadata + icon from the Bazel-built
+# :loom_desktop_app zip; only the Mach-O is swapped per arch. All binaries
+# are cross-compiled with the Go toolchain and stripped (-s -w).
+#
+# The Linux GUI desktop is out of scope here (needs webkit2gtk + a Linux
+# build environment, docs/DESKTOP_DESIGN.md §8.4); the debs ship the CLI.
 #
 # Usage: bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_release
 set -euo pipefail
@@ -43,46 +50,86 @@ fi
 
 WS="${BUILD_WORKSPACE_DIRECTORY:-$PWD}"
 cd "${WS}"
+DEST="${WS}/dist"
+mkdir -p "${DEST}"
 
 TMP="$(mktemp -d /tmp/loom_release_XXXXXX)"
 trap 'rm -rf "${TMP}"' EXIT
 
-# --- universal binary ---
-# cgo cross-compilation goes through the Go toolchain: Xcode clang accepts
-# -arch for both slices with the same SDK, while Bazel's auto-detected cc
-# toolchain only covers the host arch (the cross platform builds cgo
-# packages with CGO_ENABLED=0 and fails). The `production` tag mirrors
-# --config=desktop.
-# -s -w strips the symbol table and DWARF (~28% smaller); release
-# diagnostics rely on the file logger, so debuggability is unaffected.
-# Dev builds via :package_app keep their symbols.
+# go_build <output> <goos> <goarch> <package> [extra build args...]
+go_build() {
+  local out="$1" goos="$2" goarch="$3" pkg="$4"
+  shift 4
+  (cd "${WS}/go" && GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build -ldflags="-s -w" -o "${out}" "$@" "${pkg}") 1>&2
+}
+
+# --- macOS desktop (per-arch .app + DMG) ---
+# The desktop app needs cgo (wails); Xcode clang accepts -arch for both
+# slices with the same SDK, so plain GOARCH cross-compilation works.
+# (Bazel's auto-detected cc toolchain only covers the host arch, which is
+# why these builds go through the Go toolchain; the `production` tag
+# mirrors --config=desktop.)
 for arch in arm64 amd64; do
-  echo "package_release: building darwin_${arch} ..." 1>&2
+  [[ "${arch}" == "amd64" ]] && label="x86_64" || label="arm64"
+  echo "package_release: building desktop darwin_${arch} ..." 1>&2
   (cd "${WS}/go" && GOOS=darwin GOARCH="${arch}" CGO_ENABLED=1 go build -tags production -ldflags="-s -w" -o "${TMP}/loom-desktop-${arch}" ./pl/loom/cmd/loom-desktop) 1>&2
+
+  APP="${TMP}/app-${arch}/Loom.app"
+  mkdir -p "${TMP}/app-${arch}"
+  unzip -q "${ZIP}" -d "${TMP}/app-${arch}"
+  cp "${TMP}/loom-desktop-${arch}" "${APP}/Contents/MacOS/loom-desktop"
+  chmod +x "${APP}/Contents/MacOS/loom-desktop"
+  codesign --force --sign - "${APP}"
+  touch "${APP}"
+
+  VERSION="$(plutil -extract CFBundleVersion raw -o - "${APP}/Contents/Info.plist")"
+  DMG="${DEST}/Loom-${VERSION}-macos-${label}.dmg"
+  rm -f "${DMG}"
+  mkdir -p "${TMP}/dmg-${arch}"
+  cp -R "${APP}" "${TMP}/dmg-${arch}/"
+  ln -s /Applications "${TMP}/dmg-${arch}/Applications"
+  hdiutil create -volname "Loom" -srcfolder "${TMP}/dmg-${arch}" -ov -format UDZO "${DMG}" 1>&2
+  echo "packaged: ${DMG}"
 done
-lipo -create -output "${TMP}/loom-desktop" "${TMP}/loom-desktop-arm64" "${TMP}/loom-desktop-amd64"
-lipo -info "${TMP}/loom-desktop" 1>&2
 
-# --- bundle ---
-DEST="${WS}/dist"
-APP="${DEST}/Loom.app"
-rm -rf "${APP}"
-mkdir -p "${DEST}"
-unzip -q "${ZIP}" -d "${DEST}"
-cp "${TMP}/loom-desktop" "${APP}/Contents/MacOS/loom-desktop"
-chmod +x "${APP}/Contents/MacOS/loom-desktop"
-codesign --force --sign - "${APP}"
-touch "${APP}"
+# --- Linux CLI (.deb) ---
+# Debian versions cannot contain "-" without a revision: 0.2.0-dev ->
+# 0.2.0~dev-1 (~ sorts before the release, so 0.2.0~dev-1 < 0.2.0-1).
+DEB_VERSION="${VERSION//-/~}-1"
 
-VERSION="$(plutil -extract CFBundleVersion raw -o - "${APP}/Contents/Info.plist")"
+make_deb() { # <deb-arch> <binary>
+  local arch="$1" bin="$2"
+  local root="${TMP}/deb-${arch}"
+  mkdir -p "${root}/data/usr/bin" "${root}/control"
+  cp "${bin}" "${root}/data/usr/bin/loom"
+  chmod 755 "${root}/data/usr/bin/loom"
+  local size_kb
+  size_kb="$(du -sk "${root}/data" | cut -f1)"
+  cat > "${root}/control/control" <<EOF
+Package: loom
+Version: ${DEB_VERSION}
+Section: utils
+Priority: optional
+Architecture: ${arch}
+Installed-Size: ${size_kb}
+Maintainer: liubang <it.liubang@gmail.com>
+Description: Loom - AI coding agent (CLI)
+ Terminal AI coding agent: interactive chat, headless runs, and an
+ HTTP/SSE server mode (loom serve) hosting the web UI.
+EOF
+  (cd "${root}/data" && tar -czf "${root}/data.tar.gz" .)
+  (cd "${root}/control" && tar -czf "${root}/control.tar.gz" .)
+  echo "2.0" > "${root}/debian-binary"
+  local out="${DEST}/loom_${DEB_VERSION}_${arch}.deb"
+  rm -f "${out}"
+  # rcS: macOS ar auto-invokes ranlib, which discards the non-Mach-O
+  # members and leaves only a __.SYMDEF entry; S skips the symbol table.
+  ar rcS "${out}" "${root}/debian-binary" "${root}/control.tar.gz" "${root}/data.tar.gz"
+  echo "packaged: ${out}"
+}
 
-# --- DMG ---
-DMG="${DEST}/Loom-${VERSION}.dmg"
-rm -f "${DMG}"
-mkdir -p "${TMP}/dmg"
-cp -R "${APP}" "${TMP}/dmg/"
-ln -s /Applications "${TMP}/dmg/Applications"
-hdiutil create -volname "Loom" -srcfolder "${TMP}/dmg" -ov -format UDZO "${DMG}" 1>&2
-
-echo "packaged: ${APP} (universal2)"
-echo "packaged: ${DMG}"
+for arch in amd64 arm64; do
+  echo "package_release: building CLI linux_${arch} ..." 1>&2
+  go_build "${TMP}/loom-linux-${arch}" linux "${arch}" ./pl/loom/cmd/loom
+  make_deb "${arch}" "${TMP}/loom-linux-${arch}"
+done
