@@ -227,6 +227,50 @@ func TestProviderStreamRequestAdaptationAndAuthorization(t *testing.T) {
 	}
 }
 
+// Some compatible gateways close the connection right after the final
+// finish_reason chunk without sending [DONE]; the completed reply must
+// survive instead of being reported as a provider error (REVIEW H9).
+func TestStreamChatCompletionsToleratesMissingDoneAfterFinishReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"}}]}\n\n")
+		fmt.Fprint(w, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+	}))
+	defer server.Close()
+
+	provider := newTestProvider(t, server, server.Client(), 0)
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "gpt-test",
+		MaxTokens: 128,
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "question")},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	defer stream.Close()
+
+	events := collectEvents(t, stream)
+	for _, evt := range events {
+		if evt.Kind == domain.ModelEventStreamError {
+			t.Fatalf("unexpected stream error: %+v", evt)
+		}
+	}
+	assertEventKinds(
+		t, events,
+		domain.ModelEventResponseStart,
+		domain.ModelEventTextStart,
+		domain.ModelEventTextDelta,
+		domain.ModelEventTextEnd,
+		domain.ModelEventResponseEnd,
+	)
+	if got := events[2].TextDelta; got != "done" {
+		t.Fatalf("unexpected text delta: %q", got)
+	}
+	if got := events[4].StopReason; got != domain.StopEndTurn {
+		t.Fatalf("unexpected stop reason: %s", got)
+	}
+}
+
 func TestProviderStreamResponsesTextContract(t *testing.T) {
 	t.Parallel()
 

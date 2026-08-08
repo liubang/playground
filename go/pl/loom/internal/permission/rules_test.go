@@ -404,6 +404,123 @@ func TestSessionAllowNeverOverridesFileDeny(t *testing.T) {
 	}
 }
 
+// TestChainSharedExecContextEquivalence is the regression test for REVIEW
+// M33: the chain parses a call's exec shape once and hands it down to
+// every decider through the contextDecider fast path. The shared-context
+// verdicts must be identical to each decider parsing standalone (the old
+// multi-parse behavior), across every call shape, and the assembled chain
+// must actually use the fast path for all built-in deciders.
+func TestChainSharedExecContextEquivalence(t *testing.T) {
+	dir := t.TempDir()
+	writeRulesFile(t, dir, "rules.json", `{"rules":[
+		{"argv_prefix":["go","test"],"decision":"allow","justification":"tests are safe"}
+	]}`)
+	set, errs := LoadRuleSets(dir, "", LoadOptions{})
+	if len(errs) != 0 {
+		t.Fatalf("errs = %v", errs)
+	}
+	session := NewSessionRules()
+	if _, ok := session.RememberRunCmd([]string{"go", "build", "./..."}, domain.ExecGrant{}); !ok {
+		t.Fatal("go build must be rememberable")
+	}
+
+	policy := DefaultPolicy()
+	policy.Rules = set
+	policy.Session = session
+	chain := policy.Decider(ModeUnlessTrusted)
+
+	// Every built-in decider must keep the single-parse fast path.
+	for _, d := range chain {
+		if _, ok := d.(contextDecider); !ok {
+			t.Fatalf("built-in decider %T lost the contextDecider fast path", d)
+		}
+	}
+
+	webFetchCall := domain.PreparedCall{
+		Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "web_fetch", Arguments: json.RawMessage(`{"url":"https://example.com/x"}`)},
+		Risk: domain.R2,
+	}
+	editCall := domain.PreparedCall{
+		Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "edit", Arguments: json.RawMessage(`{"path":"a.go"}`)},
+		Risk: domain.R2,
+	}
+	calls := map[string]domain.PreparedCall{
+		"rule match":    runCmdCall(t, "go", "test", "./..."),
+		"danger screen": runCmdCall(t, "dd", "if=/dev/zero", "of=/tmp/x"),
+		"session match": runCmdCall(t, "go", "build", "./pl/..."),
+		"baseline ask":  runCmdCall(t, "npm", "install"),
+		"web_fetch":     webFetchCall,
+		"plain tool":    editCall,
+	}
+	// The standalone sequence re-derives the verdict with each decider
+	// parsing for itself — the pre-M33 behavior.
+	standalone := []Decider{
+		RuleDecider{Rules: set},
+		DangerDecider{Mode: ModeUnlessTrusted},
+		SessionDecider{Session: session},
+		BaselineDecider{Mode: ModeUnlessTrusted, AutoApproveR1: true, AskR2: true, DenyR4: true},
+	}
+	for name, call := range calls {
+		want := domain.Verdict{Decision: domain.DecisionDeny, Source: SourceBaseline, Reason: "policy chain produced no verdict (fail closed)"}
+		for _, d := range standalone {
+			if v := d.Evaluate(call); v != nil {
+				want = *v
+				break
+			}
+		}
+		got := chain.Evaluate(call)
+		if got.Decision != want.Decision || got.Source != want.Source || got.Reason != want.Reason ||
+			!execGrantsEqual(got.Grant, want.Grant) {
+			t.Fatalf("%s: chain = %+v, want %+v (standalone per-decider evaluation)", name, got, want)
+		}
+	}
+}
+
+// TestSessionMatchLongestPrefixWins is the regression test for REVIEW M32:
+// DeriveRunCmdPrefix derives the broad prefix ["go"] from
+// ["go", "-x", "build", ...] and the narrow prefix ["go", "test"] from
+// ["go", "test", ...], so both coexist in the session store. The narrow
+// memory must win for `go test` regardless of insertion order — otherwise
+// it inherits the broad memory's wider grant and never fires.
+func TestSessionMatchLongestPrefixWins(t *testing.T) {
+	network := domain.ExecGrant{NetworkFull: true}
+	zero := domain.ExecGrant{}
+
+	remember := func(s *SessionRules, argv []string, grant domain.ExecGrant, wantLen int) {
+		t.Helper()
+		prefix, ok := s.RememberRunCmd(argv, grant)
+		if !ok || len(prefix) != wantLen {
+			t.Fatalf("RememberRunCmd(%v) = %v, %v; want a %d-token prefix", argv, prefix, ok, wantLen)
+		}
+	}
+
+	// The review's scenario: broad rule remembered FIRST, narrow second.
+	s := NewSessionRules()
+	remember(s, []string{"go", "-x", "build", "./..."}, network, 1) // ["go"] with network grant
+	remember(s, []string{"go", "test", "./..."}, zero, 2)           // ["go", "test"] with zero grant
+	grant, ok := s.Match([]string{"go", "test", "./pl/..."})
+	if !ok || grant.NetworkFull {
+		t.Fatalf("go test must hit the narrow rule's zero grant, got %+v (ok=%v): the broad [go] memory shadowed it", grant, ok)
+	}
+	grant, ok = s.Match([]string{"go", "build", "./..."})
+	if !ok || !grant.NetworkFull {
+		t.Fatalf("go build must keep the broad rule's network grant, got %+v (ok=%v)", grant, ok)
+	}
+
+	// Insertion order must not matter: narrow first, broad second.
+	s2 := NewSessionRules()
+	remember(s2, []string{"go", "test", "./..."}, zero, 2)
+	remember(s2, []string{"go", "-x", "build", "./..."}, network, 1)
+	grant, ok = s2.Match([]string{"go", "test", "./pl/..."})
+	if !ok || grant.NetworkFull {
+		t.Fatalf("go test must hit the narrow rule's zero grant, got %+v (ok=%v)", grant, ok)
+	}
+	grant, ok = s2.Match([]string{"go", "vet", "./..."})
+	if !ok || !grant.NetworkFull {
+		t.Fatalf("go vet must fall back to the broad rule's network grant, got %+v (ok=%v)", grant, ok)
+	}
+}
+
 func TestSessionForgetRunCmd(t *testing.T) {
 	s := NewSessionRules()
 	prefix, ok := s.RememberRunCmd([]string{"go", "test", "./..."}, domain.ExecGrant{})
@@ -462,5 +579,3 @@ func TestAttachRulesBuiltinSwitch(t *testing.T) {
 		t.Fatalf("Builtin=false should disable builtin allows, got %v", d)
 	}
 }
-
-

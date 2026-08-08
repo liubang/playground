@@ -171,6 +171,17 @@ func (s *Server) handleBrowseDirectories(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// The browser is confined to $HOME (see the comment above): the request
+	// path itself must resolve inside it, not just the returned parent link.
+	homeResolved := home
+	if h, herr := filepath.EvalSymlinks(home); herr == nil {
+		homeResolved = h
+	}
+	if resolved != homeResolved && !strings.HasPrefix(resolved, homeResolved+string(filepath.Separator)) {
+		writeError(w, invalidInput("path is outside the home directory"))
+		return
+	}
+
 	entries, err := os.ReadDir(resolved)
 	if err != nil {
 		writeError(w, invalidInput("cannot read directory"))
@@ -188,9 +199,9 @@ func (s *Server) handleBrowseDirectories(w http.ResponseWriter, r *http.Request)
 
 	// Parent is browseable unless it would climb above $HOME.
 	parent := ""
-	if resolved != home {
+	if resolved != homeResolved {
 		p := filepath.Dir(resolved)
-		if p != resolved && (p == home || strings.HasPrefix(p, home+string(filepath.Separator))) {
+		if p != resolved && (p == homeResolved || strings.HasPrefix(p, homeResolved+string(filepath.Separator))) {
 			parent = p
 		}
 	}

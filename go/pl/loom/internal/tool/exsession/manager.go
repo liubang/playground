@@ -37,14 +37,13 @@ const DefaultIdleTTL = 30 * time.Minute
 
 const reapInterval = 30 * time.Second
 
-// sessionEntry tracks one live or recently-finished session. The zero
-// commit fields latch the artifact refs once the process exits and the
-// staged output is committed.
+// sessionEntry tracks one live or recently-finished session. The commit
+// fields latch the artifact refs once the process exits and the staged
+// output is committed.
 type sessionEntry struct {
 	id      string
 	session *process.Session
 	argv    string
-	cwd     string
 
 	lastTouch time.Time
 
@@ -68,18 +67,15 @@ func (e *sessionEntry) commitArtifacts(ctx context.Context) error {
 	if e.session.Running() {
 		return nil
 	}
-	e.committed = true
-	if e.stdoutStage != nil {
-		defer e.stdoutStage.Abort()
-	}
-	if e.stderrStage != nil {
-		defer e.stderrStage.Abort()
-	}
 	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if e.stdoutStage != nil && e.stdoutStage.TotalBytes() > 0 {
 		ref, err := e.stdoutStage.Commit(commitCtx)
 		if err != nil {
+			// Leave the staging area and the committed flag untouched so a
+			// later drain can retry — latching early here used to destroy the
+			// staged output via the deferred Abort and lose it silently
+			// (REVIEW H13).
 			return fmt.Errorf("commit stdout artifact: %w", err)
 		}
 		e.stdoutRef = &ref
@@ -90,6 +86,13 @@ func (e *sessionEntry) commitArtifacts(ctx context.Context) error {
 			return fmt.Errorf("commit stderr artifact: %w", err)
 		}
 		e.stderrRef = &ref
+	}
+	e.committed = true
+	if e.stdoutStage != nil {
+		defer e.stdoutStage.Abort()
+	}
+	if e.stderrStage != nil {
+		defer e.stderrStage.Abort()
 	}
 	return nil
 }
@@ -129,8 +132,8 @@ func NewManager(runner *process.Runner, artifacts domain.ArtifactStore, idleTTL 
 }
 
 // Start launches a new session under the granted sandbox mode and registers
-// it. displayArgv/displayCwd feed approval and result rendering.
-func (m *Manager) Start(ctx context.Context, spec process.CommandSpec, grant process.Grant, displayArgv, displayCwd string) (*sessionEntry, error) {
+// it. displayArgv feeds approval and result rendering.
+func (m *Manager) Start(ctx context.Context, spec process.CommandSpec, grant process.Grant, displayArgv string) (*sessionEntry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -165,7 +168,6 @@ func (m *Manager) Start(ctx context.Context, spec process.CommandSpec, grant pro
 		id:          newSessionID(),
 		session:     session,
 		argv:        displayArgv,
-		cwd:         displayCwd,
 		lastTouch:   time.Now(),
 		stdoutStage: stdoutStage,
 		stderrStage: stderrStage,

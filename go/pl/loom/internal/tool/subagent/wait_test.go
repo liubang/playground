@@ -64,8 +64,8 @@ func TestWaitSubagentPrepareValidation(t *testing.T) {
 	}
 
 	for name, raw := range map[string]string{
-		"missing session ID":  `{}`,
-		"unknown field":       `{"child_session_id":"sess_01","extra":true}`,
+		"missing session ID": `{}`,
+		"unknown field":      `{"child_session_id":"sess_01","extra":true}`,
 		"empty session ID":   `{"child_session_id":""}`,
 	} {
 		_, err := tool.Prepare(context.Background(), domain.ToolCall{

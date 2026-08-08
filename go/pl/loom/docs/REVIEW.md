@@ -242,3 +242,132 @@
 - **方案**：① `Run` 新增 `turnStartedAt`（NewRun/RestoreRun/ResetUsageForNewTurn 锚定），`touchWallTime()` 在 `CheckBudget`/新增 `CheckRunaway()`/token 记账处折叠已逝窗口；② `Loop` 新增 `CostInputUSDPerMTok`/`CostOutputUSDPerMTok`，token 记账（抽取 `accountUsage`，callModel 与 summarizeForCompaction 共用）按费率折算 `CostUSD`；③ 费率从 tracing 配置（`cost_input_usd_per_mtok` 等）接入 controller 与 headless main，未配置时成本记账关闭。
 - **复现用例**：`agent/run_test.go: TestRunWallTimeCountsTowardBudget`（FakeClock 推进 2min 触发硬 breach，重置窗口后清除）、`TestLoopExecuteCostBudgetExhausted`（2M tokens × $1/MTok 超过 $1 限额 → budget_exhausted）。
 - **验证**：`go test ./internal/agent/ ./internal/app/ ./cmd/...` 全绿。
+
+---
+
+## 六、第二轮 Review（2026-08-08）
+
+> 本轮由多代理并行深读全部 13 个内部包 + `go vet` + `deadcode` 静态分析交叉验证。编号沿用既有体系（H/M/R/A），新增 D（死代码）类。状态列随修复推进更新。
+
+### 高严重度 Bug
+
+| #   | 位置                                            | 问题                                                                                                                                                                          | 状态      |
+| --- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| H8  | `tool/gittools/log.go:125,151-155`              | `git_log` 的 path 用 workspace 相对路径而非 repo 相对路径（`resolveRepoPath` 结果被丢弃），repo_root≠工作区根时 path 筛选必失效；diff/blame 均正确，唯独 log 错                | ✅ 已修复 |
+| H9  | `model/openai/provider.go:978-987`              | chat completions 路径 EOF 一律报 `StopProviderError`；不发 `[DONE]` 的兼容网关在 `finishSeen` 后关连接会丢弃已完成结果（responses 路径 993-996 已有优雅收尾，chat 漏了同样保护） | ✅ 已修复 |
+| H10 | `tool/subagent/delegate.go:245`、`wait.go:88`、`resume.go:106` | delegate/wait/resume 无 HMAC 签名（裸 `sha256(canonical)[:16]`），`DelegateTaskTool.Prepare` 缺 `call.Validate()` 与名称复核，Execute 不核验 Definition/Risk | ✅ 已修复 |
+| H11 | `server/handlers_workspaces.go:146-203`         | browse 只对返回的 parent 链接做 home 限制，请求的 `path` 本身可列任意绝对路径（`?path=/etc` 正常返回），与文档化安全模型不符                                                    | ✅ 已修复 |
+| H12 | `mcp/tool.go:70-80`                             | MCP `readOnlyHint` → `CapFSRead`（R1）被基线自动批准，但 readOnly 不承诺无网络 → 搜索/抓取类 MCP 工具形成无审批网络出口（loom 自己的 web_fetch 走 R3+域名规则）               | ✅ 已修复 |
+| H13 | `tool/exsession/manager.go:71-94`               | `commitArtifacts` 先置 `committed=true` 再 Commit；失败时 staging 已被 defer 的 Abort 销毁 → 会话输出永久丢失且无信号，error 被两个调用点 `_ =` 吞掉                            | ✅ 已修复 |
+| H14 | `session/sqlite_store.go:1128`                  | `GetOrCreateShare` SELECT-then-INSERT + `ON CONFLICT DO UPDATE` 跨进程竞态：并发/重入时先调用方拿到已被覆盖的失效 token                                                          | ✅ 已修复 |
+| H15 | `agent/run.go:1488,1487-1507,1511-1515`；`runaway.go:155-164` | 终止缺陷×4：①`maxOutputStops` 声称"连续"截断但从不重置（实际全程累计）；②goal wrap-up 回合内 `StopMaxOutput` 存在无限循环窗口；③未知 stop reason 无条件回 PhasePreparing 可无界重试；④stall 提醒 `stallTurns` 归零后 level 恒为 1 被去重挡住，实际只触发一次 | ✅ 已修复 |
+
+### 中严重度 Bug
+
+| #   | 位置                                        | 问题                                                                                                                                                     | 状态      |
+| --- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| M18 | `client/http.go:330-377`                    | `pumpSSE` 对 `server.resync`/`server.draining` 只丢帧不终止（与注释承诺不符），调用方无法区分重连与不再重连 → 服务端关机期重连风暴；`scanner.Err()` 从不检查 | ✅ 已修复 |
+| M19 | `client/http.go:203-215,217`                | `State()` 在 getter 里做同步网络调用且任何错误都映射成 `Booting`（死会话显示"启动中"）；`Done()` 与 inproc 语义不一致（服务端会话结束不触发）              | ✅ 已修复 |
+| M20 | `app/session_service.go:981-1061`           | 订阅路径不检查 `closing`，`wg.Add` 撞上 `Shutdown` 的 `wg.Wait` 属 WaitGroup 误用（可 panic）                                                             | ✅ 已修复 |
+| M21 | `app/controller.go:1131-1152`               | steer 与 turn 结束 relay 之间 TOCTOU：prompt 滞留到下次提交才注入，UI 却已提示 "Queued"                                                                   | ✅ 已修复 |
+| M22 | `app/bootstrap.go:263-329`                  | `buildSubagentRegistry`/`buildCoderRegistry`/`subagent.NewManager` 失败路径不 Close 已创建的 `sessionManager`（相邻路径都 Close，不一致）                  | ✅ 已修复 |
+| M23 | `mcp/client.go:161-176,211-221`             | 协议版本协商结果解析后丢弃（后续请求始终发自家版本）；`tools/list` 未处理 `nextCursor` 分页，工具多的服务端被静默截断                                      | ✅ 已修复 |
+| M24 | `server/server.go:267-295`                  | 中间件注释承诺的 panic recovery 未实现；CORS 无 preflight 处理，`--allow-origin` 对浏览器实际不可用（OPTIONS 被 401）                                       | ✅ 已修复 |
+| M25 | `tool/builtin/view_image.go:127-137`        | 先整读再限尺寸：对大文件调 view_image 会把进程内存打爆（`pathInfo.Info.Size()` 已拿到，读前即可拒绝）；`edit/common.go:231` 同模式                          | ✅ 已修复 |
+| M26 | `tool/gittools/common.go:571-606`           | git 全部命令在沙箱外执行，虽禁 hooks/ext-diff，但 repo 级 `.git/config` 的 `core.fsMonitor` 等仍可注入命令（恶意仓库跑 git_status 即中招）                 | ✅ 已修复 |
+| M27 | `server/errors.go:125-147`                  | `Contains(msg, "invalid")` 过宽：任何 message 碰巧含 "invalid" 的内部错误被错映射为 400                                                                   | ✅ 已修复 |
+| M28 | `agent/run.go:1689-1694`                    | stall watchdog 只补偿 approval 等待，不补偿 ask_user 提问等待——用户思考超 StallTimeout 健康 run 被判 Failed                                                 | ✅ 已修复 |
+| M29 | `session/rewind.go`、`session/sqlite_store.go` | `RewindSession` 不清理 `artifact_refs`（GC 永久泄漏）和 `memory_jobs`（rewind 后不再重新提取）；`DeleteSession` 非事务三条 DELETE                       | ✅ 已修复 |
+| M30 | `model/anthropic/provider.go:276-285,364`   | `appendBlock` 把块并入上一条同 role 消息：`tool_result` 出现在 assistant 首块时会并入前一条 user 消息，wire 上 tool_result 先于 tool_use → API 400          | ✅ 已修复 |
+| M31 | `trace/otel.go:116-118,236`                 | `otel.SetErrorHandler` 进程级全局设置多次 Setup 互相覆盖；所有 provider 的 `gen_ai.system` 硬编码 `"openai"`（Anthropic 直连也被标记 openai）               | ✅ 已修复 |
+| M32 | `permission/rules.go:531-540`               | 会话记忆规则先插入先匹配而非最长前缀优先：更具体的授权（如 `go test`）被宽泛规则（`go`）遮蔽并继承其更宽 grant                                               | ✅ 已修复 |
+| M33 | `permission/decider.go:37-228`              | 一次策略评估重复解析 argv 多达 4 次（每次 = JSON unmarshal + shell 解包），应在 Chain 入口解析一次透传                                                      | ✅ 已修复 |
+| M34 | `model/stream/stream.go:70-81`              | panic 恢复路径中 emit 可能永久阻塞（recover 先于 Close 执行，events 缓冲满且消费者流失时 `close(s.events)` 永不执行）                                       | ↩️ 修复后被作者回退（保留阻塞 emit 语义，见修复记录） |
+| M35 | `config/init.go:62-289`                     | init 模板缺整个 `memory:`/`image:`/`logging:`/`workspaces:` 节及 `subagent.max_output_tokens`，与 schema 严重漂移，用户无法从模板发现这些功能               | ✅ 已修复 |
+| M36 | `cmd/loom/main.go:593-604`                  | headless 路径缺 provider nil 检查（controller.runTurn 有显式检查并注释"fail loudly"），配置异常时直接 nil panic                                            | ✅ 已修复 |
+
+### 死代码（deadcode + 人工 grep 双重确认）
+
+| #   | 位置                                  | 内容                                                                                                                                          | 状态      |
+| --- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| D1  | `domain/lifecycle.go:178-186`         | `CanTerminate` 无条件返回 true，前面遍历是死逻辑（R9 遗留，本轮决策处理）                                                                        | ✅ 已删除 |
+| D2  | `domain/ids.go:103-104`               | `ParseTurnID`/`ParseMessageID` 无调用方                                                                                                        | ✅ 已删除 |
+| D3  | `domain/lifecycle.go:62-66`           | 4 个 `SuspensionReason` 常量零引用；`Suspend()` 不校验 reason 合法性                                                                            | ✅ 已删除 |
+| D4  | `domain/interfaces.go:162`            | `ModelEventProviderWarning` 定义后两个 provider 从未发射                                                                                         | ⏭️ 保留（stream_hooks 有容错 case + 协议文档记录） |
+| D5  | `tool/edit/common.go:333-368`         | `splitFileLines`/`joinFileLines`/`fileLine` 整段死代码                                                                                           | ✅ 已删除 |
+| D6  | `tool/gittools/common.go:253,418,434` | 死函数 `sameSortedStrings`；`buildRevParseVerifyArgs` 与 `buildRefVerifyArgs` 函数体完全相同                                                     | ✅ 已删除/合并 |
+| D7  | `tool/builtin/view_image.go:42`       | 死常量 `maxImagePath`                                                                                                                           | ✅ 已删除 |
+| D8  | `model/openai/provider.go:1362,1365,1389` | `sawArgumentEvents`/`doneSeen` 写后未读；`toolCallDelta.Type` 从不校验                                                                      | ✅ 已删除 |
+| D9  | `client/http.go:132,333-375`          | `mapWireError` 的 `status` 死参数；SSE `id` 变量解析后靠 `_ = id` 压制编译器                                                                    | ✅ 已删除 |
+| D10 | `process/types.go:42,52-54`           | `Isolation.Unsafe()` 零调用、`isolationMode.String()` 不可达——`unsafe: true` 标记从未生效                                                        | ✅ 已删除 |
+| D11 | `app/workspace_registry.go:91,100`    | `NewSingletonWorkspaceService`/`newSingletonRegistry` 不可达                                                                                     | ⏭️ 保留（10 处测试调用方，测试组装工具） |
+| D12 | `tool/exsession/manager.go:47`；`common.go:255-302` | `sessionEntry.cwd` 写后从不读；`drainSession` 的 error 返回恒为 nil（调用方死分支）                                                  | ✅ 已修复 |
+| D13 | `ui/update.go:2328`；`picker.go:203`  | `submitPromptCmd`、`pickerWindow` 无调用者（后者是 R8 去重产物，已被 `Finder.windowRows` 取代）                                                  | ✅ 已删除 |
+| D14 | `ui/update.go:79,2335,1213`           | `promptSubmittedMsg.imagePaths` 死字段链（收集→透传→从不读取）                                                                                   | ✅ 已删除 |
+| D15 | `render/linear.go`、`render/jsonl.go` | 两个渲染器生产零引用（`loom run` 直接 fmt.Print），deadcode 确认整体不可达；决策：保留为演示组件 or 删除                                          | ⏭️ 决策保留（演示组件） |
+| D16 | `agent/run.go:2386`；`stream_hooks.go:333` | `lastAssistantText`/`aggregateStream` 仅测试引用；前者与 `subagent/delegate.go:536` 逐行重复                                                | ✅ 已收敛（导出 agent.LastAssistantText，aggregateStream 移入测试文件） |
+| D17 | `app/controller.go:2557`；`ui/blocks.go:851`；`render/linear.go:41` | 孤儿注释×2、`indent` 死字段                                                                                                                | ✅ 已删除（另删零引用的 Controller.getState） |
+
+### 冗余（新增，编号续 R10）
+
+| #   | 位置                              | 问题                                                                                                                              | 状态      |
+| --- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| R11 | `app/bootstrap.go:524-706`        | 三份复制的工具注册清单（主 agent/researcher/coder 共享 12 个只读工具逐字三遍），新增只读工具要改三处                                  | ✅ 已处理 |
+| R12 | `config/resolve.go:1047` ↔ `mcp/manager.go:34` | `config.MCPServer` 与 `mcp.ServerConfig` 10 字段完全相同，`process_runtime.go:269-283` 逐字段手工拷贝；应类型别名          | ✅ 已处理 |
+| R13 | `agent/ask.go:168`、`plan.go:306`、`goal.go:338` | 三个 `xxxError` 函数逐行相同                                                                                              | ✅ 已处理 |
+| R14 | `server/handlers_artifacts.go:34-62` ↔ `handlers_share.go:95-126` | artifact 服务块逐行重复（id/size 解析 + ArtifactRef + 响应头 + 写字节）                                          | ✅ 已处理 |
+| R15 | `client/http.go:115,312`          | 错误响应解码块在 `do()` 与 `SubscribeEvents` 重复，可抽 `decodeWireError`                                                           | ✅ 已处理 |
+
+> 备注：R3（baseTool 骨架 10 份复制 + errorResult 3 变体漂移）、R5（provider 间重复）、R6（controller RPC 样板，本轮复核为 14 个方法约 250 行）本轮复核仍然成立，继续挂账。
+
+### 优化空间（记录备查，不阻塞修复）
+
+| #   | 位置                        | 问题                                                                                                                     |
+| --- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| O1  | `prompt/prompt.go:259-627`  | 每个模型请求都重做全部磁盘/进程 I/O（规则文件、目录遍历、fork 两个 git 进程），静态内容可按 mtime/turn 缓存               |
+| O2  | `session/sqlite_store.go`   | `ListCheckpoints` 为 80 字符 label 反序列化全部 checkpoint 完整 transcript；回放 `rebuildIndexes` O(n²)                   |
+| O3  | `agent/compact.go:260-270`  | `maskRange` Level-2b 每轮全量 `estTokens` → O(n²)；可维护增量估算                                                          |
+| O4  | `agent/stream_hooks.go:150,182` | 流式聚合 `+=` 拼字符串 O(n²)，改 `strings.Builder`                                                                     |
+| O5  | `anthropic/provider.go:350-357,487-489` | 工具 Arguments/InputSchema 双重 JSON 编解码，可直接内嵌 `json.RawMessage`                                      |
+| O6  | `ui/view.go:1554`           | `truncateDisplayWidth` 逐 rune `lipgloss.Width(string(r))`（热路径每 rune 一次分配+全宽计算）                              |
+| O7  | `process/runner.go:417-449` | 每个命令对可执行文件做两遍完整 sha256，第一遍结果可复用                                                                    |
+| O8  | `ui/update.go:2039-2060`    | `mergeSnapshot`/`hasEquivalentBlock` O(n²)，可按块 ID/内容哈希建索引                                                       |
+
+### 第二轮修复记录（2026-08-08）
+
+> **回归验证**：`go build ./...`、`go vet ./...`、`gofmt -l .` 干净；`go test ./...` 全绿；`go test -race ./internal/app/ ./internal/session/ ./internal/client/ ./internal/agent/ ./internal/model/...` 全绿；`bazel test //go/pl/loom/...` 通过；真实模型 e2e（`LOOM_E2E_LLM=1`，本机 ~/.loom/config.yaml）通过。deadcode 复扫：本轮目标项全部消除，残余命中均为测试工具/演示组件（见 D4/D11/D15）。
+
+- **H8**：`validateGitLogArgs` 改为返回 readPaths（含 path 绑定），Execute 复核绑定后用 `pathInfo.RepoRelative` 组装 pathspec，与 git_blame/git_diff 对齐。回归：`gittools_test.go: TestGitLogToolPathFilterWithSubdirRepoRoot`。
+- **H9**：`finishChatReadError` 增加 `EOF && state.finishSeen` 分支走 `finishChatDone` 优雅收尾（镜像 responses 路径）。回归：`openai/provider_test.go: TestStreamChatCompletionsToleratesMissingDoneAfterFinishReason`。
+- **H10**：subagent 新增 `sign.go`——每工具实例随机 HMAC key，签名指纹含 CallID/ToolName/canonical args/Risk；三个工具 Prepare 补 `call.Validate()`+名称复核并签名，Execute 先 `verifyPreparedCall`（名称/来源/Risk/HMAC）。e2e 中手工拼装的 PreparedCall 改为走 Prepare（签名协议生效的直接证据）。回归：`delegate_test.go: TestDelegateExecuteRejectsTamperedPreparedCall`（篡改 Risk/伪造 hash/跨实例签名均拒绝）。
+- **H11**：browse 对请求 path 本身做 home 限制（`EvalSymlinks` 后的 homeResolved 前缀校验），parent 链接同步用 homeResolved。回归：`server_test.go: TestBrowseDirectories` 新增 `/etc` 拒绝断言，临时目录改建于 $HOME 内。
+- **H12**：`capabilitiesForSpec` 的 ReadOnlyHint 分支叠加 `CapNetworkConnect` → R3 需审批（MCP 规范 openWorldHint 默认 true 且 wire 类型无法区分未设置）。回归：`mcp/tool_test.go: TestCapabilitiesForSpecReadOnlyIsNotAutoApprovable` 等两个。
+- **H13**：`commitArtifacts` 仅在全部 Commit 成功后置 `committed`，失败保留 staging 供重试；`drainSession` 签名去掉恒 nil 的 error，commit 失败写进输出 note；顺带删除 `sessionEntry.cwd` 死字段与冗余 nil 判断（D12）。
+- **H14**：`GetOrCreateShare` 改 `INSERT ... ON CONFLICT DO NOTHING` + 回读，并发创建都拿到持久化 token。回归：`sqlite_store_test.go: TestSQLiteStoreConcurrentShareCreationReturnsPersistedToken`（-race 通过）。
+- **H15**：①callModel 在非 `StopMaxOutput` 时重置 `maxOutputStops`；②`determineCompletion` 的 StopMaxOutput 分支改为任何 `WrapUpPending != ""` 都着陆（`wrapUpOutcome` 补 goal_tokens→Succeeded），消除 goal wrap-up 无限循环窗口；③未知 stop reason 新增 `unknownStopStreak` 上限（`maxUnknownStopRetries=3`）后 OutcomeFailed；④stall 提醒不再清零 `stallTurns`，level 递增实现周期性提醒且文案反映真实停滞数。回归：`TestLoopMaxOutputStreakResetsOnNormalTurn`、`TestLoopGoalWrapUpTurnOverflowStillLands`、`TestLoopUnknownStopReasonRetriesBounded`、`TestRunawayStallReminderFiresPeriodically`。
+- **M18/M19/D9/R15**（client）：`pumpSSE` 复用 `model/sse.Parser`（无空格前缀兼容、EOF flush 末帧、读错误 slog 可见）；`server.resync` 终止流、`server.draining` 额外关闭 `Done()`（关机不再重连）；`State()` 增加 lastState 缓存，404→Closed，瞬时错误保持最后已知状态；删 `mapWireError` 死参数与 `_ = id` hack；抽 `decodeWireError`。回归：client_test.go 新增 7 个用例（resync/draining/紧前缀/读错误/状态映射/wire 错误/非信封错误）。
+- **M20**：订阅入口在 `s.mu` 临界区内检查 `closing` 并完成 `wg.Add`，关闭后返回 `ErrDraining`。回归：`TestSessionServiceSubscribeAfterShutdownDrains`、`TestSessionServiceSubscribeShutdownRace`（-race）。
+- **M21**：steer 入队后在 `c.mu` 下复查 state，已 Idle 则立即按新 prompt relay；relay 逻辑抽 `relayPendingSteers` 共用。回归：`TestControllerSteerLandingAfterTurnEndRelaysImmediately`（修复前稳定复现滞留）。
+- **M22**：`NewWorkspaceBootstrap` 改具名返回值 + defer 统一清理链，删除 7 处手工 Close。回归：`TestNewWorkspaceBootstrapFailureClosesSessionManager`（goroutine 计数观测 reaper 回收）。
+- **M23**：initialize 协商的旧版本协议存入 transport 并在后续请求的 `MCP-Protocol-Version` 回送；`ListTools` 支持 nextCursor 分页。回归：`TestHTTPClientAdoptsNegotiatedProtocolVersion`、`TestHTTPClientListToolsPagination`。
+- **M24/M27/R14**：withMiddleware 补 panic recovery（500 + slog，不泄漏 panic 值）与 CORS preflight（合法 Origin 的 OPTIONS 204 + Allow-Methods/Headers）；`mapError` 新增 `domain.ErrInvalidInput` sentinel 结构化匹配，字符串兜底收窄为精确短语集；artifact 服务块抽 `parseArtifactRefParam`/`serveArtifactBytes` 共用。回归：`middleware_test.go`/`errors_test.go`/`handlers_share_test.go` 新增用例。
+- **M25**：view_image 用 `pathInfo.Info.Size()` 读前拒绝超限；edit 用 `snapshot.Size` 预检；顺带 `strings.NewReader(string(data))` → `bytes.NewReader`。
+- **M26**：`gitBaseArgs` 增加 `-c core.fsmonitor=false -c core.untrackedCache=false`，堵住 repo 级 `.git/config` 命令注入。
+- **M28**：新增 `Loop.executeTool`——`CapUserInteract` 工具（ask_user）的等待时长补偿进 stall 基线（与 awaitApproval 同语义）。
+- **M29**：rewind 事务内 `recomputeArtifactRefs`（从存活 checkpoint 重算登记）；stale/claimed memory_jobs 重置为 pending 重新提取；`DeleteSession` 三条 DELETE 包事务。回归：`TestSQLiteStoreRewindSessionRecomputesArtifactRefs`、`TestRewindSessionResetsStaleMemoryJob`、`TestSQLiteStoreDeleteSessionRemovesAllSessionData`。
+- **M30**：anthropic 消息装配重构为 `messageSink`，`appendToolResult` 只允许并入全为 tool_result 的 user 消息（并行结果），并入含文本的 user 消息直接报错（避免 tool_result 先于 tool_use 的必 400 wire）。回归：`TestAppendAssistantToolResultMergeGuard`。
+- **M31**：otel error handler 改进程级单例 fan-out（Setup 订阅/Shutdown 退订，sync.Once 安装）；`gen_ai.system` 从模型名启发式推导（claude/anthropic→anthropic，gpt/openai→openai，其余 unknown）。回归：`TestExportErrorHandlerFanOut`、`TestGenAISystemFromModel`、`TestGenerationSpanGenAISystem`。
+- **M32**：`SessionRules.Match` 改最长前缀优先（等长保持插入序）。回归：`TestSessionMatchLongestPrefixWins`。
+- **M33**：`Chain.Evaluate` 惰性解析 argv 一次，经未导出 `evalContext`/`contextDecider` 快路径透传给四个内置 Decider（接口签名不变，编译期断言防退化）。回归：`TestChainSharedExecContextEquivalence`（六种调用形态 verdict 与逐 decider 独立解析逐字段一致）。
+- **M34**：修复（panic 路径改非阻塞 emit）后被作者回退，保留原阻塞语义；风险边缘（缓冲满+消费者流失+未 Close 时 goroutine 滞留），如后续观察到流挂死再评估。
+- **M35**：init 模板补齐 `logging:`/`memory:`/`image:`/`workspaces:` 节与 `subagent.max_output_tokens`。回归：`TestTemplateCoversSchemaSections`（18 个顶层节 + 默认值一致性）。
+- **M36**：headless 路径补 `provider == nil` 检查，与 controller.runTurn 对齐。
+- **死代码**：D1/D2/D3/D5/D6/D7/D8/D9/D10/D13/D14/D17 删除（另删零引用 `Controller.getState`）；D16 收敛为 `agent.LastAssistantText` 导出复用、`aggregateStream` 移入测试；D4（stream_hooks 容错 case + 协议文档记录）、D11（11 处测试调用方）、D15（演示组件）经复核保留。
+- **冗余**：R11 抽 `toolFactory`/`registerToolFactories`/`readOnlyToolFactories` 公共表（三处注册清单合一，registerMemoryTools 同构复用）；R12 `config.MCPServer = mcp.ServerConfig` 类型别名，process_runtime 直接透传；R13 三个 xxxError 收敛为 `toolErrorResult`；R14/R15 见上。
+- **格式**：修复 8 个存量 gofmt 未格式化文件（runtimeevent/event.go、cmd/loom/main.go、imagegen、subagent 测试等），建议 CI 增加 gofmt 门禁。
+
+### 第二轮真实环境 e2e 验收（2026-08-08）
+
+- `LOOM_E2E_LLM=1 go test ./e2e/ -run TestServeRealModelE2E`（本机真实 provider）：**PASS**（17.1s）——真实工具循环（read_file 暗号验证）、事件流水位交接、busy-turn steering、幂等提交、跨 client 会话恢复全链路通过。
+- `LOOM_E2E_LLM=1 go test ./e2e/ -run TestMemoryPipelineRealModelE2E`（本机真实 provider）：**PASS**（32.5s）——会话落盘 → 后台记忆提取（Claimed:1 Succeeded:1）→ Phase 2  consolidation（MEMORY.md/summary/raw 产物齐全）全链路通过。
+- 备注：`bazel test` 首轮 `process_test` 出现一次间歇性时序失败（`TestSessionIncrementalReadAndExit` 的 150ms 时序窗口），复跑及 `go test -count=10` 均稳定通过，与本批改动无关。

@@ -37,8 +37,7 @@ import (
 // Tool execution is shown as one line per phase; model text is streamed
 // inline with a prefix.
 type Linear struct {
-	out    io.Writer
-	indent int
+	out io.Writer
 
 	// lastUsage tracks the most recent per-request token counts so the
 	// response summary line can report them; response events themselves do
@@ -86,11 +85,7 @@ func (r *Linear) ObserveDurable(evt runtimeevent.RuntimeEvent) error {
 	case runtimeevent.KindRunPhaseChanged:
 		// Phase changes are ephemeral-level detail in linear mode.
 	case runtimeevent.KindModelRequestStarted:
-		var payload runtimeevent.ModelRequestStartedPayload
-		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
-			fmt.Fprint(r.out, "[assistant] ")
-		}
-		_ = payload
+		fmt.Fprint(r.out, "[assistant] ")
 	case runtimeevent.KindModelResponseCompleted:
 		var payload runtimeevent.ModelResponseCompletedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
@@ -100,15 +95,15 @@ func (r *Linear) ObserveDurable(evt runtimeevent.RuntimeEvent) error {
 				r.lastInputTokens, r.lastOutputTokens = 0, 0
 			}
 		}
-case runtimeevent.KindModelRequestFailed:
-var payload runtimeevent.ModelRequestFailedPayload
-if err := json.Unmarshal(evt.Payload, &payload); err == nil {
-if payload.Message != "" {
-fmt.Fprintf(r.out, "\n[model error] %s: %s — %s\n", payload.Stage, payload.Code, domain.TruncateAtRuneBoundary(payload.Message, 200))
-} else {
-fmt.Fprintf(r.out, "\n[model error] %s: %s\n", payload.Stage, payload.Code)
-}
-}
+	case runtimeevent.KindModelRequestFailed:
+		var payload runtimeevent.ModelRequestFailedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			if payload.Message != "" {
+				fmt.Fprintf(r.out, "\n[model error] %s: %s — %s\n", payload.Stage, payload.Code, domain.TruncateAtRuneBoundary(payload.Message, 200))
+			} else {
+				fmt.Fprintf(r.out, "\n[model error] %s: %s\n", payload.Stage, payload.Code)
+			}
+		}
 	case runtimeevent.KindApprovalRequested:
 		var payload runtimeevent.ApprovalRequestedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {

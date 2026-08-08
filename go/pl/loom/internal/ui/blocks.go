@@ -847,6 +847,3 @@ func toolResultPreviewText(result domain.ToolResult) string {
 	}
 	return out
 }
-
-// The one-line summary of a tool block is rendered by the view layer
-// (see renderToolSummary), which adds animation and live elapsed time.

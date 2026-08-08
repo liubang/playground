@@ -526,17 +526,28 @@ func execGrantsEqual(a, b domain.ExecGrant) bool {
 		stringSliceEqual(a.WritablePaths, b.WritablePaths)
 }
 
-// Match returns the remembered grant when argv starts with any remembered
-// prefix.
+// Match returns the remembered grant for the LONGEST remembered prefix
+// matching argv (REVIEW M32): DeriveRunCmdPrefix derives both broad
+// prefixes (["go"] from ["go", "-x", ...]) and narrow ones (["go", "test"]
+// from ["go", "test", ...]), and the two coexist in the store.
+// First-inserted-wins would let a broad prefix shadow the narrow one, so
+// `go test ./...` would inherit the broad memory's (typically wider)
+// grant and the more specific approval would never fire. Ties (equal
+// length) keep insertion order.
 func (s *SessionRules) Match(argv []string) (domain.ExecGrant, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	var (
+		grant domain.ExecGrant
+		best  int
+		found bool
+	)
 	for _, r := range s.rules {
-		if ArgvHasPrefix(argv, r.prefix) {
-			return r.grant, true
+		if len(r.prefix) > best && ArgvHasPrefix(argv, r.prefix) {
+			grant, best, found = r.grant, len(r.prefix), true
 		}
 	}
-	return domain.ExecGrant{}, false
+	return grant, found
 }
 
 // ForgetRunCmd removes a remembered argv prefix. ok=false means the prefix

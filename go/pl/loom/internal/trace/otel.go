@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -94,6 +95,43 @@ type Provider struct {
 	tp       *sdktrace.TracerProvider
 	recorder *otelRecorder
 	scores   *scoreClient
+	// unregExportErr unsubscribes this provider's logger from the
+	// process-wide export-error fan-out (REVIEW M31).
+	unregExportErr func()
+}
+
+// exportErrLoggers backs the process-wide OTel error handler
+// (REVIEW M31): otel.SetErrorHandler installs a PROCESS-GLOBAL handler,
+// so a per-Setup call would let the latest Setup hijack the export errors
+// of every earlier provider. Instead the handler is installed exactly
+// once and fans errors out to every ACTIVE provider's logger; Setup
+// subscribes its logger, Shutdown unsubscribes it.
+var (
+	exportErrOnce    sync.Once
+	exportErrMu      sync.Mutex
+	exportErrLoggers = map[*slog.Logger]struct{}{}
+)
+
+// registerExportErrLogger subscribes logger to OTel export errors and
+// returns the unsubscribe function (idempotent).
+func registerExportErrLogger(logger *slog.Logger) func() {
+	exportErrOnce.Do(func() {
+		otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+			exportErrMu.Lock()
+			defer exportErrMu.Unlock()
+			for l := range exportErrLoggers {
+				l.Warn("otel traces export failed", "error", err)
+			}
+		}))
+	})
+	exportErrMu.Lock()
+	exportErrLoggers[logger] = struct{}{}
+	exportErrMu.Unlock()
+	return func() {
+		exportErrMu.Lock()
+		delete(exportErrLoggers, logger)
+		exportErrMu.Unlock()
+	}
 }
 
 // Setup builds the OTLP exporter and tracer provider. A disabled Config is
@@ -112,16 +150,17 @@ func Setup(ctx context.Context, cfg Config) (*Provider, error) {
 	// The OTLP SDK's default error handler prints to stderr, which tears
 	// the TUI's rendering. Route exporter failures (serialization errors,
 	// network, 4xx) into the injected logger instead — discardable in the
-	// TUI, visible in headless runs.
-	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-		logger.Warn("otel traces export failed", "error", err)
-	}))
+	// TUI, visible in headless runs. otel.SetErrorHandler is
+	// process-global, so Setup must not call it per provider: subscribe
+	// through the singleton fan-out handler (REVIEW M31).
+	unregExportErr := registerExportErrLogger(logger)
 	exporter, err := otlptracehttp.New(
 		ctx,
 		otlptracehttp.WithEndpointURL(cfg.Host+otlpPath),
 		otlptracehttp.WithHeaders(map[string]string{"Authorization": basicAuthHeader(cfg.PublicKey, cfg.SecretKey)}),
 	)
 	if err != nil {
+		unregExportErr()
 		return nil, fmt.Errorf("trace.Setup: create OTLP exporter: %w", err)
 	}
 	res, err := resource.New(ctx, resource.WithAttributes(
@@ -129,8 +168,10 @@ func Setup(ctx context.Context, cfg Config) (*Provider, error) {
 		attribute.String(attrEnvironment, cfg.Environment),
 	))
 	if err != nil {
-		// Do not leak the exporter on the error path.
+		// Do not leak the exporter or the logger subscription on the
+		// error path.
 		_ = exporter.Shutdown(ctx)
+		unregExportErr()
 		return nil, fmt.Errorf("trace.Setup: create resource: %w", err)
 	}
 	tp := sdktrace.NewTracerProvider(
@@ -149,7 +190,8 @@ func Setup(ctx context.Context, cfg Config) (*Provider, error) {
 			costOut: cfg.CostOutputPerMTok,
 			scores:  scores,
 		},
-		scores: scores,
+		scores:         scores,
+		unregExportErr: unregExportErr,
 	}, nil
 }
 
@@ -161,6 +203,9 @@ func (p *Provider) Recorder() Recorder { return p.recorder }
 // the very end, so without the wait a prompt process exit could drop the
 // score even though the request was already queued.
 func (p *Provider) Shutdown(ctx context.Context) error {
+	// Unsubscribe only after the flush: shutdown exports the buffered
+	// spans, and those errors must still reach this provider's logger.
+	defer p.unregExportErr()
 	err := p.tp.Shutdown(ctx)
 	if p.scores != nil {
 		p.scores.waitIdle(2 * time.Second)
@@ -233,7 +278,7 @@ func (run *otelRun) RecordGeneration(ctx context.Context, rec GenerationRecord) 
 	attrs := []attribute.KeyValue{
 		attribute.String(attrObservationType, "generation"),
 		attribute.String(attrObservationModel, rec.Model),
-		attribute.String(attrGenAISystem, "openai"),
+		attribute.String(attrGenAISystem, genAISystem(rec.Model)),
 		attribute.String(attrGenAIRequestModel, rec.Model),
 		attribute.Int64(attrGenAIInputTokens, rec.InputTokens),
 		attribute.Int64(attrGenAIOutputTokens, rec.OutputTokens),
@@ -518,6 +563,26 @@ func encodeChatMessages(messages []domain.Message, content bool) string {
 		out = append(out, toolResults...)
 	}
 	return mustJSON(out)
+}
+
+// genAISystem maps a model name onto the OTel GenAI "gen_ai.system"
+// value. The recorder only ever sees the model name
+// (GenerationRecord.Model), never the provider type, so this is a
+// name-based heuristic: claude/anthropic names map to "anthropic",
+// gpt/openai names to "openai", and anything unrecognized reports
+// "unknown" rather than being mislabeled (REVIEW M31 — the attribute was
+// previously hardcoded "openai" for every provider, including direct
+// Anthropic calls).
+func genAISystem(model string) string {
+	m := strings.ToLower(model)
+	switch {
+	case strings.Contains(m, "claude"), strings.Contains(m, "anthropic"):
+		return "anthropic"
+	case strings.Contains(m, "gpt"), strings.Contains(m, "openai"):
+		return "openai"
+	default:
+		return "unknown"
+	}
 }
 
 func mustJSON(v any) string {

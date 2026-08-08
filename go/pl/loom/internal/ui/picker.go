@@ -197,24 +197,6 @@ func formatTokens(n int64) string {
 	return humanizeTokens(n)
 }
 
-// pickerWindow computes the visible row window around the cursor so long
-// lists stay reachable within one screen (REVIEW R8: was duplicated per
-// picker).
-func pickerWindow(cursor, total, height int) (start, end int) {
-	start, end = 0, total
-	if height > 0 {
-		visible := height - 4 // heading, blank line, scroll hints, footer
-		if visible < 1 {
-			visible = 1
-		}
-		if cursor >= visible {
-			start = cursor - visible + 1
-		}
-		end = min(start+visible, total)
-	}
-	return start, end
-}
-
 // formatTimeAgo returns a short relative time description.
 func formatTimeAgo(t time.Time) string {
 	d := time.Since(t)

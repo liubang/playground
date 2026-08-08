@@ -132,6 +132,57 @@ func TestSQLiteStoreSessionShares(t *testing.T) {
 	}
 }
 
+// Concurrent GetOrCreateShare callers must all observe the single persisted
+// token (REVIEW H14): the former INSERT ... ON CONFLICT DO UPDATE let a later
+// writer overwrite the row, leaving earlier callers holding a dead token.
+func TestSQLiteStoreConcurrentShareCreationReturnsPersistedToken(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "sessions.db")
+	store := openTestSQLiteStore(t, path)
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	for round := 0; round < 20; round++ {
+		const workers = 8
+		tokens := make([]string, workers)
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for i := range workers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				token, err := store.GetOrCreateShare(ctx, sessionID)
+				if err != nil {
+					t.Errorf("GetOrCreateShare: %v", err)
+					return
+				}
+				tokens[i] = token
+			}()
+		}
+		close(start)
+		wg.Wait()
+
+		persisted, err := store.GetOrCreateShare(ctx, sessionID)
+		if err != nil {
+			t.Fatalf("GetOrCreateShare: %v", err)
+		}
+		for i, token := range tokens {
+			if token != persisted {
+				t.Fatalf("round %d worker %d token = %q, want persisted %q", round, i, token, persisted)
+			}
+			if _, err := store.ResolveShare(ctx, token); err != nil {
+				t.Fatalf("round %d worker %d token unresolvable: %v", round, i, err)
+			}
+		}
+		if err := store.DeleteShare(ctx, sessionID); err != nil {
+			t.Fatalf("DeleteShare: %v", err)
+		}
+	}
+}
+
 func TestSQLiteStorePersistsEventsAcrossReopen(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "sessions.db")
@@ -1135,6 +1186,96 @@ func TestSQLiteStoreListCheckpointsReturnsSummary(t *testing.T) {
 	}
 	if _, err := store.ListCheckpoints(ctx, domain.SessionID{}, 10); errorCode(err) != domain.ErrInvalidInput {
 		t.Fatalf("zero session error = %v, want invalid_input", err)
+	}
+}
+
+// TestSQLiteStoreRewindSessionRecomputesArtifactRefs is the M29 regression
+// lock: references registered by checkpoints the rewind deletes must not
+// survive it — otherwise the artifacts they pin leak past the GC forever.
+// References from the surviving (rewind-target) checkpoint must be kept.
+func TestSQLiteStoreRewindSessionRecomputesArtifactRefs(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	keptID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("6", 64))
+	droppedID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("7", 64))
+
+	// Checkpoint at seq 1 references the kept artifact.
+	ckpt1 := testCheckpoint(sessionID, 1, time.Now().UTC())
+	ckpt1.Messages[0].Parts = []domain.ContentPart{
+		{Kind: domain.PartArtifact, Artifact: &domain.ArtifactRef{ID: keptID, Size: 11}},
+	}
+	events1 := []domain.Event{newEvent(sessionID, 1, domain.EventSessionCreated, nil)}
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events1, ckpt1); err != nil {
+		t.Fatalf("first checkpoint: %v", err)
+	}
+	// Checkpoint at seq 2 references the dropped artifact.
+	ckpt2 := testCheckpoint(sessionID, 2, time.Now().UTC().Add(time.Second))
+	ckpt2.Messages[0].Parts = []domain.ContentPart{
+		{Kind: domain.PartArtifact, Artifact: &domain.ArtifactRef{ID: droppedID, Size: 22}},
+	}
+	events2 := []domain.Event{newEvent(sessionID, 2, domain.EventUserMessageAdded, nil)}
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 1, events2, ckpt2); err != nil {
+		t.Fatalf("second checkpoint: %v", err)
+	}
+
+	if _, err := store.RewindSession(ctx, sessionID, 1); err != nil {
+		t.Fatalf("RewindSession: %v", err)
+	}
+	refs, err := store.ListArtifactRefs(ctx)
+	if err != nil {
+		t.Fatalf("ListArtifactRefs: %v", err)
+	}
+	if _, ok := refs[droppedID]; ok {
+		t.Fatalf("dropped artifact %s still referenced after rewind: %+v", droppedID, refs)
+	}
+	if got := refs[keptID]; got != 11 {
+		t.Fatalf("kept artifact ref size = %d, want 11 (refs %+v)", got, refs)
+	}
+}
+
+// TestSQLiteStoreDeleteSessionRemovesAllSessionData locks the M29
+// transactional delete: one call removes every per-session row — events,
+// checkpoints and artifact_refs by cascade, file_changes and memory_jobs
+// explicitly.
+func TestSQLiteStoreDeleteSessionRemovesAllSessionData(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	artifactID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("8", 64))
+	ckpt := testCheckpoint(sessionID, 1, time.Now().UTC())
+	ckpt.Messages[0].Parts = []domain.ContentPart{
+		{Kind: domain.PartArtifact, Artifact: &domain.ArtifactRef{ID: artifactID, Size: 7}},
+	}
+	events := []domain.Event{newEvent(sessionID, 1, domain.EventSessionCreated, nil)}
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events, ckpt); err != nil {
+		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
+	}
+	if err := store.RecordFileChange(ctx, sessionID, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
+		t.Fatalf("RecordFileChange: %v", err)
+	}
+	if err := store.EnqueueMemoryJob(ctx, sessionID, "/ws"); err != nil {
+		t.Fatalf("EnqueueMemoryJob: %v", err)
+	}
+
+	if err := store.DeleteSession(ctx, sessionID); err != nil {
+		t.Fatalf("DeleteSession: %v", err)
+	}
+	for _, table := range []string{"sessions", "events", "checkpoints", "artifact_refs", "file_changes", "memory_jobs"} {
+		var n int
+		if err := store.db.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM "+table+" WHERE session_id = ?", sessionID.String()).Scan(&n); err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		if n != 0 {
+			t.Fatalf("%s rows after DeleteSession = %d, want 0", table, n)
+		}
 	}
 }
 

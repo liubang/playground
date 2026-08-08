@@ -328,28 +328,6 @@ func (a *StreamAggregator) HasPartialContent() bool {
 }
 
 // consumeStream reads all events from a model stream into an aggregator.
-// aggregateStream preserves the former aggregation helper for callers and tests
-// while delegating validation to StreamAggregator.
-func aggregateStream(stream domain.ModelStream, clock domain.Clock) (streamResponse, error) {
-	agg := NewStreamAggregator(clock, StreamHooks{})
-	if err := consumeStream(stream, agg); err != nil {
-		response := streamResponse{}
-		if agg.HasPartialContent() {
-			response.Message = agg.InterruptedMessage()
-		}
-		return response, err
-	}
-	message, stop, inputTokens, outputTokens, err := agg.Finalize()
-	if err != nil {
-		response := streamResponse{}
-		if agg.HasPartialContent() {
-			response.Message = agg.InterruptedMessage()
-		}
-		return response, err
-	}
-	return streamResponse{Message: message, StopReason: stop, InputTokens: inputTokens, OutputTokens: outputTokens}, nil
-}
-
 func consumeStream(stream domain.ModelStream, agg *StreamAggregator) error {
 	for {
 		evt, err := stream.Recv()

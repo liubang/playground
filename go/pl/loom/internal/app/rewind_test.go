@@ -118,7 +118,7 @@ func TestRestoreRewindChanges_SkipsUnrestorable(t *testing.T) {
 	book := workspace.NewFileStateBook()
 
 	out := restoreRewindChanges(validator, book, []session.FileChange{{
-		Path:      "big_file.go",
+		Path:       "big_file.go",
 		Restorable: false,
 	}})
 

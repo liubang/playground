@@ -509,23 +509,68 @@ func TestMarshalNonLeadingSystemDowngraded(t *testing.T) {
 func TestMarshalUnsignedReasoningDropped(t *testing.T) {
 	t.Parallel()
 
-	var out []map[string]any
-	appendBlock := func(role string, block map[string]any) {
-		out = append(out, map[string]any{"role": role, "content": []map[string]any{block}})
-	}
+	sink := &messageSink{}
 	msg := domain.Message{Role: domain.RoleAssistant, Parts: []domain.ContentPart{
 		{Kind: domain.PartReasoning, Reasoning: &domain.ReasoningContent{Text: "no signature"}},
 		{Kind: domain.PartReasoning, Reasoning: &domain.ReasoningContent{Signature: "blob", Redacted: true}},
 	}}
-	if err := appendAssistant(msg, appendBlock); err != nil {
+	if err := appendAssistant(msg, sink); err != nil {
 		t.Fatalf("appendAssistant: %v", err)
 	}
-	if len(out) != 1 {
-		t.Fatalf("out = %+v (unsigned reasoning must be dropped)", out)
+	if len(sink.out) != 1 {
+		t.Fatalf("out = %+v (unsigned reasoning must be dropped)", sink.out)
 	}
-	block := out[0]["content"].([]map[string]any)[0]
+	block := sink.out[0]["content"].([]map[string]any)[0]
 	if block["type"] != "redacted_thinking" || block["data"] != "blob" {
 		t.Fatalf("block = %+v", block)
+	}
+}
+
+// A tool_result inside an assistant message may only merge into a preceding
+// user message that already consists of tool_result blocks; merging into a
+// user TEXT message would put the tool_result ahead of its tool_use on the
+// wire — a guaranteed API 400 (REVIEW M30).
+func TestAppendAssistantToolResultMergeGuard(t *testing.T) {
+	t.Parallel()
+
+	result := domain.ToolResult{
+		CallID:  domain.NewToolCallID(),
+		Status:  domain.ToolStatusSuccess,
+		Content: []domain.ContentPart{{Kind: domain.PartText, Text: "ok"}},
+	}
+	msg := domain.Message{Role: domain.RoleAssistant, Parts: []domain.ContentPart{
+		{Kind: domain.PartToolResult, ToolResult: &result},
+	}}
+
+	// Preceding user text message → the merge must be rejected.
+	sink := &messageSink{}
+	sink.append(string(domain.RoleUser), map[string]any{"type": "text", "text": "hello"})
+	if err := appendAssistant(msg, sink); err == nil {
+		t.Fatal("tool_result merging into a user text message must fail")
+	}
+
+	// Preceding user message of pure tool_results (parallel results) → merges.
+	sink = &messageSink{}
+	sink.append(string(domain.RoleAssistant), map[string]any{"type": "tool_use", "id": "x", "name": "t", "input": map[string]any{}})
+	if err := sink.appendToolResult(toolResultBlock(result)); err != nil {
+		t.Fatalf("first tool_result: %v", err)
+	}
+	if err := appendAssistant(msg, sink); err != nil {
+		t.Fatalf("parallel tool_result merge: %v", err)
+	}
+	content := sink.out[1]["content"].([]map[string]any)
+	if len(content) != 2 || content[0]["type"] != "tool_result" || content[1]["type"] != "tool_result" {
+		t.Fatalf("content = %+v, want two merged tool_result blocks", content)
+	}
+
+	// Preceding assistant message → a fresh user message is valid wire.
+	sink = &messageSink{}
+	sink.append(string(domain.RoleAssistant), map[string]any{"type": "tool_use", "id": "x", "name": "t", "input": map[string]any{}})
+	if err := appendAssistant(msg, sink); err != nil {
+		t.Fatalf("tool_result after assistant tool_use: %v", err)
+	}
+	if len(sink.out) != 2 || sink.out[1]["role"] != string(domain.RoleUser) {
+		t.Fatalf("out = %+v, want a new user message", sink.out)
 	}
 }
 

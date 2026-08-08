@@ -39,23 +39,17 @@ var (
 // Isolation describes the active isolation mode used for a process.
 type Isolation interface {
 	Name() string
-	Unsafe() bool
 }
 
 type isolationMode struct {
-	name   string
-	unsafe bool
+	name string
 }
 
 func (m isolationMode) Name() string { return m.name }
 
-func (m isolationMode) Unsafe() bool { return m.unsafe }
-
-func (m isolationMode) String() string { return m.name }
-
 var (
 	SeatbeltIsolation     Isolation = isolationMode{name: "seatbelt"}
-	ProcessGroupIsolation Isolation = isolationMode{name: "process_group", unsafe: true}
+	ProcessGroupIsolation Isolation = isolationMode{name: "process_group"}
 	UnsupportedIsolation  Isolation = isolationMode{name: "unsupported"}
 	UnavailableIsolation  Isolation = isolationMode{name: "unavailable"}
 )
@@ -274,14 +268,7 @@ func (s ExplicitTestSandbox) Prepare(spec SandboxSpec) (SandboxLaunch, error) {
 	if s.PrepareFunc != nil {
 		return s.PrepareFunc(spec)
 	}
-	if spec.ExecutablePath == "" {
-		return SandboxLaunch{}, fmt.Errorf("executable path is required")
-	}
-	return SandboxLaunch{
-		Program: spec.ExecutablePath,
-		Args:    append([]string(nil), spec.Args...),
-		Env:     append([]string(nil), spec.Env...),
-	}, nil
+	return DirectSandbox{}.Prepare(spec)
 }
 
 // UnsupportedSandbox fails closed on platforms without a reliable sandbox.

@@ -18,6 +18,7 @@
 package builtin
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -27,7 +28,6 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -39,7 +39,6 @@ const (
 	// and Anthropic caps a single image block at 5MB on the wire, so 3.5MB
 	// raw stays comfortably below the strictest provider limit.
 	maxImageBytes = 3584 << 10
-	maxImagePath  = 4096
 )
 
 type viewImageArgs struct {
@@ -124,6 +123,13 @@ func (t *ViewImageTool) Execute(ctx context.Context, prepared domain.PreparedCal
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
 
+	// Size-check BEFORE reading: Prepare/Execute already stat'ed the file,
+	// and reading an unbounded file into memory just to reject it can OOM
+	// the process (REVIEW M25).
+	if pathInfo.Info != nil && pathInfo.Info.Size() > maxImageBytes {
+		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput,
+			fmt.Sprintf("image is %d bytes, exceeding the %d byte limit; downscale or crop it first", pathInfo.Info.Size(), maxImageBytes)))
+	}
 	data, err := os.ReadFile(pathInfo.Absolute)
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "failed to read image file", domain.WithCause(err)))
@@ -185,7 +191,7 @@ func imageDimensions(data []byte, mediaType string) string {
 	if mediaType == "image/webp" {
 		return ""
 	}
-	cfg, _, err := image.DecodeConfig(strings.NewReader(string(data)))
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return ""
 	}

@@ -174,6 +174,13 @@ func (c *Client) initialize(ctx context.Context) error {
 	}
 	c.serverName = result.ServerInfo.Name
 	c.serverVersion = result.ServerInfo.Version
+	// A server negotiating an older revision answers with its own version;
+	// adopt it so post-initialize requests speak the revision the server
+	// actually agreed to (REVIEW M23).
+	if result.ProtocolVersion != "" && result.ProtocolVersion != protocolVersion {
+		c.logger.Debug("mcp: server negotiated an older protocol revision", "server", c.cfg.name, "negotiated", result.ProtocolVersion, "offered", protocolVersion)
+		c.transport.adoptProtocolVersion(result.ProtocolVersion)
+	}
 
 	notification, err := marshalNotification("notifications/initialized", nil)
 	if err != nil {
@@ -207,17 +214,32 @@ func (c *Client) call(ctx context.Context, method string, params any, out any) e
 	return nil
 }
 
-// ListTools discovers every tool the server offers.
+// ListTools discovers every tool the server offers, following the
+// nextCursor pagination the MCP spec allows (REVIEW M23).
 func (c *Client) ListTools(ctx context.Context) ([]ToolSpec, error) {
-	var result struct {
-		Tools []ToolSpec `json:"tools"`
+	var tools []ToolSpec
+	cursor := ""
+	for {
+		var result struct {
+			Tools      []ToolSpec `json:"tools"`
+			NextCursor string     `json:"nextCursor"`
+		}
+		params := map[string]any{}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		listCtx, cancel := context.WithTimeout(ctx, c.cfg.StartupTimeout)
+		err := c.call(listCtx, "tools/list", params, &result)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+		tools = append(tools, result.Tools...)
+		if result.NextCursor == "" {
+			return tools, nil
+		}
+		cursor = result.NextCursor
 	}
-	listCtx, cancel := context.WithTimeout(ctx, c.cfg.StartupTimeout)
-	defer cancel()
-	if err := c.call(listCtx, "tools/list", map[string]any{}, &result); err != nil {
-		return nil, err
-	}
-	return result.Tools, nil
 }
 
 // CallTool invokes one tool with cfg.ToolTimeout.

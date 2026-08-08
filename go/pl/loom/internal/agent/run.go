@@ -935,8 +935,13 @@ type Loop struct {
 	// maxOutputStops counts consecutive output-cap truncations; hitting
 	// maxOutputContinuationLimit arms the salvage wrap-up instead of
 	// paying another full generation just to be cut off again
-	// (docs/SUBAGENT_DESIGN.md §12).
+	// (docs/SUBAGENT_DESIGN.md §12). Any response that did not hit the
+	// output cap resets the streak (callModel).
 	maxOutputStops int
+	// unknownStopStreak counts consecutive unrecognized stop reasons;
+	// retrying beyond maxUnknownStopRetries is hopeless and would burn
+	// budget without a path to completion (REVIEW H15).
+	unknownStopStreak int
 	// planRevisedThisRun gates the closing nudge to plans this run actually
 	// touched: a stale plan inherited from an earlier turn must not hijack
 	// an unrelated prompt with a reconcile turn.
@@ -1321,6 +1326,16 @@ func (l *Loop) callModel(ctx context.Context) error {
 	l.lastCallInput = inputTokens
 	// A completed call proves the request fit the window.
 	l.compactFitFailures = 0
+	// Consecutive-streak bookkeeping (REVIEW H15): a response that did not
+	// hit the output cap breaks the truncation streak, and a recognized
+	// stop reason breaks the unknown-stop retry streak.
+	if stop != domain.StopMaxOutput {
+		l.maxOutputStops = 0
+	}
+	switch stop {
+	case domain.StopEndTurn, domain.StopMaxOutput, domain.StopContentFilter, domain.StopToolUse:
+		l.unknownStopStreak = 0
+	}
 	l.reportContextUsage()
 
 	if len(response.ToolCalls()) == 0 {
@@ -1486,10 +1501,14 @@ func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) 
 		return nil
 	case domain.StopMaxOutput:
 		l.maxOutputStops++
-		if l.inRunBudgetWrapUp() {
-			// Even the salvage turn overflowed the cap: accept whatever
+		if l.Run.WrapUpPending != "" {
+			// Even the wrap-up turn overflowed the cap: accept whatever
 			// text it produced and land — otherwise a persistently
-			// verbose model would loop here forever.
+			// verbose model would loop here forever. This must cover the
+			// goal wrap-up too (WrapUpPending == wrapUpGoalTokens): the
+			// resource-only check used to skip it, and with the budget
+			// hard check suspended during wrap-up the run could spin
+			// here indefinitely (REVIEW H15).
 			l.terminate(ctx, wrapUpOutcome(l.Run.WrapUpPending))
 			return nil
 		}
@@ -1509,6 +1528,14 @@ func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) 
 		l.terminate(ctx, domain.OutcomeFailed)
 		return nil
 	default:
+		l.unknownStopStreak++
+		if l.unknownStopStreak >= maxUnknownStopRetries {
+			// The provider keeps ending turns with an unrecognized stop
+			// reason; retrying further would burn budget without a path
+			// to completion (REVIEW H15).
+			l.terminate(ctx, domain.OutcomeFailed)
+			return nil
+		}
 		if _, err := l.Run.TransitionTo(domain.PhasePreparing); err != nil {
 			return err
 		}
@@ -1759,6 +1786,10 @@ const maxConcurrentToolExecs = 4
 // free continuation, then conclude.
 const maxOutputContinuationLimit = 2
 
+// maxUnknownStopRetries bounds how many times a run re-asks the model
+// after an unrecognized stop reason before giving up (REVIEW H15).
+const maxUnknownStopRetries = 3
+
 // preparedExec is one validated call queued for execution.
 type preparedExec struct {
 	prepared domain.PreparedCall
@@ -1850,12 +1881,38 @@ func (l *Loop) executeOne(ctx context.Context, item preparedExec) error {
 			return err
 		}
 	}
-	result := item.tool.Execute(ctx, item.prepared)
+	result := l.executeTool(ctx, item)
 	l.recordToolOutcome(ctx, item, result)
 	if reason := l.trackExecResult(result); reason != "" {
 		return l.terminateRunaway(ctx, reason)
 	}
 	return nil
+}
+
+// executeTool runs one prepared call on the serial path. For
+// user-interactive tools (ask_user) the wait is user thinking time, not
+// agent activity, so the stall watchdog's baseline shifts forward by the
+// wait duration — the same compensation awaitApproval applies
+// (docs/CONTEXT_DESIGN.md §4.4.3, REVIEW M28). User-interactive tools are
+// never ConcurrentSafe, so they always take this serial path and the
+// baseline update needs no synchronization.
+func (l *Loop) executeTool(ctx context.Context, item preparedExec) domain.ToolResult {
+	interactive := false
+	for _, cap := range item.prepared.Definition.Capabilities {
+		if cap == domain.CapUserInteract {
+			interactive = true
+			break
+		}
+	}
+	if !interactive {
+		return item.tool.Execute(ctx, item.prepared)
+	}
+	waitStart := l.Run.Clock.Now()
+	result := item.tool.Execute(ctx, item.prepared)
+	if !l.lastProgressAt.IsZero() {
+		l.lastProgressAt = l.lastProgressAt.Add(l.Run.Clock.Since(waitStart))
+	}
+	return result
 }
 
 // executeSegmentParallel fans one concurrent-safe segment out with
@@ -2381,9 +2438,27 @@ func cutAtRuneBoundary(s string, maxBytes int) string {
 	return domain.TruncateAtRuneBoundary(s, maxBytes)
 }
 
-// lastAssistantText returns the text of the most recent assistant message.
-// Kept for test assertions; production trace output uses runAssistantText.
-func lastAssistantText(messages []domain.Message) string {
+// toolErrorResult builds an error ToolResult for the agent-integrated tools
+// (ask_user, update_plan, update_goal), unwrapping AgentError codes.
+func toolErrorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
+	var agentErr *domain.AgentError
+	code, message := string(domain.ErrInternal), err.Error()
+	if errors.As(err, &agentErr) {
+		code, message = string(agentErr.Code), agentErr.Message
+	}
+	return domain.ToolResult{
+		CallID:     callID,
+		Status:     domain.ToolStatusError,
+		Error:      &domain.ToolError{Code: code, Message: message},
+		StartedAt:  startedAt,
+		FinishedAt: domain.RealClock{}.Now(),
+	}
+}
+
+// LastAssistantText returns the text of the most recent assistant message.
+// Exported for reuse by the subagent tool (child run conclusions) and for
+// test assertions; production trace output uses runAssistantText.
+func LastAssistantText(messages []domain.Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == domain.RoleAssistant {
 			text := strings.Join(messages[i].TextParts(), "")

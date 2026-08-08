@@ -50,6 +50,15 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
+// bootstrapSubagentFailpoint is a test-only seam (review M22 regression):
+// when non-nil, NewWorkspaceBootstrap invokes it at the top of the
+// sub-agent assembly and aborts with its error. The real assembly
+// failures (buildSubagentRegistry & co.) are unreachable through the
+// public API — every constructor involved only rejects nil arguments,
+// which bootstrap never passes — so the cleanup path needs an injected
+// fault to be regression-tested.
+var bootstrapSubagentFailpoint func() error
+
 // BootstrapConfig carries the workspace-specific inputs for assembling one
 // workspace-scoped Bootstrap on top of a shared ProcessRuntime
 // (docs/WORKSPACE_DESIGN.md §5.1).
@@ -130,7 +139,7 @@ type Bootstrap struct {
 // (docs/WORKSPACE_DESIGN.md §5.1). The ProcessRuntime owns the session/
 // artifact stores and tracing; a workspace-assembly failure never closes
 // them. The caller closes the returned Bootstrap on workspace teardown.
-func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg BootstrapConfig) (*Bootstrap, error) {
+func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg BootstrapConfig) (_ *Bootstrap, retErr error) {
 	if proc == nil || proc.Resolved == nil {
 		return nil, fmt.Errorf("process runtime is required")
 	}
@@ -185,8 +194,18 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 	if err != nil {
 		return nil, fmt.Errorf("create session manager: %w", err)
 	}
+	// Review M22: EVERY failure past this point must release the session
+	// manager — otherwise its reaper goroutine (and any staged sessions)
+	// leak. A single defer keyed on the named return replaces per-path
+	// Close calls, which had already drifted (the sub-agent assembly
+	// failures returned without closing). On success ownership passes to
+	// the returned Bootstrap.
+	defer func() {
+		if retErr != nil {
+			sessionManager.Close()
+		}
+	}()
 	if err := registerBuiltinTools(registry, validator, runner, proc.Artifact, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, proc.Questioner, book, sessionManager, resolved.Image); err != nil {
-		sessionManager.Close()
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
 
@@ -229,7 +248,6 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		// smaller than any window).
 		skillsOpt, skillsHandle, err := WireSkills(registry, cfg.WorkspaceRoot, defaultContextWindow(resolved), resolved.Skills, resolved.Storage.SkillsDir(), resolved.Prompt.DisableBuiltin, logger)
 		if err != nil {
-			sessionManager.Close()
 			return nil, fmt.Errorf("wire skills: %w", err)
 		}
 		if skillsOpt != nil {
@@ -261,6 +279,15 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		subagentManager *subagent.Manager
 	)
 	if resolved.Subagent.Enabled {
+		// Test-only seam (M22 regression): exercises the failure cleanup
+		// path — the real assembly failures below are unreachable through
+		// the public API because every constructor involved only rejects
+		// nil arguments, which bootstrap never passes.
+		if bootstrapSubagentFailpoint != nil {
+			if err := bootstrapSubagentFailpoint(); err != nil {
+				return nil, fmt.Errorf("sub-agent assembly: %w", err)
+			}
+		}
 		researcherRegistry, err := buildSubagentRegistry(validator, runner, proc.Artifact, book)
 		if err != nil {
 			return nil, fmt.Errorf("build sub-agent registry: %w", err)
@@ -330,31 +357,25 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 
 		delegateTool, err := subagent.NewDelegateTaskTool(factory)
 		if err != nil {
-			sessionManager.Close()
 			return nil, fmt.Errorf("delegate_task: %w", err)
 		}
 		if err := registry.Register(delegateTool); err != nil {
-			sessionManager.Close()
 			return nil, fmt.Errorf("register delegate_task: %w", err)
 		}
 
 		// V2 companion tools: wait_subagent and resume_subagent.
 		waitTool, err := subagent.NewWaitSubagentTool(manager)
 		if err != nil {
-			sessionManager.Close()
 			return nil, fmt.Errorf("wait_subagent: %w", err)
 		}
 		if err := registry.Register(waitTool); err != nil {
-			sessionManager.Close()
 			return nil, fmt.Errorf("register wait_subagent: %w", err)
 		}
 		resumeTool, err := subagent.NewResumeSubagentTool(manager)
 		if err != nil {
-			sessionManager.Close()
 			return nil, fmt.Errorf("resume_subagent: %w", err)
 		}
 		if err := registry.Register(resumeTool); err != nil {
-			sessionManager.Close()
 			return nil, fmt.Errorf("register resume_subagent: %w", err)
 		}
 
@@ -497,18 +518,14 @@ func defaultContextWindow(resolved *config.ResolvedConfig) int64 {
 	return 0
 }
 
-// registerMemoryTools registers the memory tools (list, read, search,
-// add_note) with the tool registry.
-func registerMemoryTools(registry *agent.ToolRegistry, store *memory.Store) error {
-	tools := []struct {
-		name string
-		mk   func() (domain.Tool, error)
-	}{
-		{"memory_list", func() (domain.Tool, error) { return memory.NewListTool(store) }},
-		{"memory_read", func() (domain.Tool, error) { return memory.NewReadTool(store) }},
-		{"memory_search", func() (domain.Tool, error) { return memory.NewSearchTool(store) }},
-		{"memory_add_note", func() (domain.Tool, error) { return memory.NewAddNoteTool(store) }},
-	}
+// toolFactory is one named tool constructor in a registration table.
+type toolFactory struct {
+	name string
+	mk   func() (domain.Tool, error)
+}
+
+// registerToolFactories builds and registers every tool in the table.
+func registerToolFactories(registry *agent.ToolRegistry, tools []toolFactory) error {
 	for _, tt := range tools {
 		t, err := tt.mk()
 		if err != nil {
@@ -521,35 +538,45 @@ func registerMemoryTools(registry *agent.ToolRegistry, store *memory.Store) erro
 	return nil
 }
 
-func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager, imageCfg config.ResolvedImage) error {
-	tools := []struct {
-		name string
-		mk   func() (domain.Tool, error)
-	}{
+// readOnlyToolFactories is the shared read-only tool set: the main agent's
+// baseline and both sub-agent registries start from it, so a new read-only
+// tool is added in exactly one place (REVIEW R11).
+func readOnlyToolFactories(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook) []toolFactory {
+	return []toolFactory{
 		{"read_file", func() (domain.Tool, error) { return builtin.NewReadFileTool(validator, book) }},
 		{"list_dir", func() (domain.Tool, error) { return builtin.NewListDirTool(validator) }},
 		{"search", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
 		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
 		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator) }},
-		{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
-		{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
 		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator) }},
 		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator) }},
 		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator) }},
 		{"git_merge_base", func() (domain.Tool, error) { return gittools.NewGitMergeBaseTool(validator) }},
 		{"git_blame", func() (domain.Tool, error) { return gittools.NewGitBlameTool(validator) }},
-		{"lint", func() (domain.Tool, error) { return lint.NewLintTool(validator, runner) }},
 		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(artStore) }},
 		{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }},
 	}
-	for _, tt := range tools {
-		t, err := tt.mk()
-		if err != nil {
-			return fmt.Errorf("%s: %w", tt.name, err)
-		}
-		if err := registry.Register(t); err != nil {
-			return fmt.Errorf("register %s: %w", tt.name, err)
-		}
+}
+
+// registerMemoryTools registers the memory tools (list, read, search,
+// add_note) with the tool registry.
+func registerMemoryTools(registry *agent.ToolRegistry, store *memory.Store) error {
+	return registerToolFactories(registry, []toolFactory{
+		{"memory_list", func() (domain.Tool, error) { return memory.NewListTool(store) }},
+		{"memory_read", func() (domain.Tool, error) { return memory.NewReadTool(store) }},
+		{"memory_search", func() (domain.Tool, error) { return memory.NewSearchTool(store) }},
+		{"memory_add_note", func() (domain.Tool, error) { return memory.NewAddNoteTool(store) }},
+	})
+}
+
+func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager, imageCfg config.ResolvedImage) error {
+	tools := append(readOnlyToolFactories(validator, runner, artStore, book),
+		toolFactory{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
+		toolFactory{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
+		toolFactory{"lint", func() (domain.Tool, error) { return lint.NewLintTool(validator, runner) }},
+	)
+	if err := registerToolFactories(registry, tools); err != nil {
+		return err
 	}
 	// run_cmd needs artifact store
 	runCmd, err := command.NewRunCmdToolWithArtifacts(validator, runner, artStore, int(maxOutputBytes))
@@ -625,31 +652,8 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 // construction.
 func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook) (*agent.ToolRegistry, error) {
 	registry := agent.NewToolRegistry()
-	tools := []struct {
-		name string
-		mk   func() (domain.Tool, error)
-	}{
-		{"read_file", func() (domain.Tool, error) { return builtin.NewReadFileTool(validator, book) }},
-		{"list_dir", func() (domain.Tool, error) { return builtin.NewListDirTool(validator) }},
-		{"search", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
-		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
-		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator) }},
-		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator) }},
-		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator) }},
-		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator) }},
-		{"git_merge_base", func() (domain.Tool, error) { return gittools.NewGitMergeBaseTool(validator) }},
-		{"git_blame", func() (domain.Tool, error) { return gittools.NewGitBlameTool(validator) }},
-		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(artStore) }},
-		{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }},
-	}
-	for _, tt := range tools {
-		t, err := tt.mk()
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", tt.name, err)
-		}
-		if err := registry.Register(t); err != nil {
-			return nil, fmt.Errorf("register %s: %w", tt.name, err)
-		}
+	if err := registerToolFactories(registry, readOnlyToolFactories(validator, runner, artStore, book)); err != nil {
+		return nil, err
 	}
 	return registry, nil
 }
@@ -661,38 +665,15 @@ func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.R
 // to answer), exec_session/write_stdin (interactive sessions), and
 // delegate_task itself (no recursion).
 func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook, maxOutputBytes int) (*agent.ToolRegistry, error) {
-	// Start from the researcher registry and add the writable tools.
+	// Start from the researcher (read-only) set and add the writable tools.
 	registry := agent.NewToolRegistry()
-	tools := []struct {
-		name string
-		mk   func() (domain.Tool, error)
-	}{
-		// Read-only tools (same as researcher).
-		{"read_file", func() (domain.Tool, error) { return builtin.NewReadFileTool(validator, book) }},
-		{"list_dir", func() (domain.Tool, error) { return builtin.NewListDirTool(validator) }},
-		{"search", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
-		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
-		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator) }},
-		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator) }},
-		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator) }},
-		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator) }},
-		{"git_merge_base", func() (domain.Tool, error) { return gittools.NewGitMergeBaseTool(validator) }},
-		{"git_blame", func() (domain.Tool, error) { return gittools.NewGitBlameTool(validator) }},
-		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(artStore) }},
-		{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }},
-		// Writable tools (coder-specific).
-		{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
-		{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
-		{"lint", func() (domain.Tool, error) { return lint.NewLintTool(validator, runner) }},
-	}
-	for _, tt := range tools {
-		t, err := tt.mk()
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", tt.name, err)
-		}
-		if err := registry.Register(t); err != nil {
-			return nil, fmt.Errorf("register %s: %w", tt.name, err)
-		}
+	tools := append(readOnlyToolFactories(validator, runner, artStore, book),
+		toolFactory{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
+		toolFactory{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
+		toolFactory{"lint", func() (domain.Tool, error) { return lint.NewLintTool(validator, runner) }},
+	)
+	if err := registerToolFactories(registry, tools); err != nil {
+		return nil, err
 	}
 	// run_cmd needs the artifact store for output capture.
 	runCmd, err := command.NewRunCmdToolWithArtifacts(validator, runner, artStore, maxOutputBytes)
