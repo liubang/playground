@@ -23,6 +23,21 @@ const fbKey = (sessionId, runId) => `loom_fb_${sessionId}_${runId}`;
 
 const $ = (id) => document.getElementById(id);
 
+// Desktop shell bootstrap (docs/DESKTOP_DESIGN.md §4.2): the embedding
+// desktop app passes its in-process token either via a <meta name="loom-token">
+// tag rendered into index.html, or via URL fragment (#token=...) — fragments
+// never reach the wire. Persist to sessionStorage before the gate reads it.
+const embeddedToken =
+  (document.querySelector('meta[name="loom-token"]')?.content || "") ||
+  (new URLSearchParams(location.hash.slice(1)).get("token") || "");
+// In the desktop shell the token is the process's random in-process one —
+// no user-pasteable credential exists, so the token gate is pointless there.
+const isDesktopShell = embeddedToken !== "";
+if (embeddedToken) {
+  sessionStorage.setItem(TOKEN_KEY, embeddedToken);
+  if (location.hash) history.replaceState(null, "", location.pathname);
+}
+
 // ---------- theme ----------
 function initTheme() {
   // 默认深色（用户偏好）；仅当显式存了 "light" 才用浅色。
@@ -174,6 +189,14 @@ function showApp() {
 function onUnauthorized() {
   sessionStorage.removeItem(TOKEN_KEY);
   app.token = "";
+  if (isDesktopShell) {
+    // 桌面端的 token 是进程内随机值，用户没有任何可粘贴的凭证；401 意味着
+    // 进程状态异常，唯一出路是重启应用（docs/DESKTOP_DESIGN.md §4.2）。
+    showGate("桌面端鉴权状态丢失，请重启应用");
+    $("gate-token").hidden = true;
+    $("gate-form").querySelector("button").hidden = true;
+    return;
+  }
   showGate("token invalid or expired — paste the current serve token");
 }
 
@@ -750,8 +773,10 @@ async function boot() {
         toast("分享已撤销", true);
         return;
       }
-      const { path } = await app.api.shareSession(app.sessionId);
-      const url = location.origin + path;
+      // 服务端配置了对外地址（PublicBaseURL，如桌面端内网分享）时返回绝对
+      // url；缺省退回按当前 origin 拼接（docs/DESKTOP_DESIGN.md §5.2）。
+      const { path, url: absoluteUrl } = await app.api.shareSession(app.sessionId);
+      const url = absoluteUrl || location.origin + path;
       if (await copyText(url)) {
         toast("分享链接已复制：任何持有链接的人可只读查看本会话", true);
       } else {
@@ -776,6 +801,15 @@ async function boot() {
   }
 }
 
+// 首入空态落地页：无会话或最新会话不可达时的归宿（picker 显示默认模型）。
+function showLandingState() {
+  $("empty-state").hidden = false;
+  $("hdr-session").hidden = true;
+  $("hdr-share").hidden = true;
+  app.curModelRef = app.defaultModelRef;
+  syncPickerLabels();
+}
+
 async function enter() {
   try {
     const meta = await app.api.metaVersion();
@@ -794,14 +828,19 @@ async function enter() {
     // 首入落地态：最近更新的会话；无会话则空态
     const { sessions } = await app.api.listSessions(1, "", false, "all");
     if (sessions && sessions.length > 0) {
-      await openSession(sessions[0].id);
+      try {
+        await openSession(sessions[0].id);
+      } catch (e) {
+        // 最新会话打不开（如刚被另一客户端删除）不是连接/鉴权问题——
+        // 落到空态而不是误进 token gate。
+        if (e.status === 401) throw e;
+        console.warn("open latest session:", e);
+        toast("最近的会话打开失败: " + e.message);
+        app.sessionId = null;
+        showLandingState();
+      }
     } else {
-      $("empty-state").hidden = false;
-      $("hdr-session").hidden = true;
-      $("hdr-share").hidden = true;
-      // 无会话时 picker 显示默认模型
-      app.curModelRef = app.defaultModelRef;
-      syncPickerLabels();
+      showLandingState();
     }
   } catch (e) {
     if (e.status !== 401) showGate("connect failed: " + e.message);

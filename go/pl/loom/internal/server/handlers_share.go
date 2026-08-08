@@ -49,10 +49,17 @@ func (s *Server) handleShareSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auditf("share.create", id)
-	writeJSON(w, http.StatusOK, map[string]string{
+	resp := map[string]string{
 		"token": token,
 		"path":  "/share/" + token,
-	})
+	}
+	// When the operator advertised an external base URL (LAN sharing, desktop
+	// app), include the absolute link so clients can hand out a URL that is
+	// reachable beyond this machine (docs/DESKTOP_DESIGN.md §5.2).
+	if s.cfg.PublicBaseURL != "" {
+		resp["url"] = s.cfg.PublicBaseURL + "/share/" + token
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleRevokeShare deletes the session's share link; existing links stop
