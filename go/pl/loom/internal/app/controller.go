@@ -797,12 +797,12 @@ func (c *Controller) ListSessions(ctx context.Context, limit int) ([]SessionSumm
 }
 
 // SkillInfo is the frontend-safe projection of one discovered skill,
-// backing the /skill listing.
+// backing the /skill listing and the aggregated /v1/skills endpoint.
 type SkillInfo struct {
-	Name        string
-	Description string
-	Scope       string
-	Path        string
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Scope       string `json:"scope"`
+	Path        string `json:"path"`
 }
 
 // SkillsListing is the result of a ListSkills call: the discovered skills
@@ -826,19 +826,7 @@ func (c *Controller) ListSkills(ctx context.Context) (SkillsListing, error) {
 	}
 	catalog := c.bootstrap.Skills.Loader.Load(ctx)
 	c.bootstrap.Skills.Catalog.Store(catalog)
-	listing := SkillsListing{Skills: make([]SkillInfo, 0, len(catalog.Skills()))}
-	for _, s := range catalog.Skills() {
-		listing.Skills = append(listing.Skills, SkillInfo{
-			Name:        s.Name,
-			Description: s.Description,
-			Scope:       s.Scope.String(),
-			Path:        s.Path,
-		})
-	}
-	for _, issue := range catalog.Issues() {
-		listing.Issues = append(listing.Issues, fmt.Sprintf("%s: %s", issue.Path, issue.Message))
-	}
-	return listing, nil
+	return SkillsListing{Skills: skillInfos(catalog.Skills()), Issues: issueStrings(catalog.Issues())}, nil
 }
 
 // MCPServerInfo is the frontend-safe projection of one configured MCP

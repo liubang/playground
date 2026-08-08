@@ -48,6 +48,10 @@ export function createApi({ getToken, onUnauthorized }) {
     // PUT 携带 revision 乐观锁，409 config_conflict 表示文件被外部修改
     getConfig: () => req("GET", "/v1/config"),
     putConfig: (revision, config) => req("PUT", "/v1/config", { revision, config }),
+    // 按需查看单个已存密钥的明文（GET 只下发掩码）；ref = {kind, name, field}
+    revealSecret: (ref) => req("POST", "/v1/config/reveal", ref),
+    // 聚合所有工作区的 skill 目录（设置面板 Skills tab，只读）
+    listSkills: () => req("GET", "/v1/skills"),
     // MCP 服务器实时状态与重连（设置面板）
     listMcpServers: () => req("GET", "/v1/mcp/servers"),
     reconnectMcpServer: (name) => req("POST", `/v1/mcp/servers/${encodeURIComponent(name)}/reconnect`, {}),

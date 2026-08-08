@@ -377,7 +377,7 @@ button { font: inherit; cursor: pointer; }
   white-space: pre-wrap; word-break: break-word; color: var(--fg);
   max-height: 200px; overflow-y: auto;
 }
-.block-tool .tool-error { margin-top: 8px; font-size: var(--text-sm); color: var(--error); white-space: pre-wrap; }
+.block-tool .tool-error { margin-top: 8px; font-size: var(--text-sm); color: var(--error); white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
 
 /* image 块（内联图片 / artifact 引用图片）：缩略展示，点击放大（灯箱） */
 .block-image, .block-artifact { margin: 4px 0; }
@@ -754,6 +754,93 @@ select.set-input { width: auto; min-width: 180px; }
 .mcp-status.is-live { color: var(--success); }
 .mcp-status.is-dead { color: var(--error); }
 .mcp-reconnect { flex: none; }
+
+/* 自绘下拉（select.js，替代原生 select；浮层视觉对齐 .menu） */
+.sel { display: flex; align-items: center; gap: 8px; text-align: left; cursor: pointer; }
+.sel .sel-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel .sel-caret { flex: none; font-size: 10px; color: var(--muted); }
+.sel-pop {
+  position: fixed; z-index: calc(var(--z-modal) + 1); min-width: 180px; max-width: 420px;
+  max-height: min(320px, calc(100vh - 32px)); overflow-y: auto;
+  background: var(--bg1); border: 1px solid var(--bg2); border-radius: 10px;
+  padding: 6px; box-shadow: var(--shadow-md); animation: menu-pop .12s ease;
+  transform-origin: top left;
+}
+.sel-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: none; border: none; color: var(--fg); border-radius: var(--radius-sm);
+  padding: 7px 10px; font: inherit; font-size: var(--text-md); cursor: pointer;
+}
+.sel-item:hover { background: var(--bg2); }
+.sel-item.is-active { color: var(--primary); }
+.sel-item .sel-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-item .check { flex: none; width: 16px; text-align: center; color: var(--primary); }
+
+/* 层级导航（模型 / MCP tab：概览 → 详情，见 settings.js set-hier） */
+.set-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.set-nav-back .icon { font-size: 11px; margin-right: 2px; }
+.set-nav-crumb { font-size: var(--text-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 概览行摘要（名称 + 元信息 + 展开箭头），详情态让位给名称输入框 */
+.set-card-summary {
+  flex: 1; min-width: 0; display: none; align-items: center; gap: 10px;
+  background: none; border: none; padding: 0; font: inherit; text-align: left; cursor: pointer; color: var(--fg);
+}
+.set-hier .set-card > .set-card-head > .set-card-summary { display: flex; }
+.set-hier .set-card.is-open > .set-card-head > .set-card-summary { display: none; }
+.set-card-name { flex: none; max-width: 45%; font-weight: 600; font-size: var(--text-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-card-name.is-empty { color: var(--muted); font-weight: 400; }
+.set-card-meta { flex: 1; min-width: 0; font-size: var(--text-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-card-caret { flex: none; font-size: 10px; color: var(--muted); }
+.set-card-summary:hover .set-card-caret { color: var(--primary); }
+
+/* 行态 ↔ 详情态切换：行态只留头部摘要，详情态只留当前卡片 */
+.set-hier .set-card > .set-card-head > .set-input { display: none; }
+.set-hier .set-card.is-open > .set-card-head > .set-input { display: block; }
+.set-hier .set-cards > .set-card > .set-card-body { display: none; }
+.set-hier .set-cards > .set-card.is-open > .set-card-body { display: block; }
+.set-hier .set-cards > .set-card:not(.is-open) > .set-card-head { margin-bottom: 0; }
+.set-hier .set-cards > .set-card:not(.is-open):hover { border-color: var(--muted); }
+.set-hier.is-detail .set-cards > .set-card:not(.is-open) { display: none; }
+.set-hier.is-detail .set-sec-top,
+.set-hier.is-detail .set-list-sec > .set-sec-title,
+.set-hier.is-detail .set-list-sec > .set-add,
+.set-hier.is-detail > .set-tip { display: none; }
+
+/* 模型子卡（provider 详情内）：默认行态，展开（第三级）后只留当前模型 */
+.set-hier .set-models > .set-card > .set-card-body { display: none; }
+.set-hier .set-models > .set-card.is-open > .set-card-body { display: block; }
+.set-hier .set-models > .set-card:not(.is-open) > .set-card-head { margin-bottom: 0; }
+.set-hier .set-models > .set-card:not(.is-open):hover { border-color: var(--muted); }
+.set-hier .set-models .set-card-tag { display: none; }
+.set-hier .set-models .set-card.is-open .set-card-tag { display: block; }
+.set-hier .set-card.is-model-detail > .set-card-body > .set-row,
+.set-hier .set-card.is-model-detail > .set-card-body > .set-adv,
+.set-hier .set-card.is-model-detail > .set-card-body > .set-subtitle,
+.set-hier .set-card.is-model-detail > .set-card-body > .set-add { display: none; }
+.set-hier .set-card.is-model-detail .set-models > .set-card:not(.is-open) { display: none; }
+
+/* Skills tab（聚合发现视图，只读） */
+.set-skills-bar { display: flex; align-items: flex-start; gap: 10px; }
+.set-skills-bar .set-tip { flex: 1; }
+.set-skills-refresh { flex: none; }
+.set-skill-root { margin: -6px 0 8px; }
+.skill-row {
+  border: 1px solid var(--bg2); border-radius: var(--radius-md); padding: 8px 12px;
+  margin-bottom: 8px; background: color-mix(in srgb, var(--bg0) 45%, transparent);
+}
+.skill-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.skill-name { font-weight: 600; font-size: var(--text-md); }
+.skill-scope {
+  font-size: 10px; color: var(--muted); border: 1px solid var(--bg2);
+  border-radius: var(--radius-full); padding: 0 7px; text-transform: uppercase; letter-spacing: .04em;
+}
+.skill-scope.is-repo { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+.skill-desc { font-size: var(--text-sm); line-height: 1.5; margin-bottom: 2px; }
+.skill-path { font-size: var(--text-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill-issue { display: flex; align-items: baseline; gap: 6px; font-size: var(--text-xs); color: var(--warning); margin: 4px 0; }
+.skill-issue .icon { font-size: 10px; }
+.set-skills-error { color: var(--error); }
 
 /* 窄屏：侧栏改为抽屉式 overlay（☰ 开关；选中会话后 main.js 自动收起） */
 @media (max-width: 767px) {

@@ -93,6 +93,96 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, view)
 }
 
+// secretReveal is the POST /v1/config/reveal request model: it names one
+// stored secret by its structural location. The GET response only carries
+// SecretMask placeholders; this endpoint serves the plaintext on demand
+// (e.g. the settings UI's reveal button) so it never has to ride the
+// whole-config response.
+type secretReveal struct {
+	Kind  string `json:"kind"`  // provider | tracing | mcp_header
+	Name  string `json:"name"`  // provider name / MCP server name
+	Field string `json:"field"` // tracing: public_key|secret_key; mcp_header: header name
+}
+
+var errSecretNotFound = &statusError{
+	status:  http.StatusNotFound,
+	code:    "secret_not_found",
+	message: "no stored secret at this location",
+}
+
+// handleRevealSecret serves one stored secret's plaintext. The file is
+// read fresh from disk (it is the single source of truth) and nothing is
+// cached, so a reveal always reflects what a save would preserve.
+func (s *Server) handleRevealSecret(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.ConfigPath == "" {
+		writeError(w, errConfigUnavailable)
+		return
+	}
+	var req secretReveal
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	raw, err := os.ReadFile(s.cfg.ConfigPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeError(w, errSecretNotFound)
+			return
+		}
+		writeError(w, err)
+		return
+	}
+	f, err := config.ParseFile(raw)
+	if err != nil {
+		writeError(w, &statusError{
+			status:  http.StatusInternalServerError,
+			code:    "config_invalid",
+			message: "config file cannot be parsed (fix it by hand): " + err.Error(),
+		})
+		return
+	}
+	value, err := lookupSecret(f, req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"value": value})
+}
+
+// lookupSecret extracts the plaintext addressed by req from the parsed
+// configuration.
+func lookupSecret(f *config.File, req secretReveal) (string, error) {
+	var value string
+	switch req.Kind {
+	case "provider":
+		for i := range f.Providers {
+			if f.Providers[i].Name == req.Name {
+				value = f.Providers[i].APIKey
+				break
+			}
+		}
+	case "tracing":
+		switch req.Field {
+		case "public_key":
+			value = f.Tracing.PublicKey
+		case "secret_key":
+			value = f.Tracing.SecretKey
+		default:
+			return "", invalidInput("tracing field must be public_key or secret_key")
+		}
+	case "mcp_header":
+		if srv, ok := f.MCPServers[req.Name]; ok {
+			value = srv.Headers[req.Field]
+		}
+	default:
+		return "", invalidInput("kind must be provider, tracing, or mcp_header")
+	}
+	if value == "" {
+		return "", errSecretNotFound
+	}
+	return value, nil
+}
+
 // handlePutConfig validates and saves a replacement configuration.
 func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.ConfigPath == "" {
