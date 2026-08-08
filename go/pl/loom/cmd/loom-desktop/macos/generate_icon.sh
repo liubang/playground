@@ -33,13 +33,31 @@ trap cleanup EXIT
 cat > "${SWIFT_SRC}" <<'EOF'
 import AppKit
 
+// macOS Big Sur+ style icon: rounded-rectangle (squircle) background with
+// the Loom diamond mark as a ring, sized to ~66% of the canvas per the
+// Apple icon grid.
 func drawMark(size: Int) -> NSImage {
     let s = CGFloat(size)
     let image = NSImage(size: NSMakeSize(s, s))
     image.lockFocus()
-    let k = s / 32.0
+
+    // Squircle background with a subtle vertical gradient.
+    let rect = NSRect(x: 0, y: 0, width: s, height: s)
+    let radius = s * 0.2237
+    let bg = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+    let gradient = NSGradient(colors: [
+        NSColor(calibratedRed: 0x2b / 255.0, green: 0x35 / 255.0, blue: 0x39 / 255.0, alpha: 1),
+        NSColor(calibratedRed: 0x1e / 255.0, green: 0x23 / 255.0, blue: 0x26 / 255.0, alpha: 1),
+    ])!
+    gradient.draw(in: bg, angle: -90)
+
+    // Diamond mark (same geometry as favicon.svg) centered on the canvas.
+    let markExtent = s * 0.66
+    let k = markExtent / 32.0
+    let ox = (s - markExtent) / 2.0
+    let oy = (s - markExtent) / 2.0
     // SVG is y-down; AppKit is y-up.
-    func pt(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSMakePoint(x * k, (32 - y) * k) }
+    func pt(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSMakePoint(ox + x * k, oy + (32 - y) * k) }
 
     let outer = NSBezierPath()
     outer.move(to: pt(16, 2))
