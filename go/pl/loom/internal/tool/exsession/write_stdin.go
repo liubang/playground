@@ -154,10 +154,7 @@ func (t *WriteStdinTool) Execute(ctx context.Context, prepared domain.PreparedCa
 		}
 	}
 	awaitYield(ctx, entry, yieldMs)
-	output, err := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)
-	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
-	}
+	output := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)
 	return successResult(prepared.Call.ID, startedAt, output)
 }
 

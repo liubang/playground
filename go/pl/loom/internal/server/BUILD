@@ -44,8 +44,10 @@ go_library(
 go_test(
     name = "server_test",
     srcs = [
+        "errors_test.go",
         "handlers_artifacts_test.go",
         "handlers_share_test.go",
+        "middleware_test.go",
         "server_test.go",
     ],
     embed = [":server"],

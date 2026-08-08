@@ -64,7 +64,7 @@ func newTestManager(t *testing.T, script ...fakes.ScriptEntry) (*Manager, *fakes
 
 	roles := map[Role]*RoleSpec{
 		RoleResearcher: {Registry: registry, Prompt: researcherPrompt, Risk: domain.R1},
-		RoleCoder:     {Registry: coderRegistry, Prompt: coderPrompt, Risk: domain.R3},
+		RoleCoder:      {Registry: coderRegistry, Prompt: coderPrompt, Risk: domain.R3},
 	}
 
 	manager, err := NewManager(factory, roles, nil)
@@ -121,7 +121,7 @@ func TestNewManagerValidation(t *testing.T) {
 	// Coder with wrong risk → error.
 	_, err = NewManager(&Factory{Store: store, Models: models}, map[Role]*RoleSpec{
 		RoleResearcher: {Registry: registry, Prompt: &stubPromptBuilder{}, Risk: domain.R1},
-		RoleCoder:     {Registry: registry, Prompt: &stubPromptBuilder{}, Risk: domain.R1},
+		RoleCoder:      {Registry: registry, Prompt: &stubPromptBuilder{}, Risk: domain.R1},
 	}, nil)
 	if err == nil {
 		t.Fatal("expected error for coder with R1 risk")
@@ -146,7 +146,7 @@ func TestNewManagerValidation(t *testing.T) {
 	// Valid manager → success.
 	_, err = NewManager(&Factory{Store: store, Models: models}, map[Role]*RoleSpec{
 		RoleResearcher: {Registry: registry, Prompt: &stubPromptBuilder{}, Risk: domain.R1},
-		RoleCoder:     {Registry: registry, Prompt: &stubPromptBuilder{}, Risk: domain.R3},
+		RoleCoder:      {Registry: registry, Prompt: &stubPromptBuilder{}, Risk: domain.R3},
 	}, nil)
 	if err != nil {
 		t.Fatalf("valid manager: %v", err)
@@ -470,7 +470,7 @@ func TestManagerObserverHooks(t *testing.T) {
 	researcherPrompt := factory.Prompt
 	roles := map[Role]*RoleSpec{
 		RoleResearcher: {Registry: researcherRegistry, Prompt: researcherPrompt, Risk: domain.R1},
-		RoleCoder:     {Registry: researcherRegistry, Prompt: researcherPrompt, Risk: domain.R3},
+		RoleCoder:      {Registry: researcherRegistry, Prompt: researcherPrompt, Risk: domain.R3},
 	}
 	mgr, err := NewManager(factory, roles, nil)
 	if err != nil {

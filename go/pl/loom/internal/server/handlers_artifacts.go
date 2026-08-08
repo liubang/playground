@@ -32,30 +32,44 @@ import (
 // artifacts (e.g. generate_image tool output) without embedding multi-MB
 // base64 blobs into the transcript JSON.
 func (s *Server) handleArtifact(w http.ResponseWriter, r *http.Request) {
-	rawID := r.PathValue("id")
-	id, err := domain.ParseArtifactID(rawID)
-	if err != nil || !domain.HasPrefix(id, "art_") {
-		writeError(w, invalidInput("invalid artifact id"))
+	ref, err := parseArtifactRefParam(r)
+	if err != nil {
+		writeError(w, err)
 		return
 	}
-	sizeStr := r.URL.Query().Get("size")
-	if sizeStr == "" {
-		writeError(w, invalidInput("size query parameter is required"))
-		return
-	}
-	size, err := strconv.ParseInt(sizeStr, 10, 64)
-	if err != nil || size < 0 {
-		writeError(w, invalidInput("size must be a non-negative integer"))
-		return
-	}
-	ref := domain.ArtifactRef{ID: id, Size: size}
 	data, err := s.svc.ReadArtifact(r.Context(), ref)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	contentType := detectArtifactContentType(data)
-	w.Header().Set("Content-Type", contentType)
+	serveArtifactBytes(w, data)
+}
+
+// parseArtifactRefParam validates the {id} path value and the required
+// size query parameter into an ArtifactRef (REVIEW R14: shared by the
+// owner and share-link artifact endpoints).
+func parseArtifactRefParam(r *http.Request) (domain.ArtifactRef, error) {
+	rawID := r.PathValue("id")
+	id, err := domain.ParseArtifactID(rawID)
+	if err != nil || !domain.HasPrefix(id, "art_") {
+		return domain.ArtifactRef{}, invalidInput("invalid artifact id")
+	}
+	sizeStr := r.URL.Query().Get("size")
+	if sizeStr == "" {
+		return domain.ArtifactRef{}, invalidInput("size query parameter is required")
+	}
+	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	if err != nil || size < 0 {
+		return domain.ArtifactRef{}, invalidInput("size must be a non-negative integer")
+	}
+	return domain.ArtifactRef{ID: id, Size: size}, nil
+}
+
+// serveArtifactBytes writes an artifact blob with content-type sniffing
+// and immutable caching: the ID is content-derived, so the bytes behind a
+// given URL never change (REVIEW R14).
+func serveArtifactBytes(w http.ResponseWriter, data []byte) {
+	w.Header().Set("Content-Type", detectArtifactContentType(data))
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)

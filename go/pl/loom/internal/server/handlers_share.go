@@ -20,9 +20,6 @@ package server
 import (
 	"net/http"
 	"regexp"
-	"strconv"
-
-	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
 // shareTokenPattern constrains share tokens to the 128-bit hex shape the
@@ -98,29 +95,15 @@ func (s *Server) handleSharedArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	rawID := r.PathValue("id")
-	id, err := domain.ParseArtifactID(rawID)
-	if err != nil || !domain.HasPrefix(id, "art_") {
-		writeError(w, invalidInput("invalid artifact id"))
-		return
-	}
-	sizeStr := r.URL.Query().Get("size")
-	if sizeStr == "" {
-		writeError(w, invalidInput("size query parameter is required"))
-		return
-	}
-	size, err := strconv.ParseInt(sizeStr, 10, 64)
-	if err != nil || size < 0 {
-		writeError(w, invalidInput("size must be a non-negative integer"))
-		return
-	}
-	data, err := s.svc.ReadSharedArtifact(r.Context(), token, domain.ArtifactRef{ID: id, Size: size})
+	ref, err := parseArtifactRefParam(r)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", detectArtifactContentType(data))
-	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	data, err := s.svc.ReadSharedArtifact(r.Context(), token, ref)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	serveArtifactBytes(w, data)
 }

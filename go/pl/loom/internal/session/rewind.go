@@ -210,8 +210,13 @@ func checkpointLabel(data []byte) (string, int) {
 // event sequence checkpointSequence: events and checkpoints after it are
 // deleted, the session version is reset, and every file change recorded
 // after that checkpoint is returned (earliest-per-path) for the caller to
-// restore. The whole mutation runs in one transaction; file restoration
-// happens afterwards and is idempotent (content-addressed snapshots).
+// restore. Artifact references are recomputed from the surviving
+// checkpoints (deleted ones must not keep pinning their artifacts), and
+// memory extraction jobs that observed deleted events — or are mid-flight
+// reading them — are reset to pending so the pipeline re-extracts from
+// the rewound transcript. The whole mutation runs in one transaction;
+// file restoration happens afterwards and is idempotent
+// (content-addressed snapshots).
 func (s *SQLiteStore) RewindSession(ctx context.Context, sessionID domain.SessionID, checkpointSequence int64) (RewindResult, error) {
 	if sessionID.IsZero() {
 		return RewindResult{}, domain.NewError(domain.ErrInvalidInput, "session ID is required")
@@ -310,6 +315,35 @@ FROM file_changes WHERE session_id = ? AND rowid > ? ORDER BY rowid ASC`,
 		return RewindResult{}, storeError("delete rewound checkpoints", err)
 	}
 	now := time.Now().UTC()
+	// Review M29: artifact_refs rows are registered per checkpoint and the
+	// deleted checkpoints may be an artifact's only referrer — leaving
+	// their rows behind pins the artifact forever (the GC never collects
+	// it). Rebuild the session's references from the SURVIVING checkpoints
+	// inside the same transaction.
+	if err := recomputeArtifactRefs(ctx, tx, sessionID); err != nil {
+		return RewindResult{}, err
+	}
+	// Review M29: a memory extraction whose extracted_version covers events
+	// the rewind just deleted is stale (its memories may describe turns
+	// that no longer exist), and an in-flight claim is reading the
+	// pre-rewind transcript. Reset those jobs to pending with no extracted
+	// version so the pipeline re-extracts from the rewound transcript.
+	// Jobs that only observed retained events (extracted_version <= the
+	// rewind point) stay untouched, as do fresh pending jobs.
+	if _, err := tx.ExecContext(ctx, `
+UPDATE memory_jobs SET
+    status = 'pending',
+    claim_token = '',
+    claimed_at_unix_nano = 0,
+    next_retry_at_unix_nano = 0,
+    attempts = 0,
+    extracted_version = -1,
+    last_error = '',
+    updated_at = ?, updated_at_unix_nano = ?
+WHERE session_id = ? AND (extracted_version > ? OR status = 'claimed')`,
+		formatTime(now), now.UnixNano(), sessionID.String(), checkpointSequence); err != nil {
+		return RewindResult{}, storeError("reset stale memory jobs", err)
+	}
 	result, err := tx.ExecContext(ctx, `
 UPDATE sessions SET version = ?, updated_at = ?, updated_at_unix_nano = ?
 WHERE session_id = ? AND version = ?`,
@@ -361,4 +395,46 @@ WHERE session_id = ? AND version = ?`,
 		},
 		Changes: changes,
 	}, nil
+}
+
+// recomputeArtifactRefs rebuilds a session's artifact_refs rows from its
+// surviving checkpoints. Rewind calls it after truncating the log:
+// references registered by deleted checkpoints must not outlive them, or
+// the artifacts they pin leak past the GC forever (review M29).
+func recomputeArtifactRefs(ctx context.Context, tx *sql.Tx, sessionID domain.SessionID) error {
+	if _, err := tx.ExecContext(ctx,
+		"DELETE FROM artifact_refs WHERE session_id = ?", sessionID.String()); err != nil {
+		return storeError("reset rewound artifact references", err)
+	}
+	rows, err := tx.QueryContext(ctx,
+		"SELECT data FROM checkpoints WHERE session_id = ?", sessionID.String())
+	if err != nil {
+		return storeError("load surviving checkpoints for artifact references", err)
+	}
+	refs := make(map[domain.ArtifactID]int64)
+	for rows.Next() {
+		var data []byte
+		if err := rows.Scan(&data); err != nil {
+			_ = rows.Close()
+			return storeError("scan checkpoint for artifact references", err)
+		}
+		var checkpoint domain.Checkpoint
+		if err := json.Unmarshal(data, &checkpoint); err != nil {
+			_ = rows.Close()
+			return storeError("decode checkpoint for artifact references", err)
+		}
+		for id, size := range checkpointArtifactRefs(checkpoint) {
+			if old, ok := refs[id]; !ok || size > old {
+				refs[id] = size
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return storeError("iterate checkpoints for artifact references", err)
+	}
+	if err := rows.Close(); err != nil {
+		return storeError("close checkpoints for artifact references", err)
+	}
+	return addArtifactRefs(ctx, tx, sessionID, refs)
 }

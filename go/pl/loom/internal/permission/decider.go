@@ -28,6 +28,17 @@ type RuleDecider struct {
 	Rules *RuleSet
 }
 
+// The built-in deciders all implement the single-parse fast path
+// (REVIEW M33). These assertions keep a future refactor from silently
+// dropping it — behavior would stay correct while the repeated parses
+// creep back in.
+var (
+	_ contextDecider = RuleDecider{}
+	_ contextDecider = DangerDecider{}
+	_ contextDecider = SessionDecider{}
+	_ contextDecider = BaselineDecider{}
+)
+
 // Evaluate returns the strictest matching rule's verdict, or nil when no
 // rule matches. Process-spawning calls (run_cmd, exec_session — anything
 // carrying a signed ExecRequest) match argv-prefix rules; web_fetch calls
@@ -35,11 +46,18 @@ type RuleDecider struct {
 // which is why run_cmd/web_fetch can never be remembered by tool name:
 // they never reach the tool-rule evaluation.
 func (d RuleDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
+	info, ok := ExecInfoOf(call)
+	return d.evaluate(call, evalContext{exec: info, execOK: ok})
+}
+
+// evaluate implements the contextDecider fast path (REVIEW M33): the
+// chain hands down the once-parsed exec info instead of re-parsing here.
+func (d RuleDecider) evaluate(call domain.PreparedCall, ctx evalContext) *domain.Verdict {
 	if d.Rules == nil {
 		return nil
 	}
-	if _, ok := ExecInfoOf(call); ok {
-		return d.evaluateRunCmd(call)
+	if ctx.execOK {
+		return d.evaluateRunCmd(ctx.exec)
 	}
 	if call.Call.Name == "web_fetch" {
 		return d.evaluateWebFetch(call)
@@ -70,11 +88,7 @@ func (d RuleDecider) evaluateWebFetch(call domain.PreparedCall) *domain.Verdict 
 }
 
 // evaluateRunCmd matches the call's argv against the prefix rules.
-func (d RuleDecider) evaluateRunCmd(call domain.PreparedCall) *domain.Verdict {
-	info, ok := ExecInfoOf(call)
-	if !ok {
-		return nil
-	}
+func (d RuleDecider) evaluateRunCmd(info RunCmdCall) *domain.Verdict {
 	best, rule := d.Rules.Evaluate(info.Argv)
 	if best == "" {
 		// Basename normalization lets absolute paths in trusted system
@@ -135,9 +149,15 @@ type DangerDecider struct {
 // otherwise it has no opinion.
 func (d DangerDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	info, ok := ExecInfoOf(call)
-	if !ok {
+	return d.evaluate(call, evalContext{exec: info, execOK: ok})
+}
+
+// evaluate implements the contextDecider fast path (REVIEW M33).
+func (d DangerDecider) evaluate(_ domain.PreparedCall, ctx evalContext) *domain.Verdict {
+	if !ctx.execOK {
 		return nil
 	}
+	info := ctx.exec
 	reason := DangerousCommand(info.Argv)
 	if reason == "" {
 		return nil
@@ -167,14 +187,19 @@ type SessionDecider struct {
 // hosts for web_fetch, remembered tool names for the eligible
 // fixed-blast-radius tools (SessionRules.RememberTool gates eligibility).
 func (d SessionDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
+	info, ok := ExecInfoOf(call)
+	return d.evaluate(call, evalContext{exec: info, execOK: ok})
+}
+
+// evaluate implements the contextDecider fast path (REVIEW M33).
+func (d SessionDecider) evaluate(call domain.PreparedCall, ctx evalContext) *domain.Verdict {
 	if d.Session == nil {
 		return nil
 	}
-	info, execOk := ExecInfoOf(call)
 	switch {
-	case execOk:
-		grant, ok := d.Session.Match(info.Argv)
-		if !ok || !AllowGrantCovers(grant, info) {
+	case ctx.execOK:
+		grant, ok := d.Session.Match(ctx.exec.Argv)
+		if !ok || !AllowGrantCovers(grant, ctx.exec) {
 			return nil
 		}
 		return &domain.Verdict{
@@ -223,9 +248,15 @@ type BaselineDecider struct {
 // workspace by the path validator (.git/.loom stay protected), so their
 // blast radius is bounded the same way a sandboxed command's is.
 func (d BaselineDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
+	info, ok := ExecInfoOf(call)
+	return d.evaluate(call, evalContext{exec: info, execOK: ok})
+}
+
+// evaluate implements the contextDecider fast path (REVIEW M33).
+func (d BaselineDecider) evaluate(call domain.PreparedCall, ctx evalContext) *domain.Verdict {
 	v := &domain.Verdict{Source: SourceBaseline}
-	if info, ok := ExecInfoOf(call); ok {
-		return d.runCmdBaseline(v, call.Risk, info)
+	if ctx.execOK {
+		return d.runCmdBaseline(v, call.Risk, ctx.exec)
 	}
 	if d.Mode == ModeUnlessDangerous {
 		switch {

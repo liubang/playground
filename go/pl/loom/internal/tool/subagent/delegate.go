@@ -26,8 +26,6 @@ package subagent
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -176,6 +174,7 @@ type Factory struct {
 type DelegateTaskTool struct {
 	def domain.ToolDefinition
 	f   *Factory
+	key [32]byte
 }
 
 // NewDelegateTaskTool creates the tool bound to the given factory.
@@ -206,7 +205,11 @@ func NewDelegateTaskTool(f *Factory) (*DelegateTaskTool, error) {
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
 	}
-	return &DelegateTaskTool{def: def, f: f}, nil
+	key, err := newSigningKey()
+	if err != nil {
+		return nil, err
+	}
+	return &DelegateTaskTool{def: def, f: f, key: key}, nil
 }
 
 // Definition returns the tool definition.
@@ -229,6 +232,12 @@ func (t *DelegateTaskTool) ConcurrentSafe() bool { return true }
 // capability-free default (R0) is a legitimate elevation, the same shape
 // as run_cmd's per-argument R2→R3 escalation.
 func (t *DelegateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+	if err := call.Validate(); err != nil {
+		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
+	}
+	if call.Name != t.def.Name {
+		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
+	}
 	args, err := decodeDelegateArgs(call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
@@ -242,7 +251,6 @@ func (t *DelegateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (dom
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	call.Arguments = canonical
-	sum := sha256.Sum256(canonical)
 	risk := riskOf(role)
 	desc := "Delegate task"
 	if task := args.Task; len([]rune(task)) > 60 {
@@ -250,13 +258,14 @@ func (t *DelegateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (dom
 	} else {
 		desc = fmt.Sprintf("Delegate task (%s): %s", role, task)
 	}
-	return domain.PreparedCall{
+	prepared := domain.PreparedCall{
 		Call:         call,
 		Definition:   t.def,
 		Risk:         risk,
 		ApprovalDesc: desc,
-		ArgsHash:     hex.EncodeToString(sum[:])[:16],
-	}, nil
+	}
+	prepared.ArgsHash = signPreparedCall(&t.key, prepared)
+	return prepared, nil
 }
 
 // Execute runs the child loop. When args.Async is true and the
@@ -274,6 +283,9 @@ func (t *DelegateTaskTool) Execute(ctx context.Context, prepared domain.Prepared
 	}
 	role, err := ParseRole(args.Role)
 	if err != nil {
+		return delegateError(prepared.Call.ID, startedAt, err, nil)
+	}
+	if err := verifyPreparedCall(&t.key, t.def, riskOf(role), prepared); err != nil {
 		return delegateError(prepared.Call.ID, startedAt, err, nil)
 	}
 
@@ -424,7 +436,7 @@ func (t *DelegateTaskTool) executeSync(ctx context.Context, prepared domain.Prep
 			Usage:         run.Usage,
 		})
 	}
-	conclusion := lastAssistantText(run.Messages)
+	conclusion := agent.LastAssistantText(run.Messages)
 	metadata := resultMetadata(childSessionID, run)
 
 	switch {
@@ -528,18 +540,6 @@ func (t *DelegateTaskTool) logger() *slog.Logger {
 		return t.f.Logger
 	}
 	return slog.Default()
-}
-
-// lastAssistantText returns the text of the most recent assistant
-// message — the child run's conclusion. (Local copy of the agent
-// package's unexported helper.)
-func lastAssistantText(messages []domain.Message) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == domain.RoleAssistant {
-			return strings.Join(messages[i].TextParts(), "")
-		}
-	}
-	return ""
 }
 
 type delegateArgs struct {

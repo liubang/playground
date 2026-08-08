@@ -107,7 +107,7 @@ func NewGenerateImageTool(gen images.Generator, artifacts domain.ArtifactStore, 
 			"batch requests need one call per asset. The generated image is persisted as an artifact, displayed " +
 			"to the user, and returned inline so you can review it; to iterate, call again with an adjusted prompt. " +
 			"size and quality default to the configured values and rarely need overriding.",
-		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"prompt":{"type":"string","minLength":1,"maxLength":4096},"size":{"type":"string","enum":["auto","1024x1024","1536x1024","1024x1536"]},"quality":{"type":"string","enum":["auto","low","medium","high"]}},"required":["prompt"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"prompt":{"type":"string","minLength":1,"maxLength":4096},"size":{"type":"string","enum":["auto","1024x1024","1536x1024","1024x1536"]},"quality":{"type":"string","enum":["auto","low","medium","high"]}},"required":["prompt"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","description":"JSON header (media type, byte size, artifact reference, revised prompt) followed by the image as an inline image content part"}`),
 		Capabilities: []domain.Capability{domain.CapNetworkConnect},
 		Source:       domain.ToolSourceBuiltin,

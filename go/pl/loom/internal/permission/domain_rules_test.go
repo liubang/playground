@@ -143,5 +143,3 @@ func TestDomainChainEvaluation(t *testing.T) {
 		t.Fatalf("unknown host = %s, want ask (R3 baseline)", v.Decision)
 	}
 }
-
-

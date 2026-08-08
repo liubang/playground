@@ -41,7 +41,7 @@ const (
 	// legacyRememberedFile is the former JSON persistence file, kept only
 	// for one-time migration into the SQLite store.
 	legacyRememberedFile = "remembered.json"
-	rememberedJustif    = "remembered from an interactive loom approval"
+	rememberedJustif     = "remembered from an interactive loom approval"
 )
 
 // RememberedDBPath returns the full path to the remembered rules database

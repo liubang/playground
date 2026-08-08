@@ -22,11 +22,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
@@ -234,7 +232,7 @@ func (t *UpdatePlanTool) Execute(_ context.Context, prepared domain.PreparedCall
 	startedAt := domain.RealClock{}.Now()
 	plan, _, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
 	if err != nil {
-		return updatePlanError(prepared.Call.ID, startedAt, err)
+		return toolErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	t.cell.Put(plan)
 	payload := map[string]any{
@@ -244,7 +242,7 @@ func (t *UpdatePlanTool) Execute(_ context.Context, prepared domain.PreparedCall
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		return updatePlanError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode result", domain.WithCause(err)))
+		return toolErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode result", domain.WithCause(err)))
 	}
 	return domain.ToolResult{
 		CallID:     prepared.Call.ID,
@@ -301,19 +299,4 @@ func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, er
 		return domain.Plan{}, nil, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	return plan, canonical, nil
-}
-
-func updatePlanError(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	var agentErr *domain.AgentError
-	code, message := string(domain.ErrInternal), err.Error()
-	if errors.As(err, &agentErr) {
-		code, message = string(agentErr.Code), agentErr.Message
-	}
-	return domain.ToolResult{
-		CallID:     callID,
-		Status:     domain.ToolStatusError,
-		Error:      &domain.ToolError{Code: code, Message: message},
-		StartedAt:  startedAt,
-		FinishedAt: domain.RealClock{}.Now(),
-	}
 }

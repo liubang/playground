@@ -250,18 +250,6 @@ func sameCapabilities(left, right []domain.Capability) bool {
 	return true
 }
 
-func sameSortedStrings(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
-}
-
 func resolveRepoRoot(validator *workspacepkg.PathValidator, input string) (repoRootResolution, error) {
 	if strings.TrimSpace(input) == "" {
 		// repo_root is optional across git tools: default to the workspace root.
@@ -365,13 +353,19 @@ func confirmRepoRoot(ctx context.Context, gitPath string, repoRoot repoRootResol
 // gitBaseArgs is the shared prefix of every git invocation: no pager, no
 // color, and — mirroring codex's git-utils operations.rs — hooks disabled
 // via core.hooksPath=/dev/null so a repository's hooks can never execute
-// in response to the agent's (read-only) git activity.
+// in response to the agent's (read-only) git activity. The fsmonitor and
+// untracked-cache features are disabled too: both can be armed through
+// repo-local .git/config (core.fsmonitor names an arbitrary hook command
+// that git status would execute), and these tools run outside the sandbox
+// (REVIEW M26).
 func gitBaseArgs(repoRoot string) []string {
 	return []string{
 		"--no-pager",
 		"-c", "color.ui=false",
 		"-c", "core.pager=cat",
 		"-c", "core.hooksPath=/dev/null",
+		"-c", "core.fsmonitor=false",
+		"-c", "core.untrackedCache=false",
 		"-C", repoRoot,
 	}
 }
@@ -431,10 +425,6 @@ func buildLsFilesOthersArgs(repoRoot string) []string {
 	return append(gitBaseArgs(repoRoot), "ls-files", "--others", "--exclude-standard", "-z")
 }
 
-func buildRefVerifyArgs(repoRoot, ref string) []string {
-	return append(gitBaseArgs(repoRoot), "rev-parse", "--verify", "--quiet", ref)
-}
-
 func buildRemoteHeadArgs(repoRoot, remote string) []string {
 	return append(gitBaseArgs(repoRoot), "symbolic-ref", "--quiet", "--short", "refs/remotes/"+remote+"/HEAD")
 }
@@ -465,7 +455,7 @@ func resolveDefaultBranch(ctx context.Context, gitPath, repoRoot string) string 
 		}
 	}
 	for _, candidate := range []string{"main", "master"} {
-		if _, err := runGit(ctx, gitPath, buildRefVerifyArgs(repoRoot, "refs/heads/"+candidate), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
+		if _, err := runGit(ctx, gitPath, buildRevParseVerifyArgs(repoRoot, "refs/heads/"+candidate), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
 			return candidate
 		}
 	}

@@ -418,6 +418,77 @@ func TestControllerSteerWhileBusyAndRelayAfterCancel(t *testing.T) {
 	}
 }
 
+// TestControllerSteerLandingAfterTurnEndRelaysImmediately is the M21
+// regression: dispatch routes a submission to the steer cell from a state
+// read taken while the turn was busy, but the turn finishes before the
+// message lands — onTurnFinished's relay already saw an empty cell.
+// Without the post-enqueue state re-check the message would strand in the
+// cell until the next external submission, with the UI already showing
+// "Queued". The steerHook forces exactly that interleaving.
+func TestControllerSteerLandingAfterTurnEndRelaysImmediately(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	inner := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "first", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "second", StopReason: domain.StopEndTurn},
+	)
+	model := newGateModel(inner)
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, model),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if _, err := controller.SubmitPrompt(ctx, "one"); err != nil {
+		t.Fatalf("SubmitPrompt(one): %v", err)
+	}
+	<-model.started // the first model call is in flight: the turn is busy
+
+	// Open the TOCTOU window: the hook runs after dispatch read the busy
+	// state but before the message reaches the cell, and lets the turn
+	// finish (state → Idle, relay against the still-empty cell).
+	controller.steerHook = func() {
+		model.Open()
+		waitForIdle(t, controller)
+	}
+	result, err := controller.SubmitPrompt(ctx, "two")
+	if err != nil {
+		t.Fatalf("SubmitPrompt(two): %v", err)
+	}
+	if !result.Steered {
+		t.Fatalf("SubmitResult = %+v, want steered", result)
+	}
+
+	// The steer must become the next turn's prompt immediately, not wait
+	// for another external submission.
+	waitForCalls(t, inner, 2)
+	calls := inner.Calls()
+	if got := userTexts(calls[1].Messages); !slices.Contains(got, "two") {
+		t.Fatalf("relay turn user messages = %v, want one containing %q", got, "two")
+	}
+	waitForIdle(t, controller)
+	snapshot, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if len(snapshot.PendingSteers) != 0 {
+		t.Fatalf("PendingSteers after relay = %v, want empty", snapshot.PendingSteers)
+	}
+}
+
 // slowModel delays each Stream call so the turn stays alive long enough
 // for concurrent commands to overlap the turn goroutine, while still
 // respecting cancellation.

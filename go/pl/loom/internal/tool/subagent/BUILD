@@ -23,6 +23,7 @@ go_library(
         "delegate.go",
         "manager.go",
         "resume.go",
+        "sign.go",
         "roles.go",
         "wait.go",
     ],

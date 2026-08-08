@@ -39,6 +39,10 @@ go_library(
 
 go_test(
     name = "mcp_test",
-    srcs = ["http_test.go"],
+    srcs = [
+        "http_test.go",
+        "tool_test.go",
+    ],
     embed = [":mcp_lib"],
+    deps = ["//go/pl/loom/internal/domain:domain_lib"],
 )

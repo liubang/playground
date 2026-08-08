@@ -66,10 +66,10 @@ func TestResumeSubagentPrepareValidation(t *testing.T) {
 
 	for name, raw := range map[string]string{
 		"missing session ID": `{"task":"follow-up"}`,
-		"empty task":        `{"child_session_id":"sess_00000000000000000000000000","task":""}`,
-		"blank task":        `{"child_session_id":"sess_00000000000000000000000000","task":"   "}`,
-		"unknown field":     `{"child_session_id":"sess_00000000000000000000000000","task":"ok","extra":1}`,
-		"invalid role":      `{"child_session_id":"sess_00000000000000000000000000","task":"ok","role":"admin"}`,
+		"empty task":         `{"child_session_id":"sess_00000000000000000000000000","task":""}`,
+		"blank task":         `{"child_session_id":"sess_00000000000000000000000000","task":"   "}`,
+		"unknown field":      `{"child_session_id":"sess_00000000000000000000000000","task":"ok","extra":1}`,
+		"invalid role":       `{"child_session_id":"sess_00000000000000000000000000","task":"ok","role":"admin"}`,
 	} {
 		_, err := tool.Prepare(context.Background(), domain.ToolCall{
 			ID:        domain.NewToolCallID(),

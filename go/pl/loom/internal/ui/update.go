@@ -76,7 +76,6 @@ type promptSubmittedMsg struct {
 	result     app.SubmitResult
 	err        error
 	imageCount int
-	imagePaths []string
 }
 
 // sessionAction describes an asynchronous new/resume session operation.
@@ -1210,7 +1209,6 @@ func (m Model) submitUserInput(raw string) (tea.Model, tea.Cmd) {
 func (m Model) finishSubmitUserInput(raw string) (tea.Model, tea.Cmd) {
 	// Capture attached images for this submission, then clear.
 	images := m.attachedImages
-	imagePaths := m.attachedPaths
 	m.attachedImages = nil
 	m.attachedPaths = nil
 	// Optimistic local echo; replaced by the durable turn.started confirmation
@@ -1222,7 +1220,7 @@ func (m Model) finishSubmitUserInput(raw string) (tea.Model, tea.Cmd) {
 	m.setStatus("Prompt submitted", false)
 	m.setActivity("Waiting for the model")
 	m.quitConfirm = false
-	return m, m.submitPromptWithImagesCmd(raw, images, imagePaths)
+	return m, m.submitPromptWithImagesCmd(raw, images)
 }
 
 // imageAttachedMsg reports the result of loading an image from a file path.
@@ -2325,17 +2323,13 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 
 // --- async controller commands ---
 
-func (m Model) submitPromptCmd(prompt string) tea.Cmd {
-	return m.submitPromptWithImagesCmd(prompt, nil, nil)
-}
-
 // submitPromptWithImagesCmd submits a prompt with optional image attachments.
 // Image loading is done asynchronously; on failure a warning is posted to the
 // status line but the text prompt still goes through.
-func (m Model) submitPromptWithImagesCmd(prompt string, images []domain.ImageContent, imagePaths []string) tea.Cmd {
+func (m Model) submitPromptWithImagesCmd(prompt string, images []domain.ImageContent) tea.Cmd {
 	return func() tea.Msg {
 		result, err := m.controller.SubmitPrompt(context.Background(), prompt, images)
-		return promptSubmittedMsg{prompt: prompt, result: result, err: err, imageCount: len(images), imagePaths: imagePaths}
+		return promptSubmittedMsg{prompt: prompt, result: result, err: err, imageCount: len(images)}
 	}
 }
 

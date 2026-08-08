@@ -80,12 +80,12 @@ func TestE2ESubagentV2SpawnAndWait(t *testing.T) {
 	})
 
 	factory := &subagent.Factory{
-		Store:     store,
-		Registry:  childRegistry,
-		Prompt:    researcherPrompt,
-		Limits:    domain.DefaultLimits(),
-		Runaway:   domain.DefaultRunawayConfig(),
-		Models:    models,
+		Store:    store,
+		Registry: childRegistry,
+		Prompt:   researcherPrompt,
+		Limits:   domain.DefaultLimits(),
+		Runaway:  domain.DefaultRunawayConfig(),
+		Models:   models,
 	}
 
 	roles := map[subagent.Role]*subagent.RoleSpec{
@@ -175,17 +175,17 @@ func TestE2ESubagentV2CoderRole(t *testing.T) {
 	})
 
 	factory := &subagent.Factory{
-		Store:     store,
-		Registry:  childRegistry,
-		Prompt:    researcherPrompt,
-		Limits:    domain.DefaultLimits(),
-		Runaway:   domain.DefaultRunawayConfig(),
-		Models:    models,
+		Store:    store,
+		Registry: childRegistry,
+		Prompt:   researcherPrompt,
+		Limits:   domain.DefaultLimits(),
+		Runaway:  domain.DefaultRunawayConfig(),
+		Models:   models,
 	}
 
 	roles := map[subagent.Role]*subagent.RoleSpec{
 		subagent.RoleResearcher: {Registry: childRegistry, Prompt: researcherPrompt, Risk: domain.R1},
-		subagent.RoleCoder:     {Registry: coderRegistry, Prompt: coderPrompt, Risk: domain.R3},
+		subagent.RoleCoder:      {Registry: coderRegistry, Prompt: coderPrompt, Risk: domain.R3},
 	}
 	manager, err := subagent.NewManager(factory, roles, nil)
 	if err != nil {
@@ -285,14 +285,15 @@ func TestE2EDelegateTaskAsyncInLoop(t *testing.T) {
 		t.Fatalf("NewDelegateTaskTool() error = %v", err)
 	}
 	callID := domain.NewToolCallID()
-	prepared := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        callID,
-			Name:      "delegate_task",
-			Arguments: json.RawMessage(`{"task":"调研入口文件","async":true}`),
-		},
-		Definition: delegateTool.Definition(),
-		Risk:       domain.R1,
+	// Go through Prepare like the agent loop does: Execute verifies the
+	// signed prepared call (REVIEW H10), so a hand-assembled one is rejected.
+	prepared, prepareErr := delegateTool.Prepare(context.Background(), domain.ToolCall{
+		ID:        callID,
+		Name:      "delegate_task",
+		Arguments: json.RawMessage(`{"task":"调研入口文件","async":true}`),
+	})
+	if prepareErr != nil {
+		t.Fatalf("delegate_task Prepare error = %v", prepareErr)
 	}
 	delegateResult := delegateTool.Execute(context.Background(), prepared)
 	if delegateResult.Status != domain.ToolStatusSuccess {
@@ -326,9 +327,9 @@ func TestE2EDelegateTaskAsyncInLoop(t *testing.T) {
 		Risk:       domain.R1,
 	}
 	// Need to run Prepare first to validate/canonicalize the call.
-	waitPrepared, prepareErr := waitTool.Prepare(context.Background(), waitPrepared.Call)
-	if prepareErr != nil {
-		t.Fatalf("wait_subagent Prepare error = %v", prepareErr)
+	waitPrepared, waitPrepareErr := waitTool.Prepare(context.Background(), waitPrepared.Call)
+	if waitPrepareErr != nil {
+		t.Fatalf("wait_subagent Prepare error = %v", waitPrepareErr)
 	}
 	waitResult := waitTool.Execute(context.Background(), waitPrepared)
 	if waitResult.Status != domain.ToolStatusSuccess {
