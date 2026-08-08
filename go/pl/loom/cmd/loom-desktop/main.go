@@ -300,7 +300,14 @@ func run(ctx context.Context, args []string) error {
 			Handler: handler,
 		},
 		Mac: &mac.Options{
-			TitleBar: mac.TitleBarDefault(),
+			// TitleBarHidden: no native title bar — the webview extends to
+			// the window top and the traffic lights overlay the 28px top
+			// rows (see app.css .is-desktop rules). Note: HiddenInset is
+			// NOT used on purpose — it sets UseToolbar=true, which attaches
+			// an empty NSToolbar and pushes the lights down into a ~52px
+			// unified toolbar band (center ~27px), misaligning them with
+			// the web UI's 28px top rows (center 14px).
+			TitleBar: mac.TitleBarHidden(),
 			About: &mac.AboutInfo{
 				Title:   "Loom",
 				Message: "Loom Desktop " + version.Version,

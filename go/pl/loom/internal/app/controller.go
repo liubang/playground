@@ -849,11 +849,17 @@ func (c *Controller) ListMCPServers(ctx context.Context) ([]MCPServerInfo, error
 	servers := c.bootstrap.MCP().Servers()
 	out := make([]MCPServerInfo, 0, len(servers))
 	for _, srv := range servers {
+		// MCPServerInfo.Tools 是 []string（TUI 只需要名字）；manager 层
+		// 的 ToolInfo 还带简介，此处投影为纯名称列表。
+		tools := make([]string, 0, len(srv.Tools))
+		for _, t := range srv.Tools {
+			tools = append(tools, t.Name)
+		}
 		out = append(out, MCPServerInfo{
 			Name:      srv.Name,
 			Connected: srv.Connected,
 			Error:     srv.Error,
-			Tools:     append([]string(nil), srv.Tools...),
+			Tools:     tools,
 		})
 	}
 	return out, nil
