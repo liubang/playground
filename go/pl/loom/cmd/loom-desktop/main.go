@@ -56,6 +56,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/logging"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/server"
+	"github.com/liubang/playground/go/pl/loom/internal/session"
 	"github.com/liubang/playground/go/pl/loom/internal/version"
 )
 
@@ -100,32 +101,38 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	// A Finder-launched .app gets "/" as cwd, which would make the default
-	// workspace useless. Ask for a project directory instead of silently
-	// adopting one; a cancel exits cleanly. Terminal launches keep the
-	// project directory, matching `loom` semantics.
-	if root == "/" {
-		picked, perr := chooseFolder("Choose a workspace directory for Loom")
-		switch {
-		case perr == nil:
-			root = picked
-		case errors.Is(perr, errPickCancelled):
-			return nil
-		default:
-			// AppleScript unavailable (stripped-down system): fall back to
-			// the home directory rather than refuse to start.
-			fmt.Fprintf(os.Stderr, "loom-desktop: folder picker unavailable (%v), using home directory\n", perr)
-			if home, herr := os.UserHomeDir(); herr == nil {
-				root = home
-			}
-		}
-	}
 	resolved, err := loadConfig()
 	if err != nil {
 		return err
 	}
 	if err := prepareStorage(resolved); err != nil {
 		return err
+	}
+
+	// A Finder-launched .app gets "/" as cwd. Reopen the most recently active
+	// project (derived from session history — the same source of truth the
+	// SPA's sidebar focus uses) instead of asking on every launch; the native
+	// picker appears only when there is no history to derive from (first
+	// launch), and a cancel exits cleanly. Terminal launches keep the project
+	// directory, matching `loom` semantics.
+	if root == "/" {
+		root = lastActiveWorkspaceRoot(ctx, resolved)
+		if root == "" {
+			picked, perr := chooseFolder("Choose a workspace directory for Loom")
+			switch {
+			case perr == nil:
+				root = picked
+			case errors.Is(perr, errPickCancelled):
+				return nil
+			default:
+				// AppleScript unavailable (stripped-down system): fall back to
+				// the home directory rather than refuse to start.
+				fmt.Fprintf(os.Stderr, "loom-desktop: folder picker unavailable (%v), using home directory\n", perr)
+				if home, herr := os.UserHomeDir(); herr == nil {
+					root = home
+				}
+			}
+		}
 	}
 
 	// Single-instance discipline: same data-dir flock as `loom serve`.
@@ -411,6 +418,42 @@ func generateToken() (string, error) {
 		return "", fmt.Errorf("generate token: %w", err)
 	}
 	return hex.EncodeToString(raw), nil
+}
+
+// lastActiveWorkspaceRoot derives the desktop default workspace from the
+// most recently updated session, so a Finder-launched Loom reopens in the
+// project the user last worked in — the same source of truth the SPA's
+// sidebar focus and composer default use. Returns "" when there is no
+// usable history (first launch, legacy rows, deleted/moved workspace); the
+// caller then falls back to asking once. Read-only: safe to run while
+// another loom process owns the data dir (WAL allows concurrent readers).
+func lastActiveWorkspaceRoot(ctx context.Context, resolved *config.ResolvedConfig) string {
+	dbPath := resolved.Storage.SessionDBPath()
+	if _, err := os.Stat(dbPath); err != nil {
+		return ""
+	}
+	store, err := session.OpenSQLiteStoreReadOnly(ctx, dbPath)
+	if err != nil {
+		return ""
+	}
+	defer store.Close()
+	summaries, _, err := store.ListSessions(ctx, "", 1, false, domain.WorkspaceID{})
+	if err != nil || len(summaries) == 0 {
+		return ""
+	}
+	wsID, err := store.SessionWorkspace(ctx, summaries[0].ID)
+	if err != nil {
+		return ""
+	}
+	ws, err := store.GetWorkspace(ctx, wsID)
+	if err != nil || ws.RootPath == "" {
+		return ""
+	}
+	// The directory may have moved since the workspace was registered.
+	if info, err := os.Stat(ws.RootPath); err != nil || !info.IsDir() {
+		return ""
+	}
+	return ws.RootPath
 }
 
 // --- bootstrap helpers (kept in sync with cmd/loom/main.go) ---
