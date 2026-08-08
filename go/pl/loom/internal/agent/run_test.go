@@ -3465,7 +3465,7 @@ func TestLoopMaxOutputSalvageTurn(t *testing.T) {
 	if run.State.Outcome != domain.OutcomeCompletedUnverified {
 		t.Fatalf("outcome = %s, want completed_unverified (salvage landing)", run.State.Outcome)
 	}
-	if got := lastAssistantText(run.Messages); got != "简要结论。" {
+	if got := LastAssistantText(run.Messages); got != "简要结论。" {
 		t.Fatalf("final answer = %q, want the salvage-turn conclusion", got)
 	}
 	var wrapUpSeen, promptSeen bool
@@ -3509,11 +3509,110 @@ func TestLoopMaxOutputSalvageTurnItselfCapped(t *testing.T) {
 	if run.State.Outcome != domain.OutcomeCompletedUnverified {
 		t.Fatalf("outcome = %s, want completed_unverified", run.State.Outcome)
 	}
-	if got := lastAssistantText(run.Messages); got != "补救也写不完" {
+	if got := LastAssistantText(run.Messages); got != "补救也写不完" {
 		t.Fatalf("final answer = %q, want the capped salvage text", got)
 	}
 	if calls := len(model.Calls()); calls != 3 {
 		t.Fatalf("model calls = %d, want exactly 3 (no infinite salvage loop)", calls)
+	}
+}
+
+// Output-cap truncations only arm the salvage wrap-up when they are
+// CONSECUTIVE: a normal turn in between resets the streak (REVIEW H15).
+func TestLoopMaxOutputStreakResetsOnNormalTurn(t *testing.T) {
+	toolTurn := fakes.ScriptEntry{
+		ToolCalls: []domain.ToolCall{{
+			ID: domain.NewToolCallID(), Name: "read_file",
+			Arguments: json.RawMessage(`{"path":"a.go"}`),
+		}},
+		StopReason: domain.StopToolUse,
+	}
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "第一部分", StopReason: domain.StopMaxOutput, UsageIn: 100, UsageOut: 400},
+		toolTurn, // a normal tool turn must break the truncation streak
+		fakes.ScriptEntry{Text: "第二部分", StopReason: domain.StopMaxOutput, UsageIn: 100, UsageOut: 400},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 50},
+	)
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "research"}},
+		CreatedAt: time.Now(),
+	})
+	registry := NewToolRegistry()
+	if err := registry.Register(fakes.ReadFileTool()); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	loop := &Loop{
+		Run: run, Model: model, Registry: registry, Logger: slog.Default(),
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded (streak was broken by the tool turn)", run.State.Outcome)
+	}
+	for _, msg := range run.Messages {
+		if strings.Contains(strings.Join(msg.TextParts(), ""), "output token limit") {
+			t.Fatal("non-consecutive truncations must not arm the salvage wrap-up")
+		}
+	}
+	if calls := len(model.Calls()); calls != 4 {
+		t.Fatalf("model calls = %d, want 4", calls)
+	}
+}
+
+// A goal-token wrap-up turn that overflows the output cap must land with
+// whatever text it produced — the goal wrap-up used to fall through every
+// guard and could loop forever (REVIEW H15).
+func TestLoopGoalWrapUpTurnOverflowStillLands(t *testing.T) {
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "工作完成", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 50},
+		fakes.ScriptEntry{Text: "总结写到一半被截断", StopReason: domain.StopMaxOutput, UsageIn: 100, UsageOut: 400},
+	)
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
+		CreatedAt: time.Now(),
+	})
+	run.Goal = &domain.Goal{
+		Objective: "finish the task", TokenBudget: 10, TokensUsed: 10,
+		Status: domain.GoalStatusActive, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	loop := &Loop{Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default()}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded (goal wrap-up landing)", run.State.Outcome)
+	}
+	if calls := len(model.Calls()); calls != 2 {
+		t.Fatalf("model calls = %d, want exactly 2 (no wrap-up loop)", calls)
+	}
+}
+
+// An unrecognized stop reason gets a bounded number of retries, then the
+// run fails instead of re-asking the model forever (REVIEW H15).
+func TestLoopUnknownStopReasonRetriesBounded(t *testing.T) {
+	entry := fakes.ScriptEntry{Text: "……", StopReason: domain.StopReason("vendor_custom"), UsageIn: 100, UsageOut: 50}
+	model := fakes.NewFakeModel(entry, entry, entry, entry, entry)
+	run := newTestRun(domain.Limits{})
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default()}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("outcome = %s, want failed (unrecognized stop reason)", run.State.Outcome)
+	}
+	if calls := len(model.Calls()); calls != maxUnknownStopRetries {
+		t.Fatalf("model calls = %d, want %d (bounded retries)", calls, maxUnknownStopRetries)
 	}
 }
 
@@ -3751,4 +3850,26 @@ func TestActionablePrepareErrorGuidesWorkspaceEscape(t *testing.T) {
 	if got := actionablePrepareError(fileToolCall, other); got != other.Error() {
 		t.Fatalf("unrelated security error changed: %q", got)
 	}
+}
+
+// aggregateStream preserves the former aggregation helper for tests while
+// delegating validation to StreamAggregator.
+func aggregateStream(stream domain.ModelStream, clock domain.Clock) (streamResponse, error) {
+	agg := NewStreamAggregator(clock, StreamHooks{})
+	if err := consumeStream(stream, agg); err != nil {
+		response := streamResponse{}
+		if agg.HasPartialContent() {
+			response.Message = agg.InterruptedMessage()
+		}
+		return response, err
+	}
+	message, stop, inputTokens, outputTokens, err := agg.Finalize()
+	if err != nil {
+		response := streamResponse{}
+		if agg.HasPartialContent() {
+			response.Message = agg.InterruptedMessage()
+		}
+		return response, err
+	}
+	return streamResponse{Message: message, StopReason: stop, InputTokens: inputTokens, OutputTokens: outputTokens}, nil
 }

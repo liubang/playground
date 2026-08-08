@@ -27,6 +27,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/logging"
+	"gopkg.in/yaml.v3"
 )
 
 // TestMain guarantees a $HOME: hermetic runners (bazel) unset it, and
@@ -745,5 +746,59 @@ func TestWriteTemplate(t *testing.T) {
 	// Never overwrite an existing file.
 	if err := WriteTemplate(path); err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("second WriteTemplate() error = %v, want already-exists", err)
+	}
+}
+
+// TestTemplateCoversSchemaSections is the M35 regression lock: the init
+// template doubles as the user-facing configuration reference, so every
+// top-level schema section must appear in it (memory/image/logging/
+// workspaces and subagent.max_output_tokens had drifted out). It also
+// verifies the template's concrete values resolve to the defaults its
+// comments document.
+func TestTemplateCoversSchemaSections(t *testing.T) {
+	var raw map[string]any
+	if err := yaml.Unmarshal([]byte(template), &raw); err != nil {
+		t.Fatalf("template is not valid YAML: %v", err)
+	}
+	// Mirror of File's top-level yaml keys (schema.go).
+	for _, section := range []string{
+		"default", "providers", "limits", "context", "runaway", "prompt",
+		"skills", "rules", "approval", "tracing", "storage", "logging",
+		"ui", "subagent", "memory", "image", "mcp_servers", "workspaces",
+	} {
+		if _, ok := raw[section]; !ok {
+			t.Fatalf("template missing top-level section %q", section)
+		}
+	}
+	sub, _ := raw["subagent"].(map[string]any)
+	if _, ok := sub["max_output_tokens"]; !ok {
+		t.Fatal("template subagent section missing max_output_tokens")
+	}
+
+	// The template's concrete values must resolve to the documented
+	// defaults.
+	content := strings.Replace(template, "api_key: sk-xxxxxxxx", "api_key: sk-real", 1)
+	cfg, err := Load(writeConfig(t, content), LoadOptions{RequireProviders: true}, noEnv)
+	if err != nil {
+		t.Fatalf("template does not load: %v", err)
+	}
+	if !cfg.Memory.Enabled || cfg.Memory.MaxJobsPerRun != 8 ||
+		cfg.Memory.RunInterval != 30*time.Minute ||
+		cfg.Memory.MinSessionIdle != time.Hour ||
+		cfg.Memory.MaxSessionAge != 30*24*time.Hour {
+		t.Fatalf("memory defaults = %+v", cfg.Memory)
+	}
+	if cfg.Logging.MaxFileBytes != logging.DefaultMaxFileBytes ||
+		cfg.Logging.MaxTotalBytes != logging.DefaultMaxTotalBytes {
+		t.Fatalf("logging defaults = %+v", cfg.Logging)
+	}
+	if cfg.Subagent.MaxOutputTokens != 8192 {
+		t.Fatalf("subagent.max_output_tokens = %d, want 8192", cfg.Subagent.MaxOutputTokens)
+	}
+	if cfg.Image.Enabled {
+		t.Fatalf("image must stay disabled with empty provider/model: %+v", cfg.Image)
+	}
+	if len(cfg.Workspaces) != 0 {
+		t.Fatalf("workspaces = %+v, want empty", cfg.Workspaces)
 	}
 }

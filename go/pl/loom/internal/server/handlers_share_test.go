@@ -148,6 +148,29 @@ func TestShareLinkLifecycle(t *testing.T) {
 	}
 }
 
+// TestSharedArtifactParamValidation locks the shared-helper contract
+// (REVIEW R14): the share-link artifact endpoint applies the same id/size
+// validation as the owner endpoint, before any store lookup.
+func TestSharedArtifactParamValidation(t *testing.T) {
+	ts, _ := newTestServer(t, fakes.NewFakeModel())
+	id := createTestSession(t, ts)
+	_, share := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/share", "")
+	token, _ := share["token"].(string)
+
+	artID := "art_" + strings.Repeat("0", 64)
+	for name, url := range map[string]string{
+		"missing size":     ts.URL + "/v1/shared/" + token + "/artifacts/" + artID,
+		"bad id":           ts.URL + "/v1/shared/" + token + "/artifacts/not-a-valid-id?size=1",
+		"negative size":    ts.URL + "/v1/shared/" + token + "/artifacts/" + artID + "?size=-1",
+		"non-numeric size": ts.URL + "/v1/shared/" + token + "/artifacts/" + artID + "?size=abc",
+	} {
+		status, _ := getPublic(t, url)
+		if status != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, want 400", name, status)
+		}
+	}
+}
+
 // TestShareViewSurvivesSessionDelete covers the FK cascade: deleting the
 // session removes its share, so old links 404 instead of leaking data.
 func TestShareViewSurvivesSessionDelete(t *testing.T) {

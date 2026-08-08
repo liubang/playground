@@ -18,13 +18,18 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
@@ -145,6 +150,53 @@ func TestProcessRuntimeLoadPrefs(t *testing.T) {
 	proc2.loadPrefs(ctx)
 	if got := proc2.CurrentModel(); got != resolved.Default {
 		t.Fatalf("CurrentModel with ghost pref = %v, want configured default", got)
+	}
+}
+
+// countReapLoopGoroutines reports how many exsession reaper goroutines
+// are currently running. The reaper exits only via Manager.Close, so its
+// presence is the observable signal for the M22 failure-cleanup path.
+func countReapLoopGoroutines() int {
+	buf := make([]byte, 4<<20)
+	n := runtime.Stack(buf, true)
+	return bytes.Count(buf[:n], []byte("exsession.(*Manager).reapLoop"))
+}
+
+// TestNewWorkspaceBootstrapFailureClosesSessionManager is the M22
+// regression lock: a sub-agent assembly failure must release the
+// already-created exec-session manager — before the fix those paths
+// returned without Close, leaking the manager's reaper goroutine for the
+// process lifetime.
+func TestNewWorkspaceBootstrapFailureClosesSessionManager(t *testing.T) {
+	ctx := context.Background()
+	resolved := testResolvedConfig(fakes.NewFakeModel())
+	resolved.Storage = config.ResolvedStorage{BaseDir: t.TempDir()}
+	resolved.Subagent.Enabled = true
+	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o755); err != nil {
+		t.Fatalf("mkdir sessions dir: %v", err)
+	}
+	proc, err := NewProcessRuntime(ctx, resolved, ProcessRuntimeConfig{ArtifactDir: filepath.Join(t.TempDir(), "artifacts")})
+	if err != nil {
+		t.Fatalf("NewProcessRuntime: %v", err)
+	}
+	t.Cleanup(proc.Close)
+
+	baseline := countReapLoopGoroutines()
+	bootstrapSubagentFailpoint = func() error { return errors.New("injected sub-agent failure") }
+	t.Cleanup(func() { bootstrapSubagentFailpoint = nil })
+
+	if _, err := NewWorkspaceBootstrap(ctx, proc, BootstrapConfig{WorkspaceRoot: t.TempDir()}); err == nil ||
+		!strings.Contains(err.Error(), "injected sub-agent failure") {
+		t.Fatalf("NewWorkspaceBootstrap error = %v, want injected failure", err)
+	}
+
+	// The reaper exits asynchronously once Close lands; give it a moment.
+	deadline := time.Now().Add(2 * time.Second)
+	for countReapLoopGoroutines() != baseline && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := countReapLoopGoroutines(); got != baseline {
+		t.Fatalf("reaper goroutines = %d, want baseline %d (session manager leaked)", got, baseline)
 	}
 }
 
@@ -481,5 +533,68 @@ func TestSessionServiceDraining(t *testing.T) {
 	}
 	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "q", nil, ""); !errors.Is(err, ErrDraining) {
 		t.Fatalf("SubmitPrompt after shutdown error = %v, want ErrDraining", err)
+	}
+}
+
+// TestSessionServiceSubscribeAfterShutdownDrains is the M20 regression
+// lock: subscriptions registered while the service is draining are
+// rejected, not attached to a forward goroutine with no lifecycle
+// guarantee.
+func TestSessionServiceSubscribeAfterShutdownDrains(t *testing.T) {
+	svc, _ := newTestService(t, fakes.NewFakeModel())
+	ctx := context.Background()
+
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := svc.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	if _, err := svc.SubscribeEvents(ctx, h.ID, 0); !errors.Is(err, ErrDraining) {
+		t.Fatalf("SubscribeEvents after shutdown error = %v, want ErrDraining", err)
+	}
+	if _, err := svc.SubscribeLatest(ctx, h.ID); !errors.Is(err, ErrDraining) {
+		t.Fatalf("SubscribeLatest after shutdown error = %v, want ErrDraining", err)
+	}
+}
+
+// TestSessionServiceSubscribeShutdownRace hammers subscriptions against
+// Shutdown. Before M20 the wg.Add in subscribeLocked could land after
+// Shutdown's wg.Wait began (WaitGroup misuse, a fatal panic) — with the
+// fix every subscription either wins a tracked goroutine (its channel
+// closes when the service goes down) or is rejected with ErrDraining.
+func TestSessionServiceSubscribeShutdownRace(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		svc, _ := newTestService(t, fakes.NewFakeModel())
+		ctx := context.Background()
+		h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+		if err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+		var wg sync.WaitGroup
+		for j := 0; j < 8; j++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ch, err := svc.SubscribeLatest(ctx, h.ID)
+				if errors.Is(err, ErrDraining) {
+					return
+				}
+				if err != nil {
+					t.Errorf("SubscribeLatest: %v", err)
+					return
+				}
+				// A successful subscription must terminate: Shutdown
+				// cancels the service context and drops live subscribers.
+				for range ch {
+				}
+			}()
+		}
+		// Shutdown may report "controller is closed": s.cancel() stops the
+		// controller's Run loop before the per-handle shutdown command
+		// arrives — immaterial here, the subscriptions are what matters.
+		_ = svc.Shutdown(ctx)
+		wg.Wait()
 	}
 }

@@ -112,6 +112,53 @@ func TestDelegatePrepareValidation(t *testing.T) {
 	}
 }
 
+// A prepared call whose binding is tampered with after Prepare must be
+// rejected at Execute: the sub-agent tools sign prepared calls with a
+// per-instance HMAC key, the same protocol as the built-in tools
+// (REVIEW H10).
+func TestDelegateExecuteRejectsTamperedPreparedCall(t *testing.T) {
+	factory, model, _, models := newTestFactory(t, fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn})
+	publishSnapshot(models, model)
+	tool, err := NewDelegateTaskTool(factory)
+	if err != nil {
+		t.Fatalf("NewDelegateTaskTool: %v", err)
+	}
+
+	// Prepare rejects a call addressed to a different tool.
+	if _, err := tool.Prepare(context.Background(), domain.ToolCall{
+		ID: domain.NewToolCallID(), Name: "read_file",
+		Arguments: json.RawMessage(`{"task":"x"}`),
+	}); err == nil {
+		t.Fatal("Prepare with a foreign tool name must fail")
+	}
+
+	prepared := delegateCall(t, tool, "find where retries are configured")
+	assertSecurityError := func(name string, p domain.PreparedCall) {
+		t.Helper()
+		got := tool.Execute(context.Background(), p)
+		if got.Status != domain.ToolStatusError || got.Error == nil || got.Error.Code != string(domain.ErrSecurity) {
+			t.Fatalf("%s: status = %s (%+v), want security error", name, got.Status, got.Error)
+		}
+	}
+
+	// Risk downgrade must not verify.
+	tampered := prepared
+	tampered.Risk = domain.R0
+	assertSecurityError("tampered risk", tampered)
+
+	// A forged hash (no key) must not verify.
+	forged := prepared
+	forged.ArgsHash = strings.Repeat("0", len(prepared.ArgsHash))
+	assertSecurityError("forged hash", forged)
+
+	// A hash minted by another tool instance (different key) must not verify.
+	other, err := NewDelegateTaskTool(factory)
+	if err != nil {
+		t.Fatalf("NewDelegateTaskTool: %v", err)
+	}
+	assertSecurityError("cross-instance hash", delegateCall(t, other, "find where retries are configured"))
+}
+
 func TestDelegateExecuteSuccess(t *testing.T) {
 	factory, model, store, models := newTestFactory(t,
 		fakes.ScriptEntry{

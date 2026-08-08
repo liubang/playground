@@ -152,15 +152,22 @@ func (l *Loop) trackStall() {
 		l.stallTurns++
 	}
 	l.progressThisTurn = false
-	if l.stallTurns >= cfg.StallWarnTurns && l.fireNoticeOnce(dimensionRunaway+":stall", l.stallTurns/cfg.StallWarnTurns) {
-		l.stallTurns = 0
-		l.Run.AddBudgetNotice(domain.BudgetNoticePayload{
-			Dimension: dimensionRunaway, Level: 1,
-			Usage: int64(cfg.StallWarnTurns), Limit: int64(cfg.StallWarnTurns),
-			Message: noticeMessage(fmt.Sprintf(
-				"[runaway warning] The last %d turns produced no visible progress (no new information, no file changes, no plan movement). Stop re-exploring and either commit to a concrete next action or report what is blocking you.",
-				cfg.StallWarnTurns), l.Run.Clock.Now()),
-		})
+	// The streak keeps growing after each reminder so the level
+	// (stallTurns/StallWarnTurns) advances — resetting it here would pin
+	// the level at 1 and fireNoticeOnce would suppress every later
+	// reminder, defeating the "every stall_warn_turns" contract
+	// (REVIEW H15).
+	if l.stallTurns >= cfg.StallWarnTurns {
+		level := l.stallTurns / cfg.StallWarnTurns
+		if l.fireNoticeOnce(dimensionRunaway+":stall", level) {
+			l.Run.AddBudgetNotice(domain.BudgetNoticePayload{
+				Dimension: dimensionRunaway, Level: level,
+				Usage: int64(l.stallTurns), Limit: int64(cfg.StallWarnTurns),
+				Message: noticeMessage(fmt.Sprintf(
+					"[runaway warning] The last %d turns produced no visible progress (no new information, no file changes, no plan movement). Stop re-exploring and either commit to a concrete next action or report what is blocking you.",
+					l.stallTurns), l.Run.Clock.Now()),
+			})
+		}
 	}
 }
 

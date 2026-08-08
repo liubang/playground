@@ -262,10 +262,25 @@ func (s *Server) routes(mux *http.ServeMux) {
 	}
 }
 
-// withMiddleware chains auth, body limits, CORS denial, and panic
-// containment around the router.
+// withMiddleware chains panic containment, security headers, CORS
+// (deny-by-default, with optional single-origin whitelisting incl.
+// preflight), bearer auth, and body limits around the router.
 func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Panic containment: a handler panic must not kill the connection
+		// (or crash in-flight SSE streams); log it and answer in the
+		// unified error model instead of dropping the request (REVIEW M24).
+		defer func() {
+			if rec := recover(); rec != nil {
+				s.logger.Error("http handler panic",
+					"panic", rec, "method", r.Method, "path", r.URL.Path)
+				writeError(w, &statusError{
+					status:  http.StatusInternalServerError,
+					code:    "internal",
+					message: "internal server error",
+				})
+			}
+		}()
 		// Security headers on every response, static and API alike
 		// (docs/WEB_DESIGN.md §7.2): CSP is the second XSS line of defense
 		// behind DOMPurify; X-Frame-Options blocks clickjacking.
@@ -282,6 +297,18 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		// development (docs/SERVE_DESIGN.md §5.2).
 		if origin := r.Header.Get("Origin"); origin != "" && s.cfg.AllowOrigin != "" && origin == s.cfg.AllowOrigin {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
+			// CORS preflight: a browser sends a bare OPTIONS (no bearer
+			// token) before any credentialed cross-origin request, so it
+			// must be answered before the auth gate — otherwise
+			// --allow-origin is unusable from a browser. OPTIONS without
+			// the whitelisted Origin falls through to the normal flow
+			// (REVIEW M24).
+			if r.Method == http.MethodOptions {
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, PATCH")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 		}
 		// The SPA's static assets are not sensitive: the token gate page
 		// must be reachable anonymously, and every /v1 endpoint still

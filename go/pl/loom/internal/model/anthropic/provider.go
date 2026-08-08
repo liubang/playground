@@ -271,18 +271,7 @@ func thinkingBudgetFor(spec domain.ReasoningSpec, maxTokens int64) (int64, error
 // alternation.
 func toAnthropicMessages(in []domain.Message) ([]map[string]any, []map[string]any, error) {
 	var systemBlocks []map[string]any
-	var out []map[string]any
-
-	appendBlock := func(role string, block map[string]any) {
-		if n := len(out); n > 0 && out[n-1]["role"] == string(role) {
-			out[n-1]["content"] = append(out[n-1]["content"].([]map[string]any), block)
-			return
-		}
-		out = append(out, map[string]any{
-			"role":    string(role),
-			"content": []map[string]any{block},
-		})
-	}
+	sink := &messageSink{}
 
 	leading := true
 	for _, msg := range in {
@@ -311,29 +300,70 @@ func toAnthropicMessages(in []domain.Message) ([]map[string]any, []map[string]an
 				return nil, nil, err
 			}
 			for _, block := range blocks {
-				appendBlock(string(domain.RoleUser), block)
+				sink.append(string(domain.RoleUser), block)
 			}
 		case domain.RoleAssistant:
-			if err := appendAssistant(msg, appendBlock); err != nil {
+			if err := appendAssistant(msg, sink); err != nil {
 				return nil, nil, err
 			}
 		default:
 			return nil, nil, fmt.Errorf("anthropic provider: unsupported role %q", msg.Role)
 		}
 	}
-	return systemBlocks, out, nil
+	return systemBlocks, sink.out, nil
+}
+
+// messageSink accumulates wire messages, merging consecutive same-role
+// messages because the API requires role alternation.
+type messageSink struct {
+	out []map[string]any
+}
+
+func (s *messageSink) append(role string, block map[string]any) {
+	if n := len(s.out); n > 0 && s.out[n-1]["role"] == role {
+		s.out[n-1]["content"] = append(s.out[n-1]["content"].([]map[string]any), block)
+		return
+	}
+	s.out = append(s.out, map[string]any{
+		"role":    role,
+		"content": []map[string]any{block},
+	})
+}
+
+// appendToolResult appends a tool_result block while preserving the API's
+// ordering invariant: tool_result blocks must immediately follow the
+// assistant message carrying their tool_use. Merging into the previous
+// message is only valid when it is a user message that already consists
+// solely of tool_result blocks (parallel results); merging into a
+// text-carrying user message would put the tool_result ahead of its
+// tool_use on the wire — a guaranteed API 400 (REVIEW M30).
+func (s *messageSink) appendToolResult(block map[string]any) error {
+	if n := len(s.out); n > 0 && s.out[n-1]["role"] == string(domain.RoleUser) {
+		for _, existing := range s.out[n-1]["content"].([]map[string]any) {
+			if existing["type"] != "tool_result" {
+				return fmt.Errorf("anthropic provider: tool result %q would merge into a user text message (tool_result must follow its tool_use)", block["tool_use_id"])
+			}
+		}
+		s.out[n-1]["content"] = append(s.out[n-1]["content"].([]map[string]any), block)
+		return nil
+	}
+	s.out = append(s.out, map[string]any{
+		"role":    string(domain.RoleUser),
+		"content": []map[string]any{block},
+	})
+	return nil
 }
 
 // appendAssistant converts one assistant message: text and signed reasoning
 // become assistant blocks in order; a tool result flushes into a user
 // message carrying tool_result blocks (consecutive results share one user
 // message, as the API requires for parallel tool use).
-func appendAssistant(msg domain.Message, appendBlock func(role string, block map[string]any)) error {
+func appendAssistant(msg domain.Message, sink *messageSink) error {
 	for _, part := range msg.Parts {
 		switch part.Kind {
 		case domain.PartText:
 			if part.Text != "" {
-				appendBlock(string(domain.RoleAssistant), map[string]any{"type": "text", "text": part.Text})
+				sink.append(string(domain.RoleAssistant), map[string]any{"type": "text", "text": part.Text})
 			}
 		case domain.PartReasoning:
 			if part.Reasoning == nil {
@@ -341,7 +371,7 @@ func appendAssistant(msg domain.Message, appendBlock func(role string, block map
 			}
 			block, ok := thinkingBlock(*part.Reasoning)
 			if ok {
-				appendBlock(string(domain.RoleAssistant), block)
+				sink.append(string(domain.RoleAssistant), block)
 			}
 		case domain.PartToolCall:
 			if part.ToolCall == nil {
@@ -355,7 +385,7 @@ func appendAssistant(msg domain.Message, appendBlock func(role string, block map
 			} else {
 				input = map[string]any{}
 			}
-			appendBlock(string(domain.RoleAssistant), map[string]any{
+			sink.append(string(domain.RoleAssistant), map[string]any{
 				"type":  "tool_use",
 				"id":    part.ToolCall.ID.String(),
 				"name":  part.ToolCall.Name,
@@ -365,7 +395,9 @@ func appendAssistant(msg domain.Message, appendBlock func(role string, block map
 			if part.ToolResult == nil {
 				return fmt.Errorf("anthropic provider: tool result part missing payload")
 			}
-			appendBlock(string(domain.RoleUser), toolResultBlock(*part.ToolResult))
+			if err := sink.appendToolResult(toolResultBlock(*part.ToolResult)); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("anthropic provider: unsupported assistant part kind %q", part.Kind)
 		}

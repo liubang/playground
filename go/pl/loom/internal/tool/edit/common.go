@@ -65,11 +65,6 @@ type editOutput struct {
 	Size    int64  `json:"size"`
 }
 
-type fileLine struct {
-	Text       string
-	HasNewline bool
-}
-
 func newBaseTool(def domain.ToolDefinition, validator *workspacepkg.PathValidator) (baseTool, error) {
 	if validator == nil {
 		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "path validator is required")
@@ -228,6 +223,12 @@ func ensureExistingTextFile(validator *workspacepkg.PathValidator, input string)
 		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrSecurity, "path is not a writable regular file", domain.WithCause(err))
 	}
 
+	// Size-check before reading: the snapshot already stat'ed the file, and
+	// reading an oversized file into memory just to reject it is wasted
+	// work (REVIEW M25).
+	if snapshot.Size > maxTextFileBytes {
+		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("file exceeds size limit of %d bytes", maxTextFileBytes))
+	}
 	data, err := os.ReadFile(resolved.Absolute)
 	if err != nil {
 		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrUnavailable, "failed to read file", domain.WithCause(err))
@@ -328,41 +329,4 @@ func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domai
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
-}
-
-func splitFileLines(data []byte) []fileLine {
-	if len(data) == 0 {
-		return nil
-	}
-	text := string(data)
-	lines := make([]fileLine, 0, strings.Count(text, "\n")+1)
-	start := 0
-	for i, r := range text {
-		if r != '\n' {
-			continue
-		}
-		lines = append(lines, fileLine{Text: text[start:i], HasNewline: true})
-		start = i + 1
-	}
-	if start < len(text) {
-		lines = append(lines, fileLine{Text: text[start:], HasNewline: false})
-	}
-	return lines
-}
-
-func joinFileLines(lines []fileLine) ([]byte, error) {
-	if len(lines) == 0 {
-		return []byte{}, nil
-	}
-	var buf bytes.Buffer
-	for i, line := range lines {
-		if !line.HasNewline && i != len(lines)-1 {
-			return nil, domain.NewError(domain.ErrInvalidInput, "only the last line may omit a trailing newline")
-		}
-		buf.WriteString(line.Text)
-		if line.HasNewline {
-			buf.WriteByte('\n')
-		}
-	}
-	return buf.Bytes(), nil
 }

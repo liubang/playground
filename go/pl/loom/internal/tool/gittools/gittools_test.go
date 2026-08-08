@@ -398,6 +398,40 @@ func TestGitLogToolReturnsRecentCommits(t *testing.T) {
 	}
 }
 
+// The path filter must be resolved relative to repo_root: git log runs with
+// -C repoRoot, so a workspace-relative path ("repo/a.txt") matches nothing
+// when the repo lives in a workspace subdirectory (REVIEW H8).
+func TestGitLogToolPathFilterWithSubdirRepoRoot(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, _, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "touch a")
+	mustWriteFile(t, filepath.Join(repoRoot, "b.txt"), []byte("two\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "touch b")
+
+	tool, err := NewGitLogTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitLogTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_log", gitLogArgs{RepoRoot: "repo", Limit: 10, Path: "repo/a.txt"}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+
+	var output gitLogOutput
+	decodeToolResult(t, result, &output)
+	if output.Count != 1 || output.Commits[0].Subject != "touch a" {
+		t.Fatalf("path filter = %+v, want only the 'touch a' commit", output)
+	}
+}
+
 // repo_root and limit are optional: empty values default to "." (workspace
 // root) and 20 respectively.
 func TestGitToolsDefaultRepoRootAndLimit(t *testing.T) {

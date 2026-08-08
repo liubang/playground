@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/mcp"
 )
 
 // File is the raw YAML schema of ~/.loom/config.yaml. Pointer fields
@@ -339,24 +340,8 @@ type Memory struct {
 // selected by exactly one of Command or URL:
 //   - command: spawn a subprocess and speak MCP over its stdio pipes;
 //   - url:     POST JSON-RPC to a remote streamable HTTP endpoint.
-type MCPServer struct {
-	Command string            `yaml:"command"`
-	Args    []string          `yaml:"args"`
-	Env     map[string]string `yaml:"env"`
-	Cwd     string            `yaml:"cwd"`
-	// URL selects the streamable HTTP transport (mutually exclusive
-	// with Command). Headers carries static per-request headers such
-	// as Authorization; a ${VAR} reference in a value resolves the
-	// environment variable at load time (secret references, mirroring
-	// api_key_env, so tokens stay out of the file).
-	URL     string            `yaml:"url"`
-	Headers map[string]string `yaml:"headers"`
-	// StartupTimeoutSec bounds spawn+initialize (default 30s);
-	// ToolTimeoutSec bounds one tools/call (default 300s).
-	StartupTimeoutSec float64 `yaml:"startup_timeout_sec"`
-	ToolTimeoutSec    float64 `yaml:"tool_timeout_sec"`
-	// EnabledTools/DisabledTools filter the discovered catalog by the
-	// server-local tool names. EnabledTools nil means "all".
-	EnabledTools  []string `yaml:"enabled_tools"`
-	DisabledTools []string `yaml:"disabled_tools"`
-}
+//
+// It aliases mcp.ServerConfig so the resolved configuration flows into
+// the MCP manager without a field-by-field copy (REVIEW R12); the ${VAR}
+// header reference resolution documented there happens at load time here.
+type MCPServer = mcp.ServerConfig

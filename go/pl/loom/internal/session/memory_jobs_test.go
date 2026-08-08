@@ -339,3 +339,81 @@ func TestDeleteSessionRemovesMemoryJob(t *testing.T) {
 		t.Fatalf("memory_jobs row survived DeleteSession (count=%d)", count)
 	}
 }
+
+// TestRewindSessionResetsStaleMemoryJob is the M29 regression lock: a
+// completed extraction whose extracted_version covers events the rewind
+// deleted must re-enter the queue (its memories may describe turns that
+// no longer exist), while an extraction that only observed retained
+// events stays untouched.
+func TestRewindSessionResetsStaleMemoryJob(t *testing.T) {
+	ctx := context.Background()
+	store := openMemoryJobTestStore(t)
+
+	// Two checkpoints (seq 1 and 2) so the session can rewind from
+	// version 2 to 1.
+	setup := func(t *testing.T) domain.SessionID {
+		t.Helper()
+		sessionID := createMemoryJobSession(t, store)
+		events1 := []domain.Event{newEvent(sessionID, 1, domain.EventSessionCreated, nil)}
+		if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events1, testCheckpoint(sessionID, 1, time.Now().UTC())); err != nil {
+			t.Fatalf("first checkpoint: %v", err)
+		}
+		events2 := []domain.Event{newEvent(sessionID, 2, domain.EventUserMessageAdded, nil)}
+		if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 1, events2, testCheckpoint(sessionID, 2, time.Now().UTC())); err != nil {
+			t.Fatalf("second checkpoint: %v", err)
+		}
+		return sessionID
+	}
+	extract := func(t *testing.T, sessionID domain.SessionID, extractedVersion int64) {
+		t.Helper()
+		if err := store.EnqueueMemoryJob(ctx, sessionID, "/ws"); err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+		jobs, err := store.ClaimMemoryJobs(ctx, 8, 0, 30*24*time.Hour, time.Hour, 5)
+		if err != nil || len(jobs) != 1 {
+			t.Fatalf("claim: %v (n=%d)", err, len(jobs))
+		}
+		if err := store.CompleteMemoryJob(ctx, sessionID, jobs[0].ClaimToken, memory.JobSucceeded, extractedVersion); err != nil {
+			t.Fatalf("complete: %v", err)
+		}
+	}
+	jobState := func(t *testing.T, sessionID domain.SessionID) (string, int64) {
+		t.Helper()
+		var status string
+		var extracted int64
+		if err := store.db.QueryRowContext(ctx,
+			"SELECT status, extracted_version FROM memory_jobs WHERE session_id = ?", sessionID.String()).
+			Scan(&status, &extracted); err != nil {
+			t.Fatalf("load job: %v", err)
+		}
+		return status, extracted
+	}
+
+	stale := setup(t) // extracted at version 2 — covers soon-to-be-deleted events
+	extract(t, stale, 2)
+	fresh := setup(t) // extracted at version 1 — retained events only
+	extract(t, fresh, 1)
+
+	if _, err := store.RewindSession(ctx, stale, 1); err != nil {
+		t.Fatalf("rewind stale session: %v", err)
+	}
+	if _, err := store.RewindSession(ctx, fresh, 1); err != nil {
+		t.Fatalf("rewind fresh session: %v", err)
+	}
+
+	if status, extracted := jobState(t, stale); status != string(memory.JobPending) || extracted != -1 {
+		t.Fatalf("stale job = (%q, %d), want (pending, -1)", status, extracted)
+	}
+	if status, extracted := jobState(t, fresh); status != string(memory.JobSucceeded) || extracted != 1 {
+		t.Fatalf("fresh job = (%q, %d), want (succeeded, 1)", status, extracted)
+	}
+
+	// The reset job is claimable again; the untouched one is not.
+	jobs, err := store.ClaimMemoryJobs(ctx, 8, 0, 30*24*time.Hour, time.Hour, 5)
+	if err != nil {
+		t.Fatalf("claim after rewind: %v", err)
+	}
+	if len(jobs) != 1 || jobs[0].SessionID != stale {
+		t.Fatalf("claimed after rewind = %+v, want only the rewound session's job", jobs)
+	}
+}

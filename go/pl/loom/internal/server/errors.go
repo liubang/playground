@@ -104,10 +104,15 @@ func mapError(err error) *statusError {
 		return &statusError{status: http.StatusNotFound, code: "shared_artifact_not_found", message: err.Error()}
 	}
 	msg := err.Error()
-	// Domain typed errors (artifact store, etc.).
+	// Domain typed errors (artifact store, session store, controller, etc.).
 	var agentErr *domain.AgentError
 	if errors.As(err, &agentErr) {
 		switch agentErr.Code {
+		case domain.ErrInvalidInput:
+			// Sentinel match for typed invalid-input errors (REVIEW M27) —
+			// the string fallback below is only for the remaining
+			// untyped (plain-string) controller errors.
+			return &statusError{status: http.StatusBadRequest, code: "invalid_input", message: msg}
 		case domain.ErrUnavailable:
 			// A missing artifact blob surfaces as unavailable wrapping
 			// os.ErrNotExist; only that case is a client-visible 404.
@@ -140,7 +145,15 @@ func mapError(err error) *statusError {
 		strings.Contains(msg, "reasoning must be"),
 		strings.Contains(msg, "unknown model"),
 		strings.Contains(msg, "unknown provider"),
-		strings.Contains(msg, "invalid"):
+		// Narrowed fallback phrases for untyped invalid-input errors
+		// (REVIEW M27): a bare Contains("invalid") mis-mapped any internal
+		// error whose message happened to contain the word to 400. Typed
+		// invalid input is matched structurally above; these phrases cover
+		// the remaining plain-string producers.
+		strings.Contains(msg, "invalid input"),
+		strings.Contains(msg, "invalid session"),
+		strings.Contains(msg, "invalid workspace"),
+		strings.Contains(msg, "invalid artifact reference"):
 		return &statusError{status: http.StatusBadRequest, code: "invalid_input", message: msg}
 	case strings.Contains(msg, "is closed"):
 		return &statusError{status: http.StatusGone, code: "session_closed", message: msg}

@@ -184,6 +184,44 @@ func TestRunawayStallWarnsWithoutTerminating(t *testing.T) {
 	}
 }
 
+// The converge reminder fires every stall_warn_turns while the stall
+// persists — not just once (REVIEW H15).
+func TestRunawayStallReminderFiresPeriodically(t *testing.T) {
+	call := domain.ToolCall{Name: "read_file", Arguments: json.RawMessage(`{"path":"a.go"}`)}
+	// 5 repeated calls after the first-seen one: with StallWarnTurns=2 the
+	// stall streak reaches 2 (level 1) and then 4 (level 2) before the run
+	// ends, so exactly two reminders must be injected.
+	entries := scriptToolCalls(call, 6, "final answer")
+	run := NewRun(domain.NewSessionID(), domain.Limits{}, domain.RealClock{})
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
+		CreatedAt: time.Now(),
+	})
+	registry := NewToolRegistry()
+	if err := registry.Register(fakes.ReadFileTool()); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop := &Loop{
+		Run: run, Model: fakes.NewFakeModel(entries...),
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+		Runaway: domain.RunawayConfig{MaxRepeatedCalls: 10, MaxConsecutiveFailures: 10, StallWarnTurns: 2},
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error = %v (a stall warns, never terminates)", err)
+	}
+	notices := 0
+	for _, msg := range run.Messages {
+		if strings.Contains(strings.Join(msg.TextParts(), ""), "no visible progress") {
+			notices++
+		}
+	}
+	if notices != 2 {
+		t.Fatalf("stall reminders = %d, want 2 (one per stall_warn_turns while stalled)", notices)
+	}
+}
+
 // Read-only research tasks produce a progress signal on every first-seen
 // call signature, so they never trip the stall detector.
 func TestRunawayResearchTaskDoesNotStall(t *testing.T) {

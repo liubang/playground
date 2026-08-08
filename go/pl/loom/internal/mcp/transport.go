@@ -34,6 +34,10 @@ type transport interface {
 	roundTrip(ctx context.Context, id int64, request []byte) (rpcMessage, error)
 	// notify sends a notification; no response is expected or awaited.
 	notify(ctx context.Context, notification []byte) error
+	// adoptProtocolVersion records the protocol revision the server
+	// negotiated at initialize; only the HTTP transport replays it (as
+	// the MCP-Protocol-Version header), stdio ignores it.
+	adoptProtocolVersion(version string)
 	// close shuts the transport down; in-flight round trips fail fast.
 	close() error
 }

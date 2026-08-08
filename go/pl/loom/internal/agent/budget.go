@@ -250,15 +250,18 @@ func (l *Loop) inRunBudgetWrapUp() bool {
 
 // wrapUpOutcome maps the wrap-up dimension to the terminal outcome: an
 // exhausted resource budget is a normal soft landing, a stall is an
-// abnormal ending (docs/CONTEXT_DESIGN.md §4.4.2), and an output-cap
+// abnormal ending (docs/CONTEXT_DESIGN.md §4.4.2), an output-cap
 // salvage completes unverified — the run was healthy, only its
-// generation style was not.
+// generation style was not — and a goal-token wrap-up succeeds: the
+// run itself is healthy, only the goal's allowance ran out.
 func wrapUpOutcome(dimension string) domain.Outcome {
 	switch dimension {
 	case dimensionStall:
 		return domain.OutcomeFailed
 	case dimensionMaxOutput:
 		return domain.OutcomeCompletedUnverified
+	case wrapUpGoalTokens:
+		return domain.OutcomeSucceeded
 	}
 	return domain.OutcomeBudgetExhausted
 }

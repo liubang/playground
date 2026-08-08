@@ -41,11 +41,17 @@ type stubHTTPServer struct {
 	interleaveNote bool   // prepend a notification inside SSE responses
 	session        string
 	expireSessions bool // treat every session'd request as unknown (404)
+	// negotiatedVersion makes initialize answer with an older protocol
+	// revision than the client's, exercising version negotiation.
+	negotiatedVersion string
+	// paginateTools splits tools/list into two nextCursor pages.
+	paginateTools bool
 
-	authHeaders     []string // Authorization header per POST
-	sessionHeaders  []string // Mcp-Session-Id header per POST
-	protocolHeaders []string // MCP-Protocol-Version header per POST
-	deletedSession  string   // session id carried by DELETE, if any
+	authHeaders      []string // Authorization header per POST
+	sessionHeaders   []string // Mcp-Session-Id header per POST
+	protocolHeaders  []string // MCP-Protocol-Version header per POST
+	toolsListCursors []string // cursor param per tools/list request
+	deletedSession   string   // session id carried by DELETE, if any
 }
 
 func (s *stubHTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -109,19 +115,41 @@ func (s *stubHTTPServer) handlePost(w http.ResponseWriter, r *http.Request) {
 	case "initialize":
 		s.mu.Lock()
 		s.session = "stub-session-1"
+		version := s.negotiatedVersion
 		s.mu.Unlock()
+		if version == "" {
+			version = protocolVersion
+		}
 		w.Header().Set("Mcp-Session-Id", "stub-session-1")
 		result = map[string]any{
-			"protocolVersion": protocolVersion,
+			"protocolVersion": version,
 			"serverInfo":      map[string]any{"name": "stub", "version": "1.0"},
 			"capabilities":    map[string]any{},
 		}
 	case "tools/list":
-		result = map[string]any{"tools": []map[string]any{{
-			"name":        "echo",
-			"description": "echo back",
-			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
-		}}}
+		var params struct {
+			Cursor string `json:"cursor"`
+		}
+		_ = json.Unmarshal(req.Params, &params)
+		s.mu.Lock()
+		s.toolsListCursors = append(s.toolsListCursors, params.Cursor)
+		paginate := s.paginateTools
+		s.mu.Unlock()
+		tool := func(name string) map[string]any {
+			return map[string]any{
+				"name":        name,
+				"description": name + " back",
+				"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
+			}
+		}
+		switch {
+		case paginate && params.Cursor == "":
+			result = map[string]any{"tools": []map[string]any{tool("echo")}, "nextCursor": "page2"}
+		case paginate:
+			result = map[string]any{"tools": []map[string]any{tool("echo2")}}
+		default:
+			result = map[string]any{"tools": []map[string]any{tool("echo")}}
+		}
 	case "tools/call":
 		result = map[string]any{"content": []map[string]any{{"type": "text", "text": "pong"}}}
 	default:
@@ -266,6 +294,48 @@ func TestHTTPClientSSEResponses(t *testing.T) {
 	}
 	if len(result.Content) != 1 || result.Content[0].Text != "pong" {
 		t.Fatalf("CallTool() content = %+v, want pong", result.Content)
+	}
+}
+
+// A server negotiating an older protocol revision gets that revision
+// replayed on every post-initialize request (REVIEW M23).
+func TestHTTPClientAdoptsNegotiatedProtocolVersion(t *testing.T) {
+	stub, url := startStub(t, func(s *stubHTTPServer) { s.negotiatedVersion = "2025-03-26" })
+	client := startHTTPClient(t, url, nil)
+
+	if _, err := client.ListTools(context.Background()); err != nil {
+		t.Fatalf("ListTools() error = %v", err)
+	}
+
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	// POSTs: initialize, initialized notification, tools/list — everything
+	// after initialize must carry the negotiated revision, not the offered one.
+	for i := 1; i < len(stub.protocolHeaders); i++ {
+		if stub.protocolHeaders[i] != "2025-03-26" {
+			t.Fatalf("protocolHeaders[%d] = %q, want negotiated 2025-03-26", i, stub.protocolHeaders[i])
+		}
+	}
+}
+
+// tools/list must follow nextCursor until pagination is exhausted
+// (REVIEW M23).
+func TestHTTPClientListToolsPagination(t *testing.T) {
+	stub, url := startStub(t, func(s *stubHTTPServer) { s.paginateTools = true })
+	client := startHTTPClient(t, url, nil)
+
+	specs, err := client.ListTools(context.Background())
+	if err != nil {
+		t.Fatalf("ListTools() error = %v", err)
+	}
+	if len(specs) != 2 || specs[0].Name != "echo" || specs[1].Name != "echo2" {
+		t.Fatalf("ListTools() = %+v, want both pages (echo, echo2)", specs)
+	}
+
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if len(stub.toolsListCursors) != 2 || stub.toolsListCursors[0] != "" || stub.toolsListCursors[1] != "page2" {
+		t.Fatalf("tools/list cursors = %v, want [\"\" \"page2\"]", stub.toolsListCursors)
 	}
 }
 

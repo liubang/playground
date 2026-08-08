@@ -924,17 +924,24 @@ func (s *SQLiteStore) migrateV5(ctx context.Context) error {
 
 // DeleteSession removes a session and all of its persisted data. Events,
 // checkpoints and artifact_refs cascade from the sessions row; file_changes
-// and memory_jobs carry no foreign key and are deleted explicitly.
+// and memory_jobs carry no foreign key and are deleted explicitly. All
+// three deletes run in one transaction (review M29): a failure must never
+// leave a half-deleted session behind.
 func (s *SQLiteStore) DeleteSession(ctx context.Context, sessionID domain.SessionID) error {
-	if _, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return storeError("begin delete session transaction", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx,
 		"DELETE FROM file_changes WHERE session_id = ?", sessionID.String()); err != nil {
 		return storeError("delete session file changes", err)
 	}
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := tx.ExecContext(ctx,
 		"DELETE FROM memory_jobs WHERE session_id = ?", sessionID.String()); err != nil {
 		return storeError("delete session memory job", err)
 	}
-	res, err := s.db.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		"DELETE FROM sessions WHERE session_id = ?", sessionID.String())
 	if err != nil {
 		return storeError("delete session", err)
@@ -945,6 +952,9 @@ func (s *SQLiteStore) DeleteSession(ctx context.Context, sessionID domain.Sessio
 	}
 	if affected == 0 {
 		return fmt.Errorf("session not found: %s", sessionID)
+	}
+	if err := tx.Commit(); err != nil {
+		return storeError("commit delete session transaction", err)
 	}
 	return nil
 }
@@ -1152,13 +1162,21 @@ func (s *SQLiteStore) GetOrCreateShare(ctx context.Context, sessionID domain.Ses
 	}
 	token = hex.EncodeToString(tokenBytes[:])
 	now := time.Now().UTC()
+	// Insert-or-ignore then read back the surviving row: under concurrent
+	// creation the loser must return the winner's persisted token. The
+	// previous DO UPDATE form let the last writer overwrite the row, leaving
+	// the earlier caller with a token the store no longer honours
+	// (REVIEW H14).
 	if _, err := s.db.ExecContext(ctx, `
 INSERT INTO session_shares(session_id, share_token, created_at, created_at_unix_nano)
 VALUES (?, ?, ?, ?)
-ON CONFLICT(session_id) DO UPDATE SET share_token = excluded.share_token,
-    created_at = excluded.created_at, created_at_unix_nano = excluded.created_at_unix_nano`,
+ON CONFLICT(session_id) DO NOTHING`,
 		sessionID.String(), token, formatTime(now), now.UnixNano()); err != nil {
 		return "", storeError("create session share", err)
+	}
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT share_token FROM session_shares WHERE session_id = ?", sessionID.String()).Scan(&token); err != nil {
+		return "", storeError("load session share", err)
 	}
 	return token, nil
 }

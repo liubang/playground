@@ -38,19 +38,53 @@ type Decider interface {
 	Evaluate(call domain.PreparedCall) *domain.Verdict
 }
 
+// evalContext carries the per-evaluation parse result shared across the
+// chain (REVIEW M33): resolving the exec shape of a run_cmd/exec_session
+// call costs a JSON unmarshal plus a shell unwrap, and the built-in
+// deciders would otherwise each repeat that work for the same call (up to
+// four parses per policy evaluation).
+type evalContext struct {
+	exec   RunCmdCall
+	execOK bool
+}
+
+// contextDecider is the internal single-parse fast path: the built-in
+// deciders implement it so Chain.Evaluate can hand down the once-parsed
+// exec info. The exported Decider interface is unchanged — third-party
+// deciders keep working and parse for themselves.
+type contextDecider interface {
+	evaluate(call domain.PreparedCall, ctx evalContext) *domain.Verdict
+}
+
 // Chain consults its deciders in order and returns the first non-nil
 // verdict. A well-formed chain always ends with a BaselineDecider, which
 // never returns nil; the deny fallback below only fires for a misassembled
 // chain (fail closed).
 type Chain []Decider
 
-// Evaluate resolves the chain's verdict for a prepared call.
+// Evaluate resolves the chain's verdict for a prepared call. The exec
+// shape is parsed lazily and at most once per evaluation, then shared by
+// every decider implementing the contextDecider fast path.
 func (c Chain) Evaluate(call domain.PreparedCall) domain.Verdict {
+	var (
+		ctx    evalContext
+		parsed bool
+	)
 	for _, d := range c {
 		if d == nil {
 			continue
 		}
-		if v := d.Evaluate(call); v != nil {
+		var v *domain.Verdict
+		if cd, ok := d.(contextDecider); ok {
+			if !parsed {
+				ctx.exec, ctx.execOK = ExecInfoOf(call)
+				parsed = true
+			}
+			v = cd.evaluate(call, ctx)
+		} else {
+			v = d.Evaluate(call)
+		}
+		if v != nil {
 			return *v
 		}
 	}

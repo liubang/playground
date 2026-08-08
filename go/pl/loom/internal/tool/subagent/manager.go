@@ -279,7 +279,7 @@ func (m *Manager) drive(ctx context.Context, cancel context.CancelFunc, mr *mana
 		Role:       mr.role,
 		Outcome:    run.State.Outcome,
 		Usage:      run.Usage,
-		Conclusion: lastAssistantText(run.Messages),
+		Conclusion: agent.LastAssistantText(run.Messages),
 		ExecErr:    execErr,
 	}
 	if obs := m.factory.Observer; obs != nil && obs.Finished != nil {
@@ -364,7 +364,7 @@ func (m *Manager) loadPersistedResult(ctx context.Context, sessionID domain.Sess
 		Role:       roleOf(inspection.Events),
 		Outcome:    ckpt.State.Outcome,
 		Usage:      ckpt.Usage,
-		Conclusion: lastAssistantText(inspection.Transcript.Messages),
+		Conclusion: agent.LastAssistantText(inspection.Transcript.Messages),
 	}, nil
 }
 
