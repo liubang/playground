@@ -5,10 +5,20 @@
 // 填充/收集逻辑而不串层。
 //
 // 空值语义与文件一致：留空 = 不写入该键（omitempty），默认值全部隐式。
-// 密钥控件展示服务端的脱敏占位符，未修改时原样回传由服务端还原。
+// 密钥控件展示服务端的脱敏占位符，未修改时原样回传由服务端还原；点击眼睛
+// 按钮经 POST /v1/config/reveal 按需取回明文（明文不随整体配置下发）。
+//
+// 列表类 tab（模型 / MCP）是「概览 → 详情」两级导航：所有卡片 DOM 始终
+// 挂载在同一个列表容器里（收集逻辑因此不变），层级切换只改 CSS 类——
+// 概览态卡片折叠成一行摘要，详情态只显示当前卡片。模型 tab 还有第三级
+// （provider → 模型明细）。
 
 import { el } from "./blocks.js";
-import { icon } from "../icons.js";
+import { icon, iconEl } from "../icons.js";
+import { createSelect, closeSelects } from "./select.js";
+
+// 与 internal/config/edit.go 的 SecretMask 保持一致。
+const SECRET_MASK = "••••••••••";
 
 // UI 未管理的配置路径：保存时从已加载的配置原样带回，避免静默丢失
 // （merge 的语义是「未提供的 key = 从文件删除」）。PRESERVE_PATHS 覆盖
@@ -20,16 +30,6 @@ const KNOWN_TOP_KEYS = new Set([
   "skills", "rules", "approval", "tracing", "storage", "logging",
   "ui", "subagent", "memory", "image", "mcp_servers", "workspaces",
 ]);
-
-function preserveUnmanaged(cfg, orig) {
-  for (const [k, v] of Object.entries(orig)) {
-    if (!KNOWN_TOP_KEYS.has(k) && cfg[k] === undefined) cfg[k] = v;
-  }
-  for (const path of PRESERVE_PATHS) {
-    const v = getPath(orig, path);
-    if (v !== undefined && getPath(cfg, path) === undefined) setPath(cfg, path, v);
-  }
-}
 
 // ---------- 路径工具 ----------
 
@@ -47,25 +47,32 @@ function setPath(obj, path, value) {
   o[keys[keys.length - 1]] = value;
 }
 
+function preserveUnmanaged(cfg, orig) {
+  for (const [k, v] of Object.entries(orig)) {
+    if (!KNOWN_TOP_KEYS.has(k) && cfg[k] === undefined) cfg[k] = v;
+  }
+  for (const path of PRESERVE_PATHS) {
+    const v = getPath(orig, path);
+    if (v !== undefined && getPath(cfg, path) === undefined) setPath(cfg, path, v);
+  }
+}
+
 // ---------- 字段控件 ----------
 
-// spec: {key, label, hint, ph, type, options, step, rows, def}
+// spec: {key, label, hint, ph, type, options, step, rows, def, revealRef}
 // type ∈ text | password | number | bool | tristate | select | textarea |
 //       list-text（每行一项 → []string）| kv-text（每行 k=v → map）|
 //       float-list（逗号分隔 → []number）
+// revealRef: password 控件的明文定位（对象或返回对象的函数），见
+//       POST /v1/config/reveal 的 secretReveal。
 function makeControl(spec) {
   const t = spec.type || "text";
   let ctl;
   if (t === "select" || t === "tristate") {
-    ctl = el("select", "set-input");
     const opts = t === "tristate"
       ? [["", `默认（${spec.def || "开"}）`], ["true", "开"], ["false", "关"]]
       : spec.options;
-    for (const [v, label] of opts) {
-      const o = el("option", "", label);
-      o.value = v;
-      ctl.appendChild(o);
-    }
+    ctl = createSelect({ className: "set-input", options: opts });
   } else if (t === "bool") {
     ctl = el("input", "set-check");
     ctl.type = "checkbox";
@@ -86,23 +93,36 @@ function makeControl(spec) {
   return ctl;
 }
 
-function fieldRow(spec) {
+// onReveal: 可选，async () => 明文 | null（失败已自行提示）；仅 password
+// 控件且当前值是掩码时参与——用户已输入新值时直接切换可见性即可。
+function fieldRow(spec, onReveal) {
   const row = el("div", "set-row");
   row.appendChild(el("label", "set-label", spec.label));
   const body = el("div", "set-field");
   const ctl = makeControl(spec);
   if ((spec.type || "text") === "password") {
-    // 密钥控件：眼睛按钮临时显示明文（掩码值也可查看——它本来就不是密钥）
+    // 密钥控件：眼睛按钮显示明文（掩码值先经 reveal 接口换回明文）
     const wrap = el("div", "set-secret");
     wrap.appendChild(ctl);
     const eye = el("button", "icon-btn set-eye");
     eye.type = "button";
     eye.title = "显示/隐藏";
     eye.innerHTML = icon("eye");
-    eye.onclick = () => {
-      const show = ctl.type === "password";
-      ctl.type = show ? "text" : "password";
-      eye.innerHTML = icon(show ? "eye-slash" : "eye");
+    eye.onclick = async () => {
+      if (ctl.type === "text") {
+        ctl.type = "password";
+        eye.innerHTML = icon("eye");
+        return;
+      }
+      if (ctl.value === SECRET_MASK && onReveal) {
+        eye.disabled = true;
+        const plaintext = await onReveal();
+        eye.disabled = false;
+        if (plaintext == null) return;
+        ctl.value = plaintext;
+      }
+      ctl.type = "text";
+      eye.innerHTML = icon("eye-slash");
     };
     wrap.appendChild(eye);
     body.appendChild(wrap);
@@ -240,7 +260,7 @@ const MODEL_FIELDS = [
 ];
 
 const TABS = [
-  { id: "providers", label: "模型" }, // 自定义渲染（列表嵌套）
+  { id: "providers", label: "模型" }, // 自定义渲染（概览 → 详情两级）
   {
     id: "limits", label: "预算与上下文", sections: [
       ["运行预算", [
@@ -329,9 +349,9 @@ const TABS = [
     id: "system", label: "系统", sections: [
       ["Langfuse 追踪", [
         { key: "tracing.host", label: "服务地址", ph: "https://langfuse.internal" },
-        { key: "tracing.public_key", label: "公钥", type: "password" },
+        { key: "tracing.public_key", label: "公钥", type: "password", revealRef: { kind: "tracing", field: "public_key" } },
         { key: "tracing.public_key_env", label: "公钥环境变量" },
-        { key: "tracing.secret_key", label: "密钥", type: "password" },
+        { key: "tracing.secret_key", label: "密钥", type: "password", revealRef: { kind: "tracing", field: "secret_key" } },
         { key: "tracing.secret_key_env", label: "密钥环境变量" },
         { key: "tracing.environment", label: "环境标签", ph: "dev" },
         { key: "tracing.include_content", label: "上送对话原文", type: "tristate" },
@@ -350,7 +370,8 @@ const TABS = [
       ]],
     ], // workspaces 追加为自定义小节（见 _renderWorkspaces）
   },
-  { id: "mcp", label: "MCP" }, // 自定义渲染（map + 双传输形态）
+  { id: "mcp", label: "MCP" }, // 自定义渲染（概览 → 详情两级）
+  { id: "skills", label: "Skills" }, // 自定义渲染（运行时发现视图，只读）
 ];
 
 // ---------- 面板 ----------
@@ -391,6 +412,7 @@ export class SettingsPanel {
 
   async close() {
     if (this.wrap.hidden || this._closing) return;
+    closeSelects();
     if (this.dirty) {
       this._closing = true; // 重入守卫：Esc/× 在 confirm 等待期间再次触发
       try {
@@ -431,6 +453,7 @@ export class SettingsPanel {
       this._msg(r.exists ? "" : "首次配置：请先在「模型」页添加至少一个 provider");
       this._renderContent();
       this._renderTabs();
+      if (this.activeTab === "skills") this._loadSkills();
     } catch (e) {
       if (e.status === 401) {
         this.wrap.hidden = true; // gate 即将弹出，面板让位
@@ -457,6 +480,7 @@ export class SettingsPanel {
     for (const panel of document.getElementById("settings-content").children) {
       panel.hidden = panel.dataset.tabId !== id;
     }
+    if (id === "skills") this._loadSkills();
   }
 
   // 一次性渲染全部 tab 面板（切换只 toggle hidden）：收集针对整棵 DOM，
@@ -472,6 +496,7 @@ export class SettingsPanel {
       panel.hidden = tab.id !== this.activeTab;
       if (tab.id === "providers") this._renderProviders(panel);
       else if (tab.id === "mcp") this._renderMcp(panel);
+      else if (tab.id === "skills") this._renderSkills(panel);
       else {
         for (const [title, fields] of tab.sections) panel.appendChild(this._renderSection(title, fields));
         if (tab.id === "system") this._renderWorkspaces(panel);
@@ -486,67 +511,242 @@ export class SettingsPanel {
   _renderSection(title, fields) {
     const sec = el("section", "set-sec");
     sec.appendChild(el("h3", "set-sec-title", title));
-    for (const spec of fields) sec.appendChild(fieldRow(spec));
+    for (const spec of fields) sec.appendChild(this._fieldRow(spec));
     return sec;
+  }
+
+  // spec.revealRef（或调用方显式给的 resolver）转成眼睛按钮的取明文回调。
+  _fieldRow(spec, resolveRef) {
+    const resolve = resolveRef || (spec.revealRef ? () => spec.revealRef : null);
+    return fieldRow(spec, resolve ? () => this._reveal(resolve()) : null);
+  }
+
+  // 按需取回一个已存密钥的明文；失败已 toast，返回 null。
+  async _reveal(ref) {
+    if (!ref || (ref.name === "" && ref.kind !== "tracing")) {
+      this.toast("先填写名称并保存配置后才能查看");
+      return null;
+    }
+    try {
+      const r = await this.api.revealSecret(ref);
+      return r.value;
+    } catch (e) {
+      if (e.status === 401) return null;
+      this.toast(e.status === 404 ? "该位置没有已保存的密钥（先保存配置）" : "查看密钥失败: " + e.message);
+      return null;
+    }
+  }
+
+  // ---------- 层级导航共享 ----------
+
+  // 面包屑条：返回按钮 + 路径文本，详情态显示。
+  _navBar(onBack) {
+    const nav = el("div", "set-nav");
+    nav.hidden = true;
+    const back = el("button", "btn btn-secondary btn-sm set-nav-back");
+    back.type = "button";
+    back.appendChild(iconEl("arrow-left"));
+    back.appendChild(document.createTextNode("返回"));
+    back.onclick = onBack;
+    nav.appendChild(back);
+    const crumb = el("span", "set-nav-crumb");
+    nav.appendChild(crumb);
+    return { nav, crumb };
+  }
+
+  // 概览行摘要：名称 + 元信息 + 展开箭头；点击进入详情。
+  _rowSummary(onOpen) {
+    const summary = el("button", "set-card-summary");
+    summary.type = "button";
+    const name = el("span", "set-card-name");
+    const meta = el("span", "set-card-meta");
+    summary.appendChild(name);
+    summary.appendChild(meta);
+    const caret = iconEl("caret-right");
+    caret.classList.add("set-card-caret");
+    summary.appendChild(caret);
+    summary.onclick = onOpen;
+    return summary;
   }
 
   // ---------- 模型 tab ----------
 
   _renderProviders(body) {
     const refs = (this._tabRefs.providers = {});
-    const top = el("section", "set-sec");
+    body.classList.add("set-hier");
+
+    const top = el("section", "set-sec set-sec-top");
     top.dataset.cfgScope = "";
     top.appendChild(el("h3", "set-sec-title", "启动模型"));
-    top.appendChild(fieldRow({ key: "default", label: "默认模型", ph: "provider/model", hint: "留空取第一个 provider 的默认模型" }));
+    top.appendChild(this._fieldRow({ key: "default", label: "默认模型", ph: "provider/model", hint: "留空取第一个 provider 的默认模型" }));
     body.appendChild(top);
     fillScope(top, this.cfg);
     refs.top = top;
 
-    body.appendChild(el("h3", "set-sec-title", "模型提供方（至少一个）"));
+    const { nav, crumb } = this._navBar(() => this._providersBack());
+    body.appendChild(nav);
+    refs.nav = nav;
+    refs.crumb = crumb;
+
+    const listSec = el("div", "set-list-sec");
+    listSec.appendChild(el("h3", "set-sec-title", "模型提供方（至少一个）"));
     const list = el("div", "set-cards");
-    body.appendChild(list);
-    refs.list = list;
-    for (const p of this.cfg.providers || []) list.appendChild(this._providerCard(p));
+    listSec.appendChild(list);
     const add = el("button", "btn btn-secondary btn-sm set-add", "+ 添加 provider");
     add.type = "button";
-    add.onclick = () => list.appendChild(this._providerCard({}));
-    body.appendChild(add);
+    add.onclick = () => {
+      const card = this._providerCard({});
+      list.appendChild(card);
+      this._markDirty();
+      this._openProvider(card);
+    };
+    listSec.appendChild(add);
+    body.appendChild(listSec);
+    refs.list = list;
+    for (const p of this.cfg.providers || []) list.appendChild(this._providerCard(p));
   }
 
   _providerCard(p) {
     const card = el("div", "set-card");
     card.dataset.cfgScope = "";
+
     const head = el("div", "set-card-head");
+    head.appendChild(this._rowSummary(() => this._openProvider(card)));
     const name = makeControl({ key: "name", type: "text", ph: "provider 名（全局唯一，必填）" });
     head.appendChild(name);
     head.appendChild(this._cardDelBtn(card, "删除该 provider"));
     card.appendChild(head);
-    for (const spec of PROVIDER_BASE_FIELDS) card.appendChild(fieldRow(spec));
-    card.appendChild(this._advDetails(PROVIDER_ADV_FIELDS));
 
-    card.appendChild(el("div", "set-subtitle", "模型目录"));
+    const cardBody = el("div", "set-card-body");
+    for (const spec of PROVIDER_BASE_FIELDS) {
+      cardBody.appendChild(spec.key === "api_key"
+        ? this._fieldRow(spec, () => ({ kind: "provider", name: name.value.trim() }))
+        : this._fieldRow(spec));
+    }
+    cardBody.appendChild(this._advDetails(PROVIDER_ADV_FIELDS));
+
+    cardBody.appendChild(el("div", "set-subtitle", "模型目录"));
     const models = el("div", "set-models");
-    card.appendChild(models);
-    for (const m of p.models || []) models.appendChild(this._modelCard(m));
+    cardBody.appendChild(models);
     const add = el("button", "btn btn-secondary btn-sm set-add", "+ 添加模型");
     add.type = "button";
-    add.onclick = () => models.appendChild(this._modelCard({}));
-    card.appendChild(add);
+    add.onclick = () => {
+      const mc = this._modelCard(card, {});
+      models.appendChild(mc);
+      this._markDirty();
+      this._openModel(card, mc);
+    };
+    cardBody.appendChild(add);
+    card.appendChild(cardBody);
+
+    for (const m of p.models || []) models.appendChild(this._modelCard(card, m));
 
     fillScope(card, p); // 直属字段；models 在嵌套 scope 中不受影响
+    this._refreshProviderRow(card);
+    card.addEventListener("input", () => this._onProviderEdit(card));
+    card.addEventListener("change", () => this._onProviderEdit(card));
     return card;
   }
 
-  _modelCard(m) {
+  _modelCard(providerCard, m) {
     const card = el("div", "set-card is-nested");
     card.dataset.cfgScope = "";
     const head = el("div", "set-card-head");
+    head.appendChild(this._rowSummary(() => this._openModel(providerCard, card)));
     head.appendChild(el("span", "set-card-tag", "model"));
     head.appendChild(this._cardDelBtn(card, "删除该模型"));
     card.appendChild(head);
-    for (const spec of MODEL_FIELDS) card.appendChild(fieldRow(spec));
+    const body = el("div", "set-card-body");
+    for (const spec of MODEL_FIELDS) body.appendChild(this._fieldRow(spec));
+    card.appendChild(body);
     fillScope(card, m);
+    this._refreshModelRow(card);
+    card.addEventListener("input", () => {
+      this._refreshModelRow(card);
+      if (this._tabRefs.providers?.openModel === card) this._setProviderCrumb();
+    });
     return card;
+  }
+
+  _onProviderEdit(card) {
+    this._refreshProviderRow(card);
+    if (this._tabRefs.providers?.open === card) this._setProviderCrumb();
+  }
+
+  _refreshProviderRow(card) {
+    const obj = {};
+    collectScope(card, obj);
+    const sName = card.querySelector(":scope > .set-card-head .set-card-name");
+    const sMeta = card.querySelector(":scope > .set-card-head .set-card-meta");
+    sName.textContent = obj.name || "（未命名 provider）";
+    sName.classList.toggle("is-empty", !obj.name);
+    const nModels = card.querySelectorAll(":scope > .set-card-body > .set-models > .set-card").length;
+    sMeta.textContent = [obj.type || "openai", obj.base_url || "未配置 Base URL", `${nModels} 个模型`].join(" · ");
+  }
+
+  _refreshModelRow(card) {
+    const obj = {};
+    collectScope(card, obj);
+    const sName = card.querySelector(":scope > .set-card-head .set-card-name");
+    const sMeta = card.querySelector(":scope > .set-card-head .set-card-meta");
+    sName.textContent = obj.name || "（未命名模型）";
+    sName.classList.toggle("is-empty", !obj.name);
+    const parts = [];
+    if (obj.context_window) parts.push(`上下文 ${obj.context_window}`);
+    if (obj.max_output_tokens) parts.push(`输出上限 ${obj.max_output_tokens}`);
+    sMeta.textContent = parts.join(" · ") || "跟随 provider / 全局默认";
+  }
+
+  _openProvider(card) {
+    const refs = this._tabRefs.providers;
+    const panel = refs.list.closest(".settings-panel");
+    panel.classList.add("is-detail");
+    card.classList.add("is-open");
+    refs.open = card;
+    refs.nav.hidden = false;
+    this._setProviderCrumb();
+  }
+
+  _openModel(providerCard, modelCard) {
+    const refs = this._tabRefs.providers;
+    providerCard.classList.add("is-model-detail");
+    modelCard.classList.add("is-open");
+    refs.openModel = modelCard;
+    this._setProviderCrumb();
+  }
+
+  _providersBack() {
+    const refs = this._tabRefs.providers;
+    const card = refs.open;
+    if (!card) return;
+    // 第三级（模型明细）→ 第二级（provider 详情）
+    if (refs.openModel) {
+      this._refreshModelRow(refs.openModel);
+      refs.openModel.classList.remove("is-open");
+      refs.openModel = null;
+      card.classList.remove("is-model-detail");
+      this._setProviderCrumb();
+      return;
+    }
+    // 第二级 → 概览
+    this._refreshProviderRow(card);
+    card.classList.remove("is-open");
+    refs.open = null;
+    refs.list.closest(".settings-panel").classList.remove("is-detail");
+    refs.nav.hidden = true;
+  }
+
+  _setProviderCrumb() {
+    const refs = this._tabRefs.providers;
+    const card = refs.open;
+    if (!card) return;
+    const name = card.querySelector(":scope > .set-card-head .set-input").value.trim() || "未命名";
+    let text = "模型提供方 / " + name;
+    if (refs.openModel) {
+      const mn = refs.openModel.querySelector('[data-cfg-key="name"]').value.trim();
+      text += " / " + (mn || "未命名模型");
+    }
+    refs.crumb.textContent = text;
   }
 
   _collectProviders(cfg) {
@@ -558,7 +758,7 @@ export class SettingsPanel {
       collectScope(card, p);
       const models = [];
       let skippedModels = 0;
-      for (const mc of card.querySelector(":scope > .set-models").children) {
+      for (const mc of card.querySelector(":scope > .set-card-body > .set-models").children) {
         const m = {};
         collectScope(mc, m);
         if (m.name) models.push(m);
@@ -576,16 +776,30 @@ export class SettingsPanel {
 
   _renderMcp(body) {
     const refs = (this._tabRefs.mcp = {});
+    body.classList.add("set-hier");
     const tip = el("div", "set-hint set-tip", "两种传输二选一：command（stdio 子进程）或 url（远程 HTTP）。header 值支持 ${VAR} 环境变量引用（令牌不落盘）。工具名格式 mcp__{服务器名}__{工具名}。");
     body.appendChild(tip);
+
+    const { nav, crumb } = this._navBar(() => this._mcpBack());
+    body.appendChild(nav);
+    refs.nav = nav;
+    refs.crumb = crumb;
+
+    const listSec = el("div", "set-list-sec");
     const list = el("div", "set-cards");
-    body.appendChild(list);
-    refs.list = list;
-    for (const [name, srv] of Object.entries(this.cfg.mcp_servers || {})) list.appendChild(this._mcpCard(name, srv));
+    listSec.appendChild(list);
     const add = el("button", "btn btn-secondary btn-sm set-add", "+ 添加 MCP 服务器");
     add.type = "button";
-    add.onclick = () => list.appendChild(this._mcpCard("", {}));
-    body.appendChild(add);
+    add.onclick = () => {
+      const card = this._mcpCard("", {});
+      list.appendChild(card);
+      this._markDirty();
+      this._openMcp(card);
+    };
+    listSec.appendChild(add);
+    body.appendChild(listSec);
+    refs.list = list;
+    for (const [name, srv] of Object.entries(this.cfg.mcp_servers || {})) list.appendChild(this._mcpCard(name, srv));
     this._refreshMcpStatus();
   }
 
@@ -661,6 +875,7 @@ export class SettingsPanel {
   _mcpCard(name, srv) {
     const card = el("div", "set-card");
     const head = el("div", "set-card-head");
+    head.appendChild(this._rowSummary(() => this._openMcp(card)));
     const nameCtl = el("input", "set-input");
     nameCtl.type = "text";
     nameCtl.placeholder = "服务器名（必填）";
@@ -679,20 +894,20 @@ export class SettingsPanel {
     head.appendChild(this._cardDelBtn(card, "删除该服务器"));
     card.appendChild(head);
 
+    const cardBody = el("div", "set-card-body");
+
     // 传输形态切换：由 command/url 哪个有值推定；切换只影响展示哪组字段
-    const transport = el("select", "set-input");
-    for (const [v, label] of [["stdio", "command（stdio 子进程）"], ["http", "url（远程 HTTP）"]]) {
-      const o = el("option", "", label);
-      o.value = v;
-      transport.appendChild(o);
-    }
+    const transport = createSelect({
+      className: "set-input set-transport",
+      options: [["stdio", "command（stdio 子进程）"], ["http", "url（远程 HTTP）"]],
+    });
     transport.value = srv.url ? "http" : "stdio";
     const tRow = el("div", "set-row");
     tRow.appendChild(el("label", "set-label", "传输方式"));
     const tField = el("div", "set-field");
     tField.appendChild(transport);
     tRow.appendChild(tField);
-    card.appendChild(tRow);
+    cardBody.appendChild(tRow);
 
     const stdio = el("div", "set-group");
     stdio.dataset.cfgScope = "";
@@ -702,8 +917,8 @@ export class SettingsPanel {
       { key: "args", label: "参数", type: "list-text", hint: "每行一个参数" },
       { key: "env", label: "环境变量", type: "kv-text", hint: "每行一个 KEY=VALUE（追加到进程环境）" },
       { key: "cwd", label: "工作目录", hint: "留空继承 loom 的工作目录" },
-    ]) stdio.appendChild(fieldRow(spec));
-    card.appendChild(stdio);
+    ]) stdio.appendChild(this._fieldRow(spec));
+    cardBody.appendChild(stdio);
 
     const http = el("div", "set-group");
     http.dataset.cfgScope = "";
@@ -711,8 +926,8 @@ export class SettingsPanel {
     for (const spec of [
       { key: "url", label: "URL", ph: "https://mcp.example.com/mcp" },
       { key: "headers", label: "请求头", type: "kv-text", hint: "每行一个 KEY=VALUE；值支持 ${VAR} 引用" },
-    ]) http.appendChild(fieldRow(spec));
-    card.appendChild(http);
+    ]) http.appendChild(this._fieldRow(spec));
+    cardBody.appendChild(http);
 
     const common = el("div", "set-group");
     common.dataset.cfgScope = "";
@@ -722,20 +937,74 @@ export class SettingsPanel {
       { key: "tool_timeout_sec", label: "工具调用超时 (秒)", type: "number", ph: "300" },
       { key: "enabled_tools", label: "工具白名单", type: "list-text", hint: "留空注册全部工具" },
       { key: "disabled_tools", label: "工具黑名单", type: "list-text" },
-    ]) common.appendChild(fieldRow(spec));
-    card.appendChild(common);
+    ]) common.appendChild(this._fieldRow(spec));
+    cardBody.appendChild(common);
+    card.appendChild(cardBody);
 
     const syncTransport = () => {
       stdio.hidden = transport.value !== "stdio";
       http.hidden = transport.value !== "http";
     };
-    transport.onchange = syncTransport;
+    transport.addEventListener("change", syncTransport);
     syncTransport();
 
     fillScope(stdio, srv);
     fillScope(http, srv);
     fillScope(common, srv);
+    this._refreshMcpRow(card);
+    card.addEventListener("input", () => this._onMcpEdit(card));
+    card.addEventListener("change", () => this._onMcpEdit(card));
     return card;
+  }
+
+  _onMcpEdit(card) {
+    this._refreshMcpRow(card);
+    if (this._tabRefs.mcp?.open === card) this._setMcpCrumb(card);
+  }
+
+  _refreshMcpRow(card) {
+    const name = card.querySelector(":scope > .set-card-head .set-input").value.trim();
+    const sName = card.querySelector(":scope > .set-card-head .set-card-name");
+    sName.textContent = name || "（未命名服务器）";
+    sName.classList.toggle("is-empty", !name);
+    card.querySelector(":scope > .set-card-head .set-card-meta").textContent = this._mcpMeta(card);
+  }
+
+  // 概览行元信息：传输方式 + 命令/URL 摘要（与收集逻辑同源地读当前传输组）。
+  _mcpMeta(card) {
+    const transport = card.querySelector(".set-transport").value;
+    const srv = {};
+    for (const group of card.querySelectorAll(":scope > .set-card-body > .set-group")) {
+      if (group.dataset.transport === "common" || group.dataset.transport === transport) collectScope(group, srv);
+    }
+    if (transport === "http") return "HTTP · " + (srv.url || "未配置 URL");
+    const cmd = [srv.command, ...(srv.args || [])].filter(Boolean).join(" ");
+    return "stdio · " + (cmd || "未配置命令");
+  }
+
+  _openMcp(card) {
+    const refs = this._tabRefs.mcp;
+    refs.list.closest(".settings-panel").classList.add("is-detail");
+    card.classList.add("is-open");
+    refs.open = card;
+    refs.nav.hidden = false;
+    this._setMcpCrumb(card);
+  }
+
+  _mcpBack() {
+    const refs = this._tabRefs.mcp;
+    const card = refs.open;
+    if (!card) return;
+    this._refreshMcpRow(card);
+    card.classList.remove("is-open");
+    refs.open = null;
+    refs.list.closest(".settings-panel").classList.remove("is-detail");
+    refs.nav.hidden = true;
+  }
+
+  _setMcpCrumb(card) {
+    const name = card.querySelector(":scope > .set-card-head .set-input").value.trim() || "未命名";
+    this._tabRefs.mcp.crumb.textContent = "MCP 服务器 / " + name;
   }
 
   _collectMcp(cfg) {
@@ -744,19 +1013,87 @@ export class SettingsPanel {
     for (const card of refs.list.children) {
       const name = card.querySelector(":scope > .set-card-head .set-input").value.trim();
       if (!name) continue;
-      const transport = card.querySelector(":scope > .set-row .set-input").value;
+      const transport = card.querySelector(".set-transport").value;
       const srv = {};
-      for (const group of card.querySelectorAll(":scope > .set-group")) {
+      for (const group of card.querySelectorAll(":scope > .set-card-body > .set-group")) {
         if (group.dataset.transport === "common" || group.dataset.transport === transport) collectScope(group, srv);
       }
-      if (name) {
-        if (servers[name]) this._skippedCards++; // 重名：后者覆盖前者
-        servers[name] = srv;
-      } else if (Object.keys(srv).length) {
-        this._skippedCards++;
-      }
+      if (servers[name]) this._skippedCards++; // 重名：后者覆盖前者
+      servers[name] = srv;
     }
     if (Object.keys(servers).length) cfg.mcp_servers = servers;
+  }
+
+  // ---------- Skills tab（运行时发现视图，只读） ----------
+
+  _renderSkills(body) {
+    const refs = (this._tabRefs.skills = {});
+    const bar = el("div", "set-skills-bar");
+    bar.appendChild(el("div", "set-hint set-tip", "所有工作区发现的 skill（编辑内容请直接修改对应的 SKILL.md；启停与额外目录在「代理行为」tab）。刷新会重新扫描磁盘。"));
+    const refresh = el("button", "btn btn-secondary btn-sm set-skills-refresh", "刷新");
+    refresh.type = "button";
+    refresh.onclick = () => this._loadSkills(true);
+    bar.appendChild(refresh);
+    body.appendChild(bar);
+    const list = el("div", "set-skills");
+    body.appendChild(list);
+    refs.list = list;
+    refs.loaded = false;
+  }
+
+  async _loadSkills(force) {
+    const refs = this._tabRefs.skills;
+    if (!refs || !refs.list || (refs.loaded && !force)) return;
+    refs.loaded = true;
+    refs.list.textContent = "";
+    refs.list.appendChild(el("div", "set-hint", "扫描中…"));
+    let r;
+    try {
+      r = await this.api.listSkills();
+    } catch (e) {
+      refs.list.textContent = "";
+      if (e.status !== 401) refs.list.appendChild(el("div", "set-hint set-skills-error", "加载失败: " + e.message));
+      return;
+    }
+    refs.list.textContent = "";
+    if (!r.enabled) {
+      refs.list.appendChild(el("div", "set-hint", `技能已禁用（${r.reason || "未知原因"}）。可在「代理行为」tab 开启。`));
+      return;
+    }
+    let total = 0;
+    for (const g of r.groups || []) {
+      total += (g.skills || []).length;
+      refs.list.appendChild(this._skillGroup(g));
+    }
+    if (total === 0) {
+      refs.list.appendChild(el("div", "set-hint", "未发现任何 skill。目录约定：工作区 .loom/skills/、.agents/skills/，用户级 ~/.loom/skills/、~/.agents/skills/。"));
+    }
+  }
+
+  _skillGroup(g) {
+    const sec = el("section", "set-sec");
+    sec.appendChild(el("h3", "set-sec-title", g.workspace_name));
+    if (g.root) sec.appendChild(el("div", "set-hint mono set-skill-root", g.root));
+    if (!g.skills || !g.skills.length) {
+      sec.appendChild(el("div", "set-hint", g.shared ? "（无用户级 skill）" : "（该工作区无 repo 级 skill）"));
+    }
+    for (const sk of g.skills || []) {
+      const row = el("div", "skill-row");
+      const head = el("div", "skill-head");
+      head.appendChild(el("span", "skill-name mono", sk.name));
+      head.appendChild(el("span", "skill-scope" + (sk.scope === "repo" ? " is-repo" : ""), sk.scope));
+      row.appendChild(head);
+      row.appendChild(el("div", "skill-desc", sk.description));
+      row.appendChild(el("div", "skill-path mono", sk.path));
+      sec.appendChild(row);
+    }
+    for (const issue of g.issues || []) {
+      const line = el("div", "skill-issue");
+      line.appendChild(iconEl("triangle-exclamation"));
+      line.appendChild(document.createTextNode(issue));
+      sec.appendChild(line);
+    }
+    return sec;
   }
 
   // ---------- workspaces（系统 tab 附加小节） ----------
@@ -784,7 +1121,7 @@ export class SettingsPanel {
     head.appendChild(makeControl({ key: "name", type: "text", ph: "显示名（可选）" }));
     head.appendChild(this._cardDelBtn(card, "删除该工作区"));
     card.appendChild(head);
-    card.appendChild(fieldRow({ key: "root", label: "根目录", ph: "~/workspace/project" }));
+    card.appendChild(this._fieldRow({ key: "root", label: "根目录", ph: "~/workspace/project" }));
     fillScope(card, ws);
     return card;
   }
@@ -808,7 +1145,7 @@ export class SettingsPanel {
     const det = el("details", "disclosure set-adv");
     det.appendChild(el("summary", "", "高级选项"));
     const inner = el("div", "set-adv-body");
-    for (const spec of fields) inner.appendChild(fieldRow(spec));
+    for (const spec of fields) inner.appendChild(this._fieldRow(spec));
     det.appendChild(inner);
     return det;
   }
@@ -819,6 +1156,16 @@ export class SettingsPanel {
     del.title = title;
     del.innerHTML = icon("trash");
     del.onclick = () => {
+      // 删除处于详情态的卡片时先逐级退回概览，避免停留在已卸载的卡片上
+      const refs = this._tabRefs.providers;
+      if (refs?.open === card) {
+        this._providersBack(); // 模型明细 → provider 详情（无则直达概览）
+        this._providersBack(); // provider 详情 → 概览
+      } else if (refs?.openModel === card) {
+        this._providersBack();
+      }
+      const mrefs = this._tabRefs.mcp;
+      if (mrefs?.open === card) this._mcpBack();
       card.remove();
       this._markDirty();
     };
@@ -849,10 +1196,11 @@ export class SettingsPanel {
     return "";
   }
 
-// 保存结果消息：按服务端返回的分级报告说明每类配置的生效时机。
-_applyMsg(resp) {
-const a = resp.applied;
-if (!a) return "已保存";
+  // 保存结果消息：按服务端返回的分级报告说明每类配置的生效时机。
+  _applyMsg(resp) {
+    if (resp.apply_error) return `已保存，但热应用失败（重启后生效）: ${resp.apply_error}`;
+    const a = resp.applied;
+    if (!a) return "已保存";
     const parts = [];
     if (a.immediate && a.immediate.length) parts.push("立即生效: " + a.immediate.join("、"));
     if (a.next_turn && a.next_turn.length) parts.push("下一轮生效: " + a.next_turn.join("、"));

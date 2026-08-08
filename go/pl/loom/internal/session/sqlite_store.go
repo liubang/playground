@@ -492,20 +492,20 @@ FROM events WHERE session_id = ? AND sequence > ? ORDER BY sequence ASC`, sessio
 }
 
 // ListSessions returns one page of persisted sessions ordered by most
-// recent update, each row carrying its delegation parent when the session
+// recent creation, each row carrying its delegation parent when the session
 // is a sub-agent child (read off the child's run.created event payload,
 // no schema migration). archived selects the archived view instead of the
 // default active listing. cursor is the previous page's nextCursor (""
 // selects the first page); the returned nextCursor is "" once the last
 // page has been served.
-// ListSessions returns a page of session summaries in reverse-update order.
+// ListSessions returns a page of session summaries in reverse-creation order.
 // workspaceID, when non-zero, restricts the listing to that workspace
 // (docs/WORKSPACE_DESIGN.md §8.1); zero lists across all workspaces.
 func (s *SQLiteStore) ListSessions(ctx context.Context, cursor string, limit int, archived bool, workspaceID domain.WorkspaceID) ([]domain.SessionSummary, string, error) {
 	if limit <= 0 || limit > 1000 {
 		return nil, "", domain.NewError(domain.ErrInvalidInput, "session list limit must be between 1 and 1000")
 	}
-	// Keyset pagination over (updated_at_unix_nano DESC, session_id DESC);
+	// Keyset pagination over (created_at_unix_nano DESC, session_id DESC);
 	// cursorNano = -1 marks the first page.
 	cursorNano := int64(-1)
 	cursorID := ""
@@ -522,7 +522,7 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, cursor string, limit int
 		archivedFlag = 1
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT s.session_id, s.version, s.created_at, s.updated_at, s.updated_at_unix_nano, s.workspace_id,
+SELECT s.session_id, s.version, s.created_at, s.updated_at, s.created_at_unix_nano, s.workspace_id,
        (SELECT json_extract(CAST(e.payload AS TEXT), '$.parent_session_id')
         FROM events e
         WHERE e.session_id = s.session_id AND e.type = 'run.created'
@@ -531,9 +531,9 @@ FROM sessions s
 WHERE ((s.archived_at_unix_nano IS NOT NULL) = ?4)
   AND (?5 = '' OR s.workspace_id = ?5)
   AND ((?1 < 0)
-   OR (s.updated_at_unix_nano < ?1)
-   OR (s.updated_at_unix_nano = ?1 AND s.session_id < ?2))
-ORDER BY s.updated_at_unix_nano DESC, s.session_id DESC
+   OR (s.created_at_unix_nano < ?1)
+   OR (s.created_at_unix_nano = ?1 AND s.session_id < ?2))
+ORDER BY s.created_at_unix_nano DESC, s.session_id DESC
 LIMIT ?3`, cursorNano, cursorID, limit, archivedFlag, workspaceID.String())
 	if err != nil {
 		return nil, "", storeError("list sessions", err)

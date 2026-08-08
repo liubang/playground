@@ -496,7 +496,7 @@ func TestSQLiteStoreReadOnlyOpenDoesNotAllowWrites(t *testing.T) {
 	}
 }
 
-func TestSQLiteStoreListSessionsMostRecentlyUpdatedFirst(t *testing.T) {
+func TestSQLiteStoreListSessionsMostRecentlyCreatedFirst(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	first := domain.NewSessionID()
@@ -516,7 +516,9 @@ func TestSQLiteStoreListSessionsMostRecentlyUpdatedFirst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
-	if len(summaries) != 2 || summaries[0].ID != first || summaries[0].Version != 1 || summaries[1].ID != second {
+	// second was created after first, so it leads the listing even though
+	// first carries the more recent update.
+	if len(summaries) != 2 || summaries[0].ID != second || summaries[1].ID != first || summaries[1].Version != 1 {
 		t.Fatalf("unexpected summaries: %+v", summaries)
 	}
 	if _, _, err := store.ListSessions(ctx, "", 0, false, domain.WorkspaceID{}); errorCode(err) != domain.ErrInvalidInput {
@@ -538,7 +540,7 @@ func TestSQLiteStoreListSessionsPagination(t *testing.T) {
 		if err := store.CreateSession(ctx, ids[i], domain.WorkspaceID{}); err != nil {
 			t.Fatalf("CreateSession %d: %v", i, err)
 		}
-		// Distinct update order: append one event per session in id order.
+		// Distinct creation order: append one event per session in id order.
 		if err := store.AppendEvents(ctx, ids[i], 0, []domain.Event{
 			newEvent(ids[i], 1, domain.EventSessionCreated, nil),
 		}); err != nil {

@@ -271,6 +271,104 @@ func TestReconnectMCPServerUnknown(t *testing.T) {
 	}
 }
 
+// revealSecret posts one reveal request and returns status + body.
+func revealSecret(t *testing.T, ts *httptest.Server, body string) (int, map[string]any) {
+	t.Helper()
+	return doJSON(t, ts.Client(), http.MethodPost, ts.URL+"/v1/config/reveal", body)
+}
+
+// TestRevealSecret locks the on-demand plaintext reveal: each secret kind
+// resolves against the file on disk (which carries the real values, unlike
+// the masked GET response).
+func TestRevealSecret(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte(`default: deepseek/deepseek-chat
+providers:
+  - name: deepseek
+    type: openai
+    base_url: https://api.deepseek.com/v1
+    api_key: sk-real
+    models:
+      - name: deepseek-chat
+tracing:
+  public_key: pk-lf
+  secret_key: sk-lf
+mcp_servers:
+  ghost:
+    url: https://mcp.example.com/mcp
+    headers:
+      Authorization: Bearer tok-abc
+`), 0o600); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	ts := newConfigTestServer(t, cfgPath)
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"provider api_key", `{"kind":"provider","name":"deepseek"}`, "sk-real"},
+		{"tracing public_key", `{"kind":"tracing","field":"public_key"}`, "pk-lf"},
+		{"tracing secret_key", `{"kind":"tracing","field":"secret_key"}`, "sk-lf"},
+		{"mcp header", `{"kind":"mcp_header","name":"ghost","field":"Authorization"}`, "Bearer tok-abc"},
+	}
+	for _, tc := range cases {
+		status, body := revealSecret(t, ts, tc.body)
+		if status != http.StatusOK {
+			t.Fatalf("%s: status = %d (%v)", tc.name, status, body)
+		}
+		if body["value"] != tc.want {
+			t.Fatalf("%s: value = %v, want %q", tc.name, body["value"], tc.want)
+		}
+	}
+}
+
+func TestRevealSecretNotFound(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	ts := newConfigTestServer(t, cfgPath)
+
+	// No config file yet.
+	status, body := revealSecret(t, ts, `{"kind":"provider","name":"deepseek"}`)
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (%v)", status, body)
+	}
+	if code := body["error"].(map[string]any)["code"]; code != "secret_not_found" {
+		t.Fatalf("error code = %v, want secret_not_found", code)
+	}
+
+	// File exists but the provider/key does not.
+	if _, put := putConfig(t, ts, "", validConfigBody); put["revision"] == nil {
+		t.Fatalf("seed PUT failed: %v", put)
+	}
+	status, _ = revealSecret(t, ts, `{"kind":"provider","name":"ghost"}`)
+	if status != http.StatusNotFound {
+		t.Fatalf("unknown provider: status = %d, want 404", status)
+	}
+	// A provider configured via api_key_env has no inline key to reveal.
+	status, _ = revealSecret(t, ts, `{"kind":"tracing","field":"public_key"}`)
+	if status != http.StatusNotFound {
+		t.Fatalf("unset tracing key: status = %d, want 404", status)
+	}
+}
+
+func TestRevealSecretBadRequest(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	ts := newConfigTestServer(t, cfgPath)
+	if _, put := putConfig(t, ts, "", validConfigBody); put["revision"] == nil {
+		t.Fatalf("seed PUT failed: %v", put)
+	}
+	for _, body := range []string{
+		`{"kind":"nonsense"}`,
+		`{"kind":"tracing","field":"api_key"}`,
+	} {
+		status, resp := revealSecret(t, ts, body)
+		if status != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, want 400 (%v)", body, status, resp)
+		}
+	}
+}
+
 func TestConfigUnavailableWithoutPath(t *testing.T) {
 	svc := newTestService(t, fakes.NewFakeModel())
 	srv, err := New(Config{Token: testToken, Version: "test", Service: svc})
