@@ -18,6 +18,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -29,8 +30,18 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
+
+// TestLastActiveWorkspaceRootNoHistory: with no session store there is
+// nothing to derive from — the caller must get "" so it can ask once.
+func TestLastActiveWorkspaceRootNoHistory(t *testing.T) {
+	resolved := &config.ResolvedConfig{Storage: config.ResolvedStorage{BaseDir: t.TempDir()}}
+	if got := lastActiveWorkspaceRoot(context.Background(), resolved); got != "" {
+		t.Fatalf("lastActiveWorkspaceRoot without store = %q, want empty", got)
+	}
+}
 
 func TestResolveListenPort(t *testing.T) {
 	// Concrete ports pass through untouched.
