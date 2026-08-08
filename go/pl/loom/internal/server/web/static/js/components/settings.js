@@ -262,7 +262,7 @@ const MODEL_FIELDS = [
 const TABS = [
   { id: "providers", label: "模型" }, // 自定义渲染（概览 → 详情两级）
   {
-    id: "limits", label: "预算与上下文", sections: [
+    id: "limits", label: "限额与保护", sections: [
       ["运行预算", [
         { key: "limits.max_input_tokens", label: "回退上下文窗口", type: "number", ph: "200000", hint: "模型未声明 context_window 时使用" },
         { key: "limits.max_output_tokens", label: "单次输出上限", type: "number", ph: "16384" },
@@ -286,7 +286,7 @@ const TABS = [
     ],
   },
   {
-    id: "permission", label: "权限", sections: [
+    id: "permission", label: "权限与审批", sections: [
       ["审批基线", [
         {
           key: "approval.mode", label: "审批模式", type: "select",
@@ -310,19 +310,15 @@ const TABS = [
     ],
   },
   {
-    id: "agent", label: "代理行为", sections: [
+    id: "agent", label: "智能体", sections: [
       ["系统提示词", [
         { key: "prompt.extra", label: "附加指令", type: "textarea", hint: "追加到内置系统提示词末尾" },
         { key: "prompt.disable_builtin", label: "禁用内置提示词", type: "bool" },
         { key: "prompt.managed.name", label: "托管提示词名", hint: "Langfuse 托管提示词（需配置追踪）" },
         { key: "prompt.managed.label", label: "托管提示词标签", ph: "production" },
       ]],
-      ["Skills", [
-        { key: "skills.enabled", label: "启用技能", type: "tristate" },
-        { key: "skills.extra_roots", label: "额外搜索目录", type: "list-text", hint: "每行一个目录" },
-      ]],
-      ["子代理", [
-        { key: "subagent.enabled", label: "启用子代理", type: "tristate" },
+      ["子智能体", [
+        { key: "subagent.enabled", label: "启用子智能体", type: "tristate" },
         { key: "subagent.model", label: "固定模型", ph: "provider/model", hint: "留空跟随当前轮次模型" },
         { key: "subagent.max_tokens", label: "Token 上限", type: "number", ph: "0", hint: "0 = 继承运行预算" },
         { key: "subagent.max_output_tokens", label: "单次输出上限", type: "number", ph: "8192" },
@@ -345,6 +341,8 @@ const TABS = [
       ]],
     ],
   },
+  { id: "skills", label: "Skills" }, // 自定义渲染（配置 + 运行时发现视图）
+  { id: "mcp", label: "MCP" }, // 自定义渲染（概览 → 详情两级）
   {
     id: "system", label: "系统", sections: [
       ["Langfuse 追踪", [
@@ -370,8 +368,6 @@ const TABS = [
       ]],
     ], // workspaces 追加为自定义小节（见 _renderWorkspaces）
   },
-  { id: "mcp", label: "MCP" }, // 自定义渲染（概览 → 详情两级）
-  { id: "skills", label: "Skills" }, // 自定义渲染（运行时发现视图，只读）
 ];
 
 // ---------- 面板 ----------
@@ -391,7 +387,7 @@ export class SettingsPanel {
 
     document.getElementById("settings-close").onclick = () => this.close();
     document.getElementById("settings-save").onclick = () => this._save();
-    document.getElementById("settings-reload").onclick = () => this._load();
+    document.getElementById("settings-reload").onclick = () => this._load(true);
     this.wrap.addEventListener("click", (e) => { if (e.target === this.wrap) this.close(); });
     // 任意编辑即标记脏；Esc 关闭（脏时确认）
     this.wrap.addEventListener("input", () => this._markDirty());
@@ -441,9 +437,31 @@ export class SettingsPanel {
     m.classList.toggle("is-error", !!isError);
   }
 
-  async _load() {
+  // 居中加载/错误占位（面板打开与手动重新加载期间替代空白内容区）。
+  _loadingEl(text, isError) {
+    const d = el("div", "set-loading" + (isError ? " is-error" : ""));
+    d.appendChild(iconEl(isError ? "xmark" : "rotate-left"));
+    d.appendChild(document.createTextNode(text));
+    return d;
+  }
+
+  // manual=true（「重新加载」按钮）时：未保存修改需确认（重载会丢弃），
+  // 完成后 toast 反馈——对比 revision 区分「已是最新」与「已重新加载」。
+  async _load(manual) {
+    if (manual && this.dirty) {
+      const ok = await this.confirm({
+        title: "重新加载",
+        body: "设置中有未保存的修改，重新加载将丢弃它们。",
+        okLabel: "重新加载",
+      });
+      if (!ok) return;
+    }
     this._msg("加载中…");
+    const body = document.getElementById("settings-content");
+    body.textContent = "";
+    body.appendChild(this._loadingEl("加载配置中…"));
     try {
+      const prevRevision = this.revision;
       const r = await this.api.getConfig();
       this.revision = r.revision || "";
       this.cfg = r.config || {};
@@ -454,11 +472,14 @@ export class SettingsPanel {
       this._renderContent();
       this._renderTabs();
       if (this.activeTab === "skills") this._loadSkills();
+      if (manual) this.toast(r.revision === prevRevision ? "已是最新，配置无变化" : "配置已重新加载", true);
     } catch (e) {
       if (e.status === 401) {
         this.wrap.hidden = true; // gate 即将弹出，面板让位
         return;
       }
+      body.textContent = "";
+      body.appendChild(this._loadingEl("加载配置失败: " + e.message, true));
       this._msg("加载配置失败: " + e.message, true);
     }
   }
@@ -822,29 +843,70 @@ export class SettingsPanel {
   }
 
   // badge 三态：undefined（未命名卡片）→ 不显示；null（已命名但未连接）→
-  // 「保存后连接」；status → 已连接 N 工具 / 连接失败。
+  // 「保存后连接」；status → 已连接 N 工具 / 连接失败。每次刷新徽标时
+  // 同步详情页的「已注册工具」小节（数据同源于进程级实时状态）。
   _setMcpBadge(card, status) {
     const badge = card.querySelector(":scope > .set-card-head .mcp-status");
     if (!badge) return;
     badge.className = "mcp-status";
     badge.title = "";
+    card._mcpStatus = status;
     if (status === undefined) {
       badge.textContent = "";
-      return;
-    }
-    if (status === null) {
+    } else if (status === null) {
       badge.textContent = "保存后连接";
-      return;
-    }
-    if (status.connected) {
+    } else if (status.connected) {
       badge.classList.add("is-live");
       badge.textContent = `已连接 · ${(status.tools || []).length} 工具`;
-      badge.title = (status.tools || []).join("\n");
+      badge.title = (status.tools || []).map((t) => t.name).join("\n");
     } else {
       badge.classList.add("is-dead");
       badge.textContent = "连接失败";
       badge.title = status.error || "";
     }
+    this._renderMcpTools(card);
+  }
+
+  // 「已注册工具」小节（详情表单上方，只读）：每行显示服务器本地名 +
+  // 简介（两行截断，点击展开），hover 名称见完整限定名
+  // （mcp__{服务器}__{工具}）。工具很多时列表限高内部滚动。
+  _renderMcpTools(card) {
+    const sec = card.querySelector(":scope > .set-card-body > .mcp-tools-sec");
+    if (!sec) return;
+    sec.textContent = "";
+    sec.appendChild(el("div", "set-subtitle", "已注册工具（实时状态 · 白/黑名单过滤后的生效集）"));
+    const st = card._mcpStatus;
+    if (!st || !st.connected) {
+      const hint = st && st.error ? "连接失败，修复后点击右上角重连" : "保存并连接成功后展示该服务器的工具列表";
+      sec.appendChild(el("div", "set-hint", hint));
+      return;
+    }
+    if (!st.tools || !st.tools.length) {
+      sec.appendChild(el("div", "set-hint", "该服务器未暴露工具（或已被白/黑名单全部过滤）"));
+      return;
+    }
+    const name = card.querySelector(":scope > .set-card-head .set-input").value.trim();
+    const prefix = `mcp__${name}__`;
+    // 简介里的 [MCP server "…"] 前缀是适配层给模型看的归因（mcp/tool.go），
+    // UI 上服务器归属显而易见，剥掉更干净
+    const descPrefix = `[MCP server "${name}"] `;
+    const list = el("div", "mcp-tool-list");
+    for (const t of st.tools) {
+      const row = el("div", "mcp-tool-row");
+      const nm = el("span", "mcp-tool-name mono", t.name.startsWith(prefix) ? t.name.slice(prefix.length) : t.name);
+      nm.title = t.name;
+      row.appendChild(nm);
+      let descText = t.description || "";
+      if (descText.startsWith(descPrefix)) descText = descText.slice(descPrefix.length);
+      const desc = el("span", "mcp-tool-desc" + (descText ? "" : " is-empty"), descText || "（无简介）");
+      if (descText) {
+        desc.title = descText;
+        desc.onclick = () => desc.classList.toggle("is-expanded");
+      }
+      row.appendChild(desc);
+      list.appendChild(row);
+    }
+    sec.appendChild(list);
   }
 
   async _reconnectMcp(card) {
@@ -856,6 +918,9 @@ export class SettingsPanel {
     const badge = card.querySelector(":scope > .set-card-head .mcp-status");
     badge.className = "mcp-status";
     badge.textContent = "连接中…";
+    const btn = card.querySelector(":scope > .set-card-head .mcp-reconnect");
+    btn.classList.add("is-spinning"); // 图标旋转 = 进行中
+    btn.disabled = true;
     try {
       const status = await this.api.reconnectMcpServer(name);
       this._setMcpBadge(card, status);
@@ -869,6 +934,9 @@ export class SettingsPanel {
       } else {
         this.toast("重连失败: " + e.message);
       }
+    } finally {
+      btn.classList.remove("is-spinning");
+      btn.disabled = false;
     }
   }
 
@@ -895,6 +963,8 @@ export class SettingsPanel {
     card.appendChild(head);
 
     const cardBody = el("div", "set-card-body");
+    // 「已注册工具」只读小节（_renderMcpTools 随徽标刷新填充）
+    cardBody.appendChild(el("div", "set-group mcp-tools-sec"));
 
     // 传输形态切换：由 command/url 哪个有值推定；切换只影响展示哪组字段
     const transport = createSelect({
@@ -951,6 +1021,7 @@ export class SettingsPanel {
     fillScope(stdio, srv);
     fillScope(http, srv);
     fillScope(common, srv);
+    this._renderMcpTools(card); // 状态未拉取前先展示占位提示
     this._refreshMcpRow(card);
     card.addEventListener("input", () => this._onMcpEdit(card));
     card.addEventListener("change", () => this._onMcpEdit(card));
@@ -1024,17 +1095,30 @@ export class SettingsPanel {
     if (Object.keys(servers).length) cfg.mcp_servers = servers;
   }
 
-  // ---------- Skills tab（运行时发现视图，只读） ----------
+  // ---------- Skills tab（配置 + 运行时发现视图） ----------
 
   _renderSkills(body) {
     const refs = (this._tabRefs.skills = {});
+    // 配置小节：控件归属 settings-content 的全局 scope（本面板不设
+    // data-cfg-scope），由通用的填充/收集逻辑处理
+    const sec = el("section", "set-sec");
+    sec.appendChild(el("h3", "set-sec-title", "技能配置"));
+    sec.appendChild(this._fieldRow({ key: "skills.enabled", label: "启用技能", type: "tristate" }));
+    sec.appendChild(this._fieldRow({ key: "skills.extra_roots", label: "额外搜索目录", type: "list-text", hint: "每行一个目录" }));
+    body.appendChild(sec);
+
     const bar = el("div", "set-skills-bar");
-    bar.appendChild(el("div", "set-hint set-tip", "所有工作区发现的 skill（编辑内容请直接修改对应的 SKILL.md；启停与额外目录在「代理行为」tab）。刷新会重新扫描磁盘。"));
-    const refresh = el("button", "btn btn-secondary btn-sm set-skills-refresh", "刷新");
+    bar.appendChild(el("h3", "set-sec-title", "发现的技能（运行时状态）"));
+    const refresh = el("button", "btn btn-secondary btn-sm set-skills-refresh");
     refresh.type = "button";
+    refresh.title = "重新扫描磁盘";
+    refresh.appendChild(iconEl("rotate-left"));
+    refresh.appendChild(document.createTextNode("刷新"));
     refresh.onclick = () => this._loadSkills(true);
+    refs.refreshBtn = refresh;
     bar.appendChild(refresh);
     body.appendChild(bar);
+    body.appendChild(el("div", "set-hint set-tip", "所有工作区发现的 skill。编辑内容请直接修改对应的 SKILL.md；上方的配置改动保存后生效（重启后应用）。"));
     const list = el("div", "set-skills");
     body.appendChild(list);
     refs.list = list;
@@ -1043,30 +1127,45 @@ export class SettingsPanel {
 
   async _loadSkills(force) {
     const refs = this._tabRefs.skills;
-    if (!refs || !refs.list || (refs.loaded && !force)) return;
+    if (!refs || !refs.list || refs.loading || (refs.loaded && !force)) return;
     refs.loaded = true;
+    refs.loading = true;
+    if (refs.refreshBtn) {
+      refs.refreshBtn.disabled = true;
+      refs.refreshBtn.classList.add("is-spinning");
+    }
     refs.list.textContent = "";
-    refs.list.appendChild(el("div", "set-hint", "扫描中…"));
-    let r;
+    refs.list.appendChild(this._loadingEl("扫描技能目录中…"));
     try {
-      r = await this.api.listSkills();
+      const r = await this.api.listSkills();
+      refs.list.textContent = "";
+      if (!r.enabled) {
+        refs.list.appendChild(el("div", "set-hint", `技能已禁用（${r.reason || "未知原因"}）。可在上方「启用技能」开启并保存。`));
+        return;
+      }
+      let total = 0, issues = 0;
+      for (const g of r.groups || []) {
+        total += (g.skills || []).length;
+        issues += (g.issues || []).length;
+        refs.list.appendChild(this._skillGroup(g));
+      }
+      if (total === 0) {
+        refs.list.appendChild(el("div", "set-hint", "未发现任何 skill。目录约定：工作区 .loom/skills/、.agents/skills/，用户级 ~/.loom/skills/、~/.agents/skills/。"));
+      }
+      // 手动刷新的结果摘要：数字让用户确认扫描覆盖了预期目录
+      if (force) this.toast(`发现 ${total} 个 skill` + (issues ? `，${issues} 个加载失败` : ""), issues === 0);
     } catch (e) {
       refs.list.textContent = "";
-      if (e.status !== 401) refs.list.appendChild(el("div", "set-hint set-skills-error", "加载失败: " + e.message));
-      return;
-    }
-    refs.list.textContent = "";
-    if (!r.enabled) {
-      refs.list.appendChild(el("div", "set-hint", `技能已禁用（${r.reason || "未知原因"}）。可在「代理行为」tab 开启。`));
-      return;
-    }
-    let total = 0;
-    for (const g of r.groups || []) {
-      total += (g.skills || []).length;
-      refs.list.appendChild(this._skillGroup(g));
-    }
-    if (total === 0) {
-      refs.list.appendChild(el("div", "set-hint", "未发现任何 skill。目录约定：工作区 .loom/skills/、.agents/skills/，用户级 ~/.loom/skills/、~/.agents/skills/。"));
+      if (e.status !== 401) {
+        refs.list.appendChild(this._loadingEl("加载失败: " + e.message, true));
+        if (force) this.toast("技能扫描失败: " + e.message);
+      }
+    } finally {
+      refs.loading = false;
+      if (refs.refreshBtn) {
+        refs.refreshBtn.disabled = false;
+        refs.refreshBtn.classList.remove("is-spinning");
+      }
     }
   }
 
@@ -1083,7 +1182,11 @@ export class SettingsPanel {
       head.appendChild(el("span", "skill-name mono", sk.name));
       head.appendChild(el("span", "skill-scope" + (sk.scope === "repo" ? " is-repo" : ""), sk.scope));
       row.appendChild(head);
-      row.appendChild(el("div", "skill-desc", sk.description));
+      // 简介默认截断为两行（CSS line-clamp），hover 见全文，点击展开/收起
+      const desc = el("div", "skill-desc", sk.description);
+      desc.title = sk.description;
+      desc.onclick = () => desc.classList.toggle("is-expanded");
+      row.appendChild(desc);
       row.appendChild(el("div", "skill-path mono", sk.path));
       sec.appendChild(row);
     }
@@ -1231,6 +1334,11 @@ export class SettingsPanel {
       const msg = this._applyMsg(r);
       this._msg(msg);
       this.toast(msg, true);
+      // 成功瞬间绿色 outline 一闪（与 is-dirty 的 warning 色 outline 呼应）
+      saveBtn.classList.remove("flash-success");
+      void saveBtn.offsetWidth; // 重置动画以便连续保存时重触发
+      saveBtn.classList.add("flash-success");
+      setTimeout(() => saveBtn.classList.remove("flash-success"), 1300);
       // 热应用可能改变 MCP 连接状态（新增/删除/重连），刷新徽标
       this._refreshMcpStatus();
     } catch (e) {

@@ -754,6 +754,44 @@ select.set-input { width: auto; min-width: 180px; }
 .mcp-status.is-live { color: var(--success); }
 .mcp-status.is-dead { color: var(--error); }
 .mcp-reconnect { flex: none; }
+/* 异步动作反馈：进行中旋转 + 成功闪烁 + 居中加载 */
+@keyframes spin { to { transform: rotate(360deg); } }
+.is-spinning .icon { animation: spin .8s linear infinite; }
+@keyframes flash-success {
+  0% { outline: 2px solid var(--success); outline-offset: 1px; }
+  100% { outline: 2px solid transparent; outline-offset: 1px; }
+}
+.flash-success { animation: flash-success 1.2s ease-out; }
+.set-loading {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 60px 0; color: var(--muted); font-size: var(--text-md);
+}
+.set-loading .icon { animation: spin .8s linear infinite; }
+.set-loading.is-error { color: var(--error); }
+.set-loading.is-error .icon { animation: none; }
+
+/* 已注册工具小节（MCP 详情页表单上方，只读；限高内部滚动） */
+.mcp-tools-sec { margin-bottom: 14px; }
+.mcp-tool-list { max-height: 240px; overflow-y: auto; }
+.mcp-tool-row { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; }
+.mcp-tool-name { flex: none; width: 180px; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-tool-desc {
+  flex: 1; min-width: 0; font-size: var(--text-xs); color: var(--muted); line-height: 1.5; cursor: pointer;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.mcp-tool-desc.is-empty { cursor: default; }
+.mcp-tool-desc.is-expanded { display: block; -webkit-line-clamp: unset; overflow: visible; }
+
+/* 悬浮提示（tooltip.js，全局接管 title 属性；视觉对齐 .menu/.sel-pop） */
+.tip {
+  position: fixed; z-index: calc(var(--z-toasts) + 1);
+  max-width: 300px; white-space: pre-line; pointer-events: none;
+  background: var(--bg2); color: var(--fg);
+  border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: var(--radius-sm); padding: 4px 9px;
+  font-size: var(--text-xs); line-height: 1.5; box-shadow: var(--shadow-md);
+  animation: fadein .12s ease;
+}
 
 /* 自绘下拉（select.js，替代原生 select；浮层视觉对齐 .menu） */
 .sel { display: flex; align-items: center; gap: 8px; text-align: left; cursor: pointer; }
@@ -820,9 +858,9 @@ select.set-input { width: auto; min-width: 180px; }
 .set-hier .set-card.is-model-detail > .set-card-body > .set-add { display: none; }
 .set-hier .set-card.is-model-detail .set-models > .set-card:not(.is-open) { display: none; }
 
-/* Skills tab（聚合发现视图，只读） */
-.set-skills-bar { display: flex; align-items: flex-start; gap: 10px; }
-.set-skills-bar .set-tip { flex: 1; }
+/* Skills tab（配置 + 聚合发现视图） */
+.set-skills-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.set-skills-bar .set-sec-title { margin-bottom: 0; }
 .set-skills-refresh { flex: none; }
 .set-skill-root { margin: -6px 0 8px; }
 .skill-row {
@@ -836,11 +874,44 @@ select.set-input { width: auto; min-width: 180px; }
   border-radius: var(--radius-full); padding: 0 7px; text-transform: uppercase; letter-spacing: .04em;
 }
 .skill-scope.is-repo { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
-.skill-desc { font-size: var(--text-sm); line-height: 1.5; margin-bottom: 2px; }
+.skill-desc {
+  font-size: var(--text-sm); line-height: 1.5; margin-bottom: 2px; cursor: pointer;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.skill-desc.is-expanded { display: block; -webkit-line-clamp: unset; overflow: visible; }
 .skill-path { font-size: var(--text-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skill-issue { display: flex; align-items: baseline; gap: 6px; font-size: var(--text-xs); color: var(--warning); margin: 4px 0; }
 .skill-issue .icon { font-size: 10px; }
 .set-skills-error { color: var(--error); }
+
+/* 桌面端（loom-desktop，mac.TitleBarHidden，无 toolbar）：无原生标题栏，
+   红绿灯悬浮在窗口左上角标准位（中心线距窗口顶 14px，横向约占 12–66px）。
+   顶行统一收紧为 28px：侧栏展开时灯落在 .ws-bar 行内，折叠时落在
+   .app-header 行内，两种状态下行内容中心线均为 14px，与灯严格同高。
+   顶行兼作窗口拖动区（Wails --wails-draggable），按钮等交互控件排除拖动。 */
+.is-desktop .sidebar { padding-top: 0; }
+/* 顶行是纯 window chrome（灯 + 操作图标）：隐藏「工作区」分节文字，避免被
+   误读为窗口标题，与折叠态顶行（灯 + ≡ ☾ ⚙ ·）语义保持一致。
+   「+」右对齐到侧栏右缘，平时隐藏、悬停侧栏（或键盘聚焦）时浮现——与
+   工作区行 hover 才显示「新建/删除」的交互语言一致，顶行平时只剩灯。 */
+.is-desktop .ws-bar-title { display: none; }
+.is-desktop .ws-bar { min-height: 28px; padding-left: 64px; justify-content: flex-end; --wails-draggable: drag; }
+.is-desktop .ws-bar .icon-btn {
+  --wails-draggable: no-drag;
+  visibility: hidden; opacity: 0; transition: opacity .12s ease;
+}
+.is-desktop .sidebar:hover .ws-bar .icon-btn,
+.is-desktop .ws-bar:focus-within .icon-btn { visibility: visible; opacity: 1; }
+.is-desktop .app-header { min-height: 28px; --wails-draggable: drag; }
+.is-desktop .app-header button { --wails-draggable: no-drag; }
+/* 侧栏折叠时红绿灯落在头部左侧，头部整体右移让位 */
+.is-desktop .shell.sidebar-collapsed .app-header { padding-left: 76px; }
+/* 窗口失焦时系统会把红绿灯绘成非激活态（透明标题栏下呈黑色圆点，AppKit
+   绘制，web 层无法改色）；让两行顶栏内容同步变淡，呈现一致的原生
+   「非激活窗口」观感（main.js 在 blur/focus 时切换 is-inactive） */
+.is-desktop .app-header, .is-desktop .ws-bar { transition: opacity .15s ease; }
+.is-desktop.is-inactive .app-header,
+.is-desktop.is-inactive .ws-bar { opacity: .45; }
 
 /* 窄屏：侧栏改为抽屉式 overlay（☰ 开关；选中会话后 main.js 自动收起） */
 @media (max-width: 767px) {

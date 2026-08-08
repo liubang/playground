@@ -100,8 +100,11 @@ func TestManagerAddAndRemove(t *testing.T) {
 	if !st.Connected {
 		t.Fatalf("not connected: %s", st.Error)
 	}
-	if len(st.Tools) != 1 || st.Tools[0] != "mcp__echo__echo" {
+	if len(st.Tools) != 1 || st.Tools[0].Name != "mcp__echo__echo" {
 		t.Fatalf("tools = %v, want [mcp__echo__echo]", st.Tools)
+	}
+	if st.Tools[0].Description == "" {
+		t.Fatalf("tools[0] missing description: %+v", st.Tools[0])
 	}
 	if got := len(m.Tools()); got != 1 {
 		t.Fatalf("Tools() = %d, want 1", got)
