@@ -109,9 +109,9 @@ func main() {
 	fmt.Println("\n=== Auto-expanding columns ===")
 	{
 		var t p.Table
-		t.Add("Key").                   // 1 col
-			Add("animal", "cat").        // 2 cols → auto-expand
-			Add("fruit", "apple", "red") // 3 cols → auto-expand
+		t.Add("Key"). // 1 col
+				Add("animal", "cat").        // 2 cols → auto-expand
+				Add("fruit", "apple", "red") // 3 cols → auto-expand
 		t.Render()
 	}
 

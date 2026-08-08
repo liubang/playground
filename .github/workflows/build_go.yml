@@ -8,8 +8,10 @@ on:
       - "MODULE.bazel"
       - "MODULE.bazel.lock"
       - ".bazelrc"
+      - "BUILD"
       - "bazel/**"
       - "go/**"
+      - "gofumpt.sh"
       - ".github/workflows/build_go.yml"
   workflow_dispatch:
 
@@ -32,6 +34,11 @@ jobs:
           bazelisk-cache: true
           repository-cache: true
           disk-cache: ${{ github.workflow }}-${{ runner.os }}
+
+      # Fast-fail before the expensive coverage run if any Go file under
+      # go/ is not gofumpt-formatted (see //:gofumpt in the root BUILD).
+      - name: gofumpt check
+        run: bazel run --config=ci //:gofumpt -- --check
 
       - name: install lcov
         run: |

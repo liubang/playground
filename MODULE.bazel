@@ -270,8 +270,10 @@ go_deps.gazelle_override(
 )
 
 # All *direct* Go dependencies of the module have to be listed explicitly.
+# cc_mvdan_gofumpt is a `tool` dependency in go/go.mod (build-only, used by //:gofumpt).
 use_repo(
     go_deps,
+    "cc_mvdan_gofumpt",
     "com_github_charmbracelet_bubbles",
     "com_github_charmbracelet_bubbletea",
     "com_github_charmbracelet_glamour",
