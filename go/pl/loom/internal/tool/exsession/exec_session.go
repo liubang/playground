@@ -159,16 +159,13 @@ func (t *ExecSessionTool) Execute(ctx context.Context, prepared domain.PreparedC
 		Args:    append([]string(nil), args.Args...),
 		Cwd:     absoluteDir,
 		Env:     args.Env,
-	}, grant, displayArgv(args.Program, args.Args), args.WorkingDir)
+	}, grant, displayArgv(args.Program, args.Args))
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, classifyStartError(err))
 	}
 
 	awaitYield(ctx, entry, yieldMs)
-	output, err := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)
-	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
-	}
+	output := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)
 	return successResult(prepared.Call.ID, startedAt, output)
 }
 

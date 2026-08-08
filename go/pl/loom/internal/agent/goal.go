@@ -22,12 +22,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
@@ -286,7 +284,7 @@ func (t *UpdateGoalTool) Execute(_ context.Context, prepared domain.PreparedCall
 	startedAt := domain.RealClock{}.Now()
 	args, err := decodeUpdateGoalArgs(prepared.Call.Arguments)
 	if err != nil {
-		return updateGoalError(prepared.Call.ID, startedAt, err)
+		return toolErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	update := GoalUpdate{Objective: args.Objective, TokenBudget: args.TokenBudget}
 	if args.Status != "" {
@@ -302,7 +300,7 @@ func (t *UpdateGoalTool) Execute(_ context.Context, prepared domain.PreparedCall
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		return updateGoalError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode result", domain.WithCause(err)))
+		return toolErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode result", domain.WithCause(err)))
 	}
 	return domain.ToolResult{
 		CallID:     prepared.Call.ID,
@@ -333,19 +331,4 @@ func decodeUpdateGoalArgs(raw json.RawMessage) (updateGoalArgs, error) {
 		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, "objective or status is required")
 	}
 	return args, nil
-}
-
-func updateGoalError(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	var agentErr *domain.AgentError
-	code, message := string(domain.ErrInternal), err.Error()
-	if errors.As(err, &agentErr) {
-		code, message = string(agentErr.Code), agentErr.Message
-	}
-	return domain.ToolResult{
-		CallID:     callID,
-		Status:     domain.ToolStatusError,
-		Error:      &domain.ToolError{Code: code, Message: message},
-		StartedAt:  startedAt,
-		FinishedAt: domain.RealClock{}.Now(),
-	}
 }

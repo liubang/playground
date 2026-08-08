@@ -853,8 +853,13 @@ func TestBrowseDirectories(t *testing.T) {
 		t.Fatalf("default browse = %v, want home %s", body, home)
 	}
 
-	// A temp dir with a visible and a hidden subdirectory.
-	tmp := t.TempDir()
+	// A temp dir (created inside $HOME to stay within the browse confinement)
+	// with a visible and a hidden subdirectory.
+	tmp, err := os.MkdirTemp(home, "loom-browse-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmp)
 	if err := os.Mkdir(filepath.Join(tmp, "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -874,6 +879,13 @@ func TestBrowseDirectories(t *testing.T) {
 	}
 	if !sawSub {
 		t.Fatalf("sub not listed in %v", b2["entries"])
+	}
+
+	// Paths outside $HOME are rejected: the browser never lists beyond it
+	// (REVIEW H11). /etc resolves (through a symlink on macOS) outside any
+	// realistic home directory.
+	if status, _ := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/files/browse?path=/etc", ""); status != http.StatusBadRequest {
+		t.Fatalf("outside-home path = %d, want 400", status)
 	}
 
 	// Non-existent path → 400.

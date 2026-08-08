@@ -58,12 +58,8 @@ const (
 type SuspensionReason string
 
 const (
-	SuspensionApproval          SuspensionReason = "approval"
-	SuspensionClarification     SuspensionReason = "clarification"
-	SuspensionCredential        SuspensionReason = "credential"
-	SuspensionExternalCondition SuspensionReason = "external_condition"
-	SuspensionBudget            SuspensionReason = "budget"
-	SuspensionOutcomeUnknown    SuspensionReason = "outcome_unknown"
+	SuspensionApproval SuspensionReason = "approval"
+	SuspensionBudget   SuspensionReason = "budget"
 )
 
 // RunState is the combined, normalized state of a Run.
@@ -172,17 +168,6 @@ func CanTransition(from, to Phase) bool {
 		}
 	}
 	return false
-}
-
-// CanTerminate reports whether the run can transition to terminal from the given phase.
-func CanTerminate(from Phase) bool {
-	for _, t := range legalTransitions {
-		if t.From == from && t.Term {
-			return true
-		}
-	}
-	// Any non-terminal phase can be cancelled or budget-exhausted
-	return true
 }
 
 // Transition applies a phase transition, returning the new RunState.

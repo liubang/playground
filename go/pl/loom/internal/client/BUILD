@@ -29,6 +29,7 @@ go_library(
     deps = [
         "//go/pl/loom/internal/app",
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/model/sse:sse_lib",
         "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
     ],

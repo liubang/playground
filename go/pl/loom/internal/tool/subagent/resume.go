@@ -20,8 +20,6 @@ package subagent
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,6 +36,7 @@ import (
 type ResumeSubagentTool struct {
 	def domain.ToolDefinition
 	m   *Manager
+	key [32]byte
 }
 
 // NewResumeSubagentTool creates the tool bound to the given manager.
@@ -58,7 +57,11 @@ func NewResumeSubagentTool(m *Manager) (*ResumeSubagentTool, error) {
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
 	}
-	return &ResumeSubagentTool{def: def, m: m}, nil
+	key, err := newSigningKey()
+	if err != nil {
+		return nil, err
+	}
+	return &ResumeSubagentTool{def: def, m: m, key: key}, nil
 }
 
 // Definition returns the tool definition.
@@ -76,6 +79,12 @@ func (t *ResumeSubagentTool) ConcurrentSafe() bool { return true }
 // The lookup is best-effort: a session that cannot be inspected fails at
 // Execute with the real error, and the risk stays at the researcher tier.
 func (t *ResumeSubagentTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+	if err := call.Validate(); err != nil {
+		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
+	}
+	if call.Name != t.def.Name {
+		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
+	}
 	var args resumeArgs
 	dec := json.NewDecoder(bytes.NewReader(call.Arguments))
 	dec.DisallowUnknownFields()
@@ -103,15 +112,16 @@ func (t *ResumeSubagentTool) Prepare(ctx context.Context, call domain.ToolCall) 
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
-	sum := sha256.Sum256(canonical)
+	call.Arguments = canonical
 	desc := fmt.Sprintf("Resume sub-agent %s (%s)", sessionID.String(), role)
-	return domain.PreparedCall{
+	prepared := domain.PreparedCall{
 		Call:         call,
 		Definition:   t.def,
 		Risk:         risk,
 		ApprovalDesc: desc,
-		ArgsHash:     hex.EncodeToString(sum[:])[:16],
-	}, nil
+	}
+	prepared.ArgsHash = signPreparedCall(&t.key, prepared)
+	return prepared, nil
 }
 
 // Execute resumes the sub-agent with a new task.
@@ -130,6 +140,9 @@ func (t *ResumeSubagentTool) Execute(ctx context.Context, prepared domain.Prepar
 		// Report the role the resume actually runs under (same rule as
 		// Prepare and Manager.Resume), not the researcher default.
 		role = t.persistedRole(ctx, sessionID, role)
+	}
+	if err := verifyPreparedCall(&t.key, t.def, riskOf(role), prepared); err != nil {
+		return resumeError(prepared.Call.ID, startedAt, err)
 	}
 
 	snap, ok := t.m.factory.Models.Get()

@@ -18,13 +18,17 @@
 package trace
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -343,6 +347,95 @@ func TestFullContentToolError(t *testing.T) {
 		}
 	}
 	t.Fatal("tool span missing")
+}
+
+// TestGenAISystemFromModel pins the model-name heuristic behind the
+// gen_ai.system attribute (REVIEW M31): claude/anthropic → "anthropic",
+// gpt/openai → "openai", anything else → "unknown" instead of the old
+// hardcoded "openai".
+func TestGenAISystemFromModel(t *testing.T) {
+	cases := map[string]string{
+		"claude-sonnet-4-5":       "anthropic",
+		"anthropic/claude-opus-4": "anthropic",
+		"Claude-3-Haiku":          "anthropic",
+		"gpt-5":                   "openai",
+		"openai/gpt-4o":           "openai",
+		"glm-5.2":                 "unknown",
+		"":                        "unknown",
+	}
+	for model, want := range cases {
+		if got := genAISystem(model); got != want {
+			t.Fatalf("genAISystem(%q) = %q, want %q", model, got, want)
+		}
+	}
+}
+
+// TestGenerationSpanGenAISystem verifies the recorded generation span
+// carries the heuristic system value, not the old hardcoded "openai"
+// (REVIEW M31).
+func TestGenerationSpanGenAISystem(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	recorder := &otelRecorder{tracer: tp.Tracer("test"), content: true, userID: "u"}
+	ctx := context.Background()
+	ctx, run := recorder.StartRun(ctx, RunMeta{SessionID: "s", RunID: "r", Model: "claude-sonnet-4-5"})
+	now := time.Now()
+	run.RecordGeneration(ctx, GenerationRecord{
+		RequestID: "req-1", Model: "claude-sonnet-4-5", StartTime: now, EndTime: now,
+	})
+	run.End(RunResult{Outcome: "completed"})
+	if err := tp.ForceFlush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range exporter.GetSpans() {
+		if s.Name == "gen_ai.chat" {
+			assertAttr(t, s.Attributes, attrGenAISystem, "anthropic")
+			return
+		}
+	}
+	t.Fatal("generation span missing")
+}
+
+// TestExportErrorHandlerFanOut is the regression test for REVIEW M31:
+// otel.SetErrorHandler is process-global, so Setup must subscribe through
+// the singleton fan-out handler instead of overwriting the global — two
+// live providers both receive export errors, and Shutdown unsubscribes
+// only its own logger.
+func TestExportErrorHandlerFanOut(t *testing.T) {
+	var buf1, buf2 bytes.Buffer
+	cfg := Config{Enabled: true, Host: "http://127.0.0.1:1", PublicKey: "pk", SecretKey: "sk"}
+	cfg.Logger = slog.New(slog.NewTextHandler(&buf1, nil))
+	p1, err := Setup(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Logger = slog.New(slog.NewTextHandler(&buf2, nil))
+	p2, err := Setup(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	otel.Handle(errors.New("export boom 1"))
+	if !strings.Contains(buf1.String(), "export boom 1") {
+		t.Fatalf("first provider's logger must see the export error:\n%s", buf1.String())
+	}
+	if !strings.Contains(buf2.String(), "export boom 1") {
+		t.Fatalf("second Setup must not hijack the first provider's export errors:\n%s", buf2.String())
+	}
+
+	// Shutdown flushes buffered spans against the unreachable endpoint;
+	// those export errors are expected and irrelevant here.
+	_ = p1.Shutdown(context.Background())
+	buf1.Reset()
+	buf2.Reset()
+	otel.Handle(errors.New("export boom 2"))
+	if strings.Contains(buf1.String(), "export boom 2") {
+		t.Fatalf("shut-down provider must be unsubscribed:\n%s", buf1.String())
+	}
+	if !strings.Contains(buf2.String(), "export boom 2") {
+		t.Fatalf("live provider must still see export errors:\n%s", buf2.String())
+	}
+	_ = p2.Shutdown(context.Background())
 }
 
 func TestNoopRecorderIsSafe(t *testing.T) {

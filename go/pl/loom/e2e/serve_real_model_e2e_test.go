@@ -274,8 +274,8 @@ type eventCollector struct {
 	client client.Client
 	ch     <-chan runtimeevent.RuntimeEvent
 
-	mu   sync.Mutex
-	seen map[runtimeevent.RuntimeEventKind]int
+	mu    sync.Mutex
+	seen  map[runtimeevent.RuntimeEventKind]int
 	turns int
 }
 

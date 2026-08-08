@@ -22,10 +22,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
@@ -100,13 +98,13 @@ func (t *AskUserTool) Execute(ctx context.Context, prepared domain.PreparedCall)
 	startedAt := domain.RealClock{}.Now()
 	question, _, err := decodeAskUserArgs(prepared.Call.Arguments)
 	if err != nil {
-		return askUserError(prepared.Call.ID, startedAt, err)
+		return toolErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	question.ID = domain.NewEventID()
 
 	answer, err := t.questioner.Ask(ctx, question)
 	if err != nil {
-		return askUserError(prepared.Call.ID, startedAt, err)
+		return toolErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	payload := map[string]any{"answered": !answer.Skipped}
@@ -124,7 +122,7 @@ func (t *AskUserTool) Execute(ctx context.Context, prepared domain.PreparedCall)
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		return askUserError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode result", domain.WithCause(err)))
+		return toolErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode result", domain.WithCause(err)))
 	}
 	return domain.ToolResult{
 		CallID:     prepared.Call.ID,
@@ -163,19 +161,4 @@ func decodeAskUserArgs(raw json.RawMessage) (domain.Question, json.RawMessage, e
 		return domain.Question{}, nil, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	return question, canonical, nil
-}
-
-func askUserError(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	var agentErr *domain.AgentError
-	code, message := string(domain.ErrInternal), err.Error()
-	if errors.As(err, &agentErr) {
-		code, message = string(agentErr.Code), agentErr.Message
-	}
-	return domain.ToolResult{
-		CallID:     callID,
-		Status:     domain.ToolStatusError,
-		Error:      &domain.ToolError{Code: code, Message: message},
-		StartedAt:  startedAt,
-		FinishedAt: domain.RealClock{}.Now(),
-	}
 }

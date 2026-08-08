@@ -64,14 +64,22 @@ func qualifiedToolName(server, tool string) string {
 	return name[:keep] + "_" + suffix
 }
 
-// riskForSpec maps MCP tool annotations onto loom's risk ladder through the
-// capability vocabulary: read-only tools classify R1, destructive/open-world
-// tools R3, everything else the R2 default.
+// capabilitiesForSpec maps MCP tool annotations onto loom's risk ladder
+// through the capability vocabulary: read-only tools classify R3 (see
+// below), destructive/open-world tools R3, everything else the R2 default.
 func capabilitiesForSpec(spec ToolSpec) []domain.Capability {
 	if spec.Annotations != nil {
 		switch {
 		case spec.Annotations.ReadOnlyHint:
-			return []domain.Capability{domain.CapFSRead}
+			// readOnlyHint promises "no side effects" but says nothing about
+			// network egress: a read-only search/fetch tool can still ship
+			// arbitrary content (including prompt-injected secrets) to an
+			// external endpoint. The MCP spec defaults openWorldHint to true
+			// and the wire type cannot distinguish "unset" from "false", so
+			// every read-only tool is also marked network-capable, landing on
+			// R3 (approval required) instead of the auto-approved R1
+			// (REVIEW H12).
+			return []domain.Capability{domain.CapFSRead, domain.CapNetworkConnect}
 		case spec.Annotations.DestructiveHint, spec.Annotations.OpenWorldHint:
 			return []domain.Capability{domain.CapNetworkConnect}
 		}

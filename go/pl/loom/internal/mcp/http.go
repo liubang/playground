@@ -59,6 +59,9 @@ type httpTransport struct {
 	name     string
 
 	sessionID atomic.Value // string, assigned at initialize
+	// protocol is the server-negotiated protocol revision replayed on
+	// every post-initialize request; empty until adoptProtocolVersion.
+	protocol atomic.Value // string
 
 	mu     sync.Mutex // guards closed
 	closed bool
@@ -104,7 +107,14 @@ func (t *httpTransport) post(ctx context.Context, msg []byte) (*http.Response, e
 	header.Set("Accept", "application/json, text/event-stream")
 	if sid, _ := t.sessionID.Load().(string); sid != "" {
 		header.Set(sessionHeader, sid)
-		header.Set(protocolHeader, protocolVersion)
+		// Replay the revision the server actually negotiated, not the one
+		// we proposed — an older server answering with its own revision
+		// expects that revision back (REVIEW M23).
+		version := protocolVersion
+		if negotiated, _ := t.protocol.Load().(string); negotiated != "" {
+			version = negotiated
+		}
+		header.Set(protocolHeader, version)
 	}
 
 	resp, err := t.client.Post(ctx, t.endpoint, msg, header)
@@ -183,6 +193,13 @@ func (t *httpTransport) readSSEResponse(body io.Reader, id int64) (rpcMessage, e
 			continue
 		}
 		return msg, nil
+	}
+}
+
+// adoptProtocolVersion records the negotiated protocol revision.
+func (t *httpTransport) adoptProtocolVersion(version string) {
+	if version != "" {
+		t.protocol.Store(version)
 	}
 }
 

@@ -74,15 +74,6 @@ func TestSelfTransition(t *testing.T) {
 	}
 }
 
-// TestCanTerminate any phase can be cancelled.
-func TestCanTerminate(t *testing.T) {
-	for _, p := range []Phase{PhasePreparing, PhaseCallingModel, PhaseAwaitingApproval, PhaseExecutingTools, PhaseCompacting} {
-		if !CanTerminate(p) {
-			t.Errorf("CanTerminate(%s) = false, want true", p)
-		}
-	}
-}
-
 // TestRunStateTransition applies a legal transition.
 func TestRunStateTransition(t *testing.T) {
 	s := RunState{Lifecycle: LifecycleActive, Phase: PhasePreparing}

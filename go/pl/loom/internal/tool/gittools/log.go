@@ -88,7 +88,7 @@ func (t *GitLogTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	args, repoRoot, err := validateGitLogArgs(ctx, t.base.validator, t.base.gitPath, args)
+	args, readPaths, err := validateGitLogArgs(ctx, t.base.validator, t.base.gitPath, args)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -98,7 +98,7 @@ func (t *GitLogTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Read git log for %s (limit=%d)", args.RepoRoot, args.Limit)
-	return t.base.prepareCall(ctx, call, canonical, []string{repoRoot.Absolute}, approvalDesc)
+	return t.base.prepareCall(ctx, call, canonical, readPaths, approvalDesc)
 }
 
 func (t *GitLogTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
@@ -106,7 +106,7 @@ func (t *GitLogTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	if err := t.base.verifyPreparedCall(prepared); err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	if len(prepared.ReadPaths) != 1 {
+	if len(prepared.ReadPaths) < 1 || len(prepared.ReadPaths) > 2 {
 		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
 	}
 
@@ -122,7 +122,28 @@ func (t *GitLogTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call repo_root binding mismatch"))
 	}
 
-	argv := buildLogArgs(repoRoot.Absolute, args.Limit, args.Path)
+	// git log interprets the pathspec relative to the repo root (git -C
+	// repoRoot), so the workspace-relative display path would silently match
+	// nothing whenever repo_root is a subdirectory — resolve to the
+	// repo-relative form the way git_blame/git_diff do.
+	repoRelativePath := ""
+	if args.Path != "" {
+		if len(prepared.ReadPaths) != 2 {
+			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding is invalid"))
+		}
+		pathInfo, err := resolveRepoPath(t.base.validator, repoRoot, args.Path)
+		if err != nil {
+			return errorResult(prepared.Call.ID, startedAt, err)
+		}
+		if prepared.ReadPaths[1] != pathInfo.Absolute {
+			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+		}
+		repoRelativePath = pathInfo.RepoRelative
+	} else if len(prepared.ReadPaths) != 1 {
+		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding is invalid"))
+	}
+
+	argv := buildLogArgs(repoRoot.Absolute, args.Limit, repoRelativePath)
 	result, err := runGit(ctx, t.base.gitPath, argv, maxGitLogStdout, maxGitStderrBytes)
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, classifyGitError(err, result.stderr, "failed to read git log"))
@@ -137,27 +158,31 @@ func (t *GitLogTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	})
 }
 
-func validateGitLogArgs(ctx context.Context, validator *workspacepkg.PathValidator, gitPath string, args gitLogArgs) (gitLogArgs, repoRootResolution, error) {
+func validateGitLogArgs(ctx context.Context, validator *workspacepkg.PathValidator, gitPath string, args gitLogArgs) (gitLogArgs, []string, error) {
 	if args.Limit == 0 {
 		args.Limit = defaultGitLogLimit
 	}
 	if args.Limit < 0 || args.Limit > maxGitLogLimit {
-		return gitLogArgs{}, repoRootResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("limit must be between 1 and %d", maxGitLogLimit))
+		return gitLogArgs{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("limit must be between 1 and %d", maxGitLogLimit))
 	}
 	repoRoot, err := resolveRepoRoot(validator, args.RepoRoot)
 	if err != nil {
-		return gitLogArgs{}, repoRootResolution{}, err
-	}
-	if args.Path != "" {
-		if _, err := resolveRepoPath(validator, repoRoot, args.Path); err != nil {
-			return gitLogArgs{}, repoRootResolution{}, err
-		}
+		return gitLogArgs{}, nil, err
 	}
 	if err := confirmRepoRoot(ctx, gitPath, repoRoot); err != nil {
-		return gitLogArgs{}, repoRootResolution{}, err
+		return gitLogArgs{}, nil, err
 	}
 	args.RepoRoot = repoRoot.Display
-	return args, repoRoot, nil
+	readPaths := []string{repoRoot.Absolute}
+	if args.Path != "" {
+		pathInfo, err := resolveRepoPath(validator, repoRoot, args.Path)
+		if err != nil {
+			return gitLogArgs{}, nil, err
+		}
+		args.Path = pathInfo.Display
+		readPaths = append(readPaths, pathInfo.Absolute)
+	}
+	return args, readPaths, nil
 }
 
 func buildLogArgs(repoRoot string, limit int, repoRelativePath string) []string {

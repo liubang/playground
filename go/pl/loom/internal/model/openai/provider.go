@@ -979,6 +979,12 @@ func finishChatReadError(ctx context.Context, state *canonicalState, err error, 
 	switch {
 	case ctx.Err() != nil:
 		finishWithError(state, ctx.Err(), domain.StopCancelled, emit)
+	case errors.Is(err, io.EOF) && state.finishSeen:
+		// Some compatible gateways close the connection right after the final
+		// finish_reason chunk instead of sending the [DONE] sentinel. The
+		// generation is already complete and paid for — finish gracefully the
+		// same way the responses path does instead of discarding the reply.
+		finishChatDone(state, emit)
 	case errors.Is(err, io.EOF):
 		finishWithError(state, fmt.Errorf("openai provider: stream closed before [DONE]"), domain.StopProviderError, emit)
 	default:
@@ -1172,7 +1178,6 @@ func (s *canonicalState) applyResponseToolItem(item responsesOutputItem, index i
 		return err
 	}
 	if done {
-		tool.doneSeen = true
 		return s.closeTool(tool, emit)
 	}
 	return nil
@@ -1180,13 +1185,11 @@ func (s *canonicalState) applyResponseToolItem(item responsesOutputItem, index i
 
 func (s *canonicalState) applyResponseToolArgsDelta(index int, delta string, emit func(domain.ModelEvent) bool) {
 	tool := s.ensureTool(index)
-	tool.sawArgumentEvents = true
 	s.emitToolArgs(tool, delta, emit)
 }
 
 func (s *canonicalState) applyResponseToolArgsDone(index int, arguments string, emit func(domain.ModelEvent) bool) error {
 	tool := s.ensureTool(index)
-	tool.sawArgumentEvents = true
 	return s.emitToolArgumentSnapshot(tool, arguments, emit)
 }
 
@@ -1353,16 +1356,14 @@ func (s *canonicalState) closeOpen(emit func(domain.ModelEvent) bool) error {
 }
 
 type toolState struct {
-	index             int
-	id                string
-	name              string
-	assembledArgs     string
-	pendingArgs       string
-	itemArguments     string
-	sawArgumentEvents bool
-	started           bool
-	ended             bool
-	doneSeen          bool
+	index         int
+	id            string
+	name          string
+	assembledArgs string
+	pendingArgs   string
+	itemArguments string
+	started       bool
+	ended         bool
 }
 
 type chatCompletionChunk struct {
@@ -1386,7 +1387,6 @@ type chatDelta struct {
 type toolCallDelta struct {
 	Index    *int             `json:"index,omitempty"`
 	ID       string           `json:"id,omitempty"`
-	Type     string           `json:"type,omitempty"`
 	Function toolCallFunction `json:"function,omitempty"`
 }
 
@@ -1553,8 +1553,6 @@ func mapStopReason(reason string) domain.StopReason {
 		return domain.StopContentFilter
 	case "cancelled":
 		return domain.StopCancelled
-	case "", "null":
-		return domain.StopUnknown
 	default:
 		return domain.StopUnknown
 	}

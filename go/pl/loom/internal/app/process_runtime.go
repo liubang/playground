@@ -266,22 +266,9 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 	// clients) so frontends can report the per-server failure reasons.
 	var mcpManager *mcp.Manager
 	if len(resolved.MCP.Servers) > 0 {
-		mcpCfgs := make(map[string]mcp.ServerConfig, len(resolved.MCP.Servers))
-		for name, srv := range resolved.MCP.Servers {
-			mcpCfgs[name] = mcp.ServerConfig{
-				Command:           srv.Command,
-				Args:              srv.Args,
-				Env:               srv.Env,
-				Cwd:               srv.Cwd,
-				URL:               srv.URL,
-				Headers:           srv.Headers,
-				StartupTimeoutSec: srv.StartupTimeoutSec,
-				ToolTimeoutSec:    srv.ToolTimeoutSec,
-				EnabledTools:      srv.EnabledTools,
-				DisabledTools:     srv.DisabledTools,
-			}
-		}
-		mgr, err := mcp.StartServers(ctx, mcpCfgs, logger)
+		// config.MCPServer aliases mcp.ServerConfig (REVIEW R12), so the
+		// resolved map flows through without a field-by-field copy.
+		mgr, err := mcp.StartServers(ctx, resolved.MCP.Servers, logger)
 		if err != nil {
 			logger.Warn("mcp: no server could be started; running with built-in tools only", "error", err)
 		}

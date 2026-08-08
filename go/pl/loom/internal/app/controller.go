@@ -234,8 +234,14 @@ type Controller struct {
 	cancelTurn context.CancelFunc
 	activeTurn uint64
 	turnDone   chan struct{}
-	nextTurn   uint64
-	running    bool
+
+	// steerHook, when non-nil, runs inside handleSteer after the busy-state
+	// routing but before the message lands in the steer cell. Test-only seam
+	// for the M21 TOCTOU regression: it lets a test force the turn to finish
+	// exactly inside the window between the state read and the cell.Put.
+	steerHook func()
+	nextTurn  uint64
+	running   bool
 
 	cmdCh     chan controllerCommand
 	doneCh    chan struct{}
@@ -1017,12 +1023,6 @@ func (c *Controller) setState(s ControllerState) {
 	c.state = s
 }
 
-func (c *Controller) getState() ControllerState {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.state
-}
-
 func (c *Controller) dispatch(cmd controllerCommand) {
 	switch cmd.Kind {
 	case cmdSubmitPrompt:
@@ -1134,6 +1134,9 @@ func (c *Controller) handleSteer(cmd controllerCommand) {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("cannot steer without a configured steer cell")}
 		return
 	}
+	if c.steerHook != nil {
+		c.steerHook()
+	}
 	if err := cell.Put(cmd.Prompt); err != nil {
 		cmd.ResultCh <- controllerResult{Err: err}
 		return
@@ -1143,12 +1146,26 @@ func (c *Controller) handleSteer(cmd controllerCommand) {
 	// the publish identity under the same lock to avoid a data race.
 	c.mu.Lock()
 	sessionID, runID, turnCounter := c.sessionID, c.runID, c.turnCounter
+	turnOver := c.state == ControllerStateIdle
 	c.mu.Unlock()
 	c.publishEphemeral(sessionID, runID, turnCounter, runtimeevent.KindSteerQueued, runtimeevent.SteerQueuedPayload{
 		Text:     cmd.Prompt,
 		QueueLen: n,
 	})
 	cmd.ResultCh <- controllerResult{Value: SubmitResult{Steered: true, QueueLen: n, Turn: turnCounter}}
+	// Review M21: dispatch routed this submission here from a state read
+	// taken BEFORE the cell.Put; the turn may have finished in between,
+	// with onTurnFinished's relay already past an empty cell — the message
+	// would then sit in the cell until the next external submission even
+	// though the caller was told it queued. The re-check under c.mu closes
+	// the window: if the turn is over, relay now. Ordering is safe both
+	// ways — whoever drains the cell first wins, the other relay finds it
+	// empty; if the state is still busy (or cancelling), the running turn
+	// or onTurnFinished's relay observes the Put because it happened-before
+	// this mu critical section.
+	if turnOver {
+		c.relayPendingSteers()
+	}
 }
 
 // steerCell returns the session's steer mailbox from its runtime (never
@@ -1478,21 +1495,27 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 	}
 	c.publishDurable(sessionID, runID, turn, runtimeevent.KindTurnFinished, payload)
 
-	// Steer relay: leftovers the loop never drained become the next turn's
-	// prompt. The relay re-enters through cmdCh so submission stays
-	// serialized with external input; the result channel is buffered, so
-	// nobody has to read it. Relaying on every terminal outcome (completed,
-	// cancelled, failed, budget) is what makes Ctrl+C flush pending steers.
-	if cell := c.steerCell(); cell != nil && cell.Len() > 0 {
-		prompt := strings.Join(cell.Take(), "\n\n")
-		select {
-		case c.cmdCh <- controllerCommand{Kind: cmdSubmitPrompt, Prompt: prompt, ResultCh: make(chan controllerResult, 1)}:
-		default:
-			// The queue is full or the controller is shutting down; the
-			// messages are lost with the process, which matches the cell's
-			// volatile contract (STEER_DESIGN §3.3).
-			c.logger.Warn("steer relay dropped: command queue unavailable", "messages", prompt)
-		}
+	c.relayPendingSteers()
+}
+
+// relayPendingSteers forwards leftover steer messages as the next turn's
+// prompt. The relay re-enters through cmdCh so submission stays
+// serialized with external input; the result channel is buffered, so
+// nobody has to read it. Relaying on every terminal outcome (completed,
+// cancelled, failed, budget) is what makes Ctrl+C flush pending steers.
+func (c *Controller) relayPendingSteers() {
+	cell := c.steerCell()
+	if cell == nil || cell.Len() == 0 {
+		return
+	}
+	prompt := strings.Join(cell.Take(), "\n\n")
+	select {
+	case c.cmdCh <- controllerCommand{Kind: cmdSubmitPrompt, Prompt: prompt, ResultCh: make(chan controllerResult, 1)}:
+	default:
+		// The queue is full or the controller is shutting down; the
+		// messages are lost with the process, which matches the cell's
+		// volatile contract (STEER_DESIGN §3.3).
+		c.logger.Warn("steer relay dropped: command queue unavailable", "messages", prompt)
 	}
 }
 
@@ -2240,23 +2263,23 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 	case domain.EventPermissionRequested:
 		var payload toolCallAuditDTO
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
-		card := runtimeevent.ApprovalRequestedPayload{
-			ApprovalID:  ev.ID,
-			CallID:      payload.CallID,
-			ToolName:    payload.Tool,
-			Risk:        payload.Risk,
-			Description: payload.ApprovalDesc,
-			ArgsHash:    payload.ArgsHash,
-			ReadPaths:   payload.ReadPaths,
-			WritePaths:  payload.WritePaths,
-			Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffUnbounded),
-			Arguments:   s.pendingArgs[payload.CallID],
-		}
-		// Surface what "allow always" would remember so frontends can label
-		// (or hide) the option honestly instead of offering a no-op.
-		if preview, _, ok := ApprovalRulePreview(payload.Tool, card.Arguments); ok {
-			card.RulePreview = preview
-		}
+			card := runtimeevent.ApprovalRequestedPayload{
+				ApprovalID:  ev.ID,
+				CallID:      payload.CallID,
+				ToolName:    payload.Tool,
+				Risk:        payload.Risk,
+				Description: payload.ApprovalDesc,
+				ArgsHash:    payload.ArgsHash,
+				ReadPaths:   payload.ReadPaths,
+				WritePaths:  payload.WritePaths,
+				Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffUnbounded),
+				Arguments:   s.pendingArgs[payload.CallID],
+			}
+			// Surface what "allow always" would remember so frontends can label
+			// (or hide) the option honestly instead of offering a no-op.
+			if preview, _, ok := ApprovalRulePreview(payload.Tool, card.Arguments); ok {
+				card.RulePreview = preview
+			}
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindApprovalRequested, card)
 			// Project the card so reconnecting clients can rebuild it from
 			// the snapshot (the requested event itself is not replayed into
@@ -2553,7 +2576,3 @@ func boundPreviewLines(text string, maxLines, maxBytes int) string {
 	}
 	return out
 }
-
-// toolCallTarget extracts the primary subject of a prepared call for one-line
-// display: write paths for edits, read paths otherwise, and the approval
-// description (e.g. the command line for run_cmd) when no paths exist.

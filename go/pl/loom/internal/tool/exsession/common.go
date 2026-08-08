@@ -251,13 +251,16 @@ func awaitYield(ctx context.Context, entry *sessionEntry, yieldMs int64) {
 }
 
 // drainSession reads the incremental output window, commits artifacts once
-// the session has exited, and renders the shared result payload.
-func drainSession(ctx context.Context, m *Manager, entry *sessionEntry, maxBytes int64) (sessionOutput, error) {
+// the session has exited, and renders the shared result payload. A commit
+// failure is surfaced in the note instead of failing the drain: the process
+// output is still readable, and the staging area is kept for a later retry
+// (REVIEW H13).
+func drainSession(ctx context.Context, m *Manager, entry *sessionEntry, maxBytes int64) sessionOutput {
 	if maxBytes <= 0 {
 		maxBytes = defaultMaxOutputBytes
 	}
 	read := entry.session.Read(int(maxBytes))
-	_ = entry.commitArtifacts(ctx)
+	commitErr := entry.commitArtifacts(ctx)
 
 	status := "running"
 	switch {
@@ -286,7 +289,15 @@ func drainSession(ctx context.Context, m *Manager, entry *sessionEntry, maxBytes
 	if read.DroppedBytes > 0 {
 		out.Note = fmt.Sprintf("output shows only the most recent bytes; %d earlier bytes were dropped from this view (full output is tracked in the session artifacts)", read.DroppedBytes)
 	}
-	if resolver, ok := m.artifacts.(artifactPathResolver); ok && m.artifacts != nil {
+	if commitErr != nil {
+		msg := fmt.Sprintf("session output artifact commit failed (%v); the staged output is kept and will be retried on the next read", commitErr)
+		if out.Note != "" {
+			out.Note += " " + msg
+		} else {
+			out.Note = msg
+		}
+	}
+	if resolver, ok := m.artifacts.(artifactPathResolver); ok {
 		if entry.stdoutRef != nil {
 			if path, found := resolver.PathForRef(*entry.stdoutRef); found {
 				out.StdoutArtifactPath = path
@@ -298,7 +309,7 @@ func drainSession(ctx context.Context, m *Manager, entry *sessionEntry, maxBytes
 			}
 		}
 	}
-	return out, nil
+	return out
 }
 
 // artifactPathResolver matches the concrete artifact store, giving the

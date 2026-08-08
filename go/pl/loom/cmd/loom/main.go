@@ -122,12 +122,12 @@ func run(ctx context.Context, args []string) error {
 					name = args[i+1]
 				}
 			}
-		return addWorkspace(ctx, args[2], name)
-	}
-	if len(args) == 3 && args[1] == "rm" {
-		return removeWorkspace(ctx, args[2])
-	}
-	return errors.New("usage: loom workspace <list|add <path> [--name N]|rm <id>>")
+			return addWorkspace(ctx, args[2], name)
+		}
+		if len(args) == 3 && args[1] == "rm" {
+			return removeWorkspace(ctx, args[2])
+		}
+		return errors.New("usage: loom workspace <list|add <path> [--name N]|rm <id>>")
 	case "inspect":
 		if len(args) != 2 {
 			return errors.New("usage: loom inspect <session-id>")
@@ -592,6 +592,11 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 
 	current := resolved.Default
 	provider := resolved.ProviderByName(current.Provider)
+	if provider == nil {
+		// Mirror the controller's runTurn guard: fail loudly instead of
+		// panicking on provider.ModelFor (REVIEW M36).
+		return fmt.Errorf("provider %q is not configured", current.Provider)
+	}
 	meta, _ := resolved.ModelMeta(current)
 	contextCfg := resolved.Context
 	if meta.WindowUtilization != nil {

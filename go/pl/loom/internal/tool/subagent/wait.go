@@ -20,8 +20,6 @@ package subagent
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,6 +36,7 @@ import (
 type WaitSubagentTool struct {
 	def domain.ToolDefinition
 	m   *Manager
+	key [32]byte
 }
 
 // NewWaitSubagentTool creates the tool bound to the given manager.
@@ -58,7 +57,11 @@ func NewWaitSubagentTool(m *Manager) (*WaitSubagentTool, error) {
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
 	}
-	return &WaitSubagentTool{def: def, m: m}, nil
+	key, err := newSigningKey()
+	if err != nil {
+		return nil, err
+	}
+	return &WaitSubagentTool{def: def, m: m, key: key}, nil
 }
 
 // Definition returns the tool definition.
@@ -70,6 +73,12 @@ func (t *WaitSubagentTool) ConcurrentSafe() bool { return true }
 
 // Prepare validates and canonicalizes the call; it is side-effect-free.
 func (t *WaitSubagentTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+	if err := call.Validate(); err != nil {
+		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
+	}
+	if call.Name != t.def.Name {
+		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
+	}
 	var args waitArgs
 	dec := json.NewDecoder(bytes.NewReader(call.Arguments))
 	dec.DisallowUnknownFields()
@@ -85,20 +94,24 @@ func (t *WaitSubagentTool) Prepare(_ context.Context, call domain.ToolCall) (dom
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
-	sum := sha256.Sum256(canonical)
+	call.Arguments = canonical
 	desc := fmt.Sprintf("Wait for sub-agent %s", sessionID.String())
-	return domain.PreparedCall{
+	prepared := domain.PreparedCall{
 		Call:         call,
 		Definition:   t.def,
 		Risk:         domain.R1,
 		ApprovalDesc: desc,
-		ArgsHash:     hex.EncodeToString(sum[:])[:16],
-	}, nil
+	}
+	prepared.ArgsHash = signPreparedCall(&t.key, prepared)
+	return prepared, nil
 }
 
 // Execute waits for the sub-agent to reach a terminal state.
 func (t *WaitSubagentTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
+	if err := verifyPreparedCall(&t.key, t.def, domain.R1, prepared); err != nil {
+		return waitError(prepared.Call.ID, startedAt, err)
+	}
 	var args waitArgs
 	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
 		return waitError(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "invalid arguments", domain.WithCause(err)))

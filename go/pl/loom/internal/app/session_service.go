@@ -986,10 +986,24 @@ func (s *SessionService) SubscribeEvents(ctx context.Context, id domain.SessionI
 	if s.broker != nil && afterSeq > s.broker.Sequence() {
 		return nil, ErrCursorInvalid
 	}
+	// Review M20: the closing check and the wg.Add must complete inside
+	// the same s.mu critical section. Shutdown flips closing under s.mu
+	// before it ever calls wg.Wait, so an Add that observed a live service
+	// always happens-before Wait — an Add racing an in-flight Wait is
+	// WaitGroup misuse ("WaitGroup is reused" panic), and a forward
+	// goroutine started after Shutdown would have no lifecycle guarantee.
+	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
+		return nil, ErrDraining
+	}
+	s.wg.Add(1)
+	s.mu.Unlock()
 	h.mu.Lock()
 	replay, ok := h.Replay.Since(afterSeq)
 	if !ok {
 		h.mu.Unlock()
+		s.wg.Done()
 		return nil, ErrCursorInvalid
 	}
 	return s.subscribeLocked(ctx, h, replay), nil
@@ -1006,14 +1020,26 @@ func (s *SessionService) SubscribeLatest(ctx context.Context, id domain.SessionI
 	if err != nil {
 		return nil, err
 	}
+	// Same M20 contract as SubscribeEvents: closing check and wg.Add under
+	// one s.mu critical section.
+	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
+		return nil, ErrDraining
+	}
+	s.wg.Add(1)
+	s.mu.Unlock()
 	h.mu.Lock()
 	return s.subscribeLocked(ctx, h, nil), nil
 }
 
 // subscribeLocked registers a live subscription on h and returns the
-// stitched output channel. Callers must hold h.mu. Replay events (nil for
-// live-only) are delivered before live ones; ordering is exact because the
-// pump appends to the ring and forwards to live queues under the same lock.
+// stitched output channel. Callers must hold h.mu AND must have already
+// accounted the forward goroutine in s.wg (under s.mu, while checking the
+// service is not closing — see SubscribeEvents, review M20). Replay events
+// (nil for live-only) are delivered before live ones; ordering is exact
+// because the pump appends to the ring and forwards to live queues under
+// the same lock.
 func (s *SessionService) subscribeLocked(ctx context.Context, h *SessionHandle, replay []runtimeevent.RuntimeEvent) <-chan runtimeevent.RuntimeEvent {
 	subID := h.nextSubID
 	h.nextSubID++
@@ -1023,7 +1049,6 @@ func (s *SessionService) subscribeLocked(ctx context.Context, h *SessionHandle, 
 	h.touch()
 
 	out := make(chan runtimeevent.RuntimeEvent, s.subscriberQueue)
-	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 		defer close(out)

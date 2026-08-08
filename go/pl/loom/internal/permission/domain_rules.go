@@ -189,5 +189,3 @@ func (s *SessionRules) Domains() []string {
 	}
 	return out
 }
-
-

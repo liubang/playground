@@ -100,8 +100,6 @@ func NewWorkspaceID() WorkspaceID   { return newID[workspaceIDT]("ws") }
 
 func ParseSessionID(s string) (SessionID, error)       { return ParseID[sessionIDT](s) }
 func ParseRunID(s string) (RunID, error)               { return ParseID[runIDT](s) }
-func ParseTurnID(s string) (TurnID, error)             { return ParseID[turnIDT](s) }
-func ParseMessageID(s string) (MessageID, error)       { return ParseID[messageIDT](s) }
 func ParseToolCallID(s string) (ToolCallID, error)     { return ParseID[toolCallIDT](s) }
 func ParseEventID(s string) (EventID, error)           { return ParseID[eventIDT](s) }
 func ParseArtifactID(s string) (ArtifactID, error)     { return ParseID[artifactIDT](s) }

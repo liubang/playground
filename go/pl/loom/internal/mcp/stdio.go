@@ -181,6 +181,10 @@ func (t *stdioTransport) roundTrip(ctx context.Context, id int64, request []byte
 	}
 }
 
+// adoptProtocolVersion is a no-op on stdio: the negotiated revision is
+// only replayed as an HTTP header by the streamable HTTP transport.
+func (t *stdioTransport) adoptProtocolVersion(string) {}
+
 func (t *stdioTransport) notify(_ context.Context, notification []byte) error {
 	t.mu.Lock()
 	closed := t.closed
