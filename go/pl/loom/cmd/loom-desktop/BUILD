@@ -156,7 +156,8 @@ sh_binary(
     tags = ["manual"],
 )
 
-# Universal2 (arm64+amd64) bundle + DMG in dist/.
+# Release artifacts in dist/: per-arch macOS DMGs (arm64 + x86_64) and
+# Linux CLI .debs (amd64 + arm64).
 # Usage: bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_release
 sh_binary(
     name = "package_release",
