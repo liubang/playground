@@ -803,6 +803,10 @@ type SkillInfo struct {
 	Description string `json:"description"`
 	Scope       string `json:"scope"`
 	Path        string `json:"path"`
+	// Disabled marks skills suppressed via config skills.disabled. Such
+	// skills only appear in the management listing (GET /v1/skills), never
+	// in the catalog the model sees.
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // SkillsListing is the result of a ListSkills call: the discovered skills
@@ -826,7 +830,10 @@ func (c *Controller) ListSkills(ctx context.Context) (SkillsListing, error) {
 	}
 	catalog := c.bootstrap.Skills.Loader.Load(ctx)
 	c.bootstrap.Skills.Catalog.Store(catalog)
-	return SkillsListing{Skills: skillInfos(catalog.Skills()), Issues: issueStrings(catalog.Issues())}, nil
+	// The TUI listing mirrors the catalog the model sees, so disabled
+	// skills are absent here (they only surface in the management
+	// listing, which marks them).
+	return SkillsListing{Skills: skillInfos(catalog.Skills(), nil), Issues: issueStrings(catalog.Issues())}, nil
 }
 
 // MCPServerInfo is the frontend-safe projection of one configured MCP

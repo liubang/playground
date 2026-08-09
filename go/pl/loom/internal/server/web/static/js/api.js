@@ -50,8 +50,14 @@ export function createApi({ getToken, onUnauthorized }) {
     putConfig: (revision, config) => req("PUT", "/v1/config", { revision, config }),
     // 按需查看单个已存密钥的明文（GET 只下发掩码）；ref = {kind, name, field}
     revealSecret: (ref) => req("POST", "/v1/config/reveal", ref),
-    // 聚合所有工作区的 skill 目录（设置面板 Skills tab，只读）
-    listSkills: () => req("GET", "/v1/skills"),
+// 聚合所有工作区的 skill 目录（设置面板 Skills tab）
+listSkills: () => req("GET", "/v1/skills"),
+// 按名称禁用/启用：写入 config 的 skills.disabled 并热应用（按名称跨
+// 工作区生效）；响应携带最新 {revision, disabled, applied}
+setSkillDisabled: (name, disabled) =>
+  req("PUT", `/v1/skills/${encodeURIComponent(name)}/disabled`, { disabled }),
+// 按 SKILL.md 路径从磁盘删除整个 skill 目录（服务端限定在发现根目录内，不可恢复）
+deleteSkill: (path) => req("DELETE", "/v1/skills", { path }),
     // MCP 服务器实时状态与重连（设置面板）
     listMcpServers: () => req("GET", "/v1/mcp/servers"),
     reconnectMcpServer: (name) => req("POST", `/v1/mcp/servers/${encodeURIComponent(name)}/reconnect`, {}),

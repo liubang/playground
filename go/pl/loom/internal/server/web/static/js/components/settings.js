@@ -24,7 +24,9 @@ const SECRET_MASK = "••••••••••";
 // （merge 的语义是「未提供的 key = 从文件删除」）。PRESERVE_PATHS 覆盖
 // 已知但 UI 未做编辑器的嵌套键；KNOWN_TOP_KEYS 之外的顶层键（未来新增
 // 的配置节）也一律保留 —— UI 完整性不该是正确性的前提。
-const PRESERVE_PATHS = ["ui.keymap"];
+// skills.disabled 由技能 tab 的禁用开关经专用端点直写（不在表单里），
+// 保存时原样带回。
+const PRESERVE_PATHS = ["ui.keymap", "skills.disabled"];
 const KNOWN_TOP_KEYS = new Set([
   "default", "providers", "limits", "context", "runaway", "prompt",
   "skills", "rules", "approval", "tracing", "storage", "logging",
@@ -1117,7 +1119,7 @@ export class SettingsPanel {
     refs.refreshBtn = refresh;
     bar.appendChild(refresh);
     body.appendChild(bar);
-    body.appendChild(el("div", "set-hint set-tip", "所有工作区发现的 skill。编辑内容请直接修改对应的 SKILL.md；上方的配置改动保存后生效（重启后应用）。"));
+    body.appendChild(el("div", "set-hint set-tip", "所有工作区发现的 skill。禁用按名称对所有工作区生效（立即生效，写入 config 的 skills.disabled）；删除会从磁盘移除整个目录。编辑内容请直接修改对应的 SKILL.md；上方的配置改动保存后生效（重启后应用）。"));
     const list = el("div", "set-skills");
     body.appendChild(list);
     refs.list = list;
@@ -1176,18 +1178,7 @@ export class SettingsPanel {
       sec.appendChild(el("div", "set-hint", g.shared ? "（无用户级 skill）" : "（该工作区无 repo 级 skill）"));
     }
     for (const sk of g.skills || []) {
-      const row = el("div", "skill-row");
-      const head = el("div", "skill-head");
-      head.appendChild(el("span", "skill-name mono", sk.name));
-      head.appendChild(el("span", "skill-scope" + (sk.scope === "repo" ? " is-repo" : ""), sk.scope));
-      row.appendChild(head);
-      // 简介默认截断为两行（CSS line-clamp），hover 见全文，点击展开/收起
-      const desc = el("div", "skill-desc", sk.description);
-      desc.title = sk.description;
-      desc.onclick = () => desc.classList.toggle("is-expanded");
-      row.appendChild(desc);
-      row.appendChild(el("div", "skill-path mono", sk.path));
-      sec.appendChild(row);
+      sec.appendChild(this._skillRow(sk));
     }
     for (const issue of g.issues || []) {
       const line = el("div", "skill-issue");
@@ -1196,6 +1187,70 @@ export class SettingsPanel {
       sec.appendChild(line);
     }
     return sec;
+  }
+
+  _skillRow(sk) {
+    const row = el("div", "skill-row" + (sk.disabled ? " is-disabled" : ""));
+    const head = el("div", "skill-head");
+    head.appendChild(el("span", "skill-name mono", sk.name));
+    head.appendChild(el("span", "skill-scope" + (sk.scope === "repo" ? " is-repo" : ""), sk.scope));
+    if (sk.disabled) head.appendChild(el("span", "skill-scope is-off", "已禁用"));
+    const actions = el("div", "skill-actions");
+    // 禁用/启用：按名称写入 config 的 skills.disabled，服务端热应用
+    const toggle = el("button", "icon-btn skill-action");
+    toggle.type = "button";
+    toggle.title = (sk.disabled ? "启用" : "禁用") + "（按名称对所有工作区生效）";
+    toggle.innerHTML = icon(sk.disabled ? "check" : "ban");
+    toggle.onclick = () => this._toggleSkill(sk, toggle);
+    actions.appendChild(toggle);
+    // 删除：从磁盘移除整个 skill 目录（不可恢复，需确认）
+    const del = el("button", "icon-btn skill-action skill-del");
+    del.type = "button";
+    del.title = "从磁盘删除该 skill";
+    del.innerHTML = icon("trash");
+    del.onclick = () => this._deleteSkill(sk);
+    actions.appendChild(del);
+    head.appendChild(actions);
+    row.appendChild(head);
+    // 简介默认截断为两行（CSS line-clamp），hover 见全文，点击展开/收起
+    const desc = el("div", "skill-desc", sk.description);
+    desc.title = sk.description;
+    desc.onclick = () => desc.classList.toggle("is-expanded");
+    row.appendChild(desc);
+    row.appendChild(el("div", "skill-path mono", sk.path));
+    return row;
+  }
+
+  async _toggleSkill(sk, btn) {
+    btn.disabled = true;
+    try {
+      const resp = await this.api.setSkillDisabled(sk.name, !sk.disabled);
+      // 端点改写了 config 文件：同步面板持有的 revision 与 disabled 列表，
+      // 否则后续保存设置会 409 冲突，或把 skills.disabled 回滚成旧值
+      if (resp.revision) this.revision = resp.revision;
+      setPath(this.cfg, "skills.disabled", resp.disabled || []);
+      this.toast(sk.disabled ? `已启用 ${sk.name}` : `已禁用 ${sk.name}（立即生效）`, true);
+      await this._loadSkills(true);
+    } catch (e) {
+      btn.disabled = false;
+      if (e.status !== 401) this.toast((sk.disabled ? "启用失败: " : "禁用失败: ") + e.message);
+    }
+  }
+
+  async _deleteSkill(sk) {
+    const ok = await this.confirm({
+      title: "删除 skill",
+      body: `将从磁盘删除「${sk.name}」所在目录（含目录内全部文件）：${sk.path}。该操作不可恢复。`,
+      okLabel: "删除",
+    });
+    if (!ok) return;
+    try {
+      await this.api.deleteSkill(sk.path);
+      this.toast(`已删除 ${sk.name}`, true);
+      await this._loadSkills(true);
+    } catch (e) {
+      if (e.status !== 401) this.toast("删除失败: " + e.message);
+    }
   }
 
   // ---------- workspaces（系统 tab 附加小节） ----------
