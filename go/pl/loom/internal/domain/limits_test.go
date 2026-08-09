@@ -18,8 +18,10 @@
 package domain
 
 import (
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestDefaultLimits(t *testing.T) {
@@ -146,5 +148,23 @@ func TestDefaultRunawayConfigPassesValidation(t *testing.T) {
 	cfg.MaxRepeatedCalls = -1
 	if err := cfg.Validate(); err == nil {
 		t.Error("negative threshold must fail validation")
+	}
+}
+
+func TestTruncateForErrorEcho(t *testing.T) {
+	short := "short value"
+	if got := TruncateForErrorEcho(short); got != short {
+		t.Fatalf("short value = %q, want unchanged", got)
+	}
+	long := strings.Repeat("x", ToolErrorEchoMaxBytes+10)
+	got := TruncateForErrorEcho(long)
+	if len(got) != ToolErrorEchoMaxBytes+3 || !strings.HasSuffix(got, "...") {
+		t.Fatalf("long value len = %d, want %d with ellipsis", len(got), ToolErrorEchoMaxBytes+3)
+	}
+	// Multi-byte characters must never be split mid-rune.
+	multi := strings.Repeat("中", ToolErrorEchoMaxBytes) // 3 bytes per rune
+	got = TruncateForErrorEcho(multi)
+	if !utf8.ValidString(strings.TrimSuffix(got, "...")) {
+		t.Fatal("truncated output split a multi-byte rune")
 	}
 }
