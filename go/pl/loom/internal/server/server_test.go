@@ -56,6 +56,13 @@ func newTestService(t *testing.T, model domain.Model) *app.SessionService {
 // recorder wired into the process runtime (nil = tracing disabled).
 func newTestServiceWithRecorder(t *testing.T, model domain.Model, rec trace.Recorder) *app.SessionService {
 	t.Helper()
+	return newTestServiceFull(t, model, rec, app.SessionServiceConfig{})
+}
+
+// newTestServiceFull is newTestServiceWithRecorder with an explicit
+// SessionServiceConfig (e.g. wiring the share-endpoint controller).
+func newTestServiceFull(t *testing.T, model domain.Model, rec trace.Recorder, svcCfg app.SessionServiceConfig) *app.SessionService {
+	t.Helper()
 	ctx := context.Background()
 	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
 	if err != nil {
@@ -71,6 +78,9 @@ func newTestServiceWithRecorder(t *testing.T, model domain.Model, rec trace.Reco
 		}},
 		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
 		Limits:  domain.DefaultLimits(),
+		// A random loopback port keeps share-endpoint tests free of
+		// conflicts with any real listener.
+		Share: config.ResolvedShare{Listen: "127.0.0.1:0"},
 	}
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	t.Cleanup(broker.Close)
@@ -93,7 +103,7 @@ func newTestServiceWithRecorder(t *testing.T, model domain.Model, rec trace.Reco
 	svc := app.NewSingletonWorkspaceService(&app.Bootstrap{
 		ProcessRuntime: proc,
 		Registry:       agent.NewToolRegistry(),
-	}, broker, app.SessionServiceConfig{})
+	}, broker, svcCfg)
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
 	return svc
 }

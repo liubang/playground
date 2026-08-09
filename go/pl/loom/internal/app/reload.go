@@ -143,6 +143,13 @@ func classifyConfigChanges(prev, next *config.ResolvedConfig) ConfigApplyReport 
 	if !reflect.DeepEqual(prev.Image, next.Image) {
 		r.Restart = append(r.Restart, "image")
 	}
+	// The share listener is runtime-managed: ApplyConfig reconciles it
+	// immediately (start/stop/rebind), no restart required. The runtime
+	// toggle writes through to share.enabled, so this reconcile is the
+	// single path that starts or stops the listener.
+	if prev.Share != next.Share {
+		r.Immediate = append(r.Immediate, "share")
+	}
 	// Storage is not diffed: the loom home derives from the config file
 	// location (fixed per process), so it can never change via hot-apply.
 	if prev.Logging != next.Logging {
@@ -181,6 +188,12 @@ func (s *SessionService) ApplyConfig(ctx context.Context, next *config.ResolvedC
 		}
 		if mgr != nil {
 			mgr.Reconcile(ctx, next.MCP.Servers)
+		}
+	}
+
+	if report.hasImmediate("share") && s.shareEndpoint != nil {
+		if err := s.shareEndpoint.Apply(next.Share.Enabled, next.Share.Listen); err != nil && s.logger != nil {
+			s.logger.Warn("hot-apply: share endpoint reconcile failed", "error", err)
 		}
 	}
 

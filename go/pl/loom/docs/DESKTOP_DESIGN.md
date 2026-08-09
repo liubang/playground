@@ -94,7 +94,7 @@ loom-desktop (单一进程)
 ├── server.AcquireDataDirLock  # 数据目录 flock——与 serve/chat 互斥语义一致
 ├── app.SessionService         # 应用层（唯一）
 ├── server.Server (UI)         # 传输适配器：常驻 127.0.0.1:0 loopback 监听，webview 直连
-├── server.Server (share)      # 可选第二监听：--listen 指定时绑内网地址（§5）
+├── server.ShareManager        # 可选第二监听的生命周期：share-only mux（§5）
 └── wails.App                  # webview 窗口：AssetServer 只服务一页 bootstrap，
                                # meta-refresh 跳转到 http://127.0.0.1:<port>/#token=<tok>
 ```
@@ -107,14 +107,14 @@ loom-desktop (单一进程)
 |---|---|---|---|---|
 | `loom`（TUI） | `assembleRuntime` | 否 | 无 | inproc client |
 | `loom serve` | `assembleRuntime` | 数据目录 flock | 可配置（默认 127.0.0.1:7680） | 任意 http client |
-| `loom-desktop` | `assembleRuntime` | 数据目录 flock | 常驻 127.0.0.1:0（UI）+ 可选 `--listen`（分享） | 内嵌 webview（loopback HTTP） |
+| `loom-desktop` | `assembleRuntime` | 数据目录 flock | 常驻 127.0.0.1:0（UI）+ 可选分享监听（`share.*`，§5） | 内嵌 webview（loopback HTTP） |
 
 桌面端与 `loom serve` 共享「数据目录 flock → assembleRuntime → broker → SessionService → server.New」序列；差异在最后：serve 阻塞等信号，desktop 额外把 webview 经 bootstrap 页指向 loopback 地址并进入 GUI 事件循环。
 
 ### 3.3 启动序列（`cmd/loom-desktop/main.go`）
 
 ```
-1. 解析参数：--listen（默认空 = 仅进程内，无 TCP）、--advertise（可选，§5）
+1. 解析参数：--print-connection（调试辅助）；分享监听由配置 share.* 驱动（§5）
 2. workspace 解析：终端启动用 cwd（与 loom 语义一致）；Finder 启动（cwd=/）
    弹原生目录选择框，取消即干净退出（v5，§3.5）
 3. loadConfig(true) / prepareStorage / newFileLogger        ← 与 runServe 相同
@@ -128,10 +128,8 @@ loom-desktop (单一进程)
 7. token := 32 字节随机（crypto/rand，进程内存，不落盘不打印）
 8. uiSrv := server.New(Config{Listen: "127.0.0.1:0", Token: token, ...})
    uiSrv.Listen(); go uiSrv.Serve()                            ← UI 常驻 loopback
-   if --listen 非空 {                                          ← 可选内网分享（第二监听）
-       shareSrv := server.New(Config{Listen, PublicBaseURL: derive(...), ...})
-       shareSrv.Listen(); go shareSrv.Serve()
-   }
+   shareMgr := server.NewShareManager(share-only factory)   ← §5
+   shareMgr.Apply(resolved.Share.Enabled, resolved.Share.Listen)  ← 可选内网分享
 9. wails.Run(&options.App{Title: "Loom", Width/Height ← 持久化窗口几何（v5，§3.5）,
        AssetServer: &assetserver.Options{
            Handler: bootstrapHandler(uiBase + "/#token=" + token)},  ← §4.2
@@ -209,43 +207,27 @@ if (embeddedToken) {
 
 `/share/{token}` 页面与 `/v1/shared/*` 只读接口是「token 即能力」的公开路由（`server.go` routes 注释），创建/撤销仍属 owner 操作（bearer-gated）。该设计对内网共享天然成立：同事浏览器打开链接即可读，无登录、无依赖。
 
-### 5.2 缺口与方案
+### 5.2 分享监听：运行时开关 + 固定端口（v6 定稿）
 
-**缺口 A：桌面默认无 TCP 监听，分享链接出不了本机。**
+**设计原则**：桌面默认仅 loopback；「是否对 LAN 可达」是运行时状态而非配置，但链接要跨重启存活，端口必须固定。
 
-`--listen` 参数（语义对齐 `loom serve --listen`）显式开启内网监听。**与 v1 草稿不同**：webview 自身不再依赖该监听（进程内挂载），因此绑定地址的选择不影响桌面 UI，推导逻辑大幅简化：
+- **配置**（持久偏好）：`share.enabled`（启动即开，默认 false）与 `share.listen`（默认 `0.0.0.0:7681`，固定端口——分享 token 持久化于会话库，固定端口 + 重开监听后链接跨重启存活；端口校验拒绝 0）；
+- **运行时开关即写穿**：`POST /v1/share/endpoint`（bearer-gated，挂在 loopback UI server）把 `share.enabled` 写进配置文件并热应用——监听经 hot-apply reconcile 即时起停，运行时状态与配置永不发散（与 `skills.disabled` 同一模式）；`GET` 返回当前状态；
+- **最小暴露面**：分享监听挂 share-only mux——仅 `/share/{token}` 页 + 静态资源 + `/v1/shared/*` 只读 API，不注册任何 bearer 路由（未知路径 404 而非 401）；
+- **绝对链接**：mint 时 `handleShareSession` 读取 ShareManager 的**实时** public base（unspecified 地址自动探测出口网卡 IP）；监听未开则响应不含 `url`，前端退回 `location.origin + path`。webview 的 origin 是 loopback 随机端口，因此分享按钮在监听未开时就地弹确认并一键开启；
+- **`loom serve` 不挂 ShareManager**：`/v1/share/endpoint` 返回 404，前端隐藏开关——`--listen` 本身即显式监听，分享链接经 origin 拼接天然可用。
 
-| `--listen` 值 | TCP 监听 | 分享可达性 |
+| `share.listen` 值 | TCP 监听 | 分享可达性 |
 |---|---|---|
-| 空（默认） | 无 | 仅本机（无对外地址，不生成 PublicBaseURL） |
-| `0.0.0.0:7680` | 全接口 | 内网经 `http://<lan-ip>:7680` |
-| `192.168.1.5:7680`（具体 IP） | 指定接口 | 内网经同一地址 |
+| `0.0.0.0:7681`（默认） | 全接口 | 内网经 `http://<lan-ip>:7681` |
+| `192.168.1.5:7681`（具体 IP） | 指定接口 | 内网经同一地址（如 tailnet） |
+| `127.0.0.1:7681` | 仅回环 | 仅本机 |
 
-**缺口 B：SPA 复制的分享链接 host 是页面自身 origin。**
+### 5.3 安全提示
 
-复制点在 `main.js`（非 v1 草稿所写的 share.js——share.js 是分享**消费侧**页面）：
-
-```javascript
-const { path } = await app.api.shareSession(app.sessionId);
-const url = location.origin + path;
-```
-
-webview 中 origin 是 `wails://localhost`，拼出的链接既不可达也不是合法 HTTP URL。引入「对外地址」`PublicBaseURL`（服务端增量，WebUI 远程场景同样受益）：
-
-| 文件 | 改动 |
-|---|---|
-| `internal/server/server.go` | `Config` 新增 `PublicBaseURL string`（可选，如 `http://192.168.1.5:7680`） |
-| `internal/server/handlers_share.go` | `handleShareSession` 响应在 `PublicBaseURL` 非空时附带绝对 `url` 字段（`{token, path, url}`） |
-| `internal/server/web/static/js/main.js` | 复制处优先用响应的 `url`，缺省退回 `location.origin + path`（现行为） |
-| `cmd/loom-desktop/main.go` | `PublicBaseURL` 推导：`--advertise` 显式值优先；`--listen` 为 unspecified 时自动探测出口网卡 IP 拼端口；未开 `--listen` 时为空（分享仅本机，不误导） |
-
-否决的备选：API 进程内 + 第二 TCP 监听只挂分享路由。`server.Server` 的 mux 是 API/分享/SPA 一体注册，拆监听要动路由结构，侵入大而收益小；单监听 + bearer 鉴权已满足威胁模型。
-
-### 5.3 安全提示（沿用现有设计，无新增风险面）
-
-- 内网监听后 REST API 仍受 bearer token 保护；桌面 token 为进程内 32 字节随机值，不可猜测；
-- 分享链接的「知道即可读」是既有设计语义，内网监听仅扩大可达范围，不改变授权模型；
-- macOS 首次绑非回环地址会触发防火墙授权弹窗；ad-hoc 签名（§6.3）使该授权身份稳定，避免每次构建重复弹窗。
+- 分享监听只暴露「token 即能力」的只读路由；管理 API 始终在 loopback bearer 之后；桌面 token 为进程内 32 字节随机值，不可猜测；
+- 分享链接的「知道即可读」是既有设计语义，监听开关仅改变可达范围，不改变授权模型；
+- 默认关闭：macOS 防火墙弹窗只在用户首次开启分享时出现；ad-hoc 签名（§6.3）使该授权身份稳定，避免每次构建重复弹窗。
 
 ---
 

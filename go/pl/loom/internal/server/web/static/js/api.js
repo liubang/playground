@@ -75,6 +75,10 @@ deleteSkill: (path) => req("DELETE", "/v1/skills", { path }),
     // 分享链接：创建幂等（重复调用返回同一 token）；撤销后原链接立即失效
     shareSession: (id) => req("POST", `/v1/sessions/${id}/share`),
     revokeShare: (id) => req("DELETE", `/v1/sessions/${id}/share`),
+    // 局域网分享监听（桌面端）：开关写穿到 share.enabled 并热应用
+    // （即时生效且持久）；无 ShareManager 的 server（loom serve）返回 404
+    getShareEndpoint: () => req("GET", "/v1/share/endpoint"),
+    setShareEndpoint: (enabled) => req("POST", "/v1/share/endpoint", { enabled }),
     // 用户反馈：对某一轮（run）投 赞=1/踩=0，落为 Langfuse BOOLEAN 分数
     submitFeedback: (id, runId, value, comment = "") =>
       req("POST", `/v1/sessions/${id}/feedback`, { run_id: runId, value, comment }),

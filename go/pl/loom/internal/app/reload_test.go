@@ -64,6 +64,7 @@ func TestClassifyConfigChanges(t *testing.T) {
 		{"skills", func(c *config.ResolvedConfig) { c.Skills.Enabled = true }, "", "", "skills"},
 		{"skills disabled", func(c *config.ResolvedConfig) { c.Skills.Disabled = []string{"x"} }, "skills.disabled", "", ""},
 		{"image", func(c *config.ResolvedConfig) { c.Image.Model = "m" }, "", "", "image"},
+		{"share", func(c *config.ResolvedConfig) { c.Share.Enabled = true }, "share", "", ""},
 		{"logging", func(c *config.ResolvedConfig) { c.Logging.MaxFileBytes = 1 }, "", "", "logging"},
 		{"ui", func(c *config.ResolvedConfig) { c.UI.Icons = "plain" }, "", "", "ui"},
 		{"workspaces", func(c *config.ResolvedConfig) {
