@@ -195,6 +195,60 @@ function setConn(state, detail) {
   setBadge($("hdr-conn"), cls, text);
 }
 
+// 断连强提示：前几次自动重连只更新徽标（瞬态抖动不打扰）；连续失败达到
+// 阈值（退避序列约 15s+）或进入 dead 终态（429 流数超限）时升起 banner，
+// 附手动重试——重试走 resync（快照重建 + 重挂流），是最稳的恢复路径。
+const CONN_WARN_ATTEMPTS = 5;
+
+function connHealth(state, detail, attempt) {
+  if (state === "live") {
+    stopDrainRecovery();
+    $("banner").hidden = true;
+    return;
+  }
+  if (state === "draining") return; // onDraining 已升 banner
+  if (state === "dead") {
+    showConnBanner(`连接已断开：${detail || "disconnected"}`);
+  } else if (typeof attempt === "number" && attempt >= CONN_WARN_ATTEMPTS) {
+    showConnBanner("连接已断开，正在自动重连…");
+  }
+}
+
+// draining 自愈：优雅停机后服务通常很快以新实例回归（桌面端重启、部署
+// 滚动）。慢速轮询版本端点，可达即 resync（快照重建 + 以新实例重挂流），
+// 不再要求用户手动刷新。
+let drainPoll = null;
+
+function startDrainRecovery() {
+  if (drainPoll) return;
+  drainPoll = setInterval(async () => {
+    try {
+      await app.api.metaVersion();
+      resync("drain_recovered");
+    } catch { /* 仍未恢复：下一轮再试 */ }
+  }, 10_000);
+}
+
+function stopDrainRecovery() {
+  if (drainPoll) { clearInterval(drainPoll); drainPoll = null; }
+}
+
+function showConnBanner(text) {
+  const b = $("banner");
+  b.textContent = "";
+  const msg = document.createElement("span");
+  msg.innerHTML = icon("triangle-exclamation");
+  msg.appendChild(document.createTextNode(" " + text));
+  const retry = document.createElement("button");
+  retry.className = "banner-retry";
+  retry.type = "button";
+  retry.textContent = "立即重试";
+  retry.onclick = () => resync("manual_retry");
+  b.appendChild(msg);
+  b.appendChild(retry);
+  b.hidden = false;
+}
+
 function setSessionState(state) {
   const map = {
     idle: ["", "idle"],
@@ -786,15 +840,35 @@ initTooltips(); // 全局接管 title 属性 → 主题化悬浮提示
     onDraining: () => {
       setConn("draining");
       const b = $("banner");
-      b.innerHTML = icon("triangle-exclamation") + " server is draining (restart in progress) — reconnect paused; refresh later";
+      b.textContent = "";
+      const msg = document.createElement("span");
+      msg.innerHTML = icon("triangle-exclamation");
+      msg.appendChild(document.createTextNode(" 服务重启中，恢复后将自动重连…"));
+      const retry = document.createElement("button");
+      retry.className = "banner-retry";
+      retry.type = "button";
+      retry.textContent = "立即重试";
+      retry.onclick = () => resync("manual_retry");
+      b.appendChild(msg);
+      b.appendChild(retry);
       b.hidden = false;
+      startDrainRecovery();
     },
-    onConn: (state, detail) => {
+    onConn: (state, detail, attempt) => {
       setConn(state, detail);
-      if (state === "live") $("banner").hidden = true;
+      connHealth(state, detail, attempt);
     },
     onAuthError: onUnauthorized,
   });
+
+  // 页面恢复可见 / 从 BFCache 还原 / 网络恢复时主动探活重连：看门狗定时器
+  // 随页面一起被系统挂起（App Nap / 窗口遮挡），不主动戳永远不会发现断连。
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) app.stream.ensureLive();
+  });
+  window.addEventListener("pageshow", () => app.stream.ensureLive());
+  window.addEventListener("focus", () => app.stream.ensureLive());
+  window.addEventListener("online", () => app.stream.ensureLive());
 
   $("hdr-session").onclick = async () => {
     if (!app.sessionId) return;
