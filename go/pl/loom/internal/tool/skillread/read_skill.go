@@ -214,16 +214,6 @@ func (t *ReadSkillTool) resolveArgs(raw readSkillArgs) (readSkillArgs, string, e
 	return args, resolved, nil
 }
 
-// truncateForErrorMessage bounds user-supplied values echoed into error
-// messages so a pathological argument cannot bloat the transcript.
-func truncateForErrorMessage(s string) string {
-	const max = 256
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
-}
-
 // resolveInsideSkillDir resolves rel inside the skill directory using a
 // per-skill workspace.PathValidator (Clean + EvalSymlinks + prefix check),
 // rejects sensitive components, and stats the result.
@@ -248,7 +238,7 @@ func resolveInsideSkillDir(sk *skill.Skill, rel string) (string, error) {
 		if os.IsNotExist(err) {
 			// Echo the offending path so the model can tell which file
 			// inside the skill directory was missing.
-			return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("path does not exist: %q", truncateForErrorMessage(rel)))
+			return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("path does not exist: %q", domain.TruncateForErrorEcho(rel)))
 		}
 		return "", domain.NewError(domain.ErrUnavailable, "failed to stat path", domain.WithCause(err))
 	}
