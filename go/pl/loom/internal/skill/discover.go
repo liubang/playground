@@ -40,7 +40,7 @@ type Loader struct {
 }
 
 // NewLoader builds a Loader. Discovery roots are fully injected (the caller
-// derives them from the workspace and the configured storage base_dir), so
+// derives them from the workspace and the loom home), so
 // the loader itself performs no path conventions of its own. A nil logger
 // discards diagnostics.
 func NewLoader(workspaceRoot string, userRoots []string, logger *slog.Logger) *Loader {

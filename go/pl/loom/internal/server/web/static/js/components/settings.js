@@ -29,7 +29,7 @@ const SECRET_MASK = "••••••••••";
 const PRESERVE_PATHS = ["ui.keymap", "skills.disabled"];
 const KNOWN_TOP_KEYS = new Set([
   "default", "providers", "limits", "context", "runaway", "prompt",
-  "skills", "rules", "approval", "tracing", "storage", "logging",
+  "skills", "rules", "approval", "tracing", "logging",
   "ui", "subagent", "memory", "image", "mcp_servers", "workspaces",
 ]);
 
@@ -358,8 +358,7 @@ const TABS = [
         { key: "tracing.cost_input_usd_per_mtok", label: "输入费率 (USD/Mtok)", type: "number", step: 0.01, ph: "0" },
         { key: "tracing.cost_output_usd_per_mtok", label: "输出费率 (USD/Mtok)", type: "number", step: 0.01, ph: "0" },
       ]],
-      ["存储与日志", [
-        { key: "storage.base_dir", label: "数据根目录", hint: "留空为 ~/.loom" },
+      ["日志", [
         { key: "logging.max_file_mb", label: "单日志文件上限 (MiB)", type: "number", ph: "2048" },
         { key: "logging.max_total_mb", label: "日志总量上限 (MiB)", type: "number", ph: "10240" },
       ]],

@@ -52,7 +52,7 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 | 权限规则 | `LOOM_RULES` / `LOOM_BUILTIN_RULES` / `LOOM_PROJECT_RULES` / `LOOM_PROJECT_RULES_ALLOW` / `LOOM_RULES_PERSIST` | `permission/policy.go` / `app/controller.go` | 迁移：`rules.*` |
 | 追踪 | `LOOM_LANGFUSE_HOST`（fallback `LANGFUSE_HOST` / `LANGFUSE_BASE_URL`）/ `LOOM_LANGFUSE_PUBLIC_KEY` / `LOOM_LANGFUSE_SECRET_KEY` / `LOOM_LANGFUSE_ENVIRONMENT` / `LOOM_TRACE_CONTENT` / `LOOM_TRACE_USER` / `LOOM_COST_INPUT_USD_PER_MTOK` / `LOOM_COST_OUTPUT_USD_PER_MTOK` | `trace/config.go` | 迁移：`tracing.*` |
 | 托管提示词 | `LOOM_PROMPT_NAME` / `LOOM_PROMPT_LABEL` | `bootstrap.go` | 迁移：`prompt.managed.*` |
-| 存储 | `LOOM_SESSION_DB` | `main.go` | 迁移：`storage.base_dir`（数据根目录，会话库路径随之派生） |
+| 存储 | `LOOM_SESSION_DB` | `main.go` | 迁移：数据根目录（loom home）即配置文件所在目录，会话库路径随之派生 |
 | TUI | `LOOM_ICONS` / `LOOM_ALT_SCREEN` | `main.go` | 迁移：`ui.*` |
 | 发布标记 | `LOOM_VERSION` | `main.go` / `process/types.go` / `trace` | 不迁移：非用户配置；自我戳版机制改为装配层显式传入（§8） |
 | 配置定位 | `LOOM_CONFIG`（v3.2 新增） | `main.go` | 不迁移：配置文件**路径**定位器（类比 `KUBECONFIG`），非配置本身；默认 `~/.loom/config.yaml` |
@@ -130,7 +130,6 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 | 非敏感覆盖：`limits.*` / `prompt.extra` / `ui.*` | 允许 | 允许 |
 | `providers[]`（含 `base_url` / `wire_api` / 任何密钥字段） | 允许 | 禁止，出现即报错 |
 | `tracing.*`（含 host 与密钥） | 允许 | 禁止，出现即报错（追踪数据外泄面等同 base_url） |
-| `storage.base_dir` | 允许 | 禁止，出现即报错（路径劫持可污染会话存储） |
 
 边界由 `config.Load` 在合并前强制执行，规则与字段白名单集中在一张表内，新增字段时强制分类。
 
@@ -208,9 +207,6 @@ tracing:                                    # Langfuse；密钥字段规则同 �
   cost_input_usd_per_mtok: 0.15
   cost_output_usd_per_mtok: 0.60
 
-storage:
-  base_dir: /Users/me/.loom                     # 空则默认 ~/.loom；sessions/logs/memories/rules/skills 均在其下
-
 ui:
   icons: nerd                               # LOOM_ICONS：nerd | plain
   alt_screen: false                         # LOOM_ALT_SCREEN=1 ↔ true
@@ -230,7 +226,7 @@ subagent:                                   # delegate_task 子 Agent（docs/SUB
 - **`default` 解析**（按序）：① 含 `/` → `provider/model` 精确匹配；② 裸名 → 先按 provider 名匹配（取该 provider 的 `default_model`），再按模型名全局唯一匹配；③ 任一步歧义或不命中即报错并列出候选；
 - **`default` 缺省**：取 `providers[0]` 的 `default_model`（其再缺省取 `models[0]`）——单 provider 场景可以不写 `default`；
 - **`base_url` 必填**：`openai.New` 对空 `BaseURL` 静默回退官方端点（`provider.go` `defaultBaseURL`）——deepseek 配置漏写会把密钥与对话发往 `api.openai.com`。显式必填消除这整类静默错配；
-- **`storage.base_dir` 缺省**：默认 `~/.loom`（`config.DefaultBaseDir`）；所有数据位置由 `config.ResolvedStorage` 派生（sessions/sessions.db、logs/、memories/、rules/、skills/、LOOM.md），代码中不再出现其他 `~/.loom` 硬编码；
+- **数据根目录（loom home）不可配**：即配置文件所在目录（`config.BaseDirForConfigPath`；默认 `~/.loom`），`LOOM_CONFIG` 是唯一的定位入口——配置文件不再自指数据根；所有数据位置由 `config.ResolvedStorage` 派生（sessions/sessions.db、logs/、memories/、rules/、skills/、LOOM.md），代码中不再出现其他 `~/.loom` 硬编码；
 - **duration / 数字**：duration 用 Go 字符串（`30m`、`1h`）；token/字节数用整数（不支持 `10k` 之类后缀，保持简单）。
 
 ---
