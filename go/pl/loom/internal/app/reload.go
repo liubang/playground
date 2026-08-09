@@ -130,7 +130,14 @@ func classifyConfigChanges(prev, next *config.ResolvedConfig) ConfigApplyReport 
 	if !reflect.DeepEqual(prev.Memory, next.Memory) {
 		r.Restart = append(r.Restart, "memory")
 	}
-	if !reflect.DeepEqual(prev.Skills, next.Skills) {
+	// The disabled-name set is pushed into every assembled loader by
+	// ApplyConfig (Immediate); enabled/extra_roots stay frozen into the
+	// per-workspace assembly and still require a restart.
+	if !reflect.DeepEqual(prev.Skills.Disabled, next.Skills.Disabled) {
+		r.Immediate = append(r.Immediate, "skills.disabled")
+	}
+	if prev.Skills.Enabled != next.Skills.Enabled ||
+		!reflect.DeepEqual(prev.Skills.ExtraRoots, next.Skills.ExtraRoots) {
 		r.Restart = append(r.Restart, "skills")
 	}
 	if !reflect.DeepEqual(prev.Image, next.Image) {
@@ -180,6 +187,7 @@ func (s *SessionService) ApplyConfig(ctx context.Context, next *config.ResolvedC
 
 	policyChanged := report.hasImmediate("approval.mode") || report.hasImmediate("rules")
 	promptChanged := report.hasImmediate("prompt")
+	skillsDisabledChanged := report.hasImmediate("skills.disabled")
 	for _, b := range s.registry.Bootstraps() {
 		if policyChanged {
 			if err := b.SetApprovalMode(ctx, next.Approval.Mode); err != nil && s.logger != nil {
@@ -189,6 +197,10 @@ func (s *SessionService) ApplyConfig(ctx context.Context, next *config.ResolvedC
 		b.SyncMCPTools()
 		if promptChanged {
 			b.RebuildPrompt(ctx)
+		}
+		if skillsDisabledChanged && b.Skills != nil {
+			b.Skills.Loader.SetDisabled(next.Skills.Disabled)
+			b.Skills.Catalog.Store(b.Skills.Loader.Load(ctx))
 		}
 	}
 	if len(report.Immediate)+len(report.NextTurn)+len(report.Restart) > 0 && s.logger != nil {

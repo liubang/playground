@@ -222,6 +222,143 @@ func TestLoaderIssuesDoNotBlock(t *testing.T) {
 	}
 }
 
+func TestLoaderEmptyWorkspaceSkipsRepoRoots(t *testing.T) {
+	home := t.TempDir()
+	writeSkill(t, filepath.Join(home, ".agents", "skills", "u"), "u", "d")
+	// A repo-convention directory under the process cwd must NOT be
+	// scanned when the loader has no workspace root (joining "" with
+	// .loom/skills would otherwise produce a cwd-relative root).
+	cwd := t.TempDir()
+	writeSkill(t, filepath.Join(cwd, ".loom", "skills", "stray"), "stray", "d")
+	t.Chdir(cwd)
+
+	cat := loadAll(t, NewLoader("", defaultUserRoots(home), nil))
+	if cat.Find("u") == nil {
+		t.Fatal("user skill missing")
+	}
+	if cat.Find("stray") != nil {
+		t.Fatal("cwd-relative repo root scanned with empty workspace root")
+	}
+}
+
+func TestLoaderDisabledFilter(t *testing.T) {
+	ws, home := newEnv(t)
+	writeSkill(t, filepath.Join(ws, ".loom", "skills", "weather"), "weather", "repo copy")
+	writeSkill(t, filepath.Join(home, ".agents", "skills", "weather"), "weather", "user copy")
+	writeSkill(t, filepath.Join(ws, ".loom", "skills", "keep"), "keep", "d")
+
+	loader := NewLoader(ws, defaultUserRoots(home), nil)
+	loader.SetDisabled([]string{"weather"})
+	cat := loadAll(t, loader)
+	// Disable is by name across scopes: neither copy is visible, and the
+	// shadowing conflict between them is not reported either.
+	if cat.Find("weather") != nil {
+		t.Fatal("disabled skill present in catalog")
+	}
+	if cat.Find("keep") == nil {
+		t.Fatal("unrelated skill filtered out")
+	}
+	if len(cat.Issues()) != 0 {
+		t.Fatalf("Issues() = %v, want none", cat.Issues())
+	}
+
+	// Clearing the set restores discovery (repo wins the conflict).
+	loader.SetDisabled(nil)
+	cat = loadAll(t, loader)
+	if got := cat.Find("weather"); got == nil || got.Description != "repo copy" {
+		t.Fatalf("weather = %+v, want repo copy after re-enable", got)
+	}
+}
+
+func TestLoaderDeleteRemovesDirectory(t *testing.T) {
+	ws := t.TempDir()
+	dir := filepath.Join(ws, ".loom", "skills", "weather")
+	path := writeSkill(t, dir, "weather", "d")
+	// Supporting files go with the directory.
+	if err := os.WriteFile(filepath.Join(dir, "run.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	loader := NewLoader(ws, nil, nil)
+	ok, err := loader.Delete(canonical(t, path))
+	if err != nil || !ok {
+		t.Fatalf("Delete = %v, %v; want true, nil", ok, err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("skill dir still exists: %v", err)
+	}
+	if got := loadAll(t, loader).Names(); len(got) != 0 {
+		t.Fatalf("Names() = %v after delete, want empty", got)
+	}
+}
+
+func TestLoaderDeleteSymlinkUnlinksOnly(t *testing.T) {
+	ws := t.TempDir()
+	realDir := filepath.Join(t.TempDir(), "real-weather")
+	path := writeSkill(t, realDir, "weather", "d")
+	root := filepath.Join(ws, ".loom", "skills")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "linked")
+	if err := os.Symlink(realDir, link); err != nil {
+		t.Fatal(err)
+	}
+
+	loader := NewLoader(ws, nil, nil)
+	ok, err := loader.Delete(canonical(t, path))
+	if err != nil || !ok {
+		t.Fatalf("Delete = %v, %v; want true, nil", ok, err)
+	}
+	// The link under the root is gone; the target directory survives.
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Fatalf("symlink still present: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("symlink target removed: %v", err)
+	}
+}
+
+func TestLoaderDeleteSkillFileDirectlyInRoot(t *testing.T) {
+	ws := t.TempDir()
+	root := filepath.Join(ws, ".loom", "skills")
+	path := writeSkill(t, root, "at-root", "d")
+	sibling := writeSkill(t, filepath.Join(root, "sibling"), "sibling", "d")
+
+	loader := NewLoader(ws, nil, nil)
+	ok, err := loader.Delete(canonical(t, path))
+	if err != nil || !ok {
+		t.Fatalf("Delete = %v, %v; want true, nil", ok, err)
+	}
+	// Only the SKILL.md is removed — the root (and its other skills)
+	// must survive.
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("SKILL.md still present: %v", err)
+	}
+	if _, err := os.Stat(sibling); err != nil {
+		t.Fatalf("sibling skill removed: %v", err)
+	}
+	if got := loadAll(t, loader).Names(); len(got) != 1 || got[0] != "sibling" {
+		t.Fatalf("Names() = %v, want [sibling]", got)
+	}
+}
+
+func TestLoaderDeleteUnknownPath(t *testing.T) {
+	ws := t.TempDir()
+	writeSkill(t, filepath.Join(ws, ".loom", "skills", "keep"), "keep", "d")
+	// A loadable SKILL.md outside every discovery root must not match.
+	outside := writeSkill(t, filepath.Join(t.TempDir(), "x"), "x", "d")
+
+	loader := NewLoader(ws, nil, nil)
+	ok, err := loader.Delete(canonical(t, outside))
+	if err != nil || ok {
+		t.Fatalf("Delete = %v, %v; want false, nil", ok, err)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("outside-root skill removed: %v", err)
+	}
+}
+
 func TestLoaderExtraRootDeduplicated(t *testing.T) {
 	ws, home := newEnv(t)
 	writeSkill(t, filepath.Join(home, ".loom", "skills", "x"), "x", "d")

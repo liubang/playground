@@ -19,6 +19,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -71,6 +72,7 @@ func WireSkills(
 		return nil, nil, nil
 	}
 	loader := skill.NewLoader(workspaceRoot, skillUserRoots(cfg, loomSkillsDir), logger)
+	loader.SetDisabled(cfg.Disabled)
 	catalog := &skill.AtomicCatalog{}
 	readSkill, err := skillread.NewReadSkillTool(catalog)
 	if err != nil {
@@ -141,13 +143,22 @@ func (s *SessionService) SkillsOverview(ctx context.Context) SkillsOverview {
 	}
 	ov := SkillsOverview{Enabled: true, Groups: []SkillGroup{}}
 
+	// The management listing deliberately scans WITHOUT the disabled
+	// filter: suppressed skills stay visible (marked disabled) so the UI
+	// can re-enable them. Only the catalogs stored back into the
+	// assembled workspaces are filtered.
+	disabled := map[string]bool{}
+	for _, name := range resolved.Skills.Disabled {
+		disabled[name] = true
+	}
+
 	// Shared user scope: identical for every workspace, listed once. An
 	// empty workspace root yields exactly the user-scope roots.
 	shared := skill.NewLoader("", skillUserRoots(resolved.Skills, resolved.Storage.SkillsDir()), s.logger).Load(ctx)
 	ov.Groups = append(ov.Groups, SkillGroup{
 		WorkspaceName: "用户级（所有工作区共享）",
 		Shared:        true,
-		Skills:        skillInfos(shared.Skills()),
+		Skills:        skillInfos(shared.Skills(), disabled),
 		Issues:        issueStrings(shared.Issues()),
 	})
 
@@ -173,23 +184,30 @@ func (s *SessionService) SkillsOverview(ctx context.Context) SkillsOverview {
 		if b, ok := s.registry.Get(ws.ID); ok && b.Skills != nil {
 			catalog := b.Skills.Loader.Load(ctx)
 			b.Skills.Catalog.Store(catalog)
+			// The stored catalog is what the model sees (disabled skills
+			// filtered out); the listing needs them visible, so rescan
+			// repo-only without the filter when any name is suppressed.
+			display := catalog
+			if len(disabled) > 0 {
+				display = skill.NewLoader(ws.RootPath, nil, s.logger).Load(ctx)
+			}
 			// The workspace loader also scans the user roots; those skills
 			// (and their issues) already appear in the shared group, so only
 			// the repo scope is reported here.
-			for _, sk := range catalog.Skills() {
+			for _, sk := range display.Skills() {
 				if sk.Scope == skill.ScopeRepo {
-					g.Skills = append(g.Skills, skillInfoOf(sk))
+					g.Skills = append(g.Skills, skillInfoOf(sk, disabled))
 				}
 			}
 			prefix := ws.RootPath + string(os.PathSeparator)
-			for _, issue := range catalog.Issues() {
+			for _, issue := range display.Issues() {
 				if strings.HasPrefix(issue.Path, prefix) {
 					g.Issues = append(g.Issues, issueString(issue))
 				}
 			}
 		} else {
 			catalog := skill.NewLoader(ws.RootPath, nil, s.logger).Load(ctx)
-			g.Skills = skillInfos(catalog.Skills())
+			g.Skills = skillInfos(catalog.Skills(), disabled)
 			g.Issues = issueStrings(catalog.Issues())
 		}
 		ov.Groups = append(ov.Groups, g)
@@ -198,16 +216,91 @@ func (s *SessionService) SkillsOverview(ctx context.Context) SkillsOverview {
 }
 
 // skillInfoOf projects one discovered skill for frontend display.
-func skillInfoOf(s *skill.Skill) SkillInfo {
-	return SkillInfo{Name: s.Name, Description: s.Description, Scope: s.Scope.String(), Path: s.Path}
+func skillInfoOf(s *skill.Skill, disabled map[string]bool) SkillInfo {
+	return SkillInfo{
+		Name:        s.Name,
+		Description: s.Description,
+		Scope:       s.Scope.String(),
+		Path:        s.Path,
+		Disabled:    disabled[s.Name],
+	}
 }
 
-func skillInfos(skills []*skill.Skill) []SkillInfo {
+func skillInfos(skills []*skill.Skill, disabled map[string]bool) []SkillInfo {
 	out := make([]SkillInfo, 0, len(skills))
 	for _, s := range skills {
-		out = append(out, skillInfoOf(s))
+		out = append(out, skillInfoOf(s, disabled))
 	}
 	return out
+}
+
+// ErrSkillNotFound reports a skill mutation (e.g. delete) against a path
+// that no discovery root resolves to a discovered skill.
+var ErrSkillNotFound = errors.New("skill not found")
+
+// DeleteSkill removes the on-disk skill addressed by rawPath (the SKILL.md
+// path as reported by SkillsOverview). The path must resolve under one of
+// the discovery roots — the shared user roots or any registered
+// workspace's repo roots — otherwise ErrSkillNotFound is returned, which
+// also confines the delete to directories loom itself would load from.
+// Assembled catalogs are refreshed so read_skill stops resolving the
+// skill immediately rather than at the next prompt build.
+func (s *SessionService) DeleteSkill(ctx context.Context, rawPath string) error {
+	resolved := s.proc.Resolved()
+	if resolved == nil {
+		return fmt.Errorf("no configuration loaded")
+	}
+	trimmed := strings.TrimSpace(rawPath)
+	abs, err := filepath.Abs(trimmed)
+	if trimmed == "" || err != nil || filepath.Base(abs) != skill.FileName {
+		return fmt.Errorf("invalid input: path must name a %s file", skill.FileName)
+	}
+	// Resolve like the loader does (loadOne) so the match is by real
+	// location; a missing file cannot match anything.
+	want, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrSkillNotFound, rawPath)
+	}
+	if absWant, err := filepath.Abs(want); err == nil {
+		want = absWant
+	}
+
+	// Candidate loaders: one user-scope loader plus one per registered
+	// workspace (the assembled loader already covers repo + user roots).
+	loaders := []*skill.Loader{
+		skill.NewLoader("", skillUserRoots(resolved.Skills, resolved.Storage.SkillsDir()), s.logger),
+	}
+	if workspaces, err := s.registry.List(ctx); err == nil {
+		for _, ws := range workspaces {
+			if b, ok := s.registry.Get(ws.ID); ok && b.Skills != nil {
+				loaders = append(loaders, b.Skills.Loader)
+			} else {
+				loaders = append(loaders, skill.NewLoader(ws.RootPath, nil, s.logger))
+			}
+		}
+	}
+	for _, loader := range loaders {
+		ok, err := loader.Delete(want)
+		if err != nil {
+			return err
+		}
+		if ok {
+			s.refreshSkillCatalogs(ctx)
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s", ErrSkillNotFound, rawPath)
+}
+
+// refreshSkillCatalogs reloads and re-stores every assembled workspace's
+// skill catalog, keeping read_skill consistent with on-disk changes and
+// config hot-applies ahead of the next prompt build.
+func (s *SessionService) refreshSkillCatalogs(ctx context.Context) {
+	for _, b := range s.registry.Bootstraps() {
+		if b.Skills != nil {
+			b.Skills.Catalog.Store(b.Skills.Loader.Load(ctx))
+		}
+	}
 }
 
 func issueString(issue skill.LoadIssue) string {
