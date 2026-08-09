@@ -269,6 +269,16 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 		logger = slog.Default()
 	}
 
+	// Augment a sparse process PATH (GUI/launchd launches) with the
+	// conventional toolchain directories before anything resolves programs:
+	// exec.LookPath reads the parent PATH, and both the sandboxed minimal
+	// env and the escalated full env derive from it. Without this, a
+	// desktop-launched loom reports "go: command not found" inside the
+	// sandbox and the model wastes turns on futile escalations.
+	if added := process.AugmentProcessPATH(); len(added) > 0 {
+		logger.Info("augmented process PATH with toolchain dirs", "added", added)
+	}
+
 	// Open session store.
 	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDBPath())
 	if err != nil {
