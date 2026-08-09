@@ -29,6 +29,7 @@ export class EventStream {
     this.lastFrameAt = 0;
     this.watchdog = null;
     this.retryTimer = null;
+    this.gen = 0; // 连接代次：作废旧连接的异步后续（防双连接/误杀新看门狗）
   }
 
   // attach opens (or re-points) the stream for a session.
@@ -74,6 +75,7 @@ export class EventStream {
 
   async _connect() {
     if (this.stopped) return;
+    const gen = ++this.gen;
     this.onConn(this.retries === 0 ? "connecting" : "reconnecting");
     const url = `/v1/sessions/${this.sessionId}/events?after=${this.lastSeq}`;
     this.abort = new AbortController();
@@ -83,11 +85,22 @@ export class EventStream {
         headers: { Authorization: "Bearer " + this.getToken() },
         signal: this.abort.signal,
       });
-    } catch (e) {
-      if (this.stopped || e.name === "AbortError") return;
+    } catch {
+      // detach（stopped）或 ensureLive/attach 起的新连接（gen 变化）引发的
+      // 中止直接丢弃；其余（网络失败）进入退避重连。
+      if (this.stopped || this.gen !== gen) return;
       return this._scheduleRetry();
     }
+    if (this.stopped || this.gen !== gen) return;
     if (res.status === 401) { this.onAuthError(); return; }
+    if (res.status === 404) {
+      // 会话在本进程不 live（服务重启后会话需重新 resume）：events 端点
+      // 无帧可发（连 server.resync 都收不到），不能按普通失败退避——直接
+      // 走 resync：snapshot 404 → resume → 重挂流。会话已删除时 resync
+      // 内部报错收场，不会形成死循环。
+      this.onResync("session_not_live");
+      return;
+    }
     if (res.status === 429) {
       // 流数超限：升 dead 让 UI 提示（附手动重试），同时挂一个慢速自动
       // 重试——别处的标签页关闭后无需用户干预即可自愈。
@@ -102,11 +115,14 @@ export class EventStream {
     this._startWatchdog();
     try {
       await this._parse(res.body);
-    } catch (e) {
-      if (this.stopped || e.name === "AbortError") return;
+    } catch {
+      // 看门狗判死的 AbortError 也走到这里：不能静默 return，否则断流后
+      // 永无重连（历史 bug：徽标停在 live，界面僵死）。detach/ensureLive
+      // 的主动中止已被 gen/stopped 守卫拦截，不会误入。
+      if (this.stopped || this.gen !== gen) return;
     }
     this._stopWatchdog();
-    if (this.stopped || this.drained) return;
+    if (this.stopped || this.drained || this.gen !== gen) return;
     this._scheduleRetry();
   }
 
