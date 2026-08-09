@@ -76,17 +76,18 @@ type ApprovalRuleHint struct {
 const TrustUnsandboxed = "unsandboxed"
 
 // RememberedRule is the categorical memory created by an interactive
-// approval: an argv prefix (with grant) for run_cmd, an exact host for
-// web_fetch, or a bare tool name for the eligible fixed-blast-radius
-// tools (permission.ToolMemoryEligible). Label is the display form;
-// Prefix/Host/Tool carry the structured form for persistence (never
+// approval: argv prefixes (with grant) for run_cmd — one per subcommand
+// for a composed shell command — an exact host for web_fetch, or a bare
+// tool name for the eligible fixed-blast-radius tools
+// (permission.ToolMemoryEligible). Label is the display form;
+// Prefixes/Host/Tool carry the structured form for persistence (never
 // re-split from the label).
 type RememberedRule struct {
-	Label  string
-	Prefix []string
-	Host   string
-	Tool   string
-	Grant  domain.ExecGrant
+	Label    string
+	Prefixes [][]string
+	Host     string
+	Tool     string
+	Grant    domain.ExecGrant
 }
 
 // RememberCall derives and stores the categorical memory for an approved
@@ -112,11 +113,15 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 			return RememberedRule{}, false
 		}
 		grant := DeriveRememberGrant(info, trust)
-		prefix, remembered := r.session.RememberRunCmd(info.Argv, grant)
+		prefixes, remembered := r.session.RememberRunCmd(info, grant)
 		if !remembered {
 			return RememberedRule{}, false
 		}
-		return RememberedRule{Label: strings.Join(prefix, " "), Prefix: prefix, Grant: grant}, true
+		labels := make([]string, 0, len(prefixes))
+		for _, prefix := range prefixes {
+			labels = append(labels, strings.Join(prefix, " "))
+		}
+		return RememberedRule{Label: strings.Join(labels, " && "), Prefixes: prefixes, Grant: grant}, true
 	case "web_fetch":
 		host, parsed := permission.ParseWebFetchHost(arguments)
 		if !parsed {
@@ -162,7 +167,22 @@ func (r *RuleApprover) matches(call domain.PreparedCall) bool {
 		return false
 	}
 	if info, ok := permission.ExecInfoOf(call); ok {
-		grant, matched := r.session.Match(info.Argv)
+		var (
+			grant   domain.ExecGrant
+			matched bool
+		)
+		if info.Shell != nil {
+			if !info.Shell.Static || info.Shell.DynamicWrites {
+				return false
+			}
+			argvs, provable := info.ShellCommandArgvs()
+			if !provable {
+				return false
+			}
+			grant, matched = r.session.MatchAll(argvs)
+		} else {
+			grant, matched = r.session.Match(info.Argv)
+		}
 		// A remembered grant only auto-approves what it covers: a plain
 		// (zero-grant) memory must not silently approve an escalated or
 		// needs_network request — the user approved the sandboxed form.
@@ -200,11 +220,15 @@ func ApprovalRulePreview(toolName string, arguments json.RawMessage) (preview st
 			// cover the next escalation, so the option is hidden.
 			return "", domain.ExecGrant{}, false
 		}
-		prefix, ok := permission.DeriveRunCmdPrefix(info.Argv)
+		prefixes, ok := permission.DeriveRunCmdPrefixes(info)
 		if !ok {
 			return "", domain.ExecGrant{}, false
 		}
-		return strings.Join(prefix, " "), DeriveRememberGrant(info, ""), true
+		labels := make([]string, 0, len(prefixes))
+		for _, prefix := range prefixes {
+			labels = append(labels, strings.Join(prefix, " "))
+		}
+		return strings.Join(labels, " && "), DeriveRememberGrant(info, ""), true
 	case "web_fetch":
 		host, parsed := permission.ParseWebFetchHost(arguments)
 		if !parsed {
@@ -231,6 +255,6 @@ func RunCmdTrustPreview(toolName string, arguments json.RawMessage) bool {
 	if !ok || !info.Escalated {
 		return false
 	}
-	_, ok = permission.DeriveRunCmdPrefix(info.Argv)
+	_, ok = permission.DeriveRunCmdPrefixes(info)
 	return ok
 }

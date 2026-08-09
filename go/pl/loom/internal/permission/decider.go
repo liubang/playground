@@ -87,16 +87,16 @@ func (d RuleDecider) evaluateWebFetch(call domain.PreparedCall) *domain.Verdict 
 	return &domain.Verdict{Decision: best, Source: SourceRule, Reason: rule.Justification}
 }
 
-// evaluateRunCmd matches the call's argv against the prefix rules.
+// evaluateRunCmd matches the call's argv against the prefix rules. A
+// composed shell command is evaluated PER SUBCOMMAND: an allow verdict
+// requires every subcommand covered by an allow rule (codex's
+// bypass-only-when-all-matched rule), while a single deny/ask hit
+// decides the whole script.
 func (d RuleDecider) evaluateRunCmd(info RunCmdCall) *domain.Verdict {
-	best, rule := d.Rules.Evaluate(info.Argv)
-	if best == "" {
-		// Basename normalization lets absolute paths in trusted system
-		// dirs hit bare-name rules (/bin/ls matches [ls]).
-		if norm, ok := NormalizeTrustedPath(info.Argv); ok {
-			best, rule = d.Rules.Evaluate(norm)
-		}
+	if info.Shell != nil {
+		return d.evaluateShellCommands(info)
 	}
+	best, rule := d.matchArgv(info.Argv)
 	if best == "" {
 		return nil
 	}
@@ -113,6 +113,62 @@ func (d RuleDecider) evaluateRunCmd(info RunCmdCall) *domain.Verdict {
 		v.Grant = grant
 	}
 	return v
+}
+
+// matchArgv evaluates one argv against the rule set, with trusted-path
+// basename normalization as the fallback (/bin/ls matches [ls]).
+func (d RuleDecider) matchArgv(argv []string) (domain.Decision, Rule) {
+	best, rule := d.Rules.Evaluate(argv)
+	if best == "" {
+		if norm, ok := NormalizeTrustedPath(argv); ok {
+			best, rule = d.Rules.Evaluate(norm)
+		}
+	}
+	return best, rule
+}
+
+// evaluateShellCommands applies the prefix rules to every subcommand of a
+// statically-analyzed shell script. Dynamic scripts get no rule opinion —
+// an unproven argv must never match an allow rule — and fall through to
+// the sandbox-backed baseline. Scripts with file-writing redirects also
+// get no rule opinion: an argv rule certifies the ARGV only
+// ("echo is read-only"), while the script's actual effect includes the
+// redirect target — that judgment belongs to the danger screen, which
+// runs next in the chain.
+func (d RuleDecider) evaluateShellCommands(info RunCmdCall) *domain.Verdict {
+	if !info.Shell.Static || info.Shell.DynamicWrites || len(info.Shell.WriteRedirects) > 0 {
+		return nil
+	}
+	argvs, ok := info.ShellCommandArgvs()
+	if !ok {
+		return nil
+	}
+	var union domain.ExecGrant
+	for _, argv := range argvs {
+		best, rule := d.matchArgv(argv)
+		switch best {
+		case domain.DecisionDeny, domain.DecisionAsk:
+			return &domain.Verdict{Decision: best, Source: SourceRule, Reason: rule.Justification}
+		case domain.DecisionAllow:
+			grant := rule.Grant.ExecGrant()
+			union.Unsandboxed = union.Unsandboxed || grant.Unsandboxed
+			union.NetworkFull = union.NetworkFull || grant.NetworkFull
+			union.WritablePaths = append(union.WritablePaths, grant.WritablePaths...)
+		default:
+			// One uncovered subcommand keeps the whole script at the
+			// baseline verdict.
+			return nil
+		}
+	}
+	if !AllowGrantCovers(union, info) {
+		return nil
+	}
+	return &domain.Verdict{
+		Decision: domain.DecisionAllow,
+		Grant:    union,
+		Source:   SourceRule,
+		Reason:   "every subcommand matched an allow rule",
+	}
 }
 
 // AllowGrantCovers reports whether an allow verdict's grant satisfies the
@@ -153,12 +209,20 @@ func (d DangerDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 }
 
 // evaluate implements the contextDecider fast path (REVIEW M33).
+// Composed shell scripts go through the script-level screen (which also
+// runs every subcommand through the argv-level screen), so a dangerous
+// literal hiding in a pipe, substitution, or subshell is still caught.
 func (d DangerDecider) evaluate(_ domain.PreparedCall, ctx evalContext) *domain.Verdict {
 	if !ctx.execOK {
 		return nil
 	}
 	info := ctx.exec
-	reason := DangerousCommand(info.Argv)
+	var reason string
+	if info.Shell != nil {
+		reason = DangerousScript(info.Shell)
+	} else {
+		reason = DangerousCommand(info.Argv)
+	}
 	if reason == "" {
 		return nil
 	}
@@ -198,7 +262,24 @@ func (d SessionDecider) evaluate(call domain.PreparedCall, ctx evalContext) *dom
 	}
 	switch {
 	case ctx.execOK:
-		grant, ok := d.Session.Match(ctx.exec.Argv)
+		var (
+			grant domain.ExecGrant
+			ok    bool
+		)
+		if ctx.exec.Shell != nil {
+			// A composed command is covered by memory only when fully
+			// static and EVERY subcommand is remembered (MatchAll).
+			if !ctx.exec.Shell.Static || ctx.exec.Shell.DynamicWrites {
+				return nil
+			}
+			argvs, provable := ctx.exec.ShellCommandArgvs()
+			if !provable {
+				return nil
+			}
+			grant, ok = d.Session.MatchAll(argvs)
+		} else {
+			grant, ok = d.Session.Match(ctx.exec.Argv)
+		}
 		if !ok || !AllowGrantCovers(grant, ctx.exec) {
 			return nil
 		}
@@ -234,64 +315,75 @@ func (d SessionDecider) evaluate(call domain.PreparedCall, ctx evalContext) *dom
 // opinion. Its behavior is selected by the approval mode (§4.3).
 type BaselineDecider struct {
 	Mode ApprovalMode
-	// AutoApproveR1 automatically approves R0/R1 operations.
-	AutoApproveR1 bool
-	// AskR2 prompts for R2 operations (unless-trusted mode).
-	AskR2 bool
-	// DenyR4 denies R4 operations outright.
-	DenyR4 bool
 }
 
-// Evaluate resolves the baseline verdict. run_cmd calls get mode-aware
-// handling. In unless-dangerous mode every other tool is auto-allowed up
-// to R2 as well: the built-in write/edit tools are confined to the
-// workspace by the path validator (.git/.loom stay protected), so their
-// blast radius is bounded the same way a sandboxed command's is.
+// Evaluate resolves the baseline verdict.
 func (d BaselineDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	info, ok := ExecInfoOf(call)
 	return d.evaluate(call, evalContext{exec: info, execOK: ok})
 }
 
 // evaluate implements the contextDecider fast path (REVIEW M33).
+//
+// The governing principle: the sandbox and the path validator are the
+// boundary, so operations confined by them never prompt — approvals are
+// reserved for what crosses the boundary (escalation, network widening)
+// or what the danger screen flagged. Built-in file tools are confined to
+// the workspace by the path validator (.git/.loom stay protected), so
+// their blast radius is bounded the same way a sandboxed command's is:
+// R0–R2 run without prompting in every mode. MCP tools are third-party
+// code whose arguments shape their effect; they keep per-call approvals
+// (rememberable by tool name) and are denied in never mode.
 func (d BaselineDecider) evaluate(call domain.PreparedCall, ctx evalContext) *domain.Verdict {
 	v := &domain.Verdict{Source: SourceBaseline}
 	if ctx.execOK {
-		return d.runCmdBaseline(v, call.Risk, ctx.exec)
+		return d.runCmdBaseline(v, ctx.exec)
 	}
-	if d.Mode == ModeUnlessDangerous {
+	if call.Definition.Source == domain.ToolSourceMCP {
 		switch {
-		case call.Risk >= domain.R4 && d.DenyR4:
-			v.Decision, v.Reason = domain.DecisionDeny, "R4 operations are denied by policy"
-		case call.Risk >= domain.R3:
-			v.Decision, v.Reason = domain.DecisionAsk, "risk baseline: R3 operations require approval"
+		case call.Risk <= domain.R1:
+			v.Decision, v.Reason = domain.DecisionAllow, "baseline: read-only MCP tool"
+		case d.Mode == ModeNever:
+			v.Decision, v.Reason = domain.DecisionDeny,
+				"never mode: third-party (MCP) tools are denied unattended; remember the tool with allow always in an interactive session"
 		default:
-			v.Decision, v.Reason = domain.DecisionAllow, "unless-dangerous: workspace-confined tools run without prompting"
+			v.Decision, v.Reason = domain.DecisionAsk, "risk baseline: third-party (MCP) tools require approval"
 		}
 		return v
 	}
-	v.Decision = d.riskBaseline(call.Risk)
-	v.Reason = "risk baseline"
+	switch {
+	case call.Risk <= domain.R2:
+		v.Decision, v.Reason = domain.DecisionAllow, "baseline: workspace-confined tool runs without prompting"
+	case d.Mode == ModeNever:
+		v.Decision, v.Reason = domain.DecisionDeny,
+			"never mode: R3+ operations are denied unattended; rework the approach to use workspace-confined operations"
+	case call.Call.Name == "web_fetch":
+		v.Decision, v.Reason = domain.DecisionAsk,
+			"risk baseline: fetching an unapproved host requires approval (the user can remember the host, or add a *.domain rule)"
+	default:
+		v.Decision, v.Reason = domain.DecisionAsk, "risk baseline: R3+ operations require approval"
+	}
 	return v
 }
 
-// runCmdBaseline maps (mode, request shape, risk) onto a verdict.
+// runCmdBaseline maps (mode, request shape) onto a verdict.
 //
 //   - escalated requests (require_escalated) run outside the sandbox, so
 //     they always ask — except in never mode, which denies them outright.
-//   - needs_network requests ask in interactive modes: widening the
-//     sandbox's network boundary is a user decision (rememberable via
-//     "allow always", which records the network grant). Never mode grants
-//     it silently: unattended runs opted into autonomy.
-//   - plain sandboxed commands (R0–R2) are auto-allowed in on-request and
-//     never modes — the sandbox is the boundary.
-func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, risk domain.RiskLevel, info RunCmdCall) *domain.Verdict {
+//   - needs_network requests ask in on-request mode (widening the
+//     sandbox's network boundary is a user decision, rememberable via
+//     "allow always"); unless-dangerous and never grant it silently —
+//     the sandbox keeps credential paths unreadable either way.
+//   - everything else runs sandboxed without prompting in every mode:
+//     the sandbox is the boundary. Dangerous commands never reach here
+//     (the DangerDecider already asked or denied them).
+func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, info RunCmdCall) *domain.Verdict {
 	switch d.Mode {
 	case ModeNever:
 		switch {
 		case info.Escalated:
-			v.Decision, v.Reason = domain.DecisionDeny, "never mode: escalated (unsandboxed) commands are denied"
-		case risk >= domain.R3:
-			v.Decision, v.Reason = domain.DecisionDeny, "never mode: R3+ commands are denied"
+			v.Decision, v.Reason = domain.DecisionDeny,
+				"never mode: escalated (unsandboxed) commands are denied; rework the command to run inside the sandbox"
 		case info.NeedsNetwork:
 			v.Decision, v.Grant, v.Reason = domain.DecisionAllow, domain.ExecGrant{NetworkFull: true}, "never mode: declared network need granted"
 		default:
@@ -301,16 +393,12 @@ func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, risk domain.RiskLevel
 
 	case ModeUnlessDangerous:
 		switch {
-		case risk >= domain.R4 && d.DenyR4:
-			v.Decision, v.Reason = domain.DecisionDeny, "R4 operations are denied by policy"
 		case info.Escalated:
 			// Leaving the sandbox always asks — the danger list is a
 			// heuristic screen and cannot be the only line of defense
 			// outside the sandbox.
 			v.Decision, v.Grant = domain.DecisionAsk, domain.ExecGrant{Unsandboxed: true}
 			v.Reason = "command requests execution OUTSIDE the sandbox (full environment, network, credentials)"
-		case risk >= domain.R3:
-			v.Decision, v.Reason = domain.DecisionAsk, "risk baseline: R3 operations require approval"
 		case info.NeedsNetwork:
 			// The sandbox keeps credential paths unreadable, so granting
 			// declared network needs inside it adds no exfiltration value.
@@ -321,17 +409,13 @@ func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, risk domain.RiskLevel
 		}
 		return v
 
-	case ModeOnRequest:
+	default: // ModeOnRequest
 		switch {
-		case risk >= domain.R4 && d.DenyR4:
-			v.Decision, v.Reason = domain.DecisionDeny, "R4 operations are denied by policy"
 		case info.Escalated:
 			// The ask carries the unsandboxed grant: approving this prompt
 			// executes outside the sandbox exactly once.
 			v.Decision, v.Grant = domain.DecisionAsk, domain.ExecGrant{Unsandboxed: true}
 			v.Reason = "command requests execution OUTSIDE the sandbox (full environment, network, credentials)"
-		case risk >= domain.R3:
-			v.Decision, v.Reason = domain.DecisionAsk, "risk baseline: R3 operations require approval"
 		case info.NeedsNetwork:
 			// The ask carries the network grant: approving this prompt runs
 			// the command sandboxed with outbound network, exactly once.
@@ -341,39 +425,5 @@ func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, risk domain.RiskLevel
 			v.Decision, v.Reason = domain.DecisionAllow, "on-request: sandboxed commands run without prompting"
 		}
 		return v
-	default: // ModeUnlessTrusted — the legacy behavior
-		switch {
-		case info.Escalated:
-			// Escalated requests always ask (riskForArgs already rated the
-			// call R3); the ask carries the unsandboxed grant.
-			v.Decision, v.Grant = domain.DecisionAsk, domain.ExecGrant{Unsandboxed: true}
-			v.Reason = "command requests execution OUTSIDE the sandbox"
-		case info.NeedsNetwork:
-			// Declared network needs always ask in interactive modes —
-			// allowing them with a zero grant would run the command without
-			// the network it said it needs (fail-retry loop).
-			v.Decision, v.Grant = domain.DecisionAsk, domain.ExecGrant{NetworkFull: true}
-			v.Reason = "command declares it needs outbound network"
-		default:
-			v.Decision = d.riskBaseline(risk)
-			v.Reason = "risk baseline"
-		}
-		return v
-	}
-}
-
-// riskBaseline is the classic R0/R1 allow, R2/R3 ask, R4 deny mapping.
-func (d BaselineDecider) riskBaseline(risk domain.RiskLevel) domain.Decision {
-	switch {
-	case risk <= domain.R1 && d.AutoApproveR1:
-		return domain.DecisionAllow
-	case risk == domain.R2 && d.AskR2:
-		return domain.DecisionAsk
-	case risk >= domain.R4 && d.DenyR4:
-		return domain.DecisionDeny
-	case risk == domain.R3:
-		return domain.DecisionAsk
-	default:
-		return domain.DecisionDeny
 	}
 }

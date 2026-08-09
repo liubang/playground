@@ -29,7 +29,7 @@ go_library(
         "runner.go",
         "sandbox_darwin.go",
         "session.go",
-        "shell_unwrap.go",
+        "shell_analyze.go",
         "sandbox_linux.go",
         "types.go",
     ],
@@ -37,6 +37,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/workspace:workspace_lib",
+        "@cc_mvdan_sh_v3//syntax",
     ] + select({
         "@platforms//os:linux": ["@org_golang_x_sys//unix"],
         "@platforms//os:macos": ["@org_golang_x_sys//unix"],
@@ -51,6 +52,7 @@ go_test(
         "runner_test.go",
         "sandbox_grant_test.go",
         "session_test.go",
+        "shell_analyze_test.go",
         "shell_unwrap_test.go",
     ],
     embed = [":process_lib"],

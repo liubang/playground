@@ -30,17 +30,10 @@ import (
 type PolicyDecision = domain.Decision
 
 // Policy is the assembly parameter pack for the decider chain
-// (docs/PERMISSION_DESIGN.md §4): declarative rules, session memory, and
-// the classic risk-baseline flags. Evaluation itself lives in the
-// deciders (decider.go); Policy.Decider wires them in strictest-first
-// order.
+// (docs/PERMISSION_DESIGN.md §4): declarative rules plus session memory.
+// Evaluation itself lives in the deciders (decider.go); Policy.Decider
+// wires them in strictest-first order.
 type Policy struct {
-	// AutoApproveR1 automatically approves R0 and R1 risk operations.
-	AutoApproveR1 bool
-	// AskR2 prompts the user for R2 operations (unless-trusted mode).
-	AskR2 bool
-	// DenyR4 denies R4 operations by default.
-	DenyR4 bool
 	// Rules are declarative argv-prefix rules loaded from user/project
 	// layers (nil = none).
 	Rules *RuleSet
@@ -52,11 +45,7 @@ type Policy struct {
 
 // DefaultPolicy returns the baseline security policy per §12.1.
 func DefaultPolicy() Policy {
-	return Policy{
-		AutoApproveR1: true,
-		AskR2:         true,
-		DenyR4:        true,
-	}
+	return Policy{}
 }
 
 // Decider assembles the strategy chain for the given approval mode:
@@ -72,12 +61,7 @@ func (p Policy) Decider(mode ApprovalMode) Chain {
 		RuleDecider{Rules: p.Rules},
 		DangerDecider{Mode: mode},
 		SessionDecider{Session: p.Session},
-		BaselineDecider{
-			Mode:          mode,
-			AutoApproveR1: p.AutoApproveR1,
-			AskR2:         p.AskR2,
-			DenyR4:        p.DenyR4,
-		},
+		BaselineDecider{Mode: mode},
 	}
 }
 

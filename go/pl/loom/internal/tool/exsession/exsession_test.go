@@ -141,14 +141,15 @@ func TestExecSessionRiskTiers(t *testing.T) {
 	manager := newManager(t, validator, python)
 	execTool := newExecSessionTool(t, validator, manager)
 
-	// Shell interpreters escalate to R3.
+	// Shell interpreters keep the base risk: the sandbox confines them
+	// and the permission layer's AST danger screen handles composition.
 	shellPrepared := prepareCall(t, execTool, "exec_session", commandArgs{
 		Program:    "sh",
 		Args:       []string{"-c", "echo hi | cat"},
 		WorkingDir: root,
 	})
-	if shellPrepared.Risk != domain.R3 {
-		t.Fatalf("shell Risk = %v, want R3", shellPrepared.Risk)
+	if shellPrepared.Risk != domain.R2 {
+		t.Fatalf("shell Risk = %v, want R2", shellPrepared.Risk)
 	}
 
 	// require_escalated without justification is rejected at prepare time.

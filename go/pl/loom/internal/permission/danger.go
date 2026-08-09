@@ -71,7 +71,15 @@ var credentialPathHints = []string{
 // dangerous-command heuristics, or "" when it does not. Matching commands
 // are asked (never silently allowed) in every approval mode.
 func DangerousCommand(argv []string) string {
-	if len(argv) == 0 {
+	return dangerousCommand(argv, 0)
+}
+
+// maxWrapperDepth bounds wrapper stripping (env/nice/nohup/... chains) so
+// a pathological command cannot recurse the screen forever.
+const maxWrapperDepth = 8
+
+func dangerousCommand(argv []string, depth int) string {
+	if len(argv) == 0 || depth > maxWrapperDepth {
 		return ""
 	}
 	base := argv[0]
@@ -81,6 +89,12 @@ func DangerousCommand(argv []string) string {
 	base = strings.ToLower(base)
 	if reason, ok := dangerousPrograms[base]; ok && reason != "" {
 		return reason
+	}
+	// Wrapper programs change how a command runs, not what it ultimately
+	// does: strip them and screen the wrapped command (sudo/su/doas are
+	// NOT wrappers — they are flagged above as dangerous programs).
+	if rest, ok := stripWrapper(base, argv[1:]); ok {
+		return dangerousCommand(rest, depth+1)
 	}
 	if ops, ok := dangerousSubcommandOps[base]; ok {
 		if reason := matchDangerousSubcommand(argv[1:], ops); reason != "" {
@@ -97,6 +111,66 @@ func DangerousCommand(argv []string) string {
 		return reason
 	}
 	return ""
+}
+
+// stripWrapper peels one wrapper program (env, nice, nohup, timeout,
+// stdbuf, command, builtin, xargs-free forms) off argv, returning the
+// wrapped command. ok=false when argv is not a wrapper invocation.
+func stripWrapper(base string, args []string) ([]string, bool) {
+	switch base {
+	case "env":
+		// env [-i] [-u NAME]... [NAME=value]... cmd args...
+		for i := 0; i < len(args); i++ {
+			arg := args[i]
+			switch {
+			case arg == "-i" || arg == "--ignore-environment" || arg == "-0" || arg == "--null":
+				continue
+			case arg == "-u" || arg == "--unset":
+				i++ // consumes the next token
+			case strings.HasPrefix(arg, "--unset="):
+				continue
+			case strings.HasPrefix(arg, "-"):
+				return nil, false // unknown env flag: do not guess
+			case strings.Contains(arg, "="):
+				continue // NAME=value assignment
+			default:
+				return args[i:], true
+			}
+		}
+		return nil, false
+	case "nice", "nohup", "stdbuf", "timeout", "time", "command", "builtin":
+		// These take their own flags before the command; rather than
+		// modeling each flag grammar, skip leading dash tokens and the
+		// known value-taking short forms conservatively. timeout takes a
+		// DURATION positional before the command — skip it too.
+		skipPositional := base == "timeout"
+		for i := 0; i < len(args); i++ {
+			arg := args[i]
+			if !strings.HasPrefix(arg, "-") {
+				if skipPositional {
+					skipPositional = false
+					continue
+				}
+				return args[i:], true
+			}
+			switch base {
+			case "nice":
+				if arg == "-n" || arg == "--adjustment" {
+					i++
+				}
+			case "stdbuf":
+				if arg == "-i" || arg == "-o" || arg == "-e" {
+					i++
+				}
+			case "timeout":
+				if arg == "-k" || arg == "--kill-after" || arg == "-s" || arg == "--signal" {
+					i++
+				}
+			}
+		}
+		return nil, false
+	}
+	return nil, false
 }
 
 // matchGitClean flags `git clean` with a force flag (which deletes

@@ -108,6 +108,11 @@ func (a *ChannelApprover) RequestApproval(ctx context.Context, req domain.Approv
 		a.mu.Unlock()
 	}()
 
+	// The run is now blocked on a human, and the human is often away
+	// from the terminal during long-horizon runs: surface a desktop
+	// notification alongside the in-app prompt.
+	NotifyApproval(req.Call.Call.Name, req.Description)
+
 	select {
 	case decision := <-resultCh:
 		return decision, nil

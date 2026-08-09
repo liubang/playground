@@ -147,6 +147,11 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 		"(allow network-bind (local ip \"localhost:*\"))",
 		"(allow network-inbound (local ip \"localhost:*\"))",
 		"(allow network-outbound (remote ip \"localhost:*\"))",
+		// Countless tools redirect output to /dev/null (git included) and
+		// read randomness at startup; denying them breaks everyday commands
+		// for no security gain.
+		"(allow file-read* file-write* (literal \"/dev/null\"))",
+		"(allow file-read* (literal \"/dev/zero\") (literal \"/dev/random\") (literal \"/dev/urandom\"))",
 	)
 	for _, rule := range sensitiveReadDenies() {
 		lines = append(lines, rule)
