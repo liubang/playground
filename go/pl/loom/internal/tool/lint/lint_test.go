@@ -46,6 +46,16 @@ func (f *fakeRunner) Run(ctx context.Context, spec process.CommandSpec) (process
 	return f.result, f.err
 }
 
+// A missing path must be named in the error so the model can tell which
+// of several parallel calls failed.
+func TestResolveExistingPathErrorNamesPath(t *testing.T) {
+	validator, _ := newValidator(t)
+	_, err := resolveExistingPath(validator, "internal/config/example.go")
+	if err == nil || !strings.Contains(err.Error(), `path does not exist: "internal/config/example.go"`) {
+		t.Fatalf("error = %v, want the offending path named", err)
+	}
+}
+
 func newValidator(t *testing.T) (*workspacepkg.PathValidator, string) {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "workspace")

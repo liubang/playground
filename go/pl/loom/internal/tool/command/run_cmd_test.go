@@ -902,6 +902,16 @@ func newTool(t *testing.T, validator *workspacepkg.PathValidator, runner *proces
 	return tool
 }
 
+// A missing working_dir must be named in the error so the model can
+// correct course without guessing.
+func TestResolveWorkingDirErrorNamesPath(t *testing.T) {
+	validator, _ := newValidator(t)
+	_, err := resolveWorkingDir(validator, "no/such/dir")
+	if err == nil || !strings.Contains(err.Error(), `working_dir does not exist: "no/such/dir"`) {
+		t.Fatalf("error = %v, want the offending path named", err)
+	}
+}
+
 func newValidator(t *testing.T) (*workspacepkg.PathValidator, string) {
 	t.Helper()
 	root := t.TempDir()

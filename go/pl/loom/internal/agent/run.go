@@ -724,6 +724,12 @@ type toolCallAuditPayload struct {
 	// fingerprint in place of ArgsHash.
 	PrepareFailed bool   `json:"prepare_failed,omitempty"`
 	ArgsRawHash   string `json:"args_raw_hash,omitempty"`
+	// ArgsSummary, set only on prepare failures, carries a sanitized
+	// excerpt of the raw arguments (whitelisted non-sensitive string keys,
+	// truncated values) so the failure is diagnosable from the event log
+	// alone. The full raw arguments may embed file contents or secrets and
+	// are never persisted.
+	ArgsSummary map[string]string `json:"args_summary,omitempty"`
 }
 
 type modelRequestAuditPayload struct {
@@ -1629,7 +1635,9 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 // fail during preparation: without them consumers see an execution
 // completion with no matching prepared/started events
 // (docs/CONTEXT_DESIGN.md §4.6). The degraded payload carries the raw
-// args hash so runaway repeat detection and audits can still correlate.
+// args hash so runaway repeat detection and audits can still correlate,
+// plus a sanitized args summary so the failing input (e.g. a nonexistent
+// path) is visible without re-deriving it from the model response.
 func (l *Loop) appendPrepareFailureEvents(tc domain.ToolCall, argsRawHash string) {
 	payload := toolCallAuditPayload{
 		CallID:        tc.ID,
@@ -1637,9 +1645,57 @@ func (l *Loop) appendPrepareFailureEvents(tc domain.ToolCall, argsRawHash string
 		Risk:          domain.R0,
 		ArgsRawHash:   argsRawHash,
 		PrepareFailed: true,
+		ArgsSummary:   prepareFailureArgsSummary(tc.Arguments),
 	}
 	l.Run.appendEvent(domain.EventToolCallPrepared, payload)
 	l.Run.appendEvent(domain.EventToolExecutionStarted, payload)
+}
+
+// prepareFailureArgsWhitelist lists the argument keys considered safe to
+// persist (bounded): they locate or identify the operation and never
+// carry payload content such as file text, env values, or command bodies.
+var prepareFailureArgsWhitelist = map[string]bool{
+	"path":        true,
+	"pattern":     true,
+	"working_dir": true,
+	"repo_root":   true,
+	"program":     true,
+	"skill":       true,
+	"name":        true,
+	"query":       true,
+	"url":         true,
+	"base":        true,
+	"type":        true,
+}
+
+// prepareFailureArgsSummary excerpts the whitelisted string arguments of a
+// call that failed preparation. Non-string values (lists, numbers, nested
+// objects) are skipped — they are either content-bearing or low-signal for
+// diagnosing a failed prepare.
+func prepareFailureArgsSummary(raw json.RawMessage) map[string]string {
+	var args map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &args); err != nil {
+		return nil
+	}
+	var out map[string]string
+	for key, value := range args {
+		if !prepareFailureArgsWhitelist[key] {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal(value, &s); err != nil {
+			continue
+		}
+		const maxValueBytes = 200
+		if len(s) > maxValueBytes {
+			s = s[:maxValueBytes] + "..."
+		}
+		if out == nil {
+			out = make(map[string]string)
+		}
+		out[key] = s
+	}
+	return out
 }
 
 // prepareErrorMessage renders the model-facing prepare failure. For
