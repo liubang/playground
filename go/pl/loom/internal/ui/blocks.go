@@ -298,8 +298,9 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 	case runtimeevent.KindApprovalRequested:
 		var payload runtimeevent.ApprovalRequestedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			blockID := fmt.Sprintf("tool-%s", payload.CallID)
 			block := &TranscriptBlock{
-				ID:         fmt.Sprintf("tool-%s", payload.CallID),
+				ID:         blockID,
 				Kind:       BlockKindTool,
 				Title:      payload.ToolName,
 				Content:    payload.Description,
@@ -310,7 +311,11 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 				ApprovalID: payload.ApprovalID,
 				ArgsHash:   payload.ArgsHash,
 				Target:     approvalTarget(payload),
-				Diff:       payload.Diff,
+			}
+			// The diff travels with tool.prepared only (single source);
+			// this event replaces the prepared block, so carry it over.
+			if prev, ok := idx.Get(blockID); ok {
+				block.Diff = prev.Diff
 			}
 			idx.Add(block)
 			return block.ID

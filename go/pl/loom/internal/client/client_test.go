@@ -73,7 +73,6 @@ func TestClientTypesAreJSONSerializable(t *testing.T) {
 						Risk:        domain.R2,
 						Description: "edit file",
 						ArgsHash:    "abc123",
-						Diff:        "- a\n+ b",
 						Arguments:   json.RawMessage(`{"path":"x.go"}`),
 					},
 				},
