@@ -999,15 +999,9 @@ func (m Model) approvalOverlayLines() []string {
 	}
 	lines = append(lines, m.approvalPathLines(p, prefix, contentWidth)...)
 
-	// The argument diff is the primary evidence for the allow/deny decision
-	// on file-editing calls; it gets the remaining vertical budget.
-	if p.Diff != "" {
-		lines = append(lines, bar)
-		for _, line := range strings.Split(m.renderDiff(headLines(p.Diff, approvalDiffMaxLines)), "\n") {
-			lines = append(lines, prefix+line)
-		}
-	}
-
+	// The argument diff is rendered on the tool block (from tool.prepared),
+	// not repeated here: the overlay stays compact enough to keep the
+	// options on screen.
 	lines = append(lines, bar)
 	alwaysRule, grant, alwaysOK := app.ApprovalRulePreview(p.ToolName, p.Arguments)
 	alwaysLabel := "Always allow (not available for this call)"
@@ -1208,19 +1202,6 @@ func (m Model) riskBadge(risk domain.RiskLevel) string {
 		style = lipgloss.NewStyle().Foreground(m.theme.Error).Bold(true)
 	}
 	return style.Render(label)
-}
-
-// approvalDiffMaxLines bounds the diff section inside the approval overlay.
-const approvalDiffMaxLines = 12
-
-// headLines returns the first n lines of text, appending an ellipsis line
-// when truncated.
-func headLines(text string, n int) string {
-	lines := strings.Split(text, "\n")
-	if len(lines) <= n {
-		return text
-	}
-	return strings.Join(lines[:n], "\n") + "\n…"
 }
 
 // renderCompletion renders the slash-command completion popup above the
