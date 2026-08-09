@@ -207,6 +207,74 @@ func TestResolveLexicalRejectsSensitiveAndEscape(t *testing.T) {
 	}
 }
 
+// TestExtraRootsAllowScratchDirs locks the two-layer scratch contract:
+// with ScratchDirs as extra roots the validator accepts temp-dir paths
+// (displayed as absolute, no workspace-relative form), keeps rejecting
+// other escapes, and still screens sensitive components inside scratch.
+func TestExtraRootsAllowScratchDirs(t *testing.T) {
+	dir := t.TempDir()
+	v, err := NewPathValidator(dir, ScratchDirs()...)
+	if err != nil {
+		t.Fatalf("NewPathValidator() error = %v", err)
+	}
+	scratch := ScratchDirs()[0]
+	target := filepath.Join(scratch, "loom-scratch-test.txt")
+
+	rp, err := v.ResolveLexical(target)
+	if err != nil {
+		t.Fatalf("ResolveLexical(%q) error = %v", target, err)
+	}
+	if rp.Relative != "" || rp.Display != target || rp.Absolute != target {
+		t.Fatalf("extra-root resolution = %+v, want absolute display form", rp)
+	}
+
+	if err := os.WriteFile(target, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(target)
+	if _, err := v.Validate(target); err != nil {
+		t.Fatalf("Validate(%q) error = %v", target, err)
+	}
+
+	if _, err := v.ResolveLexical(filepath.Join(scratch, ".env")); err == nil {
+		t.Fatal("expected sensitive-component rejection inside scratch")
+	}
+	if _, err := v.ResolveLexical("/etc/hostname"); err == nil {
+		t.Fatal("expected escape rejection outside every root")
+	}
+
+	// The raw /tmp form must match through its symlink (macOS: /tmp →
+	// /private/tmp): external paths canonicalize for the root decision.
+	const rawTmp = "/tmp/loom-scratch-lexical.txt"
+	rp, err = v.ResolveLexical(rawTmp)
+	if err != nil {
+		t.Fatalf("ResolveLexical(%q) via symlink prefix: %v", rawTmp, err)
+	}
+	if want := Canonicalize(rawTmp); rp.Absolute != want {
+		t.Fatalf("Absolute = %q, want canonical %q", rp.Absolute, want)
+	}
+}
+
+// TestScratchDirs covers the canonical, deduped contract of the scratch
+// list: $TMPDIR first, /tmp appended when it differs (Linux collapses to
+// one entry).
+func TestScratchDirs(t *testing.T) {
+	dirs := ScratchDirs()
+	if len(dirs) == 0 || dirs[0] != Canonicalize(os.TempDir()) {
+		t.Fatalf("ScratchDirs = %v, want canonical $TMPDIR first", dirs)
+	}
+	seen := map[string]bool{}
+	for _, d := range dirs {
+		if !filepath.IsAbs(d) {
+			t.Fatalf("non-absolute scratch dir %q", d)
+		}
+		if seen[d] {
+			t.Fatalf("duplicate scratch dir %q", d)
+		}
+		seen[d] = true
+	}
+}
+
 func TestSnapshotReportsMetadata(t *testing.T) {
 	v, root := newWorkspaceValidator(t)
 	path := filepath.Join(root, "file.txt")

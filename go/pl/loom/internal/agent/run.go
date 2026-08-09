@@ -1727,9 +1727,9 @@ func actionablePrepareError(tc domain.ToolCall, err error) string {
 			"Keep working_dir at the default (or a workspace subdirectory) — the command itself may still " +
 			"reference absolute paths outside the workspace (sandboxed; may require user approval)."
 	}
-	return err.Error() + "; the built-in file tools are restricted to the workspace root. " +
+	return err.Error() + "; the built-in file tools are restricted to the workspace root and the system temp dirs ($TMPDIR, /tmp). " +
 		"If the target likely lives inside the workspace, locate it with glob/search first. " +
-		"To inspect paths outside the workspace, use run_cmd instead (sandboxed; may require user approval)."
+		"For scratch files, write under the system temp dirs. To inspect other paths outside the workspace, use run_cmd instead (sandboxed; may require user approval)."
 }
 
 // malformedArgumentsHint extracts the model-facing guidance embedded in

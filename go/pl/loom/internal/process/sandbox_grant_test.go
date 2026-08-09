@@ -31,6 +31,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 // TestSeatbeltProfileProtectsWorkspaceMetadata is the regression guard for
@@ -48,8 +50,8 @@ func TestSeatbeltProfileProtectsWorkspaceMetadata(t *testing.T) {
 		t.Fatalf("profile() error = %v", err)
 	}
 	// /tmp is a symlink into /private on macOS and seatbelt matches
-	// canonical paths, so expectations go through canonicalWritePath too.
-	canonicalWS := canonicalWritePath("/tmp/ws")
+	// canonical paths, so expectations go through workspacepkg.Canonicalize too.
+	canonicalWS := workspacepkg.Canonicalize("/tmp/ws")
 	for _, rel := range []string{".git/hooks", ".git/config", ".loom"} {
 		for _, form := range []string{"literal", "subpath"} {
 			rule := `(deny file-write* (` + form + ` "` + canonicalWS + `/` + rel + `"))`
@@ -252,7 +254,7 @@ func TestWidenSandboxClones(t *testing.T) {
 	if !strings.Contains(profile, "(allow network*)") {
 		t.Fatalf("widened profile missing full network:\n%s", profile)
 	}
-	if !strings.Contains(profile, `(allow file-write* (subpath "`+canonicalWritePath("/tmp/extra")+`"))`) {
+	if !strings.Contains(profile, `(allow file-write* (subpath "`+workspacepkg.Canonicalize("/tmp/extra")+`"))`) {
 		t.Fatalf("widened profile missing extra writable path:\n%s", profile)
 	}
 	// Non-seatbelt sandboxes pass through (fail-closed preserved).
@@ -261,6 +263,29 @@ func TestWidenSandboxClones(t *testing.T) {
 	}
 	if got := widenSandbox(UnsupportedSandbox{Reason: "x"}, true, []string{"/tmp"}); got != (UnsupportedSandbox{Reason: "x"}) {
 		t.Fatalf("widenSandbox(UnsupportedSandbox) = %v, want unchanged", got)
+	}
+}
+
+// TestSeatbeltProfileAllowsScratchAndToolchainCaches locks the default
+// writable scope (PERMISSION_DESIGN §6.3.2): scratch dirs and toolchain
+// caches get write allows in every profile, canonicalized.
+func TestSeatbeltProfileAllowsScratchAndToolchainCaches(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	sandbox := SeatbeltSandbox{}
+	profile, err := sandbox.profile(SandboxSpec{
+		ExecutablePath: "/bin/echo",
+		WorkingDir:     "/tmp",
+		WorkspaceRoot:  "/tmp",
+	})
+	if err != nil {
+		t.Fatalf("profile() error = %v", err)
+	}
+	for _, dir := range ExtraWritableDirs() {
+		rule := `(allow file-write* (subpath "` + dir + `"))`
+		if !strings.Contains(profile, rule) {
+			t.Errorf("profile missing write allow for %q", dir)
+		}
 	}
 }
 

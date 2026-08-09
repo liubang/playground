@@ -20,7 +20,10 @@ package process
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 // wellKnownToolchainDirs are the conventional install locations for user
@@ -107,6 +110,61 @@ func userHome() string {
 		return ""
 	}
 	return home
+}
+
+// toolchainCacheDirs are regenerable per-user caches written by build
+// toolchains ("~/" expands against the user's home). Sandbox-writable via
+// ExtraWritableDirs: a corrupted cache costs one rebuild, and the
+// sensitive-path denies never cover them.
+var toolchainCacheDirs = []string{
+	"~/Library/Caches/go-build", // GOCACHE default (macOS)
+	"~/.cache/go-build",         // GOCACHE default (Linux)
+	"~/go/pkg/mod",              // GOMODCACHE default
+	"~/.npm",                    // npm cache
+	"~/Library/Caches/pip",      // pip cache (macOS)
+	"~/.cache/pip",              // pip cache (Linux)
+	"~/.cargo/registry",         // cargo crate cache
+	"~/.cargo/git",              // cargo git checkouts
+	"~/Library/Caches/ccache",   // ccache (macOS)
+	"~/.cache/ccache",           // ccache (Linux)
+	"~/.gradle",                 // Gradle caches + wrapper dists
+	"~/.m2/repository",          // Maven local repository
+}
+
+// ExtraWritableDirs returns the canonical directories every sandboxed
+// command may write beyond the workspace: the system scratch dirs
+// (workspace.ScratchDirs — $TMPDIR and /tmp) plus the regenerable
+// toolchain caches, so builds work out of the box instead of pushing the
+// model toward cache-redirection hacks or escalations.
+func ExtraWritableDirs() []string {
+	dirs := workspacepkg.ScratchDirs()
+	if home := userHome(); home != "" {
+		for _, dir := range toolchainCacheDirs {
+			dirs = append(dirs, workspacepkg.Canonicalize(filepath.Join(home, dir[2:])))
+		}
+	}
+	return uniqueCleanPaths(dirs)
+}
+
+// uniqueCleanPaths cleans, dedupes, and sorts absolute paths; relative
+// and empty entries are dropped. Platform-neutral home (moved from the
+// darwin sandbox file).
+func uniqueCleanPaths(paths []string) []string {
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = filepath.Clean(strings.TrimSpace(path))
+		if path == "." || path == "" || !filepath.IsAbs(path) {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		result = append(result, path)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func osDirExists(path string) bool {

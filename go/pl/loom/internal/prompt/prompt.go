@@ -406,8 +406,8 @@ func renderEnvironment(env Environment, collectErr error) string {
 	// within a day; a minute-level timestamp would defeat prompt caching for
 	// negligible value (codex likewise injects current_date, not a clock).
 	fmt.Fprintf(&sb, "- Current date: %s\n", env.Now.Format("2006-01-02 MST"))
-	sb.WriteString("- Keep all path operations inside the workspace; prefer absolute paths.")
-	sb.WriteString("\n- Assume the code or project the user mentions lives in the current workspace: locate it with glob/search first, and only consider paths outside the workspace after confirming it is absent (built-in file tools are workspace-scoped; use run_cmd for external paths).")
+	sb.WriteString("- Keep file operations inside the workspace; the system temp dirs ($TMPDIR and /tmp) are also writable for scratch files. Prefer absolute paths.")
+	sb.WriteString("\n- Assume the code or project the user mentions lives in the current workspace: locate it with glob/search first, and only consider paths outside the workspace after confirming it is absent (built-in file tools are scoped to the workspace plus the system temp dirs; use run_cmd for other external paths).")
 	if collectErr != nil {
 		fmt.Fprintf(&sb, "\n- Note: environment collection incomplete: %v", collectErr)
 	}
