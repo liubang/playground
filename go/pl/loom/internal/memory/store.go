@@ -56,13 +56,14 @@ const NotesDir = "extensions/ad_hoc/notes"
 // errLimitReached is the sentinel for Search early termination.
 var errLimitReached = errors.New("limit reached")
 
-// Store manages the memory directory tree (by default <base_dir>/memories).
+// Store manages the memory directory tree (by default <loom home>/memories).
 type Store struct {
 	root string
 }
 
 // OpenStore creates or opens the memory store at the given root; the root
-// is required (the caller derives it from the configured storage base_dir).
+// is required (the caller derives it from the loom home — the config
+// file's directory).
 func OpenStore(root string) (*Store, error) {
 	if root == "" {
 		return nil, fmt.Errorf("memory store root is required")

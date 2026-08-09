@@ -34,8 +34,8 @@ import (
 // newConfigTestServer serves the adapter with ConfigPath pointed at path.
 func newConfigTestServer(t *testing.T, cfgPath string) *httptest.Server {
 	t.Helper()
-	// Config validation resolves the default storage base (~/.loom) via
-	// the process environment; the test sandbox has no $HOME.
+	// The test sandbox has no $HOME; resolve-time derivations that read
+	// it (e.g. the ~/.agents/skills convention) need one.
 	t.Setenv("HOME", t.TempDir())
 	svc := newTestService(t, fakes.NewFakeModel())
 	srv, err := New(Config{Token: testToken, Version: "test", Service: svc, ConfigPath: cfgPath})
@@ -226,16 +226,17 @@ func TestPutConfigHotApplyReport(t *testing.T) {
 	if !ok {
 		t.Fatalf("PUT response missing applied report: %v", put)
 	}
-	// The seeded test runtime has a "test" provider and no explicit
-	// storage base; the PUT introduces a deepseek provider (next turn)
-	// and a different resolved storage base (restart).
+	// The seeded test runtime has a "test" provider; the PUT introduces
+	// a deepseek provider (next turn). Storage must never be classified:
+	// the loom home derives from the config file location and cannot
+	// change via hot-apply.
 	nextTurn, _ := applied["next_turn"].([]any)
 	restart, _ := applied["restart"].([]any)
 	if fmt.Sprint(nextTurn) == "[]" || !strings.Contains(fmt.Sprint(nextTurn), "providers") {
 		t.Fatalf("next_turn = %v, want providers", nextTurn)
 	}
-	if !strings.Contains(fmt.Sprint(restart), "storage") {
-		t.Fatalf("restart = %v, want storage", restart)
+	if strings.Contains(fmt.Sprint(restart), "storage") {
+		t.Fatalf("restart = %v, storage must never be hot-apply classified", restart)
 	}
 	// The hot-applied config is live: the model catalog now reflects the
 	// deepseek provider from the saved file.

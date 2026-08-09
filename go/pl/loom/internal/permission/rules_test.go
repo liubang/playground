@@ -568,7 +568,7 @@ func TestSessionForgetDomain(t *testing.T) {
 // TestAttachRulesBuiltinSwitch checks the builtin layer participates by
 // default and drops out when the load options disable it.
 func TestAttachRulesBuiltinSwitch(t *testing.T) {
-	// An empty temp user dir stands in for <base_dir>/rules: the builtin
+	// An empty temp user dir stands in for <loom home>/rules: the builtin
 	// switch must not gate the user layer, and a real "allow always" for
 	// ls from an interactive session would leak in and mask the toggle.
 	userDir := t.TempDir()

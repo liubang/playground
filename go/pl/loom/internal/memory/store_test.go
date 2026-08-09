@@ -48,7 +48,7 @@ func TestOpenStoreCreatesDirs(t *testing.T) {
 
 func TestOpenStoreRequiresRoot(t *testing.T) {
 	// The store performs no path conventions of its own: an empty root is
-	// an error, and the caller derives it from the storage base_dir.
+	// an error, and the caller derives it from the loom home.
 	if _, err := OpenStore(""); err == nil {
 		t.Fatal("OpenStore with empty root = nil error, want error")
 	}

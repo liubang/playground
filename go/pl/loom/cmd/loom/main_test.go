@@ -35,20 +35,22 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
 
-// writeTestConfig points LOOM_CONFIG at a minimal offline config whose
-// storage.base_dir is the given directory.
+// writeTestConfig points LOOM_CONFIG at an empty offline config inside
+// the given loom home — the config file's directory is the data root.
 func writeTestConfig(t *testing.T, baseDir string) {
 	t.Helper()
-	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	content := "storage:\n  base_dir: '" + baseDir + "'\n"
-	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+	if err := os.MkdirAll(baseDir, 0o700); err != nil {
+		t.Fatalf("mkdir loom home: %v", err)
+	}
+	cfgPath := filepath.Join(baseDir, "config.yaml")
+	if err := os.WriteFile(cfgPath, nil, 0o600); err != nil {
 		t.Fatalf("write test config: %v", err)
 	}
 	t.Setenv(configPathEnv, cfgPath)
 }
 
 // testSessionDB returns the session store path inside base's sessions
-// subdirectory (the layout SessionDBPath derives from storage.base_dir).
+// subdirectory (the layout SessionDBPath derives from the loom home).
 func testSessionDB(base string) string {
 	return filepath.Join(base, "sessions", "sessions.db")
 }

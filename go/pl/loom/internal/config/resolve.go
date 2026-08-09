@@ -155,21 +155,36 @@ type ResolvedMemory struct {
 	MaxSessionAge time.Duration
 }
 
-// ResolvedStorage is the storage section with the base directory resolved
-// to an absolute path. BaseDir is the single root for every loom data
-// location — the derived accessors below are the only sanctioned way to
-// compute them, so no other code may hard-code ~/.loom.
+// ResolvedStorage carries the loom home — the single root for every
+// loom data location. BaseDir is derived from the config file location
+// (BaseDirForConfigPath), never from configuration itself: a config
+// file pointing at its own data root would be a self-referential knob.
+// The derived accessors below are the only sanctioned way to compute
+// data locations, so no other code may hard-code ~/.loom.
 type ResolvedStorage struct {
 	BaseDir string
 }
 
-// DefaultBaseDir returns ~/.loom — the default root for all loom data.
+// DefaultBaseDir returns ~/.loom — the default loom home, used to
+// locate the default config file (~/.loom/config.yaml).
 func DefaultBaseDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("config: resolve user home: %w", err)
 	}
 	return filepath.Join(home, ".loom"), nil
+}
+
+// BaseDirForConfigPath derives the loom home (data root) from the
+// config file location: the directory containing the file, made
+// absolute. This is the ONLY rule — LOOM_CONFIG (or the default path)
+// is the single locator, and the config file never names its own home.
+func BaseDirForConfigPath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("config: resolve config path: %w", err)
+	}
+	return filepath.Dir(abs), nil
 }
 
 // SessionsDir is the session data directory: sessions.db plus its
@@ -196,24 +211,6 @@ func (s ResolvedStorage) SkillsDir() string { return filepath.Join(s.BaseDir, "s
 
 // LoomMDPath is the user-global rule file injected into every prompt.
 func (s ResolvedStorage) LoomMDPath() string { return filepath.Join(s.BaseDir, "LOOM.md") }
-
-// resolveStorage resolves the base directory: the configured path made
-// absolute, or ~/.loom when empty.
-func resolveStorage(in Storage) (ResolvedStorage, error) {
-	base := strings.TrimSpace(in.BaseDir)
-	if base == "" {
-		var err error
-		base, err = DefaultBaseDir()
-		if err != nil {
-			return ResolvedStorage{}, err
-		}
-	}
-	abs, err := filepath.Abs(base)
-	if err != nil {
-		return ResolvedStorage{}, fmt.Errorf("config: storage.base_dir: %w", err)
-	}
-	return ResolvedStorage{BaseDir: abs}, nil
-}
 
 // resolveWorkspaces validates the workspaces section and resolves each root
 // to an absolute path (with "~" home expansion, docs/WORKSPACE_DESIGN.md §10).
@@ -404,10 +401,15 @@ func modelNames(p *ResolvedProvider) []string {
 // resolve validates the raw file, resolves secrets, builds provider
 // instances, and applies built-in defaults. Any problem is a hard error —
 // a configuration that silently half-applies is worse than no run at all
-// (docs/CONFIG_DESIGN.md §7).
-func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
+// (docs/CONFIG_DESIGN.md §7). baseDir is the loom home derived from the
+// config file location (BaseDirForConfigPath) — storage is not
+// configurable.
+func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error) {
 	if lookup == nil {
 		return nil, fmt.Errorf("config: env lookup is required")
+	}
+	if baseDir == "" {
+		return nil, fmt.Errorf("config: base dir is required")
 	}
 	providers, auths, err := resolveProviders(f.Providers, lookup)
 	if err != nil {
@@ -434,10 +436,6 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	approval := ResolvedApproval{Mode: mode}
-	storage, err := resolveStorage(f.Storage)
-	if err != nil {
-		return nil, err
-	}
 	out := &ResolvedConfig{
 		Providers: providers,
 		Limits:    limits,
@@ -452,7 +450,7 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		Rules:    resolveRules(f.Rules),
 		Approval: approval,
 		Tracing:  tracing,
-		Storage:  storage,
+		Storage:  ResolvedStorage{BaseDir: baseDir},
 		Logging:  resolveLogging(f.Logging),
 		UI:       f.UI,
 	}

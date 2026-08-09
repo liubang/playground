@@ -284,7 +284,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_workspace_updated
 UPDATE sessions SET workspace_id = ?1 WHERE workspace_id = '';
 ```
 
-CLI 每次启动都执行该语句（幂等，`workspace_id=''` 的行只会越来越少）。**并发安全**：同一 base_dir 同时只有一个写进程（data-dir 排他锁 `loom.lock`，见 `ResolvedStorage.SessionsDir` 注释与 serve 的 `lock.go`），backfill 不存在多进程竞态。**已知让步**：如果用户长期在多个目录下使用 chat 后又升级，全部历史 session 会归属到"升级后第一次启动的 default workspace"。这是可接受的——归属信息此前根本不存在，任何启发式（如按 cwd 猜）都更错；文档与 release note 中说明。
+CLI 每次启动都执行该语句（幂等，`workspace_id=''` 的行只会越来越少）。**并发安全**：同一 loom home 同时只有一个写进程（data-dir 排他锁 `loom.lock`，见 `ResolvedStorage.SessionsDir` 注释与 serve 的 `lock.go`），backfill 不存在多进程竞态。**已知让步**：如果用户长期在多个目录下使用 chat 后又升级，全部历史 session 会归属到"升级后第一次启动的 default workspace"。这是可接受的——归属信息此前根本不存在，任何启发式（如按 cwd 猜）都更错；文档与 release note 中说明。
 
 只读打开路径（`sqlite_store.go:81` 的 read-only 模式）的版本检查同步接受 v5。
 
@@ -373,7 +373,7 @@ workspaces:
 
 - 语义：启动时预注册（幂等 dedupe），仅是"免手动注册"的便利；`Register` 的校验规则（存在、目录、canonical）同样适用，失败记 warn 不阻断启动；
 - default workspace 不在列表中也会自动注册（W5）；
-- `resolve.go` 的 `ResolvedConfig` 增加 `ResolvedWorkspaces []ResolvedWorkspace`。**root 的 `~` 展开是新增能力**：config 现状无任何 `~` 展开（`resolveStorage` 只做 `filepath.Abs`，resolve.go:174），`skills.extra_roots` 同样不展开。因此 `ResolvedWorkspace` 的 root 解析需在 load 期做 `~` → `$HOME` 前缀替换 + `Abs` + `EvalSymlinks`（先展开再 Abs，`~` 开头才替换），与 canonical 校验的规则对齐。若决定不支持 `~`，YAML 示例中的 `~/...` 写法必须改为绝对路径；
+- `resolve.go` 的 `ResolvedConfig` 增加 `ResolvedWorkspaces []ResolvedWorkspace`。**root 的 `~` 展开是新增能力**：config 现状无任何 `~` 展开（loom home 只做 `filepath.Abs` 派生），`skills.extra_roots` 同样不展开。因此 `ResolvedWorkspace` 的 root 解析需在 load 期做 `~` → `$HOME` 前缀替换 + `Abs` + `EvalSymlinks`（先展开再 Abs，`~` 开头才替换），与 canonical 校验的规则对齐。若决定不支持 `~`，YAML 示例中的 `~/...` 写法必须改为绝对路径；
 - 其余配置项归属不变（limits/approval 进程级、rules.user 层共享、tracing 进程级）。
 
 ## 11. 前端影响
