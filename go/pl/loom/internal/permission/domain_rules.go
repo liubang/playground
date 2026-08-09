@@ -17,20 +17,22 @@
 
 // Domain rules are the web_fetch counterpart of argv-prefix rules: instead
 // of approving every fetch (R3 network egress + untrusted content intake,
-// the exfiltration leg of the lethal trifecta), the user approves ONE
-// exact host — "always allow weather.com.cn" — and every other domain
-// still prompts (docs/PERMISSION_DESIGN.md, M3-lite). They live in the
-// same rule files under a "domains" key:
+// the exfiltration leg of the lethal trifecta), the user approves a host
+// once — "always allow weather.com.cn" — and every other domain still
+// prompts (docs/PERMISSION_DESIGN.md, M3-lite). They live in the same
+// rule files under a "domains" key:
 //
 //	{"rules": [...], "domains": [{
-//	  "host": "www.weather.com.cn",
+//	  "host": "*.weather.com.cn",
 //	  "decision": "allow",               // allow | ask | deny
 //	  "justification": "weather lookups"
 //	}]}
 //
-// Matching is EXACT host (case-insensitive, no port, no subdomains):
-// approving www.weather.com.cn does not cover api.weather.com.cn. Project
-// layers may only tighten (allow entries are dropped), same as argv rules.
+// Matching is exact host (case-insensitive, no port), plus the "*."
+// suffix wildcard: a rule host of "*.example.com" matches any subdomain
+// (api.example.com, a.b.example.com) but NOT example.com itself.
+// Project layers may only tighten (allow entries are dropped), same as
+// argv rules.
 package permission
 
 import (
@@ -55,16 +57,22 @@ type DomainRule struct {
 	Source string `json:"-"`
 }
 
-// normalizeDomainHost validates and canonicalizes a rule host: lowercase,
-// no scheme/userinfo/path/port, no leading dot.
+// wildcardPrefix marks a rule host that matches any subdomain of the
+// suffix ("*.example.com" covers api.example.com, not example.com).
+const wildcardPrefix = "*."
+
+// normalizeDomainHost validates and canonicalizes a host: lowercase, no
+// scheme/userinfo/path/port, no leading dot. Rule hosts may additionally
+// carry one leading "*." wildcard.
 func normalizeDomainHost(host string) (string, error) {
 	h := strings.ToLower(strings.TrimSpace(host))
 	h = strings.TrimSuffix(h, ".")
+	h = strings.TrimPrefix(h, wildcardPrefix)
 	if h == "" {
 		return "", fmt.Errorf("host is empty")
 	}
-	if strings.ContainsAny(h, "/:@") {
-		return "", fmt.Errorf("host %q must be a bare hostname (no scheme, path, port, or userinfo)", host)
+	if strings.ContainsAny(h, "/:@*") {
+		return "", fmt.Errorf("host %q must be a bare hostname (no scheme, path, port, userinfo, or stray wildcards)", host)
 	}
 	if strings.HasPrefix(h, ".") || strings.HasSuffix(h, ".") || strings.Contains(h, "..") {
 		return "", fmt.Errorf("host %q is not a valid hostname", host)
@@ -72,9 +80,32 @@ func normalizeDomainHost(host string) (string, error) {
 	return h, nil
 }
 
+// normalizeRuleHost canonicalizes a RULE host, preserving the wildcard
+// marker through normalization.
+func normalizeRuleHost(host string) (string, error) {
+	wild := strings.HasPrefix(strings.ToLower(strings.TrimSpace(host)), wildcardPrefix)
+	h, err := normalizeDomainHost(host)
+	if err != nil {
+		return "", err
+	}
+	if wild {
+		return wildcardPrefix + h, nil
+	}
+	return h, nil
+}
+
+// domainRuleMatches reports whether a normalized rule host covers the
+// normalized call host.
+func domainRuleMatches(ruleHost, host string) bool {
+	if suffix, wild := strings.CutPrefix(ruleHost, wildcardPrefix); wild {
+		return strings.HasSuffix(host, "."+suffix)
+	}
+	return ruleHost == host
+}
+
 // validateDomainRule checks host shape and decision validity.
 func validateDomainRule(r *DomainRule) error {
-	host, err := normalizeDomainHost(r.Host)
+	host, err := normalizeRuleHost(r.Host)
 	if err != nil {
 		return err
 	}
@@ -88,7 +119,7 @@ func validateDomainRule(r *DomainRule) error {
 }
 
 // EvaluateDomain returns the strictest decision among matching domain
-// rules (exact host), or "" when nothing matches.
+// rules (exact host or "*." suffix wildcard), or "" when nothing matches.
 func (s *RuleSet) EvaluateDomain(host string) (domain.Decision, DomainRule) {
 	if s == nil {
 		return "", DomainRule{}
@@ -103,7 +134,7 @@ func (s *RuleSet) EvaluateDomain(host string) (domain.Decision, DomainRule) {
 		bestInt int
 	)
 	for _, r := range s.domains {
-		if r.Host != host {
+		if !domainRuleMatches(r.Host, host) {
 			continue
 		}
 		d := domain.Decision(r.Decision)

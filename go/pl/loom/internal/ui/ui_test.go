@@ -689,20 +689,34 @@ func TestApprovalDecisionGuardIgnoresEarlyKeys(t *testing.T) {
 	}
 }
 
-func TestApprovalOverlayHidesRulePreviewForShell(t *testing.T) {
+func TestApprovalOverlayHidesRulePreviewForDynamicShell(t *testing.T) {
 	m := Model{theme: NoColorTheme(), width: 100}
 	m.pendingApproval = &runtimeevent.ApprovalRequestedPayload{
 		ApprovalID: domain.NewEventID(),
 		ToolName:   "run_cmd",
 		Risk:       domain.R3,
-		Arguments:  json.RawMessage(`{"program":"sh","args":["-c","echo hi | cat"]}`),
+		Arguments:  json.RawMessage(`{"program":"sh","args":["-c","echo hi > $out"]}`),
 	}
 	overlay := m.renderApprovalOverlay()
 	if !strings.Contains(overlay, "Always allow") {
 		t.Fatalf("overlay should still offer the always option: %s", overlay)
 	}
 	if strings.Contains(overlay, "Always allow `") {
-		t.Fatalf("compound shell calls must not show a rule preview: %s", overlay)
+		t.Fatalf("dynamic shell calls must not show a rule preview: %s", overlay)
+	}
+}
+
+func TestApprovalOverlayShowsRulePreviewForStaticCompoundShell(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 100}
+	m.pendingApproval = &runtimeevent.ApprovalRequestedPayload{
+		ApprovalID: domain.NewEventID(),
+		ToolName:   "run_cmd",
+		Risk:       domain.R2,
+		Arguments:  json.RawMessage(`{"program":"sh","args":["-c","go test ./... && git status"]}`),
+	}
+	overlay := m.renderApprovalOverlay()
+	if !strings.Contains(overlay, "Always allow `go test && git status`") {
+		t.Fatalf("static compound shells must show the per-subcommand rule preview: %s", overlay)
 	}
 }
 
@@ -1974,9 +1988,9 @@ func TestApprovalNumberKeysAndDisabledAlways(t *testing.T) {
 		t.Fatal("number key 2 must resolve always-allow for a rule-eligible call")
 	}
 
-	// For a compound shell call the rule is not derivable: "2", "a" and
+	// For a DYNAMIC shell call the rule is not derivable: "2", "a" and
 	// Enter on the always option are all inert, and the overlay stays up.
-	m = newApprovalModel("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","echo hi | cat"]}`))
+	m = newApprovalModel("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","echo hi > $out"]}`))
 	m.approvalCursor = 1
 	for _, key := range []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune{'2'}},

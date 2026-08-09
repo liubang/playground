@@ -131,7 +131,7 @@ func TestEscalationNeverSilentlyDowngraded(t *testing.T) {
 	outside := filepath.Join(f.home, "escalation-proof")
 
 	session := permission.NewSessionRules()
-	if _, ok := session.RememberRunCmd([]string{"touch", outside}, domain.ExecGrant{NetworkFull: true}); !ok {
+	if _, ok := session.RememberRunCmd(permission.RunCmdCall{Argv: []string{"touch", outside}}, domain.ExecGrant{NetworkFull: true}); !ok {
 		t.Fatal("remember failed")
 	}
 	policy := permission.DefaultPolicy()
@@ -175,14 +175,28 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 		}
 	})
 
-	t.Run("compound sh -c still asks", func(t *testing.T) {
+	t.Run("compound sh -c needs no approval", func(t *testing.T) {
 		f := newPermissionFixture(t)
 		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
 			"program": "sh",
 			"args":    []string{"-c", "mkdir -p .dsx_logs && echo created"},
 		}))
+		if got := len(approver.Requests()); got != 0 {
+			t.Fatalf("approver requests = %d, want 0 (composition is not a risk; the sandbox confines the script)", got)
+		}
+		if _, err := os.Stat(filepath.Join(f.ws, ".dsx_logs")); err != nil {
+			t.Fatalf("compound sh -c command did not execute: %v", err)
+		}
+	})
+
+	t.Run("danger-listed compound sh -c still asks", func(t *testing.T) {
+		f := newPermissionFixture(t)
+		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
+			"program": "sh",
+			"args":    []string{"-c", "echo hi && sudo make install"},
+		}))
 		if got := len(approver.Requests()); got != 1 {
-			t.Fatalf("approver requests = %d, want 1", got)
+			t.Fatalf("approver requests = %d, want 1 (the AST danger screen must see inside the script)", got)
 		}
 	})
 

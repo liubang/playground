@@ -1,6 +1,6 @@
 # PERMISSION_DESIGN — loom 权限体系：三层信任梯度与可插拔策略
 
-> 状态：草案 v1（M1 实现中）
+> 状态：v2（M1 + 复合命令 AST 分析已落地）
 > 关联：DESIGN.md §12（安全基座）、CONFIG_DESIGN.md、本文件取代其中权限章节的语义描述
 
 ## 1. 背景与问题
@@ -32,7 +32,6 @@ loom 现行权限模型是**二值信任**：一次工具调用要么逐次审�
 
 - 域名级网络授权（本地代理 + 按域名记忆）：M3 单独立项，本设计只预留接口形状（§8.3）。
 - Linux/Windows 沙箱实现：维持 Linux fail-closed 现状；能力模型按平台无关设计，不阻塞后续补实现。
-- shell 复合命令逐段评估：loom 保持"shell 不可入规则"的设计（更安全），不引入 shell 解析器。
 - 规则 DSL 更换：JSON 规则文件 + 加载时自检（match/not_match）保留，不换 execpolicy 式 DSL。
 
 ## 3. 核心概念
@@ -44,9 +43,9 @@ loom 现行权限模型是**二值信任**：一次工具调用要么逐次审�
 | L0 | sandboxed | 免审批 | Seatbelt 沙箱（禁外网、写 workspace+tmp、凭证路径不可读） | 默认状态（on-request 基线下所有非危险 `run_cmd`） |
 | L1 | granted | 免审批 | 沙箱"按需开口"：按规则 `grant` 放宽网络/可写路径，其余边界不变 | 用户层规则文件，或 "allow always" 记忆 |
 | L2 | trusted | 免审批 | 完全出沙箱（完整环境/网络/凭证） | 仅用户显式 opt-in，UI 标红警示 |
-| — | denied | — | 不执行 | deny 规则、危险命令清单（R4 基线） |
+| — | denied | — | 不执行 | deny 规则、危险命令清单（never 模式直接拒绝） |
 
-判定优先级：**deny/危险清单 > L2/L1 规则 > 会话记忆 > L0 基线**。严格者永远胜出，任何上层不可覆盖 deny。
+判定优先级（即链序）：**规则层（deny/ask/allow，严格者胜）> 危险清单 > 会话记忆 > 基线**。显式用户意图（文件规则）可覆盖危险启发式；会话记忆只能升级"无意见"，永不覆盖前两层（§7.0 对此语义梯度有明示）。
 
 ### 3.2 能力授予（CapabilityGrant）
 
@@ -115,7 +114,7 @@ func (c Chain) Evaluate(call domain.PreparedCall) *Verdict
 | # | Decider | 语义 | 可产生 |
 |---|---|---|---|
 | 1 | `RuleDecider` | 文件层规则（builtin+user+project）argv 前缀匹配，strictest wins；deny/ask 永远先返回 | deny / ask / allow(L0|L1|L2) |
-| 2 | `DangerDecider` | 危险命令启发式（`rm -rf /`、`dd`、fork bomb、`curl\|sh` 等）；仅作用于无规则命中时 | ask / deny |
+| 2 | `DangerDecider` | 危险启发式双层筛查：argv 级（`rm -rf /`、`dd`、`sudo`、凭证外泄形状）+ 脚本级 AST 筛查（`danger_script.go`：管道入 shell/解释器、重定向入敏感路径、嵌套在替换/子 shell 中的危险字面量）；仅作用于无规则命中时 | ask / deny |
 | 3 | `SessionDecider` | 会话记忆前缀（"allow always" 产物），只能把"无意见"升级为 allow，永不覆盖文件层 | allow(L1) |
 | 4 | `BaselineDecider` | 审批模式基线（§4.3），兜底永不返回 nil | allow(L0) / ask / deny |
 
@@ -126,29 +125,32 @@ func (c Chain) Evaluate(call domain.PreparedCall) *Verdict
 ```yaml
 # ~/.loom/config.yaml
 approval:
-  mode: on-request   # on-request | unless-trusted | never（默认 on-request）
+  mode: on-request   # on-request | unless-dangerous | never（默认 on-request）
 ```
 
-| 模式 | run_cmd 沙箱内（非危险） | 提权（R3） | R4 | 对应业界 |
-|---|---|---|---|---|
-| `on-request` | **allow（L0，沙箱即边界）** | ask | deny | codex OnRequest / Claude Code auto-allow |
-| `unless-trusted` | ask（现行行为） | ask | deny | Claude Code default 模式 |
-| `never` | allow | deny | deny | CI/无人值守 |
+| 模式 | 沙箱内 run_cmd | 工作区内建工具（R0–R2） | needs_network | 提权 | 危险清单 |
+|---|---|---|---|---|---|
+| `on-request` | **allow（沙箱即边界）** | **allow（path validator 即边界）** | ask（可记忆） | ask | ask |
+| `unless-dangerous` | allow | allow | allow（沙箱内放网） | ask | ask |
+| `never`（无人值守） | allow | allow | allow | deny（带绕行指引） | deny |
 
-- 危险清单命中时任何模式都升级为 ask（never 模式为 deny）。
-- 默认选 `on-request`：审批轰炸是安全反模式（§1.3），沙箱+凭证保护使默认放行代价可控（§3.3）。保守用户可显式切回 `unless-trusted`，行为与今天完全一致。
-- 非 `run_cmd` 工具（edit/write 等）不受模式影响，维持现行 R 基线（blast radius 随路径变化，不适合 L0 化）。
+- 危险清单命中时交互模式升级为 ask（never 模式为 deny，denial 原因直达模型以便绕行）。
+- 复合 shell 命令（管道/`&&`/重定向）不再是风险本身：`sh -c` 脚本经 AST 解析（mvdan.cc/sh）逐条子命令过规则层与危险清单；可证明安全的复合命令可按子命令前缀记忆。只有出沙箱、出网络、危险清单三类事件弹审批。
+- 非 exec 的内建工具（edit/write 等）由 path validator 限制在工作区内（.git/.loom 受保护），爆炸半径与沙箱内命令等价，R0–R2 在任何模式下免审批；MCP 工具是第三方代码，保持逐次审批（可按工具名记忆），never 模式下拒绝。
+- `never` 模式绝不产生 ask：长程任务不会死挂在无人应答的提示上。
+- 审批弹窗触发桌面通知（macOS osascript / Linux notify-send）：真正需要人时人要知道。
 
 ### 4.4 装配
 
 `internal/app/bootstrap.go` 按配置构造链：
 
 ```go
-decider := permission.Chain{
-    permission.NewRuleDecider(ruleSet),          // nil-safe
-    permission.NewDangerDecider(dangerList),     // 内置表 + 可选用户追加
-    permission.NewSessionDecider(sessionRules),  // nil-safe
-    permission.NewBaselineDecider(approvalMode, riskPolicy),
+// Policy.Decider(mode) 的实现（decider 构造即装配）：
+chain := permission.Chain{
+    permission.RuleDecider{Rules: ruleSet},        // nil-safe
+    permission.DangerDecider{Mode: mode},          // 危险清单，never 模式 deny
+    permission.SessionDecider{Session: session},   // nil-safe
+    permission.BaselineDecider{Mode: mode},        // 审批模式基线，兜底
 }
 ```
 
@@ -192,11 +194,12 @@ decider := permission.Chain{
 
 ### 6.1 `internal/permission`
 
-- 新增 `verdict.go`：`Verdict`、`CapabilityGrant`、`Decider`、`Chain`。
-- 新增 `decider_rule.go` / `decider_session.go` / `decider_baseline.go` / `decider_danger.go`；现行 `Policy.Evaluate` 的匹配逻辑拆入前两者，风险基线拆入 `BaselineDecider`。`Policy` 结构保留为装配参数包（AutoApproveR1/AskR2/DenyR4 → BaselineDecider 的 unless-trusted 实现）。
+- 新增 `verdict.go`：`Verdict`、`ApprovalMode`（on-request / unless-dangerous / never）、`Decider`、`Chain`（含 contextDecider 单次解析快路径）。
+- 内置 Decider 集中于 `decider.go`（Rule/Danger/Session/Baseline 四实现）。`Policy` 结构简化为装配参数包（Rules + Session），不再携带风险基线开关——基线行为完全由审批模式决定（§4.3）。
 - `rules.go`：Rule 增加 `Grant *RuleGrant`；`validateRule` 增加 §5 校验；`LoadRuleSets` 按层剥离非法 grant。
-- `danger.go`：危险命令清单（程序级：`dd`/`mkfs`/`shred`；模式级：`rm` 目标为 `/`、`~`、系统目录；管道入 shell：`curl|wget ... | sh`；git：`push --force` 到受保护分支的识别留给 M2，M1 先做程序/参数级）。清单条目含原因文案，供审批 UI 展示。
-- `SessionRules`：记忆条目从 `[]string` 升级为 `{Prefix []string, Grant CapabilityGrant}`；"allow always" 记录模型在提权重试时声明的能力（§6.4 的 `needs_network`），默认 grant 而非 unsandboxed。
+- `danger.go`：argv 级危险命令清单（程序级：`dd`/`mkfs`/`shred`/`sudo`；子命令级：`git push --force`、`git reset --hard`、`git clean -f`；目标级：`rm -r` 指向 `/`、`~`、系统目录或 `..` 逃逸；凭证外泄：`curl -d @~/.ssh/...` 等网络工具 argv 含凭证路径；包装器剥离：env/nice/nohup/timeout/command 前缀后递归筛查）。
+- `danger_script.go`：脚本级 AST 筛查（**v2 新增**，见 §6.4.1）：`sh -c` 脚本经 mvdan.cc/sh 解析后，逐条子命令过 argv 级清单（嵌套在 `$(...)`、子 shell、`&&` 中的危险字面量无处隐藏），另查两类跨命令形状——管道入 shell/解释器执行流（`curl | sh`，消费方带脚本文件参数的不算）、写重定向入敏感路径（shell 启动文件、凭证目录、`.git` hooks/config 含 submodule/worktree、`.loom`、关键根）。
+- `SessionRules`：记忆条目从 `[]string` 升级为 `{Prefix []string, Grant ExecGrant}`；"allow always" 记录模型在提权重试时声明的能力（§6.4 的 `needs_network`），默认 grant 而非 unsandboxed。复合 shell 命令**按子命令各记一条前缀**（`DeriveRunCmdPrefixes`），匹配侧 `MatchAll` 要求每条子命令都被记忆覆盖、grant 取并集——一个未记忆的子命令即整脚本回落常规判定。
 - `AppendRememberedRule`：写入 `remembered.json` 时携带 grant（schema v2）。
 
 ### 6.2 `internal/domain`
@@ -217,10 +220,22 @@ decider := permission.Chain{
 
 ### 6.4 `internal/tool/command`（run_cmd）
 
-- 参数 schema 增加 `needs_network: bool`（可选）：模型在沙箱失败重试时**声明能力**而非直接提权。`needs_network: true` 的调用按 R2 评估（不升级为 R3），on-request 基线下仍弹一次 ask（因为基线 grant 不含网络），批准后若选 "allow always" 则记忆 `{prefix, grant:{network:full}}`。
+- 参数 schema 增加 `needs_network: bool`（可选）：模型在沙箱失败重试时**声明能力**而非直接提权。`needs_network: true` 的调用保持 R2 评估，on-request 基线下弹一次 ask（批准后选 "allow always" 则记忆 `{prefix, grant:{network:full}}`），unless-dangerous 与 never 模式下沙箱内直接放网。
+- **（v2 变更）shell 复合命令不再升级 R3**：旧实现把不可拆解的 `sh -c` 一律升为 R3 逐次审批；AST 分析落地后，组合本身不再是风险——沙箱照常约束执行，规则层按子命令前缀评估，危险清单做脚本级筛查。只有 `require_escalated`（出沙箱）升 R3。工具描述同步改为"单命令优先 argv 形式，需要管道/重定向/&& 时自由使用 sh -c"。
 - 工具描述与 `sandboxGuidanceNote` 改写：引导顺序从"失败 → require_escalated"改为"网络类失败 → needs_network 重试；TTY/凭证类失败 → require_escalated"。
 - 执行处：消费 `ExecGrant`——`Unsandboxed` → `DirectSandbox{}`（现提权路径）；否则 Seatbelt + `AllowNetwork=grant.NetworkFull` + `WritablePaths+=grant.WritablePaths`；输出 `isolation` 字段如实标注（`seatbelt+net`、`seatbelt`、`direct`）。
 - `require_escalated` 保留（L2 路径），但不再被 `RunCmdArgv` 硬排除：提权调用可命中带 `unsandboxed` grant 的用户层规则（L2 豁免）——这是 skill 场景的兜底逃生门，默认不产生、需用户显式批准。
+
+### 6.4.1 复合 shell 的 AST 静态分析（v2 新增）
+
+`internal/process/shell_analyze.go` 用 mvdan.cc/sh 把 `sh -c` 脚本解析为 AST，单次遍历产出 `ShellAnalysis`：
+
+- `Commands`：脚本中每条简单命令（含嵌套在命令替换、子 shell 中的）的字面 argv；含变量/替换/算术展开的词标记为动态（argv 不可证明）。
+- `Static`：全脚本可静态证明（无变量、无控制流、无子 shell、无 heredoc、无后台任务、无 env 前缀赋值）。
+- `Pipes`：每条管道的「生产者 → 消费者」对，消费者附完整静态 argv（区分 `| sh` 执行流与 `| python3 analyze.py` 跑固定脚本）。
+- `WriteRedirects` / `DynamicWrites`：写重定向的静态目标 / 动态目标标记。
+
+三个消费方各自取用：**规则层**仅对全静态且无写重定向的脚本按子命令前缀匹配（一条 deny/ask 即定案，allow 要求条条命中且 grant 并集覆盖调用声明）；**危险清单**无条件筛查——子命令逐条过 argv 级清单 + 管道入解释器 + 重定向入敏感路径，动态部分查不出字面量即视为无证据（交给沙箱兜底）；**会话记忆**仅静态脚本可按子命令前缀记忆（§6.1 SessionRules）。执行路径不受影响——脚本照常经 shell 在沙箱内运行，分析只喂养分类。
 
 ### 6.5 `internal/app` + `internal/ui`
 
@@ -228,8 +243,9 @@ decider := permission.Chain{
   1. `允许一次`
   2. `始终允许（最小能力）`——默认推荐；记住 `{prefix, grant}`，grant 来源：模型 `needs_network` 声明，或提权调用默认推导为网络 grant（M1 的最常见原因近似），UI 展示推导结果
   3. `完全信任（出沙箱）`——仅提权调用出现的第四行，记住 `{prefix, unsandboxed}`
-- `RuleApprover.RememberRunCmd` 升级为记住 `{prefix, grant}`；`RunCmdRulePreview` 展示 grant 摘要（如 `talos (+网络, +写~/.talos)`）。
+- `RuleApprover.RememberRunCmd` 升级为记住 `{prefixes, grant}`——复合 shell 每条子命令一条前缀（§6.1）；`RunCmdRulePreview` 展示 grant 摘要与全部前缀（如 `go test && git status (+网络)`）。
 - 审批 UI 的 grant 展示即"选择架构"：推荐项默认高亮，出沙箱项需额外确认。
+- **桌面通知（v2 新增，`app/notify.go`）**：审批请求产生时经 macOS `osascript` / Linux `notify-send` 发系统通知——长程任务挂起等人时，人通常不在终端前。无人值守（stdin 非 TTY）时请求直接拒绝并通知"已自动拒绝"；通知失败静默降级，永不影响审批流。
 
 ### 6.6 `internal/config`
 
@@ -258,11 +274,14 @@ decider := permission.Chain{
 1. **L1 前缀指向可变内容**（`node script.js` 类）：workspace 可写意味着脚本内容可被模型改写。缓解：script 路径进前缀（现行 `DeriveRunCmdPrefix` 已如此）；根治（内容哈希绑定）列入 M2 评估，不做承诺。
 2. **`network: full` + workspace 读**：workspace 内容（源码）可被外发。这是能力授予的固有代价，由用户在批准时知情（grant 在审批 UI 明示）；域名级授权（M3）是收敛方向。
 3. **危险清单覆盖不全**：启发式必然有漏。定位是"减少明显危险"，不是完备拦截——底座仍是沙箱与 deny 规则。
+4. **AST 分析只识别字面量**：动态脚本（变量、替换、控制流）的子命令 argv 不可证明，规则层与会话记忆对其无意见（回落基线），危险清单也只能看到字面部分——经变量间接拼接的危险命令（`X=rm; $X -rf /`）不在筛查视野内，由沙箱与敏感路径写保护兜底。带写重定向的脚本整体不享规则层 allow（argv 规则只为 argv 背书，重定向目标的判断属于危险屏）。
 
 ## 8. 里程碑
 
-### M1（本次实现）
+### M1（已落地）
 三层信任梯度全链路：Decider 抽象 + 四种内置实现、规则 schema v2 + grant、on-request 基线、危险清单 v1、P0 写保护（.git/.loom + unlink）、run_cmd `needs_network`、审批三选项 + grant 记忆/持久化、`loom rules check` 输出 Verdict。
+
+**v2 增量（2026-08 已落地）**：复合 shell AST 静态分析（§6.4.1）——规则层按子命令前缀评估、危险清单脚本级筛查（管道入解释器、重定向入敏感路径、嵌套危险字面量）、会话记忆按子命令前缀；shell 复合命令不再升 R3；`unless-dangerous` / `never` 审批模式（never 绝不产生 ask，危险命令与提权带绕行指引直接 deny，denial 原因直达模型）；web_fetch 域名规则（精确 + `*.` 通配，builtin 集含包管理源白名单与外泄渠道黑名单，`loom rules check --url` 干跑）；审批桌面通知（含无人值守自动拒绝通知）；沙箱 `/dev/null`、`/dev/(u)random` 放行补漏。
 
 ### M2
 危险清单细化（git 写操作、环境窃取模式）；脚本内容哈希绑定评估；`grant.write` 的自动路径推断（从沙箱拒绝日志反推）。
@@ -270,7 +289,7 @@ decider := permission.Chain{
 ### M3
 域名级网络授权：本地代理 + 按域名审批记忆（`grant.network: {domains: [...]}` 的 schema 预留形状）；Linux bubblewrap 沙箱。
 
-**（M3-lite 已提前落地，2026-07-30）** web_fetch 的域名级记忆：规则文件新增 `"domains"` 节（`host` 精确匹配、不含端口/子域、决策 allow|ask|deny 与 argv 规则同构），RuleDecider/SessionDecider 评估 web_fetch 调用的 URL host；审批浮层对 web_fetch 提供"始终允许 `<host>`"，会话记忆 + 持久化到 `remembered.json` 的 domains 节。项目层域名 allow 同样 tighten-only。未覆盖的部分留给 M3 完整版：run_cmd 沙箱内网络按域名放行（需本地代理）、子域/通配匹配、端口维度。
+**（M3-lite 已提前落地，2026-07-30；通配符 2026-08 补齐）** web_fetch 的域名级记忆：规则文件新增 `"domains"` 节（`host` 精确匹配、`*.` 后缀通配——`*.example.com` 覆盖任意子域但不含 apex 本身、决策 allow|ask|deny 与 argv 规则同构、strictest wins），RuleDecider/SessionDecider 评估 web_fetch 调用的 URL host；审批浮层对 web_fetch 提供"始终允许 `<host>`"，会话记忆 + 持久化到 `remembered.json` 的 domains 节。项目层域名 allow 同样 tighten-only。builtin 集内置包管理源（npm/pypi/Go proxy/crates/maven/gradle/GitHub 含 `*.githubusercontent.com`）白名单与请求捕获/匿名粘贴类外泄渠道（webhook.site、pastebin.com 等）黑名单。未覆盖的部分留给 M3 完整版：run_cmd 沙箱内网络按域名放行（需本地代理）、端口维度。
 
 ### 8.3 接口预留
 `RuleGrant.Network` 设计为 `string`（`"full"`）而非 bool，M3 扩展为 `{mode: "domains", domains: [...]}` 对象时不破坏 v2 文件（JSON 反序列化用 `json.RawMessage` 延迟解析）。

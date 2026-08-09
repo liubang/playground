@@ -110,6 +110,58 @@ func TestDomainRuleSetLayersAndStrictest(t *testing.T) {
 	}
 }
 
+// TestDomainWildcardRules covers the "*." suffix wildcard: it matches any
+// subdomain depth, never the bare apex, and never a sibling domain that
+// merely shares a suffix string.
+func TestDomainWildcardRules(t *testing.T) {
+	dir := t.TempDir()
+	writeRulesFile(t, dir, "rules.json", `{"domains":[
+		{"host":"*.example.com","decision":"allow","justification":"corp domain"},
+		{"host":"*.evil.example.com","decision":"deny","justification":"known bad subdomain tree"}
+	]}`)
+	set, errs := LoadRuleSets(dir, "", LoadOptions{})
+	if len(errs) != 0 {
+		t.Fatalf("errs = %v", errs)
+	}
+	for host, want := range map[string]domain.Decision{
+		"api.example.com":    domain.DecisionAllow,
+		"a.b.example.com":    domain.DecisionAllow,
+		"example.com":        "", // apex is NOT covered by *.example.com
+		"badexample.com":     "", // suffix-string lookalike must not match
+		"evil.example.com":   domain.DecisionAllow,
+		"x.evil.example.com": domain.DecisionDeny, // deny is stricter, wins
+		"WWW.EXAMPLE.COM":    domain.DecisionAllow,
+		"unrelated.org":      "",
+	} {
+		if d, _ := set.EvaluateDomain(host); d != want {
+			t.Errorf("EvaluateDomain(%q) = %q, want %q", host, d, want)
+		}
+	}
+}
+
+// TestBuiltinDomainRules guard-rails the embedded domain set: dev
+// infrastructure is allowed (including via wildcard), known exfiltration
+// channels are denied, and unrelated hosts keep no opinion.
+func TestBuiltinDomainRules(t *testing.T) {
+	set, err := LoadBuiltinRules()
+	if err != nil {
+		t.Fatalf("embedded builtin rules must be valid: %v", err)
+	}
+	for host, want := range map[string]domain.Decision{
+		"registry.npmjs.org":        domain.DecisionAllow,
+		"proxy.golang.org":          domain.DecisionAllow,
+		"github.com":                domain.DecisionAllow,
+		"raw.githubusercontent.com": domain.DecisionAllow, // via *.githubusercontent.com
+		"webhook.site":              domain.DecisionDeny,
+		"pastebin.com":              domain.DecisionDeny,
+		"example.org":               "",
+	} {
+		if d, _ := set.EvaluateDomain(host); d != want {
+			t.Errorf("builtin EvaluateDomain(%q) = %q, want %q", host, d, want)
+		}
+	}
+}
+
 func TestDomainChainEvaluation(t *testing.T) {
 	dir := t.TempDir()
 	writeRulesFile(t, dir, "rules.json", `{"domains":[

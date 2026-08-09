@@ -240,6 +240,13 @@ func LoadBuiltinRules() (*RuleSet, error) {
 		}
 		set.rules = append(set.rules, f.Rules[i])
 	}
+	for i := range f.Domains {
+		f.Domains[i].Source = builtinSource
+		if err := validateDomainRule(&f.Domains[i]); err != nil {
+			return nil, fmt.Errorf("embedded builtin rules: %w", err)
+		}
+		set.domains = append(set.domains, f.Domains[i])
+	}
 	return set, nil
 }
 
@@ -495,29 +502,37 @@ type sessionRule struct {
 // NewSessionRules creates an empty store.
 func NewSessionRules() *SessionRules { return &SessionRules{} }
 
-// RememberRunCmd derives and stores a categorical prefix for a run_cmd
-// argv together with its approved grant, returning the stored prefix.
-// ok=false means the call must never be rule-persisted.
-func (s *SessionRules) RememberRunCmd(argv []string, grant domain.ExecGrant) (prefix []string, ok bool) {
-	prefix, ok = DeriveRunCmdPrefix(argv)
+// RememberRunCmd derives and stores categorical prefixes for a run_cmd
+// call together with their approved grant, returning the stored prefixes.
+// A composed shell command contributes ONE prefix per subcommand
+// (DeriveRunCmdPrefixes). ok=false means the call must never be
+// rule-persisted.
+func (s *SessionRules) RememberRunCmd(info RunCmdCall, grant domain.ExecGrant) (prefixes [][]string, ok bool) {
+	prefixes, ok = DeriveRunCmdPrefixes(info)
 	if !ok {
 		return nil, false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i, existing := range s.rules {
-		if stringSliceEqual(existing.prefix, prefix) {
-			if !execGrantsEqual(existing.grant, grant) {
-				// The user's LATEST approval wins: upgrading a plain
-				// memory to a granted one (and tightening a granted one)
-				// both honor the most recent interactive decision.
-				s.rules[i].grant = grant
+	for _, prefix := range prefixes {
+		duplicate := false
+		for i, existing := range s.rules {
+			if stringSliceEqual(existing.prefix, prefix) {
+				if !execGrantsEqual(existing.grant, grant) {
+					// The user's LATEST approval wins: upgrading a plain
+					// memory to a granted one (and tightening a granted one)
+					// both honor the most recent interactive decision.
+					s.rules[i].grant = grant
+				}
+				duplicate = true
+				break
 			}
-			return prefix, true
+		}
+		if !duplicate {
+			s.rules = append(s.rules, sessionRule{prefix: prefix, grant: grant})
 		}
 	}
-	s.rules = append(s.rules, sessionRule{prefix: prefix, grant: grant})
-	return prefix, true
+	return prefixes, true
 }
 
 // execGrantsEqual compares two grants for dedup purposes.
@@ -537,6 +552,11 @@ func execGrantsEqual(a, b domain.ExecGrant) bool {
 func (s *SessionRules) Match(argv []string) (domain.ExecGrant, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.matchLocked(argv)
+}
+
+// matchLocked is Match without the lock (callers hold it).
+func (s *SessionRules) matchLocked(argv []string) (domain.ExecGrant, bool) {
 	var (
 		grant domain.ExecGrant
 		best  int
@@ -548,6 +568,28 @@ func (s *SessionRules) Match(argv []string) (domain.ExecGrant, bool) {
 		}
 	}
 	return grant, found
+}
+
+// MatchAll matches a composed shell command against session memory: EVERY
+// subcommand argv must be covered by a remembered prefix, and the
+// returned grant is the union of the matched grants (a compound command
+// needs every capability its subcommands were approved with).
+// ok=false when any subcommand is not remembered — one unremembered
+// subcommand keeps the whole script at its normal verdict.
+func (s *SessionRules) MatchAll(commands [][]string) (domain.ExecGrant, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var union domain.ExecGrant
+	for _, argv := range commands {
+		grant, ok := s.matchLocked(argv)
+		if !ok {
+			return domain.ExecGrant{}, false
+		}
+		union.Unsandboxed = union.Unsandboxed || grant.Unsandboxed
+		union.NetworkFull = union.NetworkFull || grant.NetworkFull
+		union.WritablePaths = append(union.WritablePaths, grant.WritablePaths...)
+	}
+	return union, true
 }
 
 // ForgetRunCmd removes a remembered argv prefix. ok=false means the prefix
@@ -598,6 +640,29 @@ type RunCmdCall struct {
 	// sh -c script (process.UnwrapSimpleShell). Execution still goes
 	// through the shell; the unwrap only feeds classification.
 	ShellUnwrapped bool
+	// Shell is the AST analysis of a COMPOSED sh -c invocation (pipes,
+	// sequencing, redirects — anything UnwrapSimpleShell cannot reduce
+	// to one plain command). nil for plain argv and unwrapped shells.
+	Shell *process.ShellAnalysis
+}
+
+// ShellCommandArgvs returns the per-command argvs policy should classify:
+// the single (possibly unwrapped) argv for plain calls, or every
+// subcommand of a composed shell script. ok=false when any subcommand has
+// dynamic words — its argv cannot be proven, so prefix classification is
+// unsound.
+func (info RunCmdCall) ShellCommandArgvs() ([][]string, bool) {
+	if info.Shell == nil {
+		return [][]string{info.Argv}, true
+	}
+	argvs := make([][]string, 0, len(info.Shell.Commands))
+	for _, cmd := range info.Shell.Commands {
+		if len(cmd.Argv) == 0 {
+			return nil, false
+		}
+		argvs = append(argvs, cmd.Argv)
+	}
+	return argvs, true
 }
 
 // ExecInfoOf resolves the policy-relevant execution shape of a prepared
@@ -614,10 +679,7 @@ func ExecInfoOf(call domain.PreparedCall) (RunCmdCall, bool) {
 			Escalated:    call.ExecRequest.Escalated,
 			NeedsNetwork: call.ExecRequest.NeedsNetwork,
 		}
-		if unwrapped, ok := process.UnwrapSimpleShell(info.Argv); ok {
-			info.Argv = unwrapped
-			info.ShellUnwrapped = true
-		}
+		classifyShell(&info)
 		return info, true
 	}
 	return ParseRunCmdCall(call.Call.Arguments)
@@ -640,11 +702,25 @@ func ParseRunCmdCall(raw json.RawMessage) (RunCmdCall, bool) {
 		Escalated:    args.SandboxPermissions == "require_escalated",
 		NeedsNetwork: args.NeedsNetwork,
 	}
-	if unwrapped, ok := process.UnwrapSimpleShell(argv); ok {
+	classifyShell(&info)
+	return info, true
+}
+
+// classifyShell fills the shell-classification fields of a run_cmd shape:
+// provably simple sh -c scripts are unwrapped to their inner argv;
+// composed scripts keep the raw argv and carry the AST analysis instead.
+func classifyShell(info *RunCmdCall) {
+	if unwrapped, ok := process.UnwrapSimpleShell(info.Argv); ok {
 		info.Argv = unwrapped
 		info.ShellUnwrapped = true
+		return
 	}
-	return info, true
+	if len(info.Argv) == 0 || !process.IsShellProgram(info.Argv[0]) {
+		return
+	}
+	if analysis, ok := process.AnalyzeShellArgv(info.Argv); ok {
+		info.Shell = &analysis
+	}
 }
 
 // RunCmdArgv extracts [program, ...args] from run_cmd call arguments.
@@ -722,6 +798,53 @@ var subcommandedPrograms = map[string]struct{}{
 	"go": {}, "npm": {}, "npx": {}, "pnpm": {}, "yarn": {}, "cargo": {},
 	"git": {}, "bazel": {}, "docker": {}, "kubectl": {}, "helm": {}, "gh": {},
 	"golangci-lint": {}, "ruff": {}, "eslint": {}, "tsc": {}, "talos": {},
+}
+
+// DeriveRunCmdPrefixes computes the categorical rule prefixes for a
+// run_cmd call: one prefix for a plain argv, one PER SUBCOMMAND for a
+// composed shell command. A composed command is derivable only when its
+// analysis is fully static (no dynamic words, no dynamic write targets)
+// and every subcommand is individually derivable — remembering
+// `go test ./... && git status` stores ["go","test"] and
+// ["git","status"], so any later combination of remembered subcommands
+// matches while a script containing anything unremembered does not.
+// ok=false when the call must not be persisted.
+func DeriveRunCmdPrefixes(info RunCmdCall) ([][]string, bool) {
+	if info.Shell == nil {
+		prefix, ok := DeriveRunCmdPrefix(info.Argv)
+		if !ok {
+			return nil, false
+		}
+		return [][]string{prefix}, true
+	}
+	if !info.Shell.Static || info.Shell.DynamicWrites {
+		return nil, false
+	}
+	argvs, ok := info.ShellCommandArgvs()
+	if !ok {
+		return nil, false
+	}
+	var prefixes [][]string
+	for _, argv := range argvs {
+		prefix, ok := DeriveRunCmdPrefix(argv)
+		if !ok {
+			return nil, false
+		}
+		duplicate := false
+		for _, existing := range prefixes {
+			if stringSliceEqual(existing, prefix) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			prefixes = append(prefixes, prefix)
+		}
+	}
+	if len(prefixes) == 0 {
+		return nil, false
+	}
+	return prefixes, true
 }
 
 // DeriveRunCmdPrefix computes the categorical rule prefix for a run_cmd

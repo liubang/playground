@@ -274,6 +274,7 @@ go_deps.gazelle_override(
 use_repo(
     go_deps,
     "cc_mvdan_gofumpt",
+    "cc_mvdan_sh_v3",
     "com_github_charmbracelet_bubbles",
     "com_github_charmbracelet_bubbletea",
     "com_github_charmbracelet_glamour",

@@ -102,8 +102,8 @@ func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 	if !ok {
 		t.Fatal("expected go test to be persistable")
 	}
-	if !reflect.DeepEqual(rule.Prefix, []string{"go", "test"}) {
-		t.Fatalf("prefix = %v, want [go test]", rule.Prefix)
+	if !reflect.DeepEqual(rule.Prefixes, [][]string{{"go", "test"}}) {
+		t.Fatalf("prefixes = %v, want [[go test]]", rule.Prefixes)
 	}
 	if !rule.Grant.IsZero() {
 		t.Fatalf("grant = %+v, want zero for a plain sandboxed call", rule.Grant)
@@ -140,15 +140,51 @@ func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 	}
 }
 
+// TestRememberCompoundShell covers per-subcommand memory for a static
+// composed script: remembering `go test ./... && git status` stores one
+// prefix per subcommand, later scripts combining ONLY remembered
+// subcommands auto-approve, and any script containing an unremembered
+// subcommand still reaches the user.
+func TestRememberCompoundShell(t *testing.T) {
+	inner := &recordingApprover{}
+	rules := NewRuleApprover(inner, permission.NewSessionRules())
+
+	rule, ok := rules.RememberCall("run_cmd", argsJSON(t, "sh", "-c", "go test ./... && git status"), "")
+	if !ok {
+		t.Fatal("a static compound shell must be persistable")
+	}
+	want := [][]string{{"go", "test"}, {"git", "status"}}
+	if !reflect.DeepEqual(rule.Prefixes, want) {
+		t.Fatalf("prefixes = %v, want %v", rule.Prefixes, want)
+	}
+
+	// A later script combining only remembered subcommands auto-approves.
+	decision, err := rules.RequestApproval(context.Background(), domain.ApprovalRequest{
+		Call: preparedRunCmd(t, "sh", "-c", "git status && go test ./pl/..."),
+	})
+	if err != nil || decision != domain.DecisionAllow || inner.calls != 0 {
+		t.Fatalf("remembered combination = %v err=%v inner=%d, want allow without prompting", decision, err, inner.calls)
+	}
+
+	// One unremembered subcommand keeps the whole script per-call.
+	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{
+		Call: preparedRunCmd(t, "sh", "-c", "go test ./... && make deploy"),
+	})
+	if err != nil || decision != domain.DecisionAsk || inner.calls != 1 {
+		t.Fatalf("partially-remembered script = %v err=%v inner=%d, want delegated ask", decision, err, inner.calls)
+	}
+}
+
 func TestRememberRunCmdRejectsNonPersistable(t *testing.T) {
 	rules := NewRuleApprover(nil, permission.NewSessionRules())
 	for name, raw := range map[string]json.RawMessage{
-		// A compound shell script cannot be unwrapped and stays
-		// unpersistable; a PROVABLY SIMPLE sh -c command is persistable
-		// under its inner program (covered in TestRememberRunCmd).
-		"compound shell": argsJSON(t, "sh", "-c", "echo hi | cat"),
-		"eval":           argsJSON(t, "python3", "-c", "print(1)"),
-		"other tool":     json.RawMessage(`{"path":"x.go"}`),
+		// A DYNAMIC shell script (variables, substitutions) cannot prove
+		// its subcommands and stays unpersistable; a fully static compound
+		// script IS persistable per-subcommand (covered in
+		// TestRememberCompoundShell).
+		"dynamic shell": argsJSON(t, "sh", "-c", "echo hi > $out"),
+		"eval":          argsJSON(t, "python3", "-c", "print(1)"),
+		"other tool":    json.RawMessage(`{"path":"x.go"}`),
 	} {
 		toolName := "run_cmd"
 		if name == "other tool" {
@@ -201,10 +237,14 @@ func TestApprovalRulePreview(t *testing.T) {
 	if !grant.IsZero() {
 		t.Fatalf("grant = %+v, want zero", grant)
 	}
-	// A compound shell script has no preview; a provably simple sh -c
-	// command previews its inner program.
-	if _, _, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "x | y")); ok {
-		t.Fatal("compound shell must not have a rule preview")
+	// A static compound shell previews one prefix per subcommand; a
+	// DYNAMIC script (unprovable argv) has no preview.
+	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "go test ./... && git status"))
+	if !ok || preview != "go test && git status" {
+		t.Fatalf("compound shell preview = %q ok=%v, want 'go test && git status'", preview, ok)
+	}
+	if _, _, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "echo hi > $out")); ok {
+		t.Fatal("dynamic shell must not have a rule preview")
 	}
 	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "ls -la"))
 	if !ok || preview != "ls" {
@@ -270,8 +310,13 @@ func TestRunCmdTrustPreview(t *testing.T) {
 	if RunCmdTrustPreview("run_cmd", argsJSON(t, "make", "build")) {
 		t.Fatal("non-escalated calls must not offer the trust option")
 	}
-	if RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make deploy && echo done"],"sandbox_permissions":"require_escalated"}`)) {
-		t.Fatal("compound shells must not offer the trust option")
+	// A static compound shell offers the trust option (one trusted
+	// prefix per subcommand); a dynamic one does not.
+	if !RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make deploy && echo done"],"sandbox_permissions":"require_escalated"}`)) {
+		t.Fatal("static compound shells must offer the trust option")
+	}
+	if RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make $TARGET"],"sandbox_permissions":"require_escalated"}`)) {
+		t.Fatal("dynamic compound shells must not offer the trust option")
 	}
 	// A simple sh -c script unwraps to its inner program and may offer it.
 	if !RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make deploy"],"sandbox_permissions":"require_escalated"}`)) {
@@ -294,8 +339,8 @@ func TestRememberToolByName(t *testing.T) {
 	if !ok || rule.Tool != "generate_image" || rule.Label != "generate_image" {
 		t.Fatalf("remember = %+v ok=%v, want tool generate_image", rule, ok)
 	}
-	if !rule.Grant.IsZero() || rule.Prefix != nil || rule.Host != "" {
-		t.Fatalf("tool memory must not carry prefix/host/grant: %+v", rule)
+	if !rule.Grant.IsZero() || rule.Prefixes != nil || rule.Host != "" {
+		t.Fatalf("tool memory must not carry prefixes/host/grant: %+v", rule)
 	}
 
 	genCall := domain.PreparedCall{Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "generate_image", Arguments: genArgs}}

@@ -169,9 +169,9 @@ func NewRunCmdToolWithArtifacts(
 	}
 	def := domain.ToolDefinition{
 		Name: "run_cmd",
-		Description: "Execute a program in a sandbox. Always set working_dir explicitly instead of wrapping the command in 'cd ... &&' — it keeps the approval summary accurate. " +
-			"Prefer plain argv form (program + args + env) over shell wrappers: " +
-			"program='sh' with args=['-c','...'] is elevated to R3 approval risk and prompts the user every time, so use it ONLY when pipes, redirection or '&&' are truly required. " +
+		Description: "Execute a program in a sandbox. Always set working_dir explicitly instead of wrapping the command in 'cd ... &&' — it keeps the audit trail accurate. " +
+			"Prefer plain argv form (program + args + env) for single commands; use program='sh' with args=['-c','...'] freely when you need pipes, redirection, '&&' chaining, or glob expansion — " +
+			"both forms run sandboxed WITHOUT user approval; only danger-listed patterns (destructive commands, pipes into a shell, writes to sensitive paths) or sandbox escapes ever prompt. " +
 			"argv is executed directly without a shell: wildcards like '*.go' are passed to the program literally, " +
 			"so glob expansion is a legitimate reason to use the 'sh -c' form (or use the glob tool to find files first). " +
 			"Only 'program' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
@@ -262,20 +262,15 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 	return prepared, nil
 }
 
-// riskForArgs elevates to R3 when the call escapes the default sandbox:
-// shell interpreters (arbitrary command lines) and any require_escalated
-// run (executes outside the sandbox with full user privileges). A shell
-// invocation that provably contains no composition (process.UnwrapSimpleShell)
-// keeps the base risk — it is a plain command wearing a shell costume.
+// riskForArgs elevates to R3 only when the call escapes the default
+// sandbox (require_escalated runs outside it with full user privileges).
+// Shell invocations keep the base risk: the sandbox confines them the
+// same as plain argv, and the permission layer's danger screen analyzes
+// the script AST (per-subcommand screening, pipe-into-shell and
+// sensitive-redirect detection) — composition alone is not a risk.
 func riskForArgs(args runCmdArgs, base domain.RiskLevel) domain.RiskLevel {
 	if args.SandboxPermissions == sandboxRequireEscalated {
 		return domain.R3
-	}
-	if process.IsShellProgram(args.Program) {
-		argv := append([]string{args.Program}, args.Args...)
-		if _, simple := process.UnwrapSimpleShell(argv); !simple {
-			return domain.R3
-		}
 	}
 	return base
 }
@@ -1050,7 +1045,7 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall, root strin
 	parts = append(parts, "cwd="+shellQuote(args.WorkingDir))
 	parts = append(parts, fmt.Sprintf("timeout=%dms", args.TimeoutMs))
 	if process.IsShellProgram(args.Program) {
-		parts = append(parts, "shell=R3")
+		parts = append(parts, "shell=parsed")
 	}
 	if args.SandboxPermissions == sandboxRequireEscalated {
 		parts = append(parts, "network=full")
