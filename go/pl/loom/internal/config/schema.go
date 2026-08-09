@@ -187,10 +187,13 @@ type ManagedPrompt struct {
 }
 
 // Skills configures skill discovery. Enabled is nil-typed so "absent"
-// defaults to true while an explicit false disables.
+// defaults to true while an explicit false disables. Disabled lists skill
+// names to suppress at load time (by name, across every scope): a disabled
+// skill stays on disk but never enters the catalog the model sees.
 type Skills struct {
 	Enabled    *bool    `yaml:"enabled,omitempty"`
 	ExtraRoots []string `yaml:"extra_roots,omitempty"`
+	Disabled   []string `yaml:"disabled,omitempty"`
 }
 
 // Rules configures the declarative permission rule layers. All bools are

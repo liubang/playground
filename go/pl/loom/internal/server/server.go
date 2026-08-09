@@ -247,6 +247,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/config", s.handlePutConfig)
 	mux.HandleFunc("POST /v1/config/reveal", s.handleRevealSecret)
 	mux.HandleFunc("GET /v1/skills", s.handleListSkills)
+	mux.HandleFunc("PUT /v1/skills/{name}/disabled", s.handleSetSkillDisabled)
+	mux.HandleFunc("DELETE /v1/skills", s.handleDeleteSkill)
 	mux.HandleFunc("GET /v1/mcp/servers", s.handleListMCPServers)
 	mux.HandleFunc("POST /v1/mcp/servers/{name}/reconnect", s.handleReconnectMCPServer)
 	mux.HandleFunc("GET /v1/workspaces", s.handleListWorkspaces)

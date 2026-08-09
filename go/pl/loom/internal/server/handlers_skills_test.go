@@ -23,6 +23,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
@@ -176,6 +177,167 @@ func TestListSkillsAggregatesWorkspaces(t *testing.T) {
 	issues, _ := ws["issues"].([]any)
 	if len(issues) != 1 {
 		t.Fatalf("workspace issues = %v, want the broken skill issue", ws["issues"])
+	}
+}
+
+// skillEntry finds one skill in a group of a /v1/skills response.
+func skillEntry(t *testing.T, group map[string]any, name string) map[string]any {
+	t.Helper()
+	for _, s := range group["skills"].([]any) {
+		if sm := s.(map[string]any); sm["name"] == name {
+			return sm
+		}
+	}
+	t.Fatalf("skill %q not in group %v", name, group["skills"])
+	return nil
+}
+
+// TestSetSkillDisabledPersistsAndHotApplies: the toggle endpoint writes the
+// name into the config file's skills.disabled list, hot-applies it (the
+// aggregated listing then marks the skill instead of dropping it), and a
+// second toggle removes it again.
+func TestSetSkillDisabledPersistsAndHotApplies(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeSkillFile(t, filepath.Join(home, ".agents", "skills", "user-skill", "SKILL.md"), "user-skill", "user scope skill")
+
+	// The toggle persists via the config file, which must already hold a
+	// valid configuration (JSON is a YAML subset; reuse the config fixture).
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte(validConfigBody), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	svc := newSkillsTestService(t)
+	srv, err := New(Config{Token: testToken, Version: "test", Service: svc, ConfigPath: cfgPath})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	// Baseline: listed, not disabled.
+	status, body := doJSON(t, ts.Client(), http.MethodGet, ts.URL+"/v1/skills", "")
+	if status != http.StatusOK {
+		t.Fatalf("GET status = %d (%v)", status, body)
+	}
+	entry := skillEntry(t, groupByName(t, body, "用户级（所有工作区共享）"), "user-skill")
+	if entry["disabled"] == true {
+		t.Fatalf("baseline disabled = %v, want absent/false", entry["disabled"])
+	}
+
+	// Disable: persisted to the file and hot-applied.
+	status, resp := doJSON(t, ts.Client(), http.MethodPut, ts.URL+"/v1/skills/user-skill/disabled", `{"disabled": true}`)
+	if status != http.StatusOK {
+		t.Fatalf("PUT status = %d (%v)", status, resp)
+	}
+	if names, _ := resp["disabled"].([]any); len(names) != 1 || names[0] != "user-skill" {
+		t.Fatalf("disabled = %v, want [user-skill]", resp["disabled"])
+	}
+	applied, _ := resp["applied"].(map[string]any)
+	imm, _ := applied["immediate"].([]any)
+	found := false
+	for _, s := range imm {
+		if s == "skills.disabled" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("applied.immediate = %v, want skills.disabled", applied["immediate"])
+	}
+	raw, err := os.ReadFile(cfgPath)
+	if err != nil || !strings.Contains(string(raw), "user-skill") {
+		t.Fatalf("config file = %q, %v; want skills.disabled with user-skill", raw, err)
+	}
+
+	// The listing still shows the skill, marked disabled.
+	status, body = doJSON(t, ts.Client(), http.MethodGet, ts.URL+"/v1/skills", "")
+	if status != http.StatusOK {
+		t.Fatalf("GET status = %d (%v)", status, body)
+	}
+	entry = skillEntry(t, groupByName(t, body, "用户级（所有工作区共享）"), "user-skill")
+	if entry["disabled"] != true {
+		t.Fatalf("disabled = %v, want true", entry)
+	}
+
+	// Re-enable removes the name again.
+	status, resp = doJSON(t, ts.Client(), http.MethodPut, ts.URL+"/v1/skills/user-skill/disabled", `{"disabled": false}`)
+	if status != http.StatusOK {
+		t.Fatalf("PUT status = %d (%v)", status, resp)
+	}
+	if names, _ := resp["disabled"].([]any); len(names) != 0 {
+		t.Fatalf("disabled = %v, want empty", resp["disabled"])
+	}
+	status, body = doJSON(t, ts.Client(), http.MethodGet, ts.URL+"/v1/skills", "")
+	if status != http.StatusOK {
+		t.Fatalf("GET status = %d (%v)", status, body)
+	}
+	entry = skillEntry(t, groupByName(t, body, "用户级（所有工作区共享）"), "user-skill")
+	if entry["disabled"] == true {
+		t.Fatalf("disabled = %v after re-enable, want absent/false", entry["disabled"])
+	}
+}
+
+// TestDeleteSkillRemovesFromDisk: the delete endpoint removes the skill
+// directory — but only for paths the discovery roots would actually load.
+func TestDeleteSkillRemovesFromDisk(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	wsRoot := t.TempDir()
+	skillPath := filepath.Join(wsRoot, ".loom", "skills", "repo-skill", "SKILL.md")
+	writeSkillFile(t, skillPath, "repo-skill", "repo scope skill")
+
+	svc := newSkillsTestService(t)
+	if _, err := svc.RegisterWorkspace(context.Background(), wsRoot, "ws1"); err != nil {
+		t.Fatalf("RegisterWorkspace: %v", err)
+	}
+	srv, err := New(Config{Token: testToken, Version: "test", Service: svc})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	// A loadable SKILL.md outside every discovery root → 404, untouched.
+	outside := filepath.Join(t.TempDir(), "x", "SKILL.md")
+	writeSkillFile(t, outside, "x", "d")
+	status, body := doJSON(t, ts.Client(), http.MethodDelete, ts.URL+"/v1/skills", `{"path": "`+outside+`"}`)
+	if status != http.StatusNotFound || body["error"].(map[string]any)["code"] != "skill_not_found" {
+		t.Fatalf("DELETE outside-root status = %d (%v), want 404 skill_not_found", status, body)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("outside-root skill removed: %v", err)
+	}
+
+	// A path not naming SKILL.md → 400.
+	status, _ = doJSON(t, ts.Client(), http.MethodDelete, ts.URL+"/v1/skills", `{"path": "/etc/hosts"}`)
+	if status != http.StatusBadRequest {
+		t.Fatalf("DELETE non-SKILL.md status = %d, want 400", status)
+	}
+
+	// The real delete: 204 (no body), the directory is gone, and the next
+	// listing no longer shows the skill.
+	req, err := http.NewRequest(http.MethodDelete, ts.URL+"/v1/skills", strings.NewReader(`{"path": "`+skillPath+`"}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	authed(t, req)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE status = %d, want 204", resp.StatusCode)
+	}
+	if _, err := os.Stat(filepath.Dir(skillPath)); !os.IsNotExist(err) {
+		t.Fatalf("skill dir still exists: %v", err)
+	}
+	status, body = doJSON(t, ts.Client(), http.MethodGet, ts.URL+"/v1/skills", "")
+	if status != http.StatusOK {
+		t.Fatalf("GET status = %d (%v)", status, body)
+	}
+	if names := skillNames(t, groupByName(t, body, "ws1")); len(names) != 0 {
+		t.Fatalf("workspace skills = %v after delete, want empty", names)
 	}
 }
 
