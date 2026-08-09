@@ -73,6 +73,11 @@ func TestRenderFullListWithinBudget(t *testing.T) {
 	if !strings.Contains(body, "read_skill") || !strings.Contains(body, "untrusted content") {
 		t.Fatalf("body missing usage instructions or untrusted-content notice:\n%s", body)
 	}
+	// The placeholder convention keeps skillhub-style skills (<work_dir>,
+	// <SKILL_DIR>) resolvable by the model without mechanical substitution.
+	if !strings.Contains(body, "<work_dir>") || !strings.Contains(body, "<SKILL_DIR>") {
+		t.Fatalf("body missing the placeholder convention line:\n%s", body)
+	}
 }
 
 func TestRenderDescriptionRoundRobinTruncation(t *testing.T) {
