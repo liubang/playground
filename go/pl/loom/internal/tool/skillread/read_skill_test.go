@@ -112,6 +112,19 @@ func prepareErr(t *testing.T, tool *ReadSkillTool, args map[string]any) string {
 	return err.Error()
 }
 
+// A missing file inside the skill directory must be named in the error
+// so the model can tell which path was wrong.
+func TestReadSkillMissingPathNamesPath(t *testing.T) {
+	root := t.TempDir()
+	writeSkill(t, root, "pandora", "pandora", "body\n")
+	tool := newTool(t, loadCatalog(t, root))
+
+	msg := prepareErr(t, tool, map[string]any{"name": "pandora", "path": "references/missing.md"})
+	if !strings.Contains(msg, `path does not exist: "references/missing.md"`) {
+		t.Fatalf("error = %q, want the offending path named", msg)
+	}
+}
+
 func TestReadSkillDefinitionRisk(t *testing.T) {
 	tool := newTool(t, &skill.AtomicCatalog{})
 	if got := tool.Definition().Risk(); got != domain.R1 {

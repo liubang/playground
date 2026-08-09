@@ -64,7 +64,8 @@ func NewGitDiffTool(validator *workspacepkg.PathValidator) (*GitDiffTool, error)
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "git_diff",
 		Description: "Read repository diff with bounded output. Default mode: working tree vs index (or the index vs HEAD " +
-			"with staged=true). Set base to a commit/branch ref to diff that ref against the working tree; to " +
+			"with staged=true). Set base to a commit SHA, branch, or tag — optionally with ~N/^N ancestry suffixes " +
+			"(e.g. HEAD~3, abc123^) — to diff that revision against the working tree; to " +
 			"'merge-base:<branch>' to diff from the merge-base of HEAD and the branch — the right base for reviewing " +
 			"everything a feature branch changed (when the branch's upstream is ahead, the upstream's fresher " +
 			"merge-base is used and reported in base_ref); or to 'upstream' to diff against the branch's upstream " +

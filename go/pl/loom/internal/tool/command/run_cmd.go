@@ -579,6 +579,16 @@ func validateCanonicalArgs(
 	return args, resolvedDir, nil
 }
 
+// truncateForErrorMessage bounds user-supplied values echoed into error
+// messages so a pathological argument cannot bloat the transcript.
+func truncateForErrorMessage(s string) string {
+	const max = 256
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
+
 func resolveWorkingDir(
 	validator *workspacepkg.PathValidator,
 	input string,
@@ -599,7 +609,9 @@ func resolveWorkingDir(
 	info, err := os.Stat(absolute)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "working_dir does not exist", domain.WithCause(err))
+			// Echo the offending path so the model can correct course
+			// without guessing which working_dir was rejected.
+			return resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("working_dir does not exist: %q", truncateForErrorMessage(input)), domain.WithCause(err))
 		}
 		return resolvedWorkingDir{}, domain.NewError(domain.ErrUnavailable, "failed to stat working_dir", domain.WithCause(err))
 	}

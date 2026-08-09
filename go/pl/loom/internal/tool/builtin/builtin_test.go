@@ -129,6 +129,29 @@ func TestReadFileToolRejectsSensitiveComponent(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrSecurity)
 }
 
+// Regression: a missing path must be named in the error — with parallel
+// tool calls a bare "path does not exist" leaves the model guessing which
+// call failed (observed in a real session: search on a hallucinated
+// internal/config/example.go).
+func TestResolveExistingPathErrorNamesPath(t *testing.T) {
+	validator, _ := newValidator(t)
+
+	_, err := resolveExistingPath(validator, "internal/config/example.go")
+	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+	if !strings.Contains(err.Error(), `path does not exist: "internal/config/example.go"`) {
+		t.Fatalf("error = %v, want the offending path named", err)
+	}
+
+	// Multi-component so every segment stays under the filename limit and
+	// os.Stat reports ENOENT rather than ENAMETOOLONG.
+	long := strings.Repeat("aaaa/", 60) + "tail.go"
+	_, err = resolveExistingPath(validator, long)
+	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+	if strings.Contains(err.Error(), long) || !strings.Contains(err.Error(), "...") {
+		t.Fatalf("error must truncate pathological paths: %v", err)
+	}
+}
+
 func TestReadFileToolStrictJSONBinaryAndPreparedBinding(t *testing.T) {
 	validator, root := newValidator(t)
 	mustWriteFile(t, filepath.Join(root, "text.txt"), []byte("alpha\nbeta\n"))
