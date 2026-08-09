@@ -220,7 +220,7 @@ func resolveExistingPath(validator *workspacepkg.PathValidator, input string) (p
 			// Echo the offending path: with parallel tool calls the model
 			// otherwise cannot tell which call a bare "path does not exist"
 			// belongs to without correlating call IDs.
-			return pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("path does not exist: %q", truncateForErrorMessage(input)))
+			return pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("path does not exist: %q", domain.TruncateForErrorEcho(input)))
 		}
 		return pathResolution{}, domain.NewError(domain.ErrUnavailable, "failed to stat path", domain.WithCause(err))
 	}
@@ -230,16 +230,6 @@ func resolveExistingPath(validator *workspacepkg.PathValidator, input string) (p
 		Display:  displayPath(rel),
 		Info:     info,
 	}, nil
-}
-
-// truncateForErrorMessage bounds user-supplied values echoed into error
-// messages so a pathological argument cannot bloat the transcript.
-func truncateForErrorMessage(s string) string {
-	const max = 256
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
 }
 
 func displayPath(rel string) string {

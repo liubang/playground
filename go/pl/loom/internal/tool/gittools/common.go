@@ -250,16 +250,6 @@ func sameCapabilities(left, right []domain.Capability) bool {
 	return true
 }
 
-// truncateForErrorMessage bounds user-supplied values echoed into error
-// messages so a pathological argument cannot bloat the transcript.
-func truncateForErrorMessage(s string) string {
-	const max = 256
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
-}
-
 func resolveRepoRoot(validator *workspacepkg.PathValidator, input string) (repoRootResolution, error) {
 	if strings.TrimSpace(input) == "" {
 		// repo_root is optional across git tools: default to the workspace root.
@@ -281,7 +271,7 @@ func resolveRepoRoot(validator *workspacepkg.PathValidator, input string) (repoR
 		if os.IsNotExist(err) {
 			// Echo the offending path so the model can correct course
 			// without guessing which repo_root was rejected.
-			return repoRootResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("repo_root does not exist: %q", truncateForErrorMessage(input)), domain.WithCause(err))
+			return repoRootResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("repo_root does not exist: %q", domain.TruncateForErrorEcho(input)), domain.WithCause(err))
 		}
 		return repoRootResolution{}, domain.NewError(domain.ErrUnavailable, "failed to stat repo_root", domain.WithCause(err))
 	}
