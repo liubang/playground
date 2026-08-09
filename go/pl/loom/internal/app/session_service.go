@@ -86,7 +86,19 @@ type SessionServiceConfig struct {
 	// SubscriberQueue is the per-subscription live-event buffer; a slow
 	// subscriber that fills it is disconnected (and resyncs via cursor).
 	SubscriberQueue int
-	Logger          *slog.Logger
+	// ShareEndpoint, when non-nil, is reconciled on config hot-apply (the
+	// share section changes take effect immediately); nil leaves the
+	// listener lifecycle to the caller alone.
+	ShareEndpoint ShareEndpointController
+	Logger        *slog.Logger
+}
+
+// ShareEndpointController is the process-level LAN share listener
+// (server.ShareManager), abstracted here to keep app free of the
+// transport package. Apply reconciles the listener to the desired
+// state; a start failure is returned but must not fail the hot-apply.
+type ShareEndpointController interface {
+	Apply(enabled bool, listen string) error
 }
 
 // SessionHandle owns one live session: its controller, isolated runtime,
@@ -176,6 +188,7 @@ type SessionService struct {
 	replayCap       int
 	maxActiveTurns  int
 	subscriberQueue int
+	shareEndpoint   ShareEndpointController
 
 	mu       sync.Mutex
 	sessions map[domain.SessionID]*SessionHandle
@@ -210,6 +223,7 @@ func NewSessionService(proc *ProcessRuntime, reg *WorkspaceRegistry, broker *run
 		replayCap:       cfg.ReplayCap,
 		maxActiveTurns:  cfg.MaxActiveTurns,
 		subscriberQueue: cfg.SubscriberQueue,
+		shareEndpoint:   cfg.ShareEndpoint,
 		sessions:        make(map[domain.SessionID]*SessionHandle),
 	}
 	if s.maxSessions <= 0 {

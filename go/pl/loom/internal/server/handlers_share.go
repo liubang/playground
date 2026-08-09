@@ -18,8 +18,13 @@
 package server
 
 import (
+	"errors"
 	"net/http"
+	"os"
 	"regexp"
+
+	"github.com/liubang/playground/go/pl/loom/internal/config"
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
 // shareTokenPattern constrains share tokens to the 128-bit hex shape the
@@ -53,13 +58,83 @@ func (s *Server) handleShareSession(w http.ResponseWriter, r *http.Request) {
 		"token": token,
 		"path":  "/share/" + token,
 	}
-	// When the operator advertised an external base URL (LAN sharing, desktop
-	// app), include the absolute link so clients can hand out a URL that is
-	// reachable beyond this machine (docs/DESKTOP_DESIGN.md §5.2).
-	if s.cfg.PublicBaseURL != "" {
-		resp["url"] = s.cfg.PublicBaseURL + "/share/" + token
+	// When the LAN share listener is up, include the absolute link so
+	// clients can hand out a URL reachable beyond this machine — the
+	// webview talks to the loopback UI, so the base must come from the
+	// live listener, not this server's own address
+	// (docs/DESKTOP_DESIGN.md §5.2).
+	if s.cfg.Share != nil {
+		if base := s.cfg.Share.PublicBase(); base != "" {
+			resp["url"] = base + "/share/" + token
+		}
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleGetShareEndpoint reports the runtime state of the LAN share
+// listener (docs/DESKTOP_DESIGN.md §5). Servers without a ShareManager
+// (`loom serve`, where --listen is the whole story) answer 404 so the
+// frontend hides the toggle.
+func (s *Server) handleGetShareEndpoint(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.cfg.Share.State())
+}
+
+// handleSetShareEndpoint persists the share.enabled preference into the
+// config file and hot-applies it — the same write-through pattern as
+// skills.disabled, so the on/off state never diverges from the file:
+// the listener starts/stops via the hot-apply reconcile, and the next
+// launch sees the same state. The bind address stays config-driven
+// (share.listen is edited in settings, not here).
+func (s *Server) handleSetShareEndpoint(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.ConfigPath == "" {
+		writeError(w, errConfigUnavailable)
+		return
+	}
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := decodeBody(w, r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	// Read-modify-write against the on-disk file; writeAndApplyConfig
+	// re-reads it under the config lock and rejects on revision skew, so
+	// this pre-read only seeds the mutation, never the trust decision.
+	raw, err := os.ReadFile(s.cfg.ConfigPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		writeError(w, err)
+		return
+	}
+	incoming := &config.File{}
+	if raw != nil {
+		incoming, err = config.ParseFile(raw)
+		if err != nil {
+			writeError(w, &statusError{
+				status:  http.StatusInternalServerError,
+				code:    "config_invalid",
+				message: "config file cannot be parsed (fix it by hand): " + err.Error(),
+			})
+			return
+		}
+	}
+	enabled := body.Enabled
+	incoming.Share.Enabled = &enabled
+	revision := ""
+	if raw != nil {
+		revision = config.RevisionOf(raw)
+	}
+	merged, report, err := s.writeAndApplyConfig(r, incoming, revision)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("share.endpoint", domain.SessionID{}, "enabled", body.Enabled)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"revision": config.RevisionOf(merged),
+		"applied":  report,
+		"endpoint": s.cfg.Share.State(),
+	})
 }
 
 // handleRevokeShare deletes the session's share link; existing links stop

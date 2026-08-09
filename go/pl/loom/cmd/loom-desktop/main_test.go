@@ -43,58 +43,6 @@ func TestLastActiveWorkspaceRootNoHistory(t *testing.T) {
 	}
 }
 
-func TestResolveListenPort(t *testing.T) {
-	// Concrete ports pass through untouched.
-	if got, err := resolveListenPort("127.0.0.1:7680"); err != nil || got != "127.0.0.1:7680" {
-		t.Fatalf("concrete port = %q, %v", got, err)
-	}
-	// :0 resolves to a concrete, immediately re-bindable port.
-	got, err := resolveListenPort("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("resolve :0: %v", err)
-	}
-	if strings.HasSuffix(got, ":0") {
-		t.Fatalf("resolve :0 = %q, port still zero", got)
-	}
-	if _, err := resolveListenPort("not-an-addr"); err == nil {
-		t.Fatal("malformed addr: want error")
-	}
-}
-
-func TestDerivePublicBase(t *testing.T) {
-	cases := []struct {
-		name      string
-		advertise string
-		bound     string
-		want      string
-	}{
-		{"explicit advertise wins", "http://example.com:9000", "127.0.0.1:7680", "http://example.com:9000"},
-		{"loopback", "", "127.0.0.1:7680", "http://127.0.0.1:7680"},
-		{"localhost name", "", "localhost:7680", "http://127.0.0.1:7680"},
-		{"specific LAN addr", "", "192.168.1.5:7680", "http://192.168.1.5:7680"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := derivePublicBase(tc.advertise, tc.bound)
-			if err != nil {
-				t.Fatalf("derivePublicBase: %v", err)
-			}
-			if got != tc.want {
-				t.Fatalf("derivePublicBase(%q, %q) = %q, want %q", tc.advertise, tc.bound, got, tc.want)
-			}
-		})
-	}
-	// Unspecified bind: derived from the outbound interface (or an error
-	// when no route exists); never empty-without-error on a routed host.
-	got, err := derivePublicBase("", "0.0.0.0:7680")
-	if err == nil && !strings.HasPrefix(got, "http://") {
-		t.Fatalf("unspecified bind base = %q, want http:// URL", got)
-	}
-	if _, err := derivePublicBase("", "bad"); err == nil {
-		t.Fatal("malformed bound addr: want error")
-	}
-}
-
 // TestBootstrapHandler locks the desktop start page contract
 // (docs/DESKTOP_DESIGN.md §2.3): a meta-refresh redirect to the loopback UI
 // carrying the in-process token in the URL fragment.
