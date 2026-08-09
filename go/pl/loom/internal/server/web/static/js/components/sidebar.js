@@ -101,8 +101,8 @@ export class Sidebar {
     const caret = el("span", "ws-caret");
     caret.innerHTML = icon(collapsed ? "caret-right" : "caret-down");
     node.appendChild(caret);
-    const wsIc = el("span", "ws-icon");
-    wsIc.innerHTML = icon("folder");
+const wsIc = el("span", "ws-icon");
+wsIc.innerHTML = icon(collapsed ? "folder" : "folder-open");
     node.appendChild(wsIc);
     const nameEl = el("span", "ws-name", name);
     if (ws && ws.root_path) nameEl.title = ws.root_path;
@@ -111,7 +111,7 @@ export class Sidebar {
     // 新建入口只在活跃视图显示（归档视图是只读历史）。
     if (!this.archivedView) {
 const newBtn = el("button", "ws-new");
-newBtn.innerHTML = icon("square-plus");
+newBtn.innerHTML = icon("file-document-plus");
 newBtn.type = "button";
 newBtn.title = "在该工作区新建会话";
       newBtn.onclick = (e) => {
