@@ -62,6 +62,7 @@ func TestClassifyConfigChanges(t *testing.T) {
 		{"tracing host", func(c *config.ResolvedConfig) { c.Tracing.Host = "https://lf" }, "", "", "tracing"},
 		{"memory", func(c *config.ResolvedConfig) { c.Memory.MaxJobsPerRun = 4 }, "", "", "memory"},
 		{"skills", func(c *config.ResolvedConfig) { c.Skills.Enabled = true }, "", "", "skills"},
+		{"skills disabled", func(c *config.ResolvedConfig) { c.Skills.Disabled = []string{"x"} }, "skills.disabled", "", ""},
 		{"image", func(c *config.ResolvedConfig) { c.Image.Model = "m" }, "", "", "image"},
 		{"storage", func(c *config.ResolvedConfig) { c.Storage.BaseDir = "/x" }, "", "", "storage"},
 		{"logging", func(c *config.ResolvedConfig) { c.Logging.MaxFileBytes = 1 }, "", "", "logging"},

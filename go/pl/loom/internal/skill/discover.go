@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // Loader discovers skills under the workspace and user skill roots. Load is
@@ -32,6 +33,10 @@ type Loader struct {
 	workspaceRoot string
 	userRoots     []string
 	logger        *slog.Logger
+	// disabled holds the skill names suppressed at load time (config
+	// skills.disabled). It is swappable at runtime so a config hot-apply
+	// takes effect on the next Load without reassembling the loader.
+	disabled atomic.Pointer[map[string]bool]
 }
 
 // NewLoader builds a Loader. Discovery roots are fully injected (the caller
@@ -49,6 +54,28 @@ func NewLoader(workspaceRoot string, userRoots []string, logger *slog.Logger) *L
 	}
 }
 
+// SetDisabled replaces the set of skill names suppressed at load time. It
+// is safe for concurrent use with Load; an empty list clears the set.
+func (l *Loader) SetDisabled(names []string) {
+	if len(names) == 0 {
+		l.disabled.Store(nil)
+		return
+	}
+	m := make(map[string]bool, len(names))
+	for _, name := range names {
+		m[name] = true
+	}
+	l.disabled.Store(&m)
+}
+
+// isDisabled reports whether name is currently suppressed.
+func (l *Loader) isDisabled(name string) bool {
+	if m := l.disabled.Load(); m != nil {
+		return (*m)[name]
+	}
+	return false
+}
+
 type skillRoot struct {
 	path  string
 	scope Scope
@@ -64,8 +91,13 @@ func (l *Loader) roots() []skillRoot {
 			roots = append(roots, skillRoot{path: path, scope: scope})
 		}
 	}
-	add(filepath.Join(l.workspaceRoot, ".loom", "skills"), ScopeRepo)
-	add(filepath.Join(l.workspaceRoot, ".agents", "skills"), ScopeRepo)
+	// An empty workspace root yields exactly the user-scope roots — joining
+	// would produce cwd-relative ".loom/skills" paths, scanning whatever
+	// directory the process happens to run in.
+	if strings.TrimSpace(l.workspaceRoot) != "" {
+		add(filepath.Join(l.workspaceRoot, ".loom", "skills"), ScopeRepo)
+		add(filepath.Join(l.workspaceRoot, ".agents", "skills"), ScopeRepo)
+	}
 	for _, root := range l.userRoots {
 		add(root, ScopeUser)
 	}
@@ -206,5 +238,91 @@ func (l *Loader) loadOne(path string, scope Scope, b *catalogBuilder) {
 		b.fail(path, err.Error())
 		return
 	}
+	// Disabled skills are skipped before conflict resolution, so a
+	// disabled name never records shadowing issues either.
+	if l.isDisabled(skill.Name) {
+		return
+	}
 	b.add(skill)
+}
+
+// Delete removes the on-disk skill whose symlink-resolved SKILL.md path is
+// wantPath, provided the skill lives under one of the loader's discovery
+// roots. It returns false when no discovered skill matches — callers must
+// resolve symlinks on wantPath first (mirroring loadOne), so the match is
+// by real location while the removal targets the directory entry as it
+// appears under the root: deleting a symlinked skill removes only the link,
+// never the target directory. A SKILL.md sitting directly in a root removes
+// just the file; anything nested removes the whole skill directory.
+func (l *Loader) Delete(wantPath string) (bool, error) {
+	for _, root := range l.roots() {
+		info, err := os.Stat(root.path)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		dir := findSkillDir(root.path, wantPath, 0)
+		if dir == "" {
+			continue
+		}
+		if dir == root.path {
+			if err := os.Remove(filepath.Join(dir, FileName)); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+		// os.RemoveAll on a symlink removes the link itself, so a skill
+		// linked into the root (ln -s ~/dotfiles/x …) is unlinked, and a
+		// real directory is removed with all its supporting files.
+		if err := os.RemoveAll(dir); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// findSkillDir mirrors scanRoot's walk (hidden dirs skipped, symlinks
+// followed, same depth cap) and returns the directory containing the
+// SKILL.md that resolves to wantPath, or "" when absent. The returned
+// path is the directory entry as walked — a symlinked skill yields the
+// symlink path, not its target.
+func findSkillDir(dir, wantPath string, depth int) string {
+	if depth > MaxScanDepth {
+		return ""
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		full := filepath.Join(dir, name)
+		info, err := os.Stat(full)
+		if err != nil {
+			continue
+		}
+		if info.IsDir() {
+			if strings.HasPrefix(name, ".") {
+				continue
+			}
+			if found := findSkillDir(full, wantPath, depth+1); found != "" {
+				return found
+			}
+			continue
+		}
+		if name != FileName || !info.Mode().IsRegular() {
+			continue
+		}
+		resolved, err := filepath.EvalSymlinks(full)
+		if err != nil {
+			continue
+		}
+		if abs, err := filepath.Abs(resolved); err == nil {
+			resolved = abs
+		}
+		if resolved == wantPath {
+			return dir
+		}
+	}
+	return ""
 }

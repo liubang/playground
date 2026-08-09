@@ -42,6 +42,7 @@ go_library(
         "//go/pl/loom/internal/mcp:mcp_lib",
         "//go/pl/loom/internal/runtimeevent:runtimeevent",
         "//go/pl/loom/internal/server/web",
+        "//go/pl/loom/internal/skill:skill_lib",
         "@org_golang_x_sys//unix",
     ],
 )

@@ -285,6 +285,10 @@ type ResolvedSubagent struct {
 type ResolvedSkills struct {
 	Enabled    bool
 	ExtraRoots []string
+	// Disabled carries the configured skill names to suppress at load
+	// time. It is hot-applied to every assembled workspace loader, unlike
+	// Enabled/ExtraRoots which are frozen at assembly.
+	Disabled []string
 }
 
 // ResolvedRules is the rules section with defaults applied. The zero-value
@@ -443,6 +447,7 @@ func resolve(f *File, lookup EnvLookup) (*ResolvedConfig, error) {
 		Skills: ResolvedSkills{
 			Enabled:    f.Skills.Enabled == nil || *f.Skills.Enabled,
 			ExtraRoots: f.Skills.ExtraRoots,
+			Disabled:   f.Skills.Disabled,
 		},
 		Rules:    resolveRules(f.Rules),
 		Approval: approval,
