@@ -292,7 +292,7 @@ connect(afterSeq):
 
 ### 4.5 Diff 视图
 
-unified diff 字符串有三个来源：`approval.requested.payload.diff`（审批决策用）、**`tool.prepared.payload.diff`**（edit 类工具建块时挂载，展开可见；`tool.completed` 只携带 `preview` 有界输出摘要，不含 diff），以及 **snapshot 历史重建时由 `diff.js` 的 `diffForToolCall` 从 tool_call 参数本地重算**（diff 不落盘；write=纯新增免 LCS，edit 双侧 LCS 上限 400 行/侧，与 render/diff.go 同算法）。web 端 diff 不截断（`domain.ToolDiffUnbounded`；TUI 仍按 `ToolDiffMaxLines` 收敛）：超过 30 行的 diff 折叠为 details（summary 显示文件名与 `N lines · +a −d` 统计），展开即完整内容。`diff.js` 解析为 `{file?, hunks: [{lines: [{type: add|del|ctx, text}]}]}`，渲染为表格行：`+` 行绿底（`--success` 10% 透明度）、`-` 行红底、上下文行默认；行首显示 +/- 符号；行内代码按文件扩展名做 highlight.js 语法高亮（经 `sanitizeHtml` 白名单）。MVP 不渲染行内字符级 diff 高亮（留后续）。
+unified diff 字符串有两个来源：**`tool.prepared.payload.diff`**（edit 类工具建块时挂载，展开可见；审批卡片直接移用工具块上已渲染的 diff 节点、收编后移回，`approval.requested` 不再重复传输；`tool.completed` 只携带 `preview` 有界输出摘要，不含 diff），以及 **snapshot 历史重建时由 `diff.js` 的 `diffForToolCall` 从 tool_call 参数本地重算**（diff 不落盘；write=纯新增免 LCS，edit 双侧 LCS 上限 400 行/侧，与 render/diff.go 同算法）。web 端 diff 不截断（`domain.ToolDiffUnbounded`；TUI 仍按 `ToolDiffMaxLines` 收敛）：超过 30 行的 diff 折叠为 details（summary 显示文件名与 `N lines · +a −d` 统计），展开即完整内容。`diff.js` 解析为 `{file?, hunks: [{lines: [{type: add|del|ctx, text}]}]}`，渲染为表格行：`+` 行绿底（`--success` 10% 透明度）、`-` 行红底、上下文行默认；行首显示 +/- 符号；行内代码按文件扩展名做 highlight.js 语法高亮（经 `sanitizeHtml` 白名单）。MVP 不渲染行内字符级 diff 高亮（留后续）。
 
 ### 4.6 会话列表与实时徽标
 

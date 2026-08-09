@@ -222,9 +222,9 @@ type ApprovalRequestedPayload struct {
 	ArgsHash    string            `json:"args_hash"`
 	ReadPaths   []string          `json:"read_paths,omitempty"`
 	WritePaths  []string          `json:"write_paths,omitempty"`
-	// Diff is a compact line diff for file-editing calls, rendered in the
-	// approval overlay to support the allow/deny decision.
-	Diff string `json:"diff,omitempty"`
+	// The argument diff is NOT part of this payload: it already travels
+	// with tool.prepared (single source), and frontends render it on the
+	// tool block. Duplicating it here sent the same diff twice per call.
 	// Arguments carries the raw call arguments so an "allow always" decision
 	// can derive a categorical approval rule. It is display-safe (the
 	// approval description already shows the same information).

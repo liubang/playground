@@ -74,6 +74,37 @@ func TestApprovalRequestedSetsTargetFromPaths(t *testing.T) {
 	}
 }
 
+// The diff travels with tool.prepared only; the approval event replaces the
+// prepared block (same ID) and must carry the diff over so the block keeps
+// showing it while the overlay is up.
+func TestApprovalRequestedPreservesPreparedDiff(t *testing.T) {
+	idx := NewBlockIndex()
+	callID := domain.NewToolCallID()
+	ApplyRuntimeEvent(idx, toolEvent(t, runtimeevent.KindToolPrepared, runtimeevent.ToolPreparedPayload{
+		CallID:   callID,
+		ToolName: "edit",
+		Risk:     domain.R2,
+		Target:   "a.go",
+		Diff:     "- old\n+ new",
+	}))
+	ApplyRuntimeEvent(idx, toolEvent(t, runtimeevent.KindApprovalRequested, runtimeevent.ApprovalRequestedPayload{
+		ApprovalID: domain.NewEventID(),
+		CallID:     callID,
+		ToolName:   "edit",
+		Risk:       domain.R2,
+	}))
+	block, ok := idx.Get("tool-" + callID.String())
+	if !ok {
+		t.Fatal("approval block missing")
+	}
+	if block.Diff != "- old\n+ new" {
+		t.Fatalf("Diff = %q, want carried over from tool.prepared", block.Diff)
+	}
+	if block.Status != "approval" {
+		t.Fatalf("Status = %q, want approval", block.Status)
+	}
+}
+
 func TestToolCompletedSetsPreviewAndDetail(t *testing.T) {
 	idx := NewBlockIndex()
 	callID := domain.NewToolCallID()
