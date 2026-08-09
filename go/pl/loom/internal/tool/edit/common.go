@@ -197,16 +197,6 @@ func sameCapabilities(left, right []domain.Capability) bool {
 	return true
 }
 
-// truncateForErrorMessage bounds user-supplied values echoed into error
-// messages so a pathological argument cannot bloat the transcript.
-func truncateForErrorMessage(s string) string {
-	const max = 256
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
-}
-
 func resolveWritePath(validator *workspacepkg.PathValidator, input string) (workspacepkg.ResolvedPath, error) {
 	if strings.TrimSpace(input) == "" {
 		return workspacepkg.ResolvedPath{}, domain.NewError(domain.ErrInvalidInput, "path is required")
@@ -231,7 +221,7 @@ func ensureExistingTextFile(validator *workspacepkg.PathValidator, input string)
 			// Echo the offending path: with parallel tool calls the model
 			// otherwise cannot tell which call a bare "path does not exist"
 			// belongs to without correlating call IDs.
-			return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("path does not exist: %q", truncateForErrorMessage(input)), domain.WithCause(err))
+			return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("path does not exist: %q", domain.TruncateForErrorEcho(input)), domain.WithCause(err))
 		}
 		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrSecurity, "path is not a writable regular file", domain.WithCause(err))
 	}

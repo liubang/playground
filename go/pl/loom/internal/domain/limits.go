@@ -35,6 +35,21 @@ const (
 	ToolDiffUnbounded = 0
 )
 
+// ToolErrorEchoMaxBytes bounds user-supplied values echoed into tool
+// error messages, so a pathological argument cannot bloat the transcript.
+const ToolErrorEchoMaxBytes = 256
+
+// TruncateForErrorEcho bounds a user-supplied value echoed into a tool
+// error message: rune-safe truncation to ToolErrorEchoMaxBytes plus an
+// ellipsis marker when truncated. Single home for what used to be a
+// per-tool-package copy (truncateForErrorMessage).
+func TruncateForErrorEcho(s string) string {
+	if len(s) <= ToolErrorEchoMaxBytes {
+		return s
+	}
+	return TruncateAtRuneBoundary(s, ToolErrorEchoMaxBytes) + "..."
+}
+
 // TruncateAtRuneBoundary returns the longest prefix of s within maxBytes
 // that does not split a multi-byte UTF-8 character. Shared by every layer
 // that bounds display text (REVIEW R8).
