@@ -166,9 +166,17 @@ connect(afterSeq):
   连接断开（非 draining）→ 指数退避重连：1s, 2s, 4s … 封顶 15s，jitter ±25%
   重连时用 Last-Event-ID 语义：URL after=<最后收到的 seq>
   收到 409 cursor_invalid / server.resync → 全量 resync（snapshot → 新 cursor）
-  收到 server.draining → 停止重连，conn=draining
-  429 rate_limited（单会话 >8 条 SSE 流）→ 提示「该会话已在太多标签页中打开」，不重连
+  收到 server.draining → 停止 SSE 重连，conn=draining + 横幅；同时每 10s
+    轮询 /v1/meta/version 探活，服务以新实例回归即自动 resync 恢复
+  429 rate_limited（单会话 >8 条 SSE 流）→ conn=dead + 横幅提示（附手动重试），
+    同时挂 30s 慢速自动重试（别处标签页关闭后自愈）
+  连续重连失败达到阈值（attempt ≥5，约 15s+）→ 顶部 banner 强提示 + 手动重试
+    （重试走 resync：snapshot 重建 + 重挂流）；live 后 banner 自动收起
   页面隐藏（visibilitychange）不断连；仅侧栏轮询暂停（§4.6）
+  页面恢复可见 / pageshow / focus / online → ensureLive() 主动探活：
+    看门狗的 setInterval 随页面一起被系统挂起（App Nap / 窗口遮挡 / BFCache），
+    冻结期间连接悄死无定时器能发现，必须由页面事件戳醒；退避等待中立即重连，
+    连接在但超 45s 无帧则杀掉重连，否则 no-op
 ```
 
 **REST 通用行为**（api.js 统一处理）：
@@ -340,7 +348,7 @@ unified diff 字符串有两个来源：**`tool.prepared.payload.diff`**（edit 
 | `runtime.warning` / `runtime.fatal` | 黄色 notice / 红色错误块 | ✱ |
 | `session.opened` / `session.closed` | 侧栏徽标（合并流时） | ○ |
 
-服务端事件（非 runtime event）：`server.resync` → 全量重建；`server.draining` → 停止重连 + 横幅；instance 首帧变化 → 等同 resync。
+服务端事件（非 runtime event）：`server.resync` → 全量重建；`server.draining` → 停止 SSE 重连 + 横幅 + 慢速探活自愈（§3.4）；instance 首帧变化 → 等同 resync。
 
 ---
 
