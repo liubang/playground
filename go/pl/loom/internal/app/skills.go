@@ -53,9 +53,9 @@ type SkillsHandle struct {
 // prompt is disabled — a read_skill tool without a visible catalog would
 // only mislead the model.
 //
-// loomSkillsDir is the user-scope root under the storage base_dir; the
+// loomSkillsDir is the user-scope root under the loom home; the
 // cross-tool ~/.agents/skills convention (anchored to $HOME, not the
-// base_dir) and cfg.ExtraRoots complete the user-scope roots.
+// loom home) and cfg.ExtraRoots complete the user-scope roots.
 func WireSkills(
 	registry *agent.ToolRegistry,
 	workspaceRoot string,
@@ -86,8 +86,8 @@ func WireSkills(
 }
 
 // skillUserRoots derives the user-scope discovery roots: the loom skills
-// dir under the storage base_dir, the cross-tool ~/.agents/skills
-// convention (anchored to $HOME, not the base_dir), and the configured
+// dir under the loom home, the cross-tool ~/.agents/skills
+// convention (anchored to $HOME, not the loom home), and the configured
 // extra roots. Shared by WireSkills and the aggregated skills listing so
 // both see the same user scope.
 func skillUserRoots(cfg config.ResolvedSkills, loomSkillsDir string) []string {

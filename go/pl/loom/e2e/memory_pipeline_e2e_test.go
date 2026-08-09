@@ -58,20 +58,26 @@ func TestMemoryPipelineRealModelE2E(t *testing.T) {
 		}
 		configPath = filepath.Join(home, ".loom", "config.yaml")
 	}
-	if _, err := os.Stat(configPath); err != nil {
+	configRaw, err := os.ReadFile(configPath)
+	if err != nil {
 		t.Skipf("loom config not found at %s", configPath)
 	}
-	resolved, err := config.Load(configPath, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
+
+	// Isolate all writable state in a temp dir: loading a config copy
+	// from tmp makes tmp the derived loom home (the config file's
+	// directory), so the user's session store is never touched.
+	tmp := t.TempDir()
+	isolatedConfig := filepath.Join(tmp, "config.yaml")
+	if err := os.WriteFile(isolatedConfig, configRaw, 0o600); err != nil {
+		t.Fatalf("write isolated config: %v", err)
+	}
+	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
 	if err != nil {
 		t.Skipf("load loom config: %v", err)
 	}
 	if !resolved.Memory.Enabled {
 		t.Skip("memory system is disabled in the loaded config")
 	}
-
-	// Isolate all writable state in a temp dir.
-	tmp := t.TempDir()
-	resolved.Storage.BaseDir = tmp
 	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

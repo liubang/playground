@@ -36,8 +36,8 @@
 //     silently applies.
 //   - When several rules match, the strictest decision wins:
 //     deny > ask > allow.
-//   - Layers are merged: the user dir (<base_dir>/rules, passed in by the
-//     caller) plus, optionally, the project dir (<workspace>/.loom/rules).
+//   - Layers are merged: the user dir (<loom home>/rules, passed in by
+//     the caller) plus, optionally, the project dir (<workspace>/.loom/rules).
 //     Because a checked-out
 //     repository is not fully trusted, project-layer "allow" rules are
 //     ignored unless explicitly enabled (rules.project_allow) — untrusted
@@ -302,8 +302,8 @@ func (s *RuleSet) Size() int {
 
 // RulesDirProject is the project-layer rules directory for a workspace.
 // (The user-layer directory is not computed here: it derives from the
-// configured storage base_dir — config.ResolvedStorage.RulesDir — and is
-// passed in by the caller.)
+// loom home — config.ResolvedStorage.RulesDir — and is passed in by
+// the caller.)
 func RulesDirProject(workspaceRoot string) string {
 	return filepath.Join(workspaceRoot, ".loom", "rules")
 }

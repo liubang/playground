@@ -196,7 +196,7 @@ func loadConfig(requireProviders bool, logger *slog.Logger) (*config.ResolvedCon
 }
 
 // newFileLogger builds loom's unified file logger: glog-style records in
-// <base_dir>/logs/loom.YYYY-MM-DD.log, rotated at local midnight. Both
+// <loom home>/logs/loom.YYYY-MM-DD.log, rotated at local midnight. Both
 // the TUI and serve modes share it (the TUI previously discarded all
 // logs). fallback applies when the log directory cannot be opened — the
 // TUI passes a discard logger, serve passes a stderr glog handler.
@@ -335,7 +335,7 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	if err := prepareStorage(resolved, true); err != nil {
 		return err
 	}
-	// 统一文件日志（<base_dir>/logs/loom.YYYY-MM-DD.log，glog 风格）；TUI 占屏，
+	// 统一文件日志（<loom home>/logs/loom.YYYY-MM-DD.log，glog 风格）；TUI 占屏，
 	// 打不开日志目录时静默降级为丢弃，绝不影响交互。
 	logger := newFileLogger(resolved, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	proc, registry, bootstrap, err := assembleRuntime(ctx, resolved, root, logger)

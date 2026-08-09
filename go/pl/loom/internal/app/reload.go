@@ -143,9 +143,8 @@ func classifyConfigChanges(prev, next *config.ResolvedConfig) ConfigApplyReport 
 	if !reflect.DeepEqual(prev.Image, next.Image) {
 		r.Restart = append(r.Restart, "image")
 	}
-	if prev.Storage != next.Storage {
-		r.Restart = append(r.Restart, "storage")
-	}
+	// Storage is not diffed: the loom home derives from the config file
+	// location (fixed per process), so it can never change via hot-apply.
 	if prev.Logging != next.Logging {
 		r.Restart = append(r.Restart, "logging")
 	}

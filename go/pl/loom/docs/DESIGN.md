@@ -1118,7 +1118,7 @@ Loom 的全部运行时配置经环境变量注入（无配置文件），按用
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `LOOM_SESSION_DB` | 已废弃（配置字段 `storage.base_dir`） | 数据根目录（默认 `~/.loom`）；SQLite 会话库固定为 `<base_dir>/sessions/sessions.db`，artifact 与 prompt 缓存目录随其同级派生 |
+| `LOOM_SESSION_DB` | 已废弃（数据根目录即配置文件所在目录） | loom home（默认 `~/.loom`）；SQLite 会话库固定为 `<loom home>/sessions/sessions.db`，artifact 与 prompt 缓存目录随其同级派生 |
 | `XDG_STATE_HOME` | 不再影响 loom | 旧版平台状态目录推导已废弃；所有数据统一位于 `~/.loom/` |
 
 ### 36.3 系统提示词
