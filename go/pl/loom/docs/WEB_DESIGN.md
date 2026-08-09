@@ -166,6 +166,8 @@ connect(afterSeq):
   连接断开（非 draining）→ 指数退避重连：1s, 2s, 4s … 封顶 15s，jitter ±25%
   重连时用 Last-Event-ID 语义：URL after=<最后收到的 seq>
   收到 409 cursor_invalid / server.resync → 全量 resync（snapshot → 新 cursor）
+  404（会话在本进程不 live，如服务重启后）→ 走 resync（snapshot 404 → resume
+    → 重挂流）；普通失败退避在此会形成死等，因为 404 时无任何帧可发
   收到 server.draining → 停止 SSE 重连，conn=draining + 横幅；同时每 10s
     轮询 /v1/meta/version 探活，服务以新实例回归即自动 resync 恢复
   429 rate_limited（单会话 >8 条 SSE 流）→ conn=dead + 横幅提示（附手动重试），
