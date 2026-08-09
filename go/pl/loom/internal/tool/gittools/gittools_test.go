@@ -475,6 +475,16 @@ func TestGitToolsDefaultRepoRootAndLimit(t *testing.T) {
 	}
 }
 
+// A missing repo_root must be named in the error so the model can
+// correct course without guessing.
+func TestResolveRepoRootErrorNamesPath(t *testing.T) {
+	validator, _, _ := newGitValidator(t)
+	_, err := resolveRepoRoot(validator, "no/such/repo")
+	if err == nil || !strings.Contains(err.Error(), `repo_root does not exist: "no/such/repo"`) {
+		t.Fatalf("error = %v, want the offending path named", err)
+	}
+}
+
 func newGitValidator(t *testing.T) (*workspacepkg.PathValidator, string, string) {
 	t.Helper()
 	workspaceRoot := filepath.Join(t.TempDir(), "workspace")
@@ -781,6 +791,110 @@ func TestValidateGitRefRejectsDangerousInput(t *testing.T) {
 				t.Fatalf("validateGitRef(%q) expected error, got nil", tt.ref)
 			}
 		})
+	}
+}
+
+func TestValidateGitRevisionAcceptsAncestryOperators(t *testing.T) {
+	tests := []struct {
+		name string
+		rev  string
+		ok   bool
+	}{
+		{"plain branch", "feature/foo", true},
+		{"remote ref", "origin/main", true},
+		{"full sha", "afd9cebedeceab9f4492b48a41002400f140101e", true},
+		{"head tilde", "HEAD~3", true},
+		{"short sha tilde", "3f9a8d4f9~1", true},
+		{"bare tilde", "HEAD~", true},
+		{"head caret", "HEAD^", true},
+		{"caret with digits", "abc123^2", true},
+		{"chained ancestry", "feature/foo~2^1", true},
+		{"tag peel", "v1.0^0", true},
+		{"leading dash", "-e", false},
+		{"double dot range", "main..feature", false},
+		{"triple dot range", "main...feature", false},
+		{"shell metachar", "foo;rm", false},
+		{"leading tilde", "~1", false},
+		{"upstream brace syntax", "@{upstream}", false},
+		{"rev-parse peel syntax", "HEAD^{commit}", false},
+		{"reflog syntax", "HEAD@{2}", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateGitRevision(tt.rev)
+			if tt.ok && err != nil {
+				t.Fatalf("validateGitRevision(%q) unexpected error: %v", tt.rev, err)
+			}
+			if !tt.ok && err == nil {
+				t.Fatalf("validateGitRevision(%q) expected error, got nil", tt.rev)
+			}
+		})
+	}
+}
+
+func TestGitDiffWithAncestryBaseRef(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("original\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "initial")
+
+	initialSHA := strings.TrimSpace(gitOutput(t, repoRoot, "rev-parse", "HEAD"))
+
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("original\nsecond\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "second")
+
+	// Uncommitted working-tree change on top of the second commit.
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("original\nsecond\nmodified\n"))
+
+	tool, err := NewGitDiffTool(validator)
+	if err != nil {
+		t.Fatalf("NewGitDiffTool() error = %v", err)
+	}
+
+	// HEAD~1 diffs the working tree against the initial commit: both the
+	// committed "second" line and the uncommitted "modified" line show up.
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_diff", gitDiffArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+		Base:     "HEAD~1",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() with ancestry base error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output gitDiffOutput
+	decodeToolResult(t, result, &output)
+	if output.Base != "HEAD~1" {
+		t.Fatalf("output.Base = %q, want HEAD~1", output.Base)
+	}
+	if !strings.Contains(output.Diff, "+second") || !strings.Contains(output.Diff, "+modified") {
+		t.Fatalf("diff with base=HEAD~1 should contain '+second' and '+modified', got:\n%s", output.Diff)
+	}
+
+	// A short SHA with an ancestry suffix — the exact shape that failed
+	// before revision syntax was accepted — resolves to the same base.
+	shortBase := initialSHA[:9] + "~0"
+	prepared, err = tool.Prepare(context.Background(), newToolCall(t, "git_diff", gitDiffArgs{
+		RepoRoot: filepath.Join(workspaceRoot, "repo"),
+		Base:     shortBase,
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() with short-sha ancestry base error = %v", err)
+	}
+	result = tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	decodeToolResult(t, result, &output)
+	if !strings.Contains(output.Diff, "+second") || !strings.Contains(output.Diff, "+modified") {
+		t.Fatalf("diff with base=%q should contain '+second' and '+modified', got:\n%s", shortBase, output.Diff)
 	}
 }
 

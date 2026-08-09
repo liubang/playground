@@ -25,6 +25,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -250,6 +251,16 @@ func TestEditToolDetectsExternalModificationViaBook(t *testing.T) {
 	result := tool.Execute(context.Background(), prepared2)
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Execute() status = %s, want success after re-read: %+v", result.Status, result.Error)
+	}
+}
+
+// A missing path must be named in the error so the model can tell which
+// of several parallel calls failed.
+func TestEnsureExistingTextFileErrorNamesPath(t *testing.T) {
+	validator, _ := newValidator(t)
+	_, _, _, err := ensureExistingTextFile(validator, "internal/config/example.go")
+	if err == nil || !strings.Contains(err.Error(), `path does not exist: "internal/config/example.go"`) {
+		t.Fatalf("error = %v, want the offending path named", err)
 	}
 }
 

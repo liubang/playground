@@ -35,6 +35,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
+	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
 
 // TestServeRealModelE2E is the M1' acceptance suite against a REAL LLM
@@ -272,6 +273,168 @@ func TestServeRealModelE2E(t *testing.T) {
 	t.Logf("resume ok: %d turns, transcript intact", snap2.TurnCount)
 
 	t.Log("ACCEPTANCE PASS: real-model serve-path e2e complete")
+}
+
+// TestServeRealModelPrepareFailureE2E is the real-model acceptance for the
+// prepare-failure diagnosability work:
+//  1. the model-facing error for a nonexistent search path NAMES the path,
+//     so a parallel-call failure is attributable without call-ID forensics;
+//  2. the degraded tool.call_prepared event persists a sanitized
+//     args_summary (whitelisted keys only), so the failing input is
+//     diagnosable from the event log alone.
+//
+// Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
+func TestServeRealModelPrepareFailureE2E(t *testing.T) {
+	if os.Getenv("LOOM_E2E_LLM") != "1" {
+		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
+	}
+
+	ctx := context.Background()
+	configPath := os.Getenv("LOOM_CONFIG")
+	if configPath == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Skipf("no home dir: %v", err)
+		}
+		configPath = filepath.Join(home, ".loom", "config.yaml")
+	}
+	configRaw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Skipf("loom config not found at %s", configPath)
+	}
+
+	// Same isolation trick as TestServeRealModelE2E: the config copy in tmp
+	// derives tmp as the loom home, so the user's stores stay untouched.
+	tmp := t.TempDir()
+	isolatedConfig := filepath.Join(tmp, "config.yaml")
+	if err := os.WriteFile(isolatedConfig, configRaw, 0o600); err != nil {
+		t.Fatalf("write isolated config: %v", err)
+	}
+	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
+	if err != nil {
+		t.Skipf("load loom config: %v", err)
+	}
+	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	workspace := filepath.Join(tmp, "ws")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir ws: %v", err)
+	}
+
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(tmp, "artifacts"),
+		Version:     "e2e",
+		Logger:      discard,
+	})
+	if err != nil {
+		t.Fatalf("NewProcessRuntime: %v", err)
+	}
+	defer proc.Close()
+	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{
+		WorkspaceRoot: workspace,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkspaceBootstrap: %v", err)
+	}
+	defer bootstrap.Close()
+
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
+	defer broker.Close()
+	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		_ = svc.Shutdown(shutdownCtx)
+	}()
+
+	c := client.NewInProc(svc)
+	if err := c.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	sessionID := c.SessionID()
+
+	eventsCtx, stopEvents := context.WithCancel(ctx)
+	defer stopEvents()
+	events, err := c.SubscribeEvents(eventsCtx, 0)
+	if err != nil {
+		t.Fatalf("SubscribeEvents: %v", err)
+	}
+	collector := &eventCollector{client: c, ch: events}
+	go collector.run()
+
+	// The path is deliberately absent from the workspace; the prompt pins
+	// the exact argument values so the failing call is deterministic.
+	const missingPath = "internal/config/example.go"
+	prompt := "调用一次 search 工具，参数原样使用：path 填 \"internal/config/example.go\"，pattern 填 \"storage\"。" +
+		"不要先确认文件是否存在，不要更换路径，不要调用其他工具，原样发出这一次工具调用。" +
+		"收到工具结果后，把工具返回的错误消息原文复述给我。"
+	turns := collector.turnsDone()
+	if _, err := c.SubmitPrompt(ctx, prompt, nil); err != nil {
+		t.Fatalf("SubmitPrompt: %v", err)
+	}
+	collector.waitTurn(t, turns+1, 3*time.Minute)
+
+	// 1. The model-visible tool error must name the offending path.
+	snap, err := c.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	var toolErrText string
+	for _, msg := range snap.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind == domain.PartToolResult && part.ToolResult != nil && part.ToolResult.Error != nil {
+				toolErrText += part.ToolResult.Error.Message + "\n"
+			}
+		}
+	}
+	wantErr := `path does not exist: "` + missingPath + `"`
+	if !strings.Contains(toolErrText, wantErr) {
+		t.Fatalf("tool error = %q, want it to contain %q", toolErrText, wantErr)
+	}
+	t.Logf("model-visible error names the path: %q", strings.TrimSpace(toolErrText))
+
+	// 2. The durable degraded prepared event must carry args_summary.
+	store, err := sessionStoreReadOnly(ctx, resolved)
+	if err != nil {
+		t.Fatalf("open session store: %v", err)
+	}
+	defer store.Close()
+	persisted, err := store.LoadEvents(ctx, sessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	var degraded [][]byte
+	for _, evt := range persisted {
+		if evt.Type == domain.EventToolCallPrepared && strings.Contains(string(evt.Payload), `"prepare_failed":true`) {
+			degraded = append(degraded, evt.Payload)
+		}
+	}
+	if len(degraded) == 0 {
+		t.Fatal("no degraded tool.call_prepared event persisted")
+	}
+	var summaryFound bool
+	for _, p := range degraded {
+		if strings.Contains(string(p), `"args_summary"`) && strings.Contains(string(p), missingPath) {
+			summaryFound = true
+		}
+		if strings.Contains(string(p), `"content"`) {
+			t.Fatalf("non-whitelisted argument leaked into the durable payload: %s", p)
+		}
+	}
+	if !summaryFound {
+		t.Fatalf("no degraded payload carries args_summary with the failing path: %s", degraded)
+	}
+	t.Logf("durable args_summary verified across %d degraded event(s)", len(degraded))
+
+	t.Log("ACCEPTANCE PASS: prepare failure names the path and persists a sanitized args_summary")
+}
+
+// sessionStoreReadOnly opens the isolated session store for post-turn
+// inspection of the durable event log.
+func sessionStoreReadOnly(ctx context.Context, cfg *config.ResolvedConfig) (*session.SQLiteStore, error) {
+	return session.OpenSQLiteStoreReadOnly(ctx, cfg.Storage.SessionDBPath())
 }
 
 // eventCollector drains a subscription and auto-resolves any

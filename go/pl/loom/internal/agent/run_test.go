@@ -3852,6 +3852,74 @@ func TestActionablePrepareErrorGuidesWorkspaceEscape(t *testing.T) {
 	}
 }
 
+func TestPrepareFailureArgsSummary(t *testing.T) {
+	t.Run("invalid JSON yields nil", func(t *testing.T) {
+		if got := prepareFailureArgsSummary(json.RawMessage(`{bad`)); got != nil {
+			t.Fatalf("got %v, want nil", got)
+		}
+	})
+	t.Run("no whitelisted keys yields nil", func(t *testing.T) {
+		if got := prepareFailureArgsSummary(json.RawMessage(`{"content":"x","limit":1}`)); got != nil {
+			t.Fatalf("got %v, want nil", got)
+		}
+	})
+	t.Run("whitelisted strings extracted, rest dropped", func(t *testing.T) {
+		got := prepareFailureArgsSummary(json.RawMessage(
+			`{"path":"go/pl/loom/internal/config/example.go","pattern":"storage","content":"secret-body","env":{"K":"V"},"limit":50}`))
+		if got["path"] != "go/pl/loom/internal/config/example.go" || got["pattern"] != "storage" {
+			t.Fatalf("whitelisted keys missing: %v", got)
+		}
+		for _, key := range []string{"content", "env", "limit"} {
+			if _, ok := got[key]; ok {
+				t.Fatalf("key %q must not be persisted: %v", key, got)
+			}
+		}
+	})
+	t.Run("non-string whitelisted values skipped", func(t *testing.T) {
+		got := prepareFailureArgsSummary(json.RawMessage(`{"path":42,"type":["go"]}`))
+		if got != nil {
+			t.Fatalf("got %v, want nil", got)
+		}
+	})
+	t.Run("long values truncated", func(t *testing.T) {
+		long := strings.Repeat("a", 300)
+		got := prepareFailureArgsSummary(json.RawMessage(`{"path":"` + long + `"}`))
+		if len(got["path"]) != 203 || !strings.HasSuffix(got["path"], "...") {
+			t.Fatalf("value not truncated to 200+marker: %q", got["path"])
+		}
+	})
+}
+
+func TestAppendPrepareFailureEventsIncludesArgsSummary(t *testing.T) {
+	run := NewRun(domain.NewSessionID(), domain.Limits{}, domain.RealClock{})
+	loop := &Loop{Run: run}
+	tc := domain.ToolCall{
+		ID:   domain.NewToolCallID(),
+		Name: "search",
+		Arguments: json.RawMessage(
+			`{"path":"go/pl/loom/internal/config/example.go","pattern":"storage","content":"secret-body"}`),
+	}
+	loop.appendPrepareFailureEvents(tc, "deadbeef")
+
+	if len(run.pendingEvents) != 2 {
+		t.Fatalf("pending events = %d, want prepared+started pair", len(run.pendingEvents))
+	}
+	var payload toolCallAuditPayload
+	if err := json.Unmarshal(run.pendingEvents[0].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal prepared payload: %v", err)
+	}
+	if !payload.PrepareFailed || payload.ArgsRawHash != "deadbeef" {
+		t.Fatalf("degraded payload = %+v", payload)
+	}
+	if payload.ArgsSummary["path"] != "go/pl/loom/internal/config/example.go" ||
+		payload.ArgsSummary["pattern"] != "storage" {
+		t.Fatalf("args summary = %v, want path+pattern", payload.ArgsSummary)
+	}
+	if _, ok := payload.ArgsSummary["content"]; ok {
+		t.Fatalf("content must not be persisted: %v", payload.ArgsSummary)
+	}
+}
+
 // aggregateStream preserves the former aggregation helper for tests while
 // delegating validation to StreamAggregator.
 func aggregateStream(stream domain.ModelStream, clock domain.Clock) (streamResponse, error) {

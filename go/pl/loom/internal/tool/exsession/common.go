@@ -114,6 +114,16 @@ type commandArgs struct {
 	Justification      string            `json:"justification,omitempty"`
 }
 
+// truncateForErrorMessage bounds user-supplied values echoed into error
+// messages so a pathological argument cannot bloat the transcript.
+func truncateForErrorMessage(s string) string {
+	const max = 256
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
+
 // validateCommandArgs normalizes and bounds the command-line fields,
 // resolving working_dir against the workspace. It is the session
 // counterpart of run_cmd's validation, minus the timeout field.
@@ -165,7 +175,9 @@ func validateCommandArgs(validator *workspacepkg.PathValidator, args *commandArg
 	info, err := os.Stat(absolute)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", domain.NewError(domain.ErrInvalidInput, "working_dir does not exist", domain.WithCause(err))
+			// Echo the offending path so the model can correct course
+			// without guessing which working_dir was rejected.
+			return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("working_dir does not exist: %q", truncateForErrorMessage(workingDir)), domain.WithCause(err))
 		}
 		return "", domain.NewError(domain.ErrUnavailable, "failed to stat working_dir", domain.WithCause(err))
 	}
