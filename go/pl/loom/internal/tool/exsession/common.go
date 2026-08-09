@@ -32,7 +32,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
-	"github.com/liubang/playground/go/pl/loom/internal/process"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -202,17 +201,13 @@ func validateCommandArgs(validator *workspacepkg.PathValidator, args *commandArg
 	return absolute, nil
 }
 
-// riskForCommand mirrors run_cmd's risk tiers: shell interpreters and
-// escalated sessions are R3, everything else is the base R2.
+// riskForCommand mirrors run_cmd's risk tiers: only an escalated
+// session (outside the sandbox) is R3. Shell invocations stay at the
+// base risk — the sandbox confines them and the permission layer's
+// danger screen (shell AST analysis) catches the dangerous shapes.
 func riskForCommand(args commandArgs, base domain.RiskLevel) domain.RiskLevel {
 	if args.SandboxPermissions == sandboxRequireEscalated {
 		return domain.R3
-	}
-	if process.IsShellProgram(args.Program) {
-		argv := append([]string{args.Program}, args.Args...)
-		if _, simple := process.UnwrapSimpleShell(argv); !simple {
-			return domain.R3
-		}
 	}
 	return base
 }

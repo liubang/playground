@@ -35,6 +35,12 @@ func TestUnwrapSimpleShell(t *testing.T) {
 		{"single quotes", []string{"sh", "-c", "echo 'a b'"}, []string{"echo", "a b"}},
 		{"glob kept verbatim", []string{"sh", "-c", "ls *.go"}, []string{"ls", "*.go"}},
 		{"extra whitespace", []string{"sh", "-c", "  mkdir   -p   .dsx_logs  "}, []string{"mkdir", "-p", ".dsx_logs"}},
+		// An input redirect does not change the command being run; the
+		// AST parser sees through it (the old char-scan could not).
+		{"input redirect", []string{"sh", "-c", "cat < f.txt"}, []string{"cat"}},
+		// Escapes stay raw in the resolved word — classification-only,
+		// execution still goes through the shell.
+		{"escape", []string{"sh", "-c", `echo a\ b`}, []string{"echo", `a\ b`}},
 	}
 	for _, tt := range unwrap {
 		t.Run(tt.name, func(t *testing.T) {
@@ -56,13 +62,11 @@ func TestUnwrapSimpleShell(t *testing.T) {
 		{"and chaining", []string{"sh", "-c", "mkdir x && echo done"}},
 		{"semicolon", []string{"sh", "-c", "cd /tmp; ls"}},
 		{"redirect", []string{"sh", "-c", "echo hi > f.txt"}},
-		{"input redirect", []string{"sh", "-c", "cat < f.txt"}},
 		{"command substitution", []string{"sh", "-c", "echo $(date)"}},
 		{"backticks", []string{"sh", "-c", "echo `date`"}},
 		{"variable expansion", []string{"sh", "-c", "echo $HOME"}},
 		{"background", []string{"sh", "-c", "sleep 1 &"}},
 		{"subshell", []string{"sh", "-c", "(cd /tmp)"}},
-		{"escape", []string{"sh", "-c", `echo a\ b`}},
 		{"newline", []string{"sh", "-c", "ls\npwd"}},
 		{"env assignment prefix", []string{"sh", "-c", "FOO=bar make build"}},
 		{"unterminated quote", []string{"sh", "-c", `echo "a`}},

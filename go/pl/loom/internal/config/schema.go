@@ -206,13 +206,14 @@ type Rules struct {
 
 // Approval configures the baseline approval strategy
 // (docs/PERMISSION_DESIGN.md §4.3). Mode selects how calls with no rule
-// or session memory are decided: "on-request" (default: sandboxed,
-// non-dangerous commands run without prompting), "unless-dangerous"
-// (blacklist mode: everything the sandbox confines — sandboxed commands
-// with network grants, workspace writes — runs without prompting; only
-// danger-listed commands, complex shells, and escalations prompt),
-// "unless-trusted" (legacy: every unmatched R2+ call prompts), or
-// "never" (unattended: sandboxed calls run, escalations are denied).
+// or session memory are decided: "on-request" (default: everything the
+// sandbox or path validator confines runs without prompting; escalation,
+// network widening, and danger-listed commands prompt),
+// "unless-dangerous" (blacklist mode: additionally grants declared
+// network needs silently; only the danger screen and escalations
+// prompt), or "never" (unattended: sandboxed calls run, escalations and
+// dangerous commands are denied outright so a run can never hang on a
+// prompt).
 type Approval struct {
 	Mode string `yaml:"mode,omitempty"`
 }

@@ -144,10 +144,10 @@ func TestPolicyEvaluateWithRulesAndSession(t *testing.T) {
 	policy.Rules = set
 	policy.Session = NewSessionRules()
 	evaluate := func(call domain.PreparedCall) domain.Decision {
-		return policy.Decider(ModeUnlessTrusted).Evaluate(call).Decision
+		return policy.Decider(ModeOnRequest).Evaluate(call).Decision
 	}
 
-	// Rule allow beats the R2-ask baseline.
+	// Rule allow beats the baseline.
 	if d := evaluate(runCmdCall(t, "/usr/bin/talos", "query", "result", "--qid", "1")); d != domain.DecisionAllow {
 		t.Fatalf("talos query result = %v, want allow", d)
 	}
@@ -158,15 +158,16 @@ func TestPolicyEvaluateWithRulesAndSession(t *testing.T) {
 		t.Fatalf("rm = %v, want deny", d)
 	}
 	// Session memory allows the remembered prefix.
-	if _, ok := policy.Session.RememberRunCmd([]string{"go", "test", "./..."}, domain.ExecGrant{}); !ok {
+	if _, ok := policy.Session.RememberRunCmd(RunCmdCall{Argv: []string{"go", "test", "./..."}}, domain.ExecGrant{}); !ok {
 		t.Fatal("go test must be rememberable")
 	}
 	if d := evaluate(runCmdCall(t, "go", "test", "./pl/...")); d != domain.DecisionAllow {
 		t.Fatalf("remembered go test = %v, want allow", d)
 	}
-	// Unmatched calls fall back to the risk baseline (R2 -> ask).
-	if d := evaluate(runCmdCall(t, "npm", "install")); d != domain.DecisionAsk {
-		t.Fatalf("npm install = %v, want ask (baseline)", d)
+	// Unmatched calls fall back to the baseline: sandboxed commands run
+	// without prompting (the sandbox is the boundary).
+	if d := evaluate(runCmdCall(t, "npm", "install")); d != domain.DecisionAllow {
+		t.Fatalf("npm install = %v, want allow (baseline)", d)
 	}
 	// A v1 (grant-less) allow only covers PLAIN sandboxed calls: an
 	// escalated request asks for capabilities the rule never granted, so
@@ -189,14 +190,14 @@ func TestPolicyEvaluateWithRulesAndSession(t *testing.T) {
 	}
 	policy2 := DefaultPolicy()
 	policy2.Rules = set2
-	v := policy2.Decider(ModeUnlessTrusted).Evaluate(call)
+	v := policy2.Decider(ModeOnRequest).Evaluate(call)
 	if v.Decision != domain.DecisionAllow || !v.Grant.Unsandboxed {
 		t.Fatalf("escalated run matching an unsandboxed-grant rule = %v %+v, want allow+unsandboxed", v.Decision, v.Grant)
 	}
 	// Unmatched escalations ask at the baseline, stamped unsandboxed.
 	escUnmatched, _ := json.Marshal(map[string]any{"program": "make", "args": []string{"deploy"}, "sandbox_permissions": "require_escalated"})
 	call = domain.PreparedCall{Call: domain.ToolCall{Name: "run_cmd", Arguments: escUnmatched}, Risk: domain.R3}
-	v = policy.Decider(ModeUnlessTrusted).Evaluate(call)
+	v = policy.Decider(ModeOnRequest).Evaluate(call)
 	if v.Decision != domain.DecisionAsk || !v.Grant.Unsandboxed {
 		t.Fatalf("unmatched escalated run = %v %+v, want ask+unsandboxed", v.Decision, v.Grant)
 	}
@@ -347,23 +348,26 @@ func TestPolicyEvaluateBuiltinAndNormalization(t *testing.T) {
 	}
 	policy := DefaultPolicy()
 	policy.Rules = builtin
-	evaluate := func(call domain.PreparedCall) domain.Decision {
-		return policy.Decider(ModeUnlessTrusted).Evaluate(call).Decision
+	evaluate := func(call domain.PreparedCall) domain.Verdict {
+		return policy.Decider(ModeOnRequest).Evaluate(call)
 	}
-	if d := evaluate(runCmdCall(t, "ls", "-la")); d != domain.DecisionAllow {
-		t.Fatalf("ls = %v, want allow", d)
+	if v := evaluate(runCmdCall(t, "ls", "-la")); v.Decision != domain.DecisionAllow || v.Source != SourceRule {
+		t.Fatalf("ls = %s (%s), want allow from a rule", v.Decision, v.Source)
 	}
-	if d := evaluate(runCmdCall(t, "/bin/ls", "-la")); d != domain.DecisionAllow {
-		t.Fatalf("/bin/ls = %v, want allow via trusted basename", d)
+	if v := evaluate(runCmdCall(t, "/bin/ls", "-la")); v.Decision != domain.DecisionAllow || v.Source != SourceRule {
+		t.Fatalf("/bin/ls = %s (%s), want allow via trusted basename", v.Decision, v.Source)
 	}
-	if d := evaluate(runCmdCall(t, "/usr/bin/git", "status", "--short")); d != domain.DecisionAllow {
-		t.Fatalf("/usr/bin/git status = %v, want allow via trusted basename", d)
+	if v := evaluate(runCmdCall(t, "/usr/bin/git", "status", "--short")); v.Decision != domain.DecisionAllow || v.Source != SourceRule {
+		t.Fatalf("/usr/bin/git status = %s (%s), want allow via trusted basename", v.Decision, v.Source)
 	}
-	if d := evaluate(runCmdCall(t, "/tmp/evil/ls")); d != domain.DecisionAsk {
-		t.Fatalf("/tmp/evil/ls = %v, want ask (no basename trust)", d)
+	// No basename trust for attacker-writable paths: no rule fires, and
+	// the verdict comes from the (sandbox-backed) baseline instead.
+	if v := evaluate(runCmdCall(t, "/tmp/evil/ls")); v.Decision != domain.DecisionAllow || v.Source != SourceBaseline {
+		t.Fatalf("/tmp/evil/ls = %s (%s), want baseline allow (no basename trust)", v.Decision, v.Source)
 	}
-	if d := evaluate(runCmdCall(t, "go", "test", "./...")); d != domain.DecisionAsk {
-		t.Fatalf("go test = %v, want ask (deliberately not builtin)", d)
+	// Deliberately not in the builtin set: no rule fires.
+	if v := evaluate(runCmdCall(t, "go", "test", "./...")); v.Source == SourceRule {
+		t.Fatalf("go test = %s (%s), want no rule match (deliberately not builtin)", v.Decision, v.Source)
 	}
 }
 
@@ -384,10 +388,10 @@ func TestSessionAllowNeverOverridesFileDeny(t *testing.T) {
 	policy.Rules = set
 	policy.Session = NewSessionRules()
 	evaluate := func(call domain.PreparedCall) domain.Decision {
-		return policy.Decider(ModeUnlessTrusted).Evaluate(call).Decision
+		return policy.Decider(ModeOnRequest).Evaluate(call).Decision
 	}
 	// The user remembered ["go"] earlier (broad session allow).
-	if _, ok := policy.Session.RememberRunCmd([]string{"go", "build", "./..."}, domain.ExecGrant{}); !ok {
+	if _, ok := policy.Session.RememberRunCmd(RunCmdCall{Argv: []string{"go", "build", "./..."}}, domain.ExecGrant{}); !ok {
 		t.Fatal("go must be rememberable")
 	}
 	// Session allow still works for unmatched-by-file rules.
@@ -420,14 +424,14 @@ func TestChainSharedExecContextEquivalence(t *testing.T) {
 		t.Fatalf("errs = %v", errs)
 	}
 	session := NewSessionRules()
-	if _, ok := session.RememberRunCmd([]string{"go", "build", "./..."}, domain.ExecGrant{}); !ok {
+	if _, ok := session.RememberRunCmd(RunCmdCall{Argv: []string{"go", "build", "./..."}}, domain.ExecGrant{}); !ok {
 		t.Fatal("go build must be rememberable")
 	}
 
 	policy := DefaultPolicy()
 	policy.Rules = set
 	policy.Session = session
-	chain := policy.Decider(ModeUnlessTrusted)
+	chain := policy.Decider(ModeOnRequest)
 
 	// Every built-in decider must keep the single-parse fast path.
 	for _, d := range chain {
@@ -456,9 +460,9 @@ func TestChainSharedExecContextEquivalence(t *testing.T) {
 	// parsing for itself — the pre-M33 behavior.
 	standalone := []Decider{
 		RuleDecider{Rules: set},
-		DangerDecider{Mode: ModeUnlessTrusted},
+		DangerDecider{Mode: ModeOnRequest},
 		SessionDecider{Session: session},
-		BaselineDecider{Mode: ModeUnlessTrusted, AutoApproveR1: true, AskR2: true, DenyR4: true},
+		BaselineDecider{Mode: ModeOnRequest},
 	}
 	for name, call := range calls {
 		want := domain.Verdict{Decision: domain.DecisionDeny, Source: SourceBaseline, Reason: "policy chain produced no verdict (fail closed)"}
@@ -488,9 +492,9 @@ func TestSessionMatchLongestPrefixWins(t *testing.T) {
 
 	remember := func(s *SessionRules, argv []string, grant domain.ExecGrant, wantLen int) {
 		t.Helper()
-		prefix, ok := s.RememberRunCmd(argv, grant)
-		if !ok || len(prefix) != wantLen {
-			t.Fatalf("RememberRunCmd(%v) = %v, %v; want a %d-token prefix", argv, prefix, ok, wantLen)
+		prefixes, ok := s.RememberRunCmd(RunCmdCall{Argv: argv}, grant)
+		if !ok || len(prefixes) != 1 || len(prefixes[0]) != wantLen {
+			t.Fatalf("RememberRunCmd(%v) = %v, %v; want a %d-token prefix", argv, prefixes, ok, wantLen)
 		}
 	}
 
@@ -523,10 +527,11 @@ func TestSessionMatchLongestPrefixWins(t *testing.T) {
 
 func TestSessionForgetRunCmd(t *testing.T) {
 	s := NewSessionRules()
-	prefix, ok := s.RememberRunCmd([]string{"go", "test", "./..."}, domain.ExecGrant{})
-	if !ok {
+	prefixes, ok := s.RememberRunCmd(RunCmdCall{Argv: []string{"go", "test", "./..."}}, domain.ExecGrant{})
+	if !ok || len(prefixes) != 1 {
 		t.Fatal("go test must be rememberable")
 	}
+	prefix := prefixes[0]
 	if _, ok := s.Match([]string{"go", "test", "./pl/..."}); !ok {
 		t.Fatal("remembered prefix must match")
 	}
@@ -570,12 +575,12 @@ func TestAttachRulesBuiltinSwitch(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	on := RuleLoadOptions{Enabled: true, Builtin: true, Project: true}
 	policy := AttachRules(context.Background(), DefaultPolicy(), t.TempDir(), userDir, on, logger)
-	if d := policy.Decider(ModeUnlessTrusted).Evaluate(runCmdCall(t, "ls")).Decision; d != domain.DecisionAllow {
-		t.Fatalf("builtin should allow ls by default, got %v", d)
+	if v := policy.Decider(ModeOnRequest).Evaluate(runCmdCall(t, "ls")); v.Decision != domain.DecisionAllow || v.Source != SourceRule {
+		t.Fatalf("builtin should allow ls via a rule, got %s (%s)", v.Decision, v.Source)
 	}
 	off := RuleLoadOptions{Enabled: true, Builtin: false, Project: true}
 	policy = AttachRules(context.Background(), DefaultPolicy(), t.TempDir(), userDir, off, logger)
-	if d := policy.Decider(ModeUnlessTrusted).Evaluate(runCmdCall(t, "ls")).Decision; d != domain.DecisionAsk {
-		t.Fatalf("Builtin=false should disable builtin allows, got %v", d)
+	if v := policy.Decider(ModeOnRequest).Evaluate(runCmdCall(t, "ls")); v.Decision != domain.DecisionAllow || v.Source != SourceBaseline {
+		t.Fatalf("Builtin=false should drop the rule-layer allow (baseline still allows), got %s (%s)", v.Decision, v.Source)
 	}
 }

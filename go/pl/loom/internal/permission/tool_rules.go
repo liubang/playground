@@ -77,6 +77,13 @@ var toolMemoryEligible = map[string]struct{}{
 	"generate_image": {},
 }
 
+// mcpToolPrefix is the qualified-name prefix of MCP-sourced tools
+// (mcp__{server}__{tool}). MCP tools are third-party code, so the
+// baseline keeps them per-call — but the trust decision for one is
+// inherently about the server endpoint, not the arguments, so a name
+// level "allow always" is the honest memory shape for them.
+const mcpToolPrefix = "mcp__"
+
 // ToolMemoryEligible reports whether a tool's "allow always" approval may
 // be remembered by tool name, and returns the canonical (normalized) name
 // so callers never re-normalize on their own.
@@ -85,10 +92,13 @@ func ToolMemoryEligible(name string) (canonical string, ok bool) {
 	if err != nil {
 		return "", false
 	}
-	if _, ok := toolMemoryEligible[n]; !ok {
-		return "", false
+	if _, ok := toolMemoryEligible[n]; ok {
+		return n, true
 	}
-	return n, true
+	if strings.HasPrefix(n, mcpToolPrefix) {
+		return n, true
+	}
+	return "", false
 }
 
 // EvaluateTool returns the strictest decision among matching tool rules

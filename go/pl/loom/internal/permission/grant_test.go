@@ -141,6 +141,14 @@ func TestDangerousCommand(t *testing.T) {
 		{"git", "-c", "x=y", "push", "--delete"},  // ditto
 		{"git", "--git-dir", "/r/.git", "push", "-f"},
 		{"/usr/bin/dd", "if=x"},
+		// Wrapper stripping: the dangerous payload hides behind env/nice/
+		// nohup/timeout/command prefixes.
+		{"env", "FOO=bar", "rm", "-rf", "/"},
+		{"env", "-i", "PATH=/usr/bin", "sudo", "ls"},
+		{"nice", "-n", "10", "git", "push", "--force"},
+		{"nohup", "dd", "if=/dev/zero", "of=/dev/disk0"},
+		{"timeout", "30", "git", "reset", "--hard"},
+		{"command", "rm", "-rf", "~"},
 	}
 	for _, argv := range dangerous {
 		if reason := DangerousCommand(argv); reason == "" {
@@ -155,6 +163,9 @@ func TestDangerousCommand(t *testing.T) {
 		{"go", "test", "./..."},
 		{"ls", "-la"},
 		{"chmod", "644", "file"},
+		{"env", "FOO=bar", "go", "test", "./..."}, // wrapped but harmless
+		{"nice", "-n", "10", "make", "build"},     // ditto
+		{"timeout", "30", "go", "build", "./..."}, // ditto
 		nil,
 	}
 	for _, argv := range safe {
@@ -183,10 +194,11 @@ func TestNeverModeDangerDenied(t *testing.T) {
 // grant-less persisted entries no longer block grant persistence.
 func TestRememberUpgradesGrant(t *testing.T) {
 	s := NewSessionRules()
-	if _, ok := s.RememberRunCmd([]string{"talos", "query"}, domain.ExecGrant{}); !ok {
+	info := RunCmdCall{Argv: []string{"talos", "query"}}
+	if _, ok := s.RememberRunCmd(info, domain.ExecGrant{}); !ok {
 		t.Fatal("remember failed")
 	}
-	if _, ok := s.RememberRunCmd([]string{"talos", "query"}, domain.ExecGrant{NetworkFull: true}); !ok {
+	if _, ok := s.RememberRunCmd(info, domain.ExecGrant{NetworkFull: true}); !ok {
 		t.Fatal("re-remember failed")
 	}
 	grant, ok := s.Match([]string{"talos", "query", "submit"})

@@ -1604,7 +1604,10 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 			l.prepared[tc.ID] = prepared
 			needsApproval = true
 		case domain.DecisionDeny:
-			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by policy")
+			// The denial reason reaches the model verbatim: in unattended
+			// (never) runs it is the ONLY signal the model gets, so it must
+			// say why the call was refused and how to reroute.
+			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by policy: "+verdict.Reason)
 		default:
 			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by invalid policy decision")
 		}
@@ -1774,7 +1777,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 		}
 		if decision != domain.DecisionAllow {
 			delete(l.prepared, tc.ID)
-			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by policy")
+			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by the user")
 		}
 	}
 	if len(l.prepared) == 0 {

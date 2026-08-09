@@ -939,27 +939,33 @@ func listRules() error {
 // checkRules is the dry-run inspector for the declarative rule engine: it
 // evaluates an argv exactly like the run_cmd policy path and prints the
 // verdict with the matching rule (if any), mirroring `codex execpolicy
-// check`. Usage: loom rules check [--escalated] [--needs-network] <program> [args...]
+// check`. Usage:
+//
+//	loom rules check [--escalated] [--needs-network] <program> [args...]
+//	loom rules check --url https://example.com/x   (web_fetch evaluation)
 func checkRules(argv []string) error {
 	var (
 		escalated    bool
 		needsNetwork bool
+		fetchURL     string
 		args         []string
 	)
-	for _, a := range argv {
-		switch a {
+	for i := 0; i < len(argv); i++ {
+		switch argv[i] {
 		case "--escalated":
 			escalated = true
 		case "--needs-network":
 			needsNetwork = true
+		case "--url":
+			if i+1 >= len(argv) {
+				return errors.New("--url requires a value")
+			}
+			i++
+			fetchURL = argv[i]
 		default:
-			args = append(args, a)
+			args = append(args, argv[i])
 		}
 	}
-	if len(args) == 0 {
-		return errors.New("usage: loom rules check [--escalated] [--needs-network] <program> [args...]")
-	}
-	argv = args
 	root, err := resolveWorkspace("")
 	if err != nil {
 		return err
@@ -969,6 +975,13 @@ func checkRules(argv []string) error {
 		return err
 	}
 	policy := permission.AttachRules(context.Background(), permission.DefaultPolicy(), root, resolved.Storage.RulesDir(), resolved.Rules.LoadOptions(), slog.Default())
+	if fetchURL != "" {
+		return checkFetchURL(policy, resolved.Approval.Mode, fetchURL)
+	}
+	if len(args) == 0 {
+		return errors.New("usage: loom rules check [--escalated] [--needs-network] [--url URL] <program> [args...]")
+	}
+	argv = args
 	callArgs := map[string]any{"program": argv[0], "args": argv[1:]}
 	risk := domain.R2
 	if escalated {
@@ -994,7 +1007,7 @@ func checkRules(argv []string) error {
 		fmt.Printf("reason: %s\n", verdict.Reason)
 	}
 	if process.IsShellProgram(argv[0]) {
-		fmt.Println("note: shell interpreters never match prefix rules (always decided per-call at R3)")
+		fmt.Println("note: shell scripts are evaluated per subcommand via AST analysis (pipes/redirects included)")
 	}
 	if ruleArgv, ok := permission.RunCmdArgv(argsJSON); ok {
 		rule := permission.MatchRule(policy.Rules, ruleArgv)
@@ -1011,6 +1024,30 @@ func checkRules(argv []string) error {
 				source = "builtin (embedded read-only set)"
 			}
 			fmt.Printf("matched rule: %v -> %s (%s)%s\n", rule.ArgvPrefix, rule.Decision, source, via)
+			if rule.Justification != "" {
+				fmt.Printf("justification: %s\n", rule.Justification)
+			}
+		}
+	}
+	return nil
+}
+
+// checkFetchURL evaluates a web_fetch call against the domain rules and
+// prints the verdict — the web_fetch counterpart of checkRules.
+func checkFetchURL(policy permission.Policy, mode permission.ApprovalMode, rawURL string) error {
+	argsJSON, _ := json.Marshal(map[string]string{"url": rawURL})
+	call := domain.PreparedCall{
+		Call: domain.ToolCall{Name: "web_fetch", Arguments: argsJSON},
+		Risk: domain.R3,
+	}
+	verdict := policy.Decider(mode).Evaluate(call)
+	fmt.Printf("decision: %s (source: %s)\n", verdict.Decision, verdict.Source)
+	if verdict.Reason != "" {
+		fmt.Printf("reason: %s\n", verdict.Reason)
+	}
+	if host, ok := permission.ParseWebFetchHost(argsJSON); ok {
+		if _, rule := policy.Rules.EvaluateDomain(host); rule.Source != "" {
+			fmt.Printf("matched rule: host:%s -> %s (%s)\n", rule.Host, rule.Decision, rule.Source)
 			if rule.Justification != "" {
 				fmt.Printf("justification: %s\n", rule.Justification)
 			}
@@ -1191,9 +1228,14 @@ func (a *consoleApprover) RequestApproval(ctx context.Context, req domain.Approv
 		return domain.DecisionDeny, fmt.Errorf("inspect stdin: %w", err)
 	}
 	if info.Mode()&os.ModeCharDevice == 0 {
+		// Unattended (piped stdin): the request can never be answered, so
+		// it is denied — but the desktop notification still goes out: the
+		// whole point of a headless long run is that the user is elsewhere.
+		app.NotifyApproval(req.Call.Call.Name, req.Description+" (无人值守，已自动拒绝)")
 		return domain.DecisionDeny, nil
 	}
 	a.start(os.Stdin)
+	app.NotifyApproval(req.Call.Call.Name, req.Description)
 	fmt.Fprintf(os.Stderr, "\nApproval required (R%d): %s\nargs hash: %s\nAllow? [y/N] ",
 		req.Call.Risk, req.Description, req.Call.ArgsHash)
 	return a.awaitAnswer(ctx)
