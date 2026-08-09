@@ -211,8 +211,15 @@ chain := permission.Chain{
 
 - workspace 可写根的 `<workspace>/.git/hooks`、`<workspace>/.git/config`、`<workspace>/.loom` 保持只读。**（实现偏差）** 不用 codex 式 `require-all + require-not`，改为**尾部 deny**：`(deny file-write* (literal/subpath X))` 放在所有 allow 之后（seatbelt 最后匹配胜出），否则 workspace 位于其他可写根内（如 TMPDIR 下的测试场景）时保护会被后置的宽泛 allow 抵消。日常 `git commit` 不受影响的回归测试已建立（`git init` 因创建 hooks 样板被拦，属已知取舍，与 codex 一致）。
 - `sensitiveReadDenies` 每条补 `(deny file-write-unlink ...)`，防删除/重命名探测。
-- **（范围扩大）顺手修复潜伏 bug**：seatbelt 按规范化路径匹配，macOS 的 `/var`、`/tmp` 是指向 `/private` 的符号链接——旧 profile 里 `os.TempDir()` 的 `/var/folders/...` 形式**从未生效**，沙箱内 TMPDIR 写入一直静默失败。所有可写路径现在经 `canonicalWritePath`（含符号链接解析、未存在路径向上溯源）规范化。
+- **（范围扩大）顺手修复潜伏 bug**：seatbelt 按规范化路径匹配，macOS 的 `/var`、`/tmp` 是指向 `/private` 的符号链接——旧 profile 里 `os.TempDir()` 的 `/var/folders/...` 形式**从未生效**，沙箱内 TMPDIR 写入一直静默失败。所有可写路径现在经规范化（含符号链接解析、未存在路径向上溯源；现为 `workspace.Canonicalize`，两层边界共用）。
 - 执行入口：`Runner.RunWithGrant(ctx, spec, process.Grant)` 统一映射——`Unsandboxed` → DirectSandbox；零值 → 默认沙箱；其余 → `widenSandbox` 克隆 Seatbelt（网络/可写路径并集）。不支持的平台（Linux）加宽为空操作，fail-closed 保持。
+
+### 6.3.2 默认可写范围（scratch + 工具链缓存）
+
+workspace 之外，沙箱默认放行两类可写目录（`process.ExtraWritableDirs`）：
+
+1. **系统 scratch 目录**：`$TMPDIR`（per-user）与 `/tmp`（canonical）。文件工具侧同样放行——`PathValidator` 的 extra roots 由 `workspace.ScratchDirs()` 提供，两层边界同一来源，不会出现 run_cmd 能写而 write_file 被拒的分裂。风险接受依据：sticky bit 下进程只能删除自己的文件，误操作爆炸半径远小于 home；凭证路径另有 sensitive 清单兜底。`/var/tmp` 不放（语义是重启后保留，算半个 home）。
+2. **可再生工具链缓存**（仅沙箱层，文件工具不需要）：Go（`~/Library/Caches/go-build`、`~/.cache/go-build`、`~/go/pkg/mod`）、npm（`~/.npm`）、pip（双平台 caches）、cargo（`~/.cargo/registry`、`~/.cargo/git`）、ccache（双平台）、Gradle（`~/.gradle`）、Maven（`~/.m2/repository`）。依据：损坏最多一次 rebuild；sensitive 清单不覆盖。整放 `~/.cache`/`~/Library/Caches` 被否决：那是杂烩目录（浏览器缓存、应用数据、个别 CLI 的 token），不属于 scratch 语义。
 
 ### 6.3.1 Grant 覆盖检查（review C1 修复）
 
