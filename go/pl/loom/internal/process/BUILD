@@ -21,6 +21,7 @@ go_library(
     name = "process_lib",
     srcs = [
         "grant.go",
+        "pathenv.go",
         "pipe_pending_darwin.go",
         "pipe_pending_linux.go",
         "pipe_pending_other.go",
@@ -48,6 +49,7 @@ go_library(
 go_test(
     name = "process_test",
     srcs = [
+        "pathenv_test.go",
         "runner_seatbelt_test.go",
         "runner_test.go",
         "sandbox_grant_test.go",
