@@ -21,6 +21,7 @@ go_library(
     name = "permission_lib",
     srcs = [
         "danger.go",
+        "danger_script.go",
         "decider.go",
         "domain_rules.go",
         "policy.go",
@@ -44,6 +45,7 @@ go_library(
 go_test(
     name = "permission_test",
     srcs = [
+        "danger_script_test.go",
         "decider_unless_dangerous_test.go",
         "domain_rules_test.go",
         "grant_test.go",

@@ -100,21 +100,19 @@ func (c Chain) Evaluate(call domain.PreparedCall) domain.Verdict {
 type ApprovalMode string
 
 const (
-	// ModeOnRequest auto-allows sandboxed, non-dangerous commands: the
-	// sandbox is the boundary, so asking the user adds no safety.
+	// ModeOnRequest auto-allows everything the sandbox or the path
+	// validator confines — sandboxed commands, workspace-confined file
+	// writes — and prompts only for what crosses the boundary (escalation
+	// out of the sandbox, network widening) or matches the danger screen.
 	ModeOnRequest ApprovalMode = "on-request"
-	// ModeUnlessTrusted asks for every unmatched R2+ call (legacy default).
-	ModeUnlessTrusted ApprovalMode = "unless-trusted"
-	// ModeNever allows sandboxed calls (granting declared network needs)
-	// and denies escalations outright — for unattended/CI runs.
-	ModeNever ApprovalMode = "never"
-	// ModeUnlessDangerous auto-allows everything the sandbox still
-	// confines — sandboxed commands (declared network needs granted),
-	// workspace-confined writes — and only prompts for danger-listed
-	// commands, complex shell invocations (R3), and escalations out of
-	// the sandbox. The sandbox remains the boundary; the danger list is
-	// the only routine prompt source.
+	// ModeUnlessDangerous additionally grants declared network needs
+	// silently: the danger screen is the only routine prompt source.
 	ModeUnlessDangerous ApprovalMode = "unless-dangerous"
+	// ModeNever allows sandboxed calls (granting declared network needs)
+	// and denies escalations, R3+ tools, and dangerous commands outright
+	// — for unattended/CI runs. No verdict ever asks, so a run cannot
+	// hang on a prompt nobody will answer.
+	ModeNever ApprovalMode = "never"
 )
 
 // ParseApprovalMode validates a config value; empty selects the default.
@@ -122,13 +120,11 @@ func ParseApprovalMode(s string) (ApprovalMode, error) {
 	switch ApprovalMode(s) {
 	case "", ModeOnRequest:
 		return ModeOnRequest, nil
-	case ModeUnlessTrusted:
-		return ModeUnlessTrusted, nil
-	case ModeNever:
-		return ModeNever, nil
 	case ModeUnlessDangerous:
 		return ModeUnlessDangerous, nil
+	case ModeNever:
+		return ModeNever, nil
 	}
-	return "", fmt.Errorf("approval.mode must be %q, %q, %q, or %q, got %q",
-		ModeOnRequest, ModeUnlessTrusted, ModeNever, ModeUnlessDangerous, s)
+	return "", fmt.Errorf("approval.mode must be %q, %q, or %q, got %q",
+		ModeOnRequest, ModeUnlessDangerous, ModeNever, s)
 }

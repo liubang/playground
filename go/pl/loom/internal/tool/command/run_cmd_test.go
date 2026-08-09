@@ -510,7 +510,7 @@ func TestRunCmdToolValidateArguments(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 }
 
-func TestRunCmdShellProgramElevatesToR3(t *testing.T) {
+func TestRunCmdShellProgramKeepsBaseRisk(t *testing.T) {
 	validator, _ := newValidator(t)
 	python := ensurePython3(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
@@ -527,14 +527,17 @@ func TestRunCmdShellProgramElevatesToR3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
-	if prepared.Risk != domain.R3 {
-		t.Fatalf("shell risk = %v, want R3", prepared.Risk)
+	// Composition alone no longer elevates: the sandbox confines the
+	// script and the permission layer's AST danger screen handles the
+	// dangerous shapes.
+	if prepared.Risk != domain.R2 {
+		t.Fatalf("shell risk = %v, want R2", prepared.Risk)
 	}
-	if !strings.Contains(prepared.ApprovalDesc, "shell=R3") {
+	if !strings.Contains(prepared.ApprovalDesc, "shell=parsed") {
 		t.Fatalf("approval desc missing shell marker: %q", prepared.ApprovalDesc)
 	}
 
-	// The signed R3 call survives Execute-time verification and actually runs.
+	// The signed call survives Execute-time verification and actually runs.
 	shellRunner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
 		LookPath: exec.LookPath,
@@ -565,7 +568,7 @@ func TestRunCmdShellProgramElevatesToR3(t *testing.T) {
 	if plain.Risk != domain.R2 {
 		t.Fatalf("plain program risk = %v, want R2", plain.Risk)
 	}
-	if strings.Contains(plain.ApprovalDesc, "shell=R3") {
+	if strings.Contains(plain.ApprovalDesc, "shell=parsed") {
 		t.Fatalf("plain approval desc must not carry the shell marker: %q", plain.ApprovalDesc)
 	}
 }
@@ -849,18 +852,17 @@ func TestEscalationDowngradeNote(t *testing.T) {
 	}
 }
 
-func TestRiskForArgsSimpleShell(t *testing.T) {
+func TestRiskForArgsShellForms(t *testing.T) {
 	base := domain.R2
-	// A provably simple sh -c script keeps the base risk: it is a plain
-	// command wearing a shell costume.
+	// Shell forms keep the base risk: the sandbox is the boundary and
+	// the AST danger screen catches the dangerous shapes.
 	simple := runCmdArgs{Program: "sh", Args: []string{"-c", "mkdir -p .dsx_logs"}}
 	if got := riskForArgs(simple, base); got != base {
 		t.Errorf("riskForArgs(simple sh -c) = %v, want %v", got, base)
 	}
-	// Compound scripts stay R3.
 	compound := runCmdArgs{Program: "sh", Args: []string{"-c", "mkdir -p x && echo done"}}
-	if got := riskForArgs(compound, base); got != domain.R3 {
-		t.Errorf("riskForArgs(compound sh -c) = %v, want R3", got)
+	if got := riskForArgs(compound, base); got != base {
+		t.Errorf("riskForArgs(compound sh -c) = %v, want %v", got, base)
 	}
 	// Escalations always rate R3.
 	escalated := runCmdArgs{Program: "make", SandboxPermissions: sandboxRequireEscalated}

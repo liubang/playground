@@ -36,58 +36,59 @@ func runCmdPrepared(t *testing.T, program string, args ...string) domain.Prepare
 	}
 }
 
-func TestDefaultPolicyUnlessTrustedBaseline(t *testing.T) {
-	p := DefaultPolicy()
-	d := p.Decider(ModeUnlessTrusted)
-
+// TestDefaultPolicyBaseline covers the non-exec baseline: workspace-
+// confined built-in tools (R0–R2) never prompt in any mode; R3+ prompts
+// interactively and is denied outright in never mode.
+func TestDefaultPolicyBaseline(t *testing.T) {
 	tests := []struct {
 		risk domain.RiskLevel
 		want domain.Decision
 	}{
 		{domain.R0, domain.DecisionAllow},
 		{domain.R1, domain.DecisionAllow},
-		{domain.R2, domain.DecisionAsk},
+		{domain.R2, domain.DecisionAllow},
 		{domain.R3, domain.DecisionAsk},
-		{domain.R4, domain.DecisionDeny},
+		{domain.R4, domain.DecisionAsk},
 	}
-
-	for _, tt := range tests {
-		got := d.Evaluate(domain.PreparedCall{Risk: tt.risk}).Decision
-		if got != tt.want {
-			t.Errorf("Evaluate(R%d) = %s, want %s", tt.risk, got, tt.want)
+	for _, mode := range []ApprovalMode{ModeOnRequest, ModeUnlessDangerous} {
+		d := DefaultPolicy().Decider(mode)
+		for _, tt := range tests {
+			got := d.Evaluate(domain.PreparedCall{Risk: tt.risk}).Decision
+			if got != tt.want {
+				t.Errorf("%s Evaluate(R%d) = %s, want %s", mode, tt.risk, got, tt.want)
+			}
 		}
 	}
 }
 
-func TestPolicyAutoApproveDisabled(t *testing.T) {
-	p := Policy{AutoApproveR1: false, AskR2: true, DenyR4: true}
-	got := p.Decider(ModeUnlessTrusted).Evaluate(domain.PreparedCall{Risk: domain.R0}).Decision
-	if got != domain.DecisionDeny {
-		t.Errorf("Evaluate(R0) with AutoApproveR1=false = %s, want deny", got)
+// TestNeverModeBaselineDeniesR3: an unattended run must never produce an
+// ask (it would hang forever); R3+ built-in tools are denied instead.
+func TestNeverModeBaselineDeniesR3(t *testing.T) {
+	d := DefaultPolicy().Decider(ModeNever)
+	if got := d.Evaluate(domain.PreparedCall{Risk: domain.R2}).Decision; got != domain.DecisionAllow {
+		t.Errorf("never Evaluate(R2) = %s, want allow", got)
+	}
+	for _, risk := range []domain.RiskLevel{domain.R3, domain.R4} {
+		if got := d.Evaluate(domain.PreparedCall{Risk: risk}).Decision; got != domain.DecisionDeny {
+			t.Errorf("never Evaluate(R%d) = %s, want deny", risk, got)
+		}
 	}
 }
 
-func TestPolicyDenyR4Disabled(t *testing.T) {
-	p := Policy{AutoApproveR1: true, AskR2: true, DenyR4: false}
-	got := p.Decider(ModeUnlessTrusted).Evaluate(domain.PreparedCall{Risk: domain.R4}).Decision
-	if got != domain.DecisionDeny {
-		t.Errorf("Evaluate(R4) with DenyR4=false = %s, want deny", got)
+// TestMCPToolsKeepApproval: third-party MCP tools are not workspace-
+// confined, so they keep per-call approvals in interactive modes and are
+// denied in never mode.
+func TestMCPToolsKeepApproval(t *testing.T) {
+	mcpCall := domain.PreparedCall{
+		Call:       domain.ToolCall{Name: "mcp__srv__do"},
+		Risk:       domain.R2,
+		Definition: domain.ToolDefinition{Source: domain.ToolSourceMCP},
 	}
-}
-
-func TestPolicyR3AlwaysAsk(t *testing.T) {
-	p := DefaultPolicy()
-	got := p.Decider(ModeUnlessTrusted).Evaluate(domain.PreparedCall{Risk: domain.R3}).Decision
-	if got != domain.DecisionAsk {
-		t.Errorf("Evaluate(R3) = %s, want ask", got)
+	if got := DefaultPolicy().Decider(ModeOnRequest).Evaluate(mcpCall).Decision; got != domain.DecisionAsk {
+		t.Errorf("on-request MCP R2 = %s, want ask", got)
 	}
-}
-
-func TestPolicyAskR2Disabled(t *testing.T) {
-	p := Policy{AutoApproveR1: true, AskR2: false, DenyR4: true}
-	got := p.Decider(ModeUnlessTrusted).Evaluate(domain.PreparedCall{Risk: domain.R2}).Decision
-	if got != domain.DecisionDeny {
-		t.Errorf("Evaluate(R2) with AskR2=false = %s, want deny", got)
+	if got := DefaultPolicy().Decider(ModeNever).Evaluate(mcpCall).Decision; got != domain.DecisionDeny {
+		t.Errorf("never MCP R2 = %s, want deny", got)
 	}
 }
 
@@ -131,7 +132,7 @@ func TestExecRequestTypedContractPreferred(t *testing.T) {
 func TestExecSessionMatchesArgvRules(t *testing.T) {
 	p := DefaultPolicy()
 	p.Rules = &RuleSet{rules: []Rule{{ArgvPrefix: []string{"git", "status"}, Decision: "allow"}}}
-	d := p.Decider(ModeUnlessTrusted)
+	d := p.Decider(ModeOnRequest)
 	call := domain.PreparedCall{
 		Call:        domain.ToolCall{Name: "exec_session", Arguments: []byte(`{"program":"git","args":["status"]}`)},
 		Risk:        domain.R2,
@@ -202,10 +203,10 @@ func TestChainRuleDenyBeatsSessionAllow(t *testing.T) {
 		Decision:   string(domain.DecisionDeny),
 	}}})
 	session := NewSessionRules()
-	if _, ok := session.RememberRunCmd([]string{"go", "test", "./..."}, domain.ExecGrant{}); !ok {
+	if _, ok := session.RememberRunCmd(RunCmdCall{Argv: []string{"go", "test", "./..."}}, domain.ExecGrant{}); !ok {
 		t.Fatal("remember failed")
 	}
-	p := Policy{AutoApproveR1: true, AskR2: true, DenyR4: true, Rules: rules, Session: session}
+	p := Policy{Rules: rules, Session: session}
 	v := p.Decider(ModeOnRequest).Evaluate(runCmdPrepared(t, "go", "test", "./..."))
 	if v.Decision != domain.DecisionDeny {
 		t.Fatalf("file-layer deny must beat session memory, got %s", v.Decision)
@@ -218,10 +219,10 @@ func TestChainRuleDenyBeatsSessionAllow(t *testing.T) {
 func TestChainSessionAllowCarriesGrant(t *testing.T) {
 	session := NewSessionRules()
 	grant := domain.ExecGrant{NetworkFull: true}
-	if _, ok := session.RememberRunCmd([]string{"talos", "query"}, grant); !ok {
+	if _, ok := session.RememberRunCmd(RunCmdCall{Argv: []string{"talos", "query"}}, grant); !ok {
 		t.Fatal("remember failed")
 	}
-	p := Policy{AutoApproveR1: true, AskR2: true, DenyR4: true, Session: session}
+	p := Policy{Session: session}
 	v := p.Decider(ModeOnRequest).Evaluate(runCmdPrepared(t, "talos", "query", "submit"))
 	if v.Decision != domain.DecisionAllow {
 		t.Fatalf("session match = %s, want allow", v.Decision)
@@ -240,7 +241,7 @@ func TestChainRuleAllowCarriesGrant(t *testing.T) {
 		Decision:   string(domain.DecisionAllow),
 		Grant:      &RuleGrant{Network: "full"},
 	}}}
-	p := Policy{AutoApproveR1: true, AskR2: true, DenyR4: true, Rules: rules}
+	p := Policy{Rules: rules}
 	v := p.Decider(ModeOnRequest).Evaluate(runCmdPrepared(t, "talos", "diag", "check"))
 	if v.Decision != domain.DecisionAllow || !v.Grant.NetworkFull {
 		t.Fatalf("rule grant = %s %+v, want allow with network grant", v.Decision, v.Grant)
@@ -254,7 +255,7 @@ func TestChainDangerBeatsSessionAndBaseline(t *testing.T) {
 	session := NewSessionRules()
 	// rm can never be remembered via DeriveRunCmdPrefix, so simulate a
 	// remembered dangerous-looking prefix with a file rule absent.
-	p := Policy{AutoApproveR1: true, AskR2: true, DenyR4: true, Session: session}
+	p := Policy{Session: session}
 	d := p.Decider(ModeOnRequest)
 	v := d.Evaluate(runCmdPrepared(t, "rm", "-rf", "/"))
 	if v.Decision != domain.DecisionAsk {
@@ -270,7 +271,7 @@ func TestChainRuleAllowBeatsDanger(t *testing.T) {
 		ArgvPrefix: []string{"git", "push"},
 		Decision:   string(domain.DecisionAllow),
 	}}}
-	p := Policy{AutoApproveR1: true, AskR2: true, DenyR4: true, Rules: rules}
+	p := Policy{Rules: rules}
 	v := p.Decider(ModeOnRequest).Evaluate(runCmdPrepared(t, "git", "push", "--force", "origin", "main"))
 	if v.Decision != domain.DecisionAllow {
 		t.Fatalf("explicit allow rule must beat the danger screen, got %s", v.Decision)

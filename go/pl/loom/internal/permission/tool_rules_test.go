@@ -153,8 +153,10 @@ func TestToolRuleNeverCoversExec(t *testing.T) {
 		Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "run_cmd", Arguments: raw},
 		Risk: domain.R3,
 	}
-	if v := d.Evaluate(exec); v.Decision == domain.DecisionAllow {
-		t.Fatalf("a tool-name rule must never allow an exec call, got %s (%s)", v.Decision, v.Source)
+	// The verdict may still be an allow — from the sandbox-backed
+	// baseline — but it must never COME from the tool-name rule.
+	if v := d.Evaluate(exec); v.Source == SourceRule {
+		t.Fatalf("a tool-name rule must never decide an exec call, got %s (%s)", v.Decision, v.Source)
 	}
 	if v := d.Evaluate(webFetchCall(t, "https://evil.example/")); v.Decision == domain.DecisionAllow {
 		t.Fatalf("a tool-name rule must never allow a web_fetch call, got %s (%s)", v.Decision, v.Source)

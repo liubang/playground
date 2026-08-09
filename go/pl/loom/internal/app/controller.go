@@ -1620,7 +1620,14 @@ func (c *Controller) rememberApprovalRule(hint *ApprovalRuleHint) string {
 	case rule.Host != "":
 		persistErr = store.RememberDomain(persistCtx, rule.Host)
 	default:
-		persistErr = store.RememberRule(persistCtx, rule.Prefix, rule.Grant)
+		// A composed shell command contributes one prefix per subcommand;
+		// each is persisted as its own rule row.
+		for _, prefix := range rule.Prefixes {
+			if err := store.RememberRule(persistCtx, prefix, rule.Grant); err != nil {
+				persistErr = err
+				break
+			}
+		}
 	}
 	if persistErr != nil {
 		c.logger.Warn("persist remembered rule failed", "rule", note, "error", persistErr)
@@ -1724,7 +1731,7 @@ func (c *Controller) handleSetReasoning(cmd controllerCommand) {
 }
 
 func (c *Controller) handleSetModel(cmd controllerCommand) {
-	if c.bootstrap == nil || c.bootstrap.Resolved == nil {
+	if c.bootstrap == nil || c.bootstrap.Resolved() == nil {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("model switching is unavailable: no providers configured")}
 		return
 	}
