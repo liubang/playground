@@ -49,7 +49,7 @@ loom 当前只有一个真实前端：TUI（`internal/ui`，Bubble Tea），外�
 | 非阻塞事件扇出 | `runtimeevent.Broker` | 慢订阅者 ephemeral 丢弃、durable 断连，绝不阻塞 agent。 |
 | 审批桥 | `app.ChannelApprover` | channel 解耦 + `ApprovalBinding{ApprovalID, CallID, ArgsHash}` 一次性 CAS，防重复决议。 |
 | 事件溯源持久化 | `session.SQLiteStore` | events + checkpoints；`InspectSession` 返回 `SessionInspection{Session, Checkpoint, Transcript, Events}`；`TranscriptPage` 自带分页（`AfterSequence/NextAfter/HasMore`）；单连接（`SetMaxOpenConns(1)`）天然串行化写入。 |
-| 展示数据服务端算好 | `app/controller.go` `publishingStore` | `ApprovalRequestedPayload.Diff`、`ToolCompletedPayload.Preview` 等在服务端生成，纯展示客户端零 diff 逻辑。 |
+| 展示数据服务端算好 | `app/controller.go` `publishingStore` | `ToolPreparedPayload.Diff`、`ToolCompletedPayload.Preview` 等在服务端生成，纯展示客户端零 diff 逻辑。 |
 | 装配与生命周期 | `app.Bootstrap` | store/artifact/registry/model/policy/tracing 一处装配，`Close` 统一释放。 |
 | 安全基座 | `workspace.PathValidator`、`process.Runner` 沙箱、`permission.Policy` | 路径边界、命令沙箱、风险分级审批与 server 模式正交，直接复用。 |
 | 观测 | `internal/trace`（OTel/Langfuse） | Recorder 已接入 agent loop，server 层只需补 HTTP 层观测。 |
@@ -478,7 +478,7 @@ SessionService 协议无关 ⇒ 新协议 = 新增适配器，不重设协议语
   1. 状态来源仅两个：`GET snapshot`（首屏）+ SSE（此后全部）；不本地推导 agent 状态机；
   2. 未知事件 kind / 未知 payload 字段必须忽略；
   3. 流式文本以 delta 拼草稿，`model.response_completed.payload.text` 到达即替换草稿（canonical 校正）；
-  4. 审批卡片完全由 `approval.requested` payload 渲染（含 `diff`、`risk`、`description`），决议提交 binding 三元组；收到 `approval.resolved` 即撤卡；问答卡片同理：首屏由 `snapshot.pending_requests`（`kind=question` 的条目）重建、此后由 `question.asked` 驱动，收到 `question.answered` 即撤卡；
+  4. 审批卡片完全由 `approval.requested` payload 渲染（含 `risk`、`description`；diff 不随审批载荷重复传输，复用 `tool.prepared` 已渲染在工具块上的那份），决议提交 binding 三元组；收到 `approval.resolved` 即撤卡；问答卡片同理：首屏由 `snapshot.pending_requests`（`kind=question` 的条目）重建、此后由 `question.asked` 驱动，收到 `question.answered` 即撤卡；
   5. `server.resync` → 清本地状态重走 snapshot；SSE 首帧 `instance` 与上一连接不同 → 等同 resync 处理；`server.draining` → 停止重连并提示；
   6. 所有模型/工具文本输出经 sanitize 后渲染；diff 用服务端给的 `diff` 字符串做语法着色即可；
   7. token 存 `sessionStorage`（关页即清），不落 `localStorage`。

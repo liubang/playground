@@ -184,7 +184,12 @@ export class Transcript {
                 { tool_name: p.tool_call.name, target: histTarget(p.tool_call) },
                 { resolveArtifactURL: this.io.fetchArtifactURL },
               );
-              if (p.tool_call.id) histTools.set(p.tool_call.id, tb);
+              if (p.tool_call.id) {
+                histTools.set(p.tool_call.id, tb);
+                // 同步进实例表：pending 审批卡片要从工具块移入 diff（去重），
+                // 且重连截在运行中途时后续 tool.completed 需配对到该块。
+                this.tools.set(p.tool_call.id, tb);
+              }
               // diff 不落盘（只在实时 tool.prepared 载荷里）：历史重建时从
               // edit/write 参数本地重算（diff.js diffForToolCall）
               const diffText = diffForToolCall(p.tool_call.name, p.tool_call.arguments);
@@ -448,7 +453,12 @@ export class Transcript {
 
   _addApprovalCard(p) {
     if (!p.approval_id || this.approvals.has(p.approval_id)) return;
+    // diff 去重：工具块已渲染的 diff 直接移入审批卡片（审批期间工具块不再
+    // 重复展示），收编时移回；无 diff 的调用（如 run_cmd）本就没有可移节点。
+    const tb = p.call_id ? this.tools.get(p.call_id) : null;
+    const diffEl = tb ? tb.el.querySelector(":scope > .diff") : null;
     const card = approvalCard(p, {
+      diffEl: diffEl || null,
       onResolve: async ({ decision, always }) => {
         card.setResolving();
         try {
@@ -465,6 +475,11 @@ export class Transcript {
         }
       },
     });
+    if (diffEl) {
+      card.restoreDiff = () => {
+        if (tb.el.isConnected) tb.el.appendChild(diffEl);
+      };
+    }
     this.approvals.set(p.approval_id, card);
     this._append(card.el);
   }
@@ -473,6 +488,7 @@ export class Transcript {
     const card = this.approvals.get(approvalId);
     if (!card) return;
     this.approvals.delete(approvalId);
+    if (card.restoreDiff) card.restoreDiff();
     card.el.replaceWith(resolvedNotice(allowed, { actor, what: "approval" }));
     this._maybeFollow();
   }

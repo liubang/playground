@@ -358,7 +358,9 @@ export function attachDiff(blockEl, diffText) {
 // --- approval 卡片 ---
 
 // callbacks: onResolve({decision, always})
-export function approvalCard(payload, { onResolve }) {
+// diffEl（可选）：调用方从工具块移入的已渲染 diff 节点。diff 只随
+// tool.prepared 传输并渲染在工具块上，审批期间移入卡片，不重复渲染。
+export function approvalCard(payload, { onResolve, diffEl }) {
   const card = el("div", "block card-approval");
   const title = el("div", "card-title");
   const titleLabel = el("span", "card-title-label");
@@ -374,7 +376,7 @@ export function approvalCard(payload, { onResolve }) {
     cmd.appendChild(el("code", "", payload.target));
     card.appendChild(cmd);
   }
-  if (payload.diff) card.appendChild(renderDiff(payload.diff));
+  if (diffEl) card.appendChild(diffEl);
 
   const actions = el("div", "actions");
   const allow = el("button", "btn btn-primary", "Allow");

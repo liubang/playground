@@ -2267,7 +2267,6 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ArgsHash:    payload.ArgsHash,
 				ReadPaths:   payload.ReadPaths,
 				WritePaths:  payload.WritePaths,
-				Diff:        render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffUnbounded),
 				Arguments:   s.pendingArgs[payload.CallID],
 			}
 			// Surface what "allow always" would remember so frontends can label
