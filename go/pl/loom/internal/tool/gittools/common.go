@@ -250,6 +250,16 @@ func sameCapabilities(left, right []domain.Capability) bool {
 	return true
 }
 
+// truncateForErrorMessage bounds user-supplied values echoed into error
+// messages so a pathological argument cannot bloat the transcript.
+func truncateForErrorMessage(s string) string {
+	const max = 256
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
+
 func resolveRepoRoot(validator *workspacepkg.PathValidator, input string) (repoRootResolution, error) {
 	if strings.TrimSpace(input) == "" {
 		// repo_root is optional across git tools: default to the workspace root.
@@ -269,7 +279,9 @@ func resolveRepoRoot(validator *workspacepkg.PathValidator, input string) (repoR
 	info, err := os.Stat(resolved)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return repoRootResolution{}, domain.NewError(domain.ErrInvalidInput, "repo_root does not exist", domain.WithCause(err))
+			// Echo the offending path so the model can correct course
+			// without guessing which repo_root was rejected.
+			return repoRootResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("repo_root does not exist: %q", truncateForErrorMessage(input)), domain.WithCause(err))
 		}
 		return repoRootResolution{}, domain.NewError(domain.ErrUnavailable, "failed to stat repo_root", domain.WithCause(err))
 	}
@@ -493,6 +505,9 @@ var gitRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/@+-]*$`)
 
 // validateGitRef bounds a user-supplied ref/branch to git's refname
 // alphabet, rejecting flag injection (leading '-') and range operators.
+// Use this for refs that get concatenated into larger expressions
+// ("<ref>@{upstream}", "<ref>..<ref>"); for standalone revision arguments
+// use validateGitRevision instead.
 func validateGitRef(ref string) error {
 	if ref == "" {
 		return domain.NewError(domain.ErrInvalidInput, "ref is required")
@@ -504,7 +519,37 @@ func validateGitRef(ref string) error {
 		return domain.NewError(domain.ErrInvalidInput, "ref must not contain '..' (revision ranges are not supported)")
 	}
 	if !gitRefPattern.MatchString(ref) {
-		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("ref %q is not a valid git refname", ref))
+		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("ref %q is not a valid git refname (use a branch, tag, or commit SHA)", ref))
+	}
+	return nil
+}
+
+// gitRevisionPattern extends gitRefPattern with trailing ancestry operators
+// (~N, ^N, digits optional, repeatable), matching the revision expressions
+// models naturally produce (HEAD~3, abc123^, feature/foo~2^1). The base
+// alphabet still excludes '~' and '^', so the suffix grammar is unambiguous.
+var gitRevisionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/@+-]*(?:[~^][0-9]*)*$`)
+
+// validateGitRevision bounds a user-supplied revision to a refname plus
+// optional ~N/^N ancestry suffixes. Unlike validateGitRef, the result must
+// only be passed verbatim to git as a standalone revision argument (diff
+// base, blame rev) — never concatenated into larger expressions like
+// "<ref>@{upstream}" or "<ref>..<ref>", where a '~'/'^' suffix would
+// corrupt the syntax. Leading-dash and '..' rejections still apply, and
+// argv-based exec means '~'/'^' add no injection surface; resolvability is
+// verified separately via rev-parse.
+func validateGitRevision(rev string) error {
+	if rev == "" {
+		return domain.NewError(domain.ErrInvalidInput, "revision is required")
+	}
+	if len(rev) > 256 {
+		return domain.NewError(domain.ErrInvalidInput, "revision exceeds 256 bytes")
+	}
+	if strings.Contains(rev, "..") {
+		return domain.NewError(domain.ErrInvalidInput, "revision must not contain '..' (revision ranges are not supported)")
+	}
+	if !gitRevisionPattern.MatchString(rev) {
+		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("revision %q is not valid (use a branch, tag, or commit SHA, optionally with ~N/^N ancestry suffixes)", rev))
 	}
 	return nil
 }
@@ -544,15 +589,17 @@ func resolveMergeBase(ctx context.Context, gitPath, repoRoot, branch string) (st
 	return sha, usedRef, nil
 }
 
-// verifyCommitRef confirms that ref resolves to a commit, so a diff base
+// verifyCommitRef confirms that rev resolves to a commit, so a diff base
 // fails at prepare time with a clear error instead of inside git diff.
-func verifyCommitRef(ctx context.Context, gitPath, repoRoot, ref string) error {
-	if err := validateGitRef(ref); err != nil {
+// Callers pass rev verbatim to git as a standalone revision argument, so
+// ancestry suffixes (~N/^N) are accepted here via validateGitRevision.
+func verifyCommitRef(ctx context.Context, gitPath, repoRoot, rev string) error {
+	if err := validateGitRevision(rev); err != nil {
 		return err
 	}
-	result, err := runGit(ctx, gitPath, buildRevParseVerifyArgs(repoRoot, ref+"^{commit}"), maxGitRevParseStdoutBytes, maxGitStderrBytes)
+	result, err := runGit(ctx, gitPath, buildRevParseVerifyArgs(repoRoot, rev+"^{commit}"), maxGitRevParseStdoutBytes, maxGitStderrBytes)
 	if err != nil {
-		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("ref %q does not resolve to a commit", ref), domain.WithCause(err))
+		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("revision %q does not resolve to a commit", rev), domain.WithCause(err))
 	}
 	_ = result
 	return nil

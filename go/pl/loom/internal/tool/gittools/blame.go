@@ -75,8 +75,8 @@ func NewGitBlameTool(validator *workspacepkg.PathValidator) (*GitBlameTool, erro
 			"which commit), the way `git blame` answers \"where did this code come from\". Entries carry line number, " +
 			"short commit, author, and ISO date — not line content; pair with read_file for the code itself. " +
 			"Uncommitted working-tree lines are marked uncommitted with an all-zero commit. Results are windowed " +
-			"(max 2000 lines): page with start_line/end_line. Set rev to blame a historical revision instead of " +
-			"the working tree.",
+			"(max 2000 lines): page with start_line/end_line. Set rev to a commit SHA, branch, or tag — optionally " +
+			"with ~N/^N ancestry suffixes (e.g. HEAD~3) — to blame a historical revision instead of the working tree.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1},"path":{"type":"string","minLength":1},"rev":{"type":"string","minLength":1,"maxLength":256},"start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1}},"required":["path"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"path":{"type":"string"},"rev":{"type":"string"},"start_line":{"type":"integer"},"end_line":{"type":"integer"},"entries":{"type":"array","items":{"type":"object","properties":{"line":{"type":"integer"},"commit":{"type":"string"},"author":{"type":"string"},"date":{"type":"string"},"uncommitted":{"type":"boolean"}},"required":["line","commit","author","date"]}},"truncated":{"type":"boolean"}},"required":["repo_root","path","start_line","end_line","entries","truncated"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},

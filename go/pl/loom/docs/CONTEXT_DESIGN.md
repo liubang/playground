@@ -242,7 +242,7 @@ Level 3  summarize：模型生成 handoff 总结，围绕总结重建 transcript
 
 本次事故暴露的事件流缺陷随本设计一并修复：
 
-1. **prepare_failed 补齐前置事件**：工具参数解码失败（prepare_failed）时，先落 `tool.call_prepared` + `tool.execution_started`，再落 `result_added` + `execution_completed`，消除"有完成无开始"的孤儿事件。payload 降级形态（评审 m14）：prepare 失败时 `ArgsHash`/`ReadPaths`/`ApprovalDesc` 等审计字段不存在，`tool.call_prepared` 以 `{"call_id","tool","prepare_failed":true,"args_raw_hash"}` 的降级结构落事件（`args_raw_hash` 同时供 4.4.3 的重复调用检测使用）；
+1. **prepare_failed 补齐前置事件**：工具参数解码失败（prepare_failed）时，先落 `tool.call_prepared` + `tool.execution_started`，再落 `result_added` + `execution_completed`，消除"有完成无开始"的孤儿事件。payload 降级形态（评审 m14）：prepare 失败时 `ArgsHash`/`ReadPaths`/`ApprovalDesc` 等审计字段不存在，`tool.call_prepared` 以 `{"call_id","tool","prepare_failed":true,"args_raw_hash","args_summary"}` 的降级结构落事件（`args_raw_hash` 同时供 4.4.3 的重复调用检测使用；`args_summary` 为白名单非敏感字符串参数（path/pattern/working_dir/repo_root 等）的截断摘要，便于直接从事件日志定位失败入参，完整原始参数可能含文件内容或密钥，永不落盘）；
 2. **`__malformed_arguments` 错误消息**：prepare 阶段检测到该占位结构时，提取内嵌 `error` 提示字段作为错误消息返回给模型，不再把内部字段名 `json: unknown field "__malformed_arguments"` 透传给模型。
 
 ## 5. 对现有代码的改造点
