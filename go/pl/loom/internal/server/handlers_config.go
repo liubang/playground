@@ -261,7 +261,7 @@ func (s *Server) writeAndApplyConfig(r *http.Request, incoming *config.File, rev
 	if err := incoming.RestoreSecretsFrom(cur); err != nil {
 		return nil, app.ConfigApplyReport{}, invalidInput(err.Error())
 	}
-	resolved, err := incoming.Resolve(os.LookupEnv)
+	resolved, err := incoming.Resolve(s.cfg.ConfigPath, os.LookupEnv)
 	if err != nil {
 		return nil, app.ConfigApplyReport{}, invalidInput(err.Error())
 	}

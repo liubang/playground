@@ -38,7 +38,9 @@ type LoadOptions struct {
 // Load reads, validates, and resolves the YAML config at path. It is the
 // single configuration entry point for every loom command (§3.1): no env
 // overlay, no silent defaults — any problem is a hard error whose message
-// names the file, field, and cause.
+// names the file, field, and cause. The loom home (data root) is the
+// directory containing the config file — LOOM_CONFIG is the only
+// locator, and the file never names its own home.
 func Load(path string, opts LoadOptions, lookup EnvLookup) (*ResolvedConfig, error) {
 	if lookup == nil {
 		lookup = os.LookupEnv
@@ -47,11 +49,15 @@ func Load(path string, opts LoadOptions, lookup EnvLookup) (*ResolvedConfig, err
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
+	baseDir, err := BaseDirForConfigPath(path)
+	if err != nil {
+		return nil, err
+	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			if !opts.RequireProviders {
-				return resolve(&File{}, lookup)
+				return resolve(&File{}, baseDir, lookup)
 			}
 			return nil, fmt.Errorf("config file not found: %s\n\ncreate one (or run `loom config init`):\n\n%s", path, minimalExample)
 		}
@@ -70,7 +76,7 @@ func Load(path string, opts LoadOptions, lookup EnvLookup) (*ResolvedConfig, err
 		return nil, fmt.Errorf("%s: at least one provider is required\n\nminimal example:\n\n%s", path, minimalExample)
 	}
 	warnPlaintextKeyPermissions(path, *f, logger)
-	return resolve(f, lookup)
+	return resolve(f, baseDir, lookup)
 }
 
 // warnPlaintextKeyPermissions nudges the user toward 0600 when the file

@@ -133,7 +133,7 @@ type RuleLoadOptions struct {
 }
 
 // AttachRules loads declarative rules onto the given baseline policy: the
-// embedded builtin set, plus the user layer (userDir, i.e. <base_dir>/rules)
+// embedded builtin set, plus the user layer (userDir, i.e. <loom home>/rules)
 // and the project layer (<workspace>/.loom/rules), plus the SQLite
 // remembered store under userDir. Rule loading never fails the agent —
 // broken files/stores are logged and skipped.

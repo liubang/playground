@@ -19,7 +19,9 @@
 // ~/.loom/config.yaml — the single configuration source (see
 // docs/CONFIG_DESIGN.md). The only env reads are secret references
 // (api_key_env), which resolve secret *values*, not configuration,
-// plus $HOME (via os.UserHomeDir) for the default storage base_dir.
+// plus $HOME (via os.UserHomeDir) for the default config location.
+// The loom home (data root) is the directory containing the config
+// file — see BaseDirForConfigPath.
 package config
 
 import (
@@ -53,7 +55,6 @@ type File struct {
 	Rules      Rules                `yaml:"rules,omitempty"`
 	Approval   Approval             `yaml:"approval,omitempty"`
 	Tracing    Tracing              `yaml:"tracing,omitempty"`
-	Storage    Storage              `yaml:"storage,omitempty"`
 	Logging    Logging              `yaml:"logging,omitempty"`
 	UI         UI                   `yaml:"ui,omitempty"`
 	Subagent   Subagent             `yaml:"subagent,omitempty"`
@@ -238,15 +239,8 @@ type Tracing struct {
 	CostOutputPerMTok float64 `yaml:"cost_output_usd_per_mtok,omitempty"`
 }
 
-// Storage configures on-disk locations. BaseDir is the single knob:
-// every loom data location (sessions/, logs/, memories/, rules/,
-// skills/, LOOM.md) derives from it; see ResolvedStorage.
-type Storage struct {
-	BaseDir string `yaml:"base_dir,omitempty"`
-}
-
 // Logging configures file logging quotas (glog-style daily files under
-// <base_dir>/logs). Zero values keep the built-in defaults; negative
+// <loom home>/logs). Zero values keep the built-in defaults; negative
 // values disable the corresponding limit.
 type Logging struct {
 	// MaxFileMB caps one log file in MiB; past the cap the writer rolls to

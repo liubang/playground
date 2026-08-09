@@ -425,7 +425,7 @@ const (
 var ruleFileNames = []string{"LOOM.md", "AGENTS.md", "CLAUDE.md"}
 
 // FileRulesProvider discovers layered rule files: the user-global rule
-// file (globalFile, i.e. <base_dir>/LOOM.md) first (lowest precedence),
+// file (globalFile, i.e. <loom home>/LOOM.md) first (lowest precedence),
 // then the workspace-root LOOM.md/AGENTS.md/CLAUDE.md. Missing, empty,
 // and unreadable files are skipped silently.
 type FileRulesProvider struct {
@@ -435,8 +435,8 @@ type FileRulesProvider struct {
 
 // NewFileRulesProvider creates a rules provider rooted at the workspace,
 // with an optional user-global rule file (empty disables the global
-// layer). The caller derives globalFile from the configured storage
-// base_dir (config.ResolvedStorage.LoomMDPath).
+// layer). The caller derives globalFile from the loom home
+// (config.ResolvedStorage.LoomMDPath).
 func NewFileRulesProvider(workspaceRoot, globalFile string) *FileRulesProvider {
 	return &FileRulesProvider{workspaceRoot: workspaceRoot, globalFile: globalFile}
 }

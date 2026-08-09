@@ -31,7 +31,7 @@ import (
 )
 
 // TestMain guarantees a $HOME: hermetic runners (bazel) unset it, and
-// resolving the default storage base_dir (~/.loom) requires it.
+// DefaultBaseDir / "~" expansion rely on it.
 func TestMain(m *testing.M) {
 	if os.Getenv("HOME") == "" {
 		_ = os.Setenv("HOME", os.TempDir())
@@ -138,16 +138,15 @@ providers:
 	}
 }
 
-func TestResolveStorageDefaultsToLoomHome(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home) // os.UserHomeDir reads $HOME on unix
-	// A missing config file still resolves the storage layout (offline
-	// commands run without providers).
-	cfg, err := Load(filepath.Join(t.TempDir(), "absent.yaml"), LoadOptions{}, noEnv)
+func TestResolveStorageBaseDirIsConfigDir(t *testing.T) {
+	// The loom home is the directory containing the config file — even
+	// for a missing file (offline commands run without providers).
+	dir := t.TempDir()
+	cfg, err := Load(filepath.Join(dir, "absent.yaml"), LoadOptions{}, noEnv)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	want := filepath.Join(home, ".loom")
+	want := dir
 	if cfg.Storage.BaseDir != want {
 		t.Fatalf("BaseDir = %q, want %q", cfg.Storage.BaseDir, want)
 	}
@@ -176,9 +175,47 @@ func TestResolveStorageDefaultsToLoomHome(t *testing.T) {
 	}
 }
 
-func TestResolveStorageConfiguredBaseDir(t *testing.T) {
-	base := t.TempDir()
-	cfg := loadFile(t, `
+func TestStorageBaseDirDerivesFromExistingConfig(t *testing.T) {
+	path := writeConfig(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+`)
+	cfg, err := Load(path, LoadOptions{RequireProviders: true}, noEnv)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	base := filepath.Dir(path)
+	if cfg.Storage.BaseDir != base {
+		t.Fatalf("BaseDir = %q, want %q", cfg.Storage.BaseDir, base)
+	}
+	if got, want := cfg.Storage.SessionDBPath(), filepath.Join(base, "sessions", "sessions.db"); got != want {
+		t.Fatalf("SessionDBPath() = %q, want %q", got, want)
+	}
+}
+
+func TestBaseDirForConfigPathRelative(t *testing.T) {
+	t.Chdir(t.TempDir())
+	got, err := BaseDirForConfigPath("config.yaml")
+	if err != nil {
+		t.Fatalf("BaseDirForConfigPath() error = %v", err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != cwd {
+		t.Fatalf("BaseDirForConfigPath(relative) = %q, want %q", got, cwd)
+	}
+}
+
+func TestStorageSectionIsRejected(t *testing.T) {
+	// storage.base_dir is gone: the loom home is the config file's
+	// directory, and unknown keys fail fast so a stale config says so.
+	path := writeConfig(t, `
 providers:
   - name: only
     base_url: https://example.com/v1
@@ -186,13 +223,11 @@ providers:
     models:
       - name: m1
 storage:
-  base_dir: '`+base+`'
-`, noEnv)
-	if cfg.Storage.BaseDir != base {
-		t.Fatalf("BaseDir = %q, want %q", cfg.Storage.BaseDir, base)
-	}
-	if got, want := cfg.Storage.SessionDBPath(), filepath.Join(base, "sessions", "sessions.db"); got != want {
-		t.Fatalf("SessionDBPath() = %q, want %q", got, want)
+  base_dir: /tmp/elsewhere
+`)
+	_, err := Load(path, LoadOptions{RequireProviders: true}, noEnv)
+	if err == nil || !strings.Contains(err.Error(), "storage") {
+		t.Fatalf("Load() error = %v, want an unknown-key error naming storage", err)
 	}
 }
 
@@ -763,7 +798,7 @@ func TestTemplateCoversSchemaSections(t *testing.T) {
 	// Mirror of File's top-level yaml keys (schema.go).
 	for _, section := range []string{
 		"default", "providers", "limits", "context", "runaway", "prompt",
-		"skills", "rules", "approval", "tracing", "storage", "logging",
+		"skills", "rules", "approval", "tracing", "logging",
 		"ui", "subagent", "memory", "image", "mcp_servers", "workspaces",
 	} {
 		if _, ok := raw[section]; !ok {
