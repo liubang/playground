@@ -60,13 +60,16 @@ type Config struct {
 	// AllowOrigin, when non-empty, is echoed as Access-Control-Allow-Origin;
 	// empty denies all cross-origin requests (the default).
 	AllowOrigin string
-	// PublicBaseURL, when non-empty, is the externally reachable base URL of
-	// this server (e.g. "http://192.168.1.5:7680" for LAN sharing). Share-link
-	// responses then carry an absolute "url" field so clients embedding the
-	// SPA in a non-HTTP origin (the desktop webview) can hand out working
-	// links (docs/DESKTOP_DESIGN.md §5.2). Must include the scheme; normalized
-	// (trailing slashes stripped) by New.
-	PublicBaseURL string
+	// ShareOnly mounts only the public share surface — the /share/{token}
+	// page, static assets, and the /v1/shared/* read APIs — the minimal
+	// listener exposed on the LAN (docs/DESKTOP_DESIGN.md §5). No bearer
+	// routes are registered at all.
+	ShareOnly bool
+	// Share, when non-nil, wires the runtime share-endpoint management
+	// routes (GET/POST /v1/share/endpoint) and lets share minting embed
+	// the listener's live public base URL in the response (the webview
+	// talks to the loopback UI, so a static per-server base never fits).
+	Share *ShareManager
 	// NoWeb disables the embedded SPA (pure API mode, docs/WEB_DESIGN.md §7.1).
 	NoWeb bool
 	// ConfigPath is the active config file path (the same locator the
@@ -123,12 +126,6 @@ func New(cfg Config) (*Server, error) {
 	}
 	if cfg.Listen == "" {
 		cfg.Listen = "127.0.0.1:7680"
-	}
-	if cfg.PublicBaseURL != "" {
-		cfg.PublicBaseURL = strings.TrimRight(cfg.PublicBaseURL, "/")
-		if !strings.HasPrefix(cfg.PublicBaseURL, "http://") && !strings.HasPrefix(cfg.PublicBaseURL, "https://") {
-			return nil, errors.New("server: PublicBaseURL must start with http:// or https://")
-		}
 	}
 	logger := cfg.Logger
 	if logger == nil {
@@ -239,6 +236,19 @@ func (s *Server) draining() bool {
 }
 
 func (s *Server) routes(mux *http.ServeMux) {
+	if s.cfg.ShareOnly {
+		// The LAN share listener carries only the public read surface: the
+		// unguessable token in the URL is the capability, and no bearer
+		// route exists here at all.
+		mux.HandleFunc("GET /v1/shared/{token}", s.handleSharedView)
+		mux.HandleFunc("GET /v1/shared/{token}/artifacts/{id}", s.handleSharedArtifact)
+		mux.Handle("GET /share/{token}", web.SharePageHandler())
+		// Static assets for the share page (the catch-all also answers /
+		// with the SPA gate page — a static file, harmless without any
+		// API to talk to).
+		mux.Handle("GET /", web.Handler())
+		return
+	}
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 	mux.HandleFunc("GET /v1/meta/version", s.handleMetaVersion)
@@ -280,6 +290,10 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /v1/sessions/{id}/share", s.handleRevokeShare)
 	mux.HandleFunc("GET /v1/shared/{token}", s.handleSharedView)
 	mux.HandleFunc("GET /v1/shared/{token}/artifacts/{id}", s.handleSharedArtifact)
+	if s.cfg.Share != nil {
+		mux.HandleFunc("GET /v1/share/endpoint", s.handleGetShareEndpoint)
+		mux.HandleFunc("POST /v1/share/endpoint", s.handleSetShareEndpoint)
+	}
 	if !s.cfg.NoWeb {
 		mux.Handle("GET /share/{token}", web.SharePageHandler())
 	}
@@ -340,8 +354,10 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		}
 		// The SPA's static assets are not sensitive: the token gate page
 		// must be reachable anonymously, and every /v1 endpoint still
-		// requires the bearer token (docs/WEB_DESIGN.md §7.1).
-		if !isHealthRoute(r.URL.Path) && !isStaticRoute(r.URL.Path) && !isSharedRoute(r.URL.Path) && !s.authorized(r) {
+		// requires the bearer token (docs/WEB_DESIGN.md §7.1). ShareOnly
+		// listeners skip the gate entirely: they register public routes
+		// only, so anything unknown must 404, not 401.
+		if !s.cfg.ShareOnly && !isHealthRoute(r.URL.Path) && !isStaticRoute(r.URL.Path) && !isSharedRoute(r.URL.Path) && !s.authorized(r) {
 			writeError(w, errUnauthorized)
 			return
 		}

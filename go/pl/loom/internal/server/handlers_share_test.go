@@ -80,8 +80,8 @@ func TestShareLinkLifecycle(t *testing.T) {
 	if path, _ := share["path"].(string); path != "/share/"+token {
 		t.Fatalf("share path = %v, want /share/<token>", share["path"])
 	}
-	// No PublicBaseURL configured: the absolute url field must be absent so
-	// clients fall back to their own origin (docs/DESKTOP_DESIGN.md §5.2).
+	// No share listener configured: the absolute url field must be absent
+	// so clients fall back to their own origin (docs/DESKTOP_DESIGN.md §5.2).
 	if _, ok := share["url"]; ok {
 		t.Fatalf("share response unexpectedly carries url: %v", share["url"])
 	}
@@ -183,18 +183,32 @@ func TestResumeSessionUnknownContentLength(t *testing.T) {
 	}
 }
 
-// TestShareAbsoluteURL locks the PublicBaseURL contract
-// (docs/DESKTOP_DESIGN.md §5.2): when an external base URL is configured,
-// share responses carry an absolute "url" so clients on a non-HTTP origin
-// (the desktop webview) can hand out working links.
+// TestShareAbsoluteURL locks the dynamic public-base contract
+// (docs/DESKTOP_DESIGN.md §5.2): while the LAN share listener is up,
+// share responses carry an absolute "url" built from its live public
+// base, so clients on a non-HTTP origin (the desktop webview) can hand
+// out working links — and the share-only listener actually serves the
+// link.
 func TestShareAbsoluteURL(t *testing.T) {
 	svc := newTestServiceWithRecorder(t, fakes.NewFakeModel(), nil)
+	shareMgr := NewShareManager(func(listen string) (*Server, error) {
+		return New(Config{
+			Listen: listen, Token: testToken, Version: "test", Service: svc, ShareOnly: true,
+		})
+	}, nil)
+	t.Cleanup(shareMgr.Close)
+	if err := shareMgr.Apply(true, "127.0.0.1:0"); err != nil {
+		t.Fatalf("enable share endpoint: %v", err)
+	}
+	base := shareMgr.PublicBase()
+	if base == "" {
+		t.Fatal("share endpoint enabled but PublicBase is empty")
+	}
 	srv, err := New(Config{
 		Token:   testToken,
 		Version: "test",
 		Service: svc,
-		// Trailing slash: New normalizes it away.
-		PublicBaseURL: "http://192.168.1.5:7680/",
+		Share:   shareMgr,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -208,25 +222,30 @@ func TestShareAbsoluteURL(t *testing.T) {
 		t.Fatalf("POST share status = %d, want 200 (%v)", status, share)
 	}
 	token, _ := share["token"].(string)
-	want := "http://192.168.1.5:7680/share/" + token
+	want := base + "/share/" + token
 	if share["url"] != want {
 		t.Fatalf("share url = %v, want %q", share["url"], want)
 	}
 	if share["path"] != "/share/"+token {
 		t.Fatalf("share path = %v, want /share/<token>", share["path"])
 	}
-}
 
-// TestPublicBaseURLValidation: only http(s) base URLs are accepted —
-// anything else would mint broken or surprising share links.
-func TestPublicBaseURLValidation(t *testing.T) {
-	svc := newTestServiceWithRecorder(t, fakes.NewFakeModel(), nil)
-	for _, base := range []string{"ftp://x", "192.168.1.5:7680", "//x"} {
-		if _, err := New(Config{
-			Token: testToken, Version: "test", Service: svc, PublicBaseURL: base,
-		}); err == nil {
-			t.Fatalf("New(PublicBaseURL=%q): want validation error", base)
-		}
+	// The share-only listener serves the public view without credentials.
+	status, body := getPublic(t, base+"/v1/shared/"+token)
+	if status != http.StatusOK {
+		t.Fatalf("GET shared view via share listener status = %d (%s), want 200", status, body)
+	}
+	// …and nothing else: owner routes are not even registered there.
+	status, _ = getPublic(t, base+"/v1/sessions")
+	if status != http.StatusNotFound {
+		t.Fatalf("GET /v1/sessions via share listener status = %d, want 404", status)
+	}
+
+	// Listener down → mints fall back to path-only responses.
+	shareMgr.Close()
+	_, share = doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/share", "")
+	if _, ok := share["url"]; ok {
+		t.Fatalf("share response with listener down unexpectedly carries url: %v", share["url"])
 	}
 }
 

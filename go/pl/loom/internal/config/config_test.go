@@ -212,6 +212,55 @@ func TestBaseDirForConfigPathRelative(t *testing.T) {
 	}
 }
 
+func TestResolveShare(t *testing.T) {
+	// Defaults: disabled, fixed built-in bind address.
+	cfg := loadFile(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+`, noEnv)
+	if cfg.Share.Enabled || cfg.Share.Listen != DefaultShareListen {
+		t.Fatalf("share defaults = %+v, want disabled with %q", cfg.Share, DefaultShareListen)
+	}
+
+	cfg = loadFile(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+share:
+  enabled: true
+  listen: 192.168.1.5:9000
+`, noEnv)
+	if !cfg.Share.Enabled || cfg.Share.Listen != "192.168.1.5:9000" {
+		t.Fatalf("share = %+v, want enabled on 192.168.1.5:9000", cfg.Share)
+	}
+
+	// Invalid listen values fail fast: no host:port shape, port 0 (links
+	// would not survive restarts), out-of-range ports.
+	for _, listen := range []string{"not-an-addr", "0.0.0.0:0", "0.0.0.0:99999", "0.0.0.0:http"} {
+		path := writeConfig(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+share:
+  listen: '`+listen+`'
+`)
+		if _, err := Load(path, LoadOptions{RequireProviders: true}, noEnv); err == nil ||
+			!strings.Contains(err.Error(), "share.listen") {
+			t.Fatalf("share.listen %q: error = %v, want a share.listen error", listen, err)
+		}
+	}
+}
+
 func TestStorageSectionIsRejected(t *testing.T) {
 	// storage.base_dir is gone: the loom home is the config file's
 	// directory, and unknown keys fail fast so a stale config says so.
@@ -798,7 +847,7 @@ func TestTemplateCoversSchemaSections(t *testing.T) {
 	// Mirror of File's top-level yaml keys (schema.go).
 	for _, section := range []string{
 		"default", "providers", "limits", "context", "runaway", "prompt",
-		"skills", "rules", "approval", "tracing", "logging",
+		"skills", "rules", "approval", "tracing", "share", "logging",
 		"ui", "subagent", "memory", "image", "mcp_servers", "workspaces",
 	} {
 		if _, ok := raw[section]; !ok {
