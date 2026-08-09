@@ -6,6 +6,7 @@ const WATCHDOG_MS = 45_000;       // 服务端心跳 15s；45s 无帧判死
 const WATCHDOG_TICK_MS = 5_000;
 const BACKOFF_MIN_MS = 1_000;
 const BACKOFF_MAX_MS = 15_000;
+const RATE_LIMIT_RETRY_MS = 30_000; // 429 流数超限：慢速重试（对端标签页关闭即自愈）
 
 export class EventStream {
   // callbacks: onEvent(evt), onResync(reason), onDraining(),
@@ -48,6 +49,29 @@ export class EventStream {
     this._stopWatchdog();
   }
 
+  // ensureLive 在页面生命周期事件（visibilitychange/pageshow/online/focus）
+  // 时调用：看门狗的 setInterval 会随页面一起被系统挂起（App Nap / 窗口
+  // 遮挡 / BFCache），冻结期间 TCP 半开、连接悄死，恢复后没有任何定时器
+  // 会发现它——必须由页面事件主动戳一下。连接在且帧新鲜时是 no-op。
+  ensureLive() {
+    if (this.stopped || this.drained || !this.sessionId) return;
+    // 退避等待中（含 429 慢速重试）：不等了，立即重连。
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+      this.retries = 0;
+      this._connect();
+      return;
+    }
+    // 连接看似在途但已超心跳期限：判死杀掉，立即重连。
+    const stale = this.lastFrameAt > 0 && Date.now() - this.lastFrameAt > WATCHDOG_MS;
+    if (stale || !this.abort) {
+      if (this.abort) { this.abort.abort(); this.abort = null; }
+      this.retries = 0;
+      this._connect();
+    }
+  }
+
   async _connect() {
     if (this.stopped) return;
     this.onConn(this.retries === 0 ? "connecting" : "reconnecting");
@@ -65,8 +89,11 @@ export class EventStream {
     }
     if (res.status === 401) { this.onAuthError(); return; }
     if (res.status === 429) {
+      // 流数超限：升 dead 让 UI 提示（附手动重试），同时挂一个慢速自动
+      // 重试——别处的标签页关闭后无需用户干预即可自愈。
       this.onConn("dead", "too many tabs streaming this session");
-      return; // 不重连：用户在别处开了太多流
+      this.retryTimer = setTimeout(() => this._connect(), RATE_LIMIT_RETRY_MS);
+      return;
     }
     if (!res.ok) {
       return this._scheduleRetry();
@@ -88,7 +115,8 @@ export class EventStream {
     const base = Math.min(BACKOFF_MAX_MS, BACKOFF_MIN_MS * 2 ** this.retries);
     const jitter = base * (0.75 + Math.random() * 0.5);
     this.retries++;
-    this.onConn("reconnecting", `retry in ${Math.round(jitter / 1000)}s`);
+    // attempt 给 UI 判断「连续失败」用：达到阈值后升起横幅强提示。
+    this.onConn("reconnecting", `retry in ${Math.round(jitter / 1000)}s`, this.retries);
     this.retryTimer = setTimeout(() => this._connect(), jitter);
   }
 

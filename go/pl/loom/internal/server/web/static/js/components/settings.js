@@ -292,9 +292,8 @@ const TABS = [
           key: "approval.mode", label: "审批模式", type: "select",
           options: [
             ["", "默认（on-request）"],
-            ["on-request", "on-request · 沙箱内非危险命令免审批"],
+            ["on-request", "on-request · 沙箱内/工作区内免审批"],
             ["unless-dangerous", "unless-dangerous · 黑名单模式"],
-            ["unless-trusted", "unless-trusted · 保守白名单"],
             ["never", "never · 无人值守"],
           ],
           hint: "无规则/记忆命中时的决策策略",
