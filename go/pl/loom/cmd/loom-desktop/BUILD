@@ -50,6 +50,11 @@ go_library(
         "//conditions:default": [],
     }),
     importpath = "github.com/liubang/playground/go/pl/loom/cmd/loom-desktop",
+    # `manual` on the library too, not just the binary/test: wildcard builds
+    # like `bazel coverage //go/...` still build non-test targets matched by
+    # the pattern, and this one drags in wails' CGO webview (gtk on Linux),
+    # which breaks the Linux CI coverage job before any test can run.
+    tags = ["manual"],
     visibility = ["//visibility:private"],
     deps = [
         "//go/pl/loom/internal/app:app",
