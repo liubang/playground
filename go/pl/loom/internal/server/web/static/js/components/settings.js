@@ -131,7 +131,20 @@ function fieldRow(spec, onReveal) {
   } else {
     body.appendChild(ctl);
   }
-  if (spec.hint) body.appendChild(el("div", "set-hint", spec.hint));
+  // optionHints：随 select 当前值切换的解释文案（change 实时更新，
+  // 初始值由 fillControl 经 ctl._refreshHint 回填后刷新）。
+  if (spec.hint || spec.optionHints) {
+    const hint = el("div", "set-hint");
+    if (spec.optionHints) {
+      const update = () => { hint.textContent = spec.optionHints[ctl.value] ?? spec.hint ?? ""; };
+      ctl.addEventListener("change", update);
+      ctl._refreshHint = update;
+      update();
+    } else {
+      hint.textContent = spec.hint;
+    }
+    body.appendChild(hint);
+  }
   row.appendChild(body);
   return row;
 }
@@ -165,6 +178,8 @@ function fillControl(ctl, value) {
     default:
       ctl.value = value === "" ? "" : String(value);
   }
+  // 随值变化的附属文案（select 的 optionHints）在填充后刷新。
+  if (ctl._refreshHint) ctl._refreshHint();
 }
 
 function fillScope(scopeEl, obj) {
@@ -299,6 +314,12 @@ const TABS = [
             ["never", "never · 无人值守"],
           ],
           hint: "无规则/记忆命中时的决策策略",
+          optionHints: {
+            "": "on-request（默认）：沙箱内命令、工作区内读写免审批；仅出沙箱提权/网络放宽/危险清单弹审批",
+            "on-request": "沙箱内命令、工作区内读写免审批；仅出沙箱提权/网络放宽/危险清单弹审批",
+            "unless-dangerous": "黑名单模式：仅危险清单和出沙箱提权弹审批，needs_network 直接放网",
+            "never": "无人值守：沙箱内放行，提权与危险命令直接拒绝，永不阻塞等待审批",
+          },
         },
       ]],
       ["规则层", [
