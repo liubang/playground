@@ -18,8 +18,11 @@
 package process
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 func dirSet(paths ...string) func(string) bool {
@@ -43,6 +46,36 @@ func TestAugmentedPATHSkipsMissingDirs(t *testing.T) {
 	got := AugmentedPATH("/usr/bin", "/home/u", dirSet())
 	if got != "/usr/bin" {
 		t.Fatalf("AugmentedPATH = %q, want unchanged base", got)
+	}
+}
+
+// TestExtraWritableDirs locks the default writable scope beyond the
+// workspace: canonical scratch dirs plus the regenerable toolchain
+// caches (home-relative entries need $HOME).
+func TestExtraWritableDirs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dirs := ExtraWritableDirs()
+	set := make(map[string]bool, len(dirs))
+	for _, d := range dirs {
+		if !filepath.IsAbs(d) {
+			t.Fatalf("non-absolute entry %q", d)
+		}
+		set[d] = true
+	}
+	for _, want := range workspacepkg.ScratchDirs() {
+		if !set[want] {
+			t.Errorf("missing scratch dir %q in %v", want, dirs)
+		}
+	}
+	for _, cache := range []string{
+		"Library/Caches/go-build", ".npm", "go/pkg/mod",
+		".cargo/registry", ".gradle", ".m2/repository",
+	} {
+		want := workspacepkg.Canonicalize(filepath.Join(home, cache))
+		if !set[want] {
+			t.Errorf("missing toolchain cache %q in %v", want, dirs)
+		}
 	}
 }
 

@@ -158,16 +158,20 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		logger = slog.Default()
 	}
 
-	// Create workspace validator
-	validator, err := workspace.NewPathValidator(cfg.WorkspaceRoot)
+	// Create workspace validator. The system scratch dirs ($TMPDIR, /tmp)
+	// are extra writable roots so the file tools and the OS sandbox draw
+	// the same boundary (process.ExtraWritableDirs derives from the same
+	// ScratchDirs list).
+	validator, err := workspace.NewPathValidator(cfg.WorkspaceRoot, workspace.ScratchDirs()...)
 	if err != nil {
 		return nil, fmt.Errorf("create path validator: %w", err)
 	}
 
 	// Create process runner. The env allowlist additionally permits the Go
-	// toolchain variables the lint tool overrides (the sandbox only allows
-	// writes inside the workspace and the temp dir, so GOCACHE must be
-	// redirectable for go vet to work at all). SessionEnv injects the loom
+	// toolchain variables as a fallback: the sandbox already allows writes
+	// to the toolchain caches (process.ExtraWritableDirs), but a user-set
+	// GOCACHE/GOMODCACHE pointing elsewhere must stay redirectable.
+	// SessionEnv injects the loom
 	// attribution variables (see process.LoomSessionEnv) into every spawned
 	// command so downstream CLIs can attribute traffic to this session.
 	runner, err := process.NewRunner(validator, process.RunnerOptions{

@@ -44,9 +44,11 @@ var (
 	beforeCommitHook func(string)
 )
 
-// PathValidator ensures file paths stay within the workspace root.
+// PathValidator ensures file paths stay within the workspace root, plus
+// any explicitly allowed extra roots (the system scratch dirs).
 type PathValidator struct {
-	root string
+	root       string
+	extraRoots []string
 }
 
 // ResolvedPath is a lexical workspace path normalized for secure I/O.
@@ -72,9 +74,10 @@ type AtomicWriteOptions struct {
 	SyncParent   bool
 }
 
-// NewPathValidator creates a validator for the given workspace root.
-// The root is resolved to an absolute, symlink-free path.
-func NewPathValidator(root string) (*PathValidator, error) {
+// NewPathValidator creates a validator for the given workspace root;
+// extraRoots are additional writable roots (the system scratch dirs —
+// ScratchDirs). Every root is resolved to an absolute, symlink-free path.
+func NewPathValidator(root string, extraRoots ...string) (*PathValidator, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("abs path: %w", err)
@@ -83,7 +86,69 @@ func NewPathValidator(root string) (*PathValidator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("eval symlinks: %w", err)
 	}
-	return &PathValidator{root: resolved}, nil
+	seen := map[string]bool{resolved: true}
+	extra := make([]string, 0, len(extraRoots))
+	for _, r := range extraRoots {
+		if c := Canonicalize(r); c != "" && !seen[c] {
+			seen[c] = true
+			extra = append(extra, c)
+		}
+	}
+	return &PathValidator{root: resolved, extraRoots: extra}, nil
+}
+
+// matchRoot returns the root (workspace or extra) containing path.
+func (v *PathValidator) matchRoot(path string) (string, bool) {
+	if isUnderRoot(path, v.root) {
+		return v.root, true
+	}
+	for _, r := range v.extraRoots {
+		if isUnderRoot(path, r) {
+			return r, true
+		}
+	}
+	return "", false
+}
+
+// Canonicalize resolves path to its symlink-free canonical form: sandbox
+// profiles and validators both match canonical paths, and on macOS /var
+// and /tmp are symlinks into /private. Paths that do not exist yet
+// resolve through their nearest existing ancestor. Callers pass absolute
+// paths (relative input is cleaned but not made absolute).
+func Canonicalize(path string) string {
+	clean := filepath.Clean(path)
+	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+		return resolved
+	}
+	dir := clean
+	var tail []string
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return clean
+		}
+		tail = append([]string{filepath.Base(dir)}, tail...)
+		if resolved, err := filepath.EvalSymlinks(parent); err == nil {
+			for _, elem := range tail {
+				resolved = filepath.Join(resolved, elem)
+			}
+			return resolved
+		}
+		dir = parent
+	}
+}
+
+// ScratchDirs returns the canonical system scratch directories the agent
+// may freely read and write: the per-user temp dir ($TMPDIR) and the
+// shared /tmp. Both sides of the workspace boundary — the OS sandbox
+// profile and this validator — derive their temp-dir allowance from
+// this list, so they can never disagree.
+func ScratchDirs() []string {
+	dirs := []string{Canonicalize(os.TempDir())}
+	if tmp := Canonicalize(string(filepath.Separator) + "tmp"); tmp != dirs[0] {
+		dirs = append(dirs, tmp)
+	}
+	return dirs
 }
 
 // Root returns the workspace root.
@@ -121,8 +186,8 @@ func (v *PathValidator) Validate(path string) (string, error) {
 		}
 	}
 
-	// Ensure resolved path is under root
-	if !isUnderRoot(resolved, v.root) {
+	// Ensure resolved path is under an allowed root
+	if _, ok := v.matchRoot(resolved); !ok {
 		return "", fmt.Errorf("path %q escapes workspace root %q", path, v.root)
 	}
 
@@ -146,11 +211,22 @@ func (v *PathValidator) ResolveLexical(path string) (ResolvedPath, error) {
 		full = filepath.Join(v.root, cleaned)
 	}
 	full = filepath.Clean(full)
-	if !isUnderRoot(full, v.root) {
-		return ResolvedPath{}, fmt.Errorf("path %q escapes workspace root %q", path, v.root)
+	root, ok := v.matchRoot(full)
+	abs := full
+	if !ok {
+		// External absolute paths may reach an allowed scratch root
+		// through a symlinked prefix (macOS /tmp → /private/tmp): decide
+		// and resolve against the canonical form. Workspace-internal
+		// paths keep lexical semantics — their symlink defenses run
+		// downstream (ensurePathChain), unchanged.
+		abs = Canonicalize(full)
+		root, ok = v.matchRoot(abs)
+		if !ok {
+			return ResolvedPath{}, fmt.Errorf("path %q escapes workspace root %q", path, v.root)
+		}
 	}
 
-	rel, err := filepath.Rel(v.root, full)
+	rel, err := filepath.Rel(root, abs)
 	if err != nil {
 		return ResolvedPath{}, fmt.Errorf("rel path: %w", err)
 	}
@@ -158,8 +234,13 @@ func (v *PathValidator) ResolveLexical(path string) (ResolvedPath, error) {
 		return ResolvedPath{}, fmt.Errorf("path %q contains a sensitive component", path)
 	}
 
+	if root != v.root {
+		// Extra root (system scratch): no workspace-relative form — the
+		// display path is the absolute path itself.
+		return ResolvedPath{Absolute: abs, Display: abs}, nil
+	}
 	return ResolvedPath{
-		Absolute: full,
+		Absolute: abs,
 		Relative: rel,
 		Display:  displayPath(rel),
 	}, nil

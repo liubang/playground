@@ -23,8 +23,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
+
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 const sandboxExecPath = "/usr/bin/sandbox-exec"
@@ -109,20 +110,23 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 		return "", fmt.Errorf("seatbelt requires absolute paths")
 	}
 
-	writePaths := []string{canonicalWritePath(spec.WorkspaceRoot)}
+	writePaths := []string{workspacepkg.Canonicalize(spec.WorkspaceRoot)}
 	for _, path := range spec.WritablePaths {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
-		writePaths = append(writePaths, canonicalWritePath(path))
+		writePaths = append(writePaths, workspacepkg.Canonicalize(path))
 	}
 	for _, path := range s.writablePaths {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
-		writePaths = append(writePaths, canonicalWritePath(path))
+		writePaths = append(writePaths, workspacepkg.Canonicalize(path))
 	}
-	writePaths = append(writePaths, canonicalWritePath(os.TempDir()))
+	// Scratch dirs ($TMPDIR, /tmp) and regenerable toolchain caches are
+	// writable by every sandboxed command — the single source is
+	// ExtraWritableDirs, shared with the file-tool path validator.
+	writePaths = append(writePaths, ExtraWritableDirs()...)
 	writePaths = uniqueCleanPaths(writePaths)
 
 	var lines []string
@@ -170,7 +174,7 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 	for _, rule := range sensitiveUnlinkDenies() {
 		lines = append(lines, rule)
 	}
-	workspace := canonicalWritePath(spec.WorkspaceRoot)
+	workspace := workspacepkg.Canonicalize(spec.WorkspaceRoot)
 	for _, rel := range protectedWorkspaceSubpaths {
 		protected := seatbeltQuote(filepath.Join(workspace, rel))
 		lines = append(lines,
@@ -218,7 +222,7 @@ func sensitiveHome() string {
 	if err != nil || home == "" {
 		return ""
 	}
-	return canonicalWritePath(home)
+	return workspacepkg.Canonicalize(home)
 }
 
 // sensitiveReadDenies returns seatbelt rules denying reads of
@@ -261,52 +265,6 @@ func sensitiveUnlinkDenies() []string {
 		rules = append(rules, fmt.Sprintf("(deny file-write-unlink (literal %s))", seatbeltQuote(filepath.Join(home, rel))))
 	}
 	return rules
-}
-
-// canonicalWritePath resolves symlinks in a writable path because
-// seatbelt matches CANONICAL paths: on macOS /var and /tmp are symlinks
-// into /private, so the /var/folders/... form of TMPDIR never matches a
-// (subpath ...) rule — writes silently failed. Paths that do not exist
-// yet resolve through their nearest existing ancestor.
-func canonicalWritePath(path string) string {
-	clean := filepath.Clean(path)
-	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
-		return resolved
-	}
-	dir := clean
-	var tail []string
-	for {
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return clean
-		}
-		tail = append([]string{filepath.Base(dir)}, tail...)
-		if resolved, err := filepath.EvalSymlinks(parent); err == nil {
-			for _, elem := range tail {
-				resolved = filepath.Join(resolved, elem)
-			}
-			return resolved
-		}
-		dir = parent
-	}
-}
-
-func uniqueCleanPaths(paths []string) []string {
-	seen := map[string]struct{}{}
-	result := make([]string, 0, len(paths))
-	for _, path := range paths {
-		path = filepath.Clean(strings.TrimSpace(path))
-		if path == "." || path == "" || !filepath.IsAbs(path) {
-			continue
-		}
-		if _, ok := seen[path]; ok {
-			continue
-		}
-		seen[path] = struct{}{}
-		result = append(result, path)
-	}
-	sort.Strings(result)
-	return result
 }
 
 func seatbeltQuote(path string) string {
