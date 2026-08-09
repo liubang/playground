@@ -617,9 +617,14 @@ func main() {
 }
 `))
 
+	// GOMODCACHE must be allowlisted: the tool sets it explicitly (see
+	// detect.go) because go >= 1.24 aborts with "module cache not found:
+	// neither GOMODCACHE nor GOPATH is set" in hermetic environments
+	// without HOME (bazel test on CI), and the runner drops override keys
+	// that are not in the allowlist.
 	runner, err := process.NewRunner(validator, process.RunnerOptions{
 		Sandbox:      process.ExplicitTestSandbox{},
-		EnvAllowlist: []string{"PATH", "HOME", "TMPDIR", "GOCACHE", "GOPROXY", "GOFLAGS"},
+		EnvAllowlist: []string{"PATH", "HOME", "TMPDIR", "GOCACHE", "GOMODCACHE", "GOPROXY", "GOFLAGS"},
 	})
 	if err != nil {
 		t.Fatalf("NewRunner() error = %v", err)
