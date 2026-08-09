@@ -19,11 +19,13 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -111,6 +113,7 @@ type ResolvedConfig struct {
 	Approval  ResolvedApproval
 	Tracing   trace.Config
 	Storage   ResolvedStorage
+	Share     ResolvedShare
 	Logging   ResolvedLogging
 	UI        UI
 	Subagent  ResolvedSubagent
@@ -127,6 +130,41 @@ type ResolvedConfig struct {
 type ResolvedWorkspace struct {
 	Name string
 	Root string
+}
+
+// ResolvedShare is the share section with defaults applied.
+type ResolvedShare struct {
+	Enabled bool
+	Listen  string
+}
+
+// DefaultShareListen is the built-in bind address for the LAN share
+// listener: all interfaces on a fixed port — distinct from `loom
+// serve`'s default 7680 so both may run on one machine.
+const DefaultShareListen = "0.0.0.0:7681"
+
+// resolveShare overlays the share section onto the defaults and
+// validates the bind address (host:port, numeric port 1-65535; a port
+// of 0 would make share links unreproducible across restarts).
+func resolveShare(in Share) (ResolvedShare, error) {
+	out := ResolvedShare{
+		Enabled: in.Enabled != nil && *in.Enabled,
+		Listen:  DefaultShareListen,
+	}
+	raw := strings.TrimSpace(in.Listen)
+	if raw == "" {
+		return out, nil
+	}
+	_, port, err := net.SplitHostPort(raw)
+	if err != nil {
+		return ResolvedShare{}, fmt.Errorf("config: share.listen: expected host:port, got %q", raw)
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil || p < 1 || p > 65535 {
+		return ResolvedShare{}, fmt.Errorf("config: share.listen: port must be 1-65535, got %q", port)
+	}
+	out.Listen = raw
+	return out, nil
 }
 
 // ResolvedLogging is the logging section with defaults applied and MiB
@@ -436,6 +474,10 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	approval := ResolvedApproval{Mode: mode}
+	share, err := resolveShare(f.Share)
+	if err != nil {
+		return nil, err
+	}
 	out := &ResolvedConfig{
 		Providers: providers,
 		Limits:    limits,
@@ -451,6 +493,7 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 		Approval: approval,
 		Tracing:  tracing,
 		Storage:  ResolvedStorage{BaseDir: baseDir},
+		Share:    share,
 		Logging:  resolveLogging(f.Logging),
 		UI:       f.UI,
 	}

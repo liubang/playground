@@ -32,6 +32,7 @@ go_library(
         "handlers_workspaces.go",
         "lock.go",
         "server.go",
+        "share_manager.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/server",
     visibility = ["//go/pl/loom:__subpackages__"],
@@ -57,6 +58,7 @@ go_test(
         "handlers_skills_test.go",
         "middleware_test.go",
         "server_test.go",
+        "share_manager_test.go",
     ],
     embed = [":server"],
     deps = [

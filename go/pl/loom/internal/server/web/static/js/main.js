@@ -892,8 +892,29 @@ initTooltips(); // 全局接管 title 属性 → 主题化悬浮提示
         toast("分享已撤销", true);
         return;
       }
-      // 服务端配置了对外地址（PublicBaseURL，如桌面端内网分享）时返回绝对
-      // url；缺省退回按当前 origin 拼接（docs/DESKTOP_DESIGN.md §5.2）。
+      // 桌面端：分享监听未开启时就地确认并开启——开启动作写穿到
+      // share.enabled 并热应用（即时生效且持久）；loom serve 无开关
+      // （404），直接用当前 origin 拼接。
+      try {
+        const endpoint = await app.api.getShareEndpoint();
+        if (!endpoint.enabled) {
+          const ok = await confirmDialog({
+            title: "开启局域网分享",
+            body: "分享链接需要一个局域网可达的监听。开启后，同一网络内持有链接的人可只读查看本会话（可随时在设置 → 系统 → 局域网分享关闭）。",
+            okLabel: "开启并复制链接",
+          });
+          if (!ok) return;
+          const resp = await app.api.setShareEndpoint(true);
+          if (resp?.endpoint?.error) {
+            toast("分享监听启动失败: " + resp.endpoint.error);
+            return;
+          }
+        }
+      } catch (err) {
+        if (err.status !== 404) throw err;
+      }
+      // 分享监听在线时服务端返回绝对 url（docs/DESKTOP_DESIGN.md §5.2）；
+      // 缺省退回按当前 origin 拼接。
       const { path, url: absoluteUrl } = await app.api.shareSession(app.sessionId);
       const url = absoluteUrl || location.origin + path;
       if (await copyText(url)) {

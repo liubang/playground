@@ -55,6 +55,7 @@ type File struct {
 	Rules      Rules                `yaml:"rules,omitempty"`
 	Approval   Approval             `yaml:"approval,omitempty"`
 	Tracing    Tracing              `yaml:"tracing,omitempty"`
+	Share      Share                `yaml:"share,omitempty"`
 	Logging    Logging              `yaml:"logging,omitempty"`
 	UI         UI                   `yaml:"ui,omitempty"`
 	Subagent   Subagent             `yaml:"subagent,omitempty"`
@@ -237,6 +238,18 @@ type Tracing struct {
 	// attribution.
 	CostInputPerMTok  float64 `yaml:"cost_input_usd_per_mtok,omitempty"`
 	CostOutputPerMTok float64 `yaml:"cost_output_usd_per_mtok,omitempty"`
+}
+
+// Share is the persistent preference for the optional LAN share
+// listener (loom-desktop, docs/DESKTOP_DESIGN.md §5): whether it starts
+// at launch, and its fixed bind address. A stable port is what lets
+// share links survive restarts — share tokens are persisted in the
+// session store. Toggling at runtime (POST /v1/share/endpoint) writes
+// through to enabled and hot-applies, so the on/off state never
+// diverges from this file.
+type Share struct {
+	Enabled *bool  `yaml:"enabled,omitempty"`
+	Listen  string `yaml:"listen,omitempty"`
 }
 
 // Logging configures file logging quotas (glog-style daily files under

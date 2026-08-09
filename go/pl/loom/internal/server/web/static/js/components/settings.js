@@ -29,7 +29,7 @@ const SECRET_MASK = "••••••••••";
 const PRESERVE_PATHS = ["ui.keymap", "skills.disabled"];
 const KNOWN_TOP_KEYS = new Set([
   "default", "providers", "limits", "context", "runaway", "prompt",
-  "skills", "rules", "approval", "tracing", "logging",
+  "skills", "rules", "approval", "tracing", "share", "logging",
   "ui", "subagent", "memory", "image", "mcp_servers", "workspaces",
 ]);
 
@@ -357,6 +357,10 @@ const TABS = [
         { key: "tracing.user", label: "归属用户", hint: "留空依次取 git user.email、$USER" },
         { key: "tracing.cost_input_usd_per_mtok", label: "输入费率 (USD/Mtok)", type: "number", step: 0.01, ph: "0" },
         { key: "tracing.cost_output_usd_per_mtok", label: "输出费率 (USD/Mtok)", type: "number", step: 0.01, ph: "0" },
+      ]],
+      ["局域网分享", [
+        { key: "share.enabled", label: "开启局域网分享", type: "tristate", def: "关闭", hint: "保存后立即生效（热应用）；监听仅暴露只读分享页，不挂管理 API" },
+        { key: "share.listen", label: "监听地址", ph: "0.0.0.0:7681", hint: "固定端口使分享链接跨重启存活；0.0.0.0 = 所有接口，也可绑特定接口 IP" },
       ]],
       ["日志", [
         { key: "logging.max_file_mb", label: "单日志文件上限 (MiB)", type: "number", ph: "2048" },

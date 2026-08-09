@@ -18,9 +18,9 @@
 // loom-desktop is the Wails desktop frontend (docs/DESKTOP_DESIGN.md): it
 // assembles the runtime exactly like `loom serve`, then mounts the server's
 // fully-middlewared handler into the webview's AssetServer — the SPA talks
-// REST+SSE in-process, so by default there is no TCP listener at all. An
-// optional --listen address exposes the server on the LAN for session share
-// links.
+// REST+SSE in-process, so by default there is no TCP listener at all. The
+// optional LAN share listener (config share.*) exposes only the public
+// read-only share surface for session share links.
 //
 // The bootstrap helpers below intentionally duplicate cmd/loom/main.go's:
 // exporting them would couple the CGO-free `loom` binary to this command's
@@ -35,7 +35,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -77,23 +76,16 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
-	var listen, advertise string
 	var printConn bool
 	for i := 0; i < len(args); i++ {
 		switch {
-		case args[i] == "--listen" && i+1 < len(args):
-			i++
-			listen = args[i]
-		case args[i] == "--advertise" && i+1 < len(args):
-			i++
-			advertise = args[i]
 		case args[i] == "--print-connection":
 			printConn = true
 		case args[i] == "version":
 			fmt.Println("loom-desktop", version.Version)
 			return nil
 		default:
-			return fmt.Errorf("usage: loom-desktop [--listen <addr>] [--advertise <base-url>] [--print-connection] | loom-desktop version")
+			return fmt.Errorf("usage: loom-desktop [--print-connection] | loom-desktop version")
 		}
 	}
 
@@ -164,16 +156,31 @@ func run(ctx context.Context, args []string) error {
 
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	app.WireSubagentObserver(bootstrap.SubagentFactory, broker, bootstrap.Store, logger)
-	service := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{Logger: logger})
-
-	// Mirror attention-worthy agent milestones to Notification Center.
-	go watchNotifications(ctx, broker, logger)
 
 	// In-process token: random per launch, never persisted or printed.
 	token, err := generateToken()
 	if err != nil {
 		return err
 	}
+
+	// The LAN share listener is built lazily by the manager (runtime
+	// toggle / config hot-apply); the factory dereferences service only
+	// when a listener actually starts, which is always after the
+	// assignment below.
+	var service *app.SessionService
+	shareMgr := server.NewShareManager(func(listen string) (*server.Server, error) {
+		return server.New(server.Config{
+			Listen: listen, Token: token, Version: version.Version,
+			Service: service, Logger: logger, ShareOnly: true,
+		})
+	}, logger)
+	service = app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{
+		Logger:        logger,
+		ShareEndpoint: shareMgr,
+	})
+
+	// Mirror attention-worthy agent milestones to Notification Center.
+	go watchNotifications(ctx, broker, logger)
 
 	// UI loopback listener: always on, random port. The webview talks real
 	// HTTP here because the Wails AssetServer channel cannot carry our
@@ -187,6 +194,7 @@ func run(ctx context.Context, args []string) error {
 		Service:    service,
 		Logger:     logger,
 		ConfigPath: cfgPath,
+		Share:      shareMgr,
 	})
 	if err != nil {
 		return err
@@ -201,41 +209,10 @@ func run(ctx context.Context, args []string) error {
 		}
 	}()
 
-	// Optional second listener for LAN session sharing
-	// (docs/DESKTOP_DESIGN.md §5). Resolve :0 to a concrete port up front so
-	// PublicBaseURL (which embeds the port) is known before server.New
-	// validates it.
-	var shareSrv *server.Server
-	if listen != "" {
-		if listen, err = resolveListenPort(listen); err != nil {
-			return err
-		}
-		publicBase, derr := derivePublicBase(advertise, listen)
-		if derr != nil {
-			return derr
-		}
-		if shareSrv, err = server.New(server.Config{
-			Listen:        listen,
-			Token:         token,
-			Version:       version.Version,
-			Service:       service,
-			Logger:        logger,
-			PublicBaseURL: publicBase,
-			ConfigPath:    cfgPath,
-		}); err != nil {
-			return err
-		}
-		if err := shareSrv.Listen(); err != nil {
-			return err
-		}
-		logger.Info("loom-desktop share endpoint", "base", publicBase)
-		go func() {
-			if err := shareSrv.Serve(); err != nil {
-				logger.Error("share listener died", "error", err)
-			}
-		}()
-	} else if advertise != "" {
-		return errors.New("--advertise requires --listen (no listener, nothing to advertise)")
+	// Start the LAN share listener when the config opted in; a bind
+	// failure degrades to "sharing off" — the settings toggle retries.
+	if err := shareMgr.Apply(resolved.Share.Enabled, resolved.Share.Listen); err != nil {
+		logger.Warn("share endpoint start failed", "error", err)
 	}
 
 	shutdown := func() {
@@ -244,11 +221,7 @@ func run(ctx context.Context, args []string) error {
 		if err := uiSrv.Shutdown(shutdownCtx); err != nil {
 			logger.Warn("ui http shutdown", "error", err)
 		}
-		if shareSrv != nil {
-			if err := shareSrv.Shutdown(shutdownCtx); err != nil {
-				logger.Warn("share http shutdown", "error", err)
-			}
-		}
+		shareMgr.Close()
 		if err := service.Shutdown(shutdownCtx); err != nil {
 			logger.Warn("service shutdown", "error", err)
 		}
@@ -289,7 +262,7 @@ func run(ctx context.Context, args []string) error {
 		width, height = savedWs.Width, savedWs.Height
 	}
 
-	logger.Info("loom-desktop starting", "version", version.Version, "share_listen", listen != "")
+	logger.Info("loom-desktop starting", "version", version.Version, "share_listen", resolved.Share.Enabled)
 	return wails.Run(&options.App{
 		Title:     "Loom",
 		Width:     width,
@@ -350,76 +323,6 @@ func bootstrapHandler(target string) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = io.WriteString(w, page)
 	})
-}
-
-// --- advertise address (docs/DESKTOP_DESIGN.md §5.2) ---
-
-// resolveListenPort replaces a :0 port with a concrete one by probing a
-// listener, so the advertised share URL is computable before server start.
-// The probe closes immediately; the brief race window is acceptable for a
-// loopback/LAN convenience flag.
-func resolveListenPort(addr string) (string, error) {
-	_, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "", fmt.Errorf("parse --listen %q: %w", addr, err)
-	}
-	if port != "0" {
-		return addr, nil
-	}
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return "", fmt.Errorf("probe --listen %q: %w", addr, err)
-	}
-	defer ln.Close()
-	return ln.Addr().String(), nil
-}
-
-// derivePublicBase resolves the externally reachable base URL for share
-// links. Explicit --advertise wins; otherwise it is derived from the bound
-// address: loopback → the loopback URL (localhost-only sharing), unspecified
-// (0.0.0.0/::) → the outbound interface address, a specific address → used
-// as-is. Returns "" when no usable address exists.
-func derivePublicBase(advertise, boundAddr string) (string, error) {
-	if advertise != "" {
-		return advertise, nil
-	}
-	host, port, err := net.SplitHostPort(boundAddr)
-	if err != nil {
-		return "", fmt.Errorf("parse bound address %q: %w", boundAddr, err)
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		switch {
-		case ip.IsLoopback():
-			return "http://127.0.0.1:" + port, nil
-		case ip.IsUnspecified():
-			out := outboundIP()
-			if out == "" {
-				return "", errors.New("cannot determine the LAN address of this machine; pass --advertise explicitly")
-			}
-			return "http://" + out + ":" + port, nil
-		default:
-			return "http://" + host + ":" + port, nil
-		}
-	}
-	if host == "localhost" {
-		return "http://127.0.0.1:" + port, nil
-	}
-	return "http://" + host + ":" + port, nil
-}
-
-// outboundIP finds the preferred outbound IPv4 without sending traffic: a
-// UDP "dial" to a documentation prefix only performs routing-table lookup.
-func outboundIP() string {
-	conn, err := net.Dial("udp4", "192.0.2.1:80")
-	if err != nil {
-		return ""
-	}
-	defer conn.Close()
-	addr, ok := conn.LocalAddr().(*net.UDPAddr)
-	if !ok {
-		return ""
-	}
-	return addr.IP.String()
 }
 
 // generateToken returns a fresh 128-bit bearer token (hex). Unlike
