@@ -534,7 +534,7 @@ export class SettingsPanel {
   }
 
   _renderSection(title, fields) {
-    const sec = el("section", "set-sec");
+    const sec = el("section", "set-sec set-sec-card");
     sec.appendChild(el("h3", "set-sec-title", title));
     for (const spec of fields) sec.appendChild(this._fieldRow(spec));
     return sec;
@@ -1105,7 +1105,7 @@ export class SettingsPanel {
     const refs = (this._tabRefs.skills = {});
     // 配置小节：控件归属 settings-content 的全局 scope（本面板不设
     // data-cfg-scope），由通用的填充/收集逻辑处理
-    const sec = el("section", "set-sec");
+    const sec = el("section", "set-sec set-sec-card");
     sec.appendChild(el("h3", "set-sec-title", "技能配置"));
     sec.appendChild(this._fieldRow({ key: "skills.enabled", label: "启用技能", type: "tristate" }));
     sec.appendChild(this._fieldRow({ key: "skills.extra_roots", label: "额外搜索目录", type: "list-text", hint: "每行一个目录" }));
