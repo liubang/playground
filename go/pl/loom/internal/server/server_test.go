@@ -645,6 +645,40 @@ func TestSessionListEnrichment(t *testing.T) {
 	}
 }
 
+// TestSessionListLiveState locks that a busy session's live controller state
+// is projected into the session listing — sidebar status dots and the
+// per-workspace attention badge depend on non-idle states showing up here.
+func TestSessionListLiveState(t *testing.T) {
+	release := make(chan struct{})
+	model := &gateModel{inner: fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "first", StopReason: domain.StopEndTurn},
+	), release: release}
+	ts, _ := newTestServer(t, model)
+	id := createTestSession(t, ts)
+
+	if status, body := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/prompts", `{"prompt":"first"}`); status != http.StatusAccepted {
+		t.Fatalf("submit = (%d, %v)", status, body)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, listing := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions", "")
+		sessions, _ := listing["sessions"].([]any)
+		if len(sessions) != 1 {
+			t.Fatalf("sessions = %v, want exactly 1", listing)
+		}
+		entry, _ := sessions[0].(map[string]any)
+		if entry["state"] == "running" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("state = %v, want running (busy live session)", entry["state"])
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	close(release)
+	waitIdle(t, ts, id)
+}
+
 // gateModel blocks its first Stream call until release closes, giving the
 // test a deterministic busy window.
 type gateModel struct {
