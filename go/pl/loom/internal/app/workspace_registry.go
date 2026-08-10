@@ -37,9 +37,9 @@ var (
 	// ErrWorkspaceUnavailable reports that a registered workspace's root is
 	// no longer reachable (moved/deleted) or no longer canonical-consistent.
 	ErrWorkspaceUnavailable = errors.New("workspace root is unavailable")
-	// ErrWorkspaceInUse rejects deleting a workspace that is still referenced
-	// by the running process: the default workspace (the launch directory,
-	// W5) or one with live sessions. Transports map it to 409 Conflict.
+	// ErrWorkspaceInUse rejects deleting the default workspace (the launch
+	// directory, W5): every legacy entry point falls back to it. Transports
+	// map it to 409 Conflict.
 	ErrWorkspaceInUse = errors.New("workspace is in use")
 )
 
@@ -179,6 +179,12 @@ func (m *memWorkspaceStore) DeleteWorkspace(_ context.Context, id domain.Workspa
 	}
 	delete(m.byID, id)
 	delete(m.byRoot, ws.RootPath)
+	// Cascade to the workspace's sessions, mirroring SQLiteStore.
+	for sid, wsID := range m.sessionWs {
+		if wsID == id {
+			delete(m.sessionWs, sid)
+		}
+	}
 	return nil
 }
 
@@ -330,12 +336,12 @@ func (r *WorkspaceRegistry) List(ctx context.Context) ([]domain.Workspace, error
 	return r.store.ListWorkspaces(ctx)
 }
 
-// Delete removes a workspace entity: the persisted row and the in-memory
-// indexes. The on-disk root directory is never touched; the workspace's
-// sessions survive as read-only history (their workspace_id dangles by
-// design, docs/WORKSPACE_DESIGN.md §7.1). The default workspace (W5) cannot
-// be deleted — every legacy entry point falls back to it. Live-session
-// occupancy is checked by the caller (SessionService owns the live handles).
+// Delete removes a workspace entity: the persisted row (cascading to its
+// sessions, docs/WORKSPACE_DESIGN.md §16.1) and the in-memory indexes. The
+// on-disk root directory is never touched. The default workspace (W5)
+// cannot be deleted — every legacy entry point falls back to it. Live
+// sessions owned by the workspace are torn down by the caller
+// (SessionService owns the live handles).
 //
 // Delete returns the evicted runtime WITHOUT closing it: the caller
 // (SessionService.DeleteWorkspace) holds its session lock across this call

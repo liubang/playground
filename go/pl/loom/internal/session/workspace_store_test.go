@@ -21,6 +21,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -174,9 +175,10 @@ func TestListSessionsFiltersByWorkspace(t *testing.T) {
 }
 
 // TestDeleteWorkspace locks the deletion semantics (docs/WORKSPACE_DESIGN.md
-// §7.1): the workspace row goes away while its sessions survive as read-only
-// history — their workspace_id dangles (no foreign key by design), so
-// SessionWorkspace and ListSessions keep resolving them afterwards.
+// §16.1): deleting a workspace cascades to its sessions in one transaction —
+// session rows go away with their events/checkpoints/artifact_refs (FK
+// cascade) and file_changes/memory_jobs (explicit deletes) — while sessions
+// of other workspaces are untouched.
 func TestDeleteWorkspace(t *testing.T) {
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	ctx := context.Background()
@@ -187,9 +189,39 @@ func TestDeleteWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertWorkspace: %v", err)
 	}
+	other, err := store.UpsertWorkspace(ctx, domain.Workspace{
+		ID: domain.NewWorkspaceID(), Name: "other", RootPath: filepath.Join(t.TempDir(), "other"),
+	})
+	if err != nil {
+		t.Fatalf("UpsertWorkspace other: %v", err)
+	}
+
+	// Seed the doomed workspace's session with one row in every per-session
+	// table so the cascade is exercised end to end.
 	sid := domain.NewSessionID()
 	if err := store.CreateSession(ctx, sid, ws.ID); err != nil {
 		t.Fatalf("CreateSession: %v", err)
+	}
+	artifactID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("8", 64))
+	ckpt := testCheckpoint(sid, 1, time.Now().UTC())
+	ckpt.Messages[0].Parts = []domain.ContentPart{
+		{Kind: domain.PartArtifact, Artifact: &domain.ArtifactRef{ID: artifactID, Size: 7}},
+	}
+	events := []domain.Event{newEvent(sid, 1, domain.EventSessionCreated, nil)}
+	if err := store.AppendEventsAndCheckpoint(ctx, sid, 0, events, ckpt); err != nil {
+		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
+	}
+	if err := store.RecordFileChange(ctx, sid, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
+		t.Fatalf("RecordFileChange: %v", err)
+	}
+	if err := store.EnqueueMemoryJob(ctx, sid, ws.RootPath); err != nil {
+		t.Fatalf("EnqueueMemoryJob: %v", err)
+	}
+
+	// A session in another workspace must survive the cascade.
+	keep := domain.NewSessionID()
+	if err := store.CreateSession(ctx, keep, other.ID); err != nil {
+		t.Fatalf("CreateSession other: %v", err)
 	}
 
 	// Deleting an unknown workspace is an error.
@@ -211,13 +243,28 @@ func TestDeleteWorkspace(t *testing.T) {
 		t.Fatal("second DeleteWorkspace should fail")
 	}
 
-	// The session survives with its dangling workspace_id.
-	if got, err := store.SessionWorkspace(ctx, sid); err != nil || got != ws.ID {
-		t.Fatalf("SessionWorkspace after delete: %s err=%v, want dangling %s", got, err, ws.ID)
+	// The workspace's session is gone with all of its per-session rows.
+	if _, err := store.SessionWorkspace(ctx, sid); err == nil {
+		t.Fatal("SessionWorkspace after delete should fail (session cascaded)")
 	}
-	summaries, _, err := store.ListSessions(ctx, "", 10, false, ws.ID)
-	if err != nil || len(summaries) != 1 || summaries[0].ID != sid {
-		t.Fatalf("ListSessions after delete: %+v err=%v, want the surviving session", summaries, err)
+	for _, table := range []string{"sessions", "events", "checkpoints", "artifact_refs", "file_changes", "memory_jobs"} {
+		var n int
+		if err := store.db.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM "+table+" WHERE session_id = ?", sid.String()).Scan(&n); err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		if n != 0 {
+			t.Fatalf("%s rows after DeleteWorkspace = %d, want 0", table, n)
+		}
+	}
+
+	// The other workspace and its session are untouched.
+	if got, err := store.SessionWorkspace(ctx, keep); err != nil || got != other.ID {
+		t.Fatalf("SessionWorkspace surviving session: %s err=%v, want %s", got, err, other.ID)
+	}
+	summaries, _, err := store.ListSessions(ctx, "", 10, false, other.ID)
+	if err != nil || len(summaries) != 1 || summaries[0].ID != keep {
+		t.Fatalf("ListSessions other workspace: %+v err=%v, want the surviving session", summaries, err)
 	}
 }
 

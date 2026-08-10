@@ -759,10 +759,10 @@ func doDelete(t *testing.T, client *http.Client, url string) int {
 }
 
 // TestDeleteWorkspaceEndpoint locks the workspace-deletion contract
-// (docs/WORKSPACE_DESIGN.md §16): metadata-only removal; the default
-// workspace and workspaces with live sessions are refused (409); unknown
-// IDs 404; the workspace's sessions survive as read-only history with a
-// dangling workspace_id.
+// (docs/WORKSPACE_DESIGN.md §16.1): deletion cascades to the workspace's
+// sessions — live sessions are shut down and persisted history is removed
+// with the workspace; the default workspace is refused (409); unknown IDs
+// 404; the on-disk root directory is never touched.
 func TestDeleteWorkspaceEndpoint(t *testing.T) {
 	ts, registry, store := newWorkspaceScopedServer(t, fakes.NewFakeModel())
 	ctx := context.Background()
@@ -788,28 +788,25 @@ func TestDeleteWorkspaceEndpoint(t *testing.T) {
 		}
 	}
 
-	// A historical (persisted but not live) session in workspace B: it must
-	// survive the workspace deletion with its dangling workspace_id.
+	// A historical (persisted but not live) session in workspace B: the
+	// deletion must cascade to it.
 	histID := domain.NewSessionID()
 	if err := store.CreateSession(ctx, histID, wsB.WorkspaceID); err != nil {
 		t.Fatalf("CreateSession historical: %v", err)
 	}
 
-	// A live session in B blocks deletion with 409 workspace_in_use.
+	// A live session in B does not block deletion: it is shut down and
+	// cascaded away with the workspace.
 	_, bodyB := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions", fmt.Sprintf(`{"workspace_id":%q}`, idB))
 	sessB, _ := bodyB["session_id"].(string)
-	status, body := doJSON(t, ts.Client(), "DELETE", ts.URL+"/v1/workspaces/"+idB, "")
+
+	// The default workspace is never deletable (legacy clients fall back to it).
+	status, body := doJSON(t, ts.Client(), "DELETE", ts.URL+"/v1/workspaces/"+defWs.WorkspaceID.String(), "")
 	if status != http.StatusConflict {
-		t.Fatalf("delete with live session = (%d, %v), want 409", status, body)
+		t.Fatalf("delete default = (%d, %v), want 409", status, body)
 	}
 	if code, _ := body["error"].(map[string]any)["code"].(string); code != "workspace_in_use" {
 		t.Fatalf("error code = %q, want workspace_in_use", code)
-	}
-
-	// The default workspace is never deletable (legacy clients fall back to it).
-	status, body = doJSON(t, ts.Client(), "DELETE", ts.URL+"/v1/workspaces/"+defWs.WorkspaceID.String(), "")
-	if status != http.StatusConflict {
-		t.Fatalf("delete default = (%d, %v), want 409", status, body)
 	}
 
 	// Malformed / unknown IDs: 400 and 404 respectively.
@@ -821,10 +818,8 @@ func TestDeleteWorkspaceEndpoint(t *testing.T) {
 		t.Fatalf("delete unknown id = %d, want 404", status)
 	}
 
-	// Remove the live session; deletion now succeeds (204, empty body).
-	if status := doDelete(t, ts.Client(), ts.URL+"/v1/sessions/"+sessB); status != http.StatusNoContent {
-		t.Fatalf("delete live session = %d, want 204", status)
-	}
+	// Deletion succeeds without touching the live session first: the cascade
+	// shuts it down (204, empty body).
 	if status := doDelete(t, ts.Client(), ts.URL+"/v1/workspaces/"+idB); status != http.StatusNoContent {
 		t.Fatalf("delete workspace = %d, want 204", status)
 	}
@@ -838,20 +833,24 @@ func TestDeleteWorkspaceEndpoint(t *testing.T) {
 		t.Fatalf("re-delete = %d, want 404", status)
 	}
 
-	// The historical session survives, still carrying the dangling workspace_id.
+	// Both sessions of the workspace are gone — the historical one and the
+	// previously live one: neither is listed nor resolvable in the store.
 	_, allList := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions?workspace_id=all", "")
-	found := false
 	for _, s := range allList["sessions"].([]any) {
 		m := s.(map[string]any)
-		if m["id"] == histID.String() {
-			found = true
-			if m["workspace_id"] != idB {
-				t.Fatalf("historical session workspace_id = %v, want dangling %s", m["workspace_id"], idB)
-			}
+		if m["id"] == histID.String() || m["id"] == sessB {
+			t.Fatalf("session %v must be cascaded away with its workspace", m["id"])
 		}
 	}
-	if !found {
-		t.Fatalf("historical session %s missing after workspace delete", histID)
+	if _, err := store.SessionWorkspace(ctx, histID); err == nil {
+		t.Fatal("historical session must be cascaded away with its workspace")
+	}
+	liveID, err := domain.ParseSessionID(sessB)
+	if err != nil {
+		t.Fatalf("parse live session id: %v", err)
+	}
+	if _, err := store.SessionWorkspace(ctx, liveID); err == nil {
+		t.Fatal("live session must be cascaded away with its workspace")
 	}
 
 	// The on-disk root directory is never touched by the deletion.
