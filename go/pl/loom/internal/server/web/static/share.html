@@ -1,33 +1,32 @@
-<!DOCTYPE html>
+<!doctype html>
 <!-- Loom 分享页：公开只读会话视图。链接中的 token 即凭证（无需 serve
      token）；数据来自 /v1/shared/{token}，每次打开拉取最新内容。 -->
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>loom · shared session</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/app.css">
-</head>
-<body class="share-body">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>loom · shared session</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body class="share-body">
+    <header class="share-header">
+      <span class="brand">◆ loom</span>
+      <span id="share-title" class="share-title"></span>
+      <span class="spacer"></span>
+      <span id="share-meta" class="share-meta"></span>
+    </header>
 
-<header class="share-header">
-  <span class="brand">◆ loom</span>
-  <span id="share-title" class="share-title"></span>
-  <span class="spacer"></span>
-  <span id="share-meta" class="share-meta"></span>
-</header>
+    <div id="transcript" class="transcript share-transcript">
+      <div id="blocks" class="transcript-inner"></div>
+      <div id="share-error" class="share-error" hidden>
+        <div class="brand">◆ loom</div>
+        <p id="share-error-text">链接无效或已撤销。</p>
+      </div>
+    </div>
 
-<div id="transcript" class="transcript share-transcript">
-  <div id="blocks" class="transcript-inner"></div>
-  <div id="share-error" class="share-error" hidden>
-    <div class="brand">◆ loom</div>
-    <p id="share-error-text">链接无效或已撤销。</p>
-  </div>
-</div>
+    <footer class="share-footer">shared session · read-only</footer>
 
-<footer class="share-footer">shared session · read-only</footer>
-
-<script type="module" src="/js/share.js"></script>
-</body>
+    <script type="module" src="/js/share.js"></script>
+  </body>
 </html>
