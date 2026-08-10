@@ -43,11 +43,11 @@ type baseTool struct {
 }
 
 type preparedFingerprint struct {
-	CallID     string              `json:"call_id"`
-	ToolName   string              `json:"tool_name"`
-	Arguments  json.RawMessage     `json:"arguments"`
-	Risk       domain.RiskLevel    `json:"risk"`
-	URLRequest *domain.URLRequest  `json:"url_request,omitempty"`
+	CallID     string             `json:"call_id"`
+	ToolName   string             `json:"tool_name"`
+	Arguments  json.RawMessage    `json:"arguments"`
+	Risk       domain.RiskLevel   `json:"risk"`
+	URLRequest *domain.URLRequest `json:"url_request,omitempty"`
 }
 
 func newBaseTool(def domain.ToolDefinition) (baseTool, error) {

@@ -27,17 +27,17 @@ type Grant struct {
 	Unsandboxed bool
 	// NetworkFull allows outbound network and DNS inside the sandbox.
 	NetworkFull bool
-// WritablePaths are additional absolute paths writable inside the
-// sandbox. Protected workspace subpaths stay excluded regardless.
-WritablePaths []string
-// GUIOpen allows the sandboxed command to drive macOS GUI applications
-// via `open` (LaunchServices + Apple Events; docs/BROWSER_DESIGN.md §4).
-GUIOpen bool
+	// WritablePaths are additional absolute paths writable inside the
+	// sandbox. Protected workspace subpaths stay excluded regardless.
+	WritablePaths []string
+	// GUIOpen allows the sandboxed command to drive macOS GUI applications
+	// via `open` (LaunchServices + Apple Events; docs/BROWSER_DESIGN.md §4).
+	GUIOpen bool
 }
 
 // IsZero reports whether the grant requests no widenings.
 func (g Grant) IsZero() bool {
-return !g.Unsandboxed && !g.NetworkFull && len(g.WritablePaths) == 0 && !g.GUIOpen
+	return !g.Unsandboxed && !g.NetworkFull && len(g.WritablePaths) == 0 && !g.GUIOpen
 }
 
 // RunWithGrant executes like RunWithSandbox, resolving the sandbox from a

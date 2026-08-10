@@ -359,13 +359,13 @@ type Memory struct {
 // nil-typed: absent means "enabled" (the tool registers with defaults),
 // an explicit false removes the browser tool from the registry.
 type Browser struct {
-	Enabled       *bool  `yaml:"enabled,omitempty"`
-	ChromePath    string `yaml:"chrome_path,omitempty"`
-	IdleTTL       string `yaml:"idle_ttl,omitempty"`
-	NavTimeoutMs  int    `yaml:"nav_timeout_ms,omitempty"`
-	ScreenshotQ   int    `yaml:"screenshot_quality,omitempty"`
-	ViewportWidth  int   `yaml:"viewport_width,omitempty"`
-	ViewportHeight int   `yaml:"viewport_height,omitempty"`
+	Enabled        *bool  `yaml:"enabled,omitempty"`
+	ChromePath     string `yaml:"chrome_path,omitempty"`
+	IdleTTL        string `yaml:"idle_ttl,omitempty"`
+	NavTimeoutMs   int    `yaml:"nav_timeout_ms,omitempty"`
+	ScreenshotQ    int    `yaml:"screenshot_quality,omitempty"`
+	ViewportWidth  int    `yaml:"viewport_width,omitempty"`
+	ViewportHeight int    `yaml:"viewport_height,omitempty"`
 }
 
 // MCPServer configures one MCP server connection. The key in MCPServers
