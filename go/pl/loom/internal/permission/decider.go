@@ -393,6 +393,7 @@ func (d BaselineDecider) evaluate(call domain.PreparedCall, ctx evalContext) *do
 //   - everything else runs sandboxed without prompting in every mode:
 //     the sandbox is the boundary. Dangerous commands never reach here
 //     (the DangerDecider already asked or denied them).
+//
 // declaredGrantReason renders the baseline reason for a capability
 // declaration, covering combined declarations (network + gui_open).
 func declaredGrantReason(info RunCmdCall) string {
