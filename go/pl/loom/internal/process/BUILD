@@ -33,6 +33,7 @@ go_library(
         "sandbox_darwin.go",
         "session.go",
         "shell_analyze.go",
+        "shellprobe.go",
         "sandbox_linux.go",
         "types.go",
     ],
@@ -58,6 +59,7 @@ go_test(
         "session_test.go",
         "shell_analyze_test.go",
         "shell_unwrap_test.go",
+        "shellprobe_test.go",
     ],
     embed = [":process_lib"],
     deps = [
