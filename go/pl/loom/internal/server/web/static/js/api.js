@@ -42,8 +42,10 @@ export function createApi({ getToken, onUnauthorized }) {
   }
 
   return {
-    metaVersion: () => req("GET", "/v1/meta/version"),
-    metaModels: () => req("GET", "/v1/meta/models"),
+metaVersion: () => req("GET", "/v1/meta/version"),
+metaModels: () => req("GET", "/v1/meta/models"),
+// 工具链/PATH 运行时报告（设置面板「开发环境」卡片）
+metaEnvironment: () => req("GET", "/v1/meta/environment"),
     // 配置（设置面板）：GET 返回 {path, exists, revision, config}（密钥已脱敏）；
     // PUT 携带 revision 乐观锁，409 config_conflict 表示文件被外部修改
     getConfig: () => req("GET", "/v1/config"),

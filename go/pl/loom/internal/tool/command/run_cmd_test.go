@@ -769,6 +769,52 @@ func TestRunCmdGrantExecutionModes(t *testing.T) {
 	})
 }
 
+func TestCommandNotFoundNote(t *testing.T) {
+	t.Run("exit 127 fingerprint teaches the PATH fix", func(t *testing.T) {
+		note := commandNotFoundNote("/bin/sh: go: command not found\n", 127, false, nil)
+		if note == "" {
+			t.Fatal("note = empty, want PATH guidance")
+		}
+		if !strings.Contains(note, "tools.path_extra") {
+			t.Errorf("note = %q, want the config registration hint", note)
+		}
+		// Regression guard: a missing tool must NEVER route the model to
+		// escalation — the sandbox is not the problem, the PATH is (this
+		// is the exact mis-learning the note exists to prevent).
+		if strings.Contains(note, "PREFER") && strings.Contains(note, "require_escalated") {
+			t.Errorf("note = %q, must not push escalation as the fix", note)
+		}
+		if !strings.Contains(note, os.Getenv("PATH")) {
+			t.Errorf("note = %q, want the effective PATH echoed", note)
+		}
+	})
+
+	t.Run("env PATH override wins in the echo", func(t *testing.T) {
+		note := commandNotFoundNote("sh: foo: command not found", 127, false, map[string]string{"PATH": "/custom/bin"})
+		if !strings.Contains(note, "(/custom/bin)") {
+			t.Fatalf("note = %q, want the override PATH echoed", note)
+		}
+	})
+
+	t.Run("non-fingerprints stay silent", func(t *testing.T) {
+		cases := []struct {
+			stderr    string
+			exitCode  int
+			escalated bool
+		}{
+			{"go: command not found", 1, false},  // wrong exit code
+			{"compiling main.go", 127, false},    // no fingerprint text
+			{"go: command not found", 127, true}, // escalated runs see the full env
+			{"", 127, false},
+		}
+		for _, tc := range cases {
+			if note := commandNotFoundNote(tc.stderr, tc.exitCode, tc.escalated, nil); note != "" {
+				t.Errorf("commandNotFoundNote(%q, %d, %v) = %q, want empty", tc.stderr, tc.exitCode, tc.escalated, note)
+			}
+		}
+	})
+}
+
 func TestSandboxGuidanceNote(t *testing.T) {
 	t.Run("denial fingerprints point at escalation", func(t *testing.T) {
 		cases := []struct {

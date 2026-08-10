@@ -22,6 +22,8 @@ go_library(
     srcs = [
         "grant.go",
         "pathenv.go",
+        "pathenv_dirs_other.go",
+        "pathenv_dirs_unix.go",
         "pipe_pending_darwin.go",
         "pipe_pending_linux.go",
         "pipe_pending_other.go",

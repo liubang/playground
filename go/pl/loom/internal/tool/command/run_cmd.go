@@ -375,6 +375,12 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		Hash:                    runnerResult.ExecutableHash,
 		Note: combineNotes(
 			escalationDowngradeNote(args.SandboxPermissions == sandboxRequireEscalated, prepared.Grant.Unsandboxed),
+			commandNotFoundNote(
+				string(runnerResult.Stderr),
+				runnerResult.ExitCode,
+				args.SandboxPermissions == sandboxRequireEscalated,
+				args.Env,
+			),
 			sandboxGuidanceNote(
 				string(runnerResult.Stderr),
 				runnerResult.TimedOut,
@@ -648,6 +654,32 @@ func escalationDowngradeNote(escalated bool, grantUnsandboxed bool) string {
 		"sandbox restrictions, inform the user that approving the escalation prompt is required."
 }
 
+// commandNotFoundNote detects the shell's missing-program fingerprint
+// (exit 127 + "command not found" on stderr — the `sh -c` path never
+// reaches loom's own LookPath error) and teaches the PATH fix instead of
+// an escalation: a GUI-launched loom inherits a sparse system PATH, so a
+// missing tool almost never means the sandbox must be escaped — the last
+// thing we want is the model learning "command not found ⇒
+// require_escalated". Escalated runs get no note (they already see the
+// full user environment).
+func commandNotFoundNote(stderr string, exitCode int, escalated bool, envOverrides map[string]string) string {
+	if escalated || exitCode != 127 {
+		return ""
+	}
+	if !strings.Contains(strings.ToLower(stderr), "command not found") {
+		return ""
+	}
+	effectivePATH := strings.TrimSpace(envOverrides["PATH"])
+	if effectivePATH == "" {
+		effectivePATH = os.Getenv("PATH")
+	}
+	return "a program was not found on the sandbox PATH (" + effectivePATH + "). " +
+		"loom launched from a GUI inherits a sparse system PATH without user toolchains. " +
+		"Do NOT retry with sandbox_permissions='require_escalated' for a missing tool — the sandbox is not the problem, the PATH is. " +
+		"Instead: locate the binary and use an absolute program path or pass env={\"PATH\": \"<dir>:...\"} explicitly; " +
+		"for a permanent fix, register the directory in tools.path_extra in the loom config (hot-applied on save)."
+}
+
 // combineNotes joins non-empty notes with a separator.
 func combineNotes(notes ...string) string {
 	parts := make([]string, 0, len(notes))
@@ -718,7 +750,10 @@ func classifyRunError(err error) error {
 		return domain.NewError(domain.ErrUnavailable, "command execution failed", domain.WithCause(err))
 	}
 	if errors.Is(err, exec.ErrNotFound) || strings.Contains(err.Error(), "executable file not found") {
-		return domain.NewError(domain.ErrInvalidInput, "program could not be resolved on PATH", domain.WithCause(err))
+		return domain.NewError(domain.ErrInvalidInput,
+			"program could not be resolved on PATH ("+os.Getenv("PATH")+"); "+
+				"use an absolute program path, pass env={\"PATH\": \"<dir>:...\"}, or register the directory in tools.path_extra in the loom config",
+			domain.WithCause(err))
 	}
 	if strings.Contains(err.Error(), "validate cwd") {
 		return domain.NewError(domain.ErrSecurity, "working_dir escapes workspace or is invalid", domain.WithCause(err))

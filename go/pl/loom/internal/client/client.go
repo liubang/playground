@@ -63,6 +63,7 @@ type (
 	RequestCompactionResult = app.RequestCompactionResult
 	CheckpointInfo          = app.CheckpointInfo
 	RewindOutcome           = app.RewindOutcome
+	ToolchainReport         = app.ToolchainReport
 )
 
 // Controller state constants re-exported for frontend state machines.
@@ -167,6 +168,9 @@ type Client interface {
 	ListSkills(ctx context.Context) (SkillsListing, error)
 	// ListMCPServers returns the configured MCP servers and their status.
 	ListMCPServers(ctx context.Context) ([]MCPServerInfo, error)
+	// ToolchainEnvironment returns the PATH-augmentation report behind the
+	// /doctor listing and the settings environment card.
+	ToolchainEnvironment(ctx context.Context) (*ToolchainReport, error)
 	// ListRules returns the effective approval ruleset.
 	ListRules(ctx context.Context) (*permission.RuleSet, error)
 	// ForgetRule removes a remembered approval rule. Exactly one of
