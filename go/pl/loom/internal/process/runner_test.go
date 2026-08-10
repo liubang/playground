@@ -67,7 +67,7 @@ func TestRunnerExecutesProgramAndCapturesStreams(t *testing.T) {
 	if result.Isolation != ProcessGroupIsolation.Name() {
 		t.Fatalf("Isolation = %q, want %q", result.Isolation, ProcessGroupIsolation.Name())
 	}
-	if got, want := result.ExecutablePath, realPath(t, executable); got != want {
+	if got, want := result.ExecutablePath, executable; got != want {
 		t.Fatalf("ExecutablePath = %q, want %q", got, want)
 	}
 	if got, want := result.ExecutableHash, fileSHA256(t, executable); got != want {
@@ -525,8 +525,52 @@ func TestRunnerRevalidatesExecutableHashBeforeStart(t *testing.T) {
 	if !errors.Is(err, ErrExecutableHashChanged) {
 		t.Fatalf("Run() error = %v, want ErrExecutableHashChanged", err)
 	}
-	if result.ExecutablePath != realPath(t, executable) {
-		t.Fatalf("ExecutablePath = %q, want %q", result.ExecutablePath, realPath(t, executable))
+	if result.ExecutablePath != executable {
+		t.Fatalf("ExecutablePath = %q, want %q", result.ExecutablePath, executable)
+	}
+}
+
+// TestRunnerKeepsShimSymlinkAsExecutablePath pins the shim contract: the
+// looked-up executable path is executed as-is, never symlink-resolved.
+// Version-manager shims (mise, asdf, ...) are symlinks to the manager
+// binary and dispatch on argv[0]'s basename — resolving the symlink and
+// launching the target runs the manager as "mise", whose CLI parser
+// rejects the tool's arguments (rg's "--files" died this way). The hash
+// must still pin the symlink target's content.
+func TestRunnerKeepsShimSymlinkAsExecutablePath(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	target := writePythonScript(t, python, root, "target.py", []string{
+		"print('ran-through-shim')",
+	})
+	shim := filepath.Join(root, "rg")
+	if err := os.Symlink(target, shim); err != nil {
+		t.Fatalf("os.Symlink(%q, %q) error = %v", target, shim, err)
+	}
+	runner := newRunner(t, validator, RunnerOptions{
+		Sandbox:      ExplicitTestSandbox{},
+		EnvAllowlist: []string{"PATH", "LANG", "TMPDIR"},
+		LookPath:     fixedLookPath(shim),
+	})
+
+	result, err := runner.Run(context.Background(), CommandSpec{
+		Program: "rg",
+		Cwd:     root,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0 (stderr: %q)", result.ExitCode, string(result.Stderr))
+	}
+	if got, want := result.ExecutablePath, shim; got != want {
+		t.Fatalf("ExecutablePath = %q, want unresolved shim path %q", got, want)
+	}
+	if got, want := result.ExecutableHash, fileSHA256(t, target); got != want {
+		t.Fatalf("ExecutableHash = %q, want target content hash %q", got, want)
+	}
+	if !strings.Contains(string(result.Stdout), "ran-through-shim") {
+		t.Fatalf("stdout = %q, want script output", string(result.Stdout))
 	}
 }
 
