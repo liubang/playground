@@ -32,9 +32,10 @@ func dirSet(paths ...string) func(string) bool {
 	return func(path string) bool { return set[path] }
 }
 
-// resolve is a test shortcut: no config extras, no glob expansion.
+// resolve is a test shortcut: no config extras, no shell-probe dirs, no
+// glob expansion.
 func resolve(base, home string, dirExists func(string) bool) (string, []PathDir) {
-	return ResolveToolchainPATH(base, home, nil, dirExists, nil)
+	return ResolveToolchainPATH(base, home, nil, nil, dirExists, nil)
 }
 
 func dirStatus(dirs []PathDir, path string) DirStatus {
@@ -83,7 +84,7 @@ func TestResolveKeepsInheritedOrderUntouched(t *testing.T) {
 
 func TestResolveConfigExtraOutranksStatic(t *testing.T) {
 	got, dirs := ResolveToolchainPATH("/usr/bin", "/home/u",
-		[]string{"~/corp/bin"}, dirSet("/home/u/corp/bin", "/home/u/.local/share/mise/shims"), nil)
+		[]string{"~/corp/bin"}, nil, dirSet("/home/u/corp/bin", "/home/u/.local/share/mise/shims"), nil)
 	want := "/home/u/corp/bin:/home/u/.local/share/mise/shims:/usr/bin"
 	if got != want {
 		t.Fatalf("ResolveToolchainPATH = %q, want %q", got, want)
@@ -109,7 +110,7 @@ func TestResolveExpandsGlobsWithCap(t *testing.T) {
 		}
 		return matches, nil
 	}
-	got, dirs := ResolveToolchainPATH("/usr/bin", "/home/u", nil, dirSet(), globFn)
+	got, dirs := ResolveToolchainPATH("/usr/bin", "/home/u", nil, nil, dirSet(), globFn)
 	// dirSet() reports nothing existing, so expansions are all "missing";
 	// the cap still applies to how many are considered.
 	globbed := 0
@@ -126,6 +127,33 @@ func TestResolveExpandsGlobsWithCap(t *testing.T) {
 	}
 	if got != "/usr/bin" {
 		t.Fatalf("ResolveToolchainPATH = %q, want unchanged base", got)
+	}
+}
+
+func TestResolveShellDirsSitBetweenConfigAndStatic(t *testing.T) {
+	// Priority: config > probed login-shell dirs > curated static list.
+	// The shell layer carries the user's ambient environment (e.g. mise
+	// install dirs pinned by `mise activate`), so it outranks loom's
+	// built-in guesses but never explicit configuration.
+	got, dirs := ResolveToolchainPATH("/usr/bin", "/home/u",
+		[]string{"/home/u/corp/bin"},
+		[]string{"/home/u/.local/share/mise/installs/rg/latest"},
+		dirSet("/home/u/corp/bin", "/home/u/.local/share/mise/installs/rg/latest", "/home/u/.local/share/mise/shims"),
+		nil)
+	want := "/home/u/corp/bin:/home/u/.local/share/mise/installs/rg/latest:/home/u/.local/share/mise/shims:/usr/bin"
+	if got != want {
+		t.Fatalf("ResolveToolchainPATH = %q, want %q", got, want)
+	}
+	for _, d := range dirs {
+		if d.Path != "/home/u/.local/share/mise/installs/rg/latest" {
+			continue
+		}
+		if d.Source != DirSourceShell {
+			t.Fatalf("shell dir source = %q, want shell", d.Source)
+		}
+		if d.Status != DirStatusPrepended {
+			t.Fatalf("shell dir status = %q, want prepended", d.Status)
+		}
 	}
 }
 
