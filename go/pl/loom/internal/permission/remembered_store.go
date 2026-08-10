@@ -474,11 +474,11 @@ func ruleGrantFromExec(grant domain.ExecGrant) *RuleGrant {
 	if grant.IsZero() {
 		return nil
 	}
-rg := &RuleGrant{Unsandboxed: grant.Unsandboxed, Write: grant.WritablePaths, GUIOpen: grant.GUIOpen}
-if grant.NetworkFull {
-rg.Network = "full"
-}
-return rg
+	rg := &RuleGrant{Unsandboxed: grant.Unsandboxed, Write: grant.WritablePaths, GUIOpen: grant.GUIOpen}
+	if grant.NetworkFull {
+		rg.Network = "full"
+	}
+	return rg
 }
 
 func formatNowUTC() string {
