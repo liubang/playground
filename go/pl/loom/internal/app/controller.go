@@ -845,6 +845,18 @@ type MCPServerInfo struct {
 	Tools     []string
 }
 
+// ToolchainEnvironment returns the cached PATH-augmentation report for the
+// TUI /doctor listing (the same snapshot the settings environment card
+// serves). Read-only and cheap, so like ListSkills it needs no
+// command-queue serialization.
+func (c *Controller) ToolchainEnvironment(ctx context.Context) (*ToolchainReport, error) {
+	report := process.CurrentToolchainReport()
+	if report == nil {
+		return nil, fmt.Errorf("toolchain report is not available")
+	}
+	return report, nil
+}
+
 // ListMCPServers returns the status of every configured MCP server.
 // Like ListSessions it reads runtime-owned state directly; the manager's
 // projection reflects live reconnects (config hot-reload, /v1/mcp

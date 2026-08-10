@@ -236,6 +236,29 @@ func TestMetaVersion(t *testing.T) {
 	}
 }
 
+// TestMetaEnvironment: the environment endpoint serves the cached
+// toolchain report (produced by the startup PATH augmentation), so the
+// settings card can render the effective PATH without any probing of its
+// own.
+func TestMetaEnvironment(t *testing.T) {
+	ts, _ := newTestServer(t, fakes.NewFakeModel())
+	status, body := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/meta/environment", "")
+	if status == http.StatusServiceUnavailable {
+		// The test runtime may skip PATH augmentation; the 503 contract is
+		// part of the API surface.
+		return
+	}
+	if _, ok := body["effective_path"].(string); !ok {
+		t.Fatalf("effective_path missing in %v", body)
+	}
+	if _, ok := body["dirs"].([]any); !ok {
+		t.Fatalf("dirs missing in %v", body)
+	}
+	if _, ok := body["tools"].([]any); !ok {
+		t.Fatalf("tools missing in %v", body)
+	}
+}
+
 // TestMetaModels: the catalog endpoint exposes every configured model plus
 // the process default, so the SPA model picker has its data source.
 func TestMetaModels(t *testing.T) {

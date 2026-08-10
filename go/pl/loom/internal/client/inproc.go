@@ -264,6 +264,14 @@ func (c *inprocClient) ListMCPServers(ctx context.Context) ([]MCPServerInfo, err
 	return h.Controller.ListMCPServers(ctx)
 }
 
+func (c *inprocClient) ToolchainEnvironment(ctx context.Context) (*ToolchainReport, error) {
+	h, err := c.bound()
+	if err != nil {
+		return nil, err
+	}
+	return h.Controller.ToolchainEnvironment(ctx)
+}
+
 func (c *inprocClient) ListRules(ctx context.Context) (*permission.RuleSet, error) {
 	h, err := c.bound()
 	if err != nil {

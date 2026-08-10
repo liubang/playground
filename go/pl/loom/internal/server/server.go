@@ -253,6 +253,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 	mux.HandleFunc("GET /v1/meta/version", s.handleMetaVersion)
 	mux.HandleFunc("GET /v1/meta/models", s.handleMetaModels)
+	mux.HandleFunc("GET /v1/meta/environment", s.handleMetaEnvironment)
 	mux.HandleFunc("GET /v1/config", s.handleGetConfig)
 	mux.HandleFunc("PUT /v1/config", s.handlePutConfig)
 	mux.HandleFunc("POST /v1/config/reveal", s.handleRevealSecret)
@@ -423,4 +424,17 @@ func (s *Server) handleMetaVersion(w http.ResponseWriter, _ *http.Request) {
 // handleMetaModels serves the model catalog for frontend pickers.
 func (s *Server) handleMetaModels(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.svc.ModelCatalog())
+}
+
+// handleMetaEnvironment serves the cached toolchain/PATH report for the
+// settings "development environment" card. The report is produced once at
+// startup (and refreshed on config hot-apply), so the handler is a pure
+// cache read — no per-request stat calls.
+func (s *Server) handleMetaEnvironment(w http.ResponseWriter, _ *http.Request) {
+	report := s.svc.ToolchainEnvironment()
+	if report == nil {
+		writeError(w, &statusError{status: http.StatusServiceUnavailable, code: "environment_unavailable", message: "toolchain report is not available"})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
 }
