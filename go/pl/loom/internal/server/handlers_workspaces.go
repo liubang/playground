@@ -101,10 +101,10 @@ func (s *Server) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteWorkspace serves DELETE /v1/workspaces/{id}: removes the
-// workspace entity (metadata only — the on-disk root directory is never
-// touched). The workspace's sessions survive as read-only history
-// (docs/WORKSPACE_DESIGN.md §7.1). The default workspace and workspaces
-// with live sessions cannot be deleted (409 workspace_in_use).
+// workspace entity and cascades to its sessions — live sessions are shut
+// down, persisted session history is deleted with the workspace
+// (docs/WORKSPACE_DESIGN.md §16.1). The on-disk root directory is never
+// touched. The default workspace cannot be deleted (409 workspace_in_use).
 func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	id, err := parseWorkspaceIDParam(r.PathValue("id"))
 	if err != nil {

@@ -342,39 +342,46 @@ func (s *SessionService) CountSessionsPerWorkspace(ctx context.Context) (map[dom
 	return store.CountSessionsPerWorkspace(ctx)
 }
 
-// DeleteWorkspace removes a workspace entity (docs/WORKSPACE_DESIGN.md §16):
-// the persisted row, the registry's in-memory indexes, and the assembled
-// runtime. The on-disk root directory is never touched, and the workspace's
-// sessions survive as read-only history (their workspace_id dangles by
-// design, §7.1) — transcript/inspect keep working, resume is rejected. The
-// default workspace and workspaces with live sessions cannot be deleted
-// (ErrWorkspaceInUse): shut down or delete those sessions first.
+// DeleteWorkspace removes a workspace entity and cascades to its sessions
+// (docs/WORKSPACE_DESIGN.md §16.1): the persisted row together with every
+// session it owns, the registry's in-memory indexes, and the assembled
+// runtime. Live sessions are torn down (subscribers dropped, controllers
+// shut down) instead of blocking the deletion. The on-disk root directory
+// is never touched. The default workspace cannot be deleted
+// (ErrWorkspaceInUse) — every legacy entry point falls back to it.
 //
-// Concurrency: the live-session check and the registry deletion run inside
-// one s.mu critical section, and CreateSession/ResumeSession re-verify the
-// workspace's registry membership when they insert their handle under the
-// same lock — a session can therefore never come alive on a deleted
-// workspace in either interleaving. The evicted runtime is closed after
-// the lock is released so the critical section stays non-blocking.
+// Concurrency: the registry deletion and the live-handle eviction run
+// inside one s.mu critical section, and CreateSession/ResumeSession
+// re-verify the workspace's registry membership when they insert their
+// handle under the same lock — a session can therefore never come alive on
+// a deleted workspace in either interleaving. Controller shutdown and the
+// runtime close happen after the lock is released so the critical section
+// stays non-blocking. The store rows are already gone while the evicted
+// controllers wind down: an in-flight turn may log a failed event append
+// in that window, which is harmless — the turn is being torn down anyway.
 func (s *SessionService) DeleteWorkspace(ctx context.Context, id domain.WorkspaceID) error {
 	if id.IsZero() {
 		return ErrWorkspaceNotFound
 	}
 	s.mu.Lock()
-	live := 0
-	for _, h := range s.sessions {
+	rt, err := s.registry.Delete(ctx, id)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	live := make([]*SessionHandle, 0)
+	for sid, h := range s.sessions {
 		if h.WorkspaceID == id {
-			live++
+			live = append(live, h)
+			delete(s.sessions, sid)
 		}
 	}
-	if live > 0 {
-		s.mu.Unlock()
-		return fmt.Errorf("%w: %d live session(s)", ErrWorkspaceInUse, live)
-	}
-	rt, err := s.registry.Delete(ctx, id)
 	s.mu.Unlock()
-	if err != nil {
-		return err
+	for _, h := range live {
+		h.dropSubscribers()
+		if err := h.Controller.Shutdown(ctx); err != nil {
+			s.logger.Warn("shutdown during workspace delete failed", "session_id", h.ID, "workspace_id", id, "error", err)
+		}
 	}
 	if rt != nil {
 		rt.Close()

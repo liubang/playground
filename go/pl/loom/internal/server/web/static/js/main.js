@@ -589,14 +589,18 @@ async function newSession(workspaceId) {
   await openSession(session_id);
 }
 
-// 删除工作区（侧栏工作区节点操作）：仅移除元数据，磁盘目录不动；其会话
-// 保留为只读历史（侧边栏归入「已删除的工作区」分组）。
+// 删除工作区（侧栏工作区节点操作）：级联删除其下全部会话（存活会话会被
+// 关闭，历史会话一并删除，不可恢复）；磁盘目录不动。
 async function deleteWorkspace(wsId) {
   const ws = app.workspaces.find((w) => w.id === wsId);
   const name = (ws && (ws.name || ws.root_path)) || wsId;
+  const count = (ws && ws.session_count) || 0;
+  const body = count > 0
+    ? `「${name}」将被删除，其下 ${count} 个会话将一并永久删除（不可恢复）。磁盘目录不受影响。`
+    : `「${name}」将从工作区列表移除（无会话）。磁盘目录不受影响。`;
   const ok = await confirmDialog({
     title: "删除工作区",
-    body: `「${name}」将从工作区列表移除。磁盘目录不受影响；其会话保留为只读历史（不可恢复运行）。`,
+    body,
     okLabel: "删除",
   });
   if (!ok) return;
