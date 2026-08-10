@@ -111,6 +111,7 @@ type ResolvedConfig struct {
 	Skills    ResolvedSkills
 	Rules     ResolvedRules
 	Approval  ResolvedApproval
+	Tools     ResolvedTools
 	Tracing   trace.Config
 	Storage   ResolvedStorage
 	Share     ResolvedShare
@@ -136,6 +137,36 @@ type ResolvedWorkspace struct {
 type ResolvedShare struct {
 	Enabled bool
 	Listen  string
+}
+
+// ResolvedTools is the tools section with defaults applied.
+type ResolvedTools struct {
+	// PathExtra holds the additional PATH directories, "~" expanded and
+	// validated absolute.
+	PathExtra []string
+}
+
+// resolveTools expands and validates tools.path_extra: entries must
+// resolve to absolute paths (a relative PATH entry resolves against each
+// spawned command's working directory — a security smell worth rejecting
+// at load time).
+func resolveTools(in Tools) (ResolvedTools, error) {
+	var out ResolvedTools
+	for i, raw := range in.PathExtra {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			return ResolvedTools{}, fmt.Errorf("config: tools.path_extra[%d]: entry is empty", i)
+		}
+		expanded, err := expandHomeDir(trimmed)
+		if err != nil {
+			return ResolvedTools{}, fmt.Errorf("config: tools.path_extra[%d]: %w", i, err)
+		}
+		if !filepath.IsAbs(expanded) {
+			return ResolvedTools{}, fmt.Errorf("config: tools.path_extra[%d]: must be an absolute path, got %q", i, raw)
+		}
+		out.PathExtra = append(out.PathExtra, expanded)
+	}
+	return out, nil
 }
 
 // DefaultShareListen is the built-in bind address for the LAN share
@@ -478,6 +509,10 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 	if err != nil {
 		return nil, err
 	}
+	tools, err := resolveTools(f.Tools)
+	if err != nil {
+		return nil, err
+	}
 	out := &ResolvedConfig{
 		Providers: providers,
 		Limits:    limits,
@@ -494,6 +529,7 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 		Tracing:  tracing,
 		Storage:  ResolvedStorage{BaseDir: baseDir},
 		Share:    share,
+		Tools:    tools,
 		Logging:  resolveLogging(f.Logging),
 		UI:       f.UI,
 	}

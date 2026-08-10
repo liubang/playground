@@ -52,6 +52,7 @@ type File struct {
 	Runaway    Runaway              `yaml:"runaway,omitempty"`
 	Prompt     Prompt               `yaml:"prompt,omitempty"`
 	Skills     Skills               `yaml:"skills,omitempty"`
+	Tools      Tools                `yaml:"tools,omitempty"`
 	Rules      Rules                `yaml:"rules,omitempty"`
 	Approval   Approval             `yaml:"approval,omitempty"`
 	Tracing    Tracing              `yaml:"tracing,omitempty"`
@@ -196,6 +197,14 @@ type Skills struct {
 	Enabled    *bool    `yaml:"enabled,omitempty"`
 	ExtraRoots []string `yaml:"extra_roots,omitempty"`
 	Disabled   []string `yaml:"disabled,omitempty"`
+}
+
+// Tools configures how loom locates the local development toolchain.
+type Tools struct {
+	// PathExtra lists additional directories prepended to the process PATH
+	// ahead of every built-in candidate (explicit configuration wins).
+	// Entries support a leading "~/"; they must resolve to absolute paths.
+	PathExtra []string `yaml:"path_extra,omitempty"`
 }
 
 // Rules configures the declarative permission rule layers. All bools are

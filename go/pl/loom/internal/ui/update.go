@@ -64,6 +64,7 @@ var slashCommands = []slashCommand{
 	{name: "/reasoning", usage: "/reasoning [level]", desc: "Show or adjust the reasoning level"},
 	{name: "/skill", usage: "/skill", desc: "List discovered skills"},
 	{name: "/mcp", usage: "/mcp", desc: "List MCP servers and their status"},
+	{name: "/doctor", usage: "/doctor", desc: "Show the toolchain/PATH environment report"},
 	{name: "/rules", usage: "/rules", desc: "View and manage permission rules"},
 	{name: "/exit", usage: "/exit", desc: "Exit"},
 }
@@ -139,6 +140,12 @@ type skillsLoadedMsg struct {
 type mcpServersLoadedMsg struct {
 	servers []app.MCPServerInfo
 	err     error
+}
+
+// envLoadedMsg reports the result of a /doctor report request.
+type envLoadedMsg struct {
+	report *app.ToolchainReport
+	err    error
 }
 
 // questionAnsweredMsg reports the result of answering an ask_user question.
@@ -221,6 +228,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next = m.handleSkillsLoaded(msg)
 	case mcpServersLoadedMsg:
 		next = m.handleMCPServersLoaded(msg)
+	case envLoadedMsg:
+		next = m.handleEnvLoaded(msg)
 	case questionAnsweredMsg:
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Answer delivery failed: %v", msg.err), true)
@@ -1453,6 +1462,14 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		m.textArea.Reset()
 		m.setStatus("Loading skills...", false)
 		return m, m.listSkillsCmd()
+	case "/doctor":
+		if len(fields) != 1 {
+			m.setStatus("Usage: /doctor", true)
+			return m, nil
+		}
+		m.textArea.Reset()
+		m.setStatus("Loading environment report...", false)
+		return m, m.envReportCmd()
 	case "/mcp":
 		if len(fields) != 1 {
 			m.setStatus("Usage: /mcp", true)
@@ -1673,6 +1690,25 @@ func (m Model) handleMCPServersLoaded(msg mcpServersLoadedMsg) tea.Model {
 		kind:    listingMCP,
 		title:   fmt.Sprintf("MCP Servers (%d)", len(msg.servers)),
 		servers: msg.servers,
+	})
+}
+
+func (m Model) envReportCmd() tea.Cmd {
+	return func() tea.Msg {
+		report, err := m.controller.ToolchainEnvironment(context.Background())
+		return envLoadedMsg{report: report, err: err}
+	}
+}
+
+func (m Model) handleEnvLoaded(msg envLoadedMsg) tea.Model {
+	if msg.err != nil {
+		m.setStatus(fmt.Sprintf("Failed to load environment report: %v", msg.err), true)
+		return m
+	}
+	return m.openListing(listingContent{
+		kind:  listingEnv,
+		title: "Environment",
+		env:   msg.report,
 	})
 }
 

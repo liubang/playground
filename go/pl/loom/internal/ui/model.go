@@ -273,16 +273,18 @@ const (
 	listingNone listingKind = iota
 	listingSkills
 	listingMCP
+	listingEnv
 )
 
 // listingContent is the raw payload of the read-only listing dialog
-// (/skill, /mcp); the view lays it out at render time so resizing the
-// terminal re-flows the content.
+// (/skill, /mcp, /doctor); the view lays it out at render time so resizing
+// the terminal re-flows the content.
 type listingContent struct {
 	kind    listingKind
 	title   string
 	skills  app.SkillsListing
 	servers []app.MCPServerInfo
+	env     *app.ToolchainReport
 }
 
 // sparkleSpinner returns the activity indicator: a blooming sparkle that

@@ -25,6 +25,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
@@ -1253,6 +1254,51 @@ func TestSlashCommandFailurePreservesInput(t *testing.T) {
 	}
 	if !m.statusIsError {
 		t.Fatal("unknown command should be flagged as an error status")
+	}
+}
+
+func TestSlashCommandDoctor(t *testing.T) {
+	// Populate the cached report: the test process never runs
+	// NewProcessRuntime, so augment explicitly (idempotent).
+	process.AugmentProcessPATH(nil)
+
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model-a", "/ws")
+
+	updated, cmd := m.handleSlashCommand("/doctor")
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("/doctor should spawn a command")
+	}
+	if got := m.textArea.Value(); got != "" {
+		t.Fatalf("/doctor should clear the draft, got %q", got)
+	}
+	msg, ok := cmd().(envLoadedMsg)
+	if !ok {
+		t.Fatalf("cmd returned %T, want envLoadedMsg", msg)
+	}
+	if msg.err != nil || msg.report == nil {
+		t.Fatalf("envLoadedMsg = %+v, want a report", msg)
+	}
+	updatedModel, _ := m.Update(msg)
+	m = updatedModel.(Model)
+	if m.listing.kind != listingEnv {
+		t.Fatalf("listing kind = %v, want listingEnv", m.listing.kind)
+	}
+	rows := m.listingEnvRows(100)
+	if len(rows) == 0 {
+		t.Fatal("listingEnvRows = empty, want report rows")
+	}
+
+	// Extra arguments: usage error, draft preserved.
+	m.textArea.SetValue("/doctor x")
+	updated, cmd = m.handleSlashCommand("/doctor x")
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("usage error should not spawn a command")
+	}
+	if got := m.textArea.Value(); got != "/doctor x" {
+		t.Fatalf("usage error should keep the draft, got %q", got)
 	}
 }
 

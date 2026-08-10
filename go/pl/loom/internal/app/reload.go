@@ -24,6 +24,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/mcp"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
 )
 
 // ConfigApplyReport classifies one hot-applied configuration change by
@@ -53,6 +54,9 @@ func classifyConfigChanges(prev, next *config.ResolvedConfig) ConfigApplyReport 
 	// Actively re-applied below (ApplyConfig).
 	if prev.Approval.Mode != next.Approval.Mode {
 		r.Immediate = append(r.Immediate, "approval.mode")
+	}
+	if !reflect.DeepEqual(prev.Tools.PathExtra, next.Tools.PathExtra) {
+		r.Immediate = append(r.Immediate, "tools.path_extra")
 	}
 	// The remembered-store switch opens/closes a process-level store;
 	// the other rule toggles ride ReloadPolicy.
@@ -197,6 +201,16 @@ func (s *SessionService) ApplyConfig(ctx context.Context, next *config.ResolvedC
 		}
 	}
 
+	// PATH augmentation is idempotent and rebuilds from the
+	// pre-augmentation base, so changed path_extra entries take effect for
+	// subsequently spawned commands without a restart.
+	if report.hasImmediate("tools.path_extra") {
+		added := process.AugmentProcessPATH(next.Tools.PathExtra)
+		if s.logger != nil {
+			s.logger.Info("hot-apply: re-augmented process PATH", "added", added)
+		}
+	}
+
 	policyChanged := report.hasImmediate("approval.mode") || report.hasImmediate("rules")
 	promptChanged := report.hasImmediate("prompt")
 	skillsDisabledChanged := report.hasImmediate("skills.disabled")
@@ -229,6 +243,18 @@ func (r ConfigApplyReport) hasImmediate(name string) bool {
 		}
 	}
 	return false
+}
+
+// ToolchainReport aliases the process-level PATH-augmentation snapshot so
+// client frontends reference the canonical shape through the app layer
+// (docs/SERVE_DESIGN.md §10 type-identity rule).
+type ToolchainReport = process.ToolchainReport
+
+// ToolchainEnvironment returns the cached PATH-augmentation report behind
+// the settings "development environment" card; nil when the runtime never
+// augmented the PATH (bare test runners).
+func (s *SessionService) ToolchainEnvironment() *process.ToolchainReport {
+	return process.CurrentToolchainReport()
 }
 
 // MCPServers returns the live status of every configured MCP server

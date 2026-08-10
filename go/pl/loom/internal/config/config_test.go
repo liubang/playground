@@ -212,6 +212,60 @@ func TestBaseDirForConfigPathRelative(t *testing.T) {
 	}
 }
 
+func TestResolveToolsPathExtra(t *testing.T) {
+	// Absent: empty extras.
+	cfg := loadFile(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+`, noEnv)
+	if len(cfg.Tools.PathExtra) != 0 {
+		t.Fatalf("tools.path_extra default = %v, want empty", cfg.Tools.PathExtra)
+	}
+
+	// Absolute entries pass through; "~/" expands.
+	cfg = loadFile(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+tools:
+  path_extra: ["/opt/corp/bin", "~/toolchain/bin"]
+`, noEnv)
+	if len(cfg.Tools.PathExtra) != 2 || cfg.Tools.PathExtra[0] != "/opt/corp/bin" {
+		t.Fatalf("tools.path_extra = %v, want [/opt/corp/bin ~/toolchain/bin expanded]", cfg.Tools.PathExtra)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Tools.PathExtra[1] != filepath.Join(home, "toolchain/bin") {
+		t.Fatalf("tilde expansion = %q, want under %q", cfg.Tools.PathExtra[1], home)
+	}
+
+	// Empty and relative entries fail fast at load time.
+	for _, extra := range []string{`[""]`, `["rel/bin"]`} {
+		path := writeConfig(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+tools:
+  path_extra: `+extra+`
+`)
+		if _, err := Load(path, LoadOptions{RequireProviders: true}, noEnv); err == nil {
+			t.Fatalf("path_extra %s: want load error", extra)
+		}
+	}
+}
+
 func TestResolveShare(t *testing.T) {
 	// Defaults: disabled, fixed built-in bind address.
 	cfg := loadFile(t, `
