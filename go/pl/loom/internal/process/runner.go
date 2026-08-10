@@ -387,6 +387,14 @@ func (r *Runner) waitAndReap(ctx context.Context, cmd *exec.Cmd, waitErrCh <-cha
 	}
 }
 
+// resolveExecutable locates program and hashes its content. The returned
+// path is the looked-up path itself, deliberately NOT symlink-resolved:
+// version-manager shims (mise, asdf, ...) are symlinks to the manager
+// binary and dispatch on argv[0]'s basename — executing the resolved
+// target launches the manager as "mise", whose CLI parser then rejects
+// the tool's arguments. hashExecutable follows symlinks (os.Stat/os.Open),
+// so the hash still pins the real target's content, and verifyExecutable
+// re-checks it immediately before start.
 func (r *Runner) resolveExecutable(program string) (string, string, error) {
 	path, err := r.lookPath(program)
 	if err != nil {
@@ -396,15 +404,11 @@ func (r *Runner) resolveExecutable(program string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("absolute executable path: %w", err)
 	}
-	resolvedPath, err := filepath.EvalSymlinks(absolutePath)
-	if err != nil {
-		return "", "", fmt.Errorf("resolve executable symlinks: %w", err)
-	}
-	hash, err := hashExecutable(resolvedPath)
+	hash, err := hashExecutable(absolutePath)
 	if err != nil {
 		return "", "", err
 	}
-	return resolvedPath, hash, nil
+	return absolutePath, hash, nil
 }
 
 func withOptionalTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
