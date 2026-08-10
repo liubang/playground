@@ -809,13 +809,14 @@ func addWorkspace(ctx context.Context, root, name string) error {
 	return nil
 }
 
-// removeWorkspace deletes a workspace entity (loom workspace rm <id>). Only
-// the metadata row is removed — the on-disk root directory is never touched
-// and the workspace's sessions survive as read-only history
-// (docs/WORKSPACE_DESIGN.md §7.1). Like `add`, it writes through the local
-// store under the data-dir flock: a running serve owns the directory, so
-// deletion then goes through the Web UI or DELETE /v1/workspaces/{id}
-// (which additionally guards the default workspace and live sessions).
+// removeWorkspace deletes a workspace entity (loom workspace rm <id>) and
+// cascades to its sessions: every session the workspace owns is deleted
+// with its persisted history in the same transaction
+// (docs/WORKSPACE_DESIGN.md §16.1). The on-disk root directory is never
+// touched. Like `add`, it writes through the local store under the
+// data-dir flock: a running serve owns the directory, so deletion then
+// goes through the Web UI or DELETE /v1/workspaces/{id} (which
+// additionally guards the default workspace).
 func removeWorkspace(ctx context.Context, rawID string) error {
 	id, err := domain.ParseWorkspaceID(rawID)
 	if err != nil || !domain.HasPrefix(id, "ws_") {
@@ -845,10 +846,14 @@ func removeWorkspace(ctx context.Context, rawID string) error {
 	if err != nil {
 		return fmt.Errorf("workspace not found: %s", id)
 	}
+	counts, err := store.CountSessionsPerWorkspace(ctx)
+	if err != nil {
+		return fmt.Errorf("count workspace sessions: %w", err)
+	}
 	if err := store.DeleteWorkspace(ctx, id); err != nil {
 		return fmt.Errorf("delete workspace: %w", err)
 	}
-	fmt.Printf("deleted\t%s\t%s\t%s\n", ws.ID, ws.Name, ws.RootPath)
+	fmt.Printf("deleted\t%s\t%s\t%s\t(%d session(s) cascaded)\n", ws.ID, ws.Name, ws.RootPath, counts[id])
 	return nil
 }
 

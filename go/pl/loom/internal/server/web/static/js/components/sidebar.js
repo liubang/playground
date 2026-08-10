@@ -11,7 +11,7 @@ const COLLAPSE_KEY = "loom_ws_collapsed";
 export class Sidebar {
   // onSelect(id, action 由 onAction 处理)：action ∈ "archive" | "unarchive" | "delete"
   // onNewSession(workspaceId)：在该工作区下新建会话（"" = 默认工作区）。
-  // onDeleteWorkspace(workspaceId)：删除工作区元数据（历史会话保留为只读）。
+  // onDeleteWorkspace(workspaceId)：删除工作区并级联删除其下全部会话。
   constructor(listEl, { onSelect, onAction, onNewSession, onDeleteWorkspace }) {
     this.listEl = listEl;
     this.onSelect = onSelect;
@@ -92,7 +92,9 @@ export class Sidebar {
   }
 
   _appendGroup(wsId, ws, wsSessions, ids) {
-    // wsId 非空但查无实体 = 所属工作区已被删除，会话作为只读历史保留
+    // wsId 非空但查无实体 = 所属工作区已被删除。级联删除落地前的历史数据
+    // 可能留下这种悬空会话，仍归入只读的「已删除的工作区」分组展示；
+    // 删光组内会话后该分组自然消失。
     const name = ws ? ws.name : (wsId ? "已删除的工作区" : "默认工作区");
     const collapsed = this.collapsed.has(wsId);
     const group = el("div", "ws-group");
@@ -125,7 +127,7 @@ newBtn.title = "在该工作区新建会话";
         const delBtn = el("button", "ws-del");
         delBtn.innerHTML = icon("trash");
         delBtn.type = "button";
-        delBtn.title = "删除工作区（磁盘目录与历史会话保留）";
+        delBtn.title = "删除工作区（其下会话一并删除，磁盘目录保留）";
         delBtn.onclick = (e) => {
           e.stopPropagation();
           this.onDeleteWorkspace(wsId);
