@@ -35,6 +35,12 @@ type LoadOptions struct {
 	Logger *slog.Logger
 }
 
+// ErrConfigNotFound reports that the config file does not exist. Agent
+// entry points use it to trigger first-run bootstrap (auto-create the
+// starter template at the default path); offline commands treat a missing
+// file as empty defaults and never see it.
+var ErrConfigNotFound = errors.New("config file not found")
+
 // Load reads, validates, and resolves the YAML config at path. It is the
 // single configuration entry point for every loom command (§3.1): no env
 // overlay, no silent defaults — any problem is a hard error whose message
@@ -59,7 +65,7 @@ func Load(path string, opts LoadOptions, lookup EnvLookup) (*ResolvedConfig, err
 			if !opts.RequireProviders {
 				return resolve(&File{}, baseDir, lookup)
 			}
-			return nil, fmt.Errorf("config file not found: %s\n\ncreate one (or run `loom config init`):\n\n%s", path, minimalExample)
+			return nil, fmt.Errorf("%w: %s\n\ncreate one (or run `loom config init`):\n\n%s", ErrConfigNotFound, path, minimalExample)
 		}
 		return nil, fmt.Errorf("read config: %w", err)
 	}
