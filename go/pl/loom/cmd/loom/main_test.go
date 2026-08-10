@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -406,6 +407,57 @@ func TestConsoleApproverAwaitAnswerRespectsCancellation(t *testing.T) {
 	cancel()
 	if _, err := approver.awaitAnswer(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("awaitAnswer error = %v, want context.Canceled", err)
+	}
+}
+
+// TestLoadConfigFirstRunBootstrapsDefaultPath: the first agent launch with
+// no config anywhere must not die with a bare not-found error. It writes
+// the starter template at ~/.loom/config.yaml and returns a directed
+// "edit this file" error (the caller exits non-zero), and the second
+// attempt loads the template cleanly once the user has filled a key.
+func TestLoadConfigFirstRunBootstrapsDefaultPath(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(configPathEnv, "")
+
+	_, err := loadConfig(true, slog.Default())
+	if err == nil {
+		t.Fatal("loadConfig(true) without config: want first-run error")
+	}
+	if !strings.Contains(err.Error(), "first run") {
+		t.Fatalf("loadConfig(true) error = %v, want first-run guidance", err)
+	}
+	def, derr := config.DefaultBaseDir()
+	if derr != nil {
+		t.Fatal(derr)
+	}
+	if _, serr := os.Stat(filepath.Join(def, config.FileName)); serr != nil {
+		t.Fatalf("starter config not created: %v", serr)
+	}
+
+	// The generated template loads with providers present and the key left
+	// as a comment — the state the user edits before the next launch.
+	resolved, err := loadConfig(true, slog.Default())
+	if err != nil {
+		t.Fatalf("loadConfig(true) after bootstrap: %v", err)
+	}
+	if len(resolved.Providers) == 0 {
+		t.Fatal("template providers = 0, want the deepseek starter provider")
+	}
+}
+
+// TestLoadConfigExplicitMissingPathStaysHardError: LOOM_CONFIG names a file
+// that should exist; a missing explicit path is a user error and must not
+// be papered over with an auto-created template.
+func TestLoadConfigExplicitMissingPathStaysHardError(t *testing.T) {
+	explicit := filepath.Join(t.TempDir(), "custom", "config.yaml")
+	t.Setenv(configPathEnv, explicit)
+
+	_, err := loadConfig(true, slog.Default())
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("loadConfig(true) error = %v, want not-found", err)
+	}
+	if _, serr := os.Stat(explicit); !os.IsNotExist(serr) {
+		t.Fatalf("explicit missing path was auto-created: %v", serr)
 	}
 }
 

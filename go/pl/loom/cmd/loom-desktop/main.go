@@ -390,7 +390,26 @@ func loadConfig() (*config.ResolvedConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	return config.Load(path, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
+	load := func() (*config.ResolvedConfig, error) {
+		return config.Load(path, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
+	}
+	resolved, err := load()
+	if err != nil {
+		// First run: a missing config at the default path is a fresh
+		// install. Write the starter template and keep booting — the
+		// settings UI collects the API key from there. A missing explicit
+		// LOOM_CONFIG stays a hard error: it names a file that should
+		// exist, not a state to paper over.
+		if errors.Is(err, config.ErrConfigNotFound) {
+			if created, cerr := config.EnsureFirstRunConfig(path); cerr != nil {
+				return nil, cerr
+			} else if created {
+				return load()
+			}
+		}
+		return nil, err
+	}
+	return resolved, nil
 }
 
 func newFileLogger(resolved *config.ResolvedConfig, fallback *slog.Logger) *slog.Logger {
