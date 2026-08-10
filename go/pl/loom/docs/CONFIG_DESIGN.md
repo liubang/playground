@@ -96,7 +96,7 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 
 **没有 env 层**。所有 `LOOM_*` 配置变量及其消费代码（`os.Getenv` 读取点、`LimitsFromEnv`、`trace.ConfigFromEnv` 等）整体删除；每个配置项只有一个读取路径：`config.Load` → `ResolvedConfig` → 注入消费方。
 
-**无配置文件时 fail fast**：报错信息直接内嵌最小可用示例供拷贝（见 §9），不猜测、不静默默认。密钥的 `api_key_env` 引用不是配置层，是运行时密钥解析（见 §5），不受此约束。
+**无配置文件时按入口分流**：agent 入口（chat/run/resume/serve/桌面端）在**默认路径** `~/.loom/config.yaml` 缺失时视为首次安装，自动创建带注释的 starter 模板（0700 目录 + 0600 文件）——CLI 打印"已创建，请填写 api_key 后重试"并以非零退出码退出；桌面端继续启动进入设置页收集密钥。显式 `LOOM_CONFIG` 指向的路径缺失仍是**fail fast**：报错信息内嵌最小可用示例供拷贝（见 §9），不猜测、不静默创建（显式路径缺失是用户错误，不该被掩盖）。密钥的 `api_key_env` 引用不是配置层，是运行时密钥解析（见 §5），不受此约束。
 
 ### 3.2 加载时机与解析管线
 
@@ -147,7 +147,9 @@ providers:
   - name: deepseek
     type: openai                            # 首版仅支持 openai（OpenAI-compatible）
     base_url: https://api.deepseek.com/v1
-    api_key: sk-xxxxxxxx                    # 明文密钥；也可用 api_key_env 引用环境变量，见 §5
+    # 密钥必填，二选一（互斥，同时填写会报错）：
+    #   api_key: <your-api-key>            # 明文；把 <your-api-key> 换成真实密钥
+    #   api_key_env: DEEPSEEK_API_KEY      # 或只存环境变量名，启动时读取值（见 §5）
     wire_api: chat                          # provider 级默认：chat | responses
     max_retries: 2                          # 可选，默认 2
     default_model: deepseek-chat            # 可选；缺省取 models[0]
@@ -221,7 +223,7 @@ subagent:                                   # delegate_task 子 Agent（docs/SUB
 ### 4.2 字段规则
 
 - **unknown 字段即错误**：yaml 解码开启 `KnownFields(true)`，拼写错误 fail fast；
-- **除 `providers` 外所有字段可选**（回退内置默认）；空文件按无文件处理：fail fast 并内嵌示例（§9）；
+- **除 `providers` 外所有字段可选**（回退内置默认）；空文件（或仅注释）按无 provider 处理：agent 入口报"至少一个 provider"（内嵌示例，§9），离线命令按空配置继续；文件**缺失**则按 §3.1 的分流：默认路径自动创建模板引导，显式路径 fail fast 内嵌示例；
 - **命名唯一性**：`providers[].name` 全局唯一；同一 provider 内 `models[].name` 唯一；跨 provider 允许同名模型（靠 `provider/model` 消歧）；
 - **`default` 解析**（按序）：① 含 `/` → `provider/model` 精确匹配；② 裸名 → 先按 provider 名匹配（取该 provider 的 `default_model`），再按模型名全局唯一匹配；③ 任一步歧义或不命中即报错并列出候选；
 - **`default` 缺省**：取 `providers[0]` 的 `default_model`（其再缺省取 `models[0]`）——单 provider 场景可以不写 `default`；
@@ -349,7 +351,7 @@ Current  ProviderModelRef       // 启动默认，即 config.default 解析结�
 这是一次 **breaking change**，不设兼容期：
 
 - **`LOOM_*` 配置 env 全部失效**（§2.1 表中标记“迁移”的行），不读、不映射、不提示——开发期项目无历史用户，不留迁移辅助代码；
-- **无配置文件时 fail fast**：错误信息内嵌最小可用示例，拷贝改密钥引用即可用：
+- **无配置文件时按入口分流**（§3.1）：**默认路径缺失** = 首次安装，自动创建 starter 模板并引导填密钥——CLI 打印路径后非零退出，桌面端继续启动进设置页；**显式 `LOOM_CONFIG` 路径缺失** = fail fast，错误信息内嵌最小可用示例，拷贝改密钥即可用：
 
   ```yaml
   default: deepseek/deepseek-chat
@@ -357,14 +359,14 @@ Current  ProviderModelRef       // 启动默认，即 config.default 解析结�
     - name: deepseek
       type: openai
       base_url: https://api.deepseek.com/v1
-      api_key: sk-xxxxxxxx          # 或 api_key_env: DEEPSEEK_API_KEY
+      api_key: <your-api-key>          # 必填：换成你的真实密钥，或用 api_key_env: DEEPSEEK_API_KEY
       models:
         - name: deepseek-chat
           context_window: 65536
   ```
 
 - **headless（`loom run`/`resume`）**：同一 `config.Load` 管线，CI 脚本需把 env 改写为配置文件（CI 里密钥可走 `api_key_env` 注入，无需落盘）；
-- **辅助迁移**：`loom config init` 生成骨架（P2，见 §11）；首版靠 fail fast 的内嵌示例已足够。
+- **辅助迁移**：`loom config init` 仍可用作手动重建/查看带注释模板的命令（§11）；首次安装的自动引导（默认路径缺失时创建同一模板）已落地，用户无需先知道该命令。
 
 ---
 
@@ -383,7 +385,7 @@ Current  ProviderModelRef       // 启动默认，即 config.default 解析结�
 
 | 阶段 | 内容 | 验收 |
 |------|------|------|
-| **P1**（本期） | `internal/config` 包；用户层配置；provider registry；`SetModel` 引用解析；每模型 `context_window`；装配统一走 `ResolvedConfig`；`/model` 引用语法；**`LOOM_*` 配置 env 与消费代码整体删除**；无配置 fail fast（内嵌示例） | 全量测试在配置文件下绿；`grep -r "LOOM_MODEL\|LOOM_BASE_URL\|LOOM_API_KEY" --include='*.go'` 无配置读取点；配置文件端到端切换 provider |
+| **P1**（本期） | `internal/config` 包；用户层配置；provider registry；`SetModel` 引用解析；每模型 `context_window`；装配统一走 `ResolvedConfig`；`/model` 引用语法；**`LOOM_*` 配置 env 与消费代码整体删除**；无配置自动引导（默认路径缺失自动创建模板；显式路径 fail fast 内嵌示例） | 全量测试在配置文件下绿；`grep -r "LOOM_MODEL\|LOOM_BASE_URL\|LOOM_API_KEY" --include='*.go'` 无配置读取点；配置文件端到端切换 provider |
 | **P2** | 项目层配置（§3.3 信任边界）；`/model` picker；`loom config init` | 恶意项目层样本全部报错；picker UI 测试 |
 | **P3**（待定） | `api_key_cmd`；配置热加载；模型能力标记；非 openai `type` | 按需求驱动 |
 
