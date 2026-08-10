@@ -32,11 +32,17 @@ type ExecGrant struct {
 	// WritablePaths are additional absolute paths writable inside the
 	// sandbox (L1). Protected subpaths (.git/hooks, .loom) stay excluded.
 	WritablePaths []string `json:"writable_paths,omitempty"`
+	// GUIOpen lets sandboxed commands drive macOS GUI applications via
+	// `open` (LaunchServices + Apple Events; docs/BROWSER_DESIGN.md §4).
+	// Unlike network, this asks in EVERY approval mode: Apple Events are
+	// TCC-attributed to the loom process itself, so loom-level approval is
+	// the only per-call gate.
+	GUIOpen bool `json:"gui_open,omitempty"`
 }
 
 // IsZero reports whether the grant is the default sandbox (no widenings).
 func (g ExecGrant) IsZero() bool {
-	return !g.Unsandboxed && !g.NetworkFull && len(g.WritablePaths) == 0
+	return !g.Unsandboxed && !g.NetworkFull && len(g.WritablePaths) == 0 && !g.GUIOpen
 }
 
 // Summary renders the grant for approval prompts and audit logs, e.g.
@@ -48,6 +54,12 @@ func (g ExecGrant) Summary() string {
 	out := ""
 	if g.NetworkFull {
 		out += "+网络"
+	}
+	if g.GUIOpen {
+		if out != "" {
+			out += ", "
+		}
+		out += "+GUI 打开"
 	}
 	for _, p := range g.WritablePaths {
 		if out != "" {

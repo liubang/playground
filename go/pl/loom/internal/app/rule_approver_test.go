@@ -212,6 +212,12 @@ func TestRememberRunCmdGrantDerivation(t *testing.T) {
 		t.Fatalf("needs_network remember = ok=%v grant=%+v, want sandboxed network grant", ok, rule.Grant)
 	}
 
+	needsGUI := json.RawMessage(`{"program":"open","args":["https://example.com"],"needs_gui_open":true}`)
+	rule, ok = rules.RememberCall("run_cmd", needsGUI, "")
+	if !ok || !rule.Grant.GUIOpen || rule.Grant.Unsandboxed {
+		t.Fatalf("needs_gui_open remember = ok=%v grant=%+v, want sandboxed gui_open grant", ok, rule.Grant)
+	}
+
 	escalated := json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`)
 	if _, ok = rules.RememberCall("run_cmd", escalated, ""); ok {
 		t.Fatal("escalated remember without trust flavor must be refused (minimal grants cannot cover escalations)")
@@ -263,6 +269,12 @@ func TestApprovalRulePreview(t *testing.T) {
 	_, grant, ok = ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"mycli","needs_network":true}`))
 	if !ok || !grant.NetworkFull {
 		t.Fatalf("needs_network preview grant = %+v ok=%v", grant, ok)
+	}
+
+	// needs_gui_open previews carry the gui_open grant.
+	_, grant, ok = ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"open","args":["https://example.com"],"needs_gui_open":true}`))
+	if !ok || !grant.GUIOpen {
+		t.Fatalf("needs_gui_open preview grant = %+v ok=%v", grant, ok)
 	}
 
 	// web_fetch previews show the exact host.

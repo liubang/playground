@@ -111,6 +111,7 @@ type commandArgs struct {
 	YieldTimeMs        int64             `json:"yield_time_ms,omitempty"`
 	MaxOutputBytes     int64             `json:"max_output_bytes,omitempty"`
 	SandboxPermissions string            `json:"sandbox_permissions,omitempty"`
+	NeedsGUIOpen       bool              `json:"needs_gui_open,omitempty"`
 	Justification      string            `json:"justification,omitempty"`
 }
 
@@ -185,6 +186,9 @@ func validateCommandArgs(validator *workspacepkg.PathValidator, args *commandArg
 		args.SandboxPermissions = sandboxUseDefault
 	case sandboxUseDefault:
 	case sandboxRequireEscalated:
+		if args.NeedsGUIOpen {
+			return "", domain.NewError(domain.ErrInvalidInput, "needs_gui_open cannot be combined with sandbox_permissions=require_escalated (escalated runs already have GUI access; use needs_gui_open for the sandboxed path)")
+		}
 		if strings.TrimSpace(args.Justification) == "" {
 			return "", domain.NewError(domain.ErrInvalidInput, "justification is required with sandbox_permissions=require_escalated (ask the user a short yes/no question)")
 		}

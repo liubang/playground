@@ -114,8 +114,11 @@ type RuleGrant struct {
 	// load; protected workspace subpaths stay excluded).
 	Write []string `json:"write,omitempty"`
 	// Unsandboxed drops the sandbox entirely (L2 trust). Mutually
-	// exclusive with Network/Write.
+	// exclusive with Network/Write/GUIOpen.
 	Unsandboxed bool `json:"unsandboxed,omitempty"`
+	// GUIOpen allows the command to drive macOS GUI applications via
+	// `open` from inside the sandbox (docs/BROWSER_DESIGN.md §4).
+	GUIOpen bool `json:"gui_open,omitempty"`
 }
 
 // ExecGrant converts the rule form into the domain contract. A nil
@@ -128,6 +131,7 @@ func (g *RuleGrant) ExecGrant() domain.ExecGrant {
 		Unsandboxed:   g.Unsandboxed,
 		NetworkFull:   g.Network == "full",
 		WritablePaths: append([]string(nil), g.Write...),
+		GUIOpen:       g.GUIOpen,
 	}
 }
 
@@ -443,8 +447,8 @@ func validateRuleGrant(r *Rule) error {
 	if len(r.ArgvPrefix) == 0 {
 		return fmt.Errorf("rule %v: grant on an empty argv_prefix would widen every command", r.ArgvPrefix)
 	}
-	if g.Unsandboxed && (g.Network != "" || len(g.Write) > 0) {
-		return fmt.Errorf("rule %v: grant.unsandboxed is mutually exclusive with network/write", r.ArgvPrefix)
+	if g.Unsandboxed && (g.Network != "" || len(g.Write) > 0 || g.GUIOpen) {
+		return fmt.Errorf("rule %v: grant.unsandboxed is mutually exclusive with network/write/gui_open", r.ArgvPrefix)
 	}
 	if g.Network != "" && g.Network != "full" {
 		return fmt.Errorf("rule %v: grant.network must be \"full\", got %q", r.ArgvPrefix, g.Network)
@@ -538,6 +542,7 @@ func (s *SessionRules) RememberRunCmd(info RunCmdCall, grant domain.ExecGrant) (
 // execGrantsEqual compares two grants for dedup purposes.
 func execGrantsEqual(a, b domain.ExecGrant) bool {
 	return a.Unsandboxed == b.Unsandboxed && a.NetworkFull == b.NetworkFull &&
+		a.GUIOpen == b.GUIOpen &&
 		stringSliceEqual(a.WritablePaths, b.WritablePaths)
 }
 
@@ -587,6 +592,7 @@ func (s *SessionRules) MatchAll(commands [][]string) (domain.ExecGrant, bool) {
 		}
 		union.Unsandboxed = union.Unsandboxed || grant.Unsandboxed
 		union.NetworkFull = union.NetworkFull || grant.NetworkFull
+		union.GUIOpen = union.GUIOpen || grant.GUIOpen
 		union.WritablePaths = append(union.WritablePaths, grant.WritablePaths...)
 	}
 	return union, true
@@ -636,6 +642,10 @@ type RunCmdCall struct {
 	// NeedsNetwork marks needs_network=true: the model declares the
 	// command requires outbound network inside the sandbox.
 	NeedsNetwork bool
+	// NeedsGUIOpen marks needs_gui_open=true: the model declares the
+	// command drives macOS GUI applications (open / Apple Events) from
+	// inside the sandbox (docs/BROWSER_DESIGN.md §4).
+	NeedsGUIOpen bool
 	// ShellUnwrapped reports that Argv was recovered from a simple
 	// sh -c script (process.UnwrapSimpleShell). Execution still goes
 	// through the shell; the unwrap only feeds classification.
@@ -678,6 +688,7 @@ func ExecInfoOf(call domain.PreparedCall) (RunCmdCall, bool) {
 			Argv:         append([]string(nil), call.ExecRequest.Argv...),
 			Escalated:    call.ExecRequest.Escalated,
 			NeedsNetwork: call.ExecRequest.NeedsNetwork,
+			NeedsGUIOpen: call.ExecRequest.NeedsGUIOpen,
 		}
 		classifyShell(&info)
 		return info, true
@@ -692,6 +703,7 @@ func ParseRunCmdCall(raw json.RawMessage) (RunCmdCall, bool) {
 		Args               []string `json:"args"`
 		SandboxPermissions string   `json:"sandbox_permissions"`
 		NeedsNetwork       bool     `json:"needs_network"`
+		NeedsGUIOpen       bool     `json:"needs_gui_open"`
 	}
 	if err := json.Unmarshal(raw, &args); err != nil || args.Program == "" {
 		return RunCmdCall{}, false
@@ -701,6 +713,7 @@ func ParseRunCmdCall(raw json.RawMessage) (RunCmdCall, bool) {
 		Argv:         argv,
 		Escalated:    args.SandboxPermissions == "require_escalated",
 		NeedsNetwork: args.NeedsNetwork,
+		NeedsGUIOpen: args.NeedsGUIOpen,
 	}
 	classifyShell(&info)
 	return info, true
