@@ -38,7 +38,7 @@ loom 今天的"工作区"不是一个实体，而是启动时解析出的一个�
 - session 跨 workspace 迁移（§3.3 论证不可变绑定；提供 fork 语义属后续）；
 - workspace 级配额（session/turn 配额仍为进程级，user 化时再按归属拆分）；
 - workspace 间资源共享（artifact、memory 的归属维持现状，见 §9 矩阵）；
-- workspace 归档的生命周期管理（删除已实现为纯元数据移除，见 §16.1；归档暂不提供）。
+- workspace 归档的生命周期管理（删除已实现为级联删除会话，见 §16.1；归档暂不提供）。
 
 ## 3. 核心概念与领域模型
 
@@ -271,7 +271,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_workspace_updated
 ```
 
 - events/checkpoints/file_changes/artifact_refs 不动：归属经 `session_id` 间接获得，避免每行事件冗余；
-- `workspace_id` 不加外键：workspace 实体可能被删除（未来），历史 session 必须保留（对齐现有 `archived_at` 软删除语义）。
+- `workspace_id` 不加外键：删除 workspace 时的会话级联由 store 层代码在同一事务内完成（§16.1，与 `DeleteSession` 的 M29 事务模式同构），不依赖 schema 级 FK。
 
 ### 7.2 两阶段迁移：schema 与 backfill 分离
 
@@ -321,7 +321,7 @@ type WorkspaceStore interface {
 GET    /v1/workspaces              # 列举（含每 workspace 的 session 计数）
 POST   /v1/workspaces              # 注册 {root_path, name?} → 201（新建）/ 200（canonical 复用）/ 400（root 不存在、非目录或 canonical 解析失败）
 GET    /v1/workspaces/{id}         # 详情
-DELETE /v1/workspaces/{id}         # 删除元数据（§16.1）→ 204 / 404（未知 id）/ 409（default workspace 或有存活会话）
+DELETE /v1/workspaces/{id}         # 级联删除其会话（§16.1）→ 204 / 404（未知 id）/ 409（default workspace）
 POST   /v1/sessions                # 请求体新增可选 workspace_id；省略 → default workspace
 GET    /v1/sessions?workspace_id=  # 过滤（与既有 archived/limit/cursor 参数正交，handlers_sessions.go:50-62）
 
@@ -448,7 +448,7 @@ M2 是工作量主体，涉及 `bootstrap.go` 的拆分搬运与 `app` 包全部
 
 ## 16. 开放问题
 
-1. **workspace 生命周期**（删除已落地，归档未做）：删除采用**纯元数据移除**——只删 `workspaces` 行，磁盘目录不动；其 session 保留为只读历史（`workspace_id` 悬空，transcript/inspect 可读，resume 拒绝），这正是 §7.1 不加外键的预设场景。两类拒绝（409 `workspace_in_use`）：default workspace（W5，旧客户端的回落目标）、有存活 session 的 workspace（先删除/关闭其 session）。实现：`WorkspaceRegistry.Delete`（buildMu 与 Resolve 互斥，防懒装配复活；返回被摘除的 runtime 由调用方在锁外 Close）、`SessionService.DeleteWorkspace`（存活会话检查与删除在同一 s.mu 临界区；CreateSession/ResumeSession 在 handle 插入点复核 workspace 仍在注册表，双向串行化关闭 TOCTOU）、`DELETE /v1/workspaces/{id}`、`loom workspace rm`；list 响应带 `is_default` 标记供前端隐藏删除入口。归档语义待真实需求出现；
+1. **workspace 生命周期**（删除已落地，归档未做）：删除采用**级联删除会话**——`workspaces` 行与其名下全部 session 在同一事务内删除（events/checkpoints/artifact_refs/session_shares 随 sessions 行 FK 级联，file_changes/memory_jobs 无外键、显式删除，与 `DeleteSession` 的 M29 事务模式同构），磁盘目录不动。存活 session 不再阻塞删除：先把 workspace 从注册表摘除并删库（此后 CreateSession/ResumeSession 的注册表成员复核必然失败，新会话无法在已删 workspace 上激活），再在锁外 shutdown 其 controller；删库到 shutdown 的窗口内在途 turn 可能记一条事件写入失败日志，无害——turn 本来就在被拆除。唯一保留的拒绝（409 `workspace_in_use`）：default workspace（W5，旧客户端的回落目标）。实现：`WorkspaceRegistry.Delete`（buildMu 与 Resolve 互斥，防懒装配复活；返回被摘除的 runtime 由调用方在锁外 Close）、`SessionService.DeleteWorkspace`（registry 删除与存活 handle 摘除在同一 s.mu 临界区，双向串行化关闭 TOCTOU）、`DELETE /v1/workspaces/{id}`、`loom workspace rm`；list 响应带 `is_default` 标记供前端隐藏删除入口。级联落地前已删 workspace 遗留的悬空 session 仍可能存在：Web 侧边栏继续把它们归入「已删除的工作区」只读分组（resume 被注册表拒绝），删光后分组自然消失。归档语义待真实需求出现；
 2. **root 换绑（repair）**：目录移动是真实操作（磁盘迁移、worktree 调整）。换绑会使历史 `file_changes` 相对路径指向新内容，rewind 风险需要在设计层面解决（如换绑时冻结历史 session 的 rewind 能力）。本期 W4 禁止换绑；
 3. **Web 端目录浏览 picker**：注册 workspace 需要输入绝对路径，体验欠佳；server 端文件浏览 API 涉及路径探测面，单独设计；
 4. **per-workspace MCP**：MCP server 的 `cwd` 为空时继承进程 cwd 的语义在多 workspace 下可能不符合直觉（MCP 工具读的是 default workspace 的相对路径）。选项：a) 文档化现状；b) `srv.Cwd` 为空时填 default workspace root；c) workspace 级 MCP 装配。倾向 b)（一行改动），实施期定；

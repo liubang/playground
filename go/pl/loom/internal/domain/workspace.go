@@ -52,11 +52,11 @@ type WorkspaceStore interface {
 	GetWorkspaceByRoot(ctx context.Context, canonicalRoot string) (Workspace, error)
 	// ListWorkspaces returns every registered workspace, newest first.
 	ListWorkspaces(ctx context.Context) ([]Workspace, error)
-	// DeleteWorkspace removes the workspace entity with the given ID. Only
-	// the workspaces row is deleted: the on-disk root directory is never
-	// touched and sessions keep their workspace_id as a dangling reference
-	// (no foreign key, docs/WORKSPACE_DESIGN.md §7.1), preserving their
-	// persisted history as read-only.
+	// DeleteWorkspace removes the workspace entity with the given ID and
+	// cascades to its sessions (docs/WORKSPACE_DESIGN.md §16.1): every
+	// session owned by the workspace is deleted with all of its persisted
+	// data in the same transaction. The on-disk root directory is never
+	// touched.
 	DeleteWorkspace(ctx context.Context, id WorkspaceID) error
 	// SessionWorkspace is ResumeSession's lightweight ownership lookup: the
 	// workspace a session belongs to, without loading its events.
