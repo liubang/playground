@@ -13,9 +13,15 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/07/24
+// Created: 2026/08/12
 
-package webfetch
+// Package browser implements the browser tool: headless Chrome controlled
+// via chromedp, providing navigate/snapshot/screenshot/scroll/click/type/close
+// operations with idle-TTL instance reaping and SSRF-aware URL gating through
+// URLRequest. The snapshot action captures the accessibility tree (AX tree)
+// and assigns ref numbers to interactive elements; click and type use those
+// refs to interact with the page without fragile CSS selectors.
+package browser
 
 import (
 	"bytes"
@@ -28,26 +34,29 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-// baseTool is the webfetch-local variant of the shared tool skeleton. Unlike
-// the fs-oriented packages it carries no path validator: web_fetch touches no
-// workspace paths, so its prepared-call fingerprint only binds the canonical
-// arguments and the risk level.
+// baseTool is the browser-local variant of the shared tool skeleton. Like
+// webfetch it carries no path validator: browser operations touch no
+// workspace paths, so its prepared-call fingerprint binds the canonical
+// arguments, risk level, and the typed URLRequest for domain-rule
+// evaluation by the policy layer (docs/BROWSER_DESIGN.md §5.3).
 type baseTool struct {
 	def domain.ToolDefinition
 	key [32]byte
 }
 
 type preparedFingerprint struct {
-	CallID     string              `json:"call_id"`
-	ToolName   string              `json:"tool_name"`
-	Arguments  json.RawMessage     `json:"arguments"`
-	Risk       domain.RiskLevel    `json:"risk"`
-	URLRequest *domain.URLRequest  `json:"url_request,omitempty"`
+	CallID     string             `json:"call_id"`
+	ToolName   string             `json:"tool_name"`
+	Arguments  json.RawMessage    `json:"arguments"`
+	Risk       domain.RiskLevel   `json:"risk"`
+	URLRequest *domain.URLRequest `json:"url_request,omitempty"`
 }
 
 func newBaseTool(def domain.ToolDefinition) (baseTool, error) {
@@ -132,6 +141,21 @@ func (b *baseTool) signPrepared(prepared domain.PreparedCall) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// extractURLRequest parses a URL string and returns a typed URLRequest
+// carrying the canonical lowercase host, or nil if the URL is not a valid
+// http(s) URL with a host. The policy layer reads this field for domain
+// rule evaluation instead of re-parsing tool arguments.
+func extractURLRequest(rawURL string) *domain.URLRequest {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || u.Hostname() == "" {
+		return nil
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil
+	}
+	return &domain.URLRequest{Host: strings.ToLower(u.Hostname())}
+}
+
 func decodeStrict[T any](raw json.RawMessage) (T, error) {
 	var out T
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -148,6 +172,19 @@ func decodeStrict[T any](raw json.RawMessage) (T, error) {
 		return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value", domain.WithCause(err))
 	}
 	return out, nil
+}
+
+// withOpTimeout derives an operation context from the browser session
+// context with a per-action timeout, while still honoring cancellation of
+// the caller's context (e.g. the user interrupting the agent loop). The
+// returned CancelFunc must be called to release both resources.
+func withOpTimeout(ctx, browserCtx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	opCtx, cancel := context.WithTimeout(browserCtx, timeout)
+	stop := context.AfterFunc(ctx, cancel)
+	return opCtx, func() {
+		stop()
+		cancel()
+	}
 }
 
 func cloneRawMessage(raw json.RawMessage) json.RawMessage {

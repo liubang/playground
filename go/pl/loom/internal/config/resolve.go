@@ -120,6 +120,7 @@ type ResolvedConfig struct {
 	Subagent  ResolvedSubagent
 	Memory    ResolvedMemory
 	Image     ResolvedImage
+	Browser   ResolvedBrowser
 	MCP       ResolvedMCP
 	// Workspaces are the pre-registered project workspaces (docs/WORKSPACE_DESIGN.md §10).
 	Workspaces []ResolvedWorkspace
@@ -321,6 +322,80 @@ func expandHomeDir(path string) (string, error) {
 		return home, nil
 	}
 	return filepath.Join(home, path[2:]), nil
+}
+
+// ResolvedBrowser is the browser section with defaults applied.
+type ResolvedBrowser struct {
+	Enabled        bool
+	ChromePath     string
+	IdleTTL        time.Duration
+	NavTimeout     time.Duration
+	ScreenshotQual int
+	ViewportW      int
+	ViewportH      int
+}
+
+// Default browser constants.
+const (
+	defaultBrowserIdleTTL       = 5 * time.Minute
+	defaultBrowserNavTimeout    = 30 * time.Second
+	defaultBrowserScreenshotQ   = 80
+	defaultBrowserViewportW     = 1280
+	defaultBrowserViewportH     = 720
+	minBrowserNavTimeoutMs      = 5000
+	maxBrowserNavTimeoutMs      = 120000
+	minBrowserScreenshotQ       = 10
+	maxBrowserScreenshotQ       = 100
+	minBrowserViewportDim       = 320
+	maxBrowserViewportDim       = 4096
+)
+
+// resolveBrowser overlays the file's browser section onto built-in defaults.
+func resolveBrowser(in Browser) (ResolvedBrowser, error) {
+	out := ResolvedBrowser{
+		Enabled:        in.Enabled == nil || *in.Enabled,
+		IdleTTL:        defaultBrowserIdleTTL,
+		NavTimeout:     defaultBrowserNavTimeout,
+		ScreenshotQual: defaultBrowserScreenshotQ,
+		ViewportW:      defaultBrowserViewportW,
+		ViewportH:      defaultBrowserViewportH,
+	}
+	out.ChromePath = strings.TrimSpace(in.ChromePath)
+	if in.IdleTTL != "" {
+		v, err := time.ParseDuration(in.IdleTTL)
+		if err != nil {
+			return ResolvedBrowser{}, fmt.Errorf("config: browser.idle_ttl: expected a Go duration (e.g. \"5m\"), got %q", in.IdleTTL)
+		}
+		if v < 0 {
+			return ResolvedBrowser{}, fmt.Errorf("config: browser.idle_ttl must be >= 0")
+		}
+		out.IdleTTL = v
+	}
+	if in.NavTimeoutMs != 0 {
+		if in.NavTimeoutMs < minBrowserNavTimeoutMs || in.NavTimeoutMs > maxBrowserNavTimeoutMs {
+			return ResolvedBrowser{}, fmt.Errorf("config: browser.nav_timeout_ms must be between %d and %d", minBrowserNavTimeoutMs, maxBrowserNavTimeoutMs)
+		}
+		out.NavTimeout = time.Duration(in.NavTimeoutMs) * time.Millisecond
+	}
+	if in.ScreenshotQ != 0 {
+		if in.ScreenshotQ < minBrowserScreenshotQ || in.ScreenshotQ > maxBrowserScreenshotQ {
+			return ResolvedBrowser{}, fmt.Errorf("config: browser.screenshot_quality must be between %d and %d", minBrowserScreenshotQ, maxBrowserScreenshotQ)
+		}
+		out.ScreenshotQual = in.ScreenshotQ
+	}
+	if in.ViewportWidth != 0 {
+		if in.ViewportWidth < minBrowserViewportDim || in.ViewportWidth > maxBrowserViewportDim {
+			return ResolvedBrowser{}, fmt.Errorf("config: browser.viewport_width must be between %d and %d", minBrowserViewportDim, maxBrowserViewportDim)
+		}
+		out.ViewportW = in.ViewportWidth
+	}
+	if in.ViewportHeight != 0 {
+		if in.ViewportHeight < minBrowserViewportDim || in.ViewportHeight > maxBrowserViewportDim {
+			return ResolvedBrowser{}, fmt.Errorf("config: browser.viewport_height must be between %d and %d", minBrowserViewportDim, maxBrowserViewportDim)
+		}
+		out.ViewportH = in.ViewportHeight
+	}
+	return out, nil
 }
 
 // ResolvedImage is the image section with defaults applied. Generator is
@@ -588,6 +663,13 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 		return nil, err
 	}
 	out.Image = image
+
+	// Headless browser tool.
+	browser, err := resolveBrowser(f.Browser)
+	if err != nil {
+		return nil, err
+	}
+	out.Browser = browser
 
 	// MCP servers: validate config-level constraints; runtime startup
 	// (process spawning, tool discovery) happens in bootstrap.go.

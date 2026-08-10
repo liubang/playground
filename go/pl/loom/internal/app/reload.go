@@ -147,6 +147,12 @@ func classifyConfigChanges(prev, next *config.ResolvedConfig) ConfigApplyReport 
 	if !reflect.DeepEqual(prev.Image, next.Image) {
 		r.Restart = append(r.Restart, "image")
 	}
+	// Browser tool registration and Chrome path are frozen at assembly;
+	// all knobs (idle TTL, viewport, timeout, quality) are baked into the
+	// tool instance. Changing any of them requires a restart.
+	if !reflect.DeepEqual(prev.Browser, next.Browser) {
+		r.Restart = append(r.Restart, "browser")
+	}
 	// The share listener is runtime-managed: ApplyConfig reconciles it
 	// immediately (start/stop/rebind), no restart required. The runtime
 	// toggle writes through to share.enabled, so this reconcile is the

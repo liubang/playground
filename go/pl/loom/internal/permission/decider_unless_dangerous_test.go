@@ -210,6 +210,12 @@ func TestAllowGrantCoversMatrix(t *testing.T) {
 		{"network covers needs_network", domain.ExecGrant{NetworkFull: true}, RunCmdCall{NeedsNetwork: true}, true},
 		{"unsandboxed covers needs_network", domain.ExecGrant{Unsandboxed: true}, RunCmdCall{NeedsNetwork: true}, true},
 		{"write vs needs_network", domain.ExecGrant{WritablePaths: []string{"/x"}}, RunCmdCall{NeedsNetwork: true}, false},
+		{"zero grant vs needs_gui_open", domain.ExecGrant{}, RunCmdCall{NeedsGUIOpen: true}, false},
+		{"network vs needs_gui_open", domain.ExecGrant{NetworkFull: true}, RunCmdCall{NeedsGUIOpen: true}, false},
+		{"gui covers needs_gui_open", domain.ExecGrant{GUIOpen: true}, RunCmdCall{NeedsGUIOpen: true}, true},
+		{"unsandboxed covers needs_gui_open", domain.ExecGrant{Unsandboxed: true}, RunCmdCall{NeedsGUIOpen: true}, true},
+		{"gui only vs combined declaration", domain.ExecGrant{GUIOpen: true}, RunCmdCall{NeedsNetwork: true, NeedsGUIOpen: true}, false},
+		{"combined grant covers combined declaration", domain.ExecGrant{NetworkFull: true, GUIOpen: true}, RunCmdCall{NeedsNetwork: true, NeedsGUIOpen: true}, true},
 	}
 	for _, tt := range cases {
 		if got := AllowGrantCovers(tt.grant, tt.info); got != tt.want {
@@ -231,6 +237,79 @@ func TestDangerEscalatedAskCarriesUnsandboxedGrant(t *testing.T) {
 	})
 	if v == nil || v.Decision != domain.DecisionAsk || !v.Grant.Unsandboxed {
 		t.Fatalf("danger escalated ask = %+v, want ask with unsandboxed grant", v)
+	}
+}
+
+// TestDangerAskCarriesDeclaredGrants locks the review-M9 fix: a
+// danger-screened call that declared capabilities must carry them on the
+// ask, or approval silently runs the command under-powered (the
+// fail-retry loop AllowGrantCovers exists to prevent).
+func TestDangerAskCarriesDeclaredGrants(t *testing.T) {
+	d := DangerDecider{Mode: ModeOnRequest}
+	v := d.Evaluate(domain.PreparedCall{
+		Call: domain.ToolCall{Name: "run_cmd", Arguments: []byte(
+			`{"program":"sudo","args":["true"],"needs_network":true,"needs_gui_open":true}`,
+		)},
+		Risk: domain.R2,
+	})
+	if v == nil || v.Decision != domain.DecisionAsk {
+		t.Fatalf("danger ask = %+v, want ask", v)
+	}
+	if !v.Grant.NetworkFull || !v.Grant.GUIOpen {
+		t.Fatalf("danger ask grant = %+v, want both declared capabilities stamped", v.Grant)
+	}
+}
+
+// TestNeedsGUIOpenBaselineModes pins the gui_open baseline semantics
+// (docs/BROWSER_DESIGN.md §4.2): unlike needs_network it asks in EVERY
+// interactive mode and is denied in never mode — Apple Events are
+// TCC-attributed to loom, so loom-level approval is the only per-call
+// gate.
+func TestNeedsGUIOpenBaselineModes(t *testing.T) {
+	raw := []byte(`{"program":"open","args":["https://example.com"],"needs_gui_open":true}`)
+	call := domain.PreparedCall{Call: domain.ToolCall{Name: "run_cmd", Arguments: raw}, Risk: domain.R2}
+
+	v := BaselineDecider{Mode: ModeOnRequest}.Evaluate(call)
+	if v.Decision != domain.DecisionAsk || !v.Grant.GUIOpen {
+		t.Fatalf("on-request = %s %+v, want ask with gui_open grant", v.Decision, v.Grant)
+	}
+	v = BaselineDecider{Mode: ModeUnlessDangerous}.Evaluate(call)
+	if v.Decision != domain.DecisionAsk || !v.Grant.GUIOpen {
+		t.Fatalf("unless-dangerous = %s %+v, want ask with gui_open grant (gui_open is never silently granted)", v.Decision, v.Grant)
+	}
+	v = BaselineDecider{Mode: ModeNever}.Evaluate(call)
+	if v.Decision != domain.DecisionDeny {
+		t.Fatalf("never = %s, want deny (unattended runs never acquire gui_open)", v.Decision)
+	}
+
+	// Combined declarations keep the network half while asking for gui.
+	combined := domain.PreparedCall{Call: domain.ToolCall{Name: "run_cmd", Arguments: []byte(
+		`{"program":"gh","args":["browse"],"needs_network":true,"needs_gui_open":true}`,
+	)}, Risk: domain.R2}
+	v = BaselineDecider{Mode: ModeUnlessDangerous}.Evaluate(combined)
+	if v.Decision != domain.DecisionAsk || !v.Grant.GUIOpen || !v.Grant.NetworkFull {
+		t.Fatalf("unless-dangerous combined = %s %+v, want ask with both grants", v.Decision, v.Grant)
+	}
+}
+
+// TestNeedsGUIOpenCoveredByRule: a user-layer rule carrying gui_open
+// covers the declaration without any prompt — the unattended path the
+// never-mode denial message points at.
+func TestNeedsGUIOpenCoveredByRule(t *testing.T) {
+	rules := &RuleSet{rules: []Rule{{
+		ArgvPrefix: []string{"open"},
+		Decision:   string(domain.DecisionAllow),
+		Grant:      &RuleGrant{GUIOpen: true},
+	}}}
+	p := Policy{Rules: rules}
+	v := p.Decider(ModeNever).Evaluate(domain.PreparedCall{
+		Call: domain.ToolCall{Name: "run_cmd", Arguments: []byte(
+			`{"program":"open","args":["https://example.com"],"needs_gui_open":true}`,
+		)},
+		Risk: domain.R2,
+	})
+	if v.Decision != domain.DecisionAllow || !v.Grant.GUIOpen {
+		t.Fatalf("gui_open rule in never mode = %s %+v, want allow with gui_open grant", v.Decision, v.Grant)
 	}
 }
 

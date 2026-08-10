@@ -66,6 +66,7 @@ type rawRunCmdArgs struct {
 	MaxOutputBytes     *int64             `json:"max_output_bytes"`
 	SandboxPermissions *string            `json:"sandbox_permissions"`
 	NeedsNetwork       *bool              `json:"needs_network"`
+	NeedsGUIOpen       *bool              `json:"needs_gui_open"`
 	Justification      *string            `json:"justification"`
 }
 
@@ -78,6 +79,7 @@ type runCmdArgs struct {
 	MaxOutputBytes     int64             `json:"max_output_bytes"`
 	SandboxPermissions string            `json:"sandbox_permissions"`
 	NeedsNetwork       bool              `json:"needs_network,omitempty"`
+	NeedsGUIOpen       bool              `json:"needs_gui_open,omitempty"`
 	Justification      string            `json:"justification,omitempty"`
 }
 
@@ -179,13 +181,14 @@ func NewRunCmdToolWithArtifacts(
 			"Inside the sandbox, env entries are filtered by a security allowlist; keys that do not survive the filter are reported back in the output's 'note' field (escalated runs inherit the full user environment). " +
 			"The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), " +
 			"and denies writes outside the workspace and temp dir. " +
-			"When a task-critical command fails (or hangs until the timeout) because the sandbox denied OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), " +
-			"PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule. " +
-			"Reserve sandbox_permissions='require_escalated' (with a short justification question) for failures network cannot explain — writes outside the workspace, TTY needs, credential files — it runs OUTSIDE the sandbox with the full user environment after explicit approval (R3). " +
-			"Do not give up or ask the user to run it themselves before offering the matching approval. " +
-			"needs_network must NOT be combined with require_escalated (escalated runs already have full network). " +
+		"When a task-critical command fails (or hangs until the timeout) because the sandbox denied OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), " +
+		"PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule. " +
+		"When a command fails because it tried to OPEN A GUI APPLICATION (macOS 'open' a URL/app, Apple Events — LaunchServices/NSOSStatusErrorDomain errors), retry with needs_gui_open=true: after approval it runs INSIDE the sandbox with GUI-open granted. Use the same flag to proactively show the user a web page (open <url>). " +
+		"Reserve sandbox_permissions='require_escalated' (with a short justification question) for failures network/gui cannot explain — writes outside the workspace, TTY needs, credential files — it runs OUTSIDE the sandbox with the full user environment after explicit approval (R3). " +
+		"Do not give up or ask the user to run it themselves before offering the matching approval. " +
+		"needs_network and needs_gui_open must NOT be combined with require_escalated (escalated runs already have full network and GUI access). " +
 			"'justification' is an optional short note shown to the user at approval time; it is REQUIRED with sandbox_permissions='require_escalated' and simply informational otherwise.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"needs_network":{"type":"boolean"},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"needs_network":{"type":"boolean"},"needs_gui_open":{"type":"boolean"},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"stdout_preview_truncated":{"type":"boolean"},"stderr_preview_truncated":{"type":"boolean"},"stdout_artifact_truncated":{"type":"boolean"},"stderr_artifact_truncated":{"type":"boolean"},"stdout_artifact":{"type":"object"},"stderr_artifact":{"type":"object"},"stdout_artifact_path":{"type":"string"},"stderr_artifact_path":{"type":"string"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"},"note":{"type":"string"}},"required":["stdout","stderr","stdout_bytes","stderr_bytes","stdout_preview_truncated","stderr_preview_truncated","stdout_artifact_truncated","stderr_artifact_truncated","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
@@ -253,6 +256,7 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 			Argv:         append([]string{args.Program}, args.Args...),
 			Escalated:    args.SandboxPermissions == sandboxRequireEscalated,
 			NeedsNetwork: args.NeedsNetwork,
+			NeedsGUIOpen: args.NeedsGUIOpen,
 		},
 	}
 	// Sign before rendering the description so the displayed args_hash
@@ -319,6 +323,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		Unsandboxed:   prepared.Grant.Unsandboxed,
 		NetworkFull:   prepared.Grant.NetworkFull,
 		WritablePaths: prepared.Grant.WritablePaths,
+		GUIOpen:       prepared.Grant.GUIOpen,
 	}
 	runnerResult, err := t.runner.RunWithGrant(ctx, process.CommandSpec{
 		Program:      args.Program,
@@ -469,6 +474,9 @@ func validateArgs(
 	if raw.NeedsNetwork != nil {
 		args.NeedsNetwork = *raw.NeedsNetwork
 	}
+	if raw.NeedsGUIOpen != nil {
+		args.NeedsGUIOpen = *raw.NeedsGUIOpen
+	}
 	if raw.Justification != nil {
 		args.Justification = strings.TrimSpace(*raw.Justification)
 	}
@@ -570,8 +578,8 @@ func validateCanonicalArgs(
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
 		}
 	case sandboxRequireEscalated:
-		if args.NeedsNetwork {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "needs_network cannot be combined with sandbox_permissions=require_escalated (escalated runs already have full network; use needs_network for the sandboxed path)")
+		if args.NeedsNetwork || args.NeedsGUIOpen {
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "needs_network/needs_gui_open cannot be combined with sandbox_permissions=require_escalated (escalated runs already have full network and GUI access; use the needs_* flags for the sandboxed path)")
 		}
 		if args.Justification == "" {
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "justification is required with sandbox_permissions=require_escalated (ask the user a short yes/no question)")
@@ -701,6 +709,23 @@ func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
 		"retry with sandbox_permissions='require_escalated' and a short justification — after approval it runs OUTSIDE the sandbox with the full user environment. " +
 		"Do not give up or ask the user to run it themselves before offering the matching approval."
 	lower := strings.ToLower(stderr)
+	// GUI-denial signatures must be checked FIRST: Apple Event rejections
+	// typically surface as "operation not permitted", which the generic
+	// otherPatterns below would misclassify as network/write guidance
+	// (docs/BROWSER_DESIGN.md §4.2).
+	guiPatterns := []string{
+		"_lsline", "nsosstatuserrordomain", // LaunchServices error payloads
+		"appleevent", "erraevent", "procnotfound", // Apple Event delivery
+		"lsopenurlswithrole", "kls", // LSOpenURLsWithRole / kLS* codes
+	}
+	for _, p := range guiPatterns {
+		if strings.Contains(lower, p) {
+			return "the sandbox denies driving GUI applications (macOS 'open', Apple Events). " +
+				"If this command tried to open a URL or application, retry the SAME command with needs_gui_open=true — " +
+				"after a lightweight approval it runs INSIDE the sandbox with GUI-open granted, and the user can remember it as a scoped rule. " +
+				"Only when the failure is NOT GUI-related, fall back to the network/escalated guidance below."
+		}
+	}
 	networkPatterns := []string{
 		"no such host", "nodename nor servname", "name or service not known", // DNS resolution
 		"could not resolve", "temporary failure in name resolution",

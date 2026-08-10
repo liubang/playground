@@ -177,7 +177,7 @@ func TestShellProbeDirsRefreshesStaleCacheInBackground(t *testing.T) {
 	ConfigureShellPathProbe(cacheDir)
 	// Stale entries keep serving while the refresh is in flight.
 	if got := shellProbeDirs(); !reflect.DeepEqual(got, stale) {
-		t.Fatalf("shellProbeDirs() = %v, want stale %v during refresh", got)
+		t.Fatalf("shellProbeDirs() = %v, want stale %v during refresh", got, stale)
 	}
 	// A second call must not kick a duplicate refresh (asserted via the
 	// total run count below: a duplicate would block on the same release
