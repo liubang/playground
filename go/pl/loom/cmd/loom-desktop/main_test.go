@@ -221,3 +221,43 @@ func TestGenerateToken(t *testing.T) {
 		t.Fatal("two tokens identical")
 	}
 }
+
+// TestLoadConfigFirstRunBootstrapsDefaultPath: a fresh install has no
+// config at all; the desktop must write the starter template at the
+// default path and keep booting (the settings UI collects the API key),
+// instead of refusing to start.
+func TestLoadConfigFirstRunBootstrapsDefaultPath(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(configPathEnv, "")
+
+	resolved, err := loadConfig()
+	if err != nil {
+		t.Fatalf("desktop loadConfig() first run: %v", err)
+	}
+	if len(resolved.Providers) == 0 {
+		t.Fatal("template providers = 0, want the deepseek starter provider")
+	}
+	def, derr := config.DefaultBaseDir()
+	if derr != nil {
+		t.Fatal(derr)
+	}
+	if _, serr := os.Stat(filepath.Join(def, config.FileName)); serr != nil {
+		t.Fatalf("starter config not created: %v", serr)
+	}
+}
+
+// TestLoadConfigExplicitMissingPathStaysHardError: LOOM_CONFIG names a
+// file that should exist; a missing explicit path is a user error and must
+// not be papered over with an auto-created template.
+func TestLoadConfigExplicitMissingPathStaysHardError(t *testing.T) {
+	explicit := filepath.Join(t.TempDir(), "custom", "config.yaml")
+	t.Setenv(configPathEnv, explicit)
+
+	_, err := loadConfig()
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("desktop loadConfig() error = %v, want not-found", err)
+	}
+	if _, serr := os.Stat(explicit); !os.IsNotExist(serr) {
+		t.Fatalf("explicit missing path was auto-created: %v", serr)
+	}
+}

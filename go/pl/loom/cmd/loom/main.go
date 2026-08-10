@@ -190,6 +190,19 @@ func loadConfig(requireProviders bool, logger *slog.Logger) (*config.ResolvedCon
 	}
 	resolved, err := config.Load(path, config.LoadOptions{RequireProviders: requireProviders, Logger: logger}, os.LookupEnv)
 	if err != nil {
+		// First-run bootstrap: a missing config at the default path is a
+		// fresh install, not an error. Write the starter template and hand
+		// back a directed error (exit non-zero: the user still has to set
+		// an LLM API key before the agent can run). A missing explicit
+		// LOOM_CONFIG stays the original hard error — it names a file that
+		// should exist, not a state to paper over.
+		if requireProviders && errors.Is(err, config.ErrConfigNotFound) {
+			if created, cerr := config.EnsureFirstRunConfig(path); cerr != nil {
+				return nil, cerr
+			} else if created {
+				return nil, fmt.Errorf("first run: created starter config at %s\nset your LLM API key (api_key or api_key_env) in it, then run loom again", path)
+			}
+		}
 		return nil, err
 	}
 	return resolved, nil

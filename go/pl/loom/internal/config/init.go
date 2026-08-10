@@ -44,14 +44,57 @@ func WriteTemplate(path string) error {
 	return nil
 }
 
+// IsDefaultConfigPath reports whether path is the default config location
+// (~/.loom/config.yaml). First-run bootstrap applies only there: a missing
+// explicit LOOM_CONFIG path names a file that should exist — a user error
+// to surface, never a state to paper over with a generated file.
+func IsDefaultConfigPath(path string) (bool, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return false, fmt.Errorf("config: resolve config path: %w", err)
+	}
+	base, err := DefaultBaseDir()
+	if err != nil {
+		return false, err
+	}
+	return abs == filepath.Join(base, FileName), nil
+}
+
+// EnsureFirstRunConfig writes the starter template at the default config
+// path when the file is missing, creating the parent directory (0700) and
+// the file (0600). It never touches an explicit LOOM_CONFIG path and never
+// overwrites an existing file. When the default location cannot be
+// resolved (e.g. HOME is unset) the path is treated as non-default: no
+// file is created and the caller keeps its original error. Returns
+// created=true when a fresh template was written so the caller can route
+// the first-run experience: the CLI prints the path and exits non-zero,
+// the desktop keeps booting into the settings UI where the API key is
+// collected.
+func EnsureFirstRunConfig(path string) (bool, error) {
+	ok, err := IsDefaultConfigPath(path)
+	if err != nil || !ok {
+		return false, nil
+	}
+	if _, err := os.Stat(path); err == nil {
+		return false, nil
+	} else if !os.IsNotExist(err) {
+		return false, fmt.Errorf("inspect config file: %w", err)
+	}
+	if err := WriteTemplate(path); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // minimalExample is embedded in fail-fast error messages so a user without
-// any config can copy-paste their way to a working setup (§9).
+// any config can copy-paste their way to a working setup (§9). The key
+// placeholder is intentionally non-secret-looking: it must be replaced.
 const minimalExample = `  default: deepseek/deepseek-chat
   providers:
     - name: deepseek
       type: openai
       base_url: https://api.deepseek.com/v1
-      api_key: sk-xxxxxxxx          # 或 api_key_env: DEEPSEEK_API_KEY
+      api_key: <your-api-key>       # 必填：换成你的真实密钥，或用 api_key_env: DEEPSEEK_API_KEY
       models:
         - name: deepseek-chat
           context_window: 65536`
@@ -87,11 +130,9 @@ providers:
                                 # 网关都用 openai；Claude 官方端点用 anthropic。
     base_url: https://api.deepseek.com/v1
                                 # 必填。与所选协议类型匹配的端点。
-    api_key: sk-xxxxxxxx        # API 密钥，直接明文书写即可（配置文件即私有数据）
-    # api_key_env: DEEPSEEK_API_KEY
-                                # 或者改用环境变量引用：只存变量名，启动时读取值。
-                                # 适合 CI 或需要分享/入仓配置文件的场景。
-                                # 与 api_key 互斥，同时填写会报错。
+    # API 密钥，必填。二选一（互斥，同时填写会报错）：
+    #   api_key: <your-api-key>           # 直接明文书写，把 <your-api-key> 换成真实密钥
+    #   api_key_env: DEEPSEEK_API_KEY     # 或只存环境变量名，启动时读取值；适合 CI/入仓
     wire_api: chat              # 请求协议：openai 类型下为 chat（Chat Completions）|
                                 # responses（Responses API），省略默认 chat；anthropic
                                 # 类型下只有 messages（可省略）。可被单个模型覆盖。

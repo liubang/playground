@@ -878,7 +878,7 @@ func TestWriteTemplate(t *testing.T) {
 
 	// The generated template must itself load (after the user fills a key).
 	raw, _ := os.ReadFile(path)
-	content := strings.Replace(string(raw), "api_key: sk-xxxxxxxx", "api_key: sk-real", 1)
+	content := strings.Replace(string(raw), "#   api_key: <your-api-key>", "api_key: sk-real", 1)
 	if _, err := Load(writeConfig(t, content), LoadOptions{RequireProviders: true}, noEnv); err != nil {
 		t.Fatalf("generated template does not load: %v", err)
 	}
@@ -917,7 +917,7 @@ func TestTemplateCoversSchemaSections(t *testing.T) {
 
 	// The template's concrete values must resolve to the documented
 	// defaults.
-	content := strings.Replace(template, "api_key: sk-xxxxxxxx", "api_key: sk-real", 1)
+	content := strings.Replace(template, "#   api_key: <your-api-key>", "api_key: sk-real", 1)
 	cfg, err := Load(writeConfig(t, content), LoadOptions{RequireProviders: true}, noEnv)
 	if err != nil {
 		t.Fatalf("template does not load: %v", err)
@@ -940,5 +940,47 @@ func TestTemplateCoversSchemaSections(t *testing.T) {
 	}
 	if len(cfg.Workspaces) != 0 {
 		t.Fatalf("workspaces = %+v, want empty", cfg.Workspaces)
+	}
+}
+
+func TestEnsureFirstRunConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	def, err := DefaultBaseDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaultPath := filepath.Join(def, FileName)
+
+	// A missing default path gets a fresh template (0600) and reports it.
+	created, err := EnsureFirstRunConfig(defaultPath)
+	if err != nil {
+		t.Fatalf("EnsureFirstRunConfig() error = %v", err)
+	}
+	if !created {
+		t.Fatal("EnsureFirstRunConfig() created = false, want true")
+	}
+	info, err := os.Stat(defaultPath)
+	if err != nil {
+		t.Fatalf("stat created config: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("created config mode = %o, want 600", info.Mode().Perm())
+	}
+
+	// An existing file is never touched: no overwrite, no error.
+	created, err = EnsureFirstRunConfig(defaultPath)
+	if err != nil || created {
+		t.Fatalf("EnsureFirstRunConfig(existing) = (%v, %v), want (false, nil)", created, err)
+	}
+
+	// An explicit non-default path is never auto-created.
+	explicit := filepath.Join(home, "custom", "config.yaml")
+	created, err = EnsureFirstRunConfig(explicit)
+	if err != nil || created {
+		t.Fatalf("EnsureFirstRunConfig(explicit) = (%v, %v), want (false, nil)", created, err)
+	}
+	if _, err := os.Stat(explicit); !os.IsNotExist(err) {
+		t.Fatalf("explicit path was created unexpectedly: %v", err)
 	}
 }
