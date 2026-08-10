@@ -275,7 +275,7 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 	// env and the escalated full env derive from it. Without this, a
 	// desktop-launched loom reports "go: command not found" inside the
 	// sandbox and the model wastes turns on futile escalations.
-	if added := process.AugmentProcessPATH(); len(added) > 0 {
+	if added := process.AugmentProcessPATH(resolved.Tools.PathExtra); len(added) > 0 {
 		logger.Info("augmented process PATH with toolchain dirs", "added", added)
 	}
 

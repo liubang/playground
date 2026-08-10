@@ -1355,6 +1355,8 @@ func (m Model) listingRows(width int) []string {
 		return m.listingSkillRows(width)
 	case listingMCP:
 		return m.listingMCPRows(width)
+	case listingEnv:
+		return m.listingEnvRows(width)
 	}
 	return nil
 }
@@ -1390,6 +1392,50 @@ func (m Model) listingSkillRows(width int) []string {
 		rows = append(rows, "", m.theme.DialogTitle.Render("  Load issues"))
 		for _, issue := range listing.Issues {
 			rows = append(rows, "  "+m.theme.ToolError.Render("x "+truncateDisplayWidth(issue, width-6)))
+		}
+	}
+	return rows
+}
+
+// listingEnvRows renders the /doctor report: key-tool resolutions first,
+// then every candidate PATH directory with its source/status attribution,
+// then the effective PATH. The layout mirrors the settings "development
+// environment" card so both frontends answer the same question.
+func (m Model) listingEnvRows(width int) []string {
+	key := m.theme.ApprovalKey
+	dim := m.theme.Dim
+	report := m.listing.env
+	if report == nil {
+		return []string{dim.Render("  Environment report unavailable.")}
+	}
+	var rows []string
+	rows = append(rows, m.theme.DialogTitle.Render("  Key tools"))
+	for _, t := range report.Tools {
+		if t.Found {
+			rows = append(rows, "  "+m.theme.ToolSuccess.Render("+ ")+key.Render(t.Name)+"  "+dim.Render(truncateDisplayWidth(t.Path, width-12)))
+		} else {
+			rows = append(rows, "  "+m.theme.ToolError.Render("x ")+key.Render(t.Name)+"  "+dim.Render("not found"))
+		}
+	}
+	rows = append(rows, "", m.theme.DialogTitle.Render("  PATH directories (by priority)"))
+	if len(report.Dirs) == 0 {
+		rows = append(rows, dim.Render("  (no candidates)"))
+	}
+	for _, d := range report.Dirs {
+		mark := m.theme.ToolSuccess.Render("+ ")
+		switch d.Status {
+		case "missing":
+			mark = m.theme.ToolError.Render("x ")
+		case "existing":
+			mark = dim.Render("= ")
+		}
+		meta := string(d.Source) + "/" + string(d.Status)
+		rows = append(rows, "  "+mark+dim.Render(truncateDisplayWidth(d.Path, width-22)+"  ("+meta+")"))
+	}
+	if report.EffectivePATH != "" {
+		rows = append(rows, "", m.theme.DialogTitle.Render("  Effective PATH"))
+		for _, entry := range strings.Split(report.EffectivePATH, ":") {
+			rows = append(rows, "    "+dim.Render(truncateDisplayWidth(entry, width-4)))
 		}
 	}
 	return rows

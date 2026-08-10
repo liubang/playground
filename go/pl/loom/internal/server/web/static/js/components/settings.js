@@ -367,6 +367,9 @@ const TABS = [
   { id: "mcp", label: "MCP" }, // 自定义渲染（概览 → 详情两级）
   {
     id: "system", label: "系统", sections: [
+      ["开发工具链", [
+        { key: "tools.path_extra", label: "额外 PATH 目录", type: "list-text", rows: 3, ph: "~/corp/bin", hint: "每行一个绝对路径（支持 ~/ 前缀）；优先于所有内置候选目录，保存即热应用" },
+      ]],
       ["Langfuse 追踪", [
         { key: "tracing.host", label: "服务地址", ph: "https://langfuse.internal" },
         { key: "tracing.public_key", label: "公钥", type: "password", revealRef: { kind: "tracing", field: "public_key" } },
@@ -497,6 +500,7 @@ export class SettingsPanel {
       this._renderContent();
       this._renderTabs();
       if (this.activeTab === "skills") this._loadSkills();
+      if (this.activeTab === "system") this._loadEnvironment();
       if (manual) this.toast(r.revision === prevRevision ? "已是最新，配置无变化" : "配置已重新加载", true);
     } catch (e) {
       if (e.status === 401) {
@@ -527,6 +531,7 @@ export class SettingsPanel {
       panel.hidden = panel.dataset.tabId !== id;
     }
     if (id === "skills") this._loadSkills();
+    if (id === "system") this._loadEnvironment();
   }
 
   // 一次性渲染全部 tab 面板（切换只 toggle hidden）：收集针对整棵 DOM，
@@ -545,7 +550,10 @@ export class SettingsPanel {
       else if (tab.id === "skills") this._renderSkills(panel);
       else {
         for (const [title, fields] of tab.sections) panel.appendChild(this._renderSection(title, fields));
-        if (tab.id === "system") this._renderWorkspaces(panel);
+        if (tab.id === "system") {
+          this._renderEnvironment(panel);
+          this._renderWorkspaces(panel);
+        }
       }
       body.appendChild(panel);
     }
@@ -1120,6 +1128,88 @@ export class SettingsPanel {
     if (Object.keys(servers).length) cfg.mcp_servers = servers;
   }
 
+  // ---------- 系统 tab：开发环境卡片（运行时只读视图） ----------
+
+  _renderEnvironment(body) {
+    const refs = (this._tabRefs.env = {});
+    const sec = el("section", "set-sec set-sec-card");
+    const bar = el("div", "set-skills-bar");
+    bar.appendChild(el("h3", "set-sec-title", "开发环境（运行时状态）"));
+    const refresh = el("button", "btn btn-secondary btn-sm set-skills-refresh");
+    refresh.type = "button";
+    refresh.title = "重新读取运行时报告";
+    refresh.appendChild(iconEl("rotate-left"));
+    refresh.appendChild(document.createTextNode("刷新"));
+    refresh.onclick = () => this._loadEnvironment(true);
+    refs.refreshBtn = refresh;
+    bar.appendChild(refresh);
+    sec.appendChild(bar);
+    sec.appendChild(el("div", "set-hint set-tip",
+      "loom 启动时把常见工具目录补进进程 PATH（GUI 启动时 PATH 只有系统目录），优先级：上方「额外 PATH 目录」> 内置清单 > 通配展开 > 继承的 PATH。" +
+      "沙箱内命令看到的就是这份 PATH——「未检测到」的工具可考虑把其目录登记到上方配置。"));
+    const content = el("div", "set-env");
+    sec.appendChild(content);
+    body.appendChild(sec);
+    refs.content = content;
+    refs.loaded = false;
+  }
+
+  async _loadEnvironment(force) {
+    const refs = this._tabRefs.env;
+    if (!refs || !refs.content || refs.loading || (refs.loaded && !force)) return;
+    refs.loaded = true;
+    refs.loading = true;
+    if (refs.refreshBtn) {
+      refs.refreshBtn.disabled = true;
+      refs.refreshBtn.classList.add("is-spinning");
+    }
+    refs.content.textContent = "";
+    refs.content.appendChild(this._loadingEl("读取环境报告中…"));
+    try {
+      const r = await this.api.metaEnvironment();
+      refs.content.textContent = "";
+      refs.content.appendChild(el("h4", "set-env-sub", "关键工具解析"));
+      for (const t of r.tools || []) refs.content.appendChild(this._envToolRow(t));
+      refs.content.appendChild(el("h4", "set-env-sub", "候选目录（按优先级）"));
+      const dirs = r.dirs || [];
+      if (!dirs.length) refs.content.appendChild(el("div", "set-hint", "（无候选目录）"));
+      for (const d of dirs) refs.content.appendChild(this._envDirRow(d));
+      if (r.effective_path) {
+        refs.content.appendChild(el("h4", "set-env-sub", "生效 PATH"));
+        refs.content.appendChild(el("div", "set-hint mono set-env-path", r.effective_path));
+      }
+    } catch (e) {
+      refs.content.textContent = "";
+      if (e.status !== 401) {
+        refs.content.appendChild(this._loadingEl("环境报告不可用: " + e.message, true));
+        if (force) this.toast("环境报告加载失败: " + e.message);
+      }
+    } finally {
+      refs.loading = false;
+      if (refs.refreshBtn) {
+        refs.refreshBtn.disabled = false;
+        refs.refreshBtn.classList.remove("is-spinning");
+      }
+    }
+  }
+
+  _envToolRow(t) {
+    const row = el("div", "env-row");
+    row.appendChild(el("span", "env-name mono", t.name));
+    row.appendChild(el("span", "env-val mono" + (t.found ? "" : " is-missing"), t.found ? t.path : "未检测到"));
+    return row;
+  }
+
+  _envDirRow(d) {
+    const row = el("div", "env-row" + (d.status === "missing" ? " is-dim" : ""));
+    row.appendChild(el("span", "env-val mono", d.path));
+    const src = { config: "配置", static: "内置", glob: "通配" }[d.source] || d.source;
+    const st = { prepended: "已注入", existing: "已在 PATH", missing: "未安装" }[d.status] || d.status;
+    row.appendChild(el("span", "env-badge env-src-" + d.source, src));
+    row.appendChild(el("span", "env-badge env-st-" + d.status, st));
+    return row;
+  }
+
   // ---------- Skills tab（配置 + 运行时发现视图） ----------
 
   _renderSkills(body) {
@@ -1419,6 +1509,10 @@ export class SettingsPanel {
       setTimeout(() => saveBtn.classList.remove("flash-success"), 1300);
       // 热应用可能改变 MCP 连接状态（新增/删除/重连），刷新徽标
       this._refreshMcpStatus();
+      // path_extra 热应用会重写 PATH 报告，失效并刷新环境卡片
+      const envRefs = this._tabRefs.env;
+      if (envRefs) envRefs.loaded = false;
+      if (this.activeTab === "system") this._loadEnvironment();
     } catch (e) {
       if (e.status === 401) return;
       if (e.code === "config_conflict") {

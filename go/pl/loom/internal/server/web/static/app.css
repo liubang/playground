@@ -905,6 +905,22 @@ select.set-input { width: auto; min-width: 180px; }
 .skill-row.is-disabled { opacity: .55; }
 .skill-scope.is-off { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
 
+/* 系统 tab：开发环境卡片（工具链/PATH 运行时报告） */
+.set-env-sub { margin: 10px 0 4px; font-size: var(--text-sm); color: var(--muted); font-weight: 600; }
+.env-row { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; font-size: var(--text-sm); }
+.env-row.is-dim { opacity: .5; }
+.env-name { flex: none; min-width: 72px; font-weight: 600; }
+.env-val { word-break: break-all; }
+.env-val.is-missing { color: var(--muted); }
+.env-badge {
+  flex: none; font-size: 10px; color: var(--muted); border: 1px solid var(--bg2);
+  border-radius: var(--radius-full); padding: 0 7px; letter-spacing: .04em;
+}
+.env-badge.env-src-config { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+.env-badge.env-st-prepended { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+.env-badge.env-st-missing { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
+.set-env-path { word-break: break-all; line-height: 1.5; }
+
 /* 桌面端（loom-desktop，mac.TitleBarHidden，无 toolbar）：无原生标题栏，
    红绿灯悬浮在窗口左上角标准位（中心线距窗口顶 14px，横向约占 12–66px）。
    顶行统一收紧为 28px：侧栏展开时灯落在 .ws-bar 行内，折叠时落在

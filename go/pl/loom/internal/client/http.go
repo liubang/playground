@@ -539,6 +539,14 @@ func (c *httpClient) ListMCPServers(ctx context.Context) ([]MCPServerInfo, error
 	return nil, ErrUnsupported
 }
 
+func (c *httpClient) ToolchainEnvironment(ctx context.Context) (*ToolchainReport, error) {
+	var out ToolchainReport
+	if err := c.do(ctx, http.MethodGet, "/v1/meta/environment", nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *httpClient) ListRules(ctx context.Context) (*permission.RuleSet, error) {
 	return nil, ErrUnsupported
 }
