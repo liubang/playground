@@ -38,11 +38,11 @@ type Manager struct {
 	alloc       context.Context
 	allocCancel context.CancelFunc
 
-	mu          sync.Mutex
-	instance    *browserInstance
-	idleTTL     time.Duration
-	reaperDone  chan struct{}
-	closed      bool
+	mu         sync.Mutex
+	instance   *browserInstance
+	idleTTL    time.Duration
+	reaperDone chan struct{}
+	closed     bool
 }
 
 type browserInstance struct {

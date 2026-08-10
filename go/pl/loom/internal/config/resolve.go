@@ -337,17 +337,17 @@ type ResolvedBrowser struct {
 
 // Default browser constants.
 const (
-	defaultBrowserIdleTTL       = 5 * time.Minute
-	defaultBrowserNavTimeout    = 30 * time.Second
-	defaultBrowserScreenshotQ   = 80
-	defaultBrowserViewportW     = 1280
-	defaultBrowserViewportH     = 720
-	minBrowserNavTimeoutMs      = 5000
-	maxBrowserNavTimeoutMs      = 120000
-	minBrowserScreenshotQ       = 10
-	maxBrowserScreenshotQ       = 100
-	minBrowserViewportDim       = 320
-	maxBrowserViewportDim       = 4096
+	defaultBrowserIdleTTL     = 5 * time.Minute
+	defaultBrowserNavTimeout  = 30 * time.Second
+	defaultBrowserScreenshotQ = 80
+	defaultBrowserViewportW   = 1280
+	defaultBrowserViewportH   = 720
+	minBrowserNavTimeoutMs    = 5000
+	maxBrowserNavTimeoutMs    = 120000
+	minBrowserScreenshotQ     = 10
+	maxBrowserScreenshotQ     = 100
+	minBrowserViewportDim     = 320
+	maxBrowserViewportDim     = 4096
 )
 
 // resolveBrowser overlays the file's browser section onto built-in defaults.
