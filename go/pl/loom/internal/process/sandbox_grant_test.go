@@ -236,7 +236,7 @@ func withArgs(spec CommandSpec, args ...string) CommandSpec {
 // non-seatbelt sandboxes pass through untouched.
 func TestWidenSandboxClones(t *testing.T) {
 	base := SeatbeltSandbox{}
-	widened := widenSandbox(base, true, []string{"/tmp/extra"})
+	widened := widenSandbox(base, Grant{NetworkFull: true, WritablePaths: []string{"/tmp/extra"}, GUIOpen: true})
 	s, ok := widened.(SeatbeltSandbox)
 	if !ok {
 		t.Fatalf("widenSandbox returned %T, want SeatbeltSandbox", widened)
@@ -244,7 +244,10 @@ func TestWidenSandboxClones(t *testing.T) {
 	if !s.allowNetwork {
 		t.Fatal("widened sandbox must allow network")
 	}
-	if base.allowNetwork {
+	if !s.allowGUIOpen {
+		t.Fatal("widened sandbox must allow GUI open")
+	}
+	if base.allowNetwork || base.allowGUIOpen {
 		t.Fatal("base sandbox must be unchanged")
 	}
 	profile, err := s.profile(SandboxSpec{ExecutablePath: "/bin/echo", WorkingDir: "/tmp", WorkspaceRoot: "/tmp"})
@@ -257,12 +260,38 @@ func TestWidenSandboxClones(t *testing.T) {
 	if !strings.Contains(profile, `(allow file-write* (subpath "`+workspacepkg.Canonicalize("/tmp/extra")+`"))`) {
 		t.Fatalf("widened profile missing extra writable path:\n%s", profile)
 	}
+	for _, rule := range guiOpenAllowRules {
+		if !strings.Contains(profile, rule) {
+			t.Fatalf("widened profile missing GUI-open rule %q:\n%s", rule, profile)
+		}
+	}
 	// Non-seatbelt sandboxes pass through (fail-closed preserved).
-	if got := widenSandbox(DirectSandbox{}, true, nil); got != (DirectSandbox{}) {
+	if got := widenSandbox(DirectSandbox{}, Grant{NetworkFull: true}); got != (DirectSandbox{}) {
 		t.Fatalf("widenSandbox(DirectSandbox) = %v, want unchanged", got)
 	}
-	if got := widenSandbox(UnsupportedSandbox{Reason: "x"}, true, []string{"/tmp"}); got != (UnsupportedSandbox{Reason: "x"}) {
+	if got := widenSandbox(UnsupportedSandbox{Reason: "x"}, Grant{NetworkFull: true, WritablePaths: []string{"/tmp"}}); got != (UnsupportedSandbox{Reason: "x"}) {
 		t.Fatalf("widenSandbox(UnsupportedSandbox) = %v, want unchanged", got)
+	}
+}
+
+// TestSeatbeltProfileDeniesGUIOpenByDefault locks the default-deny side
+// of the gui_open capability (docs/BROWSER_DESIGN.md §4): the five
+// GUI-open rules must appear ONLY in a widened profile — the default
+// profile never carries appleevent-send.
+func TestSeatbeltProfileDeniesGUIOpenByDefault(t *testing.T) {
+	sandbox := SeatbeltSandbox{}
+	profile, err := sandbox.profile(SandboxSpec{
+		ExecutablePath: "/bin/echo",
+		WorkingDir:     "/tmp",
+		WorkspaceRoot:  "/tmp",
+	})
+	if err != nil {
+		t.Fatalf("profile() error = %v", err)
+	}
+	for _, rule := range guiOpenAllowRules {
+		if strings.Contains(profile, rule) {
+			t.Fatalf("default profile must not contain GUI-open rule %q:\n%s", rule, profile)
+		}
 	}
 }
 

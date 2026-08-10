@@ -47,6 +47,8 @@ func TestValidateRuleGrant(t *testing.T) {
 		{"grant on empty prefix", Rule{ArgvPrefix: nil, Decision: "allow", Grant: &RuleGrant{Network: "full"}}, "empty argv_prefix"},
 		{"unsandboxed with network", Rule{ArgvPrefix: []string{"x"}, Decision: "allow", Grant: &RuleGrant{Unsandboxed: true, Network: "full"}}, "mutually exclusive"},
 		{"unsandboxed with write", Rule{ArgvPrefix: []string{"x"}, Decision: "allow", Grant: &RuleGrant{Unsandboxed: true, Write: []string{"/tmp"}}}, "mutually exclusive"},
+		{"gui_open", Rule{ArgvPrefix: []string{"open"}, Decision: "allow", Grant: &RuleGrant{GUIOpen: true}}, ""},
+		{"unsandboxed with gui_open", Rule{ArgvPrefix: []string{"x"}, Decision: "allow", Grant: &RuleGrant{Unsandboxed: true, GUIOpen: true}}, "mutually exclusive"},
 		{"bad network value", Rule{ArgvPrefix: []string{"x"}, Decision: "allow", Grant: &RuleGrant{Network: "dns-only"}}, "must be \"full\""},
 		{"relative write path", Rule{ArgvPrefix: []string{"x"}, Decision: "allow", Grant: &RuleGrant{Write: []string{"rel/dir"}}}, "not absolute"},
 	}
@@ -117,6 +119,9 @@ func TestRuleGrantExecGrant(t *testing.T) {
 	g := (&RuleGrant{Network: "full", Write: []string{"/a"}}).ExecGrant()
 	if !g.NetworkFull || g.Unsandboxed || len(g.WritablePaths) != 1 {
 		t.Fatalf("grant = %+v", g)
+	}
+	if g := (&RuleGrant{GUIOpen: true}).ExecGrant(); !g.GUIOpen || g.IsZero() {
+		t.Fatalf("grant = %+v, want gui_open set", g)
 	}
 	if g := (&RuleGrant{Unsandboxed: true}).ExecGrant(); !g.Unsandboxed {
 		t.Fatalf("grant = %+v", g)
@@ -232,6 +237,26 @@ func TestRememberUpgradesGrant(t *testing.T) {
 	}
 }
 
+// TestMatchAllUnionsGUIOpen proves the composed-command grant union
+// carries gui_open: a script whose subcommands were each remembered with
+// different capabilities needs all of them (docs/BROWSER_DESIGN.md §4.3).
+func TestMatchAllUnionsGUIOpen(t *testing.T) {
+	s := NewSessionRules()
+	if _, ok := s.RememberRunCmd(RunCmdCall{Argv: []string{"go", "build"}}, domain.ExecGrant{}); !ok {
+		t.Fatal("remember go build failed")
+	}
+	if _, ok := s.RememberRunCmd(RunCmdCall{Argv: []string{"open"}}, domain.ExecGrant{GUIOpen: true}); !ok {
+		t.Fatal("remember open failed")
+	}
+	grant, ok := s.MatchAll([][]string{{"go", "build", "./..."}, {"open", "https://example.com"}})
+	if !ok {
+		t.Fatal("MatchAll must cover two remembered subcommands")
+	}
+	if !grant.GUIOpen {
+		t.Fatalf("union grant = %+v, want gui_open from the open memory", grant)
+	}
+}
+
 // TestParseRunCmdCall covers the argv + execution-mode flag extraction.
 func TestParseRunCmdCall(t *testing.T) {
 	info, ok := ParseRunCmdCall([]byte(`{"program":"talos","args":["query"],"needs_network":true}`))
@@ -240,6 +265,10 @@ func TestParseRunCmdCall(t *testing.T) {
 	}
 	if len(info.Argv) != 2 || info.Argv[0] != "talos" || info.Argv[1] != "query" {
 		t.Fatalf("argv = %v", info.Argv)
+	}
+	info, ok = ParseRunCmdCall([]byte(`{"program":"open","args":["https://example.com"],"needs_gui_open":true}`))
+	if !ok || !info.NeedsGUIOpen || info.NeedsNetwork {
+		t.Fatalf("info = %+v ok=%v, want needs_gui_open parsed", info, ok)
 	}
 	info, ok = ParseRunCmdCall([]byte(`{"program":"make","sandbox_permissions":"require_escalated"}`))
 	if !ok || !info.Escalated || info.NeedsNetwork {

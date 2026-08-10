@@ -36,6 +36,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/browser"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/builtin"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/command"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/edit"
@@ -141,6 +142,10 @@ type Bootstrap struct {
 	// provider and the read_skill tool; nil when skills are disabled
 	// (skills.enabled=false or the built-in system prompt is off).
 	Skills *SkillsHandle
+	// BrowserManager owns the headless Chrome instance for the browser
+	// tool; nil when the browser tool is disabled (browser.enabled=false
+	// or Chrome is not found). Close drains the instance and reaper.
+	BrowserManager *browser.Manager
 }
 
 // NewWorkspaceBootstrap assembles the workspace-scoped runtime components
@@ -220,6 +225,29 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 	}()
 	if err := registerBuiltinTools(registry, validator, runner, proc.Artifact, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, proc.Questioner, book, sessionManager, resolved.Image); err != nil {
 		return nil, fmt.Errorf("register tools: %w", err)
+	}
+
+	// Browser tool: registered only when the browser section is enabled
+	// (config.browser) and Chrome is found. Like generate_image, an
+	// unconfigured deployment must not advertise the tool to the model.
+	var browserMgr *browser.Manager
+	if resolved.Browser.Enabled {
+		browserMgr, err = browser.NewManager(resolved.Browser.ChromePath, resolved.Browser.IdleTTL, resolved.Browser.ViewportW, resolved.Browser.ViewportH)
+		if err != nil {
+			logger.Warn("browser tool disabled: Chrome not available", "error", err)
+			browserMgr = nil
+		} else {
+			browserTool, err := browser.NewBrowserTool(browserMgr, proc.Artifact, resolved.Browser.NavTimeout, resolved.Browser.ScreenshotQual)
+			if err != nil {
+				browserMgr.Close()
+				return nil, fmt.Errorf("browser tool: %w", err)
+			}
+			if err := registry.Register(browserTool); err != nil {
+				browserMgr.Close()
+				return nil, fmt.Errorf("register browser: %w", err)
+			}
+			logger.Info("browser tool enabled", "idle_ttl", resolved.Browser.IdleTTL)
+		}
 	}
 
 	// Approval policy: the decider chain (rules → danger → session →
@@ -413,6 +441,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		SubagentManager:  subagentManager,
 		SessionManager:   sessionManager,
 		Skills:           skills,
+		BrowserManager:   browserMgr,
 	}
 	b.PromptBuilder = b.buildPrompt(ctx, resolved)
 	return b, nil
@@ -796,6 +825,9 @@ func (b *Bootstrap) Close() {
 	}
 	if b.SessionManager != nil {
 		b.SessionManager.Close()
+	}
+	if b.BrowserManager != nil {
+		b.BrowserManager.Close()
 	}
 }
 

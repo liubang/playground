@@ -52,6 +52,7 @@ go_library(
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/skill:skill_lib",
         "//go/pl/loom/internal/tool/builtin:builtin_lib",
+        "//go/pl/loom/internal/tool/browser:browser_lib",
         "//go/pl/loom/internal/tool/command:command_lib",
         "//go/pl/loom/internal/tool/edit:edit_lib",
         "//go/pl/loom/internal/tool/exsession:exsession_lib",

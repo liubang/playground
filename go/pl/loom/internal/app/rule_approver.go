@@ -149,17 +149,13 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 //
 //   - trust=unsandboxed on an escalated call → L2 full trust (explicit
 //     user opt-in only; the ONLY rememberable flavor for escalations).
-//   - needs_network calls → sandboxed network grant.
-//   - anything else → zero grant (default sandbox).
+//   - otherwise → exactly the declared capabilities (network, gui_open);
+//     zero grant when nothing was declared.
 func DeriveRememberGrant(info permission.RunCmdCall, trust string) domain.ExecGrant {
-	switch {
-	case trust == TrustUnsandboxed && info.Escalated:
+	if trust == TrustUnsandboxed && info.Escalated {
 		return domain.ExecGrant{Unsandboxed: true}
-	case info.NeedsNetwork:
-		return domain.ExecGrant{NetworkFull: true}
-	default:
-		return domain.ExecGrant{}
 	}
+	return permission.DeclaredGrant(info)
 }
 
 func (r *RuleApprover) matches(call domain.PreparedCall) bool {

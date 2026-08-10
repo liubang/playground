@@ -26,6 +26,6 @@ func NewPlatformSandbox(PlatformSandboxOptions) Sandbox {
 
 // widenSandbox is a no-op on Linux: the unsupported sandbox stays
 // fail-closed and grants never manufacture isolation that does not exist.
-func widenSandbox(base Sandbox, _ bool, _ []string) Sandbox {
+func widenSandbox(base Sandbox, _ Grant) Sandbox {
 	return base
 }
