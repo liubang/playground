@@ -274,7 +274,11 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 	// exec.LookPath reads the parent PATH, and both the sandboxed minimal
 	// env and the escalated full env derive from it. Without this, a
 	// desktop-launched loom reports "go: command not found" inside the
-	// sandbox and the model wastes turns on futile escalations.
+	// sandbox and the model wastes turns on futile escalations. The
+	// login-shell probe (configured first) contributes the user's own
+	// shell PATH as a higher-priority layer; it probes asynchronously and
+	// never blocks startup.
+	process.ConfigureShellPathProbe(resolved.Storage.CacheDir())
 	if added := process.AugmentProcessPATH(resolved.Tools.PathExtra); len(added) > 0 {
 		logger.Info("augmented process PATH with toolchain dirs", "added", added)
 	}

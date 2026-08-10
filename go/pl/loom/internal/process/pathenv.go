@@ -34,6 +34,10 @@ const (
 	// DirSourceConfig marks directories from the tools.path_extra config;
 	// explicit user configuration outranks every built-in candidate.
 	DirSourceConfig DirSource = "config"
+	// DirSourceShell marks directories captured from the user's login
+	// shell by the probe (shellprobe.go): the ambient environment the
+	// user actually works in, outranking loom's built-in guesses.
+	DirSourceShell DirSource = "shell"
 	// DirSourceStatic marks directories from the curated well-known list.
 	DirSourceStatic DirSource = "static"
 	// DirSourceGlob marks directories expanded from a versioned-layout
@@ -101,12 +105,13 @@ var pathAugment = struct {
 }{}
 
 // ResolveToolchainPATH computes the effective PATH and the per-candidate
-// attribution in one pass: config extras first, then the static well-known
-// list, then glob expansions, all prepended ahead of the base entries in
-// that priority order. Base entries are never reordered or duplicated; an
-// empty base starts from defaultPATH, mirroring the runner's minimal-env
-// fallback. dirExists and globFn are injectable for tests.
-func ResolveToolchainPATH(base, home string, extra []string, dirExists func(string) bool, globFn func(string) ([]string, error)) (string, []PathDir) {
+// attribution in one pass: config extras first, then the probed
+// login-shell directories, then the static well-known list, then glob
+// expansions, all prepended ahead of the base entries in that priority
+// order. Base entries are never reordered or duplicated; an empty base
+// starts from defaultPATH, mirroring the runner's minimal-env fallback.
+// dirExists and globFn are injectable for tests.
+func ResolveToolchainPATH(base, home string, extra, shellDirs []string, dirExists func(string) bool, globFn func(string) ([]string, error)) (string, []PathDir) {
 	if strings.TrimSpace(base) == "" {
 		base = defaultPATH
 	}
@@ -135,6 +140,11 @@ func ResolveToolchainPATH(base, home string, extra []string, dirExists func(stri
 	for _, raw := range extra {
 		if expanded := expandHomeDir(raw, home); expanded != "" {
 			consider(expanded, DirSourceConfig)
+		}
+	}
+	for _, dir := range shellDirs {
+		if strings.TrimSpace(dir) != "" {
+			consider(dir, DirSourceShell)
 		}
 	}
 	for _, dir := range wellKnownToolchainDirs {
@@ -181,7 +191,7 @@ func AugmentProcessPATH(extra []string) []string {
 
 	current := os.Getenv("PATH")
 	base := subtractPathList(current, pathAugment.added)
-	effective, dirs := ResolveToolchainPATH(base, userHome(), extra, osDirExists, filepath.Glob)
+	effective, dirs := ResolveToolchainPATH(base, userHome(), extra, shellProbeDirs(), osDirExists, filepath.Glob)
 	if effective != current {
 		if err := os.Setenv("PATH", effective); err != nil {
 			return nil
@@ -303,6 +313,8 @@ var toolchainCacheDirs = []string{
 	"~/.cache/ccache",           // ccache (Linux)
 	"~/.gradle",                 // Gradle caches + wrapper dists
 	"~/.m2/repository",          // Maven local repository
+	"~/Library/Caches/mise",     // mise exec-env cache (macOS)
+	"~/.cache/mise",             // mise exec-env cache (Linux)
 }
 
 // ExtraWritableDirs returns the canonical directories every sandboxed
