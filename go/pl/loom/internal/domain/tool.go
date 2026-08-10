@@ -225,6 +225,25 @@ type PreparedCall struct {
 	// for argv-prefix rules, the danger screen, and session memory
 	// without the policy layer knowing its name.
 	ExecRequest *ExecRequest `json:"exec_request,omitempty"`
+	// URLRequest is the typed URL contract of URL-fetching tools
+	// (web_fetch, browser navigate). The producing tool fills it during
+	// Prepare and covers it by its signature, so the policy layer
+	// classifies a typed field instead of re-parsing tool-specific
+	// argument JSON (docs/BROWSER_DESIGN.md §5.3): any tool that sets
+	// it is eligible for domain rules, session domain memory, and the
+	// URL baseline without the policy layer knowing its name.
+	URLRequest *URLRequest `json:"url_request,omitempty"`
+}
+
+// URLRequest describes a URL the policy layer can classify uniformly,
+// independent of which tool produced it. It is the URL counterpart of
+// ExecRequest: the producing tool extracts the canonical host from its
+// arguments during Prepare and signs it, so domain rule evaluation and
+// session domain memory match the typed field rather than tool-name +
+// ad-hoc argument parsing (docs/BROWSER_DESIGN.md §5.3).
+type URLRequest struct {
+	// Host is the canonical hostname (lowercase, no port) of the URL.
+	Host string `json:"host"`
 }
 
 // ExecRequest describes a process execution the policy layer can
@@ -237,6 +256,10 @@ type ExecRequest struct {
 	// NeedsNetwork marks a declared need for outbound network inside the
 	// sandbox.
 	NeedsNetwork bool `json:"needs_network,omitempty"`
+	// NeedsGUIOpen marks a declared need to drive macOS GUI applications
+	// (open / Apple Events) from inside the sandbox
+	// (docs/BROWSER_DESIGN.md §4).
+	NeedsGUIOpen bool `json:"needs_gui_open,omitempty"`
 }
 
 // RecoverySpec describes durable evidence that can reconcile an interrupted

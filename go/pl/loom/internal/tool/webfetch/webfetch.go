@@ -145,7 +145,16 @@ func (t *WebFetchTool) Prepare(ctx context.Context, call domain.ToolCall) (domai
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Fetch %s (GET)", args.URL)
-	return t.base.prepareCall(ctx, call, canonical, approvalDesc)
+	// Extract the canonical host for the typed URLRequest (signed by the
+	// fingerprint below), so the policy layer evaluates domain rules from
+	// the typed field instead of re-parsing the arguments
+	// (docs/BROWSER_DESIGN.md §5.3). Only http/https URLs reach here
+	// (validateFetchArgs rejects other schemes).
+	var urlReq *domain.URLRequest
+	if u, err := url.Parse(args.URL); err == nil && u.Hostname() != "" {
+		urlReq = &domain.URLRequest{Host: strings.ToLower(u.Hostname())}
+	}
+	return t.base.prepareCall(ctx, call, canonical, approvalDesc, urlReq)
 }
 
 func (t *WebFetchTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {

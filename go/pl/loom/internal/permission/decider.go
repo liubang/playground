@@ -41,13 +41,15 @@ var (
 
 // Evaluate returns the strictest matching rule's verdict, or nil when no
 // rule matches. Process-spawning calls (run_cmd, exec_session — anything
-// carrying a signed ExecRequest) match argv-prefix rules; web_fetch calls
-// match host rules; other tools match tool-name rules (tool_rules.go) —
-// which is why run_cmd/web_fetch can never be remembered by tool name:
-// they never reach the tool-rule evaluation.
+// carrying a signed ExecRequest) match argv-prefix rules; URL-fetching
+// calls (web_fetch, browser navigate — anything carrying a signed
+// URLRequest) match host rules; other tools match tool-name rules
+// (tool_rules.go) — which is why run_cmd/web_fetch can never be remembered
+// by tool name: they never reach the tool-rule evaluation.
 func (d RuleDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	info, ok := ExecInfoOf(call)
-	return d.evaluate(call, evalContext{exec: info, execOK: ok})
+	urlInfo, urlOK := URLInfoOf(call)
+	return d.evaluate(call, evalContext{exec: info, execOK: ok, url: urlInfo, urlOK: urlOK})
 }
 
 // evaluate implements the contextDecider fast path (REVIEW M33): the
@@ -59,8 +61,8 @@ func (d RuleDecider) evaluate(call domain.PreparedCall, ctx evalContext) *domain
 	if ctx.execOK {
 		return d.evaluateRunCmd(ctx.exec)
 	}
-	if call.Call.Name == "web_fetch" {
-		return d.evaluateWebFetch(call)
+	if ctx.urlOK {
+		return d.evaluateURL(ctx.url)
 	}
 	return d.evaluateTool(call)
 }
@@ -74,13 +76,9 @@ func (d RuleDecider) evaluateTool(call domain.PreparedCall) *domain.Verdict {
 	return &domain.Verdict{Decision: best, Source: SourceRule, Reason: rule.Justification}
 }
 
-// evaluateWebFetch matches the call's URL host against the domain rules.
-func (d RuleDecider) evaluateWebFetch(call domain.PreparedCall) *domain.Verdict {
-	host, ok := ParseWebFetchHost(call.Call.Arguments)
-	if !ok {
-		return nil
-	}
-	best, rule := d.Rules.EvaluateDomain(host)
+// evaluateURL matches the call's URL host against the domain rules.
+func (d RuleDecider) evaluateURL(info URLInfo) *domain.Verdict {
+	best, rule := d.Rules.EvaluateDomain(info.Host)
 	if best == "" {
 		return nil
 	}
@@ -153,6 +151,7 @@ func (d RuleDecider) evaluateShellCommands(info RunCmdCall) *domain.Verdict {
 			grant := rule.Grant.ExecGrant()
 			union.Unsandboxed = union.Unsandboxed || grant.Unsandboxed
 			union.NetworkFull = union.NetworkFull || grant.NetworkFull
+			union.GUIOpen = union.GUIOpen || grant.GUIOpen
 			union.WritablePaths = append(union.WritablePaths, grant.WritablePaths...)
 		default:
 			// One uncovered subcommand keeps the whole script at the
@@ -178,16 +177,21 @@ func (d RuleDecider) evaluateShellCommands(info RunCmdCall) *domain.Verdict {
 // identical to the sandbox denial that prompted the request, and the
 // model cannot tell its escalation was refused (silent-downgrade
 // fail-retry loop). Only an explicit unsandboxed grant covers an
-// escalation; only a network (or unsandboxed) grant covers needs_network.
+// escalation; only a network (or unsandboxed) grant covers needs_network;
+// only a gui_open (or unsandboxed) grant covers needs_gui_open. Declared
+// capabilities are checked independently so a call may declare several
+// at once (needs_network + needs_gui_open).
 func AllowGrantCovers(grant domain.ExecGrant, info RunCmdCall) bool {
-	switch {
-	case info.Escalated:
-		return grant.Unsandboxed
-	case info.NeedsNetwork:
-		return grant.Unsandboxed || grant.NetworkFull
-	default:
-		return true
+	if info.Escalated && !grant.Unsandboxed {
+		return false
 	}
+	if info.NeedsNetwork && !grant.Unsandboxed && !grant.NetworkFull {
+		return false
+	}
+	if info.NeedsGUIOpen && !grant.Unsandboxed && !grant.GUIOpen {
+		return false
+	}
+	return true
 }
 
 // DangerDecider intercepts commands matching the built-in dangerous
@@ -230,13 +234,24 @@ func (d DangerDecider) evaluate(_ domain.PreparedCall, ctx evalContext) *domain.
 		return &domain.Verdict{Decision: domain.DecisionDeny, Source: SourceDanger, Reason: reason}
 	}
 	v := &domain.Verdict{Decision: domain.DecisionAsk, Source: SourceDanger, Reason: reason}
-	if info.Escalated {
-		// An approved escalation must execute unsandboxed: the ask has to
-		// carry the grant, or approval would silently run the command
-		// sandboxed (see AllowGrantCovers).
-		v.Grant = domain.ExecGrant{Unsandboxed: true}
-	}
+	// An approved ask must execute with the capabilities the call
+	// declared: the verdict has to carry the grant, or approval would
+	// silently run the command under-powered (see AllowGrantCovers) —
+	// the failure then looks identical to the denial that prompted the
+	// request and the model retries in a loop. This covers every declared
+	// capability, not just escalation (review M9).
+	v.Grant = DeclaredGrant(info)
 	return v
+}
+
+// DeclaredGrant computes the grant covering exactly the capabilities a
+// call declared: unsandboxed for escalations, otherwise the declared
+// network/gui widenings (zero grant when nothing was declared).
+func DeclaredGrant(info RunCmdCall) domain.ExecGrant {
+	if info.Escalated {
+		return domain.ExecGrant{Unsandboxed: true}
+	}
+	return domain.ExecGrant{NetworkFull: info.NeedsNetwork, GUIOpen: info.NeedsGUIOpen}
 }
 
 // SessionDecider consults prefixes remembered from interactive "allow
@@ -252,7 +267,8 @@ type SessionDecider struct {
 // fixed-blast-radius tools (SessionRules.RememberTool gates eligibility).
 func (d SessionDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	info, ok := ExecInfoOf(call)
-	return d.evaluate(call, evalContext{exec: info, execOK: ok})
+	urlInfo, urlOK := URLInfoOf(call)
+	return d.evaluate(call, evalContext{exec: info, execOK: ok, url: urlInfo, urlOK: urlOK})
 }
 
 // evaluate implements the contextDecider fast path (REVIEW M33).
@@ -289,9 +305,8 @@ func (d SessionDecider) evaluate(call domain.PreparedCall, ctx evalContext) *dom
 			Source:   SourceSession,
 			Reason:   "remembered from an interactive loom approval",
 		}
-	case call.Call.Name == "web_fetch":
-		host, ok := ParseWebFetchHost(call.Call.Arguments)
-		if !ok || !d.Session.MatchDomain(host) {
+	case ctx.urlOK:
+		if !d.Session.MatchDomain(ctx.url.Host) {
 			return nil
 		}
 		return &domain.Verdict{
@@ -320,7 +335,8 @@ type BaselineDecider struct {
 // Evaluate resolves the baseline verdict.
 func (d BaselineDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	info, ok := ExecInfoOf(call)
-	return d.evaluate(call, evalContext{exec: info, execOK: ok})
+	urlInfo, urlOK := URLInfoOf(call)
+	return d.evaluate(call, evalContext{exec: info, execOK: ok, url: urlInfo, urlOK: urlOK})
 }
 
 // evaluate implements the contextDecider fast path (REVIEW M33).
@@ -357,7 +373,7 @@ func (d BaselineDecider) evaluate(call domain.PreparedCall, ctx evalContext) *do
 	case d.Mode == ModeNever:
 		v.Decision, v.Reason = domain.DecisionDeny,
 			"never mode: R3+ operations are denied unattended; rework the approach to use workspace-confined operations"
-	case call.Call.Name == "web_fetch":
+	case ctx.urlOK:
 		v.Decision, v.Reason = domain.DecisionAsk,
 			"risk baseline: fetching an unapproved host requires approval (the user can remember the host, or add a *.domain rule)"
 	default:
@@ -377,6 +393,19 @@ func (d BaselineDecider) evaluate(call domain.PreparedCall, ctx evalContext) *do
 //   - everything else runs sandboxed without prompting in every mode:
 //     the sandbox is the boundary. Dangerous commands never reach here
 //     (the DangerDecider already asked or denied them).
+// declaredGrantReason renders the baseline reason for a capability
+// declaration, covering combined declarations (network + gui_open).
+func declaredGrantReason(info RunCmdCall) string {
+	switch {
+	case info.NeedsNetwork && info.NeedsGUIOpen:
+		return "command declares it needs outbound network AND GUI application access (macOS open / Apple Events); both granted inside the sandbox on approval"
+	case info.NeedsGUIOpen:
+		return "command declares it needs to open GUI applications (macOS open / Apple Events, granted inside the sandbox on approval)"
+	default:
+		return "command declares it needs outbound network (sandboxed, network granted on approval)"
+	}
+}
+
 func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, info RunCmdCall) *domain.Verdict {
 	switch d.Mode {
 	case ModeNever:
@@ -384,6 +413,13 @@ func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, info RunCmdCall) *dom
 		case info.Escalated:
 			v.Decision, v.Reason = domain.DecisionDeny,
 				"never mode: escalated (unsandboxed) commands are denied; rework the command to run inside the sandbox"
+		case info.NeedsGUIOpen:
+			// GUI opening asks in EVERY mode (docs/BROWSER_DESIGN.md §4.2):
+			// Apple Events are TCC-attributed to the loom process, so an
+			// unattended run must never acquire it. The only unattended
+			// path is a user-layer rule carrying grant.gui_open.
+			v.Decision, v.Reason = domain.DecisionDeny,
+				"never mode: GUI-open (macOS open / Apple Events) is denied unattended; add a user-layer rule with grant.gui_open for this command prefix, or run it without GUI access"
 		case info.NeedsNetwork:
 			v.Decision, v.Grant, v.Reason = domain.DecisionAllow, domain.ExecGrant{NetworkFull: true}, "never mode: declared network need granted"
 		default:
@@ -399,6 +435,12 @@ func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, info RunCmdCall) *dom
 			// outside the sandbox.
 			v.Decision, v.Grant = domain.DecisionAsk, domain.ExecGrant{Unsandboxed: true}
 			v.Reason = "command requests execution OUTSIDE the sandbox (full environment, network, credentials)"
+		case info.NeedsGUIOpen:
+			// Unlike network, GUI-open asks in every mode: Apple Events
+			// reach other applications under loom's TCC identity, which a
+			// silent grant would hand to any declared call.
+			v.Decision, v.Grant = domain.DecisionAsk, DeclaredGrant(info)
+			v.Reason = declaredGrantReason(info)
 		case info.NeedsNetwork:
 			// The sandbox keeps credential paths unreadable, so granting
 			// declared network needs inside it adds no exfiltration value.
@@ -416,11 +458,12 @@ func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, info RunCmdCall) *dom
 			// executes outside the sandbox exactly once.
 			v.Decision, v.Grant = domain.DecisionAsk, domain.ExecGrant{Unsandboxed: true}
 			v.Reason = "command requests execution OUTSIDE the sandbox (full environment, network, credentials)"
-		case info.NeedsNetwork:
-			// The ask carries the network grant: approving this prompt runs
-			// the command sandboxed with outbound network, exactly once.
-			v.Decision, v.Grant = domain.DecisionAsk, domain.ExecGrant{NetworkFull: true}
-			v.Reason = "command declares it needs outbound network (sandboxed, network granted on approval)"
+		case info.NeedsNetwork || info.NeedsGUIOpen:
+			// The ask carries the declared grants: approving this prompt
+			// runs the command sandboxed with exactly those capabilities,
+			// exactly once.
+			v.Decision, v.Grant = domain.DecisionAsk, DeclaredGrant(info)
+			v.Reason = declaredGrantReason(info)
 		default:
 			v.Decision, v.Reason = domain.DecisionAllow, "on-request: sandboxed commands run without prompting"
 		}

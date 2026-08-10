@@ -58,12 +58,15 @@ func NewExecSessionTool(validator *workspacepkg.PathValidator, manager *Manager)
 			"output before returning; 0 returns immediately, max 300000), max_output_bytes to 16384. " +
 			"The call returns early with status='running' and the output produced so far; drive the session afterwards with " +
 			"write_stdin (send input, or poll with empty chars). stdout and stderr are merged in arrival order like a terminal. " +
-			"The sandbox denies outbound network (loopback allowed) and writes outside the workspace and temp dir; " +
-			"sandbox_permissions='require_escalated' (with a short justification question) runs the session OUTSIDE the " +
-			"sandbox with the full user environment after explicit approval. " +
+		"The sandbox denies outbound network (loopback allowed), writes outside the workspace and temp dir, " +
+		"and driving GUI applications (macOS 'open' / Apple Events). When the session's command needs to open a URL " +
+		"or app from inside the sandbox (e.g. a dev server opening the browser), set needs_gui_open=true — after " +
+		"approval the session runs INSIDE the sandbox with GUI-open granted. " +
+		"sandbox_permissions='require_escalated' (with a short justification question) runs the session OUTSIDE the " +
+		"sandbox with the full user environment after explicit approval. " +
 			"Sessions are killed automatically after 30 minutes without any write_stdin interaction — poll long-lived " +
 			"services periodically if they must stay up.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"yield_time_ms":{"type":"integer","minimum":0,"maximum":300000},"max_output_bytes":{"type":"integer","minimum":0,"maximum":65536},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"yield_time_ms":{"type":"integer","minimum":0,"maximum":300000},"max_output_bytes":{"type":"integer","minimum":0,"maximum":65536},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"needs_gui_open":{"type":"boolean"},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"session_id":{"type":"string"},"command":{"type":"string"},"status":{"type":"string","enum":["running","exited","killed"]},"exit_code":{"type":"integer"},"signal":{"type":"string"},"output":{"type":"string"},"output_dropped_bytes":{"type":"integer"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"duration_ms":{"type":"integer"},"isolation":{"type":"string"},"stdout_artifact_path":{"type":"string"},"stderr_artifact_path":{"type":"string"},"note":{"type":"string"}},"required":["session_id","command","status","exit_code","output","stdout_bytes","stderr_bytes","duration_ms","isolation"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
@@ -123,8 +126,9 @@ func (t *ExecSessionTool) Prepare(ctx context.Context, call domain.ToolCall) (do
 		// Same typed execution contract as run_cmd: argv rules, the
 		// danger screen, and session memory apply to sessions too.
 		ExecRequest: &domain.ExecRequest{
-			Argv:      append([]string{args.Program}, args.Args...),
-			Escalated: args.SandboxPermissions == sandboxRequireEscalated,
+			Argv:         append([]string{args.Program}, args.Args...),
+			Escalated:    args.SandboxPermissions == sandboxRequireEscalated,
+			NeedsGUIOpen: args.NeedsGUIOpen,
 		},
 	}
 	prepared.ArgsHash = t.signer.sign(prepared.Call.ID.String(), t.def.Name, canonical, prepared.ReadPaths, prepared.WritePaths, risk, prepared.ExecRequest)
@@ -153,6 +157,7 @@ func (t *ExecSessionTool) Execute(ctx context.Context, prepared domain.PreparedC
 		Unsandboxed:   prepared.Grant.Unsandboxed,
 		NetworkFull:   prepared.Grant.NetworkFull,
 		WritablePaths: prepared.Grant.WritablePaths,
+		GUIOpen:       prepared.Grant.GUIOpen,
 	}
 	entry, err := t.manager.Start(ctx, process.CommandSpec{
 		Program: args.Program,

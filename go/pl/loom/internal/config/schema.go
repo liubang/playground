@@ -62,6 +62,7 @@ type File struct {
 	Subagent   Subagent             `yaml:"subagent,omitempty"`
 	Memory     Memory               `yaml:"memory,omitempty"`
 	Image      Image                `yaml:"image,omitempty"`
+	Browser    Browser              `yaml:"browser,omitempty"`
 	MCPServers map[string]MCPServer `yaml:"mcp_servers,omitempty"`
 	// Workspaces pre-registers project workspaces at startup
 	// (docs/WORKSPACE_DESIGN.md §10). Optional; the startup directory is
@@ -352,6 +353,19 @@ type Memory struct {
 	// MaxSessionAge skips sessions last touched longer ago than this (Go
 	// duration); empty keeps the default ("720h", 30 days).
 	MaxSessionAge string `yaml:"max_session_age,omitempty"`
+}
+
+// Browser configures the headless Chrome browser tool. Enabled is
+// nil-typed: absent means "enabled" (the tool registers with defaults),
+// an explicit false removes the browser tool from the registry.
+type Browser struct {
+	Enabled       *bool  `yaml:"enabled,omitempty"`
+	ChromePath    string `yaml:"chrome_path,omitempty"`
+	IdleTTL       string `yaml:"idle_ttl,omitempty"`
+	NavTimeoutMs  int    `yaml:"nav_timeout_ms,omitempty"`
+	ScreenshotQ   int    `yaml:"screenshot_quality,omitempty"`
+	ViewportWidth  int   `yaml:"viewport_width,omitempty"`
+	ViewportHeight int   `yaml:"viewport_height,omitempty"`
 }
 
 // MCPServer configures one MCP server connection. The key in MCPServers

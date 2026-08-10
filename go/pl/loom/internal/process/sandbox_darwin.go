@@ -45,6 +45,7 @@ func NewPlatformSandbox(opts PlatformSandboxOptions) Sandbox {
 // SeatbeltSandbox wraps execution in macOS sandbox-exec.
 type SeatbeltSandbox struct {
 	allowNetwork  bool
+	allowGUIOpen  bool
 	writablePaths []string
 }
 
@@ -54,15 +55,34 @@ func (s SeatbeltSandbox) Isolation() Isolation { return SeatbeltIsolation }
 // widenSandbox clones the seatbelt sandbox with additional capabilities
 // (docs/PERMISSION_DESIGN.md §3.2). Other sandbox types are returned
 // unchanged: widening never manufactures isolation that does not exist.
-func widenSandbox(base Sandbox, networkFull bool, extraWritable []string) Sandbox {
+func widenSandbox(base Sandbox, grant Grant) Sandbox {
 	s, ok := base.(SeatbeltSandbox)
 	if !ok {
 		return base
 	}
 	return SeatbeltSandbox{
-		allowNetwork:  s.allowNetwork || networkFull,
-		writablePaths: uniqueCleanPaths(append(append([]string(nil), s.writablePaths...), extraWritable...)),
+		allowNetwork:  s.allowNetwork || grant.NetworkFull,
+		allowGUIOpen:  s.allowGUIOpen || grant.GUIOpen,
+		writablePaths: uniqueCleanPaths(append(append([]string(nil), s.writablePaths...), grant.WritablePaths...)),
 	}
+}
+
+// guiOpenAllowRules are the minimal seatbelt rules that let a sandboxed
+// command drive macOS GUI applications via `open`
+// (docs/BROWSER_DESIGN.md §4.1, verified by controlled experiment on
+// 2026-08-10): LaunchServices binding resolution plus Apple Event
+// delivery. They are appended ONLY for calls granted the gui_open
+// capability — appleevent-send lets the process message ANY running
+// application, so the default profile must never include them. The
+// global-names are private interfaces and may shift across macOS
+// releases; runner_seatbelt_test.go carries a live probe that fails
+// loudly when they do.
+var guiOpenAllowRules = []string{
+	`(allow mach-lookup (global-name "com.apple.coreservices.launchservicesd"))`,
+	`(allow mach-lookup (global-name "com.apple.lsd.mapdb"))`,
+	`(allow mach-lookup (global-name "com.apple.lsd.modifydb"))`,
+	`(allow mach-lookup (global-name "com.apple.coreservices.appleevents"))`,
+	`(allow appleevent-send)`,
 }
 
 // protectedWorkspaceSubpaths are metadata locations under the writable
@@ -165,6 +185,9 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 	}
 	if s.allowNetwork {
 		lines = append(lines, "(allow network*)")
+	}
+	if s.allowGUIOpen {
+		lines = append(lines, guiOpenAllowRules...)
 	}
 	// Destructive-write denies come AFTER every allow (seatbelt's last
 	// match wins): sensitive paths stay un-renameable even when a widened

@@ -114,3 +114,37 @@ func TestSeatbeltPublicOutboundStillDenied(t *testing.T) {
 		t.Fatal("public outbound must stay denied by the default-deny profile")
 	}
 }
+
+// TestSeatbeltGUIOpenGrant is the live probe for the gui_open capability
+// (docs/BROWSER_DESIGN.md §4): the default profile must make `open` fail
+// (LaunchServices/Apple Events denied), and the GUIOpen grant must make
+// it succeed. It fails loudly when a macOS release renames the private
+// mach global-names the rules rely on. Note: the granted half opens one
+// background browser tab on the machine running the test.
+func TestSeatbeltGUIOpenGrant(t *testing.T) {
+	requireSeatbelt(t)
+	validator, root := newValidator(t)
+	runner := newRunner(t, validator, RunnerOptions{Sandbox: SeatbeltSandbox{}})
+	spec := CommandSpec{
+		Program: "open",
+		Args:    []string{"-g", "https://example.com"},
+		Cwd:     root,
+		Timeout: 15 * time.Second,
+	}
+
+	denied, err := runner.RunWithGrant(context.Background(), spec, Grant{})
+	if err != nil {
+		t.Fatalf("runner error = %v", err)
+	}
+	if denied.ExitCode == 0 {
+		t.Fatal("open must fail under the default-deny profile")
+	}
+
+	allowed, err := runner.RunWithGrant(context.Background(), spec, Grant{GUIOpen: true})
+	if err != nil {
+		t.Fatalf("runner error = %v", err)
+	}
+	if allowed.ExitCode != 0 {
+		t.Fatalf("gui_open grant must let open succeed (exit %d): %s", allowed.ExitCode, allowed.Stderr)
+	}
+}

@@ -42,10 +42,14 @@ type Decider interface {
 // chain (REVIEW M33): resolving the exec shape of a run_cmd/exec_session
 // call costs a JSON unmarshal plus a shell unwrap, and the built-in
 // deciders would otherwise each repeat that work for the same call (up to
-// four parses per policy evaluation).
+// four parses per policy evaluation). The URL host is similarly parsed
+// once from the typed URLRequest field and shared across the chain
+// (docs/BROWSER_DESIGN.md §5.3).
 type evalContext struct {
 	exec   RunCmdCall
 	execOK bool
+	url    URLInfo
+	urlOK  bool
 }
 
 // contextDecider is the internal single-parse fast path: the built-in
@@ -67,8 +71,9 @@ type Chain []Decider
 // every decider implementing the contextDecider fast path.
 func (c Chain) Evaluate(call domain.PreparedCall) domain.Verdict {
 	var (
-		ctx    evalContext
-		parsed bool
+		ctx        evalContext
+		parsedExec bool
+		parsedURL  bool
 	)
 	for _, d := range c {
 		if d == nil {
@@ -76,9 +81,13 @@ func (c Chain) Evaluate(call domain.PreparedCall) domain.Verdict {
 		}
 		var v *domain.Verdict
 		if cd, ok := d.(contextDecider); ok {
-			if !parsed {
+			if !parsedExec {
 				ctx.exec, ctx.execOK = ExecInfoOf(call)
-				parsed = true
+				parsedExec = true
+			}
+			if !parsedURL {
+				ctx.url, ctx.urlOK = URLInfoOf(call)
+				parsedURL = true
 			}
 			v = cd.evaluate(call, ctx)
 		} else {
