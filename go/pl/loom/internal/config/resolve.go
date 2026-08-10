@@ -268,6 +268,10 @@ func (s ResolvedStorage) SessionDBPath() string {
 // LogsDir is the file-log directory (loom.YYYY-MM-DD.log).
 func (s ResolvedStorage) LogsDir() string { return filepath.Join(s.BaseDir, "logs") }
 
+// CacheDir is the regenerable runtime cache root (login-shell PATH probe
+// snapshot, ...): losing it costs one recompute, never correctness.
+func (s ResolvedStorage) CacheDir() string { return filepath.Join(s.BaseDir, "cache") }
+
 // MemoriesDir is the long-term memory store root.
 func (s ResolvedStorage) MemoriesDir() string { return filepath.Join(s.BaseDir, "memories") }
 
