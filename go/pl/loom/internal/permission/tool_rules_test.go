@@ -40,6 +40,11 @@ func TestToolMemoryEligible(t *testing.T) {
 	if canonical, ok := ToolMemoryEligible("generate_image"); !ok || canonical != "generate_image" {
 		t.Fatalf("generate_image must be eligible, got %q, %v", canonical, ok)
 	}
+	// web_search's provider endpoint is pinned by deployment config, so its
+	// blast radius is argument-independent and name-level memory is honest.
+	if canonical, ok := ToolMemoryEligible("web_search"); !ok || canonical != "web_search" {
+		t.Fatalf("web_search must be eligible, got %q, %v", canonical, ok)
+	}
 	// Eligibility normalizes case and whitespace and returns the canonical name.
 	if canonical, ok := ToolMemoryEligible(" Generate_Image "); !ok || canonical != "generate_image" {
 		t.Fatalf("normalization must yield generate_image, got %q, %v", canonical, ok)
