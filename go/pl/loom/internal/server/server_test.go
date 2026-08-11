@@ -679,6 +679,75 @@ func TestSessionListLiveState(t *testing.T) {
 	waitIdle(t, ts, id)
 }
 
+// TestSessionListAwaitingApproval locks the approval-state projection the
+// per-workspace attention badge counts: a live session in awaiting_approval
+// must show up as such in the listing, and flip back once the last pending
+// card resolves. The controller setters stand in for the publishing store
+// hooks that fire when permission events persist (covered in app tests).
+func TestSessionListAwaitingApproval(t *testing.T) {
+	release := make(chan struct{})
+	model := &gateModel{inner: fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "first", StopReason: domain.StopEndTurn},
+	), release: release}
+	ts, svc := newTestServer(t, model)
+	id := createTestSession(t, ts)
+
+	if status, body := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/prompts", `{"prompt":"first"}`); status != http.StatusAccepted {
+		t.Fatalf("submit = (%d, %v)", status, body)
+	}
+	// Wait for the turn to hold the controller in running state.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, listing := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions", "")
+		sessions, _ := listing["sessions"].([]any)
+		entry, _ := sessions[0].(map[string]any)
+		if entry["state"] == "running" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("state = %v, want running first", entry["state"])
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	sid, err := domain.ParseSessionID(id)
+	if err != nil {
+		t.Fatalf("ParseSessionID: %v", err)
+	}
+	h, ok := svc.Get(sid)
+	if !ok {
+		t.Fatalf("session %s is not live", id)
+	}
+	listState := func() any {
+		t.Helper()
+		_, listing := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions", "")
+		sessions, _ := listing["sessions"].([]any)
+		if len(sessions) != 1 {
+			t.Fatalf("sessions = %v, want exactly 1", listing)
+		}
+		entry, _ := sessions[0].(map[string]any)
+		return entry["state"]
+	}
+
+	// A pending approval must surface in the listing — this row is exactly
+	// what the workspace attention badge counts.
+	h.Controller.SetAwaitingApproval()
+	if state := listState(); state != "awaiting_approval" {
+		t.Fatalf("state = %v, want awaiting_approval", state)
+	}
+
+	// Resolving the last pending card (pendingCards is empty here) flips the
+	// controller back to running, and the listing follows — the badge must
+	// clear instead of lingering on a stale count.
+	h.Controller.SetRunning()
+	if state := listState(); state != "running" {
+		t.Fatalf("state = %v, want running after resolve", state)
+	}
+
+	close(release)
+	waitIdle(t, ts, id)
+}
+
 // gateModel blocks its first Stream call until release closes, giving the
 // test a deterministic busy window.
 type gateModel struct {
