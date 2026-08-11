@@ -177,12 +177,12 @@ func AttachRules(ctx context.Context, policy Policy, workspaceRoot, userDir stri
 	if userDir != "" {
 		if remembered, err := LoadRememberedRules(ctx, RememberedDBPath(userDir)); err != nil {
 			logger.Warn("loom rules: remembered store unreadable", "error", err)
-		} else if remembered.Size() > 0 {
+		} else if remembered.HasAny() {
 			rules.merge(remembered)
 		}
 	}
-	if rules.Size() > 0 {
-		logger.Info("loom rules loaded", "rules", rules.Size())
+	if rules.HasAny() {
+		logger.Info("loom rules loaded", "rules", len(rules.Rules()), "domains", len(rules.Domains()), "tools", len(rules.Tools()))
 	}
 	policy.Rules = rules
 	return policy

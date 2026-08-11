@@ -92,6 +92,11 @@ func (l *Loop) drainGoalUpdates() {
 		// explicitly invites update_goal "complete" when the work is done.
 		if l.Run.Goal != nil && (l.Run.Goal.Status == domain.GoalStatusActive || l.Run.Goal.Status == domain.GoalStatusBudgetLimited) {
 			l.Run.Goal.Status = update.Close
+			// A closing call may carry a final summary (update_goal
+			// accepts objective together with status); record it.
+			if update.Objective != "" {
+				l.Run.Goal.Objective = update.Objective
+			}
 			l.Run.Goal.UpdatedAt = now
 		}
 	case update.Objective != "":
@@ -233,6 +238,7 @@ func NewUpdateGoalTool(cell *GoalCell) (*UpdateGoalTool, error) {
 			"you get one final turn to summarize progress — it never hard-stops you mid-work. " +
 			"Call with status='complete' only when the objective is verifiably achieved (requirement-by-requirement " +
 			"evidence from the current state), or status='blocked' only when truly stuck without user input. " +
+			"When closing with status, you may also pass 'objective' as the final summary — it is recorded on the goal. " +
 			"Do not call this tool for trivial single-step tasks.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"objective":{"type":"string","minLength":1,"maxLength":8192},"token_budget":{"type":"integer","minimum":1},"status":{"type":"string","enum":["complete","blocked"]}}}`),
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"applied":{"type":"boolean"},"objective":{"type":"string"},"token_budget":{"type":"integer"},"close":{"type":"string"},"note":{"type":"string"}},"required":["applied","note"]}`),
@@ -325,10 +331,11 @@ func decodeUpdateGoalArgs(raw json.RawMessage) (updateGoalArgs, error) {
 	case args.Status != "" && args.Status != string(domain.GoalStatusComplete) && args.Status != string(domain.GoalStatusBlocked):
 		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput,
 			fmt.Sprintf("status must be %q or %q", domain.GoalStatusComplete, domain.GoalStatusBlocked))
-	case args.Status != "" && args.Objective != "":
-		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, "objective and status are mutually exclusive")
 	case args.Status == "" && args.Objective == "":
 		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, "objective or status is required")
+	case args.Status != "" && args.TokenBudget > 0:
+		// token_budget only makes sense when (re)activating a goal.
+		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, "token_budget cannot be combined with status")
 	}
 	return args, nil
 }

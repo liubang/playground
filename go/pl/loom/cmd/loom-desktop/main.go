@@ -177,6 +177,7 @@ func run(ctx context.Context, args []string) error {
 	service = app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{
 		Logger:        logger,
 		ShareEndpoint: shareMgr,
+		RulesDir:      resolved.Storage.RulesDir(),
 	})
 
 	// Mirror attention-worthy agent milestones to Notification Center.

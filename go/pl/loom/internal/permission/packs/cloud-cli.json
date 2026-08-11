@@ -1,0 +1,52 @@
+{
+  "pack": {
+    "id": "cloud-cli",
+    "name": "云 CLI（TLS）",
+    "description": "gh / gcloud / terraform 等云 CLI 用 Go 实现，TLS 验证依赖 macOS Security framework，沙箱内必然失败。开启后这些命令的只读形态在沙箱外运行以完成 TLS 验证。注意：只覆盖列出的只读子命令，不授予凭证目录写入（~/.kube、~/.config/gh 仍受保护）；如需更多子命令，直接编辑已安装的规则文件（pack-cloud-cli.json）。",
+    "risk": "high",
+    "reason": "Go 实现的 CLI 在沙箱内 TLS 必然失败（同 go-toolchain）。这些工具会访问云凭证（~/.kube、~/.config/gh、~/.aws），unsandboxed 后它们可读取用户凭证——这是该包风险更高的原因，请仅在信任这些 CLI 时开启。",
+    "commands": ["gh api", "gcloud auth list", "terraform plan", "terraform fmt", "terraform validate"]
+  },
+  "rules": [
+    {
+      "argv_prefix": ["gh", "api"],
+      "decision": "allow",
+      "grant": {"unsandboxed": true},
+      "justification": "gh api: GitHub CLI 为 Go 实现，TLS 需 keychain；用户已启用 cloud-cli 规则包",
+      "match": [["gh", "api", "repos/x/y"]],
+      "not_match": [["git", "push"], ["gh", "repo", "delete"]]
+    },
+    {
+      "argv_prefix": ["gcloud", "auth", "list"],
+      "decision": "allow",
+      "grant": {"unsandboxed": true},
+      "justification": "gcloud auth list: 只读列凭证，Go 实现 TLS 需 keychain；用户已启用 cloud-cli 规则包",
+      "match": [["gcloud", "auth", "list"]],
+      "not_match": [["gcloud", "auth", "login"]]
+    },
+    {
+      "argv_prefix": ["terraform", "plan"],
+      "decision": "allow",
+      "grant": {"unsandboxed": true},
+      "justification": "terraform plan: 只读计划，Go 实现 TLS 需 keychain；用户已启用 cloud-cli 规则包",
+      "match": [["terraform", "plan"]],
+      "not_match": [["terraform", "destroy"], ["terraform", "apply"]]
+    },
+    {
+      "argv_prefix": ["terraform", "fmt"],
+      "decision": "allow",
+      "grant": {"unsandboxed": true},
+      "justification": "terraform fmt: 本地格式化，Go 实现 TLS 需 keychain；用户已启用 cloud-cli 规则包",
+      "match": [["terraform", "fmt"]],
+      "not_match": [["terraform", "destroy"], ["terraform", "apply"]]
+    },
+    {
+      "argv_prefix": ["terraform", "validate"],
+      "decision": "allow",
+      "grant": {"unsandboxed": true},
+      "justification": "terraform validate: 只读校验，Go 实现 TLS 需 keychain；用户已启用 cloud-cli 规则包",
+      "match": [["terraform", "validate"]],
+      "not_match": [["terraform", "destroy"], ["terraform", "apply"]]
+    }
+  ]
+}

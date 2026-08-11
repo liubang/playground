@@ -28,6 +28,7 @@ go_library(
         "reload.go",
         "rewind.go",
         "rule_approver.go",
+        "rules_packs.go",
         "session_runtime.go",
         "session_service.go",
         "skills.go",

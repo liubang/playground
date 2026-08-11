@@ -117,9 +117,11 @@ const (
 	ModeOnRequest ApprovalMode = "on-request"
 	// ModeUnlessDangerous additionally grants declared network needs
 	// silently — including builtin tools whose only risk is egress to a
-	// deployment-pinned endpoint (unlessDangerousSilentTools): the danger
-	// screen plus per-call prompts for argument-shaped targets (hosts,
-	// escalations, gui_open) are the only routine prompt sources.
+	// deployment-pinned endpoint (unlessDangerousSilentTools) and builtin
+	// web_fetch (unlessDangerousWebFetch: a credential-less GET whose SSRF
+	// guard blocks private targets; deny/ask domain rules still apply): the
+	// danger screen plus per-call prompts for escalations and gui_open are
+	// the only routine prompt sources.
 	ModeUnlessDangerous ApprovalMode = "unless-dangerous"
 	// ModeNever allows sandboxed calls (granting declared network needs)
 	// and denies escalations, R3+ tools, and dangerous commands outright

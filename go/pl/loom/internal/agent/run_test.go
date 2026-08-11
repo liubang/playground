@@ -3090,6 +3090,46 @@ func TestGoalContinuationAndCompletion(t *testing.T) {
 	}
 }
 
+// TestGoalCompleteCarriesFinalSummary locks the "close with summary"
+// contract: update_goal accepts objective together with status (the model's
+// natural way to say "done, here is what was achieved"), and the summary is
+// recorded on the goal — previously rejected as mutually exclusive.
+func TestGoalCompleteCarriesFinalSummary(t *testing.T) {
+	cell := NewGoalCell()
+	tool, err := NewUpdateGoalTool(cell)
+	if err != nil {
+		t.Fatalf("NewUpdateGoalTool: %v", err)
+	}
+	registry := NewToolRegistry()
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
+			ID: domain.NewToolCallID(), Name: "update_goal",
+			Arguments: json.RawMessage(`{"objective":"initial goal"}`),
+		}}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "progress", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
+			ID: domain.NewToolCallID(), Name: "update_goal",
+			Arguments: json.RawMessage(`{"objective":"achieved: all packs shipped","status":"complete"}`),
+		}}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+	)
+	run := newTestRun(domain.DefaultLimits())
+	loop := &Loop{Run: run, Model: model, Registry: registry, GoalCell: cell, Logger: slog.Default()}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if run.Goal == nil || run.Goal.Status != domain.GoalStatusComplete {
+		t.Fatalf("goal = %+v, want completed", run.Goal)
+	}
+	if run.Goal.Objective != "achieved: all packs shipped" {
+		t.Fatalf("goal objective = %q, want the closing summary recorded", run.Goal.Objective)
+	}
+}
+
 func TestGoalBudgetSoftLanding(t *testing.T) {
 	cell := NewGoalCell()
 	tool, err := NewUpdateGoalTool(cell)
@@ -3207,8 +3247,8 @@ func TestUpdateGoalToolValidation(t *testing.T) {
 	for _, raw := range []string{
 		`{}`,
 		`{"status":"active"}`,
-		`{"objective":"x","status":"complete"}`,
 		`{"objective":"x","token_budget":-5}`,
+		`{"status":"complete","token_budget":1000}`,
 	} {
 		if _, err := decodeUpdateGoalArgs(json.RawMessage(raw)); err == nil {
 			t.Fatalf("decodeUpdateGoalArgs(%s) must fail", raw)
@@ -3220,6 +3260,17 @@ func TestUpdateGoalToolValidation(t *testing.T) {
 	}
 	if args.Objective != "ship it" || args.TokenBudget != 1000 {
 		t.Fatalf("parsed args = %+v", args)
+	}
+
+	// Closing may carry a final objective summary (the model's natural
+	// "done, here is what was achieved" — previously rejected as
+	// mutually exclusive).
+	args, err = decodeUpdateGoalArgs(json.RawMessage(`{"objective":"finished the pack work","status":"complete"}`))
+	if err != nil {
+		t.Fatalf("decodeUpdateGoalArgs(complete+objective) error = %v", err)
+	}
+	if args.Objective != "finished the pack work" || args.Status != "complete" {
+		t.Fatalf("parsed close args = %+v", args)
 	}
 
 	cell := NewGoalCell()

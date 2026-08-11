@@ -411,6 +411,9 @@ func (d BaselineDecider) evaluate(call domain.PreparedCall, ctx evalContext) *do
 	case d.Mode == ModeUnlessDangerous && unlessDangerousSilent(call):
 		v.Decision, v.Reason = domain.DecisionAllow,
 			"unless-dangerous: pinned-endpoint network tool runs without prompting"
+	case d.Mode == ModeUnlessDangerous && unlessDangerousWebFetch(call):
+		v.Decision, v.Reason = domain.DecisionAllow,
+			"unless-dangerous: builtin web_fetch runs without prompting (deny/ask domain rules still apply)"
 	case d.Mode == ModeNever:
 		v.Decision, v.Reason = domain.DecisionDeny,
 			"never mode: R3+ operations are denied unattended; rework the approach to use workspace-confined operations"
@@ -453,6 +456,24 @@ func unlessDangerousSilent(call domain.PreparedCall) bool {
 	}
 	_, ok := unlessDangerousSilentTools[call.Call.Name]
 	return ok
+}
+
+// unlessDangerousWebFetch reports whether a builtin web_fetch call may run
+// silently in unless-dangerous mode. Unlike web_search, the target host is
+// argument-shaped — but the mode's network contract already grants a
+// sandboxed needs_network command egress to ANY host silently, and web_fetch
+// is strictly weaker than that: a credential-less anonymous GET that never
+// carries the user's browser identity or cookies, whose SSRF dial guard
+// blocks private/loopback/link-local targets unless the model explicitly
+// sets allow_private=true. Deny/ask domain rules are evaluated earlier in
+// the chain and keep their force, so the user's explicit blacklist still
+// wins. browser navigate is deliberately NOT included: it drives the real
+// user browser with its real identity and cookies.
+func unlessDangerousWebFetch(call domain.PreparedCall) bool {
+	if call.Definition.Source != domain.ToolSourceBuiltin {
+		return false
+	}
+	return call.Call.Name == "web_fetch"
 }
 
 // runCmdBaseline maps (mode, request shape) onto a verdict.
