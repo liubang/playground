@@ -121,8 +121,13 @@ func RestoreRun(id domain.RunID, sessionID domain.SessionID, state domain.RunSta
 }
 
 // ContinueRun starts a new active run in an existing session from a complete
-// terminal checkpoint. The continuation preserves transcript and plan, while
-// using optimistic persistence from the supplied session version.
+// terminal checkpoint. The continuation preserves the transcript and an
+// unfinished plan (the loop keeps re-injecting it into model context and the
+// next update_plan revision continues it), while a completed plan is inert —
+// never re-injected, archived by frontends at the turn boundary — so the
+// continuation starts without it. Dropping it also keeps drainPlanUpdates'
+// title fallback from leaking the finished plan's title onto the next plan.
+// Optimistic persistence rides the supplied session version.
 //
 // Budget semantics: limits are a PER-PROMPT runaway cap, not a session-level
 // spending account. The checkpoint's cumulative usage is discarded and the
@@ -156,9 +161,13 @@ func ContinueRun(checkpoint domain.Checkpoint, messages []domain.Message, sessio
 				fmt.Sprintf("restored message sequence %d at index %d, want %d", message.Sequence, i, i+1))
 		}
 	}
-	run := RestoreRun(domain.NewRunID(), checkpoint.SessionID,
-		domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
-		checkpoint.Plan, checkpoint.Usage, limits, append([]domain.Message(nil), messages...), sessionVersion, clock)
+plan := checkpoint.Plan
+if plan.IsComplete() {
+plan = domain.Plan{}
+}
+run := RestoreRun(domain.NewRunID(), checkpoint.SessionID,
+domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
+plan, checkpoint.Usage, limits, append([]domain.Message(nil), messages...), sessionVersion, clock)
 	run.ResetUsageForNewTurn()
 	// A goal survives the prompt boundary: the continuation keeps pursuing
 	// the same objective (a budget-limited/closed goal stays closed).
