@@ -19,9 +19,15 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "toolkit_lib",
-    srcs = ["binary.go"],
+    srcs = [
+        "binary.go",
+        "signing.go",
+    ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/toolkit",
     visibility = ["//visibility:public"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+    ],
 )
 
 go_test(

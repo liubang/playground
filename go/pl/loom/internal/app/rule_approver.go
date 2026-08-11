@@ -73,7 +73,9 @@ type ApprovalRuleHint struct {
 }
 
 // TrustUnsandboxed is the ApprovalRuleHint.Trust value for L2 rememberance.
-const TrustUnsandboxed = "unsandboxed"
+// Re-exported from the permission package so callers in this layer don't
+// need to import permission directly for the constant.
+const TrustUnsandboxed = permission.TrustUnsandboxed
 
 // RememberedRule is the categorical memory created by an interactive
 // approval: argv prefixes (with grant) for run_cmd — one per subcommand
@@ -93,18 +95,29 @@ type RememberedRule struct {
 // RememberCall derives and stores the categorical memory for an approved
 // call. ok=false means the call must never be remembered (shells, eval
 // forms, destructive programs, heredocs, or unmappable URLs).
+//
+// The memory shape is derived from the typed request fields
+// (ExecRequest/URLRequest) via permission.DeriveMemoryShape — this layer
+// never switches on tool names.
 func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, trust string) (RememberedRule, bool) {
 	if r.session == nil {
 		return RememberedRule{}, false
 	}
-	switch toolName {
-	case "run_cmd", "exec_session":
-		// exec_session shares run_cmd's program/args/sandbox_permissions
-		// argument shape, so the same parser and prefix derivation apply.
-		info, parsed := permission.ParseRunCmdCall(arguments)
-		if !parsed {
-			return RememberedRule{}, false
-		}
+	// Build a minimal PreparedCall so DeriveMemoryShape's fallback parsing
+	// (ExecInfoOf/URLInfoOf) can resolve the request shape from raw
+	// arguments — the typed ExecRequest/URLRequest are nil here because
+	// this is the approval-UI boundary, not the Prepare path.
+	call := domain.PreparedCall{
+		Call: domain.ToolCall{
+			ID:        domain.NewToolCallID(),
+			Name:      toolName,
+			Arguments: arguments,
+		},
+	}
+	shape := permission.DeriveMemoryShape(call)
+	switch shape.Kind {
+	case permission.MemoryArgv:
+		info := shape.Info
 		if info.Escalated && trust != TrustUnsandboxed {
 			// An escalation can only be remembered as explicit full trust:
 			// any lesser grant would not cover the next escalated call
@@ -112,7 +125,7 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 			// dead weight that never fires.
 			return RememberedRule{}, false
 		}
-		grant := DeriveRememberGrant(info, trust)
+		grant := permission.DeriveRememberGrant(info, trust)
 		prefixes, remembered := r.session.RememberRunCmd(info, grant)
 		if !remembered {
 			return RememberedRule{}, false
@@ -122,46 +135,31 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 			labels = append(labels, strings.Join(prefix, " "))
 		}
 		return RememberedRule{Label: strings.Join(labels, " && "), Prefixes: prefixes, Grant: grant}, true
-	case "web_fetch":
-		host, parsed := permission.ParseWebFetchHost(arguments)
-		if !parsed {
-			return RememberedRule{}, false
-		}
-		host, remembered := r.session.RememberDomain(host)
+
+	case permission.MemoryHost:
+		host, remembered := r.session.RememberDomain(shape.Host)
 		if !remembered {
 			return RememberedRule{}, false
 		}
 		return RememberedRule{Label: host, Host: host}, true
-	default:
-		// Tool-name memory: SessionRules.RememberTool gates eligibility, so
-		// path/host-varying tools (edit, write, view_image, ...) keep their
-		// per-call approvals.
-		name, remembered := r.session.RememberTool(toolName)
+
+	case permission.MemoryTool:
+		name, remembered := r.session.RememberTool(shape.ToolName)
 		if !remembered {
 			return RememberedRule{}, false
 		}
 		return RememberedRule{Label: name, Tool: name}, true
-	}
-}
 
-// DeriveRememberGrant computes the grant a remembered rule should carry
-// for the given call and user-chosen trust flavor:
-//
-//   - trust=unsandboxed on an escalated call → L2 full trust (explicit
-//     user opt-in only; the ONLY rememberable flavor for escalations).
-//   - otherwise → exactly the declared capabilities (network, gui_open);
-//     zero grant when nothing was declared.
-func DeriveRememberGrant(info permission.RunCmdCall, trust string) domain.ExecGrant {
-	if trust == TrustUnsandboxed && info.Escalated {
-		return domain.ExecGrant{Unsandboxed: true}
+	default:
+		return RememberedRule{}, false
 	}
-	return permission.DeclaredGrant(info)
 }
 
 func (r *RuleApprover) matches(call domain.PreparedCall) bool {
 	if r.session == nil {
 		return false
 	}
+	// ExecRequest: match argv prefixes with grant coverage.
 	if info, ok := permission.ExecInfoOf(call); ok {
 		var (
 			grant   domain.ExecGrant
@@ -184,10 +182,11 @@ func (r *RuleApprover) matches(call domain.PreparedCall) bool {
 		// needs_network request — the user approved the sandboxed form.
 		return matched && permission.AllowGrantCovers(grant, info)
 	}
-	if call.Call.Name == "web_fetch" {
-		host, ok := permission.ParseWebFetchHost(call.Call.Arguments)
-		return ok && r.session.MatchDomain(host)
+	// URLRequest: match exact host (web_fetch, browser navigate).
+	if urlInfo, ok := permission.URLInfoOf(call); ok {
+		return r.session.MatchDomain(urlInfo.Host)
 	}
+	// No typed request: tool-name memory.
 	return r.session.MatchTool(call.Call.Name)
 }
 
@@ -206,51 +205,45 @@ func (r *RuleApprover) RunCmdRuleCount() int {
 // host ("www.weather.com.cn") for web_fetch, the bare tool name for the
 // eligible fixed-blast-radius tools. ok=false means the call cannot be
 // remembered.
+//
+// The shape is derived from the typed request fields via
+// permission.DeriveMemoryShape — this layer never switches on tool names.
 func ApprovalRulePreview(toolName string, arguments json.RawMessage) (preview string, grant domain.ExecGrant, ok bool) {
-	switch toolName {
-	case "run_cmd", "exec_session":
-		info, parsed := permission.ParseRunCmdCall(arguments)
-		if !parsed || info.Escalated {
-			// Escalated calls offer only "allow once" and "always trust
-			// (unsandboxed)" — a minimal-capability memory could never
-			// cover the next escalation, so the option is hidden.
-			return "", domain.ExecGrant{}, false
-		}
-		prefixes, ok := permission.DeriveRunCmdPrefixes(info)
-		if !ok {
-			return "", domain.ExecGrant{}, false
-		}
-		labels := make([]string, 0, len(prefixes))
-		for _, prefix := range prefixes {
-			labels = append(labels, strings.Join(prefix, " "))
-		}
-		return strings.Join(labels, " && "), DeriveRememberGrant(info, ""), true
-	case "web_fetch":
-		host, parsed := permission.ParseWebFetchHost(arguments)
-		if !parsed {
-			return "", domain.ExecGrant{}, false
-		}
-		return host, domain.ExecGrant{}, true
-	default:
-		canonical, ok := permission.ToolMemoryEligible(toolName)
-		if !ok {
-			return "", domain.ExecGrant{}, false
-		}
-		return canonical, domain.ExecGrant{}, true
+	call := domain.PreparedCall{
+		Call: domain.ToolCall{
+			ID:        domain.NewToolCallID(),
+			Name:      toolName,
+			Arguments: arguments,
+		},
 	}
+	shape := permission.DeriveMemoryShape(call)
+	// Escalated exec calls offer only "allow once" and "always trust
+	// (unsandboxed)" — a minimal-capability memory could never cover the
+	// next escalation, so the option is hidden.
+	if shape.Kind == permission.MemoryArgv && shape.Info.Escalated {
+		return "", domain.ExecGrant{}, false
+	}
+	return shape.PreviewLabel()
 }
 
 // RunCmdTrustPreview reports whether the approval overlay should offer the
-// "always trust (unsandboxed)" option: escalated run_cmd calls whose
-// prefix is derivable.
+// "always trust (unsandboxed)" option: escalated exec calls whose prefix
+// is derivable.
 func RunCmdTrustPreview(toolName string, arguments json.RawMessage) bool {
-	if toolName != "run_cmd" && toolName != "exec_session" {
+	call := domain.PreparedCall{
+		Call: domain.ToolCall{
+			ID:        domain.NewToolCallID(),
+			Name:      toolName,
+			Arguments: arguments,
+		},
+	}
+	shape := permission.DeriveMemoryShape(call)
+	if shape.Kind != permission.MemoryArgv {
 		return false
 	}
-	info, ok := permission.ParseRunCmdCall(arguments)
-	if !ok || !info.Escalated {
+	if !shape.Info.Escalated {
 		return false
 	}
-	_, ok = permission.DeriveRunCmdPrefixes(info)
+	_, ok := permission.DeriveRunCmdPrefixes(shape.Info)
 	return ok
 }

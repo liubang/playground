@@ -36,6 +36,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 const (
@@ -131,7 +132,7 @@ func (t *WebFetchTool) Definition() domain.ToolDefinition {
 func (t *WebFetchTool) ConcurrentSafe() bool { return true }
 
 func (t *WebFetchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[fetchArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[fetchArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -151,8 +152,8 @@ func (t *WebFetchTool) Prepare(ctx context.Context, call domain.ToolCall) (domai
 	// (docs/BROWSER_DESIGN.md §5.3). Only http/https URLs reach here
 	// (validateFetchArgs rejects other schemes).
 	var urlReq *domain.URLRequest
-	if u, err := url.Parse(args.URL); err == nil && u.Hostname() != "" {
-		urlReq = &domain.URLRequest{Host: strings.ToLower(u.Hostname())}
+	if host, ok := domain.HostFromURL(args.URL); ok {
+		urlReq = &domain.URLRequest{Host: host}
 	}
 	return t.base.prepareCall(ctx, call, canonical, approvalDesc, urlReq)
 }
@@ -160,26 +161,26 @@ func (t *WebFetchTool) Prepare(ctx context.Context, call domain.ToolCall) (domai
 func (t *WebFetchTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
 	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-	args, err := decodeStrict[fetchArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[fetchArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	cacheKey := args.URL + "\x1f" + args.Format
 	if entry, ok := t.cache.get(cacheKey); ok {
-		return successResult(prepared.Call.ID, startedAt, t.buildOutput(ctx, args, entry, "hit"))
+		return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(ctx, args, entry, "hit"))
 	}
 
 	entry, err := t.fetch(ctx, args)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if entry.Status >= 200 && entry.Status < 300 && !entry.noStore {
 		t.cache.put(cacheKey, entry.cachedResponse)
 	}
-	return successResult(prepared.Call.ID, startedAt, t.buildOutput(ctx, args, entry.cachedResponse, "miss"))
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(ctx, args, entry.cachedResponse, "miss"))
 }
 
 // validateFetchArgs normalizes and validates the call. It is side-effect-free:

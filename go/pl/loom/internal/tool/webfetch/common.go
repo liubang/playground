@@ -18,47 +18,31 @@
 package webfetch
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
-// baseTool is the webfetch-local variant of the shared tool skeleton. Unlike
-// the fs-oriented packages it carries no path validator: web_fetch touches no
-// workspace paths, so its prepared-call fingerprint only binds the canonical
-// arguments and the risk level.
+// baseTool is the webfetch-local variant of the shared tool skeleton,
+// delegating signing and verification to the toolkit package. The
+// fingerprint includes the typed URLRequest for domain-rule evaluation
+// by the policy layer.
 type baseTool struct {
-	def domain.ToolDefinition
-	key [32]byte
-}
-
-type preparedFingerprint struct {
-	CallID     string             `json:"call_id"`
-	ToolName   string             `json:"tool_name"`
-	Arguments  json.RawMessage    `json:"arguments"`
-	Risk       domain.RiskLevel   `json:"risk"`
-	URLRequest *domain.URLRequest `json:"url_request,omitempty"`
+	def    domain.ToolDefinition
+	signer toolkit.Signer
 }
 
 func newBaseTool(def domain.ToolDefinition) (baseTool, error) {
 	if err := def.Validate(); err != nil {
 		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
 	}
-	var key [32]byte
-	if _, err := rand.Read(key[:]); err != nil {
-		return baseTool{}, domain.NewError(domain.ErrInternal, "failed to initialize tool verifier", domain.WithCause(err))
+	signer, err := toolkit.NewSigner()
+	if err != nil {
+		return baseTool{}, err
 	}
-	return baseTool{def: def, key: key}, nil
+	return baseTool{def: def, signer: signer}, nil
 }
 
 func (b *baseTool) prepareCall(
@@ -74,156 +58,37 @@ func (b *baseTool) prepareCall(
 	if err := call.Validate(); err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
 	}
-	if call.Name != b.def.Name {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", b.def.Name))
+	if err := toolkit.ValidateCallName(call, b.def); err != nil {
+		return domain.PreparedCall{}, err
 	}
 
 	prepared := domain.PreparedCall{
 		Call: domain.ToolCall{
 			ID:        call.ID,
 			Name:      b.def.Name,
-			Arguments: cloneRawMessage(canonicalArgs),
+			Arguments: toolkit.CloneRawMessage(canonicalArgs),
 		},
 		Definition:   b.def,
 		Risk:         b.def.Risk(),
 		ApprovalDesc: approvalDesc,
 		URLRequest:   urlRequest,
 	}
-	prepared.ArgsHash = b.signPrepared(prepared)
+	prepared.ArgsHash = b.signer.Sign(prepared)
 	return prepared, nil
 }
 
 func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	if prepared.Call.Name != b.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call tool name mismatch")
-	}
-	if prepared.Definition.Name != b.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call definition mismatch")
-	}
-	if prepared.Definition.Source != b.def.Source {
-		return domain.NewError(domain.ErrSecurity, "prepared call source mismatch")
-	}
-	if prepared.Risk != b.def.Risk() {
-		return domain.NewError(domain.ErrSecurity, "prepared call risk mismatch")
-	}
-	if !sameCapabilities(prepared.Definition.Capabilities, b.def.Capabilities) {
-		return domain.NewError(domain.ErrSecurity, "prepared call capabilities mismatch")
-	}
-
-	expected := b.signPrepared(prepared)
-	if !hmac.Equal([]byte(prepared.ArgsHash), []byte(expected)) {
-		return domain.NewError(domain.ErrSecurity, "prepared call verification failed")
-	}
-	return nil
+	return b.signer.VerifyWithRisk(prepared, b.def)
 }
 
-func (b *baseTool) signPrepared(prepared domain.PreparedCall) string {
-	fingerprint := preparedFingerprint{
-		CallID:     prepared.Call.ID.String(),
-		ToolName:   prepared.Call.Name,
-		Arguments:  cloneRawMessage(prepared.Call.Arguments),
-		Risk:       prepared.Risk,
-		URLRequest: prepared.URLRequest,
-	}
-	payload, _ := json.Marshal(fingerprint)
-
-	h := hmac.New(sha256.New, b.key[:])
-	_, _ = h.Write(payload)
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-func decodeStrict[T any](raw json.RawMessage) (T, error) {
-	var out T
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&out); err != nil {
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must be valid JSON matching the tool schema", domain.WithCause(err))
-	}
-
-	var trailing struct{}
-	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value")
-		}
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value", domain.WithCause(err))
-	}
-	return out, nil
-}
-
-func cloneRawMessage(raw json.RawMessage) json.RawMessage {
-	if raw == nil {
+// extractURLRequest parses a URL string and returns a typed URLRequest
+// carrying the canonical lowercase host, or nil if the URL is not a valid
+// http(s) URL with a host. The policy layer reads this field for domain
+// rule evaluation instead of re-parsing tool arguments.
+func extractURLRequest(rawURL string) *domain.URLRequest {
+	host, ok := domain.HostFromURL(rawURL)
+	if !ok {
 		return nil
 	}
-	return append(json.RawMessage(nil), raw...)
-}
-
-func sameCapabilities(left, right []domain.Capability) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func successResult(callID domain.ToolCallID, startedAt time.Time, payload any) domain.ToolResult {
-	content, err := json.Marshal(payload)
-	if err != nil {
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
-	}
-	finishedAt := time.Now()
-	return domain.ToolResult{
-		CallID:     callID,
-		Status:     domain.ToolStatusSuccess,
-		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(content)}},
-		StartedAt:  startedAt,
-		FinishedAt: finishedAt,
-	}
-}
-
-func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	status := domain.ToolStatusError
-	code := string(domain.ErrInternal)
-	message := "internal tool error"
-	retryable := false
-
-	switch {
-	case errors.Is(err, context.Canceled):
-		status = domain.ToolStatusCancelled
-		code = string(domain.ErrCancelled)
-		message = "operation cancelled"
-	case errors.Is(err, context.DeadlineExceeded):
-		status = domain.ToolStatusTimeout
-		code = string(domain.ErrTimeout)
-		message = "operation timed out"
-	default:
-		var agentErr *domain.AgentError
-		if errors.As(err, &agentErr) {
-			code = string(agentErr.Code)
-			message = agentErr.Message
-			retryable = agentErr.Retryable
-			switch agentErr.Code {
-			case domain.ErrCancelled:
-				status = domain.ToolStatusCancelled
-			case domain.ErrTimeout:
-				status = domain.ToolStatusTimeout
-			}
-		}
-	}
-
-	finishedAt := time.Now()
-	return domain.ToolResult{
-		CallID: callID,
-		Status: status,
-		Error: &domain.ToolError{
-			Code:      code,
-			Message:   message,
-			Retryable: retryable,
-		},
-		StartedAt:  startedAt,
-		FinishedAt: finishedAt,
-	}
+	return &domain.URLRequest{Host: host}
 }

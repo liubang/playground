@@ -38,7 +38,6 @@ package permission
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -63,21 +62,14 @@ const wildcardPrefix = "*."
 
 // normalizeDomainHost validates and canonicalizes a host: lowercase, no
 // scheme/userinfo/path/port, no leading dot. Rule hosts may additionally
-// carry one leading "*." wildcard.
+// carry one leading "*." wildcard — that marker is stripped before
+// delegating to domain.CanonicalHost so both layers share a single
+// validation implementation and can never drift apart.
 func normalizeDomainHost(host string) (string, error) {
 	h := strings.ToLower(strings.TrimSpace(host))
 	h = strings.TrimSuffix(h, ".")
 	h = strings.TrimPrefix(h, wildcardPrefix)
-	if h == "" {
-		return "", fmt.Errorf("host is empty")
-	}
-	if strings.ContainsAny(h, "/:@*") {
-		return "", fmt.Errorf("host %q must be a bare hostname (no scheme, path, port, userinfo, or stray wildcards)", host)
-	}
-	if strings.HasPrefix(h, ".") || strings.HasSuffix(h, ".") || strings.Contains(h, "..") {
-		return "", fmt.Errorf("host %q is not a valid hostname", host)
-	}
-	return h, nil
+	return domain.CanonicalHost(h)
 }
 
 // normalizeRuleHost canonicalizes a RULE host, preserving the wildcard
@@ -159,15 +151,7 @@ func ParseWebFetchHost(raw json.RawMessage) (string, bool) {
 	if err := json.Unmarshal(raw, &args); err != nil || args.URL == "" {
 		return "", false
 	}
-	u, err := url.Parse(args.URL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return "", false
-	}
-	host, err := normalizeDomainHost(u.Hostname())
-	if err != nil {
-		return "", false
-	}
-	return host, true
+	return domain.HostFromURL(args.URL)
 }
 
 // URLInfo carries the policy-relevant URL shape of a prepared call.

@@ -15,16 +15,9 @@
 package exsession
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,6 +25,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -62,45 +56,30 @@ const (
 	sandboxRequireEscalated = "require_escalated"
 )
 
+// signer is the exsession-local HMAC signer, wrapping the toolkit Signer
+// with a variadic-parts interface that exec_session and write_stdin share.
 type signer struct {
-	key [32]byte
+	tk toolkit.Signer
 }
 
 func newSigner() (signer, error) {
-	var s signer
-	if _, err := rand.Read(s.key[:]); err != nil {
-		return signer{}, domain.NewError(domain.ErrInternal, "failed to initialize tool verifier", domain.WithCause(err))
+	tk, err := toolkit.NewSigner()
+	if err != nil {
+		return signer{}, err
 	}
-	return s, nil
+	return signer{tk: tk}, nil
 }
 
 func (s *signer) sign(parts ...any) string {
-	h := hmac.New(sha256.New, s.key[:])
 	payload, _ := json.Marshal(parts)
-	_, _ = h.Write(payload)
-	return hex.EncodeToString(h.Sum(nil))
+	return s.tk.SignRaw(payload)
 }
 
 func (s *signer) verify(expected, actual string) bool {
-	return hmac.Equal([]byte(expected), []byte(actual))
+	return s.tk.VerifyRaw(expected, actual)
 }
 
-func decodeStrict[T any](raw json.RawMessage) (T, error) {
-	var out T
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&out); err != nil {
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must be valid JSON matching the tool schema", domain.WithCause(err))
-	}
-	var trailing struct{}
-	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value")
-		}
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value", domain.WithCause(err))
-	}
-	return out, nil
-}
+func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
 
 // commandArgs is the shared command-line shape of exec_session.
 type commandArgs struct {
@@ -347,58 +326,9 @@ func displayArgv(program string, args []string) string {
 }
 
 func successResult(callID domain.ToolCallID, startedAt time.Time, payload any) domain.ToolResult {
-	content, err := json.Marshal(payload)
-	if err != nil {
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
-	}
-	return domain.ToolResult{
-		CallID:     callID,
-		Status:     domain.ToolStatusSuccess,
-		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(content)}},
-		StartedAt:  startedAt,
-		FinishedAt: time.Now(),
-	}
+	return toolkit.SuccessResult(callID, startedAt, payload)
 }
 
 func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	status := domain.ToolStatusError
-	code := string(domain.ErrInternal)
-	message := "internal tool error"
-	retryable := false
-
-	switch {
-	case errors.Is(err, context.Canceled):
-		status = domain.ToolStatusCancelled
-		code = string(domain.ErrCancelled)
-		message = "operation cancelled"
-	case errors.Is(err, context.DeadlineExceeded):
-		status = domain.ToolStatusTimeout
-		code = string(domain.ErrTimeout)
-		message = "operation timed out"
-	default:
-		var agentErr *domain.AgentError
-		if errors.As(err, &agentErr) {
-			code = string(agentErr.Code)
-			message = agentErr.Message
-			retryable = agentErr.Retryable
-			switch agentErr.Code {
-			case domain.ErrCancelled:
-				status = domain.ToolStatusCancelled
-			case domain.ErrTimeout:
-				status = domain.ToolStatusTimeout
-			}
-		}
-	}
-
-	return domain.ToolResult{
-		CallID: callID,
-		Status: status,
-		Error: &domain.ToolError{
-			Code:      code,
-			Message:   message,
-			Retryable: retryable,
-		},
-		StartedAt:  startedAt,
-		FinishedAt: time.Now(),
-	}
+	return toolkit.ErrorResult(callID, startedAt, err)
 }
