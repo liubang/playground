@@ -1106,7 +1106,22 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	turnID := c.nextTurn
 	c.activeTurn = turnID
 	sessionID, runID := c.sessionID, c.runID
+	// A completed plan is archived at the turn boundary: the runtime
+	// already treats it as inert (complete plans are not re-injected into
+	// model context), so drop the projection to keep snapshots clean; the
+	// empty plan.updated below lets live clients hide the panel. An
+	// unfinished plan survives — the next update_plan revision refreshes
+	// the panel.
+	planArchived := c.hasPlan && c.plan.IsComplete()
+	if planArchived {
+		c.plan = domain.Plan{}
+		c.hasPlan = false
+	}
 	c.mu.Unlock()
+
+	if planArchived {
+		c.publishDurable(sessionID, runID, turnCounter, runtimeevent.KindPlanUpdated, domain.Plan{Items: []domain.PlanItem{}})
+	}
 
 	// Publish turn started event
 	// Note: the envelope runID here is the PREVIOUS turn's (zero on the
