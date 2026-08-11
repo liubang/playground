@@ -28,6 +28,7 @@ go_library(
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/model/images:images_lib",
+        "//go/pl/loom/internal/tool/toolkit:toolkit_lib",
     ],
 )
 

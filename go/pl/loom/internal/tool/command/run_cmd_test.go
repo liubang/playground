@@ -270,7 +270,10 @@ func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	if output.Isolation != process.ProcessGroupIsolation.Name() {
 		t.Fatalf("output.Isolation = %q, want %q", output.Isolation, process.ProcessGroupIsolation.Name())
 	}
-	if output.ExecutablePath != realPath(t, python) {
+	// The launcher reports the path it resolved via LookPath; on systems
+	// where the interpreter is a symlink (e.g. mise's python3 ->
+	// python3.14) the two sides only agree after canonicalization.
+	if realPath(t, output.ExecutablePath) != realPath(t, python) {
 		t.Fatalf("ExecutablePath = %q, want %q", output.ExecutablePath, realPath(t, python))
 	}
 	if output.Hash == "" {

@@ -32,6 +32,7 @@ go_library(
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/tool/toolkit:toolkit_lib",
         "//go/pl/loom/internal/trace",
     ],
 )

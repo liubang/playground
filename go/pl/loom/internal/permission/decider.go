@@ -90,12 +90,28 @@ func (d RuleDecider) evaluateURL(info URLInfo) *domain.Verdict {
 // requires every subcommand covered by an allow rule (codex's
 // bypass-only-when-all-matched rule), while a single deny/ask hit
 // decides the whole script.
+//
+// When the call declared needs_network, domain rules are additionally
+// applied to any network targets extracted from the argv (URLs or bare
+// hostnames): a domain deny or ask overrides an argv allow, so a
+// rule-level "allow go mod download" cannot silently reach a denied
+// host. This brings run_cmd network egress under the same host
+// allow/deny list that governs web_fetch (docs/PERMISSION_DESIGN.md
+// §6 — on-request network filtering).
 func (d RuleDecider) evaluateRunCmd(info RunCmdCall) *domain.Verdict {
 	if info.Shell != nil {
 		return d.evaluateShellCommands(info)
 	}
 	best, rule := d.matchArgv(info.Argv)
 	if best == "" {
+		// No argv rule matched. When the call declared needs_network,
+		// domain rules still apply to any extracted hosts — a deny rule
+		// on a host must block even an uncovered command.
+		if info.NeedsNetwork {
+			if v := d.evaluateNetworkHosts(info); v != nil {
+				return v
+			}
+		}
 		return nil
 	}
 	grant := rule.Grant.ExecGrant()
@@ -109,6 +125,15 @@ func (d RuleDecider) evaluateRunCmd(info RunCmdCall) *domain.Verdict {
 	v := &domain.Verdict{Decision: best, Source: SourceRule, Reason: rule.Justification}
 	if best == domain.DecisionAllow {
 		v.Grant = grant
+	}
+	// When the call declared needs_network, domain rules may override
+	// the argv verdict: a deny beats an allow, an ask beats an allow.
+	if info.NeedsNetwork {
+		if dv := d.evaluateNetworkHosts(info); dv != nil {
+			if decisionStrictness(dv.Decision) > decisionStrictness(v.Decision) {
+				return dv
+			}
+		}
 	}
 	return v
 }
@@ -133,6 +158,11 @@ func (d RuleDecider) matchArgv(argv []string) (domain.Decision, Rule) {
 // ("echo is read-only"), while the script's actual effect includes the
 // redirect target — that judgment belongs to the danger screen, which
 // runs next in the chain.
+//
+// When the call declared needs_network, domain rules are additionally
+// applied to any network targets extracted from the full script (all
+// subcommands are scanned). A domain deny/ask overrides the argv allow,
+// same as the plain-argv path.
 func (d RuleDecider) evaluateShellCommands(info RunCmdCall) *domain.Verdict {
 	if !info.Shell.Static || info.Shell.DynamicWrites || len(info.Shell.WriteRedirects) > 0 {
 		return nil
@@ -162,12 +192,20 @@ func (d RuleDecider) evaluateShellCommands(info RunCmdCall) *domain.Verdict {
 	if !AllowGrantCovers(union, info) {
 		return nil
 	}
-	return &domain.Verdict{
+	v := &domain.Verdict{
 		Decision: domain.DecisionAllow,
 		Grant:    union,
 		Source:   SourceRule,
 		Reason:   "every subcommand matched an allow rule",
 	}
+	if info.NeedsNetwork {
+		if dv := d.evaluateNetworkHosts(info); dv != nil {
+			if decisionStrictness(dv.Decision) > decisionStrictness(v.Decision) {
+				return dv
+			}
+		}
+	}
+	return v
 }
 
 // AllowGrantCovers reports whether an allow verdict's grant satisfies the
