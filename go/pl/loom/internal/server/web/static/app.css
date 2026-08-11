@@ -2700,6 +2700,25 @@ select.set-input {
   border-color: color-mix(in srgb, var(--warning) 40%, transparent);
 }
 
+/* 规则包卡片：命令 chips + 风险徽标（权限 tab） */
+.pack-card {
+  margin-bottom: 10px;
+}
+.pack-cmds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.pack-cmd {
+  font-size: 12px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  color: var(--fg);
+  white-space: nowrap;
+}
+
 /* 系统 tab：开发环境卡片（工具链/PATH 运行时报告） */
 .set-env-sub {
   margin: 10px 0 4px;

@@ -720,6 +720,31 @@ func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
 				"Only when the failure is NOT GUI-related, fall back to the network/escalated guidance below."
 		}
 	}
+	// macOS Security framework TLS fingerprints: runtimes that verify TLS
+	// roots through the macOS Security framework (Go's crypto/x509 via
+	// securityd; pip's vendored truststore) fail with this signature inside
+	// the seatbelt sandbox even with needs_network granted — curl/python-
+	// urllib/node/cargo/maven read file-based CA stores (/etc/ssl/cert.pem,
+	// JDK cacerts) and are NOT affected. This is a known platform limitation
+	// (Claude Code documents it and tells users to exclude such CLIs from
+	// the sandbox); no file or mach rule opens it back up. The practical
+	// escape is to use curl for the fetch (works fine sandboxed), or to
+	// escalate the Go/Python command.
+	securityFrameworkTLSPatterns := []string{
+		"x509: osstatus", "x509: certificate signed by unknown authority",
+		"certificate verification failed", "unable to get local issuer certificate",
+		"osstatus", // pip/truststore surfaces bare OSStatus -26276 without the x509: prefix
+	}
+	for _, p := range securityFrameworkTLSPatterns {
+		if strings.Contains(lower, p) {
+			return "TLS certificate verification failed inside the macOS sandbox for a Security-framework-based runtime " +
+				"(Go programs, pip with vendored truststore): these read trust roots through securityd/keychain, which the seatbelt sandbox denies — " +
+				"this is a platform limitation, not a network grant issue (curl/python-urllib/node/cargo/maven read file-based CA stores and are NOT affected). " +
+				"PREFER replacing the fetch with curl (e.g. 'curl -sSL <url>') which works sandboxed, or if the Go/Python program itself must run, " +
+				"retry the SAME command with sandbox_permissions='require_escalated' and a short justification — after approval it runs OUTSIDE the sandbox with full user privileges. " +
+				"Alternatively, for trusted high-frequency commands (go mod download, pip install, gh api), the user can enable the matching rule pack in Settings → 权限与审批 → 规则包, which pre-authorizes them without per-run approval."
+		}
+	}
 	networkPatterns := []string{
 		"no such host", "nodename nor servname", "name or service not known", // DNS resolution
 		"could not resolve", "temporary failure in name resolution",

@@ -855,6 +855,36 @@ func TestSandboxGuidanceNote(t *testing.T) {
 		}
 	})
 
+	t.Run("security-framework TLS fingerprints explain the limitation", func(t *testing.T) {
+		cases := []struct {
+			stderr string
+			hit    bool
+		}{
+			{"Get \"https://x\": tls: failed to verify certificate: x509: OSStatus -26276", true},
+			{"x509: certificate signed by unknown authority", true},
+			{"curl: (60) SSL certificate problem: unable to get local issuer certificate", true},
+			{"WARNING: Retrying... SSLError(SSLCertVerificationError('OSStatus -26276')): /simple/six/", true},
+			{"go: downloading github.com/x/y v1.0.0", false},
+		}
+		for _, tc := range cases {
+			note := sandboxGuidanceNote(tc.stderr, false, false)
+			if tc.hit && note == "" {
+				t.Errorf("sandboxGuidanceNote(%q) = %q, want a note", tc.stderr, note)
+			}
+			if !tc.hit && note != "" {
+				t.Errorf("sandboxGuidanceNote(%q) = %q, want empty", tc.stderr, note)
+			}
+			if tc.hit {
+				if !strings.Contains(note, "curl") {
+					t.Errorf("sandboxGuidanceNote(%q) = %q, want curl workaround hint", tc.stderr, note)
+				}
+				if !strings.Contains(note, "require_escalated") {
+					t.Errorf("sandboxGuidanceNote(%q) = %q, want escalation option", tc.stderr, note)
+				}
+			}
+		}
+	})
+
 	t.Run("timeout suggests a sandbox network hang", func(t *testing.T) {
 		note := sandboxGuidanceNote("still working...", true, false)
 		if note == "" {

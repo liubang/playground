@@ -296,12 +296,16 @@ func MatchRule(s *RuleSet, argv []string) Rule {
 	return r
 }
 
-// Size reports the number of loaded rules.
-func (s *RuleSet) Size() int {
+// HasAny reports whether the set holds at least one rule of any kind
+// (argv-prefix, domain, or tool-name). Callers that merge a possibly
+// domain-only set (e.g. the remembered store) must gate on HasAny, not
+// on a per-kind count — a store with remembered hosts but no argv rules
+// would otherwise be dropped as "empty".
+func (s *RuleSet) HasAny() bool {
 	if s == nil {
-		return 0
+		return false
 	}
-	return len(s.rules)
+	return len(s.rules) > 0 || len(s.domains) > 0 || len(s.tools) > 0
 }
 
 // RulesDirProject is the project-layer rules directory for a workspace.

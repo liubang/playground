@@ -90,7 +90,11 @@ type SessionServiceConfig struct {
 	// share section changes take effect immediately); nil leaves the
 	// listener lifecycle to the caller alone.
 	ShareEndpoint ShareEndpointController
-	Logger        *slog.Logger
+	// RulesDir is the user-layer rules directory (<loom home>/rules).
+	// Rule pack install/uninstall writes pack-*.json files here; empty
+	// disables pack management.
+	RulesDir string
+	Logger   *slog.Logger
 }
 
 // ShareEndpointController is the process-level LAN share listener
@@ -189,6 +193,7 @@ type SessionService struct {
 	maxActiveTurns  int
 	subscriberQueue int
 	shareEndpoint   ShareEndpointController
+	rulesDir        string
 
 	mu       sync.Mutex
 	sessions map[domain.SessionID]*SessionHandle
@@ -218,6 +223,7 @@ func NewSessionService(proc *ProcessRuntime, reg *WorkspaceRegistry, broker *run
 		registry:        reg,
 		broker:          broker,
 		logger:          logger,
+		rulesDir:        cfg.RulesDir,
 		maxSessions:     cfg.MaxSessions,
 		idleTTL:         cfg.IdleTTL,
 		replayCap:       cfg.ReplayCap,

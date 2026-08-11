@@ -67,6 +67,10 @@ export function createApi({ getToken, onUnauthorized }) {
     listMcpServers: () => req('GET', '/v1/mcp/servers'),
     reconnectMcpServer: (name) =>
       req('POST', `/v1/mcp/servers/${encodeURIComponent(name)}/reconnect`, {}),
+    // 规则包（设置面板）：列出内置包与安装状态；安装/卸载写入用户规则目录并热重载
+    listRulePacks: () => req('GET', '/v1/rules/packs'),
+    installRulePack: (id) => req('PUT', `/v1/rules/packs/${encodeURIComponent(id)}/install`, {}),
+    uninstallRulePack: (id) => req('DELETE', `/v1/rules/packs/${encodeURIComponent(id)}`),
     listSessions: (limit = 50, cursor = '', archived = false, workspaceId = '') =>
       req(
         'GET',
