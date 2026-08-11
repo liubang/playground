@@ -75,6 +75,7 @@ func (b *baseTool) prepareCall(
 	call domain.ToolCall,
 	canonicalArgs json.RawMessage,
 	approvalDesc string,
+	risk domain.RiskLevel,
 	urlRequest *domain.URLRequest,
 ) (domain.PreparedCall, error) {
 	if err := ctx.Err(); err != nil {
@@ -94,7 +95,7 @@ func (b *baseTool) prepareCall(
 			Arguments: cloneRawMessage(canonicalArgs),
 		},
 		Definition:   b.def,
-		Risk:         b.def.Risk(),
+		Risk:         risk,
 		ApprovalDesc: approvalDesc,
 		URLRequest:   urlRequest,
 	}
@@ -112,7 +113,14 @@ func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
 	if prepared.Definition.Source != b.def.Source {
 		return domain.NewError(domain.ErrSecurity, "prepared call source mismatch")
 	}
-	if prepared.Risk != b.def.Risk() {
+	// Risk is graded per action (riskForAction), so recompute it from the
+	// signed arguments instead of assuming the definition default — the
+	// same re-derivation run_cmd performs for riskForArgs.
+	args, err := decodeStrict[browserArgs](prepared.Call.Arguments)
+	if err != nil {
+		return domain.NewError(domain.ErrSecurity, "prepared call arguments are unreadable")
+	}
+	if prepared.Risk != riskForAction(args.Action) {
 		return domain.NewError(domain.ErrSecurity, "prepared call risk mismatch")
 	}
 	if !sameCapabilities(prepared.Definition.Capabilities, b.def.Capabilities) {

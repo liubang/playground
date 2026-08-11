@@ -128,8 +128,15 @@ func NewBrowserTool(manager *Manager, artifacts domain.ArtifactStore, navTimeout
 			"The browser instance persists across calls and is automatically reaped after 5 minutes of inactivity.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"action":{"type":"string","enum":["navigate","snapshot","screenshot","scroll","click","type","close"],"description":"The browser action to perform"},"url":{"type":"string","minLength":1,"maxLength":2048,"description":"URL to navigate to (required for navigate)"},"ref":{"type":"string","description":"Element ref from snapshot (required for click/type)"},"text":{"type":"string","maxLength":10000,"description":"Text to type into element (required for type)"},"submit":{"type":"boolean","description":"Press Enter after typing (optional for type)"},"selector":{"type":"string","description":"CSS selector to scroll to (optional for scroll)"},"scroll_x":{"type":"integer","description":"Horizontal scroll offset in pixels"},"scroll_y":{"type":"integer","description":"Vertical scroll offset in pixels"},"format":{"type":"string","enum":["png","jpeg"],"description":"Screenshot format (default: png)"},"quality":{"type":"integer","minimum":10,"maximum":100,"description":"JPEG quality (default: 80)"},"full_page":{"type":"boolean","description":"Capture full page instead of viewport (default: false)"},"timeout_ms":{"type":"integer","minimum":5000,"maximum":120000,"description":"Per-action timeout in milliseconds"}},"required":["action"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"action":{"type":"string"},"url":{"type":"string"},"title":{"type":"string"},"status":{"type":"string"},"screenshot":{"type":"object"},"scroll_position":{"type":"object"},"output":{"type":"string"},"ref":{"type":"string"},"message":{"type":"string"}},"required":["action","status"]}`),
-		Capabilities: []domain.Capability{domain.CapNetworkConnect},
-		Source:       domain.ToolSourceBuiltin,
+		// No network.connect capability: it maps to a static R3 floor, while
+		// this tool grades risk PER ACTION in Prepare (docs/BROWSER_DESIGN.md
+		// §5.2: snapshot/screenshot/scroll/click are R2, navigate/type R3) —
+		// and the loop's execution-time drift guard rejects a prepared risk
+		// BELOW the definition's static tier. The per-action elevation is
+		// covered by the prepared-call signature, the same shape as run_cmd's
+		// riskForArgs and delegate_task's riskOf. Source=builtin is the audit
+		// marker.
+		Source: domain.ToolSourceBuiltin,
 	})
 	if err != nil {
 		return nil, err
@@ -183,7 +190,26 @@ func (t *BrowserTool) Prepare(ctx context.Context, call domain.ToolCall) (domain
 		urlReq = extractURLRequest(args.URL)
 	}
 
-	return t.base.prepareCall(ctx, call, canonical, approvalDesc, urlReq)
+	return t.base.prepareCall(ctx, call, canonical, approvalDesc, riskForAction(args.Action), urlReq)
+}
+
+// riskForAction grades the call's risk by action (docs/BROWSER_DESIGN.md
+// §5.2, review M4): read/shape operations on the ALREADY-APPROVED page
+// (snapshot, screenshot, scroll, click, close) are R2 and run without
+// prompting in every approval mode, while actions that inject data or
+// cross an origin (type, navigate) stay R3 — navigate additionally flows
+// through the domain rule set via its URLRequest. Grading per action is
+// what keeps the tool usable: a flat R3 would demand an approval for
+// every single step of a browsing session.
+func riskForAction(action string) domain.RiskLevel {
+	switch action {
+	case "navigate", "type":
+		return domain.R3
+	default:
+		// snapshot, screenshot, scroll, click, close. validateBrowserArgs
+		// has already rejected unknown actions by the time this runs.
+		return domain.R2
+	}
 }
 
 func (t *BrowserTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
