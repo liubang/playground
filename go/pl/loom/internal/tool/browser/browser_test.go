@@ -363,7 +363,45 @@ func TestBrowserTool_Definition(t *testing.T) {
 	def := tool.Definition()
 	assert.Equal(t, "browser", def.Name)
 	assert.Equal(t, domain.ToolSourceBuiltin, def.Source)
-	assert.Contains(t, def.Capabilities, domain.CapNetworkConnect)
+	// No static capabilities: risk is graded per action in Prepare (a
+	// static network.connect would floor the tier at R3, and the loop's
+	// drift guard rejects prepared risks below the definition default).
+	assert.Empty(t, def.Capabilities)
+}
+
+// TestBrowserTool_Prepare_RiskTiers pins the per-action risk grading
+// (docs/BROWSER_DESIGN.md §5.2): read/shape actions on the approved page
+// are R2 (no approval prompt in any mode); navigate/type are R3.
+func TestBrowserTool_Prepare_RiskTiers(t *testing.T) {
+	mgr := newTestManager(t)
+	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	assert.NoError(t, err)
+
+	cases := []struct {
+		args     browserArgs
+		wantRisk domain.RiskLevel
+	}{
+		{browserArgs{Action: "navigate", URL: "https://example.com"}, domain.R3},
+		{browserArgs{Action: "type", Ref: "1", Text: "hi"}, domain.R3},
+		{browserArgs{Action: "snapshot"}, domain.R2},
+		{browserArgs{Action: "screenshot"}, domain.R2},
+		{browserArgs{Action: "scroll", ScrollY: 400}, domain.R2},
+		{browserArgs{Action: "click", Ref: "1"}, domain.R2},
+		{browserArgs{Action: "close"}, domain.R2},
+	}
+	for _, tc := range cases {
+		prepared, err := tool.Prepare(context.Background(), newToolCall(t, "browser", tc.args))
+		assert.NoError(t, err, tc.args.Action)
+		assert.Equal(t, tc.wantRisk, prepared.Risk, tc.args.Action)
+		// The per-action risk must round-trip through verification.
+		assert.NoError(t, tool.base.verifyPreparedCall(prepared), tc.args.Action)
+	}
+
+	// A prepared call whose risk was tampered with must fail verification.
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "browser", browserArgs{Action: "snapshot"}))
+	assert.NoError(t, err)
+	prepared.Risk = domain.R3
+	assert.Error(t, tool.base.verifyPreparedCall(prepared))
 }
 
 func TestBrowserTool_ConcurrentSafe(t *testing.T) {
