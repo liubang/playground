@@ -60,8 +60,8 @@ func TestRememberedStoreRuleLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if set.Size() != 3 {
-		t.Fatalf("rules = %d, want 3", set.Size())
+	if got := len(set.Rules()); got != 3 {
+		t.Fatalf("rules = %d, want 3", got)
 	}
 	if d, _ := set.Evaluate([]string{"go", "test", "./..."}); d != domain.DecisionAllow {
 		t.Fatalf("persisted rule must evaluate: %v", d)
@@ -90,8 +90,8 @@ func TestRememberedStoreRuleGrantUpgradeLatestWins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if set.Size() != 1 {
-		t.Fatalf("rules = %d, want 1 (upgrade in place)", set.Size())
+	if got := len(set.Rules()); got != 1 {
+		t.Fatalf("rules = %d, want 1 (upgrade in place)", got)
 	}
 	_, rule := set.Evaluate([]string{"talos", "query"})
 	if rule.Grant == nil || rule.Grant.Network != "full" {
@@ -207,8 +207,8 @@ func TestLoadRememberedRulesMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("missing store: %v", err)
 	}
-	if set.Size() != 0 {
-		t.Fatalf("size = %d, want 0", set.Size())
+	if got := len(set.Rules()); got != 0 {
+		t.Fatalf("size = %d, want 0", got)
 	}
 }
 

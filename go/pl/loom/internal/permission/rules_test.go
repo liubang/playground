@@ -248,8 +248,9 @@ func TestBuiltinRulesAreValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embedded builtin rules must be valid: %v", err)
 	}
-	if set.Size() < 30 {
-		t.Fatalf("builtin set suspiciously small: %d rules", set.Size())
+	if total := len(set.Rules()) + len(set.Domains()) + len(set.Tools()); total < 30 {
+		t.Fatalf("builtin set suspiciously small: %d rules (argv=%d domains=%d tools=%d)",
+			total, len(set.Rules()), len(set.Domains()), len(set.Tools()))
 	}
 	// Every builtin rule must be an allow with a justification (auditability).
 	for _, r := range set.Rules() {

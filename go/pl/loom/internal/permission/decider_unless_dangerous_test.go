@@ -170,6 +170,76 @@ func TestUnlessDangerousPinnedEndpointToolSilent(t *testing.T) {
 	}
 }
 
+// TestUnlessDangerousWebFetchSilent pins the web_fetch carve-out:
+// a builtin web_fetch call is silently allowed in unless-dangerous (the
+// tool is a credential-less GET whose SSRF guard blocks private targets;
+// deny/ask domain rules still apply because they evaluate earlier in the
+// chain), still asks in on-request, and is still denied unattended in
+// never mode. browser navigate — which drives the real user browser with
+// its real identity — must keep its prompt even in unless-dangerous.
+func TestUnlessDangerousWebFetchSilent(t *testing.T) {
+	builtin := domain.ToolDefinition{Source: domain.ToolSourceBuiltin}
+	fetchCall := domain.PreparedCall{
+		Call:       domain.ToolCall{Name: "web_fetch", Arguments: []byte(`{"url":"https://weather.example/forecast"}`)},
+		Definition: builtin,
+		Risk:       domain.R3,
+	}
+	if v := (BaselineDecider{Mode: ModeUnlessDangerous}).Evaluate(fetchCall); v.Decision != domain.DecisionAllow {
+		t.Fatalf("web_fetch in unless-dangerous = %s (%s), want allow", v.Decision, v.Reason)
+	}
+	if v := (BaselineDecider{Mode: ModeOnRequest}).Evaluate(fetchCall); v.Decision != domain.DecisionAsk {
+		t.Fatalf("web_fetch in on-request = %s, want ask (first-use boundary crossing)", v.Decision)
+	}
+	if v := (BaselineDecider{Mode: ModeNever}).Evaluate(fetchCall); v.Decision != domain.DecisionDeny {
+		t.Fatalf("web_fetch in never = %s, want deny (unattended)", v.Decision)
+	}
+
+	// A same-named tool from a non-builtin source never inherits the silence.
+	mcpShill := fetchCall
+	mcpShill.Definition = domain.ToolDefinition{Source: domain.ToolSourceMCP}
+	if v := (BaselineDecider{Mode: ModeUnlessDangerous}).Evaluate(mcpShill); v.Decision == domain.DecisionAllow {
+		t.Fatalf("non-builtin web_fetch in unless-dangerous = %s, must not silently allow", v.Decision)
+	}
+
+	// browser navigate keeps its prompt: it operates the real user browser.
+	browserCall := domain.PreparedCall{
+		Call:       domain.ToolCall{Name: "browser", Arguments: []byte(`{"action":"navigate","url":"https://weather.example/forecast"}`)},
+		Definition: builtin,
+		Risk:       domain.R3,
+	}
+	if v := (BaselineDecider{Mode: ModeUnlessDangerous}).Evaluate(browserCall); v.Decision != domain.DecisionAsk {
+		t.Fatalf("browser navigate in unless-dangerous = %s, want ask (real browser identity)", v.Decision)
+	}
+}
+
+// TestUnlessDangerousWebFetchDenyRuleStillWins proves that a deny domain
+// rule evaluated earlier in the chain overrides the silent web_fetch
+// baseline: unless-dangerous means "not dangerous by default", not "no
+// blacklist".
+func TestUnlessDangerousWebFetchDenyRuleStillWins(t *testing.T) {
+	p := DefaultPolicy()
+	p.Rules = &RuleSet{domains: []DomainRule{
+		{Host: "evil.example", Decision: string(domain.DecisionDeny), Justification: "test blacklist"},
+	}}
+	d := p.Decider(ModeUnlessDangerous)
+	call := domain.PreparedCall{
+		Call:       domain.ToolCall{Name: "web_fetch", Arguments: []byte(`{"url":"https://evil.example/x"}`)},
+		Definition: domain.ToolDefinition{Source: domain.ToolSourceBuiltin},
+		Risk:       domain.R3,
+	}
+	v := d.Evaluate(call)
+	if v.Decision != domain.DecisionDeny || v.Source != SourceRule {
+		t.Fatalf("deny-domain web_fetch in unless-dangerous = %s (%s), want deny from rule", v.Decision, v.Source)
+	}
+
+	// An allowed host still flows through the silent baseline.
+	call.Call.Arguments = []byte(`{"url":"https://good.example/x"}`)
+	v = d.Evaluate(call)
+	if v.Decision != domain.DecisionAllow {
+		t.Fatalf("good-host web_fetch in unless-dangerous = %s, want allow", v.Decision)
+	}
+}
+
 // --- exact grant coverage (no silent downgrade) ---
 
 // TestEscalatedRequiresUnsandboxedGrant reproduces the sess_09538cef

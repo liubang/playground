@@ -928,6 +928,7 @@ export class SettingsPanel {
     }
     if (id === 'skills') this._loadSkills()
     if (id === 'system') this._loadEnvironment()
+    if (id === 'permission') this._loadRulePacks()
   }
 
   // 一次性渲染全部 tab 面板（切换只 toggle hidden）：收集针对整棵 DOM，
@@ -951,6 +952,7 @@ export class SettingsPanel {
           this._renderEnvironment(panel)
           this._renderWorkspaces(panel)
         }
+        if (tab.id === 'permission') this._renderRulePacks(panel)
       }
       body.appendChild(panel)
     }
@@ -1850,6 +1852,133 @@ export class SettingsPanel {
       await this._loadSkills(true)
     } catch (e) {
       if (e.status !== 401) this.toast('删除失败: ' + e.message)
+    }
+  }
+
+  // ---------- 规则包（权限 tab 附加小节） ----------
+
+  _renderRulePacks(body) {
+    const refs = (this._tabRefs.packs = {})
+    const sec = el('section', 'set-sec set-sec-card')
+    const bar = el('div', 'set-skills-bar')
+    bar.appendChild(el('h3', 'set-sec-title', '规则包（预授权命令）'))
+    const refresh = el('button', 'btn btn-secondary btn-sm set-skills-refresh')
+    refresh.type = 'button'
+    refresh.title = '重新读取规则包状态'
+    refresh.appendChild(iconEl('rotate-left'))
+    refresh.appendChild(document.createTextNode('刷新'))
+    refresh.onclick = () => this._loadRulePacks(true)
+    refs.refreshBtn = refresh
+    bar.appendChild(refresh)
+    sec.appendChild(bar)
+    sec.appendChild(
+      el(
+        'div',
+        'set-hint set-tip',
+        '部分已知安全的命令（Go 工具链、pip、云 CLI）在 macOS 沙箱内因 TLS 验证必然失败。开启对应规则包后，这些命令直接在沙箱外运行，不再失败、不再逐次审批。' +
+          '开启会把这些命令的 allow 规则写入用户规则目录（pack-*.json），可随时在规则文件中查看、修改或删除；风险等级高的包可能读取云凭证，请按需开启。'
+      )
+    )
+    const list = el('div', 'set-skills')
+    sec.appendChild(list)
+    body.appendChild(sec)
+    refs.list = list
+    refs.loaded = false
+  }
+
+  async _loadRulePacks(force) {
+    const refs = this._tabRefs.packs
+    if (!refs || !refs.list || refs.loading || (refs.loaded && !force)) return
+    refs.loaded = true
+    refs.loading = true
+    if (refs.refreshBtn) {
+      refs.refreshBtn.disabled = true
+      refs.refreshBtn.classList.add('is-spinning')
+    }
+    refs.list.textContent = ''
+    refs.list.appendChild(this._loadingEl('读取规则包中…'))
+    try {
+      const r = await this.api.listRulePacks()
+      refs.list.textContent = ''
+      const packs = r.packs || []
+      if (!packs.length) {
+        refs.list.appendChild(el('div', 'set-hint', '（无可用规则包）'))
+        return
+      }
+      for (const p of packs) refs.list.appendChild(this._rulePackRow(p))
+      if (force) this.toast(`共 ${packs.length} 个规则包`, true)
+    } catch (e) {
+      refs.list.textContent = ''
+      if (e.status !== 401) {
+        refs.list.appendChild(this._loadingEl('加载失败: ' + e.message, true))
+        if (force) this.toast('规则包加载失败: ' + e.message)
+      }
+    } finally {
+      refs.loading = false
+      if (refs.refreshBtn) {
+        refs.refreshBtn.disabled = false
+        refs.refreshBtn.classList.remove('is-spinning')
+      }
+    }
+  }
+
+  _rulePackRow(p) {
+    const sec = el('section', 'set-sec set-sec-card pack-card')
+    const head = el('div', 'skill-head')
+    head.appendChild(el('span', 'skill-name mono', p.name))
+    const riskLabel = { low: '低风险', medium: '中风险', high: '高风险' }[p.risk] || p.risk
+    head.appendChild(el('span', 'skill-scope' + (p.risk === 'high' ? ' is-repo' : ''), riskLabel))
+    if (p.installed) head.appendChild(el('span', 'skill-scope is-off', '已启用'))
+    sec.appendChild(head)
+    if (p.description) sec.appendChild(el('div', 'set-hint', p.description))
+    if (p.reason) sec.appendChild(el('div', 'set-hint set-tip', '信任边界：' + p.reason))
+    const cmds = el('div', 'pack-cmds')
+    for (const c of p.commands || []) cmds.appendChild(el('code', 'pack-cmd mono', c))
+    sec.appendChild(cmds)
+    const actions = el('div', 'skill-actions')
+    if (p.installed) {
+      const off = el('button', 'btn btn-secondary btn-sm')
+      off.type = 'button'
+      off.textContent = '停用'
+      off.onclick = () => this._toggleRulePack(p, off)
+      actions.appendChild(off)
+    } else {
+      const on = el('button', 'btn btn-primary btn-sm')
+      on.type = 'button'
+      on.textContent = '启用'
+      on.onclick = () => this._toggleRulePack(p, on)
+      actions.appendChild(on)
+    }
+    sec.appendChild(actions)
+    return sec
+  }
+
+  async _toggleRulePack(p, btn) {
+    if (!p.installed) {
+      const ok = await this.confirm({
+        title: '启用规则包 ' + p.name,
+        body:
+          `将把 ${p.commands.length} 条命令的 allow 规则写入用户规则目录（pack-${p.id}.json），` +
+          '这些命令将在沙箱外运行，可读取你的凭证与 keychain。' +
+          (p.risk === 'high' ? '\n\n高风险：该包涉及云 CLI，可能访问云凭证，请确认信任。' : '') +
+          '\n\n可在规则文件中随时修改或删除以停用。',
+        okLabel: '启用',
+      })
+      if (!ok) return
+    }
+    btn.disabled = true
+    try {
+      if (p.installed) {
+        await this.api.uninstallRulePack(p.id)
+        this.toast(`已停用 ${p.name}（立即生效）`, true)
+      } else {
+        await this.api.installRulePack(p.id)
+        this.toast(`已启用 ${p.name}（立即生效）`, true)
+      }
+      await this._loadRulePacks(true)
+    } catch (e) {
+      btn.disabled = false
+      if (e.status !== 401) this.toast((p.installed ? '停用失败: ' : '启用失败: ') + e.message)
     }
   }
 

@@ -20,10 +20,12 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
@@ -125,6 +127,90 @@ func TestApplyConfigHotSwap(t *testing.T) {
 	}
 	if b.approvalMode != permission.ModeUnlessDangerous {
 		t.Fatalf("approvalMode = %q, want unless-dangerous", b.approvalMode)
+	}
+}
+
+// TestRulePackHotReload is the end-to-end proof that enabling a rule pack
+// from the WebUI takes effect WITHOUT a restart: InstallRulePack writes
+// pack-<id>.json and reloads every assembled workspace's policy, so the
+// very next policy evaluation sees the unsandboxed grant. Uninstall
+// reverts it immediately.
+func TestRulePackHotReload(t *testing.T) {
+	ctx := context.Background()
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	// Build a resolved config with rules enabled and a writable rules dir.
+	// ResolvedStorage.RulesDir() == BaseDir/rules, and InstallRulePack
+	// writes through SessionServiceConfig.RulesDir — point both at the
+	// same directory so ReloadPolicy sees the installed pack file.
+	baseDir := t.TempDir()
+	rulesDir := filepath.Join(baseDir, "rules")
+	base := testResolvedConfig(fakes.NewFakeModel())
+	base.Rules = config.ResolvedRules{Enabled: true, Builtin: true}
+	base.Storage = config.ResolvedStorage{BaseDir: baseDir}
+	base.Approval = config.ResolvedApproval{Mode: permission.ModeUnlessDangerous, TrustUserURLs: true}
+
+	proc := &ProcessRuntime{Current: base.Default, Store: store, Logger: slog.Default()}
+	proc.SwapResolved(base)
+	// Mirror NewBootstrap's policy wiring (bootstrap.go:434-436): a test
+	// Bootstrap assembled by testBootstrap lacks permissionPolicy, which
+	// ReloadPolicy treats as "no policy loaded" and skips — the exact gap
+	// this test guards.
+	policy := permission.AttachRules(ctx, permission.DefaultPolicy(), t.TempDir(), rulesDir, permission.RuleLoadOptions{Enabled: true, Builtin: true}, slog.Default())
+	decider := policy.Decider(permission.ModeUnlessDangerous)
+	b := &Bootstrap{
+		ProcessRuntime:   proc,
+		Registry:         agent.NewToolRegistry(),
+		SteerCell:        agent.NewSteerCell(),
+		WorkspaceRoot:    t.TempDir(),
+		Policy:           decider,
+		permissionPolicy: &policy,
+		approvalMode:     permission.ModeUnlessDangerous,
+	}
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(64))
+	t.Cleanup(broker.Close)
+	svc := NewSingletonWorkspaceService(b, broker, SessionServiceConfig{RulesDir: rulesDir})
+	t.Cleanup(func() { _ = svc.Shutdown(ctx) })
+
+	// Before install: go mod download has no rule (baseline).
+	ev := b.Policy.Evaluate(domain.PreparedCall{
+		Call: domain.ToolCall{Name: "run_cmd", Arguments: json.RawMessage(`{"program":"go","args":["mod","download","x"]}`)},
+		Risk: domain.R2,
+	})
+	if ev.Source == permission.SourceRule {
+		t.Fatalf("before install: verdict = %s from %s, want no rule", ev.Decision, ev.Source)
+	}
+
+	// Install go-toolchain: policy must see it immediately.
+	info, err := svc.InstallRulePack(ctx, "go-toolchain")
+	if err != nil {
+		t.Fatalf("InstallRulePack: %v", err)
+	}
+	if !info.Installed {
+		t.Fatalf("install info = %+v", info)
+	}
+	ev = b.Policy.Evaluate(domain.PreparedCall{
+		Call: domain.ToolCall{Name: "run_cmd", Arguments: json.RawMessage(`{"program":"go","args":["mod","download","x"]}`)},
+		Risk: domain.R2,
+	})
+	if ev.Source != permission.SourceRule || ev.Decision != domain.DecisionAllow || !ev.Grant.Unsandboxed {
+		t.Fatalf("after install: verdict = %s (%s) grant=%+v, want rule allow + unsandboxed", ev.Decision, ev.Source, ev.Grant)
+	}
+
+	// Uninstall: policy reverts immediately.
+	if err := svc.UninstallRulePack(ctx, "go-toolchain"); err != nil {
+		t.Fatalf("UninstallRulePack: %v", err)
+	}
+	ev = b.Policy.Evaluate(domain.PreparedCall{
+		Call: domain.ToolCall{Name: "run_cmd", Arguments: json.RawMessage(`{"program":"go","args":["mod","download","x"]}`)},
+		Risk: domain.R2,
+	})
+	if ev.Source == permission.SourceRule {
+		t.Fatalf("after uninstall: verdict = %s from %s, want no rule", ev.Decision, ev.Source)
 	}
 }
 

@@ -18,7 +18,10 @@
 package permission
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -33,6 +36,35 @@ func runCmdPrepared(t *testing.T, program string, args ...string) domain.Prepare
 	return domain.PreparedCall{
 		Call: domain.ToolCall{Name: "run_cmd", Arguments: raw},
 		Risk: domain.R2,
+	}
+}
+
+// TestAttachRulesLoadsDomainOnlyRememberedStore is the regression test for
+// a remembered store holding only host rules (no argv rules): AttachRules
+// must still merge it, or every web_fetch to a remembered host would prompt
+// again after a restart (Size() only counted argv rules, so a domain-only
+// store was dropped as "empty").
+func TestAttachRulesLoadsDomainOnlyRememberedStore(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	store, err := OpenRememberedStore(ctx, RememberedDBPath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RememberDomain(ctx, "www.weather.com.cn"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	p := AttachRules(ctx, DefaultPolicy(), t.TempDir(), dir, RuleLoadOptions{
+		Enabled: true,
+		Builtin: true,
+	}, logger)
+	d, rule := p.Rules.EvaluateDomain("www.weather.com.cn")
+	if d != domain.DecisionAllow {
+		t.Fatalf("remembered domain not loaded after AttachRules: decision=%s rule=%+v", d, rule)
 	}
 }
 
