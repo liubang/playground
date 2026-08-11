@@ -32,6 +32,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/model/images"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 const (
@@ -127,7 +128,7 @@ func (t *GenerateImageTool) Definition() domain.ToolDefinition {
 func (t *GenerateImageTool) ConcurrentSafe() bool { return true }
 
 func (t *GenerateImageTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[generateImageArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[generateImageArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -147,17 +148,17 @@ func (t *GenerateImageTool) Prepare(ctx context.Context, call domain.ToolCall) (
 func (t *GenerateImageTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
 	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-	args, err := decodeStrict[generateImageArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[generateImageArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if args, err = t.validateArgs(args); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if err := ctx.Err(); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	res, err := t.gen.Generate(ctx, images.GenerateRequest{
@@ -167,7 +168,7 @@ func (t *GenerateImageTool) Execute(ctx context.Context, prepared domain.Prepare
 		Quality: orDefault(args.Quality, t.opts.Quality),
 	})
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	out := generateImageOutput{
@@ -202,7 +203,7 @@ func (t *GenerateImageTool) Execute(ctx context.Context, prepared domain.Prepare
 
 	header, err := json.Marshal(out)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
 	}
 	// Text header first, matching the view_image result layout (header +
 	// image part).

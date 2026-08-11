@@ -20,14 +20,9 @@ package gittools
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,6 +33,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -56,7 +52,7 @@ type baseTool struct {
 	def       domain.ToolDefinition
 	validator *workspacepkg.PathValidator
 	gitPath   string
-	key       [32]byte
+	signer    toolkit.Signer
 }
 
 type preparedFingerprint struct {
@@ -112,12 +108,12 @@ func newBaseTool(def domain.ToolDefinition, validator *workspacepkg.PathValidato
 		gitPath = resolved
 	}
 
-	var key [32]byte
-	if _, err := rand.Read(key[:]); err != nil {
-		return baseTool{}, domain.NewError(domain.ErrInternal, "failed to initialize tool verifier", domain.WithCause(err))
+	signer, err := toolkit.NewSigner()
+	if err != nil {
+		return baseTool{}, err
 	}
 
-	return baseTool{def: def, validator: validator, gitPath: gitPath, key: key}, nil
+	return baseTool{def: def, validator: validator, gitPath: gitPath, signer: signer}, nil
 }
 
 func (b *baseTool) prepareCall(
@@ -133,98 +129,34 @@ func (b *baseTool) prepareCall(
 	if err := call.Validate(); err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
 	}
-	if call.Name != b.def.Name {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", b.def.Name))
+	if err := toolkit.ValidateCallName(call, b.def); err != nil {
+		return domain.PreparedCall{}, err
 	}
 
 	prepared := domain.PreparedCall{
 		Call: domain.ToolCall{
 			ID:        call.ID,
 			Name:      b.def.Name,
-			Arguments: cloneRawMessage(canonicalArgs),
+			Arguments: toolkit.CloneRawMessage(canonicalArgs),
 		},
 		Definition:   b.def,
 		Risk:         b.def.Risk(),
 		ApprovalDesc: approvalDesc,
-		ReadPaths:    sortedStrings(readPaths),
+		ReadPaths:    toolkit.SortedStrings(readPaths),
 	}
-	prepared.ArgsHash = b.signPrepared(prepared)
+	prepared.ArgsHash = b.signer.Sign(prepared)
 	return prepared, nil
 }
 
 func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	if prepared.Call.Name != b.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call tool name mismatch")
-	}
-	if prepared.Definition.Name != b.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call definition mismatch")
-	}
-	if prepared.Definition.Source != b.def.Source {
-		return domain.NewError(domain.ErrSecurity, "prepared call source mismatch")
-	}
-	if prepared.Risk != b.def.Risk() {
-		return domain.NewError(domain.ErrSecurity, "prepared call risk mismatch")
-	}
-	if !sameCapabilities(prepared.Definition.Capabilities, b.def.Capabilities) {
-		return domain.NewError(domain.ErrSecurity, "prepared call capabilities mismatch")
-	}
-
-	expected := b.signPrepared(prepared)
-	if !hmac.Equal([]byte(prepared.ArgsHash), []byte(expected)) {
-		return domain.NewError(domain.ErrSecurity, "prepared call verification failed")
-	}
-	return nil
+	return b.signer.VerifyWithRisk(prepared, b.def)
 }
 
-func (b *baseTool) signPrepared(prepared domain.PreparedCall) string {
-	fingerprint := preparedFingerprint{
-		CallID:     prepared.Call.ID.String(),
-		ToolName:   prepared.Call.Name,
-		Arguments:  cloneRawMessage(prepared.Call.Arguments),
-		ReadPaths:  append([]string(nil), prepared.ReadPaths...),
-		WritePaths: append([]string(nil), prepared.WritePaths...),
-		Risk:       prepared.Risk,
-	}
-	payload, _ := json.Marshal(fingerprint)
+func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
 
-	h := hmac.New(sha256.New, b.key[:])
-	_, _ = h.Write(payload)
-	return hex.EncodeToString(h.Sum(nil))
-}
+func cloneRawMessage(raw json.RawMessage) json.RawMessage { return toolkit.CloneRawMessage(raw) }
 
-func decodeStrict[T any](raw json.RawMessage) (T, error) {
-	var out T
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&out); err != nil {
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must be valid JSON matching the tool schema", domain.WithCause(err))
-	}
-
-	var trailing struct{}
-	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value")
-		}
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value", domain.WithCause(err))
-	}
-	return out, nil
-}
-
-func cloneRawMessage(raw json.RawMessage) json.RawMessage {
-	if raw == nil {
-		return nil
-	}
-	return append(json.RawMessage(nil), raw...)
-}
-
-func sortedStrings(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := append([]string(nil), values...)
-	sort.Strings(out)
-	return out
-}
+func sortedStrings(values []string) []string { return toolkit.SortedStrings(values) }
 
 func sortedUniqueStrings(values map[string]struct{}) []string {
 	if len(values) == 0 {
@@ -239,15 +171,7 @@ func sortedUniqueStrings(values map[string]struct{}) []string {
 }
 
 func sameCapabilities(left, right []domain.Capability) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
+	return toolkit.SameCapabilities(left, right)
 }
 
 func resolveRepoRoot(validator *workspacepkg.PathValidator, input string) (repoRootResolution, error) {

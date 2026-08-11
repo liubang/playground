@@ -37,6 +37,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
 )
 
@@ -172,9 +173,9 @@ type Factory struct {
 // DelegateTaskTool lets the model delegate a self-contained read-only
 // research task to a sub-agent running in an isolated context.
 type DelegateTaskTool struct {
-	def domain.ToolDefinition
-	f   *Factory
-	key [32]byte
+	def    domain.ToolDefinition
+	f      *Factory
+	signer toolkit.Signer
 }
 
 // NewDelegateTaskTool creates the tool bound to the given factory.
@@ -205,11 +206,11 @@ func NewDelegateTaskTool(f *Factory) (*DelegateTaskTool, error) {
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
 	}
-	key, err := newSigningKey()
+	signer, err := toolkit.NewSigner()
 	if err != nil {
 		return nil, err
 	}
-	return &DelegateTaskTool{def: def, f: f, key: key}, nil
+	return &DelegateTaskTool{def: def, f: f, signer: signer}, nil
 }
 
 // Definition returns the tool definition.
@@ -264,7 +265,7 @@ func (t *DelegateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (dom
 		Risk:         risk,
 		ApprovalDesc: desc,
 	}
-	prepared.ArgsHash = signPreparedCall(&t.key, prepared)
+	prepared.ArgsHash = signPreparedCall(&t.signer, prepared)
 	return prepared, nil
 }
 
@@ -285,7 +286,7 @@ func (t *DelegateTaskTool) Execute(ctx context.Context, prepared domain.Prepared
 	if err != nil {
 		return delegateError(prepared.Call.ID, startedAt, err, nil)
 	}
-	if err := verifyPreparedCall(&t.key, t.def, riskOf(role), prepared); err != nil {
+	if err := verifyPreparedCall(&t.signer, t.def, riskOf(role), prepared); err != nil {
 		return delegateError(prepared.Call.ID, startedAt, err, nil)
 	}
 

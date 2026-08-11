@@ -21,13 +21,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,6 +34,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -141,7 +138,7 @@ type RunCmdTool struct {
 	runner           *process.Runner
 	artifacts        domain.ArtifactStore
 	modelOutputBytes int
-	key              [32]byte
+	signer           toolkit.Signer
 }
 
 // NewRunCmdTool creates a run_cmd tool bound to a workspace validator and process runner.
@@ -197,9 +194,9 @@ func NewRunCmdToolWithArtifacts(
 		return nil, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
 	}
 
-	var key [32]byte
-	if _, err := rand.Read(key[:]); err != nil {
-		return nil, domain.NewError(domain.ErrInternal, "failed to initialize tool verifier", domain.WithCause(err))
+	signer, err := toolkit.NewSigner()
+	if err != nil {
+		return nil, err
 	}
 	return &RunCmdTool{
 		def:              def,
@@ -207,7 +204,7 @@ func NewRunCmdToolWithArtifacts(
 		runner:           runner,
 		artifacts:        artifacts,
 		modelOutputBytes: modelOutputBytes,
-		key:              key,
+		signer:           signer,
 	}, nil
 }
 
@@ -432,17 +429,14 @@ func (t *RunCmdTool) verifyPreparedCall(prepared domain.PreparedCall) error {
 func (t *RunCmdTool) signPrepared(prepared domain.PreparedCall) string {
 	fingerprint := preparedFingerprint{
 		CallID:      prepared.Call.ID.String(),
-		Arguments:   cloneRawMessage(prepared.Call.Arguments),
+		Arguments:   toolkit.CloneRawMessage(prepared.Call.Arguments),
 		ReadPaths:   append([]string(nil), prepared.ReadPaths...),
 		WritePaths:  append([]string(nil), prepared.WritePaths...),
 		Risk:        prepared.Risk,
 		Definition:  prepared.Definition,
 		ExecRequest: prepared.ExecRequest,
 	}
-	payload, _ := json.Marshal(fingerprint)
-	h := hmac.New(sha256.New, t.key[:])
-	_, _ = h.Write(payload)
-	return hex.EncodeToString(h.Sum(nil))
+	return t.signer.SignFingerprint(fingerprint)
 }
 
 // Default values applied when the model omits optional parameters, keeping
@@ -789,22 +783,7 @@ func classifyRunError(err error) error {
 	return domain.NewError(domain.ErrUnavailable, "command execution failed", domain.WithCause(err))
 }
 
-func decodeStrict[T any](raw json.RawMessage) (T, error) {
-	var out T
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&out); err != nil {
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must be valid JSON matching the tool schema", domain.WithCause(err))
-	}
-	var trailing struct{}
-	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value")
-		}
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value", domain.WithCause(err))
-	}
-	return out, nil
-}
+func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
 
 func boundCommandOutput(payload *runCmdOutput, limit int) error {
 	if payload == nil || limit <= 0 {
@@ -985,46 +964,7 @@ func contentResultWithArtifacts(
 }
 
 func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	status := domain.ToolStatusError
-	code := string(domain.ErrInternal)
-	message := "internal tool error"
-	retryable := false
-
-	switch {
-	case errors.Is(err, context.Canceled):
-		status = domain.ToolStatusCancelled
-		code = string(domain.ErrCancelled)
-		message = "operation cancelled"
-	case errors.Is(err, context.DeadlineExceeded):
-		status = domain.ToolStatusTimeout
-		code = string(domain.ErrTimeout)
-		message = "operation timed out"
-	default:
-		var agentErr *domain.AgentError
-		if errors.As(err, &agentErr) {
-			code = string(agentErr.Code)
-			message = agentErr.Message
-			retryable = agentErr.Retryable
-			switch agentErr.Code {
-			case domain.ErrCancelled:
-				status = domain.ToolStatusCancelled
-			case domain.ErrTimeout:
-				status = domain.ToolStatusTimeout
-			}
-		}
-	}
-
-	return domain.ToolResult{
-		CallID: callID,
-		Status: status,
-		Error: &domain.ToolError{
-			Code:      code,
-			Message:   message,
-			Retryable: retryable,
-		},
-		StartedAt:  startedAt,
-		FinishedAt: time.Now(),
-	}
+	return toolkit.ErrorResult(callID, startedAt, err)
 }
 
 func sameDefinition(left, right domain.ToolDefinition) bool {
@@ -1045,12 +985,7 @@ func sameDefinition(left, right domain.ToolDefinition) bool {
 	return true
 }
 
-func cloneRawMessage(raw json.RawMessage) json.RawMessage {
-	if raw == nil {
-		return nil
-	}
-	return append(json.RawMessage(nil), raw...)
-}
+func cloneRawMessage(raw json.RawMessage) json.RawMessage { return toolkit.CloneRawMessage(raw) }
 
 func cloneStringMap(values map[string]string) map[string]string {
 	if len(values) == 0 {

@@ -20,21 +20,18 @@ package edit
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -47,15 +44,7 @@ const (
 type baseTool struct {
 	def       domain.ToolDefinition
 	validator *workspacepkg.PathValidator
-	key       [32]byte
-}
-
-type preparedFingerprint struct {
-	CallID     string           `json:"call_id"`
-	ToolName   string           `json:"tool_name"`
-	Arguments  json.RawMessage  `json:"arguments"`
-	WritePaths []string         `json:"write_paths,omitempty"`
-	Risk       domain.RiskLevel `json:"risk"`
+	signer    toolkit.Signer
 }
 
 type editOutput struct {
@@ -72,12 +61,11 @@ func newBaseTool(def domain.ToolDefinition, validator *workspacepkg.PathValidato
 	if err := def.Validate(); err != nil {
 		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
 	}
-
-	var key [32]byte
-	if _, err := rand.Read(key[:]); err != nil {
-		return baseTool{}, domain.NewError(domain.ErrInternal, "failed to initialize tool verifier", domain.WithCause(err))
+	signer, err := toolkit.NewSigner()
+	if err != nil {
+		return baseTool{}, err
 	}
-	return baseTool{def: def, validator: validator, key: key}, nil
+	return baseTool{def: def, validator: validator, signer: signer}, nil
 }
 
 func (b *baseTool) prepareCall(
@@ -93,108 +81,47 @@ func (b *baseTool) prepareCall(
 	if err := call.Validate(); err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
 	}
-	if call.Name != b.def.Name {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", b.def.Name))
+	if err := toolkit.ValidateCallName(call, b.def); err != nil {
+		return domain.PreparedCall{}, err
 	}
 
 	prepared := domain.PreparedCall{
 		Call: domain.ToolCall{
 			ID:        call.ID,
 			Name:      b.def.Name,
-			Arguments: cloneRawMessage(canonicalArgs),
+			Arguments: toolkit.CloneRawMessage(canonicalArgs),
 		},
 		Definition:   b.def,
 		Risk:         b.def.Risk(),
 		ApprovalDesc: approvalDesc,
-		WritePaths:   sortedStrings(writePaths),
+		WritePaths:   toolkit.SortedStrings(writePaths),
 	}
-	prepared.ArgsHash = b.signPrepared(prepared)
+	prepared.ArgsHash = b.signer.Sign(prepared)
 	return prepared, nil
 }
 
 func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	if prepared.Call.Name != b.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call tool name mismatch")
-	}
-	if prepared.Definition.Name != b.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call definition mismatch")
-	}
-	if prepared.Definition.Source != b.def.Source {
-		return domain.NewError(domain.ErrSecurity, "prepared call source mismatch")
-	}
-	if prepared.Risk != b.def.Risk() {
-		return domain.NewError(domain.ErrSecurity, "prepared call risk mismatch")
-	}
-	if !sameCapabilities(prepared.Definition.Capabilities, b.def.Capabilities) {
-		return domain.NewError(domain.ErrSecurity, "prepared call capabilities mismatch")
-	}
-
-	expected := b.signPrepared(prepared)
-	if !hmac.Equal([]byte(prepared.ArgsHash), []byte(expected)) {
-		return domain.NewError(domain.ErrSecurity, "prepared call verification failed")
-	}
-	return nil
+	return b.signer.VerifyWithRisk(prepared, b.def)
 }
 
-func (b *baseTool) signPrepared(prepared domain.PreparedCall) string {
-	fingerprint := preparedFingerprint{
-		CallID:     prepared.Call.ID.String(),
-		ToolName:   prepared.Call.Name,
-		Arguments:  cloneRawMessage(prepared.Call.Arguments),
-		WritePaths: append([]string(nil), prepared.WritePaths...),
-		Risk:       prepared.Risk,
-	}
-	payload, _ := json.Marshal(fingerprint)
+// --- Local aliases to the shared toolkit helpers ---
 
-	h := hmac.New(sha256.New, b.key[:])
-	_, _ = h.Write(payload)
-	return hex.EncodeToString(h.Sum(nil))
-}
+func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
 
-func decodeStrict[T any](raw json.RawMessage) (T, error) {
-	var out T
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&out); err != nil {
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must be valid JSON matching the tool schema", domain.WithCause(err))
-	}
+func cloneRawMessage(raw json.RawMessage) json.RawMessage { return toolkit.CloneRawMessage(raw) }
 
-	var trailing struct{}
-	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value")
-		}
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value", domain.WithCause(err))
-	}
-	return out, nil
-}
-
-func cloneRawMessage(raw json.RawMessage) json.RawMessage {
-	if raw == nil {
-		return nil
-	}
-	return append(json.RawMessage(nil), raw...)
-}
-
-func sortedStrings(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := append([]string(nil), values...)
-	sort.Strings(out)
-	return out
-}
+func sortedStrings(values []string) []string { return toolkit.SortedStrings(values) }
 
 func sameCapabilities(left, right []domain.Capability) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
+	return toolkit.SameCapabilities(left, right)
+}
+
+func successResult(callID domain.ToolCallID, startedAt time.Time, payload any) domain.ToolResult {
+	return toolkit.SuccessResult(callID, startedAt, payload)
+}
+
+func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
+	return toolkit.ErrorResult(callID, startedAt, err)
 }
 
 func resolveWritePath(validator *workspacepkg.PathValidator, input string) (workspacepkg.ResolvedPath, error) {
@@ -215,20 +142,12 @@ func ensureExistingTextFile(validator *workspacepkg.PathValidator, input string)
 	}
 	snapshot, err := validator.Snapshot(resolved.Absolute)
 	if err != nil {
-		// errors.Is (not os.IsNotExist) is required: the validator wraps lstat
-		// failures in fmt.Errorf %w chains that os.IsNotExist does not unwrap.
 		if errors.Is(err, os.ErrNotExist) {
-			// Echo the offending path: with parallel tool calls the model
-			// otherwise cannot tell which call a bare "path does not exist"
-			// belongs to without correlating call IDs.
 			return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("path does not exist: %q", domain.TruncateForErrorEcho(input)), domain.WithCause(err))
 		}
 		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrSecurity, "path is not a writable regular file", domain.WithCause(err))
 	}
 
-	// Size-check before reading: the snapshot already stat'ed the file, and
-	// reading an oversized file into memory just to reject it is wasted
-	// work (REVIEW M25).
 	if snapshot.Size > maxTextFileBytes {
 		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("file exceeds size limit of %d bytes", maxTextFileBytes))
 	}
@@ -268,65 +187,6 @@ func normalizeAtomicWriteError(err error) error {
 		return domain.NewError(domain.ErrConflict, "file changed since expected_hash was computed", domain.WithCause(err))
 	}
 	return domain.NewError(domain.ErrUnavailable, "failed to write file atomically", domain.WithCause(err))
-}
-
-func successResult(callID domain.ToolCallID, startedAt time.Time, payload any) domain.ToolResult {
-	content, err := json.Marshal(payload)
-	if err != nil {
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
-	}
-	finishedAt := time.Now()
-	return domain.ToolResult{
-		CallID:     callID,
-		Status:     domain.ToolStatusSuccess,
-		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(content)}},
-		StartedAt:  startedAt,
-		FinishedAt: finishedAt,
-	}
-}
-
-func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	status := domain.ToolStatusError
-	code := string(domain.ErrInternal)
-	message := "internal tool error"
-	retryable := false
-
-	switch {
-	case errors.Is(err, context.Canceled):
-		status = domain.ToolStatusCancelled
-		code = string(domain.ErrCancelled)
-		message = "operation cancelled"
-	case errors.Is(err, context.DeadlineExceeded):
-		status = domain.ToolStatusTimeout
-		code = string(domain.ErrTimeout)
-		message = "operation timed out"
-	default:
-		var agentErr *domain.AgentError
-		if errors.As(err, &agentErr) {
-			code = string(agentErr.Code)
-			message = agentErr.Message
-			retryable = agentErr.Retryable
-			switch agentErr.Code {
-			case domain.ErrCancelled:
-				status = domain.ToolStatusCancelled
-			case domain.ErrTimeout:
-				status = domain.ToolStatusTimeout
-			}
-		}
-	}
-
-	finishedAt := time.Now()
-	return domain.ToolResult{
-		CallID: callID,
-		Status: status,
-		Error: &domain.ToolError{
-			Code:      code,
-			Message:   message,
-			Retryable: retryable,
-		},
-		StartedAt:  startedAt,
-		FinishedAt: finishedAt,
-	}
 }
 
 func sha256Hex(data []byte) string {
