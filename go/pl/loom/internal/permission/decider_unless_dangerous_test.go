@@ -129,6 +129,47 @@ func TestUnlessDangerousWriteToolAutoAllows(t *testing.T) {
 	}
 }
 
+// TestUnlessDangerousPinnedEndpointToolSilent pins the web_search carve-out:
+// a builtin tool whose only risk is egress to a deployment-pinned endpoint
+// is silently allowed in unless-dangerous (the same contract that grants
+// needs_network silently), still asks in on-request, and is still denied
+// unattended in never mode. generate_image — same network-only profile but
+// per-call provider cost — must keep its prompt in every interactive mode.
+func TestUnlessDangerousPinnedEndpointToolSilent(t *testing.T) {
+	builtin := domain.ToolDefinition{Source: domain.ToolSourceBuiltin}
+	searchCall := domain.PreparedCall{
+		Call:       domain.ToolCall{Name: "web_search", Arguments: []byte(`{"query":"loom"}`)},
+		Definition: builtin,
+		Risk:       domain.R3,
+	}
+	if v := (BaselineDecider{Mode: ModeUnlessDangerous}).Evaluate(searchCall); v.Decision != domain.DecisionAllow {
+		t.Fatalf("web_search in unless-dangerous = %s (%s), want allow", v.Decision, v.Reason)
+	}
+	if v := (BaselineDecider{Mode: ModeOnRequest}).Evaluate(searchCall); v.Decision != domain.DecisionAsk {
+		t.Fatalf("web_search in on-request = %s, want ask (first-use boundary crossing)", v.Decision)
+	}
+	if v := (BaselineDecider{Mode: ModeNever}).Evaluate(searchCall); v.Decision != domain.DecisionDeny {
+		t.Fatalf("web_search in never = %s, want deny (unattended)", v.Decision)
+	}
+
+	// Per-call-cost tools stay per-call even in unless-dangerous.
+	imageCall := domain.PreparedCall{
+		Call:       domain.ToolCall{Name: "generate_image", Arguments: []byte(`{"prompt":"cat"}`)},
+		Definition: builtin,
+		Risk:       domain.R3,
+	}
+	if v := (BaselineDecider{Mode: ModeUnlessDangerous}).Evaluate(imageCall); v.Decision != domain.DecisionAsk {
+		t.Fatalf("generate_image in unless-dangerous = %s, want ask", v.Decision)
+	}
+
+	// A same-named tool from a non-builtin source never inherits the silence.
+	mcpShill := searchCall
+	mcpShill.Definition = domain.ToolDefinition{Source: domain.ToolSourceMCP}
+	if v := (BaselineDecider{Mode: ModeUnlessDangerous}).Evaluate(mcpShill); v.Decision == domain.DecisionAllow {
+		t.Fatalf("non-builtin web_search in unless-dangerous = %s, must not silently allow", v.Decision)
+	}
+}
+
 // --- exact grant coverage (no silent downgrade) ---
 
 // TestEscalatedRequiresUnsandboxedGrant reproduces the sess_09538cef

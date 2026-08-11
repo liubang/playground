@@ -370,6 +370,9 @@ func (d BaselineDecider) evaluate(call domain.PreparedCall, ctx evalContext) *do
 	switch {
 	case call.Risk <= domain.R2:
 		v.Decision, v.Reason = domain.DecisionAllow, "baseline: workspace-confined tool runs without prompting"
+	case d.Mode == ModeUnlessDangerous && unlessDangerousSilent(call):
+		v.Decision, v.Reason = domain.DecisionAllow,
+			"unless-dangerous: pinned-endpoint network tool runs without prompting"
 	case d.Mode == ModeNever:
 		v.Decision, v.Reason = domain.DecisionDeny,
 			"never mode: R3+ operations are denied unattended; rework the approach to use workspace-confined operations"
@@ -380,6 +383,38 @@ func (d BaselineDecider) evaluate(call domain.PreparedCall, ctx evalContext) *do
 		v.Decision, v.Reason = domain.DecisionAsk, "risk baseline: R3+ operations require approval"
 	}
 	return v
+}
+
+// unlessDangerousSilentTools are the builtin R3+ tools whose ONLY risk is
+// network egress to a DEPLOYMENT-PINNED endpoint — the target host is
+// chosen by process configuration, never shaped by call arguments. The
+// unless-dangerous contract already grants declared network needs
+// silently (runCmdBaseline: "the sandbox keeps credential paths
+// unreadable, so granting declared network needs inside it adds no
+// exfiltration value"), and that argument holds a fortiori here: a
+// sandboxed needs_network command may reach ANY host, while these tools
+// can only reach their pinned one. on-request still asks (crossing the
+// network boundary is a user decision there — rememberable via "allow
+// always", and web_search is tool-memory eligible); never still denies
+// unattended. generate_image is deliberately ABSENT: its per-call
+// provider quota cost is part of what the prompt pays for.
+var unlessDangerousSilentTools = map[string]struct{}{
+	// The search backend is pinned at process start by env config
+	// (BRAVE_SEARCH_API_KEY / TAVILY_API_KEY / LOOM_WEB_SEARCH_PROVIDER →
+	// hardcoded provider URLs); arguments are query/count/timeout only and
+	// the SSRF dial guard keeps the DNS answer honest.
+	"web_search": {},
+}
+
+// unlessDangerousSilent reports whether a call is a builtin tool on the
+// pinned-endpoint silent list. The source check is defense in depth: a
+// same-named tool from another source must never inherit the silence.
+func unlessDangerousSilent(call domain.PreparedCall) bool {
+	if call.Definition.Source != domain.ToolSourceBuiltin {
+		return false
+	}
+	_, ok := unlessDangerousSilentTools[call.Call.Name]
+	return ok
 }
 
 // runCmdBaseline maps (mode, request shape) onto a verdict.
