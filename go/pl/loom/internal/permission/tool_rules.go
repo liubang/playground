@@ -75,6 +75,13 @@ var toolMemoryEligible = map[string]struct{}{
 	// only. Each call still costs provider quota, which the standing
 	// approval explicitly accepts.
 	"generate_image": {},
+	// The search backend endpoint is pinned at process start by deployment
+	// configuration (BRAVE_SEARCH_API_KEY / TAVILY_API_KEY /
+	// LOOM_WEB_SEARCH_PROVIDER → hardcoded provider URLs); arguments are
+	// query/count/timeout only and the SSRF dial guard keeps the DNS answer
+	// honest, so the egress target can never be argument-shaped. No
+	// filesystem effect.
+	"web_search": {},
 }
 
 // mcpToolPrefix is the qualified-name prefix of MCP-sourced tools
