@@ -176,7 +176,7 @@ type updatePlanArgsRawItem struct {
 }
 
 type updatePlanArgsRaw struct {
-	Title string                 `json:"title"`
+	Title string                  `json:"title"`
 	Plan  []updatePlanArgsRawItem `json:"plan"`
 }
 

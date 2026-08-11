@@ -22,6 +22,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -85,6 +88,78 @@ func (r *refRegistry) lookup(ref string) *axNode {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.refs[ref]
+}
+
+// resolve returns the AX node for a model-supplied ref. Snapshots print
+// refs as "[9]" but models pass both "9" and "[9]"; normalizeRef maps
+// both spellings onto the registry key form.
+func (r *refRegistry) resolve(ref string) *axNode {
+	return r.lookup(normalizeRef(ref))
+}
+
+// knownRefs summarizes the live refs for error messages, e.g.
+// `[1] link "Download", [2] tab "Leak Suspects"`, so a model that sent
+// a bad ref can see what it should have sent. The summary is bounded:
+// a large snapshot must not bloat the error.
+func (r *refRegistry) knownRefs() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.refs) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(r.refs))
+	for k := range r.refs {
+		keys = append(keys, k)
+	}
+	// Sort by the numeric part, not lexically: "[9]" < "[10]".
+	sort.Slice(keys, func(i, j int) bool {
+		if oi, oj := refOrdinal(keys[i]), refOrdinal(keys[j]); oi != oj {
+			return oi < oj
+		}
+		return keys[i] < keys[j]
+	})
+	const maxListed = 8
+	var b strings.Builder
+	for i, k := range keys {
+		if i == maxListed {
+			fmt.Fprintf(&b, ", … (%d more)", len(keys)-maxListed)
+			break
+		}
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(k)
+		b.WriteString(" ")
+		b.WriteString(r.refs[k].String())
+	}
+	return b.String()
+}
+
+// normalizeRef canonicalizes a model-supplied element ref to the
+// registry key form ("[N]"): trims whitespace and adds the brackets
+// the snapshot display format uses.
+func normalizeRef(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	if !strings.HasPrefix(s, "[") {
+		s = "[" + s
+	}
+	if !strings.HasSuffix(s, "]") {
+		s += "]"
+	}
+	return s
+}
+
+// refOrdinal extracts the numeric part of a ref key ("[9]" → 9) for
+// sorting; malformed keys sort last.
+func refOrdinal(ref string) int {
+	n, err := strconv.Atoi(strings.Trim(ref, "[]"))
+	if err != nil {
+		return math.MaxInt
+	}
+	return n
 }
 
 // replace atomically swaps the registry contents with a fresh snapshot.
@@ -235,13 +310,30 @@ func (t *BrowserTool) buildAXSerial(
 	}
 }
 
+// unknownRefError builds the error returned when click/type references a
+// ref that is not in the registry. The message must tell the model how to
+// recover: the previous wording ("stale or unknown ref; take a new
+// snapshot") sent models into a snapshot-and-retry loop when the real
+// problem was the ref spelling, because a fresh snapshot re-assigns the
+// exact same numbers. Listing the live refs makes the fix obvious.
+func (t *BrowserTool) unknownRefError(ref string) error {
+	if known := t.registry.knownRefs(); known != "" {
+		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(
+			"unknown ref %q; live refs from the last snapshot: %s. "+
+				"Pass one of them (the number alone, e.g. \"3\", also works), "+
+				"or take a new snapshot if the page has changed", ref, known))
+	}
+	return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(
+		"unknown ref %q: no live snapshot refs. Run action=snapshot first, "+
+			"then pass the ref number shown next to the target element", ref))
+}
+
 // --- click action ---
 
 func (t *BrowserTool) doClick(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
-	node := t.registry.lookup(args.Ref)
+	node := t.registry.resolve(args.Ref)
 	if node == nil {
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
-			fmt.Sprintf("stale or unknown ref %q; take a new snapshot before clicking", args.Ref)))
+		return errorResult(callID, startedAt, t.unknownRefError(args.Ref))
 	}
 
 	browserCtx, err := t.manager.Acquire()
@@ -284,10 +376,9 @@ func (t *BrowserTool) doClick(ctx context.Context, callID domain.ToolCallID, arg
 // --- type action ---
 
 func (t *BrowserTool) doType(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
-	node := t.registry.lookup(args.Ref)
+	node := t.registry.resolve(args.Ref)
 	if node == nil {
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
-			fmt.Sprintf("stale or unknown ref %q; take a new snapshot before typing", args.Ref)))
+		return errorResult(callID, startedAt, t.unknownRefError(args.Ref))
 	}
 
 	if args.Text == "" {

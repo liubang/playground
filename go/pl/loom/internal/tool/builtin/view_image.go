@@ -153,6 +153,11 @@ func (t *ViewImageTool) Execute(ctx context.Context, prepared domain.PreparedCal
 	if dimensions != "" {
 		header += " · " + dimensions
 	}
+	// Same contract as browser screenshots (browser.go): the UI renders
+	// inline tool-result images, so the model must not re-deliver the image
+	// via a markdown link to a local path (the web UI cannot resolve those).
+	header += "\nNote: the image is already displayed to the user in this tool result; " +
+		"do not embed it as a markdown link in your reply."
 
 	finishedAt := time.Now()
 	return domain.ToolResult{

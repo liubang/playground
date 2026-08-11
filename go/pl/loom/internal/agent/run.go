@@ -161,13 +161,13 @@ func ContinueRun(checkpoint domain.Checkpoint, messages []domain.Message, sessio
 				fmt.Sprintf("restored message sequence %d at index %d, want %d", message.Sequence, i, i+1))
 		}
 	}
-plan := checkpoint.Plan
-if plan.IsComplete() {
-plan = domain.Plan{}
-}
-run := RestoreRun(domain.NewRunID(), checkpoint.SessionID,
-domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
-plan, checkpoint.Usage, limits, append([]domain.Message(nil), messages...), sessionVersion, clock)
+	plan := checkpoint.Plan
+	if plan.IsComplete() {
+		plan = domain.Plan{}
+	}
+	run := RestoreRun(domain.NewRunID(), checkpoint.SessionID,
+		domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
+		plan, checkpoint.Usage, limits, append([]domain.Message(nil), messages...), sessionVersion, clock)
 	run.ResetUsageForNewTurn()
 	// A goal survives the prompt boundary: the continuation keeps pursuing
 	// the same objective (a budget-limited/closed goal stays closed).
@@ -800,6 +800,16 @@ type fileChangeResult struct {
 // grant alongside the decision.
 type Policy interface {
 	Evaluate(call domain.PreparedCall) domain.Verdict
+}
+
+// TranscriptAwarePolicy is an optional Policy extension: policies that
+// derive verdict context from the conversation transcript (today: hosts
+// the user mentioned, used to auto-allow matching URL calls) return a
+// transcript-bound view of themselves. The receiver stays unchanged, so
+// concurrent runs sharing one policy never observe each other's
+// transcripts.
+type TranscriptAwarePolicy interface {
+	WithTranscript(messages []domain.Message) Policy
 }
 
 // DefaultPolicy applies the baseline R0/R1 allow, R2/R3 ask, R4 deny policy.
@@ -1583,6 +1593,10 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 		return nil
 	}
 	needsApproval := false
+	// The policy is bound once per routing pass: l.policy() snapshots
+	// transcript-derived context, and per-call rebinding would only repeat
+	// the same extraction.
+	policy := l.policy()
 	for _, tc := range calls {
 		tool, ok := l.Registry.Lookup(tc.Name)
 		if !ok {
@@ -1608,7 +1622,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 		if reason := l.trackToolCall(tc.Name, prepared.Call.Arguments); reason != "" {
 			return l.terminateRunaway(ctx, reason)
 		}
-		verdict := l.policy().Evaluate(prepared)
+		verdict := policy.Evaluate(prepared)
 		// The grant is policy-decided, not model-influenced: it rides the
 		// prepared call into Execute (run_cmd maps it onto the sandbox).
 		prepared.Grant = verdict.Grant
@@ -1778,10 +1792,17 @@ func (l *Loop) terminateRunaway(ctx context.Context, reason string) error {
 }
 
 func (l *Loop) policy() Policy {
-	if l.Policy == nil {
-		return DefaultPolicy{}
+	p := l.Policy
+	if p == nil {
+		p = DefaultPolicy{}
 	}
-	return l.Policy
+	// Bind transcript-derived context (user-mentioned hosts) at each
+	// evaluation pass: the transcript grows between passes (new turns,
+	// steer messages), and rebinding is a cheap snapshot copy.
+	if tp, ok := p.(TranscriptAwarePolicy); ok && l.Run != nil {
+		return tp.WithTranscript(l.Run.Messages)
+	}
+	return p
 }
 
 func (l *Loop) awaitApproval(ctx context.Context) error {
@@ -1797,9 +1818,10 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 			l.lastProgressAt = l.lastProgressAt.Add(l.Run.Clock.Since(suspendStart))
 		}
 	}()
+	policy := l.policy()
 	for _, tc := range lastToolCalls(l.Run.Messages) {
 		prepared, ok := l.prepared[tc.ID]
-		if !ok || l.policy().Evaluate(prepared).Decision != domain.DecisionAsk {
+		if !ok || policy.Evaluate(prepared).Decision != domain.DecisionAsk {
 			continue
 		}
 		// The durable permission event ID is the approval ID. Reusing it for

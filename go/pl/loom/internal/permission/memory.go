@@ -65,9 +65,9 @@ const (
 // call. Kind=MemoryNone means the call must stay per-call.
 type MemoryShape struct {
 	Kind     MemoryKind
-	Info     RunCmdCall    // valid when Kind=MemoryArgv
-	Host     string        // valid when Kind=MemoryHost
-	ToolName string        // valid when Kind=MemoryTool (canonical, normalized)
+	Info     RunCmdCall // valid when Kind=MemoryArgv
+	Host     string     // valid when Kind=MemoryHost
+	ToolName string     // valid when Kind=MemoryTool (canonical, normalized)
 }
 
 // DeriveMemoryShape inspects a prepared call's typed request fields to
