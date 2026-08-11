@@ -231,6 +231,11 @@ type Rules struct {
 // prompt).
 type Approval struct {
 	Mode string `yaml:"mode,omitempty"`
+	// TrustUserURLs auto-allows fetching a host the user mentioned in the
+	// conversation (web_fetch, browser navigate): the user handed the
+	// agent the URL, so asking again is pure friction. Rule-layer denies
+	// still win, and never mode ignores it. Nil means enabled.
+	TrustUserURLs *bool `yaml:"trust_user_urls,omitempty"`
 }
 
 // Tracing configures Langfuse observability. Keys follow the same
@@ -359,8 +364,14 @@ type Memory struct {
 // nil-typed: absent means "enabled" (the tool registers with defaults),
 // an explicit false removes the browser tool from the registry.
 type Browser struct {
-	Enabled        *bool  `yaml:"enabled,omitempty"`
-	ChromePath     string `yaml:"chrome_path,omitempty"`
+	Enabled    *bool  `yaml:"enabled,omitempty"`
+	ChromePath string `yaml:"chrome_path,omitempty"`
+	// CdpURL is a remote Chrome DevTools Protocol endpoint (ws:// or
+	// http://). When set, the browser Manager connects to this remote
+	// Chrome instead of launching a local process — letting users point
+	// loom at an externally managed Chrome (e.g. one with a real profile
+	// or anti-detection extensions). Empty means "launch locally".
+	CdpURL         string `yaml:"cdp_url,omitempty"`
 	IdleTTL        string `yaml:"idle_ttl,omitempty"`
 	NavTimeoutMs   int    `yaml:"nav_timeout_ms,omitempty"`
 	ScreenshotQ    int    `yaml:"screenshot_quality,omitempty"`

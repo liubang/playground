@@ -1130,6 +1130,10 @@ func TestViewImageToolReturnsImagePart(t *testing.T) {
 	if header.Kind != domain.PartText || !strings.Contains(header.Text, "image/png") || !strings.Contains(header.Text, "4x2") {
 		t.Fatalf("header part = %+v", header)
 	}
+	// 与 browser 截图一致的契约：告知模型图片已展示给用户，禁止再贴 markdown 链接。
+	if !strings.Contains(header.Text, "already displayed to the user") || !strings.Contains(header.Text, "do not embed it as a markdown link") {
+		t.Fatalf("header missing display contract note: %q", header.Text)
+	}
 	imagePart := result.Content[1]
 	if imagePart.Kind != domain.PartImage || imagePart.Image == nil {
 		t.Fatalf("image part = %+v", imagePart)

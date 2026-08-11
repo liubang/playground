@@ -44,6 +44,7 @@ const KNOWN_TOP_KEYS = new Set([
   'subagent',
   'memory',
   'image',
+  'browser',
   'mcp_servers',
   'workspaces',
 ])
@@ -702,6 +703,62 @@ const TABS = [
         [
           { key: 'logging.max_file_mb', label: '单日志文件上限 (MiB)', type: 'number', ph: '2048' },
           { key: 'logging.max_total_mb', label: '日志总量上限 (MiB)', type: 'number', ph: '10240' },
+        ],
+      ],
+      [
+        '浏览器',
+        [
+          {
+            key: 'browser.enabled',
+            label: '启用浏览器工具',
+            type: 'tristate',
+            def: '开',
+            hint: '默认启用；关闭后浏览器工具不再注册',
+          },
+          {
+            key: 'browser.chrome_path',
+            label: 'Chrome 路径',
+            ph: '留空自动探测',
+            hint: 'Chrome/Chromium 二进制路径；留空时自动探测系统常见位置',
+          },
+          {
+            key: 'browser.cdp_url',
+            label: 'CDP 远程地址',
+            ph: 'ws://127.0.0.1:9222',
+            hint: '远程 Chrome DevTools Protocol 地址；设置后连接外部 Chrome 而非本地启动（可绕过反爬验证）',
+          },
+          {
+            key: 'browser.idle_ttl',
+            label: '空闲回收时间',
+            ph: '5m',
+            hint: '浏览器实例空闲超过此时间后自动关闭（Go 时长语法）',
+          },
+          {
+            key: 'browser.nav_timeout_ms',
+            label: '导航超时 (ms)',
+            type: 'number',
+            ph: '30000',
+            hint: '页面导航超时，范围 5000–120000',
+          },
+          {
+            key: 'browser.screenshot_quality',
+            label: '截图质量',
+            type: 'number',
+            ph: '80',
+            hint: 'JPEG 质量，范围 10–100',
+          },
+          {
+            key: 'browser.viewport_width',
+            label: '视口宽度',
+            type: 'number',
+            ph: '1280',
+          },
+          {
+            key: 'browser.viewport_height',
+            label: '视口高度',
+            type: 'number',
+            ph: '720',
+          },
         ],
       ],
       [

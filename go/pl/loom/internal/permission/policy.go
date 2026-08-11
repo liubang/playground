@@ -41,6 +41,13 @@ type Policy struct {
 	// "allow always" decisions (nil = none). Only run_cmd calls are
 	// session-rule eligible.
 	Session *SessionRules
+	// UserIntent enables the user-intent decider: URL calls targeting a
+	// host the user mentioned in the conversation are auto-allowed
+	// (interactive modes only — never mode keeps its strict unattended
+	// contract). The decider enters the chain with an empty snapshot;
+	// each routing pass rebinds it from the live transcript via
+	// Chain.WithUserIntent.
+	UserIntent bool
 }
 
 // DefaultPolicy returns the baseline security policy per §12.1.
@@ -50,19 +57,25 @@ func DefaultPolicy() Policy {
 
 // Decider assembles the strategy chain for the given approval mode:
 //
-//	rules (strictest wins, incl. deny) → danger heuristics → session
-//	memory → mode-aware baseline (always terminal)
+//	rules (strictest wins, incl. deny) → danger heuristics → user intent
+//	(hosts the user mentioned; interactive modes only, when enabled) →
+//	session memory → mode-aware baseline (always terminal)
 //
 // Swapping a strategy means swapping one chain element. The returned
 // Chain satisfies the agent's Policy interface (Evaluate → domain.Verdict)
 // and never produces a nil verdict.
 func (p Policy) Decider(mode ApprovalMode) Chain {
-	return Chain{
+	chain := Chain{
 		RuleDecider{Rules: p.Rules},
 		DangerDecider{Mode: mode},
+	}
+	if p.UserIntent && mode != ModeNever {
+		chain = append(chain, UserIntentDecider{})
+	}
+	return append(chain,
 		SessionDecider{Session: p.Session},
 		BaselineDecider{Mode: mode},
-	}
+	)
 }
 
 // trustedProgramDirs are candidate system directories whose executables

@@ -24,9 +24,30 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
+
+// stealthUserAgent replaces the stock headless UA ("HeadlessChrome/…")
+// with an ordinary desktop Chrome UA — the "Headless" marker alone is
+// enough for Baidu/Google risk control to serve a verification page.
+// The exact build number does not matter; the absence of the marker does.
+const stealthUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+	"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+// stealthInitScript runs in every new document before any page script
+// (Page.addScriptToEvaluateOnNewDocument), erasing the automation
+// fingerprints a CDP-driven Chrome otherwise exposes. Keep it minimal:
+// every spoofed property is a surface a page can probe for inconsistency,
+// and the launch flags already cover the primary signal
+// (navigator.webdriver via --enable-automation removal).
+const stealthInitScript = `
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en']});
+Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+window.chrome = window.chrome || {runtime: {}};
+`
 
 // Manager owns headless Chrome browser instances and reaps idle ones. Each
 // workspace gets one Manager; the browser tool delegates to it for all
@@ -37,6 +58,7 @@ import (
 type Manager struct {
 	alloc       context.Context
 	allocCancel context.CancelFunc
+	cdpURL      string // remote CDP endpoint, empty when launching locally
 
 	mu         sync.Mutex
 	instance   *browserInstance
@@ -55,7 +77,13 @@ type browserInstance struct {
 // Chrome/Chromium binary; when empty the Manager probes well-known
 // locations. idleTTL controls how long an idle browser instance survives
 // before the reaper closes it. viewportW/H set the initial window size.
-func NewManager(chromePath string, idleTTL time.Duration, viewportW, viewportH int) (*Manager, error) {
+//
+// When cdpURL is non-empty, the Manager connects to the remote Chrome
+// DevTools Protocol endpoint (ws:// or http://) instead of launching a
+// local Chrome process — this lets users point loom at an externally
+// managed Chrome (e.g. one with a real profile or anti-detection
+// extensions). chromePath is ignored when cdpURL is set.
+func NewManager(chromePath, cdpURL string, idleTTL time.Duration, viewportW, viewportH int) (*Manager, error) {
 	if idleTTL <= 0 {
 		idleTTL = 5 * time.Minute
 	}
@@ -66,30 +94,49 @@ func NewManager(chromePath string, idleTTL time.Duration, viewportW, viewportH i
 		viewportH = 720
 	}
 
-	resolved := chromePath
-	if resolved == "" {
-		resolved = findChrome()
-	}
-	if resolved == "" {
-		return nil, domain.NewError(domain.ErrInvalidInput,
-			"Chrome/Chromium binary not found; install Chrome or set browser.chrome_path in config")
-	}
+	var allocCtx context.Context
+	var cancel context.CancelFunc
 
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.ExecPath(resolved),
-		chromedp.WindowSize(viewportW, viewportH),
-		// Disable GPU and sandbox: headless environments (CI, containers)
-		// lack GPU and the user namespace sandbox; these flags are the
-		// standard headless workaround.
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("no-sandbox", true),
-	)
+	if cdpURL != "" {
+		// Remote allocator: connect to an externally managed Chrome.
+		// chromedp.NewRemoteAllocator accepts both ws:// and http:// URLs;
+		// for http:// it probes /json/version to discover the ws:// endpoint.
+		allocCtx, cancel = chromedp.NewRemoteAllocator(context.Background(), cdpURL)
+	} else {
+		resolved := chromePath
+		if resolved == "" {
+			resolved = findChrome()
+		}
+		if resolved == "" {
+			return nil, domain.NewError(domain.ErrInvalidInput,
+				"Chrome/Chromium binary not found; install Chrome or set browser.chrome_path or browser.cdp_url in config")
+		}
 
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
+		opts := append(chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.ExecPath(resolved),
+			chromedp.WindowSize(viewportW, viewportH),
+			// Anti-detection: stock headless Chrome announces automation
+			// through --enable-automation (navigator.webdriver=true) and a
+			// "HeadlessChrome" user agent, which is exactly what triggers
+			// the Baidu/Google bot-verification pages. Strip both markers
+			// while keeping headless operation. Flag(name, false) erases a
+			// default: chromedp skips boolean flags whose value is false.
+			chromedp.Flag("enable-automation", false),
+			chromedp.Flag("disable-blink-features", "AutomationControlled"),
+			chromedp.UserAgent(stealthUserAgent),
+			// Disable GPU and sandbox: headless environments (CI, containers)
+			// lack GPU and the user namespace sandbox; these flags are the
+			// standard headless workaround.
+			chromedp.Flag("disable-gpu", true),
+			chromedp.Flag("no-sandbox", true),
+		)
+		allocCtx, cancel = chromedp.NewExecAllocator(context.Background(), opts...)
+	}
 
 	m := &Manager{
 		alloc:       allocCtx,
 		allocCancel: cancel,
+		cdpURL:      cdpURL,
 		idleTTL:     idleTTL,
 		reaperDone:  make(chan struct{}),
 	}
@@ -133,6 +180,14 @@ func (m *Manager) Acquire() (context.Context, error) {
 		cancel()
 		return nil, domain.NewError(domain.ErrUnavailable, "failed to start browser", domain.WithCause(err))
 	}
+	// Register the stealth init script before the first navigation, or the
+	// document the tool is about to open would miss it. Best-effort: an
+	// injection failure only loses the anti-detection hardening — the
+	// instance stays usable for pages without bot detection.
+	_ = chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		_, err := page.AddScriptToEvaluateOnNewDocument(stealthInitScript).Do(ctx)
+		return err
+	}))
 	m.instance = &browserInstance{
 		ctx:    ctx,
 		cancel: cancel,
@@ -238,7 +293,16 @@ func findChrome() string {
 	return ""
 }
 
+// CdpURL returns the remote CDP endpoint when the Manager is connected to
+// an external Chrome, or empty when launching a local Chrome process.
+func (m *Manager) CdpURL() string {
+	return m.cdpURL
+}
+
 // String returns a human-readable description for logging.
 func (m *Manager) String() string {
+	if m.cdpURL != "" {
+		return fmt.Sprintf("browser.Manager(remote=%s, idleTTL=%s)", m.cdpURL, m.idleTTL)
+	}
 	return fmt.Sprintf("browser.Manager(idleTTL=%s)", m.idleTTL)
 }

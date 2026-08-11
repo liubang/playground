@@ -30,6 +30,7 @@ go_test(
         "skills_e2e_test.go",
         "subagent_e2e_test.go",
         "subagent_v2_e2e_test.go",
+        "user_intent_e2e_test.go",
     ],
     deps = [
         "//go/pl/loom/internal/agent:agent_lib",

@@ -21,12 +21,12 @@ import "testing"
 
 func TestCanonicalHost(t *testing.T) {
 	valid := map[string]string{
-		"example.com":      "example.com",
-		"  EXAMPLE.com. ":  "example.com",
-		"api.example.com":  "api.example.com",
-		"127.0.0.1":        "127.0.0.1",
-		"xn--nxasmq6b.cn":  "xn--nxasmq6b.cn",
-		"weather.com.cn":   "weather.com.cn",
+		"example.com":     "example.com",
+		"  EXAMPLE.com. ": "example.com",
+		"api.example.com": "api.example.com",
+		"127.0.0.1":       "127.0.0.1",
+		"xn--nxasmq6b.cn": "xn--nxasmq6b.cn",
+		"weather.com.cn":  "weather.com.cn",
 	}
 	for in, want := range valid {
 		got, err := CanonicalHost(in)

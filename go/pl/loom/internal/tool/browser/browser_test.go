@@ -24,8 +24,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- helpers ---
@@ -46,7 +48,7 @@ func newTestManager(t *testing.T) *Manager {
 	t.Helper()
 	// Use /bin/true as a stand-in: NewManager only checks the path exists,
 	// it doesn't verify it's Chrome until Acquire creates a context.
-	m, err := NewManager("/bin/true", 0, 0, 0)
+	m, err := NewManager("/bin/true", "", 0, 0, 0)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
@@ -746,6 +748,54 @@ func TestRefRegistry_Replace(t *testing.T) {
 	assert.Nil(t, r.lookup("[1]"))
 }
 
+func TestNormalizeRef(t *testing.T) {
+	assert.Equal(t, "[9]", normalizeRef("9"))
+	assert.Equal(t, "[9]", normalizeRef("[9]"))
+	assert.Equal(t, "[9]", normalizeRef(" 9 "))
+	assert.Equal(t, "[9]", normalizeRef("[9] "))
+	assert.Equal(t, "", normalizeRef(""))
+	assert.Equal(t, "", normalizeRef("   "))
+}
+
+func TestRefRegistry_Resolve(t *testing.T) {
+	r := newRefRegistry()
+	r.replace(map[string]*axNode{
+		"[3]": {backendDOMID: 7, role: "tab", name: "Leak Suspects"},
+	})
+
+	// Both spellings resolve to the same node.
+	for _, spelling := range []string{"3", "[3]", " 3 "} {
+		got := r.resolve(spelling)
+		assert.NotNil(t, got, spelling)
+		assert.Equal(t, "tab", got.role, spelling)
+	}
+	assert.Nil(t, r.resolve("4"))
+	assert.Nil(t, r.resolve(""))
+}
+
+func TestRefRegistry_KnownRefs(t *testing.T) {
+	r := newRefRegistry()
+	assert.Equal(t, "", r.knownRefs())
+
+	r.replace(map[string]*axNode{
+		"[10]": {backendDOMID: 10, role: "link", name: "ten"},
+		"[2]":  {backendDOMID: 2, role: "button", name: "two"},
+		"[1]":  {backendDOMID: 1, role: "link", name: "one"},
+	})
+	// Numeric ordering: [1], [2], [10] — not lexical ([1], [10], [2]).
+	assert.Equal(t, `[1] link "one", [2] button "two", [10] link "ten"`, r.knownRefs())
+
+	// The summary is bounded: more than 8 refs are truncated with a count.
+	big := make(map[string]*axNode)
+	for i := 1; i <= 12; i++ {
+		big[fmt.Sprintf("[%d]", i)] = &axNode{backendDOMID: cdp.BackendNodeID(i), role: "tab"}
+	}
+	r.replace(big)
+	summary := r.knownRefs()
+	assert.Contains(t, summary, "(4 more)")
+	assert.NotContains(t, summary, "[12]")
+}
+
 func TestAXNode_String(t *testing.T) {
 	assert.Equal(t, `button "Submit"`, (&axNode{role: "button", name: "Submit"}).String())
 	assert.Equal(t, "link", (&axNode{role: "link"}).String())
@@ -770,6 +820,16 @@ func TestRuneCount(t *testing.T) {
 func TestTruncateRunes(t *testing.T) {
 	assert.Equal(t, "hel", truncateRunes("hello", 3))
 	assert.Equal(t, "hello", truncateRunes("hello", 10))
+}
+
+func TestSameDocumentURL(t *testing.T) {
+	assert.True(t, sameDocumentURL("https://a.com/p", "https://a.com/p#frag"))
+	assert.True(t, sameDocumentURL("https://a.com/p#a", "https://a.com/p#b"))
+	assert.True(t, sameDocumentURL("https://a.com/p", "https://a.com/p"))
+	assert.False(t, sameDocumentURL("https://a.com/p", "https://a.com/p?q=1"))
+	assert.False(t, sameDocumentURL("https://a.com/p", "https://a.com/other"))
+	assert.False(t, sameDocumentURL("https://a.com", "https://b.com"))
+	assert.False(t, sameDocumentURL("://bad", "https://a.com"))
 }
 
 func TestIsInteractive(t *testing.T) {
@@ -850,7 +910,7 @@ func TestBrowserTool_Execute_ClickStaleRef(t *testing.T) {
 	tool, err := NewBrowserTool(mgr, nil, 0, 0)
 	assert.NoError(t, err)
 
-	// No snapshot taken yet — ref is stale.
+	// No snapshot taken yet — no live refs at all.
 	call := newToolCall(t, "browser", browserArgs{Action: "click", Ref: "[1]"})
 	prepared, err := tool.Prepare(context.Background(), call)
 	assert.NoError(t, err)
@@ -859,7 +919,7 @@ func TestBrowserTool_Execute_ClickStaleRef(t *testing.T) {
 	assert.Equal(t, domain.ToolStatusError, result.Status)
 	assert.NotNil(t, result.Error)
 	assert.Equal(t, "invalid_input", result.Error.Code)
-	assert.Contains(t, result.Error.Message, "stale")
+	assert.Contains(t, result.Error.Message, "no live snapshot refs")
 }
 
 func TestBrowserTool_Execute_TypeStaleRef(t *testing.T) {
@@ -867,7 +927,7 @@ func TestBrowserTool_Execute_TypeStaleRef(t *testing.T) {
 	tool, err := NewBrowserTool(mgr, nil, 0, 0)
 	assert.NoError(t, err)
 
-	// No snapshot taken yet — ref is stale.
+	// No snapshot taken yet — no live refs at all.
 	call := newToolCall(t, "browser", browserArgs{Action: "type", Ref: "[1]", Text: "hello"})
 	prepared, err := tool.Prepare(context.Background(), call)
 	assert.NoError(t, err)
@@ -875,7 +935,56 @@ func TestBrowserTool_Execute_TypeStaleRef(t *testing.T) {
 	result := tool.Execute(context.Background(), prepared)
 	assert.Equal(t, domain.ToolStatusError, result.Status)
 	assert.NotNil(t, result.Error)
-	assert.Contains(t, result.Error.Message, "stale")
+	assert.Contains(t, result.Error.Message, "no live snapshot refs")
+}
+
+// TestBrowserTool_Execute_ClickRefWithoutBrackets pins the ref-spelling
+// tolerance: models pass "1" as often as "[1]", and both must resolve to
+// the same snapshot node. The click proceeds past ref resolution here and
+// fails later on the dummy Chrome binary (unavailable), NOT on the ref
+// lookup (invalid_input).
+func TestBrowserTool_Execute_ClickRefWithoutBrackets(t *testing.T) {
+	mgr := newTestManager(t)
+	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	assert.NoError(t, err)
+
+	tool.registry.replace(map[string]*axNode{
+		"[1]": {backendDOMID: 42, role: "button", name: "Submit"},
+	})
+
+	for _, spelling := range []string{"1", "[1]", " 1 "} {
+		call := newToolCall(t, "browser", browserArgs{Action: "click", Ref: spelling})
+		prepared, err := tool.Prepare(context.Background(), call)
+		assert.NoError(t, err)
+
+		result := tool.Execute(context.Background(), prepared)
+		assert.Equal(t, domain.ToolStatusError, result.Status, spelling)
+		require.NotNil(t, result.Error, spelling)
+		assert.Equal(t, "unavailable", result.Error.Code, spelling)
+	}
+}
+
+// TestBrowserTool_Execute_ClickUnknownRef_ListsLiveRefs makes the error
+// actionable: a model that sends a bad ref learns which refs are live,
+// instead of being sent into a snapshot-and-retry loop.
+func TestBrowserTool_Execute_ClickUnknownRef_ListsLiveRefs(t *testing.T) {
+	mgr := newTestManager(t)
+	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	assert.NoError(t, err)
+
+	tool.registry.replace(map[string]*axNode{
+		"[1]": {backendDOMID: 42, role: "button", name: "Submit"},
+	})
+
+	call := newToolCall(t, "browser", browserArgs{Action: "click", Ref: "9"})
+	prepared, err := tool.Prepare(context.Background(), call)
+	assert.NoError(t, err)
+
+	result := tool.Execute(context.Background(), prepared)
+	assert.Equal(t, domain.ToolStatusError, result.Status)
+	require.NotNil(t, result.Error)
+	assert.Equal(t, "invalid_input", result.Error.Code)
+	assert.Contains(t, result.Error.Message, `[1] button "Submit"`)
 }
 
 // --- Definition update test ---

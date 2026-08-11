@@ -257,8 +257,15 @@ func (t *BrowserTool) doNavigate(ctx context.Context, callID domain.ToolCallID, 
 	navCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
 	defer cancel()
 
-	var title string
+	// Location before Navigate yields the pre-navigation URL. A fragment-
+	// only change is a same-document navigation: Chrome fires no load
+	// event, the page does not reload, and history-mode SPAs (Vue/React
+	// Router) ignore the fragment entirely — so the model must be told
+	// the click path is the only way through, instead of receiving a bare
+	// "ok" for a navigation that changed nothing.
+	var prevURL, title string
 	err = chromedp.Run(navCtx,
+		chromedp.Location(&prevURL),
 		chromedp.Navigate(args.URL),
 		chromedp.Title(&title),
 	)
@@ -271,12 +278,31 @@ func (t *BrowserTool) doNavigate(ctx context.Context, callID domain.ToolCallID, 
 	// Invalidate refs: navigation changes the page.
 	t.registry.invalidate()
 
-	return successResult(callID, startedAt, browserOutput{
+	out := browserOutput{
 		Action: "navigate",
 		URL:    args.URL,
 		Title:  title,
 		Status: "ok",
-	})
+	}
+	if prevURL != "" && sameDocumentURL(prevURL, args.URL) {
+		out.Message = "only the URL fragment changed and the document did not reload; " +
+			"if the page content did not switch, this SPA uses history-mode routing — " +
+			"snapshot the page and click the target element by ref instead of navigating by fragment"
+	}
+	return successResult(callID, startedAt, out)
+}
+
+// sameDocumentURL reports whether two URLs address the same document,
+// i.e. they differ at most in the fragment.
+func sameDocumentURL(a, b string) bool {
+	ua, errA := url.Parse(a)
+	ub, errB := url.Parse(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	ua.Fragment, ua.RawFragment = "", ""
+	ub.Fragment, ub.RawFragment = "", ""
+	return ua.String() == ub.String()
 }
 
 func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
