@@ -42,18 +42,21 @@ export class Sidebar {
   }
 
   // setActive(id, {scroll})：scroll=true 时（用户主动打开会话）把条目滚动
-  // 到可视区域；轮询刷新后的重设不滚动，避免打断用户浏览侧栏。
+  // 到可视区域，并在其所在组被折叠时展开该组——主动选中的会话必须看得见。
+  // 轮询刷新后的重设（scroll=false）不滚动也不动折叠态：用户主动折叠包含
+  // 当前会话的组是合法选择（组名着色 + 待审批徽标保持定位能力，见 app.css
+  // .ws-node.has-active），不能被后台轮询悄悄撤销。
   setActive(id, { scroll = false } = {}) {
     this.activeId = id
-    // 当前会话所在组被折叠时自动展开：用户主动选中的会话必须看得见，
-    // 其余组保持用户的折叠选择不变。
-    const sess = this._lastSessions.find((s) => s.id === id)
-    if (sess) {
-      const wsId = sess.workspace_id || ''
-      if (this.collapsed.has(wsId)) {
-        this.collapsed.delete(wsId)
-        this._saveCollapsed()
-        this.render(this._lastSessions, this.workspaces)
+    if (scroll) {
+      const sess = this._lastSessions.find((s) => s.id === id)
+      if (sess) {
+        const wsId = sess.workspace_id || ''
+        if (this.collapsed.has(wsId)) {
+          this.collapsed.delete(wsId)
+          this._saveCollapsed()
+          this.render(this._lastSessions, this.workspaces)
+        }
       }
     }
     for (const item of this.listEl.querySelectorAll('.sess-item')) {
