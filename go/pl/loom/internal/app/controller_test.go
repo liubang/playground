@@ -173,6 +173,165 @@ func TestControllerContinuesSessionForFollowUpPrompt(t *testing.T) {
 	}
 }
 
+// TestControllerArchivesCompletedPlanOnNewTurn pins the turn-boundary plan
+// lifecycle: a completed plan is inert for the runtime (never re-injected
+// into model context), so a new prompt archives the projection — the
+// snapshot drops it and live clients get an empty plan.updated BEFORE the
+// turn.started, letting them hide the panel.
+func TestControllerArchivesCompletedPlanOnNewTurn(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{
+			{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(`{"plan":[{"goal":"step one","status":"done"},{"goal":"step two","status":"done"}]}`)},
+		}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "task done", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "follow-up answer", StopReason: domain.StopEndTurn},
+	)
+	broker := runtimeevent.NewBroker()
+	defer broker.Close()
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, model),
+		Broker:    broker,
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if _, err := controller.SubmitPrompt(ctx, "task"); err != nil {
+		t.Fatalf("SubmitPrompt(task): %v", err)
+	}
+	waitForIdle(t, controller)
+
+	snap, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snap.Plan == nil || !snap.Plan.IsComplete() {
+		t.Fatalf("snapshot plan after turn 1 = %+v, want a complete plan", snap.Plan)
+	}
+
+	events, unsubscribe := broker.Subscribe()
+	defer unsubscribe()
+	if _, err := controller.SubmitPrompt(ctx, "follow-up"); err != nil {
+		t.Fatalf("SubmitPrompt(follow-up): %v", err)
+	}
+
+	// The archive is synchronous: the projection is gone before the
+	// submission returns.
+	snap, err = controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot after follow-up: %v", err)
+	}
+	if snap.Plan != nil {
+		t.Fatalf("snapshot plan after follow-up = %+v, want archived (nil)", snap.Plan)
+	}
+
+	// Live clients see an empty plan.updated ahead of the turn.started.
+	deadline := time.After(2 * time.Second)
+	var kinds []runtimeevent.RuntimeEventKind
+	for len(kinds) < 2 {
+		select {
+		case evt := <-events:
+			kinds = append(kinds, evt.Kind)
+			if evt.Kind == runtimeevent.KindPlanUpdated {
+				var plan domain.Plan
+				if err := json.Unmarshal(evt.Payload, &plan); err != nil {
+					t.Fatalf("decode plan.updated payload: %v", err)
+				}
+				if len(plan.Items) != 0 {
+					t.Fatalf("archived plan.updated items = %d, want 0", len(plan.Items))
+				}
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for archive events; got %v", kinds)
+		}
+	}
+	if kinds[0] != runtimeevent.KindPlanUpdated || kinds[1] != runtimeevent.KindTurnStarted {
+		t.Fatalf("event order = %v, want [plan.updated turn.started]", kinds)
+	}
+
+	waitForIdle(t, controller)
+	snap, err = controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot final: %v", err)
+	}
+	if snap.Plan != nil {
+		t.Fatalf("snapshot plan after follow-up turn = %+v, want nil (no new plan)", snap.Plan)
+	}
+}
+
+// TestControllerKeepsUnfinishedPlanOnNewTurn: an unfinished plan is still
+// live state (re-injected into model context), so a new turn must NOT
+// archive the projection — the panel stays until the next update_plan.
+func TestControllerKeepsUnfinishedPlanOnNewTurn(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{
+			{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(`{"plan":[{"goal":"step one","status":"done"},{"goal":"step two","status":"in_progress"}]}`)},
+		}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "answer", StopReason: domain.StopEndTurn},
+		// The one-shot reconcile nudge burns one extra scripted call.
+		fakes.ScriptEntry{Text: "reconciled", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "follow-up answer", StopReason: domain.StopEndTurn},
+	)
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, model),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if _, err := controller.SubmitPrompt(ctx, "task"); err != nil {
+		t.Fatalf("SubmitPrompt(task): %v", err)
+	}
+	waitForIdle(t, controller)
+
+	snap, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snap.Plan == nil || snap.Plan.IsComplete() {
+		t.Fatalf("snapshot plan after turn 1 = %+v, want an unfinished plan", snap.Plan)
+	}
+
+	if _, err := controller.SubmitPrompt(ctx, "follow-up"); err != nil {
+		t.Fatalf("SubmitPrompt(follow-up): %v", err)
+	}
+	snap, err = controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot after follow-up: %v", err)
+	}
+	if snap.Plan == nil || len(snap.Plan.Items) != 2 {
+		t.Fatalf("snapshot plan after follow-up = %+v, want the unfinished plan kept", snap.Plan)
+	}
+	waitForIdle(t, controller)
+}
+
 // ctxCaptureModel records the loom attribution env attached to the turn
 // context of its first Stream call (docs/SERVE_DESIGN.md §4.3).
 type ctxCaptureModel struct {
