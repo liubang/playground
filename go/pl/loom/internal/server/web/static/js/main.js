@@ -747,9 +747,13 @@ function onRuntimeEvent(evt) {
       break
     case 'approval.requested':
       setSessionState('awaiting_approval')
+      // 侧栏状态灯与工作区待审批徽标的数据源是会话列表：立即刷新，
+      // 不等 5s 轮询，否则徽标的出现/消失明显滞后于卡片的弹出/收起。
+      refreshSessions()
       break
     case 'approval.resolved':
       setSessionState('running')
+      refreshSessions()
       break
     case 'run.cancel_requested':
       setSessionState('cancelling')
