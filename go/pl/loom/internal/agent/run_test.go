@@ -132,6 +132,47 @@ func TestContinueRunFromTerminalCheckpoint(t *testing.T) {
 	}
 }
 
+// A completed plan is inert for the next turn — never re-injected into
+// model context, archived by frontends at the turn boundary — so the
+// continuation drops it. Dropping it also keeps drainPlanUpdates' title
+// fallback from leaking the finished plan's title onto the next plan. An
+// unfinished plan is live state and survives the prompt boundary.
+func TestContinueRunPlanCarryOver(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	newCheckpoint := func(plan domain.Plan) domain.Checkpoint {
+		return domain.Checkpoint{
+			ID: domain.NewCheckpointID(), SessionID: domain.NewSessionID(), Sequence: 7,
+			State:     domain.RunState{Lifecycle: domain.LifecycleTerminal, Outcome: domain.OutcomeSucceeded},
+			Plan:      plan,
+			CreatedAt: clock.Now(),
+		}
+	}
+
+	completed := domain.Plan{Title: "old task", Items: []domain.PlanItem{
+		{Index: 0, Goal: "step one", Status: domain.PlanItemDone},
+		{Index: 1, Goal: "step two", Status: domain.PlanItemDone},
+	}}
+	run, err := ContinueRun(newCheckpoint(completed), nil, 7, domain.DefaultLimits(), clock)
+	if err != nil {
+		t.Fatalf("ContinueRun(completed plan): %v", err)
+	}
+	if len(run.Plan.Items) != 0 || run.Plan.Title != "" {
+		t.Fatalf("completed plan carried into continuation: %+v", run.Plan)
+	}
+
+	unfinished := domain.Plan{Title: "ongoing task", Items: []domain.PlanItem{
+		{Index: 0, Goal: "step one", Status: domain.PlanItemDone},
+		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
+	}}
+	run, err = ContinueRun(newCheckpoint(unfinished), nil, 7, domain.DefaultLimits(), clock)
+	if err != nil {
+		t.Fatalf("ContinueRun(unfinished plan): %v", err)
+	}
+	if run.Plan.Title != "ongoing task" || len(run.Plan.Items) != 2 {
+		t.Fatalf("unfinished plan not preserved: %+v", run.Plan)
+	}
+}
+
 func TestContinueRunRejectsUnsafeRecovery(t *testing.T) {
 	clock := domain.NewFakeClock(time.Now().UTC())
 	sessionID := domain.NewSessionID()
