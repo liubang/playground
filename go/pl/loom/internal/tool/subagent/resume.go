@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 // ResumeSubagentTool restarts a terminal (or crash-interrupted) sub-agent
@@ -36,7 +37,7 @@ import (
 type ResumeSubagentTool struct {
 	def domain.ToolDefinition
 	m   *Manager
-	key [32]byte
+	key toolkit.Signer
 }
 
 // NewResumeSubagentTool creates the tool bound to the given manager.
@@ -57,7 +58,7 @@ func NewResumeSubagentTool(m *Manager) (*ResumeSubagentTool, error) {
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
 	}
-	key, err := newSigningKey()
+	key, err := toolkit.NewSigner()
 	if err != nil {
 		return nil, err
 	}

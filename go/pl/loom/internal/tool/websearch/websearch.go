@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
 )
 
@@ -124,7 +125,7 @@ func (t *WebSearchTool) Definition() domain.ToolDefinition {
 func (t *WebSearchTool) ConcurrentSafe() bool { return true }
 
 func (t *WebSearchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[searchArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[searchArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -144,29 +145,29 @@ func (t *WebSearchTool) Prepare(ctx context.Context, call domain.ToolCall) (doma
 func (t *WebSearchTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
 	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-	args, err := decodeStrict[searchArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[searchArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	cacheKey := t.provider.Name() + "\x1f" + args.Query + "\x1f" + fmt.Sprintf("%d", args.Count)
 	if entry, ok := t.cache.get(cacheKey); ok {
 		var results []searchResult
 		if err := json.Unmarshal([]byte(entry.Body), &results); err == nil {
-			return successResult(prepared.Call.ID, startedAt, t.buildOutput(args, results, "hit", entry.FetchedAt))
+			return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(args, results, "hit", entry.FetchedAt))
 		}
 	}
 
 	results, err := t.search(ctx, args)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if body, err := json.Marshal(results); err == nil && len(body) <= cacheMaxBodyBytes {
 		t.cache.put(cacheKey, cachedResponse{FetchedAt: t.now().UTC(), Body: string(body)})
 	}
-	return successResult(prepared.Call.ID, startedAt, t.buildOutput(args, results, "miss", t.now().UTC()))
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(args, results, "miss", t.now().UTC()))
 }
 
 func validateSearchArgs(args searchArgs) (searchArgs, error) {

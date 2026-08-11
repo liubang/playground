@@ -25,12 +25,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -68,15 +63,6 @@ type readSkillArgs struct {
 	ResolvedPath string `json:"resolved_path,omitempty"`
 }
 
-type preparedFingerprint struct {
-	CallID     string           `json:"call_id"`
-	ToolName   string           `json:"tool_name"`
-	Arguments  json.RawMessage  `json:"arguments"`
-	ReadPaths  []string         `json:"read_paths,omitempty"`
-	WritePaths []string         `json:"write_paths,omitempty"`
-	Risk       domain.RiskLevel `json:"risk"`
-}
-
 // ReadSkillTool reads files of discovered skills by name. Authorization is
 // the discovered-skill whitelist: paths are resolved inside the owning
 // skill's directory via a per-skill workspace.PathValidator (reusing its
@@ -84,7 +70,7 @@ type preparedFingerprint struct {
 type ReadSkillTool struct {
 	def     domain.ToolDefinition
 	catalog *skill.AtomicCatalog
-	key     [32]byte
+	signer  toolkit.Signer
 }
 
 // NewReadSkillTool creates the tool bound to the shared catalog snapshot.
@@ -108,11 +94,11 @@ func NewReadSkillTool(catalog *skill.AtomicCatalog) (*ReadSkillTool, error) {
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
 	}
-	var key [32]byte
-	if _, err := rand.Read(key[:]); err != nil {
-		return nil, domain.NewError(domain.ErrInternal, "failed to initialize tool verifier", domain.WithCause(err))
+	signer, err := toolkit.NewSigner()
+	if err != nil {
+		return nil, err
 	}
-	return &ReadSkillTool{def: def, catalog: catalog, key: key}, nil
+	return &ReadSkillTool{def: def, catalog: catalog, signer: signer}, nil
 }
 
 // Definition returns the tool definition.
@@ -159,7 +145,7 @@ func (t *ReadSkillTool) Prepare(ctx context.Context, call domain.ToolCall) (doma
 		ReadPaths:    []string{resolved},
 		ApprovalDesc: approvalDescription(args),
 	}
-	prepared.ArgsHash = t.signPrepared(prepared)
+	prepared.ArgsHash = t.signer.Sign(prepared)
 	return prepared, nil
 }
 
@@ -337,34 +323,7 @@ func formatByteSize(n int64) string {
 }
 
 func (t *ReadSkillTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	if prepared.Call.Name != t.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call tool name mismatch")
-	}
-	if prepared.Definition.Name != t.def.Name || prepared.Definition.Source != t.def.Source {
-		return domain.NewError(domain.ErrSecurity, "prepared call definition mismatch")
-	}
-	if prepared.Risk != t.def.Risk() {
-		return domain.NewError(domain.ErrSecurity, "prepared call risk mismatch")
-	}
-	if expected := t.signPrepared(prepared); !hmac.Equal([]byte(prepared.ArgsHash), []byte(expected)) {
-		return domain.NewError(domain.ErrSecurity, "prepared call verification failed")
-	}
-	return nil
-}
-
-func (t *ReadSkillTool) signPrepared(prepared domain.PreparedCall) string {
-	fingerprint := preparedFingerprint{
-		CallID:     prepared.Call.ID.String(),
-		ToolName:   prepared.Call.Name,
-		Arguments:  cloneRawMessage(prepared.Call.Arguments),
-		ReadPaths:  append([]string(nil), prepared.ReadPaths...),
-		WritePaths: append([]string(nil), prepared.WritePaths...),
-		Risk:       prepared.Risk,
-	}
-	payload, _ := json.Marshal(fingerprint)
-	h := hmac.New(sha256.New, t.key[:])
-	_, _ = h.Write(payload)
-	return hex.EncodeToString(h.Sum(nil))
+	return t.signer.VerifyWithRisk(prepared, t.def)
 }
 
 func approvalDescription(args readSkillArgs) string {
@@ -446,29 +405,9 @@ func readFileBounded(ctx context.Context, path string, maxBytes int64) ([]byte, 
 	return data, nil
 }
 
-func decodeStrict[T any](raw json.RawMessage) (T, error) {
-	var out T
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&out); err != nil {
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must be valid JSON matching the tool schema", domain.WithCause(err))
-	}
-	var trailing struct{}
-	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value")
-		}
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must contain exactly one JSON value", domain.WithCause(err))
-	}
-	return out, nil
-}
+func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
 
-func cloneRawMessage(raw json.RawMessage) json.RawMessage {
-	if raw == nil {
-		return nil
-	}
-	return append(json.RawMessage(nil), raw...)
-}
+func cloneRawMessage(raw json.RawMessage) json.RawMessage { return toolkit.CloneRawMessage(raw) }
 
 // textResult builds a successful plain-text tool result.
 func textResult(callID domain.ToolCallID, startedAt time.Time, text string) domain.ToolResult {
@@ -482,22 +421,5 @@ func textResult(callID domain.ToolCallID, startedAt time.Time, text string) doma
 }
 
 func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	status := domain.ToolStatusError
-	code := string(domain.ErrInternal)
-	message := "internal tool error"
-	retryable := false
-
-	var agentErr *domain.AgentError
-	if errors.As(err, &agentErr) {
-		code = string(agentErr.Code)
-		message = agentErr.Message
-		retryable = agentErr.Retryable
-	}
-	return domain.ToolResult{
-		CallID:     callID,
-		Status:     status,
-		Error:      &domain.ToolError{Code: code, Message: message, Retryable: retryable},
-		StartedAt:  startedAt,
-		FinishedAt: time.Now(),
-	}
+	return toolkit.ErrorResult(callID, startedAt, err)
 }

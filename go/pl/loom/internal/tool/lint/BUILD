@@ -30,6 +30,7 @@ go_library(
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/process:process_lib",
+        "//go/pl/loom/internal/tool/toolkit:toolkit_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )
