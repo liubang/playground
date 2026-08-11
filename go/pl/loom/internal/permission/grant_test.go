@@ -228,8 +228,8 @@ func TestRememberUpgradesGrant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if set.Size() != 1 {
-		t.Fatalf("rules = %d, want 1 (upgrade in place)", set.Size())
+	if got := len(set.Rules()); got != 1 {
+		t.Fatalf("rules = %d, want 1 (upgrade in place)", got)
 	}
 	_, rule := set.Evaluate([]string{"talos", "query"})
 	if rule.Grant == nil || rule.Grant.Network != "full" {

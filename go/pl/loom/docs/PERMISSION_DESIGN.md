@@ -137,6 +137,7 @@ approval:
 - 危险清单命中时交互模式升级为 ask（never 模式为 deny，denial 原因直达模型以便绕行）。
 - 复合 shell 命令（管道/`&&`/重定向）不再是风险本身：`sh -c` 脚本经 AST 解析（mvdan.cc/sh）逐条子命令过规则层与危险清单；可证明安全的复合命令可按子命令前缀记忆。只有出沙箱、出网络、危险清单三类事件弹审批。
 - 非 exec 的内建工具（edit/write 等）由 path validator 限制在工作区内（.git/.loom 受保护），爆炸半径与沙箱内命令等价，R0–R2 在任何模式下免审批；MCP 工具是第三方代码，保持逐次审批（可按工具名记忆），never 模式下拒绝。
+- **unless-dangerous 下 builtin `web_fetch` 免审批**：它是无凭证的匿名 GET（不携带用户浏览器身份/cookie），SSRF 防护默认拦截私有/回环/链路本地目标（`allow_private=true` 显式开启），能力严格弱于该模式已静默放行的沙箱内 `needs_network` 命令。**deny/ask 域名规则仍优先**（RuleDecider 在链首，用户显式黑名单永远生效），on-request 仍逐次审批（可记忆域名），never 仍拒绝。`browser` 工具不受此豁免——它驱动真实用户浏览器（真实身份/cookie），即使目标域名已记住也保持逐次审批。
 - `never` 模式绝不产生 ask：长程任务不会死挂在无人应答的提示上。
 - 审批弹窗触发桌面通知（macOS osascript / Linux notify-send）：真正需要人时人要知道。
 
@@ -292,6 +293,8 @@ workspace 之外，沙箱默认放行两类可写目录（`process.ExtraWritable
 
 ### M2
 危险清单细化（git 写操作、环境窃取模式）；脚本内容哈希绑定评估；`grant.write` 的自动路径推断（从沙箱拒绝日志反推）。
+
+**规则包（rule packs，2026-08 已落地）**：沙箱内 macOS TLS 验证对 Security-framework 依赖型运行时（Go 的 crypto/x509、pip 的 vendored truststore）必然失败（`OSStatus -26276`，实测无文件/mach 级解法，Claude Code 同款结论）。为"已知可信但沙箱不兼容"的命令提供**用户显式开启**的预授权：`internal/permission/packs/*.json` 内嵌模板（元数据 + 标准规则文件），WebUI 设置「规则包」卡片一键启用/停用，安装即写 `~/.loom/rules/pack-<id>.json`（普通规则文件，LoadRuleSets 零特判加载、`loom rules check` 可审计、可手动编辑），安装/卸载即时热重载全部 workspace 策略。内置三包：`go-toolchain`（go mod download/tidy/vendor，中风险）、`cloud-cli`（gh api、gcloud auth list、terraform plan/fmt/validate——**只读形态**，高风险的 apply/destroy 不预授权，写凭证目录仍受保护）、`python-pip`（pip install/download）。安全红线：包规则必须 allow+grant、只授 unsandboxed 不组合凭证写、绝不包含代码执行形态（go run/install）；builtin 只读集仍硬校验"零 grant"。
 
 ### M3
 域名级网络授权：本地代理 + 按域名审批记忆（`grant.network: {domains: [...]}` 的 schema 预留形状）；Linux bubblewrap 沙箱。

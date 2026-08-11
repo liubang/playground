@@ -1,0 +1,44 @@
+{
+  "pack": {
+    "id": "python-pip",
+    "name": "pip（TLS）",
+    "description": "pip 通过内嵌 truststore 经 macOS Security framework 加载系统根证书，沙箱内 TLS 验证必然失败（OSStatus -26276）。开启后 pip install/download 在沙箱外运行。urllib/requests 若不启用 truststore 不受影响。",
+    "risk": "medium",
+    "reason": "pip 26+ 默认启用 truststore，它调 Security framework 读 keychain 根证书，沙箱内无解。pip 会执行下载包中的 setup.py/二进制，unsandboxed 使其拥有完整权限——请仅在信任的包源下使用。",
+    "commands": ["pip install", "pip download"]
+  },
+  "rules": [
+    {
+      "argv_prefix": ["pip", "install"],
+      "decision": "allow",
+      "grant": {"unsandboxed": true},
+      "justification": "pip install: TLS 经 truststore 需 keychain；用户已启用 python-pip 规则包",
+      "match": [["pip", "install", "requests"]],
+      "not_match": [["pip", "uninstall"]]
+    },
+    {
+      "argv_prefix": ["pip3", "install"],
+      "decision": "allow",
+      "grant": {"unsandboxed": true},
+      "justification": "pip3 install: 同 pip install；用户已启用 python-pip 规则包",
+      "match": [["pip3", "install", "requests"]],
+      "not_match": [["pip3", "uninstall"]]
+    },
+    {
+      "argv_prefix": ["pip", "download"],
+      "decision": "allow",
+      "grant": {"unsandboxed": true},
+      "justification": "pip download: TLS 同 install；用户已启用 python-pip 规则包",
+      "match": [["pip", "download", "six"]],
+      "not_match": [["pip", "uninstall"]]
+    },
+    {
+      "argv_prefix": ["pip3", "download"],
+      "decision": "allow",
+      "grant": {"unsandboxed": true},
+      "justification": "pip3 download: 同 pip download；用户已启用 python-pip 规则包",
+      "match": [["pip3", "download", "six"]],
+      "not_match": [["pip3", "uninstall"]]
+    }
+  ]
+}

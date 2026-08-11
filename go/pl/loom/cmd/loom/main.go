@@ -365,7 +365,10 @@ func runChat(ctx context.Context, workspaceRoot string, resumeSessionID *domain.
 	// The TUI is a peer client of the runtime (docs/SERVE_DESIGN.md §10):
 	// same SessionService + in-proc client assembly that `loom serve` uses,
 	// so every frontend shares one behavior.
-	service := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{Logger: logger})
+	service := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{
+		Logger:   logger,
+		RulesDir: resolved.Storage.RulesDir(),
+	})
 	sessionClient := client.NewInProc(service)
 
 	if resumeSessionID != nil {
@@ -490,7 +493,10 @@ func runServe(ctx context.Context, args []string) error {
 
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	app.WireSubagentObserver(bootstrap.SubagentFactory, broker, bootstrap.Store, logger)
-	service := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{Logger: logger})
+	service := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{
+		Logger:   logger,
+		RulesDir: resolved.Storage.RulesDir(),
+	})
 	srv, err := server.New(server.Config{
 		Listen:      listen,
 		Token:       token,
