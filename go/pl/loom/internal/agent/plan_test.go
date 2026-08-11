@@ -77,6 +77,35 @@ func TestUpdatePlanPrepareValidSnapshot(t *testing.T) {
 	}
 }
 
+// Models occasionally emit evidence as a bare string instead of the
+// one-element array the schema declares; the tool normalizes it instead of
+// burning a tool round-trip on a strict decode error.
+func TestUpdatePlanPrepareToleratesStringEvidence(t *testing.T) {
+	tool, _ := newPlanTool(t)
+	args := `{"plan":[` +
+		`{"goal":"read existing code","status":"done","evidence":"read goal.go"},` +
+		`{"goal":"implement update_plan","status":"done","evidence":null},` +
+		`{"goal":"add tests","status":"in_progress"}]}`
+	prepared, err := tool.Prepare(context.Background(), planCall(t, args))
+	if err != nil {
+		t.Fatalf("Prepare error: %v", err)
+	}
+	// The canonical arguments carry the normalized array form.
+	if !strings.Contains(string(prepared.Call.Arguments), `"evidence":["read goal.go"]`) {
+		t.Fatalf("canonical arguments not normalized: %s", prepared.Call.Arguments)
+	}
+	plan, _, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
+	if err != nil {
+		t.Fatalf("canonical arguments no longer decode: %v", err)
+	}
+	if got := plan.Items[0].Evidence; len(got) != 1 || got[0] != "read goal.go" {
+		t.Fatalf("string evidence not wrapped: %+v", got)
+	}
+	if got := plan.Items[1].Evidence; len(got) != 0 {
+		t.Fatalf("null evidence = %v, want none", got)
+	}
+}
+
 func TestUpdatePlanPrepareRejectsInvalidSnapshots(t *testing.T) {
 	tool, _ := newPlanTool(t)
 	cases := map[string]string{
@@ -88,6 +117,7 @@ func TestUpdatePlanPrepareRejectsInvalidSnapshots(t *testing.T) {
 		"bad status":         `{"plan":[{"goal":"a","status":"doing"},{"goal":"b","status":"todo"}]}`,
 		"two in_progress":    `{"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"in_progress"}]}`,
 		"unknown item field": `{"plan":[{"goal":"a","status":"todo","step":"a"},{"goal":"b","status":"todo"}]}`,
+		"numeric evidence":   `{"plan":[{"goal":"a","status":"done","evidence":5},{"goal":"b","status":"todo"}]}`,
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
