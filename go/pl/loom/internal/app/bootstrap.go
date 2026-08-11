@@ -232,7 +232,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 	// unconfigured deployment must not advertise the tool to the model.
 	var browserMgr *browser.Manager
 	if resolved.Browser.Enabled {
-		browserMgr, err = browser.NewManager(resolved.Browser.ChromePath, resolved.Browser.IdleTTL, resolved.Browser.ViewportW, resolved.Browser.ViewportH)
+		browserMgr, err = browser.NewManager(resolved.Browser.ChromePath, resolved.Browser.CdpURL, resolved.Browser.IdleTTL, resolved.Browser.ViewportW, resolved.Browser.ViewportH)
 		if err != nil {
 			logger.Warn("browser tool disabled: Chrome not available", "error", err)
 			browserMgr = nil
@@ -246,7 +246,11 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 				browserMgr.Close()
 				return nil, fmt.Errorf("register browser: %w", err)
 			}
-			logger.Info("browser tool enabled", "idle_ttl", resolved.Browser.IdleTTL)
+			if resolved.Browser.CdpURL != "" {
+				logger.Info("browser tool enabled (remote CDP)", "cdp_url", resolved.Browser.CdpURL, "idle_ttl", resolved.Browser.IdleTTL)
+			} else {
+				logger.Info("browser tool enabled (local)", "idle_ttl", resolved.Browser.IdleTTL)
+			}
 		}
 	}
 
@@ -256,13 +260,14 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 	// D4); the project layer is loaded per workspace from cfg.WorkspaceRoot.
 	policy := permission.DefaultPolicy()
 	policy.Session = proc.SessionRules
+	policy.UserIntent = resolved.Approval.TrustUserURLs
 	policy = permission.AttachRules(ctx, policy, cfg.WorkspaceRoot, resolved.Storage.RulesDir(), permission.RuleLoadOptions{
 		Enabled:      resolved.Rules.Enabled,
 		Builtin:      resolved.Rules.Builtin,
 		Project:      resolved.Rules.Project,
 		ProjectAllow: resolved.Rules.ProjectAllow,
 	}, logger)
-	decider := policy.Decider(resolved.Approval.Mode)
+	decider := wirePolicy(policy, resolved.Approval.Mode)
 
 	// Skills assembly (read_skill tool + catalog prompt option) happens
 	// once here; the option is cached on the Bootstrap so prompt rebuilds
@@ -533,6 +538,7 @@ func (b *Bootstrap) ReloadPolicy(ctx context.Context) error {
 	b.policyMu.RUnlock()
 	policy := permission.DefaultPolicy()
 	policy.Session = session
+	policy.UserIntent = resolved.Approval.TrustUserURLs
 	// File and store I/O happens outside the lock; only the swap is
 	// serialized against readers.
 	policy = permission.AttachRules(ctx, policy, b.WorkspaceRoot, resolved.Storage.RulesDir(), permission.RuleLoadOptions{
@@ -544,7 +550,7 @@ func (b *Bootstrap) ReloadPolicy(ctx context.Context) error {
 	b.policyMu.Lock()
 	defer b.policyMu.Unlock()
 	*b.permissionPolicy = policy
-	b.Policy = policy.Decider(b.approvalMode)
+	b.Policy = wirePolicy(policy, b.approvalMode)
 	return nil
 }
 

@@ -80,7 +80,7 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 	if chromePath == "" {
 		t.Skip("Chrome/Chromium binary not found; skipping browser e2e test")
 	}
-	mgr, err := NewManager(chromePath, time.Minute, 1280, 720)
+	mgr, err := NewManager(chromePath, "", time.Minute, 1280, 720)
 	require.NoError(t, err)
 	t.Cleanup(mgr.Close)
 
@@ -187,11 +187,11 @@ func TestBrowserTool_E2E_FullFlow(t *testing.T) {
 	assert.Equal(t, counterRef, click.Ref)
 	assert.Equal(t, "ok", click.Status)
 
-	// Click invalidates the registry: a stale ref must now be rejected.
+	// Click invalidates the registry: the ref must now be rejected.
 	_, staleResult := env.execRaw(browserArgs{Action: "click", Ref: counterRef})
 	assert.Equal(t, domain.ToolStatusError, staleResult.Status)
 	require.NotNil(t, staleResult.Error)
-	assert.Contains(t, staleResult.Error.Message, "stale")
+	assert.Contains(t, staleResult.Error.Message, "no live snapshot refs")
 
 	// The label mutation must be visible in a fresh snapshot.
 	snapText = env.waitForSnapshot(func(s string) bool {
@@ -278,7 +278,7 @@ func TestBrowserTool_E2E_StaleRefAfterNavigate(t *testing.T) {
 	_, result := env.execRaw(browserArgs{Action: "click", Ref: ref})
 	assert.Equal(t, domain.ToolStatusError, result.Status)
 	require.NotNil(t, result.Error)
-	assert.Contains(t, result.Error.Message, "stale")
+	assert.Contains(t, result.Error.Message, "no live snapshot refs")
 }
 
 // TestBrowserTool_E2E_TypeUnicode verifies the IME text-insertion path

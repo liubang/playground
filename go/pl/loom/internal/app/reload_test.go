@@ -45,6 +45,7 @@ func TestClassifyConfigChanges(t *testing.T) {
 		wantI, wantN, wantR string
 	}{
 		{"approval mode", func(c *config.ResolvedConfig) { c.Approval.Mode = permission.ModeNever }, "approval.mode", "", ""},
+		{"approval trust user urls", func(c *config.ResolvedConfig) { c.Approval.TrustUserURLs = !c.Approval.TrustUserURLs }, "approval.trust_user_urls", "", ""},
 		{"rules", func(c *config.ResolvedConfig) { c.Rules.Builtin = true }, "rules", "", ""},
 		{"prompt", func(c *config.ResolvedConfig) { c.Prompt.Extra = "x" }, "prompt", "", ""},
 		{"mcp", func(c *config.ResolvedConfig) {

@@ -32,6 +32,8 @@ go_library(
         "remembered_store.go",
         "rules.go",
         "tool_rules.go",
+        "user_intent.go",
+        "user_intent_extract.go",
         "verdict.go",
     ],
     embedsrcs = ["builtin.json"],
@@ -57,6 +59,7 @@ go_test(
         "remembered_store_test.go",
         "rules_test.go",
         "tool_rules_test.go",
+        "user_intent_test.go",
     ],
     embed = [":permission_lib"],
 )
