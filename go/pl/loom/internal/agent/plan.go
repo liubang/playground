@@ -164,6 +164,43 @@ type updatePlanArgs struct {
 	Plan  []updatePlanArgsItem `json:"plan"`
 }
 
+// updatePlanArgsRawItem is the decoding form of a plan step: Evidence stays
+// raw so a bare string — a common model deviation from the array the schema
+// declares — can be normalized instead of rejected (a strict decode error
+// costs a whole tool round-trip, and the model almost always retries with
+// exactly this fix).
+type updatePlanArgsRawItem struct {
+	Goal     string          `json:"goal"`
+	Status   string          `json:"status"`
+	Evidence json.RawMessage `json:"evidence"`
+}
+
+type updatePlanArgsRaw struct {
+	Title string                 `json:"title"`
+	Plan  []updatePlanArgsRawItem `json:"plan"`
+}
+
+// decodePlanItemEvidence normalizes the evidence field: absent/null → nil,
+// an array of strings → as-is, a bare string → wrapped as a one-element
+// slice.
+func decodePlanItemEvidence(raw json.RawMessage) ([]string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	if raw[0] == '"' {
+		var single string
+		if err := json.Unmarshal(raw, &single); err != nil {
+			return nil, err
+		}
+		return []string{single}, nil
+	}
+	var list []string
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 // UpdatePlanTool lets the model maintain the run's task plan. Mutations go
 // through the PlanCell; the loop applies them after the tool batch, so the
 // tool itself is side-effect-free w.r.t. the run state.
@@ -257,7 +294,7 @@ func (t *UpdatePlanTool) Execute(_ context.Context, prepared domain.PreparedCall
 // unknown fields are rejected, indexes are assigned in array order, and the
 // result must satisfy Plan.Validate (at most one in_progress).
 func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, error) {
-	var args updatePlanArgs
+	var args updatePlanArgsRaw
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&args); err != nil {
@@ -272,29 +309,36 @@ func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, er
 		title = string(titleRunes[:120])
 	}
 	items := make([]domain.PlanItem, 0, len(args.Plan))
+	canonicalArgs := updatePlanArgs{Title: args.Title, Plan: make([]updatePlanArgsItem, 0, len(args.Plan))}
 	for i, raw := range args.Plan {
 		goal := strings.TrimSpace(raw.Goal)
 		if goal == "" {
 			return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput,
 				fmt.Sprintf("plan step %d: goal is required", i+1))
 		}
+		evidence, err := decodePlanItemEvidence(raw.Evidence)
+		if err != nil {
+			return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput,
+				fmt.Sprintf("plan step %d: invalid evidence", i+1), domain.WithCause(err))
+		}
 		item := domain.PlanItem{
 			Index:  i,
 			Goal:   goal,
 			Status: domain.PlanItemStatus(strings.TrimSpace(raw.Status)),
 		}
-		for _, ev := range raw.Evidence {
+		for _, ev := range evidence {
 			if trimmed := strings.TrimSpace(ev); trimmed != "" {
 				item.Evidence = append(item.Evidence, trimmed)
 			}
 		}
 		items = append(items, item)
+		canonicalArgs.Plan = append(canonicalArgs.Plan, updatePlanArgsItem{Goal: raw.Goal, Status: raw.Status, Evidence: evidence})
 	}
 	plan := domain.Plan{Title: title, Items: items}
 	if err := plan.Validate(); err != nil {
 		return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput, "invalid plan snapshot", domain.WithCause(err))
 	}
-	canonical, err := json.Marshal(args)
+	canonical, err := json.Marshal(canonicalArgs)
 	if err != nil {
 		return domain.Plan{}, nil, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
