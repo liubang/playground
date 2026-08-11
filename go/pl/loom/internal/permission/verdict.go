@@ -25,10 +25,11 @@ import (
 
 // Verdict provenance labels recorded in audits and surfaced in the UI.
 const (
-	SourceRule     = "rule"
-	SourceSession  = "session"
-	SourceDanger   = "danger"
-	SourceBaseline = "baseline"
+	SourceRule       = "rule"
+	SourceSession    = "session"
+	SourceDanger     = "danger"
+	SourceBaseline   = "baseline"
+	SourceUserIntent = "user_intent"
 )
 
 // Decider judges a prepared call (docs/PERMISSION_DESIGN.md §4.1). A nil

@@ -55,6 +55,9 @@ func classifyConfigChanges(prev, next *config.ResolvedConfig) ConfigApplyReport 
 	if prev.Approval.Mode != next.Approval.Mode {
 		r.Immediate = append(r.Immediate, "approval.mode")
 	}
+	if prev.Approval.TrustUserURLs != next.Approval.TrustUserURLs {
+		r.Immediate = append(r.Immediate, "approval.trust_user_urls")
+	}
 	if !reflect.DeepEqual(prev.Tools.PathExtra, next.Tools.PathExtra) {
 		r.Immediate = append(r.Immediate, "tools.path_extra")
 	}
@@ -217,7 +220,7 @@ func (s *SessionService) ApplyConfig(ctx context.Context, next *config.ResolvedC
 		}
 	}
 
-	policyChanged := report.hasImmediate("approval.mode") || report.hasImmediate("rules")
+	policyChanged := report.hasImmediate("approval.mode") || report.hasImmediate("approval.trust_user_urls") || report.hasImmediate("rules")
 	promptChanged := report.hasImmediate("prompt")
 	skillsDisabledChanged := report.hasImmediate("skills.disabled")
 	for _, b := range s.registry.Bootstraps() {

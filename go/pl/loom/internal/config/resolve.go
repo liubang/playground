@@ -328,6 +328,7 @@ func expandHomeDir(path string) (string, error) {
 type ResolvedBrowser struct {
 	Enabled        bool
 	ChromePath     string
+	CdpURL         string
 	IdleTTL        time.Duration
 	NavTimeout     time.Duration
 	ScreenshotQual int
@@ -361,6 +362,16 @@ func resolveBrowser(in Browser) (ResolvedBrowser, error) {
 		ViewportH:      defaultBrowserViewportH,
 	}
 	out.ChromePath = strings.TrimSpace(in.ChromePath)
+	out.CdpURL = strings.TrimSpace(in.CdpURL)
+	if out.CdpURL != "" {
+		u, err := url.Parse(out.CdpURL)
+		if err != nil || u.Host == "" {
+			return ResolvedBrowser{}, fmt.Errorf("config: browser.cdp_url: must be a valid ws:// or http:// URL, got %q", in.CdpURL)
+		}
+		if u.Scheme != "ws" && u.Scheme != "wss" && u.Scheme != "http" && u.Scheme != "https" {
+			return ResolvedBrowser{}, fmt.Errorf("config: browser.cdp_url: scheme must be ws://, wss://, http://, or https://, got %q", in.CdpURL)
+		}
+	}
 	if in.IdleTTL != "" {
 		v, err := time.ParseDuration(in.IdleTTL)
 		if err != nil {
@@ -449,6 +460,9 @@ type ResolvedRules struct {
 // ResolvedApproval is the approval section with defaults applied.
 type ResolvedApproval struct {
 	Mode permission.ApprovalMode
+	// TrustUserURLs enables the user-intent decider (auto-allow hosts the
+	// user mentioned); defaults to true.
+	TrustUserURLs bool
 }
 
 // ProviderByName returns the named provider, or nil.
@@ -583,7 +597,10 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 	if err != nil {
 		return nil, fmt.Errorf("config: %w", err)
 	}
-	approval := ResolvedApproval{Mode: mode}
+	approval := ResolvedApproval{
+		Mode:          mode,
+		TrustUserURLs: f.Approval.TrustUserURLs == nil || *f.Approval.TrustUserURLs,
+	}
 	share, err := resolveShare(f.Share)
 	if err != nil {
 		return nil, err

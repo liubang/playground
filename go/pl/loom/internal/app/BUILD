@@ -32,6 +32,7 @@ go_library(
         "session_service.go",
         "skills.go",
         "subagent_bridge.go",
+        "user_intent_policy.go",
         "workspace_registry.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/app",
