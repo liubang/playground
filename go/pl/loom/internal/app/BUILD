@@ -16,6 +16,7 @@
 # Created: 2026/07/23
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
+
 go_library(
     name = "app",
     srcs = [
@@ -48,13 +49,13 @@ go_library(
         "//go/pl/loom/internal/model/openai:openai_lib",
         "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/process:process_lib",
-        "//go/pl/loom/internal/prompt:prompt",
+        "//go/pl/loom/internal/prompt",
         "//go/pl/loom/internal/render",
-        "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "//go/pl/loom/internal/runtimeevent",
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/skill:skill_lib",
-        "//go/pl/loom/internal/tool/builtin:builtin_lib",
         "//go/pl/loom/internal/tool/browser:browser_lib",
+        "//go/pl/loom/internal/tool/builtin:builtin_lib",
         "//go/pl/loom/internal/tool/command:command_lib",
         "//go/pl/loom/internal/tool/edit:edit_lib",
         "//go/pl/loom/internal/tool/exsession:exsession_lib",
@@ -92,8 +93,8 @@ go_test(
         "//go/pl/loom/internal/fakes:fakes_lib",
         "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/process:process_lib",
-        "//go/pl/loom/internal/prompt:prompt",
-        "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "//go/pl/loom/internal/prompt",
+        "//go/pl/loom/internal/runtimeevent",
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/tool/subagent:subagent_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",

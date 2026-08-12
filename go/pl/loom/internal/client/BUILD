@@ -31,7 +31,7 @@ go_library(
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/model/sse:sse_lib",
         "//go/pl/loom/internal/permission:permission_lib",
-        "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "//go/pl/loom/internal/runtimeevent",
     ],
 )
 
@@ -49,8 +49,8 @@ go_test(
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/fakes:fakes_lib",
         "//go/pl/loom/internal/permission:permission_lib",
-        "//go/pl/loom/internal/runtimeevent:runtimeevent",
-        "//go/pl/loom/internal/server:server",
+        "//go/pl/loom/internal/runtimeevent",
+        "//go/pl/loom/internal/server",
         "//go/pl/loom/internal/session:session_lib",
     ],
 )

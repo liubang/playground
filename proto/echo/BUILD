@@ -89,8 +89,8 @@ ALL_GRPC_PROTOS = [
 cpp_grpc_library(
     name = "echo_cc_grpc",
     protos = [
-        ":message_proto",
         ":echo_proto",
+        ":message_proto",
     ],
 )
 

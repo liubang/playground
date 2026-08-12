@@ -15,8 +15,8 @@ cpp_proto_library(
 proto_library(
     name = "master_proto",
     srcs = [
-        "master.proto",
         "common.proto",
+        "master.proto",
     ],
 )
 
@@ -41,8 +41,8 @@ cpp_proto_library(
 proto_library(
     name = "unit_server_proto",
     srcs = [
-        "unit_server.proto",
         "common.proto",
+        "unit_server.proto",
     ],
 )
 
@@ -54,8 +54,8 @@ cpp_proto_library(
 proto_library(
     name = "data_proto",
     srcs = [
-        "data.proto",
         "common.proto",
+        "data.proto",
     ],
 )
 
