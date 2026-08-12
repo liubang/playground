@@ -64,6 +64,7 @@ type rawRunCmdArgs struct {
 	SandboxPermissions *string            `json:"sandbox_permissions"`
 	NeedsNetwork       *bool              `json:"needs_network"`
 	NeedsGUIOpen       *bool              `json:"needs_gui_open"`
+	WritablePaths      *[]string          `json:"writable_paths"`
 	Justification      *string            `json:"justification"`
 }
 
@@ -77,6 +78,7 @@ type runCmdArgs struct {
 	SandboxPermissions string            `json:"sandbox_permissions"`
 	NeedsNetwork       bool              `json:"needs_network,omitempty"`
 	NeedsGUIOpen       bool              `json:"needs_gui_open,omitempty"`
+	WritablePaths      []string          `json:"writable_paths,omitempty"`
 	Justification      string            `json:"justification,omitempty"`
 }
 
@@ -86,6 +88,7 @@ const (
 	sandboxUseDefault       = "use_default"
 	sandboxRequireEscalated = "require_escalated"
 	maxJustificationBytes   = 240
+	maxWritablePaths        = 8
 )
 
 type runCmdOutput struct {
@@ -180,12 +183,15 @@ func NewRunCmdToolWithArtifacts(
 			"and denies writes outside the workspace and temp dir. " +
 			"When a task-critical command fails (or hangs until the timeout) because the sandbox denied OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), " +
 			"PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule. " +
+			"When a command fails because the sandbox denied a WRITE OUTSIDE THE WORKSPACE (a tool dropping logs/config/state in its own directory, e.g. ~/Library/Logs/<tool> or ~/.<tool>), " +
+			"PREFER retrying the same command with writable_paths=[that directory]: after a lightweight approval it runs INSIDE the sandbox with exactly those directories additionally writable, and the user can remember it as a scoped rule. " +
+			"writable_paths accepts absolute paths ('~/' is expanded), never names a credential location (.ssh, .aws, keychains, ...) or one of its ancestors, and combines freely with needs_network/needs_gui_open. " +
 			"When a command fails because it tried to OPEN A GUI APPLICATION (macOS 'open' a URL/app, Apple Events — LaunchServices/NSOSStatusErrorDomain errors), retry with needs_gui_open=true: after approval it runs INSIDE the sandbox with GUI-open granted. Use the same flag to proactively show the user a web page (open <url>). " +
-			"Reserve sandbox_permissions='require_escalated' (with a short justification question) for failures network/gui cannot explain — writes outside the workspace, TTY needs, credential files — it runs OUTSIDE the sandbox with the full user environment after explicit approval (R3). " +
+			"Reserve sandbox_permissions='require_escalated' (with a short justification question) for failures the scoped flags cannot explain — TTY needs, credential files the sandbox hides, Security-framework TLS — it runs OUTSIDE the sandbox with the full user environment after explicit approval (R3). " +
 			"Do not give up or ask the user to run it themselves before offering the matching approval. " +
-			"needs_network and needs_gui_open must NOT be combined with require_escalated (escalated runs already have full network and GUI access). " +
+			"needs_network, needs_gui_open and writable_paths must NOT be combined with require_escalated (escalated runs already have full network, GUI and write access). " +
 			"'justification' is an optional short note shown to the user at approval time; it is REQUIRED with sandbox_permissions='require_escalated' and simply informational otherwise.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"needs_network":{"type":"boolean"},"needs_gui_open":{"type":"boolean"},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"needs_network":{"type":"boolean"},"needs_gui_open":{"type":"boolean"},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096}},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"stdout_preview_truncated":{"type":"boolean"},"stderr_preview_truncated":{"type":"boolean"},"stdout_artifact_truncated":{"type":"boolean"},"stderr_artifact_truncated":{"type":"boolean"},"stdout_artifact":{"type":"object"},"stderr_artifact":{"type":"object"},"stdout_artifact_path":{"type":"string"},"stderr_artifact_path":{"type":"string"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"},"note":{"type":"string"}},"required":["stdout","stderr","stdout_bytes","stderr_bytes","stdout_preview_truncated","stderr_preview_truncated","stdout_artifact_truncated","stderr_artifact_truncated","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
@@ -250,10 +256,11 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 		// The typed execution contract the policy layer classifies on
 		// (REVIEW M17/A2); covered by the signature below.
 		ExecRequest: &domain.ExecRequest{
-			Argv:         append([]string{args.Program}, args.Args...),
-			Escalated:    args.SandboxPermissions == sandboxRequireEscalated,
-			NeedsNetwork: args.NeedsNetwork,
-			NeedsGUIOpen: args.NeedsGUIOpen,
+			Argv:          append([]string{args.Program}, args.Args...),
+			Escalated:     args.SandboxPermissions == sandboxRequireEscalated,
+			NeedsNetwork:  args.NeedsNetwork,
+			NeedsGUIOpen:  args.NeedsGUIOpen,
+			WritablePaths: append([]string(nil), args.WritablePaths...),
 		},
 	}
 	// Sign before rendering the description so the displayed args_hash
@@ -263,14 +270,17 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 	return prepared, nil
 }
 
-// riskForArgs elevates to R3 only when the call escapes the default
-// sandbox (require_escalated runs outside it with full user privileges).
-// Shell invocations keep the base risk: the sandbox confines them the
-// same as plain argv, and the permission layer's danger screen analyzes
-// the script AST (per-subcommand screening, pipe-into-shell and
-// sensitive-redirect detection) — composition alone is not a risk.
+// riskForArgs elevates to R3 when the call crosses the default sandbox's
+// boundary: require_escalated runs outside it with full user privileges,
+// and writable_paths widens its write boundary beyond the workspace (the
+// path validator no longer bounds the blast radius, so policy — not the
+// sandbox default — is the gate). Shell invocations keep the base risk:
+// the sandbox confines them the same as plain argv, and the permission
+// layer's danger screen analyzes the script AST (per-subcommand
+// screening, pipe-into-shell and sensitive-redirect detection) —
+// composition alone is not a risk.
 func riskForArgs(args runCmdArgs, base domain.RiskLevel) domain.RiskLevel {
-	if args.SandboxPermissions == sandboxRequireEscalated {
+	if args.SandboxPermissions == sandboxRequireEscalated || len(args.WritablePaths) > 0 {
 		return domain.R3
 	}
 	return base
@@ -316,6 +326,17 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	// explicit Unsandboxed grant on every escalated ask it approves, so a
 	// zero grant here can only come from a grant-less allow (L0) — and L0
 	// trust must never be silently promoted to L2 unsandboxed execution.
+	//
+	// The grant is policy-produced and therefore trusted, but it is NOT
+	// covered by the ArgsHash signature — re-validate the writable paths
+	// against the sensitive-location boundary here so a misassembled or
+	// hand-rolled verdict can never open a credential directory to writes
+	// (defense in depth; the cheap check runs once per execution).
+	for _, p := range prepared.Grant.WritablePaths {
+		if workspacepkg.CoversSensitiveLocation(filepath.Clean(p)) {
+			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "grant writable path covers a credential location"))
+		}
+	}
 	grant := process.Grant{
 		Unsandboxed:   prepared.Grant.Unsandboxed,
 		NetworkFull:   prepared.Grant.NetworkFull,
@@ -471,6 +492,9 @@ func validateArgs(
 	if raw.NeedsGUIOpen != nil {
 		args.NeedsGUIOpen = *raw.NeedsGUIOpen
 	}
+	if raw.WritablePaths != nil {
+		args.WritablePaths = append([]string(nil), (*raw.WritablePaths)...)
+	}
 	if raw.Justification != nil {
 		args.Justification = strings.TrimSpace(*raw.Justification)
 	}
@@ -561,6 +585,12 @@ func validateCanonicalArgs(
 	}
 	args.Env = canonicalEnv
 
+	writable, err := validateWritablePaths(args.WritablePaths)
+	if err != nil {
+		return runCmdArgs{}, resolvedWorkingDir{}, err
+	}
+	args.WritablePaths = writable
+
 	switch args.SandboxPermissions {
 	case sandboxUseDefault:
 		// A justification is accepted on any call: it is only an
@@ -572,8 +602,8 @@ func validateCanonicalArgs(
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
 		}
 	case sandboxRequireEscalated:
-		if args.NeedsNetwork || args.NeedsGUIOpen {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "needs_network/needs_gui_open cannot be combined with sandbox_permissions=require_escalated (escalated runs already have full network and GUI access; use the needs_* flags for the sandboxed path)")
+		if args.NeedsNetwork || args.NeedsGUIOpen || len(args.WritablePaths) > 0 {
+			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "needs_network/needs_gui_open/writable_paths cannot be combined with sandbox_permissions=require_escalated (escalated runs already have full network, GUI and write access; use the scoped flags for the sandboxed path)")
 		}
 		if args.Justification == "" {
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "justification is required with sandbox_permissions=require_escalated (ask the user a short yes/no question)")
@@ -585,6 +615,59 @@ func validateCanonicalArgs(
 		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("sandbox_permissions must be %q or %q", sandboxUseDefault, sandboxRequireEscalated))
 	}
 	return args, resolvedDir, nil
+}
+
+// validateWritablePaths canonicalizes the model-declared writable paths
+// and enforces the grant boundary: absolute (a leading "~/" expands
+// against the user's home), never a sensitive location or one of its
+// ancestors (granting "~" must not open ~/.ssh to a plain write), never
+// the filesystem root. The result is sorted and deduplicated so the
+// canonical arguments — and with them the ArgsHash signature — are
+// deterministic across Prepare and Execute.
+func validateWritablePaths(raw []string) ([]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	if len(raw) > maxWritablePaths {
+		return nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("writable_paths exceeds %d entries", maxWritablePaths))
+	}
+	home, _ := os.UserHomeDir()
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, p := range raw {
+		if len(p) == 0 || len(p) > maxWorkingDirBytes {
+			return nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("writable_paths entry is empty or exceeds %d bytes", maxWorkingDirBytes))
+		}
+		if strings.ContainsRune(p, 0) {
+			return nil, domain.NewError(domain.ErrInvalidInput, "writable_paths entry contains null byte")
+		}
+		expanded := p
+		if expanded == "~" {
+			expanded = home
+		} else if strings.HasPrefix(expanded, "~/") {
+			expanded = filepath.Join(home, strings.TrimPrefix(expanded, "~/"))
+		}
+		if expanded != p && home == "" {
+			return nil, domain.NewError(domain.ErrInvalidInput, "writable_paths cannot expand ~: home directory is unavailable")
+		}
+		if !filepath.IsAbs(expanded) {
+			return nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("writable_paths entry must be an absolute path: %q", domain.TruncateForErrorEcho(p)))
+		}
+		canonical := workspacepkg.Canonicalize(expanded)
+		if canonical == string(filepath.Separator) {
+			return nil, domain.NewError(domain.ErrSecurity, "writable_paths cannot name the filesystem root")
+		}
+		if workspacepkg.CoversSensitiveLocation(canonical) {
+			return nil, domain.NewError(domain.ErrSecurity, fmt.Sprintf("writable_paths entry %q is or covers a credential location; such paths can never be granted — use sandbox_permissions='require_escalated' with a justification instead", domain.TruncateForErrorEcho(p)))
+		}
+		if _, dup := seen[canonical]; dup {
+			continue
+		}
+		seen[canonical] = struct{}{}
+		out = append(out, canonical)
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 func resolveWorkingDir(
@@ -699,7 +782,9 @@ func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
 	}
 	const networkAdvice = "If this failure is caused by missing OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), " +
 		"PREFER retrying the SAME command with needs_network=true — after a lightweight approval it runs INSIDE the sandbox with network granted. " +
-		"Only when the failure is NOT network-related (write access outside the workspace/temp dir, TTY, credential files like SSO tokens the sandbox hides), " +
+		"If it is caused by a denied WRITE OUTSIDE the workspace/temp dir (a tool dropping logs, config or state in its own directory), " +
+		"PREFER retrying the SAME command with writable_paths=[that directory] — after a lightweight approval it runs INSIDE the sandbox with exactly those directories writable. " +
+		"Only when neither scoped flag explains the failure (TTY, credential files like SSO tokens the sandbox hides), " +
 		"retry with sandbox_permissions='require_escalated' and a short justification — after approval it runs OUTSIDE the sandbox with the full user environment. " +
 		"Do not give up or ask the user to run it themselves before offering the matching approval."
 	lower := strings.ToLower(stderr)
@@ -757,7 +842,7 @@ func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
 	}
 	otherPatterns := []string{
 		"address family not supported", "operation not permitted", // socket/bind/listen denials
-		"read-only file system", // write outside workspace/temp dir
+		"read-only file system", "permission denied", // write outside workspace/temp dir
 	}
 	for _, p := range otherPatterns {
 		if strings.Contains(lower, p) {
@@ -1082,6 +1167,9 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall, root strin
 		if args.Justification != "" {
 			parts = append(parts, "note["+args.Justification+"]")
 		}
+	}
+	if len(args.WritablePaths) > 0 {
+		parts = append(parts, "writable=["+strings.Join(args.WritablePaths, ", ")+"]")
 	}
 
 	// Surface workspace-external absolute paths referenced by argv (e.g.

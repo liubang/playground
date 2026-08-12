@@ -181,3 +181,45 @@ func IsSensitiveAbsolute(path string) bool {
 	}
 	return false
 }
+
+// CoversSensitiveLocation reports whether granting WRITE access to the
+// canonical absolute path would also reach a sensitive location — because
+// the path IS sensitive (IsSensitiveAbsolute) or is an ANCESTOR of one
+// (granting "~" would otherwise open ~/.ssh/authorized_keys to a plain
+// file-write, which the seatbelt read/unlink denies do not cover). It is
+// the gate for writable-path grant requests (run_cmd writable_paths):
+// such grants must only ever name ordinary data directories.
+func CoversSensitiveLocation(path string) bool {
+	if !filepath.IsAbs(path) {
+		return false
+	}
+	if IsSensitiveAbsolute(path) {
+		return true
+	}
+	clean := filepath.Clean(path)
+	if clean == string(filepath.Separator) {
+		// The filesystem root is an ancestor of every credential
+		// location; isUnderRoot's prefix check cannot express it.
+		return true
+	}
+	// Note: universally-sensitive COMPONENTS (.git, .env, ...) are
+	// positional, not absolute — an ancestor grant cannot be structurally
+	// checked against them here. The structural ancestor check covers the
+	// KNOWN absolute credential locations below (granting "~" must not
+	// open ~/.ssh).
+	home := SensitiveHome()
+	if home == "" {
+		return false
+	}
+	for _, rel := range sensitiveHomeSubpaths {
+		if isUnderRoot(filepath.Join(home, rel), clean) {
+			return true
+		}
+	}
+	for _, rel := range sensitiveHomeLiterals {
+		if isUnderRoot(filepath.Join(home, rel), clean) {
+			return true
+		}
+	}
+	return false
+}

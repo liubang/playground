@@ -669,6 +669,13 @@ type RunCmdCall struct {
 	// command drives macOS GUI applications (open / Apple Events) from
 	// inside the sandbox (docs/BROWSER_DESIGN.md §4).
 	NeedsGUIOpen bool
+	// WritablePaths lists the canonical absolute paths the model declared
+	// via writable_paths: additional directories writable INSIDE the
+	// sandbox — the scoped alternative to escalation for commands that
+	// drop logs/config/state outside the workspace. Coverage is checked
+	// path-by-path (AllowGrantCovers): a lesser grant never answers a
+	// wider write request.
+	WritablePaths []string
 	// ShellUnwrapped reports that Argv was recovered from a simple
 	// sh -c script (process.UnwrapSimpleShell). Execution still goes
 	// through the shell; the unwrap only feeds classification.
@@ -708,10 +715,11 @@ func (info RunCmdCall) ShellCommandArgvs() ([][]string, bool) {
 func ExecInfoOf(call domain.PreparedCall) (RunCmdCall, bool) {
 	if call.ExecRequest != nil && len(call.ExecRequest.Argv) > 0 {
 		info := RunCmdCall{
-			Argv:         append([]string(nil), call.ExecRequest.Argv...),
-			Escalated:    call.ExecRequest.Escalated,
-			NeedsNetwork: call.ExecRequest.NeedsNetwork,
-			NeedsGUIOpen: call.ExecRequest.NeedsGUIOpen,
+			Argv:          append([]string(nil), call.ExecRequest.Argv...),
+			Escalated:     call.ExecRequest.Escalated,
+			NeedsNetwork:  call.ExecRequest.NeedsNetwork,
+			NeedsGUIOpen:  call.ExecRequest.NeedsGUIOpen,
+			WritablePaths: append([]string(nil), call.ExecRequest.WritablePaths...),
 		}
 		classifyShell(&info)
 		return info, true
@@ -727,16 +735,18 @@ func ParseRunCmdCall(raw json.RawMessage) (RunCmdCall, bool) {
 		SandboxPermissions string   `json:"sandbox_permissions"`
 		NeedsNetwork       bool     `json:"needs_network"`
 		NeedsGUIOpen       bool     `json:"needs_gui_open"`
+		WritablePaths      []string `json:"writable_paths"`
 	}
 	if err := json.Unmarshal(raw, &args); err != nil || args.Program == "" {
 		return RunCmdCall{}, false
 	}
 	argv := append([]string{args.Program}, args.Args...)
 	info := RunCmdCall{
-		Argv:         argv,
-		Escalated:    args.SandboxPermissions == "require_escalated",
-		NeedsNetwork: args.NeedsNetwork,
-		NeedsGUIOpen: args.NeedsGUIOpen,
+		Argv:          argv,
+		Escalated:     args.SandboxPermissions == "require_escalated",
+		NeedsNetwork:  args.NeedsNetwork,
+		NeedsGUIOpen:  args.NeedsGUIOpen,
+		WritablePaths: append([]string(nil), args.WritablePaths...),
 	}
 	classifyShell(&info)
 	return info, true
