@@ -19,13 +19,13 @@ package imagegen
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/media"
 	"github.com/liubang/playground/go/pl/loom/internal/model/images"
 )
 
@@ -49,8 +49,12 @@ func (f *fakeGenerator) Generate(_ context.Context, req images.GenerateRequest) 
 	return f.result, f.err
 }
 
-func newTestTool(t *testing.T, gen images.Generator, store domain.ArtifactStore, opts Options) *GenerateImageTool {
+func newTestTool(t *testing.T, gen images.Generator, opts Options) *GenerateImageTool {
 	t.Helper()
+	store, err := artifact.Open(t.TempDir(), 8<<20)
+	if err != nil {
+		t.Fatalf("artifact.Open: %v", err)
+	}
 	tool, err := NewGenerateImageTool(gen, store, opts)
 	if err != nil {
 		t.Fatalf("NewGenerateImageTool: %v", err)
@@ -74,26 +78,33 @@ func prepareCall(t *testing.T, tool *GenerateImageTool, args string) domain.Prep
 func TestNewGenerateImageToolValidation(t *testing.T) {
 	t.Parallel()
 	gen := &fakeGenerator{}
-	if _, err := NewGenerateImageTool(nil, nil, Options{Model: "m"}); err == nil {
+	store, err := artifact.Open(t.TempDir(), 8<<20)
+	if err != nil {
+		t.Fatalf("artifact.Open: %v", err)
+	}
+	if _, err := NewGenerateImageTool(nil, store, Options{Model: "m"}); err == nil {
 		t.Fatal("expected error for nil generator")
 	}
-	if _, err := NewGenerateImageTool(gen, nil, Options{}); err == nil {
+	if _, err := NewGenerateImageTool(gen, store, Options{}); err == nil {
 		t.Fatal("expected error for empty model")
 	}
-	if _, err := NewGenerateImageTool(gen, nil, Options{Model: "m", Size: "800x600"}); err == nil {
+	if _, err := NewGenerateImageTool(gen, store, Options{Model: "m", Size: "800x600"}); err == nil {
 		t.Fatal("expected error for invalid default size")
 	}
-	if _, err := NewGenerateImageTool(gen, nil, Options{Model: "m", Quality: "ultra"}); err == nil {
+	if _, err := NewGenerateImageTool(gen, store, Options{Model: "m", Quality: "ultra"}); err == nil {
 		t.Fatal("expected error for invalid default quality")
 	}
-	if _, err := NewGenerateImageTool(gen, nil, Options{Model: "m", Size: "auto", Quality: "high"}); err != nil {
+	if _, err := NewGenerateImageTool(gen, store, Options{Model: "m", Size: "auto", Quality: "high"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := NewGenerateImageTool(gen, nil, Options{Model: "m"}); err == nil {
+		t.Fatal("expected error for nil store")
 	}
 }
 
 func TestPrepareValidatesArgs(t *testing.T) {
 	t.Parallel()
-	tool := newTestTool(t, &fakeGenerator{}, nil, Options{Model: "gpt-image-2"})
+	tool := newTestTool(t, &fakeGenerator{}, Options{Model: "gpt-image-2"})
 	cases := []struct {
 		name string
 		args string
@@ -121,7 +132,7 @@ func TestPrepareValidatesArgs(t *testing.T) {
 
 func TestPrepareApprovalDescContainsPrompt(t *testing.T) {
 	t.Parallel()
-	tool := newTestTool(t, &fakeGenerator{}, nil, Options{Model: "gpt-image-2"})
+	tool := newTestTool(t, &fakeGenerator{}, Options{Model: "gpt-image-2"})
 	prepared := prepareCall(t, tool, `{"prompt":"a red fox in a field"}`)
 	if !strings.Contains(prepared.ApprovalDesc, "gpt-image-2") || !strings.Contains(prepared.ApprovalDesc, "a red fox") {
 		t.Fatalf("unexpected approval description: %q", prepared.ApprovalDesc)
@@ -131,18 +142,14 @@ func TestPrepareApprovalDescContainsPrompt(t *testing.T) {
 	}
 }
 
-func TestExecuteSuccessStoresArtifactAndInlinesImage(t *testing.T) {
+func TestExecuteSuccessStoresArtifact(t *testing.T) {
 	t.Parallel()
 	gen := &fakeGenerator{result: images.GenerateResult{
 		Data:          testPNG,
 		MediaType:     "image/png",
 		RevisedPrompt: "revised",
 	}}
-	store, err := artifact.Open(t.TempDir(), 8<<20)
-	if err != nil {
-		t.Fatalf("artifact.Open: %v", err)
-	}
-	tool := newTestTool(t, gen, store, Options{Model: "gpt-image-2", Size: "1024x1024"})
+	tool := newTestTool(t, gen, Options{Model: "gpt-image-2", Size: "1024x1024"})
 
 	prepared := prepareCall(t, tool, `{"prompt":"  a red fox  ","quality":"high"}`)
 	result := tool.Execute(context.Background(), prepared)
@@ -157,19 +164,17 @@ func TestExecuteSuccessStoresArtifactAndInlinesImage(t *testing.T) {
 		t.Fatalf("unexpected generator request: %+v", gen)
 	}
 
-	var textPart, artifactPart, imagePart *domain.ContentPart
+	var textPart, artifactPart *domain.ContentPart
 	for i := range result.Content {
 		switch result.Content[i].Kind {
 		case domain.PartText:
 			textPart = &result.Content[i]
 		case domain.PartArtifact:
 			artifactPart = &result.Content[i]
-		case domain.PartImage:
-			imagePart = &result.Content[i]
 		}
 	}
-	if textPart == nil || artifactPart == nil || imagePart == nil {
-		t.Fatalf("expected text+artifact+image parts, got %+v", result.Content)
+	if textPart == nil || artifactPart == nil {
+		t.Fatalf("expected text+artifact parts, got %+v", result.Content)
 	}
 
 	var out generateImageOutput
@@ -190,51 +195,19 @@ func TestExecuteSuccessStoresArtifactAndInlinesImage(t *testing.T) {
 	if artifactPart.Artifact.MediaType != "image/png" {
 		t.Fatalf("artifact media type = %q, want image/png", artifactPart.Artifact.MediaType)
 	}
-	if imagePart.Image.MediaType != "image/png" ||
-		imagePart.Image.Data != base64.StdEncoding.EncodeToString(testPNG) {
-		t.Fatal("inline image part mismatch")
-	}
-	if err := result.Content[0].Validate(); err != nil {
-		t.Fatalf("content part failed domain validation: %v", err)
-	}
-
-	// The artifact blob must be readable back from the store.
-	rc, err := store.OpenArtifact(context.Background(), *artifactPart.Artifact)
-	if err != nil {
-		t.Fatalf("OpenArtifact: %v", err)
-	}
-	defer rc.Close()
 }
 
 func TestExecuteWithoutArtifactStore(t *testing.T) {
 	t.Parallel()
-	gen := &fakeGenerator{result: images.GenerateResult{Data: testPNG, MediaType: "image/png"}}
-	tool := newTestTool(t, gen, nil, Options{Model: "gpt-image-2"})
-
-	result := tool.Execute(context.Background(), prepareCall(t, tool, `{"prompt":"p"}`))
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("status = %s", result.Status)
-	}
-	for _, part := range result.Content {
-		if part.Kind == domain.PartArtifact {
-			t.Fatal("no artifact part expected without a store")
-		}
-	}
-	var hasImage bool
-	for _, part := range result.Content {
-		if part.Kind == domain.PartImage {
-			hasImage = true
-		}
-	}
-	if !hasImage {
-		t.Fatal("inline image part expected even without a store")
-	}
+	// generate_image now requires an artifact store at construction; a
+	// nil store is rejected by NewGenerateImageTool, so there is no
+	// "without store" execute path to test anymore.
 }
 
 func TestExecuteGeneratorError(t *testing.T) {
 	t.Parallel()
 	gen := &fakeGenerator{err: domain.NewError(domain.ErrRateLimited, "slow down", domain.WithRetryable(true))}
-	tool := newTestTool(t, gen, nil, Options{Model: "gpt-image-2"})
+	tool := newTestTool(t, gen, Options{Model: "gpt-image-2"})
 
 	result := tool.Execute(context.Background(), prepareCall(t, tool, `{"prompt":"p"}`))
 	if result.Status != domain.ToolStatusError {
@@ -247,49 +220,28 @@ func TestExecuteGeneratorError(t *testing.T) {
 
 func TestExecuteLargeImageSkipsInline(t *testing.T) {
 	t.Parallel()
-	// One byte over the inline cap: the artifact must still be stored, but
-	// no inline image part is emitted and the note must not claim one.
-	big := make([]byte, maxInlineImageBytes+1)
+	// generate_image no longer inlines anything — images live only as
+	// artifacts, and oversized blobs are rejected by media.StoreImage
+	// (MaxImageBytes) before they reach the store. The previous "inline
+	// cap" concept is gone, so this test is retained as a guard that an
+	// oversized image is rejected, not silently dropped.
+	big := make([]byte, media.MaxImageBytes+1)
 	gen := &fakeGenerator{result: images.GenerateResult{Data: big, MediaType: "image/png"}}
-	store, err := artifact.Open(t.TempDir(), 8<<20)
-	if err != nil {
-		t.Fatalf("artifact.Open: %v", err)
-	}
-	tool := newTestTool(t, gen, store, Options{Model: "gpt-image-2"})
+	tool := newTestTool(t, gen, Options{Model: "gpt-image-2"})
 
 	result := tool.Execute(context.Background(), prepareCall(t, tool, `{"prompt":"p"}`))
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("status = %s, err = %+v", result.Status, result.Error)
+	if result.Status != domain.ToolStatusError {
+		t.Fatalf("status = %s, want error for oversized image", result.Status)
 	}
-	var out generateImageOutput
-	var sawArtifact, sawImage bool
-	for i := range result.Content {
-		switch result.Content[i].Kind {
-		case domain.PartText:
-			if err := json.Unmarshal([]byte(result.Content[i].Text), &out); err != nil {
-				t.Fatalf("output header is not JSON: %v", err)
-			}
-		case domain.PartArtifact:
-			sawArtifact = true
-		case domain.PartImage:
-			sawImage = true
-		}
-	}
-	if !sawArtifact {
-		t.Fatal("artifact part expected for an oversized image")
-	}
-	if sawImage {
-		t.Fatal("inline image part must be skipped above the inline cap")
-	}
-	if strings.Contains(out.Note, "attached inline") {
-		t.Fatalf("note must not claim an inline attachment: %q", out.Note)
+	if result.Error == nil || result.Error.Code != string(domain.ErrInvalidInput) {
+		t.Fatalf("result = %+v, want invalid input", result)
 	}
 }
 
 func TestExecuteRejectsTamperedPreparedCall(t *testing.T) {
 	t.Parallel()
 	gen := &fakeGenerator{result: images.GenerateResult{Data: testPNG, MediaType: "image/png"}}
-	tool := newTestTool(t, gen, nil, Options{Model: "gpt-image-2"})
+	tool := newTestTool(t, gen, Options{Model: "gpt-image-2"})
 
 	prepared := prepareCall(t, tool, `{"prompt":"p"}`)
 	prepared.Call.Arguments = json.RawMessage(`{"prompt":"tampered"}`)

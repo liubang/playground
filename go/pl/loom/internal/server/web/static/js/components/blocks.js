@@ -357,8 +357,10 @@ export function histCompletion(r) {
     if (Number.isFinite(ms) && ms >= 0) durationMs = ms
   }
   const images = content.filter((c) => c.kind === 'image' && c.image).map((c) => c.image)
+  // model_only 的 artifact（view_image）不进展示通道：文本头已包含路径/
+  // 类型/尺寸等审计信息，图片本体只给模型看（展示是 present_image 的职责）。
   const artifacts = content
-    .filter((c) => c.kind === 'artifact_ref' && c.artifact)
+    .filter((c) => c.kind === 'artifact_ref' && c.artifact && !c.model_only)
     .map((c) => c.artifact)
   return {
     status,

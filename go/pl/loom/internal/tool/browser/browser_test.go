@@ -26,6 +26,7 @@ import (
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/media"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -276,7 +277,7 @@ func TestNewBrowserTool_NilManager(t *testing.T) {
 
 func TestNewBrowserTool_Defaults(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, defaultNavTimeoutMs*time.Millisecond, tool.navTimeout)
 	assert.Equal(t, defaultScreenshotQuality, tool.screenshotQual)
@@ -284,17 +285,29 @@ func TestNewBrowserTool_Defaults(t *testing.T) {
 
 func TestNewBrowserTool_CustomValues(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 60*time.Second, 90)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 60*time.Second, 90)
 	assert.NoError(t, err)
 	assert.Equal(t, 60*time.Second, tool.navTimeout)
 	assert.Equal(t, 90, tool.screenshotQual)
+}
+
+func TestNewBrowserTool_NilArtifacts(t *testing.T) {
+	// NewBrowserTool requires a non-nil artifact store: screenshots are
+	// persisted as artifacts and materialized at the egress.
+	mgr := newTestManager(t)
+	_, err := NewBrowserTool(mgr, nil, 0, 0)
+	assert.Error(t, err)
+	var agentErr *domain.AgentError
+	if assert.ErrorAs(t, err, &agentErr) {
+		assert.Equal(t, domain.ErrInvalidInput, agentErr.Code)
+	}
 }
 
 // --- Prepare / verify tests ---
 
 func TestBrowserTool_Prepare_Navigate(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "navigate", URL: "https://example.com"})
@@ -309,7 +322,7 @@ func TestBrowserTool_Prepare_Navigate(t *testing.T) {
 
 func TestBrowserTool_Prepare_Screenshot_NoURL(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "screenshot"})
@@ -320,7 +333,7 @@ func TestBrowserTool_Prepare_Screenshot_NoURL(t *testing.T) {
 
 func TestBrowserTool_Prepare_InvalidAction(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "invalid"})
@@ -330,7 +343,7 @@ func TestBrowserTool_Prepare_InvalidAction(t *testing.T) {
 
 func TestBrowserTool_Prepare_NameMismatch(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "wrong_name", browserArgs{Action: "screenshot"})
@@ -340,7 +353,7 @@ func TestBrowserTool_Prepare_NameMismatch(t *testing.T) {
 
 func TestBrowserTool_VerifyPreparedCall(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "navigate", URL: "https://example.com"})
@@ -359,7 +372,7 @@ func TestBrowserTool_VerifyPreparedCall(t *testing.T) {
 
 func TestBrowserTool_Definition(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	def := tool.Definition()
@@ -376,7 +389,7 @@ func TestBrowserTool_Definition(t *testing.T) {
 // are R2 (no approval prompt in any mode); navigate/type are R3.
 func TestBrowserTool_Prepare_RiskTiers(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	cases := []struct {
@@ -408,7 +421,7 @@ func TestBrowserTool_Prepare_RiskTiers(t *testing.T) {
 
 func TestBrowserTool_ConcurrentSafe(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	// Browser tool is NOT concurrent-safe: operations are serialized
@@ -572,7 +585,7 @@ func TestFindChrome(t *testing.T) {
 
 func TestBrowserTool_Execute_Close(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "close"})
@@ -587,7 +600,7 @@ func TestBrowserTool_Execute_Close(t *testing.T) {
 
 func TestBrowserTool_Execute_TamperedHash(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "close"})
@@ -604,7 +617,7 @@ func TestBrowserTool_Execute_TamperedHash(t *testing.T) {
 
 func TestBrowserTool_Execute_InvalidArgs(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	// Build a prepared call with invalid JSON arguments.
@@ -670,26 +683,19 @@ func (a *mockStagedArtifact) Commit(ctx context.Context) (domain.ArtifactRef, er
 }
 
 func TestStoreScreenshot_NilArtifacts(t *testing.T) {
-	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
-	assert.NoError(t, err)
-
-	// When artifacts store is nil, storeScreenshot reports no artifact.
-	_, ok := tool.storeScreenshot(context.Background(), []byte("png-bytes"), "image/png")
-	assert.False(t, ok)
+	// media.StoreImage on a nil store returns an error and no ref.
+	_, err := media.StoreImage(context.Background(), nil, []byte("png-bytes"))
+	assert.Error(t, err)
 }
 
 func TestStoreScreenshot_WithStore(t *testing.T) {
-	mgr := newTestManager(t)
 	store := &mockArtifactStore{}
-	tool, err := NewBrowserTool(mgr, store, 0, 0)
-	assert.NoError(t, err)
 
 	// Raw bytes are persisted (not base64 text) and the media type is set
 	// so the UI can render the image.
 	raw := []byte("\x89PNG\r\n\x1a\n fake png bytes")
-	ref, ok := tool.storeScreenshot(context.Background(), raw, "image/png")
-	assert.True(t, ok)
+	ref, err := media.StoreImage(context.Background(), store, raw)
+	assert.NoError(t, err)
 	assert.NotZero(t, ref.ID)
 	assert.Equal(t, int64(len(raw)), ref.Size)
 	assert.Equal(t, "image/png", ref.MediaType)
@@ -697,13 +703,9 @@ func TestStoreScreenshot_WithStore(t *testing.T) {
 }
 
 func TestStoreScreenshot_StoreFailure(t *testing.T) {
-	mgr := newTestManager(t)
 	store := &mockArtifactStore{failOn: true}
-	tool, err := NewBrowserTool(mgr, store, 0, 0)
-	assert.NoError(t, err)
-
-	_, ok := tool.storeScreenshot(context.Background(), []byte("data"), "image/png")
-	assert.False(t, ok)
+	_, err := media.StoreImage(context.Background(), store, []byte("data"))
+	assert.Error(t, err)
 }
 
 // --- refRegistry tests ---
@@ -805,7 +807,7 @@ func TestAXNode_String(t *testing.T) {
 
 func TestSerializeAXTree_Empty(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	output := tool.serializeAXTree(nil)
@@ -853,7 +855,7 @@ func TestIsSkippable(t *testing.T) {
 
 func TestBrowserTool_Prepare_Snapshot(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "snapshot"})
@@ -865,7 +867,7 @@ func TestBrowserTool_Prepare_Snapshot(t *testing.T) {
 
 func TestBrowserTool_Prepare_Click(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "click", Ref: "[1]"})
@@ -876,7 +878,7 @@ func TestBrowserTool_Prepare_Click(t *testing.T) {
 
 func TestBrowserTool_Prepare_Click_NoRef(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "click"})
@@ -886,7 +888,7 @@ func TestBrowserTool_Prepare_Click_NoRef(t *testing.T) {
 
 func TestBrowserTool_Prepare_Type(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "type", Ref: "[1]", Text: "hello"})
@@ -897,7 +899,7 @@ func TestBrowserTool_Prepare_Type(t *testing.T) {
 
 func TestBrowserTool_Prepare_Type_NoText(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	call := newToolCall(t, "browser", browserArgs{Action: "type", Ref: "[1]"})
@@ -907,7 +909,7 @@ func TestBrowserTool_Prepare_Type_NoText(t *testing.T) {
 
 func TestBrowserTool_Execute_ClickStaleRef(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	// No snapshot taken yet — no live refs at all.
@@ -924,7 +926,7 @@ func TestBrowserTool_Execute_ClickStaleRef(t *testing.T) {
 
 func TestBrowserTool_Execute_TypeStaleRef(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	// No snapshot taken yet — no live refs at all.
@@ -945,7 +947,7 @@ func TestBrowserTool_Execute_TypeStaleRef(t *testing.T) {
 // lookup (invalid_input).
 func TestBrowserTool_Execute_ClickRefWithoutBrackets(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	tool.registry.replace(map[string]*axNode{
@@ -969,7 +971,7 @@ func TestBrowserTool_Execute_ClickRefWithoutBrackets(t *testing.T) {
 // instead of being sent into a snapshot-and-retry loop.
 func TestBrowserTool_Execute_ClickUnknownRef_ListsLiveRefs(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	tool.registry.replace(map[string]*axNode{
@@ -991,7 +993,7 @@ func TestBrowserTool_Execute_ClickUnknownRef_ListsLiveRefs(t *testing.T) {
 
 func TestBrowserTool_Definition_IncludesSnapshotClickType(t *testing.T) {
 	mgr := newTestManager(t)
-	tool, err := NewBrowserTool(mgr, nil, 0, 0)
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 0, 0)
 	assert.NoError(t, err)
 
 	def := tool.Definition()

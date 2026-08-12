@@ -134,12 +134,31 @@ type ContentPart struct {
 	Artifact   *ArtifactRef      `json:"artifact,omitempty"`
 	Reasoning  *ReasoningContent `json:"reasoning,omitempty"`
 	Image      *ImageContent     `json:"image,omitempty"`
+	// PresentOnly marks a display-only image artifact (present_image): the
+	// UI renders it, but the egress materialization skips it — the model
+	// never sees the image, so it costs no context and no tokens.
+	PresentOnly bool `json:"present_only,omitempty"`
+	// ModelOnly marks a model-bound image artifact (view_image): the egress
+	// materialization resolves it for the model, but display channels must
+	// not render the image itself — a compact text reference (path, media
+	// type, dimensions from the accompanying header) is enough for the
+	// user to audit what the model saw. Display is present_image's job.
+	ModelOnly bool `json:"model_only,omitempty"`
 }
 
 // Validate ensures the ContentPart is well-formed.
 func (p ContentPart) Validate() error {
 	if p.PartIndex < 0 {
 		return fmt.Errorf("part_index must be non-negative")
+	}
+	if p.PresentOnly && p.Kind != PartArtifact {
+		return fmt.Errorf("present_only is only valid on artifact parts")
+	}
+	if p.ModelOnly && p.Kind != PartArtifact {
+		return fmt.Errorf("model_only is only valid on artifact parts")
+	}
+	if p.PresentOnly && p.ModelOnly {
+		return fmt.Errorf("present_only and model_only are mutually exclusive")
 	}
 	switch p.Kind {
 	case PartText:
