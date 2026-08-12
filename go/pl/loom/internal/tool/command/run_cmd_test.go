@@ -1032,6 +1032,144 @@ func realPath(t *testing.T, path string) string {
 	return resolved
 }
 
+// --- writable_paths (scoped write widening) ---
+
+func TestValidateWritablePaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	canonicalHome := workspacepkg.Canonicalize(home)
+	ordinary := filepath.Join(canonicalHome, "Library", "Logs", "dsx")
+
+	t.Run("canonicalizes expands tilde sorts and dedups", func(t *testing.T) {
+		got, err := validateWritablePaths([]string{ordinary + "/", "~/Library/Logs/dsx", "/tmp"})
+		if err != nil {
+			t.Fatalf("validateWritablePaths() error = %v", err)
+		}
+		want := []string{workspacepkg.Canonicalize("/tmp"), ordinary}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("validateWritablePaths() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("rejects relative paths", func(t *testing.T) {
+		if _, err := validateWritablePaths([]string{"logs/dsx"}); err == nil {
+			t.Fatal("relative writable_paths entry must fail")
+		}
+	})
+
+	t.Run("rejects the filesystem root", func(t *testing.T) {
+		if _, err := validateWritablePaths([]string{"/"}); err == nil {
+			t.Fatal("filesystem root must fail")
+		}
+	})
+
+	t.Run("rejects sensitive locations", func(t *testing.T) {
+		for _, p := range []string{
+			filepath.Join(canonicalHome, ".ssh"),
+			filepath.Join(canonicalHome, ".aws", "credentials"),
+			filepath.Join(canonicalHome, ".netrc"),
+		} {
+			if _, err := validateWritablePaths([]string{p}); err == nil {
+				t.Errorf("writable_paths entry %q must fail (sensitive location)", p)
+			}
+		}
+	})
+
+	t.Run("rejects ancestors of sensitive locations", func(t *testing.T) {
+		// Granting "~" would open ~/.ssh/authorized_keys to a plain
+		// write, which the seatbelt read/unlink denies do not cover.
+		for _, p := range []string{"~", canonicalHome, filepath.Join(canonicalHome, ".config")} {
+			if _, err := validateWritablePaths([]string{p}); err == nil {
+				t.Errorf("writable_paths entry %q must fail (covers a credential location)", p)
+			}
+		}
+	})
+
+	t.Run("rejects overlong lists", func(t *testing.T) {
+		tooMany := make([]string, maxWritablePaths+1)
+		for i := range tooMany {
+			tooMany[i] = filepath.Join("/tmp", string(rune('a'+i)))
+		}
+		if _, err := validateWritablePaths(tooMany); err == nil {
+			t.Fatal("overlong writable_paths must fail")
+		}
+	})
+}
+
+func TestRunCmdToolPrepareWritablePaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	validator, _ := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{Sandbox: process.ExplicitTestSandbox{}})
+	tool := newTool(t, validator, runner)
+	outside := filepath.Join(workspacepkg.Canonicalize(home), "Library", "Logs", "dsx")
+
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Program:       stringPtr("dsx"),
+		Args:          &[]string{"login"},
+		WritablePaths: &[]string{"~/Library/Logs/dsx"},
+		NeedsNetwork:  boolPtr(true),
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.Risk != domain.R3 {
+		t.Errorf("risk = %v, want R3 (write-boundary crossing)", prepared.Risk)
+	}
+	if prepared.ExecRequest == nil || len(prepared.ExecRequest.WritablePaths) != 1 ||
+		prepared.ExecRequest.WritablePaths[0] != outside {
+		t.Fatalf("ExecRequest.WritablePaths = %+v, want [%q]", prepared.ExecRequest, outside)
+	}
+	if !strings.Contains(prepared.ApprovalDesc, "writable=["+outside+"]") {
+		t.Errorf("approval desc %q must render the writable paths", prepared.ApprovalDesc)
+	}
+	if !strings.Contains(prepared.ApprovalDesc, "network=requested-in-sandbox") {
+		t.Errorf("approval desc %q must keep the network declaration", prepared.ApprovalDesc)
+	}
+}
+
+func TestRunCmdToolPrepareWritablePathsRejectsEscalatedCombo(t *testing.T) {
+	validator, _ := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{Sandbox: process.ExplicitTestSandbox{}})
+	tool := newTool(t, validator, runner)
+	escalated := sandboxRequireEscalated
+	_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Program:            stringPtr("dsx"),
+		SandboxPermissions: &escalated,
+		WritablePaths:      &[]string{"/tmp/dsx-logs"},
+		Justification:      stringPtr("x"),
+	}))
+	if err == nil {
+		t.Fatal("writable_paths combined with require_escalated must fail")
+	}
+}
+
+// TestRunCmdToolExecuteRejectsSensitiveGrant is the defense-in-depth gate:
+// the grant is policy-produced and NOT covered by the ArgsHash signature,
+// so Execute re-validates it — a hand-rolled verdict must never open a
+// credential directory to writes.
+func TestRunCmdToolExecuteRejectsSensitiveGrant(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	python := ensurePython3(t)
+	validator, _ := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: fixedLookPath(python),
+	})
+	tool := newTool(t, validator, runner)
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Program: stringPtr("python3"),
+		Args:    &[]string{"-c", "print('hi')"},
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	prepared.Grant = domain.ExecGrant{WritablePaths: []string{filepath.Join(workspacepkg.Canonicalize(home), ".ssh")}}
+	result := tool.Execute(context.Background(), prepared)
+	assertToolResultError(t, result, domain.ToolStatusError, domain.ErrSecurity)
+}
+
 func newToolCall[T any](t *testing.T, args T) domain.ToolCall {
 	t.Helper()
 	return domain.ToolCall{

@@ -286,6 +286,13 @@ type ExecRequest struct {
 	// (open / Apple Events) from inside the sandbox
 	// (docs/BROWSER_DESIGN.md §4).
 	NeedsGUIOpen bool `json:"needs_gui_open,omitempty"`
+	// WritablePaths are additional canonical absolute paths the model
+	// declares the command needs to write INSIDE the sandbox (beyond the
+	// workspace and temp dir) — the scoped alternative to escalation for
+	// tools that drop logs/config/state outside the workspace. The
+	// producing tool validates them (absolute, canonicalized, never a
+	// sensitive location or its ancestor) and signs the outcome.
+	WritablePaths []string `json:"writable_paths,omitempty"`
 }
 
 // RecoverySpec describes durable evidence that can reconcile an interrupted

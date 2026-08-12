@@ -18,6 +18,9 @@
 package permission
 
 import (
+	"path/filepath"
+	"strings"
+
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
@@ -230,9 +233,10 @@ func (d RuleDecider) evaluateShellCommands(info RunCmdCall) *domain.Verdict {
 // model cannot tell its escalation was refused (silent-downgrade
 // fail-retry loop). Only an explicit unsandboxed grant covers an
 // escalation; only a network (or unsandboxed) grant covers needs_network;
-// only a gui_open (or unsandboxed) grant covers needs_gui_open. Declared
-// capabilities are checked independently so a call may declare several
-// at once (needs_network + needs_gui_open).
+// only a gui_open (or unsandboxed) grant covers needs_gui_open; every
+// declared writable path must sit under a granted writable path (or an
+// unsandboxed grant). Declared capabilities are checked independently so
+// a call may declare several at once (needs_network + writable_paths).
 func AllowGrantCovers(grant domain.ExecGrant, info RunCmdCall) bool {
 	if info.Escalated && !grant.Unsandboxed {
 		return false
@@ -243,7 +247,29 @@ func AllowGrantCovers(grant domain.ExecGrant, info RunCmdCall) bool {
 	if info.NeedsGUIOpen && !grant.Unsandboxed && !grant.GUIOpen {
 		return false
 	}
+	if !grant.Unsandboxed {
+		for _, requested := range info.WritablePaths {
+			if !writablePathCovered(grant.WritablePaths, requested) {
+				return false
+			}
+		}
+	}
 	return true
+}
+
+// writablePathCovered reports whether the requested path equals or sits
+// under one of the granted paths. Both sides are canonical absolute paths
+// (validated by the producing tool and the rule parser), so a clean+
+// prefix check is sound.
+func writablePathCovered(granted []string, requested string) bool {
+	clean := filepath.Clean(requested)
+	for _, g := range granted {
+		root := filepath.Clean(g)
+		if clean == root || strings.HasPrefix(clean, root+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // DangerDecider intercepts commands matching the built-in dangerous
@@ -298,12 +324,17 @@ func (d DangerDecider) evaluate(_ domain.PreparedCall, ctx evalContext) *domain.
 
 // DeclaredGrant computes the grant covering exactly the capabilities a
 // call declared: unsandboxed for escalations, otherwise the declared
-// network/gui widenings (zero grant when nothing was declared).
+// network/gui/writable-path widenings (zero grant when nothing was
+// declared).
 func DeclaredGrant(info RunCmdCall) domain.ExecGrant {
 	if info.Escalated {
 		return domain.ExecGrant{Unsandboxed: true}
 	}
-	return domain.ExecGrant{NetworkFull: info.NeedsNetwork, GUIOpen: info.NeedsGUIOpen}
+	return domain.ExecGrant{
+		NetworkFull:   info.NeedsNetwork,
+		GUIOpen:       info.NeedsGUIOpen,
+		WritablePaths: append([]string(nil), info.WritablePaths...),
+	}
 }
 
 // SessionDecider consults prefixes remembered from interactive "allow
@@ -524,15 +555,26 @@ func unlessDangerousWebFetch(call domain.PreparedCall) bool {
 //     (the DangerDecider already asked or denied them).
 //
 // declaredGrantReason renders the baseline reason for a capability
-// declaration, covering combined declarations (network + gui_open).
+// declaration, covering combined declarations (network + gui_open +
+// writable paths).
 func declaredGrantReason(info RunCmdCall) string {
-	switch {
-	case info.NeedsNetwork && info.NeedsGUIOpen:
-		return "command declares it needs outbound network AND GUI application access (macOS open / Apple Events); both granted inside the sandbox on approval"
-	case info.NeedsGUIOpen:
-		return "command declares it needs to open GUI applications (macOS open / Apple Events, granted inside the sandbox on approval)"
-	default:
+	var parts []string
+	if info.NeedsNetwork {
+		parts = append(parts, "outbound network")
+	}
+	if info.NeedsGUIOpen {
+		parts = append(parts, "GUI application access (macOS open / Apple Events)")
+	}
+	if len(info.WritablePaths) > 0 {
+		parts = append(parts, "write access to "+strings.Join(info.WritablePaths, ", "))
+	}
+	switch len(parts) {
+	case 0:
 		return "command declares it needs outbound network (sandboxed, network granted on approval)"
+	case 1:
+		return "command declares it needs " + parts[0] + " (granted inside the sandbox on approval)"
+	default:
+		return "command declares it needs " + strings.Join(parts, " AND ") + " (all granted inside the sandbox on approval)"
 	}
 }
 
@@ -550,6 +592,12 @@ func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, info RunCmdCall) *dom
 			// path is a user-layer rule carrying grant.gui_open.
 			v.Decision, v.Reason = domain.DecisionDeny,
 				"never mode: GUI-open (macOS open / Apple Events) is denied unattended; add a user-layer rule with grant.gui_open for this command prefix, or run it without GUI access"
+		case len(info.WritablePaths) > 0:
+			// Widening the sandbox's write boundary is a user decision:
+			// an unattended run must never acquire it silently. The only
+			// unattended path is a user-layer rule carrying grant.write.
+			v.Decision, v.Reason = domain.DecisionDeny,
+				"never mode: declared writable paths outside the workspace are denied unattended; add a user-layer rule with grant.write for this command prefix, or keep the writes inside the workspace"
 		case info.NeedsNetwork:
 			v.Decision, v.Grant, v.Reason = domain.DecisionAllow, domain.ExecGrant{NetworkFull: true}, "never mode: declared network need granted"
 		default:
@@ -571,6 +619,16 @@ func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, info RunCmdCall) *dom
 			// silent grant would hand to any declared call.
 			v.Decision, v.Grant = domain.DecisionAsk, DeclaredGrant(info)
 			v.Reason = declaredGrantReason(info)
+		case len(info.WritablePaths) > 0:
+			// Widening the write boundary asks in every interactive mode
+			// (the sandbox can no longer bound the blast radius), but the
+			// ask is SCOPED: approval grants exactly the declared paths
+			// inside the sandbox, and "allow always" remembers a
+			// writable-path rule instead of full trust — so the escalation
+			// path stops being the only answer for log/config-dropping
+			// CLIs.
+			v.Decision, v.Grant = domain.DecisionAsk, DeclaredGrant(info)
+			v.Reason = declaredGrantReason(info)
 		case info.NeedsNetwork:
 			// The sandbox keeps credential paths unreadable, so granting
 			// declared network needs inside it adds no exfiltration value.
@@ -588,7 +646,7 @@ func (d BaselineDecider) runCmdBaseline(v *domain.Verdict, info RunCmdCall) *dom
 			// executes outside the sandbox exactly once.
 			v.Decision, v.Grant = domain.DecisionAsk, domain.ExecGrant{Unsandboxed: true}
 			v.Reason = "command requests execution OUTSIDE the sandbox (full environment, network, credentials)"
-		case info.NeedsNetwork || info.NeedsGUIOpen:
+		case info.NeedsNetwork || info.NeedsGUIOpen || len(info.WritablePaths) > 0:
 			// The ask carries the declared grants: approving this prompt
 			// runs the command sandboxed with exactly those capabilities,
 			// exactly once.
