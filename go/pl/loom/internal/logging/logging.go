@@ -76,7 +76,7 @@ func NewFileLogger(logsDir string, level slog.Leveler, quotas Quotas) (*slog.Log
 		dir: logsDir, prefix: "loom", now: time.Now,
 		maxFile: quotas.fileCap(), maxTotal: quotas.totalCap(),
 	}
-	if _, err := w.Write(nil); err != nil {
+	if err := w.ensureOpen(); err != nil {
 		return nil, err
 	}
 	return slog.New(NewGlogHandler(w, level)), nil
@@ -97,6 +97,18 @@ func NewGlogHandler(w io.Writer, level slog.Leveler) slog.Handler {
 
 // --- glog-style handler ---
 
+// bufPool recycles bytes.Buffers across Handle calls to avoid per-record
+// allocation. sync.Pool is concurrency-safe; each goroutine borrows an
+// independent buffer, builds the record, writes it, and returns the
+// buffer before the next Handle call on the same goroutine.
+var bufPool = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
+}
+
+// sourceCache memoizes PC→"file:line" strings so the runtime.CallersFrames
+// symbolization cost is paid once per call site.
+var sourceCache sync.Map // uintptr → string
+
 type glogHandler struct {
 	w      io.Writer
 	level  slog.Leveler
@@ -109,7 +121,10 @@ func (h *glogHandler) Enabled(_ context.Context, l slog.Level) bool {
 }
 
 func (h *glogHandler) Handle(_ context.Context, r slog.Record) error {
-	var b bytes.Buffer
+	b := bufPool.Get().(*bytes.Buffer)
+	b.Reset()
+	defer bufPool.Put(b)
+
 	b.WriteByte(levelChar(r.Level))
 	b.WriteString(r.Time.Format("0102 15:04:05.000000"))
 	b.WriteString("  ")
@@ -122,12 +137,16 @@ func (h *glogHandler) Handle(_ context.Context, r slog.Record) error {
 	}
 	r.Attrs(func(a slog.Attr) bool {
 		b.WriteByte(' ')
-		writeAttr(&b, h.groups, a)
+		writeAttr(b, h.groups, a)
 		return true
 	})
 	b.WriteByte('\n')
-	_, err := h.w.Write(b.Bytes())
-	return err
+	if _, err := h.w.Write(b.Bytes()); err != nil {
+		// Best-effort fallback: the record must not vanish silently.
+		// stderr may also fail, but there is nothing more to do.
+		fmt.Fprint(os.Stderr, b.String())
+	}
+	return nil
 }
 
 func (h *glogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
@@ -169,8 +188,13 @@ func sourceRef(pc uintptr) string {
 	if pc == 0 {
 		return "???:0"
 	}
+	if s, ok := sourceCache.Load(pc); ok {
+		return s.(string)
+	}
 	frame, _ := runtime.CallersFrames([]uintptr{pc}).Next()
-	return filepath.Base(frame.File) + ":" + strconv.Itoa(frame.Line)
+	s := filepath.Base(frame.File) + ":" + strconv.Itoa(frame.Line)
+	sourceCache.Store(pc, s)
+	return s
 }
 
 // writeAttr renders one attribute as key=value, flattening groups with dots
@@ -178,25 +202,32 @@ func sourceRef(pc uintptr) string {
 func writeAttr(b *bytes.Buffer, groups []string, a slog.Attr) {
 	a.Value = a.Value.Resolve()
 	if a.Value.Kind() == slog.KindGroup {
+		// Build the combined group path once for all children.
+		combined := make([]string, 0, len(groups)+1)
+		combined = append(combined, groups...)
+		combined = append(combined, a.Key)
 		for _, ga := range a.Value.Group() {
-			writeAttr(b, appendKey(groups, a.Key), ga)
+			writeAttr(b, combined, ga)
 		}
 		return
 	}
-	key := strings.Join(appendKey(groups, a.Key), ".")
+	// Write "group.sub.key" directly to b without allocating a slice.
+	for i, g := range groups {
+		if i > 0 {
+			b.WriteByte('.')
+		}
+		b.WriteString(g)
+	}
+	if len(groups) > 0 {
+		b.WriteByte('.')
+	}
+	b.WriteString(a.Key)
+	b.WriteByte('=')
 	v := a.Value.String()
 	if v == "" || strings.ContainsAny(v, " \t\n\"") {
 		v = strconv.Quote(v)
 	}
-	b.WriteString(key)
-	b.WriteByte('=')
 	b.WriteString(v)
-}
-
-func appendKey(groups []string, key string) []string {
-	out := make([]string, 0, len(groups)+1)
-	out = append(out, groups...)
-	return append(out, key)
 }
 
 // --- date/size-rotated file writer with a total-size quota ---
@@ -220,33 +251,40 @@ type dailyWriter struct {
 	f        *os.File
 }
 
-func (w *dailyWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	today := w.now().Format("2006-01-02")
-	switch {
-	case w.f == nil || today != w.day:
-		w.day, w.seq = today, 0
-		if err := w.openCurrent(); err != nil {
-			return 0, err
-		}
-		// 进程重启后当天的文件可能已达上限：直接推进到序号文件。
-		for w.maxFile > 0 && w.size >= w.maxFile {
-			w.seq++
-			if err := w.openCurrent(); err != nil {
-				return 0, err
+func (w *dailyWriter) Write(p []byte) (n int, err error) {
+	var gcCands []gcCandidate
+	var current string
+	func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		today := w.now().Format("2006-01-02")
+		switch {
+		case w.f == nil || today != w.day:
+			w.day, w.seq = today, 0
+			if err = w.openCurrent(); err != nil {
+				return
 			}
+			// 进程重启后当天的文件可能已达上限：直接推进到序号文件。
+			for w.maxFile > 0 && w.size >= w.maxFile {
+				w.seq++
+				if err = w.openCurrent(); err != nil {
+					return
+				}
+			}
+			gcCands = w.gcCollect()
+		case w.maxFile > 0 && w.size > 0 && w.size+int64(len(p)) > w.maxFile:
+			w.seq++
+			if err = w.openCurrent(); err != nil {
+				return
+			}
+			gcCands = w.gcCollect()
 		}
-		w.gc()
-	case w.maxFile > 0 && w.size > 0 && w.size+int64(len(p)) > w.maxFile:
-		w.seq++
-		if err := w.openCurrent(); err != nil {
-			return 0, err
-		}
-		w.gc()
-	}
-	n, err := w.f.Write(p)
-	w.size += int64(n)
+		n, err = w.f.Write(p)
+		w.size += int64(n)
+		current = w.current
+	}()
+	// Sweep old files outside the lock; the current file is never removed.
+	w.gcSweep(gcCands, current)
 	return n, err
 }
 
@@ -279,22 +317,54 @@ func (w *dailyWriter) openCurrent() error {
 	return nil
 }
 
-// gc deletes the oldest log files until the directory total fits maxTotal.
-// The currently open file is never removed.
-func (w *dailyWriter) gc() {
+// ensureOpen opens today's log file eagerly. Used at startup so
+// path/permission problems surface before the first log line.
+func (w *dailyWriter) ensureOpen() error {
+	var gcCands []gcCandidate
+	var current string
+	if err := func() error {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		today := w.now().Format("2006-01-02")
+		w.day, w.seq = today, 0
+		if err := w.openCurrent(); err != nil {
+			return err
+		}
+		for w.maxFile > 0 && w.size >= w.maxFile {
+			w.seq++
+			if err := w.openCurrent(); err != nil {
+				return err
+			}
+		}
+		gcCands = w.gcCollect()
+		current = w.current
+		return nil
+	}(); err != nil {
+		return err
+	}
+	w.gcSweep(gcCands, current)
+	return nil
+}
+
+// gcCandidate represents a log file eligible for garbage collection.
+type gcCandidate struct {
+	name    string
+	size    int64
+	modTime time.Time
+}
+
+// gcCollect reads the directory and returns candidates for deletion,
+// sorted oldest-first. Returns nil when no GC is needed.
+// Must be called under w.mu.
+func (w *dailyWriter) gcCollect() []gcCandidate {
 	if w.maxTotal <= 0 {
-		return
+		return nil
 	}
 	entries, err := os.ReadDir(w.dir)
 	if err != nil {
-		return
+		return nil
 	}
-	type cand struct {
-		name    string
-		size    int64
-		modTime time.Time
-	}
-	var files []cand
+	var files []gcCandidate
 	var total int64
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasPrefix(e.Name(), w.prefix+".") || !strings.HasSuffix(e.Name(), ".log") {
@@ -304,15 +374,29 @@ func (w *dailyWriter) gc() {
 		if err != nil {
 			continue
 		}
-		files = append(files, cand{e.Name(), info.Size(), info.ModTime()})
+		files = append(files, gcCandidate{e.Name(), info.Size(), info.ModTime()})
 		total += info.Size()
 	}
+	if total <= w.maxTotal {
+		return nil
+	}
 	sort.Slice(files, func(i, j int) bool { return files[i].modTime.Before(files[j].modTime) })
+	return files
+}
+
+// gcSweep deletes files from the candidate list until the total fits
+// maxTotal. The current file is never removed. Called without holding
+// w.mu; current is captured under the lock to avoid races.
+func (w *dailyWriter) gcSweep(files []gcCandidate, current string) {
+	var total int64
+	for _, c := range files {
+		total += c.size
+	}
 	for _, c := range files {
 		if total <= w.maxTotal {
 			return
 		}
-		if c.name == w.current {
+		if c.name == current {
 			continue
 		}
 		if err := os.Remove(filepath.Join(w.dir, c.name)); err == nil {
