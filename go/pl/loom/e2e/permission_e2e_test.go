@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -226,6 +227,69 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 		data, err := os.ReadFile(filepath.Join(f.ws, "note.txt"))
 		if err != nil || string(data) != "hello" {
 			t.Fatalf("write tool did not create the file: %v %q", err, data)
+		}
+	})
+
+	// A write outside the workspace roots crosses the confinement
+	// boundary: it prompts even in unless-dangerous mode, and the
+	// approval executes the write.
+	t.Run("external write asks and executes on approval", func(t *testing.T) {
+		f := newPermissionFixture(t)
+		outside := filepath.Join(f.home, "notes", "a.txt")
+		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "write", map[string]any{
+			"path":    outside,
+			"content": "external",
+		}))
+		if got := len(approver.Requests()); got != 1 {
+			t.Fatalf("approver requests = %d, want 1 (boundary-crossing writes always ask)", got)
+		}
+		data, err := os.ReadFile(outside)
+		if err != nil || string(data) != "external" {
+			t.Fatalf("approved external write did not land: %v %q", err, data)
+		}
+	})
+
+	// A writable-path rule answers the same call without prompting.
+	t.Run("path rule auto-allows external write", func(t *testing.T) {
+		f := newPermissionFixture(t)
+		outside := filepath.Join(f.home, "notes", "b.txt")
+		rulesDir := t.TempDir()
+		ruleJSON := `{"paths":[{"path":` + strconv.Quote(filepath.Join(f.home, "notes")) + `,"decision":"allow","justification":"notes vault"}]}`
+		if err := os.WriteFile(filepath.Join(rulesDir, "paths.json"), []byte(ruleJSON), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		set, errs := permission.LoadRuleSets(rulesDir, "", permission.LoadOptions{})
+		if len(errs) != 0 {
+			t.Fatalf("load rules: %v", errs)
+		}
+		rulePolicy := permission.DefaultPolicy()
+		rulePolicy.Rules = set
+
+		_, approver := f.drive(t, rulePolicy, permission.ModeUnlessDangerous, toolCall(t, "write", map[string]any{
+			"path":    outside,
+			"content": "ruled",
+		}))
+		if got := len(approver.Requests()); got != 0 {
+			t.Fatalf("approver requests = %d, want 0 (the path rule covers the write)", got)
+		}
+		if data, err := os.ReadFile(outside); err != nil || string(data) != "ruled" {
+			t.Fatalf("rule-covered external write did not land: %v %q", err, data)
+		}
+	})
+
+	// Sensitive locations never reach the approver: the write tool refuses
+	// at Prepare, before any policy evaluation.
+	t.Run("sensitive external write fails before approval", func(t *testing.T) {
+		f := newPermissionFixture(t)
+		run, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "write", map[string]any{
+			"path":    filepath.Join(f.home, ".ssh", "config"),
+			"content": "Host evil",
+		}))
+		if got := len(approver.Requests()); got != 0 {
+			t.Fatalf("approver requests = %d, want 0 (sensitive paths must fail at Prepare)", got)
+		}
+		if text := transcriptText(run); !strings.Contains(text, "sensitive") {
+			t.Fatalf("transcript missing the sensitive-location denial:\n%s", text)
 		}
 	})
 

@@ -79,15 +79,17 @@ const TrustUnsandboxed = permission.TrustUnsandboxed
 
 // RememberedRule is the categorical memory created by an interactive
 // approval: argv prefixes (with grant) for run_cmd — one per subcommand
-// for a composed shell command — an exact host for web_fetch, or a bare
-// tool name for the eligible fixed-blast-radius tools
+// for a composed shell command — an exact host for web_fetch, a writable
+// directory for boundary-crossing file writes, or a bare tool name for
+// the eligible fixed-blast-radius tools
 // (permission.ToolMemoryEligible). Label is the display form;
-// Prefixes/Host/Tool carry the structured form for persistence (never
-// re-split from the label).
+// Prefixes/Host/Path/Tool carry the structured form for persistence
+// (never re-split from the label).
 type RememberedRule struct {
 	Label    string
 	Prefixes [][]string
 	Host     string
+	Path     string
 	Tool     string
 	Grant    domain.ExecGrant
 }
@@ -106,13 +108,16 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 	// Build a minimal PreparedCall so DeriveMemoryShape's fallback parsing
 	// (ExecInfoOf/URLInfoOf) can resolve the request shape from raw
 	// arguments — the typed ExecRequest/URLRequest are nil here because
-	// this is the approval-UI boundary, not the Prepare path.
+	// this is the approval-UI boundary, not the Prepare path. The write
+	// contract is synthesized explicitly (an absolute path argument at the
+	// approval boundary IS a boundary write); deciders never guess it.
 	call := domain.PreparedCall{
 		Call: domain.ToolCall{
 			ID:        domain.NewToolCallID(),
 			Name:      toolName,
 			Arguments: arguments,
 		},
+		WriteRequest: permission.WriteRequestFromRawArgs(arguments),
 	}
 	shape := permission.DeriveMemoryShape(call)
 	switch shape.Kind {
@@ -142,6 +147,13 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 			return RememberedRule{}, false
 		}
 		return RememberedRule{Label: host, Host: host}, true
+
+	case permission.MemoryPath:
+		dir, remembered := r.session.RememberPath(shape.Dir)
+		if !remembered {
+			return RememberedRule{}, false
+		}
+		return RememberedRule{Label: dir, Path: dir}, true
 
 	case permission.MemoryTool:
 		name, remembered := r.session.RememberTool(shape.ToolName)
@@ -186,6 +198,10 @@ func (r *RuleApprover) matches(call domain.PreparedCall) bool {
 	if urlInfo, ok := permission.URLInfoOf(call); ok {
 		return r.session.MatchDomain(urlInfo.Host)
 	}
+	// WriteRequest outside the roots: match remembered writable dirs.
+	if writeInfo, ok := permission.WriteInfoOf(call); ok {
+		return r.session.MatchPath(writeInfo.Path)
+	}
 	// No typed request: tool-name memory.
 	return r.session.MatchTool(call.Call.Name)
 }
@@ -215,6 +231,7 @@ func ApprovalRulePreview(toolName string, arguments json.RawMessage) (preview st
 			Name:      toolName,
 			Arguments: arguments,
 		},
+		WriteRequest: permission.WriteRequestFromRawArgs(arguments),
 	}
 	shape := permission.DeriveMemoryShape(call)
 	// Escalated exec calls offer only "allow once" and "always trust

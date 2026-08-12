@@ -27,6 +27,7 @@ go_library(
         "memory.go",
         "net_hosts.go",
         "packs.go",
+        "path_rules.go",
         "policy.go",
         "policy_trust_other.go",
         "policy_trust_unix.go",
@@ -48,6 +49,7 @@ go_library(
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/process:process_lib",
+        "//go/pl/loom/internal/workspace:workspace_lib",
         "@org_modernc_sqlite//:sqlite",
     ],
 )
@@ -62,6 +64,7 @@ go_test(
         "memory_test.go",
         "net_hosts_test.go",
         "packs_test.go",
+        "path_rules_test.go",
         "policy_test.go",
         "remembered_store_test.go",
         "rules_test.go",
@@ -69,4 +72,8 @@ go_test(
         "user_intent_test.go",
     ],
     embed = [":permission_lib"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/workspace:workspace_lib",
+    ],
 )

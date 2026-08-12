@@ -20,11 +20,14 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 func argsJSON(t *testing.T, program string, args ...string) json.RawMessage {
@@ -372,6 +375,54 @@ func TestRememberToolByName(t *testing.T) {
 	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{Call: editCall})
 	if err != nil || decision != domain.DecisionAsk || inner.calls != 1 {
 		t.Fatalf("edit call must delegate: decision=%v inner=%d", decision, inner.calls)
+	}
+}
+
+// TestRememberWritePath covers path memory for boundary-crossing writes:
+// the target's parent directory is remembered and later writes anywhere
+// under it auto-approve; writes elsewhere keep prompting.
+func TestRememberWritePath(t *testing.T) {
+	inner := &recordingApprover{}
+	rules := NewRuleApprover(inner, permission.NewSessionRules())
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "notes", "a.txt")
+	args := json.RawMessage(`{"path":` + strconv.Quote(target) + `,"content":"x"}`)
+	rule, ok := rules.RememberCall("write", args, "")
+	wantDir := workspacepkg.Canonicalize(filepath.Join(dir, "notes"))
+	if !ok || rule.Path != wantDir || rule.Label != wantDir {
+		t.Fatalf("remember = %+v ok=%v, want path %q", rule, ok, wantDir)
+	}
+
+	write := func(path string) domain.PreparedCall {
+		raw, _ := json.Marshal(map[string]string{"path": path})
+		return domain.PreparedCall{
+			Call:         domain.ToolCall{ID: domain.NewToolCallID(), Name: "write", Arguments: raw},
+			WriteRequest: &domain.WriteRequest{Path: workspacepkg.Canonicalize(path), OutsideRoots: true},
+		}
+	}
+	// Under the remembered directory: auto-approve without prompting.
+	decision, err := rules.RequestApproval(context.Background(), domain.ApprovalRequest{Call: write(filepath.Join(dir, "notes", "b.txt"))})
+	if err != nil || decision != domain.DecisionAllow || inner.calls != 0 {
+		t.Fatalf("remembered dir: decision=%v err=%v inner=%d", decision, err, inner.calls)
+	}
+	// Anywhere else still prompts.
+	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{Call: write(filepath.Join(t.TempDir(), "c.txt"))})
+	if err != nil || decision != domain.DecisionAsk || inner.calls != 1 {
+		t.Fatalf("unremembered dir: decision=%v err=%v inner=%d", decision, err, inner.calls)
+	}
+}
+
+func TestApprovalRulePreviewWritePath(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "notes", "a.txt")
+	preview, _, ok := ApprovalRulePreview("write", json.RawMessage(`{"path":`+strconv.Quote(target)+`,"content":"x"}`))
+	want := workspacepkg.Canonicalize(filepath.Dir(target))
+	if !ok || preview != want {
+		t.Fatalf("write preview = %q ok=%v, want %q", preview, ok, want)
+	}
+	// Workspace-relative paths are confined writes: no approval, no preview.
+	if _, _, ok := ApprovalRulePreview("write", json.RawMessage(`{"path":"x.go"}`)); ok {
+		t.Fatal("relative write paths must not have a path rule preview")
 	}
 }
 

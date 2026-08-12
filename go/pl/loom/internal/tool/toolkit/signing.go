@@ -43,14 +43,15 @@ import (
 // URLRequest, process tools include ExecRequest, simple tools include
 // only the base fields.
 type Fingerprint struct {
-	CallID      string              `json:"call_id"`
-	ToolName    string              `json:"tool_name"`
-	Arguments   json.RawMessage     `json:"arguments"`
-	ReadPaths   []string            `json:"read_paths,omitempty"`
-	WritePaths  []string            `json:"write_paths,omitempty"`
-	Risk        domain.RiskLevel    `json:"risk"`
-	ExecRequest *domain.ExecRequest `json:"exec_request,omitempty"`
-	URLRequest  *domain.URLRequest  `json:"url_request,omitempty"`
+	CallID       string               `json:"call_id"`
+	ToolName     string               `json:"tool_name"`
+	Arguments    json.RawMessage      `json:"arguments"`
+	ReadPaths    []string             `json:"read_paths,omitempty"`
+	WritePaths   []string             `json:"write_paths,omitempty"`
+	Risk         domain.RiskLevel     `json:"risk"`
+	ExecRequest  *domain.ExecRequest  `json:"exec_request,omitempty"`
+	URLRequest   *domain.URLRequest   `json:"url_request,omitempty"`
+	WriteRequest *domain.WriteRequest `json:"write_request,omitempty"`
 }
 
 // Signer is a per-tool HMAC-SHA256 signer/verifier for prepared calls.
@@ -72,14 +73,15 @@ func NewSigner() (Signer, error) {
 // Sign computes the HMAC-SHA256 of the prepared call's fingerprint.
 func (s *Signer) Sign(prepared domain.PreparedCall) string {
 	fp := Fingerprint{
-		CallID:      prepared.Call.ID.String(),
-		ToolName:    prepared.Call.Name,
-		Arguments:   CloneRawMessage(prepared.Call.Arguments),
-		ReadPaths:   append([]string(nil), prepared.ReadPaths...),
-		WritePaths:  append([]string(nil), prepared.WritePaths...),
-		Risk:        prepared.Risk,
-		ExecRequest: prepared.ExecRequest,
-		URLRequest:  prepared.URLRequest,
+		CallID:       prepared.Call.ID.String(),
+		ToolName:     prepared.Call.Name,
+		Arguments:    CloneRawMessage(prepared.Call.Arguments),
+		ReadPaths:    append([]string(nil), prepared.ReadPaths...),
+		WritePaths:   append([]string(nil), prepared.WritePaths...),
+		Risk:         prepared.Risk,
+		ExecRequest:  prepared.ExecRequest,
+		URLRequest:   prepared.URLRequest,
+		WriteRequest: prepared.WriteRequest,
 	}
 	return s.SignFingerprint(fp)
 }

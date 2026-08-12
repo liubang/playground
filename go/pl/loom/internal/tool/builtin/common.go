@@ -151,25 +151,25 @@ func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domai
 	return toolkit.ErrorResult(callID, startedAt, err)
 }
 
+// resolveExistingPath resolves an existing filesystem path for the builtin
+// READ tools. Paths inside the workspace keep their workspace-relative
+// display form; absolute paths outside the workspace are readable too
+// (PathValidator.ValidateRead mirrors the sandbox's broad read allowance)
+// and display as their absolute path. Sensitive locations are denied
+// everywhere by the validator.
 func resolveExistingPath(validator *workspacepkg.PathValidator, input string) (pathResolution, error) {
 	if strings.TrimSpace(input) == "" {
 		return pathResolution{}, domain.NewError(domain.ErrInvalidInput, "path is required")
 	}
-	if rel, ok := lexicalWorkspaceRelativePath(validator, input); ok && containsSensitiveComponent(rel) {
-		return pathResolution{}, domain.NewError(domain.ErrSecurity, "path contains a sensitive component")
+
+	resolved, err := validator.ValidateRead(input)
+	if err != nil {
+		return pathResolution{}, domain.NewError(domain.ErrSecurity, "path is not readable", domain.WithCause(err))
 	}
 
-	resolved, err := validator.Validate(input)
-	if err != nil {
-		return pathResolution{}, domain.NewError(domain.ErrSecurity, "path escapes workspace or is invalid", domain.WithCause(err))
-	}
-
-	rel, err := filepath.Rel(validator.Root(), resolved)
-	if err != nil {
-		return pathResolution{}, domain.NewError(domain.ErrInternal, "failed to normalize path", domain.WithCause(err))
-	}
-	if containsSensitiveComponent(rel) {
-		return pathResolution{}, domain.NewError(domain.ErrSecurity, "path contains a sensitive component")
+	display := filepath.ToSlash(resolved)
+	if rel, err := filepath.Rel(validator.Root(), resolved); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		display = displayPath(rel)
 	}
 
 	info, err := os.Stat(resolved)
@@ -182,7 +182,7 @@ func resolveExistingPath(validator *workspacepkg.PathValidator, input string) (p
 
 	return pathResolution{
 		Absolute: resolved,
-		Display:  displayPath(rel),
+		Display:  display,
 		Info:     info,
 	}, nil
 }
@@ -193,24 +193,6 @@ func displayPath(rel string) string {
 		return "."
 	}
 	return filepath.ToSlash(clean)
-}
-
-func lexicalWorkspaceRelativePath(validator *workspacepkg.PathValidator, input string) (string, bool) {
-	clean := filepath.Clean(input)
-	if !filepath.IsAbs(clean) {
-		return clean, true
-	}
-
-	root := filepath.Clean(validator.Root())
-	candidate := filepath.Clean(clean)
-	if candidate != root && !strings.HasPrefix(candidate, root+string(filepath.Separator)) {
-		return "", false
-	}
-	rel, err := filepath.Rel(root, candidate)
-	if err != nil {
-		return "", false
-	}
-	return rel, true
 }
 
 // containsSensitiveComponent delegates to the single canonical list in the

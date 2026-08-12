@@ -129,6 +129,91 @@ func TestReadFileToolRejectsSensitiveComponent(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrSecurity)
 }
 
+// Read alignment: absolute paths outside the workspace are readable
+// through the builtin read tools, matching the sandbox's broad read
+// allowance (workspace.PathValidator.ValidateRead).
+func TestReadFileToolReadsExternalPath(t *testing.T) {
+	validator, _ := newValidator(t)
+	content := "external\ncontent\n"
+	external := filepath.Join(t.TempDir(), "external.txt")
+	mustWriteFile(t, external, []byte(content))
+
+	tool, err := NewReadFileTool(validator, nil)
+	if err != nil {
+		t.Fatalf("NewReadFileTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "read_file", readFileArgs{Path: external}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	output := toolResultText(t, result)
+	// External paths display as their canonical absolute path.
+	wantHeader := "path: " + filepath.ToSlash(workspacepkg.Canonicalize(external))
+	if !strings.HasPrefix(output, wantHeader) {
+		t.Fatalf("output header = %q, want prefix %q", strings.Split(output, "\n")[0], wantHeader)
+	}
+	if !strings.Contains(output, "     1→external\n     2→content\n") {
+		t.Fatalf("output missing external content: %q", output)
+	}
+}
+
+// Read alignment never opens credential locations: home-rooted secrets and
+// sensitive components stay denied wherever they live.
+func TestReadFileToolDeniesExternalSensitivePath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	validator, _ := newValidator(t)
+
+	tool, err := NewReadFileTool(validator, nil)
+	if err != nil {
+		t.Fatalf("NewReadFileTool() error = %v", err)
+	}
+	targets := []string{
+		filepath.Join(home, ".ssh", "id_rsa"),     // home-rooted sensitive directory
+		filepath.Join(home, ".netrc"),             // home-rooted sensitive file
+		filepath.Join(t.TempDir(), "app", ".env"), // sensitive component anywhere
+	}
+	for _, target := range targets {
+		mustWriteFile(t, target, []byte("secret"))
+		if _, err := tool.Prepare(context.Background(), newToolCall(t, "read_file", readFileArgs{Path: target})); err == nil {
+			t.Errorf("Prepare(%q) must be denied", target)
+		} else {
+			assertAgentErrorCode(t, err, domain.ErrSecurity)
+		}
+	}
+}
+
+func TestViewImageToolReadsExternalPath(t *testing.T) {
+	validator, _ := newValidator(t)
+	external := filepath.Join(t.TempDir(), "pixel.png")
+	mustWriteFile(t, external, mustPNG(t, 2, 2))
+
+	tool, err := NewViewImageTool(validator)
+	if err != nil {
+		t.Fatalf("NewViewImageTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "view_image", viewImageArgs{Path: external}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	if len(result.Content) != 2 || result.Content[0].Kind != domain.PartText || result.Content[1].Kind != domain.PartImage {
+		t.Fatalf("result.Content = %+v, want text+image parts", result.Content)
+	}
+	output := result.Content[0].Text
+	wantHeader := "image: " + filepath.ToSlash(workspacepkg.Canonicalize(external)) + " · image/png"
+	if !strings.HasPrefix(output, wantHeader) {
+		t.Fatalf("output header = %q, want prefix %q", strings.Split(output, "\n")[0], wantHeader)
+	}
+}
+
 // Regression: a missing path must be named in the error — with parallel
 // tool calls a bare "path does not exist" leaves the model guessing which
 // call failed (observed in a real session: search on a hallucinated

@@ -154,10 +154,12 @@ func (e *ArgvExample) UnmarshalJSON(data []byte) error {
 }
 
 // ruleFile is the on-disk shape of one *.json rule file. The optional
-// "domains" section holds web_fetch host rules (domain_rules.go).
+// "domains" section holds web_fetch host rules (domain_rules.go); the
+// optional "paths" section holds writable-path rules (path_rules.go).
 type ruleFile struct {
 	Rules   []Rule       `json:"rules"`
 	Domains []DomainRule `json:"domains,omitempty"`
+	Paths   []PathRule   `json:"paths,omitempty"`
 }
 
 // matches reports whether argv hits the rule's prefix.
@@ -179,12 +181,14 @@ func decisionStrictness(d domain.Decision) int {
 }
 
 // RuleSet is an ordered collection of rules from one or more layers:
-// argv-prefix rules for run_cmd, host rules for web_fetch, and tool-name
-// rules for the fixed-blast-radius tools (tool_rules.go).
+// argv-prefix rules for run_cmd, host rules for web_fetch, tool-name
+// rules for the fixed-blast-radius tools (tool_rules.go), and
+// writable-path rules for boundary-crossing file writes (path_rules.go).
 type RuleSet struct {
 	rules   []Rule
 	domains []DomainRule
 	tools   []ToolRule
+	paths   []PathRule
 }
 
 // Rules returns the loaded rules (for `loom rules list` and tests).
@@ -263,6 +267,7 @@ func (s *RuleSet) merge(other *RuleSet) {
 	s.rules = append(s.rules, other.rules...)
 	s.domains = append(s.domains, other.domains...)
 	s.tools = append(s.tools, other.tools...)
+	s.paths = append(s.paths, other.paths...)
 }
 
 // Evaluate returns the strictest decision among matching rules, or "" when
@@ -305,7 +310,7 @@ func (s *RuleSet) HasAny() bool {
 	if s == nil {
 		return false
 	}
-	return len(s.rules) > 0 || len(s.domains) > 0 || len(s.tools) > 0
+	return len(s.rules) > 0 || len(s.domains) > 0 || len(s.tools) > 0 || len(s.paths) > 0
 }
 
 // RulesDirProject is the project-layer rules directory for a workspace.
@@ -352,7 +357,7 @@ func LoadRuleSets(userDir, projectDir string, opts LoadOptions) (*RuleSet, []err
 		sort.Strings(names) // deterministic load order within a layer
 		for _, name := range names {
 			path := filepath.Join(dir, name)
-			rules, domains, err := loadRuleFile(path)
+			rules, domains, paths, err := loadRuleFile(path)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -379,6 +384,13 @@ func LoadRuleSets(userDir, projectDir string, opts LoadOptions) (*RuleSet, []err
 				}
 				set.domains = append(set.domains, d)
 			}
+			for _, p := range paths {
+				if !trusted && domain.Decision(p.Decision) == domain.DecisionAllow {
+					// Same tighten-only rule for writable-path allows.
+					continue
+				}
+				set.paths = append(set.paths, p)
+			}
 		}
 	}
 	load(userDir, true, true)
@@ -387,29 +399,35 @@ func LoadRuleSets(userDir, projectDir string, opts LoadOptions) (*RuleSet, []err
 }
 
 // loadRuleFile parses and self-tests one rule file (argv rules plus the
-// optional domains section).
-func loadRuleFile(path string) ([]Rule, []DomainRule, error) {
+// optional domains and paths sections).
+func loadRuleFile(path string) ([]Rule, []DomainRule, []PathRule, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read rule file %s: %w", path, err)
+		return nil, nil, nil, fmt.Errorf("read rule file %s: %w", path, err)
 	}
 	var f ruleFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, nil, fmt.Errorf("parse rule file %s: %w", path, err)
+		return nil, nil, nil, fmt.Errorf("parse rule file %s: %w", path, err)
 	}
 	for i := range f.Rules {
 		f.Rules[i].Source = path
 		if err := validateRule(&f.Rules[i]); err != nil {
-			return nil, nil, fmt.Errorf("rule file %s: %w", path, err)
+			return nil, nil, nil, fmt.Errorf("rule file %s: %w", path, err)
 		}
 	}
 	for i := range f.Domains {
 		f.Domains[i].Source = path
 		if err := validateDomainRule(&f.Domains[i]); err != nil {
-			return nil, nil, fmt.Errorf("rule file %s: %w", path, err)
+			return nil, nil, nil, fmt.Errorf("rule file %s: %w", path, err)
 		}
 	}
-	return f.Rules, f.Domains, nil
+	for i := range f.Paths {
+		f.Paths[i].Source = path
+		if err := validatePathRule(&f.Paths[i]); err != nil {
+			return nil, nil, nil, fmt.Errorf("rule file %s: %w", path, err)
+		}
+	}
+	return f.Rules, f.Domains, f.Paths, nil
 }
 
 // validateRule checks decision and grant validity and runs the
@@ -499,6 +517,7 @@ type SessionRules struct {
 	rules   []sessionRule
 	domains map[string]struct{}
 	tools   map[string]struct{}
+	paths   map[string]struct{}
 }
 
 // sessionRule is one remembered prefix plus its approved grant.

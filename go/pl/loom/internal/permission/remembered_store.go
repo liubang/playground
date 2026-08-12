@@ -153,6 +153,41 @@ ON CONFLICT(host) DO NOTHING`,
 	return nil
 }
 
+// RememberPath upserts a writable-directory allow rule for
+// boundary-crossing file writes. The directory is canonicalized;
+// sensitive locations are rejected so the store can never reopen them.
+func (s *RememberedStore) RememberPath(ctx context.Context, dir string) error {
+	canonical, err := normalizeRulePath(dir)
+	if err != nil {
+		return err
+	}
+	now := formatNowUTC()
+	_, err = s.db.ExecContext(ctx, `
+INSERT INTO remembered_paths(path, justification, created_at)
+VALUES (?, ?, ?)
+ON CONFLICT(path) DO NOTHING`,
+		canonical, rememberedJustif, now)
+	if err != nil {
+		return fmt.Errorf("remember path: %w", err)
+	}
+	return nil
+}
+
+// ForgetPath removes a remembered writable-directory rule. ok=false means
+// the directory was not in the store.
+func (s *RememberedStore) ForgetPath(ctx context.Context, dir string) (bool, error) {
+	canonical, err := normalizeRulePath(dir)
+	if err != nil {
+		return false, err
+	}
+	res, err := s.db.ExecContext(ctx, "DELETE FROM remembered_paths WHERE path = ?", canonical)
+	if err != nil {
+		return false, fmt.Errorf("forget path: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 // RememberTool upserts a tool-name allow rule. Only tools passing
 // ToolMemoryEligible may be stored; anything else is rejected so the
 // store can never widen a path/host-varying tool to a standing approval.
@@ -254,7 +289,7 @@ func (s *RememberedStore) MigrateLegacyJSON(ctx context.Context, rulesDir string
 // time but not persisted; grant write paths are expanded and cleaned
 // the same way file-layer loading does.
 func (s *RememberedStore) ImportRuleFile(ctx context.Context, path string) error {
-	rules, domains, err := loadRuleFile(path)
+	rules, domains, paths, err := loadRuleFile(path)
 	if err != nil {
 		return err
 	}
@@ -301,6 +336,21 @@ INSERT OR IGNORE INTO remembered_domains(host, justification, created_at)
 VALUES (?, ?, ?)`,
 			d.Host, justif, now); err != nil {
 			return fmt.Errorf("import domain %s: %w", d.Host, err)
+		}
+	}
+	for _, p := range paths {
+		if domain.Decision(p.Decision) != domain.DecisionAllow {
+			continue
+		}
+		justif := p.Justification
+		if justif == "" {
+			justif = rememberedJustif
+		}
+		if _, err := tx.ExecContext(ctx, `
+INSERT OR IGNORE INTO remembered_paths(path, justification, created_at)
+VALUES (?, ?, ?)`,
+			p.Path, justif, now); err != nil {
+			return fmt.Errorf("import path %s: %w", p.Path, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -362,6 +412,11 @@ CREATE TABLE IF NOT EXISTS remembered_domains (
 );
 CREATE TABLE IF NOT EXISTS remembered_tools (
     name TEXT PRIMARY KEY,
+    justification TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS remembered_paths (
+    path TEXT PRIMARY KEY,
     justification TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
 );`
@@ -428,30 +483,14 @@ func queryRemembered(ctx context.Context, db *sql.DB) (*RuleSet, error) {
 	if err := drows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate remembered domains: %w", err)
 	}
-	// tool-name rules. The table predates this reader on older databases;
-	// probe sqlite_master instead of sniffing driver error strings, and
-	// degrade a missing table to "no tool rules".
-	var toolsTable string
-	err = db.QueryRowContext(ctx,
-		"SELECT name FROM sqlite_master WHERE type='table' AND name='remembered_tools'").Scan(&toolsTable)
-	if errors.Is(err, sql.ErrNoRows) {
-		return set, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("probe remembered tools table: %w", err)
-	}
-	trows, err := db.QueryContext(ctx, "SELECT name, justification FROM remembered_tools")
-	if err != nil {
-		return nil, fmt.Errorf("query remembered tools: %w", err)
-	}
-	defer trows.Close()
-	for trows.Next() {
+	// tool-name rules.
+	if err := queryRememberedOptional(ctx, db, "remembered_tools", "name", func(scan func(dest ...any) error) error {
 		var name, justif string
-		if err := trows.Scan(&name, &justif); err != nil {
-			return nil, fmt.Errorf("scan remembered tool: %w", err)
+		if err := scan(&name, &justif); err != nil {
+			return err
 		}
 		if _, ok := ToolMemoryEligible(name); !ok {
-			continue // never honor a stored rule for an ineligible tool
+			return nil // never honor a stored rule for an ineligible tool
 		}
 		set.tools = append(set.tools, ToolRule{
 			Name:          name,
@@ -459,11 +498,58 @@ func queryRemembered(ctx context.Context, db *sql.DB) (*RuleSet, error) {
 			Justification: justif,
 			Source:        RememberedSource,
 		})
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	if err := trows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate remembered tools: %w", err)
+	// writable-path rules.
+	if err := queryRememberedOptional(ctx, db, "remembered_paths", "path", func(scan func(dest ...any) error) error {
+		var path, justif string
+		if err := scan(&path, &justif); err != nil {
+			return err
+		}
+		set.paths = append(set.paths, PathRule{
+			Path:          path,
+			Decision:      string(domain.DecisionAllow),
+			Justification: justif,
+			Source:        RememberedSource,
+		})
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return set, nil
+}
+
+// queryRememberedOptional reads one of the tables that postdate older
+// databases. The table is probed in sqlite_master instead of sniffing
+// driver error strings, and a missing table degrades to "no rules".
+// The query selects (keyColumn, justification); consume receives the row
+// scanner.
+func queryRememberedOptional(ctx context.Context, db *sql.DB, table, keyColumn string, consume func(scan func(dest ...any) error) error) error {
+	var found string
+	err := db.QueryRowContext(ctx,
+		"SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("probe %s table: %w", table, err)
+	}
+	rows, err := db.QueryContext(ctx, "SELECT "+keyColumn+", justification FROM "+table)
+	if err != nil {
+		return fmt.Errorf("query %s: %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err := consume(rows.Scan); err != nil {
+			return fmt.Errorf("scan %s: %w", table, err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate %s: %w", table, err)
+	}
+	return nil
 }
 
 // ruleGrantFromExec converts a domain grant into its rule-file form (nil

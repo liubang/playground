@@ -1653,6 +1653,8 @@ func (c *Controller) rememberApprovalRule(hint *ApprovalRuleHint) string {
 		persistErr = store.RememberTool(persistCtx, rule.Tool)
 	case rule.Host != "":
 		persistErr = store.RememberDomain(persistCtx, rule.Host)
+	case rule.Path != "":
+		persistErr = store.RememberPath(persistCtx, rule.Path)
 	default:
 		// A composed shell command contributes one prefix per subcommand;
 		// each is persisted as its own rule row.

@@ -68,8 +68,10 @@ type WriteTool struct {
 func NewWriteTool(validator *workspacepkg.PathValidator) (*WriteTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "write",
-		Description: "Write a UTF-8 text file within the workspace: create it (parent directories are created as needed) " +
+		Description: "Write a UTF-8 text file: create it (parent directories are created as needed) " +
 			"or overwrite it entirely. Prefer edit for partial modifications. " +
+			"Paths inside the workspace run directly; absolute paths outside the workspace require user approval " +
+			"(credential locations are always denied). " +
 			"Before overwriting an existing file you MUST read_file it first — overwriting content you have not seen " +
 			"risks destroying user work, and the approval binds the file state observed at prepare time. " +
 			"The approval shows the byte count and whether the call creates or overwrites.",
@@ -100,7 +102,7 @@ func (t *WriteTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.P
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "content must be valid UTF-8 text")
 	}
 
-	pathInfo, err := resolveWritePath(t.base.validator, args.Path)
+	pathInfo, external, err := resolveWritePath(t.base.validator, args.Path)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -111,7 +113,7 @@ func (t *WriteTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.P
 		Created: true,
 		OldHash: workspacepkg.EmptyFileSHA256,
 	}
-	snapshot, statErr := t.base.validator.Snapshot(pathInfo.Absolute)
+	snapshot, statErr := t.base.validator.SnapshotResolved(pathInfo)
 	switch {
 	case statErr == nil:
 		canonical.Created = false
@@ -134,7 +136,10 @@ func (t *WriteTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.P
 		action = "overwrite"
 	}
 	approvalDesc := fmt.Sprintf("Write %s (%d bytes, %s)", canonical.Path, len(canonical.Content), action)
-	prepared, err := t.base.prepareCall(ctx, call, rawCanonical, []string{pathInfo.Absolute}, approvalDesc)
+	if external {
+		approvalDesc += " [outside workspace]"
+	}
+	prepared, err := t.base.prepareCall(ctx, call, rawCanonical, []string{pathInfo.Absolute}, approvalDesc, writeRequestOf(pathInfo, external))
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -170,16 +175,19 @@ func (t *WriteTool) Execute(ctx context.Context, prepared domain.PreparedCall) d
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	pathInfo, err := resolveWritePath(t.base.validator, prepared.WritePaths[0])
+	pathInfo, _, err := resolveWritePath(t.base.validator, prepared.WritePaths[0])
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
 	if pathInfo.Display != canonical.Path {
 		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 	}
+	if err := verifyWriteRequestBinding(prepared, pathInfo); err != nil {
+		return errorResult(prepared.Call.ID, startedAt, err)
+	}
 
 	// The file state must still match what the approval was bound to.
-	snapshot, statErr := t.base.validator.Snapshot(pathInfo.Absolute)
+	snapshot, statErr := t.base.validator.SnapshotResolved(pathInfo)
 	switch {
 	case statErr == nil:
 		if canonical.Created {
@@ -201,7 +209,7 @@ func (t *WriteTool) Execute(ctx context.Context, prepared domain.PreparedCall) d
 			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "failed to create parent directories", domain.WithCause(err)))
 		}
 	}
-	resultSnapshot, err := t.base.validator.AtomicWrite(pathInfo.Absolute, []byte(canonical.Content), workspacepkg.AtomicWriteOptions{
+	resultSnapshot, err := t.base.validator.AtomicWriteResolved(pathInfo, []byte(canonical.Content), workspacepkg.AtomicWriteOptions{
 		ExpectedHash: canonical.OldHash,
 		SyncParent:   true,
 	})
