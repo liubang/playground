@@ -34,6 +34,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/media"
 	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
@@ -889,6 +890,11 @@ type Loop struct {
 	// Reasoning carries the selected model's reasoning (thinking) intent
 	// into every model call; the zero value lets the provider decide.
 	Reasoning domain.ReasoningSpec
+	// SupportsImages reports whether the active model accepts image input
+	// (config Model.modalities). When false, image references in history
+	// are replaced by explicit text gaps instead of inline images —
+	// providers reject image parts outright.
+	SupportsImages bool
 	// GoalCell receives update_goal tool mutations; the loop drains it
 	// after each tool batch. Nil disables goal tracking.
 	GoalCell *GoalCell
@@ -1240,6 +1246,19 @@ func (l *Loop) drainSteer() {
 	}
 }
 
+// wireMessages prepares canonical history for one model request:
+// vision-capable models get image artifact references materialized into
+// derived inline images (media.Materialize); other models get explicit
+// text gaps (media.StripImages) because providers reject image parts —
+// and user-role artifact parts — outright. The canonical history itself
+// is never mutated.
+func (l *Loop) wireMessages(ctx context.Context, messages []domain.Message) []domain.Message {
+	if l.SupportsImages {
+		return media.Materialize(ctx, l.Artifacts, messages)
+	}
+	return media.StripImages(messages)
+}
+
 func (l *Loop) callModel(ctx context.Context) error {
 	modelName := l.ModelName
 	if modelName == "" {
@@ -1251,10 +1270,16 @@ func (l *Loop) callModel(ctx context.Context) error {
 		l.terminate(ctx, domain.OutcomeFailed)
 		return fmt.Errorf("build context manifest: %w", err)
 	}
+	// Resolve image artifact references for the wire (vision models get
+	// derived inline images; others get explicit text gaps). The manifest
+	// and the trace input keep the canonical (reference-carrying)
+	// messages: hashing/recording multi-MB base64 on every call would
+	// waste CPU and leak blobs into the observability sink.
+	wireMessages := l.wireMessages(ctx, messages)
 	req := domain.ModelRequest{
 		ID:              domain.NewEventID(),
 		ModelName:       modelName,
-		Messages:        messages,
+		Messages:        wireMessages,
 		Tools:           l.Registry.List(),
 		MaxTokens:       l.Run.Limits.MaxOutputTokens,
 		Reasoning:       l.Reasoning,
@@ -2241,8 +2266,11 @@ func (l *Loop) summarizeForCompaction(ctx context.Context) (string, error) {
 		modelName = "default"
 	}
 	startedAt := l.Run.Clock.Now()
+	// Compaction summarizes the full history, so image references must be
+	// resolved here too — the summarizer cannot describe an image it
+	// cannot see.
 	req := domain.ModelRequest{
-		ID: domain.NewEventID(), ModelName: modelName, Messages: messages,
+		ID: domain.NewEventID(), ModelName: modelName, Messages: l.wireMessages(ctx, messages),
 		MaxTokens: l.Run.Limits.MaxOutputTokens,
 	}
 	stream, err := l.Model.Stream(ctx, req)

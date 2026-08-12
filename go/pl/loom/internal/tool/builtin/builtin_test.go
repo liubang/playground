@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -35,7 +34,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/media"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
@@ -192,11 +193,12 @@ func TestViewImageToolReadsExternalPath(t *testing.T) {
 	external := filepath.Join(t.TempDir(), "pixel.png")
 	mustWriteFile(t, external, mustPNG(t, 2, 2))
 
-	tool, err := NewViewImageTool(validator)
+	store := newTestArtifactStore(t)
+	tool, err := NewViewImageTool(validator, store)
 	if err != nil {
 		t.Fatalf("NewViewImageTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "view_image", viewImageArgs{Path: external}))
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "view_image", imagePathArgs{Path: external}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -204,8 +206,8 @@ func TestViewImageToolReadsExternalPath(t *testing.T) {
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
 	}
-	if len(result.Content) != 2 || result.Content[0].Kind != domain.PartText || result.Content[1].Kind != domain.PartImage {
-		t.Fatalf("result.Content = %+v, want text+image parts", result.Content)
+	if len(result.Content) != 2 || result.Content[0].Kind != domain.PartText || result.Content[1].Kind != domain.PartArtifact || result.Content[1].Artifact == nil {
+		t.Fatalf("result.Content = %+v, want text+artifact parts", result.Content)
 	}
 	output := result.Content[0].Text
 	wantHeader := "image: " + filepath.ToSlash(workspacepkg.Canonicalize(external)) + " · image/png"
@@ -1234,16 +1236,28 @@ func mustPNG(t *testing.T, width, height int) []byte {
 	return buf.Bytes()
 }
 
+// newTestArtifactStore opens a throwaway on-disk artifact store for tools
+// that persist image outputs (view_image, generate_image, browser).
+func newTestArtifactStore(t *testing.T) domain.ArtifactStore {
+	t.Helper()
+	store, err := artifact.Open(t.TempDir(), 8<<20)
+	if err != nil {
+		t.Fatalf("artifact.Open: %v", err)
+	}
+	return store
+}
+
 func TestViewImageToolReturnsImagePart(t *testing.T) {
 	validator, root := newValidator(t)
 	pngData := mustPNG(t, 4, 2)
 	mustWriteFile(t, filepath.Join(root, "shot.png"), pngData)
 
-	tool, err := NewViewImageTool(validator)
+	store := newTestArtifactStore(t)
+	tool, err := NewViewImageTool(validator, store)
 	if err != nil {
 		t.Fatalf("NewViewImageTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "view_image", viewImageArgs{Path: "shot.png"}))
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "view_image", imagePathArgs{Path: "shot.png"}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -1255,38 +1269,44 @@ func TestViewImageToolReturnsImagePart(t *testing.T) {
 		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
 	}
 	if len(result.Content) != 2 {
-		t.Fatalf("len(Content) = %d, want 2 (text header + image)", len(result.Content))
+		t.Fatalf("len(Content) = %d, want 2 (text header + artifact)", len(result.Content))
 	}
 	header := result.Content[0]
 	if header.Kind != domain.PartText || !strings.Contains(header.Text, "image/png") || !strings.Contains(header.Text, "4x2") {
 		t.Fatalf("header part = %+v", header)
 	}
-	// 与 browser 截图一致的契约：告知模型图片已展示给用户，禁止再贴 markdown 链接。
-	if !strings.Contains(header.Text, "already displayed to the user") || !strings.Contains(header.Text, "do not embed it as a markdown link") {
-		t.Fatalf("header missing display contract note: %q", header.Text)
+	// view_image 的契约：图片只进模型上下文，不展示给用户；需要展示时引导
+	// 模型改调 present_image，且禁止再贴 markdown 链接。
+	if !strings.Contains(header.Text, "not displayed") || !strings.Contains(header.Text, "present_image") ||
+		!strings.Contains(header.Text, "do not embed it as a markdown link") {
+		t.Fatalf("header missing model-only contract note: %q", header.Text)
 	}
-	imagePart := result.Content[1]
-	if imagePart.Kind != domain.PartImage || imagePart.Image == nil {
-		t.Fatalf("image part = %+v", imagePart)
+	artifactPart := result.Content[1]
+	if artifactPart.Kind != domain.PartArtifact || artifactPart.Artifact == nil {
+		t.Fatalf("artifact part = %+v", artifactPart)
 	}
-	if imagePart.Image.MediaType != "image/png" {
-		t.Fatalf("MediaType = %q, want image/png", imagePart.Image.MediaType)
+	if !artifactPart.ModelOnly {
+		t.Fatal("view_image artifact part must be marked ModelOnly")
 	}
-	decoded, err := base64.StdEncoding.DecodeString(imagePart.Image.Data)
-	if err != nil || !bytes.Equal(decoded, pngData) {
-		t.Fatalf("base64 round-trip mismatch (err=%v)", err)
+	if artifactPart.Artifact.MediaType != "image/png" {
+		t.Fatalf("MediaType = %q, want image/png", artifactPart.Artifact.MediaType)
+	}
+	raw, err := store.Read(context.Background(), *artifactPart.Artifact)
+	if err != nil || !bytes.Equal(raw, pngData) {
+		t.Fatalf("artifact round-trip mismatch (err=%v)", err)
 	}
 }
 
 func TestViewImageToolRejectsNonImageAndOversize(t *testing.T) {
 	validator, root := newValidator(t)
 	mustWriteFile(t, filepath.Join(root, "text.txt"), []byte("not an image"))
-	tool, err := NewViewImageTool(validator)
+	store := newTestArtifactStore(t)
+	tool, err := NewViewImageTool(validator, store)
 	if err != nil {
 		t.Fatalf("NewViewImageTool() error = %v", err)
 	}
 
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "view_image", viewImageArgs{Path: "text.txt"}))
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "view_image", imagePathArgs{Path: "text.txt"}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -1296,9 +1316,9 @@ func TestViewImageToolRejectsNonImageAndOversize(t *testing.T) {
 	}
 
 	// A file with valid magic but beyond the byte budget.
-	big := append(mustPNG(t, 1, 1), make([]byte, maxImageBytes)...)
+	big := append(mustPNG(t, 1, 1), make([]byte, media.MaxImageBytes)...)
 	mustWriteFile(t, filepath.Join(root, "big.png"), big)
-	prepared, err = tool.Prepare(context.Background(), newToolCall(t, "view_image", viewImageArgs{Path: "big.png"}))
+	prepared, err = tool.Prepare(context.Background(), newToolCall(t, "view_image", imagePathArgs{Path: "big.png"}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -1324,8 +1344,8 @@ func TestDetectImageMediaType(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := detectImageMediaType(tt.data); got != tt.want {
-				t.Fatalf("detectImageMediaType() = %q, want %q", got, tt.want)
+			if got := media.SniffImageType(tt.data); got != tt.want {
+				t.Fatalf("SniffImageType() = %q, want %q", got, tt.want)
 			}
 		})
 	}

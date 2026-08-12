@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/media"
 )
 
 // Condenser configuration defaults. The defaults are chosen so a zero
@@ -508,6 +509,14 @@ func estTokens(messages []domain.Message) int {
 							total += len(content.Text)
 						case domain.PartImage:
 							total += imageTokenFootprint
+						case domain.PartArtifact:
+							// Image references bound for the model are materialized
+							// into inline images on the wire (media.Materialize);
+							// count their derived footprint. Present-only artifacts
+							// are excluded — the model never sees them.
+							if media.IsModelImage(content) {
+								total += imageTokenFootprint
+							}
 						}
 					}
 				}
@@ -516,6 +525,13 @@ func estTokens(messages []domain.Message) int {
 				// vision pricings; use a conservative per-image footprint so
 				// occupancy never underestimates.
 				total += imageTokenFootprint
+			case domain.PartArtifact:
+				// Image attachments bound for the model are persisted as
+				// artifact references and materialized at the egress; they cost
+				// the same footprint. Present-only artifacts are excluded.
+				if media.IsModelImage(part) {
+					total += imageTokenFootprint
+				}
 			case domain.PartReasoning:
 				// Reasoning replayed upstream consumes input budget; count it
 				// conservatively so occupancy never underestimates.

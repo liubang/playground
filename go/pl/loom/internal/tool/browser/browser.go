@@ -19,7 +19,6 @@ package browser
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,18 +29,13 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/media"
 )
 
 const (
 	defaultNavTimeoutMs  = 30000
 	maxNavTimeoutMs      = 120000
 	defaultScreenshotFmt = "png"
-	// maxInlineImageBytes mirrors view_image/imagegen: base64 inflates by
-	// 4/3 and Anthropic caps a single image block at 5MB on the wire, so
-	// 3.5MB raw stays below the strictest provider limit. Larger
-	// screenshots are still persisted as artifacts, just not inlined into
-	// the transcript.
-	maxInlineImageBytes = 3584 << 10
 )
 
 // browserArgs is the validated argument set for the browser tool.
@@ -76,12 +70,10 @@ type browserOutput struct {
 type screenshotPayload struct {
 	Format string `json:"format"`
 	Bytes  int    `json:"bytes"`
-	// Artifact references the persisted image (raw bytes, with MediaType)
-	// when an artifact store is available; the UI renders it for the user.
+	// Artifact references the persisted image (raw bytes, with MediaType);
+	// the UI renders it for the user, and the agent loop materializes it
+	// into a derived inline image for the model (media.Materialize).
 	Artifact *domain.ArtifactRef `json:"artifact,omitempty"`
-	// Inlined reports whether the image is attached to the result as an
-	// image part for vision-capable models.
-	Inlined bool `json:"inlined"`
 	// Note tells the model how the screenshot was delivered so it does not
 	// try to re-attach or re-render it.
 	Note string `json:"note"`
@@ -108,11 +100,16 @@ type BrowserTool struct {
 }
 
 // NewBrowserTool creates the browser tool. The Manager must be created
-// before the tool. A nil artifact store disables screenshot overflow
-// (truncated screenshots lose their full data silently).
+// before the tool. The artifact store is required: screenshots are
+// persisted as artifacts and materialized for the model at the egress
+// (media.Materialize), so without it the screenshot action would have no
+// delivery channel at all.
 func NewBrowserTool(manager *Manager, artifacts domain.ArtifactStore, navTimeout time.Duration, screenshotQual int) (*BrowserTool, error) {
 	if manager == nil {
 		return nil, domain.NewError(domain.ErrInvalidInput, "browser manager is required")
+	}
+	if artifacts == nil {
+		return nil, domain.NewError(domain.ErrInvalidInput, "browser artifact store is required")
 	}
 	if navTimeout <= 0 {
 		navTimeout = defaultNavTimeoutMs * time.Millisecond
@@ -342,35 +339,22 @@ func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID
 		return errorResult(callID, startedAt, mapBrowserError(err))
 	}
 
-	// Deliver the screenshot the same way imagegen does: persist the raw
-	// bytes as an artifact (the UI displays it to the user), and attach an
-	// image part for vision-capable models when it fits the inline budget.
-	// The base64 payload never goes into the text JSON: there it is dead
-	// weight for the model and gets mangled by the generic output
-	// truncation layer.
-	mediaType := "image/" + format
+	// Deliver the screenshot the same way every image source does: persist
+	// the raw bytes as an artifact. The UI renders the reference for the
+	// user; the agent loop materializes it into a derived (rescaled) inline
+	// image for the model at request time. Nothing is ever inlined here —
+	// base64 in the transcript is dead weight and gets mangled by the
+	// generic output truncation layer.
+	ref, err := media.StoreImage(ctx, t.artifacts, buf)
+	if err != nil {
+		return errorResult(callID, startedAt, err)
+	}
 	payload := &screenshotPayload{
-		Format: format,
-		Bytes:  len(buf),
-	}
-
-	content := make([]domain.ContentPart, 0, 3)
-	if ref, ok := t.storeScreenshot(ctx, buf, mediaType); ok {
-		payload.Artifact = &ref
-		content = append(content, domain.ContentPart{Kind: domain.PartArtifact, Artifact: &ref})
-	}
-	payload.Inlined = len(buf) <= maxInlineImageBytes
-	switch {
-	case payload.Artifact != nil && payload.Inlined:
-		payload.Note = "The screenshot is persisted as an artifact, already displayed to the user, and attached inline below " +
-			"for your review. Do not embed it as a markdown link in your reply."
-	case payload.Artifact != nil:
-		payload.Note = "The screenshot is persisted as an artifact and already displayed to the user; it exceeds the inline " +
-			"size limit, so it is not attached for your review."
-	case payload.Inlined:
-		payload.Note = "The screenshot is attached inline below for your review and is already displayed to the user."
-	default:
-		payload.Note = "The screenshot exceeds the inline size limit and no artifact store is configured, so it could not be returned."
+		Format:   format,
+		Bytes:    len(buf),
+		Artifact: &ref,
+		Note: "The screenshot is persisted as an artifact, already displayed to the user, and attached for your " +
+			"review. Do not embed it as a markdown link in your reply.",
 	}
 
 	header, err := json.Marshal(browserOutput{
@@ -381,12 +365,9 @@ func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID
 	if err != nil {
 		return errorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
 	}
-	content = append([]domain.ContentPart{{Kind: domain.PartText, Text: string(header)}}, content...)
-	if payload.Inlined {
-		content = append(content, domain.ContentPart{Kind: domain.PartImage, Image: &domain.ImageContent{
-			MediaType: mediaType,
-			Data:      base64.StdEncoding.EncodeToString(buf),
-		}})
+	content := []domain.ContentPart{
+		{Kind: domain.PartText, Text: string(header)},
+		{Kind: domain.PartArtifact, Artifact: &ref},
 	}
 
 	return domain.ToolResult{
@@ -449,34 +430,6 @@ func (t *BrowserTool) doClose(callID domain.ToolCallID, startedAt time.Time) dom
 		Status:  "ok",
 		Message: "browser instance closed",
 	})
-}
-
-// storeScreenshot persists the raw image bytes as an artifact with the
-// media type set, so the UI can render it for the user. Failure degrades
-// to "no artifact" rather than failing the call — the inline image still
-// carries the screenshot to the model and the user.
-func (t *BrowserTool) storeScreenshot(ctx context.Context, data []byte, mediaType string) (domain.ArtifactRef, bool) {
-	if t.artifacts == nil {
-		return domain.ArtifactRef{}, false
-	}
-	stage, err := t.artifacts.Begin(ctx)
-	if err != nil {
-		return domain.ArtifactRef{}, false
-	}
-	if _, err := stage.Write(data); err != nil {
-		_ = stage.Abort()
-		return domain.ArtifactRef{}, false
-	}
-	if stage.Truncated() {
-		_ = stage.Abort()
-		return domain.ArtifactRef{}, false
-	}
-	ref, err := stage.Commit(ctx)
-	if err != nil {
-		return domain.ArtifactRef{}, false
-	}
-	ref.MediaType = mediaType
-	return ref, true
 }
 
 // validateBrowserArgs normalizes and validates the call arguments.

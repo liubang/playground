@@ -18,74 +18,32 @@
 package builtin
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
 	"os"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/media"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-const (
-	// maxImageBytes bounds the raw image payload. Base64 inflates by 4/3,
-	// and Anthropic caps a single image block at 5MB on the wire, so 3.5MB
-	// raw stays comfortably below the strictest provider limit.
-	maxImageBytes = 3584 << 10
-)
-
-type viewImageArgs struct {
+// imagePathArgs is the shared argument shape of the two image path tools
+// (view_image, present_image).
+type imagePathArgs struct {
 	Path string `json:"path"`
 }
 
-// ViewImageTool implements view_image: attach a workspace image to the
-// conversation so a vision-capable model can see it (codex's view_image).
-type ViewImageTool struct {
-	base baseTool
-}
-
-// NewViewImageTool creates a view_image tool bound to the workspace validator.
-func NewViewImageTool(validator *workspacepkg.PathValidator) (*ViewImageTool, error) {
-	base, err := newBaseTool(domain.ToolDefinition{
-		Name: "view_image",
-		Description: "Attach a local image file (png, jpeg, gif, webp) to the conversation so you " +
-			"can see it. Relative paths resolve inside the workspace; absolute paths outside the workspace work " +
-			"too (credential locations are always denied). Use it whenever the user references an image (a " +
-			"screenshot, diagram, mockup, photo of an error) that you need to look at. The result carries the " +
-			"image inline plus a text header with the format, pixel dimensions when decodable, and byte size. " +
-			"Files larger than 3.5MB are rejected; downscale or crop them first (e.g. with run_cmd " +
-			"sips/ImageMagick) if you must view them.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1,"maxLength":4096}},"required":["path"]}`),
-		OutputSchema: json.RawMessage(`{"type":"string","description":"text header (path, media type, dimensions, size) followed by the image as an inline image content part"}`),
-		Capabilities: []domain.Capability{domain.CapFSRead},
-		Source:       domain.ToolSourceBuiltin,
-	}, validator)
-	if err != nil {
-		return nil, err
-	}
-	return &ViewImageTool{base: base}, nil
-}
-
-func (t *ViewImageTool) Definition() domain.ToolDefinition {
-	return t.base.def
-}
-
-// ConcurrentSafe implements domain.ConcurrentSafely: reads are independent.
-func (t *ViewImageTool) ConcurrentSafe() bool { return true }
-
-func (t *ViewImageTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[viewImageArgs](call.Arguments)
+// prepareImagePathCall implements the shared Prepare pipeline of the image
+// path tools: decode args, resolve the path inside the workspace validator,
+// and bind the canonical path into the prepared call.
+func prepareImagePathCall(base baseTool, ctx context.Context, call domain.ToolCall, approvalVerb string) (domain.PreparedCall, error) {
+	args, err := decodeStrict[imagePathArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	pathInfo, err := resolveExistingPath(t.base.validator, args.Path)
+	pathInfo, err := resolveExistingPath(base.validator, args.Path)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -98,109 +56,132 @@ func (t *ViewImageTool) Prepare(ctx context.Context, call domain.ToolCall) (doma
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
-	approvalDesc := fmt.Sprintf("View image %s", args.Path)
-	return t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
+	return base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, fmt.Sprintf("%s %s", approvalVerb, args.Path))
+}
+
+// loadImageArtifact implements the shared Execute pipeline of the image
+// path tools: re-verify the prepared binding, read the file (size-checked
+// before the read, REVIEW M25), and persist the bytes as an artifact. The
+// media type is sniffed from the bytes — never from the file extension.
+func loadImageArtifact(base baseTool, artifacts domain.ArtifactStore, ctx context.Context, prepared domain.PreparedCall) (string, domain.ArtifactRef, []byte, error) {
+	if err := base.verifyPreparedCall(prepared); err != nil {
+		return "", domain.ArtifactRef{}, nil, err
+	}
+	if len(prepared.ReadPaths) != 1 {
+		return "", domain.ArtifactRef{}, nil, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid")
+	}
+	args, err := decodeStrict[imagePathArgs](prepared.Call.Arguments)
+	if err != nil {
+		return "", domain.ArtifactRef{}, nil, err
+	}
+	pathInfo, err := resolveExistingPath(base.validator, prepared.ReadPaths[0])
+	if err != nil {
+		return "", domain.ArtifactRef{}, nil, err
+	}
+	if pathInfo.Display != args.Path {
+		return "", domain.ArtifactRef{}, nil, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch")
+	}
+	if err := ctx.Err(); err != nil {
+		return "", domain.ArtifactRef{}, nil, err
+	}
+	if pathInfo.Info != nil && pathInfo.Info.Size() > media.MaxImageBytes {
+		return "", domain.ArtifactRef{}, nil, domain.NewError(domain.ErrInvalidInput,
+			fmt.Sprintf("image is %d bytes, exceeding the %d byte limit; downscale or crop it first", pathInfo.Info.Size(), media.MaxImageBytes))
+	}
+	data, err := os.ReadFile(pathInfo.Absolute)
+	if err != nil {
+		return "", domain.ArtifactRef{}, nil, domain.NewError(domain.ErrUnavailable, "failed to read image file", domain.WithCause(err))
+	}
+	if len(data) == 0 {
+		return "", domain.ArtifactRef{}, nil, domain.NewError(domain.ErrInvalidInput, "image file is empty")
+	}
+	ref, err := media.StoreImage(ctx, artifacts, data)
+	if err != nil {
+		return "", domain.ArtifactRef{}, nil, err
+	}
+	return args.Path, ref, data, nil
+}
+
+// imageHeader builds the shared model-facing header line for the image
+// path tools (path · media type · byte size · pixel dimensions).
+func imageHeader(displayPath string, ref domain.ArtifactRef, data []byte) string {
+	header := fmt.Sprintf("image: %s · %s · %d bytes", displayPath, ref.MediaType, len(data))
+	if dimensions := media.Dimensions(data); dimensions != "" {
+		header += " · " + dimensions
+	}
+	return header
+}
+
+// ViewImageTool implements view_image: attach a workspace image to the
+// conversation so a vision-capable model can see it (codex's view_image).
+// The raw bytes are persisted as an artifact, and the agent loop
+// materializes a derived (rescaled) inline image for the model at the
+// egress (media.Materialize). Nothing is ever inlined into the transcript.
+// The artifact part is marked ModelOnly: display channels show only the
+// text header, never the image itself — displaying an image to the user
+// is present_image's job.
+type ViewImageTool struct {
+	base      baseTool
+	artifacts domain.ArtifactStore
+}
+
+// NewViewImageTool creates a view_image tool bound to the workspace validator.
+// The artifact store is required: it is the image's only delivery channel.
+func NewViewImageTool(validator *workspacepkg.PathValidator, artifacts domain.ArtifactStore) (*ViewImageTool, error) {
+	if artifacts == nil {
+		return nil, domain.NewError(domain.ErrInvalidInput, "view_image artifact store is required")
+	}
+	base, err := newBaseTool(domain.ToolDefinition{
+		Name: "view_image",
+		Description: "Attach a local image file (png, jpeg, gif, webp) to the conversation so you " +
+			"can see it. Relative paths resolve inside the workspace; absolute paths outside the workspace work " +
+			"too (credential locations are always denied). Use it whenever the user references an image (a " +
+			"screenshot, diagram, mockup, photo of an error) that you need to look at. The image is persisted " +
+			"as an artifact and attached for your review at model-request time (large images are rescaled " +
+			"automatically); it is NOT shown to the user — call present_image as well if the user should " +
+			"see it. Files larger than 64MB are rejected; downscale or crop them first (e.g. with run_cmd " +
+			"sips/ImageMagick) if you must view them. If you only want to DISPLAY an image to the user " +
+			"(e.g. a plot you just generated) without seeing it yourself, use present_image instead.",
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1,"maxLength":4096}},"required":["path"]}`),
+		OutputSchema: json.RawMessage(`{"type":"string","description":"text header (path, media type, dimensions, size) followed by an artifact reference to the image"}`),
+		Capabilities: []domain.Capability{domain.CapFSRead},
+		Source:       domain.ToolSourceBuiltin,
+	}, validator)
+	if err != nil {
+		return nil, err
+	}
+	return &ViewImageTool{base: base, artifacts: artifacts}, nil
+}
+
+func (t *ViewImageTool) Definition() domain.ToolDefinition {
+	return t.base.def
+}
+
+// ConcurrentSafe implements domain.ConcurrentSafely: reads are independent.
+func (t *ViewImageTool) ConcurrentSafe() bool { return true }
+
+func (t *ViewImageTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+	return prepareImagePathCall(t.base, ctx, call, "View image")
 }
 
 func (t *ViewImageTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
-	}
-	if len(prepared.ReadPaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
-	}
-	args, err := decodeStrict[viewImageArgs](prepared.Call.Arguments)
+	path, ref, data, err := loadImageArtifact(t.base, t.artifacts, ctx, prepared)
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	pathInfo, err := resolveExistingPath(t.base.validator, prepared.ReadPaths[0])
-	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
-	}
-	if pathInfo.Display != args.Path {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
-	}
-	if err := ctx.Err(); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
-	}
-
-	// Size-check BEFORE reading: Prepare/Execute already stat'ed the file,
-	// and reading an unbounded file into memory just to reject it can OOM
-	// the process (REVIEW M25).
-	if pathInfo.Info != nil && pathInfo.Info.Size() > maxImageBytes {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput,
-			fmt.Sprintf("image is %d bytes, exceeding the %d byte limit; downscale or crop it first", pathInfo.Info.Size(), maxImageBytes)))
-	}
-	data, err := os.ReadFile(pathInfo.Absolute)
-	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "failed to read image file", domain.WithCause(err)))
-	}
-	if len(data) == 0 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "image file is empty"))
-	}
-	if len(data) > maxImageBytes {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput,
-			fmt.Sprintf("image is %d bytes, exceeding the %d byte limit; downscale or crop it first", len(data), maxImageBytes)))
-	}
-
-	mediaType := detectImageMediaType(data)
-	if mediaType == "" {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput,
-			"unsupported image format (want png, jpeg, gif, or webp magic bytes)"))
-	}
-
-	dimensions := imageDimensions(data, mediaType)
-	header := fmt.Sprintf("image: %s · %s · %d bytes", args.Path, mediaType, len(data))
-	if dimensions != "" {
-		header += " · " + dimensions
-	}
-	// Same contract as browser screenshots (browser.go): the UI renders
-	// inline tool-result images, so the model must not re-deliver the image
-	// via a markdown link to a local path (the web UI cannot resolve those).
-	header += "\nNote: the image is already displayed to the user in this tool result; " +
-		"do not embed it as a markdown link in your reply."
-
-	finishedAt := time.Now()
+	header := imageHeader(path, ref, data) +
+		"\nNote: the image is attached for your review at model-request time. It is not displayed " +
+		"to the user — call present_image if they should see it, and do not embed it as a markdown " +
+		"link in your reply."
 	return domain.ToolResult{
 		CallID: prepared.Call.ID,
 		Status: domain.ToolStatusSuccess,
 		Content: []domain.ContentPart{
 			{Kind: domain.PartText, Text: header},
-			{Kind: domain.PartImage, Image: &domain.ImageContent{
-				MediaType: mediaType,
-				Data:      base64.StdEncoding.EncodeToString(data),
-			}},
+			{Kind: domain.PartArtifact, Artifact: &ref, ModelOnly: true},
 		},
 		StartedAt:  startedAt,
-		FinishedAt: finishedAt,
+		FinishedAt: time.Now(),
 	}
-}
-
-// detectImageMediaType sniffs the magic bytes of the four supported formats.
-func detectImageMediaType(data []byte) string {
-	switch {
-	case len(data) >= 8 && string(data[:8]) == "\x89PNG\r\n\x1a\n":
-		return "image/png"
-	case len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF:
-		return "image/jpeg"
-	case len(data) >= 6 && (string(data[:6]) == "GIF87a" || string(data[:6]) == "GIF89a"):
-		return "image/gif"
-	case len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP":
-		return "image/webp"
-	}
-	return ""
-}
-
-// imageDimensions reports "WxH" for formats the standard library can decode
-// a config for (png, jpeg, gif); webp has no stdlib decoder and reports "".
-func imageDimensions(data []byte, mediaType string) string {
-	if mediaType == "image/webp" {
-		return ""
-	}
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil {
-		return ""
-	}
-	return fmt.Sprintf("%dx%d", cfg.Width, cfg.Height)
 }

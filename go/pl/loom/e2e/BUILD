@@ -22,6 +22,7 @@ go_test(
     srcs = [
         "context_budget_e2e_test.go",
         "exsession_e2e_test.go",
+        "image_e2e_test.go",
         "mcp_e2e_test.go",
         "mcp_http_e2e_test.go",
         "memory_pipeline_e2e_test.go",
