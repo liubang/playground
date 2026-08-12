@@ -713,6 +713,52 @@ func TestSearchRipgrepEngineAggregatesMatchesAndContext(t *testing.T) {
 	}
 }
 
+// Regression: searching an absolute path OUTSIDE the workspace must pass
+// that path through as the rg working directory. The process runner accepts
+// such a cwd under the read boundary (ValidateRead); an earlier write-boundary
+// (Validate) check rejected it and surfaced as an opaque "internal tool
+// error" for every out-of-workspace search.
+func TestSearchRipgrepOutsideWorkspaceRoot(t *testing.T) {
+	stubRgLocator(t)
+	validator, _ := newValidator(t)
+	// Canonicalize: macOS /var symlinks into /private/var, and the path
+	// validator resolves to the canonical form the runner will see.
+	outside := workspacepkg.Canonicalize(t.TempDir())
+	mustWriteFile(t, filepath.Join(outside, "notes.txt"), []byte("hello outside\n"))
+
+	match := `{"type":"match","data":{"path":{"text":"` + filepath.Join(outside, "notes.txt") + `"},"line_number":1,"lines":{"text":"hello outside\n"}}}`
+	runner := &fakeRgRunner{result: process.Result{ExitCode: 0, Stdout: []byte(match + "\n")}}
+
+	tool, err := NewSearchTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewSearchTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+		Pattern: "hello",
+		Path:    outside,
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	if runner.lastSpec.Cwd != outside {
+		t.Fatalf("rg cwd = %q, want outside-workspace root %q", runner.lastSpec.Cwd, outside)
+	}
+	argv := runner.lastSpec.Args
+	if n := len(argv); n < 2 || argv[n-1] != outside {
+		t.Fatalf("rg argv must end with the outside-workspace root %q: %v", outside, argv)
+	}
+
+	var output searchOutput
+	decodeToolResult(t, result, &output)
+	if output.MatchCount != 1 || output.Matches[0].Text != "hello outside" {
+		t.Fatalf("unexpected output: %+v", output)
+	}
+}
+
 // Regression (REVIEW M8): rg must cap emitted columns so multi-megabyte
 // single-line files cannot blow the JSONL scanner's token limit.
 func TestRgCommonArgsIncludesMaxColumns(t *testing.T) {
