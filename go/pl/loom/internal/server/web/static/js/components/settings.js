@@ -1700,7 +1700,7 @@ export class SettingsPanel {
       el(
         'div',
         'set-hint set-tip',
-        '所有工作区发现的 skill。禁用按名称对所有工作区生效（立即生效，写入 config 的 skills.disabled）；删除会从磁盘移除整个目录。编辑内容请直接修改对应的 SKILL.md；上方的配置改动保存后生效（重启后应用）。'
+        '各工作区发现的 skill（未发现 skill 的工作区不列出）。禁用按名称对所有工作区生效（立即生效，写入 config 的 skills.disabled）；删除会从磁盘移除整个目录。编辑内容请直接修改对应的 SKILL.md；上方的配置改动保存后生效（重启后应用）。'
       )
     )
     const list = el('div', 'set-skills')
@@ -1733,14 +1733,18 @@ export class SettingsPanel {
         )
         return
       }
-      let total = 0,
-        issues = 0
-      for (const g of r.groups || []) {
-        total += (g.skills || []).length
-        issues += (g.issues || []).length
-        refs.list.appendChild(this._skillGroup(g))
-      }
-      if (total === 0) {
+let total = 0,
+issues = 0,
+groups = 0
+for (const g of r.groups || []) {
+total += (g.skills || []).length
+issues += (g.issues || []).length
+refs.list.appendChild(this._skillGroup(g))
+groups++
+}
+// 服务端已省略无 skill（且无加载失败）的工作区分组；一个分组都没
+// 有时才提示目录约定
+if (groups === 0) {
         refs.list.appendChild(
           el(
             'div',
@@ -1773,13 +1777,9 @@ export class SettingsPanel {
   _skillGroup(g) {
     const sec = el('section', 'set-sec')
     sec.appendChild(el('h3', 'set-sec-title', g.workspace_name))
-    if (g.root) sec.appendChild(el('div', 'set-hint mono set-skill-root', g.root))
-    if (!g.skills || !g.skills.length) {
-      sec.appendChild(
-        el('div', 'set-hint', g.shared ? '（无用户级 skill）' : '（该工作区无 repo 级 skill）')
-      )
-    }
-    for (const sk of g.skills || []) {
+if (g.root) sec.appendChild(el('div', 'set-hint mono set-skill-root', g.root))
+// 空分组（无 skill 且无 issue）已被服务端过滤，这里不需要空态
+for (const sk of g.skills || []) {
       sec.appendChild(this._skillRow(sk))
     }
     for (const issue of g.issues || []) {

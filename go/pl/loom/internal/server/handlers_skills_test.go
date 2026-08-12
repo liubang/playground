@@ -109,6 +109,22 @@ func groupByName(t *testing.T, body map[string]any, name string) map[string]any 
 	return nil
 }
 
+// groupNames returns the set of workspace_name values in a /v1/skills
+// response (empty workspaces are omitted by the service, so presence is
+// the meaningful assertion).
+func groupNames(t *testing.T, body map[string]any) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	groups, ok := body["groups"].([]any)
+	if !ok {
+		t.Fatalf("groups missing in %v", body)
+	}
+	for _, g := range groups {
+		out[g.(map[string]any)["workspace_name"].(string)] = true
+	}
+	return out
+}
+
 func skillNames(t *testing.T, group map[string]any) map[string]string {
 	t.Helper()
 	out := map[string]string{}
@@ -141,6 +157,11 @@ func TestListSkillsAggregatesWorkspaces(t *testing.T) {
 	if _, err := svc.RegisterWorkspace(context.Background(), wsRoot, "ws1"); err != nil {
 		t.Fatalf("RegisterWorkspace: %v", err)
 	}
+	// A workspace without any discovered skill must not appear in the
+	// aggregated listing at all.
+	if _, err := svc.RegisterWorkspace(context.Background(), t.TempDir(), "ws2"); err != nil {
+		t.Fatalf("RegisterWorkspace ws2: %v", err)
+	}
 	srv, err := New(Config{Token: testToken, Version: "test", Service: svc})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -154,6 +175,9 @@ func TestListSkillsAggregatesWorkspaces(t *testing.T) {
 	}
 	if body["enabled"] != true {
 		t.Fatalf("enabled = %v, want true (reason %v)", body["enabled"], body["reason"])
+	}
+	if groupNames(t, body)["ws2"] {
+		t.Fatalf("empty workspace ws2 listed: %v", body["groups"])
 	}
 
 	shared := groupByName(t, body, "用户级（所有工作区共享）")
@@ -336,8 +360,9 @@ func TestDeleteSkillRemovesFromDisk(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("GET status = %d (%v)", status, body)
 	}
-	if names := skillNames(t, groupByName(t, body, "ws1")); len(names) != 0 {
-		t.Fatalf("workspace skills = %v after delete, want empty", names)
+	// ws1 has neither skills nor issues left, so its group is omitted.
+	if groupNames(t, body)["ws1"] {
+		t.Fatalf("ws1 group still listed after its only skill was deleted: %v", body["groups"])
 	}
 }
 

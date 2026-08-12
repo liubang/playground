@@ -114,7 +114,10 @@ type SkillGroup struct {
 }
 
 // SkillsOverview is the GET /v1/skills response model: the shared
-// user-scope group plus every registered workspace's repo-scope skills.
+// user-scope group plus the repo-scope skills of every registered
+// workspace that actually has something to show — groups with neither
+// skills nor load issues are omitted so the settings UI only lists
+// workspaces where skills were discovered.
 type SkillsOverview struct {
 	Enabled bool         `json:"enabled"`
 	Reason  string       `json:"reason,omitempty"`
@@ -153,14 +156,18 @@ func (s *SessionService) SkillsOverview(ctx context.Context) SkillsOverview {
 	}
 
 	// Shared user scope: identical for every workspace, listed once. An
-	// empty workspace root yields exactly the user-scope roots.
+	// empty workspace root yields exactly the user-scope roots. Like the
+	// workspace groups below, it is omitted when nothing was found.
 	shared := skill.NewLoader("", skillUserRoots(resolved.Skills, resolved.Storage.SkillsDir()), s.logger).Load(ctx)
-	ov.Groups = append(ov.Groups, SkillGroup{
+	sharedGroup := SkillGroup{
 		WorkspaceName: "用户级（所有工作区共享）",
 		Shared:        true,
 		Skills:        skillInfos(shared.Skills(), disabled),
 		Issues:        issueStrings(shared.Issues()),
-	})
+	}
+	if len(sharedGroup.Skills) > 0 || len(sharedGroup.Issues) > 0 {
+		ov.Groups = append(ov.Groups, sharedGroup)
+	}
 
 	workspaces, err := s.registry.List(ctx)
 	if err != nil {
@@ -209,6 +216,12 @@ func (s *SessionService) SkillsOverview(ctx context.Context) SkillsOverview {
 			catalog := skill.NewLoader(ws.RootPath, nil, s.logger).Load(ctx)
 			g.Skills = skillInfos(catalog.Skills(), disabled)
 			g.Issues = issueStrings(catalog.Issues())
+		}
+		// A workspace without any discovered skill (and without load
+		// issues worth surfacing) carries no information; skip it so the
+		// UI doesn't drown the real groups in empty sections.
+		if len(g.Skills) == 0 && len(g.Issues) == 0 {
+			continue
 		}
 		ov.Groups = append(ov.Groups, g)
 	}
