@@ -431,6 +431,188 @@ func TestServeRealModelPrepareFailureE2E(t *testing.T) {
 	t.Log("ACCEPTANCE PASS: prepare failure names the path and persists a sanitized args_summary")
 }
 
+// TestServeRealModelWritablePathsE2E is the real-model acceptance for the
+// run_cmd writable_paths scoped grant: a command that drops a file OUTSIDE
+// the workspace must be completed WITHOUT leaving the sandbox — the model
+// is expected to declare writable_paths (the scoped in-sandbox widening)
+// instead of require_escalated, exactly the behavior the dsx/talos
+// approval-storm session motivated.
+//
+// Acceptance coverage:
+//  1. the file lands on disk with the expected content (real write through
+//     the seatbelt sandbox with a writable-path grant);
+//  2. no approval request ever carries ESCALATED(no-sandbox) — the run
+//     never leaves the sandbox;
+//  3. at least one approval request carries the scoped writable=[...]
+//     grant, proving the model reached for writable_paths.
+//
+// Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
+func TestServeRealModelWritablePathsE2E(t *testing.T) {
+	if os.Getenv("LOOM_E2E_LLM") != "1" {
+		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
+	}
+
+	ctx := context.Background()
+	configPath := os.Getenv("LOOM_CONFIG")
+	if configPath == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Skipf("no home dir: %v", err)
+		}
+		configPath = filepath.Join(home, ".loom", "config.yaml")
+	}
+	configRaw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Skipf("loom config not found at %s", configPath)
+	}
+
+	// Same isolation trick as TestServeRealModelE2E: the config copy in tmp
+	// derives tmp as the loom home, so the user's stores stay untouched.
+	tmp := t.TempDir()
+	isolatedConfig := filepath.Join(tmp, "config.yaml")
+	if err := os.WriteFile(isolatedConfig, configRaw, 0o600); err != nil {
+		t.Fatalf("write isolated config: %v", err)
+	}
+	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
+	if err != nil {
+		t.Skipf("load loom config: %v", err)
+	}
+	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	workspace := filepath.Join(tmp, "ws")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir ws: %v", err)
+	}
+	// The write target must sit outside BOTH the workspace and the
+	// sandbox's default writable temp dir — otherwise the write succeeds
+	// without any grant and the test accepts nothing (an earlier version
+	// used a t.TempDir()-relative target, which lives under $TMPDIR and
+	// is writable by default). A throwaway directory directly in the
+	// user's home mirrors the dsx ~/Library/Logs case exactly.
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+	outside, err := os.MkdirTemp(home, ".loom-writable-e2e-")
+	if err != nil {
+		t.Fatalf("create outside dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+	target := filepath.Join(outside, "result.txt")
+	const codeWord = "loom-writable-e2e-ok"
+
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(tmp, "artifacts"),
+		Version:     "e2e",
+		Logger:      discard,
+	})
+	if err != nil {
+		t.Fatalf("NewProcessRuntime: %v", err)
+	}
+	defer proc.Close()
+	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{
+		WorkspaceRoot: workspace,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkspaceBootstrap: %v", err)
+	}
+	defer bootstrap.Close()
+
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
+	defer broker.Close()
+	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		_ = svc.Shutdown(shutdownCtx)
+	}()
+
+	c := client.NewInProc(svc)
+	if err := c.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	sessionID := c.SessionID()
+
+	eventsCtx, stopEvents := context.WithCancel(ctx)
+	defer stopEvents()
+	events, err := c.SubscribeEvents(eventsCtx, 0)
+	if err != nil {
+		t.Fatalf("SubscribeEvents: %v", err)
+	}
+	collector := &eventCollector{client: c, ch: events}
+	go collector.run()
+
+	// The prompt pins the OUT-OF-WORKSPACE target and the in-sandbox
+	// preference, but deliberately does NOT name the writable_paths
+	// parameter: the model is expected to learn it from the tool
+	// description and the sandbox guidance note, which is exactly the
+	// behavior being accepted.
+	prompt := fmt.Sprintf("把文本 %q 写入文件 %s（该路径在工作区之外）。要求：\n"+
+		"1. 必须通过 run_cmd 执行命令完成写入（不要用 write/edit 工具）；\n"+
+		"2. 让命令留在沙箱内运行：如果默认沙箱拦截了这次写入，按工具描述和返回指引选择最小化的沙箱内授权方式重试，直到写入成功，不要放弃；\n"+
+		"3. 写入成功后用 run_cmd 读取该文件，把文件内容原样复述给我。",
+		codeWord, target)
+	turns := collector.turnsDone()
+	if _, err := c.SubmitPrompt(ctx, prompt, nil); err != nil {
+		t.Fatalf("SubmitPrompt: %v", err)
+	}
+	collector.waitTurn(t, turns+1, 5*time.Minute)
+
+	// 1. The file must really have landed through the sandboxed grant.
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("target file was never written: %v (turn error: %s)", err, collector.lastTurnError())
+	}
+	if !strings.Contains(string(data), codeWord) {
+		t.Fatalf("target content = %q, want it to contain %q", data, codeWord)
+	}
+	t.Logf("write landed via sandboxed grant: %q", strings.TrimSpace(string(data)))
+
+	// 2+3. Inspect the durable permission trail: no escalation, at least
+	// one scoped writable-path ask.
+	store, err := sessionStoreReadOnly(ctx, resolved)
+	if err != nil {
+		t.Fatalf("open session store: %v", err)
+	}
+	defer store.Close()
+	persisted, err := store.LoadEvents(ctx, sessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	var asks int
+	var writableAsk bool
+	for _, evt := range persisted {
+		if evt.Type != domain.EventPermissionRequested {
+			continue
+		}
+		asks++
+		payload := string(evt.Payload)
+		t.Logf("permission ask #%d: %s", asks, payload)
+		if strings.Contains(payload, "ESCALATED(no-sandbox)") {
+			t.Fatalf("the run escalated out of the sandbox; writable_paths should have sufficed:\n%s", payload)
+		}
+		if strings.Contains(payload, "writable=[") {
+			writableAsk = true
+		}
+	}
+	if !writableAsk {
+		t.Fatalf("no permission request carried a scoped writable grant (%d asks); the model never used writable_paths", asks)
+	}
+	t.Logf("permission trail: %d ask(s), all sandboxed, scoped writable grant present", asks)
+
+	snap, err := c.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if !strings.Contains(lastAssistantText(snap.Messages), codeWord) {
+		t.Logf("note: final answer did not echo the code word (non-fatal; the file content is authoritative)")
+	}
+
+	t.Log("ACCEPTANCE PASS: out-of-workspace write completed via scoped writable_paths grant, zero sandbox escapes")
+}
+
 // sessionStoreReadOnly opens the isolated session store for post-turn
 // inspection of the durable event log.
 func sessionStoreReadOnly(ctx context.Context, cfg *config.ResolvedConfig) (*session.SQLiteStore, error) {
