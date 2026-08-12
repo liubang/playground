@@ -310,7 +310,16 @@ func (r *Runner) validateSpec(spec CommandSpec) (validatedSpec, error) {
 	if err != nil {
 		return validatedSpec{}, err
 	}
-	cwd, err := r.validator.Validate(spec.Cwd)
+	// The cwd follows the READ boundary, not the write boundary: a working
+	// directory grants no write access by itself — writes are enforced by
+	// the sandbox profile's WritablePaths (workspace root plus granted
+	// paths), which prepareLaunch derives from the validator root, never
+	// from the cwd. Read tools legitimately spawn read-only subprocesses
+	// (rg) rooted outside the workspace; rejecting those here surfaced as
+	// opaque "internal tool error" failures. Sensitive locations stay
+	// denied, and callers that need a stricter cwd (run_cmd) validate with
+	// the write boundary themselves before reaching the runner.
+	cwd, err := r.validator.ValidateRead(spec.Cwd)
 	if err != nil {
 		return validatedSpec{}, fmt.Errorf("validate cwd: %w", err)
 	}
