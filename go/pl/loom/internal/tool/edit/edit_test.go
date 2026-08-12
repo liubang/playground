@@ -258,7 +258,7 @@ func TestEditToolDetectsExternalModificationViaBook(t *testing.T) {
 // of several parallel calls failed.
 func TestEnsureExistingTextFileErrorNamesPath(t *testing.T) {
 	validator, _ := newValidator(t)
-	_, _, _, err := ensureExistingTextFile(validator, "internal/config/example.go")
+	_, _, _, _, err := ensureExistingTextFile(validator, "internal/config/example.go")
 	if err == nil || !strings.Contains(err.Error(), `path does not exist: "internal/config/example.go"`) {
 		t.Fatalf("error = %v, want the offending path named", err)
 	}
@@ -394,6 +394,97 @@ func TestWriteToolCreatesFileWithParentDirectories(t *testing.T) {
 	}
 	if string(content) != "package dir\n" {
 		t.Fatalf("content = %q", string(content))
+	}
+}
+
+// Boundary-crossing writes: Prepare signs a WriteRequest marking
+// OutsideRoots (the policy layer is the approval gate, not the tool), and
+// Execute completes the write through the resolved-path cores.
+func TestWriteToolExternalPathCarriesWriteRequest(t *testing.T) {
+	validator, _ := newValidator(t)
+	external := filepath.Join(t.TempDir(), "notes", "a.txt")
+
+	tool, err := NewWriteTool(validator)
+	if err != nil {
+		t.Fatalf("NewWriteTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "write", writeArgs{
+		Path:    external,
+		Content: "hello\n",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.WriteRequest == nil || !prepared.WriteRequest.OutsideRoots {
+		t.Fatalf("WriteRequest = %+v, want OutsideRoots=true", prepared.WriteRequest)
+	}
+	if prepared.WriteRequest.Path != workspacepkg.Canonicalize(external) {
+		t.Fatalf("WriteRequest.Path = %q, want %q", prepared.WriteRequest.Path, workspacepkg.Canonicalize(external))
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s: %+v", result.Status, result.Error)
+	}
+	content, err := os.ReadFile(external)
+	if err != nil || string(content) != "hello\n" {
+		t.Fatalf("external file content = %q, err = %v", content, err)
+	}
+
+	// Confined writes carry the contract with OutsideRoots=false.
+	prepared2, err := tool.Prepare(context.Background(), newToolCall(t, "write", writeArgs{
+		Path: "in.txt", Content: "x\n",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared2.WriteRequest == nil || prepared2.WriteRequest.OutsideRoots {
+		t.Fatalf("confined WriteRequest = %+v, want OutsideRoots=false", prepared2.WriteRequest)
+	}
+}
+
+func TestEditToolExternalPath(t *testing.T) {
+	validator, _ := newValidator(t)
+	external := filepath.Join(t.TempDir(), "note.txt")
+	mustWriteFile(t, external, []byte("before\n"), 0o644)
+
+	tool, err := NewEditTool(validator, nil)
+	if err != nil {
+		t.Fatalf("NewEditTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path: external, OldString: "before", NewString: "after",
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.WriteRequest == nil || !prepared.WriteRequest.OutsideRoots {
+		t.Fatalf("WriteRequest = %+v, want OutsideRoots=true", prepared.WriteRequest)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s: %+v", result.Status, result.Error)
+	}
+	content, err := os.ReadFile(external)
+	if err != nil || string(content) != "after\n" {
+		t.Fatalf("external file content = %q, err = %v", content, err)
+	}
+}
+
+// Sensitive locations stay denied at Prepare, before any policy evaluation
+// — no approval can ever reopen them.
+func TestWriteToolExternalSensitiveDenied(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	validator, _ := newValidator(t)
+
+	tool, err := NewWriteTool(validator)
+	if err != nil {
+		t.Fatalf("NewWriteTool() error = %v", err)
+	}
+	if _, err := tool.Prepare(context.Background(), newToolCall(t, "write", writeArgs{
+		Path: filepath.Join(home, ".ssh", "config"), Content: "x",
+	})); err == nil {
+		t.Fatal("Prepare(~/.ssh/config) must be denied")
 	}
 }
 

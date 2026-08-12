@@ -99,7 +99,10 @@ func searchDirectory(ctx context.Context, validator *workspacepkg.PathValidator,
 		if err != nil {
 			return domain.NewError(domain.ErrInternal, "failed to normalize walked path", domain.WithCause(err))
 		}
-		if containsSensitiveComponent(rel) {
+		// The component check covers names sensitive anywhere (.git, .env);
+		// IsSensitiveAbsolute additionally covers home-rooted locations
+		// (~/.kube, ~/.aws) when the walk root lies outside the workspace.
+		if containsSensitiveComponent(rel) || workspacepkg.IsSensitiveAbsolute(path) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}

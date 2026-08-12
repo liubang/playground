@@ -49,7 +49,8 @@ var (
 func (d RuleDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	info, ok := ExecInfoOf(call)
 	urlInfo, urlOK := URLInfoOf(call)
-	return d.evaluate(call, evalContext{exec: info, execOK: ok, url: urlInfo, urlOK: urlOK})
+	writeInfo, writeOK := WriteInfoOf(call)
+	return d.evaluate(call, evalContext{exec: info, execOK: ok, url: urlInfo, urlOK: urlOK, write: writeInfo, writeOK: writeOK})
 }
 
 // evaluate implements the contextDecider fast path (REVIEW M33): the
@@ -64,7 +65,20 @@ func (d RuleDecider) evaluate(call domain.PreparedCall, ctx evalContext) *domain
 	if ctx.urlOK {
 		return d.evaluateURL(ctx.url)
 	}
+	if ctx.writeOK {
+		return d.evaluateWrite(ctx.write)
+	}
 	return d.evaluateTool(call)
+}
+
+// evaluateWrite matches a boundary-crossing write target against the
+// writable-path rules.
+func (d RuleDecider) evaluateWrite(info WriteInfo) *domain.Verdict {
+	best, rule := d.Rules.EvaluatePath(info.Path)
+	if best == "" {
+		return nil
+	}
+	return &domain.Verdict{Decision: best, Source: SourceRule, Reason: rule.Justification}
 }
 
 // evaluateTool matches the call's tool name against the tool rules.
@@ -306,7 +320,8 @@ type SessionDecider struct {
 func (d SessionDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	info, ok := ExecInfoOf(call)
 	urlInfo, urlOK := URLInfoOf(call)
-	return d.evaluate(call, evalContext{exec: info, execOK: ok, url: urlInfo, urlOK: urlOK})
+	writeInfo, writeOK := WriteInfoOf(call)
+	return d.evaluate(call, evalContext{exec: info, execOK: ok, url: urlInfo, urlOK: urlOK, write: writeInfo, writeOK: writeOK})
 }
 
 // evaluate implements the contextDecider fast path (REVIEW M33).
@@ -352,6 +367,15 @@ func (d SessionDecider) evaluate(call domain.PreparedCall, ctx evalContext) *dom
 			Source:   SourceSession,
 			Reason:   "remembered from an interactive loom approval",
 		}
+	case ctx.writeOK:
+		if !d.Session.MatchPath(ctx.write.Path) {
+			return nil
+		}
+		return &domain.Verdict{
+			Decision: domain.DecisionAllow,
+			Source:   SourceSession,
+			Reason:   "remembered from an interactive loom approval",
+		}
 	default:
 		if !d.Session.MatchTool(call.Call.Name) {
 			return nil
@@ -374,7 +398,8 @@ type BaselineDecider struct {
 func (d BaselineDecider) Evaluate(call domain.PreparedCall) *domain.Verdict {
 	info, ok := ExecInfoOf(call)
 	urlInfo, urlOK := URLInfoOf(call)
-	return d.evaluate(call, evalContext{exec: info, execOK: ok, url: urlInfo, urlOK: urlOK})
+	writeInfo, writeOK := WriteInfoOf(call)
+	return d.evaluate(call, evalContext{exec: info, execOK: ok, url: urlInfo, urlOK: urlOK, write: writeInfo, writeOK: writeOK})
 }
 
 // evaluate implements the contextDecider fast path (REVIEW M33).
@@ -406,6 +431,16 @@ func (d BaselineDecider) evaluate(call domain.PreparedCall, ctx evalContext) *do
 		return v
 	}
 	switch {
+	case ctx.writeOK && d.Mode == ModeNever:
+		v.Decision, v.Reason = domain.DecisionDeny,
+			"never mode: writes outside the workspace roots are denied unattended; add a user-layer writable-path rule (paths section) for the target directory"
+	case ctx.writeOK:
+		// A write outside the workspace + scratch roots crosses the
+		// confinement boundary: the path validator no longer bounds the
+		// blast radius, so every interactive mode asks — rememberable by
+		// directory via "allow always" or a paths rule.
+		v.Decision, v.Reason = domain.DecisionAsk,
+			"risk baseline: writing outside the workspace requires approval (the user can remember the directory, or add a paths rule)"
 	case call.Risk <= domain.R2:
 		v.Decision, v.Reason = domain.DecisionAllow, "baseline: workspace-confined tool runs without prompting"
 	case d.Mode == ModeUnlessDangerous && unlessDangerousSilent(call):

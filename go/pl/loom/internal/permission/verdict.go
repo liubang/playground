@@ -47,10 +47,12 @@ type Decider interface {
 // once from the typed URLRequest field and shared across the chain
 // (docs/BROWSER_DESIGN.md §5.3).
 type evalContext struct {
-	exec   RunCmdCall
-	execOK bool
-	url    URLInfo
-	urlOK  bool
+	exec    RunCmdCall
+	execOK  bool
+	url     URLInfo
+	urlOK   bool
+	write   WriteInfo
+	writeOK bool
 }
 
 // contextDecider is the internal single-parse fast path: the built-in
@@ -72,9 +74,10 @@ type Chain []Decider
 // every decider implementing the contextDecider fast path.
 func (c Chain) Evaluate(call domain.PreparedCall) domain.Verdict {
 	var (
-		ctx        evalContext
-		parsedExec bool
-		parsedURL  bool
+		ctx         evalContext
+		parsedExec  bool
+		parsedURL   bool
+		parsedWrite bool
 	)
 	for _, d := range c {
 		if d == nil {
@@ -89,6 +92,10 @@ func (c Chain) Evaluate(call domain.PreparedCall) domain.Verdict {
 			if !parsedURL {
 				ctx.url, ctx.urlOK = URLInfoOf(call)
 				parsedURL = true
+			}
+			if !parsedWrite {
+				ctx.write, ctx.writeOK = WriteInfoOf(call)
+				parsedWrite = true
 			}
 			v = cd.evaluate(call, ctx)
 		} else {

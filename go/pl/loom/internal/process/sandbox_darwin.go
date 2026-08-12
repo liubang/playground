@@ -208,45 +208,12 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 	return strings.Join(lines, "\n") + "\n", nil
 }
 
-// sensitiveSubpaths and sensitiveLiterals are the credential-like
-// locations under the user's home directory. Reads are denied up front
+// The sensitive locations denied below come from the workspace package —
+// the single source of truth shared with the builtin file tools
+// (workspace/sensitive.go). Reads are denied up front
 // (sensitiveReadDenies); destructive writes are denied AFTER the write
 // allows (sensitiveUnlinkDenies) so widened write roots cannot enable a
 // rename-then-read bypass.
-var sensitiveSubpaths = []string{
-	".ssh",
-	".gnupg",
-	".aws",
-	".azure",
-	".kube",
-	".docker",
-	".config/gcloud",
-	".config/gh",
-	".config/snowflake",
-	"Library/Keychains",
-}
-
-var sensitiveLiterals = []string{
-	".netrc",
-	".git-credentials",
-	".env",
-	"credentials.json",
-	"service-account.json",
-	".npmrc",
-	".pypirc",
-}
-
-// sensitiveHome returns the canonicalized home directory for sensitive
-// path rules. Seatbelt matches canonical paths, so a symlinked HOME
-// (common in tests and some managed setups) must be resolved or the
-// denies silently match nothing.
-func sensitiveHome() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return ""
-	}
-	return workspacepkg.Canonicalize(home)
-}
 
 // sensitiveReadDenies returns seatbelt rules denying reads of
 // credential-like locations under the user's home directory. Writes
@@ -255,15 +222,17 @@ func sensitiveHome() string {
 // sandbox only needs to cover the home-level secrets the broad read
 // policy would otherwise expose.
 func sensitiveReadDenies() []string {
-	home := sensitiveHome()
+	home := workspacepkg.SensitiveHome()
 	if home == "" {
 		return nil
 	}
-	rules := make([]string, 0, len(sensitiveSubpaths)+len(sensitiveLiterals))
-	for _, rel := range sensitiveSubpaths {
+	subpaths := workspacepkg.SensitiveHomeSubpaths()
+	literals := workspacepkg.SensitiveHomeLiterals()
+	rules := make([]string, 0, len(subpaths)+len(literals))
+	for _, rel := range subpaths {
 		rules = append(rules, fmt.Sprintf("(deny file-read* (subpath %s))", seatbeltQuote(filepath.Join(home, rel))))
 	}
-	for _, rel := range sensitiveLiterals {
+	for _, rel := range literals {
 		rules = append(rules, fmt.Sprintf("(deny file-read* (literal %s))", seatbeltQuote(filepath.Join(home, rel))))
 	}
 	return rules
@@ -276,15 +245,17 @@ func sensitiveReadDenies() []string {
 // trailing allow would win and rename-then-read would bypass the read
 // deny.
 func sensitiveUnlinkDenies() []string {
-	home := sensitiveHome()
+	home := workspacepkg.SensitiveHome()
 	if home == "" {
 		return nil
 	}
-	rules := make([]string, 0, len(sensitiveSubpaths)+len(sensitiveLiterals))
-	for _, rel := range sensitiveSubpaths {
+	subpaths := workspacepkg.SensitiveHomeSubpaths()
+	literals := workspacepkg.SensitiveHomeLiterals()
+	rules := make([]string, 0, len(subpaths)+len(literals))
+	for _, rel := range subpaths {
 		rules = append(rules, fmt.Sprintf("(deny file-write-unlink (subpath %s))", seatbeltQuote(filepath.Join(home, rel))))
 	}
-	for _, rel := range sensitiveLiterals {
+	for _, rel := range literals {
 		rules = append(rules, fmt.Sprintf("(deny file-write-unlink (literal %s))", seatbeltQuote(filepath.Join(home, rel))))
 	}
 	return rules

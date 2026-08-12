@@ -48,7 +48,9 @@ type ReadFileTool struct {
 func NewReadFileTool(validator *workspacepkg.PathValidator, book *workspacepkg.FileStateBook) (*ReadFileTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "read_file",
-		Description: "Read a UTF-8 text file within the workspace. Output is cat -n style plain text: a header line " +
+		Description: "Read a UTF-8 text file. Relative paths resolve inside the workspace; absolute paths outside " +
+			"the workspace are readable too, except credential locations (~/.ssh, ~/.aws, ~/.kube, .env files, " +
+			"and similar), which are always denied. Output is cat -n style plain text: a header line " +
 			"(path, shown/total line range, size, sha256 content hash) followed by lines rendered as '<number>→<text>'. " +
 			"Paginate large files with offset/limit (max 500 lines per call); when the output ends with a truncated " +
 			"marker, keep reading with offset until it disappears. Binary files are rejected. " +
