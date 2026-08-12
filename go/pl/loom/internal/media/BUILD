@@ -12,44 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/22 21:10
-
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "builtin_lib",
+    name = "media_lib",
     srcs = [
-        "common.go",
-        "glob.go",
-        "list_dir.go",
-        "present_image.go",
-        "read_file.go",
-        "rg.go",
-        "search.go",
-        "search_text.go",
-        "view_image.go",
+        "cache.go",
+        "derive.go",
+        "materialize.go",
+        "media.go",
+        "store.go",
     ],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/builtin",
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/media",
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/media:media_lib",
-        "//go/pl/loom/internal/process:process_lib",
-        "//go/pl/loom/internal/tool/toolkit:toolkit_lib",
-        "//go/pl/loom/internal/workspace:workspace_lib",
+        "@org_golang_x_image//draw",
+        "@org_golang_x_image//webp",
     ],
 )
 
 go_test(
-    name = "builtin_test",
-    srcs = ["builtin_test.go"],
-    embed = [":builtin_lib"],
+    name = "media_test",
+    srcs = ["media_test.go"],
+    embed = [":media_lib"],
     deps = [
         "//go/pl/loom/internal/artifact:artifact_lib",
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/media:media_lib",
-        "//go/pl/loom/internal/process:process_lib",
-        "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )

@@ -19,7 +19,6 @@ package browser
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -217,36 +216,27 @@ func TestBrowserTool_E2E_FullFlow(t *testing.T) {
 	require.NotNil(t, scrolled.ScrollPos)
 	assert.Greater(t, scrolled.ScrollPos.Y, 500, "scroll must move the viewport")
 
-	// 6. screenshot: the header carries metadata, the image goes out as an
-	// artifact (for the user) plus an inline image part (for the model).
+	// 6. screenshot: the header carries metadata, the image goes out as
+	// an artifact only — the wire image is derived per model request by
+	// media.Materialize, so no base64 ever travels in the tool result.
 	// The base64 payload must NOT appear in the text header.
 	pngShot, pngResult := env.execRaw(browserArgs{Action: "screenshot"})
 	require.Equal(t, domain.ToolStatusSuccess, pngResult.Status, "png screenshot: %+v", pngResult.Error)
 	require.NotNil(t, pngShot.Screenshot)
 	assert.Equal(t, "png", pngShot.Screenshot.Format)
-	assert.True(t, pngShot.Screenshot.Inlined)
 	assert.NotEmpty(t, pngShot.Screenshot.Note)
 	assert.NotContains(t, findPart(pngResult.Content, domain.PartText).Text, "iVBORw", "base64 must not leak into the text header")
 	pngArt := findPart(pngResult.Content, domain.PartArtifact)
 	require.NotNil(t, pngArt, "screenshot must be persisted as an artifact")
 	assert.Equal(t, "image/png", pngArt.Artifact.MediaType)
-	pngImg := findPart(pngResult.Content, domain.PartImage)
-	require.NotNil(t, pngImg, "screenshot must be inlined as an image part")
-	assert.Equal(t, "image/png", pngImg.Image.MediaType)
-	pngData, err := base64.StdEncoding.DecodeString(pngImg.Image.Data)
-	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(string(pngData), "\x89PNG"), "PNG magic bytes")
 
 	jpgShot, jpgResult := env.execRaw(browserArgs{Action: "screenshot", Format: "jpeg", Quality: 50, FullPage: true})
 	require.Equal(t, domain.ToolStatusSuccess, jpgResult.Status, "jpeg screenshot: %+v", jpgResult.Error)
 	require.NotNil(t, jpgShot.Screenshot)
 	assert.Equal(t, "jpeg", jpgShot.Screenshot.Format)
-	jpgImg := findPart(jpgResult.Content, domain.PartImage)
-	require.NotNil(t, jpgImg)
-	assert.Equal(t, "image/jpeg", jpgImg.Image.MediaType)
-	jpgData, err := base64.StdEncoding.DecodeString(jpgImg.Image.Data)
-	require.NoError(t, err)
-	assert.True(t, len(jpgData) > 2 && jpgData[0] == 0xFF && jpgData[1] == 0xD8, "JPEG magic bytes")
+	jpgArt := findPart(jpgResult.Content, domain.PartArtifact)
+	require.NotNil(t, jpgArt, "jpeg screenshot must be persisted as an artifact")
+	assert.Equal(t, "image/jpeg", jpgArt.Artifact.MediaType)
 
 	// 7. close: releases the instance; the next navigate must transparently
 	// create a fresh one.

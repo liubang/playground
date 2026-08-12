@@ -45,6 +45,7 @@ go_library(
         "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/mcp:mcp_lib",
+        "//go/pl/loom/internal/media:media_lib",
         "//go/pl/loom/internal/memory:memory_lib",
         "//go/pl/loom/internal/model/openai:openai_lib",
         "//go/pl/loom/internal/permission:permission_lib",

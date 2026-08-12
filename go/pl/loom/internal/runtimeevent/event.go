@@ -299,12 +299,6 @@ type ToolCompletedPayload struct {
 	// without waiting for a snapshot rebuild. References are tiny (id + size);
 	// the blob bytes never travel on the event stream.
 	Artifacts []domain.ArtifactRef `json:"artifacts,omitempty"`
-	// Images carries the inline image content parts found in the tool result
-	// (e.g. view_image output), so live clients can render them without waiting
-	// for a snapshot rebuild. Each entry carries a base64 payload; only tools
-	// that produce inline images (view_image, generate_image when under the
-	// inline size limit) populate this field.
-	Images []domain.ImageContent `json:"images,omitempty"`
 }
 
 // ToolProgressPayload describes bounded progress.

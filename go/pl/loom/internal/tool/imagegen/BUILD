@@ -27,6 +27,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/media:media_lib",
         "//go/pl/loom/internal/model/images:images_lib",
         "//go/pl/loom/internal/tool/toolkit:toolkit_lib",
     ],

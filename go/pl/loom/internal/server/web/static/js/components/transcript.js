@@ -227,7 +227,9 @@ export class Transcript {
             break
           case 'artifact_ref':
             flushText()
-            if (p.artifact) {
+            // model_only 的图片只给模型看，展示通道渲染文本引用即可（见 blocks.js
+            // histCompletion 的同名过滤）。
+            if (p.artifact && !p.model_only) {
               this._append(artifactBlock(p.artifact, this.io.fetchArtifactURL))
             }
             break

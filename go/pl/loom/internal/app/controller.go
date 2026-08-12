@@ -19,6 +19,7 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -30,6 +31,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/media"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/render"
@@ -1093,6 +1095,29 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("cannot submit prompt in state %q", state)}
 		return
 	}
+	// Image attachments: gate on the active model's declared modalities and
+	// persist the raw bytes as artifacts BEFORE the turn starts — a bad
+	// image must fail the submission, not the turn. The user message then
+	// carries references (media.Materialize derives the wire image at every
+	// model call), so no base64 ever lands in the transcript. Note the
+	// steer path above keeps its text-only semantics: images submitted
+	// while busy are dropped before this point.
+	if len(cmd.Images) > 0 {
+		c.mu.Lock()
+		current := c.currentLocked()
+		c.mu.Unlock()
+		if meta, _ := c.bootstrap.Resolved().ModelMeta(current); !meta.SupportsImages() {
+			cmd.ResultCh <- controllerResult{Err: domain.NewError(domain.ErrInvalidInput,
+				fmt.Sprintf("model %q does not support image input (config modalities); switch models or remove the attachments", current.String()))}
+			return
+		}
+		refs, err := c.storeImageAttachments(cmd.Images)
+		if err != nil {
+			cmd.ResultCh <- controllerResult{Err: err}
+			return
+		}
+		cmd.ImageRefs = refs
+	}
 	c.mu.Lock()
 	if c.sessionID.IsZero() {
 		c.mu.Unlock()
@@ -1147,11 +1172,37 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	go func() {
 		defer cancelTurn()
 		defer close(turnDone)
-		err := c.runTurn(turnCtx, cmd.Prompt, cmd.Images, turnCounter)
+		err := c.runTurn(turnCtx, cmd.Prompt, cmd.ImageRefs, turnCounter)
 		c.onTurnFinished(turnID, turnCounter, err)
 	}()
 
 	cmd.ResultCh <- controllerResult{Value: SubmitResult{Turn: turnCounter}}
+}
+
+// storeImageAttachments decodes client-supplied base64 images and persists
+// each as an artifact (media.StoreImage sniffs the real media type from the
+// bytes; the declared type is never trusted). The submission fails as a
+// whole when any image is invalid — partial attachment sets would silently
+// drop user intent.
+func (c *Controller) storeImageAttachments(images []domain.ImageContent) ([]domain.ArtifactRef, error) {
+	refs := make([]domain.ArtifactRef, 0, len(images))
+	for i, img := range images {
+		raw, err := base64.StdEncoding.DecodeString(img.Data)
+		if err != nil {
+			return nil, domain.NewError(domain.ErrInvalidInput,
+				fmt.Sprintf("image %d: invalid base64 payload", i+1), domain.WithCause(err))
+		}
+		if len(raw) > media.MaxImageBytes {
+			return nil, domain.NewError(domain.ErrInvalidInput,
+				fmt.Sprintf("image %d is %d bytes, exceeding the %d byte limit", i+1, len(raw), media.MaxImageBytes))
+		}
+		ref, err := media.StoreImage(c.sessionCtx, c.bootstrap.Artifact, raw)
+		if err != nil {
+			return nil, fmt.Errorf("image %d: %w", i+1, err)
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
 }
 
 // handleSteer queues a prompt submitted while a turn is busy into the
@@ -1252,7 +1303,7 @@ func (c *Controller) SubagentView(ctx context.Context, sessionID domain.SessionI
 	}, nil
 }
 
-func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain.ImageContent, turnCounter int) error {
+func (c *Controller) runTurn(ctx context.Context, prompt string, imageRefs []domain.ArtifactRef, turnCounter int) error {
 	store := c.bootstrap.Store
 	clock := c.clock
 
@@ -1302,14 +1353,14 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 		return fmt.Errorf("persist run initialization: %w", err)
 	}
 
-	// Add user message
-	parts := make([]domain.ContentPart, 0, 1+len(images))
+	// Add user message. Image attachments are artifact references persisted
+	// by handleSubmitPrompt; the wire image is derived per request by
+	// media.Materialize, keeping the transcript free of base64 blobs.
+	parts := make([]domain.ContentPart, 0, 1+len(imageRefs))
 	parts = append(parts, domain.ContentPart{Kind: domain.PartText, Text: prompt})
-	for _, img := range images {
-		parts = append(parts, domain.ContentPart{Kind: domain.PartImage, Image: &domain.ImageContent{
-			MediaType: img.MediaType,
-			Data:      img.Data,
-		}})
+	for _, ref := range imageRefs {
+		ref := ref
+		parts = append(parts, domain.ContentPart{Kind: domain.PartArtifact, Artifact: &ref})
 	}
 	userMsg := domain.Message{
 		ID:        domain.NewMessageID(),
@@ -1373,7 +1424,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 		Run:                run,
 		Model:              provider.ModelFor(current.Model),
 		ModelName:          current.Model,
-		Store:              &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), artifacts: make(map[domain.ToolCallID][]domain.ArtifactRef), images: make(map[domain.ToolCallID][]domain.ImageContent), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
+		Store:              &publishingStore{inner: store, broker: c.broker, sessionID: c.sessionID, runID: run.ID, clock: clock, controller: c, previews: make(map[domain.ToolCallID]string), artifacts: make(map[domain.ToolCallID][]domain.ArtifactRef), pendingArgs: make(map[domain.ToolCallID]json.RawMessage)},
 		Approver:           c.rulesApprover,
 		Policy:             c.bootstrap.CurrentPolicy(),
 		Registry:           c.runtime.Registry,
@@ -1386,6 +1437,7 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, images []domain
 		Window:             window,
 		Runaway:            c.bootstrap.Resolved().Runaway,
 		Reasoning:          reasoning,
+		SupportsImages:     modelMeta.SupportsImages(),
 		ForceCompact:       forceCompact,
 		CompactTriggerHint: triggerHint,
 		GoalCell:           c.runtime.GoalCell,
@@ -2108,9 +2160,13 @@ const (
 )
 
 type controllerCommand struct {
-	Kind       string
-	Prompt     string
-	Images     []domain.ImageContent
+	Kind   string
+	Prompt string
+	Images []domain.ImageContent
+	// ImageRefs carries the artifact-persisted form of Images, filled by
+	// handleSubmitPrompt before the turn starts (never populated on the
+	// steer path, which is text-only).
+	ImageRefs  []domain.ArtifactRef
 	SessionID  domain.SessionID
 	ModelName  string
 	Reasoning  string
@@ -2157,13 +2213,8 @@ type publishingStore struct {
 
 	// artifacts stashes the artifact references of a tool result keyed by call
 	// ID over the same window, so the runtime ToolCompleted event can carry
-	// them for live rendering (e.g. generate_image output).
+	// them for live rendering (images and externalized outputs alike).
 	artifacts map[domain.ToolCallID][]domain.ArtifactRef
-
-	// images stashes the inline image content parts of a tool result keyed
-	// by call ID over the same window, so the runtime ToolCompleted event
-	// can carry them for live rendering (e.g. view_image output).
-	images map[domain.ToolCallID][]domain.ImageContent
 
 	// pendingArgs stashes raw tool-call arguments keyed by call ID between
 	// EventModelResponseCompleted (which carries them in the assistant
@@ -2378,10 +2429,6 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			if len(artifacts) > 0 && s.artifacts != nil {
 				s.artifacts[callID] = artifacts
 			}
-			imgs := imagesFromToolResult(payload.Message)
-			if len(imgs) > 0 && s.images != nil {
-				s.images[callID] = imgs
-			}
 		}
 	case domain.EventToolExecutionStarted:
 		var payload toolCallAuditDTO
@@ -2400,8 +2447,6 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			delete(s.previews, payload.CallID)
 			artifacts := s.artifacts[payload.CallID]
 			delete(s.artifacts, payload.CallID)
-			imgs := s.images[payload.CallID]
-			delete(s.images, payload.CallID)
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindToolCompleted, runtimeevent.ToolCompletedPayload{
 				CallID:       payload.CallID,
 				ToolName:     payload.ToolName,
@@ -2412,7 +2457,6 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				FinishedAt:   payload.FinishedAt,
 				Preview:      preview,
 				Artifacts:    artifacts,
-				Images:       imgs,
 			})
 		}
 	case domain.EventBudgetUpdated:
@@ -2557,7 +2601,9 @@ const pendingArgsCap = 256
 
 // toolResultPreview extracts a bounded text excerpt from a tool-result
 // message (the joined text parts, falling back to the error message) plus
-// the artifact references carried by the result content.
+// the displayable artifact references carried by the result content.
+// Model-only artifacts (view_image) are excluded: live clients render the
+// text header as the audit reference and must not render the image itself.
 func toolResultPreview(msg domain.Message) (domain.ToolCallID, string, []domain.ArtifactRef) {
 	for _, part := range msg.Parts {
 		if part.Kind != domain.PartToolResult || part.ToolResult == nil {
@@ -2571,7 +2617,7 @@ func toolResultPreview(msg domain.Message) (domain.ToolCallID, string, []domain.
 			case domain.PartText:
 				b.WriteString(cp.Text)
 			case domain.PartArtifact:
-				if cp.Artifact != nil {
+				if cp.Artifact != nil && !cp.ModelOnly {
 					artifacts = append(artifacts, *cp.Artifact)
 				}
 			}
@@ -2583,25 +2629,6 @@ func toolResultPreview(msg domain.Message) (domain.ToolCallID, string, []domain.
 		return result.CallID, boundPreviewLines(text, domain.ToolPreviewMaxLines, domain.ToolPreviewMaxBytes), artifacts
 	}
 	return domain.ToolCallID{}, "", nil
-}
-
-// imagesFromToolResult extracts inline image content parts from the first
-// tool_result part of msg. It is used to stash images for the runtime
-// ToolCompleted event so live clients can render them (e.g. view_image).
-func imagesFromToolResult(msg domain.Message) []domain.ImageContent {
-	for _, part := range msg.Parts {
-		if part.Kind != domain.PartToolResult || part.ToolResult == nil {
-			continue
-		}
-		var imgs []domain.ImageContent
-		for _, cp := range part.ToolResult.Content {
-			if cp.Kind == domain.PartImage && cp.Image != nil {
-				imgs = append(imgs, *cp.Image)
-			}
-		}
-		return imgs
-	}
-	return nil
 }
 
 // boundPreviewLines trims text to at most maxLines lines and maxBytes bytes,
