@@ -2128,10 +2128,12 @@ body.lightbox-open {
    卡片，与 providers/MCP/workspaces 的 .set-card 语言统一；含卡片的
    小节（层级导航、工作区）不加此变体，避免双重边框。 */
 .set-sec-card {
+  position: relative;
   background: color-mix(in srgb, var(--bg1) 55%, transparent);
   border: 1px solid var(--bg2);
   border-radius: var(--radius-md);
-  padding: 12px 16px 4px;
+  padding: 14px 16px 4px;
+  margin-top: 10px; /* 给浮起的标题留位 */
   margin-bottom: 14px;
 }
 .set-sec-title {
@@ -2139,6 +2141,36 @@ body.lightbox-open {
   font-weight: 600;
   color: var(--fg);
   margin-bottom: 10px;
+}
+/* 卡片小节的标题浮在边框左上角（fieldset/legend 式）：面板底色盖住
+   边框形成「开口」。带刷新按钮的小节（环境/规则包）只浮标题，
+   刷新按钮留在卡片内右上角，避免按钮压在边框线上。 */
+.set-sec-card > .set-sec-title,
+.set-sec-card > .set-skills-bar .set-sec-title {
+  position: absolute;
+  top: 0;
+  left: 10px;
+  transform: translateY(-50%);
+  margin: 0;
+  padding: 0 6px;
+  background: var(--bg1);
+}
+.set-sec-card > .set-skills-bar {
+  justify-content: flex-end;
+}
+/* 表单里的下拉不撑满整行：短选项全宽显得笨重；label 自带省略 */
+.set-input.sel {
+  width: auto;
+  min-width: 220px;
+  max-width: 360px;
+}
+/* 长说明默认一行截断，点击展开/收起（与 skill-desc 同一交互语言） */
+.set-tip.is-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  cursor: pointer;
 }
 .set-row {
   display: grid;
@@ -2177,6 +2209,22 @@ body.lightbox-open {
 .set-input:focus {
   outline: 1px solid var(--primary);
   border-color: var(--primary);
+}
+/* 必填标记（标签后的红色星号）与保存校验失败的控件高亮 */
+.set-req {
+  color: var(--error);
+  font-weight: 600;
+}
+.set-input.is-invalid {
+  border-color: var(--error);
+}
+.set-input.is-invalid:focus {
+  outline: 1px solid var(--error);
+  border-color: var(--error);
+}
+button.is-invalid {
+  outline: 2px solid var(--error);
+  outline-offset: 1px;
 }
 .set-input::placeholder {
   color: var(--muted);
@@ -2700,9 +2748,25 @@ select.set-input {
   border-color: color-mix(in srgb, var(--warning) 40%, transparent);
 }
 
-/* 规则包卡片：命令 chips + 风险徽标（权限 tab） */
+/* 规则包卡片：命令 chips + 风险徽标（权限 tab）。pack 卡片没有浮起
+   标题，不需要 set-sec-card 的 legend 留位；简介默认两行截断可点击展开 */
 .pack-card {
+  margin-top: 0;
   margin-bottom: 10px;
+}
+.pack-card .skill-head {
+  margin-bottom: 6px;
+}
+.pack-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  cursor: pointer;
+}
+.pack-desc.is-expanded {
+  display: block;
+  overflow: visible;
 }
 .pack-cmds {
   display: flex;

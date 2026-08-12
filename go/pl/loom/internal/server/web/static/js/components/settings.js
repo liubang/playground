@@ -20,6 +20,10 @@ import { createSelect, closeSelects } from './select.js'
 // 与 internal/config/edit.go 的 SecretMask 保持一致。
 const SECRET_MASK = '••••••••••'
 
+// 未发现 skill 时的目录约定提示（扫描为空与删空后共用）
+const SKILLS_EMPTY_HINT =
+  '未发现任何 skill。目录约定：工作区 .loom/skills/、.agents/skills/，用户级 ~/.loom/skills/、~/.agents/skills/。'
+
 // UI 未管理的配置路径：保存时从已加载的配置原样带回，避免静默丢失
 // （merge 的语义是「未提供的 key = 从文件删除」）。PRESERVE_PATHS 覆盖
 // 已知但 UI 未做编辑器的嵌套键；KNOWN_TOP_KEYS 之外的顶层键（未来新增
@@ -77,7 +81,7 @@ function preserveUnmanaged(cfg, orig) {
 
 // ---------- 字段控件 ----------
 
-// spec: {key, label, hint, ph, type, options, step, rows, def, revealRef}
+// spec: {key, label, hint, ph, type, options, step, rows, def, required, revealRef}
 // type ∈ text | password | number | bool | tristate | select | textarea |
 //       list-text（每行一项 → []string）| kv-text（每行 k=v → map）|
 //       float-list（逗号分隔 → []number）
@@ -120,7 +124,13 @@ function makeControl(spec) {
 // 控件且当前值是掩码时参与——用户已输入新值时直接切换可见性即可。
 function fieldRow(spec, onReveal) {
   const row = el('div', 'set-row')
-  row.appendChild(el('label', 'set-label', spec.label))
+  const label = el('label', 'set-label', spec.label)
+  if (spec.required) {
+    const star = el('span', 'set-req', ' *')
+    star.title = '必填'
+    label.appendChild(star)
+  }
+  row.appendChild(label)
   const body = el('div', 'set-field')
   const ctl = makeControl(spec)
   if ((spec.type || 'text') === 'password') {
@@ -302,7 +312,12 @@ const PROVIDER_BASE_FIELDS = [
       ['anthropic', 'anthropic（Messages API）'],
     ],
   },
-  { key: 'base_url', label: 'Base URL', ph: 'https://api.deepseek.com/v1' },
+  {
+    key: 'base_url',
+    label: 'Base URL',
+    required: true,
+    ph: 'https://api.deepseek.com/v1',
+  },
   {
     key: 'api_key',
     label: 'API Key',
@@ -347,7 +362,7 @@ const PROVIDER_ADV_FIELDS = [
 ]
 
 const MODEL_FIELDS = [
-  { key: 'name', label: '模型名', ph: '如 deepseek-chat' },
+  { key: 'name', label: '模型名', required: true, ph: '如 deepseek-chat' },
   { key: 'context_window', label: '上下文窗口', type: 'number', ph: '如 65536' },
   { key: 'max_output_tokens', label: '单次输出上限', type: 'number', ph: '如 8192' },
   {
@@ -793,6 +808,7 @@ export class SettingsPanel {
     this.cfg = {}
     this.dirty = false
     this.activeTab = 'providers'
+    this._rendered = false // 内容区是否已构建过（revision 未变时跳过重渲染）
     this._tabRefs = {} // tab id → 自定义渲染器收集的 DOM 引用
     this._skippedCards = 0 // 收集时被丢弃的非空卡片计数（保存时提示）
 
@@ -802,9 +818,15 @@ export class SettingsPanel {
     this.wrap.addEventListener('click', (e) => {
       if (e.target === this.wrap) this.close()
     })
-    // 任意编辑即标记脏；Esc 关闭（脏时确认）
-    this.wrap.addEventListener('input', () => this._markDirty())
-    this.wrap.addEventListener('change', () => this._markDirty())
+    // 任意编辑即标记脏（开始编辑校验失败字段时顺带摘除标红）；Esc 关闭（脏时确认）
+    this.wrap.addEventListener('input', (e) => {
+      this._markDirty()
+      e.target.classList?.remove('is-invalid')
+    })
+    this.wrap.addEventListener('change', (e) => {
+      this._markDirty()
+      e.target.classList?.remove('is-invalid')
+    })
     document.addEventListener(
       'keydown',
       (e) => {
@@ -854,6 +876,14 @@ export class SettingsPanel {
     m.classList.toggle('is-error', !!isError)
   }
 
+  // 长说明文本：默认一行截断，点击展开/收起（与 skill-desc 同一交互语言）
+  _tip(text) {
+    const tip = el('div', 'set-hint set-tip is-clamp', text)
+    tip.title = '点击展开/收起'
+    tip.onclick = () => tip.classList.toggle('is-clamp')
+    return tip
+  }
+
   // 居中加载/错误占位（面板打开与手动重新加载期间替代空白内容区）。
   _loadingEl(text, isError) {
     const d = el('div', 'set-loading' + (isError ? ' is-error' : ''))
@@ -864,6 +894,8 @@ export class SettingsPanel {
 
   // manual=true（「重新加载」按钮）时：未保存修改需确认（重载会丢弃），
   // 完成后 toast 反馈——对比 revision 区分「已是最新」与「已重新加载」。
+  // revision 未变且非放弃修改的重载时跳过整棵 DOM 重建：滚动位置、
+  // 详情层级（面包屑）、展开态全部保留，这是避免「刷新一处动全页」的关键。
   async _load(manual) {
     if (manual && this.dirty) {
       const ok = await this.confirm({
@@ -875,10 +907,14 @@ export class SettingsPanel {
     }
     this._msg('加载中…')
     const body = document.getElementById('settings-content')
-    body.textContent = ''
-    body.appendChild(this._loadingEl('加载配置中…'))
+    // 只有首次渲染才需要清场占位；已渲染过时请求期间保持现有 DOM
+    if (!this._rendered) {
+      body.textContent = ''
+      body.appendChild(this._loadingEl('加载配置中…'))
+    }
     try {
       const prevRevision = this.revision
+      const wasDirty = this.dirty
       const r = await this.api.getConfig()
       this.revision = r.revision || ''
       this.cfg = r.config || {}
@@ -888,20 +924,34 @@ export class SettingsPanel {
       this.dirty = false
       document.getElementById('settings-save').classList.remove('is-dirty')
       this._msg(r.exists ? '' : '首次配置：请先在「模型」页添加至少一个 provider')
-      this._renderContent()
-      this._renderTabs()
+      // 脏状态重载例外——用户已确认放弃修改，必须重建以恢复服务端值
+      if (!this._rendered || wasDirty || r.revision !== prevRevision) {
+        this._renderContent()
+        this._renderTabs()
+        this._rendered = true
+      } else {
+        // 配置没变但运行态可能变了（外部重连等）：刷新 MCP 徽标（内部有 diff）
+        this._refreshMcpStatus()
+      }
       if (this.activeTab === 'skills') this._loadSkills()
       if (this.activeTab === 'system') this._loadEnvironment()
-      if (manual)
+      if (manual) {
         this.toast(r.revision === prevRevision ? '已是最新，配置无变化' : '配置已重新加载', true)
+      }
     } catch (e) {
       if (e.status === 401) {
         this.wrap.hidden = true // gate 即将弹出，面板让位
         return
       }
-      body.textContent = ''
-      body.appendChild(this._loadingEl('加载配置失败: ' + e.message, true))
-      this._msg('加载配置失败: ' + e.message, true)
+      // 已有内容时保留 DOM，只在消息条报错（手动重载追加 toast）
+      if (this._rendered) {
+        this._msg('加载配置失败: ' + e.message, true)
+        if (manual) this.toast('加载配置失败: ' + e.message)
+      } else {
+        body.textContent = ''
+        body.appendChild(this._loadingEl('加载配置失败: ' + e.message, true))
+        this._msg('加载配置失败: ' + e.message, true)
+      }
     }
   }
 
@@ -946,8 +996,9 @@ export class SettingsPanel {
       else if (tab.id === 'mcp') this._renderMcp(panel)
       else if (tab.id === 'skills') this._renderSkills(panel)
       else {
-        for (const [title, fields] of tab.sections)
+        for (const [title, fields] of tab.sections) {
           panel.appendChild(this._renderSection(title, fields))
+        }
         if (tab.id === 'system') {
           this._renderEnvironment(panel)
           this._renderWorkspaces(panel)
@@ -1273,8 +1324,9 @@ export class SettingsPanel {
     listSec.appendChild(add)
     body.appendChild(listSec)
     refs.list = list
-    for (const [name, srv] of Object.entries(this.cfg.mcp_servers || {}))
+    for (const [name, srv] of Object.entries(this.cfg.mcp_servers || {})) {
       list.appendChild(this._mcpCard(name, srv))
+    }
     this._refreshMcpStatus()
   }
 
@@ -1318,7 +1370,23 @@ export class SettingsPanel {
       badge.textContent = '连接失败'
       badge.title = status.error || ''
     }
-    this._renderMcpTools(card)
+    // 工具列表重建会收起用户展开的简介：状态签名（含当前名称，影响
+    // 前缀剥离）没变就跳过，只更新上面的徽标文本
+    const name = card.querySelector(':scope > .set-card-head .set-input').value.trim()
+    const sig = JSON.stringify([
+      name,
+      status == null
+        ? status
+        : [
+            status.connected,
+            status.error,
+            (status.tools || []).map((t) => [t.name, t.description]),
+          ],
+    ])
+    if (card._mcpToolsSig !== sig) {
+      card._mcpToolsSig = sig
+      this._renderMcpTools(card)
+    }
   }
 
   // 「已注册工具」小节（详情表单上方，只读）：每行显示服务器本地名 +
@@ -1449,7 +1517,7 @@ export class SettingsPanel {
     stdio.dataset.cfgScope = ''
     stdio.dataset.transport = 'stdio'
     for (const spec of [
-      { key: 'command', label: '命令', ph: '如 npx' },
+      { key: 'command', label: '命令', required: true, ph: '如 npx' },
       { key: 'args', label: '参数', type: 'list-text', hint: '每行一个参数' },
       {
         key: 'env',
@@ -1458,23 +1526,25 @@ export class SettingsPanel {
         hint: '每行一个 KEY=VALUE（追加到进程环境）',
       },
       { key: 'cwd', label: '工作目录', hint: '留空继承 loom 的工作目录' },
-    ])
+    ]) {
       stdio.appendChild(this._fieldRow(spec))
+    }
     cardBody.appendChild(stdio)
 
     const http = el('div', 'set-group')
     http.dataset.cfgScope = ''
     http.dataset.transport = 'http'
     for (const spec of [
-      { key: 'url', label: 'URL', ph: 'https://mcp.example.com/mcp' },
+      { key: 'url', label: 'URL', required: true, ph: 'https://mcp.example.com/mcp' },
       {
         key: 'headers',
         label: '请求头',
         type: 'kv-text',
         hint: '每行一个 KEY=VALUE；值支持 ${VAR} 引用',
       },
-    ])
+    ]) {
       http.appendChild(this._fieldRow(spec))
+    }
     cardBody.appendChild(http)
 
     const common = el('div', 'set-group')
@@ -1485,8 +1555,9 @@ export class SettingsPanel {
       { key: 'tool_timeout_sec', label: '工具调用超时 (秒)', type: 'number', ph: '300' },
       { key: 'enabled_tools', label: '工具白名单', type: 'list-text', hint: '留空注册全部工具' },
       { key: 'disabled_tools', label: '工具黑名单', type: 'list-text' },
-    ])
+    ]) {
       common.appendChild(this._fieldRow(spec))
+    }
     cardBody.appendChild(common)
     card.appendChild(cardBody)
 
@@ -1525,8 +1596,9 @@ export class SettingsPanel {
     const transport = card.querySelector('.set-transport').value
     const srv = {}
     for (const group of card.querySelectorAll(':scope > .set-card-body > .set-group')) {
-      if (group.dataset.transport === 'common' || group.dataset.transport === transport)
+      if (group.dataset.transport === 'common' || group.dataset.transport === transport) {
         collectScope(group, srv)
+      }
     }
     if (transport === 'http') return 'HTTP · ' + (srv.url || '未配置 URL')
     const cmd = [srv.command, ...(srv.args || [])].filter(Boolean).join(' ')
@@ -1567,8 +1639,9 @@ export class SettingsPanel {
       const transport = card.querySelector('.set-transport').value
       const srv = {}
       for (const group of card.querySelectorAll(':scope > .set-card-body > .set-group')) {
-        if (group.dataset.transport === 'common' || group.dataset.transport === transport)
+        if (group.dataset.transport === 'common' || group.dataset.transport === transport) {
           collectScope(group, srv)
+        }
       }
       if (servers[name]) this._skippedCards++ // 重名：后者覆盖前者
       servers[name] = srv
@@ -1593,9 +1666,7 @@ export class SettingsPanel {
     bar.appendChild(refresh)
     sec.appendChild(bar)
     sec.appendChild(
-      el(
-        'div',
-        'set-hint set-tip',
+      this._tip(
         'loom 启动时把常见工具目录补进进程 PATH（GUI 启动时 PATH 只有系统目录），优先级：上方「额外 PATH 目录」> 内置清单 > 通配展开 > 继承的 PATH。' +
           '沙箱内命令看到的就是这份 PATH——「未检测到」的工具可考虑把其目录登记到上方配置。'
       )
@@ -1610,7 +1681,6 @@ export class SettingsPanel {
   async _loadEnvironment(force) {
     const refs = this._tabRefs.env
     if (!refs || !refs.content || refs.loading || (refs.loaded && !force)) return
-    refs.loaded = true
     refs.loading = true
     if (refs.refreshBtn) {
       refs.refreshBtn.disabled = true
@@ -1620,6 +1690,7 @@ export class SettingsPanel {
     refs.content.appendChild(this._loadingEl('读取环境报告中…'))
     try {
       const r = await this.api.metaEnvironment()
+      refs.loaded = true // 成功才置位：失败后下次切入 tab 允许自动重试
       refs.content.textContent = ''
       refs.content.appendChild(el('h4', 'set-env-sub', '关键工具解析'))
       for (const t of r.tools || []) refs.content.appendChild(this._envToolRow(t))
@@ -1697,9 +1768,7 @@ export class SettingsPanel {
     bar.appendChild(refresh)
     body.appendChild(bar)
     body.appendChild(
-      el(
-        'div',
-        'set-hint set-tip',
+      this._tip(
         '各工作区发现的 skill（未发现 skill 的工作区不列出）。禁用按名称对所有工作区生效（立即生效，写入 config 的 skills.disabled）；删除会从磁盘移除整个目录。编辑内容请直接修改对应的 SKILL.md；上方的配置改动保存后生效（重启后应用）。'
       )
     )
@@ -1712,7 +1781,6 @@ export class SettingsPanel {
   async _loadSkills(force) {
     const refs = this._tabRefs.skills
     if (!refs || !refs.list || refs.loading || (refs.loaded && !force)) return
-    refs.loaded = true
     refs.loading = true
     if (refs.refreshBtn) {
       refs.refreshBtn.disabled = true
@@ -1722,6 +1790,7 @@ export class SettingsPanel {
     refs.list.appendChild(this._loadingEl('扫描技能目录中…'))
     try {
       const r = await this.api.listSkills()
+      refs.loaded = true // 成功才置位：失败后下次切入 tab 允许自动重试
       refs.list.textContent = ''
       if (!r.enabled) {
         refs.list.appendChild(
@@ -1733,32 +1802,27 @@ export class SettingsPanel {
         )
         return
       }
-let total = 0,
-issues = 0,
-groups = 0
-for (const g of r.groups || []) {
-total += (g.skills || []).length
-issues += (g.issues || []).length
-refs.list.appendChild(this._skillGroup(g))
-groups++
-}
-// 服务端已省略无 skill（且无加载失败）的工作区分组；一个分组都没
-// 有时才提示目录约定
-if (groups === 0) {
-        refs.list.appendChild(
-          el(
-            'div',
-            'set-hint',
-            '未发现任何 skill。目录约定：工作区 .loom/skills/、.agents/skills/，用户级 ~/.loom/skills/、~/.agents/skills/。'
-          )
-        )
+      let total = 0,
+        issues = 0,
+        groups = 0
+      for (const g of r.groups || []) {
+        total += (g.skills || []).length
+        issues += (g.issues || []).length
+        refs.list.appendChild(this._skillGroup(g))
+        groups++
+      }
+      // 服务端已省略无 skill（且无加载失败）的工作区分组；一个分组都没
+      // 有时才提示目录约定
+      if (groups === 0) {
+        refs.list.appendChild(el('div', 'set-hint', SKILLS_EMPTY_HINT))
       }
       // 手动刷新的结果摘要：数字让用户确认扫描覆盖了预期目录
-      if (force)
+      if (force) {
         this.toast(
           `发现 ${total} 个 skill` + (issues ? `，${issues} 个加载失败` : ''),
           issues === 0
         )
+      }
     } catch (e) {
       refs.list.textContent = ''
       if (e.status !== 401) {
@@ -1777,9 +1841,9 @@ if (groups === 0) {
   _skillGroup(g) {
     const sec = el('section', 'set-sec')
     sec.appendChild(el('h3', 'set-sec-title', g.workspace_name))
-if (g.root) sec.appendChild(el('div', 'set-hint mono set-skill-root', g.root))
-// 空分组（无 skill 且无 issue）已被服务端过滤，这里不需要空态
-for (const sk of g.skills || []) {
+    if (g.root) sec.appendChild(el('div', 'set-hint mono set-skill-root', g.root))
+    // 空分组（无 skill 且无 issue）已被服务端过滤，这里不需要空态
+    for (const sk of g.skills || []) {
       sec.appendChild(this._skillRow(sk))
     }
     for (const issue of g.issues || []) {
@@ -1793,13 +1857,14 @@ for (const sk of g.skills || []) {
 
   _skillRow(sk) {
     const row = el('div', 'skill-row' + (sk.disabled ? ' is-disabled' : ''))
+    row._skill = sk // 就地更新（_applySkillDisabled/_removeSkillRow）回读用
     const head = el('div', 'skill-head')
     head.appendChild(el('span', 'skill-name mono', sk.name))
     head.appendChild(el('span', 'skill-scope' + (sk.scope === 'repo' ? ' is-repo' : ''), sk.scope))
-    if (sk.disabled) head.appendChild(el('span', 'skill-scope is-off', '已禁用'))
+    if (sk.disabled) head.appendChild(el('span', 'skill-scope is-off skill-off', '已禁用'))
     const actions = el('div', 'skill-actions')
     // 禁用/启用：按名称写入 config 的 skills.disabled，服务端热应用
-    const toggle = el('button', 'icon-btn skill-action')
+    const toggle = el('button', 'icon-btn skill-action skill-toggle')
     toggle.type = 'button'
     toggle.title = (sk.disabled ? '启用' : '禁用') + '（按名称对所有工作区生效）'
     toggle.innerHTML = icon(sk.disabled ? 'check' : 'ban')
@@ -1832,10 +1897,38 @@ for (const sk of g.skills || []) {
       if (resp.revision) this.revision = resp.revision
       setPath(this.cfg, 'skills.disabled', resp.disabled || [])
       this.toast(sk.disabled ? `已启用 ${sk.name}` : `已禁用 ${sk.name}（立即生效）`, true)
-      await this._loadSkills(true)
+      // 就地同步行状态（禁用按名称生效，可能涉及多行），不整表重扫——
+      // 滚动位置与已展开的简介因此保留
+      this._applySkillDisabled(resp.disabled)
     } catch (e) {
-      btn.disabled = false
       if (e.status !== 401) this.toast((sk.disabled ? '启用失败: ' : '禁用失败: ') + e.message)
+    } finally {
+      btn.disabled = false
+    }
+  }
+
+  // 禁用/启用后就地同步列表：行样式、「已禁用」徽标、开关按钮图标与文案。
+  // sk 对象原地修改（行的 onclick 闭包捕获的是它），后续操作基于最新状态。
+  _applySkillDisabled(disabled) {
+    const refs = this._tabRefs.skills
+    if (!refs || !refs.list) return
+    const off = new Set(disabled || [])
+    for (const row of refs.list.querySelectorAll('.skill-row')) {
+      const sk = row._skill
+      if (!sk) continue
+      sk.disabled = off.has(sk.name)
+      row.classList.toggle('is-disabled', sk.disabled)
+      const head = row.querySelector('.skill-head')
+      let badge = head.querySelector('.skill-off')
+      if (sk.disabled && !badge) {
+        badge = el('span', 'skill-scope is-off skill-off', '已禁用')
+        head.insertBefore(badge, head.querySelector('.skill-actions'))
+      } else if (!sk.disabled && badge) {
+        badge.remove()
+      }
+      const toggle = head.querySelector('.skill-toggle')
+      toggle.title = (sk.disabled ? '启用' : '禁用') + '（按名称对所有工作区生效）'
+      toggle.innerHTML = icon(sk.disabled ? 'check' : 'ban')
     }
   }
 
@@ -1849,10 +1942,29 @@ for (const sk of g.skills || []) {
     try {
       await this.api.deleteSkill(sk.path)
       this.toast(`已删除 ${sk.name}`, true)
-      await this._loadSkills(true)
+      this._removeSkillRow(sk.path)
     } catch (e) {
       if (e.status !== 401) this.toast('删除失败: ' + e.message)
     }
+  }
+
+  // 删除后就地移除对应行；分组清空后整组移除，全部删完时给出目录约定提示
+  _removeSkillRow(path) {
+    const refs = this._tabRefs.skills
+    if (!refs || !refs.list) return
+    for (const row of [...refs.list.querySelectorAll('.skill-row')]) {
+      if (row._skill && row._skill.path === path) row.remove()
+    }
+    for (const sec of [...refs.list.children]) {
+      if (
+        sec.classList.contains('set-sec') &&
+        !sec.querySelector('.skill-row') &&
+        !sec.querySelector('.skill-issue')
+      ) {
+        sec.remove()
+      }
+    }
+    if (!refs.list.children.length) refs.list.appendChild(el('div', 'set-hint', SKILLS_EMPTY_HINT))
   }
 
   // ---------- 规则包（权限 tab 附加小节） ----------
@@ -1872,9 +1984,7 @@ for (const sk of g.skills || []) {
     bar.appendChild(refresh)
     sec.appendChild(bar)
     sec.appendChild(
-      el(
-        'div',
-        'set-hint set-tip',
+      this._tip(
         '部分已知安全的命令（Go 工具链、pip、云 CLI）在 macOS 沙箱内因 TLS 验证必然失败。开启对应规则包后，这些命令直接在沙箱外运行，不再失败、不再逐次审批。' +
           '开启会把这些命令的 allow 规则写入用户规则目录（pack-*.json），可随时在规则文件中查看、修改或删除；风险等级高的包可能读取云凭证，请按需开启。'
       )
@@ -1889,7 +1999,6 @@ for (const sk of g.skills || []) {
   async _loadRulePacks(force) {
     const refs = this._tabRefs.packs
     if (!refs || !refs.list || refs.loading || (refs.loaded && !force)) return
-    refs.loaded = true
     refs.loading = true
     if (refs.refreshBtn) {
       refs.refreshBtn.disabled = true
@@ -1899,6 +2008,7 @@ for (const sk of g.skills || []) {
     refs.list.appendChild(this._loadingEl('读取规则包中…'))
     try {
       const r = await this.api.listRulePacks()
+      refs.loaded = true // 成功才置位：失败后下次切入 tab 允许自动重试
       refs.list.textContent = ''
       const packs = r.packs || []
       if (!packs.length) {
@@ -1929,12 +2039,8 @@ for (const sk of g.skills || []) {
     const riskLabel = { low: '低风险', medium: '中风险', high: '高风险' }[p.risk] || p.risk
     head.appendChild(el('span', 'skill-scope' + (p.risk === 'high' ? ' is-repo' : ''), riskLabel))
     if (p.installed) head.appendChild(el('span', 'skill-scope is-off', '已启用'))
-    sec.appendChild(head)
-    if (p.description) sec.appendChild(el('div', 'set-hint', p.description))
-    if (p.reason) sec.appendChild(el('div', 'set-hint set-tip', '信任边界：' + p.reason))
-    const cmds = el('div', 'pack-cmds')
-    for (const c of p.commands || []) cmds.appendChild(el('code', 'pack-cmd mono', c))
-    sec.appendChild(cmds)
+    // 启用/停用放在头行右侧（.skill-actions 自带 margin-left:auto），
+    // 与名称/徽标同一视线；不再孤零零挂在卡片底部
     const actions = el('div', 'skill-actions')
     if (p.installed) {
       const off = el('button', 'btn btn-secondary btn-sm')
@@ -1949,7 +2055,18 @@ for (const sk of g.skills || []) {
       on.onclick = () => this._toggleRulePack(p, on)
       actions.appendChild(on)
     }
-    sec.appendChild(actions)
+    head.appendChild(actions)
+    sec.appendChild(head)
+    if (p.description) {
+      const desc = el('div', 'set-hint pack-desc', p.description)
+      desc.title = '点击展开/收起'
+      desc.onclick = () => desc.classList.toggle('is-expanded')
+      sec.appendChild(desc)
+    }
+    if (p.reason) sec.appendChild(el('div', 'set-hint set-tip', '信任边界：' + p.reason))
+    const cmds = el('div', 'pack-cmds')
+    for (const c of p.commands || []) cmds.appendChild(el('code', 'pack-cmd mono', c))
+    sec.appendChild(cmds)
     return sec
   }
 
@@ -1975,7 +2092,9 @@ for (const sk of g.skills || []) {
         await this.api.installRulePack(p.id)
         this.toast(`已启用 ${p.name}（立即生效）`, true)
       }
-      await this._loadRulePacks(true)
+      // 就地重渲染这一张卡片（徽标 + 按钮切换），不整表重建
+      p.installed = !p.installed
+      btn.closest('.pack-card').replaceWith(this._rulePackRow(p))
     } catch (e) {
       btn.disabled = false
       if (e.status !== 401) this.toast((p.installed ? '停用失败: ' : '启用失败: ') + e.message)
@@ -2013,7 +2132,9 @@ for (const sk of g.skills || []) {
     head.appendChild(makeControl({ key: 'name', type: 'text', ph: '显示名（可选）' }))
     head.appendChild(this._cardDelBtn(card, '删除该工作区'))
     card.appendChild(head)
-    card.appendChild(this._fieldRow({ key: 'root', label: '根目录', ph: '~/workspace/project' }))
+    card.appendChild(
+      this._fieldRow({ key: 'root', label: '根目录', required: true, ph: '~/workspace/project' })
+    )
     fillScope(card, ws)
     return card
   }
@@ -2078,15 +2199,153 @@ for (const sk of g.skills || []) {
     }
   }
 
-  _validate(cfg) {
-    if (!cfg.providers || cfg.providers.length === 0) return '请先在「模型」页添加至少一个 provider'
-    for (const p of cfg.providers) {
-      if (!p.base_url) return `provider「${p.name}」缺少 base_url`
-      if (!p.models || p.models.length === 0) return `provider「${p.name}」至少需要一个模型`
-      if (p.api_key && p.api_key_env)
-        return `provider「${p.name}」的 api_key 与 api_key_env 只能二选一`
+  // ---------- 校验 ----------
+
+  // 找到第一个校验失败的字段：{msg, tab, el}。与收集逻辑同源地读 DOM，
+  // 从而能拿到出问题的具体控件做定位。只拦截「填了内容但缺必填」的
+  // 卡片——完全空白的卡片（点了添加又放弃）沿用收集时的丢弃语义。
+  _firstInvalid() {
+    const prefs = this._tabRefs.providers
+    if (prefs && prefs.list) {
+      let namedProviders = 0
+      for (const card of prefs.list.children) {
+        const p = {}
+        collectScope(card, p)
+        const modelCards = [
+          ...card.querySelectorAll(':scope > .set-card-body > .set-models > .set-card'),
+        ]
+        if (!p.name) {
+          if (Object.keys(p).length || modelCards.length) {
+            return {
+              msg: '有 provider 缺少名称',
+              tab: 'providers',
+              el: card.querySelector(':scope > .set-card-head .set-input'),
+            }
+          }
+          continue
+        }
+        namedProviders++
+        if (!p.base_url) {
+          return {
+            msg: `provider「${p.name}」缺少 Base URL`,
+            tab: 'providers',
+            el: card.querySelector(':scope > .set-card-body [data-cfg-key="base_url"]'),
+          }
+        }
+        if (p.api_key && p.api_key_env) {
+          return {
+            msg: `provider「${p.name}」的 API Key 与 Key 环境变量只能二选一`,
+            tab: 'providers',
+            el: card.querySelector(':scope > .set-card-body [data-cfg-key="api_key_env"]'),
+          }
+        }
+        let namedModels = 0
+        for (const mc of modelCards) {
+          const m = {}
+          collectScope(mc, m)
+          if (m.name) namedModels++
+          else if (Object.keys(m).length) {
+            return {
+              msg: `provider「${p.name}」下有模型缺少名称`,
+              tab: 'providers',
+              el: mc.querySelector('[data-cfg-key="name"]'),
+            }
+          }
+        }
+        if (!namedModels) {
+          return {
+            msg: `provider「${p.name}」至少需要一个模型`,
+            tab: 'providers',
+            el: card.querySelector(':scope > .set-card-body > .set-add'),
+          }
+        }
+      }
+      if (!namedProviders) {
+        return {
+          msg: '请先在「模型」页添加至少一个 provider',
+          tab: 'providers',
+          el: prefs.list.closest('.settings-panel').querySelector('.set-add'),
+        }
+      }
     }
-    return ''
+    const mrefs = this._tabRefs.mcp
+    if (mrefs && mrefs.list) {
+      for (const card of mrefs.list.children) {
+        const nameCtl = card.querySelector(':scope > .set-card-head .set-input')
+        const transport = card.querySelector('.set-transport').value
+        const srv = {}
+        for (const group of card.querySelectorAll(':scope > .set-card-body > .set-group')) {
+          if (group.dataset.transport === 'common' || group.dataset.transport === transport) {
+            collectScope(group, srv)
+          }
+        }
+        const name = nameCtl.value.trim()
+        if (!name) {
+          if (Object.keys(srv).length) {
+            return { msg: '有 MCP 服务器缺少名称', tab: 'mcp', el: nameCtl }
+          }
+          continue
+        }
+        if (transport === 'stdio' && !srv.command) {
+          return {
+            msg: `MCP 服务器「${name}」缺少命令`,
+            tab: 'mcp',
+            el: card.querySelector('[data-cfg-key="command"]'),
+          }
+        }
+        if (transport === 'http' && !srv.url) {
+          return {
+            msg: `MCP 服务器「${name}」缺少 URL`,
+            tab: 'mcp',
+            el: card.querySelector('[data-cfg-key="url"]'),
+          }
+        }
+      }
+    }
+    const wrefs = this._tabRefs.workspaces
+    if (wrefs && wrefs.list) {
+      for (const card of wrefs.list.children) {
+        const ws = {}
+        collectScope(card, ws)
+        if (!ws.root && ws.name) {
+          return {
+            msg: `工作区「${ws.name}」缺少根目录`,
+            tab: 'system',
+            el: card.querySelector('[data-cfg-key="root"]'),
+          }
+        }
+      }
+    }
+    return null
+  }
+
+  // 定位到校验失败的字段：切 tab → 进入卡片详情态（若在层级列表内）→
+  // 滚动到可视区并聚焦 → 标红（开始编辑后由 wrap 的 input/change 监听摘除）。
+  _locate({ tab, el }) {
+    if (tab && this.activeTab !== tab) this._switchTab(tab)
+    if (!el) return
+    const card = el.closest('.set-card')
+    const prefs = this._tabRefs.providers
+    if (card && prefs && prefs.list && prefs.list.contains(card)) {
+      let providerCard = card
+      let modelCard = null
+      if (card.classList.contains('is-nested')) {
+        modelCard = card
+        providerCard = card.closest('.set-models').closest('.set-card')
+      }
+      if (prefs.openModel) this._providersBack()
+      if (prefs.open && prefs.open !== providerCard) this._providersBack()
+      if (prefs.open !== providerCard) this._openProvider(providerCard)
+      if (modelCard && prefs.openModel !== modelCard) this._openModel(providerCard, modelCard)
+    }
+    const mrefs = this._tabRefs.mcp
+    if (card && mrefs && mrefs.list && mrefs.list.contains(card)) {
+      if (mrefs.open && mrefs.open !== card) this._mcpBack()
+      if (mrefs.open !== card) this._openMcp(card)
+    }
+    el.classList.add('is-invalid')
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    if (el.focus) el.focus({ preventScroll: true })
   }
 
   // 保存结果消息：按服务端返回的分级报告说明每类配置的生效时机。
@@ -2107,18 +2366,26 @@ for (const sk of g.skills || []) {
     const saveBtn = document.getElementById('settings-save')
     saveBtn.disabled = true
     try {
+      // 先校验后收集：校验直接读 DOM，失败可定位到具体控件
+      const bad = this._firstInvalid()
+      if (bad) {
+        this._locate(bad)
+        this._msg(bad.msg, true)
+        this.toast(bad.msg)
+        return
+      }
       const cfg = {}
       this._collectAll(cfg)
       preserveUnmanaged(cfg, this.cfg)
-      const err = this._validate(cfg)
-      if (err) {
-        this._msg(err, true)
-        this.toast(err)
-        return
-      }
       this._msg('保存中…（MCP 变更需连接，可能耗时数秒）')
       const r = await this.api.putConfig(this.revision, cfg)
       this.revision = r.revision || this.revision
+      // path_extra 变化才会重写 PATH 报告：按 key 精确失效环境卡片，
+      // 其他保存不动它（比较要在 this.cfg 更新前做）
+      const pathExtraChanged =
+        JSON.stringify(getPath(cfg, 'tools.path_extra') ?? null) !==
+        JSON.stringify(getPath(this.cfg, 'tools.path_extra') ?? null)
+      this.cfg = cfg // 保存成功的配置成为后续 preserve/比较 的基准
       this.dirty = false
       saveBtn.classList.remove('is-dirty')
       const msg = this._applyMsg(r)
@@ -2131,10 +2398,11 @@ for (const sk of g.skills || []) {
       setTimeout(() => saveBtn.classList.remove('flash-success'), 1300)
       // 热应用可能改变 MCP 连接状态（新增/删除/重连），刷新徽标
       this._refreshMcpStatus()
-      // path_extra 热应用会重写 PATH 报告，失效并刷新环境卡片
       const envRefs = this._tabRefs.env
-      if (envRefs) envRefs.loaded = false
-      if (this.activeTab === 'system') this._loadEnvironment()
+      if (envRefs && pathExtraChanged) {
+        envRefs.loaded = false
+        if (this.activeTab === 'system') this._loadEnvironment()
+      }
     } catch (e) {
       if (e.status === 401) return
       if (e.code === 'config_conflict') {
