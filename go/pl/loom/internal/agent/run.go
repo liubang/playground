@@ -760,9 +760,14 @@ type modelRequestFailedPayload struct {
 }
 
 type permissionResolvedPayload struct {
-	CallID   domain.ToolCallID `json:"call_id"`
-	ArgsHash string            `json:"args_hash"`
-	Decision domain.Decision   `json:"decision"`
+	// ApprovalID is the ID of the permission.requested event being resolved.
+	// Downstream projections key pending approval cards by that requested
+	// event ID, so the resolution must carry it — the resolved event's own
+	// ID is a fresh, unrelated identifier.
+	ApprovalID domain.EventID    `json:"approval_id"`
+	CallID     domain.ToolCallID `json:"call_id"`
+	ArgsHash   string            `json:"args_hash"`
+	Decision   domain.Decision   `json:"decision"`
 }
 
 type toolExecutionCompletedPayload struct {
@@ -1853,9 +1858,10 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 			return fmt.Errorf("request approval for %s: %w", tc.ID, err)
 		}
 		l.Run.appendEvent(domain.EventPermissionResolved, permissionResolvedPayload{
-			CallID:   prepared.Call.ID,
-			ArgsHash: prepared.ArgsHash,
-			Decision: decision,
+			ApprovalID: approvalEvent.ID,
+			CallID:     prepared.Call.ID,
+			ArgsHash:   prepared.ArgsHash,
+			Decision:   decision,
 		})
 		if l.traceRun != nil {
 			l.traceRun.RecordEvent(ctx, "approval.resolved", map[string]string{

@@ -1320,6 +1320,126 @@ func forceAwaitingApproval(controller *Controller) {
 	controller.mu.Unlock()
 }
 
+// Regression: a permission.resolved domain event names its approval by the
+// permission.requested event's ID in the PAYLOAD; the resolved event's own
+// ID is a fresh, unrelated identifier. The publishing store must key every
+// projection update by the payload's approval ID — keying by the resolved
+// event's ID left zombie approval cards in snapshots (a session switch
+// replayed every approval of the turn as still pending), pinned the
+// session in awaiting_approval for the rest of the turn (the workspace
+// badge overcounted), and broadcast an approval_id no frontend card
+// matched.
+func TestPublishingStoreApprovalResolvedKeysByApprovalID(t *testing.T) {
+	store, err := session.OpenSQLiteStore(context.Background(), filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	broker := runtimeevent.NewBroker()
+	defer broker.Close()
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, fakes.NewFakeModel()),
+		Broker:    broker,
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	// The command loop is not started; the publishing store is driven
+	// directly, so set the pre-approval run state by hand.
+	controller.mu.Lock()
+	controller.state = ControllerStateRunning
+	controller.mu.Unlock()
+
+	sessionID := domain.NewSessionID()
+	ps := &publishingStore{
+		broker:      broker,
+		sessionID:   sessionID,
+		runID:       domain.NewRunID(),
+		clock:       domain.RealClock{},
+		controller:  controller,
+		pendingArgs: make(map[domain.ToolCallID]json.RawMessage),
+	}
+	events, unsubscribe := broker.Subscribe()
+	defer unsubscribe()
+
+	callID := domain.NewToolCallID()
+	requestedID := domain.NewEventID()
+	reqPayload, err := json.Marshal(toolCallAuditDTO{
+		CallID: callID, Tool: "run_cmd", Risk: domain.R3, ArgsHash: "hash-1", ApprovalDesc: "run it",
+	})
+	if err != nil {
+		t.Fatalf("marshal requested payload: %v", err)
+	}
+	ps.publishForEvent(sessionID, domain.Event{ID: requestedID, Type: domain.EventPermissionRequested, Payload: reqPayload})
+
+	if got := controller.State(); got != ControllerStateAwaitingApproval {
+		t.Fatalf("state after requested = %q, want awaiting_approval", got)
+	}
+	controller.mu.Lock()
+	_, cardOK := controller.pendingCards[requestedID]
+	// handleResolveApproval records the actor under the approval ID before
+	// the loop persists the resolution.
+	controller.approvalActors[requestedID] = "web"
+	controller.mu.Unlock()
+	if !cardOK {
+		t.Fatal("requested event did not project a pending card")
+	}
+
+	// The resolved event gets its own fresh ID; the approval ID travels in
+	// the payload (see agent.awaitApproval).
+	resolvedID := domain.NewEventID()
+	if resolvedID == requestedID {
+		t.Fatal("test premise broken: resolved and requested IDs collide")
+	}
+	resPayload, err := json.Marshal(permissionResolvedDTO{
+		ApprovalID: requestedID, CallID: callID, Decision: domain.DecisionAllow,
+	})
+	if err != nil {
+		t.Fatalf("marshal resolved payload: %v", err)
+	}
+	ps.publishForEvent(sessionID, domain.Event{ID: resolvedID, Type: domain.EventPermissionResolved, Payload: resPayload})
+
+	controller.mu.Lock()
+	_, zombie := controller.pendingCards[requestedID]
+	_, actorLeaked := controller.approvalActors[requestedID]
+	state := controller.state
+	controller.mu.Unlock()
+	if zombie {
+		t.Fatal("resolved approval card was not removed from the projection")
+	}
+	if actorLeaked {
+		t.Fatal("approval actor was not consumed")
+	}
+	if state != ControllerStateRunning {
+		t.Fatalf("state after last card resolved = %q, want running", state)
+	}
+
+	// The broadcast approval.resolved must carry the REQUESTED event's ID
+	// (frontends key their cards by it) and the recorded actor.
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case evt := <-events:
+			if evt.Kind != runtimeevent.KindApprovalResolved {
+				continue
+			}
+			var payload runtimeevent.ApprovalResolvedPayload
+			if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+				t.Fatalf("decode approval.resolved: %v", err)
+			}
+			if payload.ApprovalID != requestedID {
+				t.Fatalf("broadcast approval_id = %s, want requested id %s", payload.ApprovalID, requestedID)
+			}
+			if payload.Actor != "web" {
+				t.Fatalf("broadcast actor = %q, want web", payload.Actor)
+			}
+			return
+		case <-deadline:
+			t.Fatal("timed out waiting for approval.resolved frame")
+		}
+	}
+}
+
 // Regression: the "allow always" memory must land BEFORE the decision wakes
 // the agent loop — the woken loop re-evaluates the batch's remaining calls
 // against session memory immediately, and a late memory re-prompts a call
