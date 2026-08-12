@@ -142,6 +142,21 @@ func TestContentPartValidation(t *testing.T) {
 			false,
 		},
 		{
+			"model_only on artifact part",
+			ContentPart{Kind: PartArtifact, Artifact: &ArtifactRef{ID: NewArtifactID(), Size: 10}, ModelOnly: true},
+			false,
+		},
+		{
+			"model_only on text part",
+			ContentPart{Kind: PartText, Text: "hello", ModelOnly: true},
+			true,
+		},
+		{
+			"present_only and model_only",
+			ContentPart{Kind: PartArtifact, Artifact: &ArtifactRef{ID: NewArtifactID(), Size: 10}, PresentOnly: true, ModelOnly: true},
+			true,
+		},
+		{
 			"unknown kind",
 			ContentPart{Kind: "unknown"},
 			true,

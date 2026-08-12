@@ -111,6 +111,11 @@ type Provider struct {
 type Model struct {
 	Name          string `yaml:"name"`
 	ContextWindow int64  `yaml:"context_window,omitempty"`
+	// Modalities declares the model's input modalities (e.g. ["text",
+	// "image"]). Empty means text-only: submitting image attachments to
+	// such a model is rejected, and image references in history are
+	// replaced by text gaps (media.StripImages) instead of inline images.
+	Modalities []string `yaml:"modalities,omitempty"`
 	// WindowUtilization overrides context.utilization for this model (e.g.
 	// when a gateway overstates the window); nil inherits the global value.
 	WindowUtilization *float64 `yaml:"window_utilization,omitempty"`
@@ -119,6 +124,16 @@ type Model struct {
 	MaxOutputTokens int64     `yaml:"max_output_tokens,omitempty"`
 	WireAPI         string    `yaml:"wire_api,omitempty"`
 	Reasoning       Reasoning `yaml:"reasoning,omitempty"`
+}
+
+// SupportsImages reports whether the model declares image input.
+func (m Model) SupportsImages() bool {
+	for _, modality := range m.Modalities {
+		if modality == "image" {
+			return true
+		}
+	}
+	return false
 }
 
 // Reasoning configures the model's reasoning (thinking) intent in

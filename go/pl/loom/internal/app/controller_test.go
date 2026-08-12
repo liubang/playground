@@ -860,6 +860,26 @@ func TestToolResultPreviewExtractsAndBounds(t *testing.T) {
 		t.Fatalf("artifact extraction = (%v, %v), want (%v, [%v])", gotID, gotArtifacts, callID, ref)
 	}
 
+	// Model-only artifacts (view_image) stay out of the live display channel:
+	// clients render the text header as the audit reference, never the image.
+	modelOnlyMsg := domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleAssistant,
+		Parts: []domain.ContentPart{{
+			Kind: domain.PartToolResult,
+			ToolResult: &domain.ToolResult{
+				CallID: callID,
+				Status: domain.ToolStatusSuccess,
+				Content: []domain.ContentPart{
+					{Kind: domain.PartText, Text: "image: shot.png · image/png"},
+					{Kind: domain.PartArtifact, Artifact: &ref, ModelOnly: true},
+				},
+			},
+		}},
+	}
+	if _, preview, got := toolResultPreview(modelOnlyMsg); len(got) != 0 {
+		t.Fatalf("model-only artifacts surfaced for display: %v (preview %q)", got, preview)
+	}
+
 	errMsg := domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleAssistant,
 		Parts: []domain.ContentPart{{

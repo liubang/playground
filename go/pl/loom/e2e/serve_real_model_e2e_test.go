@@ -446,6 +446,10 @@ type eventCollector struct {
 	mu    sync.Mutex
 	seen  map[runtimeevent.RuntimeEventKind]int
 	turns int
+	// lastTurnErr carries the Error field of the most recent
+	// KindTurnFinished event ("" for a clean finish) — the first thing to
+	// inspect when a real-model turn comes back empty.
+	lastTurnErr string
 }
 
 func (c *eventCollector) run() {
@@ -455,6 +459,10 @@ func (c *eventCollector) run() {
 		c.seen[evt.Kind]++
 		if evt.Kind == runtimeevent.KindTurnFinished {
 			c.turns++
+			var p runtimeevent.TurnFinishedPayload
+			if err := json.Unmarshal(evt.Payload, &p); err == nil {
+				c.lastTurnErr = p.Error
+			}
 		}
 		c.mu.Unlock()
 		switch evt.Kind {
@@ -478,6 +486,12 @@ func (c *eventCollector) turnsDone() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.turns
+}
+
+func (c *eventCollector) lastTurnError() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.lastTurnErr
 }
 
 func (c *eventCollector) waitTurn(t *testing.T, n int, timeout time.Duration) {
