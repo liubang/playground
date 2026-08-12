@@ -2043,6 +2043,12 @@ func TestLoopEmitsApprovalAndSideEffectEventsSafely(t *testing.T) {
 	if preparedPayload.ApprovalDesc != "Write notes.txt" {
 		t.Fatalf("unexpected approval desc: %q", preparedPayload.ApprovalDesc)
 	}
+	// The resolved payload must name the REQUESTED event's ID (the approval
+	// ID): downstream projections key pending cards by it, and frontends
+	// match approval.resolved frames against it.
+	if resolvedPayload.ApprovalID != events[requestedIdx].ID {
+		t.Fatalf("resolved approval_id = %s, want requested event id %s", resolvedPayload.ApprovalID, events[requestedIdx].ID)
+	}
 	if resolvedPayload.CallID != callID || resolvedPayload.ArgsHash != "args-hash-123" || resolvedPayload.Decision != domain.DecisionAllow {
 		t.Fatalf("unexpected permission resolution payload: %+v", resolvedPayload)
 	}

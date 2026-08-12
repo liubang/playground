@@ -2330,13 +2330,23 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 	case domain.EventPermissionResolved:
 		var payload permissionResolvedDTO
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+			// The approval ID is the REQUESTED event's ID recorded in the
+			// payload — pendingCards, approvalActors, and every frontend's
+			// approval map are all keyed by it. The resolved event's own ID
+			// (ev.ID) is a fresh identifier that matches nothing; using it
+			// here leaked zombie cards into snapshots and pinned the session
+			// in awaiting_approval for the rest of the turn.
+			approvalID := payload.ApprovalID
+			if approvalID.IsZero() {
+				approvalID = ev.ID // legacy events without the field
+			}
 			s.controller.mu.Lock()
-			actor := s.controller.approvalActors[ev.ID]
-			delete(s.controller.approvalActors, ev.ID)
-			delete(s.controller.pendingCards, ev.ID)
+			actor := s.controller.approvalActors[approvalID]
+			delete(s.controller.approvalActors, approvalID)
+			delete(s.controller.pendingCards, approvalID)
 			s.controller.mu.Unlock()
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindApprovalResolved, runtimeevent.ApprovalResolvedPayload{
-				ApprovalID: ev.ID,
+				ApprovalID: approvalID,
 				CallID:     payload.CallID,
 				Decision:   payload.Decision,
 				Actor:      actor,
@@ -2503,8 +2513,12 @@ type toolCallAuditDTO struct {
 }
 
 type permissionResolvedDTO struct {
-	CallID   domain.ToolCallID `json:"call_id"`
-	Decision domain.Decision   `json:"decision"`
+	// ApprovalID echoes the permission.requested event ID (the approval ID)
+	// recorded by the agent loop. Events persisted before this field existed
+	// leave it zero; the handler falls back to the resolved event's own ID.
+	ApprovalID domain.EventID    `json:"approval_id,omitempty"`
+	CallID     domain.ToolCallID `json:"call_id"`
+	Decision   domain.Decision   `json:"decision"`
 }
 
 type toolExecutionCompletedDTO struct {
