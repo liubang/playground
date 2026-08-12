@@ -61,10 +61,12 @@ type GlobTool struct {
 func NewGlobTool(validator *workspacepkg.PathValidator, runner rgRunner) (*GlobTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "glob",
-		Description: "Find files by name pattern within the workspace (e.g. '*.go', 'src/**/test_*.ts'). " +
+		Description: "Find files by name pattern (e.g. '*.go', 'src/**/test_*.ts'). 'path' defaults to the " +
+			"workspace root and may be any readable directory, including absolute paths outside the workspace " +
+			"(credential locations are always excluded). " +
 			"A pattern without '/' matches the file name at any depth; a pattern with '/' matches the " +
-			"workspace-relative path ('**' crosses directories). " +
-			"Returns workspace-relative paths in deterministic order, capped at 200. " +
+			"path relative to 'path' ('**' crosses directories). " +
+			"Returns paths in deterministic order, capped at 200. " +
 			"Files matched by .gitignore and hidden (dot-prefixed) paths are skipped when the ripgrep " +
 			"engine is available; the fallback engine includes them (the engine is reported in the output).",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"pattern":{"type":"string","minLength":1,"maxLength":512},"path":{"type":"string","minLength":1}},"required":["pattern"]}`),
@@ -146,7 +148,10 @@ func (t *GlobTool) Execute(ctx context.Context, prepared domain.PreparedCall) do
 func (t *GlobTool) executeRipgrep(ctx context.Context, prepared domain.PreparedCall, root pathResolution, args globArgs, startedAt time.Time) domain.ToolResult {
 	// rg --files lists candidate files relative to the working directory; the
 	// glob pattern filters them. Fetch one extra entry to detect truncation.
-	argv := []string{"--files", "--glob", args.Pattern, "--", "."}
+	// Sensitive excludes come last: rg's later globs win (see rg.go).
+	argv := []string{"--files", "--glob", args.Pattern}
+	argv = append(argv, rgSensitiveExcludes()...)
+	argv = append(argv, "--", ".")
 	stdout, rgTruncated, err := runRipgrep(ctx, t.runner, root.Absolute, argv)
 	if err != nil {
 		if isSandboxFailure(err) {
@@ -208,7 +213,10 @@ func (t *GlobTool) executeGoFallback(ctx context.Context, prepared domain.Prepar
 		if err != nil {
 			return err
 		}
-		if containsSensitiveComponent(rel) {
+		// The component check covers names sensitive anywhere (.git, .env);
+		// IsSensitiveAbsolute additionally covers home-rooted locations
+		// (~/.kube, ~/.aws) when the walk root lies outside the workspace.
+		if containsSensitiveComponent(rel) || workspacepkg.IsSensitiveAbsolute(p) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}

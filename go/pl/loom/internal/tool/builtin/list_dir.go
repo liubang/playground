@@ -58,8 +58,11 @@ type ListDirTool struct {
 // NewListDirTool creates a list_dir tool.
 func NewListDirTool(validator *workspacepkg.PathValidator) (*ListDirTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
-		Name:         "list_dir",
-		Description:  "List direct children of a workspace directory (name, kind, size, mode, mtime), deterministically sorted and capped at 200 entries. Not recursive: use glob to find files by name across the tree, or search to look inside file contents.",
+		Name: "list_dir",
+		Description: "List direct children of a directory (name, kind, size, mode, mtime), deterministically " +
+			"sorted and capped at 200 entries. Relative paths resolve inside the workspace; absolute paths " +
+			"outside the workspace work too (credential locations are always excluded). " +
+			"Not recursive: use glob to find files by name across the tree, or search to look inside file contents.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1}},"required":["path"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"entry_count":{"type":"integer"},"truncated":{"type":"boolean"},"entries":{"type":"array"}},"required":["path","entry_count","truncated","entries"]}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},

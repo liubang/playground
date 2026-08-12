@@ -30,6 +30,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 // searchEngine identifies which backend produced a search result.
@@ -193,6 +194,22 @@ func rgCommonArgs(contextLines int, caseSensitive, fixedStrings, noIgnore bool, 
 	}
 	if fileType != "" {
 		args = append(args, "--type", fileType)
+	}
+	return append(args, rgSensitiveExcludes()...)
+}
+
+// rgSensitiveExcludes excludes the canonical sensitive components
+// (workspace.SensitiveComponents) from rg results. rg skips dotfiles by
+// default, but --no-ignore/--hidden callers and the non-dotfile entries
+// (credentials.json, service-account.json) need explicit excludes. They
+// are appended AFTER caller globs because rg's later globs win: a
+// user-supplied include must never re-admit a sensitive path (read tools
+// accept roots outside the workspace, where no validator pre-check ran).
+func rgSensitiveExcludes() []string {
+	components := workspacepkg.SensitiveComponents()
+	args := make([]string, 0, len(components)*2)
+	for _, c := range components {
+		args = append(args, "--glob", "!"+c)
 	}
 	return args
 }

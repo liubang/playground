@@ -154,9 +154,10 @@ func ScratchDirs() []string {
 // Root returns the workspace root.
 func (v *PathValidator) Root() string { return v.root }
 
-// Validate checks that the given path is within the workspace root.
-// It cleans the path, resolves symlinks, and ensures the result is under root.
-func (v *PathValidator) Validate(path string) (string, error) {
+// resolve cleans path, joins it with the workspace root when relative,
+// and resolves it to a canonical symlink-free absolute path (non-existent
+// tails resolve through their nearest existing ancestor).
+func (v *PathValidator) resolve(path string) (string, error) {
 	// Reject null bytes
 	if strings.ContainsRune(path, 0) {
 		return "", fmt.Errorf("null byte in path")
@@ -185,12 +186,40 @@ func (v *PathValidator) Validate(path string) (string, error) {
 			return "", fmt.Errorf("resolve non-existent path: %w", err)
 		}
 	}
+	return resolved, nil
+}
+
+// Validate checks that the given path is within the workspace root.
+// It cleans the path, resolves symlinks, and ensures the result is under root.
+func (v *PathValidator) Validate(path string) (string, error) {
+	resolved, err := v.resolve(path)
+	if err != nil {
+		return "", err
+	}
 
 	// Ensure resolved path is under an allowed root
 	if _, ok := v.matchRoot(resolved); !ok {
 		return "", fmt.Errorf("path %q escapes workspace root %q", path, v.root)
 	}
 
+	return resolved, nil
+}
+
+// ValidateRead resolves path for READ-ONLY access. Unlike Validate it
+// permits canonical paths outside every allowed root — mirroring the OS
+// sandbox's broad read allowance (process/sandbox_darwin.go), so the
+// builtin read tools and sandboxed commands expose the same read boundary
+// — but denies sensitive locations wherever they live (IsSensitiveAbsolute).
+// Writes must keep using Validate/ResolveLexical: read alignment never
+// widens the write boundary.
+func (v *PathValidator) ValidateRead(path string) (string, error) {
+	resolved, err := v.resolve(path)
+	if err != nil {
+		return "", err
+	}
+	if IsSensitiveAbsolute(resolved) {
+		return "", fmt.Errorf("path %q is in a sensitive location", path)
+	}
 	return resolved, nil
 }
 
@@ -246,12 +275,44 @@ func (v *PathValidator) ResolveLexical(path string) (ResolvedPath, error) {
 	}, nil
 }
 
+// ResolveWrite resolves a WRITE target. Paths under the workspace or
+// scratch roots keep lexical semantics (ResolveLexical: no symlink
+// following, downstream chain defenses). Any other path resolves to its
+// canonical form with sensitive locations denied — the same predicate
+// reads use (ValidateRead): the read boundary and the writable-candidate
+// boundary share exactly one rule, "canonical and non-sensitive" — and
+// external=true reports that the target crosses the confinement
+// boundary. Callers MUST route external writes through the policy layer
+// (approval, writable-path rules); resolution alone is not an approval.
+func (v *PathValidator) ResolveWrite(path string) (resolved ResolvedPath, external bool, err error) {
+	resolved, err = v.ResolveLexical(path)
+	if err == nil {
+		return resolved, false, nil
+	}
+	canonical, readErr := v.ValidateRead(path)
+	if readErr != nil {
+		// The ValidateRead error is the operative one: "escapes the
+		// workspace" is no longer a rejection reason on its own, while
+		// "sensitive location" and "null byte" still are.
+		return ResolvedPath{}, false, readErr
+	}
+	return ResolvedPath{Absolute: canonical, Display: filepath.ToSlash(canonical)}, true, nil
+}
+
 // Snapshot returns a secure regular-file snapshot for a workspace path.
 func (v *PathValidator) Snapshot(path string) (Snapshot, error) {
 	resolved, err := v.ResolveLexical(path)
 	if err != nil {
 		return Snapshot{}, err
 	}
+	return v.SnapshotResolved(resolved)
+}
+
+// SnapshotResolved snapshots an already-resolved path. It is the shared
+// core of Snapshot: callers that resolved the path themselves (including
+// approved external writes via ResolveWrite) skip re-resolution — the
+// signature-bound ResolvedPath IS the vetted input.
+func (v *PathValidator) SnapshotResolved(resolved ResolvedPath) (Snapshot, error) {
 	info, err := ensurePathChain(resolved.Absolute, true)
 	if err != nil {
 		return Snapshot{}, err
@@ -277,6 +338,12 @@ func (v *PathValidator) AtomicWrite(path string, data []byte, opts AtomicWriteOp
 	if err != nil {
 		return Snapshot{}, err
 	}
+	return v.AtomicWriteResolved(resolved, data, opts)
+}
+
+// AtomicWriteResolved is the resolved-path core of AtomicWrite (see
+// SnapshotResolved for why the split exists).
+func (v *PathValidator) AtomicWriteResolved(resolved ResolvedPath, data []byte, opts AtomicWriteOptions) (result Snapshot, err error) {
 	if opts.ExpectedHash == "" {
 		return Snapshot{}, fmt.Errorf("expected hash is required")
 	}
@@ -369,7 +436,7 @@ func (v *PathValidator) AtomicWrite(path string, data []byte, opts AtomicWriteOp
 		}
 	}
 
-	return v.Snapshot(resolved.Absolute)
+	return v.SnapshotResolved(resolved)
 }
 
 // isUnderRoot checks that path is under root, handling trailing separators.
@@ -411,42 +478,6 @@ func resolveNonExistent(path string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(resolved, base), nil
-}
-
-// IsSensitive reports whether a path should be denied by default.
-func IsSensitive(path string) bool {
-	base := filepath.Base(path)
-	sensitive := []string{
-		".git",
-		".ssh",
-		".gnupg",
-		".env",
-		".credentials",
-		"credentials.json",
-		"service-account.json",
-	}
-	for _, s := range sensitive {
-		if base == s {
-			return true
-		}
-	}
-	return false
-}
-
-// ContainsSensitiveComponent reports whether any component of the path is
-// on the sensitive list (see IsSensitive). Tool packages must call this
-// instead of keeping their own copy of the list (REVIEW R4).
-func ContainsSensitiveComponent(path string) bool {
-	clean := filepath.Clean(path)
-	if clean == "." || clean == string(filepath.Separator) {
-		return false
-	}
-	for _, part := range strings.Split(clean, string(filepath.Separator)) {
-		if IsSensitive(part) {
-			return true
-		}
-	}
-	return false
 }
 
 func displayPath(rel string) string {

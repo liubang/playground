@@ -111,21 +111,21 @@ func TestLoadRuleFileRejectsBrokenSelfTest(t *testing.T) {
 	writeRulesFile(t, dir, "bad.json", `{"rules":[
 		{"argv_prefix":["go","test"],"decision":"allow","match":[["go","build"]]}
 	]}`)
-	if _, _, err := loadRuleFile(filepath.Join(dir, "bad.json")); err == nil {
+	if _, _, _, err := loadRuleFile(filepath.Join(dir, "bad.json")); err == nil {
 		t.Fatal("self-test failure must reject the file")
 	}
 	writeRulesFile(t, dir, "bad2.json", `{"rules":[
 		{"argv_prefix":["go","test"],"decision":"allow","not_match":[["go","test","./..."]]}
 	]}`)
-	if _, _, err := loadRuleFile(filepath.Join(dir, "bad2.json")); err == nil {
+	if _, _, _, err := loadRuleFile(filepath.Join(dir, "bad2.json")); err == nil {
 		t.Fatal("not_match hitting the rule must reject the file")
 	}
 	writeRulesFile(t, dir, "bad3.json", `{"rules":[{"argv_prefix":["go"],"decision":"yolo"}]}`)
-	if _, _, err := loadRuleFile(filepath.Join(dir, "bad3.json")); err == nil {
+	if _, _, _, err := loadRuleFile(filepath.Join(dir, "bad3.json")); err == nil {
 		t.Fatal("invalid decision must reject the file")
 	}
 	writeRulesFile(t, dir, "bad4.json", `{"domains":[{"host":"https://evil.com/x","decision":"allow"}]}`)
-	if _, _, err := loadRuleFile(filepath.Join(dir, "bad4.json")); err == nil {
+	if _, _, _, err := loadRuleFile(filepath.Join(dir, "bad4.json")); err == nil {
 		t.Fatal("domain rule with scheme/path must reject the file")
 	}
 }

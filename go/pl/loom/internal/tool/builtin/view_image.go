@@ -55,11 +55,13 @@ type ViewImageTool struct {
 func NewViewImageTool(validator *workspacepkg.PathValidator) (*ViewImageTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "view_image",
-		Description: "Attach a local image file (png, jpeg, gif, webp) from the workspace to the conversation so you " +
-			"can see it. Use it whenever the user references an image (a screenshot, diagram, mockup, photo of an " +
-			"error) that you need to look at. The result carries the image inline plus a text header with the " +
-			"format, pixel dimensions when decodable, and byte size. Files larger than 3.5MB are rejected; " +
-			"downscale or crop them first (e.g. with run_cmd sips/ImageMagick) if you must view them.",
+		Description: "Attach a local image file (png, jpeg, gif, webp) to the conversation so you " +
+			"can see it. Relative paths resolve inside the workspace; absolute paths outside the workspace work " +
+			"too (credential locations are always denied). Use it whenever the user references an image (a " +
+			"screenshot, diagram, mockup, photo of an error) that you need to look at. The result carries the " +
+			"image inline plus a text header with the format, pixel dimensions when decodable, and byte size. " +
+			"Files larger than 3.5MB are rejected; downscale or crop them first (e.g. with run_cmd " +
+			"sips/ImageMagick) if you must view them.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1,"maxLength":4096}},"required":["path"]}`),
 		OutputSchema: json.RawMessage(`{"type":"string","description":"text header (path, media type, dimensions, size) followed by the image as an inline image content part"}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
