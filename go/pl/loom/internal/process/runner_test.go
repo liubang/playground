@@ -443,7 +443,35 @@ func TestRunnerRejectsMissingSandbox(t *testing.T) {
 	}
 }
 
-func TestRunnerRejectsCwdEscape(t *testing.T) {
+// The runner's cwd follows the read boundary (ValidateRead): read-only
+// subprocesses spawned by read tools (rg for search/glob) legitimately run
+// with a working directory outside the workspace. Writes stay confined by
+// the sandbox profile's WritablePaths, which never include the cwd.
+func TestRunnerAllowsCwdOutsideWorkspace(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	executable := writePythonScript(t, python, root, "noop.py", []string{"print('ok')"})
+	runner := newRunner(t, validator, RunnerOptions{
+		Sandbox:  ExplicitTestSandbox{},
+		LookPath: fixedLookPath(executable),
+	})
+	outside := t.TempDir()
+
+	result, err := runner.Run(context.Background(), CommandSpec{
+		Program: "noop",
+		Cwd:     outside,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, want cwd outside workspace allowed", err)
+	}
+	if result.ExitCode != 0 || string(result.Stdout) != "ok\n" {
+		t.Fatalf("unexpected result: exit=%d stdout=%q", result.ExitCode, string(result.Stdout))
+	}
+}
+
+// The read boundary still denies sensitive locations (e.g. .ssh), wherever
+// they live — the component check is lexical, so the path need not exist.
+func TestRunnerRejectsSensitiveCwd(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	executable := writePythonScript(t, python, root, "noop.py", []string{"print('ok')"})
@@ -454,7 +482,7 @@ func TestRunnerRejectsCwdEscape(t *testing.T) {
 
 	_, err := runner.Run(context.Background(), CommandSpec{
 		Program: "noop",
-		Cwd:     filepath.Join(root, ".."),
+		Cwd:     filepath.Join(t.TempDir(), ".ssh"),
 	})
 	if err == nil || !strings.Contains(err.Error(), "validate cwd") {
 		t.Fatalf("Run() error = %v, want cwd validation failure", err)
