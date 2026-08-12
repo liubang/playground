@@ -57,12 +57,12 @@ go_library(
     tags = ["manual"],
     visibility = ["//visibility:private"],
     deps = [
-        "//go/pl/loom/internal/app:app",
+        "//go/pl/loom/internal/app",
         "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/logging:logging",
-        "//go/pl/loom/internal/runtimeevent:runtimeevent",
-        "//go/pl/loom/internal/server:server",
+        "//go/pl/loom/internal/logging",
+        "//go/pl/loom/internal/runtimeevent",
+        "//go/pl/loom/internal/server",
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/version",
         "@com_github_wailsapp_wails_v2//:wails",
@@ -91,7 +91,7 @@ go_test(
     tags = ["manual"],
     deps = [
         "//go/pl/loom/internal/config:config_lib",
-        "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "//go/pl/loom/internal/runtimeevent",
     ],
 )
 

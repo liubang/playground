@@ -61,7 +61,7 @@ cc_library(
     deps = [
         ":metadata",
         ":unit_server_manager",
-        "@braft//:braft",
+        "@braft",
     ],
 )
 
@@ -80,7 +80,7 @@ cc_library(
         ":metadata",
         "//cpp/pl/minitable/proto:common_cc_proto",
         "//cpp/pl/minitable/proto:master_cc_proto",
-        "@brpc//:brpc",
+        "@brpc",
     ],
 )
 
@@ -94,7 +94,7 @@ cc_library(
         ":master_sm",
         "//cpp/pl/minitable/proto:admin_cc_proto",
         "//cpp/pl/minitable/proto:common_cc_proto",
-        "@brpc//:brpc",
+        "@brpc",
     ],
 )
 
@@ -108,7 +108,7 @@ cc_library(
         ":master_sm",
         "//cpp/pl/minitable/proto:common_cc_proto",
         "//cpp/pl/minitable/proto:unit_server_cc_proto",
-        "@brpc//:brpc",
+        "@brpc",
     ],
 )
 
@@ -127,7 +127,7 @@ cc_binary(
         ":master_service",
         ":master_sm",
         ":unit_server_service",
-        "@brpc//:brpc",
+        "@brpc",
         "@gflags",
     ],
 )

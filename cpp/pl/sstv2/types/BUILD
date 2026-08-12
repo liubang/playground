@@ -74,7 +74,10 @@ cc_library(
 
 cc_library(
     name = "internal_row",
-    hdrs = ["internal_row.h", "column_flag.h"],
+    hdrs = [
+        "column_flag.h",
+        "internal_row.h",
+    ],
     deps = [
         ":internal_schema",
         ":value",
@@ -83,7 +86,12 @@ cc_library(
 
 cc_library(
     name = "key",
-    hdrs = ["key.h", "key_comparator.h", "key_factory.h", "key_prefix.h"],
+    hdrs = [
+        "key.h",
+        "key_comparator.h",
+        "key_factory.h",
+        "key_prefix.h",
+    ],
     deps = [
         ":internal_row",
         ":internal_schema",

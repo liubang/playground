@@ -14,8 +14,8 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-load("@rules_java//java:defs.bzl", "java_binary", "java_library")
 load("@contrib_rules_jvm//java:defs.bzl", "java_junit5_test")
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
 
 # Spring Boot dependencies
 springboot_deps = [

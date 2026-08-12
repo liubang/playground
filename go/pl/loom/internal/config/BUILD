@@ -16,6 +16,7 @@
 # Created: 2026/07/26
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
+
 go_library(
     name = "config_lib",
     srcs = [
@@ -29,7 +30,7 @@ go_library(
     visibility = ["//go/pl/loom:__subpackages__"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/logging:logging",
+        "//go/pl/loom/internal/logging",
         "//go/pl/loom/internal/mcp:mcp_lib",
         "//go/pl/loom/internal/model/anthropic:anthropic_lib",
         "//go/pl/loom/internal/model/images:images_lib",
