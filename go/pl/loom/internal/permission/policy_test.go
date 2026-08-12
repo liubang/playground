@@ -226,6 +226,129 @@ func TestNeverModeDeniesEscalatedAndGrantsNetwork(t *testing.T) {
 	}
 }
 
+// --- writable_paths declarations (scoped write widening) ---
+
+// runCmdWritablePrepared builds a run_cmd prepared call declaring
+// writable_paths, mirroring the canonical arguments the tool produces.
+func runCmdWritablePrepared(t *testing.T, program string, writable []string, args ...string) domain.PreparedCall {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{
+		"program":        program,
+		"args":           args,
+		"writable_paths": writable,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return domain.PreparedCall{
+		Call: domain.ToolCall{Name: "run_cmd", Arguments: raw},
+		Risk: domain.R3,
+	}
+}
+
+// TestWritablePathsBaselinePerMode: a declared writable-path widening asks
+// in every interactive mode (the sandbox can no longer bound the blast
+// radius) with a SCOPED grant stamped — never the unsandboxed grant — and
+// is denied outright in never mode.
+func TestWritablePathsBaselinePerMode(t *testing.T) {
+	writable := []string{"/Users/test/Library/Logs/myapp"}
+
+	d := DefaultPolicy().Decider(ModeUnlessDangerous)
+	v := d.Evaluate(runCmdWritablePrepared(t, "myapp", writable, "env", "production"))
+	if v.Decision != domain.DecisionAsk {
+		t.Fatalf("writable_paths in unless-dangerous = %s, want ask", v.Decision)
+	}
+	if v.Grant.Unsandboxed {
+		t.Fatalf("grant = %+v, want sandboxed writable-path grant (never unsandboxed)", v.Grant)
+	}
+	if len(v.Grant.WritablePaths) != 1 || v.Grant.WritablePaths[0] != writable[0] {
+		t.Fatalf("grant.WritablePaths = %v, want %v", v.Grant.WritablePaths, writable)
+	}
+
+	d = DefaultPolicy().Decider(ModeOnRequest)
+	v = d.Evaluate(runCmdWritablePrepared(t, "myapp", writable, "env", "production"))
+	if v.Decision != domain.DecisionAsk || len(v.Grant.WritablePaths) != 1 {
+		t.Fatalf("writable_paths in on-request = %s %+v, want ask with the scoped grant", v.Decision, v.Grant)
+	}
+
+	d = DefaultPolicy().Decider(ModeNever)
+	if v = d.Evaluate(runCmdWritablePrepared(t, "myapp", writable, "env", "production")); v.Decision != domain.DecisionDeny {
+		t.Fatalf("writable_paths in never = %s, want deny", v.Decision)
+	}
+}
+
+// TestAllowGrantCoversWritablePaths: coverage is exact per declared path —
+// a granted directory covers requests beneath it, a sibling does not, and
+// only an unsandboxed grant answers everything.
+func TestAllowGrantCoversWritablePaths(t *testing.T) {
+	info := RunCmdCall{Argv: []string{"myapp"}, WritablePaths: []string{"/Users/test/Library/Logs/myapp"}}
+	cases := []struct {
+		name  string
+		grant domain.ExecGrant
+		want  bool
+	}{
+		{"zero grant", domain.ExecGrant{}, false},
+		{"exact path", domain.ExecGrant{WritablePaths: []string{"/Users/test/Library/Logs/myapp"}}, true},
+		{"granted parent", domain.ExecGrant{WritablePaths: []string{"/Users/test/Library/Logs"}}, true},
+		{"granted sibling", domain.ExecGrant{WritablePaths: []string{"/Users/test/Library/Caches"}}, false},
+		{"prefix lookalike", domain.ExecGrant{WritablePaths: []string{"/Users/test/Library/Logs/myapp-backup"}}, false},
+		{"unsandboxed covers all", domain.ExecGrant{Unsandboxed: true}, true},
+	}
+	for _, tc := range cases {
+		if got := AllowGrantCovers(tc.grant, info); got != tc.want {
+			t.Errorf("%s: AllowGrantCovers = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+
+	// Every declared path must be covered independently.
+	two := RunCmdCall{Argv: []string{"myapp"}, WritablePaths: []string{"/a/logs", "/b/config"}}
+	if AllowGrantCovers(domain.ExecGrant{WritablePaths: []string{"/a"}}, two) {
+		t.Error("partial coverage must not satisfy a two-path declaration")
+	}
+	if !AllowGrantCovers(domain.ExecGrant{WritablePaths: []string{"/a", "/b"}}, two) {
+		t.Error("full coverage must satisfy a two-path declaration")
+	}
+}
+
+// TestWritablePathsSessionMemory: an "allow always" on a writable-path ask
+// remembers the argv prefix WITH the scoped grant, so later calls under
+// the same prefix and equal-or-narrower paths resolve silently — while a
+// WIDER path declaration falls through to the baseline ask.
+func TestWritablePathsSessionMemory(t *testing.T) {
+	session := NewSessionRules()
+	p := DefaultPolicy()
+	p.Session = session
+	d := p.Decider(ModeUnlessDangerous)
+
+	first := runCmdWritablePrepared(t, "myapp", []string{"/Users/test/Library/Logs/myapp"}, "login")
+	if v := d.Evaluate(first); v.Decision != domain.DecisionAsk {
+		t.Fatalf("first call = %s, want ask before any memory", v.Decision)
+	}
+
+	info, ok := ExecInfoOf(first)
+	if !ok {
+		t.Fatal("ExecInfoOf failed")
+	}
+	if _, ok := session.RememberRunCmd(info, DeclaredGrant(info)); !ok {
+		t.Fatal("RememberRunCmd failed")
+	}
+
+	// Same prefix + same paths: silent allow carrying the scoped grant.
+	v := d.Evaluate(runCmdWritablePrepared(t, "myapp", []string{"/Users/test/Library/Logs/myapp"}, "table", "inspect"))
+	if v.Decision != domain.DecisionAllow || v.Source != SourceSession {
+		t.Fatalf("remembered call = %s (%s), want allow from session", v.Decision, v.Source)
+	}
+	if v.Grant.Unsandboxed || len(v.Grant.WritablePaths) != 1 {
+		t.Fatalf("remembered grant = %+v, want scoped writable grant", v.Grant)
+	}
+
+	// Same prefix + a WIDER path: the scoped memory must not answer it.
+	v = d.Evaluate(runCmdWritablePrepared(t, "myapp", []string{"/Users/test/Library/Logs"}, "login"))
+	if v.Decision != domain.DecisionAsk || v.Source != SourceBaseline {
+		t.Fatalf("widened call = %s (%s), want baseline ask", v.Decision, v.Source)
+	}
+}
+
 // --- chain ordering ---
 
 func TestChainRuleDenyBeatsSessionAllow(t *testing.T) {

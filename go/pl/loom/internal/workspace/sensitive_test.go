@@ -155,6 +155,46 @@ func TestResolveWrite(t *testing.T) {
 	}
 }
 
+// TestCoversSensitiveLocation proves the writable-grant gate rejects both
+// sensitive locations themselves AND their ancestors: a write grant on "~"
+// would otherwise open ~/.ssh/authorized_keys to a plain file-write, which
+// the seatbelt read/unlink denies do not cover.
+func TestCoversSensitiveLocation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	canonicalHome := Canonicalize(home)
+
+	tests := []struct {
+		path   string
+		expect bool
+	}{
+		// Sensitive locations themselves.
+		{filepath.Join(canonicalHome, ".ssh"), true},
+		{filepath.Join(canonicalHome, ".aws", "credentials"), true},
+		{filepath.Join(canonicalHome, ".netrc"), true},
+		{filepath.Join(canonicalHome, "Library", "Keychains"), true},
+		// Ancestors of sensitive locations: the whole point of the gate.
+		{canonicalHome, true},
+		{filepath.Join(canonicalHome, ".config"), true}, // covers .config/gcloud
+		{filepath.Join(canonicalHome, "Library"), true}, // covers Library/Keychains
+		{filepath.Dir(canonicalHome), true},             // covers the home itself
+		{"/", true},
+		// Ordinary data directories stay grantable.
+		{filepath.Join(canonicalHome, "Library", "Logs", "myapp"), false},
+		{filepath.Join(canonicalHome, ".mycli"), false},
+		{filepath.Join(canonicalHome, "projects", "repo"), false},
+		{"/tmp", false},
+		{"/usr/local/share", false},
+		// Relative input is not an absolute verdict.
+		{".ssh", false},
+	}
+	for _, tt := range tests {
+		if got := CoversSensitiveLocation(tt.path); got != tt.expect {
+			t.Errorf("CoversSensitiveLocation(%q) = %v, want %v", tt.path, got, tt.expect)
+		}
+	}
+}
+
 func TestValidateReadDeniesSensitivePaths(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
