@@ -18,11 +18,13 @@
 package logging
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -169,3 +171,63 @@ func TestDailyWriterTotalQuotaGC(t *testing.T) {
 type lockedBuilder struct{ b *strings.Builder }
 
 func (w *lockedBuilder) Write(p []byte) (int, error) { return w.b.Write(p) }
+
+// TestDailyWriterConcurrentWriters hammers dailyWriter from many goroutines
+// to verify that all lines land intact and no write is lost or interleaved.
+func TestDailyWriterConcurrentWriters(t *testing.T) {
+	dir := t.TempDir()
+	day := time.Date(2026, 8, 5, 12, 0, 0, 0, time.Local)
+	w := &dailyWriter{dir: dir, prefix: "loom", now: func() time.Time { return day }}
+
+	const goroutines = 50
+	const perGoroutine = 200
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			<-start
+			for j := 0; j < perGoroutine; j++ {
+				line := fmt.Sprintf("g%04d-l%04d\n", id, j)
+				if _, err := w.Write([]byte(line)); err != nil {
+					t.Errorf("write error: %v", err)
+					return
+				}
+			}
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, "loom.2026-08-05.log"))
+	if err != nil {
+		t.Fatalf("read log file: %v", err)
+	}
+
+	// Every line must be a complete record; none should be truncated or
+	// interleaved with another goroutine's output.
+	lines := strings.Split(strings.TrimSuffix(string(content), "\n"), "\n")
+	want := goroutines * perGoroutine
+	if len(lines) != want {
+		t.Fatalf("line count = %d, want %d", len(lines), want)
+	}
+
+	// Verify each line matches the expected format.
+	lineRe := regexp.MustCompile(`^g\d{4}-l\d{4}$`)
+	seen := make(map[string]bool, want)
+	for _, line := range lines {
+		if !lineRe.MatchString(line) {
+			t.Fatalf("corrupted line: %q", line)
+		}
+		if seen[line] {
+			t.Fatalf("duplicate line: %q", line)
+		}
+		seen[line] = true
+	}
+}
