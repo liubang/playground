@@ -36,8 +36,8 @@ cc_library(
         "sqlite_source.cpp",
     ],
     hdrs = [
-        "connector_runtime.h",
         "connector_registry.h",
+        "connector_runtime.h",
         "memory_source.h",
         "mysql_connection_pool.h",
         "mysql_source.h",

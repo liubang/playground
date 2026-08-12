@@ -92,7 +92,7 @@ cc_library(
         ":data_service_core",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
-        "@braft//:braft",
+        "@braft",
     ],
 )
 
@@ -135,7 +135,7 @@ cc_library(
     linkopts = LINKOPTS,
     deps = [
         ":slice_raft_state_machine",
-        "@braft//:braft",
+        "@braft",
     ],
 )
 

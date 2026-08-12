@@ -31,11 +31,11 @@ go_library(
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
         "@io_opentelemetry_go_otel//:otel",
-        "@io_opentelemetry_go_otel//attribute:attribute",
-        "@io_opentelemetry_go_otel//codes:codes",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
         "@io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracehttp//:otlptracehttp",
-        "@io_opentelemetry_go_otel_sdk//resource:resource",
-        "@io_opentelemetry_go_otel_sdk//trace:trace",
+        "@io_opentelemetry_go_otel_sdk//resource",
+        "@io_opentelemetry_go_otel_sdk//trace",
         "@io_opentelemetry_go_otel_trace//:trace",
     ],
 )
@@ -50,7 +50,7 @@ go_test(
     embed = [":trace"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
-        "@io_opentelemetry_go_otel_sdk//trace:trace",
-        "@io_opentelemetry_go_otel_sdk//trace/tracetest:tracetest",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_sdk//trace/tracetest",
     ],
 )

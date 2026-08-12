@@ -20,11 +20,11 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "session_lib",
     srcs = [
+        "memory_jobs.go",
         "rewind.go",
         "sqlite_store.go",
         "transcript.go",
         "workspace_store.go",
-        "memory_jobs.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/session",
     visibility = ["//visibility:public"],
@@ -38,10 +38,10 @@ go_library(
 go_test(
     name = "session_test",
     srcs = [
+        "memory_jobs_test.go",
         "sqlite_store_test.go",
         "transcript_test.go",
         "workspace_store_test.go",
-        "memory_jobs_test.go",
     ],
     embed = [":session_lib"],
     deps = [

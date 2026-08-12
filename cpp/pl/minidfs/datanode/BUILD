@@ -16,7 +16,6 @@
 # Created: 2025/06/30 00:47
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",

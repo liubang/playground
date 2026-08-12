@@ -11,7 +11,7 @@ go_library(
     visibility = ["//go/pl/loom:__subpackages__"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
-        "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "//go/pl/loom/internal/runtimeevent",
     ],
 )
 
@@ -26,7 +26,7 @@ go_test(
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/fakes:fakes_lib",
-        "//go/pl/loom/internal/runtimeevent:runtimeevent",
+        "//go/pl/loom/internal/runtimeevent",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
