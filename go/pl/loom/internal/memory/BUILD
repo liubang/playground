@@ -20,14 +20,14 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "memory_lib",
     srcs = [
-        "store.go",
-        "tools.go",
-        "prompt.go",
-        "extract.go",
         "consolidate.go",
+        "extract.go",
         "jobs.go",
         "pipeline.go",
+        "prompt.go",
         "redact.go",
+        "store.go",
+        "tools.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/memory",
     visibility = ["//visibility:public"],
@@ -39,13 +39,13 @@ go_library(
 go_test(
     name = "memory_test",
     srcs = [
+        "consolidate_test.go",
+        "extract_test.go",
+        "pipeline_test.go",
+        "prompt_test.go",
+        "redact_test.go",
         "store_test.go",
         "tools_test.go",
-        "prompt_test.go",
-        "extract_test.go",
-        "consolidate_test.go",
-        "redact_test.go",
-        "pipeline_test.go",
     ],
     embed = [":memory_lib"],
     deps = [

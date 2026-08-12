@@ -45,11 +45,11 @@ cc_test(
 
 cc_test(
     name = "slice_braft_e2e_test",
+    timeout = "long",
     srcs = ["slice_braft_e2e_test.cpp"],
     copts = TEST_COPTS,
     linkopts = LINKOPTS,
     tags = ["exclusive"],
-    timeout = "long",
     deps = [
         "//cpp/pl/minitable/codec:cell_key_codec",
         "//cpp/pl/minitable/core:braft_slice_adapter",
@@ -59,8 +59,8 @@ cc_test(
         "//cpp/pl/minitable/core:slice_store",
         "//cpp/pl/sstv2/io:local_filesystem",
         "//cpp/pl/sstv2/types:schema",
-        "@braft//:braft",
-        "@brpc//:brpc",
+        "@braft",
+        "@brpc",
         "@googletest//:gtest_main",
     ],
 )
