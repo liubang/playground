@@ -233,6 +233,14 @@ type PreparedCall struct {
 	// it is eligible for domain rules, session domain memory, and the
 	// URL baseline without the policy layer knowing its name.
 	URLRequest *URLRequest `json:"url_request,omitempty"`
+	// WriteRequest is the typed write contract of file-writing tools
+	// (write, edit). The producing tool fills it during Prepare and
+	// covers it by its signature, so the policy layer classifies a typed
+	// field instead of re-parsing tool-specific argument JSON: any tool
+	// that sets it is eligible for writable-path rules, session path
+	// memory, and the boundary-crossing write baseline without the
+	// policy layer knowing its name.
+	WriteRequest *WriteRequest `json:"write_request,omitempty"`
 }
 
 // URLRequest describes a URL the policy layer can classify uniformly,
@@ -244,6 +252,24 @@ type PreparedCall struct {
 type URLRequest struct {
 	// Host is the canonical hostname (lowercase, no port) of the URL.
 	Host string `json:"host"`
+}
+
+// WriteRequest describes a file write the policy layer can classify
+// uniformly, independent of which tool produced it. It is the write
+// counterpart of ExecRequest: the producing tool resolves its target
+// during Prepare and signs the outcome, so writable-path rule evaluation
+// and session path memory match the typed field rather than tool-name +
+// ad-hoc argument parsing.
+type WriteRequest struct {
+	// Path is the canonical absolute write target.
+	Path string `json:"path"`
+	// OutsideRoots marks a target outside the workspace + scratch roots:
+	// the write crosses the confinement boundary, so policy (writable-path
+	// rules, session path memory, per-mode baseline) — not the path
+	// validator — is the gate. The flag is explicit (rather than nil
+	// meaning confined) so the policy layer can distinguish "confined
+	// write" from "produced before this contract existed".
+	OutsideRoots bool `json:"outside_roots,omitempty"`
 }
 
 // ExecRequest describes a process execution the policy layer can

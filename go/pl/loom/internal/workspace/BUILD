@@ -25,6 +25,7 @@ go_library(
         "metadata_linux.go",
         "metadata_unsupported.go",
         "path.go",
+        "sensitive.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/workspace",
     visibility = ["//visibility:public"],
@@ -32,6 +33,9 @@ go_library(
 
 go_test(
     name = "workspace_test",
-    srcs = ["path_test.go"],
+    srcs = [
+        "path_test.go",
+        "sensitive_test.go",
+    ],
     embed = [":workspace_lib"],
 )

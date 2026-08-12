@@ -74,6 +74,7 @@ func (b *baseTool) prepareCall(
 	canonicalArgs json.RawMessage,
 	writePaths []string,
 	approvalDesc string,
+	writeRequest *domain.WriteRequest,
 ) (domain.PreparedCall, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.PreparedCall{}, err
@@ -95,6 +96,7 @@ func (b *baseTool) prepareCall(
 		Risk:         b.def.Risk(),
 		ApprovalDesc: approvalDesc,
 		WritePaths:   toolkit.SortedStrings(writePaths),
+		WriteRequest: writeRequest,
 	}
 	prepared.ArgsHash = b.signer.Sign(prepared)
 	return prepared, nil
@@ -124,44 +126,69 @@ func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domai
 	return toolkit.ErrorResult(callID, startedAt, err)
 }
 
-func resolveWritePath(validator *workspacepkg.PathValidator, input string) (workspacepkg.ResolvedPath, error) {
+// resolveWritePath resolves a write target. Paths confined to the
+// workspace + scratch roots behave exactly as before; any other absolute
+// path resolves to its canonical non-sensitive form and external=true
+// marks the call as boundary-crossing — the producing tool must declare
+// it via WriteRequest so the policy layer (path rules, session memory,
+// per-mode baseline) gates the write. Sensitive locations stay denied
+// here, before any policy evaluation.
+func resolveWritePath(validator *workspacepkg.PathValidator, input string) (workspacepkg.ResolvedPath, bool, error) {
 	if strings.TrimSpace(input) == "" {
-		return workspacepkg.ResolvedPath{}, domain.NewError(domain.ErrInvalidInput, "path is required")
+		return workspacepkg.ResolvedPath{}, false, domain.NewError(domain.ErrInvalidInput, "path is required")
 	}
-	resolved, err := validator.ResolveLexical(input)
+	resolved, external, err := validator.ResolveWrite(input)
 	if err != nil {
-		return workspacepkg.ResolvedPath{}, domain.NewError(domain.ErrSecurity, "path escapes workspace or is invalid", domain.WithCause(err))
+		return workspacepkg.ResolvedPath{}, false, domain.NewError(domain.ErrSecurity, "path is not writable", domain.WithCause(err))
 	}
-	return resolved, nil
+	return resolved, external, nil
 }
 
-func ensureExistingTextFile(validator *workspacepkg.PathValidator, input string) (workspacepkg.ResolvedPath, workspacepkg.Snapshot, []byte, error) {
-	resolved, err := resolveWritePath(validator, input)
-	if err != nil {
-		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, err
+// writeRequestOf derives the typed write contract for a resolved target.
+func writeRequestOf(resolved workspacepkg.ResolvedPath, external bool) *domain.WriteRequest {
+	return &domain.WriteRequest{Path: resolved.Absolute, OutsideRoots: external}
+}
+
+// verifyWriteRequestBinding re-checks at Execute time that the signed
+// WriteRequest matches the re-resolved write target (defense in depth on
+// top of the HMAC over the fingerprint).
+func verifyWriteRequestBinding(prepared domain.PreparedCall, resolved workspacepkg.ResolvedPath) error {
+	if prepared.WriteRequest == nil {
+		return domain.NewError(domain.ErrSecurity, "prepared call carries no write request")
 	}
-	snapshot, err := validator.Snapshot(resolved.Absolute)
+	if prepared.WriteRequest.Path != resolved.Absolute {
+		return domain.NewError(domain.ErrSecurity, "prepared call write request binding mismatch")
+	}
+	return nil
+}
+
+func ensureExistingTextFile(validator *workspacepkg.PathValidator, input string) (workspacepkg.ResolvedPath, bool, workspacepkg.Snapshot, []byte, error) {
+	resolved, external, err := resolveWritePath(validator, input)
+	if err != nil {
+		return workspacepkg.ResolvedPath{}, false, workspacepkg.Snapshot{}, nil, err
+	}
+	snapshot, err := validator.SnapshotResolved(resolved)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("path does not exist: %q", domain.TruncateForErrorEcho(input)), domain.WithCause(err))
+			return workspacepkg.ResolvedPath{}, false, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("path does not exist: %q", domain.TruncateForErrorEcho(input)), domain.WithCause(err))
 		}
-		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrSecurity, "path is not a writable regular file", domain.WithCause(err))
+		return workspacepkg.ResolvedPath{}, false, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrSecurity, "path is not a writable regular file", domain.WithCause(err))
 	}
 
 	if snapshot.Size > maxTextFileBytes {
-		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("file exceeds size limit of %d bytes", maxTextFileBytes))
+		return workspacepkg.ResolvedPath{}, false, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("file exceeds size limit of %d bytes", maxTextFileBytes))
 	}
 	data, err := os.ReadFile(resolved.Absolute)
 	if err != nil {
-		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrUnavailable, "failed to read file", domain.WithCause(err))
+		return workspacepkg.ResolvedPath{}, false, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrUnavailable, "failed to read file", domain.WithCause(err))
 	}
 	if int64(len(data)) > maxTextFileBytes {
-		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("file exceeds size limit of %d bytes", maxTextFileBytes))
+		return workspacepkg.ResolvedPath{}, false, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("file exceeds size limit of %d bytes", maxTextFileBytes))
 	}
 	if bytes.IndexByte(data, 0) >= 0 || !utf8.Valid(data) {
-		return workspacepkg.ResolvedPath{}, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, "file appears to be binary or not valid UTF-8")
+		return workspacepkg.ResolvedPath{}, false, workspacepkg.Snapshot{}, nil, domain.NewError(domain.ErrInvalidInput, "file appears to be binary or not valid UTF-8")
 	}
-	return resolved, snapshot, data, nil
+	return resolved, external, snapshot, data, nil
 }
 
 func canonicalizeHash(value string) (string, error) {

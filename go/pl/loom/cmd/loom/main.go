@@ -928,7 +928,8 @@ func listRules() error {
 	rules := policy.Rules.Rules()
 	domains := policy.Rules.Domains()
 	tools := policy.Rules.Tools()
-	if len(rules) == 0 && len(domains) == 0 && len(tools) == 0 {
+	paths := policy.Rules.Paths()
+	if len(rules) == 0 && len(domains) == 0 && len(tools) == 0 && len(paths) == 0 {
 		fmt.Println("no rules in effect (rules.enabled/rules.builtin may be disabled)")
 		return nil
 	}
@@ -957,6 +958,13 @@ func listRules() error {
 		}
 		fmt.Printf("[%s] %-40s %s%s\n", t.Decision, "tool:"+t.Name, t.Source, just)
 	}
+	for _, p := range paths {
+		just := ""
+		if p.Justification != "" {
+			just = " — " + p.Justification
+		}
+		fmt.Printf("[%s] %-40s %s%s\n", p.Decision, "path:"+p.Path, p.Source, just)
+	}
 	return nil
 }
 
@@ -972,6 +980,7 @@ func checkRules(argv []string) error {
 		escalated    bool
 		needsNetwork bool
 		fetchURL     string
+		writePath    string
 		args         []string
 	)
 	for i := 0; i < len(argv); i++ {
@@ -986,6 +995,12 @@ func checkRules(argv []string) error {
 			}
 			i++
 			fetchURL = argv[i]
+		case "--path":
+			if i+1 >= len(argv) {
+				return errors.New("--path requires a value")
+			}
+			i++
+			writePath = argv[i]
 		default:
 			args = append(args, argv[i])
 		}
@@ -1002,8 +1017,11 @@ func checkRules(argv []string) error {
 	if fetchURL != "" {
 		return checkFetchURL(policy, resolved.Approval.Mode, fetchURL)
 	}
+	if writePath != "" {
+		return checkWritePath(policy, resolved.Approval.Mode, writePath)
+	}
 	if len(args) == 0 {
-		return errors.New("usage: loom rules check [--escalated] [--needs-network] [--url URL] <program> [args...]")
+		return errors.New("usage: loom rules check [--escalated] [--needs-network] [--url URL] [--path PATH] <program> [args...]")
 	}
 	argv = args
 	callArgs := map[string]any{"program": argv[0], "args": argv[1:]}
@@ -1080,11 +1098,34 @@ func checkFetchURL(policy permission.Policy, mode permission.ApprovalMode, rawUR
 	return nil
 }
 
+// checkWritePath evaluates a boundary-crossing file write against the
+// writable-path rules and prints the verdict — the write counterpart of
+// checkFetchURL.
+func checkWritePath(policy permission.Policy, mode permission.ApprovalMode, path string) error {
+	argsJSON, _ := json.Marshal(map[string]string{"path": path})
+	call := domain.PreparedCall{
+		Call: domain.ToolCall{Name: "write", Arguments: argsJSON},
+		Risk: domain.R2,
+	}
+	verdict := policy.Decider(mode).Evaluate(call)
+	fmt.Printf("decision: %s (source: %s)\n", verdict.Decision, verdict.Source)
+	if verdict.Reason != "" {
+		fmt.Printf("reason: %s\n", verdict.Reason)
+	}
+	if _, rule := policy.Rules.EvaluatePath(path); rule.Source != "" {
+		fmt.Printf("matched rule: path:%s -> %s (%s)\n", rule.Path, rule.Decision, rule.Source)
+		if rule.Justification != "" {
+			fmt.Printf("justification: %s\n", rule.Justification)
+		}
+	}
+	return nil
+}
+
 // forgetRules removes a remembered approval from the SQLite store.
-// Usage: loom rules forget [--domain host | --tool name] <program> [args...]
+// Usage: loom rules forget [--domain host | --tool name | --path dir] <program> [args...]
 func forgetRules(argv []string) error {
 	if len(argv) == 0 {
-		return errors.New("usage: loom rules forget [--domain host | --tool name] <program> [args...]")
+		return errors.New("usage: loom rules forget [--domain host | --tool name | --path dir] <program> [args...]")
 	}
 	resolved, err := loadConfig(false, slog.Default())
 	if err != nil {
@@ -1095,9 +1136,9 @@ func forgetRules(argv []string) error {
 		return fmt.Errorf("open remembered store: %w", err)
 	}
 	defer store.Close()
-	if argv[0] == "--domain" || argv[0] == "--tool" {
+	if argv[0] == "--domain" || argv[0] == "--tool" || argv[0] == "--path" {
 		if len(argv) < 2 || strings.HasPrefix(argv[1], "--") {
-			return fmt.Errorf("%s requires a value\nusage: loom rules forget [--domain host | --tool name] <program> [args...]", argv[0])
+			return fmt.Errorf("%s requires a value\nusage: loom rules forget [--domain host | --tool name | --path dir] <program> [args...]", argv[0])
 		}
 		if argv[0] == "--domain" {
 			host := argv[1]
@@ -1109,6 +1150,19 @@ func forgetRules(argv []string) error {
 				fmt.Printf("no remembered domain for %q\n", host)
 			} else {
 				fmt.Printf("forgot domain %q\n", host)
+			}
+			return nil
+		}
+		if argv[0] == "--path" {
+			dir := argv[1]
+			ok, err := store.ForgetPath(context.Background(), dir)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				fmt.Printf("no remembered path rule for %q\n", dir)
+			} else {
+				fmt.Printf("forgot path rule %q\n", dir)
 			}
 			return nil
 		}

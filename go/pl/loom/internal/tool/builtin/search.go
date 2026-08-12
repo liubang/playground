@@ -116,9 +116,10 @@ type SearchTool struct {
 func NewSearchTool(validator *workspacepkg.PathValidator, runner rgRunner) (*SearchTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "search",
-		Description: "Search file contents within the workspace. 'pattern' is a ripgrep regular expression " +
+		Description: "Search file contents. 'pattern' is a ripgrep regular expression " +
 			"(use fixed_strings=true for literal text). " +
-			"'path' defaults to the workspace root and may point to a directory (searched recursively) or a single file. " +
+			"'path' defaults to the workspace root and may point to a directory (searched recursively) or a single " +
+			"file, including absolute paths outside the workspace (credential locations are always excluded). " +
 			"Filter with glob (a pattern without '/' matches the file name at any depth, one with '/' matches the " +
 			"workspace-relative path; prefix with '!' to exclude; multiple patterns union) or with type (a ripgrep " +
 			"type name like 'go'; omit it when unsure — prefer glob for file-name filtering and never pass null " +

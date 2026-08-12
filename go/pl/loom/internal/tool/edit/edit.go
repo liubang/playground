@@ -50,8 +50,10 @@ type EditTool struct {
 func NewEditTool(validator *workspacepkg.PathValidator, book *workspacepkg.FileStateBook) (*EditTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "edit",
-		Description: "Replace exact text in a single workspace file. old_string must match exactly one location " +
-			"(or use replace_all=true). You MUST read_file the target first: edits are rejected if the file " +
+		Description: "Replace exact text in a single file. old_string must match exactly one location " +
+			"(or use replace_all=true). Paths inside the workspace run directly; absolute paths outside the " +
+			"workspace require user approval (credential locations are always denied). " +
+			"You MUST read_file the target first: edits are rejected if the file " +
 			"changed since your last read. expected_hash is optional and rarely needed.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1},"old_string":{"type":"string"},"new_string":{"type":"string"},"replace_all":{"type":"boolean"},"expected_hash":{"type":"string","minLength":64,"maxLength":64}},"required":["path","old_string","new_string"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"old_hash":{"type":"string"},"new_hash":{"type":"string"},"size":{"type":"integer"}},"required":["path","old_hash","new_hash","size"]}`),
@@ -73,7 +75,7 @@ func (t *EditTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.Pr
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	args, pathInfo, data, err := validateEditArgs(t.base.validator, args)
+	args, pathInfo, external, data, err := validateEditArgs(t.base.validator, args)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -84,7 +86,10 @@ func (t *EditTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.Pr
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Edit %s", args.Path)
-	prepared, err := t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
+	if external {
+		approvalDesc += " [outside workspace]"
+	}
+	prepared, err := t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc, writeRequestOf(pathInfo, external))
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -113,12 +118,15 @@ func (t *EditTool) Execute(ctx context.Context, prepared domain.PreparedCall) do
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	pathInfo, oldSnapshot, data, err := ensureExistingTextFile(t.base.validator, prepared.WritePaths[0])
+	pathInfo, _, oldSnapshot, data, err := ensureExistingTextFile(t.base.validator, prepared.WritePaths[0])
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
 	if pathInfo.Display != args.Path {
 		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+	}
+	if err := verifyWriteRequestBinding(prepared, pathInfo); err != nil {
+		return errorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	// Drift checks: the explicit hash (when supplied) is authoritative;
@@ -137,7 +145,7 @@ func (t *EditTool) Execute(ctx context.Context, prepared domain.PreparedCall) do
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	resultSnapshot, err := t.base.validator.AtomicWrite(pathInfo.Absolute, []byte(newContent), workspacepkg.AtomicWriteOptions{
+	resultSnapshot, err := t.base.validator.AtomicWriteResolved(pathInfo, []byte(newContent), workspacepkg.AtomicWriteOptions{
 		ExpectedHash: oldSnapshot.SHA256,
 		SyncParent:   true,
 	})
@@ -153,26 +161,26 @@ func (t *EditTool) Execute(ctx context.Context, prepared domain.PreparedCall) do
 	})
 }
 
-func validateEditArgs(validator *workspacepkg.PathValidator, args editArgs) (editArgs, workspacepkg.ResolvedPath, []byte, error) {
+func validateEditArgs(validator *workspacepkg.PathValidator, args editArgs) (editArgs, workspacepkg.ResolvedPath, bool, []byte, error) {
 	if len(args.NewString) > maxReplacementBytes {
-		return editArgs{}, workspacepkg.ResolvedPath{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("new_string exceeds %d bytes", maxReplacementBytes))
+		return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("new_string exceeds %d bytes", maxReplacementBytes))
 	}
 	if len(args.OldString) == 0 {
-		return editArgs{}, workspacepkg.ResolvedPath{}, nil, domain.NewError(domain.ErrInvalidInput, "old_string must not be empty")
+		return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, domain.NewError(domain.ErrInvalidInput, "old_string must not be empty")
 	}
 	if args.ExpectedHash != "" {
 		expectedHash, err := canonicalizeHash(args.ExpectedHash)
 		if err != nil {
-			return editArgs{}, workspacepkg.ResolvedPath{}, nil, err
+			return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, err
 		}
 		args.ExpectedHash = expectedHash
 	}
-	pathInfo, _, data, err := ensureExistingTextFile(validator, args.Path)
+	pathInfo, external, _, data, err := ensureExistingTextFile(validator, args.Path)
 	if err != nil {
-		return editArgs{}, workspacepkg.ResolvedPath{}, nil, err
+		return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, err
 	}
 	args.Path = pathInfo.Display
-	return args, pathInfo, data, nil
+	return args, pathInfo, external, data, nil
 }
 
 func applyEditReplacement(content string, args editArgs) (string, error) {

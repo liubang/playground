@@ -24,6 +24,8 @@
 //
 //   - ExecRequest (run_cmd, exec_session) → argv-prefix memory with a grant.
 //   - URLRequest (web_fetch, browser navigate) → exact-host domain memory.
+//   - WriteRequest outside the roots (write, edit) → writable-directory
+//     path memory.
 //   - Neither (generate_image, web_search, MCP tools) → tool-name memory.
 //
 // This file is the single place that maps a PreparedCall to a MemoryShape,
@@ -33,6 +35,7 @@
 package permission
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -56,6 +59,11 @@ const (
 	// MemoryHost means the call carries a URLRequest and is remembered
 	// by exact host (web_fetch, browser navigate).
 	MemoryHost
+	// MemoryPath means the call carries a boundary-crossing WriteRequest
+	// and is remembered by writable directory (write, edit): approving
+	// "always allow" whitelists the target's PARENT DIRECTORY, so later
+	// writes anywhere under it stop prompting.
+	MemoryPath
 	// MemoryTool means the call carries no typed request and is remembered
 	// by tool name (generate_image, web_search, MCP tools).
 	MemoryTool
@@ -67,6 +75,7 @@ type MemoryShape struct {
 	Kind     MemoryKind
 	Info     RunCmdCall // valid when Kind=MemoryArgv
 	Host     string     // valid when Kind=MemoryHost
+	Dir      string     // valid when Kind=MemoryPath (canonical absolute dir)
 	ToolName string     // valid when Kind=MemoryTool (canonical, normalized)
 }
 
@@ -99,6 +108,13 @@ func DeriveMemoryShape(call domain.PreparedCall) MemoryShape {
 		return MemoryShape{Kind: MemoryHost, Host: urlInfo.Host}
 	}
 
+	// WriteRequest outside the roots: writable-directory path memory
+	// (write, edit). Workspace-confined writes never reach an approval,
+	// so they never arrive here.
+	if writeInfo, ok := WriteInfoOf(call); ok {
+		return MemoryShape{Kind: MemoryPath, Dir: filepath.Dir(writeInfo.Path)}
+	}
+
 	// No typed request: tool-name memory (only eligible tools).
 	canonical, eligible := ToolMemoryEligible(call.Call.Name)
 	if !eligible {
@@ -128,6 +144,12 @@ func (s MemoryShape) PreviewLabel() (label string, grant domain.ExecGrant, ok bo
 			return "", domain.ExecGrant{}, false
 		}
 		return s.Host, domain.ExecGrant{}, true
+
+	case MemoryPath:
+		if s.Dir == "" {
+			return "", domain.ExecGrant{}, false
+		}
+		return s.Dir, domain.ExecGrant{}, true
 
 	case MemoryTool:
 		if s.ToolName == "" {
