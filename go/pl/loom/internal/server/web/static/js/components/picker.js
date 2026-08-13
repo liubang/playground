@@ -50,7 +50,7 @@ export class Picker {
   }
 
   // 打开模型选择器
-  // models: [{provider, name, context_window}]
+  // models: [{provider, name, context_window, modalities}]
   // currentRef: "provider/model"
   // onPick(ref) => Promise
   openModels(btn, { models, defaultRef, currentRef, onPick }) {
@@ -76,6 +76,14 @@ export class Picker {
         const item = document.createElement('button')
         item.className = 'menu-item' + (ref === currentRef ? ' is-active' : '')
         item.appendChild(document.createTextNode(mo.name))
+        // 多模态（声明了 image 输入）模型加图片角标
+        if ((mo.modalities || []).includes('image')) {
+          const mod = document.createElement('span')
+          mod.className = 'mod'
+          mod.title = '支持图片输入'
+          mod.innerHTML = icon('image')
+          item.appendChild(mod)
+        }
         if (mo.context_window) {
           const cw = document.createElement('span')
           cw.className = 'ctx'

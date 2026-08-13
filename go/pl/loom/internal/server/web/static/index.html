@@ -101,10 +101,13 @@
 
           <div class="composer">
             <details id="plan-panel" class="plan-panel disclosure" open hidden></details>
-            <div class="composer-box">
+            <div class="composer-box" id="composer-box">
+              <div id="attach-strip" class="attach-strip" hidden></div>
               <textarea id="composer-input" rows="1" placeholder="Message loom…"></textarea>
               <div class="composer-bar">
                 <div class="composer-tools">
+                  <button id="attach-btn" class="icon-btn" title="添加图片（支持直接粘贴 / 拖拽）" data-icon="image"></button>
+                  <input id="attach-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
                   <button id="model-btn" class="picker-btn" title="切换模型">
                     <span class="picker-label">model</span
                     ><span class="picker-caret" data-icon="caret-down"></span>

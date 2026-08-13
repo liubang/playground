@@ -49,6 +49,11 @@ const maxSSEPerSession = 8
 // maxBodyBytes bounds REST request bodies (prompts may paste large text).
 const maxBodyBytes = 4 << 20
 
+// maxPromptBodyBytes bounds prompt submissions: inline base64 images
+// (~4/3 of their raw bytes) dwarf the global body cap. Five ~2MB
+// screenshots re-encoded as PNG can approach 20MB on the wire.
+const maxPromptBodyBytes = 32 << 20
+
 // Config configures a Server.
 type Config struct {
 	// Listen is "host:port" (TCP, loopback recommended) or

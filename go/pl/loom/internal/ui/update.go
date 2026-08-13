@@ -15,7 +15,9 @@
 package ui
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -249,6 +251,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next = m
 	case imageAttachedMsg:
 		next, cmd = m.handleImageAttached(msg)
+	case clipboardImageMsg:
+		next, cmd = m.handleClipboardImage(msg)
 	case clipboardCopiedMsg:
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Copy failed: %v", msg.err), true)
@@ -818,6 +822,8 @@ func (m Model) runChatAction(action Action) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, copyToClipboard(text)
+	case ActionPasteImage:
+		return m, m.pasteClipboardImageCmd()
 	case ActionJumpToBottom:
 		m.resumeFollowTail()
 	}
@@ -1220,9 +1226,13 @@ func (m Model) finishSubmitUserInput(raw string) (tea.Model, tea.Cmd) {
 	images := m.attachedImages
 	m.attachedImages = nil
 	m.attachedPaths = nil
-	// Optimistic local echo; replaced by the durable turn.started confirmation
-	// or removed when the controller rejects the prompt.
-	m.pendingSubmitID = m.blocks.AddPendingUserBlock(raw)
+	// Image-only submissions (empty text) get a placeholder so the
+	// optimistic echo and the prompt don't render as an empty bubble.
+	display := raw
+	if display == "" {
+		display = "[image]"
+	}
+	m.pendingSubmitID = m.blocks.AddPendingUserBlock(display)
 	m.pendingSubmitPrompt = raw
 	m.resumeFollowTail()
 	m.textArea.Reset()
@@ -1239,11 +1249,14 @@ type imageAttachedMsg struct {
 	err     error
 }
 
+// maxImageLoadBytes bounds a single image attachment at load time, whether
+// it comes from a file path or the system clipboard.
+const maxImageLoadBytes = 20 * 1024 * 1024 // 20 MiB
+
 // attachImageCmd loads an image file from the given path asynchronously.
 func (m Model) attachImageCmd(path string) tea.Cmd {
 	return func() tea.Msg {
-		const maxImageBytes = 20 * 1024 * 1024 // 20 MiB
-		content, err := domain.LoadImageFromPath(path, maxImageBytes)
+		content, err := domain.LoadImageFromPath(path, maxImageLoadBytes)
 		return imageAttachedMsg{path: path, content: content, err: err}
 	}
 }
@@ -1279,20 +1292,28 @@ func (m Model) handleImageAttached(msg imageAttachedMsg) (tea.Model, tea.Cmd) {
 }
 
 // extractImagePaths scans text for tokens that look like local file paths
-// with a supported image extension. It returns absolute paths for existing
-// files, skipping non-existent paths and unsupported extensions.
+// with a supported image extension. Tokens follow shell-like quoting and
+// backslash escaping (dragging a file into a terminal inserts an escaped
+// absolute path), and a leading ~/ expands to the user's home directory.
+// Only absolute paths to existing files are returned; relative paths are
+// skipped to avoid false positives on prose.
 func extractImagePaths(text string) []string {
 	var out []string
-	for _, field := range strings.Fields(text) {
-		candidate := field
-		// Strip surrounding quotes and prose punctuation. Quotes and
-		// punctuation can nest in either order (`"path".`, `("path")`),
-		// so trim both cutsets from both ends.
+	for _, candidate := range splitShellFields(text) {
+		// Strip surrounding prose punctuation (quotes are consumed by the
+		// splitter, but a trailing ". from an unmatched pair may remain).
 		candidate = strings.Trim(candidate, `"'.,;:!?)]}([{`)
+		if candidate == "" {
+			continue
+		}
+		if strings.HasPrefix(candidate, "~/") {
+			if home, err := os.UserHomeDir(); err == nil {
+				candidate = filepath.Join(home, candidate[2:])
+			}
+		}
 		if !domain.IsImageExtension(candidate) {
 			continue
 		}
-		// Resolve relative paths against the workspace root.
 		if !filepath.IsAbs(candidate) {
 			continue // only absolute paths are auto-detected to avoid false positives
 		}
@@ -1305,6 +1326,52 @@ func extractImagePaths(text string) []string {
 		}
 	}
 	return out
+}
+
+// splitShellFields splits text into whitespace-separated fields while
+// honoring single/double quotes and backslash escapes — the escaping a
+// terminal applies when a file path is dragged into it. Quotes are stripped
+// and escaped characters are unescaped. An unterminated quote is treated
+// literally from the opening quote on, so prose like "don't" survives.
+func splitShellFields(text string) []string {
+	var fields []string
+	var cur strings.Builder
+	has := false
+	i := 0
+	for i < len(text) {
+		c := text[i]
+		switch {
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+			if has {
+				fields = append(fields, cur.String())
+				cur.Reset()
+				has = false
+			}
+			i++
+		case c == '\\' && i+1 < len(text):
+			cur.WriteByte(text[i+1])
+			has = true
+			i += 2
+		case c == '\'' || c == '"':
+			end := strings.IndexByte(text[i+1:], c)
+			if end < 0 {
+				cur.WriteByte(c) // unterminated: literal
+				i++
+			} else {
+				cur.WriteString(text[i+1 : i+1+end])
+				i += end + 2
+				has = true
+			}
+		default:
+			cur.WriteByte(c)
+			has = true
+			i++
+		}
+	}
+	if has {
+		fields = append(fields, cur.String())
+	}
+	return fields
 }
 
 func (m Model) handlePromptSubmitted(msg promptSubmittedMsg) tea.Model {
@@ -2521,6 +2588,116 @@ func copyToClipboard(text string) tea.Cmd {
 		}
 		return clipboardCopiedMsg{chars: len(text)}
 	}
+}
+
+// --- clipboard image paste (Ctrl+V) ---
+
+// clipboardImageMsg reports the result of reading an image from the system
+// clipboard. The image is attached to the composer without submitting; the
+// user sends it (with optional text) by pressing Enter.
+type clipboardImageMsg struct {
+	name    string
+	content domain.ImageContent
+	err     error
+}
+
+// pngMagic is the 8-byte PNG signature used to validate clipboard bytes —
+// platform tools occasionally return text diagnostics on stdout with exit 0
+// (notably xclip), so trust the bytes, not the exit code.
+var pngMagic = []byte("\x89PNG\r\n\x1a\n")
+
+// pasteClipboardImageCmd reads a PNG image from the system clipboard
+// asynchronously and attaches it to the composer.
+func (m Model) pasteClipboardImageCmd() tea.Cmd {
+	return func() tea.Msg {
+		raw, err := readClipboardImage()
+		if err != nil {
+			return clipboardImageMsg{err: err}
+		}
+		if len(raw) > maxImageLoadBytes {
+			return clipboardImageMsg{err: fmt.Errorf("clipboard image is %d bytes, exceeding the %d byte limit", len(raw), maxImageLoadBytes)}
+		}
+		if !bytes.HasPrefix(raw, pngMagic) {
+			return clipboardImageMsg{err: fmt.Errorf("clipboard does not contain a PNG image")}
+		}
+		name := fmt.Sprintf("clipboard-%s.png", time.Now().Format("150405"))
+		return clipboardImageMsg{name: name, content: domain.ImageContent{MediaType: "image/png", Data: base64.StdEncoding.EncodeToString(raw)}}
+	}
+}
+
+// readClipboardImage reads PNG bytes of the image currently on the system
+// clipboard using the platform's paste command: pngpaste (with an osascript
+// fallback) on macOS, wl-paste/xclip on Linux. Windows is not supported.
+func readClipboardImage() ([]byte, error) {
+	switch runtime.GOOS {
+	case "darwin":
+		if path, err := exec.LookPath("pngpaste"); err == nil {
+			tmp, err := os.CreateTemp("", "loom-clip-*.png")
+			if err != nil {
+				return nil, err
+			}
+			name := tmp.Name()
+			tmp.Close()
+			defer os.Remove(name)
+			if out, err := exec.Command(path, name).CombinedOutput(); err != nil {
+				return nil, fmt.Errorf("pngpaste: %s", strings.TrimSpace(string(out)))
+			}
+			return os.ReadFile(name)
+		}
+		// osascript fallback: no pngpaste installed. «class PNGf» is the
+		// clipboard's PNG flavor; write it to a temp file.
+		tmp, err := os.CreateTemp("", "loom-clip-*.png")
+		if err != nil {
+			return nil, err
+		}
+		name := tmp.Name()
+		tmp.Close()
+		defer os.Remove(name)
+		script := fmt.Sprintf(`set pngData to the clipboard as «class PNGf»
+set fp to open for access (POSIX file %q) with write permission
+set eof of fp to 0
+write pngData to fp
+close access fp`, name)
+		if out, err := exec.Command("osascript", "-e", script).CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("no image on clipboard (or install pngpaste: brew install pngpaste): %s", strings.TrimSpace(string(out)))
+		}
+		return os.ReadFile(name)
+	default:
+		if path, err := exec.LookPath("wl-paste"); err == nil {
+			out, err := exec.Command(path, "--type", "image/png").Output()
+			if err != nil || len(out) == 0 {
+				return nil, fmt.Errorf("no image on clipboard")
+			}
+			return out, nil
+		}
+		if path, err := exec.LookPath("xclip"); err == nil {
+			out, err := exec.Command(path, "-selection", "clipboard", "-t", "image/png", "-o").Output()
+			if err != nil || len(out) == 0 {
+				return nil, fmt.Errorf("no image on clipboard")
+			}
+			return out, nil
+		}
+		return nil, fmt.Errorf("no clipboard image tool found (install wl-paste or xclip)")
+	}
+}
+
+// handleClipboardImage attaches a clipboard image to the composer. Unlike
+// path-based loads (which defer submission until all loads finish), clipboard
+// attaches do not interact with the pending-submit counters: the image is
+// ready immediately and rides along on the next Enter.
+func (m Model) handleClipboardImage(msg clipboardImageMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.setStatus(fmt.Sprintf("Clipboard image: %v", msg.err), true)
+		return m, nil
+	}
+	if len(m.attachedImages) >= maxImageAttachments {
+		m.setStatus(fmt.Sprintf("At most %d image attachments", maxImageAttachments), true)
+		return m, nil
+	}
+	m.attachedImages = append(m.attachedImages, msg.content)
+	m.attachedPaths = append(m.attachedPaths, msg.name)
+	m.setStatus(fmt.Sprintf("Attached %s (%d/%d) — send with Enter", msg.name, len(m.attachedImages), maxImageAttachments), false)
+	return m, nil
 }
 
 // --- status helpers ---

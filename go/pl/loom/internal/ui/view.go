@@ -1277,7 +1277,7 @@ func (m Model) renderHelpOverlay() string {
 	keyRow("Ctrl+R", "Toggle thought process", "Tab", "Complete /command")
 	keyRow("Ctrl+E", "Toggle tool output", "Ctrl+O", "Expand/collapse all tools")
 	keyRow("Ctrl+F", "Search transcript", "Ctrl+Y", "Copy last reply")
-	keyRow("Ctrl+G", "View sub-agent (read-only)", "Click", "Delegate block: view sub-agent")
+	keyRow("Ctrl+V", "Paste image from clipboard", "Ctrl+G", "View sub-agent (read-only)")
 	keyRow("Ctrl+C", "Cancel turn / clear (x2 quit)", "Ctrl+D", "Exit (when idle)")
 	keyRow("Esc", "Cancel turn; close dialogs", "", "")
 	b.WriteString("\n")

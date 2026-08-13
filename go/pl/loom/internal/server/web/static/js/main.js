@@ -183,7 +183,7 @@ const app = {
   curModelRef: '', // 当前会话选中
   curReasoning: '', // 当前会话 reasoning effort
   reasoningOverridden: false,
-  lastSubmit: null, // {text, key} —— 幂等重发
+  lastSubmit: null, // {fp, key} —— 幂等重发（fp 含图片指纹）
   sessionList: [], // 已加载的会话列表（分页累加）
   sessCursor: '', // 下一页游标（"" = 没有更多）
   sessLoading: false,
@@ -383,6 +383,26 @@ function syncPickerLabels() {
   $('reasoning-btn').querySelector('.picker-label').innerHTML = reasoningLabel(
     app.curReasoning,
     app.reasoningOverridden
+  )
+  syncAttachCapability()
+}
+
+// syncAttachCapability 按当前模型声明的 modalities 门控 composer 的图片
+// 附件入口。目录里查不到当前模型（配置过期等）时保持放行，由服务端
+// 提交门禁兜底报错。
+function syncAttachCapability() {
+  if (!app.composer) return
+  const entry = app.models.find((m) => m.provider + '/' + m.name === app.curModelRef)
+  if (!entry) {
+    app.composer.setImagesEnabled(true)
+    return
+  }
+  const ok = (entry.modalities || []).includes('image')
+  app.composer.setImagesEnabled(
+    ok,
+    ok
+      ? ''
+      : `模型 ${entry.name} 未声明图片输入（modalities）；请切换多模态模型，或在设置 → 模型中勾选「图片输入」`
   )
 }
 
@@ -913,6 +933,10 @@ async function boot() {
     textarea: $('composer-input'),
     sendBtn: $('send-btn'),
     cancelBtn: $('cancel-btn'),
+    attachBtn: $('attach-btn'),
+    fileInput: $('attach-input'),
+    stripEl: $('attach-strip'),
+    boxEl: $('composer-box'),
     onSubmit: submitPrompt,
     onCancel: () => {
       if (!app.sessionId) return
@@ -920,6 +944,7 @@ async function boot() {
         if (e.status !== 401) toast('cancel: ' + e.message)
       })
     },
+    onError: (m) => toast(m),
   })
 
   app.statusbar = new Statusbar({
@@ -1114,6 +1139,7 @@ async function enter() {
       const cat = await app.api.metaModels()
       app.models = cat.models || []
       app.defaultModelRef = cat.default || ''
+      syncAttachCapability() // 目录到位后刷新附件入口（modalities 随目录下发）
     } catch (e) {
       if (e.status !== 401) console.warn('load models:', e)
     }
@@ -1130,27 +1156,29 @@ async function enter() {
   }
 }
 
-async function submitPrompt(text) {
+async function submitPrompt(text, images = []) {
   if (app.readOnly) {
     toast('子 agent 会话为只读，不能追问')
     return
   }
-  // 幂等键：同一文本重发共享同键（双击/网络重试不产生重复 turn）
+  // 幂等键：同一「文本 + 图片集合」重发共享同键（双击/网络重试不产生重复 turn）
+  const fp = text + '#' + images.map((i) => i.data.length).join('+')
   let key
-  if (app.lastSubmit && app.lastSubmit.text === text) {
+  if (app.lastSubmit && app.lastSubmit.fp === fp) {
     key = app.lastSubmit.key
   } else {
     key = randomId()
   }
-  app.lastSubmit = { text, key }
+  app.lastSubmit = { fp, key }
   try {
     if (!app.sessionId) await newSession(recentWorkspaceId())
-    await app.api.submitPrompt(app.sessionId, text, key)
+    await app.api.submitPrompt(app.sessionId, text, key, images)
     app.composer.clearDraft()
     app.lastSubmit = null
     refreshSessions()
   } catch (e) {
     if (e.status === 401) return
+    // 失败时仅还原文本，附件留在 composer 以便重试
     app.composer.restoreDraft(text)
     toast('send failed: ' + e.message)
   }
