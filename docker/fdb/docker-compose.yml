@@ -31,7 +31,6 @@ services:
         limits:
           memory: 2560m
           cpus: '2'
-
   fdb-node-2:
     image: foundationdb/foundationdb:${FDB_VERSION:-7.3.63}
     container_name: fdb-node-2
@@ -61,7 +60,6 @@ services:
         limits:
           memory: 2560m
           cpus: '2'
-
   fdb-node-3:
     image: foundationdb/foundationdb:${FDB_VERSION:-7.3.63}
     container_name: fdb-node-3
@@ -91,7 +89,6 @@ services:
         limits:
           memory: 2560m
           cpus: '2'
-
   # 独立客户端容器（profile，默认不启动）：
   #   docker compose run --rm client            # 交互式 fdbcli
   #   docker compose run --rm client --exec "status"
@@ -104,7 +101,6 @@ services:
       - ./fdb.cluster:/var/fdb/fdb.cluster:ro
     networks:
       fdb:
-
 volumes:
   node1-data:
   node1-logs:
@@ -112,7 +108,6 @@ volumes:
   node2-logs:
   node3-data:
   node3-logs:
-
 networks:
   fdb:
     ipam:

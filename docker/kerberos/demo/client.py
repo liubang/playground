@@ -7,6 +7,7 @@
 
 用法: python3 client.py [消息]
 """
+
 import socket
 import struct
 import sys

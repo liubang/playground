@@ -32,7 +32,7 @@ document.addEventListener(
       closeOpenPop()
     }
   },
-  true
+  true,
 )
 document.addEventListener(
   'keydown',
@@ -45,7 +45,7 @@ document.addEventListener(
       closeOpenPop()
     }
   },
-  true
+  true,
 )
 window.addEventListener('blur', closeOpenPop)
 window.addEventListener('resize', closeOpenPop)
@@ -55,7 +55,7 @@ document.addEventListener(
   (e) => {
     if (openPop && !openPop.contains(e.target)) closeOpenPop()
   },
-  true
+  true,
 )
 
 // createSelect({ className, options: [[value, label], ...] }) → <button>

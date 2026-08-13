@@ -27,7 +27,7 @@ fi
 source .env
 
 echo "==> 生成客户端 cluster 文件 fdb.cluster..."
-printf 'docker:%s@172.28.11.11:4500,172.28.11.12:4500,172.28.11.13:4500\n' "$FDB_CLUSTER_ID" > fdb.cluster
+printf 'docker:%s@172.28.11.11:4500,172.28.11.12:4500,172.28.11.13:4500\n' "$FDB_CLUSTER_ID" >fdb.cluster
 log_ok "fdb.cluster 已生成（容器网络内客户端使用）"
 
 fdbcli_exec() {

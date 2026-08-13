@@ -14,13 +14,14 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include "calc.h"
+
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "calc.h"
 #include "calc_flex.h"
 
 extern int Calcparse(yyscan_t scanner, CalcResult* result);
@@ -158,39 +159,39 @@ struct Ast* NewFlow(
 
 void TreeFree(struct Ast* a) {
     switch (a->nodetype) {
-    case '+':
-    case '-':
-    case '*':
-    case '/':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case 'L':
-        TreeFree(a->r);
-    case '|':
-    case 'M':
-    case 'C':
-    case 'F':
-        TreeFree(a->l);
-    case 'K':
-    case 'N':
-        break;
-    case '=':
-        free(((struct SymAssign*)a)->v);
-        break;
-    case 'I':
-    case 'W':
-        free(((struct Flow*)a)->cond);
-        if (((struct Flow*)a)->tl)
-            TreeFree(((struct Flow*)a)->tl);
-        if (((struct Flow*)a)->el)
-            TreeFree(((struct Flow*)a)->el);
-        break;
-    default:
-        printf("internal error: free bad node %c\n", a->nodetype);
+        case '+':
+        case '-':
+        case '*':
+        case '/':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case 'L':
+            TreeFree(a->r);
+        case '|':
+        case 'M':
+        case 'C':
+        case 'F':
+            TreeFree(a->l);
+        case 'K':
+        case 'N':
+            break;
+        case '=':
+            free(((struct SymAssign*)a)->v);
+            break;
+        case 'I':
+        case 'W':
+            free(((struct Flow*)a)->cond);
+            if (((struct Flow*)a)->tl)
+                TreeFree(((struct Flow*)a)->tl);
+            if (((struct Flow*)a)->el)
+                TreeFree(((struct Flow*)a)->el);
+            break;
+        default:
+            printf("internal error: free bad node %c\n", a->nodetype);
     }
     free(a);
 }
@@ -227,91 +228,91 @@ double Eval(struct Ast* a) {
     }
 
     switch (a->nodetype) {
-    /* constant */
-    case 'K':
-        v = ((struct NumVal*)a)->number;
-        break;
-    /* symbol ref */
-    case 'N':
-        v = ((struct SymRef*)a)->s->value;
-        break;
-    case '=':
-        v = ((struct SymAssign*)a)->s->value = Eval(((struct SymAssign*)a)->v);
-        break;
-    /* expression */
-    case '+':
-        v = Eval(a->l) + Eval(a->r);
-        break;
-    case '-':
-        v = Eval(a->l) - Eval(a->r);
-        break;
-    case '*':
-        v = Eval(a->l) * Eval(a->r);
-        break;
-    case '/':
-        v = Eval(a->l) / Eval(a->r);
-        break;
-    case '|':
-        v = fabs(Eval(a->l));
-        break;
-    case 'M':
-        v = -Eval(a->l);
-        break;
-    /* comparisions */
-    case '1':
-        v = (Eval(a->l) > Eval(a->r)) ? 1 : 0;
-        break;
-    case '2':
-        v = (Eval(a->l) < Eval(a->r)) ? 1 : 0;
-        break;
-    case '3':
-        v = (Eval(a->l) != Eval(a->r)) ? 1 : 0;
-        break;
-    case '4':
-        v = (Eval(a->l) == Eval(a->r)) ? 1 : 0;
-        break;
-    case '5':
-        v = (Eval(a->l) >= Eval(a->r)) ? 1 : 0;
-        break;
-    case '6':
-        v = (Eval(a->l) <= Eval(a->r)) ? 1 : 0;
-        break;
-    /* control flow */
-    case 'I':
-        if (Eval(((struct Flow*)a)->cond) != 0) {
+        /* constant */
+        case 'K':
+            v = ((struct NumVal*)a)->number;
+            break;
+        /* symbol ref */
+        case 'N':
+            v = ((struct SymRef*)a)->s->value;
+            break;
+        case '=':
+            v = ((struct SymAssign*)a)->s->value = Eval(((struct SymAssign*)a)->v);
+            break;
+        /* expression */
+        case '+':
+            v = Eval(a->l) + Eval(a->r);
+            break;
+        case '-':
+            v = Eval(a->l) - Eval(a->r);
+            break;
+        case '*':
+            v = Eval(a->l) * Eval(a->r);
+            break;
+        case '/':
+            v = Eval(a->l) / Eval(a->r);
+            break;
+        case '|':
+            v = fabs(Eval(a->l));
+            break;
+        case 'M':
+            v = -Eval(a->l);
+            break;
+        /* comparisions */
+        case '1':
+            v = (Eval(a->l) > Eval(a->r)) ? 1 : 0;
+            break;
+        case '2':
+            v = (Eval(a->l) < Eval(a->r)) ? 1 : 0;
+            break;
+        case '3':
+            v = (Eval(a->l) != Eval(a->r)) ? 1 : 0;
+            break;
+        case '4':
+            v = (Eval(a->l) == Eval(a->r)) ? 1 : 0;
+            break;
+        case '5':
+            v = (Eval(a->l) >= Eval(a->r)) ? 1 : 0;
+            break;
+        case '6':
+            v = (Eval(a->l) <= Eval(a->r)) ? 1 : 0;
+            break;
+        /* control flow */
+        case 'I':
+            if (Eval(((struct Flow*)a)->cond) != 0) {
+                if (((struct Flow*)a)->tl) {
+                    v = Eval(((struct Flow*)a)->tl);
+                } else {
+                    v = 0.0;
+                }
+            } else {
+                if (((struct Flow*)a)->el) {
+                    v = Eval(((struct Flow*)a)->el);
+                } else {
+                    v = 0.0;
+                }
+            }
+            break;
+        case 'W':
+            v = 0.0;
             if (((struct Flow*)a)->tl) {
-                v = Eval(((struct Flow*)a)->tl);
-            } else {
-                v = 0.0;
+                while (Eval(((struct Flow*)a)->cond) != 0) {
+                    v = Eval(((struct Flow*)a)->tl);
+                }
             }
-        } else {
-            if (((struct Flow*)a)->el) {
-                v = Eval(((struct Flow*)a)->el);
-            } else {
-                v = 0.0;
-            }
-        }
-        break;
-    case 'W':
-        v = 0.0;
-        if (((struct Flow*)a)->tl) {
-            while (Eval(((struct Flow*)a)->cond) != 0) {
-                v = Eval(((struct Flow*)a)->tl);
-            }
-        }
-        break;
-    case 'L':
-        Eval(a->l);
-        v = Eval(a->r);
-        break;
-    case 'F':
-        v = callbuiltin((struct FnCall*)a);
-        break;
-    case 'C':
-        v = calluser((struct UfnCall*)a);
-        break;
-    default:
-        printf("internal error: bad node %c\n", a->nodetype);
+            break;
+        case 'L':
+            Eval(a->l);
+            v = Eval(a->r);
+            break;
+        case 'F':
+            v = callbuiltin((struct FnCall*)a);
+            break;
+        case 'C':
+            v = calluser((struct UfnCall*)a);
+            break;
+        default:
+            printf("internal error: bad node %c\n", a->nodetype);
     }
     return v;
 }
@@ -320,18 +321,18 @@ static double callbuiltin(struct FnCall* f) {
     enum Bifs functype = f->functype;
     double v = Eval(f->l);
     switch (functype) {
-    case B_sqrt:
-        return sqrt(v);
-    case B_exp:
-        return exp(v);
-    case B_log:
-        return log(v);
-    case B_print:
-        printf("= %4.4g\n", v);
-        return v;
-    default:
-        printf("Unknown built-in function %d", functype);
-        return 0.0;
+        case B_sqrt:
+            return sqrt(v);
+        case B_exp:
+            return exp(v);
+        case B_log:
+            return log(v);
+        case B_print:
+            printf("= %4.4g\n", v);
+            return v;
+        default:
+            printf("Unknown built-in function %d", functype);
+            return 0.0;
     }
 }
 

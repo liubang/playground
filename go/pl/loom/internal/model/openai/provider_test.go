@@ -1139,7 +1139,8 @@ func TestResponsesIncompleteMaxOutputYieldsStopMaxOutput(t *testing.T) {
 			t.Fatalf("max_output truncation surfaced as stream error: %+v", evt)
 		}
 	}
-	assertEventKinds(t, events,
+	assertEventKinds(
+		t, events,
 		domain.ModelEventResponseStart,
 		domain.ModelEventTextStart,
 		domain.ModelEventTextDelta,

@@ -72,7 +72,8 @@ func (p Policy) Decider(mode ApprovalMode) Chain {
 	if p.UserIntent && mode != ModeNever {
 		chain = append(chain, UserIntentDecider{})
 	}
-	return append(chain,
+	return append(
+		chain,
 		SessionDecider{Session: p.Session},
 		BaselineDecider{Mode: mode},
 	)

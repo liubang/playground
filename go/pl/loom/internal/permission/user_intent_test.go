@@ -47,7 +47,8 @@ func TestExtractUserIntentHosts(t *testing.T) {
 	)
 	// Assistant and tool-result content is model-influenced: it must never
 	// seed the trust set.
-	msgs = append(msgs,
+	msgs = append(
+		msgs,
 		domain.Message{
 			ID:    domain.NewMessageID(),
 			Role:  domain.RoleAssistant,

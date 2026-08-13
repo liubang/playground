@@ -184,7 +184,8 @@ func (t *BrowserTool) doSnapshot(ctx context.Context, callID domain.ToolCallID, 
 	// first use and injects the target executor into the context that the
 	// cdproto Do methods require.
 	var nodes []*accessibility.Node
-	err = chromedp.Run(snapCtx,
+	err = chromedp.Run(
+		snapCtx,
 		// Enable the accessibility domain so AXNodeIds are stable.
 		accessibility.Enable(),
 		chromedp.ActionFunc(func(ctx context.Context) error {
@@ -321,11 +322,13 @@ func (t *BrowserTool) unknownRefError(ref string) error {
 		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(
 			"unknown ref %q; live refs from the last snapshot: %s. "+
 				"Pass one of them (the number alone, e.g. \"3\", also works), "+
-				"or take a new snapshot if the page has changed", ref, known))
+				"or take a new snapshot if the page has changed", ref, known,
+		))
 	}
 	return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(
 		"unknown ref %q: no live snapshot refs. Run action=snapshot first, "+
-			"then pass the ref number shown next to the target element", ref))
+			"then pass the ref number shown next to the target element", ref,
+	))
 }
 
 // --- click action ---
@@ -396,7 +399,8 @@ func (t *BrowserTool) doType(ctx context.Context, callID domain.ToolCallID, args
 
 	// Focus the element by backend node ID, then insert the text via the
 	// IME path (input.InsertText) which handles arbitrary Unicode text.
-	err = chromedp.Run(typeCtx,
+	err = chromedp.Run(
+		typeCtx,
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			return dom.Focus().WithBackendNodeID(node.backendDOMID).Do(ctx)
 		}),
@@ -468,7 +472,8 @@ func clickBackendNode(backendID cdp.BackendNodeID) chromedp.Action {
 // silently dropped.
 func (t *BrowserTool) capturePageSummary(ctx context.Context) string {
 	var title, currentURL string
-	_ = chromedp.Run(ctx,
+	_ = chromedp.Run(
+		ctx,
 		chromedp.Title(&title),
 		chromedp.Location(&currentURL),
 	)

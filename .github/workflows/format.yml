@@ -1,0 +1,26 @@
+name: format
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+# 全语言统一格式门禁（aspect_rules_lint）：
+# C/C++ clang-format、Go gofumpt、Java google-java-format、Python ruff、
+# JS/CSS/HTML prettier、Shell shfmt、Starlark buildifier、YAML yamlfmt。
+# 本地修复：bazel run //:format
+jobs:
+  format:
+    name: format check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+          disk-cache: ${{ github.workflow }}-${{ runner.os }}
+      - name: format check
+        run: bazel run --config=ci //:format.check

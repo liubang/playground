@@ -35,8 +35,9 @@ bazel run :refresh_compile_commands
 # Java Maven dependency lock
 REPIN=1 bazel run @maven//:pin
 
-# Format C++ code
-./format.sh
+# Format all code (C++/Go/Java/Python/JS/CSS/HTML/Shell/Starlark/YAML)
+bazel run //:format              # fix in place; pass paths to limit scope
+bazel run //:format.check        # check only (CI gate: .github/workflows/format.yml)
 ```
 
 Tests always run with `-c opt` (see `.bazelrc`). Locally, tests re-run every time (`--nocache_test_results`); CI caches test results (`--config=ci`).

@@ -99,7 +99,8 @@ func TestRunawayRepeatedPrepareFailures(t *testing.T) {
 	tool := fakes.ReadFileTool().WithPrepareFn(
 		func(_ context.Context, _ domain.ToolCall) (domain.PreparedCall, error) {
 			return domain.PreparedCall{}, errors.New("context must be between 0 and 5")
-		})
+		},
+	)
 	call := domain.ToolCall{Name: "read_file", Arguments: json.RawMessage(`{"context":10}`)}
 	run, _, err := runLoopWithTool(t, tool, scriptToolCalls(call, 3, "")...)
 	if err == nil || !strings.Contains(err.Error(), "identical arguments") {
@@ -278,7 +279,8 @@ func TestRunawayStallTimeoutSoftLands(t *testing.T) {
 		func(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 			clock.Advance(20 * time.Second)
 			return fakes.ReadFileTool().Prepare(ctx, call)
-		})
+		},
+	)
 	call := domain.ToolCall{Name: "read_file", Arguments: json.RawMessage(`{"path":"a.go"}`)}
 	entries := scriptToolCalls(call, 8, "wrap-up summary")
 	run := NewRun(domain.NewSessionID(), domain.Limits{}, clock)

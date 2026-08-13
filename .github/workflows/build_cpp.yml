@@ -1,4 +1,3 @@
----
 name: build-cpp
 on:
   push:
@@ -12,11 +11,9 @@ on:
       - "cpp/**"
       - ".github/workflows/build_cpp.yml"
   workflow_dispatch:
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   test-macos:
     name: test-macos
@@ -45,7 +42,6 @@ jobs:
             --config=release \
             --config=ci \
             //cpp/...
-
   test-linux-clang:
     name: test-linux-clang
     runs-on: ubuntu-24.04
@@ -60,10 +56,7 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot" --health-interval=10s --health-timeout=5s --health-retries=10
     steps:
       - uses: actions/checkout@v5
       - uses: bazel-contrib/setup-bazel@0.19.0
@@ -95,7 +88,6 @@ jobs:
             --linkopt=-stdlib=libstdc++ \
             --test_env=FLUX_MYSQL_TEST_DSN=mysql://flux:flux@127.0.0.1:3306/flux_test \
             -- //cpp/... -//cpp/pl/recall/embedding_server/...
-
   # gcc job: run coverage (which also executes all tests), then deploy report
   coverage-linux-gcc:
     name: coverage-linux-gcc
@@ -113,10 +105,7 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot" --health-interval=10s --health-timeout=5s --health-retries=10
     steps:
       - uses: actions/checkout@v5
       - uses: bazel-contrib/setup-bazel@0.19.0

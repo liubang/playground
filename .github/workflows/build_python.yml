@@ -1,4 +1,3 @@
----
 name: build-python
 on:
   push:
@@ -12,11 +11,9 @@ on:
       - "python/**"
       - ".github/workflows/build_python.yml"
   workflow_dispatch:
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   build-python:
     name: python playground

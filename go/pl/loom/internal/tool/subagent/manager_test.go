@@ -202,7 +202,8 @@ func TestManagerRolePrompt(t *testing.T) {
 }
 
 func TestManagerSpawnAndWait(t *testing.T) {
-	mgr, _, store, _ := newTestManager(t,
+	mgr, _, store, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "结论：测试完成", StopReason: domain.StopEndTurn, UsageIn: 50, UsageOut: 10},
 	)
 
@@ -347,7 +348,8 @@ func TestManagerWaitTimeout(t *testing.T) {
 }
 
 func TestManagerShutdown(t *testing.T) {
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "结论", StopReason: domain.StopEndTurn},
 	)
 
@@ -398,7 +400,8 @@ func TestManagerShutdownIdempotent(t *testing.T) {
 }
 
 func TestManagerSpawnWithCoderRole(t *testing.T) {
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "实现完成", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 50},
 	)
 
@@ -422,7 +425,8 @@ func TestManagerSpawnWithCoderRole(t *testing.T) {
 }
 
 func TestManagerWaitForPersistedSession(t *testing.T) {
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "结论", StopReason: domain.StopEndTurn},
 	)
 
@@ -456,7 +460,8 @@ func TestManagerWaitForPersistedSession(t *testing.T) {
 func TestManagerObserverHooks(t *testing.T) {
 	var starts []ChildStart
 	var finishes []ChildFinish
-	factory, model, store, models := newTestFactory(t,
+	factory, model, store, models := newTestFactory(
+		t,
 		fakes.ScriptEntry{Text: "结论", StopReason: domain.StopEndTurn, UsageIn: 50, UsageOut: 10},
 	)
 	factory.Prompt = &stubPromptBuilder{}
@@ -514,7 +519,8 @@ func TestManagerResumeUnknownSession(t *testing.T) {
 }
 
 func TestManagerResumeStillRunning(t *testing.T) {
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "结论", StopReason: domain.StopEndTurn},
 	)
 
@@ -544,7 +550,8 @@ func TestManagerResumeStillRunning(t *testing.T) {
 }
 
 func TestManagerSpawnRecordsRoleInDelegation(t *testing.T) {
-	mgr, _, store, _ := newTestManager(t,
+	mgr, _, store, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "结论", StopReason: domain.StopEndTurn},
 	)
 
@@ -580,7 +587,8 @@ func TestManagerSpawnRecordsRoleInDelegation(t *testing.T) {
 // has collected the finished entry from the registry — the S1 regression
 // where a done-but-uncollected entry blocked Resume with "still running".
 func TestManagerResumeAfterCollect(t *testing.T) {
-	mgr, _, store, _ := newTestManager(t,
+	mgr, _, store, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "initial conclusion", StopReason: domain.StopEndTurn},
 		fakes.ScriptEntry{Text: "follow-up conclusion", StopReason: domain.StopEndTurn},
 	)
@@ -632,7 +640,8 @@ func TestManagerResumeAfterCollect(t *testing.T) {
 // Wait has collected the finished entry (the S3 regression where Status
 // falsely reported Running for done-but-uncollected entries).
 func TestManagerStatusDoneAfterCollect(t *testing.T) {
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
 	)
 
@@ -667,7 +676,8 @@ func TestManagerStatusDoneAfterCollect(t *testing.T) {
 // done-but-not-yet-collected entry (the in-process Resume path that
 // previously deadlocked).
 func TestManagerResumeStaleDoneEntry(t *testing.T) {
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "initial", StopReason: domain.StopEndTurn},
 		fakes.ScriptEntry{Text: "follow-up", StopReason: domain.StopEndTurn},
 	)

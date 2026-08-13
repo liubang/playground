@@ -1,6 +1,8 @@
 #include "calc.h"
-#include "calc_flex.h"
+
 #include <stdarg.h>
+
+#include "calc_flex.h"
 
 extern int Calcparse(yyscan_t, CalcParseResult* result);
 

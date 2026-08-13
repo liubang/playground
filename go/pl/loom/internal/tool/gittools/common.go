@@ -297,14 +297,16 @@ func gitBaseArgs(repoRoot string) []string {
 }
 
 func buildRevParseArgs(repoRoot string) []string {
-	return append(gitBaseArgs(repoRoot),
+	return append(
+		gitBaseArgs(repoRoot),
 		"rev-parse",
 		"--show-toplevel",
 	)
 }
 
 func buildStatusArgs(repoRoot string) []string {
-	return append(gitBaseArgs(repoRoot),
+	return append(
+		gitBaseArgs(repoRoot),
 		"status",
 		"--porcelain=v2",
 		"-z",
@@ -313,7 +315,8 @@ func buildStatusArgs(repoRoot string) []string {
 }
 
 func buildDiffArgs(repoRoot string, staged bool, unified int, base, repoRelativePath string) []string {
-	args := append(gitBaseArgs(repoRoot),
+	args := append(
+		gitBaseArgs(repoRoot),
 		"diff",
 		"--no-ext-diff",
 		"--no-textconv",

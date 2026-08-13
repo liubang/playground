@@ -1,1 +1,15 @@
 *.flux linguist-language=JavaScript
+
+# ---- bazel run //:format（rules_lint）排除规则 ----
+# flux 是自定义 DSL，上面的 linguist-language 仅供 GitHub 高亮，不能交给 prettier
+*.flux rules-lint-ignored=true
+# 生成的 protobuf 代码不做格式化
+*.pb.go linguist-generated=true
+# 第三方 vendor 静态资源
+go/pl/loom/internal/server/web/static/vendor/** linguist-generated=true
+# maven 依赖锁文件由 bazel run @maven//:pin 生成，repin 会整体重写
+maven_install.json linguist-generated=true
+# clang-format/clang-tidy 配置是 YAML，但 linguist 的 YAML 文件名规则会命中它们；
+# 这些是手工维护/上游同步的样例，不交给 yamlfmt 重排
+.clang-format rules-lint-ignored=true
+.clang-tidy rules-lint-ignored=true

@@ -206,7 +206,8 @@ func validateGitBlameArgs(
 }
 
 func buildBlameArgs(repoRoot, rev string, startLine, endLine int, repoRelativePath string) []string {
-	args := append(gitBaseArgs(repoRoot),
+	args := append(
+		gitBaseArgs(repoRoot),
 		"blame",
 		"--porcelain",
 		"-L", fmt.Sprintf("%d,%d", startLine, endLine),

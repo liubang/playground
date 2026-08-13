@@ -18,8 +18,8 @@
 # Created: 2024/06/04 23:43
 
 if [ $# != 1 ]; then
-	echo "Usage $0 <file>"
-	return 1
+    echo "Usage $0 <file>"
+    return 1
 fi
 
 hash=$(openssl dgst -sha256 -binary "$1" | openssl base64 -A)

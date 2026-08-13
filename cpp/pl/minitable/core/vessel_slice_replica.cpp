@@ -22,17 +22,20 @@ absl::StatusOr<std::unique_ptr<VesselSliceReplica>> VesselSliceReplica::Create(
         new VesselSliceReplica(wal, std::move(state_machine), std::move(options)));
 }
 
-VesselSliceReplica::VesselSliceReplica(
-    minivessel::SharedWal* wal,
-    std::unique_ptr<VesselSliceStateMachine> state_machine,
-    minivessel::ReplicaRuntimeOptions options)
+VesselSliceReplica::VesselSliceReplica(minivessel::SharedWal* wal,
+                                       std::unique_ptr<VesselSliceStateMachine> state_machine,
+                                       minivessel::ReplicaRuntimeOptions options)
     : state_machine_(std::move(state_machine)),
-      runtime_(std::make_unique<minivessel::ReplicaRuntime>(wal, state_machine_.get(),
-                                                            std::move(options))) {}
+      runtime_(std::make_unique<minivessel::ReplicaRuntime>(
+          wal, state_machine_.get(), std::move(options))) {}
 
-VesselSliceReplica::~VesselSliceReplica() { stop(); }
+VesselSliceReplica::~VesselSliceReplica() {
+    stop();
+}
 
-absl::Status VesselSliceReplica::poll() { return runtime_->poll(); }
+absl::Status VesselSliceReplica::poll() {
+    return runtime_->poll();
+}
 
 absl::Status VesselSliceReplica::promote() {
     std::lock_guard lock(session_mutex_);
@@ -85,6 +88,8 @@ void VesselSliceReplica::stop() {
     }
 }
 
-minivessel::ReplicaStatus VesselSliceReplica::status() const { return runtime_->status(); }
+minivessel::ReplicaStatus VesselSliceReplica::status() const {
+    return runtime_->status();
+}
 
 } // namespace pl::minitable

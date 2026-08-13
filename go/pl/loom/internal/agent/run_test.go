@@ -3884,7 +3884,8 @@ func TestRunAssistantTextScopesToCurrentRun(t *testing.T) {
 
 	prior := textMessage(domain.RoleAssistant, "上一轮的答复")
 	prior.Metadata = map[string]string{"run_id": domain.NewRunID().String()}
-	run.Messages = append(run.Messages,
+	run.Messages = append(
+		run.Messages,
 		textMessage(domain.RoleAssistant, "更老的答复"), // legacy, unstamped
 		prior,
 		textMessage(domain.RoleUser, "再试一次"),
@@ -3963,7 +3964,8 @@ func TestPrepareFailureArgsSummary(t *testing.T) {
 	})
 	t.Run("whitelisted strings extracted, rest dropped", func(t *testing.T) {
 		got := prepareFailureArgsSummary(json.RawMessage(
-			`{"path":"go/pl/loom/internal/config/example.go","pattern":"storage","content":"secret-body","env":{"K":"V"},"limit":50}`))
+			`{"path":"go/pl/loom/internal/config/example.go","pattern":"storage","content":"secret-body","env":{"K":"V"},"limit":50}`,
+		))
 		if got["path"] != "go/pl/loom/internal/config/example.go" || got["pattern"] != "storage" {
 			t.Fatalf("whitelisted keys missing: %v", got)
 		}
@@ -3995,7 +3997,8 @@ func TestAppendPrepareFailureEventsIncludesArgsSummary(t *testing.T) {
 		ID:   domain.NewToolCallID(),
 		Name: "search",
 		Arguments: json.RawMessage(
-			`{"path":"go/pl/loom/internal/config/example.go","pattern":"storage","content":"secret-body"}`),
+			`{"path":"go/pl/loom/internal/config/example.go","pattern":"storage","content":"secret-body"}`,
+		),
 	}
 	loop.appendPrepareFailureEvents(tc, "deadbeef")
 

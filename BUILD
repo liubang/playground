@@ -16,7 +16,6 @@
 # Created: 2023/04/14 14:00
 
 load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
-load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 licenses(["notice"])
 
@@ -24,6 +23,8 @@ exports_files([
     "LICENSE",
     "MODULE.bazel",
     "WORKSPACE",
+    # //tools/format:prettier 的运行时配置
+    ".prettierrc",
 ])
 
 config_setting(
@@ -95,13 +96,16 @@ refresh_compile_commands(
     },
 )
 
-# Uniformly format all Go sources under //go with gofumpt:
-#   bazel run //:gofumpt            # format in place
-#   bazel run //:gofumpt -- --check # fail if any file is unformatted (for CI)
-sh_binary(
-    name = "gofumpt",
-    srcs = ["gofumpt.sh"],
-    args = ["$(rlocationpath @cc_mvdan_gofumpt//:gofumpt)"],
-    data = ["@cc_mvdan_gofumpt//:gofumpt"],
-    deps = ["@bazel_tools//tools/bash/runfiles"],
+# 统一代码格式化（C++/Go/Java/Python/JS/CSS/HTML/Shell/Starlark/YAML）：
+#   bazel run //:format        # 全量格式化
+#   bazel run //:format <path> # 只格式化指定文件
+#   bazel run //:format.check  # CI 检查模式
+alias(
+    name = "format",
+    actual = "//tools/format",
+)
+
+alias(
+    name = "format.check",
+    actual = "//tools/format:format.check",
 )

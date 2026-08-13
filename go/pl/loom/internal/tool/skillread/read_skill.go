@@ -280,7 +280,8 @@ func (t *ReadSkillTool) Execute(ctx context.Context, prepared domain.PreparedCal
 	}
 	selected, first, last, truncated := sliceLines(lines, args.Offset, args.Limit)
 	return textResult(prepared.Call.ID, startedAt, formatReadSkillText(
-		args.Name, args.Path, sk.Dir, selected, first, last, len(lines), truncated, args.Offset, int64(len(data))))
+		args.Name, args.Path, sk.Dir, selected, first, last, len(lines), truncated, args.Offset, int64(len(data)),
+	))
 }
 
 // formatReadSkillText renders the cat -n style plain-text output, keeping

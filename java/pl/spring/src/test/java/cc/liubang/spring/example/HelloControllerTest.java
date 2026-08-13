@@ -17,37 +17,38 @@
 
 package cc.liubang.spring.example;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 @SpringBootTest
 @AutoConfigureMockMvc
 class HelloControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+  @Autowired private MockMvc mockMvc;
 
-    @Test
-    void testHello() throws Exception {
-        mockMvc.perform(get("/api/hello"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.code").value(200))
-            .andExpect(jsonPath("$.data.message").value("Hello, Spring Boot with Bazel!"))
-            .andExpect(jsonPath("$.timestamp").exists());
-    }
+  @Test
+  void testHello() throws Exception {
+    mockMvc
+        .perform(get("/api/hello"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.code").value(200))
+        .andExpect(jsonPath("$.data.message").value("Hello, Spring Boot with Bazel!"))
+        .andExpect(jsonPath("$.timestamp").exists());
+  }
 
-    @Test
-    void testHelloName() throws Exception {
-        mockMvc.perform(get("/api/hello/Bazel"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.code").value(200))
-            .andExpect(jsonPath("$.data.message").value("Hello, Bazel!"));
-    }
+  @Test
+  void testHelloName() throws Exception {
+    mockMvc
+        .perform(get("/api/hello/Bazel"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.code").value(200))
+        .andExpect(jsonPath("$.data.message").value("Hello, Bazel!"));
+  }
 }

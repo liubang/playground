@@ -23,9 +23,9 @@ set -euo pipefail
 # fdbserver 不会自建 datadir/logdir（$ID 会被 fdbmonitor 替换为端口号），需预先创建
 mkdir -p /var/fdb/data/4500 /var/fdb/data/4501 /var/fdb/logs/4500 /var/fdb/logs/4501
 chown -R fdb:fdb /var/fdb/data /var/fdb/logs
-echo "docker:${FDB_CLUSTER_ID}@${FDB_COORDINATORS}" > /var/fdb/fdb.cluster
+echo "docker:${FDB_CLUSTER_ID}@${FDB_COORDINATORS}" >/var/fdb/fdb.cluster
 
-cat > /var/fdb/foundationdb.conf <<EOF
+cat >/var/fdb/foundationdb.conf <<EOF
 [fdbmonitor]
 user = fdb
 
