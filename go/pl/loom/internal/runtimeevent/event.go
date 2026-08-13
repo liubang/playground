@@ -154,6 +154,11 @@ type SessionOpenedPayload struct {
 type TurnStartedPayload struct {
 	TurnIndex int    `json:"turn_index"`
 	Prompt    string `json:"prompt,omitempty"`
+	// Images carries the artifact references of image attachments submitted
+	// with the prompt (empty on the text-only steer-relay path), so display
+	// channels can render the attachments with the user message in real time
+	// instead of waiting for a snapshot replay.
+	Images []domain.ArtifactRef `json:"images,omitempty"`
 }
 
 // RunPhasePayload describes a phase change.

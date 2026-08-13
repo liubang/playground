@@ -42,7 +42,7 @@ func Materialize(ctx context.Context, store domain.ArtifactStore, messages []dom
 	}
 	return rewriteImages(messages, func(ref domain.ArtifactRef) domain.ContentPart {
 		return resolve(ctx, store, ref)
-	})
+	}, true)
 }
 
 // StripImages returns a copy of messages with every model-bound image
@@ -56,19 +56,22 @@ func StripImages(messages []domain.Message) []domain.Message {
 			Kind: domain.PartText,
 			Text: fmt.Sprintf("[image %s omitted: the active model does not support image input]", ref.ID.String()),
 		}
-	})
+	}, false)
 }
 
 // rewriteImages applies rewrite to every model-bound image artifact part —
 // top-level message parts (user attachments) and tool-result content parts
 // alike — returning the input slice untouched when nothing matches.
-func rewriteImages(messages []domain.Message, rewrite func(domain.ArtifactRef) domain.ContentPart) []domain.Message {
+// noteAttachments prefixes each TOP-LEVEL image with a text marker anchoring
+// it as already-visible (see attachmentNote); tool-result images already
+// carry an explanatory header, so they stay a plain 1:1 replacement.
+func rewriteImages(messages []domain.Message, rewrite func(domain.ArtifactRef) domain.ContentPart, noteAttachments bool) []domain.Message {
 	// out stays nil until the first change so the no-image fast path
 	// returns the input untouched; once allocated it shadows the canonical
 	// history, which is never mutated.
 	var out []domain.Message
 	for i, msg := range messages {
-		derived, changed := rewriteMessageImages(msg, rewrite)
+		derived, changed := rewriteMessageImages(msg, rewrite, noteAttachments)
 		if !changed {
 			if out != nil {
 				out[i] = msg
@@ -89,16 +92,28 @@ func rewriteImages(messages []domain.Message, rewrite func(domain.ArtifactRef) d
 
 // rewriteMessageImages rewrites the model-bound image parts of one message,
 // returning the original message unchanged when nothing matches.
-func rewriteMessageImages(msg domain.Message, rewrite func(domain.ArtifactRef) domain.ContentPart) (domain.Message, bool) {
+func rewriteMessageImages(msg domain.Message, rewrite func(domain.ArtifactRef) domain.ContentPart, noteAttachments bool) (domain.Message, bool) {
 	changed := false
-	parts := make([]domain.ContentPart, len(msg.Parts))
-	copy(parts, msg.Parts)
-	for i, part := range parts {
+	// out stays nil until the first change; the note insertion means the
+	// result can be longer than the input, so parts are appended lazily.
+	var out []domain.ContentPart
+	for i, part := range msg.Parts {
 		switch {
 		case IsModelImage(part):
-			parts[i] = rewrite(*part.Artifact)
+			if out == nil {
+				out = make([]domain.ContentPart, 0, len(msg.Parts)+1)
+				out = append(out, msg.Parts[:i]...)
+			}
+			if noteAttachments {
+				out = append(out, attachmentNote())
+			}
+			out = append(out, rewrite(*part.Artifact))
 			changed = true
 		case part.ToolResult != nil && hasImageArtifact(part.ToolResult.Content):
+			if out == nil {
+				out = make([]domain.ContentPart, 0, len(msg.Parts))
+				out = append(out, msg.Parts[:i]...)
+			}
 			content := make([]domain.ContentPart, len(part.ToolResult.Content))
 			copy(content, part.ToolResult.Content)
 			for j, c := range content {
@@ -108,15 +123,35 @@ func rewriteMessageImages(msg domain.Message, rewrite func(domain.ArtifactRef) d
 			}
 			result := *part.ToolResult
 			result.Content = content
-			parts[i].ToolResult = &result
+			p := part
+			p.ToolResult = &result
+			out = append(out, p)
 			changed = true
+		default:
+			if out != nil {
+				out = append(out, part)
+			}
 		}
 	}
 	if !changed {
 		return msg, false
 	}
-	msg.Parts = parts
+	msg.Parts = out
 	return msg, true
+}
+
+// attachmentNote is the wire-side text marker placed immediately before each
+// user-attached image. The canonical artifact reference carries no path, yet
+// models with a strong tool-call prior otherwise try to "load" the
+// already-visible image with view_image — guessing a path from memory or
+// context, which can pull an unrelated file into the turn. The adjacent note
+// anchors the image as already seen. Only the wire copy carries it; the
+// canonical transcript is never touched.
+func attachmentNote() domain.ContentPart {
+	return domain.ContentPart{
+		Kind: domain.PartText,
+		Text: "[the image attached to this message follows inline — you can already see it directly; do NOT call view_image for it]",
+	}
 }
 
 // IsModelImage reports whether the part is an image artifact reference
