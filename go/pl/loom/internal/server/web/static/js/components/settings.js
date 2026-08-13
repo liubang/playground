@@ -815,10 +815,13 @@ const TABS = [
 // ---------- 面板 ----------
 
 export class SettingsPanel {
-  constructor({ api, toast, confirm }) {
+  // onSaved(resp)：保存成功后的回调（可选）——调用方借此刷新依赖配置的
+  // 运行态 UI（模型目录/picker 角标/附件门控等），桌面壳无 F5 必须就地刷新
+  constructor({ api, toast, confirm, onSaved }) {
     this.api = api
     this.toast = toast
     this.confirm = confirm
+    this.onSaved = onSaved || null
     this.wrap = document.getElementById('settings-wrap')
     this.revision = ''
     this.cfg = {}
@@ -2415,6 +2418,9 @@ export class SettingsPanel {
       setTimeout(() => saveBtn.classList.remove('flash-success'), 1300)
       // 热应用可能改变 MCP 连接状态（新增/删除/重连），刷新徽标
       this._refreshMcpStatus()
+      // 通知调用方刷新依赖配置的 UI（模型目录、picker 角标、附件门控）；
+      // 回调自处理异常，不阻塞保存收尾
+      if (this.onSaved) this.onSaved(r)
       const envRefs = this._tabRefs.env
       if (envRefs && pathExtraChanged) {
         envRefs.loaded = false
