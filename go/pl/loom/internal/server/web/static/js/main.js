@@ -387,6 +387,21 @@ function syncPickerLabels() {
   syncAttachCapability()
 }
 
+// refreshModelCatalog 重新拉取模型目录并同步所有消费方：picker 角标
+//（modalities 图片徽标 / context_window）、模型按钮标签、composer 附件
+// 门控。桌面壳没有 F5，设置保存热应用后必须就地刷新，否则 modalities
+// 等模型元数据改动在界面上不可见。
+async function refreshModelCatalog() {
+  try {
+    const cat = await app.api.metaModels()
+    app.models = cat.models || []
+    app.defaultModelRef = cat.default || ''
+    syncPickerLabels()
+  } catch (e) {
+    if (e.status !== 401) console.warn('refresh models:', e)
+  }
+}
+
 // syncAttachCapability 按当前模型声明的 modalities 门控 composer 的图片
 // 附件入口。目录里查不到当前模型（配置过期等）时保持放行，由服务端
 // 提交门禁兜底报错。
@@ -955,7 +970,13 @@ async function boot() {
   app.ctxgauge = new CtxGauge($('ctx-gauge'))
 
   // 设置面板（config.yaml 图形化编辑，保存即热更新，响应带分级生效报告）
-  app.settings = new SettingsPanel({ api: app.api, toast, confirm: confirmDialog })
+  // onSaved：保存成功后刷新模型目录（picker 角标 / 附件门控依赖目录）
+  app.settings = new SettingsPanel({
+    api: app.api,
+    toast,
+    confirm: confirmDialog,
+    onSaved: refreshModelCatalog,
+  })
   $('hdr-settings').onclick = () => app.settings.open()
 
   // 模型 / reasoning 切换器
@@ -1134,15 +1155,8 @@ async function enter() {
   try {
     const meta = await app.api.metaVersion()
     app.statusbar.setVersion(meta.version)
-    // 加载模型目录（picker 数据源）
-    try {
-      const cat = await app.api.metaModels()
-      app.models = cat.models || []
-      app.defaultModelRef = cat.default || ''
-      syncAttachCapability() // 目录到位后刷新附件入口（modalities 随目录下发）
-    } catch (e) {
-      if (e.status !== 401) console.warn('load models:', e)
-    }
+    // 加载模型目录（picker 数据源；modalities 随目录下发，刷新附件入口）
+    await refreshModelCatalog()
     showApp()
     await loadWorkspaces()
     await refreshSessions()
