@@ -191,7 +191,9 @@ func NewDelegateTaskTool(f *Factory) (*DelegateTaskTool, error) {
 			"sandboxed commands in the workspace; spawning one is an R3 approval because its writes are real). " +
 			"Use it for large-codebase exploration, multi-file fact gathering, independent review, or a focused " +
 			"implementation task — work that would flood this conversation with intermediate output. The sub-agent " +
-			"sees NO conversation history, so the task must be fully self-contained; it cannot ask questions or " +
+			"sees NO conversation history, so the task must be fully self-contained — images attached to this " +
+			"conversation are invisible to it too: transcribe the relevant content into the task, or point it " +
+			"to an on-disk path it can open with its own view_image. It cannot ask questions or " +
 			"delegate further, and its token consumption counts against this run's budget. With async=true the " +
 			"call returns a child_session_id immediately: collect the result with wait_subagent, refine it with " +
 			"resume_subagent. Act on the conclusion yourself rather than asking the sub-agent to.",

@@ -1156,6 +1156,7 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	c.publishDurable(sessionID, runID, turnCounter, runtimeevent.KindTurnStarted, runtimeevent.TurnStartedPayload{
 		TurnIndex: turnCounter,
 		Prompt:    cmd.Prompt,
+		Images:    cmd.ImageRefs,
 	})
 
 	// Create turn context
