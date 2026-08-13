@@ -81,10 +81,11 @@ function preserveUnmanaged(cfg, orig) {
 
 // ---------- 字段控件 ----------
 
-// spec: {key, label, hint, ph, type, options, step, rows, def, required, revealRef}
+// spec: {key, label, hint, ph, type, options, step, rows, def, required, revealRef, flagValue}
 // type ∈ text | password | number | bool | tristate | select | textarea |
 //       list-text（每行一项 → []string）| kv-text（每行 k=v → map）|
-//       float-list（逗号分隔 → []number）
+//       float-list（逗号分隔 → []number）|
+//       flag-list（勾选 → 写入固定 []string（spec.flagValue），不勾 = 省略）
 // revealRef: password 控件的明文定位（对象或返回对象的函数），见
 //       POST /v1/config/reveal 的 secretReveal。
 function makeControl(spec) {
@@ -100,9 +101,10 @@ function makeControl(spec) {
           ]
         : spec.options
     ctl = createSelect({ className: 'set-input', options: opts })
-  } else if (t === 'bool') {
+  } else if (t === 'bool' || t === 'flag-list') {
     ctl = el('input', 'set-check')
     ctl.type = 'checkbox'
+    if (t === 'flag-list') ctl._flagValue = spec.flagValue || []
   } else if (t === 'textarea' || t === 'list-text' || t === 'kv-text') {
     ctl = el('textarea', 'set-input mono')
     ctl.rows = spec.rows || 3
@@ -196,6 +198,9 @@ function fillControl(ctl, value) {
     case 'bool':
       ctl.checked = value === true
       break
+    case 'flag-list':
+      ctl.checked = Array.isArray(value) && value.length > 0
+      break
     case 'tristate':
       ctl.value = value === '' ? '' : String(value)
       break
@@ -234,6 +239,10 @@ function collectControl(ctl, obj) {
     }
     case 'bool': {
       if (ctl.checked) setPath(obj, key, true) // false = 默认，不写入
+      break
+    }
+    case 'flag-list': {
+      if (ctl.checked) setPath(obj, key, [...(ctl._flagValue || [])]) // 不勾 = 默认（省略键）
       break
     }
     case 'tristate': {
@@ -365,6 +374,13 @@ const MODEL_FIELDS = [
   { key: 'name', label: '模型名', required: true, ph: '如 deepseek-chat' },
   { key: 'context_window', label: '上下文窗口', type: 'number', ph: '如 65536' },
   { key: 'max_output_tokens', label: '单次输出上限', type: 'number', ph: '如 8192' },
+  {
+    key: 'modalities',
+    label: '图片输入（多模态）',
+    type: 'flag-list',
+    flagValue: ['text', 'image'],
+    hint: '仅当模型确实支持图片输入时勾选（写入 modalities: [text, image]）；勾选后输入框可粘贴/拖入图片，纯文本模型勾选会被网关报错',
+  },
   {
     key: 'wire_api',
     label: '协议覆盖',
@@ -1215,6 +1231,7 @@ export class SettingsPanel {
     const parts = []
     if (obj.context_window) parts.push(`上下文 ${obj.context_window}`)
     if (obj.max_output_tokens) parts.push(`输出上限 ${obj.max_output_tokens}`)
+    if (Array.isArray(obj.modalities) && obj.modalities.includes('image')) parts.push('多模态')
     sMeta.textContent = parts.join(' · ') || '跟随 provider / 全局默认'
   }
 

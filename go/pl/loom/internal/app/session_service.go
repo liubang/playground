@@ -553,6 +553,10 @@ type ModelCatalogEntry struct {
 	Provider      string `json:"provider"`
 	Name          string `json:"name"`
 	ContextWindow int64  `json:"context_window,omitempty"`
+	// Modalities declares the model's input modalities (e.g. ["text",
+	// "image"]); empty means text-only. The frontend uses it to badge
+	// vision-capable models and to gate the image-attachment affordances.
+	Modalities []string `json:"modalities,omitempty"`
 }
 
 // ModelCatalog is the wire shape of GET /v1/meta/models: every selectable
@@ -573,7 +577,7 @@ func (s *SessionService) ModelCatalog() ModelCatalog {
 		p := &resolved.Providers[i]
 		for _, m := range p.Models {
 			catalog.Models = append(catalog.Models, ModelCatalogEntry{
-				Provider: p.Name, Name: m.Name, ContextWindow: m.ContextWindow,
+				Provider: p.Name, Name: m.Name, ContextWindow: m.ContextWindow, Modalities: m.Modalities,
 			})
 		}
 	}
