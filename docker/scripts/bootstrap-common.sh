@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Shared helpers for module bootstrap scripts. Sourcing this file has no side effects.
 
-log_ok()   { printf '\033[32m[OK]\033[0m    %s\n' "$1"; }
+log_ok() { printf '\033[32m[OK]\033[0m    %s\n' "$1"; }
 log_skip() { printf '\033[33m[SKIP]\033[0m  %s\n' "$1"; }
-log_run()  { printf '\033[36m[...]\033[0m  %s\n' "$1"; }
+log_run() { printf '\033[36m[...]\033[0m  %s\n' "$1"; }
 log_warn() { printf '\033[33m[WARN]\033[0m  %s\n' "$1"; }
 log_fail() { printf '\033[31m[FAIL]\033[0m  %s\n' "$1" >&2; }
-die()      { log_fail "$1"; exit 1; }
+die() {
+    log_fail "$1"
+    exit 1
+}
 
 bootstrap_init() {
     local module_dir="$1"
@@ -15,9 +18,9 @@ bootstrap_init() {
     RESET=false
     while (($#)); do
         case "$1" in
-            --no-start) START_SERVICES=false ;;
-            --reset) RESET=true ;;
-            *) die "未知参数: $1" ;;
+        --no-start) START_SERVICES=false ;;
+        --reset) RESET=true ;;
+        *) die "未知参数: $1" ;;
         esac
         shift
     done
@@ -90,7 +93,7 @@ validate_env_value() {
 write_env_file() {
     local output="$1" key value
     shift
-    [ $(( $# % 2 )) -eq 0 ] || die "write_env_file 参数必须为 key/value 对"
+    [ $(($# % 2)) -eq 0 ] || die "write_env_file 参数必须为 key/value 对"
     : >"$output"
     while (($#)); do
         key="$1"
@@ -115,20 +118,20 @@ select_bind_mode() {
     printf '  3) 全部公开：%s\n' "$all_description"
     read -r -p "请选择 [1]: " input
     case "$input" in
-        2)
+    2)
+        PUBLIC_BIND_ADDR="0.0.0.0"
+        BIND_MODE="safe-public"
+        ;;
+    3)
+        read -r -p "${confirm_message}，输入 YES 继续: " confirm
+        if [ "$confirm" = "YES" ]; then
             PUBLIC_BIND_ADDR="0.0.0.0"
-            BIND_MODE="safe-public"
-            ;;
-        3)
-            read -r -p "${confirm_message}，输入 YES 继续: " confirm
-            if [ "$confirm" = "YES" ]; then
-                PUBLIC_BIND_ADDR="0.0.0.0"
-                INTERNAL_BIND_ADDR="0.0.0.0"
-                BIND_MODE="all-public"
-            else
-                log_warn "未确认，使用仅本机模式"
-            fi
-            ;;
+            INTERNAL_BIND_ADDR="0.0.0.0"
+            BIND_MODE="all-public"
+        else
+            log_warn "未确认，使用仅本机模式"
+        fi
+        ;;
     esac
 }
 

@@ -42,6 +42,7 @@ import ctypes
 import os
 import sys
 
+
 def _preload_mlx_native_libs() -> bool:
     for path_entry in sys.path:
         dylib = os.path.join(path_entry, "mlx", "lib", "libmlx.dylib")
@@ -56,11 +57,14 @@ def _preload_mlx_native_libs() -> bool:
         for root, _dirs, files in os.walk(runfiles_dir):
             if "libmlx.dylib" in files:
                 try:
-                    ctypes.CDLL(os.path.join(root, "libmlx.dylib"), mode=ctypes.RTLD_GLOBAL)
+                    ctypes.CDLL(
+                        os.path.join(root, "libmlx.dylib"), mode=ctypes.RTLD_GLOBAL
+                    )
                     return True
                 except OSError:
                     continue
     return False
+
 
 _preload_mlx_native_libs()
 # ---------------------------------------------------------------------------
@@ -251,42 +255,55 @@ class MLXEmbeddingModel:
                     def find_class(self, module: str, name: str):
                         if module == "collections" and name == "OrderedDict":
                             from collections import OrderedDict
+
                             return OrderedDict
                         if module == "torch._utils" and name == "_rebuild_tensor_v2":
                             return self._rebuild_tensor_v2
                         if "torch" in module and "Storage" in name:
                             return self._make_storage_class(name)
-                        if module == "torch" and name in ("FloatStorage", "HalfStorage",
-                                                          "BFloat16Storage", "LongStorage",
-                                                          "IntStorage", "ShortStorage",
-                                                          "ByteStorage", "BoolStorage",
-                                                          "DoubleStorage", "CharStorage"):
+                        if module == "torch" and name in (
+                            "FloatStorage",
+                            "HalfStorage",
+                            "BFloat16Storage",
+                            "LongStorage",
+                            "IntStorage",
+                            "ShortStorage",
+                            "ByteStorage",
+                            "BoolStorage",
+                            "DoubleStorage",
+                            "CharStorage",
+                        ):
                             return self._make_storage_class(name)
                         # Allow basic builtins
                         if module == "builtins":
                             import builtins
+
                             return getattr(builtins, name)
                         if module == "_codecs" and name == "encode":
                             import _codecs
+
                             return _codecs.encode
-                        raise pickle.UnpicklingError(
-                            f"Forbidden: {module}.{name}"
-                        )
+                        raise pickle.UnpicklingError(f"Forbidden: {module}.{name}")
 
                     def _make_storage_class(self, name: str):
                         dtype_info = self._DTYPE_MAP.get(name, (np.float32, 4))
+
                         class _Storage:
                             def __init__(self, size):
                                 self.size = size
                                 self.dtype_info = dtype_info
+
                             def __reduce_ex__(self, protocol):
                                 return (self.__class__, (self.size,))
+
                         _Storage.__name__ = name
                         _Storage.__qualname__ = name
                         return _Storage
 
                     @staticmethod
-                    def _rebuild_tensor_v2(storage, storage_offset, size, stride, *args):
+                    def _rebuild_tensor_v2(
+                        storage, storage_offset, size, stride, *args
+                    ):
                         return (storage, storage_offset, size, stride)
 
                     def persistent_load(self, saved_id):
@@ -309,7 +326,11 @@ class MLXEmbeddingModel:
                     if not isinstance(storage_info, tuple) or len(storage_info) < 3:
                         continue
                     storage_cls, data_key, _numel = storage_info
-                    dtype_np, elem_size = storage_cls.dtype_info if hasattr(storage_cls, 'dtype_info') else (np.float32, 4)
+                    dtype_np, elem_size = (
+                        storage_cls.dtype_info
+                        if hasattr(storage_cls, "dtype_info")
+                        else (np.float32, 4)
+                    )
 
                     # Read raw data from zip
                     if data_key not in data_entries:
@@ -317,7 +338,7 @@ class MLXEmbeddingModel:
                     raw = zf.read(data_entries[data_key])
 
                     # Handle bfloat16 specially
-                    is_bf16 = (dtype_np == "bfloat16")
+                    is_bf16 = dtype_np == "bfloat16"
                     if is_bf16:
                         # Read as uint16, convert to float32
                         arr = np.frombuffer(raw, dtype=np.uint16)
@@ -328,7 +349,9 @@ class MLXEmbeddingModel:
                         for s in size:
                             total_elements *= s
                         offset_elements = storage_offset
-                        arr_f32 = arr_f32[offset_elements:offset_elements + total_elements]
+                        arr_f32 = arr_f32[
+                            offset_elements : offset_elements + total_elements
+                        ]
                         tensor = arr_f32.reshape(size)
                     else:
                         arr = np.frombuffer(raw, dtype=dtype_np)
@@ -336,7 +359,7 @@ class MLXEmbeddingModel:
                         for s in size:
                             total_elements *= s
                         offset_elements = storage_offset
-                        arr = arr[offset_elements:offset_elements + total_elements]
+                        arr = arr[offset_elements : offset_elements + total_elements]
                         tensor = arr.reshape(size)
 
                     weights[param_name] = mx.array(tensor)
@@ -349,7 +372,9 @@ class MLXEmbeddingModel:
             raise KeyError(f"Weight '{name}' not found in model")
         return self.weights[name]
 
-    def _layer_norm(self, x: mx.array, weight_key: str, bias_key: str, eps: float | None = None) -> mx.array:
+    def _layer_norm(
+        self, x: mx.array, weight_key: str, bias_key: str, eps: float | None = None
+    ) -> mx.array:
         """Apply layer normalization."""
         if eps is None:
             eps = self.layer_norm_eps
@@ -359,7 +384,9 @@ class MLXEmbeddingModel:
         var = mx.var(x, axis=-1, keepdims=True)
         return weight * (x - mean) / mx.sqrt(var + eps) + bias
 
-    def _linear(self, x: mx.array, weight_key: str, bias_key: str | None = None) -> mx.array:
+    def _linear(
+        self, x: mx.array, weight_key: str, bias_key: str | None = None
+    ) -> mx.array:
         """Apply a linear projection."""
         w = self._get_weight(weight_key)
         out = x @ w.T
@@ -367,21 +394,28 @@ class MLXEmbeddingModel:
             out = out + self._get_weight(bias_key)
         return out
 
-    def _self_attention(self, hidden: mx.array, attention_mask: mx.array,
-                        prefix: str, num_heads: int) -> mx.array:
+    def _self_attention(
+        self, hidden: mx.array, attention_mask: mx.array, prefix: str, num_heads: int
+    ) -> mx.array:
         """Multi-head self-attention."""
         B, S, D = hidden.shape
         head_dim = D // num_heads
 
-        q = self._linear(hidden, f"{prefix}.self.query.weight", f"{prefix}.self.query.bias")
+        q = self._linear(
+            hidden, f"{prefix}.self.query.weight", f"{prefix}.self.query.bias"
+        )
         k = self._linear(hidden, f"{prefix}.self.key.weight", f"{prefix}.self.key.bias")
-        v = self._linear(hidden, f"{prefix}.self.value.weight", f"{prefix}.self.value.bias")
+        v = self._linear(
+            hidden, f"{prefix}.self.value.weight", f"{prefix}.self.value.bias"
+        )
 
         q = q.reshape(B, S, num_heads, head_dim).transpose(0, 2, 1, 3)
         k = k.reshape(B, S, num_heads, head_dim).transpose(0, 2, 1, 3)
         v = v.reshape(B, S, num_heads, head_dim).transpose(0, 2, 1, 3)
 
-        scores = (q @ k.transpose(0, 1, 3, 2)) / mx.sqrt(mx.array(head_dim, dtype=q.dtype))
+        scores = (q @ k.transpose(0, 1, 3, 2)) / mx.sqrt(
+            mx.array(head_dim, dtype=q.dtype)
+        )
 
         if attention_mask is not None:
             mask_4d = attention_mask[:, None, None, :]  # (B, 1, 1, S)
@@ -390,16 +424,21 @@ class MLXEmbeddingModel:
         attn_weights = mx.softmax(scores, axis=-1)
         context = (attn_weights @ v).transpose(0, 2, 1, 3).reshape(B, S, D)
 
-        context = self._linear(context, f"{prefix}.output.dense.weight", f"{prefix}.output.dense.bias")
+        context = self._linear(
+            context, f"{prefix}.output.dense.weight", f"{prefix}.output.dense.bias"
+        )
         return context
 
-    def _transformer_layer(self, hidden: mx.array, attention_mask: mx.array,
-                           layer_idx: int, num_heads: int) -> mx.array:
+    def _transformer_layer(
+        self, hidden: mx.array, attention_mask: mx.array, layer_idx: int, num_heads: int
+    ) -> mx.array:
         """One transformer encoder layer: attention + FFN with residual + LN."""
         prefix = f"encoder.layer.{layer_idx}"
 
         # Self-attention + residual + LN
-        attn_out = self._self_attention(hidden, attention_mask, f"{prefix}.attention", num_heads)
+        attn_out = self._self_attention(
+            hidden, attention_mask, f"{prefix}.attention", num_heads
+        )
         hidden = self._layer_norm(
             hidden + attn_out,
             f"{prefix}.attention.output.LayerNorm.weight",
@@ -407,11 +446,15 @@ class MLXEmbeddingModel:
         )
 
         # FFN: intermediate -> activation -> output
-        intermediate = self._linear(hidden, f"{prefix}.intermediate.dense.weight",
-                                    f"{prefix}.intermediate.dense.bias")
+        intermediate = self._linear(
+            hidden,
+            f"{prefix}.intermediate.dense.weight",
+            f"{prefix}.intermediate.dense.bias",
+        )
         intermediate = nn.gelu(intermediate)
-        ffn_out = self._linear(intermediate, f"{prefix}.output.dense.weight",
-                               f"{prefix}.output.dense.bias")
+        ffn_out = self._linear(
+            intermediate, f"{prefix}.output.dense.weight", f"{prefix}.output.dense.bias"
+        )
         hidden = self._layer_norm(
             hidden + ffn_out,
             f"{prefix}.output.LayerNorm.weight",
@@ -426,7 +469,9 @@ class MLXEmbeddingModel:
         pos_ids = mx.arange(input_ids.shape[1])[None, :]
         pos_emb = self._get_weight("embeddings.position_embeddings.weight")[pos_ids]
         tok_type_ids = mx.zeros_like(input_ids)
-        tok_emb = self._get_weight("embeddings.token_type_embeddings.weight")[tok_type_ids]
+        tok_emb = self._get_weight("embeddings.token_type_embeddings.weight")[
+            tok_type_ids
+        ]
 
         hidden = word_emb + pos_emb + tok_emb
         hidden = self._layer_norm(
@@ -436,7 +481,9 @@ class MLXEmbeddingModel:
         )
 
         for i in range(self.num_hidden_layers):
-            hidden = self._transformer_layer(hidden, attention_mask, i, self.num_attention_heads)
+            hidden = self._transformer_layer(
+                hidden, attention_mask, i, self.num_attention_heads
+            )
 
         return hidden
 
@@ -505,8 +552,7 @@ async def create_embeddings(request: EmbeddingRequest):
 
     return EmbeddingResponse(
         data=[
-            EmbeddingData(embedding=emb, index=i)
-            for i, emb in enumerate(embeddings)
+            EmbeddingData(embedding=emb, index=i) for i, emb in enumerate(embeddings)
         ],
         model=request.model,
         usage=UsageInfo(prompt_tokens=total_tokens, total_tokens=total_tokens),
@@ -520,14 +566,17 @@ async def create_embeddings(request: EmbeddingRequest):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="MLX Embedding Server")
-    parser.add_argument("--model", type=str, default="BAAI/bge-m3",
-                        help="HuggingFace model name or local path")
-    parser.add_argument("--host", type=str, default="0.0.0.0",
-                        help="Bind host")
-    parser.add_argument("--port", type=int, default=8000,
-                        help="Bind port")
-    parser.add_argument("--max-length", type=int, default=512,
-                        help="Max token length for truncation")
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="BAAI/bge-m3",
+        help="HuggingFace model name or local path",
+    )
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Bind host")
+    parser.add_argument("--port", type=int, default=8000, help="Bind port")
+    parser.add_argument(
+        "--max-length", type=int, default=512, help="Max token length for truncation"
+    )
     return parser.parse_args()
 
 

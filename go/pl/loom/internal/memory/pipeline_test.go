@@ -120,7 +120,8 @@ func createSessionWithCheckpoint(t *testing.T, store *session.SQLiteStore, texts
 const extractionJSON = `{"rollout_summary": "Fixed the flaky bazel test by pinning the toolchain", "rollout_slug": "fix-flaky-bazel-test", "raw_memory": "### Task 1: fix flaky bazel test\n- User prefers table-driven tests\n- Reusable: pin the go toolchain in MODULE.bazel"}`
 
 func TestPipelineRunOnceExtractsAndConsolidates(t *testing.T) {
-	fx := newPipelineFixture(t,
+	fx := newPipelineFixture(
+		t,
 		fakes.ScriptEntry{Text: extractionJSON},
 		fakes.ScriptEntry{Text: "# Memory Handbook\n\n### User Preferences\n- prefers table-driven tests"},
 		fakes.ScriptEntry{Text: "# Summary\n- table-driven tests; pin go toolchain"},
@@ -202,7 +203,8 @@ func TestPipelineNoTranscriptSettlesNoOutput(t *testing.T) {
 }
 
 func TestPipelineFailureRetriesWithBackoff(t *testing.T) {
-	fx := newPipelineFixture(t,
+	fx := newPipelineFixture(
+		t,
 		fakes.ScriptEntry{Error: "provider unavailable"},
 		fakes.ScriptEntry{Text: extractionJSON},
 	)
@@ -233,7 +235,8 @@ func TestPipelineFailureRetriesWithBackoff(t *testing.T) {
 }
 
 func TestPipelineExtractionRedactsSecrets(t *testing.T) {
-	fx := newPipelineFixture(t,
+	fx := newPipelineFixture(
+		t,
 		fakes.ScriptEntry{Text: extractionJSON},
 	)
 	ctx := context.Background()

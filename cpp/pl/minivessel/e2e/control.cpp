@@ -87,9 +87,8 @@ bool Invoke(proto::CounterService_Stub* stub, const std::string& command) {
             return false;
         }
         Print(status);
-        if (command == "health" &&
-            (status.role() == "failed" || status.role() == "stopped" ||
-             !status.last_error().empty())) {
+        if (command == "health" && (status.role() == "failed" || status.role() == "stopped" ||
+                                    !status.last_error().empty())) {
             std::cerr << "replica is not healthy: role=" << status.role()
                       << " last_error=" << status.last_error() << '\n';
             return false;

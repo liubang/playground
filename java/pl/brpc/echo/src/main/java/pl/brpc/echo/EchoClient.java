@@ -22,70 +22,78 @@ import com.baidu.cloud.starlight.api.rpc.config.ServiceConfig;
 import com.baidu.cloud.starlight.api.rpc.config.TransportConfig;
 import com.baidu.cloud.starlight.core.rpc.SingleStarlightClient;
 import com.baidu.cloud.starlight.core.rpc.proxy.JDKProxyFactory;
-
 import pl.grpc.proto.EchoRequest;
 import pl.grpc.proto.EchoResponse;
 import pl.grpc.proto.HealthRequest;
 import pl.grpc.proto.HealthResponse;
 
 /**
- * Starlight echo client — calls the 2 unary RPCs (Echo + HealthCheck)
- * over the brpc binary protocol.
- * <p>
- * Can talk to either a Java Starlight server or a C++ brpc server.
+ * Starlight echo client — calls the 2 unary RPCs (Echo + HealthCheck) over the brpc binary
+ * protocol.
+ *
+ * <p>Can talk to either a Java Starlight server or a C++ brpc server.
  */
 public class EchoClient {
 
-    public static void main(String[] args) {
-        String host = args.length > 0 ? args[0] : "localhost";
-        int port = args.length > 1 ? Integer.parseInt(args[1]) : 8005;
+  public static void main(String[] args) {
+    String host = args.length > 0 ? args[0] : "localhost";
+    int port = args.length > 1 ? Integer.parseInt(args[1]) : 8005;
 
-        TransportConfig transportConfig = new TransportConfig();
-        StarlightClient client = new SingleStarlightClient(host, port, transportConfig);
-        client.init();
+    TransportConfig transportConfig = new TransportConfig();
+    StarlightClient client = new SingleStarlightClient(host, port, transportConfig);
+    client.init();
 
-        ServiceConfig serviceConfig = new ServiceConfig();
-        serviceConfig.setProtocol("brpc");
-        // For cross-language interop with C++ brpc, set the proto service name.
-        // When talking to a Java Starlight server, javaInterface.getName() is used by default.
-        // brpc service FQN: pl.brpc.echo.EchoService
-        serviceConfig.setServiceId("pl.brpc.echo.EchoService");
-        serviceConfig.setSerializeMode("pb2-std"); // standard protobuf for C++ compat
+    ServiceConfig serviceConfig = new ServiceConfig();
+    serviceConfig.setProtocol("brpc");
+    // For cross-language interop with C++ brpc, set the proto service name.
+    // When talking to a Java Starlight server, javaInterface.getName() is used by default.
+    // brpc service FQN: pl.brpc.echo.EchoService
+    serviceConfig.setServiceId("pl.brpc.echo.EchoService");
+    serviceConfig.setSerializeMode("pb2-std"); // standard protobuf for C++ compat
 
-        JDKProxyFactory proxyFactory = new JDKProxyFactory();
-        EchoService echoService = proxyFactory.getProxy(
-                EchoService.class, serviceConfig, client);
+    JDKProxyFactory proxyFactory = new JDKProxyFactory();
+    EchoService echoService = proxyFactory.getProxy(EchoService.class, serviceConfig, client);
 
-        try {
-            // --- HealthCheck ---
-            System.out.println("============ HealthCheck ============");
-            HealthRequest healthRequest = HealthRequest.newBuilder().build();
-            HealthResponse healthResponse = echoService.HealthCheck(healthRequest);
-            System.out.println("[HealthCheck] status="
-                    + healthResponse.getStatus()
-                    + " | server=" + healthResponse.getServerId()
-                    + " | version=" + healthResponse.getVersion()
-                    + " | uptime=" + healthResponse.getUptimeSeconds() + "s");
+    try {
+      // --- HealthCheck ---
+      System.out.println("============ HealthCheck ============");
+      HealthRequest healthRequest = HealthRequest.newBuilder().build();
+      HealthResponse healthResponse = echoService.HealthCheck(healthRequest);
+      System.out.println(
+          "[HealthCheck] status="
+              + healthResponse.getStatus()
+              + " | server="
+              + healthResponse.getServerId()
+              + " | version="
+              + healthResponse.getVersion()
+              + " | uptime="
+              + healthResponse.getUptimeSeconds()
+              + "s");
 
-            // --- Unary Echo ---
-            System.out.println("============ Unary Echo =============");
-            long sentUs = System.currentTimeMillis() * 1000;
-            EchoRequest echoRequest = EchoRequest.newBuilder()
-                    .setMessage("Hello from Java Starlight client!")
-                    .setTimestampUs(sentUs)
-                    .putHeaders("client", "java-starlight")
-                    .build();
-            EchoResponse echoResponse = echoService.Echo(echoRequest);
-            long rttUs = System.currentTimeMillis() * 1000 - sentUs;
-            System.out.println("[Echo] response: " + echoResponse.getMessage()
-                    + " | rtt_us=" + rttUs
-                    + " | server=" + echoResponse.getServerId());
+      // --- Unary Echo ---
+      System.out.println("============ Unary Echo =============");
+      long sentUs = System.currentTimeMillis() * 1000;
+      EchoRequest echoRequest =
+          EchoRequest.newBuilder()
+              .setMessage("Hello from Java Starlight client!")
+              .setTimestampUs(sentUs)
+              .putHeaders("client", "java-starlight")
+              .build();
+      EchoResponse echoResponse = echoService.Echo(echoRequest);
+      long rttUs = System.currentTimeMillis() * 1000 - sentUs;
+      System.out.println(
+          "[Echo] response: "
+              + echoResponse.getMessage()
+              + " | rtt_us="
+              + rttUs
+              + " | server="
+              + echoResponse.getServerId());
 
-        } catch (Exception e) {
-            System.err.println("[EchoClient] RPC failed: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            client.destroy();
-        }
+    } catch (Exception e) {
+      System.err.println("[EchoClient] RPC failed: " + e.getMessage());
+      e.printStackTrace();
+    } finally {
+      client.destroy();
     }
+  }
 }

@@ -1,0 +1,12 @@
+# Bazel 输出目录（软链）
+bazel-*
+
+# 第三方 vendor 静态资源，不纳入格式化
+go/pl/loom/internal/server/web/static/vendor/
+
+# flux 是自定义查询语言（.gitattributes 标记为 JavaScript 仅为 GitHub 高亮），
+# prettier 无法解析
+*.flux
+
+# maven 依赖锁文件，由 bazel run @maven//:pin 生成并重写
+maven_install.json

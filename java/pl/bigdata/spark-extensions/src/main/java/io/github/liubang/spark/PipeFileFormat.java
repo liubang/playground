@@ -5,8 +5,8 @@ import org.apache.spark.sql.sources.DataSourceRegister;
 
 /** CSV-compatible file format whose default delimiter is a pipe character. */
 public final class PipeFileFormat extends CSVFileFormat implements DataSourceRegister {
-    @Override
-    public String shortName() {
-        return "pipe";
-    }
+  @Override
+  public String shortName() {
+    return "pipe";
+  }
 }

@@ -107,7 +107,8 @@ func TestWaitSubagentPrepareCanonicalizesSessionID(t *testing.T) {
 }
 
 func TestWaitSubagentExecuteCompleted(t *testing.T) {
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "结论：查找完毕", StopReason: domain.StopEndTurn, UsageIn: 80, UsageOut: 20},
 	)
 
@@ -274,7 +275,8 @@ func TestWaitSubagentExecuteInvalidArgs(t *testing.T) {
 }
 
 func TestWaitSubagentExecuteWithCoderRole(t *testing.T) {
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "实现完毕", StopReason: domain.StopEndTurn, UsageIn: 120, UsageOut: 40},
 	)
 
@@ -323,7 +325,8 @@ func TestWaitSubagentExecuteWithCoderRole(t *testing.T) {
 }
 
 func TestWaitSubagentZeroTimeoutWaitsIndefinitely(t *testing.T) {
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "快结果", StopReason: domain.StopEndTurn},
 	)
 

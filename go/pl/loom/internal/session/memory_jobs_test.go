@@ -53,7 +53,8 @@ func ageSession(t *testing.T, store *SQLiteStore, sessionID domain.SessionID, d 
 	t.Helper()
 	at := time.Now().UTC().Add(-d).UnixNano()
 	if _, err := store.db.Exec(
-		"UPDATE sessions SET updated_at_unix_nano = ? WHERE session_id = ?", at, sessionID.String()); err != nil {
+		"UPDATE sessions SET updated_at_unix_nano = ? WHERE session_id = ?", at, sessionID.String(),
+	); err != nil {
 		t.Fatalf("age session: %v", err)
 	}
 }
@@ -61,7 +62,8 @@ func ageSession(t *testing.T, store *SQLiteStore, sessionID domain.SessionID, d 
 func bumpSessionVersion(t *testing.T, store *SQLiteStore, sessionID domain.SessionID, version int64) {
 	t.Helper()
 	if _, err := store.db.Exec(
-		"UPDATE sessions SET version = ? WHERE session_id = ?", version, sessionID.String()); err != nil {
+		"UPDATE sessions SET version = ? WHERE session_id = ?", version, sessionID.String(),
+	); err != nil {
 		t.Fatalf("bump session version: %v", err)
 	}
 }
@@ -194,7 +196,8 @@ func TestClaimReclaimsExpiredLease(t *testing.T) {
 	// Simulate a crashed worker: claimed_at 2h ago, lease 1h.
 	stale := time.Now().UTC().Add(-2 * time.Hour).UnixNano()
 	if _, err := store.db.Exec(
-		"UPDATE memory_jobs SET claimed_at_unix_nano = ? WHERE session_id = ?", stale, sessionID.String()); err != nil {
+		"UPDATE memory_jobs SET claimed_at_unix_nano = ? WHERE session_id = ?", stale, sessionID.String(),
+	); err != nil {
 		t.Fatalf("stale claim: %v", err)
 	}
 	reclaimed, err := store.ClaimMemoryJobs(ctx, 8, 0, 30*24*time.Hour, time.Hour, 5)
@@ -234,7 +237,8 @@ func TestFailMemoryJobBackoffAndAbandon(t *testing.T) {
 	var attempts int
 	var lastError string
 	if err := store.db.QueryRow(
-		"SELECT status, attempts, last_error FROM memory_jobs WHERE session_id = ?", sessionID.String()).
+		"SELECT status, attempts, last_error FROM memory_jobs WHERE session_id = ?", sessionID.String(),
+	).
 		Scan(&status, &attempts, &lastError); err != nil {
 		t.Fatalf("read job: %v", err)
 	}
@@ -254,7 +258,8 @@ func TestFailMemoryJobBackoffAndAbandon(t *testing.T) {
 
 	// Backoff due: claimable again; second failure abandons the job.
 	if _, err := store.db.Exec(
-		"UPDATE memory_jobs SET next_retry_at_unix_nano = 0 WHERE session_id = ?", sessionID.String()); err != nil {
+		"UPDATE memory_jobs SET next_retry_at_unix_nano = 0 WHERE session_id = ?", sessionID.String(),
+	); err != nil {
 		t.Fatalf("force retry due: %v", err)
 	}
 	jobs, err = store.ClaimMemoryJobs(ctx, 8, 0, 30*24*time.Hour, time.Hour, 5)
@@ -265,7 +270,8 @@ func TestFailMemoryJobBackoffAndAbandon(t *testing.T) {
 		t.Fatalf("second fail: %v", err)
 	}
 	if err := store.db.QueryRow(
-		"SELECT status, attempts FROM memory_jobs WHERE session_id = ?", sessionID.String()).
+		"SELECT status, attempts FROM memory_jobs WHERE session_id = ?", sessionID.String(),
+	).
 		Scan(&status, &attempts); err != nil {
 		t.Fatalf("read job: %v", err)
 	}
@@ -332,7 +338,8 @@ func TestDeleteSessionRemovesMemoryJob(t *testing.T) {
 	}
 	var count int
 	if err := store.db.QueryRow(
-		"SELECT COUNT(*) FROM memory_jobs WHERE session_id = ?", sessionID.String()).Scan(&count); err != nil {
+		"SELECT COUNT(*) FROM memory_jobs WHERE session_id = ?", sessionID.String(),
+	).Scan(&count); err != nil {
 		t.Fatalf("count jobs: %v", err)
 	}
 	if count != 0 {

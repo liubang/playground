@@ -104,14 +104,16 @@ func TestPrepareFailedKeepsEventStreamPaired(t *testing.T) {
 	tool := fakes.ReadFileTool().WithPrepareFn(
 		func(_ context.Context, _ domain.ToolCall) (domain.PreparedCall, error) {
 			return domain.PreparedCall{}, errors.New(`json: unknown field "__malformed_arguments"`)
-		})
+		},
+	)
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{
 			ToolCalls: []domain.ToolCall{{
 				ID:   domain.NewToolCallID(),
 				Name: "read_file",
 				Arguments: json.RawMessage(
-					`{"__malformed_arguments":"{bad json","error":"model emitted invalid arguments JSON; re-issue the tool call with valid arguments"}`),
+					`{"__malformed_arguments":"{bad json","error":"model emitted invalid arguments JSON; re-issue the tool call with valid arguments"}`,
+				),
 			}},
 			StopReason: domain.StopToolUse,
 		},

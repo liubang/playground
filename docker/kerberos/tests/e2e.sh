@@ -8,7 +8,10 @@ TIMEOUT_SECONDS="${E2E_TIMEOUT_SECONDS:-120}"
 COMPOSE=(docker compose --project-directory "$KERBEROS_DIR" -f "$KERBEROS_DIR/docker-compose.yml")
 
 log() { printf '\n==> %s\n' "$*"; }
-fail() { printf '\n[FAIL] %s\n' "$*" >&2; exit 1; }
+fail() {
+    printf '\n[FAIL] %s\n' "$*" >&2
+    exit 1
+}
 require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 compose() { "${COMPOSE[@]}" "$@"; }
 
@@ -36,11 +39,12 @@ service_ready() {
 }
 
 wait_for() {
-    local description="$1"; shift
+    local description="$1"
+    shift
     local deadline=$((SECONDS + TIMEOUT_SECONDS))
     log "Waiting for $description"
     until "$@"; do
-        (( SECONDS < deadline )) || fail "timed out waiting for $description"
+        ((SECONDS < deadline)) || fail "timed out waiting for $description"
         sleep 2
     done
 }
@@ -115,15 +119,18 @@ main() {
     local command="${1:-all}"
     check_dependencies
     case "$command" in
-        all)
-            start_lab
-            run_tests
-            ;;
-        start) start_lab ;;
-        test) run_tests ;;
-        down) compose down ;;
-        reset) compose down -v ;;
-        *) usage; exit 2 ;;
+    all)
+        start_lab
+        run_tests
+        ;;
+    start) start_lab ;;
+    test) run_tests ;;
+    down) compose down ;;
+    reset) compose down -v ;;
+    *)
+        usage
+        exit 2
+        ;;
     esac
 }
 

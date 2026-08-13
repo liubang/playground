@@ -17,6 +17,12 @@
 
 package cc.liubang.spring.example;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import cc.liubang.spring.example.dto.CreateUserRequest;
 import cc.liubang.spring.example.dto.UserVO;
 import cc.liubang.spring.example.exception.BusinessException;
@@ -25,92 +31,84 @@ import cc.liubang.spring.example.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 class UserServiceTest {
 
-    private UserService userService;
+  private UserService userService;
 
-    @BeforeEach
-    void setUp() {
-        userService = new UserService();
-    }
+  @BeforeEach
+  void setUp() {
+    userService = new UserService();
+  }
 
-    @Test
-    void createUser_success() {
-        CreateUserRequest request = new CreateUserRequest("Alice", "alice@example.com", 25);
-        UserVO user = userService.createUser(request);
+  @Test
+  void createUser_success() {
+    CreateUserRequest request = new CreateUserRequest("Alice", "alice@example.com", 25);
+    UserVO user = userService.createUser(request);
 
-        assertNotNull(user.getId());
-        assertEquals("Alice", user.getName());
-        assertEquals("alice@example.com", user.getEmail());
-        assertEquals(25, user.getAge());
-    }
+    assertNotNull(user.getId());
+    assertEquals("Alice", user.getName());
+    assertEquals("alice@example.com", user.getEmail());
+    assertEquals(25, user.getAge());
+  }
 
-    @Test
-    void createUser_duplicateEmail_throwsBusinessException() {
-        CreateUserRequest request = new CreateUserRequest("Alice", "alice@example.com", 25);
-        userService.createUser(request);
+  @Test
+  void createUser_duplicateEmail_throwsBusinessException() {
+    CreateUserRequest request = new CreateUserRequest("Alice", "alice@example.com", 25);
+    userService.createUser(request);
 
-        BusinessException ex = assertThrows(BusinessException.class,
+    BusinessException ex =
+        assertThrows(
+            BusinessException.class,
             () -> userService.createUser(new CreateUserRequest("Bob", "alice@example.com", 30)));
-        assertEquals(409, ex.getCode());
-        assertTrue(ex.getMessage().contains("alice@example.com"));
-    }
+    assertEquals(409, ex.getCode());
+    assertTrue(ex.getMessage().contains("alice@example.com"));
+  }
 
-    @Test
-    void getUser_exists() {
-        CreateUserRequest request = new CreateUserRequest("Alice", "alice@example.com", 25);
-        UserVO created = userService.createUser(request);
+  @Test
+  void getUser_exists() {
+    CreateUserRequest request = new CreateUserRequest("Alice", "alice@example.com", 25);
+    UserVO created = userService.createUser(request);
 
-        UserVO found = userService.getUser(created.getId());
-        assertEquals(created.getId(), found.getId());
-        assertEquals("Alice", found.getName());
-    }
+    UserVO found = userService.getUser(created.getId());
+    assertEquals(created.getId(), found.getId());
+    assertEquals("Alice", found.getName());
+  }
 
-    @Test
-    void getUser_notFound_throwsResourceNotFoundException() {
-        assertThrows(ResourceNotFoundException.class,
-            () -> userService.getUser("nonexistent"));
-    }
+  @Test
+  void getUser_notFound_throwsResourceNotFoundException() {
+    assertThrows(ResourceNotFoundException.class, () -> userService.getUser("nonexistent"));
+  }
 
-    @Test
-    void listUsers_empty() {
-        assertTrue(userService.listUsers().isEmpty());
-    }
+  @Test
+  void listUsers_empty() {
+    assertTrue(userService.listUsers().isEmpty());
+  }
 
-    @Test
-    void listUsers_afterCreation() {
-        userService.createUser(new CreateUserRequest("Alice", "a@example.com", 25));
-        userService.createUser(new CreateUserRequest("Bob", "b@example.com", 30));
+  @Test
+  void listUsers_afterCreation() {
+    userService.createUser(new CreateUserRequest("Alice", "a@example.com", 25));
+    userService.createUser(new CreateUserRequest("Bob", "b@example.com", 30));
 
-        assertEquals(2, userService.listUsers().size());
-    }
+    assertEquals(2, userService.listUsers().size());
+  }
 
-    @Test
-    void deleteUser_success() {
-        UserVO user = userService.createUser(
-            new CreateUserRequest("Alice", "alice@example.com", 25));
-        userService.deleteUser(user.getId());
+  @Test
+  void deleteUser_success() {
+    UserVO user = userService.createUser(new CreateUserRequest("Alice", "alice@example.com", 25));
+    userService.deleteUser(user.getId());
 
-        assertThrows(ResourceNotFoundException.class,
-            () -> userService.getUser(user.getId()));
-    }
+    assertThrows(ResourceNotFoundException.class, () -> userService.getUser(user.getId()));
+  }
 
-    @Test
-    void deleteUser_notFound_throwsResourceNotFoundException() {
-        assertThrows(ResourceNotFoundException.class,
-            () -> userService.deleteUser("nonexistent"));
-    }
+  @Test
+  void deleteUser_notFound_throwsResourceNotFoundException() {
+    assertThrows(ResourceNotFoundException.class, () -> userService.deleteUser("nonexistent"));
+  }
 
-    @Test
-    void createMultipleUsers_uniqueIds() {
-        UserVO u1 = userService.createUser(new CreateUserRequest("A", "a@x.com", 20));
-        UserVO u2 = userService.createUser(new CreateUserRequest("B", "b@x.com", 21));
-        assertFalse(u1.getId().equals(u2.getId()));
-    }
+  @Test
+  void createMultipleUsers_uniqueIds() {
+    UserVO u1 = userService.createUser(new CreateUserRequest("A", "a@x.com", 20));
+    UserVO u2 = userService.createUser(new CreateUserRequest("B", "b@x.com", 21));
+    assertFalse(u1.getId().equals(u2.getId()));
+  }
 }

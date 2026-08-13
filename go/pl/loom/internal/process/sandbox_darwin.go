@@ -200,7 +200,8 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 	workspace := workspacepkg.Canonicalize(spec.WorkspaceRoot)
 	for _, rel := range protectedWorkspaceSubpaths {
 		protected := seatbeltQuote(filepath.Join(workspace, rel))
-		lines = append(lines,
+		lines = append(
+			lines,
 			fmt.Sprintf("(deny file-write* (literal %s))", protected),
 			fmt.Sprintf("(deny file-write* (subpath %s))", protected),
 		)

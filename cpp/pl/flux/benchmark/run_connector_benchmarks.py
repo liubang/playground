@@ -181,10 +181,13 @@ def parse_mysql_url(dsn):
 
 def digit_generator_sql(rows):
     digits = max(1, len(str(max(rows - 1, 0))))
-    sources = [f"(SELECT 0 i UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 "
-               f"UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 "
-               f"UNION ALL SELECT 8 UNION ALL SELECT 9) d{index}" for index in range(digits)]
-    terms = [f"d{index}.i * {10 ** index}" for index in range(digits)]
+    sources = [
+        f"(SELECT 0 i UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 "
+        f"UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 "
+        f"UNION ALL SELECT 8 UNION ALL SELECT 9) d{index}"
+        for index in range(digits)
+    ]
+    terms = [f"d{index}.i * {10**index}" for index in range(digits)]
     return f"SELECT {' + '.join(terms)} AS n FROM {', '.join(sources)}"
 
 
@@ -260,7 +263,9 @@ def run_sqlite(args):
     for scenario in scenarios:
         samples = []
         for run in range(args.warmup):
-            db_path = f"/tmp/flux_connector_bench_{scenario}_{os.getpid()}_warmup_{run}.db"
+            db_path = (
+                f"/tmp/flux_connector_bench_{scenario}_{os.getpid()}_warmup_{run}.db"
+            )
             command = [str(SQLITE_BIN), str(args.sqlite_rows), db_path, scenario]
             if scenario == "wide_filter":
                 command.append(str(args.threshold))
@@ -310,11 +315,15 @@ def run_mysql(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--connector", choices=["sqlite", "mysql", "all"], default="sqlite")
+    parser.add_argument(
+        "--connector", choices=["sqlite", "mysql", "all"], default="sqlite"
+    )
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--repeat", type=int, default=3)
     parser.add_argument("--sqlite-rows", type=int, default=1_000_000)
-    parser.add_argument("--mysql-dsn", default=os.environ.get("FLUX_MYSQL_TEST_DSN", ""))
+    parser.add_argument(
+        "--mysql-dsn", default=os.environ.get("FLUX_MYSQL_TEST_DSN", "")
+    )
     parser.add_argument("--mysql-table", default="cpu")
     parser.add_argument("--mysql-rows", type=int, default=1_000_000)
     parser.add_argument("--mysql-target-splits", type=int, default=8)
@@ -326,10 +335,18 @@ def main():
     parser.add_argument("--prepare-mysql-benchmark-table", action="store_true")
     parser.add_argument("--threshold", type=float, default=50.0)
     parser.add_argument("--scenario", dest="scenarios", action="append")
-    parser.add_argument("--build", action="store_true", help="build benchmark targets before running")
-    parser.add_argument("--bazel-config", default="release", help="Bazel config used with --build")
-    parser.add_argument("--output", help="write the JSON summary to this file as a stable baseline")
-    parser.add_argument("--compare-baseline", help="compare median seconds against a previous JSON")
+    parser.add_argument(
+        "--build", action="store_true", help="build benchmark targets before running"
+    )
+    parser.add_argument(
+        "--bazel-config", default="release", help="Bazel config used with --build"
+    )
+    parser.add_argument(
+        "--output", help="write the JSON summary to this file as a stable baseline"
+    )
+    parser.add_argument(
+        "--compare-baseline", help="compare median seconds against a previous JSON"
+    )
     parser.add_argument("--regression-threshold", type=float, default=0.10)
     args = parser.parse_args()
 
@@ -352,7 +369,9 @@ def main():
     comparisons = []
     regressions = []
     if args.compare_baseline:
-        baseline_payload = json.loads(Path(args.compare_baseline).read_text(encoding="utf-8"))
+        baseline_payload = json.loads(
+            Path(args.compare_baseline).read_text(encoding="utf-8")
+        )
         comparisons, regressions = compare_with_baseline(
             results, baseline_payload, args.regression_threshold
         )

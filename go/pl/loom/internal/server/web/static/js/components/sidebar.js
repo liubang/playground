@@ -124,7 +124,7 @@ export class Sidebar {
 
     const node = el(
       'div',
-      'ws-node' + (collapsed ? ' is-collapsed' : '') + (hasActive ? ' has-active' : '')
+      'ws-node' + (collapsed ? ' is-collapsed' : '') + (hasActive ? ' has-active' : ''),
     )
     node.dataset.wsId = wsId
     const caret = el('span', 'ws-caret')
@@ -225,7 +225,7 @@ export class Sidebar {
   _appendItem(wrap, s, isChild) {
     const item = el(
       'button',
-      'sess-item' + (s.id === this.activeId ? ' is-active' : '') + (isChild ? ' is-child' : '')
+      'sess-item' + (s.id === this.activeId ? ' is-active' : '') + (isChild ? ' is-child' : ''),
     )
     item.dataset.id = s.id
     item.title = (s.title || shortId(s.id)) + (s.model_name ? ` · ${s.model_name}` : '')

@@ -2,4 +2,6 @@
 
 #include <stdio.h>
 
-void Demo3SayHello(const char* s) { puts(s); }
+void Demo3SayHello(const char* s) {
+    puts(s);
+}

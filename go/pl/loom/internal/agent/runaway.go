@@ -92,7 +92,8 @@ func (l *Loop) trackToolCall(tool string, args json.RawMessage) string {
 			Usage: int64(l.repeatedCallCount), Limit: int64(cfg.MaxRepeatedCalls),
 			Message: noticeMessage(fmt.Sprintf(
 				"[runaway warning] Tool %q was just called with identical arguments %d times in a row. Repeating it will not produce new information — change strategy (different arguments, a different tool, or report the blocker).",
-				tool, l.repeatedCallCount), l.Run.Clock.Now()),
+				tool, l.repeatedCallCount,
+			), l.Run.Clock.Now()),
 		})
 	}
 	return ""
@@ -165,7 +166,8 @@ func (l *Loop) trackStall() {
 				Usage: int64(l.stallTurns), Limit: int64(cfg.StallWarnTurns),
 				Message: noticeMessage(fmt.Sprintf(
 					"[runaway warning] The last %d turns produced no visible progress (no new information, no file changes, no plan movement). Stop re-exploring and either commit to a concrete next action or report what is blocking you.",
-					l.stallTurns), l.Run.Clock.Now()),
+					l.stallTurns,
+				), l.Run.Clock.Now()),
 			})
 		}
 	}

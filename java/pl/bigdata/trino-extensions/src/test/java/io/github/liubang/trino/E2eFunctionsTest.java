@@ -7,13 +7,13 @@ import io.airlift.slice.Slices;
 import org.junit.jupiter.api.Test;
 
 class E2eFunctionsTest {
-    @Test
-    void prefixesText() {
-        assertEquals("e2e:hello", E2eFunctions.prefix(Slices.utf8Slice("hello")).toStringUtf8());
-    }
+  @Test
+  void prefixesText() {
+    assertEquals("e2e:hello", E2eFunctions.prefix(Slices.utf8Slice("hello")).toStringUtf8());
+  }
 
-    @Test
-    void preservesNull() {
-        assertNull(E2eFunctions.prefix(null));
-    }
+  @Test
+  void preservesNull() {
+    assertNull(E2eFunctions.prefix(null));
+  }
 }

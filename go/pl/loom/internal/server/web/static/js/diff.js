@@ -64,7 +64,7 @@ function diffTexts(oldText, newText) {
   } else {
     ops = lcsDiff(
       capLines(splitDiffLines(oldText), DIFF_MAX_INPUT_LINES),
-      capLines(splitDiffLines(newText), DIFF_MAX_INPUT_LINES)
+      capLines(splitDiffLines(newText), DIFF_MAX_INPUT_LINES),
     )
   }
   const show = new Array(ops.length).fill(false)

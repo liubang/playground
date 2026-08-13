@@ -382,7 +382,7 @@ function syncPickerLabels() {
   $('model-btn').querySelector('.picker-label').textContent = modelLabel(app.curModelRef)
   $('reasoning-btn').querySelector('.picker-label').innerHTML = reasoningLabel(
     app.curReasoning,
-    app.reasoningOverridden
+    app.reasoningOverridden,
   )
   syncAttachCapability()
 }
@@ -417,7 +417,7 @@ function syncAttachCapability() {
     ok,
     ok
       ? ''
-      : `模型 ${entry.name} 未声明图片输入（modalities）；请切换多模态模型，或在设置 → 模型中勾选「图片输入」`
+      : `模型 ${entry.name} 未声明图片输入（modalities）；请切换多模态模型，或在设置 → 模型中勾选「图片输入」`,
   )
 }
 
@@ -475,7 +475,7 @@ async function loadMoreSessions() {
       SESSION_PAGE_SIZE,
       app.sessCursor,
       app.showArchived,
-      'all'
+      'all',
     )
     app.sessionList = app.sessionList.concat(sessions || [])
     app.sessCursor = next_cursor || ''

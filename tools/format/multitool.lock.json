@@ -1,0 +1,75 @@
+{
+  "$schema": "https://raw.githubusercontent.com/theoremlp/rules_multitool/main/lockfile.schema.json",
+  "nodejs": {
+    "binaries": [
+      {
+        "kind": "archive",
+        "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-darwin-arm64.tar.gz",
+        "file": "node-v22.23.2-darwin-arm64/bin/node",
+        "sha256": "61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6",
+        "os": "macos",
+        "cpu": "arm64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-darwin-x64.tar.gz",
+        "file": "node-v22.23.2-darwin-x64/bin/node",
+        "sha256": "58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026",
+        "os": "macos",
+        "cpu": "x86_64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-arm64.tar.gz",
+        "file": "node-v22.23.2-linux-arm64/bin/node",
+        "sha256": "013b59cfd2819703a6f4a14ab891fc46fc2a4e3f5bcd92de3fb4929b43e35b30",
+        "os": "linux",
+        "cpu": "arm64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.gz",
+        "file": "node-v22.23.2-linux-x64/bin/node",
+        "sha256": "b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a",
+        "os": "linux",
+        "cpu": "x86_64"
+      }
+    ]
+  },
+  "prettier": {
+    "binaries": [
+      {
+        "kind": "archive",
+        "url": "https://registry.npmjs.org/prettier/-/prettier-3.9.6.tgz",
+        "file": "package/bin/prettier.cjs",
+        "sha256": "997da95cf2ae81053cafc79ef122a6e8dc12e3f2c619d57eb1f2e19525fb212f",
+        "os": "macos",
+        "cpu": "arm64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://registry.npmjs.org/prettier/-/prettier-3.9.6.tgz",
+        "file": "package/bin/prettier.cjs",
+        "sha256": "997da95cf2ae81053cafc79ef122a6e8dc12e3f2c619d57eb1f2e19525fb212f",
+        "os": "macos",
+        "cpu": "x86_64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://registry.npmjs.org/prettier/-/prettier-3.9.6.tgz",
+        "file": "package/bin/prettier.cjs",
+        "sha256": "997da95cf2ae81053cafc79ef122a6e8dc12e3f2c619d57eb1f2e19525fb212f",
+        "os": "linux",
+        "cpu": "arm64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://registry.npmjs.org/prettier/-/prettier-3.9.6.tgz",
+        "file": "package/bin/prettier.cjs",
+        "sha256": "997da95cf2ae81053cafc79ef122a6e8dc12e3f2c619d57eb1f2e19525fb212f",
+        "os": "linux",
+        "cpu": "x86_64"
+      }
+    ]
+  }
+}

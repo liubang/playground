@@ -1,5 +1,4 @@
 name: playground-minidfs
-
 x-minidfs-image: &minidfs-image
   image: liubang/minidfs:local
   build:
@@ -7,9 +6,8 @@ x-minidfs-image: &minidfs-image
     dockerfile: docker/minidfs/Dockerfile
     args:
       BUILDER_IMAGE: ${BUILDER_IMAGE:-liubang/bazel-builder:8.7.0}
-
 x-datanode: &datanode
-  <<: *minidfs-image
+  !!merge <<: *minidfs-image
   restart: "no"
   environment:
     MINIDFS_BLOCK_TOKEN_SECRET: ${MINIDFS_BLOCK_TOKEN_SECRET:?MINIDFS_BLOCK_TOKEN_SECRET must be set}
@@ -24,7 +22,6 @@ x-datanode: &datanode
     start_period: 5s
   networks:
     - minidfs
-
 services:
   mysql:
     image: mysql:8.3
@@ -47,9 +44,8 @@ services:
       start_period: 10s
     networks:
       - minidfs
-
   namenode:
-    <<: *minidfs-image
+    !!merge <<: *minidfs-image
     restart: "no"
     environment:
       MINIDFS_BLOCK_TOKEN_SECRET: ${MINIDFS_BLOCK_TOKEN_SECRET:?MINIDFS_BLOCK_TOKEN_SECRET must be set}
@@ -76,9 +72,8 @@ services:
       start_period: 5s
     networks:
       - minidfs
-
   datanode1:
-    <<: *datanode
+    !!merge <<: *datanode
     command:
       - minidfs-datanode
       - --namenode_addr=namenode:9000
@@ -91,9 +86,8 @@ services:
       - --block_report_interval_ms=3000
     volumes:
       - datanode1-data:/data/minidfs
-
   datanode2:
-    <<: *datanode
+    !!merge <<: *datanode
     command:
       - minidfs-datanode
       - --namenode_addr=namenode:9000
@@ -106,9 +100,8 @@ services:
       - --block_report_interval_ms=3000
     volumes:
       - datanode2-data:/data/minidfs
-
   datanode3:
-    <<: *datanode
+    !!merge <<: *datanode
     command:
       - minidfs-datanode
       - --namenode_addr=namenode:9000
@@ -121,9 +114,8 @@ services:
       - --block_report_interval_ms=3000
     volumes:
       - datanode3-data:/data/minidfs
-
   cli:
-    <<: *minidfs-image
+    !!merge <<: *minidfs-image
     profiles: ["tools"]
     entrypoint: ["minidfs"]
     command: ["--help"]
@@ -132,13 +124,11 @@ services:
         condition: service_healthy
     networks:
       - minidfs
-
 volumes:
   mysql-data:
   datanode1-data:
   datanode2-data:
   datanode3-data:
-
 networks:
   minidfs:
     driver: bridge

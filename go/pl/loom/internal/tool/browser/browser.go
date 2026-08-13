@@ -261,7 +261,8 @@ func (t *BrowserTool) doNavigate(ctx context.Context, callID domain.ToolCallID, 
 	// the click path is the only way through, instead of receiving a bare
 	// "ok" for a navigation that changed nothing.
 	var prevURL, title string
-	err = chromedp.Run(navCtx,
+	err = chromedp.Run(
+		navCtx,
 		chromedp.Location(&prevURL),
 		chromedp.Navigate(args.URL),
 		chromedp.Title(&title),
@@ -389,13 +390,15 @@ func (t *BrowserTool) doScroll(ctx context.Context, callID domain.ToolCallID, ar
 	defer cancel()
 
 	if args.Selector != "" {
-		err = chromedp.Run(scrollCtx,
+		err = chromedp.Run(
+			scrollCtx,
 			chromedp.ScrollIntoView(args.Selector, chromedp.ByQuery),
 		)
 	} else {
 		// Use JavaScript to scroll to the specified coordinates.
 		script := fmt.Sprintf("window.scrollTo(%d, %d);", args.ScrollX, args.ScrollY)
-		err = chromedp.Run(scrollCtx,
+		err = chromedp.Run(
+			scrollCtx,
 			chromedp.Evaluate(script, nil),
 		)
 	}
@@ -407,7 +410,8 @@ func (t *BrowserTool) doScroll(ctx context.Context, callID domain.ToolCallID, ar
 
 	// Read back the current scroll position.
 	var scrollX, scrollY int64
-	_ = chromedp.Run(scrollCtx,
+	_ = chromedp.Run(
+		scrollCtx,
 		chromedp.Evaluate("window.scrollX", &scrollX),
 		chromedp.Evaluate("window.scrollY", &scrollY),
 	)

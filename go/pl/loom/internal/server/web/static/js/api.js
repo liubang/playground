@@ -74,7 +74,7 @@ export function createApi({ getToken, onUnauthorized }) {
     listSessions: (limit = 50, cursor = '', archived = false, workspaceId = '') =>
       req(
         'GET',
-        `/v1/sessions?limit=${limit}${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}${archived ? '&archived=1' : ''}${workspaceId ? '&workspace_id=' + encodeURIComponent(workspaceId) : ''}`
+        `/v1/sessions?limit=${limit}${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}${archived ? '&archived=1' : ''}${workspaceId ? '&workspace_id=' + encodeURIComponent(workspaceId) : ''}`,
       ),
     // workspaces（docs/WORKSPACE_DESIGN.md §8.1）
     listWorkspaces: () => req('GET', '/v1/workspaces'),
@@ -110,7 +110,7 @@ export function createApi({ getToken, onUnauthorized }) {
         'POST',
         `/v1/sessions/${id}/prompts`,
         { prompt, ...(images.length ? { images } : {}) },
-        { 'Idempotency-Key': idemKey }
+        { 'Idempotency-Key': idemKey },
       ),
     cancelTurn: (id) => req('POST', `/v1/sessions/${id}/cancel`, {}),
     setModel: (id, ref) => {

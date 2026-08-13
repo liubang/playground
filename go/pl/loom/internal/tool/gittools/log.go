@@ -186,7 +186,8 @@ func validateGitLogArgs(ctx context.Context, validator *workspacepkg.PathValidat
 }
 
 func buildLogArgs(repoRoot string, limit int, repoRelativePath string) []string {
-	args := append(gitBaseArgs(repoRoot),
+	args := append(
+		gitBaseArgs(repoRoot),
 		"log",
 		"--format=%H%x09%an%x09%aI%x09%s",
 		fmt.Sprintf("-n%d", limit),

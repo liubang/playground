@@ -70,8 +70,8 @@ start_cluster() {
     "$FDB_DIR/bootstrap.sh" --no-start
     log_run "启动 FDB 集群（保留已有数据卷）"
     compose up -d
-    wait_until "coordinator 就绪并完成数据库初始化" 90 2 configure_if_needed \
-        || die "configure 失败，请查看: docker compose logs"
+    wait_until "coordinator 就绪并完成数据库初始化" 90 2 configure_if_needed ||
+        die "configure 失败，请查看: docker compose logs"
     wait_until "数据库可用" 90 2 cluster_available || die "请查看: docker compose logs"
 }
 
@@ -128,8 +128,8 @@ run_fault_test() {
     log_run "容错测试：写入数据后停止 fdb-node-3"
     fdbcli_exec "writemode on; set e2e/fault before-stop" >/dev/null
     compose stop fdb-node-3
-    wait_until "单节点故障后数据库恢复可用" 120 2 cluster_available \
-        || die "停止一个节点后数据库未恢复"
+    wait_until "单节点故障后数据库恢复可用" 120 2 cluster_available ||
+        die "停止一个节点后数据库未恢复"
     local got
     got="$(fdbcli_exec "get e2e/fault")"
     grep -q "before-stop" <<<"$got" || die "故障后读取数据丢失: ${got}"
@@ -151,8 +151,8 @@ run_persistence_test() {
     log_run "持久化测试：写入数据后重启全部容器"
     fdbcli_exec "writemode on; set e2e/persist survive-restart" >/dev/null
     compose restart
-    wait_until "全集群重启后数据库恢复可用" 180 2 cluster_available \
-        || die "重启后数据库未恢复"
+    wait_until "全集群重启后数据库恢复可用" 180 2 cluster_available ||
+        die "重启后数据库未恢复"
     wait_until "重启后集群恢复 healthy" 180 2 cluster_healthy || die "重启后集群未回到 healthy"
     local got
     got="$(fdbcli_exec "get e2e/persist")"
@@ -172,22 +172,25 @@ main() {
     local command="${1:-all}"
     bootstrap_check_dependencies
     case "$command" in
-        all)
-            start_cluster
-            run_tests
-            run_fault_test
-            run_persistence_test
-            cleanup_test_data
-            printf '\n'
-            log_ok "FDB E2E 全部通过"
-            ;;
-        start) start_cluster ;;
-        test) run_tests ;;
-        fault-test) run_fault_test ;;
-        persistence-test) run_persistence_test ;;
-        down) compose down ;;
-        reset) compose down -v --remove-orphans ;;
-        *) usage; exit 2 ;;
+    all)
+        start_cluster
+        run_tests
+        run_fault_test
+        run_persistence_test
+        cleanup_test_data
+        printf '\n'
+        log_ok "FDB E2E 全部通过"
+        ;;
+    start) start_cluster ;;
+    test) run_tests ;;
+    fault-test) run_fault_test ;;
+    persistence-test) run_persistence_test ;;
+    down) compose down ;;
+    reset) compose down -v --remove-orphans ;;
+    *)
+        usage
+        exit 2
+        ;;
     esac
 }
 
