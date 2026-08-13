@@ -111,6 +111,24 @@ func TestSessionServicePreferenceInheritance(t *testing.T) {
 	}
 }
 
+// TestModelCatalogModalities: the picker wire shape carries each model's
+// declared modalities so the frontend can badge vision-capable models and
+// gate image attachments; undeclared models stay empty (text-only).
+func TestModelCatalogModalities(t *testing.T) {
+	svc, _ := newTestService(t, fakes.NewFakeModel())
+	cat := svc.ModelCatalog()
+	got := map[string][]string{}
+	for _, m := range cat.Models {
+		got[m.Provider+"/"+m.Name] = m.Modalities
+	}
+	if mods := got["test/new-model"]; len(mods) != 2 || mods[0] != "text" || mods[1] != "image" {
+		t.Fatalf("new-model modalities = %v, want [text image]", mods)
+	}
+	if mods := got["test/test-model"]; len(mods) != 0 {
+		t.Fatalf("test-model modalities = %v, want empty (text-only)", mods)
+	}
+}
+
 // TestProcessRuntimeLoadPrefs: persisted preferences are restored over the
 // configured defaults; unresolvable values (e.g. a model removed from the
 // config) are ignored without breaking startup.

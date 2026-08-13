@@ -2561,6 +2561,7 @@ func TestExtractImagePaths(t *testing.T) {
 	dir := t.TempDir()
 	img := writeTestImage(t, dir, "shot.png")
 	upper := writeTestImage(t, dir, "upper.PNG")
+	withSpace := writeTestImage(t, dir, "my shot.png")
 
 	cases := []struct {
 		name string
@@ -2577,6 +2578,9 @@ func TestExtractImagePaths(t *testing.T) {
 		{"relative path ignored", "open shot.png", nil},
 		{"missing file ignored", filepath.Join(dir, "missing.png"), nil},
 		{"unsupported extension ignored", filepath.Join(dir, "doc.pdf"), nil},
+		// Dragging a file with spaces into a terminal yields an escaped path.
+		{"escaped spaces", strings.ReplaceAll(withSpace, " ", `\ `), []string{withSpace}},
+		{"quoted spaces", `"` + withSpace + `"`, []string{withSpace}},
 	}
 	for _, tc := range cases {
 		got := extractImagePaths(tc.text)

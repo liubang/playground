@@ -51,6 +51,7 @@ const (
 	ActionViewSubagent     Action = "view_subagent"
 	ActionCopyLastReply    Action = "copy_last_reply"
 	ActionJumpToBottom     Action = "jump_to_bottom"
+	ActionPasteImage       Action = "paste_image"
 
 	// ContextPicker: keys available in both finder modes (insert and
 	// normal). Mode-specific runes (j/k/g/G/q/i in normal mode) are
@@ -78,6 +79,7 @@ var defaultBindings = map[KeyContext][]struct {
 		{ActionViewSubagent, []string{"ctrl+g"}},
 		{ActionCopyLastReply, []string{"ctrl+y"}},
 		{ActionJumpToBottom, []string{"ctrl+end"}},
+		{ActionPasteImage, []string{"ctrl+v"}},
 	},
 	ContextPicker: {
 		{ActionCursorUp, []string{"up", "ctrl+k"}},
