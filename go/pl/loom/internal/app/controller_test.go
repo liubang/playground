@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
+	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
@@ -170,6 +171,117 @@ func TestControllerContinuesSessionForFollowUpPrompt(t *testing.T) {
 	}
 	if len(snapshot.Messages) != 4 {
 		t.Fatalf("message count = %d, want 4", len(snapshot.Messages))
+	}
+}
+
+// tinyPNG is a 1x1 PNG — big enough for the media sniffer, cheap to store.
+const tinyPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+// TestControllerTurnStartedCarriesImageRefs pins the realtime attachment
+// contract: turn.started must carry the submitted image attachments as
+// artifact references, so display channels can render them with the user
+// message immediately instead of waiting for a snapshot replay. The
+// payload reference must match the one persisted on the user message.
+func TestControllerTurnStartedCarriesImageRefs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	astore, err := artifact.Open(filepath.Join(t.TempDir(), "artifacts"), 100<<20)
+	if err != nil {
+		t.Fatalf("artifact.Open: %v", err)
+	}
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "seen", StopReason: domain.StopEndTurn},
+	)
+	bs := testBootstrap(store, model)
+	bs.Artifact = astore
+
+	broker := runtimeevent.NewBroker()
+	defer broker.Close()
+	controller := NewController(ControllerConfig{
+		Bootstrap: bs,
+		Broker:    broker,
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	// The default test-model declares no image modality; switch to the
+	// vision-capable catalog entry so attachments pass the modality gate.
+	if _, err := controller.SetModel(ctx, "new-model"); err != nil {
+		t.Fatalf("SetModel(new-model): %v", err)
+	}
+
+	events, unsubscribe := broker.Subscribe()
+	defer unsubscribe()
+	if _, err := controller.SubmitPromptWithImages(ctx, "看图说话",
+		[]domain.ImageContent{{MediaType: "image/png", Data: tinyPNGBase64}}); err != nil {
+		t.Fatalf("SubmitPromptWithImages: %v", err)
+	}
+
+	// The first turn.started on the wire must carry the attachment refs.
+	var started runtimeevent.TurnStartedPayload
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case evt := <-events:
+			if evt.Kind != runtimeevent.KindTurnStarted {
+				continue
+			}
+			if err := json.Unmarshal(evt.Payload, &started); err != nil {
+				t.Fatalf("decode turn.started payload: %v", err)
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for turn.started")
+		}
+		break
+	}
+	if started.Prompt != "看图说话" {
+		t.Fatalf("turn.started prompt = %q, want 看图说话", started.Prompt)
+	}
+	if len(started.Images) != 1 {
+		t.Fatalf("turn.started images = %d, want 1", len(started.Images))
+	}
+	ref := started.Images[0]
+	if ref.ID.IsZero() || ref.Size <= 0 || !strings.HasPrefix(ref.MediaType, "image/") {
+		t.Fatalf("turn.started image ref = %+v, want a sniffed image artifact reference", ref)
+	}
+
+	waitForIdle(t, controller)
+
+	// The event payload and the persisted user message must reference the
+	// same artifact — otherwise realtime and replay rendering would diverge.
+	snap, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	var persisted *domain.ArtifactRef
+	for _, msg := range snap.Messages {
+		if msg.Role != domain.RoleUser {
+			continue
+		}
+		for _, part := range msg.Parts {
+			if part.Kind == domain.PartArtifact && part.Artifact != nil {
+				persisted = part.Artifact
+			}
+		}
+	}
+	if persisted == nil {
+		t.Fatal("no artifact reference on any user message")
+	}
+	if *persisted != ref {
+		t.Fatalf("persisted image ref = %+v, want the turn.started ref %+v", *persisted, ref)
 	}
 }
 

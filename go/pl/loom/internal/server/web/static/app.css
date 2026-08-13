@@ -5,7 +5,7 @@
 
 /* ============================== 设计令牌（§6.1） ============================== */
 :root,
-[data-theme='dark'] {
+[data-theme="dark"] {
   /* 默认深色 */
   --bg0: #1e2326;
   --bg1: #272e33;
@@ -26,7 +26,7 @@
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.3);
   color-scheme: dark;
 }
-[data-theme='light'] {
+[data-theme="light"] {
   /* Everforest Light Hard */
   --bg0: #fffbef;
   --bg1: #efebd4;
@@ -69,17 +69,20 @@ body {
       --font-ui,
       -apple-system,
       BlinkMacSystemFont,
-      'Segoe UI',
+      "Segoe UI",
       Roboto,
-      'Helvetica Neue',
+      "Helvetica Neue",
       sans-serif
     );
   -webkit-font-smoothing: antialiased;
 }
 :root {
-  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-ui:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    sans-serif;
   --font-mono:
-    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
   /* 字号刻度 */
   --text-xs: 11.5px;
   --text-sm: 12.5px;
@@ -216,11 +219,11 @@ button {
   display: none;
 }
 .disclosure summary::before {
-  content: '\25B6';
+  content: "\25B6";
   flex: none;
 }
 .disclosure[open] summary::before {
-  content: '\25BC';
+  content: "\25BC";
 }
 .disclosure summary:hover {
   color: var(--fg);
@@ -786,6 +789,31 @@ button {
   line-height: 1.6;
 }
 
+/* 气泡内的图片附件：文字上方纵向排列，点击放大（灯箱） */
+.user-bubble .user-images {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.user-bubble .user-images + .user-text {
+  margin-top: 8px;
+}
+.user-bubble .user-images .inline-image {
+  display: block;
+  max-width: min(320px, 100%);
+  max-height: 320px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bg2);
+  cursor: zoom-in;
+}
+.user-bubble .user-images .inline-image:hover {
+  border-color: var(--muted);
+}
+.user-bubble .user-images .inline-image:focus-visible {
+  outline: 2px solid var(--accent, var(--muted));
+  outline-offset: 1px;
+}
+
 /* assistant：左侧纯文本，无标签 */
 .block-assistant {
   align-self: stretch;
@@ -1064,7 +1092,7 @@ button {
   color: var(--success);
 }
 .tool-status.running::before {
-  content: '●';
+  content: "●";
   margin-right: 4px;
   animation: pulse 1.2s ease-in-out infinite;
 }
@@ -1333,7 +1361,7 @@ body.lightbox-open {
   color: var(--muted);
   font-size: var(--text-sm);
 }
-.card-question input[type='text'] {
+.card-question input[type="text"] {
   width: 100%;
   padding: 8px 12px;
   margin: 8px 0 4px;
@@ -1343,7 +1371,7 @@ body.lightbox-open {
   border-radius: var(--radius-sm);
   font-size: var(--text-md);
 }
-.card-question input[type='text']:focus {
+.card-question input[type="text"]:focus {
   outline: none;
   border-color: var(--primary);
 }
@@ -2131,6 +2159,9 @@ body.lightbox-open {
   overflow-y: auto;
 }
 .settings-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: none;
   border: none;
   color: var(--muted);
@@ -2140,6 +2171,15 @@ body.lightbox-open {
   padding: 6px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
+}
+/* 导航图标跟随文字色（muted → hover fg → active primary 由基类 currentColor 继承），
+统一 1em 宽度保证不同 viewBox 的图标左对齐 */
+.settings-tab .icon {
+  opacity: 0.85;
+}
+.settings-tab.is-active .icon,
+.settings-tab:hover .icon {
+  opacity: 1;
 }
 .settings-tab:hover {
   color: var(--fg);
@@ -2167,9 +2207,14 @@ body.lightbox-open {
 .settings-foot .spacer {
   flex: 1;
 }
+/* 消息条位于按钮组左侧（spacer 之后）：限宽 + 右对齐贴住按钮，
+长文本截断，完整内容经 title 悬停可见 */
 .settings-msg {
   font-size: var(--text-sm);
   color: var(--muted);
+  min-width: 0;
+  max-width: 45%;
+  text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
