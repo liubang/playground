@@ -135,8 +135,12 @@ func NewViewImageTool(validator *workspacepkg.PathValidator, artifacts domain.Ar
 		Name: "view_image",
 		Description: "Attach a local image file (png, jpeg, gif, webp) to the conversation so you " +
 			"can see it. Relative paths resolve inside the workspace; absolute paths outside the workspace work " +
-			"too (credential locations are always denied). Use it whenever the user references an image (a " +
-			"screenshot, diagram, mockup, photo of an error) that you need to look at. The image is persisted " +
+			"too (credential locations are always denied). Use it only for image files on disk that are NOT " +
+			"already in the conversation — e.g. when the user gives you a path to a screenshot, diagram, " +
+			"mockup, or photo of an error that you need to look at. Images the user attached directly to " +
+			"their message are already provided to you inline: never call this tool for those, and never " +
+			"guess or reconstruct a file path from memory or context — call it only with an explicit path " +
+			"given by the user or one you have verified exists. The image is persisted " +
 			"as an artifact and attached for your review at model-request time (large images are rescaled " +
 			"automatically); it is NOT shown to the user — call present_image as well if the user should " +
 			"see it. Files larger than 64MB are rejected; downscale or crop them first (e.g. with run_cmd " +

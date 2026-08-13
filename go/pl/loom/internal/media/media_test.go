@@ -247,11 +247,18 @@ func TestMaterializeResolvesImageRef(t *testing.T) {
 	out := Materialize(context.Background(), store, canonical)
 
 	parts := out[0].Parts
-	if parts[1].Kind != domain.PartImage || parts[1].Image == nil {
-		t.Fatalf("part[1] = %+v, want a materialized image part", parts[1])
+	// Layout: original text, attachment note, materialized image.
+	if len(parts) != 3 {
+		t.Fatalf("parts = %d, want 3 (text, note, image)", len(parts))
+	}
+	if parts[1].Kind != domain.PartText || !strings.Contains(parts[1].Text, "view_image") {
+		t.Fatalf("part[1] = %+v, want the attachment note", parts[1])
+	}
+	if parts[2].Kind != domain.PartImage || parts[2].Image == nil {
+		t.Fatalf("part[2] = %+v, want a materialized image part", parts[2])
 	}
 	// The stored original is 3000px; the derived wire image must be bounded.
-	assertDimensions(t, *parts[1].Image, maxDimension, maxDimension)
+	assertDimensions(t, *parts[2].Image, maxDimension, maxDimension)
 	// Canonical history must not be mutated.
 	if canonical[0].Parts[1].Kind != domain.PartArtifact {
 		t.Fatal("Materialize mutated the canonical message")
@@ -294,9 +301,9 @@ func TestMaterializeMissingArtifactDegradesToText(t *testing.T) {
 	}
 	msgs := []domain.Message{userMessageWithRef(t, domain.ArtifactRef{ID: id, Size: 10, MediaType: "image/png"})}
 	out := Materialize(context.Background(), store, msgs)
-	part := out[0].Parts[1]
+	part := out[0].Parts[2] // after the original text and the attachment note
 	if part.Kind != domain.PartText || !strings.Contains(part.Text, "unavailable") {
-		t.Fatalf("part[1] = %+v, want a text placeholder", part)
+		t.Fatalf("part[2] = %+v, want a text placeholder", part)
 	}
 }
 
@@ -318,11 +325,15 @@ func TestMaterializeRespectsDisplayFlags(t *testing.T) {
 	}}
 	out := Materialize(context.Background(), store, msgs)
 	parts := out[0].Parts
-	if parts[0].Kind != domain.PartImage {
-		t.Fatalf("model-only part = %v, want a materialized image part", parts[0].Kind)
+	// The model-only ref expands to note+image; the present-only ref is untouched.
+	if parts[0].Kind != domain.PartText {
+		t.Fatalf("part[0] = %v, want the attachment note", parts[0].Kind)
 	}
-	if parts[1].Kind != domain.PartArtifact || !parts[1].PresentOnly {
-		t.Fatalf("present-only part = %+v, want the artifact reference untouched", parts[1])
+	if parts[1].Kind != domain.PartImage {
+		t.Fatalf("model-only part = %v, want a materialized image part", parts[1].Kind)
+	}
+	if parts[2].Kind != domain.PartArtifact || !parts[2].PresentOnly {
+		t.Fatalf("present-only part = %+v, want the artifact reference untouched", parts[2])
 	}
 }
 

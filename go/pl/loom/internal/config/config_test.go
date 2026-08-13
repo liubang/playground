@@ -268,6 +268,43 @@ tools:
 	}
 }
 
+func TestResolveSkillsExtraRoots(t *testing.T) {
+	// Absent: no extra roots.
+	cfg := loadFile(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+`, noEnv)
+	if len(cfg.Skills.ExtraRoots) != 0 {
+		t.Fatalf("skills.extra_roots default = %v, want empty", cfg.Skills.ExtraRoots)
+	}
+
+	// Absolute entries pass through; "~/" expands; blank entries drop.
+	cfg = loadFile(t, `
+providers:
+  - name: only
+    base_url: https://example.com/v1
+    api_key: sk
+    models:
+      - name: m1
+skills:
+  extra_roots: ["/opt/skills", "~/my-skills", ""]
+`, noEnv)
+	if len(cfg.Skills.ExtraRoots) != 2 || cfg.Skills.ExtraRoots[0] != "/opt/skills" {
+		t.Fatalf("skills.extra_roots = %v, want [/opt/skills ~/my-skills expanded]", cfg.Skills.ExtraRoots)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Skills.ExtraRoots[1] != filepath.Join(home, "my-skills") {
+		t.Fatalf("tilde expansion = %q, want under %q", cfg.Skills.ExtraRoots[1], home)
+	}
+}
+
 func TestResolveShare(t *testing.T) {
 	// Defaults: disabled, fixed built-in bind address.
 	cfg := loadFile(t, `

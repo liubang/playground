@@ -170,6 +170,30 @@ func resolveTools(in Tools) (ResolvedTools, error) {
 	return out, nil
 }
 
+// resolveSkills applies the skills defaults and expands a leading "~" in
+// extra_roots, so every directory-typed config field accepts the same home
+// shorthand (workspaces[].root and tools.path_extra already do). Blank
+// entries are dropped rather than rejected: the settings UI edits the list
+// as one-line-per-entry text, where stray blank lines are easy to leave.
+func resolveSkills(in Skills) (ResolvedSkills, error) {
+	out := ResolvedSkills{
+		Enabled:  in.Enabled == nil || *in.Enabled,
+		Disabled: in.Disabled,
+	}
+	for i, raw := range in.ExtraRoots {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		expanded, err := expandHomeDir(trimmed)
+		if err != nil {
+			return ResolvedSkills{}, fmt.Errorf("config: skills.extra_roots[%d]: %w", i, err)
+		}
+		out.ExtraRoots = append(out.ExtraRoots, expanded)
+	}
+	return out, nil
+}
+
 // DefaultShareListen is the built-in bind address for the LAN share
 // listener: all interfaces on a fixed port — distinct from `loom
 // serve`'s default 7680 so both may run on one machine.
@@ -361,7 +385,11 @@ func resolveBrowser(in Browser) (ResolvedBrowser, error) {
 		ViewportW:      defaultBrowserViewportW,
 		ViewportH:      defaultBrowserViewportH,
 	}
-	out.ChromePath = strings.TrimSpace(in.ChromePath)
+	chromePath, err := expandHomeDir(strings.TrimSpace(in.ChromePath))
+	if err != nil {
+		return ResolvedBrowser{}, fmt.Errorf("config: browser.chrome_path: %w", err)
+	}
+	out.ChromePath = chromePath
 	out.CdpURL = strings.TrimSpace(in.CdpURL)
 	if out.CdpURL != "" {
 		u, err := url.Parse(out.CdpURL)
@@ -609,25 +637,25 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 	if err != nil {
 		return nil, err
 	}
+	skills, err := resolveSkills(f.Skills)
+	if err != nil {
+		return nil, err
+	}
 	out := &ResolvedConfig{
 		Providers: providers,
 		Limits:    limits,
 		Context:   contextCfg,
 		Runaway:   runawayCfg,
 		Prompt:    f.Prompt,
-		Skills: ResolvedSkills{
-			Enabled:    f.Skills.Enabled == nil || *f.Skills.Enabled,
-			ExtraRoots: f.Skills.ExtraRoots,
-			Disabled:   f.Skills.Disabled,
-		},
-		Rules:    resolveRules(f.Rules),
-		Approval: approval,
-		Tracing:  tracing,
-		Storage:  ResolvedStorage{BaseDir: baseDir},
-		Share:    share,
-		Tools:    tools,
-		Logging:  resolveLogging(f.Logging),
-		UI:       f.UI,
+		Skills:    skills,
+		Rules:     resolveRules(f.Rules),
+		Approval:  approval,
+		Tracing:   tracing,
+		Storage:   ResolvedStorage{BaseDir: baseDir},
+		Share:     share,
+		Tools:     tools,
+		Logging:   resolveLogging(f.Logging),
+		UI:        f.UI,
 	}
 	if len(providers) > 0 {
 		def := f.Default
