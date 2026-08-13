@@ -8,9 +8,8 @@
 
 namespace pl::minitable {
 
-VesselSliceStateMachine::VesselSliceStateMachine(
-    std::unique_ptr<SliceApplyMachine> machine,
-    std::shared_ptr<const codec::CellKeyCodec> codec)
+VesselSliceStateMachine::VesselSliceStateMachine(std::unique_ptr<SliceApplyMachine> machine,
+                                                 std::shared_ptr<const codec::CellKeyCodec> codec)
     : machine_(std::move(machine)), codec_(std::move(codec)) {}
 
 absl::StatusOr<minivessel::ApplyResult> VesselSliceStateMachine::apply(

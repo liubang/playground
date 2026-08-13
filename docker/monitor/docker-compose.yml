@@ -10,7 +10,6 @@ services:
       - prometheus-data:/prometheus
     networks:
       - monitor
-
   grafana:
     image: grafana/grafana:13.1.0
     container_name: grafana
@@ -26,10 +25,8 @@ services:
       - grafana-data:/var/lib/grafana
     networks:
       - monitor
-
 volumes:
   prometheus-data:
   grafana-data:
-
 networks:
   monitor:

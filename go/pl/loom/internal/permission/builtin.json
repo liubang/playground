@@ -1,84 +1,438 @@
 {
   "rules": [
-    {"argv_prefix": ["ls"], "decision": "allow", "justification": "read-only directory listing", "match": [["ls", "-la", "/tmp"]], "not_match": [["lsblk"]]},
-    {"argv_prefix": ["cat"], "decision": "allow", "justification": "read-only file content", "match": [["cat", "a.txt"]], "not_match": [["catch"]]},
-    {"argv_prefix": ["head"], "decision": "allow", "justification": "read-only file head", "match": [["head", "-n", "10", "f"]], "not_match": [["headless"]]},
-    {"argv_prefix": ["tail"], "decision": "allow", "justification": "read-only file tail", "match": [["tail", "-f", "log"]], "not_match": [["tailor"]]},
-    {"argv_prefix": ["wc"], "decision": "allow", "justification": "read-only byte/line counts", "match": [["wc", "-l", "f"]], "not_match": [["wcalc"]]},
-    {"argv_prefix": ["file"], "decision": "allow", "justification": "read-only file type detection", "match": [["file", "a.bin"]], "not_match": [["filetest"]]},
-    {"argv_prefix": ["stat"], "decision": "allow", "justification": "read-only file metadata", "match": [["stat", "-f", "%z", "f"]], "not_match": [["status"]]},
-    {"argv_prefix": ["du"], "decision": "allow", "justification": "read-only disk usage", "match": [["du", "-sh", "."]], "not_match": [["dump"]]},
-    {"argv_prefix": ["df"], "decision": "allow", "justification": "read-only filesystem usage", "match": [["df", "-h"]], "not_match": [["dfx"]]},
-    {"argv_prefix": ["grep"], "decision": "allow", "justification": "read-only text search", "match": [["grep", "-rn", "pat", "."]], "not_match": [["grepcidr"]]},
-    {"argv_prefix": ["rg"], "decision": "allow", "justification": "read-only text search", "match": [["rg", "-n", "pat"]], "not_match": [["rgx"]]},
-    {"argv_prefix": ["jq"], "decision": "allow", "justification": "read-only JSON query", "match": [["jq", ".a", "f.json"]], "not_match": [["jql"]]},
-    {"argv_prefix": ["sort"], "decision": "allow", "justification": "read-only sort to stdout", "match": [["sort", "-u", "f"]], "not_match": [["sortd"]]},
-    {"argv_prefix": ["uniq"], "decision": "allow", "justification": "read-only dedupe", "match": [["uniq", "-c", "f"]], "not_match": [["uniqx"]]},
-    {"argv_prefix": ["diff"], "decision": "allow", "justification": "read-only file comparison", "match": [["diff", "a", "b"]], "not_match": [["diffstat"]]},
-    {"argv_prefix": ["cut"], "decision": "allow", "justification": "read-only column extraction", "match": [["cut", "-d:", "-f1", "f"]], "not_match": [["cutest"]]},
-    {"argv_prefix": ["tr"], "decision": "allow", "justification": "read-only char translation", "match": [["tr", "a-z", "A-Z"]], "not_match": [["tree"]]},
-    {"argv_prefix": ["column"], "decision": "allow", "justification": "read-only columnar format", "match": [["column", "-t", "f"]], "not_match": [["columns"]]},
-    {"argv_prefix": ["paste"], "decision": "allow", "justification": "read-only line merge", "match": [["paste", "a", "b"]], "not_match": [["pastel"]]},
-    {"argv_prefix": ["comm"], "decision": "allow", "justification": "read-only set comparison", "match": [["comm", "-12", "a", "b"]], "not_match": [["command"]]},
-    {"argv_prefix": ["pwd"], "decision": "allow", "justification": "print working directory", "match": [["pwd"]], "not_match": [["pwgen"]]},
-    {"argv_prefix": ["echo"], "decision": "allow", "justification": "print arguments", "match": [["echo", "hi"]], "not_match": [["echosd"]]},
-    {"argv_prefix": ["printf"], "decision": "allow", "justification": "print formatted text", "match": [["printf", "%s\\n", "x"]], "not_match": [["printenv"]]},
-    {"argv_prefix": ["date"], "decision": "allow", "justification": "print date/time", "match": [["date", "+%F"]], "not_match": [["datelog"]]},
-    {"argv_prefix": ["uname"], "decision": "allow", "justification": "print system info", "match": [["uname", "-a"]], "not_match": [["unamex"]]},
-    {"argv_prefix": ["basename"], "decision": "allow", "justification": "print path basename", "match": [["basename", "/a/b/c"]], "not_match": [["basenames"]]},
-    {"argv_prefix": ["dirname"], "decision": "allow", "justification": "print path dirname", "match": [["dirname", "/a/b/c"]], "not_match": [["dirnames"]]},
-    {"argv_prefix": ["realpath"], "decision": "allow", "justification": "resolve path only", "match": [["realpath", "."]], "not_match": [["realpaths"]]},
-    {"argv_prefix": ["readlink"], "decision": "allow", "justification": "read symlink target", "match": [["readlink", "f"]], "not_match": [["readlinks"]]},
-    {"argv_prefix": ["which"], "decision": "allow", "justification": "locate program on PATH", "match": [["which", "go"]], "not_match": [["whicher"]]},
-    {"argv_prefix": ["git", "status"], "decision": "allow", "justification": "read-only repo status", "match": [["git", "status", "--short"]], "not_match": [["git", "stage"], ["git", "stash"]]},
-    {"argv_prefix": ["git", "diff"], "decision": "allow", "justification": "read-only repo diff", "match": [["git", "diff", "HEAD~1"]], "not_match": [["git", "difftool"], ["gits"]]},
-    {"argv_prefix": ["git", "log"], "decision": "allow", "justification": "read-only history", "match": [["git", "log", "--oneline", "-5"]], "not_match": [["git", "login"]]},
-    {"argv_prefix": ["git", "show"], "decision": "allow", "justification": "read-only object display", "match": [["git", "show", "HEAD"]], "not_match": [["git", "show-ref"]]},
-    {"argv_prefix": ["git", "rev-parse"], "decision": "allow", "justification": "read-only revision resolve", "match": [["git", "rev-parse", "HEAD"]], "not_match": [["git", "rev-list"]]},
-    {"argv_prefix": ["git", "ls-files"], "decision": "allow", "justification": "read-only index listing", "match": [["git", "ls-files"]], "not_match": [["git", "ls-remote"]]},
-    {"argv_prefix": ["git", "blame"], "decision": "allow", "justification": "read-only authorship", "match": [["git", "blame", "f.go"]], "not_match": [["git", "blamex"]]},
-    {"argv_prefix": ["git", "describe"], "decision": "allow", "justification": "read-only describe", "match": [["git", "describe", "--tags"]], "not_match": [["git", "describex"]]},
-    {"argv_prefix": ["git", "shortlog"], "decision": "allow", "justification": "read-only history summary", "match": [["git", "shortlog", "-sn"]], "not_match": [["git", "shortlist"]]},
-    {"argv_prefix": ["git", "--version"], "decision": "allow", "justification": "print git version", "match": [["git", "--version"]], "not_match": [["git", "--exec-path"]]},
-    {"argv_prefix": ["node", "-v"], "decision": "allow", "justification": "print node version", "match": [["node", "-v"]], "not_match": [["node", "-e", "x"], ["node", "server.js"]]},
-    {"argv_prefix": ["node", "--version"], "decision": "allow", "justification": "print node version", "match": [["node", "--version"]], "not_match": [["node", "--eval", "x"]]},
-    {"argv_prefix": ["python3", "-V"], "decision": "allow", "justification": "print python version", "match": [["python3", "-V"]], "not_match": [["python3", "-c", "x"]]},
-    {"argv_prefix": ["python3", "--version"], "decision": "allow", "justification": "print python version", "match": [["python3", "--version"]], "not_match": [["python3", "--", "x"]]},
-    {"argv_prefix": ["go", "version"], "decision": "allow", "justification": "print go version", "match": [["go", "version"]], "not_match": [["go", "vet"], ["gofmt"]]},
-    {"argv_prefix": ["bazel", "--version"], "decision": "allow", "justification": "print bazel version", "match": [["bazel", "--version"]], "not_match": [["bazel", "build"]]}
+    {
+      "argv_prefix": ["ls"],
+      "decision": "allow",
+      "justification": "read-only directory listing",
+      "match": [["ls", "-la", "/tmp"]],
+      "not_match": [["lsblk"]]
+    },
+    {
+      "argv_prefix": ["cat"],
+      "decision": "allow",
+      "justification": "read-only file content",
+      "match": [["cat", "a.txt"]],
+      "not_match": [["catch"]]
+    },
+    {
+      "argv_prefix": ["head"],
+      "decision": "allow",
+      "justification": "read-only file head",
+      "match": [["head", "-n", "10", "f"]],
+      "not_match": [["headless"]]
+    },
+    {
+      "argv_prefix": ["tail"],
+      "decision": "allow",
+      "justification": "read-only file tail",
+      "match": [["tail", "-f", "log"]],
+      "not_match": [["tailor"]]
+    },
+    {
+      "argv_prefix": ["wc"],
+      "decision": "allow",
+      "justification": "read-only byte/line counts",
+      "match": [["wc", "-l", "f"]],
+      "not_match": [["wcalc"]]
+    },
+    {
+      "argv_prefix": ["file"],
+      "decision": "allow",
+      "justification": "read-only file type detection",
+      "match": [["file", "a.bin"]],
+      "not_match": [["filetest"]]
+    },
+    {
+      "argv_prefix": ["stat"],
+      "decision": "allow",
+      "justification": "read-only file metadata",
+      "match": [["stat", "-f", "%z", "f"]],
+      "not_match": [["status"]]
+    },
+    {
+      "argv_prefix": ["du"],
+      "decision": "allow",
+      "justification": "read-only disk usage",
+      "match": [["du", "-sh", "."]],
+      "not_match": [["dump"]]
+    },
+    {
+      "argv_prefix": ["df"],
+      "decision": "allow",
+      "justification": "read-only filesystem usage",
+      "match": [["df", "-h"]],
+      "not_match": [["dfx"]]
+    },
+    {
+      "argv_prefix": ["grep"],
+      "decision": "allow",
+      "justification": "read-only text search",
+      "match": [["grep", "-rn", "pat", "."]],
+      "not_match": [["grepcidr"]]
+    },
+    {
+      "argv_prefix": ["rg"],
+      "decision": "allow",
+      "justification": "read-only text search",
+      "match": [["rg", "-n", "pat"]],
+      "not_match": [["rgx"]]
+    },
+    {
+      "argv_prefix": ["jq"],
+      "decision": "allow",
+      "justification": "read-only JSON query",
+      "match": [["jq", ".a", "f.json"]],
+      "not_match": [["jql"]]
+    },
+    {
+      "argv_prefix": ["sort"],
+      "decision": "allow",
+      "justification": "read-only sort to stdout",
+      "match": [["sort", "-u", "f"]],
+      "not_match": [["sortd"]]
+    },
+    {
+      "argv_prefix": ["uniq"],
+      "decision": "allow",
+      "justification": "read-only dedupe",
+      "match": [["uniq", "-c", "f"]],
+      "not_match": [["uniqx"]]
+    },
+    {
+      "argv_prefix": ["diff"],
+      "decision": "allow",
+      "justification": "read-only file comparison",
+      "match": [["diff", "a", "b"]],
+      "not_match": [["diffstat"]]
+    },
+    {
+      "argv_prefix": ["cut"],
+      "decision": "allow",
+      "justification": "read-only column extraction",
+      "match": [["cut", "-d:", "-f1", "f"]],
+      "not_match": [["cutest"]]
+    },
+    {
+      "argv_prefix": ["tr"],
+      "decision": "allow",
+      "justification": "read-only char translation",
+      "match": [["tr", "a-z", "A-Z"]],
+      "not_match": [["tree"]]
+    },
+    {
+      "argv_prefix": ["column"],
+      "decision": "allow",
+      "justification": "read-only columnar format",
+      "match": [["column", "-t", "f"]],
+      "not_match": [["columns"]]
+    },
+    {
+      "argv_prefix": ["paste"],
+      "decision": "allow",
+      "justification": "read-only line merge",
+      "match": [["paste", "a", "b"]],
+      "not_match": [["pastel"]]
+    },
+    {
+      "argv_prefix": ["comm"],
+      "decision": "allow",
+      "justification": "read-only set comparison",
+      "match": [["comm", "-12", "a", "b"]],
+      "not_match": [["command"]]
+    },
+    {
+      "argv_prefix": ["pwd"],
+      "decision": "allow",
+      "justification": "print working directory",
+      "match": [["pwd"]],
+      "not_match": [["pwgen"]]
+    },
+    {
+      "argv_prefix": ["echo"],
+      "decision": "allow",
+      "justification": "print arguments",
+      "match": [["echo", "hi"]],
+      "not_match": [["echosd"]]
+    },
+    {
+      "argv_prefix": ["printf"],
+      "decision": "allow",
+      "justification": "print formatted text",
+      "match": [["printf", "%s\\n", "x"]],
+      "not_match": [["printenv"]]
+    },
+    {
+      "argv_prefix": ["date"],
+      "decision": "allow",
+      "justification": "print date/time",
+      "match": [["date", "+%F"]],
+      "not_match": [["datelog"]]
+    },
+    {
+      "argv_prefix": ["uname"],
+      "decision": "allow",
+      "justification": "print system info",
+      "match": [["uname", "-a"]],
+      "not_match": [["unamex"]]
+    },
+    {
+      "argv_prefix": ["basename"],
+      "decision": "allow",
+      "justification": "print path basename",
+      "match": [["basename", "/a/b/c"]],
+      "not_match": [["basenames"]]
+    },
+    {
+      "argv_prefix": ["dirname"],
+      "decision": "allow",
+      "justification": "print path dirname",
+      "match": [["dirname", "/a/b/c"]],
+      "not_match": [["dirnames"]]
+    },
+    {
+      "argv_prefix": ["realpath"],
+      "decision": "allow",
+      "justification": "resolve path only",
+      "match": [["realpath", "."]],
+      "not_match": [["realpaths"]]
+    },
+    {
+      "argv_prefix": ["readlink"],
+      "decision": "allow",
+      "justification": "read symlink target",
+      "match": [["readlink", "f"]],
+      "not_match": [["readlinks"]]
+    },
+    {
+      "argv_prefix": ["which"],
+      "decision": "allow",
+      "justification": "locate program on PATH",
+      "match": [["which", "go"]],
+      "not_match": [["whicher"]]
+    },
+    {
+      "argv_prefix": ["git", "status"],
+      "decision": "allow",
+      "justification": "read-only repo status",
+      "match": [["git", "status", "--short"]],
+      "not_match": [
+        ["git", "stage"],
+        ["git", "stash"]
+      ]
+    },
+    {
+      "argv_prefix": ["git", "diff"],
+      "decision": "allow",
+      "justification": "read-only repo diff",
+      "match": [["git", "diff", "HEAD~1"]],
+      "not_match": [["git", "difftool"], ["gits"]]
+    },
+    {
+      "argv_prefix": ["git", "log"],
+      "decision": "allow",
+      "justification": "read-only history",
+      "match": [["git", "log", "--oneline", "-5"]],
+      "not_match": [["git", "login"]]
+    },
+    {
+      "argv_prefix": ["git", "show"],
+      "decision": "allow",
+      "justification": "read-only object display",
+      "match": [["git", "show", "HEAD"]],
+      "not_match": [["git", "show-ref"]]
+    },
+    {
+      "argv_prefix": ["git", "rev-parse"],
+      "decision": "allow",
+      "justification": "read-only revision resolve",
+      "match": [["git", "rev-parse", "HEAD"]],
+      "not_match": [["git", "rev-list"]]
+    },
+    {
+      "argv_prefix": ["git", "ls-files"],
+      "decision": "allow",
+      "justification": "read-only index listing",
+      "match": [["git", "ls-files"]],
+      "not_match": [["git", "ls-remote"]]
+    },
+    {
+      "argv_prefix": ["git", "blame"],
+      "decision": "allow",
+      "justification": "read-only authorship",
+      "match": [["git", "blame", "f.go"]],
+      "not_match": [["git", "blamex"]]
+    },
+    {
+      "argv_prefix": ["git", "describe"],
+      "decision": "allow",
+      "justification": "read-only describe",
+      "match": [["git", "describe", "--tags"]],
+      "not_match": [["git", "describex"]]
+    },
+    {
+      "argv_prefix": ["git", "shortlog"],
+      "decision": "allow",
+      "justification": "read-only history summary",
+      "match": [["git", "shortlog", "-sn"]],
+      "not_match": [["git", "shortlist"]]
+    },
+    {
+      "argv_prefix": ["git", "--version"],
+      "decision": "allow",
+      "justification": "print git version",
+      "match": [["git", "--version"]],
+      "not_match": [["git", "--exec-path"]]
+    },
+    {
+      "argv_prefix": ["node", "-v"],
+      "decision": "allow",
+      "justification": "print node version",
+      "match": [["node", "-v"]],
+      "not_match": [
+        ["node", "-e", "x"],
+        ["node", "server.js"]
+      ]
+    },
+    {
+      "argv_prefix": ["node", "--version"],
+      "decision": "allow",
+      "justification": "print node version",
+      "match": [["node", "--version"]],
+      "not_match": [["node", "--eval", "x"]]
+    },
+    {
+      "argv_prefix": ["python3", "-V"],
+      "decision": "allow",
+      "justification": "print python version",
+      "match": [["python3", "-V"]],
+      "not_match": [["python3", "-c", "x"]]
+    },
+    {
+      "argv_prefix": ["python3", "--version"],
+      "decision": "allow",
+      "justification": "print python version",
+      "match": [["python3", "--version"]],
+      "not_match": [["python3", "--", "x"]]
+    },
+    {
+      "argv_prefix": ["go", "version"],
+      "decision": "allow",
+      "justification": "print go version",
+      "match": [["go", "version"]],
+      "not_match": [["go", "vet"], ["gofmt"]]
+    },
+    {
+      "argv_prefix": ["bazel", "--version"],
+      "decision": "allow",
+      "justification": "print bazel version",
+      "match": [["bazel", "--version"]],
+      "not_match": [["bazel", "build"]]
+    }
   ],
   "domains": [
-    {"host": "registry.npmjs.org", "decision": "allow", "justification": "npm package registry"},
-    {"host": "registry.npmmirror.com", "decision": "allow", "justification": "npm mirror registry"},
-    {"host": "registry.yarnpkg.com", "decision": "allow", "justification": "yarn package registry"},
-    {"host": "pypi.org", "decision": "allow", "justification": "python package index"},
-    {"host": "files.pythonhosted.org", "decision": "allow", "justification": "python package files"},
-    {"host": "proxy.golang.org", "decision": "allow", "justification": "go module proxy"},
-    {"host": "sum.golang.org", "decision": "allow", "justification": "go module checksum db"},
-    {"host": "index.golang.org", "decision": "allow", "justification": "go module index"},
-    {"host": "goproxy.cn", "decision": "allow", "justification": "go module proxy mirror"},
-    {"host": "crates.io", "decision": "allow", "justification": "rust crate registry"},
-    {"host": "index.crates.io", "decision": "allow", "justification": "rust crate index"},
-    {"host": "static.crates.io", "decision": "allow", "justification": "rust crate files"},
-    {"host": "repo.maven.apache.org", "decision": "allow", "justification": "maven central"},
-    {"host": "repo1.maven.org", "decision": "allow", "justification": "maven central (canonical)"},
-    {"host": "plugins.gradle.org", "decision": "allow", "justification": "gradle plugin portal"},
-    {"host": "github.com", "decision": "allow", "justification": "github"},
-    {"host": "api.github.com", "decision": "allow", "justification": "github api"},
-    {"host": "codeload.github.com", "decision": "allow", "justification": "github archive downloads"},
-    {"host": "*.githubusercontent.com", "decision": "allow", "justification": "github content subdomains (raw, objects, media, ...)"},
+    { "host": "registry.npmjs.org", "decision": "allow", "justification": "npm package registry" },
+    {
+      "host": "registry.npmmirror.com",
+      "decision": "allow",
+      "justification": "npm mirror registry"
+    },
+    {
+      "host": "registry.yarnpkg.com",
+      "decision": "allow",
+      "justification": "yarn package registry"
+    },
+    { "host": "pypi.org", "decision": "allow", "justification": "python package index" },
+    {
+      "host": "files.pythonhosted.org",
+      "decision": "allow",
+      "justification": "python package files"
+    },
+    { "host": "proxy.golang.org", "decision": "allow", "justification": "go module proxy" },
+    { "host": "sum.golang.org", "decision": "allow", "justification": "go module checksum db" },
+    { "host": "index.golang.org", "decision": "allow", "justification": "go module index" },
+    { "host": "goproxy.cn", "decision": "allow", "justification": "go module proxy mirror" },
+    { "host": "crates.io", "decision": "allow", "justification": "rust crate registry" },
+    { "host": "index.crates.io", "decision": "allow", "justification": "rust crate index" },
+    { "host": "static.crates.io", "decision": "allow", "justification": "rust crate files" },
+    { "host": "repo.maven.apache.org", "decision": "allow", "justification": "maven central" },
+    {
+      "host": "repo1.maven.org",
+      "decision": "allow",
+      "justification": "maven central (canonical)"
+    },
+    { "host": "plugins.gradle.org", "decision": "allow", "justification": "gradle plugin portal" },
+    { "host": "github.com", "decision": "allow", "justification": "github" },
+    { "host": "api.github.com", "decision": "allow", "justification": "github api" },
+    {
+      "host": "codeload.github.com",
+      "decision": "allow",
+      "justification": "github archive downloads"
+    },
+    {
+      "host": "*.githubusercontent.com",
+      "decision": "allow",
+      "justification": "github content subdomains (raw, objects, media, ...)"
+    },
 
-    {"host": "webhook.site", "decision": "deny", "justification": "request-capture endpoint — classic exfiltration channel"},
-    {"host": "requestbin.com", "decision": "deny", "justification": "request-capture endpoint — classic exfiltration channel"},
-    {"host": "*.requestbin.com", "decision": "deny", "justification": "request-capture endpoint — classic exfiltration channel"},
-    {"host": "pipedream.com", "decision": "deny", "justification": "request-capture endpoint — classic exfiltration channel"},
-    {"host": "*.pipedream.com", "decision": "deny", "justification": "request-capture endpoint — classic exfiltration channel"},
-    {"host": "pastebin.com", "decision": "deny", "justification": "anonymous paste service — classic exfiltration channel"},
-    {"host": "paste.ee", "decision": "deny", "justification": "anonymous paste service — classic exfiltration channel"},
-    {"host": "hastebin.com", "decision": "deny", "justification": "anonymous paste service — classic exfiltration channel"},
-    {"host": "transfer.sh", "decision": "deny", "justification": "anonymous file drop — classic exfiltration channel"},
-    {"host": "0x0.st", "decision": "deny", "justification": "anonymous file drop — classic exfiltration channel"},
-    {"host": "bashupload.com", "decision": "deny", "justification": "anonymous file drop — classic exfiltration channel"},
-    {"host": "file.io", "decision": "deny", "justification": "anonymous file drop — classic exfiltration channel"}
+    {
+      "host": "webhook.site",
+      "decision": "deny",
+      "justification": "request-capture endpoint — classic exfiltration channel"
+    },
+    {
+      "host": "requestbin.com",
+      "decision": "deny",
+      "justification": "request-capture endpoint — classic exfiltration channel"
+    },
+    {
+      "host": "*.requestbin.com",
+      "decision": "deny",
+      "justification": "request-capture endpoint — classic exfiltration channel"
+    },
+    {
+      "host": "pipedream.com",
+      "decision": "deny",
+      "justification": "request-capture endpoint — classic exfiltration channel"
+    },
+    {
+      "host": "*.pipedream.com",
+      "decision": "deny",
+      "justification": "request-capture endpoint — classic exfiltration channel"
+    },
+    {
+      "host": "pastebin.com",
+      "decision": "deny",
+      "justification": "anonymous paste service — classic exfiltration channel"
+    },
+    {
+      "host": "paste.ee",
+      "decision": "deny",
+      "justification": "anonymous paste service — classic exfiltration channel"
+    },
+    {
+      "host": "hastebin.com",
+      "decision": "deny",
+      "justification": "anonymous paste service — classic exfiltration channel"
+    },
+    {
+      "host": "transfer.sh",
+      "decision": "deny",
+      "justification": "anonymous file drop — classic exfiltration channel"
+    },
+    {
+      "host": "0x0.st",
+      "decision": "deny",
+      "justification": "anonymous file drop — classic exfiltration channel"
+    },
+    {
+      "host": "bashupload.com",
+      "decision": "deny",
+      "justification": "anonymous file drop — classic exfiltration channel"
+    },
+    {
+      "host": "file.io",
+      "decision": "deny",
+      "justification": "anonymous file drop — classic exfiltration channel"
+    }
   ]
 }

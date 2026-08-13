@@ -22,6 +22,7 @@ import cc.liubang.spring.example.dto.CreateUserRequest;
 import cc.liubang.spring.example.dto.UserVO;
 import cc.liubang.spring.example.service.UserService;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -32,40 +33,37 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
 
-    private final UserService userService;
+  private final UserService userService;
 
-    public UserController(UserService userService) {
-        this.userService = userService;
-    }
+  public UserController(UserService userService) {
+    this.userService = userService;
+  }
 
-    @PostMapping
-    public ResponseEntity<ApiResponse<UserVO>> createUser(
-            @Valid @RequestBody CreateUserRequest request) {
-        UserVO user = userService.createUser(request);
-        return ResponseEntity
-            .status(HttpStatus.CREATED)
-            .body(ApiResponse.success("user created", user));
-    }
+  @PostMapping
+  public ResponseEntity<ApiResponse<UserVO>> createUser(
+      @Valid @RequestBody CreateUserRequest request) {
+    UserVO user = userService.createUser(request);
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(ApiResponse.success("user created", user));
+  }
 
-    @GetMapping("/{id}")
-    public ApiResponse<UserVO> getUser(@PathVariable String id) {
-        return ApiResponse.success(userService.getUser(id));
-    }
+  @GetMapping("/{id}")
+  public ApiResponse<UserVO> getUser(@PathVariable String id) {
+    return ApiResponse.success(userService.getUser(id));
+  }
 
-    @GetMapping
-    public ApiResponse<List<UserVO>> listUsers() {
-        return ApiResponse.success(userService.listUsers());
-    }
+  @GetMapping
+  public ApiResponse<List<UserVO>> listUsers() {
+    return ApiResponse.success(userService.listUsers());
+  }
 
-    @DeleteMapping("/{id}")
-    public ApiResponse<Void> deleteUser(@PathVariable String id) {
-        userService.deleteUser(id);
-        return ApiResponse.success("user deleted", null);
-    }
+  @DeleteMapping("/{id}")
+  public ApiResponse<Void> deleteUser(@PathVariable String id) {
+    userService.deleteUser(id);
+    return ApiResponse.success("user deleted", null);
+  }
 }

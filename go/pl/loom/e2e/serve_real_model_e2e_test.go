@@ -160,7 +160,8 @@ func TestServeRealModelE2E(t *testing.T) {
 	if snap.EventSeq == 0 {
 		t.Fatalf("snapshot EventSeq = 0, want a live watermark")
 	}
-	collector.assertSaw(t,
+	collector.assertSaw(
+		t,
 		runtimeevent.KindTurnStarted,
 		runtimeevent.KindModelResponseCompleted,
 		runtimeevent.KindTurnFinished,

@@ -16,11 +16,14 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-# Formats all Go sources under go/ with the hermetic gofumpt built by Bazel.
+# prettier 启动封装：用 multitool 锁定的 nodejs 执行 prettier.cjs，
+# 并显式指定 .prettierrc，行为与机器上是否安装 node/prettier 无关。
 #
-#   bazel run //:gofumpt            # format in place (gofumpt -w)
-#   bazel run //:gofumpt -- --check # CI mode: fail if any file is unformatted
-#   bazel run //:gofumpt -- -extra  # extra flags are forwarded to gofumpt
+# 注意：本文件是 expand_template 的模板（@NODE@/@PRETTIER@/@CONFIG@ 在
+# 构建期替换为 rlocationpath）。不能用 sh_binary args 传参——rules_lint 的
+# format runner 直接 exec 工具二进制，bazel run 注入的 args 不会生效。
+#
+# $@ = rules_lint format runner 透传的 flags + 文件列表
 
 set -euo pipefail
 
@@ -48,38 +51,8 @@ else
 fi
 # --- end runfiles.bash initialization v3 ---
 
-GOFUMPT_BIN="$(rlocation "$1")"
-shift
+NODE_BIN="$(rlocation "@NODE@")"
+PRETTIER_CJS="$(rlocation "@PRETTIER@")"
+PRETTIER_RC="$(rlocation "@CONFIG@")"
 
-# `bazel run` exports BUILD_WORKSPACE_DIRECTORY pointing at the workspace root.
-cd "${BUILD_WORKSPACE_DIRECTORY:-.}"
-
-# Collect Go sources under go/, excluding generated protobuf code.
-files=()
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    while IFS= read -r f; do
-        files+=("$f")
-    done < <(git ls-files -- 'go/*.go' ':!:*.pb.go')
-else
-    while IFS= read -r f; do
-        files+=("$f")
-    done < <(find go -type f -name '*.go' ! -name '*.pb.go')
-fi
-
-if [[ ${#files[@]} -eq 0 ]]; then
-    echo "no go files found" >&2
-    exit 0
-fi
-
-if [[ "${1:-}" == "--check" ]]; then
-    out="$("${GOFUMPT_BIN}" -l "${files[@]}")"
-    if [[ -n "${out}" ]]; then
-        echo "the following files are not gofumpt-formatted:" >&2
-        echo "${out}" >&2
-        exit 1
-    fi
-    echo "all go files are gofumpt-clean"
-    exit 0
-fi
-
-exec "${GOFUMPT_BIN}" -w "$@" "${files[@]}"
+exec "${NODE_BIN}" "${PRETTIER_CJS}" --config "${PRETTIER_RC}" "$@"

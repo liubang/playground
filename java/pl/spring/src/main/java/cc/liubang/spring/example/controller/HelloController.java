@@ -18,31 +18,32 @@
 package cc.liubang.spring.example.controller;
 
 import cc.liubang.spring.example.dto.ApiResponse;
+import java.time.LocalDateTime;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
-import java.util.Map;
-
 @RestController
 @RequestMapping("/api")
 public class HelloController {
 
-    @GetMapping("/hello")
-    public ApiResponse<Map<String, Object>> hello() {
-        return ApiResponse.success(Map.of(
-            "message", "Hello, Spring Boot with Bazel!",
-            "timestamp", LocalDateTime.now().toString()
-        ));
-    }
+  @GetMapping("/hello")
+  public ApiResponse<Map<String, Object>> hello() {
+    return ApiResponse.success(
+        Map.of(
+            "message",
+            "Hello, Spring Boot with Bazel!",
+            "timestamp",
+            LocalDateTime.now().toString()));
+  }
 
-    @GetMapping("/hello/{name}")
-    public ApiResponse<Map<String, Object>> helloName(@PathVariable String name) {
-        return ApiResponse.success(Map.of(
+  @GetMapping("/hello/{name}")
+  public ApiResponse<Map<String, Object>> helloName(@PathVariable String name) {
+    return ApiResponse.success(
+        Map.of(
             "message", String.format("Hello, %s!", name),
-            "timestamp", LocalDateTime.now().toString()
-        ));
-    }
+            "timestamp", LocalDateTime.now().toString()));
+  }
 }

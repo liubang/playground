@@ -1,4 +1,3 @@
----
 name: build-java
 on:
   push:
@@ -13,32 +12,26 @@ on:
       - "maven_install.json"
       - ".github/workflows/build_java.yml"
   workflow_dispatch:
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   coverage:
     name: java coverage
     runs-on: ubuntu-24.04
     env:
       TZ: Asia/Shanghai
-
     steps:
       - uses: actions/checkout@v5
-
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           repository-cache: true
           disk-cache: ${{ github.workflow }}-${{ runner.os }}
-
       - name: install lcov
         run: |
           sudo apt-get update
           sudo apt-get install -y lcov
-
       - name: coverage
         id: coverage
         continue-on-error: true
@@ -54,7 +47,6 @@ jobs:
             --output-file /tmp/coverage_filtered.dat \
             --ignore-errors unused,negative
           genhtml --branch-coverage --ignore-errors negative --output coverage-java /tmp/coverage_filtered.dat
-
       - name: generate coverage badge
         if: steps.coverage.outcome == 'success'
         uses: ./.github/actions/coverage-badge
@@ -62,7 +54,6 @@ jobs:
           lcov-file: /tmp/coverage_filtered.dat
           output-dir: coverage-java
           label: Java
-
       - name: generate failure badge
         if: steps.coverage.outcome == 'failure'
         uses: ./.github/actions/coverage-badge
@@ -70,7 +61,6 @@ jobs:
           output-dir: coverage-java
           label: Java
           status: failure
-
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         if: ${{ github.ref == 'refs/heads/main' }}
@@ -82,7 +72,6 @@ jobs:
           keep_files: true
           user_name: "liubang"
           user_email: "it.liubang@gmail.com"
-
       - name: Fail the job if coverage failed
         if: steps.coverage.outcome == 'failure'
         run: exit 1

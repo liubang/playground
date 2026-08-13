@@ -27,14 +27,14 @@ set -euo pipefail
 ZIP_REL="go/pl/loom/cmd/loom-desktop/loom_desktop_app.zip"
 ZIP=""
 for base in "${RUNFILES_DIR:-$PWD}/_main" "${RUNFILES_DIR:-$PWD}" "${BUILD_WORKSPACE_DIRECTORY:-$PWD}/bazel-bin"; do
-  if [[ -f "${base}/${ZIP_REL}" ]]; then
-    ZIP="${base}/${ZIP_REL}"
-    break
-  fi
+    if [[ -f "${base}/${ZIP_REL}" ]]; then
+        ZIP="${base}/${ZIP_REL}"
+        break
+    fi
 done
 if [[ -z "${ZIP}" ]]; then
-  echo "package_app: cannot locate loom_desktop_app.zip (build :loom_desktop_app first)" >&2
-  exit 1
+    echo "package_app: cannot locate loom_desktop_app.zip (build :loom_desktop_app first)" >&2
+    exit 1
 fi
 
 DEST="${BUILD_WORKSPACE_DIRECTORY:-$PWD}/dist"

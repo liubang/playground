@@ -48,14 +48,13 @@ std::unique_ptr<VesselSliceReplica> MakeReplica(
     if (!machine.ok()) {
         return nullptr;
     }
-    auto state_machine =
-        std::make_unique<VesselSliceStateMachine>(std::move(*machine), codec);
+    auto state_machine = std::make_unique<VesselSliceStateMachine>(std::move(*machine), codec);
     auto replica = VesselSliceReplica::Create(
         wal,
         std::move(state_machine),
-        minivessel::ReplicaRuntimeOptions{
-            .replica_id = std::move(replica_id),
-            .assignment_epoch = minivessel::AssignmentEpoch(assignment_epoch)});
+        minivessel::ReplicaRuntimeOptions{.replica_id = std::move(replica_id),
+                                          .assignment_epoch =
+                                              minivessel::AssignmentEpoch(assignment_epoch)});
     return replica.ok() ? std::move(*replica) : nullptr;
 }
 
@@ -67,8 +66,7 @@ absl::StatusOr<std::string> MakeEntry(const codec::CellKeyCodec& codec,
     VersionedStorageKey key{
         .storage_key = {.partition = GlobalOrderPrefix{},
                         .row_key = {Value::make<DataType::kString>(row)},
-                        .target = CellRef{.column_family_id = 1,
-                                          .qualifier = StaticQualifier{1}}},
+                        .target = CellRef{.column_family_id = 1, .qualifier = StaticQualifier{1}}},
         .commit_ts = timestamp,
         .mutation_seq = 0,
         .op_type = OpType::kPut};
@@ -94,9 +92,9 @@ absl::StatusOr<std::string> MakeEntry(const codec::CellKeyCodec& codec,
 }
 
 TEST(SliceVesselE2ETest, ThreeReplicasConvergeAndFailOverWithWriterFencing) {
-    const auto root = std::filesystem::path(::testing::TempDir()) /
-                      ("minitable-vessel-" + std::to_string(::testing::UnitTest::GetInstance()
-                                                               ->random_seed()));
+    const auto root =
+        std::filesystem::path(::testing::TempDir()) /
+        ("minitable-vessel-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()));
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
 
@@ -119,14 +117,15 @@ TEST(SliceVesselE2ETest, ThreeReplicasConvergeAndFailOverWithWriterFencing) {
     ASSERT_TRUE(replica_a->promote().ok());
     auto first = MakeEntry(*codec, 1, "row-a", "value-a");
     ASSERT_TRUE(first.ok()) << first.status();
-    auto committed = replica_a->submit(
-        "request-1", std::as_bytes(std::span(first->data(), first->size())));
+    auto committed =
+        replica_a->submit("request-1", std::as_bytes(std::span(first->data(), first->size())));
     ASSERT_TRUE(committed.ok()) << committed.status();
     EXPECT_EQ(committed->lrsn, minivessel::Lrsn(2));
-    EXPECT_EQ(replica_b->submit("not-primary", std::as_bytes(std::span(first->data(), first->size())))
-                  .status()
-                  .code(),
-              absl::StatusCode::kFailedPrecondition);
+    EXPECT_EQ(
+        replica_b->submit("not-primary", std::as_bytes(std::span(first->data(), first->size())))
+            .status()
+            .code(),
+        absl::StatusCode::kFailedPrecondition);
 
     ASSERT_TRUE(replica_b->poll().ok());
     ASSERT_TRUE(replica_c->poll().ok());
@@ -134,8 +133,7 @@ TEST(SliceVesselE2ETest, ThreeReplicasConvergeAndFailOverWithWriterFencing) {
     EXPECT_EQ(replica_c->state_machine().machine().store().visible_applied_index(), 2U);
 
     ASSERT_TRUE(replica_a->demote().ok());
-    EXPECT_EQ(replica_a
-                  ->submit("stale-a", std::as_bytes(std::span(first->data(), first->size())))
+    EXPECT_EQ(replica_a->submit("stale-a", std::as_bytes(std::span(first->data(), first->size())))
                   .status()
                   .code(),
               absl::StatusCode::kFailedPrecondition);
@@ -145,8 +143,8 @@ TEST(SliceVesselE2ETest, ThreeReplicasConvergeAndFailOverWithWriterFencing) {
 
     auto second = MakeEntry(*codec, 2, "row-b", "value-b");
     ASSERT_TRUE(second.ok()) << second.status();
-    auto second_commit = replica_b->submit(
-        "request-2", std::as_bytes(std::span(second->data(), second->size())));
+    auto second_commit =
+        replica_b->submit("request-2", std::as_bytes(std::span(second->data(), second->size())));
     ASSERT_TRUE(second_commit.ok()) << second_commit.status();
     EXPECT_EQ(second_commit->lrsn, minivessel::Lrsn(4));
 

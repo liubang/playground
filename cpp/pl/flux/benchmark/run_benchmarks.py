@@ -282,7 +282,9 @@ def selected(case_filter: set[str] | None, name: str) -> bool:
 def parse_int_list(raw: str | None, default_values: tuple[int, ...]) -> tuple[int, ...]:
     if raw is None:
         return default_values
-    values = tuple(int(part.strip().replace("_", "")) for part in raw.split(",") if part.strip())
+    values = tuple(
+        int(part.strip().replace("_", "")) for part in raw.split(",") if part.strip()
+    )
     return values or default_values
 
 
@@ -425,11 +427,15 @@ def main() -> None:
         )
         join_grouped_query = write_query(
             work_dir / f"join_grouped_{rows}.flux",
-            JOIN_GROUPED_TEMPLATE.replace("LEFT", f'"{left}"').replace("RIGHT", f'"{right}"'),
+            JOIN_GROUPED_TEMPLATE.replace("LEFT", f'"{left}"').replace(
+                "RIGHT", f'"{right}"'
+            ),
         )
         join_full_query = write_query(
             work_dir / f"join_full_{rows}.flux",
-            JOIN_FULL_TEMPLATE.replace("LEFT", f'"{left}"').replace("RIGHT", f'"{right}"'),
+            JOIN_FULL_TEMPLATE.replace("LEFT", f'"{left}"').replace(
+                "RIGHT", f'"{right}"'
+            ),
         )
         join_cases = (
             ("join", join_query),

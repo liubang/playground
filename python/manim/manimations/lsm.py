@@ -20,6 +20,7 @@
 
 from manim import *
 
+
 class LevelDBWriteAndCompaction(Scene):
     def construct(self):
         title = Text("LevelDB 写入流程与 Compaction", font_size=48)
@@ -33,7 +34,9 @@ class LevelDBWriteAndCompaction(Scene):
         self.play(Create(wal), Write(wal_text))
 
         # Step 2: MemTable
-        mem = Rectangle(width=2.5, height=1.0, color=GREEN).next_to(wal, RIGHT, buff=1.5)
+        mem = Rectangle(width=2.5, height=1.0, color=GREEN).next_to(
+            wal, RIGHT, buff=1.5
+        )
         mem_text = Text("MemTable", font_size=24).move_to(mem)
         self.play(Create(mem), Write(mem_text))
 
@@ -46,7 +49,9 @@ class LevelDBWriteAndCompaction(Scene):
         self.wait(1)
 
         # Step 3: MemTable Full -> Immutable
-        imm = Rectangle(width=2.5, height=1.0, color=YELLOW).next_to(mem, DOWN, buff=1.2)
+        imm = Rectangle(width=2.5, height=1.0, color=YELLOW).next_to(
+            mem, DOWN, buff=1.2
+        )
         imm_text = Text("Immutable MemTable", font_size=20).move_to(imm)
         self.play(FadeIn(imm), Write(imm_text))
 
@@ -67,11 +72,21 @@ class LevelDBWriteAndCompaction(Scene):
 
         # ===== Compaction Section =====
         compaction_title = Text("Compaction 过程", font_size=36)
-        self.play(FadeOut(wal), FadeOut(wal_text), FadeOut(write_arrow1), FadeOut(write_label),
-                  FadeOut(mem), FadeOut(mem_text), FadeOut(imm), FadeOut(imm_text),
-                  FadeOut(flush_arrow), FadeOut(flush_label), FadeOut(sst_arrow),
-                  title.animate.shift(UP*0.5),
-                  FadeIn(compaction_title.shift(DOWN*2)))
+        self.play(
+            FadeOut(wal),
+            FadeOut(wal_text),
+            FadeOut(write_arrow1),
+            FadeOut(write_label),
+            FadeOut(mem),
+            FadeOut(mem_text),
+            FadeOut(imm),
+            FadeOut(imm_text),
+            FadeOut(flush_arrow),
+            FadeOut(flush_label),
+            FadeOut(sst_arrow),
+            title.animate.shift(UP * 0.5),
+            FadeIn(compaction_title.shift(DOWN * 2)),
+        )
         self.wait(1)
         self.play(FadeOut(compaction_title))
 

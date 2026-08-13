@@ -7,6 +7,7 @@ demo/demo-server@LAB.LOCAL 的服务票据，否则握手直接失败。
 
 服务自身不"输密码"：它通过 KRB5_KTNAME 指向的 keytab 证明自己的身份。
 """
+
 import socket
 import struct
 import sys

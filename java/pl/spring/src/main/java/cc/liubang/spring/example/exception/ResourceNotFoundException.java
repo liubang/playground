@@ -19,15 +19,20 @@ package cc.liubang.spring.example.exception;
 
 public class ResourceNotFoundException extends RuntimeException {
 
-    private final String resource;
-    private final String id;
+  private final String resource;
+  private final String id;
 
-    public ResourceNotFoundException(String resource, String id) {
-        super(String.format("%s not found with id: %s", resource, id));
-        this.resource = resource;
-        this.id = id;
-    }
+  public ResourceNotFoundException(String resource, String id) {
+    super(String.format("%s not found with id: %s", resource, id));
+    this.resource = resource;
+    this.id = id;
+  }
 
-    public String getResource() { return resource; }
-    public String getId() { return id; }
+  public String getResource() {
+    return resource;
+  }
+
+  public String getId() {
+    return id;
+  }
 }

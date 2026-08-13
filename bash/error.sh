@@ -18,7 +18,7 @@
 # Created: 2023/11/18 23:12
 
 err() {
-	echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $@" >&2
+    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $@" >&2
 }
 
 err "this is test"

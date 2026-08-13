@@ -17,6 +17,11 @@
 
 package cc.liubang.spring.example;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -24,103 +29,100 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 /**
- * Tests that verify the global exception handler produces correct HTTP status
- * codes and response bodies for various error scenarios.
+ * Tests that verify the global exception handler produces correct HTTP status codes and response
+ * bodies for various error scenarios.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 class GlobalExceptionHandlerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+  @Autowired private MockMvc mockMvc;
 
-    @Test
-    void resourceNotFound_returns404WithMessage() throws Exception {
-        mockMvc.perform(get("/api/users/does-not-exist"))
-            .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.code").value(404))
-            .andExpect(jsonPath("$.message").value("User not found with id: does-not-exist"))
-            .andExpect(jsonPath("$.data").doesNotExist());
-    }
+  @Test
+  void resourceNotFound_returns404WithMessage() throws Exception {
+    mockMvc
+        .perform(get("/api/users/does-not-exist"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value(404))
+        .andExpect(jsonPath("$.message").value("User not found with id: does-not-exist"))
+        .andExpect(jsonPath("$.data").doesNotExist());
+  }
 
-    @Test
-    void validationError_blankFields_returns400() throws Exception {
-        String json = """
-            {"name": "", "email": "", "age": 25}
-            """;
-        mockMvc.perform(post("/api/users")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value(400))
-            .andExpect(jsonPath("$.message").exists());
-    }
+  @Test
+  void validationError_blankFields_returns400() throws Exception {
+    String json =
+        """
+        {"name": "", "email": "", "age": 25}
+        """;
+    mockMvc
+        .perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content(json))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400))
+        .andExpect(jsonPath("$.message").exists());
+  }
 
-    @Test
-    void validationError_invalidEmail_returns400() throws Exception {
-        String json = """
-            {"name": "Valid Name", "email": "bad-email", "age": 25}
-            """;
-        mockMvc.perform(post("/api/users")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value(400));
-    }
+  @Test
+  void validationError_invalidEmail_returns400() throws Exception {
+    String json =
+        """
+        {"name": "Valid Name", "email": "bad-email", "age": 25}
+        """;
+    mockMvc
+        .perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content(json))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+  }
 
-    @Test
-    void validationError_nameTooShort_returns400() throws Exception {
-        String json = """
-            {"name": "A", "email": "valid@example.com", "age": 25}
-            """;
-        mockMvc.perform(post("/api/users")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value(400));
-    }
+  @Test
+  void validationError_nameTooShort_returns400() throws Exception {
+    String json =
+        """
+        {"name": "A", "email": "valid@example.com", "age": 25}
+        """;
+    mockMvc
+        .perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content(json))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+  }
 
-    @Test
-    void validationError_ageOutOfRange_returns400() throws Exception {
-        String json = """
-            {"name": "Valid Name", "email": "valid@example.com", "age": 0}
-            """;
-        mockMvc.perform(post("/api/users")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value(400));
-    }
+  @Test
+  void validationError_ageOutOfRange_returns400() throws Exception {
+    String json =
+        """
+        {"name": "Valid Name", "email": "valid@example.com", "age": 0}
+        """;
+    mockMvc
+        .perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content(json))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+  }
 
-    @Test
-    void businessException_duplicateEmail_returns400() throws Exception {
-        String json = """
-            {"name": "First", "email": "global-dup@example.com", "age": 20}
-            """;
-        mockMvc.perform(post("/api/users")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
-            .andExpect(status().isCreated());
+  @Test
+  void businessException_duplicateEmail_returns400() throws Exception {
+    String json =
+        """
+        {"name": "First", "email": "global-dup@example.com", "age": 20}
+        """;
+    mockMvc
+        .perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content(json))
+        .andExpect(status().isCreated());
 
-        mockMvc.perform(post("/api/users")
+    mockMvc
+        .perform(
+            post("/api/users")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.replace("First", "Second")))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value(409))
-            .andExpect(jsonPath("$.message").value("email already exists: global-dup@example.com"));
-    }
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(409))
+        .andExpect(jsonPath("$.message").value("email already exists: global-dup@example.com"));
+  }
 
-    @Test
-    void malformedJson_returns400() throws Exception {
-        mockMvc.perform(post("/api/users")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{invalid json"))
-            .andExpect(status().isBadRequest());
-    }
+  @Test
+  void malformedJson_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/users").contentType(MediaType.APPLICATION_JSON).content("{invalid json"))
+        .andExpect(status().isBadRequest());
+  }
 }

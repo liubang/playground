@@ -1,0 +1,5 @@
+# git blame 忽略列表（GitHub 与 git 2.23+ 的 blame --ignore-revs-file 均读取本文件）
+#
+# 首次全量代码重排（bazel run //:format，aspect_rules_lint）：
+# 将该重排 commit 的 hash 填入下行并取消注释，blame 即跳过这一层纯格式变更。
+# <commit-sha> # style: mass reformat via bazel run //:format

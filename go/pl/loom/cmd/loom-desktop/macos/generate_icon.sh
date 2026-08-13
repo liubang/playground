@@ -25,12 +25,12 @@ cd "$(dirname "$0")"
 
 SWIFT_SRC="$(mktemp /tmp/loom_icon_XXXXXX.swift)"
 cleanup() {
-  rm -f "${SWIFT_SRC}"
-  rm -rf AppIcon.iconset
+    rm -f "${SWIFT_SRC}"
+    rm -rf AppIcon.iconset
 }
 trap cleanup EXIT
 
-cat > "${SWIFT_SRC}" <<'EOF'
+cat >"${SWIFT_SRC}" <<'EOF'
 import AppKit
 
 // macOS Big Sur+ style icon: rounded-rectangle (squircle) background with

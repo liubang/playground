@@ -5,5 +5,5 @@ extern "C" {
 #include <iostream>
 
 void Demo4SayHello(const char* s) {
-  std::cout << s << std::endl;
+    std::cout << s << std::endl;
 }

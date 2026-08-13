@@ -23,7 +23,7 @@ async function fetchArtifactURL(id, size) {
   const cached = artifactURLCache.get(key)
   if (cached) return cached
   const res = await fetch(
-    `/v1/shared/${encodeURIComponent(token)}/artifacts/${encodeURIComponent(id)}?size=${size}`
+    `/v1/shared/${encodeURIComponent(token)}/artifacts/${encodeURIComponent(id)}?size=${size}`,
   )
   if (!res.ok) throw new Error(`artifact fetch failed (HTTP ${res.status})`)
   const blob = await res.blob()

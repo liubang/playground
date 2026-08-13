@@ -23,10 +23,11 @@ import pl.grpc.proto.HealthRequest;
 import pl.grpc.proto.HealthResponse;
 
 /**
- * Java interface for the EchoService, consumed by Starlight.
- * Method names MUST match the proto RPC names exactly for brpc cross-language interop.
+ * Java interface for the EchoService, consumed by Starlight. Method names MUST match the proto RPC
+ * names exactly for brpc cross-language interop.
  */
 public interface EchoService {
-    EchoResponse Echo(EchoRequest request);
-    HealthResponse HealthCheck(HealthRequest request);
+  EchoResponse Echo(EchoRequest request);
+
+  HealthResponse HealthCheck(HealthRequest request);
 }

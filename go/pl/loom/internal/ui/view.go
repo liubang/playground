@@ -1382,7 +1382,8 @@ func (m Model) listingSkillRows(width int) []string {
 		if i > 0 {
 			rows = append(rows, "")
 		}
-		rows = append(rows,
+		rows = append(
+			rows,
 			"  "+key.Render(truncateDisplayWidth(s.Name, width-10))+" "+dim.Render("· "+s.Scope),
 			"    "+dim.Render(truncateDisplayWidth(cleanListingText(s.Description), width-4)),
 			"    "+dim.Render(truncateDisplayWidth(s.Path, width-4)),
@@ -1461,7 +1462,8 @@ func (m Model) listingMCPRows(width int) []string {
 		}
 		if srv.Connected {
 			header := fmt.Sprintf("%s · %d tool%s", srv.Name, len(srv.Tools), pluralS(len(srv.Tools)))
-			rows = append(rows,
+			rows = append(
+				rows,
 				"  "+m.theme.ToolSuccess.Render("+ ")+key.Render(header),
 				"    "+dim.Render(truncateDisplayWidth(strings.Join(srv.Tools, ", "), width-4)),
 			)
@@ -1471,7 +1473,8 @@ func (m Model) listingMCPRows(width int) []string {
 		if errMsg == "" {
 			errMsg = "unknown error"
 		}
-		rows = append(rows,
+		rows = append(
+			rows,
 			"  "+m.theme.ToolError.Render("x ")+key.Render(srv.Name),
 			"    "+m.theme.ToolError.Render(truncateDisplayWidth(errMsg, width-4)),
 		)
