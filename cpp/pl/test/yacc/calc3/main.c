@@ -14,9 +14,9 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "calc.h"
-
 #include <stdio.h>
+
+#include "calc.h"
 
 int main(int argc, char* argv[]) {
     const char* input = "1+2*3+(5-3)\n";

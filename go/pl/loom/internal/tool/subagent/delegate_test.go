@@ -160,7 +160,8 @@ func TestDelegateExecuteRejectsTamperedPreparedCall(t *testing.T) {
 }
 
 func TestDelegateExecuteSuccess(t *testing.T) {
-	factory, model, store, models := newTestFactory(t,
+	factory, model, store, models := newTestFactory(
+		t,
 		fakes.ScriptEntry{
 			ToolCalls: []domain.ToolCall{
 				{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"main.go"}`)},
@@ -230,7 +231,8 @@ func TestDelegateExecuteSuccess(t *testing.T) {
 }
 
 func TestDelegateObserverHooks(t *testing.T) {
-	factory, model, _, models := newTestFactory(t,
+	factory, model, _, models := newTestFactory(
+		t,
 		fakes.ScriptEntry{Text: "结论", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 30},
 	)
 	publishSnapshot(models, model)
@@ -267,7 +269,8 @@ func TestDelegateObserverHooks(t *testing.T) {
 }
 
 func TestDelegateExecuteModelFailure(t *testing.T) {
-	factory, model, _, models := newTestFactory(t,
+	factory, model, _, models := newTestFactory(
+		t,
 		fakes.ScriptEntry{Error: "provider exploded"},
 	)
 	publishSnapshot(models, model)
@@ -305,7 +308,8 @@ func TestDelegateExecuteWithoutModelSelection(t *testing.T) {
 }
 
 func TestDelegateExecuteCancelledWithParentTurn(t *testing.T) {
-	factory, model, _, models := newTestFactory(t,
+	factory, model, _, models := newTestFactory(
+		t,
 		fakes.ScriptEntry{Text: "never reached", StopReason: domain.StopEndTurn},
 	)
 	publishSnapshot(models, model)

@@ -112,7 +112,8 @@ func NewManager(chromePath, cdpURL string, idleTTL time.Duration, viewportW, vie
 				"Chrome/Chromium binary not found; install Chrome or set browser.chrome_path or browser.cdp_url in config")
 		}
 
-		opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		opts := append(
+			chromedp.DefaultExecAllocatorOptions[:],
 			chromedp.ExecPath(resolved),
 			chromedp.WindowSize(viewportW, viewportH),
 			// Anti-detection: stock headless Chrome announces automation

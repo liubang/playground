@@ -69,10 +69,10 @@ if [ "$START_SERVICES" = true ]; then
     wait_until "MySQL 就绪" 30 2 mysql_healthy || die "MySQL 启动失败"
 
     echo "==> 初始化 HDFS 目录..."
-    docker compose exec -T namenode hdfs dfs -mkdir -p /user/hive/warehouse /tmp 2>/dev/null \
-        && docker compose exec -T namenode hdfs dfs -chmod -R 777 /user/hive/warehouse /tmp 2>/dev/null \
-        && log_ok "HDFS warehouse 目录已创建" \
-        || log_skip "HDFS 目录创建跳过（NameNode 可能尚未就绪）"
+    docker compose exec -T namenode hdfs dfs -mkdir -p /user/hive/warehouse /tmp 2>/dev/null &&
+        docker compose exec -T namenode hdfs dfs -chmod -R 777 /user/hive/warehouse /tmp 2>/dev/null &&
+        log_ok "HDFS warehouse 目录已创建" ||
+        log_skip "HDFS 目录创建跳过（NameNode 可能尚未就绪）"
 
     show_compose_status
     printf '\n==> Web UI:\n'

@@ -163,7 +163,8 @@ func (k Keymap) WithOverrides(overrides map[string]map[string]string) (Keymap, [
 			if owner, taken := table[key]; taken && owner != action {
 				warnings = append(warnings, fmt.Sprintf(
 					"key %q in context %q already bound to %q; override for %q ignored",
-					key, ctxName, owner, actionName))
+					key, ctxName, owner, actionName,
+				))
 				continue
 			}
 			// Detach the action from its previous key(s), then bind the

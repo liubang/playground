@@ -91,8 +91,7 @@ using ObjectMetadataBackend = VesselFileSystem;
             "filesystem exposes active-log backend without advertised capabilities");
     }
     if (!advertised.contains(required_active_log)) {
-        return absl::FailedPreconditionError(
-            "filesystem lacks required active-log capabilities");
+        return absl::FailedPreconditionError("filesystem lacks required active-log capabilities");
     }
     if (required_active_log.bits() != 0 && storage == nullptr) {
         return absl::FailedPreconditionError(

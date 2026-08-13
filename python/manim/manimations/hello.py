@@ -21,6 +21,7 @@
 from manim import *
 import math
 
+
 class HelloWorld(Scene):
     def construct(self):
         # 添加文字

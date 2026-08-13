@@ -703,7 +703,8 @@ func registerMemoryTools(registry *agent.ToolRegistry, store *memory.Store) erro
 }
 
 func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager, imageCfg config.ResolvedImage) error {
-	tools := append(readOnlyToolFactories(validator, runner, artStore, book),
+	tools := append(
+		readOnlyToolFactories(validator, runner, artStore, book),
 		toolFactory{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
 		toolFactory{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
 		toolFactory{"lint", func() (domain.Tool, error) { return lint.NewLintTool(validator, runner) }},
@@ -800,7 +801,8 @@ func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.R
 func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook, maxOutputBytes int) (*agent.ToolRegistry, error) {
 	// Start from the researcher (read-only) set and add the writable tools.
 	registry := agent.NewToolRegistry()
-	tools := append(readOnlyToolFactories(validator, runner, artStore, book),
+	tools := append(
+		readOnlyToolFactories(validator, runner, artStore, book),
 		toolFactory{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
 		toolFactory{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
 		toolFactory{"lint", func() (domain.Tool, error) { return lint.NewLintTool(validator, runner) }},

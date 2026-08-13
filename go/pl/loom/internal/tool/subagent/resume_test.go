@@ -129,7 +129,8 @@ func TestResumeSubagentPrepareRiskByRole(t *testing.T) {
 
 func TestResumeSubagentExecuteResumed(t *testing.T) {
 	// Phase 1: Spawn a child that completes quickly.
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "结论：初步研究完成", StopReason: domain.StopEndTurn, UsageIn: 50, UsageOut: 10},
 		fakes.ScriptEntry{Text: "结论：后续研究完成", StopReason: domain.StopEndTurn, UsageIn: 60, UsageOut: 15},
 	)
@@ -324,7 +325,8 @@ func TestTrimAndValidateTask(t *testing.T) {
 }
 
 func TestResumeSubagentWithFocusPaths(t *testing.T) {
-	mgr, _, _, _ := newTestManager(t,
+	mgr, _, _, _ := newTestManager(
+		t,
 		fakes.ScriptEntry{Text: "结论：已完成", StopReason: domain.StopEndTurn},
 		fakes.ScriptEntry{Text: "结论：聚焦完成", StopReason: domain.StopEndTurn},
 	)

@@ -1,5 +1,6 @@
-#include "calc.h"
 #include <stdio.h>
+
+#include "calc.h"
 
 int main(int argc, char* argv[]) {
     const char* input = "1+2=";

@@ -1,6 +1,5 @@
 name: "Generate Coverage Badge"
 description: "Generate a shields.io-compatible badge JSON from an lcov report, or a failure badge"
-
 inputs:
   lcov-file:
     description: "Path to the lcov coverage report file"
@@ -15,7 +14,6 @@ inputs:
     description: "Build status: 'success' or 'failure'. When failure, generates a red 'failed' badge."
     required: false
     default: "success"
-
 runs:
   using: "composite"
   steps:

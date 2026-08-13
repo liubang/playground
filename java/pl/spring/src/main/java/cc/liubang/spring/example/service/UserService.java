@@ -21,47 +21,46 @@ import cc.liubang.spring.example.dto.CreateUserRequest;
 import cc.liubang.spring.example.dto.UserVO;
 import cc.liubang.spring.example.exception.BusinessException;
 import cc.liubang.spring.example.exception.ResourceNotFoundException;
-import org.springframework.stereotype.Service;
-
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.stereotype.Service;
 
 @Service
 public class UserService {
 
-    private final Map<String, UserVO> users = new ConcurrentHashMap<>();
+  private final Map<String, UserVO> users = new ConcurrentHashMap<>();
 
-    public UserVO createUser(CreateUserRequest request) {
-        // Check for duplicate email
-        boolean emailExists = users.values().stream()
-            .anyMatch(u -> u.getEmail().equals(request.getEmail()));
-        if (emailExists) {
-            throw new BusinessException(409, "email already exists: " + request.getEmail());
-        }
-
-        String id = UUID.randomUUID().toString().substring(0, 8);
-        UserVO user = new UserVO(id, request.getName(), request.getEmail(), request.getAge());
-        users.put(id, user);
-        return user;
+  public UserVO createUser(CreateUserRequest request) {
+    // Check for duplicate email
+    boolean emailExists =
+        users.values().stream().anyMatch(u -> u.getEmail().equals(request.getEmail()));
+    if (emailExists) {
+      throw new BusinessException(409, "email already exists: " + request.getEmail());
     }
 
-    public UserVO getUser(String id) {
-        UserVO user = users.get(id);
-        if (user == null) {
-            throw new ResourceNotFoundException("User", id);
-        }
-        return user;
-    }
+    String id = UUID.randomUUID().toString().substring(0, 8);
+    UserVO user = new UserVO(id, request.getName(), request.getEmail(), request.getAge());
+    users.put(id, user);
+    return user;
+  }
 
-    public List<UserVO> listUsers() {
-        return List.copyOf(users.values());
+  public UserVO getUser(String id) {
+    UserVO user = users.get(id);
+    if (user == null) {
+      throw new ResourceNotFoundException("User", id);
     }
+    return user;
+  }
 
-    public void deleteUser(String id) {
-        if (users.remove(id) == null) {
-            throw new ResourceNotFoundException("User", id);
-        }
+  public List<UserVO> listUsers() {
+    return List.copyOf(users.values());
+  }
+
+  public void deleteUser(String id) {
+    if (users.remove(id) == null) {
+      throw new ResourceNotFoundException("User", id);
     }
+  }
 }

@@ -43,8 +43,16 @@ from proto.echo.echo_pb2_grpc import (
 
 
 ITEMS = [
-    "Alpha", "Bravo", "Charlie", "Delta", "Echo",
-    "Foxtrot", "Golf", "Hotel", "India", "Juliet",
+    "Alpha",
+    "Bravo",
+    "Charlie",
+    "Delta",
+    "Echo",
+    "Foxtrot",
+    "Golf",
+    "Hotel",
+    "India",
+    "Juliet",
 ]
 
 
@@ -82,9 +90,7 @@ class StreamService(StreamServiceServicer):
     def __init__(self, server_id: str):
         self.server_id = server_id
 
-    def ServerStream(
-        self, request: ServerStreamRequest, context: grpc.ServicerContext
-    ):
+    def ServerStream(self, request: ServerStreamRequest, context: grpc.ServicerContext):
         pattern = None
         if request.pattern:
             try:

@@ -237,7 +237,8 @@ func TestServeRealModelImageE2E(t *testing.T) {
 	}
 	turns = collector.turnsDone()
 	if _, err := c.SubmitPrompt(ctx, fmt.Sprintf(
-		"调用 view_image 工具查看图片 %s，然后只回答一个中文颜色词，不要解释。", swatch), nil); err != nil {
+		"调用 view_image 工具查看图片 %s，然后只回答一个中文颜色词，不要解释。", swatch,
+	), nil); err != nil {
 		t.Fatalf("SubmitPrompt(view_image turn): %v", err)
 	}
 	collector.waitTurn(t, turns+1, 3*time.Minute)

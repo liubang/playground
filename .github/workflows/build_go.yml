@@ -1,4 +1,3 @@
----
 name: build-go
 on:
   push:
@@ -11,40 +10,29 @@ on:
       - "BUILD"
       - "bazel/**"
       - "go/**"
-      - "gofumpt.sh"
       - ".github/workflows/build_go.yml"
   workflow_dispatch:
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   coverage:
     name: go coverage
     runs-on: ubuntu-24.04
     env:
       TZ: Asia/Shanghai
-
     steps:
       - uses: actions/checkout@v5
-
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           repository-cache: true
           disk-cache: ${{ github.workflow }}-${{ runner.os }}
-
-      # Fast-fail before the expensive coverage run if any Go file under
-      # go/ is not gofumpt-formatted (see //:gofumpt in the root BUILD).
-      - name: gofumpt check
-        run: bazel run --config=ci //:gofumpt -- --check
-
+      # Go 格式检查已由 format.yml 的 //:format.check 统一覆盖（gofumpt）
       - name: install lcov
         run: |
           sudo apt-get update
           sudo apt-get install -y lcov
-
       - name: coverage
         id: coverage
         continue-on-error: true
@@ -60,7 +48,6 @@ jobs:
             --output-file /tmp/coverage_filtered.dat \
             --ignore-errors unused,negative
           genhtml --branch-coverage --ignore-errors negative --output coverage-go /tmp/coverage_filtered.dat
-
       - name: generate coverage badge
         if: steps.coverage.outcome == 'success'
         uses: ./.github/actions/coverage-badge
@@ -68,7 +55,6 @@ jobs:
           lcov-file: /tmp/coverage_filtered.dat
           output-dir: coverage-go
           label: Go
-
       - name: generate failure badge
         if: steps.coverage.outcome == 'failure'
         uses: ./.github/actions/coverage-badge
@@ -76,7 +62,6 @@ jobs:
           output-dir: coverage-go
           label: Go
           status: failure
-
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         if: ${{ github.ref == 'refs/heads/main' }}
@@ -88,33 +73,27 @@ jobs:
           keep_files: true
           user_name: "liubang"
           user_email: "it.liubang@gmail.com"
-
       - name: Fail the job if coverage failed
         if: steps.coverage.outcome == 'failure'
         run: exit 1
-
   # The desktop target is tagged `manual` (CGO + system webview frameworks),
   # so it needs its own macOS-only job (docs/DESKTOP_DESIGN.md §6.4).
   desktop:
     name: loom-desktop app bundle (macOS)
     runs-on: macos-latest
-
     steps:
       - uses: actions/checkout@v5
-
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           repository-cache: true
           disk-cache: ${{ github.workflow }}-${{ runner.os }}
-
       - name: build .app bundle
         run: |
           bazel build \
             --config=ci \
             --config=desktop \
             //go/pl/loom/cmd/loom-desktop:loom_desktop_app
-
       - name: unit tests
         run: |
           bazel test \

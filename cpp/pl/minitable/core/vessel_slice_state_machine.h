@@ -18,8 +18,7 @@ public:
                             std::shared_ptr<const codec::CellKeyCodec> codec);
 
     [[nodiscard]] absl::StatusOr<minivessel::ApplyResult> apply(
-        const minivessel::LogRecord& record,
-        const minivessel::ApplyContext& context) override;
+        const minivessel::LogRecord& record, const minivessel::ApplyContext& context) override;
 
     [[nodiscard]] SliceApplyMachine& machine() noexcept { return *machine_; }
     [[nodiscard]] const SliceApplyMachine& machine() const noexcept { return *machine_; }

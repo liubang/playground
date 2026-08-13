@@ -28,9 +28,9 @@ TEST(MiniDfsFileSystemTest, DoesNotPretendObjectStorageIsAnActiveWal) {
     EXPECT_FALSE(
         validate_vessel_filesystem(filesystem, kFramedSharedWalActiveLogCapabilities).ok());
 
-    FramedSharedWal wal(nullptr,
-                        {.group = {.group_id = "missing", .incarnation = GroupIncarnation(1)},
-                         .path = "/missing"});
+    FramedSharedWal wal(
+        nullptr,
+        {.group = {.group_id = "missing", .incarnation = GroupIncarnation(1)}, .path = "/missing"});
     EXPECT_EQ(wal.acquire_writer("replica", AssignmentEpoch(1), 1000).status().code(),
               absl::StatusCode::kFailedPrecondition);
 }

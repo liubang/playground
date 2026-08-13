@@ -68,7 +68,9 @@ def write_join_file(path: Path, rows: int, divisor: float) -> None:
 
 def write_pivot_file(path: Path, rows: int, fields: tuple[str, ...]) -> None:
     with path.open("w", encoding="utf-8") as handle:
-        handle.write("#datatype,string,long,dateTime:RFC3339,string,string,string,double\n")
+        handle.write(
+            "#datatype,string,long,dateTime:RFC3339,string,string,string,double\n"
+        )
         handle.write("#group,false,false,false,false,false,false,false\n")
         handle.write("#default,_result,,,,,,\n")
         handle.write(",result,table,_time,host,region,_field,_value\n")
@@ -85,7 +87,9 @@ def main() -> None:
     for rows in METRIC_ROW_COUNTS:
         write_metric_file(OUTPUT_DIR / f"metrics_{rows}.annotated.csv", rows)
         write_pivot_file(OUTPUT_DIR / f"pivot_{rows}.annotated.csv", rows, PIVOT_FIELDS)
-        write_pivot_file(OUTPUT_DIR / f"pivot_wide_{rows}.annotated.csv", rows, WIDE_PIVOT_FIELDS)
+        write_pivot_file(
+            OUTPUT_DIR / f"pivot_wide_{rows}.annotated.csv", rows, WIDE_PIVOT_FIELDS
+        )
 
     for rows in JOIN_ROW_COUNTS:
         write_join_file(OUTPUT_DIR / f"join_left_{rows}.annotated.csv", rows, 10.0)

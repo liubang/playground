@@ -10,7 +10,10 @@ COMPOSE=(docker compose --project-directory "$MINIDFS_DIR" -f "$MINIDFS_DIR/dock
 WORK_DIR=""
 
 log() { printf '\n==> %s\n' "$*"; }
-fail() { printf '\n[FAIL] %s\n' "$*" >&2; exit 1; }
+fail() {
+    printf '\n[FAIL] %s\n' "$*" >&2
+    exit 1
+}
 compose() { "${COMPOSE[@]}" "$@"; }
 require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 
@@ -337,7 +340,10 @@ run_recovery_test() {
     datanodes="$(cli datanodes)"
     datanode1_id="$(awk '$2 == "datanode1" {print $1; exit}' <<<"$datanodes")"
     [[ "$datanode1_id" =~ ^[0-9]+$ ]]
-    block_id_csv="$(IFS=,; echo "${block_ids[*]}")"
+    block_id_csv="$(
+        IFS=,
+        echo "${block_ids[*]}"
+    )"
 
     log "Stopping and starting datanode1 while preserving its named volume"
     compose stop datanode1
@@ -376,22 +382,25 @@ main() {
     local command="${1:-all}"
     check_dependencies
     case "$command" in
-        all)
-            build_and_test
-            start_cluster
-            run_tests
-            run_minivessel_tests
-            run_recovery_test
-            ;;
-        build) build_and_test ;;
-        start) start_cluster ;;
-        test) run_tests ;;
-        api-test) run_api_tests ;;
-        minivessel-test) run_minivessel_tests ;;
-        recovery-test) run_recovery_test ;;
-        down) compose down ;;
-        reset) compose down -v --remove-orphans ;;
-        *) usage; exit 2 ;;
+    all)
+        build_and_test
+        start_cluster
+        run_tests
+        run_minivessel_tests
+        run_recovery_test
+        ;;
+    build) build_and_test ;;
+    start) start_cluster ;;
+    test) run_tests ;;
+    api-test) run_api_tests ;;
+    minivessel-test) run_minivessel_tests ;;
+    recovery-test) run_recovery_test ;;
+    down) compose down ;;
+    reset) compose down -v --remove-orphans ;;
+    *)
+        usage
+        exit 2
+        ;;
     esac
 }
 

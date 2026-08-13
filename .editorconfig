@@ -1,0 +1,18 @@
+# 供 shfmt / yamlfmt 等格式化工具读取的缩进约定
+# （bazel run //:format 使用；编辑器插件亦可受益）
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+
+# shfmt：仓库 shell 脚本统一 4 空格缩进（shfmt 默认 tab）
+[*.{sh,bash}]
+indent_style = space
+indent_size = 4
+
+# yamlfmt：默认即 2 空格，显式声明防止编辑器/工具漂移
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2

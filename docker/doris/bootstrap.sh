@@ -42,7 +42,7 @@ doris_mysql() {
 
 doris_backends_ready() {
     local count
-    count="$(doris_mysql -N -e "SHOW BACKENDS" 2>/dev/null | \
+    count="$(doris_mysql -N -e "SHOW BACKENDS" 2>/dev/null |
         awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="true") c++} END{print c+0}')"
     [ "${count:-0}" -ge 2 ]
 }

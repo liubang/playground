@@ -11,7 +11,7 @@
     {
       "argv_prefix": ["pip", "install"],
       "decision": "allow",
-      "grant": {"unsandboxed": true},
+      "grant": { "unsandboxed": true },
       "justification": "pip install: TLS 经 truststore 需 keychain；用户已启用 python-pip 规则包",
       "match": [["pip", "install", "requests"]],
       "not_match": [["pip", "uninstall"]]
@@ -19,7 +19,7 @@
     {
       "argv_prefix": ["pip3", "install"],
       "decision": "allow",
-      "grant": {"unsandboxed": true},
+      "grant": { "unsandboxed": true },
       "justification": "pip3 install: 同 pip install；用户已启用 python-pip 规则包",
       "match": [["pip3", "install", "requests"]],
       "not_match": [["pip3", "uninstall"]]
@@ -27,7 +27,7 @@
     {
       "argv_prefix": ["pip", "download"],
       "decision": "allow",
-      "grant": {"unsandboxed": true},
+      "grant": { "unsandboxed": true },
       "justification": "pip download: TLS 同 install；用户已启用 python-pip 规则包",
       "match": [["pip", "download", "six"]],
       "not_match": [["pip", "uninstall"]]
@@ -35,7 +35,7 @@
     {
       "argv_prefix": ["pip3", "download"],
       "decision": "allow",
-      "grant": {"unsandboxed": true},
+      "grant": { "unsandboxed": true },
       "justification": "pip3 download: 同 pip download；用户已启用 python-pip 规则包",
       "match": [["pip3", "download", "six"]],
       "not_match": [["pip3", "uninstall"]]

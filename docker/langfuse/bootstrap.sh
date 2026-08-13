@@ -21,7 +21,7 @@ gen_hex_secret() {
 
 validate_http_url() {
     local name="$1" value="$2"
-    [[ "$value" =~ ^https?://[^[:space:]/]+(:[0-9]+)?(/[^[:space:]]*)?$ ]] || \
+    [[ "$value" =~ ^https?://[^[:space:]/]+(:[0-9]+)?(/[^[:space:]]*)?$ ]] ||
         die "$name 必须是完整的 http(s) URL: $value"
 }
 
@@ -45,9 +45,9 @@ prepare_env() {
         public_host="$(hostname)"
         prompt_value langfuse_public_url "Langfuse 外部 URL" "http://${public_host}:3100"
         prompt_value minio_public_url "MinIO S3 外部 URL" "http://${public_host}:9190"
-        [[ "$langfuse_public_url" != *localhost* && "$langfuse_public_url" != *127.0.0.1* && "$langfuse_public_url" != *0.0.0.0* ]] || \
+        [[ "$langfuse_public_url" != *localhost* && "$langfuse_public_url" != *127.0.0.1* && "$langfuse_public_url" != *0.0.0.0* ]] ||
             die "公开模式的 Langfuse URL 必须使用其他设备可访问的主机名或 IP"
-        [[ "$minio_public_url" != *localhost* && "$minio_public_url" != *127.0.0.1* && "$minio_public_url" != *0.0.0.0* ]] || \
+        [[ "$minio_public_url" != *localhost* && "$minio_public_url" != *127.0.0.1* && "$minio_public_url" != *0.0.0.0* ]] ||
             die "公开模式的 MinIO URL 必须使用其他设备可访问的主机名或 IP"
     fi
     validate_http_url LANGFUSE_PUBLIC_URL "$langfuse_public_url"

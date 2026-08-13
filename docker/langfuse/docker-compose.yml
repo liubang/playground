@@ -37,7 +37,6 @@ x-langfuse-environment: &langfuse-environment
   LANGFUSE_S3_BATCH_EXPORT_EXTERNAL_ENDPOINT: ${MINIO_PUBLIC_URL:?Run ./bootstrap.sh to generate .env}
   LANGFUSE_S3_BATCH_EXPORT_FORCE_PATH_STYLE: "true"
   LANGFUSE_S3_BATCH_EXPORT_PREFIX: exports/
-
 x-langfuse-depends-on: &langfuse-depends-on
   postgres:
     condition: service_healthy
@@ -47,7 +46,6 @@ x-langfuse-depends-on: &langfuse-depends-on
     condition: service_healthy
   minio:
     condition: service_healthy
-
 services:
   langfuse-web:
     image: docker.io/langfuse/langfuse:3
@@ -56,11 +54,10 @@ services:
     ports:
       - "${PUBLIC_BIND_ADDR:-127.0.0.1}:${LANGFUSE_PORT:-3100}:3000"
     environment:
-      <<: *langfuse-environment
+      !!merge <<: *langfuse-environment
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Run ./bootstrap.sh to generate .env}
     networks:
       - langfuse
-
   langfuse-worker:
     image: docker.io/langfuse/langfuse-worker:3
     restart: unless-stopped
@@ -68,7 +65,6 @@ services:
     environment: *langfuse-environment
     networks:
       - langfuse
-
   postgres:
     image: docker.io/postgres:${POSTGRES_VERSION:-17}
     restart: unless-stopped
@@ -88,7 +84,6 @@ services:
       start_period: 10s
     networks:
       - langfuse
-
   clickhouse:
     image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-latest}
     restart: unless-stopped
@@ -108,7 +103,6 @@ services:
       start_period: 5s
     networks:
       - langfuse
-
   redis:
     image: docker.io/redis:${REDIS_VERSION:-7}
     restart: unless-stopped
@@ -132,7 +126,6 @@ services:
       start_period: 5s
     networks:
       - langfuse
-
   minio:
     image: cgr.dev/chainguard/minio:${MINIO_VERSION:-latest}
     restart: unless-stopped
@@ -154,13 +147,11 @@ services:
       start_period: 2s
     networks:
       - langfuse
-
 volumes:
   postgres-data:
   clickhouse-data:
   clickhouse-logs:
   redis-data:
   minio-data:
-
 networks:
   langfuse:

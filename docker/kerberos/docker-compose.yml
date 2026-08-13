@@ -20,7 +20,6 @@ services:
       timeout: 3s
       retries: 30
       start_period: 10s
-
   demo-server:
     build: ./demo
     container_name: krb5-demo-server
@@ -38,7 +37,6 @@ services:
     depends_on:
       kdc:
         condition: service_healthy
-
   client:
     build: ./demo
     container_name: krb5-client
@@ -53,10 +51,8 @@ services:
     depends_on:
       kdc:
         condition: service_healthy
-
 volumes:
   kdc-data:
   keytabs:
-
 networks:
   kerberos:
