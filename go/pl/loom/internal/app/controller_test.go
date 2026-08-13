@@ -36,7 +36,7 @@ func testResolvedConfig(model domain.Model) *config.ResolvedConfig {
 			Model: model,
 			Models: []config.Model{
 				{Name: "test-model", ContextWindow: 128000},
-				{Name: "new-model", ContextWindow: 64000},
+				{Name: "new-model", ContextWindow: 64000, Modalities: []string{"text", "image"}},
 				{Name: "third-model"},
 			},
 			DefaultModel: "test-model",

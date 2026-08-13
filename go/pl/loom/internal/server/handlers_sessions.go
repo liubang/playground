@@ -32,7 +32,14 @@ import (
 
 // decodeBody decodes a JSON request body with the global size cap.
 func decodeBody(w http.ResponseWriter, r *http.Request, v any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	return decodeBodyLimit(w, r, v, maxBodyBytes)
+}
+
+// decodeBodyLimit decodes a JSON request body with an explicit size cap,
+// used by routes that accept larger payloads (e.g. prompts with inline
+// base64 images, whose 4/3 expansion dwarfs the global cap).
+func decodeBodyLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) error {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(v); err != nil {
@@ -256,7 +263,7 @@ func (s *Server) handleSubmitPrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req submitPromptRequest
-	if err := decodeBody(w, r, &req); err != nil {
+	if err := decodeBodyLimit(w, r, &req, maxPromptBodyBytes); err != nil {
 		writeError(w, err)
 		return
 	}
