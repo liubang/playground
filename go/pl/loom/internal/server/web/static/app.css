@@ -1066,6 +1066,12 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  cursor: pointer;
+}
+/* 点击 target 展开：换行显示完整内容（长命令等），再次点击收起。 */
+.block-tool .tool-target.expanded {
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 .block-tool .tool-dur {
   margin-left: auto;
@@ -1397,6 +1403,17 @@ body.lightbox-open {
   border-radius: var(--radius-md);
   padding: 10px 14px;
   font-size: var(--text-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.block-interrupted {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 9%, transparent);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: var(--text-md);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .resolved {
   color: var(--muted);

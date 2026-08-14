@@ -34,6 +34,10 @@ type ScriptEntry struct {
 	UsageIn    int64
 	UsageOut   int64
 	Error      string // if set, stream returns this error
+	// Err returns a typed error as-is (e.g. a retryable domain.AgentError),
+	// taking precedence over Error; string errors cannot exercise the
+	// classification paths that typed errors reach.
+	Err error
 }
 
 // FakeModel replays a scripted sequence of model responses.
@@ -61,6 +65,9 @@ func (m *FakeModel) Stream(_ context.Context, req domain.ModelRequest) (domain.M
 	entry := m.script[m.index]
 	m.index++
 
+	if entry.Err != nil {
+		return nil, entry.Err
+	}
 	if entry.Error != "" {
 		return nil, fmt.Errorf("%s", entry.Error)
 	}
