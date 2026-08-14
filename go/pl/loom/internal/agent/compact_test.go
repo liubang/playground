@@ -98,6 +98,50 @@ func bigOutput(size int) string {
 	return strings.Repeat("0123456789abcdef\n", size/17+1)[:size]
 }
 
+// condense applies one compaction pass the way the loop does (docs/
+// SURFACE_DESIGN.md §4.2): Plan emits pure directives, the shared domain
+// application function produces the new surface. Audit counters derive
+// from the returned ops (maskCount et al. below).
+func condense(t *testing.T, cond Condenser, messages *[]domain.Message, store domain.ArtifactStore) domain.SurfaceOps {
+	t.Helper()
+	ops := cond.Plan(context.Background(), *messages, store, time.Now().UTC())
+	if !ops.Empty() {
+		applied, err := domain.ApplySurfaceOps(*messages, ops)
+		if err != nil {
+			t.Fatalf("ApplySurfaceOps() error = %v", err)
+		}
+		*messages = applied
+	}
+	return ops
+}
+
+// maskCount is the number of masked outputs in the pass.
+func maskCount(ops domain.SurfaceOps) int {
+	if ops.Masks == nil {
+		return 0
+	}
+	return len(ops.Masks.Masks)
+}
+
+// maskedBytes is the total original size of masked outputs.
+func maskedBytes(ops domain.SurfaceOps) int {
+	total := 0
+	if ops.Masks != nil {
+		for _, mask := range ops.Masks.Masks {
+			total += mask.OriginalBytes
+		}
+	}
+	return total
+}
+
+// archivedCount is the number of messages replaced by the archive marker.
+func archivedCount(ops domain.SurfaceOps) int {
+	if ops.Archive == nil {
+		return 0
+	}
+	return int(ops.Archive.ToSequence - ops.Archive.FromSequence + 1)
+}
+
 // --- masking ---
 
 func TestCondenseMasksOversizedToolOutputs(t *testing.T) {
@@ -105,26 +149,27 @@ func TestCondenseMasksOversizedToolOutputs(t *testing.T) {
 	original := bigOutput(8000)
 	messages := []domain.Message{
 		textMessage(domain.RoleUser, "please run the build"),
-		toolCallMessage("run_cmd"),
-		toolResultMessage(original),
-		textMessage(domain.RoleAssistant, "build failed, fixing"),
-		// recent window (6 messages) — must remain untouched
-		toolResultMessage(bigOutput(9000)),
-		textMessage(domain.RoleAssistant, "a"),
+	}
+	messages = append(messages, toolPair("run_cmd", original)...)
+	messages = append(messages, textMessage(domain.RoleAssistant, "build failed, fixing"))
+	// recent window (6 messages) — must remain untouched
+	messages = append(messages, toolPair("run_cmd", bigOutput(9000))...)
+	messages = append(
+		messages,
 		textMessage(domain.RoleAssistant, "b"),
 		textMessage(domain.RoleAssistant, "c"),
 		textMessage(domain.RoleAssistant, "d"),
 		textMessage(domain.RoleAssistant, "e"),
-	}
+	)
 
 	cond := Condenser{KeepRecentMessages: 6, MaskMinBytes: 4096}
-	result := cond.Condense(context.Background(), &messages, store)
+	ops := condense(t, cond, &messages, store)
 
-	if len(result.outputs) != 1 {
-		t.Fatalf("masked outputs = %d, want 1", len(result.outputs))
+	if maskCount(ops) != 1 {
+		t.Fatalf("masked outputs = %d, want 1", maskCount(ops))
 	}
-	if result.bytesMasked != len(original) {
-		t.Fatalf("bytes masked = %d, want %d", result.bytesMasked, len(original))
+	if maskedBytes(ops) != len(original) {
+		t.Fatalf("bytes masked = %d, want %d", maskedBytes(ops), len(original))
 	}
 
 	masked := messages[2].Parts[0].ToolResult.Content[0].Text
@@ -139,12 +184,12 @@ func TestCondenseMasksOversizedToolOutputs(t *testing.T) {
 	}
 
 	// The recent-window output stays inline.
-	recent := messages[4].Parts[0].ToolResult.Content[0].Text
+	recent := messages[5].Parts[0].ToolResult.Content[0].Text
 	if strings.HasPrefix(recent, compactedPlaceholderMark) {
 		t.Fatal("recent-window output must not be masked")
 	}
-	if messages[4].Revision != 0 {
-		t.Fatalf("recent message revision = %d, want 0", messages[4].Revision)
+	if messages[5].Revision != 0 {
+		t.Fatalf("recent message revision = %d, want 0", messages[5].Revision)
 	}
 
 	// The artifact holds the original bytes and is readable back through
@@ -174,20 +219,22 @@ func TestCondenseMaskRegistersArtifactRef(t *testing.T) {
 	store := openArtifactStore(t)
 	messages := []domain.Message{
 		textMessage(domain.RoleUser, "please run the build"),
-		toolCallMessage("run_cmd"),
-		toolResultMessage(bigOutput(8000)),
+	}
+	messages = append(messages, toolPair("run_cmd", bigOutput(8000))...)
+	messages = append(
+		messages,
 		textMessage(domain.RoleAssistant, "a"),
 		textMessage(domain.RoleAssistant, "b"),
 		textMessage(domain.RoleAssistant, "c"),
 		textMessage(domain.RoleAssistant, "d"),
 		textMessage(domain.RoleAssistant, "e"),
 		textMessage(domain.RoleAssistant, "f"),
-	}
+	)
 
 	cond := Condenser{KeepRecentMessages: 6, MaskMinBytes: 4096}
-	result := cond.Condense(context.Background(), &messages, store)
-	if len(result.outputs) != 1 {
-		t.Fatalf("masked outputs = %d, want 1", len(result.outputs))
+	ops := condense(t, cond, &messages, store)
+	if maskCount(ops) != 1 {
+		t.Fatalf("masked outputs = %d, want 1", maskCount(ops))
 	}
 
 	content := messages[2].Parts[0].ToolResult.Content
@@ -200,8 +247,8 @@ func TestCondenseMaskRegistersArtifactRef(t *testing.T) {
 	if ref == nil {
 		t.Fatal("masked tool result must carry a PartArtifact reference so GC keeps the artifact")
 	}
-	if ref.ID.String() != result.outputs[0].Artifact {
-		t.Fatalf("artifact ref = %s, want masked output %s", ref.ID, result.outputs[0].Artifact)
+	if ref.ID != ops.Masks.Masks[0].Artifact.ID {
+		t.Fatalf("artifact ref = %s, want masked output %s", ref.ID, ops.Masks.Masks[0].Artifact.ID)
 	}
 	if err := messages[2].Validate(); err != nil {
 		t.Fatalf("masked message must stay valid: %v", err)
@@ -219,15 +266,18 @@ func TestCondenseArchiveMarkerCarriesArtifactRefs(t *testing.T) {
 
 	var messages []domain.Message
 	refMsg := textMessage(domain.RoleAssistant, strings.Repeat("x", 400))
+	refMsg.Sequence = 1
 	refMsg.Parts = append(refMsg.Parts, domain.ContentPart{Kind: domain.PartArtifact, Artifact: &innerRef})
 	messages = append(messages, refMsg)
 	for i := 0; i < 9; i++ {
-		messages = append(messages, textMessage(domain.RoleAssistant, strings.Repeat("x", 400)))
+		msg := textMessage(domain.RoleAssistant, strings.Repeat("x", 400))
+		msg.Sequence = int64(i + 2)
+		messages = append(messages, msg)
 	}
 
 	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 1 << 20, Window: windowWithTarget(250)}
-	result := cond.Condense(context.Background(), &messages, store)
-	if result.archived == 0 {
+	ops := condense(t, cond, &messages, store)
+	if archivedCount(ops) == 0 {
 		t.Fatal("expected archival to happen")
 	}
 
@@ -258,44 +308,37 @@ func TestCondenseArchiveMarkerCarriesArtifactRefs(t *testing.T) {
 
 func TestCondenseSkipsSmallOutputsAndIsIdempotent(t *testing.T) {
 	store := openArtifactStore(t)
-	messages := []domain.Message{
-		toolResultMessage("small output"),
-		textMessage(domain.RoleAssistant, "done"),
-	}
+	messages := toolPair("run_cmd", "small output")
+	messages = append(messages, textMessage(domain.RoleAssistant, "done"))
 	// KeepRecentMessages 1 protects only the trailing message; note that a
 	// zero value selects the documented default window instead of "none".
 	cond := Condenser{KeepRecentMessages: 1, MaskMinBytes: 4096}
 
-	result := cond.Condense(context.Background(), &messages, store)
-	if len(result.outputs) != 0 {
-		t.Fatalf("small output should not be masked: %+v", result.outputs)
+	ops := condense(t, cond, &messages, store)
+	if maskCount(ops) != 0 {
+		t.Fatalf("small output should not be masked: %+v", ops.Masks)
 	}
 
 	// Mask once, then run again: the placeholder mark prevents re-masking.
-	messages = []domain.Message{
-		toolResultMessage(bigOutput(6000)),
-		textMessage(domain.RoleAssistant, "done"),
+	messages = toolPair("run_cmd", bigOutput(6000))
+	messages = append(messages, textMessage(domain.RoleAssistant, "done"))
+	first := condense(t, cond, &messages, store)
+	if maskCount(first) != 1 {
+		t.Fatalf("first pass masked %d, want 1", maskCount(first))
 	}
-	first := cond.Condense(context.Background(), &messages, store)
-	if len(first.outputs) != 1 {
-		t.Fatalf("first pass masked %d, want 1", len(first.outputs))
-	}
-	second := cond.Condense(context.Background(), &messages, store)
-	if len(second.outputs) != 0 {
-		t.Fatalf("second pass masked %d, want 0 (idempotent)", len(second.outputs))
+	second := condense(t, cond, &messages, store)
+	if maskCount(second) != 0 {
+		t.Fatalf("second pass masked %d, want 0 (idempotent)", maskCount(second))
 	}
 }
 
 func TestCondensePreservesToolPairing(t *testing.T) {
 	store := openArtifactStore(t)
-	messages := []domain.Message{
-		toolCallMessage("run_cmd"),
-		toolResultMessage(bigOutput(6000)),
-		toolCallMessage("read_file"),
-		toolResultMessage(bigOutput(7000)),
-	}
+	var messages []domain.Message
+	messages = append(messages, toolPair("run_cmd", bigOutput(6000))...)
+	messages = append(messages, toolPair("read_file", bigOutput(7000))...)
 	cond := Condenser{KeepRecentMessages: 1, MaskMinBytes: 4096}
-	cond.Condense(context.Background(), &messages, store)
+	condense(t, cond, &messages, store)
 
 	// Every assistant tool_call must still have a following tool result.
 	calls := 0
@@ -319,9 +362,9 @@ func TestCondenseNilStoreIsNoop(t *testing.T) {
 	messages := []domain.Message{
 		toolResultMessage(bigOutput(6000)),
 	}
-	result := Condenser{KeepRecentMessages: 0, MaskMinBytes: 4096}.Condense(context.Background(), &messages, nil)
-	if len(result.outputs) != 0 {
-		t.Fatalf("nil store must disable masking: %+v", result.outputs)
+	ops := condense(t, Condenser{KeepRecentMessages: 0, MaskMinBytes: 4096}, &messages, nil)
+	if maskCount(ops) != 0 {
+		t.Fatalf("nil store must disable masking: %+v", ops.Masks)
 	}
 }
 
@@ -333,9 +376,9 @@ func TestLoopCompactMasksAndRecordsEvent(t *testing.T) {
 	run.AddUserMessage(textMessage(domain.RoleUser, "run the tests"))
 	run.Messages = append(
 		run.Messages,
-		toolResultMessage(bigOutput(8000)),
-		textMessage(domain.RoleAssistant, "analyzing"),
+		toolPair("run_cmd", bigOutput(8000))...,
 	)
+	run.Messages = append(run.Messages, textMessage(domain.RoleAssistant, "analyzing"))
 
 	loop := &Loop{Run: run, Artifacts: store, Condenser: Condenser{KeepRecentMessages: 1, MaskMinBytes: 4096}}
 	run.Usage.InputTokens = 150_000
@@ -351,7 +394,7 @@ func TestLoopCompactMasksAndRecordsEvent(t *testing.T) {
 	if after >= before {
 		t.Fatalf("compact did not shrink the transcript: before=%d after=%d", before, after)
 	}
-	masked := run.Messages[1].Parts[0].ToolResult.Content[0].Text
+	masked := run.Messages[2].Parts[0].ToolResult.Content[0].Text
 	if !strings.HasPrefix(masked, compactedPlaceholderMark) {
 		t.Fatalf("output not masked: %q", masked[:80])
 	}
@@ -414,14 +457,16 @@ func TestCondenseArchivesOldestSpan(t *testing.T) {
 	store := openArtifactStore(t)
 	var messages []domain.Message
 	for i := 0; i < 10; i++ {
-		messages = append(messages, textMessage(domain.RoleAssistant, strings.Repeat("x", 400)))
+		msg := textMessage(domain.RoleAssistant, strings.Repeat("x", 400))
+		msg.Sequence = int64(i + 1)
+		messages = append(messages, msg)
 	}
 
 	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 1 << 20, Window: windowWithTarget(250)}
-	result := cond.Condense(context.Background(), &messages, store)
+	ops := condense(t, cond, &messages, store)
 
-	if result.archived != 8 {
-		t.Fatalf("archived = %d, want 8", result.archived)
+	if archivedCount(ops) != 8 {
+		t.Fatalf("archived = %d, want 8", archivedCount(ops))
 	}
 	if len(messages) != 3 {
 		t.Fatalf("len(messages) = %d, want 3 (marker + window)", len(messages))
@@ -476,8 +521,8 @@ func TestCondenseRenumbersSequencesDensely(t *testing.T) {
 	}
 
 	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 1 << 20, Window: windowWithTarget(250)}
-	result := cond.Condense(context.Background(), &messages, store)
-	if result.archived == 0 {
+	ops := condense(t, cond, &messages, store)
+	if archivedCount(ops) == 0 {
 		t.Fatal("expected archival to happen")
 	}
 
@@ -549,22 +594,21 @@ func TestPairingSafeCutBoundaries(t *testing.T) {
 
 func TestCondenseMasksIntoWindowWhenTailHeavy(t *testing.T) {
 	store := openArtifactStore(t)
-	messages := []domain.Message{
-		textMessage(domain.RoleUser, "fix the build"),
-		toolResultMessage(bigOutput(1000)),
-		toolResultMessage(bigOutput(1000)),
-		textMessage(domain.RoleAssistant, "working on it"),
-	}
+	var messages []domain.Message
+	messages = append(messages, textMessage(domain.RoleUser, "fix the build"))
+	messages = append(messages, toolPair("run_cmd", bigOutput(1000))...)
+	messages = append(messages, toolPair("run_cmd", bigOutput(1000))...)
+	messages = append(messages, textMessage(domain.RoleAssistant, "working on it"))
 
 	cond := Condenser{KeepRecentMessages: 2, MaskMinBytes: 100, Window: windowWithTarget(200)}
-	result := cond.Condense(context.Background(), &messages, store)
+	ops := condense(t, cond, &messages, store)
 
-	// Level 1 masks the first output; the window alone stays above target,
-	// so Level 2b masks the second one too. The final message is untouched.
-	if len(result.outputs) != 2 {
-		t.Fatalf("masked outputs = %d, want 2", len(result.outputs))
+	// Both tool results sit outside the keep-recent window and are masked;
+	// the final message is untouched.
+	if maskCount(ops) != 2 {
+		t.Fatalf("masked outputs = %d, want 2", maskCount(ops))
 	}
-	if messages[3].Parts[0].Text != "working on it" {
+	if messages[5].Parts[0].Text != "working on it" {
 		t.Fatal("final message must remain untouched")
 	}
 	if est := estTokens(messages); est > 200 {
@@ -637,6 +681,48 @@ func TestEstTokens(t *testing.T) {
 	}
 	if got := estTokens(messages); got != 200 {
 		t.Fatalf("estTokens = %d, want 200", got)
+	}
+}
+
+func TestEstTokensImageWireFootprint(t *testing.T) {
+	// A 343KB screenshot must count its base64 wire size (457KB → ~114k
+	// tokens), not the flat 1500-token floor — gateways metering raw prompt
+	// length see the wire form.
+	big := domain.ArtifactRef{ID: domain.NewArtifactID(), Size: 343323, MediaType: "image/jpeg"}
+	small := domain.ArtifactRef{ID: domain.NewArtifactID(), Size: 100, MediaType: "image/png"}
+	presentOnly := domain.ArtifactRef{ID: domain.NewArtifactID(), Size: 1 << 20, MediaType: "image/png"}
+	messages := []domain.Message{
+		{
+			ID: domain.NewMessageID(), Role: domain.RoleUser,
+			Parts: []domain.ContentPart{
+				{Kind: domain.PartArtifact, Artifact: &big},
+				{Kind: domain.PartArtifact, Artifact: &small},
+				{Kind: domain.PartArtifact, Artifact: &presentOnly, PresentOnly: true},
+			},
+			CreatedAt: time.Now(),
+		},
+	}
+	got := estTokens(messages)
+	wantBig := 343323 * 4 / 3 / 4 // base64 chars / 4
+	want := wantBig + 1500        // big wire + small floor; present-only excluded
+	if got != want {
+		t.Fatalf("estTokens = %d, want %d (wire %d + floor 1500, present-only excluded)", got, want, wantBig)
+	}
+
+	// Inline image parts count their base64 payload length directly.
+	inline := []domain.Message{{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts: []domain.ContentPart{{
+			Kind: domain.PartImage,
+			Image: &domain.ImageContent{
+				MediaType: "image/png",
+				Data:      strings.Repeat("a", 8000),
+			},
+		}},
+		CreatedAt: time.Now(),
+	}}
+	if got := estTokens(inline); got != 2000 {
+		t.Fatalf("estTokens(inline 8000 base64 chars) = %d, want 2000", got)
 	}
 }
 

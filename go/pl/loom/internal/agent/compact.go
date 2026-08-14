@@ -198,13 +198,6 @@ func buildSummaryReplacement(messages []domain.Message, summary string, now time
 	return out, dropped
 }
 
-// compactResult summarizes one Condense pass.
-type compactResult struct {
-	outputs     []maskedOutput
-	bytesMasked int
-	archived    int
-}
-
 // artifactPathResolver is implemented by the concrete artifact store; the
 // condenser uses it to give the model a directly readable path instead of an
 // opaque blob ID.
@@ -212,7 +205,8 @@ type artifactPathResolver interface {
 	PathForRef(ref domain.ArtifactRef) (string, bool)
 }
 
-// Condense compacts the transcript in place through a cost-ordered pipeline:
+// Plan computes one compaction pass as pure directives (docs/SURFACE_DESIGN.md
+// §4.2) without touching the input:
 //
 // Level 1: mask oversized tool outputs outside the keep-recent window.
 // Level 2a: if the estimate still exceeds the target, archive the oldest
@@ -220,59 +214,86 @@ type artifactPathResolver interface {
 // Level 2b: if the trailing window alone still exceeds the target, extend
 // masking into the window, protecting only the final message.
 //
-// Masking never deletes messages and never touches tool calls; archival cuts
-// at a tool-pairing-safe boundary, so the assistant tool_call ↔ tool result
-// invariant holds throughout. A nil artifact store disables compaction.
-func (c Condenser) Condense(ctx context.Context, messages *[]domain.Message, artifacts domain.ArtifactStore) compactResult {
+// Level decisions are driven by a working view to which each stage's
+// directives are applied immediately (via the shared domain application
+// functions) — so the directives Plan emits are incrementally validated as
+// they are produced, and the view the next level sees is exactly what
+// replay will see. Audit counts are derived from the returned ops by the
+// caller. A nil artifact store disables compaction.
+func (c Condenser) Plan(ctx context.Context, messages []domain.Message, artifacts domain.ArtifactStore, now time.Time) domain.SurfaceOps {
 	c = c.withDefaults()
-	result := compactResult{}
-	if artifacts == nil || len(*messages) == 0 {
-		return result
+	var ops domain.SurfaceOps
+	if artifacts == nil || len(messages) == 0 {
+		return ops
 	}
 	target := c.target()
+	view := messages
 
-	cutoff := len(*messages) - c.KeepRecentMessages
+	cutoff := len(view) - c.KeepRecentMessages
 	if cutoff > 0 {
-		c.maskRange(ctx, *messages, artifacts, 0, cutoff, 0, &result)
+		var masks []domain.MaskedPart
+		masks, view = c.planMaskRange(ctx, view, artifacts, 0, cutoff, 0)
+		if len(masks) > 0 {
+			ops.Masks = &domain.ContextMaskedPayload{Masks: masks}
+		}
 	}
-	if estTokens(*messages) > target && cutoff > 0 {
-		c.archiveOldestSpan(ctx, messages, artifacts, &result)
+	if estTokens(view) > target && cutoff > 0 {
+		if archive, applied, ok := c.planArchiveOldestSpan(ctx, view, artifacts, now); ok {
+			ops.Archive = &archive
+			view = applied
+		}
 	}
-	if est := estTokens(*messages); est > target && len(*messages) > 1 {
+	if est := estTokens(view); est > target && len(view) > 1 {
 		// The trailing window alone is too heavy: extend masking into it,
 		// protecting only the final message, until the target is met.
-		c.maskRange(ctx, *messages, artifacts, 0, len(*messages)-1, target, &result)
+		masks, _ := c.planMaskRange(ctx, view, artifacts, 0, len(view)-1, target)
+		if len(masks) > 0 {
+			if ops.Masks == nil {
+				ops.Masks = &domain.ContextMaskedPayload{}
+			}
+			ops.Masks.Masks = append(ops.Masks.Masks, masks...)
+		}
 	}
-	// Dense-sequence invariant: Run.normalizeMessage assigns new messages
-	// len(messages)+1 and ContinueRun requires restored sequences to equal
-	// index+1. Archival punches a hole in the numbering (the marker inherits
-	// a mid-range sequence), so without renumbering, messages appended after
-	// compaction collide with survivors and brick session recovery with
-	// "sequence N already assigned to message ...".
-	for i := range *messages {
-		(*messages)[i].Sequence = int64(i + 1)
-	}
-	return result
+	return ops
 }
 
-// maskRange externalizes eligible tool outputs in messages[from:to]. When
-// stopAtTokens is positive the pass stops as soon as the transcript estimate
-// drops to that target.
-func (c Condenser) maskRange(ctx context.Context, messages []domain.Message, artifacts domain.ArtifactStore, from, to, stopAtTokens int, result *compactResult) {
-	for i := from; i < to && i < len(messages); i++ {
+// planMaskRange is the directive-producing form of the former maskRange:
+// it externalizes eligible tool outputs in view[from:to], applying each
+// message's masks to the working view as it goes so the stopAtTokens
+// estimate tracks the masked state exactly like the mutating runtime did.
+// It returns the directives (Level order preserved) and the final view.
+func (c Condenser) planMaskRange(ctx context.Context, view []domain.Message, artifacts domain.ArtifactStore, from, to, stopAtTokens int) ([]domain.MaskedPart, []domain.Message) {
+	var all []domain.MaskedPart
+	for i := from; i < to && i < len(view); i++ {
 		if err := ctx.Err(); err != nil {
-			return
+			break
 		}
-		if stopAtTokens > 0 && estTokens(messages) <= stopAtTokens {
-			return
+		if stopAtTokens > 0 && estTokens(view) <= stopAtTokens {
+			break
 		}
-		c.maskMessageOutputs(ctx, &messages[i], artifacts, result)
+		masks := c.planMaskMessageOutputs(ctx, &view[i], artifacts)
+		if len(masks) == 0 {
+			continue
+		}
+		applied, err := domain.ApplyMaskDirective(view, masks)
+		if err != nil {
+			// Self-generated directives must apply; a failure here is a
+			// generator bug. Drop this message's masks and keep going —
+			// compaction degrades, it never corrupts.
+			continue
+		}
+		view = applied
+		all = append(all, masks...)
 	}
+	return all, view
 }
 
-// maskMessageOutputs externalizes every eligible tool output of one message.
-func (c Condenser) maskMessageOutputs(ctx context.Context, msg *domain.Message, artifacts domain.ArtifactStore, result *compactResult) {
-	changed := false
+// planMaskMessageOutputs computes the mask directives for every eligible
+// tool output of one message. All masks of one message share one revision
+// bump (msg.Revision+1), mirroring the runtime's once-per-message-per-level
+// revision semantics. It never mutates msg.
+func (c Condenser) planMaskMessageOutputs(ctx context.Context, msg *domain.Message, artifacts domain.ArtifactStore) []domain.MaskedPart {
+	var masks []domain.MaskedPart
 	for pi := range msg.Parts {
 		part := &msg.Parts[pi]
 		if part.Kind != domain.PartToolResult || part.ToolResult == nil {
@@ -293,64 +314,38 @@ func (c Condenser) maskMessageOutputs(ctx context.Context, msg *domain.Message, 
 				continue
 			}
 			original := len(content.Text)
-			content.Text = maskPlaceholder(original, ref, artifacts)
-			// Register the reference structurally so session persistence
-			// (checkpointArtifactRefs) keeps the artifact alive for GC. Both
-			// providers skip PartArtifact when rendering tool results, so the
-			// wire form is unchanged.
+			// Register the reference in its FINAL appended form (MediaType
+			// overridden): replay applies it verbatim and consumers such as
+			// estTokens / media classification read MediaType.
 			artifactRef := ref
 			artifactRef.MediaType = "text/plain" // masked tool output is text
-			part.ToolResult.Content = append(part.ToolResult.Content, domain.ContentPart{Kind: domain.PartArtifact, Artifact: &artifactRef})
-			result.bytesMasked += original
-			result.outputs = append(result.outputs, maskedOutput{
-				MessageID: msg.ID.String(),
-				Bytes:     original,
-				Artifact:  ref.ID.String(),
+			masks = append(masks, domain.MaskedPart{
+				MessageID:     msg.ID,
+				PartIndex:     pi,
+				ContentIndex:  ci,
+				OriginalBytes: original,
+				Artifact:      artifactRef,
+				Placeholder:   maskPlaceholder(original, ref, artifacts),
+				Revision:      msg.Revision + 1,
 			})
-			changed = true
 		}
 	}
-	if changed {
-		msg.Revision++
-	}
+	return masks
 }
 
-// archiveOldestSpan serializes the oldest messages into one full-fidelity
-// artifact and replaces the span with a single marker message. The cut is
-// minimal for meeting the target and always lands on a tool-pairing-safe
-// boundary; it never eats into the keep-recent window.
-func (c Condenser) archiveOldestSpan(ctx context.Context, messages *[]domain.Message, artifacts domain.ArtifactStore, result *compactResult) {
-	msgs := *messages
-	cutoff := len(msgs) - c.KeepRecentMessages
-	if cutoff <= 0 {
-		return
-	}
-
-	// Smallest drop that meets the target; zero means even the window alone
-	// exceeds it, in which case archival cannot help (Level 2b takes over).
-	drop := 0
-	for cut := 1; cut <= cutoff; cut++ {
-		if estTokens(msgs[cut:]) <= c.target() {
-			drop = cut
-			break
-		}
-	}
-	if drop == 0 {
-		return
-	}
-	cut := pairingSafeCut(msgs, drop, cutoff)
-	if cut == 0 {
-		return
-	}
-
-	data, err := encodeSpan(msgs[:cut])
+// archiveSpan externalizes span as one full-fidelity artifact and builds
+// the archive directive (marker included). ok=false means preservation
+// failed and the caller decides whether to degrade or skip. Shared by
+// Level-2a archival (Condenser.Plan) and the summary-overflow retry
+// (Loop.archiveOldestForSummaryRetry).
+func archiveSpan(ctx context.Context, span []domain.Message, artifacts domain.ArtifactStore, now time.Time) (domain.ContextArchivedPayload, bool) {
+	data, err := encodeSpan(span)
 	if err != nil {
-		return
+		return domain.ContextArchivedPayload{}, false
 	}
 	ref, err := externalize(ctx, artifacts, string(data))
 	if err != nil {
-		// Archival failure must not drop history: keep the span inline.
-		return
+		return domain.ContextArchivedPayload{}, false
 	}
 
 	// The marker replaces the whole span, so it inherits every artifact
@@ -359,7 +354,7 @@ func (c Condenser) archiveOldestSpan(ctx context.Context, messages *[]domain.Mes
 	// only carry text parts, so the references travel in metadata where
 	// checkpointArtifactRefs picks them up for GC tracking.
 	var refs []domain.ArtifactRef
-	for _, msg := range msgs[:cut] {
+	for _, msg := range span {
 		refs = append(refs, msg.ArtifactRefs()...)
 	}
 	refs = append(refs, ref)
@@ -373,16 +368,60 @@ func (c Condenser) archiveOldestSpan(ctx context.Context, messages *[]domain.Mes
 		Role:      domain.RoleSystem,
 		Status:    domain.MessageStatusFinal,
 		Revision:  1,
-		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: archiveMarkerText(cut, ref, artifacts)}},
-		CreatedAt: time.Now().UTC(),
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: archiveMarkerText(len(span), ref, artifacts)}},
+		CreatedAt: now,
 		Metadata:  metadata,
-		// Sequence is left zero here: Condense renumbers the whole list
-		// densely before returning, which is the invariant the rest of the
-		// system (message append, continuation validation) relies on.
+		// Sequence is assigned by dense renumbering at application time.
 	}
-	rest := append([]domain.Message{marker}, msgs[cut:]...)
-	*messages = rest
-	result.archived = cut
+	return domain.ContextArchivedPayload{
+		FromSequence: span[0].Sequence,
+		ToSequence:   span[len(span)-1].Sequence,
+		Artifact:     ref,
+		Marker:       marker,
+	}, true
+}
+
+// planArchiveOldestSpan is the directive-producing form of the former
+// archiveOldestSpan: it archives the oldest message span via archiveSpan
+// and returns the directive plus the post-archive view for the next
+// level's decisions. The cut is minimal for meeting the target and always
+// lands on a tool-pairing-safe boundary; it never eats into the keep-recent
+// window.
+func (c Condenser) planArchiveOldestSpan(ctx context.Context, view []domain.Message, artifacts domain.ArtifactStore, now time.Time) (domain.ContextArchivedPayload, []domain.Message, bool) {
+	cutoff := len(view) - c.KeepRecentMessages
+	if cutoff <= 0 {
+		return domain.ContextArchivedPayload{}, view, false
+	}
+
+	// Smallest drop that meets the target; zero means even the window alone
+	// exceeds it, in which case archival cannot help (Level 2b takes over).
+	drop := 0
+	for cut := 1; cut <= cutoff; cut++ {
+		if estTokens(view[cut:]) <= c.target() {
+			drop = cut
+			break
+		}
+	}
+	if drop == 0 {
+		return domain.ContextArchivedPayload{}, view, false
+	}
+	cut := pairingSafeCut(view, drop, cutoff)
+	if cut == 0 {
+		return domain.ContextArchivedPayload{}, view, false
+	}
+
+	archive, ok := archiveSpan(ctx, view[:cut], artifacts, now)
+	if !ok {
+		// Archival failure must not drop history: keep the span inline.
+		return domain.ContextArchivedPayload{}, view, false
+	}
+	applied, err := domain.ApplyArchiveDirective(view, archive)
+	if err != nil {
+		// Self-generated directive must apply; on failure drop the archive
+		// (the span stays inline) rather than emit a corrupt event.
+		return domain.ContextArchivedPayload{}, view, false
+	}
+	return archive, applied, true
 }
 
 // pairingSafeCut finds the smallest cut index in [want, limit] that does not
@@ -480,9 +519,32 @@ func maskPlaceholder(originalBytes int, ref domain.ArtifactRef, artifacts domain
 		compactedPlaceholderMark, human, locator)
 }
 
-// imageTokenFootprint is the conservative byte footprint of one image in
+// imageTokenFootprint is the floor byte footprint of one image in
 // estTokens' pre-division total (1500 tokens x 4 bytes/token).
 const imageTokenFootprint = 1500 * 4
+
+// imageWireFootprint returns the conservative pre-division byte footprint
+// of one model-bound image: the flat floor, or the base64 wire size when
+// the actual blob size is known. Some gateways meter raw prompt length
+// including inline base64 (observed: aigc rejected a nominally ~57k-token
+// request carrying ~680KB of images with "Prompt exceeds max length"), so
+// the flat floor alone can undercount a wire form by an order of magnitude.
+func imageWireFootprint(sizeBytes int64) int {
+	wire := sizeBytes * 4 / 3 // base64 inflation
+	if wire < imageTokenFootprint {
+		return imageTokenFootprint
+	}
+	return int(wire)
+}
+
+// inlineImageFootprint is imageWireFootprint for parts whose Data is
+// already base64-encoded: no inflation needed, just the payload length.
+func inlineImageFootprint(dataLen int) int {
+	if dataLen < imageTokenFootprint {
+		return imageTokenFootprint
+	}
+	return dataLen
+}
 
 // EstimateTokens exposes estTokens for read-only projections outside the
 // agent package (e.g. the session snapshot's occupancy field).
@@ -507,30 +569,38 @@ func estTokens(messages []domain.Message) int {
 						switch content.Kind {
 						case domain.PartText:
 							total += len(content.Text)
-						case domain.PartImage:
-							total += imageTokenFootprint
+				case domain.PartImage:
+					if content.Image != nil {
+						total += inlineImageFootprint(len(content.Image.Data))
+					} else {
+						total += imageTokenFootprint
+					}
 						case domain.PartArtifact:
 							// Image references bound for the model are materialized
 							// into inline images on the wire (media.Materialize);
 							// count their derived footprint. Present-only artifacts
 							// are excluded — the model never sees them.
 							if media.IsModelImage(content) {
-								total += imageTokenFootprint
+								total += imageWireFootprint(content.Artifact.Size)
 							}
 						}
 					}
 				}
 			case domain.PartImage:
 				// A mid-size photo costs roughly 1.1-1.6k tokens with mainstream
-				// vision pricings; use a conservative per-image footprint so
-				// occupancy never underestimates.
+				// vision pricings; the wire-form footprint keeps the estimate
+				// conservative for gateways metering raw prompt length.
+			if part.Image != nil {
+				total += inlineImageFootprint(len(part.Image.Data))
+			} else {
 				total += imageTokenFootprint
+			}
 			case domain.PartArtifact:
 				// Image attachments bound for the model are persisted as
 				// artifact references and materialized at the egress; they cost
 				// the same footprint. Present-only artifacts are excluded.
 				if media.IsModelImage(part) {
-					total += imageTokenFootprint
+					total += imageWireFootprint(part.Artifact.Size)
 				}
 			case domain.PartReasoning:
 				// Reasoning replayed upstream consumes input budget; count it

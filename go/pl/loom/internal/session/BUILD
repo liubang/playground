@@ -40,6 +40,7 @@ go_test(
     srcs = [
         "memory_jobs_test.go",
         "sqlite_store_test.go",
+        "surface_directive_store_test.go",
         "transcript_test.go",
         "workspace_store_test.go",
     ],

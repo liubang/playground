@@ -41,9 +41,23 @@ type TranscriptPage struct {
 	Messages      []domain.Message `json:"messages"`
 }
 
-// Replay rebuilds a canonical transcript from session events.
+// Replay rebuilds the model-visible surface from session events: message
+// events plus compaction directives (docs/SURFACE_DESIGN.md). This is what
+// the model actually saw.
 func Replay(events []domain.Event) (Transcript, error) {
 	projector := newProjector()
+	if err := projector.applyEvents(events, 0); err != nil {
+		return Transcript{}, err
+	}
+	return projector.transcript(), nil
+}
+
+// ReplayFull rebuilds the FULL-FIDELITY transcript, ignoring compaction
+// directives: every message as originally logged, unmasked and unarchived.
+// Use it for audit/export; use Replay for the model-visible surface.
+func ReplayFull(events []domain.Event) (Transcript, error) {
+	projector := newProjector()
+	projector.applyDirectives = false
 	if err := projector.applyEvents(events, 0); err != nil {
 		return Transcript{}, err
 	}
@@ -224,6 +238,11 @@ type projector struct {
 	messageBySequence map[int64]int
 	lastEventSequence int64
 	nextSequence      int64
+	// applyDirectives gates surface directive events (context.masked /
+	// context.archived / context.summarized). Replay and
+	// ReplayFromCheckpoint apply them (surface semantics); ReplayFull
+	// skips them (full-fidelity semantics).
+	applyDirectives bool
 }
 
 func newProjector() *projector {
@@ -231,6 +250,20 @@ func newProjector() *projector {
 		messageByID:       map[string]int{},
 		messageBySequence: map[int64]int{},
 		nextSequence:      1,
+		applyDirectives:   true,
+	}
+}
+
+// replaceMessages swaps the projected surface after a directive
+// application, rebuilding every derived index. Deleted messages must not
+// leave tombstone sequence mappings: post-compaction messages reuse dense
+// numbers and would otherwise collide with the ghosts of archived ones.
+func (p *projector) replaceMessages(messages []domain.Message) {
+	p.messages = append([]domain.Message(nil), messages...)
+	p.rebuildIndexes()
+	p.nextSequence = 1
+	if n := len(p.messages); n > 0 {
+		p.nextSequence = p.messages[n-1].Sequence + 1
 	}
 }
 
@@ -283,6 +316,49 @@ func (p *projector) applyEvents(events []domain.Event, minSequence int64) error 
 	return nil
 }
 
+// applySurfaceMessage projects one surface-carrying event payload message:
+// sequence assignment, normalization, and — in full-fidelity mode — the
+// post-compaction sequence collision fallback.
+func (p *projector) applySurfaceMessage(msg domain.Message) error {
+	if msg.Sequence == 0 {
+		msg.Sequence = p.nextLogicalSequence(msg.ID)
+	}
+	normalized, err := p.normalizeMessage(msg)
+	if err != nil {
+		return err
+	}
+	if !p.applyDirectives {
+		// Full-fidelity replay (ReplayFull) keeps pre-compaction
+		// messages, so a post-compaction message arrives with a
+		// sequence that is dense for the COMPACTED surface but already
+		// taken here. Its recorded sequence is meaningless in this
+		// view; append it at the next logical position instead.
+		if existingIdx, taken := p.messageBySequence[normalized.Sequence]; taken && p.messages[existingIdx].ID != normalized.ID {
+			normalized.Sequence = p.nextLogicalSequence(normalized.ID)
+		}
+	}
+	return p.applyMessage(normalized)
+}
+
+// applyDirective applies one surface directive event: decode the payload,
+// run the shared domain application function, and swap the projected
+// surface. Full-fidelity replay (ReplayFull) skips directives entirely.
+func applyDirective[P any](p *projector, evt domain.Event, apply func(P) ([]domain.Message, error)) error {
+	if !p.applyDirectives {
+		return nil
+	}
+	var payload P
+	if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid %s payload: %w", evt.Type, err)
+	}
+	out, err := apply(payload)
+	if err != nil {
+		return err
+	}
+	p.replaceMessages(out)
+	return nil
+}
+
 func (p *projector) applyEvent(evt domain.Event) error {
 	switch evt.Type {
 	case domain.EventSessionCreated,
@@ -290,6 +366,7 @@ func (p *projector) applyEvent(evt domain.Event) error {
 		domain.EventRunStateChanged,
 		domain.EventModelRequestStarted,
 		domain.EventModelRequestFailed,
+		domain.EventModelRequestHeader,
 		domain.EventToolCallPrepared,
 		domain.EventPermissionRequested,
 		domain.EventPermissionResolved,
@@ -297,27 +374,41 @@ func (p *projector) applyEvent(evt domain.Event) error {
 		domain.EventToolExecutionCompleted,
 		domain.EventFileChanged,
 		domain.EventPlanRevised,
+		domain.EventGoalUpdated,
 		domain.EventContextCompacted,
 		domain.EventCheckpointCreated,
 		domain.EventBudgetUpdated,
+		domain.EventBudgetWrapupStarted,
 		domain.EventRunCompleted,
 		domain.EventRunFailed,
 		domain.EventRunCancelled:
 		return nil
+	case domain.EventBudgetNotice:
+		// Budget notices are surface messages too (AddBudgetNotice appends
+		// them to the transcript); project them like any message event.
+		var payload domain.BudgetNoticePayload
+		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+			return fmt.Errorf("invalid budget.notice payload: %w", err)
+		}
+		return p.applySurfaceMessage(payload.Message)
 	case domain.EventUserMessageAdded, domain.EventModelResponseCompleted, domain.EventToolResultAdded:
 		payload, err := domain.UnmarshalMessageEventPayload(evt.Payload)
 		if err != nil {
 			return err
 		}
-		msg := payload.Message
-		if msg.Sequence == 0 {
-			msg.Sequence = p.nextLogicalSequence(msg.ID)
-		}
-		normalized, err := p.normalizeMessage(msg)
-		if err != nil {
-			return err
-		}
-		return p.applyMessage(normalized)
+		return p.applySurfaceMessage(payload.Message)
+	case domain.EventContextMasked:
+		return applyDirective(p, evt, func(payload domain.ContextMaskedPayload) ([]domain.Message, error) {
+			return domain.ApplyMaskDirective(p.messages, payload.Masks)
+		})
+	case domain.EventContextArchived:
+		return applyDirective(p, evt, func(payload domain.ContextArchivedPayload) ([]domain.Message, error) {
+			return domain.ApplyArchiveDirective(p.messages, payload)
+		})
+	case domain.EventContextSummarized:
+		return applyDirective(p, evt, func(payload domain.ContextSummarizedPayload) ([]domain.Message, error) {
+			return domain.ApplyReplacementDirective(p.messages, payload.Replacement)
+		})
 	default:
 		return fmt.Errorf("unsupported event type %q", evt.Type)
 	}
