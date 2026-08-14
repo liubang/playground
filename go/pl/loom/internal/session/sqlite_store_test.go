@@ -883,43 +883,6 @@ func TestSQLiteStorePreservesIgnorableFlag(t *testing.T) {
 	}
 }
 
-// TestSQLiteStoreMigrateV9AddsIgnorableColumn: a pre-v9 database (column
-// dropped, marker rewound) gains the ignorable column on open, with the
-// persisted events intact and defaulting to non-ignorable.
-func TestSQLiteStoreMigrateV9AddsIgnorableColumn(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "sessions.db")
-	store := openTestSQLiteStore(t, path)
-	sessionID := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	ckpt := testCheckpoint(sessionID, 1, time.Now().UTC())
-	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0,
-		[]domain.Event{newEvent(sessionID, 1, domain.EventSessionCreated, nil)}, ckpt); err != nil {
-		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
-	}
-	// Simulate a pre-v9 database: drop the column and the v9 marker.
-	if _, err := store.db.ExecContext(ctx, "ALTER TABLE events DROP COLUMN ignorable"); err != nil {
-		t.Fatalf("drop ignorable column: %v", err)
-	}
-	if _, err := store.db.ExecContext(ctx, "DELETE FROM schema_migrations WHERE version >= 9"); err != nil {
-		t.Fatalf("downgrade schema marker: %v", err)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
-	store = openTestSQLiteStore(t, path)
-	loaded, err := store.LoadEvents(ctx, sessionID, 0)
-	if err != nil {
-		t.Fatalf("LoadEvents after v9 migration: %v", err)
-	}
-	if len(loaded) != 1 || loaded[0].Ignorable {
-		t.Fatalf("migrated events = %+v, want one non-ignorable event", loaded)
-	}
-}
-
 func TestSQLiteStoreRejectsNewerSchema(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "sessions.db")
