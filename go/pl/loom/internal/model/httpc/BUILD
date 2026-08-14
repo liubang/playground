@@ -22,10 +22,12 @@ go_library(
     srcs = ["httpc.go"],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/model/httpc",
     visibility = ["//visibility:public"],
+    deps = ["//go/pl/loom/internal/domain:domain_lib"],
 )
 
 go_test(
     name = "httpc_test",
     srcs = ["httpc_test.go"],
     embed = [":httpc_lib"],
+    deps = ["//go/pl/loom/internal/domain:domain_lib"],
 )

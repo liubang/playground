@@ -20,6 +20,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -415,7 +416,10 @@ func TestE2EDelegateTaskChildFailure(t *testing.T) {
 	// finishes the turn itself (3).
 	mock := newMockOpenAI(t, []mockEntry{
 		{ToolName: "delegate_task", ToolArgs: `{"task":"研究 X"}`, UsageIn: 100, UsageOut: 30},
-		{Fail: true},
+		// The child failure must be non-retryable: a retryable 5xx sends the
+		// child loop into its bounded wait-and-retry, which would consume
+		// the parent's scripted entries below.
+		{Fail: true, FailStatus: http.StatusBadRequest},
 		{Text: "子 Agent 不可用，我直接自己查。", UsageIn: 50, UsageOut: 20},
 	})
 	model := mock.provider(t)

@@ -16,6 +16,8 @@ import {
   resolvedNotice,
   noticeBlock,
   fatalBlock,
+  interruptedBlock,
+  failureText,
   histTarget,
   histCompletion,
   compactBlock,
@@ -46,6 +48,7 @@ export class Transcript {
     this._turnAssistant = null // 本轮最新 assistant 块（轮结束时挂操作行）
     this._turnAssistantTs = '' // 该块内容的事件时间
     this._turnRunID = '' // 本轮 run id（跟随最新可信事件），反馈投票目标
+    this._turnErrorShown = false // 本轮是否已渲染错误块（避免 turn.finished 重复展示）
 
     scroller.addEventListener('scroll', () => {
       const gap = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
@@ -77,6 +80,7 @@ export class Transcript {
     this._turnAssistant = null
     this._turnAssistantTs = ''
     this._turnRunID = ''
+    this._turnErrorShown = false
     if (this.followBtn) this.followBtn.hidden = true
   }
 
@@ -182,7 +186,13 @@ export class Transcript {
           // 反馈目标：消息落盘时 agent loop 已打上 run_id metadata
           const runId = (m.metadata && m.metadata.run_id) || ''
           if (runId) lastRunId = runId
-          lastAssistant = assistantBlock(text)
+          if (m.status === 'interrupted') {
+            // 流式中断的残段消息：渲染为持久的中断块，而不是普通
+            // assistant 块——否则错误痕迹在切换会话后凭空消失
+            lastAssistant = interruptedBlock((text ? text + '\n' : '') + '[interrupted]')
+          } else {
+            lastAssistant = assistantBlock(text)
+          }
           lastTs = createdAt
           this._append(lastAssistant)
         }
@@ -269,6 +279,12 @@ export class Transcript {
     }
     // pending steer 队列重建（STEER_DESIGN §4.5：snapshot 兜底）
     for (const text of snap.pending_steers || []) this._addSteerNotice(text)
+    // 上一轮失败的持久错误块：实时路径的错误块不随 snapshot 重建，
+    // 没有它的话切换会话/刷新后失败痕迹就消失了
+    if (snap.last_error && snap.last_error.message) {
+      this._append(fatalBlock(failureText(snap.last_error)))
+      this._turnErrorShown = true
+    }
     // 快照可能截在轮次中途：进行中的轮不挂行（留给轮终止事件挂，
     // 状态接力给实时路径）；已完结的轮在此收尾挂行。
     const running =
@@ -298,6 +314,7 @@ export class Transcript {
     switch (evt.kind) {
       case 'turn.started':
         this._hideThinking()
+        this._turnErrorShown = false
         this._drainSteerNotices(p.prompt || '')
         // 图片附件随事件载荷实时渲染（artifact 引用，鉴权加载），不再
         // 依赖切会话后的 snapshot 重放才能看到。
@@ -313,6 +330,12 @@ export class Transcript {
         this._finalizeStream()
         this._finalizeReasoning()
         this._attachTurnActions()
+        // 兜底展示未被 model.request_failed / runtime.fatal 覆盖的轮级
+        // 失败（如持久化错误）；已展示过错误块则不重复
+        if (p.error && !this._turnErrorShown) {
+          this._append(fatalBlock(`turn failed — ${(p.error || '').slice(0, 300)}`))
+          this._turnErrorShown = true
+        }
         break
       case 'model.text_delta':
         this._hideThinking()
@@ -341,13 +364,22 @@ export class Transcript {
         break
       case 'model.request_failed': {
         this._hideThinking()
-        const detail = (p.message || '').slice(0, 300)
+        // 与 snapshot.last_error 重建时同款 fatal 块：实时与历史一致
+        this._append(fatalBlock(failureText(p)))
+        this._turnErrorShown = true
+        break
+      }
+      case 'model.request_retrying': {
+        // 限流/瞬态错误：等待重试中。保持 thinking 动画，让轮次看起来
+        // 仍然存活，而不是静默卡死
+        const waitS = Math.max(1, Math.round((p.wait_ms || 0) / 1000))
         this._append(
           noticeBlock(
-            `model request failed (${p.stage || 'unknown'}): ${p.code || ''}${detail ? ' — ' + detail : ''}`,
+            `model request ${p.code || 'failed'} — retrying in ${waitS}s (attempt ${p.attempt || '?'}/${p.max_attempts || '?'})`,
             true,
           ),
         )
+        this._showThinking()
         break
       }
       case 'tool.prepared': {
@@ -420,6 +452,7 @@ export class Transcript {
       case 'runtime.fatal':
         this._hideThinking()
         this._append(fatalBlock(p.message || 'runtime fatal'))
+        this._turnErrorShown = true
         this._attachTurnActions()
         break
       case 'subagent.started':

@@ -720,6 +720,37 @@ func TestProviderStreamRetriesHTTP429BeforeStream(t *testing.T) {
 	)
 }
 
+// TestProviderStreamClassifiesExhaustedRateLimit pins the terminal error
+// contract: once the bounded establishment retries are exhausted, the 429
+// surfaces as a retryable domain.ErrRateLimited (not an opaque internal
+// error), so the agent loop can wait out the gateway's rate window.
+func TestProviderStreamClassifiesExhaustedRateLimit(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, `{"error":{"message":"rate limited"}}`)
+	}))
+	defer server.Close()
+
+	provider := newTestProvider(t, server, server.Client(), 0)
+	_, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "gpt-test",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "hi")},
+	})
+	var ae *domain.AgentError
+	if !errors.As(err, &ae) {
+		t.Fatalf("err = %v, want *domain.AgentError", err)
+	}
+	if ae.Code != domain.ErrRateLimited || !ae.Retryable {
+		t.Fatalf("err = [%s] retryable=%v, want [rate_limited] retryable=true", ae.Code, ae.Retryable)
+	}
+	if !strings.Contains(err.Error(), "rate limited") {
+		t.Fatalf("err = %v, want the provider message preserved", err)
+	}
+}
+
 func TestProviderStreamRetriesRequestFailureBeforeResponse(t *testing.T) {
 	t.Parallel()
 

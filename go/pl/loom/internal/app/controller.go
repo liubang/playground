@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -86,6 +87,13 @@ type Snapshot struct {
 	// its UI from the snapshot alone (docs/SERVE_DESIGN.md §4.4).
 	PendingRequests []PendingRequest `json:"pending_requests,omitempty"`
 	PendingSteers   []string         `json:"pending_steers,omitempty"`
+	// LastError projects the most recent unrecovered turn failure (a model
+	// request the loop gave up on, or a turn-level error) so a
+	// (re)connecting client can render a persistent error block from the
+	// snapshot alone — live-only error blocks otherwise vanish on session
+	// switch/reload. Cleared when a later model call succeeds or a new
+	// turn starts.
+	LastError *SnapshotError `json:"last_error,omitempty"`
 	// Plan is the run's latest task plan (update_plan), projected so a
 	// (re)connecting client can render the plan panel from the snapshot
 	// alone instead of waiting for the next plan.updated event.
@@ -100,6 +108,29 @@ type Snapshot struct {
 	// handoff (docs/SERVE_DESIGN.md §4.4).
 	EventSeq  uint64    `json:"event_seq"`
 	Timestamp time.Time `json:"timestamp"`
+}
+
+// SnapshotError is the wire projection of a terminal turn failure. Stage
+// and Code come from the model.request_failed audit event when one
+// preceded the failure; a bare Message means the turn died from a cause
+// the domain log could not represent (e.g. a persistence error).
+type SnapshotError struct {
+	Stage   string `json:"stage,omitempty"`
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message"`
+}
+
+// snapshotErrorMaxRunes bounds a projected error message: provider error
+// bodies can embed multi-hundred-byte JSON blobs.
+const snapshotErrorMaxRunes = 300
+
+// truncateRunes bounds a projected error message for wire payloads.
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
 }
 
 // WindowInfo is the wire projection of agent.WindowModel: every threshold a
@@ -187,6 +218,12 @@ type Controller struct {
 	runtime   *SessionRuntime
 	lastUsage domain.Usage
 	messages  []domain.Message
+	// lastError projects the latest unrecovered turn failure for
+	// Snapshot.LastError: set by EventModelRequestFailed (and, as a
+	// fallback, by turn-finish errors the event log could not represent),
+	// cleared by EventModelResponseCompleted / EventRunCreated. The pointed
+	// value is never mutated in place, so snapshots may share it.
+	lastError *SnapshotError
 	// plan/hasPlan project the run's latest task plan (domain.EventPlanRevised)
 	// for Snapshot consumers; seeded from the checkpoint on session resume.
 	plan    domain.Plan
@@ -1125,6 +1162,11 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 		return
 	}
 	c.state = ControllerStateRunning
+	// A new turn supersedes the previous turn's failure projection. This
+	// is the authoritative turn-start point: run.created events are
+	// persisted by flushRunEvents directly against the store, so they
+	// never flow through publishingStore's projection updates.
+	c.lastError = nil
 	turnCounter := c.turnCounter + 1
 	c.turnCounter = turnCounter
 	c.nextTurn++
@@ -1548,6 +1590,15 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 	c.mu.Lock()
 	if err != nil {
 		c.logger.Error("turn finished with error", "error", err)
+		// Turns can die from causes the domain log could not represent (e.g.
+		// a persistence failure before any run-failed event): keep a generic
+		// failure projection so reconnecting clients still see the turn
+		// failed. A preceding model.request_failed already recorded the
+		// richer structured reason and wins; cancellation is a user action,
+		// never an error.
+		if c.lastError == nil && !errors.Is(err, context.Canceled) {
+			c.lastError = &SnapshotError{Message: truncateRunes(err.Error(), snapshotErrorMaxRunes)}
+		}
 	}
 	if c.activeTurn != turnID {
 		c.mu.Unlock()
@@ -1570,9 +1621,10 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 	c.mu.Unlock()
 
 	var payload any
-	if err != nil {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		// Surface turn failures the domain log could not represent (for example
 		// a persistence error before the loop emitted any run-failed event).
+		// Cancellation is a user action already carried by run.cancelled.
 		payload = runtimeevent.TurnFinishedPayload{Error: err.Error()}
 	}
 	c.publishDurable(sessionID, runID, turn, runtimeevent.KindTurnFinished, payload)
@@ -1736,6 +1788,7 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	c.runID = domain.RunID{}
 	c.turnCounter = 0
 	c.messages = nil
+	c.lastError = nil
 	c.plan = domain.Plan{}
 	c.hasPlan = false
 	c.delegated = false
@@ -1870,6 +1923,7 @@ func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	c.runID = domain.RunID{}
 	c.turnCounter = 0
 	c.messages = append([]domain.Message(nil), inspection.Transcript.Messages...)
+	c.lastError = lastErrorFromEvents(inspection.Events)
 	c.lastUsage = run.Usage
 	// Seed the plan projection from the checkpoint: the plan survives prompt
 	// boundaries like the goal does, and no EventPlanRevised is re-emitted
@@ -1994,6 +2048,7 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 		PendingApprovals:    c.approver.PendingApprovals(),
 		PendingRequests:     pending,
 		PendingSteers:       c.steerCellPeek(),
+		LastError:           c.lastError,
 		EventSeq:            c.appliedSeq,
 		Timestamp:           c.clock.Now(),
 	}
@@ -2296,6 +2351,9 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 	case domain.EventModelResponseCompleted:
 		var payload domain.MessageEventPayload
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+			// A successful call recovers any earlier failure projection
+			// (e.g. a context-overflow retry that eventually went through).
+			s.controller.clearLastError()
 			hasToolCalls := len(payload.Message.ToolCalls()) > 0
 			requestID, parseErr := domain.ParseEventID(payload.Message.Metadata["request_id"])
 			if parseErr != nil {
@@ -2332,11 +2390,29 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 	case domain.EventModelRequestFailed:
 		var payload modelRequestFailedDTO
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+			s.controller.setLastError(&SnapshotError{
+				Stage:   payload.Stage,
+				Code:    payload.Code,
+				Message: truncateRunes(payload.Message, snapshotErrorMaxRunes),
+			})
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindModelRequestFailed, runtimeevent.ModelRequestFailedPayload{
 				RequestID: payload.RequestID,
 				Stage:     payload.Stage,
 				Code:      payload.Code,
 				Message:   payload.Message,
+			})
+		}
+	case domain.EventModelRequestRetrying:
+		var payload modelRequestRetryingDTO
+		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindModelRequestRetrying, runtimeevent.ModelRequestRetryingPayload{
+				RequestID:   payload.RequestID,
+				Stage:       payload.Stage,
+				Code:        payload.Code,
+				Message:     payload.Message,
+				Attempt:     payload.Attempt,
+				MaxAttempts: payload.MaxAttempts,
+				WaitMs:      payload.WaitMs,
 			})
 		}
 	case domain.EventToolCallPrepared:
@@ -2346,7 +2422,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				CallID:   payload.CallID,
 				ToolName: payload.Tool,
 				Risk:     payload.Risk,
-				Target:   toolCallTarget(payload),
+				Target:   toolCallTarget(payload, s.pendingArgs[payload.CallID]),
 				Diff:     render.DiffForToolCall(payload.Tool, s.pendingArgs[payload.CallID], domain.ToolDiffUnbounded),
 			})
 		}
@@ -2511,8 +2587,15 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 	case domain.EventRunCompleted:
 		s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindRunCompleted, nil)
 	case domain.EventRunFailed:
+		// The bare "run failed" carries no diagnosable reason; enrich it
+		// with the recorded request failure so live clients can show what
+		// actually killed the run.
+		message := "run failed"
+		if last := s.controller.currentLastError(); last != nil && last.Message != "" {
+			message = "run failed: " + last.Message
+		}
 		s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindRuntimeFatal, runtimeevent.RuntimeFatalPayload{
-			Message: "run failed",
+			Message: message,
 		})
 	case domain.EventRunCancelled:
 		s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindRunCancelled, nil)
@@ -2535,6 +2618,62 @@ type modelRequestFailedDTO struct {
 	Stage     string         `json:"stage"`
 	Code      string         `json:"code"`
 	Message   string         `json:"message,omitempty"`
+}
+
+// modelRequestRetryingDTO mirrors the agent's unexported retry payload.
+type modelRequestRetryingDTO struct {
+	RequestID   domain.EventID `json:"request_id"`
+	Stage       string         `json:"stage"`
+	Code        string         `json:"code"`
+	Message     string         `json:"message,omitempty"`
+	Attempt     int            `json:"attempt"`
+	MaxAttempts int            `json:"max_attempts"`
+	WaitMs      int64          `json:"wait_ms"`
+}
+
+// setLastError records the latest unrecovered turn failure for snapshots.
+func (c *Controller) setLastError(failure *SnapshotError) {
+	c.mu.Lock()
+	c.lastError = failure
+	c.mu.Unlock()
+}
+
+// clearLastError drops the failure projection (recovery or a new turn).
+func (c *Controller) clearLastError() {
+	c.mu.Lock()
+	c.lastError = nil
+	c.mu.Unlock()
+}
+
+// currentLastError reads the failure projection. The value is never
+// mutated in place, so the returned pointer is safe to share.
+func (c *Controller) currentLastError() *SnapshotError {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.lastError
+}
+
+// lastErrorFromEvents rebuilds the last-failure projection from the
+// persisted timeline on session resume: a request failure sticks until a
+// later successful response or a new run supersedes it.
+func lastErrorFromEvents(events []domain.Event) *SnapshotError {
+	var last *SnapshotError
+	for _, ev := range events {
+		switch ev.Type {
+		case domain.EventModelRequestFailed:
+			var payload modelRequestFailedDTO
+			if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+				last = &SnapshotError{
+					Stage:   payload.Stage,
+					Code:    payload.Code,
+					Message: truncateRunes(payload.Message, snapshotErrorMaxRunes),
+				}
+			}
+		case domain.EventModelResponseCompleted, domain.EventRunCreated:
+			last = nil
+		}
+	}
+	return last
 }
 
 // contextCompactedDTO mirrors the agent's unexported compaction payload.
@@ -2579,9 +2718,19 @@ type toolExecutionCompletedDTO struct {
 }
 
 // toolCallTarget picks the most descriptive display target for a prepared
-// call: the first write path, then the first read path, then the approval
-// description.
-func toolCallTarget(audit toolCallAuditDTO) string {
+// call. For run_cmd the read/write paths are always the workspace root
+// (enforcement boundary, not the interesting target): the command line
+// reconstructed from the call arguments is what the user wants to see, with
+// the approval description as fallback (e.g. pending-args cap overflow).
+// For all other tools: the first write path, then the first read path,
+// then the approval description.
+func toolCallTarget(audit toolCallAuditDTO, args json.RawMessage) string {
+	if audit.Tool == "run_cmd" {
+		if cmd := runCmdCommandLine(args); cmd != "" {
+			return cmd
+		}
+		return audit.ApprovalDesc
+	}
 	if len(audit.WritePaths) > 0 {
 		return audit.WritePaths[0]
 	}
@@ -2589,6 +2738,24 @@ func toolCallTarget(audit toolCallAuditDTO) string {
 		return audit.ReadPaths[0]
 	}
 	return audit.ApprovalDesc
+}
+
+// runCmdCommandLine reconstructs the displayed command line for a run_cmd
+// call from its arguments: "program arg1 arg2 ..." with ambiguous elements
+// quoted (single home: render.CommandLineForDisplay, mirrored by the WebUI
+// snapshot path in JS).
+func runCmdCommandLine(args json.RawMessage) string {
+	if len(args) == 0 {
+		return ""
+	}
+	var parsed struct {
+		Program string   `json:"program"`
+		Args    []string `json:"args"`
+	}
+	if err := json.Unmarshal(args, &parsed); err != nil || parsed.Program == "" {
+		return ""
+	}
+	return render.CommandLineForDisplay(append([]string{parsed.Program}, parsed.Args...))
 }
 
 // Bounds for the tool result preview carried by runtime ToolCompleted

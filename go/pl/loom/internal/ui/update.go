@@ -2337,6 +2337,13 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 			m.setStatus(fmt.Sprintf("Model request failed at %s: %s", payload.Stage, payload.Code), true)
 		}
 		m.setActivity("Model request failed")
+	case runtimeevent.KindModelRequestRetrying:
+		var payload runtimeevent.ModelRequestRetryingPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			m.setStatus(fmt.Sprintf("Model request %s; retrying in %.0fs (attempt %d/%d)",
+				payload.Code, float64(payload.WaitMs)/1000, payload.Attempt, payload.MaxAttempts), true)
+		}
+		m.setActivity("Waiting to retry model request")
 	case runtimeevent.KindContextCompacted:
 		var payload runtimeevent.ContextCompactedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {

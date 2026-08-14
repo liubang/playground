@@ -36,6 +36,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
 const (
@@ -221,6 +223,40 @@ func AsStatusError(err error) (*StatusError, bool) {
 		return se, true
 	}
 	return nil, false
+}
+
+// ToDomainError maps a Post failure onto the domain error vocabulary so
+// upper layers can classify it (rate limit vs. permission vs. transient
+// failure) without string matching, and so the agent loop can wait out
+// retryable failures instead of killing the run on the first HTTP 429.
+// Context cancellation and deadline errors pass through unchanged —
+// callers route on those sentinels. The cause chain always preserves err,
+// so typed checks (AsStatusError, HTTP 413 detection) keep working.
+func ToDomainError(prefix string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if se, ok := AsStatusError(err); ok {
+		msg := prefix + ": " + se.Error()
+		switch {
+		case se.Code == http.StatusTooManyRequests:
+			return domain.NewError(domain.ErrRateLimited, msg, domain.WithRetryable(true), domain.WithCause(err))
+		case se.Code == http.StatusUnauthorized || se.Code == http.StatusForbidden:
+			return domain.NewError(domain.ErrPermission, msg, domain.WithCause(err))
+		case se.Code == http.StatusBadRequest:
+			return domain.NewError(domain.ErrInvalidInput, msg, domain.WithCause(err))
+		case se.Code == http.StatusRequestTimeout || se.Code >= 500:
+			return domain.NewError(domain.ErrUnavailable, msg, domain.WithRetryable(true), domain.WithCause(err))
+		default:
+			return domain.NewError(domain.ErrUnavailable, msg, domain.WithCause(err))
+		}
+	}
+	// Transport-level failure (DNS, connection reset, ...): the request
+	// never reached the provider, so retrying is safe.
+	return domain.NewError(domain.ErrUnavailable, prefix+": "+err.Error(), domain.WithRetryable(true), domain.WithCause(err))
 }
 
 // RequireEventStream verifies that resp carries an SSE body.
