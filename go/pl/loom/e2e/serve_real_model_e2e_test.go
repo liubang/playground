@@ -657,6 +657,339 @@ func sessionStoreReadOnly(ctx context.Context, cfg *config.ResolvedConfig) (*ses
 	return session.OpenSQLiteStoreReadOnly(ctx, cfg.Storage.SessionDBPath())
 }
 
+// TestServeRealModelPruneCompactionE2E is the real-model acceptance for
+// the Level-0 tool-result pruner: a medium (8–16KB) tool output must be
+// middle-pruned INLINE during a forced compaction — head and tail
+// survive, the marker records the omission, nothing is externalized —
+// and the session keeps working afterwards. It also verifies the
+// ignorable marking on the persisted log (audit events marked,
+// transcript events not).
+func TestServeRealModelPruneCompactionE2E(t *testing.T) {
+	resolved, home, workspace := realModelHome(t)
+	ctx := context.Background()
+	svc := startRealModelService(t, ctx, resolved, home, workspace)
+
+	// ~10KB: inside the [8KB, 16KB) prune band — below the mask threshold
+	// and below the ingestion truncation.
+	var big strings.Builder
+	big.WriteString("HEAD-SENTINEL-BEGIN\n")
+	for i := 0; i < 165; i++ {
+		fmt.Fprintf(&big, "line-%03d %s\n", i, strings.Repeat("z", 55))
+	}
+	big.WriteString("TAIL-SENTINEL-END\n")
+	bigPath := filepath.Join(workspace, "band.txt")
+	if err := os.WriteFile(bigPath, []byte(big.String()), 0o600); err != nil {
+		t.Fatalf("write band file: %v", err)
+	}
+	smallPath := filepath.Join(workspace, "small.txt")
+	if err := os.WriteFile(smallPath, []byte("tiny\n"), 0o600); err != nil {
+		t.Fatalf("write small file: %v", err)
+	}
+
+	c := client.NewInProc(svc)
+	if err := c.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	eventsCtx, stopEvents := context.WithCancel(ctx)
+	defer stopEvents()
+	events, err := c.SubscribeEvents(eventsCtx, 0)
+	if err != nil {
+		t.Fatalf("SubscribeEvents: %v", err)
+	}
+	collector := &eventCollector{client: c, ch: events}
+	go collector.run()
+
+	// Turn 1: the model reads the ~10KB file into the transcript.
+	turns := collector.turnsDone()
+	if _, err := c.SubmitPrompt(ctx, fmt.Sprintf("用 read_file 工具读取 %s 这个文件，然后只回答：好", bigPath), nil); err != nil {
+		t.Fatalf("SubmitPrompt(turn1): %v", err)
+	}
+	collector.waitTurn(t, turns+1, 3*time.Minute)
+	// Turn 2 (filler): pushes the big output out of the keep-recent window.
+	if _, err := c.SubmitPrompt(ctx, fmt.Sprintf("用 read_file 工具读取 %s 这个文件，然后只回答：好", smallPath), nil); err != nil {
+		t.Fatalf("SubmitPrompt(turn2): %v", err)
+	}
+	collector.waitTurn(t, turns+2, 3*time.Minute)
+
+	// Forced compaction ahead of turn 3: the big output sits outside the
+	// trailing window and must be middle-pruned inline.
+	if _, err := c.RequestCompaction(ctx); err != nil {
+		t.Fatalf("RequestCompaction: %v", err)
+	}
+	if _, err := c.SubmitPrompt(ctx, "用一个字回答：嗯", nil); err != nil {
+		t.Fatalf("SubmitPrompt(turn3): %v", err)
+	}
+	collector.waitTurn(t, turns+3, 3*time.Minute)
+
+	// The transcript must show the pruned form: marker + head + tail.
+	snap, err := c.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	var prunedText string
+	for _, msg := range snap.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind == domain.PartToolResult && part.ToolResult != nil {
+				for _, content := range part.ToolResult.Content {
+					if strings.Contains(content.Text, "[... tool result middle pruned:") {
+						prunedText = content.Text
+					}
+				}
+			}
+		}
+	}
+	if prunedText == "" {
+		t.Fatal("no middle-pruned tool output in the transcript after forced compaction")
+	}
+	if !strings.Contains(prunedText, "HEAD-SENTINEL-BEGIN") || !strings.Contains(prunedText, "TAIL-SENTINEL-END") {
+		t.Fatalf("pruned output lost its head/tail sentinels: %q...", prunedText[:120])
+	}
+
+	// The durable audit: one context.masked directive carrying exactly one
+	// prune and zero masks; audit events are ignorable, transcript events
+	// are not.
+	store, err := sessionStoreReadOnly(ctx, resolved)
+	if err != nil {
+		t.Fatalf("open session store: %v", err)
+	}
+	defer store.Close()
+	persisted, err := store.LoadEvents(ctx, c.SessionID(), 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	var sawPrune, sawIgnorableAudit bool
+	for _, evt := range persisted {
+		switch evt.Type {
+		case domain.EventContextMasked:
+			var payload domain.ContextMaskedPayload
+			if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+				t.Fatalf("unmarshal masked payload: %v", err)
+			}
+			if len(payload.Prunes) != 1 || len(payload.Masks) != 0 {
+				t.Fatalf("masked payload = %d prunes / %d masks, want 1/0", len(payload.Prunes), len(payload.Masks))
+			}
+			sawPrune = true
+		case domain.EventModelRequestStarted:
+			if !evt.Ignorable {
+				t.Fatal("model.request_started is pure audit and must be ignorable")
+			}
+			sawIgnorableAudit = true
+		case domain.EventUserMessageAdded:
+			if evt.Ignorable {
+				t.Fatal("user.message_added carries surface state and must NOT be ignorable")
+			}
+		}
+	}
+	if !sawPrune {
+		t.Fatal("no context.masked prune directive persisted")
+	}
+	if !sawIgnorableAudit {
+		t.Fatal("no model.request_started event persisted")
+	}
+	t.Log("ACCEPTANCE PASS: Level-0 pruner + ignorable marks verified against a real model")
+}
+
+// TestServeRealModelOrphanRecoveryE2E is the real-model acceptance for
+// crash-orphaned run closure: a session whose log tail is an unfinished
+// run (the process died mid-turn) recovers with a run.interrupted audit
+// marker and a visible interruption projection, then continues with a
+// real turn.
+func TestServeRealModelOrphanRecoveryE2E(t *testing.T) {
+	resolved, home, workspace := realModelHome(t)
+	ctx := context.Background()
+
+	svc := startRealModelService(t, ctx, resolved, home, workspace)
+	c := client.NewInProc(svc)
+	if err := c.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	sessionID := c.SessionID()
+
+	// Craft the crash tail directly in the store: a run that started and
+	// showed activity but never reached a terminal event.
+	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDBPath())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	existing, err := store.LoadEvents(ctx, sessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	base := int64(len(existing))
+	now := time.Now().UTC()
+	deadRunID := domain.NewRunID()
+	userMsg := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleUser,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "crashed turn"}},
+		CreatedAt: now,
+	}
+	runCreated, err := domain.MarshalPayload(struct {
+		RunID domain.RunID `json:"run_id"`
+	}{RunID: deadRunID})
+	if err != nil {
+		t.Fatalf("marshal run.created: %v", err)
+	}
+	userAdded, err := domain.MarshalPayload(domain.MessageEventPayload{Message: userMsg})
+	if err != nil {
+		t.Fatalf("marshal user message: %v", err)
+	}
+	tail := []domain.Event{
+		{ID: domain.NewEventID(), Sequence: base + 1, SessionID: sessionID, Type: domain.EventRunCreated, Timestamp: now, Payload: runCreated},
+		{ID: domain.NewEventID(), Sequence: base + 2, SessionID: sessionID, Type: domain.EventUserMessageAdded, Timestamp: now, Payload: userAdded},
+		{ID: domain.NewEventID(), Sequence: base + 3, SessionID: sessionID, Type: domain.EventModelRequestStarted, Timestamp: now},
+	}
+	ckpt := domain.Checkpoint{
+		ID: domain.NewCheckpointID(), SessionID: sessionID, Sequence: base + 3,
+		State:    domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
+		Messages: []domain.Message{userMsg}, CreatedAt: now,
+	}
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, base, tail, ckpt); err != nil {
+		t.Fatalf("append crash tail: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close store: %v", err)
+	}
+
+	// Recovery only runs when no live controller owns the session: shut
+	// the first service down and resume through a fresh one.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	_ = svc.Shutdown(shutdownCtx)
+	cancel()
+	svc2 := startRealModelService(t, ctx, resolved, home, workspace)
+	c2 := client.NewInProc(svc2)
+	if err := c2.ResumeSession(ctx, sessionID); err != nil {
+		t.Fatalf("ResumeSession: %v", err)
+	}
+
+	// The interruption projection is visible from the snapshot alone.
+	snap, err := c2.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snap.LastError == nil || !strings.Contains(snap.LastError.Message, "ended before completing") {
+		t.Fatalf("snapshot.last_error = %+v, want the interruption notice", snap.LastError)
+	}
+
+	// The recovered session keeps working against the real model.
+	eventsCtx, stopEvents := context.WithCancel(ctx)
+	defer stopEvents()
+	events, err := c2.SubscribeEvents(eventsCtx, 0)
+	if err != nil {
+		t.Fatalf("SubscribeEvents: %v", err)
+	}
+	collector := &eventCollector{client: c2, ch: events}
+	go collector.run()
+	turns := collector.turnsDone()
+	if _, err := c2.SubmitPrompt(ctx, "用一个字回答：好", nil); err != nil {
+		t.Fatalf("SubmitPrompt: %v", err)
+	}
+	collector.waitTurn(t, turns+1, 3*time.Minute)
+
+	// The orphan marker persisted with the dead run's identity.
+	store2, err := sessionStoreReadOnly(ctx, resolved)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store2.Close()
+	persisted, err := store2.LoadEvents(ctx, sessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	var marker *domain.Event
+	for i := range persisted {
+		if persisted[i].Type == domain.EventRunInterrupted {
+			marker = &persisted[i]
+		}
+	}
+	if marker == nil {
+		t.Fatal("no run.interrupted marker persisted for the crash-orphaned run")
+	}
+	var payload struct {
+		RunID domain.RunID `json:"run_id"`
+	}
+	if err := json.Unmarshal(marker.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal marker: %v", err)
+	}
+	if payload.RunID != deadRunID {
+		t.Fatalf("marker run_id = %s, want the dead run %s", payload.RunID, deadRunID)
+	}
+	if !marker.Ignorable {
+		t.Fatal("run.interrupted is pure audit and must be ignorable")
+	}
+	t.Log("ACCEPTANCE PASS: crash-orphaned run marked interrupted, session recovered with a real turn")
+}
+
+// realModelHome prepares an isolated loom home for the real-model suites:
+// the user's config copied into tmp (making tmp the derived loom home, so
+// the user's stores stay untouched) plus a throwaway workspace. Returns
+// the resolved config, the loom home, and the workspace root.
+func realModelHome(t *testing.T) (*config.ResolvedConfig, string, string) {
+	t.Helper()
+	if os.Getenv("LOOM_E2E_LLM") != "1" {
+		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
+	}
+	configPath := os.Getenv("LOOM_CONFIG")
+	if configPath == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Skipf("no home dir: %v", err)
+		}
+		configPath = filepath.Join(home, ".loom", "config.yaml")
+	}
+	configRaw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Skipf("loom config not found at %s", configPath)
+	}
+	tmp := t.TempDir()
+	isolatedConfig := filepath.Join(tmp, "config.yaml")
+	if err := os.WriteFile(isolatedConfig, configRaw, 0o600); err != nil {
+		t.Fatalf("write isolated config: %v", err)
+	}
+	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
+	if err != nil {
+		t.Skipf("load loom config: %v", err)
+	}
+	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	workspace := filepath.Join(tmp, "ws")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir ws: %v", err)
+	}
+	return resolved, tmp, workspace
+}
+
+// startRealModelService brings up the serve-path stack (process runtime,
+// workspace bootstrap, broker, singleton service) on an isolated home.
+func startRealModelService(t *testing.T, ctx context.Context, resolved *config.ResolvedConfig, home, workspace string) *app.SessionService {
+	t.Helper()
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(home, "artifacts"),
+		Version:     "e2e",
+		Logger:      discard,
+	})
+	if err != nil {
+		t.Fatalf("NewProcessRuntime: %v", err)
+	}
+	t.Cleanup(func() { proc.Close() })
+	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{WorkspaceRoot: workspace})
+	if err != nil {
+		t.Fatalf("NewWorkspaceBootstrap: %v", err)
+	}
+	t.Cleanup(func() { bootstrap.Close() })
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
+	t.Cleanup(broker.Close)
+	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		_ = svc.Shutdown(shutdownCtx)
+	})
+	return svc
+}
+
 // eventCollector drains a subscription and auto-resolves any
 // approval/question requests so real-model turns never wedge.
 type eventCollector struct {

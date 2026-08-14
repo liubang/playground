@@ -1886,7 +1886,7 @@ func TestLastErrorFromEventsProjectsOrphanedTurn(t *testing.T) {
 	// Crash mid-turn: the tail run never resolved.
 	orphan := []domain.Event{created(), started()}
 	got := lastErrorFromEvents(orphan)
-	if got == nil || !strings.Contains(got.Message, "ended abruptly") {
+	if got == nil || !strings.Contains(got.Message, "ended before completing") {
 		t.Fatalf("orphan lastError = %+v, want the interruption notice", got)
 	}
 

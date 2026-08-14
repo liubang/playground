@@ -2740,7 +2740,7 @@ func lastErrorFromEvents(events []domain.Event) *SnapshotError {
 		}
 	}
 	if last == nil && !agent.OrphanedRunID(events).IsZero() {
-		last = &SnapshotError{Message: "previous turn ended abruptly (process exit or crash); the session recovered and can continue"}
+		last = &SnapshotError{Message: "previous turn ended before completing (crash, kill, or rewind); the session recovered and can continue"}
 	}
 	return last
 }
