@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | v3.3（P1 已实现；v3.2 新增 `LOOM_CONFIG` 定位变量、headless 复用 Bootstrap；v3.3 删除废弃 env warn 机制与全部迁移叙述注释——开发期无历史用户） |
+| 状态 | v3.4（P1 已实现；v3.2 新增配置定位变量、headless 复用 Bootstrap；v3.3 删除废弃 env warn 机制与全部迁移叙述注释；v3.4 定位变量由 `LOOM_CONFIG`（文件路径）改为 `LOOM_HOME`（loom home 目录，配置/日志/记忆等全部派生其下）——开发期无历史用户） |
 | 日期 | 2026-07-26 |
 | 关联文档 | `DESIGN.md`（§4 总体架构）、`TUI_DESIGN.md`（Slash Command）、`SERVE_DESIGN.md`（§2.2 G8 装配逻辑两份） |
 | 目标读者 | loom 运行时与前端贡献者 |
@@ -52,10 +52,10 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 | 权限规则 | `LOOM_RULES` / `LOOM_BUILTIN_RULES` / `LOOM_PROJECT_RULES` / `LOOM_PROJECT_RULES_ALLOW` / `LOOM_RULES_PERSIST` | `permission/policy.go` / `app/controller.go` | 迁移：`rules.*` |
 | 追踪 | `LOOM_LANGFUSE_HOST`（fallback `LANGFUSE_HOST` / `LANGFUSE_BASE_URL`）/ `LOOM_LANGFUSE_PUBLIC_KEY` / `LOOM_LANGFUSE_SECRET_KEY` / `LOOM_LANGFUSE_ENVIRONMENT` / `LOOM_TRACE_CONTENT` / `LOOM_TRACE_USER` / `LOOM_COST_INPUT_USD_PER_MTOK` / `LOOM_COST_OUTPUT_USD_PER_MTOK` | `trace/config.go` | 迁移：`tracing.*` |
 | 托管提示词 | `LOOM_PROMPT_NAME` / `LOOM_PROMPT_LABEL` | `bootstrap.go` | 迁移：`prompt.managed.*` |
-| 存储 | `LOOM_SESSION_DB` | `main.go` | 迁移：数据根目录（loom home）即配置文件所在目录，会话库路径随之派生 |
+| 存储 | `LOOM_SESSION_DB` | `main.go` | 迁移：数据根目录（loom home）由 `LOOM_HOME` 定位（默认 `~/.loom`），会话库路径随之派生 |
 | TUI | `LOOM_ICONS` / `LOOM_ALT_SCREEN` | `main.go` | 迁移：`ui.*` |
 | 发布标记 | `LOOM_VERSION` | `main.go` / `process/types.go` / `trace` | 不迁移：非用户配置；自我戳版机制改为装配层显式传入（§8） |
-| 配置定位 | `LOOM_CONFIG`（v3.2 新增） | `main.go` | 不迁移：配置文件**路径**定位器（类比 `KUBECONFIG`），非配置本身；默认 `~/.loom/config.yaml` |
+| 配置定位 | `LOOM_HOME`（v3.4 起；前身为 v3.2 的 `LOOM_CONFIG`） | `main.go` | 不迁移：loom home **目录**定位器（类比 `CARGO_HOME`），非配置本身；默认 `~/.loom`，配置文件固定为 `<loom home>/config.yaml` |
 | 系统标准 | `XDG_STATE_HOME` / `NO_COLOR` / `TERM` / `SHELL` / `USER` / `HOME` | 多处 | 不迁移：社区/OS 标准，保持 env |
 | 归因注入 | `LOOM_SESSION_ID` / `LOOM_AGENT_NAME` / `LOOM_AGENT_VERSION`（由 loom 注入 spawned 命令） | `process/` | 不迁移：运行时输出，非输入 |
 
@@ -96,7 +96,7 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 
 **没有 env 层**。所有 `LOOM_*` 配置变量及其消费代码（`os.Getenv` 读取点、`LimitsFromEnv`、`trace.ConfigFromEnv` 等）整体删除；每个配置项只有一个读取路径：`config.Load` → `ResolvedConfig` → 注入消费方。
 
-**无配置文件时按入口分流**：agent 入口（chat/run/resume/serve/桌面端）在**默认路径** `~/.loom/config.yaml` 缺失时视为首次安装，自动创建带注释的 starter 模板（0700 目录 + 0600 文件）——CLI 打印"已创建，请填写 api_key 后重试"并以非零退出码退出；桌面端继续启动进入设置页收集密钥。显式 `LOOM_CONFIG` 指向的路径缺失仍是**fail fast**：报错信息内嵌最小可用示例供拷贝（见 §9），不猜测、不静默创建（显式路径缺失是用户错误，不该被掩盖）。密钥的 `api_key_env` 引用不是配置层，是运行时密钥解析（见 §5），不受此约束。
+**无配置文件时按入口分流**：agent 入口（chat/run/resume/serve/桌面端）在**默认 loom home**（`~/.loom`）的 `config.yaml` 缺失时视为首次安装，自动创建带注释的 starter 模板（0700 目录 + 0600 文件）——CLI 打印"已创建，请填写 api_key 后重试"并以非零退出码退出；桌面端继续启动进入设置页收集密钥。显式 `LOOM_HOME` 指向的目录缺失 `config.yaml` 仍是**fail fast**：报错信息内嵌最小可用示例供拷贝（见 §9），不猜测、不静默创建（显式 home 未就绪是用户错误，不该被掩盖）。密钥的 `api_key_env` 引用不是配置层，是运行时密钥解析（见 §5），不受此约束。
 
 ### 3.2 加载时机与解析管线
 
@@ -104,7 +104,7 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 ┌────────────────────────────────────────────────────────────────────┐
 │ cmd/loom/main.go（chat / run / resume 共用）                        │
 │                                                                    │
-│  config.Load(userPath, projectPath?)                               │
+│  config.Load(home)                                                 │
 │    ├─ 读取 + yaml 解析 + 结构校验（§7）                              │
 │    ├─ 项目层信任边界过滤（§3.3，P2）                                 │
 │    └─ 密钥引用解析（api_key_env → 值，§5）                           │
@@ -223,12 +223,12 @@ subagent:                                   # delegate_task 子 Agent（docs/SUB
 ### 4.2 字段规则
 
 - **unknown 字段即错误**：yaml 解码开启 `KnownFields(true)`，拼写错误 fail fast；
-- **除 `providers` 外所有字段可选**（回退内置默认）；空文件（或仅注释）按无 provider 处理：agent 入口报"至少一个 provider"（内嵌示例，§9），离线命令按空配置继续；文件**缺失**则按 §3.1 的分流：默认路径自动创建模板引导，显式路径 fail fast 内嵌示例；
+- **除 `providers` 外所有字段可选**（回退内置默认）；空文件（或仅注释）按无 provider 处理：agent 入口报"至少一个 provider"（内嵌示例，§9），离线命令按空配置继续；文件**缺失**则按 §3.1 的分流：默认 home 自动创建模板引导，显式 `LOOM_HOME` fail fast 内嵌示例；
 - **命名唯一性**：`providers[].name` 全局唯一；同一 provider 内 `models[].name` 唯一；跨 provider 允许同名模型（靠 `provider/model` 消歧）；
 - **`default` 解析**（按序）：① 含 `/` → `provider/model` 精确匹配；② 裸名 → 先按 provider 名匹配（取该 provider 的 `default_model`），再按模型名全局唯一匹配；③ 任一步歧义或不命中即报错并列出候选；
 - **`default` 缺省**：取 `providers[0]` 的 `default_model`（其再缺省取 `models[0]`）——单 provider 场景可以不写 `default`；
 - **`base_url` 必填**：`openai.New` 对空 `BaseURL` 静默回退官方端点（`provider.go` `defaultBaseURL`）——deepseek 配置漏写会把密钥与对话发往 `api.openai.com`。显式必填消除这整类静默错配；
-- **数据根目录（loom home）不可配**：即配置文件所在目录（`config.BaseDirForConfigPath`；默认 `~/.loom`），`LOOM_CONFIG` 是唯一的定位入口——配置文件不再自指数据根；所有数据位置由 `config.ResolvedStorage` 派生（sessions/sessions.db、logs/、memories/、rules/、skills/、LOOM.md），代码中不再出现其他 `~/.loom` 硬编码；
+- **数据根目录（loom home）由定位器决定、不可在文件内配置**：即 `LOOM_HOME` 指定的目录（`config.HomeDir`；默认 `~/.loom`），配置文件固定为其下 `config.yaml`，不再自指数据根；所有数据位置由 `config.ResolvedStorage` 派生（sessions/sessions.db、logs/、memories/、rules/、skills/、LOOM.md），代码中不再出现其他 `~/.loom` 硬编码；
 - **duration / 数字**：duration 用 Go 字符串（`30m`、`1h`）；token/字节数用整数（不支持 `10k` 之类后缀，保持简单）。
 
 ---
@@ -351,7 +351,7 @@ Current  ProviderModelRef       // 启动默认，即 config.default 解析结�
 这是一次 **breaking change**，不设兼容期：
 
 - **`LOOM_*` 配置 env 全部失效**（§2.1 表中标记“迁移”的行），不读、不映射、不提示——开发期项目无历史用户，不留迁移辅助代码；
-- **无配置文件时按入口分流**（§3.1）：**默认路径缺失** = 首次安装，自动创建 starter 模板并引导填密钥——CLI 打印路径后非零退出，桌面端继续启动进设置页；**显式 `LOOM_CONFIG` 路径缺失** = fail fast，错误信息内嵌最小可用示例，拷贝改密钥即可用：
+- **无配置文件时按入口分流**（§3.1）：**默认 home 的 config.yaml 缺失** = 首次安装，自动创建 starter 模板并引导填密钥——CLI 打印路径后非零退出，桌面端继续启动进设置页；**显式 `LOOM_HOME` 的 config.yaml 缺失** = fail fast，错误信息内嵌最小可用示例，拷贝改密钥即可用：
 
   ```yaml
   default: deepseek/deepseek-chat
@@ -366,7 +366,7 @@ Current  ProviderModelRef       // 启动默认，即 config.default 解析结�
   ```
 
 - **headless（`loom run`/`resume`）**：同一 `config.Load` 管线，CI 脚本需把 env 改写为配置文件（CI 里密钥可走 `api_key_env` 注入，无需落盘）；
-- **辅助迁移**：`loom config init` 仍可用作手动重建/查看带注释模板的命令（§11）；首次安装的自动引导（默认路径缺失时创建同一模板）已落地，用户无需先知道该命令。
+- **辅助迁移**：`loom config init` 仍可用作手动重建/查看带注释模板的命令（§11）；首次安装的自动引导（默认 home 缺失配置时创建同一模板）已落地，用户无需先知道该命令。
 
 ---
 
@@ -385,7 +385,7 @@ Current  ProviderModelRef       // 启动默认，即 config.default 解析结�
 
 | 阶段 | 内容 | 验收 |
 |------|------|------|
-| **P1**（本期） | `internal/config` 包；用户层配置；provider registry；`SetModel` 引用解析；每模型 `context_window`；装配统一走 `ResolvedConfig`；`/model` 引用语法；**`LOOM_*` 配置 env 与消费代码整体删除**；无配置自动引导（默认路径缺失自动创建模板；显式路径 fail fast 内嵌示例） | 全量测试在配置文件下绿；`grep -r "LOOM_MODEL\|LOOM_BASE_URL\|LOOM_API_KEY" --include='*.go'` 无配置读取点；配置文件端到端切换 provider |
+| **P1**（本期） | `internal/config` 包；用户层配置；provider registry；`SetModel` 引用解析；每模型 `context_window`；装配统一走 `ResolvedConfig`；`/model` 引用语法；**`LOOM_*` 配置 env 与消费代码整体删除**；无配置自动引导（默认 home 缺失配置自动创建模板；显式 `LOOM_HOME` fail fast 内嵌示例） | 全量测试在配置文件下绿；`grep -r "LOOM_MODEL\|LOOM_BASE_URL\|LOOM_API_KEY" --include='*.go'` 无配置读取点；配置文件端到端切换 provider |
 | **P2** | 项目层配置（§3.3 信任边界）；`/model` picker；`loom config init` | 恶意项目层样本全部报错；picker UI 测试 |
 | **P3**（待定） | `api_key_cmd`；配置热加载；模型能力标记；非 openai `type` | 按需求驱动 |
 

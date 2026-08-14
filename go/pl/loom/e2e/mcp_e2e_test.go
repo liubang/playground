@@ -127,8 +127,7 @@ func helperCommand(t *testing.T) (string, []string, map[string]string) {
 }
 
 // prepareSessionsDir creates the sessions subdirectory under the loom
-// home — the config file's directory (bootstrap opens the store but
-// does not create it).
+// home (bootstrap opens the store but does not create it).
 func prepareSessionsDir(t *testing.T, resolved *config.ResolvedConfig) {
 	t.Helper()
 	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
@@ -137,8 +136,8 @@ func prepareSessionsDir(t *testing.T, resolved *config.ResolvedConfig) {
 }
 
 // writeMCPConfig serializes a config.File with a provider and the given
-// MCP servers to a YAML file, returning the path.
-func writeMCPConfig(t *testing.T, dir string, mcpServers map[string]config.MCPServer) string {
+// MCP servers as config.yaml inside dir (the loom home).
+func writeMCPConfig(t *testing.T, dir string, mcpServers map[string]config.MCPServer) {
 	t.Helper()
 	f := config.File{
 		Default: "test/test-model",
@@ -155,11 +154,9 @@ func writeMCPConfig(t *testing.T, dir string, mcpServers map[string]config.MCPSe
 	if err != nil {
 		t.Fatalf("yaml.Marshal() error = %v", err)
 	}
-	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return path
 }
 
 // -----------------------------------------------------------------------
@@ -171,7 +168,8 @@ func writeMCPConfig(t *testing.T, dir string, mcpServers map[string]config.MCPSe
 func TestE2EMCPConfigResolution(t *testing.T) {
 	cmd, args, env := helperCommand(t)
 
-	configPath := writeMCPConfig(t, t.TempDir(), map[string]config.MCPServer{
+	home := t.TempDir()
+	writeMCPConfig(t, home, map[string]config.MCPServer{
 		"echo": {
 			Command:           cmd,
 			Args:              args,
@@ -181,7 +179,7 @@ func TestE2EMCPConfigResolution(t *testing.T) {
 			EnabledTools:      []string{"echo"},
 		},
 	})
-	resolved, err := config.Load(configPath, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
+	resolved, err := config.Load(home, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -240,8 +238,9 @@ func TestE2EMCPConfigValidationErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			configPath := writeMCPConfig(t, t.TempDir(), tt.servers)
-			_, err := config.Load(configPath, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
+			home := t.TempDir()
+			writeMCPConfig(t, home, tt.servers)
+			_, err := config.Load(home, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("Load() error = %v, want %q", err, tt.wantErr)
 			}
@@ -260,7 +259,7 @@ func TestE2EMCPBootstrapIntegration(t *testing.T) {
 	ws := t.TempDir()
 	cmd, args, env := helperCommand(t)
 
-	configPath := writeMCPConfig(t, ws, map[string]config.MCPServer{
+	writeMCPConfig(t, ws, map[string]config.MCPServer{
 		"echo": {
 			Command:           cmd,
 			Args:              args,
@@ -269,7 +268,7 @@ func TestE2EMCPBootstrapIntegration(t *testing.T) {
 			ToolTimeoutSec:    60,
 		},
 	})
-	resolved, err := config.Load(configPath, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
+	resolved, err := config.Load(ws, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -343,7 +342,7 @@ func TestE2EMCPToolFiltering(t *testing.T) {
 	ws := t.TempDir()
 	cmd, args, env := helperCommand(t)
 
-	configPath := writeMCPConfig(t, ws, map[string]config.MCPServer{
+	writeMCPConfig(t, ws, map[string]config.MCPServer{
 		"echo": {
 			Command:           cmd,
 			Args:              args,
@@ -352,7 +351,7 @@ func TestE2EMCPToolFiltering(t *testing.T) {
 			EnabledTools:      []string{"nonexistent_tool"},
 		},
 	})
-	resolved, err := config.Load(configPath, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
+	resolved, err := config.Load(ws, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -387,12 +386,12 @@ func TestE2EMCPToolFiltering(t *testing.T) {
 func TestE2EMCPGracefulDegradation(t *testing.T) {
 	ws := t.TempDir()
 
-	configPath := writeMCPConfig(t, ws, map[string]config.MCPServer{
+	writeMCPConfig(t, ws, map[string]config.MCPServer{
 		"broken": {
 			Command: "/nonexistent/mcp-server-that-does-not-exist",
 		},
 	})
-	resolved, err := config.Load(configPath, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
+	resolved, err := config.Load(ws, config.LoadOptions{RequireProviders: true}, os.LookupEnv)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

@@ -23,6 +23,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
@@ -261,7 +262,9 @@ func (s *Server) writeAndApplyConfig(r *http.Request, incoming *config.File, rev
 	if err := incoming.RestoreSecretsFrom(cur); err != nil {
 		return nil, app.ConfigApplyReport{}, invalidInput(err.Error())
 	}
-	resolved, err := incoming.Resolve(s.cfg.ConfigPath, os.LookupEnv)
+	// The loom home is the config file's directory: the file always lives
+	// at <loom home>/config.yaml.
+	resolved, err := incoming.Resolve(filepath.Dir(s.cfg.ConfigPath), os.LookupEnv)
 	if err != nil {
 		return nil, app.ConfigApplyReport{}, invalidInput(err.Error())
 	}

@@ -59,12 +59,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/version"
 )
 
-const (
-	artifactDirectoryName = "artifacts"
-	// configPathEnv points at an alternative config file (same locator
-	// semantics as cmd/loom).
-	configPathEnv = "LOOM_CONFIG"
-)
+const artifactDirectoryName = "artifacts"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -90,10 +85,6 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	root, err := resolveWorkspace("")
-	if err != nil {
-		return err
-	}
-	cfgPath, err := configPath()
 	if err != nil {
 		return err
 	}
@@ -197,7 +188,7 @@ func run(ctx context.Context, args []string) error {
 		Version:    version.Version,
 		Service:    service,
 		Logger:     logger,
-		ConfigPath: cfgPath,
+		ConfigPath: config.ConfigPathForHome(resolved.Storage.BaseDir),
 		Share:      shareMgr,
 	})
 	if err != nil {
@@ -378,34 +369,23 @@ func lastActiveWorkspaceRoot(ctx context.Context, resolved *config.ResolvedConfi
 
 // --- bootstrap helpers (kept in sync with cmd/loom/main.go) ---
 
-func configPath() (string, error) {
-	if p := strings.TrimSpace(os.Getenv(configPathEnv)); p != "" {
-		return filepath.Abs(p)
-	}
-	base, err := config.DefaultBaseDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(base, config.FileName), nil
-}
-
 func loadConfig() (*config.ResolvedConfig, error) {
-	path, err := configPath()
+	home, err := config.HomeDir(os.LookupEnv)
 	if err != nil {
 		return nil, err
 	}
 	load := func() (*config.ResolvedConfig, error) {
-		return config.Load(path, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
+		return config.Load(home, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
 	}
 	resolved, err := load()
 	if err != nil {
-		// First run: a missing config at the default path is a fresh
+		// First run: a missing config in the default loom home is a fresh
 		// install. Write the starter template and keep booting — the
-		// settings UI collects the API key from there. A missing explicit
-		// LOOM_CONFIG stays a hard error: it names a file that should
-		// exist, not a state to paper over.
+		// settings UI collects the API key from there. A missing config
+		// in an explicit LOOM_HOME stays a hard error: the user pointed
+		// loom at a home that should already be set up.
 		if errors.Is(err, config.ErrConfigNotFound) {
-			if created, cerr := config.EnsureFirstRunConfig(path); cerr != nil {
+			if created, cerr := config.EnsureFirstRunConfig(home); cerr != nil {
 				return nil, cerr
 			} else if created {
 				return load()

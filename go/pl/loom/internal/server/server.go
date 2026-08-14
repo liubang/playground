@@ -77,9 +77,10 @@ type Config struct {
 	Share *ShareManager
 	// NoWeb disables the embedded SPA (pure API mode, docs/WEB_DESIGN.md §7.1).
 	NoWeb bool
-	// ConfigPath is the active config file path (the same locator the
-	// process loaded from: LOOM_CONFIG or the default). Empty disables the
-	// /v1/config endpoints (they answer 503 config_unavailable).
+	// ConfigPath is the active config file path (<loom home>/config.yaml,
+	// with the loom home located by LOOM_HOME or the default). Empty
+	// disables the /v1/config endpoints (they answer 503
+	// config_unavailable).
 	ConfigPath string
 	// Version is the build version reported by /v1/meta/version.
 	Version string

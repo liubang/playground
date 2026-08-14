@@ -155,8 +155,8 @@ func bootstrapWithMCP(t *testing.T, servers map[string]config.MCPServer, lookup 
 	if lookup == nil {
 		lookup = envLookupOrEmpty
 	}
-	configPath := writeMCPConfig(t, ws, servers)
-	resolved, err := config.Load(configPath, config.LoadOptions{RequireProviders: true}, lookup)
+	writeMCPConfig(t, ws, servers)
+	resolved, err := config.Load(ws, config.LoadOptions{RequireProviders: true}, lookup)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -381,8 +381,9 @@ func TestE2EMCPHTTPConfigValidation(t *testing.T) {
 			if lookup == nil {
 				lookup = envLookupOrEmpty
 			}
-			configPath := writeMCPConfig(t, t.TempDir(), tt.servers)
-			_, err := config.Load(configPath, config.LoadOptions{RequireProviders: true}, lookup)
+			home := t.TempDir()
+			writeMCPConfig(t, home, tt.servers)
+			_, err := config.Load(home, config.LoadOptions{RequireProviders: true}, lookup)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("Load() error = %v, want %q", err, tt.wantErr)
 			}

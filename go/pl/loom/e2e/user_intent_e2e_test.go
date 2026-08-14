@@ -31,7 +31,6 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/client"
-	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
@@ -52,42 +51,8 @@ import (
 //
 // Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
 func TestUserIntentRealModelE2E(t *testing.T) {
-	if os.Getenv("LOOM_E2E_LLM") != "1" {
-		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
-	}
-
 	ctx := context.Background()
-	configPath := os.Getenv("LOOM_CONFIG")
-	if configPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Skipf("no home dir: %v", err)
-		}
-		configPath = filepath.Join(home, ".loom", "config.yaml")
-	}
-	configRaw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Skipf("loom config not found at %s", configPath)
-	}
-
-	// Same isolation trick as TestServeRealModelE2E: the config copy in tmp
-	// derives tmp as the loom home, so the user's stores stay untouched.
-	tmp := t.TempDir()
-	isolatedConfig := filepath.Join(tmp, "config.yaml")
-	if err := os.WriteFile(isolatedConfig, configRaw, 0o600); err != nil {
-		t.Fatalf("write isolated config: %v", err)
-	}
-	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
-	if err != nil {
-		t.Skipf("load loom config: %v", err)
-	}
-	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	workspace := filepath.Join(tmp, "ws")
-	if err := os.MkdirAll(workspace, 0o755); err != nil {
-		t.Fatalf("mkdir ws: %v", err)
-	}
+	resolved, tmp, workspace := realModelHome(t)
 	// Act 2's URL must reach the transcript via a tool result, never via a
 	// user message — iana.org carries no builtin rule opinion.
 	if err := os.WriteFile(filepath.Join(workspace, "target.txt"), []byte("https://www.iana.org/domains/reserved\n"), 0o600); err != nil {

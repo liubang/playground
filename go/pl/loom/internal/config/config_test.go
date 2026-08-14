@@ -31,7 +31,7 @@ import (
 )
 
 // TestMain guarantees a $HOME: hermetic runners (bazel) unset it, and
-// DefaultBaseDir / "~" expansion rely on it.
+// DefaultHomeDir / "~" expansion rely on it.
 func TestMain(m *testing.M) {
 	if os.Getenv("HOME") == "" {
 		_ = os.Setenv("HOME", os.TempDir())
@@ -73,13 +73,15 @@ providers:
         context_window: 400000
 `
 
+// writeConfig writes content as config.yaml inside a fresh temp loom
+// home and returns the home directory.
 func writeConfig(t *testing.T, content string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, FileName), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return path
+	return home
 }
 
 func loadFile(t *testing.T, content string, lookup EnvLookup) *ResolvedConfig {
@@ -138,15 +140,15 @@ providers:
 	}
 }
 
-func TestResolveStorageBaseDirIsConfigDir(t *testing.T) {
-	// The loom home is the directory containing the config file — even
-	// for a missing file (offline commands run without providers).
-	dir := t.TempDir()
-	cfg, err := Load(filepath.Join(dir, "absent.yaml"), LoadOptions{}, noEnv)
+func TestStorageDerivesFromHome(t *testing.T) {
+	// The loom home is the single data root — even for a missing config
+	// file (offline commands run without providers).
+	home := t.TempDir()
+	cfg, err := Load(home, LoadOptions{}, noEnv)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	want := dir
+	want := home
 	if cfg.Storage.BaseDir != want {
 		t.Fatalf("BaseDir = %q, want %q", cfg.Storage.BaseDir, want)
 	}
@@ -177,8 +179,8 @@ func TestResolveStorageBaseDirIsConfigDir(t *testing.T) {
 	}
 }
 
-func TestStorageBaseDirDerivesFromExistingConfig(t *testing.T) {
-	path := writeConfig(t, `
+func TestStorageBaseDirIsHome(t *testing.T) {
+	home := writeConfig(t, `
 providers:
   - name: only
     base_url: https://example.com/v1
@@ -186,31 +188,30 @@ providers:
     models:
       - name: m1
 `)
-	cfg, err := Load(path, LoadOptions{RequireProviders: true}, noEnv)
+	cfg, err := Load(home, LoadOptions{RequireProviders: true}, noEnv)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	base := filepath.Dir(path)
-	if cfg.Storage.BaseDir != base {
-		t.Fatalf("BaseDir = %q, want %q", cfg.Storage.BaseDir, base)
+	if cfg.Storage.BaseDir != home {
+		t.Fatalf("BaseDir = %q, want %q", cfg.Storage.BaseDir, home)
 	}
-	if got, want := cfg.Storage.SessionDBPath(), filepath.Join(base, "sessions", "sessions.db"); got != want {
+	if got, want := cfg.Storage.SessionDBPath(), filepath.Join(home, "sessions", "sessions.db"); got != want {
 		t.Fatalf("SessionDBPath() = %q, want %q", got, want)
 	}
 }
 
-func TestBaseDirForConfigPathRelative(t *testing.T) {
+func TestLoadRelativeHomeResolvesAgainstCwd(t *testing.T) {
 	t.Chdir(t.TempDir())
-	got, err := BaseDirForConfigPath("config.yaml")
+	cfg, err := Load(".", LoadOptions{}, noEnv)
 	if err != nil {
-		t.Fatalf("BaseDirForConfigPath() error = %v", err)
+		t.Fatalf("Load() error = %v", err)
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != cwd {
-		t.Fatalf("BaseDirForConfigPath(relative) = %q, want %q", got, cwd)
+	if cfg.Storage.BaseDir != cwd {
+		t.Fatalf("BaseDir = %q, want %q (relative home resolves against cwd)", cfg.Storage.BaseDir, cwd)
 	}
 }
 
@@ -252,7 +253,7 @@ tools:
 
 	// Empty and relative entries fail fast at load time.
 	for _, extra := range []string{`[""]`, `["rel/bin"]`} {
-		path := writeConfig(t, `
+		home := writeConfig(t, `
 providers:
   - name: only
     base_url: https://example.com/v1
@@ -262,7 +263,7 @@ providers:
 tools:
   path_extra: `+extra+`
 `)
-		if _, err := Load(path, LoadOptions{RequireProviders: true}, noEnv); err == nil {
+		if _, err := Load(home, LoadOptions{RequireProviders: true}, noEnv); err == nil {
 			t.Fatalf("path_extra %s: want load error", extra)
 		}
 	}
@@ -337,7 +338,7 @@ share:
 	// Invalid listen values fail fast: no host:port shape, port 0 (links
 	// would not survive restarts), out-of-range ports.
 	for _, listen := range []string{"not-an-addr", "0.0.0.0:0", "0.0.0.0:99999", "0.0.0.0:http"} {
-		path := writeConfig(t, `
+		home := writeConfig(t, `
 providers:
   - name: only
     base_url: https://example.com/v1
@@ -347,7 +348,7 @@ providers:
 share:
   listen: '`+listen+`'
 `)
-		if _, err := Load(path, LoadOptions{RequireProviders: true}, noEnv); err == nil ||
+		if _, err := Load(home, LoadOptions{RequireProviders: true}, noEnv); err == nil ||
 			!strings.Contains(err.Error(), "share.listen") {
 			t.Fatalf("share.listen %q: error = %v, want a share.listen error", listen, err)
 		}
@@ -355,9 +356,9 @@ share:
 }
 
 func TestStorageSectionIsRejected(t *testing.T) {
-	// storage.base_dir is gone: the loom home is the config file's
-	// directory, and unknown keys fail fast so a stale config says so.
-	path := writeConfig(t, `
+	// storage.base_dir is gone: the loom home comes from LOOM_HOME (or
+	// the default), and unknown keys fail fast so a stale config says so.
+	home := writeConfig(t, `
 providers:
   - name: only
     base_url: https://example.com/v1
@@ -367,7 +368,7 @@ providers:
 storage:
   base_dir: /tmp/elsewhere
 `)
-	_, err := Load(path, LoadOptions{RequireProviders: true}, noEnv)
+	_, err := Load(home, LoadOptions{RequireProviders: true}, noEnv)
 	if err == nil || !strings.Contains(err.Error(), "storage") {
 		t.Fatalf("Load() error = %v, want an unknown-key error naming storage", err)
 	}
@@ -520,10 +521,10 @@ func TestLoadValidationErrors(t *testing.T) {
 }
 
 func TestLoadEmptyFile(t *testing.T) {
-	path := writeConfig(t, "# nothing but a comment\n")
+	home := writeConfig(t, "# nothing but a comment\n")
 
 	// Offline commands tolerate an empty file.
-	cfg, err := Load(path, LoadOptions{}, noEnv)
+	cfg, err := Load(home, LoadOptions{}, noEnv)
 	if err != nil {
 		t.Fatalf("Load(empty, offline) error = %v", err)
 	}
@@ -532,17 +533,17 @@ func TestLoadEmptyFile(t *testing.T) {
 	}
 
 	// Agent entries still fail fast with the embedded example.
-	if _, err := Load(path, LoadOptions{RequireProviders: true}, noEnv); err == nil ||
+	if _, err := Load(home, LoadOptions{RequireProviders: true}, noEnv); err == nil ||
 		!strings.Contains(err.Error(), "at least one provider") {
 		t.Fatalf("Load(empty, agent) error = %v, want providers-required", err)
 	}
 }
 
 func TestLoadMissingFile(t *testing.T) {
-	missing := filepath.Join(t.TempDir(), "config.yaml")
+	home := t.TempDir() // no config.yaml inside
 
 	// Agent entry points fail fast with a copy-pasteable example.
-	_, err := Load(missing, LoadOptions{RequireProviders: true}, noEnv)
+	_, err := Load(home, LoadOptions{RequireProviders: true}, noEnv)
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("Load() error = %v, want not-found with example", err)
 	}
@@ -551,7 +552,7 @@ func TestLoadMissingFile(t *testing.T) {
 	}
 
 	// Offline commands tolerate a missing file and fall back to defaults.
-	cfg, err := Load(missing, LoadOptions{}, noEnv)
+	cfg, err := Load(home, LoadOptions{}, noEnv)
 	if err != nil {
 		t.Fatalf("Load(offline) error = %v", err)
 	}
@@ -981,16 +982,16 @@ func TestTemplateCoversSchemaSections(t *testing.T) {
 }
 
 func TestEnsureFirstRunConfig(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	def, err := DefaultBaseDir()
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	def, err := DefaultHomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defaultPath := filepath.Join(def, FileName)
+	defaultPath := ConfigPathForHome(def)
 
-	// A missing default path gets a fresh template (0600) and reports it.
-	created, err := EnsureFirstRunConfig(defaultPath)
+	// A missing default home gets a fresh template (0600) and reports it.
+	created, err := EnsureFirstRunConfig(def)
 	if err != nil {
 		t.Fatalf("EnsureFirstRunConfig() error = %v", err)
 	}
@@ -1006,18 +1007,18 @@ func TestEnsureFirstRunConfig(t *testing.T) {
 	}
 
 	// An existing file is never touched: no overwrite, no error.
-	created, err = EnsureFirstRunConfig(defaultPath)
+	created, err = EnsureFirstRunConfig(def)
 	if err != nil || created {
 		t.Fatalf("EnsureFirstRunConfig(existing) = (%v, %v), want (false, nil)", created, err)
 	}
 
-	// An explicit non-default path is never auto-created.
-	explicit := filepath.Join(home, "custom", "config.yaml")
+	// An explicit non-default home is never auto-created.
+	explicit := filepath.Join(fakeHome, "custom")
 	created, err = EnsureFirstRunConfig(explicit)
 	if err != nil || created {
 		t.Fatalf("EnsureFirstRunConfig(explicit) = (%v, %v), want (false, nil)", created, err)
 	}
-	if _, err := os.Stat(explicit); !os.IsNotExist(err) {
-		t.Fatalf("explicit path was created unexpectedly: %v", err)
+	if _, err := os.Stat(ConfigPathForHome(explicit)); !os.IsNotExist(err) {
+		t.Fatalf("explicit home's config was created unexpectedly: %v", err)
 	}
 }
