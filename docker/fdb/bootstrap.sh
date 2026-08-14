@@ -85,10 +85,10 @@ if [ "$START_SERVICES" = true ]; then
     echo "    docker compose exec fdb-node-1 fdbcli -C /var/fdb/fdb.cluster"
     printf '\n==> Trace 日志（排障用，TraceEvent 即文档）:\n'
     echo "    docker compose exec fdb-node-1 ls /var/fdb/logs/4500/"
-    printf '\n==> 监控（指标由 fdb-exporter:9189 暴露，经 monitor 模块采集）:\n'
+    printf '\n==> 监控（指标由 fdb-exporter:9444 暴露，经 monitor 模块采集）:\n'
     echo "  Prometheus    http://localhost:9090  (job: foundationdb)"
-    echo "  Grafana       http://localhost:3000  (认证信息见 ../monitor/.env，Dashboard: FoundationDB Overview)"
-    echo "  Exporter      curl http://fdb-exporter:9189/metrics  (容器网络内)"
+    echo "  Grafana       http://localhost:3000  (认证信息见 ../monitor/.env，Dashboard: FoundationDB)"
+    echo "  Exporter      curl http://fdb-exporter:9444/metrics  (容器网络内)"
     echo ""
     echo "完成！运行 ./tests/e2e.sh all 执行验收测试。"
 else
