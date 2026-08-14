@@ -53,44 +53,8 @@ import (
 //  7. approval/question requests are auto-resolved to keep turns moving
 //     (and thereby exercised when the policy requires them).
 func TestServeRealModelE2E(t *testing.T) {
-	if os.Getenv("LOOM_E2E_LLM") != "1" {
-		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
-	}
-
 	ctx := context.Background()
-	configPath := os.Getenv("LOOM_CONFIG")
-	if configPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Skipf("no home dir: %v", err)
-		}
-		configPath = filepath.Join(home, ".loom", "config.yaml")
-	}
-	configRaw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Skipf("loom config not found at %s", configPath)
-	}
-
-	// Isolate all writable state in a temp dir: loading a config copy
-	// from tmp makes tmp the derived loom home (the config file's
-	// directory), so the user's session store and workspace are never
-	// touched.
-	tmp := t.TempDir()
-	isolatedConfig := filepath.Join(tmp, "config.yaml")
-	if err := os.WriteFile(isolatedConfig, configRaw, 0o600); err != nil {
-		t.Fatalf("write isolated config: %v", err)
-	}
-	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
-	if err != nil {
-		t.Skipf("load loom config: %v", err)
-	}
-	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	workspace := filepath.Join(tmp, "ws")
-	if err := os.MkdirAll(workspace, 0o755); err != nil {
-		t.Fatalf("mkdir ws: %v", err)
-	}
+	resolved, tmp, workspace := realModelHome(t)
 	const codeWord = "loom-e2e-m1-biplane-42"
 	if err := os.WriteFile(filepath.Join(workspace, "marker.txt"), []byte("口令是："+codeWord+"\n"), 0o600); err != nil {
 		t.Fatalf("write marker: %v", err)
@@ -323,42 +287,8 @@ func TestServeRealModelE2E(t *testing.T) {
 //
 // Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
 func TestServeRealModelPrepareFailureE2E(t *testing.T) {
-	if os.Getenv("LOOM_E2E_LLM") != "1" {
-		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
-	}
-
 	ctx := context.Background()
-	configPath := os.Getenv("LOOM_CONFIG")
-	if configPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Skipf("no home dir: %v", err)
-		}
-		configPath = filepath.Join(home, ".loom", "config.yaml")
-	}
-	configRaw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Skipf("loom config not found at %s", configPath)
-	}
-
-	// Same isolation trick as TestServeRealModelE2E: the config copy in tmp
-	// derives tmp as the loom home, so the user's stores stay untouched.
-	tmp := t.TempDir()
-	isolatedConfig := filepath.Join(tmp, "config.yaml")
-	if err := os.WriteFile(isolatedConfig, configRaw, 0o600); err != nil {
-		t.Fatalf("write isolated config: %v", err)
-	}
-	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
-	if err != nil {
-		t.Skipf("load loom config: %v", err)
-	}
-	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	workspace := filepath.Join(tmp, "ws")
-	if err := os.MkdirAll(workspace, 0o755); err != nil {
-		t.Fatalf("mkdir ws: %v", err)
-	}
+	resolved, tmp, workspace := realModelHome(t)
 
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
 	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
@@ -486,42 +416,8 @@ func TestServeRealModelPrepareFailureE2E(t *testing.T) {
 //
 // Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
 func TestServeRealModelWritablePathsE2E(t *testing.T) {
-	if os.Getenv("LOOM_E2E_LLM") != "1" {
-		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
-	}
-
 	ctx := context.Background()
-	configPath := os.Getenv("LOOM_CONFIG")
-	if configPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Skipf("no home dir: %v", err)
-		}
-		configPath = filepath.Join(home, ".loom", "config.yaml")
-	}
-	configRaw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Skipf("loom config not found at %s", configPath)
-	}
-
-	// Same isolation trick as TestServeRealModelE2E: the config copy in tmp
-	// derives tmp as the loom home, so the user's stores stay untouched.
-	tmp := t.TempDir()
-	isolatedConfig := filepath.Join(tmp, "config.yaml")
-	if err := os.WriteFile(isolatedConfig, configRaw, 0o600); err != nil {
-		t.Fatalf("write isolated config: %v", err)
-	}
-	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
-	if err != nil {
-		t.Skipf("load loom config: %v", err)
-	}
-	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	workspace := filepath.Join(tmp, "ws")
-	if err := os.MkdirAll(workspace, 0o755); err != nil {
-		t.Fatalf("mkdir ws: %v", err)
-	}
+	resolved, tmp, workspace := realModelHome(t)
 	// The write target must sit outside BOTH the workspace and the
 	// sandbox's default writable temp dir — otherwise the write succeeds
 	// without any grant and the test accepts nothing (an earlier version
@@ -920,36 +816,48 @@ func TestServeRealModelOrphanRecoveryE2E(t *testing.T) {
 	t.Log("ACCEPTANCE PASS: crash-orphaned run marked interrupted, session recovered with a real turn")
 }
 
+// readRealUserConfig reads the user's own loom config (<loom
+// home>/config.yaml; LOOM_HOME or ~/.loom) for the real-model suites.
+func readRealUserConfig(t *testing.T) []byte {
+	t.Helper()
+	home, err := config.HomeDir(os.LookupEnv)
+	if err != nil {
+		t.Skipf("no home dir: %v", err)
+	}
+	raw, err := os.ReadFile(config.ConfigPathForHome(home))
+	if err != nil {
+		t.Skipf("loom config not found at %s", config.ConfigPathForHome(home))
+	}
+	return raw
+}
+
+// loadIsolatedConfig copies raw into a fresh temp loom home and loads it
+// from there, so every writable location derives from the temp home and
+// the user's stores stay untouched. Returns the temp home and the
+// resolved config.
+func loadIsolatedConfig(t *testing.T, raw []byte) (string, *config.ResolvedConfig) {
+	t.Helper()
+	tmp := t.TempDir()
+	if err := os.WriteFile(config.ConfigPathForHome(tmp), raw, 0o600); err != nil {
+		t.Fatalf("write isolated config: %v", err)
+	}
+	resolved, err := config.Load(tmp, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
+	if err != nil {
+		t.Skipf("load loom config: %v", err)
+	}
+	return tmp, resolved
+}
+
 // realModelHome prepares an isolated loom home for the real-model suites:
-// the user's config copied into tmp (making tmp the derived loom home, so
-// the user's stores stay untouched) plus a throwaway workspace. Returns
-// the resolved config, the loom home, and the workspace root.
+// the user's config copied into a temp home (so the user's stores stay
+// untouched) plus a throwaway workspace. Returns the resolved config, the
+// loom home, and the workspace root.
 func realModelHome(t *testing.T) (*config.ResolvedConfig, string, string) {
 	t.Helper()
 	if os.Getenv("LOOM_E2E_LLM") != "1" {
 		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
 	}
-	configPath := os.Getenv("LOOM_CONFIG")
-	if configPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Skipf("no home dir: %v", err)
-		}
-		configPath = filepath.Join(home, ".loom", "config.yaml")
-	}
-	configRaw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Skipf("loom config not found at %s", configPath)
-	}
-	tmp := t.TempDir()
-	isolatedConfig := filepath.Join(tmp, "config.yaml")
-	if err := os.WriteFile(isolatedConfig, configRaw, 0o600); err != nil {
-		t.Fatalf("write isolated config: %v", err)
-	}
-	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
-	if err != nil {
-		t.Skipf("load loom config: %v", err)
-	}
+	tmp, resolved := loadIsolatedConfig(t, readRealUserConfig(t))
 	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

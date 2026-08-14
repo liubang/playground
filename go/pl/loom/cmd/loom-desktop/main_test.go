@@ -228,7 +228,7 @@ func TestGenerateToken(t *testing.T) {
 // instead of refusing to start.
 func TestLoadConfigFirstRunBootstrapsDefaultPath(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv(configPathEnv, "")
+	t.Setenv(config.HomeEnv, "")
 
 	resolved, err := loadConfig()
 	if err != nil {
@@ -237,7 +237,7 @@ func TestLoadConfigFirstRunBootstrapsDefaultPath(t *testing.T) {
 	if len(resolved.Providers) == 0 {
 		t.Fatal("template providers = 0, want the deepseek starter provider")
 	}
-	def, derr := config.DefaultBaseDir()
+	def, derr := config.DefaultHomeDir()
 	if derr != nil {
 		t.Fatal(derr)
 	}
@@ -246,18 +246,18 @@ func TestLoadConfigFirstRunBootstrapsDefaultPath(t *testing.T) {
 	}
 }
 
-// TestLoadConfigExplicitMissingPathStaysHardError: LOOM_CONFIG names a
-// file that should exist; a missing explicit path is a user error and must
-// not be papered over with an auto-created template.
-func TestLoadConfigExplicitMissingPathStaysHardError(t *testing.T) {
-	explicit := filepath.Join(t.TempDir(), "custom", "config.yaml")
-	t.Setenv(configPathEnv, explicit)
+// TestLoadConfigExplicitHomeStaysHardError: LOOM_HOME names a directory
+// whose config.yaml should exist; a missing config there is a user error
+// and must not be papered over with an auto-created template.
+func TestLoadConfigExplicitHomeStaysHardError(t *testing.T) {
+	explicit := filepath.Join(t.TempDir(), "custom")
+	t.Setenv(config.HomeEnv, explicit)
 
 	_, err := loadConfig()
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("desktop loadConfig() error = %v, want not-found", err)
 	}
-	if _, serr := os.Stat(explicit); !os.IsNotExist(serr) {
-		t.Fatalf("explicit missing path was auto-created: %v", serr)
+	if _, serr := os.Stat(filepath.Join(explicit, "config.yaml")); !os.IsNotExist(serr) {
+		t.Fatalf("explicit home's config was auto-created: %v", serr)
 	}
 }

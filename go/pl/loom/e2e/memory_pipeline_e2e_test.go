@@ -29,7 +29,6 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/client"
-	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/memory"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
@@ -50,40 +49,9 @@ func TestMemoryPipelineRealModelE2E(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	configPath := os.Getenv("LOOM_CONFIG")
-	if configPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Skipf("no home dir: %v", err)
-		}
-		configPath = filepath.Join(home, ".loom", "config.yaml")
-	}
-	configRaw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Skipf("loom config not found at %s", configPath)
-	}
-
-	// Isolate all writable state in a temp dir: loading a config copy
-	// from tmp makes tmp the derived loom home (the config file's
-	// directory), so the user's session store is never touched.
-	tmp := t.TempDir()
-	isolatedConfig := filepath.Join(tmp, "config.yaml")
-	if err := os.WriteFile(isolatedConfig, configRaw, 0o600); err != nil {
-		t.Fatalf("write isolated config: %v", err)
-	}
-	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
-	if err != nil {
-		t.Skipf("load loom config: %v", err)
-	}
+	resolved, tmp, workspace := realModelHome(t)
 	if !resolved.Memory.Enabled {
 		t.Skip("memory system is disabled in the loaded config")
-	}
-	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	workspace := filepath.Join(tmp, "ws")
-	if err := os.MkdirAll(workspace, 0o755); err != nil {
-		t.Fatalf("mkdir ws: %v", err)
 	}
 
 	// Neutralize the process's own background pipeline so the test drives

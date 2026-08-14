@@ -44,37 +44,28 @@ func WriteTemplate(path string) error {
 	return nil
 }
 
-// IsDefaultConfigPath reports whether path is the default config location
-// (~/.loom/config.yaml). First-run bootstrap applies only there: a missing
-// explicit LOOM_CONFIG path names a file that should exist — a user error
-// to surface, never a state to paper over with a generated file.
-func IsDefaultConfigPath(path string) (bool, error) {
-	abs, err := filepath.Abs(path)
+// EnsureFirstRunConfig writes the starter template at <home>/config.yaml
+// when home is the DEFAULT loom home and the file is missing, creating
+// the parent directory (0700) and the file (0600). An explicit LOOM_HOME
+// directory is never bootstrapped: it names a place that should already
+// be set up — a user error to surface, never a state to paper over with
+// a generated file. An existing file is never overwritten. When the
+// default home cannot be resolved (e.g. HOME is unset) the directory is
+// treated as non-default: no file is created and the caller keeps its
+// original error. Returns created=true when a fresh template was written
+// so the caller can route the first-run experience: the CLI prints the
+// path and exits non-zero, the desktop keeps booting into the settings
+// UI where the API key is collected.
+func EnsureFirstRunConfig(home string) (bool, error) {
+	abs, err := filepath.Abs(home)
 	if err != nil {
-		return false, fmt.Errorf("config: resolve config path: %w", err)
+		return false, fmt.Errorf("config: resolve loom home: %w", err)
 	}
-	base, err := DefaultBaseDir()
-	if err != nil {
-		return false, err
-	}
-	return abs == filepath.Join(base, FileName), nil
-}
-
-// EnsureFirstRunConfig writes the starter template at the default config
-// path when the file is missing, creating the parent directory (0700) and
-// the file (0600). It never touches an explicit LOOM_CONFIG path and never
-// overwrites an existing file. When the default location cannot be
-// resolved (e.g. HOME is unset) the path is treated as non-default: no
-// file is created and the caller keeps its original error. Returns
-// created=true when a fresh template was written so the caller can route
-// the first-run experience: the CLI prints the path and exits non-zero,
-// the desktop keeps booting into the settings UI where the API key is
-// collected.
-func EnsureFirstRunConfig(path string) (bool, error) {
-	ok, err := IsDefaultConfigPath(path)
-	if err != nil || !ok {
+	def, err := DefaultHomeDir()
+	if err != nil || abs != def {
 		return false, nil
 	}
+	path := ConfigPathForHome(abs)
 	if _, err := os.Stat(path); err == nil {
 		return false, nil
 	} else if !os.IsNotExist(err) {
@@ -105,7 +96,8 @@ const minimalExample = `  default: deepseek/deepseek-chat
 const template = `# ==============================================================================
 # loom 配置文件
 #
-# 位置: ~/.loom/config.yaml（loom 唯一配置来源，LOOM_CONFIG 可指定其他路径）
+# 位置: <loom home>/config.yaml（loom 唯一配置来源；loom home 默认为 ~/.loom，
+#       可用 LOOM_HOME 环境变量指定其他目录）
 # 说明: 除 providers 外所有节均可省略，省略时取内置默认值（各项注释中标注）。
 #       保存后重启 loom 生效（不支持热加载）。含明文密钥时建议 chmod 600。
 # ==============================================================================
@@ -292,8 +284,8 @@ share:
 
 # ------------------------------------------------------------------------------
 # 文件日志配额（loom home/logs 下的 glog 风格按日文件；
-# loom home = 本配置文件所在目录，其下派生 sessions/ logs/ memories/
-# rules/ skills/ 与全局规则文件 LOOM.md）
+# loom home = LOOM_HOME 指定的目录（默认 ~/.loom），其下派生 sessions/
+# logs/ memories/ rules/ skills/ 与全局规则文件 LOOM.md）
 # ------------------------------------------------------------------------------
 logging:
   max_file_mb: 0              # 单个日志文件上限 MiB，超过后轮转为同日序号文件

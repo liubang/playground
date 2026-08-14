@@ -16,12 +16,11 @@
 // Created: 2026/07/26
 
 // Package config loads loom's configuration from the YAML file at
-// ~/.loom/config.yaml — the single configuration source (see
-// docs/CONFIG_DESIGN.md). The only env reads are secret references
-// (api_key_env), which resolve secret *values*, not configuration,
-// plus $HOME (via os.UserHomeDir) for the default config location.
-// The loom home (data root) is the directory containing the config
-// file — see BaseDirForConfigPath.
+// <loom home>/config.yaml — the single configuration source (see
+// docs/CONFIG_DESIGN.md). The loom home (data root) is located by
+// LOOM_HOME, defaulting to ~/.loom. The only other env reads are
+// secret references (api_key_env), which resolve secret *values*, not
+// configuration, plus $HOME (via os.UserHomeDir) for the default home.
 package config
 
 import (

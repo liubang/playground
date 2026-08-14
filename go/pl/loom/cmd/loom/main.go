@@ -54,9 +54,6 @@ import (
 const (
 	artifactDirectoryName = "artifacts"
 	artifactGCGracePeriod = 24 * time.Hour
-	// configPathEnv points at an alternative config file. It is a config
-	// *locator* (like kubectl's KUBECONFIG), not configuration itself.
-	configPathEnv = "LOOM_CONFIG"
 )
 
 func main() {
@@ -166,41 +163,28 @@ func run(ctx context.Context, args []string) error {
 
 // --- configuration ---
 
-// configPath returns the active config file path: LOOM_CONFIG when set,
-// otherwise ~/.loom/config.yaml.
-func configPath() (string, error) {
-	if p := strings.TrimSpace(os.Getenv(configPathEnv)); p != "" {
-		return filepath.Abs(p)
-	}
-	base, err := config.DefaultBaseDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(base, config.FileName), nil
-}
-
 // loadConfig is the single configuration entry point for every command.
 // requireProviders distinguishes agent entries (chat/run/resume: at least
 // one provider is mandatory) from offline commands (sessions/inspect/gc/
 // rules: they only need storage/rules and work without providers).
 func loadConfig(requireProviders bool, logger *slog.Logger) (*config.ResolvedConfig, error) {
-	path, err := configPath()
+	home, err := config.HomeDir(os.LookupEnv)
 	if err != nil {
 		return nil, err
 	}
-	resolved, err := config.Load(path, config.LoadOptions{RequireProviders: requireProviders, Logger: logger}, os.LookupEnv)
+	resolved, err := config.Load(home, config.LoadOptions{RequireProviders: requireProviders, Logger: logger}, os.LookupEnv)
 	if err != nil {
-		// First-run bootstrap: a missing config at the default path is a
-		// fresh install, not an error. Write the starter template and hand
-		// back a directed error (exit non-zero: the user still has to set
-		// an LLM API key before the agent can run). A missing explicit
-		// LOOM_CONFIG stays the original hard error — it names a file that
-		// should exist, not a state to paper over.
+		// First-run bootstrap: a missing config in the default loom home
+		// is a fresh install, not an error. Write the starter template and
+		// hand back a directed error (exit non-zero: the user still has to
+		// set an LLM API key before the agent can run). A missing config
+		// in an explicit LOOM_HOME stays the original hard error — the
+		// user pointed loom at a home that should already be set up.
 		if requireProviders && errors.Is(err, config.ErrConfigNotFound) {
-			if created, cerr := config.EnsureFirstRunConfig(path); cerr != nil {
+			if created, cerr := config.EnsureFirstRunConfig(home); cerr != nil {
 				return nil, cerr
 			} else if created {
-				return nil, fmt.Errorf("first run: created starter config at %s\nset your LLM API key (api_key or api_key_env) in it, then run loom again", path)
+				return nil, fmt.Errorf("first run: created starter config at %s\nset your LLM API key (api_key or api_key_env) in it, then run loom again", config.ConfigPathForHome(home))
 			}
 		}
 		return nil, err
@@ -240,10 +224,11 @@ func prepareStorage(resolved *config.ResolvedConfig, create bool) error {
 
 // initConfig writes the annotated starter config (loom config init).
 func initConfig() error {
-	path, err := configPath()
+	home, err := config.HomeDir(os.LookupEnv)
 	if err != nil {
 		return err
 	}
+	path := config.ConfigPathForHome(home)
 	if err := config.WriteTemplate(path); err != nil {
 		return err
 	}
@@ -441,10 +426,6 @@ func runServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	cfgPath, err := configPath()
-	if err != nil {
-		return err
-	}
 	resolved, err := loadConfig(true, slog.Default())
 	if err != nil {
 		return err
@@ -508,7 +489,7 @@ func runServe(ctx context.Context, args []string) error {
 		Version:     version.Version,
 		Service:     service,
 		Logger:      logger,
-		ConfigPath:  cfgPath,
+		ConfigPath:  config.ConfigPathForHome(resolved.Storage.BaseDir),
 	})
 	if err != nil {
 		return err

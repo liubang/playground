@@ -36,8 +36,8 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
 
-// writeTestConfig points LOOM_CONFIG at an empty offline config inside
-// the given loom home — the config file's directory is the data root.
+// writeTestConfig points LOOM_HOME at baseDir with an empty offline
+// config inside — the loom home is the data root.
 func writeTestConfig(t *testing.T, baseDir string) {
 	t.Helper()
 	if err := os.MkdirAll(baseDir, 0o700); err != nil {
@@ -47,7 +47,7 @@ func writeTestConfig(t *testing.T, baseDir string) {
 	if err := os.WriteFile(cfgPath, nil, 0o600); err != nil {
 		t.Fatalf("write test config: %v", err)
 	}
-	t.Setenv(configPathEnv, cfgPath)
+	t.Setenv(config.HomeEnv, baseDir)
 }
 
 // testSessionDB returns the session store path inside base's sessions
@@ -418,7 +418,7 @@ func TestConsoleApproverAwaitAnswerRespectsCancellation(t *testing.T) {
 // attempt loads the template cleanly once the user has filled a key.
 func TestLoadConfigFirstRunBootstrapsDefaultPath(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv(configPathEnv, "")
+	t.Setenv(config.HomeEnv, "")
 
 	_, err := loadConfig(true, slog.Default())
 	if err == nil {
@@ -427,7 +427,7 @@ func TestLoadConfigFirstRunBootstrapsDefaultPath(t *testing.T) {
 	if !strings.Contains(err.Error(), "first run") {
 		t.Fatalf("loadConfig(true) error = %v, want first-run guidance", err)
 	}
-	def, derr := config.DefaultBaseDir()
+	def, derr := config.DefaultHomeDir()
 	if derr != nil {
 		t.Fatal(derr)
 	}
@@ -446,19 +446,19 @@ func TestLoadConfigFirstRunBootstrapsDefaultPath(t *testing.T) {
 	}
 }
 
-// TestLoadConfigExplicitMissingPathStaysHardError: LOOM_CONFIG names a file
-// that should exist; a missing explicit path is a user error and must not
-// be papered over with an auto-created template.
-func TestLoadConfigExplicitMissingPathStaysHardError(t *testing.T) {
-	explicit := filepath.Join(t.TempDir(), "custom", "config.yaml")
-	t.Setenv(configPathEnv, explicit)
+// TestLoadConfigExplicitHomeStaysHardError: LOOM_HOME names a directory
+// whose config.yaml should exist; a missing config there is a user error
+// and must not be papered over with an auto-created template.
+func TestLoadConfigExplicitHomeStaysHardError(t *testing.T) {
+	explicit := filepath.Join(t.TempDir(), "custom")
+	t.Setenv(config.HomeEnv, explicit)
 
 	_, err := loadConfig(true, slog.Default())
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("loadConfig(true) error = %v, want not-found", err)
 	}
-	if _, serr := os.Stat(explicit); !os.IsNotExist(serr) {
-		t.Fatalf("explicit missing path was auto-created: %v", serr)
+	if _, serr := os.Stat(filepath.Join(explicit, "config.yaml")); !os.IsNotExist(serr) {
+		t.Fatalf("explicit home's config was auto-created: %v", serr)
 	}
 }
 
