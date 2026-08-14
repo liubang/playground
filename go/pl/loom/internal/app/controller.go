@@ -795,7 +795,13 @@ func (c *Controller) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-c.doneCh:
-		return fmt.Errorf("controller is closed")
+		// Already stopped — e.g. the Run context was cancelled while the
+		// shutdown command was in flight (SessionService.Shutdown cancels
+		// the shared service context before shutting controllers down, and
+		// Run's select may take the ctx.Done branch first). Shutdown's
+		// contract is "ensure the controller is stopped"; that end state
+		// already holds, so this is success, not an error.
+		return nil
 	}
 	select {
 	case result := <-resultCh:

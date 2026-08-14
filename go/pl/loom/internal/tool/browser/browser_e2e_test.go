@@ -125,14 +125,18 @@ func (e *e2eEnv) execRaw(args browserArgs) (browserOutput, domain.ToolResult) {
 	return out, result
 }
 
-// findRef returns the registry ref for the first node with the given role,
-// verifying that the ref also appears in the serialized snapshot output.
-func (e *e2eEnv) findRef(snapshotOutput, role string) string {
+// findRef returns the registry ref for the node with the given role and
+// accessible name, verifying that the ref also appears in the serialized
+// snapshot output. The name is required, not optional: the fixture page
+// has two buttons (counter + form submit), and map iteration order is
+// random — a role-only lookup picks the wrong one nondeterministically
+// (clicking "Search" submits the form and navigates away).
+func (e *e2eEnv) findRef(snapshotOutput, role, name string) string {
 	e.t.Helper()
 	e.tool.registry.mu.Lock()
 	defer e.tool.registry.mu.Unlock()
 	for ref, n := range e.tool.registry.refs {
-		if n.role == role {
+		if n.role == role && strings.Contains(n.name, name) {
 			require.Contains(e.t, snapshotOutput, ref+" "+role,
 				"registry ref %q must appear in the serialized snapshot", ref)
 			return ref
@@ -177,7 +181,7 @@ func TestBrowserTool_E2E_FullFlow(t *testing.T) {
 		return strings.Contains(s, "Count: 0")
 	}, "AX tree to populate after navigate")
 	assert.Contains(t, snapText, "Accessibility Tree Snapshot")
-	counterRef := env.findRef(snapText, "button")
+	counterRef := env.findRef(snapText, "button", "Count: 0")
 	require.NotEmpty(t, counterRef, "snapshot must assign a ref to the counter button")
 
 	// 3. click: the counter button mutates its own label via JS.
@@ -199,7 +203,7 @@ func TestBrowserTool_E2E_FullFlow(t *testing.T) {
 
 	// 4. type + submit: fill the search box and press Enter to submit the
 	// form, which navigates to /search?q=...
-	textboxRef := env.findRef(snapText, "textbox")
+	textboxRef := env.findRef(snapText, "textbox", "Query")
 	require.NotEmpty(t, textboxRef, "snapshot must assign a ref to the search input")
 	typed := env.exec(browserArgs{Action: "type", Ref: textboxRef, Text: "loom-e2e", Submit: true})
 	assert.Equal(t, "type", typed.Action)
@@ -260,7 +264,7 @@ func TestBrowserTool_E2E_StaleRefAfterNavigate(t *testing.T) {
 	snapText := env.waitForSnapshot(func(s string) bool {
 		return strings.Contains(s, "Count: 0")
 	}, "AX tree to populate after navigate")
-	ref := env.findRef(snapText, "button")
+	ref := env.findRef(snapText, "button", "Count: 0")
 	require.NotEmpty(t, ref)
 
 	// Navigating away invalidates refs captured on the previous page.
@@ -282,7 +286,7 @@ func TestBrowserTool_E2E_TypeUnicode(t *testing.T) {
 	snapText := env.waitForSnapshot(func(s string) bool {
 		return strings.Contains(s, "Count: 0")
 	}, "AX tree to populate after navigate")
-	ref := env.findRef(snapText, "textbox")
+	ref := env.findRef(snapText, "textbox", "Query")
 	require.NotEmpty(t, ref)
 
 	env.exec(browserArgs{Action: "type", Ref: ref, Text: "你好 loom", Submit: true})
