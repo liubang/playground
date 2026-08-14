@@ -1830,6 +1830,48 @@ func TestControllerSnapshotCarriesLastError(t *testing.T) {
 	}
 }
 
+// TestControllerShutdownAfterRunContextCancelIsNil locks the shutdown
+// idempotency contract (the TestSessionServiceSubscribeAfterShutdownDrains
+// flake): SessionService.Shutdown cancels the shared service context
+// BEFORE shutting controllers down, so the controller's Run loop may exit
+// via ctx.Done before the shutdown command is delivered. Shutdown must
+// report success — the requested end state (a stopped controller)
+// already holds.
+func TestControllerShutdownAfterRunContextCancelIsNil(t *testing.T) {
+	runCtx, cancel := context.WithCancel(context.Background())
+
+	store, err := session.OpenSQLiteStore(context.Background(), filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, fakes.NewFakeModel()),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(runCtx)
+	if err := controller.NewSession(context.Background()); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+
+	// Cancel the Run context and wait for the loop to exit on its own —
+	// the exact interleaving the service shutdown race produces.
+	cancel()
+	deadline := time.Now().Add(2 * time.Second)
+	for controller.State() != ControllerStateClosed && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if controller.State() != ControllerStateClosed {
+		t.Fatalf("controller state = %q after Run context cancel, want closed", controller.State())
+	}
+	if err := controller.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown after Run context cancel = %v, want nil (idempotent close)", err)
+	}
+}
+
 // The controller must stay in awaiting_approval until the LAST pending card
 // resolves: a batch can hold several asks, and flipping back to running on
 // the first resolved event makes the state gate reject the rest.
