@@ -89,6 +89,49 @@ services:
         limits:
           memory: 2560m
           cpus: '2'
+  # 状态采集器：周期性 fdbcli status json，原子写入共享卷 fdb-status，
+  # 供 fdb-exporter 读取。使用 FDB 官方镜像（自带 fdbcli）。
+  status-collector:
+    image: foundationdb/foundationdb:${FDB_VERSION:-7.3.63}
+    container_name: fdb-status-collector
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "/var/fdb/scripts/status-collector.sh"]
+    environment:
+      STATUS_INTERVAL: 15
+    volumes:
+      - ./status-collector.sh:/var/fdb/scripts/status-collector.sh:ro
+      - ./fdb.cluster:/var/fdb/fdb.cluster:ro
+      - fdb-status:/status
+    depends_on:
+      fdb-node-1:
+        condition: service_healthy
+    networks:
+      - fdb
+  # Prometheus exporter：读取共享卷中的 status.json，展平为指标暴露在 :9189/metrics。
+  # 同时加入 monitor 模块的外部网络（monitor_monitor），供 Prometheus 抓取。
+  fdb-exporter:
+    image: python:3.13-alpine
+    container_name: fdb-exporter
+    restart: unless-stopped
+    command: ["python", "/app/exporter.py"]
+    environment:
+      STATUS_FILE: /status/status.json
+      LISTEN_PORT: 9189
+    volumes:
+      - ./exporter/exporter.py:/app/exporter.py:ro
+      - fdb-status:/status:ro
+    depends_on:
+      - status-collector
+    networks:
+      - fdb
+      - monitor
+    healthcheck:
+      # 注意用 127.0.0.1：alpine 中 localhost 优先解析为 ::1，而服务仅监听 IPv4
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9189/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
   # 独立客户端容器（profile，默认不启动）：
   #   docker compose run --rm client            # 交互式 fdbcli
   #   docker compose run --rm client --exec "status"
@@ -108,8 +151,13 @@ volumes:
   node2-logs:
   node3-data:
   node3-logs:
+  fdb-status:
 networks:
   fdb:
     ipam:
       config:
         - subnet: 172.28.11.0/24
+  # monitor 模块的共享网络，由 ../monitor/bootstrap.sh 创建（fdb bootstrap 会自动拉起）
+  monitor:
+    name: monitor_monitor
+    external: true
