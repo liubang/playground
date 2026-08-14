@@ -63,15 +63,32 @@ type ChannelApprover struct {
 	earlyOrder []domain.EventID
 	done       chan struct{}
 	doneOnce   sync.Once
+	notify     bool
+}
+
+// ChannelApproverOption tunes a ChannelApprover at construction.
+type ChannelApproverOption func(*ChannelApprover)
+
+// WithoutApprovalNotify disables the desktop notification fired when a run
+// blocks on an approval. Frontends that already surface the request
+// prominently (the WebUI) or mirror it to the notification center themselves
+// (the desktop app) use this to avoid a redundant system banner.
+func WithoutApprovalNotify() ChannelApproverOption {
+	return func(a *ChannelApprover) { a.notify = false }
 }
 
 // NewChannelApprover creates a new ChannelApprover.
-func NewChannelApprover() *ChannelApprover {
-	return &ChannelApprover{
+func NewChannelApprover(opts ...ChannelApproverOption) *ChannelApprover {
+	a := &ChannelApprover{
 		pending: make(map[domain.EventID]pendingApproval),
 		early:   make(map[domain.EventID]earlyDecision),
 		done:    make(chan struct{}),
+		notify:  true,
 	}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
 }
 
 // RequestApproval implements domain.Approver. It creates a pending approval
@@ -111,7 +128,9 @@ func (a *ChannelApprover) RequestApproval(ctx context.Context, req domain.Approv
 	// The run is now blocked on a human, and the human is often away
 	// from the terminal during long-horizon runs: surface a desktop
 	// notification alongside the in-app prompt.
-	NotifyApproval(req.Call.Call.Name, req.Description)
+	if a.notify {
+		NotifyApproval(req.Call.Call.Name, req.Description)
+	}
 
 	select {
 	case decision := <-resultCh:

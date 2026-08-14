@@ -178,6 +178,9 @@ func run(ctx context.Context, args []string) error {
 		Logger:        logger,
 		ShareEndpoint: shareMgr,
 		RulesDir:      resolved.Storage.RulesDir(),
+		// watchNotifications below already mirrors approval requests to the
+		// Notification Center; the approver must not fire a second banner.
+		DisableApprovalNotify: true,
 	})
 
 	// Mirror attention-worthy agent milestones to Notification Center.
