@@ -1,0 +1,373 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+// Created: 2026/08/14
+
+package session
+
+import (
+	"context"
+	"encoding/json"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
+)
+
+// Surface directive GC/rewind/inspection tests (docs/SURFACE_DESIGN.md
+// §4.6, §4.5): directive events carry artifact references that must keep
+// blobs alive even without any checkpoint, rewind must honor the surviving
+// directives, and the two InspectSession entry paths must agree.
+
+func testArtifactRef(t *testing.T, fill byte, size int64) domain.ArtifactRef {
+	t.Helper()
+	id, err := domain.ParseArtifactID("art_sha256_" + strings.Repeat(string(fill), 64))
+	if err != nil {
+		t.Fatalf("ParseArtifactID: %v", err)
+	}
+	return domain.ArtifactRef{ID: id, Size: size, MediaType: "text/plain"}
+}
+
+func maskedDirectiveEvent(t *testing.T, sessionID domain.SessionID, seq int64, messageID domain.MessageID, ref domain.ArtifactRef) domain.Event {
+	t.Helper()
+	payload, err := domain.MarshalPayload(domain.ContextMaskedPayload{Masks: []domain.MaskedPart{{
+		MessageID: messageID, PartIndex: 0, ContentIndex: 0,
+		OriginalBytes: int(ref.Size), Artifact: ref,
+		Placeholder: "[tool output compacted]", Revision: 2,
+	}}})
+	if err != nil {
+		t.Fatalf("MarshalPayload: %v", err)
+	}
+	return newEvent(sessionID, seq, domain.EventContextMasked, payload)
+}
+
+// TestDirectiveEventsBackfillArtifactRefs: with every checkpoint gone, the
+// reference graph must still be rebuildable from directive events alone.
+func TestDirectiveEventsBackfillArtifactRefs(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "sessions.db")
+	store := openTestSQLiteStore(t, path)
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	messageID := domain.NewMessageID()
+	maskedRef := testArtifactRef(t, 'a', 40)
+	archiveRef := testArtifactRef(t, 'b', 50)
+	inheritedRef := testArtifactRef(t, 'c', 60)
+	attachmentRef := testArtifactRef(t, '9', 70)
+
+	// A user message with an image attachment: its reference lives only in
+	// the message event (and in checkpoints, which this test deletes).
+	attachmentMsg := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleUser,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{
+			{Kind: domain.PartText, Text: "look at this"},
+			{Kind: domain.PartArtifact, Artifact: &attachmentRef},
+		},
+		CreatedAt: time.Now().UTC(),
+	}
+
+	encoded, err := json.Marshal([]domain.ArtifactRef{inheritedRef, archiveRef})
+	if err != nil {
+		t.Fatalf("marshal refs: %v", err)
+	}
+	archivePayload, err := domain.MarshalPayload(domain.ContextArchivedPayload{
+		FromSequence: 1, ToSequence: 2, Artifact: archiveRef,
+		Marker: domain.Message{
+			ID: domain.NewMessageID(), Role: domain.RoleSystem, Status: domain.MessageStatusFinal, Revision: 1,
+			Parts:    []domain.ContentPart{{Kind: domain.PartText, Text: "[earlier messages archived]"}},
+			Metadata: map[string]string{domain.MetadataCompactedArtifacts: string(encoded)},
+			// Marker.Sequence is assigned by dense renumbering at apply time.
+		},
+	})
+	if err != nil {
+		t.Fatalf("MarshalPayload: %v", err)
+	}
+	dropPayload, err := domain.MarshalPayload(domain.ContextArchivedPayload{
+		FromSequence: 1, ToSequence: 1, // zero artifact: drop without preservation
+		Marker: domain.Message{
+			ID: domain.NewMessageID(), Role: domain.RoleSystem, Status: domain.MessageStatusFinal, Revision: 1,
+			Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "[earlier messages dropped]"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("MarshalPayload: %v", err)
+	}
+
+	events := []domain.Event{
+		newEvent(sessionID, 1, domain.EventSessionCreated, nil),
+		newEvent(sessionID, 2, domain.EventUserMessageAdded, messagePayload(t, attachmentMsg)),
+		maskedDirectiveEvent(t, sessionID, 3, messageID, maskedRef),
+		newEvent(sessionID, 4, domain.EventContextArchived, archivePayload),
+		newEvent(sessionID, 5, domain.EventContextArchived, dropPayload),
+	}
+	ckpt := testCheckpoint(sessionID, 5, time.Now().UTC())
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events, ckpt); err != nil {
+		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
+	}
+
+	// Simulate checkpoint loss + stale refs, then re-run the migration.
+	if _, err := store.db.ExecContext(ctx, "DELETE FROM checkpoints"); err != nil {
+		t.Fatalf("delete checkpoints: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, "DELETE FROM artifact_refs"); err != nil {
+		t.Fatalf("clear artifact refs: %v", err)
+	}
+	if err := store.backfillArtifactRefs(ctx); err != nil {
+		t.Fatalf("backfillArtifactRefs: %v", err)
+	}
+
+	refs, err := store.ListArtifactRefs(ctx)
+	if err != nil {
+		t.Fatalf("ListArtifactRefs: %v", err)
+	}
+	if refs[maskedRef.ID] != 40 {
+		t.Fatalf("masked artifact ref = %d, want 40 (refs %+v)", refs[maskedRef.ID], refs)
+	}
+	if refs[archiveRef.ID] != 50 {
+		t.Fatalf("archive artifact ref = %d, want 50", refs[archiveRef.ID])
+	}
+	if refs[inheritedRef.ID] != 60 {
+		t.Fatalf("inherited marker ref = %d, want 60", refs[inheritedRef.ID])
+	}
+	if refs[attachmentRef.ID] != 70 {
+		t.Fatalf("message attachment ref = %d, want 70 (message events scanned)", refs[attachmentRef.ID])
+	}
+	if len(refs) != 4 {
+		t.Fatalf("refs = %+v, want exactly the 4 expected refs (zero-artifact drop skipped)", refs)
+	}
+}
+
+// TestBackfillMergesCheckpointAndDirectiveRefsByMaxSize: the same
+// artifact pinned by a checkpoint (larger) and a directive event (smaller)
+// must keep the MAX size after the migration re-scan.
+func TestBackfillMergesCheckpointAndDirectiveRefsByMaxSize(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	shared := testArtifactRef(t, '7', 40) // directive size
+	ckptRef := shared
+	ckptRef.Size = 100 // checkpoint size (larger)
+
+	ckpt := testCheckpoint(sessionID, 2, time.Now().UTC())
+	ckpt.Messages[0].Parts = []domain.ContentPart{{Kind: domain.PartArtifact, Artifact: &ckptRef}}
+	events := []domain.Event{
+		newEvent(sessionID, 1, domain.EventSessionCreated, nil),
+		maskedDirectiveEvent(t, sessionID, 2, domain.NewMessageID(), shared),
+	}
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events, ckpt); err != nil {
+		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
+	}
+	if err := store.backfillArtifactRefs(ctx); err != nil {
+		t.Fatalf("backfillArtifactRefs: %v", err)
+	}
+	refs, err := store.ListArtifactRefs(ctx)
+	if err != nil {
+		t.Fatalf("ListArtifactRefs: %v", err)
+	}
+	if got := refs[shared.ID]; got != 100 {
+		t.Fatalf("merged ref size = %d, want MAX(100, 40) = 100", got)
+	}
+}
+
+// TestRewindKeepsSurvivingDirectiveArtifactRefs: rewind truncates the log;
+// references pinned by directive events that SURVIVE the rewind must
+// survive, references from truncated events must go.
+func TestRewindKeepsSurvivingDirectiveArtifactRefs(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	keptRef := testArtifactRef(t, 'd', 11)
+	droppedRef := testArtifactRef(t, 'e', 22)
+
+	ckpt1 := testCheckpoint(sessionID, 1, time.Now().UTC())
+	events1 := []domain.Event{
+		maskedDirectiveEvent(t, sessionID, 1, domain.NewMessageID(), keptRef),
+	}
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events1, ckpt1); err != nil {
+		t.Fatalf("first append: %v", err)
+	}
+	ckpt2 := testCheckpoint(sessionID, 2, time.Now().UTC().Add(time.Second))
+	events2 := []domain.Event{
+		maskedDirectiveEvent(t, sessionID, 2, domain.NewMessageID(), droppedRef),
+	}
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 1, events2, ckpt2); err != nil {
+		t.Fatalf("second append: %v", err)
+	}
+
+	if _, err := store.RewindSession(ctx, sessionID, 1); err != nil {
+		t.Fatalf("RewindSession: %v", err)
+	}
+	refs, err := store.ListArtifactRefs(ctx)
+	if err != nil {
+		t.Fatalf("ListArtifactRefs: %v", err)
+	}
+	if _, ok := refs[droppedRef.ID]; ok {
+		t.Fatalf("truncated directive's artifact still referenced: %+v", refs)
+	}
+	if got := refs[keptRef.ID]; got != 11 {
+		t.Fatalf("surviving directive's artifact ref = %d, want 11 (refs %+v)", got, refs)
+	}
+}
+
+// TestInspectSessionMatchesPureReplayWithDirectives locks §4.5's semantic
+// unification: with a checkpoint present (checkpoint + tail path) and
+// without it (pure log path), InspectSession must return the same surface.
+func TestInspectSessionMatchesPureReplayWithDirectives(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	base := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	callID := domain.NewToolCallID()
+	callMsg := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleAssistant,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{
+			ID: callID, Name: "read_file", Arguments: json.RawMessage(`{"path":"a.go"}`),
+		}}},
+		CreatedAt: base,
+	}
+	resultMsg := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 2, Role: domain.RoleAssistant,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartToolResult, ToolResult: &domain.ToolResult{
+			CallID: callID, Status: domain.ToolStatusSuccess,
+			Content:   []domain.ContentPart{{Kind: domain.PartText, Text: strings.Repeat("x", 4000)}},
+			StartedAt: base, FinishedAt: base,
+		}}},
+		CreatedAt: base,
+	}
+	maskedRef := testArtifactRef(t, 'f', 4000)
+	maskPayload, err := domain.MarshalPayload(domain.ContextMaskedPayload{Masks: []domain.MaskedPart{{
+		MessageID: resultMsg.ID, PartIndex: 0, ContentIndex: 0,
+		OriginalBytes: 4000, Artifact: maskedRef,
+		Placeholder: "[tool output compacted 3.9KB externalized]", Revision: 2,
+	}}})
+	if err != nil {
+		t.Fatalf("MarshalPayload: %v", err)
+	}
+
+	events := []domain.Event{
+		newEventAt(sessionID, 1, domain.EventSessionCreated, nil, base),
+		newEventAt(sessionID, 2, domain.EventModelResponseCompleted, messagePayload(t, callMsg), base),
+		newEventAt(sessionID, 3, domain.EventToolResultAdded, messagePayload(t, resultMsg), base),
+		newEventAt(sessionID, 4, domain.EventContextMasked, maskPayload, base),
+	}
+	// The checkpoint carries the post-mask surface, exactly as flushEvents
+	// persists it in the same transaction as the directive event.
+	surface, err := domain.ApplyMaskDirective([]domain.Message{callMsg, resultMsg},
+		[]domain.MaskedPart{{
+			MessageID: resultMsg.ID, PartIndex: 0, ContentIndex: 0,
+			OriginalBytes: 4000, Artifact: maskedRef,
+			Placeholder: "[tool output compacted 3.9KB externalized]", Revision: 2,
+		}})
+	if err != nil {
+		t.Fatalf("ApplyMaskDirective: %v", err)
+	}
+	ckpt := testCheckpoint(sessionID, 4, base)
+	ckpt.Messages = surface
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events, ckpt); err != nil {
+		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
+	}
+
+	inspection, err := store.InspectSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("InspectSession: %v", err)
+	}
+	replayed, err := Replay(inspection.Events)
+	if err != nil {
+		t.Fatalf("Replay from pure log: %v", err)
+	}
+	if len(inspection.Transcript.Messages) != len(replayed.Messages) {
+		t.Fatalf("checkpoint path %d messages vs pure-log path %d",
+			len(inspection.Transcript.Messages), len(replayed.Messages))
+	}
+	for i := range replayed.Messages {
+		want, _ := json.Marshal(replayed.Messages[i])
+		got, _ := json.Marshal(inspection.Transcript.Messages[i])
+		if string(want) != string(got) {
+			t.Fatalf("message %d diverges between entries:\n pure-log:   %s\n checkpoint: %s", i, want, got)
+		}
+	}
+	// And the surface really is masked (not the full-fidelity original).
+	content := inspection.Transcript.Messages[1].Parts[0].ToolResult.Content[0].Text
+	if !strings.HasPrefix(content, "[tool output compacted") {
+		t.Fatalf("expected masked placeholder in inspected surface, got %q", content[:60])
+	}
+}
+
+// TestLegacySessionWithoutDirectivesUnchanged: §4.7 — a session with no
+// directive events replays byte-identically to the pre-change behavior
+// (the directive code paths never engage).
+func TestLegacySessionWithoutDirectivesUnchanged(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	events := transcriptEvents(t, sessionID)
+	ckpt := testCheckpoint(sessionID, 3, time.Now().UTC())
+	ckpt.Messages = []domain.Message{}
+	for _, evt := range events {
+		if evt.Type == domain.EventUserMessageAdded || evt.Type == domain.EventModelResponseCompleted {
+			payload, err := domain.UnmarshalMessageEventPayload(evt.Payload)
+			if err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			ckpt.Messages = append(ckpt.Messages, payload.Message)
+		}
+	}
+	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events, ckpt); err != nil {
+		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
+	}
+
+	replayed, err := Replay(events)
+	if err != nil {
+		t.Fatalf("Replay legacy events: %v", err)
+	}
+	if len(replayed.Messages) != 2 {
+		t.Fatalf("legacy replay messages = %d, want 2", len(replayed.Messages))
+	}
+	full, err := ReplayFull(events)
+	if err != nil {
+		t.Fatalf("ReplayFull legacy events: %v", err)
+	}
+	if len(full.Messages) != len(replayed.Messages) {
+		t.Fatalf("without directives Replay and ReplayFull must agree: %d vs %d",
+			len(replayed.Messages), len(full.Messages))
+	}
+	inspection, err := store.InspectSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("InspectSession legacy: %v", err)
+	}
+	if len(inspection.Transcript.Messages) != 2 {
+		t.Fatalf("legacy inspect messages = %d, want 2", len(inspection.Transcript.Messages))
+	}
+}

@@ -1609,19 +1609,19 @@ func TestLoopTracksUsageManifestAndPersistsEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadEvents: %v", err)
 	}
-	if len(events) != 7 {
-		t.Fatalf("expected 7 persisted events, got %d", len(events))
+	if len(events) != 8 {
+		t.Fatalf("expected 8 persisted events, got %d", len(events))
 	}
 	if _, err := domain.UnmarshalMessageEventPayload(events[0].Payload); err != nil {
 		t.Fatalf("invalid persisted user message: %v", err)
 	}
-	if events[2].Type != domain.EventBudgetUpdated || events[3].Type != domain.EventModelRequestStarted {
-		t.Fatalf("missing turn budget or model request audit event: %v", collectEventTypes(events))
+	if events[2].Type != domain.EventBudgetUpdated || events[3].Type != domain.EventModelRequestHeader || events[4].Type != domain.EventModelRequestStarted {
+		t.Fatalf("missing turn budget, request header or model request audit event: %v", collectEventTypes(events))
 	}
-	if _, err := domain.UnmarshalMessageEventPayload(events[4].Payload); err != nil {
+	if _, err := domain.UnmarshalMessageEventPayload(events[5].Payload); err != nil {
 		t.Fatalf("invalid persisted assistant message: %v", err)
 	}
-	if events[5].Type != domain.EventBudgetUpdated {
+	if events[6].Type != domain.EventBudgetUpdated {
 		t.Fatalf("missing budget update event: %v", collectEventTypes(events))
 	}
 }
@@ -3824,6 +3824,18 @@ func TestIsContextOverflowErrorIgnoresOtherFailures(t *testing.T) {
 	// classifies via the needles.
 	if !isContextOverflowError(errors.New("openai provider: HTTP 400: prompt is too long")) {
 		t.Fatal("semantic context overflow must still classify")
+	}
+	// Gateways that meter raw prompt length (including inline base64
+	// images) reject with length phrasing, not window phrasing — observed
+	// verbatim from aigc. It must engage the compaction+retry path.
+	for _, msg := range []string{
+		"Prompt exceeds max length",
+		"prompt exceeds max length",
+		"input exceeds the maximum length",
+	} {
+		if !isContextOverflowError(errors.New(msg)) {
+			t.Fatalf("length-phrased rejection %q must classify as a fit failure", msg)
+		}
 	}
 }
 

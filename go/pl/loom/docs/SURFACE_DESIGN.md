@@ -1,6 +1,7 @@
 # Loom Surface/Log 分离设计
 
-> 状态：草案 v2（2026-08-13；首轮自审修正 4 处：双批 mask 合并安全性论证、Level 3 不吞前级指令、投影器 nextSequence 重建、mask 与 normalizeMessage 修订语义对齐）
+> 状态：**已全部实施**（2026-08-14；M1-M4 均经独立审查+真实环境验收；bazel 45/45 通过。M1 审查修正 2 major + 5 minor；M2 审查修正 2 major——budget.notice/goal.updated 投影缺口为顺带修复的预存 bug；M3/M4 审查修正 1 major（消息附件引用未入纯 log 重建路径）+ 2 minor。真实环境验收：glm-5.2 小窗口会话产生 context.masked/context.summarized 指令事件与 initial/resume 双 reason 的 model.request_header，request_started 全量锚定，inspect/resume/gc 均正常）
+> 设计修订记录：v2 首轮自审修正 4 处（双批 mask 合并安全性论证、Level 3 不吞前级指令、投影器 nextSequence 重建、mask 与 normalizeMessage 修订语义对齐）；v3 二轮自审+ dsh 对照修正 4 处（SurfaceOps 包归属下移 domain、归档定位归纳不变量显式化、surface/wire 边界澄清、引入运行时不变量自检；并将 request/header 持久化纳入范围 §4.8）；实施期修正 2 处（revision 规则放宽为同层等值——运行时每条消息每层只 bump 一次；archive 允许零 artifact 承载 summary-overflow 的无保留 drop）
 > 作者：liubang
 > 日期：2026-08-13
 > 参考：deepseek-harness（`packages/core/session`）的 "Model-visible ⟺ Logged" 原则与 surface/log 双层事件模型；docs/CONTEXT_DESIGN.md（压缩三级管线）
@@ -13,6 +14,8 @@
 - **Surface（模型可见面）**：某次模型调用时，模型实际看到的 transcript。它是 log 的派生视图——可能被压缩改写过的那一版。
 
 设计目标是让两者满足 **"Model-visible ⟺ Logged"**：任何到达模型请求的内容，必须能从 log 重建；log 中的任何内容，都有明确的 surface 归宿（可见、被遮蔽、或被归档）。
+
+**Surface 与 wire 的边界**：surface 中的图片以 `PartArtifact` 引用存在，模型实际看到的是 egress 处 materialize（vision 模型内联）或 strip（非 vision 模型）后的结果。wire 转换是 (surface, 模型能力) 的纯函数——surface 确定、模型确定（§4.8 的 request/header 持久化模型名），则 wire 输入确定。因此"模型可见"的可重建性在 surface 层成立即可，无需把 wire 形态落盘。
 
 ### 1.2 现状：压缩结果不在 log 里
 
@@ -76,6 +79,7 @@ Loom 不需要照搬其分层命名（loom 的消息事件天然就是 surface �
                  │            tool.result_added                                 │
                  │   指令事件：context.masked / context.archived /              │
                  │            context.summarized（本设计新增）                    │
+                 │   请求头事件：model.request_header（本设计新增，§4.8）          │
                  │   审计事件：context.compacted（保留，不变）                    │
                  └───────────────────────────┬─────────────────────────────────┘
                                              │
@@ -144,6 +148,8 @@ type ContextArchivedPayload struct {
 
 应用语义：删除区间内消息 → 插入 Marker → dense renumber（见 §4.3）。
 
+**定位有效性的归纳不变量**：sequence 区间以压缩时的 surface 编号定位。回放能正确应用它的前提是：回放应用过的指令前缀与运行时完全一致（归纳可得——两边消费同一事件序列、同一应用函数），因此压缩时投影器表面的编号与运行时编号相同。任一指令应用失败都会立即报错终止回放，不会产生静默错位。
+
 #### 4.1.3 `context.summarized`（Level 3 摘要替换）
 
 ```go
@@ -180,21 +186,25 @@ context.masked?      → context.archived? → context.summarized? → context.c
 
 ### 4.2 Condenser 改造：从改写到生成指令
 
+**包归属**：`SurfaceOps`、三个指令 payload 与 `ApplySurfaceOps` 全部放在 `domain` 包（如 `domain/surface_ops.go`）——事件 payload 类型本就集中在 `domain/event.go`（`MessageEventPayload`、`BudgetNoticePayload` 等），且 `agent`（生成侧）与 `session`（回放侧）都依赖 `domain`，放 domain 不引入新的依赖边；放 agent 会让 session 反向依赖 agent，层级倒置。
+
 ```go
-// SurfaceOps 是一次 Condense 产出的全部压缩指令（纯数据）。
-// 三个字段在一次压缩中可同时非空（Level 1 mask 后仍超标 → archive；
-// 机械压缩仍不达标 → Level 3 摘要整面替换），按序全部应用：
-// mask → archive → replacement。Level 3 发生时不吞掉前两级指令：
-// mask/archive 的 artifact 外化与审计轨迹已真实发生，且回放按序
-// 应用后被 Replacement 整体覆盖，结果与运行时一致。
+// SurfaceOps 是一次 Condense 产出的全部压缩指令（纯数据，字段即事件 payload，
+// 发事件无需二次包装）。三个字段在一次压缩中可同时非空（Level 1 mask 后仍
+// 超标 → archive；机械压缩仍不达标 → Level 3 摘要整面替换），按序全部应用：
+// mask → archive → replacement。Level 3 发生时不吞掉前两级指令：mask/archive
+// 的 artifact 外化与审计轨迹已真实发生，且回放按序应用后被 Replacement 整体
+// 覆盖，结果与运行时一致。
 type SurfaceOps struct {
-    Masks       []MaskedPart
-    Archive     *ArchiveOp      // from/to/artifact/marker，至多一个
-    Replacement []domain.Message // Level 3 整面替换
+    Masks       *ContextMaskedPayload
+    Archive     *ContextArchivedPayload
+    Replacement *ContextSummarizedPayload
 }
 
 // Plan 替代现在的 Condense：只读 messages，产出指令，不做任何修改。
-func (c Condenser) Plan(ctx context.Context, messages []domain.Message, artifacts domain.ArtifactStore) (SurfaceOps, compactResult)
+// 审计计数（masked 字节数、归档条数等）由调用方从返回的 ops 派生，
+// 不维护平行账本（终审修正，消除双账本回滚逻辑）。
+func (c Condenser) Plan(ctx context.Context, messages []domain.Message, artifacts domain.ArtifactStore, now time.Time) domain.SurfaceOps
 ```
 
 - `Plan` 内部仍按 Level 1 → 2a → 2b 的成本顺序决策，但每一步只**记录**指令（在 messages 的只读副本上演算后续级别所需的视图，或直接操作副本来计算下一步的输入——实现细节，对外契约是"不触碰入参"）；
@@ -241,6 +251,8 @@ l.Run.appendEvent(domain.EventContextCompacted, ...)   // 审计事件，不变
 - `lastCompactEst`、`ForceCompact`、notice re-arm 等簿记不变；
 - 崩溃安全不变：指令事件与 checkpoint 同事务，崩溃后要么都在要么都不在；`RecoverRun` 现有逻辑不感知压缩，无需改动。
 
+**运行时不变量自检（借自 dsh invariant 机制）**：dsh 在每次请求前校验 "从 log 折叠出的 messages == 即将发送的 messages"。本设计引入等价的 strict 模式自检（`LOOM_STRICT_REPLAY=1` 或 debug 构建）：`callModel` 组装完 `effectiveMessages()` 后，用 `session.Replay`（内存事件副本）折叠出的 surface 与之做深度比较，不一致即 panic/log-fatal。常态关闭（有回放成本），CI 的 loop 测试全程开启——它把 §5.1 的黄金断言从"事后测试"升级为"每次请求时的在线校验"，能在压缩 bug 造成污染的第一现场暴露。
+
 ### 4.5 回放与消费方的语义变化
 
 | 消费方 | 现状 | 本设计后 |
@@ -278,6 +290,64 @@ func ReplayFull(events []domain.Event) (Transcript, error)
 - **旧二进制读新会话**：`Event.Validate` 对未知事件类型报错，旧版本 loom 打开含指令事件的会话会失败。接受此前向不兼容：事件类型扩展不需要 schema 变更（payload 是 BLOB），但要求版本升级先于使用。在 release note 中声明。
 - **混合状态**：一次会话先由旧版本压缩（只有审计事件）、后由新版本压缩（有指令事件）——投影器对缺失指令的历史区间无法修正（信息已随旧 checkpoint 存在），行为退化为现状，不产生新错误。
 
+### 4.8 请求头持久化（`model.request_header`）
+
+Surface 解决了"transcript 可重建"，但一次模型请求还有另一半天：system prompt、tools schema、模型配置。现状只有 `model.request_started` 携带 `ManifestID`/`ManifestHash`/`PromptHash` 三个哈希（`modelRequestAuditPayload`），`PromptBuilder` 的注释明确写着 prompt "never persisted"——哈希能证明"变了"，不能回答"是什么"。本节把请求头全文纳入 log，彻底闭合 P3。
+
+#### 4.8.1 事件与 payload
+
+```go
+// domain 包；EventModelRequestHeader EventType = "model.request_header"
+
+type RequestHeaderReason string
+
+const (
+    HeaderReasonInitial RequestHeaderReason = "initial" // 会话首个 header
+    HeaderReasonResume  RequestHeaderReason = "resume"  // 进程重启/恢复后首个 header
+    HeaderReasonChange  RequestHeaderReason = "change"  // 任一组成部分变化
+)
+
+type RequestHeader struct {
+    ModelName   string                  `json:"model_name"`
+    Reasoning   domain.ReasoningSpec    `json:"reasoning,omitempty"`
+    MaxTokens   int64                   `json:"max_tokens,omitempty"`
+    Temperature float64                 `json:"temperature,omitempty"`
+    // System 是渲染后的完整 system prompt 文本（static + dynamic 拼接后）。
+    System      string                  `json:"system,omitempty"`
+    // Tools 是本次请求暴露的完整工具 schema 列表。
+    Tools       []domain.ToolDefinition `json:"tools,omitempty"`
+    // Rules 是 context manifest 中稳定的规则集引用。manifest 的
+    // per-request 部分（message ranges/budget buckets/truncations）
+    // 每次调用都变，纳入会让去重失效——各次调用的完整 manifest
+    // 哈希仍由 model.request_started 携带（实施期修正）。
+    Rules       []domain.ContextRuleRef `json:"rules,omitempty"`
+}
+
+type RequestHeaderPayload struct {
+    Header RequestHeader       `json:"header"`
+    Reason RequestHeaderReason `json:"reason"`
+    Hash   string              `json:"hash"` // header canonical JSON 的 SHA-256
+}
+```
+
+#### 4.8.2 变更去重（借自 dsh 的 initial/resume/change 三态）
+
+请求头全文每次调用都落盘不可接受（prompt + tools schema 量级几十 KB，一个会话上百次调用）。dsh 的做法是**按变更去重**：每次 `buildRequest` 组装出 header 后与基线比较，仅在首次、resume 后首次、或内容变化时追加事件。loom 采用同样策略：
+
+- Loop 持有 `lastHeaderHash`；`callModel` 组装请求后计算 header canonical hash，相同则跳过；
+- 恢复后的新 Loop 实例首个请求以 `resume` 记一条（即使内容与崩溃前相同——它为"之后的 `request_started` 引用哪个 header"建立锚点，回放侧无需跨进程记忆）；
+- `model.request_started` 的 audit payload 增加 `header_hash` 字段（新增字段对旧事件格式后向兼容），把每次请求锚定到具体 header 版本——第 N 次调用模型看到了什么 = 最近的 `header_hash` 对应的全文 + 当时的 surface。
+
+#### 4.8.3 体积估算与取舍
+
+去重后，header 事件的触发点是：会话开始、resume、`/model` 切换、工具集增删（MCP 热载）、prompt 模板/skill/memory 变更。常态会话个位数。单条几十 KB，与一次大工具输出同级，可接受。**明确不采纳** sidecar/哈希引用方案（仅存哈希、正文外置 artifact store）：artifact GC 与会话生命周期不同步会带来悬空引用风险，且调试时要多一次跳转；全文入 log 换来的"单文件自包含可审计"价值更大。
+
+#### 4.8.4 与回放测试的衔接
+
+`model.request_header` 是 docs/REPLAY_TESTING_DESIGN.md 中请求指纹校验的数据来源：回放时 ReplayModel 可对每次调用重建 header 并与录制基线比较，检测"请求侧漂移"（prompt 模板变了、工具集变了）——这类漂移在纯位置匹配下是静默的。
+
+**已知盲区（有意保留）**：压缩的 summarize 调用（`summarizeForCompaction`）直调 `Model.Stream`，不落 `request_started` 也不落 header——它无 tools、请求形态不同，落 header 会造成去重抖动。其输入可重建（当时的 surface + 固定 summon prompt），输出经 `context.summarized` 的 Replacement 持久化，仅有用量会计入 budget.updated。若未来需要完整审计这次调用，应加一条轻量审计事件而非复用 header。
+
 ## 5. 测试策略
 
 ### 5.1 黄金一致性性质测试（核心）
@@ -313,8 +383,7 @@ assert.DeepEqual(transcript.Messages, run.Messages)
 
 ## 6. 非目标
 
-- **chunk 级流式持久化**（dsh 的 `assistant/chunk` 事件）：loom 的 stream delta 只经 runtimeevent 实时分发不落盘。token 级回放保真是独立增强，可在本设计之上叠加（同为 log-only 事件），不在本期。
-- **`request/header` 持久化**（每次模型调用的 config + system prompt + tools schema 快照）：独立小特性，与本设计正交，可先行落地。
+- **chunk 级流式持久化**（dsh 的 `assistant/chunk` 事件）：loom 的 stream delta 只经 runtimeevent 实时分发不落盘。token 级回放保真是独立增强，可在本设计之上叠加（同为 log-only 事件），不在本期；回放测试改在 model 边界独立录制（见 docs/REPLAY_TESTING_DESIGN.md）。
 - **log 瘦身 / snapshot + truncate**：见 §4.6。
 - **UI 变更**：mask 占位符与 archived marker 的展示逻辑已存在，无需改动。
 
@@ -325,5 +394,6 @@ assert.DeepEqual(transcript.Messages, run.Messages)
 | M1 | 三个事件类型 + payload 定义 + `Event.Validate` 白名单 + `ApplySurfaceOps` 共享函数 + 单测 | §5.5 负例通过 |
 | M2 | Condenser 改 `Plan` + Loop 接线 + projector 应用指令 + `ReplayFull` | §5.1 黄金断言在现有全部 loop 测试上通过 |
 | M3 | GC/rewind 引用扫描扩展 + `InspectSession` 语义统一 + 旧会话回归 fixture | §5.3、§5.4 通过 |
+| M4 | `model.request_header` 事件 + 变更去重 + `request_started` 锚定字段（与 M1-M3 正交，可并行） | header 去重单测 + resume 锚点测试通过 |
 
 M2 是语义切换点，落地前需全量回归（含 e2e 的 compaction 与 recovery 场景）。
