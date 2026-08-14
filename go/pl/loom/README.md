@@ -55,7 +55,8 @@ loom gc                           # 回收无引用的 artifact
 | `LOOM_BASE_URL` / `LOOM_API_KEY` | — | OpenAI 兼容端点与密钥 |
 | `LOOM_WIRE_API` | `chat_completions` | 线协议：`chat_completions` 或 `responses` |
 | `LOOM_CONTEXT_WINDOW` | 0（自动） | 模型上下文窗口 token 数，驱动压缩 |
-| `LOOM_SESSION_DB` | 已废弃 | 数据根目录（loom home）即配置文件所在目录（默认 `~/.loom`）；会话库固定派生为 `<loom home>/sessions/sessions.db` |
+| `LOOM_HOME` | `~/.loom` | loom home（数据根目录）：配置文件 `<loom home>/config.yaml`、会话库、日志、记忆、规则、技能均派生其下 |
+| `LOOM_SESSION_DB` | 已废弃 | 会话库固定派生为 `<loom home>/sessions/sessions.db` |
 | `LOOM_SYSTEM_PROMPT_EXTRA` | — | 追加到系统提示词的自定义指令 |
 | `LOOM_SKILLS` / `LOOM_SKILLS_EXTRA_ROOTS` | 开 / — | 技能开关与额外发现根目录 |
 | `LOOM_RULES` | 开 | 用户/项目声明式权限规则（`.loom/rules/*.json`） |

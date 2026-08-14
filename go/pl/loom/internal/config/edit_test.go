@@ -191,17 +191,16 @@ func TestParseFileRejectsMultiDocument(t *testing.T) {
 
 func TestResolve(t *testing.T) {
 	lookup := envWith(map[string]string{"MCP_TOKEN": "tok"})
-	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	resolved, err := editTestFile().Resolve(configPath, lookup)
+	home := t.TempDir()
+	resolved, err := editTestFile().Resolve(home, lookup)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	if len(resolved.Providers) != 1 || resolved.Default.String() != "deepseek/deepseek-chat" {
 		t.Fatalf("resolved = %+v", resolved)
 	}
-	// The loom home derives from the config file's directory.
-	if want := filepath.Dir(configPath); resolved.Storage.BaseDir != want {
-		t.Fatalf("BaseDir = %q, want %q", resolved.Storage.BaseDir, want)
+	if resolved.Storage.BaseDir != home {
+		t.Fatalf("BaseDir = %q, want %q", resolved.Storage.BaseDir, home)
 	}
 
 	// Resolve must not mutate its input: the file is serialized to disk
@@ -209,7 +208,7 @@ func TestResolve(t *testing.T) {
 	// by resolve would leak into it.
 	f := editTestFile()
 	f.Providers[0].Models[0].WireAPI = ""
-	if _, err := f.Resolve(configPath, lookup); err != nil {
+	if _, err := f.Resolve(home, lookup); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	if got := f.Providers[0].Models[0].WireAPI; got != "" {
@@ -218,18 +217,18 @@ func TestResolve(t *testing.T) {
 
 	bare := editTestFile()
 	bare.Providers = nil
-	if _, err := bare.Resolve(configPath, lookup); err == nil {
+	if _, err := bare.Resolve(home, lookup); err == nil {
 		t.Fatal("no providers accepted")
 	}
 
 	bad := editTestFile()
 	bad.Approval.Mode = "whenever"
-	if _, err := bad.Resolve(configPath, lookup); err == nil || !strings.Contains(err.Error(), "approval") {
+	if _, err := bad.Resolve(home, lookup); err == nil || !strings.Contains(err.Error(), "approval") {
 		t.Fatalf("err = %v, want an approval-mode error", err)
 	}
 
 	missingEnv := editTestFile()
-	if _, err := missingEnv.Resolve(configPath, noEnv); err == nil || !strings.Contains(err.Error(), "MCP_TOKEN") {
+	if _, err := missingEnv.Resolve(home, noEnv); err == nil || !strings.Contains(err.Error(), "MCP_TOKEN") {
 		t.Fatalf("err = %v, want a missing-env error for the ${MCP_TOKEN} header", err)
 	}
 }

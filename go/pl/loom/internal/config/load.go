@@ -23,6 +23,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 )
 
 // LoadOptions controls loading behavior.
@@ -41,13 +42,13 @@ type LoadOptions struct {
 // file as empty defaults and never see it.
 var ErrConfigNotFound = errors.New("config file not found")
 
-// Load reads, validates, and resolves the YAML config at path. It is the
-// single configuration entry point for every loom command (§3.1): no env
-// overlay, no silent defaults — any problem is a hard error whose message
-// names the file, field, and cause. The loom home (data root) is the
-// directory containing the config file — LOOM_CONFIG is the only
+// Load reads, validates, and resolves the YAML config at
+// <home>/config.yaml. It is the single configuration entry point for
+// every loom command (§3.1): no env overlay, no silent defaults — any
+// problem is a hard error whose message names the file, field, and
+// cause. home is the loom home (data root): LOOM_HOME is the only
 // locator, and the file never names its own home.
-func Load(path string, opts LoadOptions, lookup EnvLookup) (*ResolvedConfig, error) {
+func Load(home string, opts LoadOptions, lookup EnvLookup) (*ResolvedConfig, error) {
 	if lookup == nil {
 		lookup = os.LookupEnv
 	}
@@ -55,10 +56,11 @@ func Load(path string, opts LoadOptions, lookup EnvLookup) (*ResolvedConfig, err
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	baseDir, err := BaseDirForConfigPath(path)
+	baseDir, err := filepath.Abs(home)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("config: resolve loom home: %w", err)
 	}
+	path := ConfigPathForHome(baseDir)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

@@ -250,18 +250,22 @@ type ResolvedMemory struct {
 }
 
 // ResolvedStorage carries the loom home — the single root for every
-// loom data location. BaseDir is derived from the config file location
-// (BaseDirForConfigPath), never from configuration itself: a config
-// file pointing at its own data root would be a self-referential knob.
-// The derived accessors below are the only sanctioned way to compute
-// data locations, so no other code may hard-code ~/.loom.
+// loom data location. BaseDir comes from the home locator (LOOM_HOME or
+// the default), never from configuration itself: a config file pointing
+// at its own data root would be a self-referential knob. The derived
+// accessors below are the only sanctioned way to compute data locations,
+// so no other code may hard-code ~/.loom.
 type ResolvedStorage struct {
 	BaseDir string
 }
 
-// DefaultBaseDir returns ~/.loom — the default loom home, used to
-// locate the default config file (~/.loom/config.yaml).
-func DefaultBaseDir() (string, error) {
+// HomeEnv locates the loom home directory. It is a *locator* (like
+// CARGO_HOME), not configuration itself: config, logs, sessions,
+// memories, rules, and skills all live under it.
+const HomeEnv = "LOOM_HOME"
+
+// DefaultHomeDir returns ~/.loom — the default loom home.
+func DefaultHomeDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("config: resolve user home: %w", err)
@@ -269,17 +273,24 @@ func DefaultBaseDir() (string, error) {
 	return filepath.Join(home, ".loom"), nil
 }
 
-// BaseDirForConfigPath derives the loom home (data root) from the
-// config file location: the directory containing the file, made
-// absolute. This is the ONLY rule — LOOM_CONFIG (or the default path)
-// is the single locator, and the config file never names its own home.
-func BaseDirForConfigPath(path string) (string, error) {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return "", fmt.Errorf("config: resolve config path: %w", err)
+// HomeDir resolves the active loom home: $LOOM_HOME when set, otherwise
+// DefaultHomeDir. The result is always absolute.
+func HomeDir(lookup EnvLookup) (string, error) {
+	if lookup == nil {
+		lookup = os.LookupEnv
 	}
-	return filepath.Dir(abs), nil
+	if dir, ok := lookup(HomeEnv); ok && strings.TrimSpace(dir) != "" {
+		abs, err := filepath.Abs(strings.TrimSpace(dir))
+		if err != nil {
+			return "", fmt.Errorf("config: resolve %s: %w", HomeEnv, err)
+		}
+		return abs, nil
+	}
+	return DefaultHomeDir()
 }
+
+// ConfigPathForHome returns the config file path within a loom home.
+func ConfigPathForHome(home string) string { return filepath.Join(home, FileName) }
 
 // SessionsDir is the session data directory: sessions.db plus its
 // sibling artifacts/, prompt_cache/, serve.token, and loom.lock.
@@ -591,9 +602,8 @@ func modelNames(p *ResolvedProvider) []string {
 // resolve validates the raw file, resolves secrets, builds provider
 // instances, and applies built-in defaults. Any problem is a hard error —
 // a configuration that silently half-applies is worse than no run at all
-// (docs/CONFIG_DESIGN.md §7). baseDir is the loom home derived from the
-// config file location (BaseDirForConfigPath) — storage is not
-// configurable.
+// (docs/CONFIG_DESIGN.md §7). baseDir is the loom home (LOOM_HOME or the
+// default) — storage is not configurable.
 func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error) {
 	if lookup == nil {
 		return nil, fmt.Errorf("config: env lookup is required")
