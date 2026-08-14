@@ -34,9 +34,22 @@ fdbcli_exec() {
     docker compose exec -T fdb-node-1 fdbcli -C /var/fdb/fdb.cluster --exec "$1" 2>&1
 }
 
+# fdb-exporter 通过外部网络 monitor_monitor 暴露给 Prometheus 抓取，
+# 该网络由 monitor 模块创建；不存在时自动拉起 monitor 模块（其 bootstrap 幂等）。
+ensure_monitor_network() {
+    if docker network inspect monitor_monitor >/dev/null 2>&1; then
+        log_skip "monitor_monitor 网络已存在"
+    else
+        echo "==> 监控依赖 monitor 模块（Prometheus + Grafana），正在启动..."
+        "$SCRIPT_DIR/../monitor/bootstrap.sh"
+    fi
+}
+
 cluster_available() {
     fdbcli_exec "status minimal" 2>/dev/null | grep -q "The database is available"
 }
+
+ensure_monitor_network
 
 if [ "$START_SERVICES" = true ]; then
     echo "==> 启动 FDB 集群（3 节点 × 2 进程）..."
@@ -72,6 +85,10 @@ if [ "$START_SERVICES" = true ]; then
     echo "    docker compose exec fdb-node-1 fdbcli -C /var/fdb/fdb.cluster"
     printf '\n==> Trace 日志（排障用，TraceEvent 即文档）:\n'
     echo "    docker compose exec fdb-node-1 ls /var/fdb/logs/4500/"
+    printf '\n==> 监控（指标由 fdb-exporter:9189 暴露，经 monitor 模块采集）:\n'
+    echo "  Prometheus    http://localhost:9090  (job: foundationdb)"
+    echo "  Grafana       http://localhost:3000  (认证信息见 ../monitor/.env，Dashboard: FoundationDB Overview)"
+    echo "  Exporter      curl http://fdb-exporter:9189/metrics  (容器网络内)"
     echo ""
     echo "完成！运行 ./tests/e2e.sh all 执行验收测试。"
 else

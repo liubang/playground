@@ -328,11 +328,13 @@ SHOW BACKENDS\G
 
 FoundationDB 实验集群：3 个节点容器，每节点由 `fdbmonitor`（生产同款进程监管）托管 2 个 `fdbserver` 进程，共 6 进程；3 个 coordinator，`double` 副本 + `ssd`（SQLite）引擎，数据持久化在命名卷。
 
-| 服务       | 容器内地址               | 角色                          |
-| ---------- | ------------------------ | ----------------------------- |
-| fdb-node-1 | 172.28.11.11:4500/4501   | coordinator + storage/tlog 等 |
-| fdb-node-2 | 172.28.11.12:4500/4501   | coordinator + storage/tlog 等 |
-| fdb-node-3 | 172.28.11.13:4500/4501   | coordinator + storage/tlog 等 |
+| 服务             | 容器内地址               | 角色                                       |
+| ---------------- | ------------------------ | ------------------------------------------ |
+| fdb-node-1       | 172.28.11.11:4500/4501   | coordinator + storage/tlog 等              |
+| fdb-node-2       | 172.28.11.12:4500/4501   | coordinator + storage/tlog 等              |
+| fdb-node-3       | 172.28.11.13:4500/4501   | coordinator + storage/tlog 等              |
+| status-collector | —                        | 周期性 `fdbcli status json` 写入共享卷     |
+| fdb-exporter     | monitor 网络 :9189       | status json 展平为 Prometheus 指标         |
 
 FDB 客户端需要直连集群中的**每个**进程（coordinator、proxy、storage server），macOS 宿主机无法路由到容器 IP，且 fdbserver 的双 public address 必须分属不同 TLS 状态，因此本模块不做宿主机端口映射，客户端一律通过容器网络访问：
 
@@ -350,6 +352,16 @@ docker compose exec fdb-node-1 fdbcli -C /var/fdb/fdb.cluster
 ```
 
 每个 fdbserver 的 `--memory` 限制为 1GiB（`--cache-memory` 256MiB），单容器资源上限 2.5 GB / 2 CPU。Trace 日志在容器 `/var/fdb/logs/<端口>/`（命名卷持久化）。FDB 未启用认证与 TLS，仅限本地开发测试。
+
+### 监控（Prometheus + Grafana）
+
+集群指标通过两个附加服务导出：`status-collector` 每 15s 执行一次 `fdbcli status json` 并原子写入共享卷；`fdb-exporter`（纯 Python 标准库，见 `exporter/exporter.py`）读取该 JSON，将 cluster/process/machine/client 各层数值字段展平为 `fdb_*` 指标，暴露在 `:9189/metrics`，并加入 [`monitor/`](./monitor) 模块的共享网络供 Prometheus 抓取（job 名 `foundationdb`）。
+
+`bootstrap.sh` 启动前会自动检测并在需要时拉起 monitor 模块；Grafana 内置 **FoundationDB Overview** 仪表盘（可用性、副本状态、事务/读写速率、QoS 限流、数据迁移、进程 CPU/内存/磁盘/网络等）。exporter 未映射宿主机端口，容器网络内验证：
+
+```bash
+docker compose exec fdb-node-1 wget -q -O- http://fdb-exporter:9189/metrics | head
+```
 
 ---
 
@@ -391,14 +403,18 @@ Prometheus + Grafana 监控栈。
 
 | 服务       | 镜像                      | 端口 | 用途           |
 | ---------- | ------------------------- | ---- | -------------- |
-| Prometheus | `prom/prometheus:v3.13.0` | 9090 | 指标采集与查询 |
-| Grafana    | `grafana/grafana:13.1.0`  | 3000 | 可视化面板     |
+| Prometheus | `prom/prometheus:latest` | 9090 | 指标采集与查询 |
+| Grafana    | `grafana/grafana:latest`  | 3000 | 可视化面板     |
 
 ```bash
 cd monitor && ./bootstrap.sh
 ```
 
-Prometheus 抓取配置见 `prometheus/prometheus.yml`，当前仅抓取自身，可按需添加 target。Grafana 用户名默认为 `admin`，随机密码由 `bootstrap.sh` 写入 `monitor/.env` 的 `GRAFANA_ADMIN_PASSWORD`；Prometheus 默认仅绑定本机且未启用认证。
+Prometheus 抓取配置见 `prometheus/prometheus.yml`：除自身外，默认抓取 [`fdb/`](./fdb) 模块的 `fdb-exporter:9189`（job `foundationdb`，fdb 未启动时该 target 显示 DOWN 不影响其他 job），可按需继续添加 target。
+
+Grafana 通过 `grafana/provisioning/` 自动配置：Prometheus 数据源（uid `prometheus`）与 `grafana/dashboards/` 下的仪表盘（当前含 **FoundationDB Overview**）。Grafana 用户名默认为 `admin`，随机密码由 `bootstrap.sh` 写入 `monitor/.env` 的 `GRAFANA_ADMIN_PASSWORD`；Prometheus 默认仅绑定本机且未启用认证。
+
+其他模块接入监控的方式：服务加入本模块的 `monitor_monitor` 网络（`external: true`），再在 `prometheus/prometheus.yml` 添加对应 job 即可（`fdb/` 模块即采用该方式，其 `bootstrap.sh` 会在网络不存在时自动拉起本模块）。
 
 ---
 
