@@ -54,6 +54,11 @@ const (
 	KindModelToolCallDelta     RuntimeEventKind = "model.tool_call_delta"
 	KindModelResponseCompleted RuntimeEventKind = "model.response_completed"
 	KindModelRequestFailed     RuntimeEventKind = "model.request_failed"
+	// KindModelRequestRetrying announces a start-stage failure the loop is
+	// about to retry after a bounded wait (rate limit, transient 5xx or
+	// transport error). Frontends use it to keep the turn visibly alive
+	// during the wait instead of looking stuck.
+	KindModelRequestRetrying RuntimeEventKind = "model.request_retrying"
 	// Approval events
 	KindApprovalRequested RuntimeEventKind = "approval.requested"
 	KindApprovalResolved  RuntimeEventKind = "approval.resolved"
@@ -122,7 +127,7 @@ func (e RuntimeEvent) Validate() error {
 		KindTurnStarted, KindTurnFinished,
 		KindRunPhaseChanged,
 		KindModelRequestStarted, KindModelTextDelta, KindModelReasoningDelta, KindModelToolCallDelta,
-		KindModelResponseCompleted, KindModelRequestFailed,
+		KindModelResponseCompleted, KindModelRequestFailed, KindModelRequestRetrying,
 		KindApprovalRequested, KindApprovalResolved,
 		KindQuestionAsked, KindQuestionAnswered,
 		KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
@@ -215,6 +220,19 @@ type ModelRequestFailedPayload struct {
 	// Message carries the underlying error text (rate limit, network
 	// failure, ...) so clients can show a diagnosable reason.
 	Message string `json:"message,omitempty"`
+}
+
+// ModelRequestRetryingPayload describes one retried start-stage attempt:
+// the failure that triggered the retry, which attempt this is, and the
+// wait the loop is about to sleep before re-issuing the request.
+type ModelRequestRetryingPayload struct {
+	RequestID   domain.EventID `json:"request_id"`
+	Stage       string         `json:"stage"`
+	Code        string         `json:"code"`
+	Message     string         `json:"message,omitempty"`
+	Attempt     int            `json:"attempt"`
+	MaxAttempts int            `json:"max_attempts"`
+	WaitMs      int64          `json:"wait_ms"`
 }
 
 // ApprovalRequestedPayload describes an approval request.

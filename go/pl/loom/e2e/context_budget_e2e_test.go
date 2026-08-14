@@ -66,9 +66,14 @@ type mockEntry struct {
 	UsageIn  int64
 	UsageOut int64
 	Delay    time.Duration
-	// Fail makes the handler answer HTTP 500 — provider-error injection
-	// (e.g. a sub-agent's model call dying mid-delegation).
-	Fail bool
+	// Fail makes the handler answer an HTTP error — provider-error
+	// injection (e.g. a sub-agent's model call dying mid-delegation).
+	// FailStatus selects the status (default 500); pick a non-retryable
+	// 4xx when the scenario needs the run to fail fast — retryable 5xx
+	// responses now go through the loop's bounded wait-and-retry, which
+	// would consume the following scripted entries.
+	Fail       bool
+	FailStatus int
 	// Match routes this entry to the first unconsumed request whose body
 	// contains the substring; empty matches anything. Entries are consumed
 	// in declaration order among the matching ones — parallel sub-agents
@@ -116,12 +121,19 @@ func (m *mockOpenAI) handleChatCompletions(w http.ResponseWriter, r *http.Reques
 	}
 	m.mu.Unlock()
 	if idx < 0 {
-		http.Error(w, `{"error":{"message":"no matching mock entry"}}`, http.StatusInternalServerError)
+		// A request without a scripted entry is a test-scripting bug, not a
+		// transient provider error: answer a non-retryable 400 so the run
+		// fails fast instead of burning the loop's retry budget on waits.
+		http.Error(w, `{"error":{"message":"no matching mock entry"}}`, http.StatusBadRequest)
 		return
 	}
 	entry := m.entries[idx]
 	if entry.Fail {
-		http.Error(w, `{"error":{"message":"mock injected provider error"}}`, http.StatusInternalServerError)
+		status := entry.FailStatus
+		if status == 0 {
+			status = http.StatusInternalServerError
+		}
+		http.Error(w, `{"error":{"message":"mock injected provider error"}}`, status)
 		return
 	}
 	if entry.Delay > 0 {

@@ -569,12 +569,12 @@ func estTokens(messages []domain.Message) int {
 						switch content.Kind {
 						case domain.PartText:
 							total += len(content.Text)
-				case domain.PartImage:
-					if content.Image != nil {
-						total += inlineImageFootprint(len(content.Image.Data))
-					} else {
-						total += imageTokenFootprint
-					}
+						case domain.PartImage:
+							if content.Image != nil {
+								total += inlineImageFootprint(len(content.Image.Data))
+							} else {
+								total += imageTokenFootprint
+							}
 						case domain.PartArtifact:
 							// Image references bound for the model are materialized
 							// into inline images on the wire (media.Materialize);
@@ -590,11 +590,11 @@ func estTokens(messages []domain.Message) int {
 				// A mid-size photo costs roughly 1.1-1.6k tokens with mainstream
 				// vision pricings; the wire-form footprint keeps the estimate
 				// conservative for gateways metering raw prompt length.
-			if part.Image != nil {
-				total += inlineImageFootprint(len(part.Image.Data))
-			} else {
-				total += imageTokenFootprint
-			}
+				if part.Image != nil {
+					total += inlineImageFootprint(len(part.Image.Data))
+				} else {
+					total += imageTokenFootprint
+				}
 			case domain.PartArtifact:
 				// Image attachments bound for the model are persisted as
 				// artifact references and materialized at the egress; they cost

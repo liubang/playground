@@ -1332,6 +1332,205 @@ func TestLoopExecuteModelFailureCarriesMessage(t *testing.T) {
 	}
 }
 
+// fastStartRetry keeps retry waits in the millisecond range so retry tests
+// stay fast.
+var fastStartRetry = StartRetryPolicy{MaxAttempts: 5, InitialWait: time.Millisecond, MaxWait: 2 * time.Millisecond, MaxHintWait: 5 * time.Millisecond}
+
+func rateLimitedStartError() error {
+	return domain.NewError(domain.ErrRateLimited, "provider: HTTP 429 too many requests", domain.WithRetryable(true))
+}
+
+func countEvents(events []domain.Event, typ domain.EventType) int {
+	n := 0
+	for _, ev := range events {
+		if ev.Type == typ {
+			n++
+		}
+	}
+	return n
+}
+
+// TestLoopExecuteRetriesRetryableStartFailure locks the rate-limit
+// recovery path: a start-stage retryable failure (HTTP 429 class) is
+// waited out and retried — audited via model.request_retrying — instead
+// of killing the run on the first failure.
+func TestLoopExecuteRetriesRetryableStartFailure(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Err: rateLimitedStartError()},
+		fakes.ScriptEntry{Err: rateLimitedStartError()},
+		fakes.ScriptEntry{Text: "recovered", StopReason: domain.StopEndTurn},
+	)
+	loop := &Loop{
+		Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default(),
+		StartRetry: fastStartRetry,
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v, want nil (the retry should recover)", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+	if got := len(model.Calls()); got != 3 {
+		t.Fatalf("model calls = %d, want 3 (2 failed attempts + 1 success)", got)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	if got := countEvents(events, domain.EventModelRequestRetrying); got != 2 {
+		t.Fatalf("model.request_retrying count = %d, want 2: %v", got, collectEventTypes(events))
+	}
+	if eventIndex(events, domain.EventModelRequestFailed) >= 0 {
+		t.Fatalf("retried attempts must not emit model.request_failed: %v", collectEventTypes(events))
+	}
+	idx := eventIndex(events, domain.EventModelRequestRetrying)
+	var payload struct {
+		Stage       string `json:"stage"`
+		Code        string `json:"code"`
+		Message     string `json:"message"`
+		Attempt     int    `json:"attempt"`
+		MaxAttempts int    `json:"max_attempts"`
+	}
+	if err := json.Unmarshal(events[idx].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal retrying payload: %v", err)
+	}
+	if payload.Stage != "start" || payload.Code != string(domain.ErrRateLimited) ||
+		!strings.Contains(payload.Message, "429") || payload.Attempt != 1 ||
+		payload.MaxAttempts != fastStartRetry.MaxAttempts {
+		t.Fatalf("retrying payload = %+v, want stage=start code=rate_limited attempt=1/%d with the provider message",
+			payload, fastStartRetry.MaxAttempts)
+	}
+}
+
+// TestLoopExecuteStartRetryGivesUp locks the retry bound: a persistently
+// failing provider exhausts MaxAttempts and the run fails with the
+// terminal model.request_failed audit — it never hangs the turn forever.
+func TestLoopExecuteStartRetryGivesUp(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Err: rateLimitedStartError()},
+		fakes.ScriptEntry{Err: rateLimitedStartError()},
+		fakes.ScriptEntry{Err: rateLimitedStartError()},
+	)
+	loop := &Loop{
+		Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default(),
+		StartRetry: StartRetryPolicy{MaxAttempts: 3, InitialWait: time.Millisecond, MaxWait: 2 * time.Millisecond},
+	}
+	if err := loop.Execute(context.Background()); err == nil {
+		t.Fatal("expected error from a persistently rate-limited model")
+	}
+	if run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("outcome = %s, want failed", run.State.Outcome)
+	}
+	if got := len(model.Calls()); got != 3 {
+		t.Fatalf("model calls = %d, want 3 (MaxAttempts bound)", got)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	if got := countEvents(events, domain.EventModelRequestRetrying); got != 2 {
+		t.Fatalf("model.request_retrying count = %d, want 2 (attempts 1-2 retried): %v", got, collectEventTypes(events))
+	}
+	if countEvents(events, domain.EventModelRequestFailed) != 1 {
+		t.Fatalf("model.request_failed count = %d, want 1 (terminal): %v",
+			countEvents(events, domain.EventModelRequestFailed), collectEventTypes(events))
+	}
+	if eventIndex(events, domain.EventRunFailed) < 0 {
+		t.Fatalf("run.failed not persisted: %v", collectEventTypes(events))
+	}
+}
+
+// failStartModel fails every start attempt with a fixed error; onCall
+// fires per attempt (used to cancel the context mid-retry).
+type failStartModel struct {
+	err    error
+	onCall func()
+	calls  int
+}
+
+func (m *failStartModel) Stream(_ context.Context, _ domain.ModelRequest) (domain.ModelStream, error) {
+	m.calls++
+	if m.onCall != nil {
+		m.onCall()
+	}
+	return nil, m.err
+}
+
+// TestLoopExecuteStartRetryWaitCancelled: cancelling while the loop
+// sleeps out a retryable failure terminates as cancelled — not as a
+// failed run with a misleading request_failed audit.
+func TestLoopExecuteStartRetryWaitCancelled(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	model := &failStartModel{err: rateLimitedStartError(), onCall: cancel}
+	loop := &Loop{
+		Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default(),
+		// The wait itself must not matter: cancellation cuts it short.
+		StartRetry: StartRetryPolicy{MaxAttempts: 5, InitialWait: time.Hour, MaxWait: time.Hour},
+	}
+	if err := loop.Execute(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+	if run.State.Outcome != domain.OutcomeCancelled {
+		t.Fatalf("outcome = %s, want cancelled", run.State.Outcome)
+	}
+	if model.calls != 1 {
+		t.Fatalf("model calls = %d, want 1 (no retry after cancellation)", model.calls)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	if eventIndex(events, domain.EventRunCancelled) < 0 {
+		t.Fatalf("run.cancelled not persisted: %v", collectEventTypes(events))
+	}
+	if eventIndex(events, domain.EventModelRequestFailed) >= 0 {
+		t.Fatalf("cancellation during the retry wait must not emit model.request_failed: %v", collectEventTypes(events))
+	}
+}
+
+func TestStartRetryWait(t *testing.T) {
+	loop := &Loop{StartRetry: StartRetryPolicy{
+		MaxAttempts: 3, InitialWait: 2 * time.Second, MaxWait: 5 * time.Second, MaxHintWait: time.Minute,
+	}}
+
+	if _, retry := loop.startRetryWait(errors.New("plain failure"), 1); retry {
+		t.Fatal("non-retryable error must not be retried")
+	}
+	if _, retry := loop.startRetryWait(rateLimitedStartError(), 3); retry {
+		t.Fatal("reaching MaxAttempts must give up")
+	}
+	// attempt 2 backoff: base 4s, half-jittered into [2s, 4s].
+	wait, retry := loop.startRetryWait(rateLimitedStartError(), 2)
+	if !retry || wait < 2*time.Second || wait > 4*time.Second {
+		t.Fatalf("startRetryWait(attempt 2) = %s, %v; want [2s, 4s], true", wait, retry)
+	}
+	// A Retry-After hint above the backoff but within the cap wins.
+	hinted := domain.NewError(domain.ErrRateLimited, "slow down", domain.WithRetryable(true),
+		domain.WithCause(&httpc.StatusError{Code: 429, Status: "429", RetryAfter: 30 * time.Second}))
+	if wait, retry := loop.startRetryWait(hinted, 1); !retry || wait != 30*time.Second {
+		t.Fatalf("startRetryWait(hint 30s) = %s, %v; want 30s, true", wait, retry)
+	}
+	// A hint beyond the cap is ignored.
+	bigHint := domain.NewError(domain.ErrRateLimited, "slow down", domain.WithRetryable(true),
+		domain.WithCause(&httpc.StatusError{Code: 429, Status: "429", RetryAfter: time.Hour}))
+	if wait, retry := loop.startRetryWait(bigHint, 1); !retry || wait > 2*time.Second {
+		t.Fatalf("startRetryWait(hint 1h) = %s, %v; want <= 2s (hint ignored), true", wait, retry)
+	}
+}
+
 // v3 (CONTEXT_DESIGN §4.4.3): the token budget is session-cumulative and
 // must survive the prompt boundary, while per-prompt observability
 // counters (turns, tool calls, wall time) reset.

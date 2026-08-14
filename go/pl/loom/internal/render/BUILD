@@ -3,6 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "render",
     srcs = [
+        "argv.go",
         "diff.go",
         "jsonl.go",
         "linear.go",
@@ -18,6 +19,7 @@ go_library(
 go_test(
     name = "render_test",
     srcs = [
+        "argv_test.go",
         "diff_test.go",
         "jsonl_test.go",
         "linear_test.go",

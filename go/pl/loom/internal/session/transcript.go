@@ -366,6 +366,7 @@ func (p *projector) applyEvent(evt domain.Event) error {
 		domain.EventRunStateChanged,
 		domain.EventModelRequestStarted,
 		domain.EventModelRequestFailed,
+		domain.EventModelRequestRetrying,
 		domain.EventModelRequestHeader,
 		domain.EventToolCallPrepared,
 		domain.EventPermissionRequested,

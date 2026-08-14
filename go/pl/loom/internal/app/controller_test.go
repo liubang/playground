@@ -913,17 +913,36 @@ func messageText(message domain.Message) string {
 }
 
 func TestToolCallTargetPrefersWritePaths(t *testing.T) {
-	if got := toolCallTarget(toolCallAuditDTO{WritePaths: []string{"w.go"}, ReadPaths: []string{"r.go"}}); got != "w.go" {
+	if got := toolCallTarget(toolCallAuditDTO{WritePaths: []string{"w.go"}, ReadPaths: []string{"r.go"}}, nil); got != "w.go" {
 		t.Fatalf("target = %q, want write path", got)
 	}
-	if got := toolCallTarget(toolCallAuditDTO{ReadPaths: []string{"r.go"}}); got != "r.go" {
+	if got := toolCallTarget(toolCallAuditDTO{ReadPaths: []string{"r.go"}}, nil); got != "r.go" {
 		t.Fatalf("target = %q, want read path", got)
 	}
-	if got := toolCallTarget(toolCallAuditDTO{ApprovalDesc: "run: go test ./..."}); got != "run: go test ./..." {
+	if got := toolCallTarget(toolCallAuditDTO{ApprovalDesc: "run: go test ./..."}, nil); got != "run: go test ./..." {
 		t.Fatalf("target = %q, want approval description", got)
 	}
-	if got := toolCallTarget(toolCallAuditDTO{}); got != "" {
+	if got := toolCallTarget(toolCallAuditDTO{}, nil); got != "" {
 		t.Fatalf("target = %q, want empty", got)
+	}
+	// run_cmd always has workspace-root read/write paths; the display
+	// target is the command line reconstructed from the call arguments.
+	if got := toolCallTarget(toolCallAuditDTO{
+		Tool:       "run_cmd",
+		WritePaths: []string{"/workspace"},
+		ReadPaths:  []string{"/workspace"},
+	}, json.RawMessage(`{"program":"go","args":["test","./..."],"working_dir":"."}`)); got != "go test ./..." {
+		t.Fatalf("run_cmd target = %q, want command line", got)
+	}
+	// Without arguments (pending-args cap overflow), fall back to the
+	// approval description.
+	if got := toolCallTarget(toolCallAuditDTO{
+		Tool:         "run_cmd",
+		WritePaths:   []string{"/workspace"},
+		ReadPaths:    []string{"/workspace"},
+		ApprovalDesc: "Run 'go' 'test' './...'; env[none]; cwd='.'; timeout=120000ms; network=loopback-only; args_hash=abc",
+	}, nil); got != "Run 'go' 'test' './...'; env[none]; cwd='.'; timeout=120000ms; network=loopback-only; args_hash=abc" {
+		t.Fatalf("run_cmd target = %q, want approval description fallback", got)
 	}
 }
 
@@ -1698,6 +1717,116 @@ func TestControllerResolveApprovalMismatchedBindingDoesNotRemember(t *testing.T)
 	}
 	if decision := <-result; decision != domain.DecisionAllow {
 		t.Fatalf("decision = %q, want allow", decision)
+	}
+}
+
+// TestLastErrorFromEvents pins the resume-time rebuild of the failure
+// projection: a request failure sticks across the timeline until a later
+// successful response or a new run supersedes it.
+func TestLastErrorFromEvents(t *testing.T) {
+	sessionID := domain.NewSessionID()
+	seq := int64(0)
+	ev := func(typ domain.EventType, payload any) domain.Event {
+		seq++
+		var raw json.RawMessage
+		if payload != nil {
+			data, err := json.Marshal(payload)
+			if err != nil {
+				t.Fatalf("marshal payload: %v", err)
+			}
+			raw = data
+		}
+		return domain.Event{ID: domain.NewEventID(), Sequence: seq, SessionID: sessionID, Type: typ, Payload: raw}
+	}
+	failed := modelRequestFailedDTO{Stage: "start", Code: "rate_limited", Message: "HTTP 429 slow down"}
+
+	if got := lastErrorFromEvents(nil); got != nil {
+		t.Fatalf("empty timeline lastError = %+v, want nil", got)
+	}
+	// A terminal failure with no later recovery is projected.
+	events := []domain.Event{
+		ev(domain.EventRunCreated, nil),
+		ev(domain.EventModelRequestFailed, failed),
+		ev(domain.EventRunFailed, nil),
+	}
+	got := lastErrorFromEvents(events)
+	if got == nil || got.Stage != "start" || got.Code != "rate_limited" || got.Message != "HTTP 429 slow down" {
+		t.Fatalf("lastError = %+v, want the request failure", got)
+	}
+	// A successful response after the failure (a recovered retry) clears it.
+	events = append(events, ev(domain.EventModelResponseCompleted, domain.MessageEventPayload{}))
+	if got := lastErrorFromEvents(events); got != nil {
+		t.Fatalf("lastError after recovery = %+v, want nil", got)
+	}
+	// A new turn supersedes the previous failure even without a response.
+	events = []domain.Event{
+		ev(domain.EventModelRequestFailed, failed),
+		ev(domain.EventRunFailed, nil),
+		ev(domain.EventRunCreated, nil),
+	}
+	if got := lastErrorFromEvents(events); got != nil {
+		t.Fatalf("lastError after a new run = %+v, want nil", got)
+	}
+}
+
+// TestControllerSnapshotCarriesLastError pins the persistent-error
+// contract: a turn that dies from a model failure leaves last_error in
+// the snapshot (so a client switching sessions and back still sees the
+// failure), and a later successful turn clears it.
+func TestControllerSnapshotCarriesLastError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Error: "provider exploded: quota exhausted"},
+		fakes.ScriptEntry{Text: "recovered answer", StopReason: domain.StopEndTurn},
+	)
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, model),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if _, err := controller.SubmitPrompt(ctx, "boom"); err != nil {
+		t.Fatalf("SubmitPrompt: %v", err)
+	}
+	waitForIdle(t, controller)
+
+	snap, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snap.LastError == nil {
+		t.Fatal("snapshot.last_error = nil after a failed turn, want the failure projected")
+	}
+	if snap.LastError.Stage != "start" || snap.LastError.Code != "internal" ||
+		!strings.Contains(snap.LastError.Message, "quota exhausted") {
+		t.Fatalf("snapshot.last_error = %+v, want stage=start code=internal with the provider message", snap.LastError)
+	}
+
+	// A successful follow-up turn clears the projection.
+	if _, err := controller.SubmitPrompt(ctx, "again"); err != nil {
+		t.Fatalf("SubmitPrompt(follow-up): %v", err)
+	}
+	waitForIdle(t, controller)
+	snap, err = controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if snap.LastError != nil {
+		t.Fatalf("snapshot.last_error = %+v after a successful turn, want nil", snap.LastError)
 	}
 }
 

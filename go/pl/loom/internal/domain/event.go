@@ -34,6 +34,12 @@ const (
 	EventModelRequestStarted    EventType = "model.request_started"
 	EventModelResponseCompleted EventType = "model.response_completed"
 	EventModelRequestFailed     EventType = "model.request_failed"
+	// EventModelRequestRetrying marks a start-stage failure the loop is
+	// about to retry after a bounded wait (rate limits, transient 5xx or
+	// transport errors). It is the audit trail for retried attempts;
+	// EventModelRequestFailed remains reserved for attempts the loop
+	// gives up on.
+	EventModelRequestRetrying   EventType = "model.request_retrying"
 	EventToolCallPrepared       EventType = "tool.call_prepared"
 	EventPermissionRequested    EventType = "permission.requested"
 	EventPermissionResolved     EventType = "permission.resolved"
@@ -104,7 +110,7 @@ func (e Event) Validate() error {
 	switch e.Type {
 	case EventSessionCreated, EventRunCreated, EventRunStateChanged,
 		EventUserMessageAdded, EventModelRequestStarted, EventModelResponseCompleted,
-		EventModelRequestFailed, EventToolCallPrepared, EventPermissionRequested,
+		EventModelRequestFailed, EventModelRequestRetrying, EventToolCallPrepared, EventPermissionRequested,
 		EventPermissionResolved, EventToolExecutionStarted, EventToolExecutionCompleted,
 		EventToolResultAdded, EventFileChanged, EventPlanRevised, EventContextCompacted,
 		EventGoalUpdated, EventCheckpointCreated, EventBudgetUpdated, EventBudgetNotice,

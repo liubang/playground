@@ -637,7 +637,14 @@ func (m Model) renderToolSummary(block *TranscriptBlock) string {
 	name := lipgloss.NewStyle().Bold(true).Render(block.Title)
 	parts := []string{fmt.Sprintf("%s %s", iconStyle.Render(icon), name)}
 	if block.Target != "" {
-		parts = append(parts, truncateDisplayWidth(block.Target, 80))
+		// Collapsed blocks keep the target on one bounded line; an expanded
+		// block shows it in full (long run_cmd command lines) — expansion is
+		// the explicit ask-for-more gesture, and the line simply wraps.
+		target := block.Target
+		if !block.Expanded {
+			target = truncateDisplayWidth(target, 80)
+		}
+		parts = append(parts, target)
 	}
 	switch {
 	case block.Status == "running" && !block.StartedAt.IsZero():
