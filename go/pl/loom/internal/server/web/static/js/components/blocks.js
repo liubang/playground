@@ -260,7 +260,16 @@ export function toolBlock(payload, hooks = {}) {
   const b = el('div', 'block block-tool')
   const head = el('div', 'tool-head')
   head.appendChild(el('span', 'tool-name mono', payload.tool_name || 'tool'))
-  if (payload.target) head.appendChild(el('span', 'tool-target mono', payload.target))
+  if (payload.target) {
+    const tgt = el('span', 'tool-target mono', payload.target)
+    // CSS 省略号截断后，原生 tooltip 与点击展开（换行显示）都能看完整内容。
+    tgt.title = payload.target
+    tgt.onclick = (e) => {
+      e.stopPropagation()
+      tgt.classList.toggle('expanded')
+    }
+    head.appendChild(tgt)
+  }
   const status = el('span', 'tool-status running', 'running')
   head.appendChild(status)
   const dur = el('span', 'tool-dur mono')
@@ -353,13 +362,28 @@ function fmtDuration(ms) {
 
 // --- 历史（snapshot 重建）工具块辅助 ---
 
+// argv 展示引号规则：与 Go 侧 render.CommandLineForDisplay 完全一致
+// （shlex.join 同款安全字符集），保证实时路径与 snapshot 重建路径渲染出
+// 相同的命令行。含空白/元字符/引号的元素或空串用单引号包裹。
+const DISPLAY_SAFE_ARG = /^[A-Za-z0-9_@%+=:,./-]+$/
+function quoteArgForDisplay(arg) {
+  if (DISPLAY_SAFE_ARG.test(arg)) return arg
+  return `'${arg.replaceAll("'", `'"'"'`)}'`
+}
+
 // histTarget 从 tool_call.arguments（wire 上已是 object）提取展示用目标。
+// run_cmd 的参数是 program + args，拼成命令行展示（与实时路径、TUI 一致）；
+// 其余工具按 path/command/pattern 等已知键提取。此处不做长度截断：视觉上
+// 由 CSS 省略号收缩，完整文本经 toolBlock 的 title 悬浮提示与点击展开可见。
 export function histTarget(call) {
   const a = call?.arguments
   if (!a || typeof a !== 'object') return ''
+  if (typeof a.program === 'string' && a.program !== '') {
+    const rest = Array.isArray(a.args) ? a.args.filter((x) => typeof x === 'string') : []
+    return [a.program, ...rest].map(quoteArgForDisplay).join(' ')
+  }
   const v = a.path || a.file_path || a.command || a.cmd || a.query || a.pattern || a.url || ''
-  const s = String(v)
-  return s.length > 120 ? s.slice(0, 120) + '…' : s
+  return String(v)
 }
 
 // histCompletion 把 ToolResult 映射为 toolBlock.complete(p) 需要的载荷。
@@ -759,4 +783,19 @@ export function compactBlock(p) {
 
 export function fatalBlock(text) {
   return el('div', 'block block-fatal', text)
+}
+
+// 中断块：warning 色的持久块（区别于 fatal 的 error 红），用于历史重建时
+// 渲染 status === 'interrupted' 的 assistant 消息（模型流中途失败的残段）。
+export function interruptedBlock(text) {
+  return el('div', 'block block-interrupted', text)
+}
+
+// 失败信息格式化：实时 model.request_failed 事件与 snapshot.last_error
+// 共用同一文案，保证切换会话前后看到的错误块一致。
+export function failureText(err) {
+  const detail = (err.message || '').slice(0, 300)
+  if (!err.code && !err.stage) return `turn failed — ${detail}`
+  const head = `model request failed (${err.stage || 'unknown'}): ${err.code || ''}`
+  return detail ? `${head} — ${detail}` : head
 }

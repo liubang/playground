@@ -155,7 +155,9 @@ func (p *Provider) Stream(ctx context.Context, req domain.ModelRequest) (domain.
 
 	resp, err := p.client.Post(ctx, p.endpointURL, body, headers)
 	if err != nil {
-		return nil, fmt.Errorf("anthropic provider: %w", err)
+		// Classify the failure (rate limit / permission / transient) so the
+		// agent loop can wait out retryable ones instead of killing the run.
+		return nil, httpc.ToDomainError("anthropic provider", err)
 	}
 
 	if err := httpc.RequireEventStream(resp); err != nil {

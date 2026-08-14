@@ -19,6 +19,8 @@ package httpc
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +28,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
 func testClient(t *testing.T, maxRetries int) *Client {
@@ -249,5 +253,76 @@ func TestStatusErrorMessageFallbackToBody(t *testing.T) {
 	}
 	if !strings.Contains(se.Error(), "upstream exploded") {
 		t.Fatalf("StatusError.Error() = %q", se.Error())
+	}
+}
+
+func TestToDomainErrorClassifiesFailures(t *testing.T) {
+	statusErr := func(code int) error {
+		return &StatusError{Code: code, Status: fmt.Sprintf("%d status", code), Message: "provider says no"}
+	}
+	cases := []struct {
+		name      string
+		err       error
+		code      domain.ErrorCode
+		retryable bool
+	}{
+		{"429 is rate limited and retryable", statusErr(http.StatusTooManyRequests), domain.ErrRateLimited, true},
+		{"401 is permission", statusErr(http.StatusUnauthorized), domain.ErrPermission, false},
+		{"403 is permission", statusErr(http.StatusForbidden), domain.ErrPermission, false},
+		{"400 is invalid input", statusErr(http.StatusBadRequest), domain.ErrInvalidInput, false},
+		{"408 is unavailable and retryable", statusErr(http.StatusRequestTimeout), domain.ErrUnavailable, true},
+		{"500 is unavailable and retryable", statusErr(http.StatusInternalServerError), domain.ErrUnavailable, true},
+		{"418 is unavailable and not retryable", statusErr(http.StatusTeapot), domain.ErrUnavailable, false},
+		{"transport error is retryable", errors.New("connection reset by peer"), domain.ErrUnavailable, true},
+		{
+			"wrapped status error keeps its class",
+			fmt.Errorf("anthropic provider: %w", statusErr(http.StatusTooManyRequests)), domain.ErrRateLimited, true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ToDomainError("test provider", tc.err)
+			var ae *domain.AgentError
+			if !errors.As(got, &ae) {
+				t.Fatalf("ToDomainError() = %v, want *domain.AgentError", got)
+			}
+			if ae.Code != tc.code || ae.Retryable != tc.retryable {
+				t.Fatalf("ToDomainError() = [%s] retryable=%v, want [%s] retryable=%v",
+					ae.Code, ae.Retryable, tc.code, tc.retryable)
+			}
+			if !strings.Contains(ae.Error(), "test provider") {
+				t.Fatalf("error text %q misses the provider prefix", ae.Error())
+			}
+			if !errors.Is(got, tc.err) && !errors.Is(ae.Unwrap(), tc.err) {
+				t.Fatalf("cause chain lost the original error: %v", got)
+			}
+		})
+	}
+}
+
+func TestToDomainErrorPassesContextSentinelsThrough(t *testing.T) {
+	if got := ToDomainError("p", nil); got != nil {
+		t.Fatalf("ToDomainError(nil) = %v, want nil", got)
+	}
+	for _, sentinel := range []error{context.Canceled, context.DeadlineExceeded} {
+		got := ToDomainError("p", fmt.Errorf("wrap: %w", sentinel))
+		if !errors.Is(got, sentinel) {
+			t.Fatalf("ToDomainError(%v) = %v, want the sentinel preserved", sentinel, got)
+		}
+		var ae *domain.AgentError
+		if errors.As(got, &ae) {
+			t.Fatalf("ToDomainError(%v) must not wrap the sentinel into AgentError", sentinel)
+		}
+	}
+}
+
+func TestToDomainErrorKeepsStatusErrorDiscoverable(t *testing.T) {
+	// The 413 detection in the agent loop unwraps StatusError through the
+	// domain error's cause chain; the mapping must not hide it.
+	orig := &StatusError{Code: http.StatusRequestEntityTooLarge, Status: "413 Request Entity Too Large"}
+	got := ToDomainError("p", orig)
+	se, ok := AsStatusError(got)
+	if !ok || se.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("AsStatusError(ToDomainError()) = %v, %v; want the 413 StatusError", se, ok)
 	}
 }

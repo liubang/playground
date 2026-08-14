@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"sort"
 	"strconv"
@@ -763,6 +764,63 @@ type modelRequestFailedPayload struct {
 	Message string `json:"message,omitempty"`
 }
 
+// modelRequestRetryingPayload is the EventModelRequestRetrying payload:
+// one retried start-stage attempt, with the wait the loop is about to
+// sleep so frontends can show the turn is alive instead of looking dead.
+type modelRequestRetryingPayload struct {
+	RequestID   domain.EventID `json:"request_id"`
+	Stage       string         `json:"stage"`
+	Code        string         `json:"code"`
+	Message     string         `json:"message,omitempty"`
+	Attempt     int            `json:"attempt"`
+	MaxAttempts int            `json:"max_attempts"`
+	WaitMs      int64          `json:"wait_ms"`
+}
+
+// StartRetryPolicy bounds start-stage retries of retryable provider
+// failures (rate limits, transient 5xx, transport errors). The provider's
+// httpc layer already retried within its sub-second budget; this layer
+// spans the much longer windows gateways actually enforce (per-minute
+// rate limits): a few multi-second waits cross a minute window, while the
+// bounded attempt count keeps a persistently failing provider from
+// hanging the turn forever.
+type StartRetryPolicy struct {
+	// MaxAttempts is the total number of start attempts (1 initial +
+	// retries). 0 selects the default.
+	MaxAttempts int
+	// InitialWait seeds the exponential backoff between attempts. 0
+	// selects the default.
+	InitialWait time.Duration
+	// MaxWait caps the computed backoff. 0 selects the default.
+	MaxWait time.Duration
+	// MaxHintWait caps how long a provider Retry-After hint is honored.
+	// 0 selects the default.
+	MaxHintWait time.Duration
+}
+
+const (
+	defaultStartRetryMaxAttempts = 5
+	defaultStartRetryInitialWait = 2 * time.Second
+	defaultStartRetryMaxWait     = 30 * time.Second
+	defaultStartRetryMaxHintWait = 60 * time.Second
+)
+
+func (p StartRetryPolicy) withDefaults() StartRetryPolicy {
+	if p.MaxAttempts <= 0 {
+		p.MaxAttempts = defaultStartRetryMaxAttempts
+	}
+	if p.InitialWait <= 0 {
+		p.InitialWait = defaultStartRetryInitialWait
+	}
+	if p.MaxWait <= 0 {
+		p.MaxWait = defaultStartRetryMaxWait
+	}
+	if p.MaxHintWait <= 0 {
+		p.MaxHintWait = defaultStartRetryMaxHintWait
+	}
+	return p
+}
+
 // logRequestHeader persists the full request header on first use
 // (initial/resume) and on content change, returning its canonical hash for
 // the request_started anchor (docs/SURFACE_DESIGN.md §4.8). Unchanged
@@ -986,6 +1044,10 @@ type Loop struct {
 	// the last progress signal. Approval waits shift it forward so user
 	// thinking time never counts (docs/CONTEXT_DESIGN.md §4.4.3).
 	lastProgressAt time.Time
+	// StartRetry bounds start-stage retries of retryable provider failures
+	// (rate limits, transient 5xx/transport errors). The zero value applies
+	// documented defaults.
+	StartRetry StartRetryPolicy
 	// ForceCompact demands compaction before the next model call. It is set
 	// internally after a provider context-overflow rejection, and may be set
 	// by the caller (e.g. a manual /compact request) to force a pass ahead
@@ -1346,8 +1408,12 @@ func (l *Loop) callModel(ctx context.Context) error {
 		l.terminate(ctx, domain.OutcomeFailed)
 		return err
 	}
-	stream, err := l.Model.Stream(ctx, req)
-	if err != nil {
+	var stream domain.ModelStream
+	for attempt := 1; ; attempt++ {
+		stream, err = l.Model.Stream(ctx, req)
+		if err == nil {
+			break
+		}
 		l.recordGeneration(ctx, trace.GenerationRecord{
 			RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
 			Input: messages, StartTime: startedAt, EndTime: l.Run.Clock.Now(), Err: err,
@@ -1358,14 +1424,41 @@ func (l *Loop) callModel(ctx context.Context) error {
 			l.terminate(ctx, domain.OutcomeCancelled)
 			return fmt.Errorf("model stream: %w", err)
 		}
-		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
-			RequestID: req.ID, Stage: "start", Code: errorCodeForAudit(err), Message: err.Error(),
-		})
 		if isContextOverflowError(err) {
+			l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
+				RequestID: req.ID, Stage: "start", Code: errorCodeForAudit(err), Message: err.Error(),
+			})
 			return l.handleContextOverflow(ctx, err)
 		}
-		l.terminate(ctx, domain.OutcomeFailed)
-		return fmt.Errorf("model stream: %w", err)
+		wait, retry := l.startRetryWait(err, attempt)
+		if !retry {
+			l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
+				RequestID: req.ID, Stage: "start", Code: errorCodeForAudit(err), Message: err.Error(),
+			})
+			l.terminate(ctx, domain.OutcomeFailed)
+			return fmt.Errorf("model stream: %w", err)
+		}
+		// Retryable failure (rate limit, transient 5xx, transport error):
+		// announce the wait so frontends keep showing the turn as alive,
+		// then sleep it out instead of killing the run on the first 429.
+		l.Run.appendEvent(domain.EventModelRequestRetrying, modelRequestRetryingPayload{
+			RequestID: req.ID, Stage: "start", Code: errorCodeForAudit(err), Message: err.Error(),
+			Attempt: attempt, MaxAttempts: l.StartRetry.withDefaults().MaxAttempts, WaitMs: wait.Milliseconds(),
+		})
+		if err := l.flushEvents(ctx); err != nil {
+			l.terminate(ctx, domain.OutcomeFailed)
+			return err
+		}
+		if l.Logger != nil {
+			l.Logger.Warn("model request failed with a retryable error; waiting to retry",
+				"attempt", attempt, "wait", wait, "code", errorCodeForAudit(err), "error", err)
+		}
+		if sleepErr := sleepContext(ctx, wait); sleepErr != nil {
+			// The wait was cut short by cancellation/shutdown: same routing
+			// as a cancelled start.
+			l.terminate(ctx, domain.OutcomeCancelled)
+			return fmt.Errorf("model stream: %w", sleepErr)
+		}
 	}
 	defer stream.Close()
 
@@ -2239,6 +2332,49 @@ var contextOverflowNeedles = []string{
 // rejection and warrants the same remedy: compact, then retry.
 var requestTooLargeNeedles = []string{
 	"payload too large", "request entity too large",
+}
+
+// startRetryWait decides whether a start-stage failure is worth waiting
+// out, and for how long. attempt is 1-based (attempt 1 = the first
+// failure); reaching MaxAttempts gives up. The backoff doubles per
+// attempt with half jitter — guaranteed spacing (unlike full jitter's
+// possible ~0) while still decorrelating concurrently throttled clients —
+// and a bounded provider Retry-After hint raises the wait.
+func (l *Loop) startRetryWait(err error, attempt int) (time.Duration, bool) {
+	policy := l.StartRetry.withDefaults()
+	if !domain.IsRetryable(err) || attempt >= policy.MaxAttempts {
+		return 0, false
+	}
+	// Capped doubling instead of a bit shift: a shift by attempt-1 can
+	// overflow int64 with an absurdly large configured MaxAttempts.
+	wait := policy.InitialWait
+	for i := 1; i < attempt && wait < policy.MaxWait; i++ {
+		wait *= 2
+	}
+	if wait > policy.MaxWait {
+		wait = policy.MaxWait
+	}
+	wait = wait/2 + time.Duration(rand.Float64()*float64(wait/2))
+	if se, ok := httpc.AsStatusError(err); ok && se.RetryAfter > wait && se.RetryAfter <= policy.MaxHintWait {
+		wait = se.RetryAfter
+	}
+	return wait, true
+}
+
+// sleepContext waits for d, returning early with the context error when
+// the run is cancelled or shut down mid-wait.
+func sleepContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // isContextOverflowError reports whether the provider — or a gateway in

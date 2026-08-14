@@ -672,6 +672,37 @@ func TestStreamErrorStatus(t *testing.T) {
 	}
 }
 
+// TestStreamClassifiesRateLimit pins the error-mapping contract: a 429
+// surfaces as a retryable domain.ErrRateLimited (not an opaque internal
+// error), so the agent loop can wait out the gateway's rate window
+// instead of killing the run.
+func TestStreamClassifiesRateLimit(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = fmt.Fprint(w, `{"type":"error","error":{"type":"rate_limit_error","message":"requests per minute exceeded"}}`)
+	}))
+	defer server.Close()
+
+	provider, _ := New(Config{BaseURL: server.URL, MaxRetries: 0})
+	_, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "claude-test",
+		Messages:  []domain.Message{{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "go"}}}},
+	})
+	var ae *domain.AgentError
+	if !errors.As(err, &ae) {
+		t.Fatalf("err = %v, want *domain.AgentError", err)
+	}
+	if ae.Code != domain.ErrRateLimited || !ae.Retryable {
+		t.Fatalf("err = [%s] retryable=%v, want [rate_limited] retryable=true", ae.Code, ae.Retryable)
+	}
+	if !strings.Contains(err.Error(), "requests per minute exceeded") {
+		t.Fatalf("err = %v, want the provider message preserved", err)
+	}
+}
+
 func TestToolResultBlockWithImage(t *testing.T) {
 	result := domain.ToolResult{
 		CallID: domain.NewToolCallID(), Status: domain.ToolStatusSuccess,
