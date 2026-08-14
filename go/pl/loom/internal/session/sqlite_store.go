@@ -145,14 +145,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     updated_at_unix_nano INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS events (
-    event_id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    sequence INTEGER NOT NULL CHECK (sequence > 0),
-    type TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    payload BLOB,
-    UNIQUE (session_id, sequence),
-    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+event_id TEXT PRIMARY KEY,
+session_id TEXT NOT NULL,
+sequence INTEGER NOT NULL CHECK (sequence > 0),
+type TEXT NOT NULL,
+timestamp TEXT NOT NULL,
+payload BLOB,
+ignorable INTEGER NOT NULL DEFAULT 0,
+UNIQUE (session_id, sequence),
+FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_events_session_sequence
     ON events(session_id, sequence);
@@ -268,11 +269,6 @@ CREATE TABLE IF NOT EXISTS session_shares (
 	}
 	if !newestVersion.Valid || newestVersion.Int64 < 5 {
 		if err := s.migrateV5(ctx); err != nil {
-			return err
-		}
-	}
-	if !newestVersion.Valid || newestVersion.Int64 < 9 {
-		if err := s.migrateV9(ctx); err != nil {
 			return err
 		}
 	}
@@ -931,24 +927,6 @@ func (s *SQLiteStore) migrateV5(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx,
 		"CREATE INDEX IF NOT EXISTS idx_sessions_workspace_updated ON sessions(workspace_id, updated_at_unix_nano DESC)"); err != nil {
 		return storeError("migrate v5: index sessions workspace_id", err)
-	}
-	return nil
-}
-
-// migrateV9 adds the ignorable column to the events table: the
-// writer-side informational mark (domain.Event.Ignorable) must survive
-// persistence, or a log carrying an UNKNOWN event type loses the flag
-// that lets older binaries skip it safely. The column defaults to 0 —
-// legacy events predate the mechanism and are all known types anyway.
-func (s *SQLiteStore) migrateV9(ctx context.Context) error {
-	// Same duplicate-column tolerance as migrateV3-V5.
-	_, err := s.db.ExecContext(ctx,
-		"ALTER TABLE events ADD COLUMN ignorable INTEGER NOT NULL DEFAULT 0")
-	if err != nil {
-		msg := strings.ToLower(err.Error())
-		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
-			return storeError("migrate v9: add ignorable to events", err)
-		}
 	}
 	return nil
 }

@@ -104,10 +104,7 @@ type PrunedPart struct {
 // before masks.
 type ContextMaskedPayload struct {
 	Masks []MaskedPart `json:"masks"`
-	// Prunes carries the inline middle-prunings. Old logs lack the field
-	// (nil); old binaries reading a payload with prunes ignore the field
-	// and replay the fuller pre-prune surface — a conservative divergence,
-	// never a failure.
+	// Prunes carries the inline middle-prunings (applied before masks).
 	Prunes []PrunedPart `json:"prunes,omitempty"`
 }
 
