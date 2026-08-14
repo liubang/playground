@@ -340,7 +340,7 @@ func RecoverRun(sessionID domain.SessionID, checkpoint *domain.Checkpoint, messa
 	if orphan := OrphanedRunID(events); !orphan.IsZero() {
 		run.appendEvent(domain.EventRunInterrupted, runInterruptedPayload{
 			RunID:  orphan,
-			Reason: "process exited before the run reached a terminal state",
+			Reason: "the run never reached a terminal state (process exit, kill, or rewind)",
 		})
 	}
 	run.appendEvent(domain.EventRunCreated, struct {
@@ -378,9 +378,9 @@ type runInterruptedPayload struct {
 }
 
 // OrphanedRunID returns the run left non-terminal at the log tail — the
-// last run.created with no run.completed/failed/cancelled after it, the
-// signature of a process crash (or a kill mid-turn). Zero when the tail
-// run resolved or no run exists.
+// last run.created with no run.completed/failed/cancelled after it: the
+// signature of a process crash or kill mid-turn, or of a rewind to a
+// mid-turn checkpoint. Zero when the tail run resolved or no run exists.
 func OrphanedRunID(events []domain.Event) domain.RunID {
 	for i := len(events) - 1; i >= 0; i-- {
 		switch events[i].Type {

@@ -34,7 +34,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 8
+const sqliteSchemaVersion = 9
 
 // SQLiteStore persists session events and checkpoints in a SQLite database.
 // A store serializes writes through one connection; optimistic versions still
@@ -271,6 +271,11 @@ CREATE TABLE IF NOT EXISTS session_shares (
 			return err
 		}
 	}
+	if !newestVersion.Valid || newestVersion.Int64 < 9 {
+		if err := s.migrateV9(ctx); err != nil {
+			return err
+		}
+	}
 	_, err := s.db.ExecContext(ctx,
 		"INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
 		sqliteSchemaVersion, formatTime(time.Now().UTC()))
@@ -357,10 +362,14 @@ func (s *SQLiteStore) appendEventsTx(ctx context.Context, sessionID domain.Sessi
 
 	for i := range events {
 		event := events[i]
+		ignorable := 0
+		if event.Ignorable {
+			ignorable = 1
+		}
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO events(event_id, session_id, sequence, type, timestamp, payload)
-VALUES (?, ?, ?, ?, ?, ?)`, event.ID.String(), sessionID.String(), event.Sequence,
-			string(event.Type), formatTime(event.Timestamp), []byte(event.Payload)); err != nil {
+INSERT INTO events(event_id, session_id, sequence, type, timestamp, payload, ignorable)
+VALUES (?, ?, ?, ?, ?, ?, ?)`, event.ID.String(), sessionID.String(), event.Sequence,
+			string(event.Type), formatTime(event.Timestamp), []byte(event.Payload), ignorable); err != nil {
 			if isUniqueConstraint(err) {
 				return domain.NewError(domain.ErrConflict, "event already exists", domain.WithCause(err))
 			}
@@ -452,7 +461,7 @@ func (s *SQLiteStore) LoadEvents(ctx context.Context, sessionID domain.SessionID
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-SELECT event_id, sequence, type, timestamp, payload
+SELECT event_id, sequence, type, timestamp, payload, ignorable
 FROM events WHERE session_id = ? AND sequence > ? ORDER BY sequence ASC`, sessionID.String(), after)
 	if err != nil {
 		return nil, storeError("load events", err)
@@ -464,7 +473,8 @@ FROM events WHERE session_id = ? AND sequence > ? ORDER BY sequence ASC`, sessio
 		var id, eventType, timestamp string
 		var sequence int64
 		var payload []byte
-		if err := rows.Scan(&id, &sequence, &eventType, &timestamp, &payload); err != nil {
+		var ignorable int
+		if err := rows.Scan(&id, &sequence, &eventType, &timestamp, &payload, &ignorable); err != nil {
 			return nil, storeError("scan event", err)
 		}
 		eventID, err := domain.ParseEventID(id)
@@ -478,7 +488,8 @@ FROM events WHERE session_id = ? AND sequence > ? ORDER BY sequence ASC`, sessio
 		event := domain.Event{
 			ID: eventID, Sequence: sequence, SessionID: sessionID,
 			Type: domain.EventType(eventType), Timestamp: parsedTime,
-			Payload: append(json.RawMessage(nil), payload...),
+			Payload:   append(json.RawMessage(nil), payload...),
+			Ignorable: ignorable != 0,
 		}
 		if err := event.Validate(); err != nil {
 			return nil, storeError("validate persisted event", err)
@@ -676,7 +687,7 @@ ORDER BY sequence DESC, created_at_unix_nano DESC, checkpoint_id DESC LIMIT 1`, 
 	}
 
 	rows, err := tx.QueryContext(ctx, `
-SELECT event_id, sequence, type, timestamp, payload
+SELECT event_id, sequence, type, timestamp, payload, ignorable
 FROM events WHERE session_id = ? ORDER BY sequence ASC`, sessionID.String())
 	if err != nil {
 		return domain.SessionInspection{}, storeError("load session events", err)
@@ -728,7 +739,8 @@ func scanEvents(rows *sql.Rows, sessionID domain.SessionID) ([]domain.Event, err
 		var id, eventType, timestamp string
 		var sequence int64
 		var payload []byte
-		if err := rows.Scan(&id, &sequence, &eventType, &timestamp, &payload); err != nil {
+		var ignorable int
+		if err := rows.Scan(&id, &sequence, &eventType, &timestamp, &payload, &ignorable); err != nil {
 			return nil, storeError("scan event", err)
 		}
 		eventID, err := domain.ParseEventID(id)
@@ -742,7 +754,8 @@ func scanEvents(rows *sql.Rows, sessionID domain.SessionID) ([]domain.Event, err
 		event := domain.Event{
 			ID: eventID, Sequence: sequence, SessionID: sessionID,
 			Type: domain.EventType(eventType), Timestamp: parsedTime,
-			Payload: append(json.RawMessage(nil), payload...),
+			Payload:   append(json.RawMessage(nil), payload...),
+			Ignorable: ignorable != 0,
 		}
 		if err := event.Validate(); err != nil {
 			return nil, storeError("validate persisted event", err)
@@ -918,6 +931,24 @@ func (s *SQLiteStore) migrateV5(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx,
 		"CREATE INDEX IF NOT EXISTS idx_sessions_workspace_updated ON sessions(workspace_id, updated_at_unix_nano DESC)"); err != nil {
 		return storeError("migrate v5: index sessions workspace_id", err)
+	}
+	return nil
+}
+
+// migrateV9 adds the ignorable column to the events table: the
+// writer-side informational mark (domain.Event.Ignorable) must survive
+// persistence, or a log carrying an UNKNOWN event type loses the flag
+// that lets older binaries skip it safely. The column defaults to 0 —
+// legacy events predate the mechanism and are all known types anyway.
+func (s *SQLiteStore) migrateV9(ctx context.Context) error {
+	// Same duplicate-column tolerance as migrateV3-V5.
+	_, err := s.db.ExecContext(ctx,
+		"ALTER TABLE events ADD COLUMN ignorable INTEGER NOT NULL DEFAULT 0")
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
+			return storeError("migrate v9: add ignorable to events", err)
+		}
 	}
 	return nil
 }
