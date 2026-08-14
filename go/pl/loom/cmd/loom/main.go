@@ -496,6 +496,9 @@ func runServe(ctx context.Context, args []string) error {
 	service := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{
 		Logger:   logger,
 		RulesDir: resolved.Storage.RulesDir(),
+		// The WebUI surfaces approval requests in-page; a desktop banner on
+		// top of that is noise for the user staring at the browser.
+		DisableApprovalNotify: true,
 	})
 	srv, err := server.New(server.Config{
 		Listen:      listen,

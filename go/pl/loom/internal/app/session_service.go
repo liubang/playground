@@ -94,7 +94,12 @@ type SessionServiceConfig struct {
 	// Rule pack install/uninstall writes pack-*.json files here; empty
 	// disables pack management.
 	RulesDir string
-	Logger   *slog.Logger
+	// DisableApprovalNotify suppresses the desktop notification fired when
+	// a run blocks on an approval. Set by frontends that already surface
+	// the request prominently (WebUI) or mirror it to the notification
+	// center themselves (desktop app).
+	DisableApprovalNotify bool
+	Logger                *slog.Logger
 }
 
 // ShareEndpointController is the process-level LAN share listener
@@ -187,13 +192,14 @@ type SessionService struct {
 	broker   *runtimeevent.Broker
 	logger   *slog.Logger
 
-	maxSessions     int
-	idleTTL         time.Duration
-	replayCap       int
-	maxActiveTurns  int
-	subscriberQueue int
-	shareEndpoint   ShareEndpointController
-	rulesDir        string
+	maxSessions           int
+	idleTTL               time.Duration
+	replayCap             int
+	maxActiveTurns        int
+	subscriberQueue       int
+	shareEndpoint         ShareEndpointController
+	rulesDir              string
+	disableApprovalNotify bool
 
 	mu       sync.Mutex
 	sessions map[domain.SessionID]*SessionHandle
@@ -219,18 +225,19 @@ func NewSessionService(proc *ProcessRuntime, reg *WorkspaceRegistry, broker *run
 		logger = slog.Default()
 	}
 	s := &SessionService{
-		proc:            proc,
-		registry:        reg,
-		broker:          broker,
-		logger:          logger,
-		rulesDir:        cfg.RulesDir,
-		maxSessions:     cfg.MaxSessions,
-		idleTTL:         cfg.IdleTTL,
-		replayCap:       cfg.ReplayCap,
-		maxActiveTurns:  cfg.MaxActiveTurns,
-		subscriberQueue: cfg.SubscriberQueue,
-		shareEndpoint:   cfg.ShareEndpoint,
-		sessions:        make(map[domain.SessionID]*SessionHandle),
+		proc:                  proc,
+		registry:              reg,
+		broker:                broker,
+		logger:                logger,
+		rulesDir:              cfg.RulesDir,
+		maxSessions:           cfg.MaxSessions,
+		idleTTL:               cfg.IdleTTL,
+		replayCap:             cfg.ReplayCap,
+		maxActiveTurns:        cfg.MaxActiveTurns,
+		subscriberQueue:       cfg.SubscriberQueue,
+		shareEndpoint:         cfg.ShareEndpoint,
+		disableApprovalNotify: cfg.DisableApprovalNotify,
+		sessions:              make(map[domain.SessionID]*SessionHandle),
 	}
 	if s.maxSessions <= 0 {
 		s.maxSessions = defaultMaxSessions
@@ -263,7 +270,11 @@ func (s *SessionService) newHandle(ws *Bootstrap) (*SessionHandle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build session runtime: %w", err)
 	}
-	approver := NewChannelApprover()
+	var approverOpts []ChannelApproverOption
+	if s.disableApprovalNotify {
+		approverOpts = append(approverOpts, WithoutApprovalNotify())
+	}
+	approver := NewChannelApprover(approverOpts...)
 	controller := NewController(ControllerConfig{
 		Bootstrap: ws,
 		Broker:    s.broker,
