@@ -103,22 +103,21 @@ func (f *File) ToMap() (map[string]any, error) {
 
 // Resolve validates f exactly as startup with RequireProviders would —
 // at least one provider, resolvable secret references, every section
-// invariant — and returns the resolved runtime configuration.
-// configPath is the file f would be persisted to: the loom home (data
-// root) derives from its directory, matching what a restart loading
-// that path would see. lookup resolves api_key_env/${VAR} references
-// against the server process environment — the same environment a
-// restart would see. Callers that persist f afterwards use the
-// returned config for hot-apply directly, so the applied configuration
-// always matches what was validated (no read-back from disk, no
-// write/apply skew).
-func (f *File) Resolve(configPath string, lookup EnvLookup) (*ResolvedConfig, error) {
+// invariant — and returns the resolved runtime configuration. home is
+// the loom home f would be persisted into (the config file always lives
+// at <home>/config.yaml), matching what a restart loading that home
+// would see. lookup resolves api_key_env/${VAR} references against the
+// server process environment — the same environment a restart would
+// see. Callers that persist f afterwards use the returned config for
+// hot-apply directly, so the applied configuration always matches what
+// was validated (no read-back from disk, no write/apply skew).
+func (f *File) Resolve(home string, lookup EnvLookup) (*ResolvedConfig, error) {
 	if len(f.Providers) == 0 {
 		return nil, fmt.Errorf("config: at least one provider is required")
 	}
-	baseDir, err := BaseDirForConfigPath(configPath)
+	baseDir, err := filepath.Abs(home)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("config: resolve loom home: %w", err)
 	}
 	return resolve(f, baseDir, lookup)
 }

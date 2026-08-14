@@ -39,7 +39,6 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/client"
-	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
@@ -74,18 +73,7 @@ func TestServeRealModelImageE2E(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	configPath := os.Getenv("LOOM_CONFIG")
-	if configPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Skipf("no home dir: %v", err)
-		}
-		configPath = filepath.Join(home, ".loom", "config.yaml")
-	}
-	configRaw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Skipf("loom config not found at %s", configPath)
-	}
+	configRaw := readRealUserConfig(t)
 
 	visionRef := os.Getenv("LOOM_E2E_VISION_MODEL")
 	if visionRef == "" {
@@ -93,18 +81,9 @@ func TestServeRealModelImageE2E(t *testing.T) {
 	}
 	patched := patchConfigModalities(t, configRaw, visionRef)
 
-	// Same isolation trick as TestServeRealModelE2E: the patched config
-	// copy in tmp derives tmp as the loom home, so the user's stores are
-	// never touched.
-	tmp := t.TempDir()
-	isolatedConfig := filepath.Join(tmp, "config.yaml")
-	if err := os.WriteFile(isolatedConfig, patched, 0o600); err != nil {
-		t.Fatalf("write isolated config: %v", err)
-	}
-	resolved, err := config.Load(isolatedConfig, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
-	if err != nil {
-		t.Skipf("load loom config: %v", err)
-	}
+	// The patched config copy loads from a temp loom home, so the user's
+	// stores are never touched.
+	tmp, resolved := loadIsolatedConfig(t, patched)
 	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
