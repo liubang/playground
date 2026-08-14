@@ -1170,13 +1170,18 @@ async function enter() {
   }
 }
 
-async function submitPrompt(text, images = []) {
+async function submitPrompt(text, images = [], followup = false) {
   if (app.readOnly) {
     toast('子 agent 会话为只读，不能追问')
     return
   }
-  // 幂等键：同一「文本 + 图片集合」重发共享同键（双击/网络重试不产生重复 turn）
-  const fp = text + '#' + images.map((i) => i.data.length).join('+')
+  // followup 仅文本：图片随普通 prompt 发送（后端同样拒绝 followup+图片）
+  if (followup && images.length) {
+    toast('排队到下一轮的消息仅支持文本，图片已忽略')
+    images = []
+  }
+  // 幂等键：同一「文本 + 图片集合 + 投递方式」重发共享同键（双击/网络重试不产生重复 turn）
+  const fp = (followup ? 'F:' : '') + text + '#' + images.map((i) => i.data.length).join('+')
   let key
   if (app.lastSubmit && app.lastSubmit.fp === fp) {
     key = app.lastSubmit.key
@@ -1186,7 +1191,7 @@ async function submitPrompt(text, images = []) {
   app.lastSubmit = { fp, key }
   try {
     if (!app.sessionId) await newSession(recentWorkspaceId())
-    await app.api.submitPrompt(app.sessionId, text, key, images)
+    await app.api.submitPrompt(app.sessionId, text, key, images, followup)
     app.composer.clearDraft()
     app.lastSubmit = null
     refreshSessions()

@@ -192,6 +192,114 @@ func TestLoopMaskCompactionSurfaceMatchesEventReplay(t *testing.T) {
 	}
 }
 
+// TestLoopPruneCompactionSurfaceMatchesEventReplay covers Level 0: a
+// medium tool output is middle-pruned inline, and the context.masked
+// directive (carrying prunes) must replay to the exact runtime surface.
+func TestLoopPruneCompactionSurfaceMatchesEventReplay(t *testing.T) {
+	store := fakes.NewFakeStore()
+	artifacts := openLoopArtifacts(t)
+	tool := bigResultTool(10 * 1024) // inside the default [8KB, 16KB) prune band
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{
+				{ID: domain.NewToolCallID(), Name: "big_output", Arguments: json.RawMessage(`{"path":"x.log"}`)},
+			},
+			StopReason: domain.StopToolUse,
+			UsageIn:    100,
+			UsageOut:   30,
+		},
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{
+				{ID: domain.NewToolCallID(), Name: "echo", Arguments: json.RawMessage(`{"text":"next"}`)},
+			},
+			StopReason: domain.StopToolUse,
+			UsageIn:    3050,
+			UsageOut:   30,
+		},
+		fakes.ScriptEntry{Text: "analysis done", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 15},
+	)
+
+	registry := NewToolRegistry()
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if err := registry.Register(fakes.EchoTool()); err != nil {
+		t.Fatalf("Register echo: %v", err)
+	}
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	mustCreateSession(t, store, run.SessionID)
+	addUserTextMessage(run, "check the log")
+
+	loop := &Loop{
+		Run: run, Model: model, Store: store,
+		Approver:  fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry:  registry,
+		Logger:    slog.Default(),
+		Artifacts: artifacts,
+		// The post-prune surface (~1.4k est tokens) fits the 2000 target, so
+		// no costlier level fires.
+		Window: WindowModel{Effective: 4000, CompactTrigger: 3000, CompactTarget: 2000},
+		// Default MaskMinBytes (16KB): the 10KB output falls in the prune
+		// band and must be pruned, never externalized.
+		Condenser: Condenser{KeepRecentMessages: 2},
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	counts := eventTypesIn(events)
+	if counts[domain.EventContextMasked] != 1 || counts[domain.EventContextArchived] != 0 ||
+		counts[domain.EventContextSummarized] != 0 {
+		t.Fatalf("directives = %v, want exactly one context.masked", counts)
+	}
+	for _, evt := range events {
+		if evt.Type != domain.EventContextMasked {
+			continue
+		}
+		var payload domain.ContextMaskedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+			t.Fatalf("unmarshal masked payload: %v", err)
+		}
+		if len(payload.Prunes) != 1 || len(payload.Masks) != 0 {
+			t.Fatalf("payload = %d prunes / %d masks, want 1/0", len(payload.Prunes), len(payload.Masks))
+		}
+	}
+
+	// The golden invariant holds for prunes too: replay from the pure log
+	// reproduces the exact surface the loop held.
+	transcript, err := session.Replay(events)
+	if err != nil {
+		t.Fatalf("Replay: %v", err)
+	}
+	assertMessagesMatchRuntime(t, transcript.Messages, run.Messages)
+
+	// ReplayFull ignores directives: the original 10KB output survives there.
+	full, err := session.ReplayFull(events)
+	if err != nil {
+		t.Fatalf("ReplayFull: %v", err)
+	}
+	foundOriginal := false
+	for _, msg := range full.Messages {
+		for _, part := range msg.Parts {
+			if part.ToolResult != nil && len(part.ToolResult.Content) > 0 &&
+				len(part.ToolResult.Content[0].Text) == 10*1024 {
+				foundOriginal = true
+			}
+		}
+	}
+	if !foundOriginal {
+		t.Fatal("ReplayFull lost the original tool output")
+	}
+}
+
 func TestLoopSummaryCompactionSurfaceMatchesEventReplay(t *testing.T) {
 	store := fakes.NewFakeStore()
 	artifacts := openLoopArtifacts(t)

@@ -332,6 +332,118 @@ func TestCondenseSkipsSmallOutputsAndIsIdempotent(t *testing.T) {
 	}
 }
 
+// --- pruning (Level 0) ---
+
+// pruneCount is the number of inline-pruned outputs in the pass.
+func pruneCount(ops domain.SurfaceOps) int {
+	if ops.Masks == nil {
+		return 0
+	}
+	return len(ops.Masks.Prunes)
+}
+
+func TestCondensePrunesMediumToolOutputs(t *testing.T) {
+	store := openArtifactStore(t)
+	original := bigOutput(10 * 1024) // inside the default [8KB, 16KB) prune band
+	messages := []domain.Message{
+		textMessage(domain.RoleUser, "please run the build"),
+	}
+	messages = append(messages, toolPair("run_cmd", original)...)
+	// recent window (6 messages) — must remain untouched
+	messages = append(messages, toolPair("run_cmd", bigOutput(9*1024))...)
+	messages = append(
+		messages,
+		textMessage(domain.RoleAssistant, "b"),
+		textMessage(domain.RoleAssistant, "c"),
+		textMessage(domain.RoleAssistant, "d"),
+		textMessage(domain.RoleAssistant, "e"),
+	)
+
+	cond := Condenser{KeepRecentMessages: 6}
+	ops := condense(t, cond, &messages, store)
+
+	if maskCount(ops) != 0 {
+		t.Fatalf("masked outputs = %d, want 0 (a band output is pruned, not externalized)", maskCount(ops))
+	}
+	if pruneCount(ops) != 1 {
+		t.Fatalf("pruned outputs = %d, want 1", pruneCount(ops))
+	}
+
+	pruned := messages[2].Parts[0].ToolResult.Content[0].Text
+	if !strings.HasPrefix(pruned, original[:100]) {
+		t.Fatalf("pruned output lost its head: %q", pruned[:80])
+	}
+	if !strings.Contains(pruned, prunedMiddleMark) {
+		t.Fatalf("pruned output misses the marker: %q", pruned[:200])
+	}
+	if !strings.HasSuffix(pruned, original[len(original)-100:]) {
+		t.Fatal("pruned output lost its tail")
+	}
+	if !utf8.ValidString(pruned) {
+		t.Fatal("pruned output is not valid UTF-8")
+	}
+	if len(pruned) >= len(original) {
+		t.Fatalf("pruned output = %d bytes, want smaller than %d", len(pruned), len(original))
+	}
+	if len(messages[2].Parts[0].ToolResult.Content) != 1 {
+		t.Fatal("a prune must not append an artifact reference")
+	}
+	if messages[2].Revision != 1 {
+		t.Fatalf("revision = %d, want 1", messages[2].Revision)
+	}
+
+	// The recent-window output stays inline.
+	recent := messages[4].Parts[0].ToolResult.Content[0].Text
+	if strings.Contains(recent, prunedMiddleMark) {
+		t.Fatal("recent-window output must not be pruned")
+	}
+
+	// A second pass is idempotent: the pruned form is below the band and
+	// carries the marker.
+	second := condense(t, cond, &messages, store)
+	if pruneCount(second) != 0 || maskCount(second) != 0 {
+		t.Fatalf("second pass pruned %d masked %d, want 0/0 (idempotent)", pruneCount(second), maskCount(second))
+	}
+}
+
+func TestCondensePruneBandEdges(t *testing.T) {
+	store := openArtifactStore(t)
+	// Below the band: stays verbatim. At/above MaskMinBytes: externalized,
+	// not pruned (full-fidelity preservation wins for very large outputs).
+	small := bigOutput(8*1024 - 1)
+	huge := bigOutput(16 * 1024)
+	messages := toolPair("run_cmd", small)
+	messages = append(messages, toolPair("run_cmd", huge)...)
+	messages = append(messages, textMessage(domain.RoleAssistant, "done"))
+
+	cond := Condenser{KeepRecentMessages: 1}
+	ops := condense(t, cond, &messages, store)
+
+	if pruneCount(ops) != 0 {
+		t.Fatalf("pruned = %d, want 0 (below-band verbatim, at-mask-threshold externalized)", pruneCount(ops))
+	}
+	if maskCount(ops) != 1 || maskedBytes(ops) != len(huge) {
+		t.Fatalf("masked = %d (%d bytes), want 1 (%d bytes)", maskCount(ops), maskedBytes(ops), len(huge))
+	}
+	if got := messages[1].Parts[0].ToolResult.Content[0].Text; got != small {
+		t.Fatalf("below-band output changed: %d bytes, want %d verbatim", len(got), len(small))
+	}
+}
+
+// Level 0 needs no artifact store: a nil store disables masking/archival
+// but pruning still shrinks the surface.
+func TestCondensePrunesWithoutArtifactStore(t *testing.T) {
+	messages := toolPair("run_cmd", bigOutput(10*1024))
+	messages = append(messages, textMessage(domain.RoleAssistant, "done"))
+	ops := condense(t, Condenser{KeepRecentMessages: 1}, &messages, nil)
+	if pruneCount(ops) != 1 {
+		t.Fatalf("pruned = %d, want 1 without an artifact store", pruneCount(ops))
+	}
+	if maskCount(ops) != 0 {
+		t.Fatalf("masked = %d, want 0 without an artifact store", maskCount(ops))
+	}
+}
+
 func TestCondensePreservesToolPairing(t *testing.T) {
 	store := openArtifactStore(t)
 	var messages []domain.Message

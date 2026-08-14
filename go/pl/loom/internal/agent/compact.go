@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/media"
@@ -39,6 +40,16 @@ const (
 	// masking them bought little headroom but forced re-reads after
 	// compaction (CONTEXT_DESIGN §4.5).
 	defaultMaskMinBytes = 16 * 1024
+	// defaultPruneMinBytes is the Level-0 entry threshold: medium outputs
+	// below the mask threshold are middle-pruned inline instead — cheap
+	// (no artifact round-trip) while still buying real headroom
+	// (deepseek-harness tool-result-pruner style).
+	defaultPruneMinBytes = 8 * 1024
+	// defaultPruneHeadBytes/defaultPruneTailBytes bound the kept ends of a
+	// pruned output: the head carries shape (headers, the beginning of a
+	// listing), the tail carries the conclusion (errors, summaries).
+	defaultPruneHeadBytes = 4 * 1024
+	defaultPruneTailBytes = 1024
 	// summaryUserMessageBudgetRatio is the share of the compaction target
 	// reserved for verbatim user messages in a summarized replacement
 	// history (docs/CONTEXT_DESIGN.md §4.3.3).
@@ -73,6 +84,11 @@ const compactedSummaryMeta = "summary"
 // pass never re-externalizes an already-masked output.
 const compactedPlaceholderMark = "[tool output compacted]"
 
+// prunedMiddleMark prefixes the in-text marker of a middle-pruned output,
+// so a later pass never re-prunes an already-pruned output (the size band
+// alone cannot guarantee that under a changed configuration).
+const prunedMiddleMark = "[... tool result middle pruned:"
+
 // archivedSpanMark prefixes the marker message that replaces an archived
 // message span, so later passes skip it when computing archive boundaries.
 const archivedSpanMark = "[earlier messages archived]"
@@ -95,6 +111,14 @@ type Condenser struct {
 	KeepRecentMessages int
 	// MaskMinBytes is the minimum tool-output text size externalized.
 	MaskMinBytes int
+	// PruneMinBytes is the minimum tool-output text size middle-pruned
+	// inline (Level 0). The prune band is [PruneMinBytes, MaskMinBytes):
+	// below the band the output stays verbatim, above it full-fidelity
+	// externalization wins. PruneHeadBytes/PruneTailBytes bound the kept
+	// ends of a pruned output.
+	PruneMinBytes  int
+	PruneHeadBytes int
+	PruneTailBytes int
 }
 
 func (c Condenser) withDefaults() Condenser {
@@ -103,6 +127,15 @@ func (c Condenser) withDefaults() Condenser {
 	}
 	if c.MaskMinBytes <= 0 {
 		c.MaskMinBytes = defaultMaskMinBytes
+	}
+	if c.PruneMinBytes <= 0 {
+		c.PruneMinBytes = defaultPruneMinBytes
+	}
+	if c.PruneHeadBytes <= 0 {
+		c.PruneHeadBytes = defaultPruneHeadBytes
+	}
+	if c.PruneTailBytes <= 0 {
+		c.PruneTailBytes = defaultPruneTailBytes
 	}
 	return c
 }
@@ -132,6 +165,8 @@ type contextCompactedPayload struct {
 	Phase                 string         `json:"phase"`
 	MaskedOutputs         int            `json:"masked_outputs"`
 	MaskedBytes           int            `json:"masked_bytes"`
+	PrunedOutputs         int            `json:"pruned_outputs,omitempty"`
+	PrunedBytes           int            `json:"pruned_bytes,omitempty"`
 	ArchivedMessages      int            `json:"archived_messages,omitempty"`
 	EstTokensBefore       int            `json:"est_tokens_before"`
 	EstTokensAfter        int            `json:"est_tokens_after"`
@@ -208,6 +243,10 @@ type artifactPathResolver interface {
 // Plan computes one compaction pass as pure directives (docs/SURFACE_DESIGN.md
 // §4.2) without touching the input:
 //
+// Level 0: middle-prune medium tool outputs outside the keep-recent window
+// inline (head + marker + tail). Cheap — no artifact round-trip — and often
+// enough on its own, sparing the costlier levels (deepseek-harness
+// tool-result-pruner style).
 // Level 1: mask oversized tool outputs outside the keep-recent window.
 // Level 2a: if the estimate still exceeds the target, archive the oldest
 // message span as one full-fidelity artifact, replaced by a marker.
@@ -219,11 +258,12 @@ type artifactPathResolver interface {
 // functions) — so the directives Plan emits are incrementally validated as
 // they are produced, and the view the next level sees is exactly what
 // replay will see. Audit counts are derived from the returned ops by the
-// caller. A nil artifact store disables compaction.
+// caller. A nil artifact store disables masking/archival; pruning and
+// summarization still work.
 func (c Condenser) Plan(ctx context.Context, messages []domain.Message, artifacts domain.ArtifactStore, now time.Time) domain.SurfaceOps {
 	c = c.withDefaults()
 	var ops domain.SurfaceOps
-	if artifacts == nil || len(messages) == 0 {
+	if len(messages) == 0 {
 		return ops
 	}
 	target := c.target()
@@ -231,10 +271,22 @@ func (c Condenser) Plan(ctx context.Context, messages []domain.Message, artifact
 
 	cutoff := len(view) - c.KeepRecentMessages
 	if cutoff > 0 {
+		if prunes, pruned := c.planPrunes(view, cutoff); len(prunes) > 0 {
+			ops.Masks = &domain.ContextMaskedPayload{Prunes: prunes}
+			view = pruned
+		}
+	}
+	if artifacts == nil {
+		return ops
+	}
+	if cutoff > 0 {
 		var masks []domain.MaskedPart
 		masks, view = c.planMaskRange(ctx, view, artifacts, 0, cutoff, 0)
 		if len(masks) > 0 {
-			ops.Masks = &domain.ContextMaskedPayload{Masks: masks}
+			if ops.Masks == nil {
+				ops.Masks = &domain.ContextMaskedPayload{}
+			}
+			ops.Masks.Masks = append(ops.Masks.Masks, masks...)
 		}
 	}
 	if estTokens(view) > target && cutoff > 0 {
@@ -257,6 +309,80 @@ func (c Condenser) Plan(ctx context.Context, messages []domain.Message, artifact
 	return ops
 }
 
+// planPrunes computes the Level-0 inline prune directives for every
+// eligible tool output in view[:cutoff] — medium text outputs in the
+// [PruneMinBytes, MaskMinBytes) band keep their head and tail and drop
+// the middle. It returns the directives and the post-prune working view.
+// Pruning is pure (no artifact store, no I/O); a self-application failure
+// degrades to no prunes, never to a corrupt directive.
+func (c Condenser) planPrunes(view []domain.Message, cutoff int) ([]domain.PrunedPart, []domain.Message) {
+	var prunes []domain.PrunedPart
+	for i := 0; i < cutoff && i < len(view); i++ {
+		msg := &view[i]
+		for pi := range msg.Parts {
+			part := &msg.Parts[pi]
+			if part.Kind != domain.PartToolResult || part.ToolResult == nil {
+				continue
+			}
+			for ci := range part.ToolResult.Content {
+				content := &part.ToolResult.Content[ci]
+				if content.Kind != domain.PartText || !c.prunable(content.Text) {
+					continue
+				}
+				prunes = append(prunes, domain.PrunedPart{
+					MessageID:     msg.ID,
+					PartIndex:     pi,
+					ContentIndex:  ci,
+					OriginalBytes: len(content.Text),
+					Replacement:   c.pruneMiddle(content.Text),
+					Revision:      msg.Revision + 1,
+				})
+			}
+		}
+	}
+	if len(prunes) == 0 {
+		return nil, view
+	}
+	applied, err := domain.ApplyMaskDirective(view, domain.ContextMaskedPayload{Prunes: prunes})
+	if err != nil {
+		// Self-generated directives must apply; a failure here is a
+		// generator bug. Drop the prunes and keep going — compaction
+		// degrades, it never corrupts.
+		return nil, view
+	}
+	return prunes, applied
+}
+
+// prunable reports whether a tool-output text enters the Level-0 prune
+// band: medium-sized, and not already pruned or masked (the marker guards
+// make a changed configuration safe against re-pruning).
+func (c Condenser) prunable(text string) bool {
+	if len(text) < c.PruneMinBytes || len(text) >= c.MaskMinBytes {
+		return false
+	}
+	if strings.Contains(text, prunedMiddleMark) || strings.HasPrefix(text, compactedPlaceholderMark) {
+		return false
+	}
+	// Pruning must actually shrink the text; a head+tail configuration
+	// covering the whole band would rewrite without gain.
+	return c.PruneHeadBytes+c.PruneTailBytes < len(text)
+}
+
+// pruneMiddle keeps the head and tail of text, dropping the middle behind
+// a marker that records the omission. Both cuts land on rune boundaries —
+// the replacement is persisted and later sent to providers, so it must
+// stay valid UTF-8.
+func (c Condenser) pruneMiddle(text string) string {
+	head := cutAtRuneBoundary(text, c.PruneHeadBytes)
+	tailStart := len(text) - c.PruneTailBytes
+	for tailStart < len(text) && !utf8.RuneStart(text[tailStart]) {
+		tailStart++
+	}
+	omitted := len(text) - len(head) - (len(text) - tailStart)
+	return fmt.Sprintf("%s\n\n%s ~%s of %s omitted ...]\n\n%s",
+		head, prunedMiddleMark, humanBytes(omitted), humanBytes(len(text)), text[tailStart:])
+}
+
 // planMaskRange is the directive-producing form of the former maskRange:
 // it externalizes eligible tool outputs in view[from:to], applying each
 // message's masks to the working view as it goes so the stopAtTokens
@@ -275,7 +401,7 @@ func (c Condenser) planMaskRange(ctx context.Context, view []domain.Message, art
 		if len(masks) == 0 {
 			continue
 		}
-		applied, err := domain.ApplyMaskDirective(view, masks)
+		applied, err := domain.ApplyMaskDirective(view, domain.ContextMaskedPayload{Masks: masks})
 		if err != nil {
 			// Self-generated directives must apply; a failure here is a
 			// generator bug. Drop this message's masks and keep going —

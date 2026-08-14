@@ -56,6 +56,11 @@ func TestEventValidation(t *testing.T) {
 			Event{ID: NewEventID(), Sequence: 1, SessionID: sid, Type: "unknown"},
 			true,
 		},
+		{
+			"unknown ignorable type passes (writer-marked informational)",
+			Event{ID: NewEventID(), Sequence: 1, SessionID: sid, Type: "future.audit", Ignorable: true},
+			false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -65,6 +70,35 @@ func TestEventValidation(t *testing.T) {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// TestEventTypeInformational pins the audit-only set: types a reader may
+// skip when unknown, versus the types whose loss would corrupt a
+// projection (lifecycle, transcript, directives, recovery feeds).
+func TestEventTypeInformational(t *testing.T) {
+	informational := []EventType{
+		EventModelRequestStarted, EventModelRequestFailed, EventModelRequestRetrying,
+		EventModelRequestHeader, EventToolCallPrepared, EventToolExecutionStarted,
+		EventToolExecutionCompleted, EventPermissionRequested, EventPermissionResolved,
+		EventFileChanged, EventContextCompacted, EventCheckpointCreated,
+	}
+	for _, typ := range informational {
+		if !typ.Informational() {
+			t.Errorf("%s must be informational", typ)
+		}
+	}
+	critical := []EventType{
+		EventSessionCreated, EventRunCreated, EventRunStateChanged,
+		EventUserMessageAdded, EventModelResponseCompleted, EventToolResultAdded,
+		EventPlanRevised, EventGoalUpdated, EventBudgetUpdated, EventBudgetNotice,
+		EventBudgetWrapupStarted, EventRunCompleted, EventRunFailed, EventRunCancelled,
+		EventContextMasked, EventContextArchived, EventContextSummarized,
+	}
+	for _, typ := range critical {
+		if typ.Informational() {
+			t.Errorf("%s must NEVER be informational (projections/recovery depend on it)", typ)
+		}
 	}
 }
 

@@ -240,6 +240,10 @@ type Model struct {
 	// loop to inject them before its next model call. Fed by steer.queued,
 	// drained FIFO by steer.injected, rebuilt from Snapshot.PendingSteers.
 	pendingSteers []string
+	// pendingFollowups mirrors the controller's next-turn queue: messages
+	// held until the busy turn ends, then relayed one per turn boundary.
+	// Same feed/rebuild rhythm as pendingSteers.
+	pendingFollowups []string
 
 	// resubscribes bounds CONSECUTIVE event-stream recovery attempts (any
 	// successfully received event resets it); eventsDead locks prompt

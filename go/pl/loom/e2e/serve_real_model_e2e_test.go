@@ -223,6 +223,43 @@ func TestServeRealModelE2E(t *testing.T) {
 	}
 	t.Log("steer ok: busy submission queued and drained")
 
+	// --- 4b. busy-turn followup: queued for AFTER the turn, then relayed ---
+	if _, err := c.SubmitPrompt(ctx, "再慢慢数：用中文从二十一数到三十，每个数字单独一行。", nil); err != nil {
+		t.Fatalf("SubmitPrompt(turn4): %v", err)
+	}
+	// Same busy-window retry as the steer case above.
+	var followupQueued bool
+	followupDeadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(followupDeadline) {
+		result, err := c.SubmitFollowup(ctx, "用一个字回答：好")
+		if err != nil {
+			t.Fatalf("SubmitFollowup: %v", err)
+		}
+		if result.Followup {
+			followupQueued = true
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !followupQueued {
+		t.Fatalf("followup submission during an active turn was not queued")
+	}
+	// The followup must not leak into the busy turn: it becomes its own
+	// turn right after — two more turn.finished events in total.
+	turns = collector.turnsDone()
+	collector.waitTurn(t, turns+2, 5*time.Minute)
+	snap, err = c.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot(after followup): %v", err)
+	}
+	if !transcriptContains(snap.Messages, "用一个字回答：好") {
+		t.Fatalf("followup prompt never became its own turn")
+	}
+	if len(snap.PendingFollowups) != 0 {
+		t.Fatalf("PendingFollowups = %v after the relay, want empty", snap.PendingFollowups)
+	}
+	t.Log("followup ok: queued during the busy turn, relayed as its own turn")
+
 	// --- 5. idempotent submission ---
 	turnsBefore := snap.TurnCount
 	turns = collector.turnsDone()
@@ -232,12 +269,12 @@ func TestServeRealModelE2E(t *testing.T) {
 	collector.waitTurn(t, turns+1, 3*time.Minute)
 	// Repeat the exact submission through the service's idempotency channel.
 	turns = collector.turnsDone()
-	res, dedup, err := svc.SubmitPrompt(ctx, sessionID, "用一个字回答：嗯", nil, "idem-e2e-1")
+	res, dedup, err := svc.SubmitPrompt(ctx, sessionID, "用一个字回答：嗯", nil, "idem-e2e-1", false)
 	if err != nil {
 		t.Fatalf("SubmitPrompt(idem first): %v", err)
 	}
 	collector.waitTurn(t, turns+1, 3*time.Minute)
-	res2, dedup2, err := svc.SubmitPrompt(ctx, sessionID, "用一个字回答：嗯", nil, "idem-e2e-1")
+	res2, dedup2, err := svc.SubmitPrompt(ctx, sessionID, "用一个字回答：嗯", nil, "idem-e2e-1", false)
 	if err != nil {
 		t.Fatalf("SubmitPrompt(idem repeat): %v", err)
 	}

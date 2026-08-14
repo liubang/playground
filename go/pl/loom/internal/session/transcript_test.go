@@ -187,6 +187,38 @@ func TestReplayFromCheckpointMatchesReplay(t *testing.T) {
 	}
 }
 
+// TestReplaySkipsUnknownIgnorableEvents pins the forward-compat contract
+// (deepseek-harness SessionEvent.ignorable): a log written by a NEWER
+// binary with unknown informational event types still replays — but an
+// unknown type WITHOUT the mark fails loudly, because skipping it could
+// silently corrupt the surface.
+func TestReplaySkipsUnknownIgnorableEvents(t *testing.T) {
+	sessionID := domain.NewSessionID()
+	base := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
+	msg := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleUser,
+		Status: domain.MessageStatusFinal, Revision: 1, CreatedAt: base,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}},
+	}
+	events := []domain.Event{
+		{ID: domain.NewEventID(), Sequence: 1, SessionID: sessionID, Type: domain.EventSessionCreated, Timestamp: base},
+		messageEvent(t, 2, sessionID, domain.EventUserMessageAdded, msg),
+		{ID: domain.NewEventID(), Sequence: 3, SessionID: sessionID, Type: "future.audit", Ignorable: true, Timestamp: base},
+	}
+	transcript, err := Replay(events)
+	if err != nil {
+		t.Fatalf("Replay with unknown ignorable event: %v", err)
+	}
+	if len(transcript.Messages) != 1 || transcript.Messages[0].ID != msg.ID {
+		t.Fatalf("transcript = %+v, want the one user message", transcript.Messages)
+	}
+
+	events[2].Ignorable = false
+	if _, err := Replay(events); err == nil {
+		t.Fatal("Replay accepted an unknown NON-ignorable event type")
+	}
+}
+
 func TestReplayAcceptsToolCompletionAuditPayload(t *testing.T) {
 	sessionID := domain.NewSessionID()
 	payload := json.RawMessage(`{"call_id":"tc_test","status":"success","started_at":"2025-01-01T00:00:00Z","finished_at":"2025-01-01T00:00:01Z"}`)

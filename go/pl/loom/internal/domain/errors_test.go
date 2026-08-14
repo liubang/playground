@@ -70,7 +70,7 @@ func TestIsRetryableNonAgentError(t *testing.T) {
 func TestAllErrorCodes(t *testing.T) {
 	codes := []ErrorCode{
 		ErrInvalidInput, ErrPermission, ErrConflict, ErrUnavailable,
-		ErrRateLimited, ErrTimeout, ErrCancelled, ErrBudget,
+		ErrRateLimited, ErrQuotaExhausted, ErrTimeout, ErrCancelled, ErrBudget,
 		ErrSecurity, ErrInternal,
 	}
 	for _, code := range codes {
