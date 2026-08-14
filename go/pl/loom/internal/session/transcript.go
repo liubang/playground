@@ -382,7 +382,8 @@ func (p *projector) applyEvent(evt domain.Event) error {
 		domain.EventBudgetWrapupStarted,
 		domain.EventRunCompleted,
 		domain.EventRunFailed,
-		domain.EventRunCancelled:
+		domain.EventRunCancelled,
+		domain.EventRunInterrupted:
 		return nil
 	case domain.EventBudgetNotice:
 		// Budget notices are surface messages too (AddBudgetNotice appends
@@ -400,7 +401,7 @@ func (p *projector) applyEvent(evt domain.Event) error {
 		return p.applySurfaceMessage(payload.Message)
 	case domain.EventContextMasked:
 		return applyDirective(p, evt, func(payload domain.ContextMaskedPayload) ([]domain.Message, error) {
-			return domain.ApplyMaskDirective(p.messages, payload.Masks)
+			return domain.ApplyMaskDirective(p.messages, payload)
 		})
 	case domain.EventContextArchived:
 		return applyDirective(p, evt, func(payload domain.ContextArchivedPayload) ([]domain.Message, error) {
@@ -411,6 +412,13 @@ func (p *projector) applyEvent(evt domain.Event) error {
 			return domain.ApplyReplacementDirective(p.messages, payload.Replacement)
 		})
 	default:
+		// A type this binary does not know: the writer's ignorable mark
+		// guarantees no projection derives state from it, so skipping is
+		// safe (deepseek-harness SessionEvent.ignorable semantics).
+		// Without the mark the type might carry surface state — fail loud.
+		if evt.Ignorable {
+			return nil
+		}
 		return fmt.Errorf("unsupported event type %q", evt.Type)
 	}
 }

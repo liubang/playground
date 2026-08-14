@@ -267,6 +267,14 @@ func (c *httpClient) Done() <-chan struct{} { return c.done }
 // --- turn control ---
 
 func (c *httpClient) SubmitPrompt(ctx context.Context, prompt string, images []domain.ImageContent) (SubmitResult, error) {
+	return c.submitPrompt(ctx, prompt, images, false)
+}
+
+func (c *httpClient) SubmitFollowup(ctx context.Context, prompt string) (SubmitResult, error) {
+	return c.submitPrompt(ctx, prompt, nil, true)
+}
+
+func (c *httpClient) submitPrompt(ctx context.Context, prompt string, images []domain.ImageContent, followup bool) (SubmitResult, error) {
 	path, err := c.sessionPath()
 	if err != nil {
 		return SubmitResult{}, err
@@ -274,12 +282,17 @@ func (c *httpClient) SubmitPrompt(ctx context.Context, prompt string, images []d
 	var out struct {
 		Turn     int  `json:"turn"`
 		Steered  bool `json:"steered"`
+		Followup bool `json:"followup"`
 		QueueLen int  `json:"queue_len"`
 	}
-	if err := c.do(ctx, http.MethodPost, path+"/prompts", map[string]any{"prompt": prompt, "images": images}, &out); err != nil {
+	body := map[string]any{"prompt": prompt, "images": images}
+	if followup {
+		body["followup"] = true
+	}
+	if err := c.do(ctx, http.MethodPost, path+"/prompts", body, &out); err != nil {
 		return SubmitResult{}, err
 	}
-	return SubmitResult{Steered: out.Steered, QueueLen: out.QueueLen, Turn: out.Turn}, nil
+	return SubmitResult{Steered: out.Steered, Followup: out.Followup, QueueLen: out.QueueLen, Turn: out.Turn}, nil
 }
 
 func (c *httpClient) CancelTurn(ctx context.Context) error {

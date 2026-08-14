@@ -269,6 +269,18 @@ func TestToDomainErrorClassifiesFailures(t *testing.T) {
 		{"429 is rate limited and retryable", statusErr(http.StatusTooManyRequests), domain.ErrRateLimited, true},
 		{"401 is permission", statusErr(http.StatusUnauthorized), domain.ErrPermission, false},
 		{"403 is permission", statusErr(http.StatusForbidden), domain.ErrPermission, false},
+		{"429 with quota text is quota exhaustion, not rate limited", &StatusError{
+			Code: http.StatusTooManyRequests, Status: "429", Message: "You exceeded your current quota, please check your plan and billing details",
+		}, domain.ErrQuotaExhausted, false},
+		{"429 with insufficient_quota is quota exhaustion", &StatusError{
+			Code: http.StatusTooManyRequests, Status: "429", Message: "insufficient_quota: remaining quota is zero",
+		}, domain.ErrQuotaExhausted, false},
+		{"400 with usage-limit text is quota exhaustion", &StatusError{
+			Code: http.StatusBadRequest, Status: "400", Message: "usage limit reached for this period",
+		}, domain.ErrQuotaExhausted, false},
+		{"401 with quota text stays permission (auth first)", &StatusError{
+			Code: http.StatusUnauthorized, Status: "401", Message: "insufficient_quota",
+		}, domain.ErrPermission, false},
 		{"400 is invalid input", statusErr(http.StatusBadRequest), domain.ErrInvalidInput, false},
 		{"408 is unavailable and retryable", statusErr(http.StatusRequestTimeout), domain.ErrUnavailable, true},
 		{"500 is unavailable and retryable", statusErr(http.StatusInternalServerError), domain.ErrUnavailable, true},

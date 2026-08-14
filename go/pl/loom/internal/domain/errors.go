@@ -31,11 +31,15 @@ const (
 	ErrConflict     ErrorCode = "conflict"
 	ErrUnavailable  ErrorCode = "unavailable"
 	ErrRateLimited  ErrorCode = "rate_limited"
-	ErrTimeout      ErrorCode = "timeout"
-	ErrCancelled    ErrorCode = "cancelled"
-	ErrBudget       ErrorCode = "budget"
-	ErrSecurity     ErrorCode = "security"
-	ErrInternal     ErrorCode = "internal"
+	// ErrQuotaExhausted marks provider quota/billing exhaustion: it rides
+	// any status (commonly 429) but is NOT a transient rate limit —
+	// waiting out a window cannot help, so it is never retryable.
+	ErrQuotaExhausted ErrorCode = "quota_exhausted"
+	ErrTimeout        ErrorCode = "timeout"
+	ErrCancelled      ErrorCode = "cancelled"
+	ErrBudget         ErrorCode = "budget"
+	ErrSecurity       ErrorCode = "security"
+	ErrInternal       ErrorCode = "internal"
 )
 
 // AgentError is the standard error type for the agent runtime.

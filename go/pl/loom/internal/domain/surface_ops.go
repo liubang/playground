@@ -78,9 +78,42 @@ type MaskedPart struct {
 	Revision int `json:"revision"`
 }
 
-// ContextMaskedPayload is the EventContextMasked payload.
+// PrunedPart locates one inline middle-pruned tool output: which content
+// of which tool result of which message. Unlike a MaskedPart nothing is
+// externalized — the head and tail stay inline and the middle is dropped
+// (the original remains in the append-only log regardless), so a prune
+// costs no artifact round-trip and keeps the output's shape visible to
+// the model. Location and Revision semantics are exactly MaskedPart's.
+type PrunedPart struct {
+	MessageID    MessageID `json:"message_id"`
+	PartIndex    int       `json:"part_index"`
+	ContentIndex int       `json:"content_index"`
+	// OriginalBytes is the pre-pruning text size (audit).
+	OriginalBytes int `json:"original_bytes"`
+	// Replacement is the full replacement text (head + marker + tail),
+	// generated once at runtime and applied verbatim.
+	Replacement string `json:"replacement"`
+	// Revision follows the MaskedPart contract: prunes and masks from the
+	// same pass share one revision bump per message.
+	Revision int `json:"revision"`
+}
+
+// ContextMaskedPayload is the EventContextMasked payload: one observation
+// reduction pass carrying both externalized masks (full-fidelity
+// preservation) and inline prunes (cheap middle-truncation). Prunes apply
+// before masks.
 type ContextMaskedPayload struct {
 	Masks []MaskedPart `json:"masks"`
+	// Prunes carries the inline middle-prunings. Old logs lack the field
+	// (nil); old binaries reading a payload with prunes ignore the field
+	// and replay the fuller pre-prune surface — a conservative divergence,
+	// never a failure.
+	Prunes []PrunedPart `json:"prunes,omitempty"`
+}
+
+// Empty reports whether the payload carries any directive at all.
+func (p ContextMaskedPayload) Empty() bool {
+	return len(p.Masks) == 0 && len(p.Prunes) == 0
 }
 
 // ContextArchivedPayload is the EventContextArchived payload.
@@ -157,11 +190,14 @@ func ApplySurfaceOps(messages []Message, ops SurfaceOps) ([]Message, error) {
 	touched := make(map[MessageID]struct{})
 	var err error
 	if ops.Masks != nil {
-		if out, err = applyMasks(out, ops.Masks.Masks); err != nil {
+		if out, err = applyMasks(out, *ops.Masks); err != nil {
 			return nil, fmt.Errorf("context.masked: %w", err)
 		}
 		for _, mask := range ops.Masks.Masks {
 			touched[mask.MessageID] = struct{}{}
+		}
+		for _, prune := range ops.Masks.Prunes {
+			touched[prune.MessageID] = struct{}{}
 		}
 	}
 	if ops.Archive != nil {
@@ -195,11 +231,11 @@ func ApplySurfaceOps(messages []Message, ops SurfaceOps) ([]Message, error) {
 // ApplyMaskDirective applies one context.masked event's payload: like
 // ApplySurfaceOps with only Masks set, but rejecting an empty directive —
 // a directive event with nothing to apply is corrupt, not a no-op.
-func ApplyMaskDirective(messages []Message, masks []MaskedPart) ([]Message, error) {
-	if len(masks) == 0 {
+func ApplyMaskDirective(messages []Message, payload ContextMaskedPayload) ([]Message, error) {
+	if payload.Empty() {
 		return nil, fmt.Errorf("context.masked: empty directive")
 	}
-	return ApplySurfaceOps(messages, SurfaceOps{Masks: &ContextMaskedPayload{Masks: masks}})
+	return ApplySurfaceOps(messages, SurfaceOps{Masks: &payload})
 }
 
 // ApplyArchiveDirective applies one context.archived event's payload.
@@ -244,13 +280,39 @@ func cloneMessages(messages []Message) []Message {
 	return out
 }
 
-// applyMasks externalizes tool outputs per directive. Masks hitting the same
-// message in the same level share one revision value (the runtime bumps a
-// message once per level); cross-level masks must strictly increase.
-// Directives targeting the same content twice are rejected: the runtime
-// generator can never produce them (the placeholder prefix guard skips
-// masked content).
-func applyMasks(messages []Message, masks []MaskedPart) ([]Message, error) {
+// applyMasks applies one context.masked payload: inline prunes first,
+// then externalized masks. Prunes hitting the same message in the same
+// pass share one revision value with masks (the runtime bumps a message
+// once per level); cross-level edits must strictly increase. Directives
+// targeting the same content twice are rejected: the runtime generator
+// can never produce them (the placeholder/marker guards skip edited
+// content).
+func applyMasks(messages []Message, payload ContextMaskedPayload) ([]Message, error) {
+	// contentEdit is the shared core of a prune (inline replacement) and a
+	// mask (replacement plus an appended artifact reference).
+	type contentEdit struct {
+		messageID    MessageID
+		partIndex    int
+		contentIndex int
+		text         string
+		artifact     *ArtifactRef // nil for prunes
+		revision     int
+	}
+	edits := make([]contentEdit, 0, len(payload.Prunes)+len(payload.Masks))
+	for _, prune := range payload.Prunes {
+		edits = append(edits, contentEdit{
+			messageID: prune.MessageID, partIndex: prune.PartIndex, contentIndex: prune.ContentIndex,
+			text: prune.Replacement, revision: prune.Revision,
+		})
+	}
+	for _, mask := range payload.Masks {
+		artifact := mask.Artifact
+		edits = append(edits, contentEdit{
+			messageID: mask.MessageID, partIndex: mask.PartIndex, contentIndex: mask.ContentIndex,
+			text: mask.Placeholder, artifact: &artifact, revision: mask.Revision,
+		})
+	}
+
 	byID := make(map[MessageID]int, len(messages))
 	for i, msg := range messages {
 		byID[msg.ID] = i
@@ -260,53 +322,54 @@ func applyMasks(messages []Message, masks []MaskedPart) ([]Message, error) {
 		partIndex    int
 		contentIndex int
 	}
-	seen := make(map[contentLoc]struct{}, len(masks))
+	seen := make(map[contentLoc]struct{}, len(edits))
 	baselines := make(map[MessageID]int)
-	for mi, mask := range masks {
-		loc := contentLoc{mask.MessageID, mask.PartIndex, mask.ContentIndex}
+	for mi, edit := range edits {
+		loc := contentLoc{edit.messageID, edit.partIndex, edit.contentIndex}
 		if _, dup := seen[loc]; dup {
-			return nil, fmt.Errorf("mask[%d]: duplicate directive for message %s part %d content %d", mi, mask.MessageID, mask.PartIndex, mask.ContentIndex)
+			return nil, fmt.Errorf("edit[%d]: duplicate directive for message %s part %d content %d", mi, edit.messageID, edit.partIndex, edit.contentIndex)
 		}
 		seen[loc] = struct{}{}
-		idx, ok := byID[mask.MessageID]
+		idx, ok := byID[edit.messageID]
 		if !ok {
-			return nil, fmt.Errorf("mask[%d]: message %s not found", mi, mask.MessageID)
+			return nil, fmt.Errorf("edit[%d]: message %s not found", mi, edit.messageID)
 		}
 		msg := &messages[idx]
-		baseline, maskedBefore := baselines[mask.MessageID]
-		if !maskedBefore {
+		baseline, editedBefore := baselines[edit.messageID]
+		if !editedBefore {
 			baseline = msg.Revision
-			baselines[mask.MessageID] = baseline
+			baselines[edit.messageID] = baseline
 		}
-		// Same-level masks on one message share one revision bump (equal
+		// Same-level edits on one message share one revision bump (equal
 		// revisions allowed); a later level must strictly increase.
-		if mask.Revision <= baseline || mask.Revision < msg.Revision {
-			return nil, fmt.Errorf("mask[%d]: message %s revision must exceed pre-mask %d and not regress below %d (got %d)", mi, mask.MessageID, baseline, msg.Revision, mask.Revision)
+		if edit.revision <= baseline || edit.revision < msg.Revision {
+			return nil, fmt.Errorf("edit[%d]: message %s revision must exceed pre-edit %d and not regress below %d (got %d)", mi, edit.messageID, baseline, msg.Revision, edit.revision)
 		}
-		if mask.PartIndex < 0 || mask.PartIndex >= len(msg.Parts) {
-			return nil, fmt.Errorf("mask[%d]: message %s part_index %d out of range", mi, mask.MessageID, mask.PartIndex)
+		if edit.partIndex < 0 || edit.partIndex >= len(msg.Parts) {
+			return nil, fmt.Errorf("edit[%d]: message %s part_index %d out of range", mi, edit.messageID, edit.partIndex)
 		}
-		part := &msg.Parts[mask.PartIndex]
+		part := &msg.Parts[edit.partIndex]
 		if part.Kind != PartToolResult || part.ToolResult == nil {
-			return nil, fmt.Errorf("mask[%d]: message %s part %d is not a tool result", mi, mask.MessageID, mask.PartIndex)
+			return nil, fmt.Errorf("edit[%d]: message %s part %d is not a tool result", mi, edit.messageID, edit.partIndex)
 		}
-		if mask.ContentIndex < 0 || mask.ContentIndex >= len(part.ToolResult.Content) {
-			return nil, fmt.Errorf("mask[%d]: message %s part %d content_index %d out of range", mi, mask.MessageID, mask.PartIndex, mask.ContentIndex)
+		if edit.contentIndex < 0 || edit.contentIndex >= len(part.ToolResult.Content) {
+			return nil, fmt.Errorf("edit[%d]: message %s part %d content_index %d out of range", mi, edit.messageID, edit.partIndex, edit.contentIndex)
 		}
-		content := &part.ToolResult.Content[mask.ContentIndex]
+		content := &part.ToolResult.Content[edit.contentIndex]
 		if content.Kind != PartText {
-			return nil, fmt.Errorf("mask[%d]: message %s part %d content %d is not text", mi, mask.MessageID, mask.PartIndex, mask.ContentIndex)
+			return nil, fmt.Errorf("edit[%d]: message %s part %d content %d is not text", mi, edit.messageID, edit.partIndex, edit.contentIndex)
 		}
-		if mask.Placeholder == "" {
-			return nil, fmt.Errorf("mask[%d]: empty placeholder", mi)
+		if edit.text == "" {
+			return nil, fmt.Errorf("edit[%d]: empty replacement", mi)
 		}
-		if err := mask.Artifact.Validate(); err != nil {
-			return nil, fmt.Errorf("mask[%d]: invalid artifact: %w", mi, err)
+		content.Text = edit.text
+		if edit.artifact != nil {
+			if err := edit.artifact.Validate(); err != nil {
+				return nil, fmt.Errorf("edit[%d]: invalid artifact: %w", mi, err)
+			}
+			part.ToolResult.Content = append(part.ToolResult.Content, ContentPart{Kind: PartArtifact, Artifact: edit.artifact})
 		}
-		content.Text = mask.Placeholder
-		artifactRef := mask.Artifact
-		part.ToolResult.Content = append(part.ToolResult.Content, ContentPart{Kind: PartArtifact, Artifact: &artifactRef})
-		msg.Revision = mask.Revision
+		msg.Revision = edit.revision
 	}
 	return messages, nil
 }

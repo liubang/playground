@@ -187,6 +187,10 @@ type ModelEvent struct {
 	CachedInputTokens int64      `json:"cached_input_tokens,omitempty"`
 	StopReason        StopReason `json:"stop_reason,omitempty"`
 	Error             string     `json:"error,omitempty"`
+	// Retryable marks a stream_error as transient (truncated body, transport
+	// drop): re-issuing the request is safe while nothing was delivered
+	// yet. The agent loop only honors it for streams with no activity.
+	Retryable bool `json:"retryable,omitempty"`
 }
 
 // ModelStream is a pull-based stream of model events.

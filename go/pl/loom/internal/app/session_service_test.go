@@ -254,7 +254,7 @@ func TestSessionServiceSubmitPromptAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	result, dedup, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, "key-1")
+	result, dedup, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, "key-1", false)
 	if err != nil {
 		t.Fatalf("SubmitPrompt: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestSessionServiceSubmitPromptAndIdempotency(t *testing.T) {
 	}
 	waitForIdle(t, h.Controller)
 
-	again, dedup, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, "key-1")
+	again, dedup, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, "key-1", false)
 	if err != nil {
 		t.Fatalf("SubmitPrompt(repeat): %v", err)
 	}
@@ -313,7 +313,7 @@ func TestSessionServiceSubscribeEventsReplayAndLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, ""); err != nil {
+	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, "", false); err != nil {
 		t.Fatalf("SubmitPrompt: %v", err)
 	}
 	waitForIdle(t, h.Controller)
@@ -378,7 +378,7 @@ func TestSessionServiceResumeFromStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, ""); err != nil {
+	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, "", false); err != nil {
 		t.Fatalf("SubmitPrompt: %v", err)
 	}
 	waitForIdle(t, h.Controller)
@@ -423,7 +423,7 @@ func TestSessionServiceSnapshotWatermarkHandoff(t *testing.T) {
 	}
 	// The busy session pushes the global sequence forward; the quiet
 	// session's replay ring stays empty (it has no events of its own).
-	if _, _, err := svc.SubmitPrompt(ctx, busy.ID, "work", nil, ""); err != nil {
+	if _, _, err := svc.SubmitPrompt(ctx, busy.ID, "work", nil, "", false); err != nil {
 		t.Fatalf("SubmitPrompt(busy): %v", err)
 	}
 	waitForIdle(t, busy.Controller)
@@ -447,7 +447,7 @@ func TestSessionServiceSnapshotWatermarkHandoff(t *testing.T) {
 		t.Fatalf("SubscribeEvents(quiet, watermark=%d): %v (must accept global watermarks)", snap.EventSeq, err)
 	}
 	// Live events still flow after the watermark handoff.
-	if _, _, err := svc.SubmitPrompt(ctx, quiet.ID, "hello", nil, ""); err != nil {
+	if _, _, err := svc.SubmitPrompt(ctx, quiet.ID, "hello", nil, "", false); err != nil {
 		t.Fatalf("SubmitPrompt(quiet): %v", err)
 	}
 	evt := nextEvent(t, ch)
@@ -469,7 +469,7 @@ func TestSessionServiceSubscribeLatestAfterInvalidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, ""); err != nil {
+	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, "", false); err != nil {
 		t.Fatalf("SubmitPrompt: %v", err)
 	}
 	waitForIdle(t, h.Controller)
@@ -515,7 +515,7 @@ func TestSessionServiceConcurrentIdempotentSubmit(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			res, dedup, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, "same-key")
+			res, dedup, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, "same-key", false)
 			results <- res
 			dedups <- dedup
 			errs <- err
@@ -551,7 +551,7 @@ func TestSessionServiceDraining(t *testing.T) {
 	if _, err := svc.CreateSession(ctx, domain.WorkspaceID{}); !errors.Is(err, ErrDraining) {
 		t.Fatalf("CreateSession after shutdown error = %v, want ErrDraining", err)
 	}
-	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "q", nil, ""); !errors.Is(err, ErrDraining) {
+	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "q", nil, "", false); !errors.Is(err, ErrDraining) {
 		t.Fatalf("SubmitPrompt after shutdown error = %v, want ErrDraining", err)
 	}
 }

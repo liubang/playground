@@ -72,3 +72,53 @@ func TestSteerCellRejectsBlankAndFull(t *testing.T) {
 		t.Fatalf("full Put error = %v, want ErrSteerCellFull", err)
 	}
 }
+
+// TestSteerCellDualQueue pins the delivery-target split: Take drains only
+// the steer (next-step) queue; followups wait for the turn boundary and
+// leave one at a time.
+func TestSteerCellDualQueue(t *testing.T) {
+	cell := NewSteerCell()
+	_ = cell.Put("steer-1")
+	_ = cell.PutFollowup("followup-1")
+	_ = cell.PutFollowup("followup-2")
+	_ = cell.Put("steer-2")
+
+	// Draining steers never touches followups.
+	if got := cell.Take(); !slices.Equal(got, []string{"steer-1", "steer-2"}) {
+		t.Fatalf("Take = %v, want the steer queue in FIFO order", got)
+	}
+	if got := cell.FollowupLen(); got != 2 {
+		t.Fatalf("FollowupLen = %d, want 2 (untouched by the steer drain)", got)
+	}
+
+	// Followups leave one per claim, in order.
+	if got, ok := cell.TakeFollowup(); !ok || got != "followup-1" {
+		t.Fatalf("TakeFollowup = %q, %v; want followup-1, true", got, ok)
+	}
+	if got := cell.PeekFollowups(); !slices.Equal(got, []string{"followup-2"}) {
+		t.Fatalf("PeekFollowups = %v, want [followup-2]", got)
+	}
+	if got, ok := cell.TakeFollowup(); !ok || got != "followup-2" {
+		t.Fatalf("TakeFollowup = %q, %v; want followup-2, true", got, ok)
+	}
+	if got, ok := cell.TakeFollowup(); ok || got != "" {
+		t.Fatalf("TakeFollowup on empty = %q, %v; want \"\", false", got, ok)
+	}
+}
+
+// TestSteerCellSharesCapacityAcrossQueues: the soft cap guards total
+// pending volume regardless of the queue mix.
+func TestSteerCellSharesCapacityAcrossQueues(t *testing.T) {
+	cell := NewSteerCell()
+	for i := range SteerCellCapacity - 1 {
+		if err := cell.Put(string(rune('a' + i))); err != nil {
+			t.Fatalf("Put #%d: %v", i, err)
+		}
+	}
+	if err := cell.PutFollowup("last slot"); err != nil {
+		t.Fatalf("PutFollowup into the last slot: %v", err)
+	}
+	if err := cell.PutFollowup("overflow"); !errors.Is(err, ErrSteerCellFull) {
+		t.Fatalf("full PutFollowup error = %v, want ErrSteerCellFull", err)
+	}
+}
