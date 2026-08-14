@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
@@ -74,6 +75,15 @@ type Run struct {
 	// metadata (AddAssistantMessage), which is what late-arriving user
 	// feedback uses to find the trace again.
 	TraceID string
+	// StartRetryStreak carries the count of consecutive unresolved
+	// start-stage retries observed at recovery time (trailing
+	// model.request_retrying events with no resolution — the signature of
+	// a crash mid-retry). The next model call consumes it so a
+	// crash-looping provider cannot keep resetting its retry budget
+	// (deepseek-harness durable retry counting, adapted to loom's run
+	// scope: a resumed run never re-enters the dead request, so the streak
+	// applies to exactly the next call). In-memory only; never persisted.
+	StartRetryStreak int
 }
 
 // NewRun creates a new Run in the preparing phase.
@@ -322,6 +332,17 @@ func RecoverRun(sessionID domain.SessionID, checkpoint *domain.Checkpoint, messa
 			run.WrapUpPending = dimensionTokens
 		}
 	}
+	run.StartRetryStreak = trailingRetryStreak(events)
+	// Close out a crash-orphaned predecessor (deepseek-harness's
+	// interrupted turn marker): the log's last run never reached a
+	// terminal event, so mark it interrupted before this continuation
+	// opens — analytics and audit consumers never see a zombie run.
+	if orphan := OrphanedRunID(events); !orphan.IsZero() {
+		run.appendEvent(domain.EventRunInterrupted, runInterruptedPayload{
+			RunID:  orphan,
+			Reason: "process exited before the run reached a terminal state",
+		})
+	}
 	run.appendEvent(domain.EventRunCreated, struct {
 		RunID       domain.RunID `json:"run_id"`
 		Recovery    bool         `json:"recovery"`
@@ -347,6 +368,55 @@ func RecoverRun(sessionID domain.SessionID, checkpoint *domain.Checkpoint, messa
 		})
 	}
 	return run, nil
+}
+
+// runInterruptedPayload is the EventRunInterrupted payload: the orphan
+// run being closed out, and why.
+type runInterruptedPayload struct {
+	RunID  domain.RunID `json:"run_id"`
+	Reason string       `json:"reason"`
+}
+
+// OrphanedRunID returns the run left non-terminal at the log tail — the
+// last run.created with no run.completed/failed/cancelled after it, the
+// signature of a process crash (or a kill mid-turn). Zero when the tail
+// run resolved or no run exists.
+func OrphanedRunID(events []domain.Event) domain.RunID {
+	for i := len(events) - 1; i >= 0; i-- {
+		switch events[i].Type {
+		case domain.EventRunCompleted, domain.EventRunFailed, domain.EventRunCancelled:
+			return domain.RunID{}
+		case domain.EventRunCreated:
+			var payload struct {
+				RunID domain.RunID `json:"run_id"`
+			}
+			if err := json.Unmarshal(events[i].Payload, &payload); err != nil {
+				return domain.RunID{}
+			}
+			return payload.RunID
+		}
+	}
+	return domain.RunID{}
+}
+
+// trailingRetryStreak counts the consecutive model.request_retrying
+// events at the log tail: an unresolved trailing run of them (no
+// response, no terminal failure, no newer request) is the signature of a
+// crash mid-retry. Anything resolved — or any newer request boundary —
+// ends the streak.
+func trailingRetryStreak(events []domain.Event) int {
+	streak := 0
+	for i := len(events) - 1; i >= 0; i-- {
+		switch events[i].Type {
+		case domain.EventModelRequestRetrying:
+			streak++
+		case domain.EventModelRequestStarted, domain.EventModelResponseCompleted,
+			domain.EventModelRequestFailed, domain.EventRunCreated,
+			domain.EventRunCompleted, domain.EventRunFailed, domain.EventRunCancelled:
+			return streak
+		}
+	}
+	return streak
 }
 
 func reconcileFileOperation(call domain.ToolCall, audit toolCallAuditPayload, clock domain.Clock, files FileStateReader) (domain.ToolResult, bool, error) {
@@ -690,6 +760,9 @@ func (r *Run) newEvent(evtType domain.EventType, payload any) domain.Event {
 		Type:      evtType,
 		Timestamp: r.Clock.Now(),
 		Payload:   raw,
+		// Informational records are marked so readers older than the type can
+		// skip them without failing the replay (docs: domain.Event.Ignorable).
+		Ignorable: evtType.Informational(),
 	}
 }
 
@@ -1409,10 +1482,39 @@ func (l *Loop) callModel(ctx context.Context) error {
 		return err
 	}
 	var stream domain.ModelStream
+	var agg *StreamAggregator
+	// A recovered run keeps counting retries where the crashed process
+	// left off; consuming the streak here scopes it to exactly this call.
+	attemptBase := l.Run.StartRetryStreak
+	l.Run.StartRetryStreak = 0
+	// The attempt loop spans stream establishment AND consumption
+	// (deepseek-harness retries both stages): a consumption failure that
+	// delivered nothing — no text, reasoning, or tool-call fragment — is
+	// as safely retryable as a start failure, because nothing reached the
+	// UI or the transcript. A failure WITH activity breaks out unretried:
+	// the partial draft is preserved as an interrupted message below.
+	stage := "start"
 	for attempt := 1; ; attempt++ {
+		stage = "start"
 		stream, err = l.Model.Stream(ctx, req)
 		if err == nil {
-			break
+			stage = "stream"
+			agg = NewStreamAggregator(l.Run.Clock, l.StreamHooks).WithIDRewrite(l.toolCallIDTaken())
+			err = consumeStream(stream, agg)
+			_ = stream.Close()
+			if err == nil {
+				break
+			}
+			if agg.HasActivity() {
+				break
+			}
+			if errors.Is(err, io.EOF) {
+				// The pump ended without any terminal or error event: a
+				// silent truncation, retryable like the providers' typed
+				// stream errors.
+				err = domain.NewError(domain.ErrUnavailable, "model stream closed before completion",
+					domain.WithRetryable(true), domain.WithCause(err))
+			}
 		}
 		l.recordGeneration(ctx, trace.GenerationRecord{
 			RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
@@ -1426,14 +1528,14 @@ func (l *Loop) callModel(ctx context.Context) error {
 		}
 		if isContextOverflowError(err) {
 			l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
-				RequestID: req.ID, Stage: "start", Code: errorCodeForAudit(err), Message: err.Error(),
+				RequestID: req.ID, Stage: stage, Code: errorCodeForAudit(err), Message: err.Error(),
 			})
 			return l.handleContextOverflow(ctx, err)
 		}
-		wait, retry := l.startRetryWait(err, attempt)
+		wait, retry := l.startRetryWait(err, attemptBase+attempt)
 		if !retry {
 			l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
-				RequestID: req.ID, Stage: "start", Code: errorCodeForAudit(err), Message: err.Error(),
+				RequestID: req.ID, Stage: stage, Code: errorCodeForAudit(err), Message: err.Error(),
 			})
 			l.terminate(ctx, domain.OutcomeFailed)
 			return fmt.Errorf("model stream: %w", err)
@@ -1442,8 +1544,8 @@ func (l *Loop) callModel(ctx context.Context) error {
 		// announce the wait so frontends keep showing the turn as alive,
 		// then sleep it out instead of killing the run on the first 429.
 		l.Run.appendEvent(domain.EventModelRequestRetrying, modelRequestRetryingPayload{
-			RequestID: req.ID, Stage: "start", Code: errorCodeForAudit(err), Message: err.Error(),
-			Attempt: attempt, MaxAttempts: l.StartRetry.withDefaults().MaxAttempts, WaitMs: wait.Milliseconds(),
+			RequestID: req.ID, Stage: stage, Code: errorCodeForAudit(err), Message: err.Error(),
+			Attempt: attemptBase + attempt, MaxAttempts: l.StartRetry.withDefaults().MaxAttempts, WaitMs: wait.Milliseconds(),
 		})
 		if err := l.flushEvents(ctx); err != nil {
 			l.terminate(ctx, domain.OutcomeFailed)
@@ -1451,7 +1553,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 		}
 		if l.Logger != nil {
 			l.Logger.Warn("model request failed with a retryable error; waiting to retry",
-				"attempt", attempt, "wait", wait, "code", errorCodeForAudit(err), "error", err)
+				"attempt", attempt, "stage", stage, "wait", wait, "code", errorCodeForAudit(err), "error", err)
 		}
 		if sleepErr := sleepContext(ctx, wait); sleepErr != nil {
 			// The wait was cut short by cancellation/shutdown: same routing
@@ -1460,32 +1562,32 @@ func (l *Loop) callModel(ctx context.Context) error {
 			return fmt.Errorf("model stream: %w", sleepErr)
 		}
 	}
-	defer stream.Close()
 
-	agg := NewStreamAggregator(l.Run.Clock, l.StreamHooks).WithIDRewrite(l.toolCallIDTaken())
-	aggErr := consumeStream(stream, agg)
-	if aggErr != nil {
+	if err != nil {
+		// Mid-stream failure WITH delivered content: unretryable inline
+		// (the deltas already streamed to the UI). Preserve the partial
+		// draft as an interrupted message, then fail as before.
 		if agg.HasPartialContent() {
 			l.Run.AddAssistantMessage(agg.InterruptedMessage())
 		}
 		l.recordGeneration(ctx, trace.GenerationRecord{
 			RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
-			Input: messages, StartTime: startedAt, EndTime: l.Run.Clock.Now(), Err: aggErr,
+			Input: messages, StartTime: startedAt, EndTime: l.Run.Clock.Now(), Err: err,
 		})
-		if errors.Is(aggErr, context.Canceled) {
+		if errors.Is(err, context.Canceled) {
 			// Same cancellation routing as the start stage: cancelled, not
 			// failed, and no request_failed event.
 			l.terminate(ctx, domain.OutcomeCancelled)
-			return fmt.Errorf("model stream consumption: %w", aggErr)
+			return fmt.Errorf("model stream consumption: %w", err)
 		}
 		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
-			RequestID: req.ID, Stage: "stream", Code: errorCodeForAudit(aggErr), Message: aggErr.Error(),
+			RequestID: req.ID, Stage: "stream", Code: errorCodeForAudit(err), Message: err.Error(),
 		})
-		if isContextOverflowError(aggErr) {
-			return l.handleContextOverflow(ctx, aggErr)
+		if isContextOverflowError(err) {
+			return l.handleContextOverflow(ctx, err)
 		}
 		l.terminate(ctx, domain.OutcomeFailed)
-		return fmt.Errorf("model stream consumption: %w", aggErr)
+		return fmt.Errorf("model stream consumption: %w", err)
 	}
 	response, stop, inputTokens, outputTokens, err := agg.Finalize()
 	if err != nil {
@@ -2682,6 +2784,8 @@ func (l *Loop) compact(ctx context.Context) error {
 	// no parallel bookkeeping (docs/SURFACE_DESIGN.md §4.2).
 	var auditOutputs []maskedOutput
 	maskedBytes := 0
+	prunedOutputs := 0
+	prunedBytes := 0
 	if ops.Masks != nil {
 		for _, mask := range ops.Masks.Masks {
 			maskedBytes += mask.OriginalBytes
@@ -2690,6 +2794,10 @@ func (l *Loop) compact(ctx context.Context) error {
 				Bytes:     mask.OriginalBytes,
 				Artifact:  mask.Artifact.ID.String(),
 			})
+		}
+		prunedOutputs = len(ops.Masks.Prunes)
+		for _, prune := range ops.Masks.Prunes {
+			prunedBytes += prune.OriginalBytes
 		}
 	}
 	archivedMessages := 0
@@ -2706,6 +2814,8 @@ func (l *Loop) compact(ctx context.Context) error {
 		Phase:                 phase,
 		MaskedOutputs:         len(auditOutputs),
 		MaskedBytes:           maskedBytes,
+		PrunedOutputs:         prunedOutputs,
+		PrunedBytes:           prunedBytes,
 		ArchivedMessages:      archivedMessages,
 		EstTokensBefore:       tokensBefore,
 		EstTokensAfter:        tokensAfter,
@@ -2716,12 +2826,14 @@ func (l *Loop) compact(ctx context.Context) error {
 		TruncatedUserMessages: truncatedUserMessages,
 		Outputs:               auditOutputs,
 	})
-	if l.Logger != nil && (len(auditOutputs) > 0 || archivedMessages > 0 || summarized) {
+	if l.Logger != nil && (len(auditOutputs) > 0 || prunedOutputs > 0 || archivedMessages > 0 || summarized) {
 		l.Logger.Info("context compacted",
 			"trigger", trigger,
 			"phase", phase,
 			"masked_outputs", len(auditOutputs),
 			"masked_bytes", maskedBytes,
+			"pruned_outputs", prunedOutputs,
+			"pruned_bytes", prunedBytes,
 			"archived_messages", archivedMessages,
 			"summarized", summarized,
 			"est_tokens_before", tokensBefore,
@@ -2733,6 +2845,8 @@ func (l *Loop) compact(ctx context.Context) error {
 			"phase":             phase,
 			"masked_outputs":    fmt.Sprintf("%d", len(auditOutputs)),
 			"masked_bytes":      fmt.Sprintf("%d", maskedBytes),
+			"pruned_outputs":    fmt.Sprintf("%d", prunedOutputs),
+			"pruned_bytes":      fmt.Sprintf("%d", prunedBytes),
 			"archived_messages": fmt.Sprintf("%d", archivedMessages),
 			"summarized":        fmt.Sprintf("%t", summarized),
 			"est_tokens_before": fmt.Sprintf("%d", tokensBefore),

@@ -111,6 +111,10 @@ type Client interface {
 	// SubmitPrompt sends a user prompt. While a turn is busy the prompt is
 	// queued for steering (TUI semantics, docs/SERVE_DESIGN.md §16.3 D1).
 	SubmitPrompt(ctx context.Context, prompt string, images []domain.ImageContent) (SubmitResult, error)
+	// SubmitFollowup queues a text-only prompt for AFTER the busy turn
+	// (next-turn delivery, one per turn boundary) instead of steering
+	// into it. On an idle session it simply starts the turn.
+	SubmitFollowup(ctx context.Context, prompt string) (SubmitResult, error)
 	// CancelTurn cancels the active turn.
 	CancelTurn(ctx context.Context) error
 

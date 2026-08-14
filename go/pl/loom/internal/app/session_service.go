@@ -691,12 +691,17 @@ func (s *SessionService) SetSessionArchived(ctx context.Context, id domain.Sessi
 
 // SubmitPrompt forwards a prompt to the session's controller. While the
 // session is busy the prompt steers the active turn (TUI semantics,
-// docs/SERVE_DESIGN.md §16.3 D1). idemKey, when non-empty, makes the call
+// docs/SERVE_DESIGN.md §16.3 D1); with followup=true it queues for AFTER
+// the busy turn instead (next-turn delivery, one per turn boundary).
+// Followups are text-only. idemKey, when non-empty, makes the call
 // idempotent within this process: a repeat returns the first result with
 // deduplicated=true (§4.7).
-func (s *SessionService) SubmitPrompt(ctx context.Context, id domain.SessionID, prompt string, images []domain.ImageContent, idemKey string) (result SubmitResult, deduplicated bool, err error) {
+func (s *SessionService) SubmitPrompt(ctx context.Context, id domain.SessionID, prompt string, images []domain.ImageContent, idemKey string, followup bool) (result SubmitResult, deduplicated bool, err error) {
 	if s.isClosing() {
 		return SubmitResult{}, false, ErrDraining
+	}
+	if followup && len(images) > 0 {
+		return SubmitResult{}, false, domain.NewError(domain.ErrInvalidInput, "followups are text-only; send images with a regular prompt")
 	}
 	h, err := s.handle(id)
 	if err != nil {
@@ -739,7 +744,11 @@ func (s *SessionService) SubmitPrompt(ctx context.Context, id domain.SessionID, 
 	if s.maxActiveTurns > 0 && h.Controller.State() == ControllerStateIdle && s.activeTurns() >= s.maxActiveTurns {
 		return SubmitResult{}, false, ErrTooManyTurns
 	}
-	result, err = h.Controller.SubmitPromptWithImages(ctx, prompt, images)
+	if followup {
+		result, err = h.Controller.SubmitFollowup(ctx, prompt)
+	} else {
+		result, err = h.Controller.SubmitPromptWithImages(ctx, prompt, images)
+	}
 	if err != nil {
 		return SubmitResult{}, false, err
 	}

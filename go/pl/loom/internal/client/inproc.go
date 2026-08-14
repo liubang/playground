@@ -119,7 +119,16 @@ func (c *inprocClient) SubmitPrompt(ctx context.Context, prompt string, images [
 	if err != nil {
 		return SubmitResult{}, err
 	}
-	result, _, err := c.service.SubmitPrompt(ctx, h.ID, prompt, images, "")
+	result, _, err := c.service.SubmitPrompt(ctx, h.ID, prompt, images, "", false)
+	return result, err
+}
+
+func (c *inprocClient) SubmitFollowup(ctx context.Context, prompt string) (SubmitResult, error) {
+	h, err := c.bound()
+	if err != nil {
+		return SubmitResult{}, err
+	}
+	result, _, err := c.service.SubmitPrompt(ctx, h.ID, prompt, nil, "", true)
 	return result, err
 }
 

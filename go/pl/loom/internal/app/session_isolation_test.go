@@ -141,7 +141,7 @@ func TestServeSessionsDoNotCrossTalk(t *testing.T) {
 	}
 
 	// --- turn A1: goal/plan writes ---
-	if _, _, err := svc.SubmitPrompt(ctx, hA.ID, "question-A", nil, ""); err != nil {
+	if _, _, err := svc.SubmitPrompt(ctx, hA.ID, "question-A", nil, "", false); err != nil {
 		t.Fatalf("SubmitPrompt(A1): %v", err)
 	}
 	waitForIdle(t, hA.Controller)
@@ -175,7 +175,7 @@ func TestServeSessionsDoNotCrossTalk(t *testing.T) {
 	}
 
 	// --- turn A2: question + steer isolation ---
-	if _, _, err := svc.SubmitPrompt(ctx, hA.ID, "ask something", nil, ""); err != nil {
+	if _, _, err := svc.SubmitPrompt(ctx, hA.ID, "ask something", nil, "", false); err != nil {
 		t.Fatalf("SubmitPrompt(A2): %v", err)
 	}
 	var pending []domain.EventID
@@ -195,7 +195,7 @@ func TestServeSessionsDoNotCrossTalk(t *testing.T) {
 	}
 
 	// While A is busy, a new prompt steers A — and only A.
-	if _, _, err := svc.SubmitPrompt(ctx, hA.ID, "steer-A", nil, ""); err != nil {
+	if _, _, err := svc.SubmitPrompt(ctx, hA.ID, "steer-A", nil, "", false); err != nil {
 		t.Fatalf("SubmitPrompt(steer-A): %v", err)
 	}
 	if got := hA.Runtime.SteerCell.Len(); got != 1 {
@@ -246,7 +246,7 @@ func TestServeSessionsDoNotCrossTalk(t *testing.T) {
 	waitForIdle(t, hA.Controller)
 
 	// --- turn B1: env attribution + no cross-contamination in requests ---
-	if _, _, err := svc.SubmitPrompt(ctx, hB.ID, "question-B", nil, ""); err != nil {
+	if _, _, err := svc.SubmitPrompt(ctx, hB.ID, "question-B", nil, "", false); err != nil {
 		t.Fatalf("SubmitPrompt(B1): %v", err)
 	}
 	waitForIdle(t, hB.Controller)

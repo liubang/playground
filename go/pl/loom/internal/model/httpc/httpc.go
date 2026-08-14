@@ -33,6 +33,7 @@ import (
 	"math/rand/v2"
 	"mime"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -225,6 +226,20 @@ func AsStatusError(err error) (*StatusError, bool) {
 	return nil, false
 }
 
+// quotaExceededPattern fingerprints provider quota/billing exhaustion in
+// an error message (deepseek-harness isQuotaExceededError style): such
+// failures commonly ride an HTTP 429 but are NOT transient rate limits —
+// no window wait restores an exhausted balance.
+var quotaExceededPattern = regexp.MustCompile(
+	`(?i)\b(?:insufficient[\s_-]+(?:quota|balance|credits?)|(?:quota|usage[\s_-]+limit)[\s_-]+(?:exceeded|exhausted|reached)|(?:exceeded|exhausted|reached)[\s_-]+(?:your[\s_-]+)?(?:current[\s_-]+)?quota)\b`,
+)
+
+// isQuotaExceededMessage reports whether a provider error message signals
+// quota/billing exhaustion rather than a transient condition.
+func isQuotaExceededMessage(message string) bool {
+	return quotaExceededPattern.MatchString(message)
+}
+
 // ToDomainError maps a Post failure onto the domain error vocabulary so
 // upper layers can classify it (rate limit vs. permission vs. transient
 // failure) without string matching, and so the agent loop can wait out
@@ -242,10 +257,15 @@ func ToDomainError(prefix string, err error) error {
 	if se, ok := AsStatusError(err); ok {
 		msg := prefix + ": " + se.Error()
 		switch {
-		case se.Code == http.StatusTooManyRequests:
-			return domain.NewError(domain.ErrRateLimited, msg, domain.WithRetryable(true), domain.WithCause(err))
 		case se.Code == http.StatusUnauthorized || se.Code == http.StatusForbidden:
 			return domain.NewError(domain.ErrPermission, msg, domain.WithCause(err))
+		case isQuotaExceededMessage(se.Message):
+			// Quota exhaustion rides any status (most often 429); classify
+			// before the rate-limit branch so the loop fails fast with a
+			// diagnosable error instead of burning its retry budget.
+			return domain.NewError(domain.ErrQuotaExhausted, msg, domain.WithCause(err))
+		case se.Code == http.StatusTooManyRequests:
+			return domain.NewError(domain.ErrRateLimited, msg, domain.WithRetryable(true), domain.WithCause(err))
 		case se.Code == http.StatusBadRequest:
 			return domain.NewError(domain.ErrInvalidInput, msg, domain.WithCause(err))
 		case se.Code == http.StatusRequestTimeout || se.Code >= 500:

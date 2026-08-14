@@ -105,11 +105,11 @@ export function createApi({ getToken, onUnauthorized }) {
     snapshot: (id) => req('GET', `/v1/sessions/${id}/snapshot`),
     transcript: (id, after = 0, limit = 200) =>
       req('GET', `/v1/sessions/${id}/transcript?after=${after}&limit=${limit}`),
-    submitPrompt: (id, prompt, idemKey, images = []) =>
+    submitPrompt: (id, prompt, idemKey, images = [], followup = false) =>
       req(
         'POST',
         `/v1/sessions/${id}/prompts`,
-        { prompt, ...(images.length ? { images } : {}) },
+        { prompt, ...(images.length ? { images } : {}), ...(followup ? { followup: true } : {}) },
         { 'Idempotency-Key': idemKey },
       ),
     cancelTurn: (id) => req('POST', `/v1/sessions/${id}/cancel`, {}),

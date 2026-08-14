@@ -988,9 +988,9 @@ func finishChatReadError(ctx context.Context, state *canonicalState, err error, 
 		// same way the responses path does instead of discarding the reply.
 		finishChatDone(state, emit)
 	case errors.Is(err, io.EOF):
-		finishWithError(state, fmt.Errorf("openai provider: stream closed before [DONE]"), domain.StopProviderError, emit)
+		finishTransientError(state, fmt.Errorf("openai provider: stream closed before [DONE]"), emit)
 	default:
-		finishWithError(state, fmt.Errorf("openai provider: stream read failed: %w", err), domain.StopProviderError, emit)
+		finishTransientError(state, fmt.Errorf("openai provider: stream read failed: %w", err), emit)
 	}
 }
 
@@ -1003,17 +1003,29 @@ func finishResponsesReadError(ctx context.Context, state *canonicalState, err er
 		// instead of sending the optional [DONE] sentinel.
 		state.flushBufferedTerminal(emit)
 	case errors.Is(err, io.EOF):
-		finishWithError(state, fmt.Errorf("openai provider: responses stream closed before terminal event"), domain.StopProviderError, emit)
+		finishTransientError(state, fmt.Errorf("openai provider: responses stream closed before terminal event"), emit)
 	default:
-		finishWithError(state, fmt.Errorf("openai provider: stream read failed: %w", err), domain.StopProviderError, emit)
+		finishTransientError(state, fmt.Errorf("openai provider: stream read failed: %w", err), emit)
 	}
 }
 
 func finishWithError(state *canonicalState, err error, stop domain.StopReason, emit stream.Emitter) {
+	finishStreamError(state, err, stop, false, emit)
+}
+
+// finishTransientError ends the stream on a transient read failure
+// (truncated body, transport drop): the error is marked retryable so the
+// agent loop can re-issue the request while nothing was delivered yet.
+func finishTransientError(state *canonicalState, err error, emit stream.Emitter) {
+	finishStreamError(state, err, domain.StopProviderError, true, emit)
+}
+
+func finishStreamError(state *canonicalState, err error, stop domain.StopReason, retryable bool, emit stream.Emitter) {
 	_ = state.closeOpen(emit)
 	emit(domain.ModelEvent{
-		Kind:  domain.ModelEventStreamError,
-		Error: err.Error(),
+		Kind:      domain.ModelEventStreamError,
+		Error:     err.Error(),
+		Retryable: retryable,
 	})
 	emit(domain.ModelEvent{
 		Kind:       domain.ModelEventResponseEnd,

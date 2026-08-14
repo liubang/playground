@@ -379,12 +379,16 @@ type ContextUsagePayload struct {
 	LastCallInputTokens int64 `json:"last_call_input_tokens,omitempty"`
 }
 
-// SteerQueuedPayload reports a user message accepted into the pending-steer
+// SteerQueuedPayload reports a user message accepted into a pending
 // queue while a turn is busy. Ephemeral: the pending panel rebuilds from
-// Snapshot.PendingSteers after a resubscribe.
+// Snapshot.PendingSteers/PendingFollowups after a resubscribe.
 type SteerQueuedPayload struct {
 	Text     string `json:"text"`
 	QueueLen int    `json:"queue_len"`
+	// Queue names the delivery target: "" (or "steer") injects into the
+	// running turn at the next model call; "followup" holds the message
+	// until the turn ends and relays it as the next turn's prompt.
+	Queue string `json:"queue,omitempty"`
 }
 
 // SteerInjectedPayload reports a queued message drained by the agent loop

@@ -282,11 +282,11 @@ func TestInspectSessionMatchesPureReplayWithDirectives(t *testing.T) {
 	// The checkpoint carries the post-mask surface, exactly as flushEvents
 	// persists it in the same transaction as the directive event.
 	surface, err := domain.ApplyMaskDirective([]domain.Message{callMsg, resultMsg},
-		[]domain.MaskedPart{{
+		domain.ContextMaskedPayload{Masks: []domain.MaskedPart{{
 			MessageID: resultMsg.ID, PartIndex: 0, ContentIndex: 0,
 			OriginalBytes: 4000, Artifact: maskedRef,
 			Placeholder: "[tool output compacted 3.9KB externalized]", Revision: 2,
-		}})
+		}}})
 	if err != nil {
 		t.Fatalf("ApplyMaskDirective: %v", err)
 	}

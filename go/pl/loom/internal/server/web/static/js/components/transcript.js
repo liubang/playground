@@ -42,6 +42,7 @@ export class Transcript {
     this.approvals = new Map() // approval_id → card api
     this.questions = new Map() // question_id → card api
     this.steers = [] // pending steer notice（{el, text}，FIFO）
+    this.followups = [] // pending followup notice（{el, text}，FIFO，turn 边界接力）
     this.following = true
     this._rafPending = false
     this._pendingStreamTs = '' // 首个 text_delta 事件时间，收笔注入草稿操作行
@@ -75,6 +76,7 @@ export class Transcript {
     this.approvals.clear()
     this.questions.clear()
     this.steers = []
+    this.followups = []
     this.following = true
     this._pendingStreamTs = ''
     this._turnAssistant = null
@@ -277,8 +279,9 @@ export class Transcript {
       if (pr.kind === 'approval' && pr.approval) this._addApprovalCard(pr.approval)
       else if (pr.kind === 'question' && pr.question) this._addQuestionCard(pr.question)
     }
-    // pending steer 队列重建（STEER_DESIGN §4.5：snapshot 兜底）
+    // pending steer/followup 队列重建（STEER_DESIGN §4.5：snapshot 兜底）
     for (const text of snap.pending_steers || []) this._addSteerNotice(text)
+    for (const text of snap.pending_followups || []) this._addFollowupNotice(text)
     // 上一轮失败的持久错误块：实时路径的错误块不随 snapshot 重建，
     // 没有它的话切换会话/刷新后失败痕迹就消失了
     if (snap.last_error && snap.last_error.message) {
@@ -316,6 +319,7 @@ export class Transcript {
         this._hideThinking()
         this._turnErrorShown = false
         this._drainSteerNotices(p.prompt || '')
+        this._drainFollowupNotices(p.prompt || '')
         // 图片附件随事件载荷实时渲染（artifact 引用，鉴权加载），不再
         // 依赖切会话后的 snapshot 重放才能看到。
         this._append(userBlock(p.prompt || '', evt.time || '', p.images, this.io.fetchArtifactURL))
@@ -420,7 +424,8 @@ export class Transcript {
         this._showThinking()
         break
       case 'steer.queued':
-        this._addSteerNotice(p.text || p.prompt || '')
+        if (p.queue === 'followup') this._addFollowupNotice(p.text || p.prompt || '')
+        else this._addSteerNotice(p.text || p.prompt || '')
         break
       case 'steer.injected': {
         // cell 严格 FIFO：移除头部第一条 queued notice，转为正式 user block
@@ -472,6 +477,23 @@ export class Transcript {
     const n = noticeBlock(`steer queued: “${text}”`)
     this.steers.push({ el: n, text })
     this._append(n)
+  }
+
+  _addFollowupNotice(text) {
+    const n = noticeBlock(`followup queued: “${text}” — runs as the next turn`)
+    this.followups.push({ el: n, text })
+    this._append(n)
+  }
+
+  // followup 在 turn 边界接力：turn.started 的 prompt 精确等于队首文本时
+  // 移除该 notice（每轮只接力一条）；不匹配则说明本轮由别的提交触发。
+  _drainFollowupNotices(prompt) {
+    if (this.followups.length === 0) return
+    const head = this.followups[0]
+    if (head.text && head.text === prompt) {
+      head.el.remove()
+      this.followups.shift()
+    }
   }
 
   // turn.started 的 prompt 可能是 steer 接力产物（leftover 以 "\n\n" 合并）：

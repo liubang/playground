@@ -826,8 +826,49 @@ func (m Model) runChatAction(action Action) (tea.Model, tea.Cmd) {
 		return m, m.pasteClipboardImageCmd()
 	case ActionJumpToBottom:
 		m.resumeFollowTail()
+	case ActionQueueFollowup:
+		return m.queueFollowup()
 	}
 	return m, nil
+}
+
+// queueFollowup submits the composer draft into the next-turn queue: it
+// runs as its own turn after the busy one instead of steering into it.
+// Text-only, like steers; no optimistic echo — the followup panel entry
+// (fed by the steer.queued event) is the pending indicator.
+func (m Model) queueFollowup() (tea.Model, tea.Cmd) {
+	value := strings.TrimSpace(m.textArea.Value())
+	if value == "" {
+		return m, nil
+	}
+	if strings.HasPrefix(value, "/") {
+		m.setStatus("Slash commands cannot be queued as followups", true)
+		return m, nil
+	}
+	if m.eventsDead {
+		m.setStatus("Cannot submit: runtime event stream is down. Press Ctrl+C to exit.", true)
+		return m, nil
+	}
+	m.textArea.Reset()
+	m.quitConfirm = false
+	// An idle followup starts its turn immediately: echo the user block
+	// optimistically like a normal submit. While busy the followup panel
+	// entry (fed by steer.queued) is the pending indicator instead.
+	if m.controllerState == app.ControllerStateIdle {
+		m.pendingSubmitID = m.blocks.AddPendingUserBlock(value)
+		m.pendingSubmitPrompt = value
+	}
+	return m, m.submitFollowupCmd(value)
+}
+
+// submitFollowupCmd delivers a followup submission; the ack reuses
+// promptSubmittedMsg (no pending echo was created, so the handler's
+// block bookkeeping is a no-op).
+func (m Model) submitFollowupCmd(prompt string) tea.Cmd {
+	return func() tea.Msg {
+		result, err := m.controller.SubmitFollowup(context.Background(), prompt)
+		return promptSubmittedMsg{prompt: prompt, result: result, err: err}
+	}
 }
 
 // routeFinderKey translates keys for every finder mode (docs/
@@ -1376,6 +1417,11 @@ func splitShellFields(text string) []string {
 
 func (m Model) handlePromptSubmitted(msg promptSubmittedMsg) tea.Model {
 	if msg.err == nil {
+		if msg.result.Followup {
+			m.setStatus(fmt.Sprintf("Queued as followup (%d pending) — runs as its own turn after this one", msg.result.QueueLen), false)
+			m.pendingSubmitID, m.pendingSubmitPrompt = "", ""
+			return m
+		}
 		if msg.result.Steered {
 			// The optimistic echo must not become a transcript user block:
 			// the message lives in the steer panel until the loop injects it
@@ -1576,6 +1622,7 @@ func (m Model) handleSessionSwitched(msg sessionSwitchedMsg) (tea.Model, tea.Cmd
 	m.pendingQuestion = nil
 	m.choiceList = nil
 	m.pendingSteers = nil
+	m.pendingFollowups = nil
 	m.subOverlay = nil
 	m.mode = ModeChat
 	m.setStatus(msg.action.success, false)
@@ -1700,6 +1747,7 @@ func (m Model) handleRewindFinished(msg rewindFinishedMsg) (tea.Model, tea.Cmd) 
 	m.pendingQuestion = nil
 	m.choiceList = nil
 	m.pendingSteers = nil
+	m.pendingFollowups = nil
 	m.subOverlay = nil
 	m.mode = ModeChat
 	out := msg.outcome
@@ -2109,6 +2157,7 @@ func (m Model) handleSnapshot(msg snapshotMsg) (tea.Model, tea.Cmd) {
 	}
 	m.workspace = msg.snapshot.WorkspaceRoot
 	m.pendingSteers = msg.snapshot.PendingSteers
+	m.pendingFollowups = msg.snapshot.PendingFollowups
 	m.usage = msg.snapshot.Usage
 	if sessionChanged || (m.initialSnapshotPending && len(m.blocks.Order) == 0) {
 		m.blocks = RebuildTranscript(msg.snapshot.Messages)
@@ -2224,6 +2273,15 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 			m.setStatus(fmt.Sprintf("Relayed %d queued message(s) into this turn", n), false)
 		}
 		m.pendingSteers = nil
+		// A turn start consumes the followup queue head when it is the
+		// relayed prompt (FIFO, one per turn boundary); a turn started by
+		// an unrelated submission leaves the queue untouched.
+		if len(m.pendingFollowups) > 0 {
+			var payload runtimeevent.TurnStartedPayload
+			if err := json.Unmarshal(evt.Payload, &payload); err == nil && payload.Prompt == m.pendingFollowups[0] {
+				m.pendingFollowups = m.pendingFollowups[1:]
+			}
+		}
 		// The panel shows the current turn's plan only: a new prompt starts
 		// the display fresh (Claude Code clears tasks between turns). The
 		// runtime plan itself is untouched — an unfinished plan is still
@@ -2233,7 +2291,11 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 	case runtimeevent.KindSteerQueued:
 		var payload runtimeevent.SteerQueuedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
-			m.pendingSteers = append(m.pendingSteers, payload.Text)
+			if payload.Queue == "followup" {
+				m.pendingFollowups = append(m.pendingFollowups, payload.Text)
+			} else {
+				m.pendingSteers = append(m.pendingSteers, payload.Text)
+			}
 		}
 	case runtimeevent.KindSteerInjected:
 		// The cell is FIFO, so injected messages leave the panel head-first;

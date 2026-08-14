@@ -74,6 +74,9 @@ type mockEntry struct {
 	// would consume the following scripted entries.
 	Fail       bool
 	FailStatus int
+	// FailBody replaces the default error body (e.g. to inject provider
+	// quota-exhaustion text riding a 429).
+	FailBody string
 	// Match routes this entry to the first unconsumed request whose body
 	// contains the substring; empty matches anything. Entries are consumed
 	// in declaration order among the matching ones — parallel sub-agents
@@ -133,7 +136,11 @@ func (m *mockOpenAI) handleChatCompletions(w http.ResponseWriter, r *http.Reques
 		if status == 0 {
 			status = http.StatusInternalServerError
 		}
-		http.Error(w, `{"error":{"message":"mock injected provider error"}}`, status)
+		body := entry.FailBody
+		if body == "" {
+			body = `{"error":{"message":"mock injected provider error"}}`
+		}
+		http.Error(w, body, status)
 		return
 	}
 	if entry.Delay > 0 {
@@ -183,6 +190,13 @@ func (m *mockOpenAI) handleChatCompletions(w http.ResponseWriter, r *http.Reques
 		"usage":   map[string]any{"prompt_tokens": entry.UsageIn, "completion_tokens": entry.UsageOut},
 	})
 	fmt.Fprint(w, "data: [DONE]\n\n")
+}
+
+// requestCount reports how many requests reached the mock.
+func (m *mockOpenAI) requestCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.requests)
 }
 
 // provider builds the real openai provider pointed at the mock.
@@ -573,6 +587,79 @@ func TestE2EMaskExternalizesWithReadablePath(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "abcdefghij") {
 		t.Fatalf("artifact does not hold the original output (%d bytes)", len(data))
+	}
+}
+
+// E9: a plain 429 is a transient rate limit — the real provider stack
+// classifies it as retryable and the loop waits out the window instead of
+// killing the run (bounded by StartRetryPolicy).
+func TestE2ERateLimitRetriedThroughProviderStack(t *testing.T) {
+	ws := t.TempDir()
+	mock := newMockOpenAI(t, []mockEntry{
+		{Fail: true, FailStatus: http.StatusTooManyRequests},
+		{Text: "recovered after the rate window", UsageIn: 50, UsageOut: 10},
+	})
+	registry, artStore := realEnv(t, ws)
+	run := newBudgetRun(t, domain.DefaultLimits())
+	loop := newRealLoop(run, mock.provider(t), registry, artStore,
+		agent.NewWindowModel(200_000, 200_000, domain.DefaultContextConfig()))
+	loop.StartRetry = agent.StartRetryPolicy{
+		MaxAttempts: 3, InitialWait: 10 * time.Millisecond, MaxWait: 20 * time.Millisecond, MaxHintWait: 50 * time.Millisecond,
+	}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v, want the 429 waited out and retried", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+	if got := mock.requestCount(); got != 2 {
+		t.Fatalf("mock requests = %d, want 2 (429 then success)", got)
+	}
+	retrying := runEvents(run, domain.EventModelRequestRetrying)
+	if len(retrying) != 1 || !strings.Contains(string(retrying[0]), `"code":"rate_limited"`) {
+		t.Fatalf("expected one rate_limited retrying event, got %s", retrying)
+	}
+	if failed := runEvents(run, domain.EventModelRequestFailed); len(failed) != 0 {
+		t.Fatalf("a recovered retry must not emit request_failed: %s", failed)
+	}
+}
+
+// E10: a 429 carrying quota-exhaustion text is NOT a transient rate
+// limit — no window wait restores an exhausted balance, so the run fails
+// fast with a diagnosable quota_exhausted audit.
+func TestE2EQuotaExhaustionFailsFast(t *testing.T) {
+	ws := t.TempDir()
+	mock := newMockOpenAI(t, []mockEntry{
+		{
+			Fail: true, FailStatus: http.StatusTooManyRequests,
+			FailBody: `{"error":{"message":"insufficient_quota: remaining quota is zero"}}`,
+		},
+		{Text: "unreached", UsageIn: 50, UsageOut: 10},
+	})
+	registry, artStore := realEnv(t, ws)
+	run := newBudgetRun(t, domain.DefaultLimits())
+	loop := newRealLoop(run, mock.provider(t), registry, artStore,
+		agent.NewWindowModel(200_000, 200_000, domain.DefaultContextConfig()))
+	loop.StartRetry = agent.StartRetryPolicy{
+		MaxAttempts: 3, InitialWait: 10 * time.Millisecond, MaxWait: 20 * time.Millisecond, MaxHintWait: 50 * time.Millisecond,
+	}
+
+	if err := loop.Execute(context.Background()); err == nil {
+		t.Fatal("expected quota exhaustion to fail the run")
+	}
+	if run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("outcome = %s, want failed", run.State.Outcome)
+	}
+	if got := mock.requestCount(); got != 1 {
+		t.Fatalf("mock requests = %d, want 1 (quota errors are never retried)", got)
+	}
+	if retrying := runEvents(run, domain.EventModelRequestRetrying); len(retrying) != 0 {
+		t.Fatalf("quota exhaustion must not be retried: %s", retrying)
+	}
+	failed := runEvents(run, domain.EventModelRequestFailed)
+	if len(failed) != 1 || !strings.Contains(string(failed[0]), `"code":"quota_exhausted"`) {
+		t.Fatalf("expected one quota_exhausted request_failed, got %s", failed)
 	}
 }
 

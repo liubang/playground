@@ -57,7 +57,9 @@ export class Composer {
     // 附件：[{name, mediaType, data, previewUrl}] —— data 为 base64（无 data: 前缀）
     this.attachments = []
 
-    const submit = () => {
+    // followup=true：排入下一轮队列（turn 结束后接力为下一轮的 prompt），
+    // 而不是注入当前 turn（deepseek-harness 的 next-turn 投递）。
+    const submit = (followup = false) => {
       if (this.readOnly) return // 只读会话（子 agent）：不允许追问
       const text = this.ta.value.trim()
       if (!text && this.attachments.length === 0) return
@@ -67,10 +69,11 @@ export class Composer {
           media_type: a.mediaType,
           data: a.data,
         })),
+        followup,
       )
     }
 
-    sendBtn.onclick = submit
+    sendBtn.onclick = () => submit()
     cancelBtn.onclick = onCancel
 
     this.ta.addEventListener('compositionstart', () => {
@@ -82,7 +85,8 @@ export class Composer {
     this.ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !this.composing && !e.isComposing) {
         e.preventDefault()
-        submit()
+        // Ctrl/Cmd+Enter：排队到下一轮；普通 Enter：steer 当前轮 / 直接发送
+        submit(e.ctrlKey || e.metaKey)
       }
     })
     // 粘贴：剪贴板里只取图片项；纯文本走默认插入。截图（Cmd+V）命中此路径。
@@ -287,10 +291,12 @@ export class Composer {
     }
     if (this.focused) {
       this.ta.placeholder = this.running
-        ? 'Enter to steer the running turn · Shift+Enter for newline'
+        ? 'Enter to steer the running turn · Ctrl+Enter to queue for the next turn · Shift+Enter for newline'
         : 'Enter to send · Shift+Enter for newline · paste/drop images'
     } else {
-      this.ta.placeholder = this.running ? 'Steer this turn…' : 'Message loom…'
+      this.ta.placeholder = this.running
+        ? 'Steer this turn… (Ctrl+Enter queues for next turn)'
+        : 'Message loom…'
     }
   }
 
