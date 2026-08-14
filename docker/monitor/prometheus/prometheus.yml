@@ -22,8 +22,10 @@ scrape_configs:
       - targets: ["localhost:9090"]
   # FoundationDB 集群（../fdb 模块）：fdb-exporter 与 Prometheus 同在 monitor 网络。
   # fdb 未启动时该 target 显示 DOWN，不影响其他 job。
+  # 配套 Grafana 面板按 namespace="$namespace" 过滤，这里打上 namespace=docker 适配。
   - job_name: "foundationdb"
     static_configs:
-      - targets: ["fdb-exporter:9189"]
+      - targets: ["fdb-exporter:9444"]
         labels:
           cluster: "docker"
+          namespace: "docker"
