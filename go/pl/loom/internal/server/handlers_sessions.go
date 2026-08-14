@@ -254,6 +254,9 @@ type submitPromptRequest struct {
 	Prompt         string                `json:"prompt"`
 	Images         []domain.ImageContent `json:"images,omitempty"`
 	IdempotencyKey string                `json:"idempotency_key,omitempty"`
+	// Followup queues the prompt for AFTER the busy turn (next-turn
+	// delivery) instead of steering into it. Text-only.
+	Followup bool `json:"followup,omitempty"`
 }
 
 func (s *Server) handleSubmitPrompt(w http.ResponseWriter, r *http.Request) {
@@ -275,13 +278,13 @@ func (s *Server) handleSubmitPrompt(w http.ResponseWriter, r *http.Request) {
 	if idemKey == "" {
 		idemKey = req.IdempotencyKey
 	}
-	result, deduplicated, err := s.svc.SubmitPrompt(r.Context(), id, req.Prompt, req.Images, idemKey)
+	result, deduplicated, err := s.svc.SubmitPrompt(r.Context(), id, req.Prompt, req.Images, idemKey, req.Followup)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	promptHash := sha256.Sum256([]byte(req.Prompt))
-	s.auditf("prompt.submit", id, "prompt_len", len(req.Prompt), "prompt_hash", hex.EncodeToString(promptHash[:8]), "steered", result.Steered, "deduplicated", deduplicated)
+	s.auditf("prompt.submit", id, "prompt_len", len(req.Prompt), "prompt_hash", hex.EncodeToString(promptHash[:8]), "steered", result.Steered, "followup", result.Followup, "deduplicated", deduplicated)
 	status := http.StatusAccepted
 	if deduplicated {
 		status = http.StatusOK
@@ -289,6 +292,7 @@ func (s *Server) handleSubmitPrompt(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, map[string]any{
 		"turn":         result.Turn,
 		"steered":      result.Steered,
+		"followup":     result.Followup,
 		"queue_len":    result.QueueLen,
 		"deduplicated": deduplicated,
 	})

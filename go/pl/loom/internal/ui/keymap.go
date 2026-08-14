@@ -52,6 +52,10 @@ const (
 	ActionCopyLastReply    Action = "copy_last_reply"
 	ActionJumpToBottom     Action = "jump_to_bottom"
 	ActionPasteImage       Action = "paste_image"
+	// ActionQueueFollowup submits the composer draft into the next-turn
+	// queue: it runs as its own turn after the busy one, instead of
+	// steering into it (deepseek-harness followup semantics).
+	ActionQueueFollowup Action = "queue_followup"
 
 	// ContextPicker: keys available in both finder modes (insert and
 	// normal). Mode-specific runes (j/k/g/G/q/i in normal mode) are
@@ -80,6 +84,7 @@ var defaultBindings = map[KeyContext][]struct {
 		{ActionCopyLastReply, []string{"ctrl+y"}},
 		{ActionJumpToBottom, []string{"ctrl+end"}},
 		{ActionPasteImage, []string{"ctrl+v"}},
+		{ActionQueueFollowup, []string{"ctrl+n"}},
 	},
 	ContextPicker: {
 		{ActionCursorUp, []string{"up", "ctrl+k"}},

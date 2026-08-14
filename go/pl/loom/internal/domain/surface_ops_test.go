@@ -169,6 +169,78 @@ func TestApplySurfaceOpsMasksAbsoluteRevision(t *testing.T) {
 	}
 }
 
+func TestApplySurfaceOpsPrunes(t *testing.T) {
+	callID := NewToolCallID()
+	messages := []Message{
+		surfaceTestMessage(RoleAssistant, 1, surfaceToolCall(callID, "run_cmd")),
+		surfaceTestMessage(RoleUser, 2, surfaceToolResult(callID, "medium output", "huge output")),
+	}
+	target := messages[1]
+	artifact := surfaceArtifactRef(NewArtifactID())
+	// One prune (inline, no artifact) and one mask (externalized) hitting
+	// the same message in the same pass share the single revision bump.
+	out, err := ApplySurfaceOps(messages, SurfaceOps{Masks: &ContextMaskedPayload{
+		Prunes: []PrunedPart{{
+			MessageID: target.ID, PartIndex: 0, ContentIndex: 0,
+			OriginalBytes: len("medium output"), Replacement: "medium [... pruned ...] output",
+			Revision: 2,
+		}},
+		Masks: []MaskedPart{{
+			MessageID: target.ID, PartIndex: 0, ContentIndex: 1,
+			OriginalBytes: len("huge output"), Artifact: artifact,
+			Placeholder: "[tool output compacted]", Revision: 2,
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("ApplySurfaceOps() error = %v", err)
+	}
+	result := out[1].Parts[0].ToolResult
+	if result.Content[0].Text != "medium [... pruned ...] output" {
+		t.Fatalf("pruned content = %q", result.Content[0].Text)
+	}
+	if result.Content[1].Text != "[tool output compacted]" {
+		t.Fatalf("masked content = %q", result.Content[1].Text)
+	}
+	if len(result.Content) != 3 {
+		t.Fatalf("content length = %d, want 3 (only the mask appends an artifact)", len(result.Content))
+	}
+	if result.Content[2].Kind != PartArtifact || result.Content[2].Artifact == nil || result.Content[2].Artifact.ID != artifact.ID {
+		t.Fatalf("appended part = %+v, want the mask artifact %s", result.Content[2], artifact.ID)
+	}
+	if out[1].Revision != 2 {
+		t.Fatalf("revision = %d, want 2", out[1].Revision)
+	}
+	// Input must not be mutated.
+	if messages[1].Revision != 1 || messages[1].Parts[0].ToolResult.Content[0].Text != "medium output" {
+		t.Fatal("ApplySurfaceOps mutated its input")
+	}
+}
+
+func TestApplySurfaceOpsPruneDuplicateContentRejected(t *testing.T) {
+	callID := NewToolCallID()
+	messages := []Message{
+		surfaceTestMessage(RoleAssistant, 1, surfaceToolCall(callID, "run_cmd")),
+		surfaceTestMessage(RoleUser, 2, surfaceToolResult(callID, "content")),
+	}
+	target := messages[1]
+	// A prune and a mask targeting the SAME content is a generator bug and
+	// must fail application, like duplicate masks do.
+	_, err := ApplySurfaceOps(messages, SurfaceOps{Masks: &ContextMaskedPayload{
+		Prunes: []PrunedPart{{
+			MessageID: target.ID, PartIndex: 0, ContentIndex: 0,
+			OriginalBytes: 7, Replacement: "[pruned]", Revision: 2,
+		}},
+		Masks: []MaskedPart{{
+			MessageID: target.ID, PartIndex: 0, ContentIndex: 0,
+			OriginalBytes: 7, Artifact: surfaceArtifactRef(NewArtifactID()),
+			Placeholder: "[masked]", Revision: 2,
+		}},
+	}})
+	if err == nil {
+		t.Fatal("ApplySurfaceOps() accepted a prune+mask double hit on one content")
+	}
+}
+
 func TestApplySurfaceOpsArchive(t *testing.T) {
 	callID := NewToolCallID()
 	messages := []Message{
@@ -282,10 +354,10 @@ func TestApplySurfaceOpsOrderingMaskThenArchive(t *testing.T) {
 		surfaceTestMessage(RoleUser, 3, surfaceToolResult(callID, "huge output")),
 		surfaceTestMessage(RoleAssistant, 4, ContentPart{Kind: PartText, Text: "recent"}),
 	}
-	masked, err := ApplyMaskDirective(messages, []MaskedPart{{
+	masked, err := ApplyMaskDirective(messages, ContextMaskedPayload{Masks: []MaskedPart{{
 		MessageID: messages[2].ID, PartIndex: 0, ContentIndex: 0, OriginalBytes: 11,
 		Artifact: surfaceArtifactRef(NewArtifactID()), Placeholder: "[masked]", Revision: 2,
-	}})
+	}}})
 	if err != nil {
 		t.Fatalf("mask: %v", err)
 	}
@@ -472,7 +544,7 @@ func TestApplySurfaceOpsFullChainPerEvent(t *testing.T) {
 
 	// Per-event rhythm (projector). ApplySurfaceOps never mutates its
 	// input, so both rhythms can share the same base list.
-	step1, err := ApplyMaskDirective(base, masks)
+	step1, err := ApplyMaskDirective(base, ContextMaskedPayload{Masks: masks})
 	if err != nil {
 		t.Fatalf("mask directive: %v", err)
 	}
@@ -510,7 +582,7 @@ func TestApplyDirectivesRejectEmpty(t *testing.T) {
 	messages := []Message{
 		surfaceTestMessage(RoleUser, 1, ContentPart{Kind: PartText, Text: "hi"}),
 	}
-	if _, err := ApplyMaskDirective(messages, nil); err == nil {
+	if _, err := ApplyMaskDirective(messages, ContextMaskedPayload{}); err == nil {
 		t.Fatal("ApplyMaskDirective() accepted an empty directive")
 	}
 	if _, err := ApplyReplacementDirective(messages, nil); err == nil {

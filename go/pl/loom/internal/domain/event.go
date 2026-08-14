@@ -57,6 +57,11 @@ const (
 	EventRunCompleted           EventType = "run.completed"
 	EventRunFailed              EventType = "run.failed"
 	EventRunCancelled           EventType = "run.cancelled"
+	// EventRunInterrupted closes out a crash-orphaned run (deepseek-
+	// harness's interrupted turn marker): written by recovery when the
+	// log's last run never reached a terminal event. Pure audit — no
+	// projection derives state from it — so it is informational/ignorable.
+	EventRunInterrupted EventType = "run.interrupted"
 )
 
 // Event is an immutable fact in the event log. Events are the source of truth
@@ -68,6 +73,33 @@ type Event struct {
 	Type      EventType       `json:"type"`
 	Timestamp time.Time       `json:"timestamp"`
 	Payload   json.RawMessage `json:"payload,omitempty"`
+	// Ignorable marks a purely informational record: dropping it cannot
+	// change any projection (deepseek-harness SessionEvent.ignorable).
+	// Readers skip UNKNOWN types only when this is set — a writer marks
+	// its new informational types (EventType.Informational), so a log
+	// written by a newer loom still replays under an older one; an
+	// unknown NON-ignorable type stays a hard error, because skipping it
+	// could silently corrupt the reconstructed surface.
+	Ignorable bool `json:"ignorable,omitempty"`
+}
+
+// Informational reports whether the event type is a pure audit/observability
+// record: no PROJECTION or GC path derives state from it, so a reader that
+// does not know the type may safely skip it (when the event is marked
+// Ignorable). Lifecycle, transcript, and directive types are NEVER
+// informational. (Recovery scans the raw event log directly — it never
+// goes through the projection, so audit types it consumes, like
+// tool.execution_*, may still be informational.)
+func (t EventType) Informational() bool {
+	switch t {
+	case EventModelRequestStarted, EventModelRequestFailed, EventModelRequestRetrying,
+		EventModelRequestHeader, EventToolCallPrepared, EventToolExecutionStarted,
+		EventToolExecutionCompleted, EventPermissionRequested, EventPermissionResolved,
+		EventFileChanged, EventContextCompacted, EventCheckpointCreated,
+		EventRunInterrupted:
+		return true
+	}
+	return false
 }
 
 // MessageEventPayload is the canonical payload envelope for transcript events.
@@ -115,10 +147,15 @@ func (e Event) Validate() error {
 		EventToolResultAdded, EventFileChanged, EventPlanRevised, EventContextCompacted,
 		EventGoalUpdated, EventCheckpointCreated, EventBudgetUpdated, EventBudgetNotice,
 		EventBudgetWrapupStarted, EventRunCompleted, EventRunFailed, EventRunCancelled,
+		EventRunInterrupted,
 		EventContextMasked, EventContextArchived, EventContextSummarized,
 		EventModelRequestHeader:
 	default:
-		return fmt.Errorf("unknown event type %q", e.Type)
+		// An unknown type is only acceptable when the writer marked it
+		// informational: skipping it cannot corrupt any projection.
+		if !e.Ignorable {
+			return fmt.Errorf("unknown event type %q", e.Type)
+		}
 	}
 	if len(e.Payload) > 0 && !json.Valid(e.Payload) {
 		return fmt.Errorf("invalid event payload JSON")

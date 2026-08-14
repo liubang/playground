@@ -1464,6 +1464,163 @@ func (m *failStartModel) Stream(_ context.Context, _ domain.ModelRequest) (domai
 	return nil, m.err
 }
 
+// replayStream replays a fixed event sequence; an empty sequence means
+// the stream dies silently (immediate EOF, no terminal event) — a
+// truncated response.
+type replayStream struct {
+	events []domain.ModelEvent
+	pos    int
+}
+
+func (s *replayStream) Recv() (domain.ModelEvent, error) {
+	if s.pos >= len(s.events) {
+		return domain.ModelEvent{}, io.EOF
+	}
+	evt := s.events[s.pos]
+	s.pos++
+	return evt, nil
+}
+
+func (s *replayStream) Close() error { return nil }
+
+// streamStepModel returns scripted outcomes in order: a start error, or a
+// stream replaying the given events.
+type streamStepModel struct {
+	calls int
+	steps []streamStep
+}
+
+type streamStep struct {
+	err    error
+	events []domain.ModelEvent
+}
+
+func (m *streamStepModel) Stream(_ context.Context, _ domain.ModelRequest) (domain.ModelStream, error) {
+	step := m.steps[min(m.calls, len(m.steps)-1)]
+	m.calls++
+	if step.err != nil {
+		return nil, step.err
+	}
+	return &replayStream{events: step.events}, nil
+}
+
+// TestStreamAggregatorStreamErrorClassification pins the typed contract:
+// a retryable-marked stream error keeps its classification through the
+// aggregator so the loop can wait-and-retry; an unmarked one stays a
+// plain terminal failure.
+func TestStreamAggregatorStreamErrorClassification(t *testing.T) {
+	agg := NewStreamAggregator(domain.RealClock{}, StreamHooks{})
+	err := agg.Apply(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: "stream read failed: connection reset", Retryable: true})
+	if !domain.IsRetryable(err) {
+		t.Fatalf("retryable stream error = %v, want retryable", err)
+	}
+	agg = NewStreamAggregator(domain.RealClock{}, StreamHooks{})
+	err = agg.Apply(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: "malformed chunk JSON"})
+	if domain.IsRetryable(err) {
+		t.Fatalf("unmarked stream error = %v, want non-retryable", err)
+	}
+}
+
+// TestLoopExecuteRetriesSilentStreamTruncation locks the mid-stream
+// recovery path: a stream that dies before delivering ANY content
+// (silent EOF here; a retryable-marked provider stream error behaves the
+// same) is waited out and retried — audited with stage=stream — instead
+// of killing the run.
+func TestLoopExecuteRetriesSilentStreamTruncation(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+
+	model := &streamStepModel{steps: []streamStep{
+		{events: nil}, // truncated: immediate EOF, no terminal event
+		{events: []domain.ModelEvent{
+			{Kind: domain.ModelEventTextDelta, TextDelta: "recovered"},
+			{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn},
+		}},
+	}}
+	loop := &Loop{
+		Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default(),
+		StartRetry: fastStartRetry,
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v, want the truncated stream retried to success", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+	if model.calls != 2 {
+		t.Fatalf("model calls = %d, want 2 (truncation + retry)", model.calls)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	idx := eventIndex(events, domain.EventModelRequestRetrying)
+	if idx < 0 {
+		t.Fatalf("model.request_retrying not persisted: %v", collectEventTypes(events))
+	}
+	var payload struct {
+		Stage string `json:"stage"`
+	}
+	if err := json.Unmarshal(events[idx].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal retrying payload: %v", err)
+	}
+	if payload.Stage != "stream" {
+		t.Fatalf("retrying stage = %q, want stream", payload.Stage)
+	}
+	if eventIndex(events, domain.EventModelRequestFailed) >= 0 {
+		t.Fatalf("a recovered retry must not emit model.request_failed: %v", collectEventTypes(events))
+	}
+}
+
+// TestLoopExecuteDoesNotRetryStreamWithPartialContent locks the safety
+// boundary: once ANY content streamed (text here; reasoning/tool
+// fragments count the same), a failure — even a retryable-classified
+// one — preserves the partial draft as an interrupted message and fails,
+// never silently re-issues the request.
+func TestLoopExecuteDoesNotRetryStreamWithPartialContent(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+
+	model := &streamStepModel{steps: []streamStep{
+		{events: []domain.ModelEvent{
+			{Kind: domain.ModelEventTextDelta, TextDelta: "partial draft"},
+			{Kind: domain.ModelEventStreamError, Error: "openai provider: stream read failed: connection reset", Retryable: true},
+		}},
+		{events: []domain.ModelEvent{
+			{Kind: domain.ModelEventTextDelta, TextDelta: "unreached"},
+			{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn},
+		}},
+	}}
+	loop := &Loop{
+		Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default(),
+		StartRetry: fastStartRetry,
+	}
+	if err := loop.Execute(context.Background()); err == nil {
+		t.Fatal("expected the mid-stream failure to fail the run")
+	}
+	if run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("outcome = %s, want failed", run.State.Outcome)
+	}
+	if model.calls != 1 {
+		t.Fatalf("model calls = %d, want 1 (no retry with delivered content)", model.calls)
+	}
+	if eventIndex(run.PendingEvents(), domain.EventModelRequestRetrying) >= 0 {
+		t.Fatal("a content-carrying stream failure must not emit model.request_retrying")
+	}
+	// The partial draft survives as an interrupted assistant message.
+	var interrupted string
+	for _, msg := range run.Messages {
+		if msg.Role == domain.RoleAssistant && msg.Status == domain.MessageStatusInterrupted {
+			interrupted = strings.Join(msg.TextParts(), "")
+		}
+	}
+	if interrupted != "partial draft" {
+		t.Fatalf("interrupted draft = %q, want %q", interrupted, "partial draft")
+	}
+}
+
 // TestLoopExecuteStartRetryWaitCancelled: cancelling while the loop
 // sleeps out a retryable failure terminates as cancelled — not as a
 // failed run with a misleading request_failed audit.
@@ -1528,6 +1685,282 @@ func TestStartRetryWait(t *testing.T) {
 		domain.WithCause(&httpc.StatusError{Code: 429, Status: "429", RetryAfter: time.Hour}))
 	if wait, retry := loop.startRetryWait(bigHint, 1); !retry || wait > 2*time.Second {
 		t.Fatalf("startRetryWait(hint 1h) = %s, %v; want <= 2s (hint ignored), true", wait, retry)
+	}
+}
+
+// TestTrailingRetryStreak pins the crash signature: only an UNRESOLVED
+// trailing run of request_retrying events counts.
+func TestTrailingRetryStreak(t *testing.T) {
+	sessionID := domain.NewSessionID()
+	ev := func(seq int64, typ domain.EventType) domain.Event {
+		return testAgentEvent(t, sessionID, seq, typ, modelRequestRetryingPayload{}, time.Now().UTC())
+	}
+	cases := []struct {
+		name  string
+		types []domain.EventType
+		want  int
+	}{
+		{"empty log", nil, 0},
+		{"crash mid-retry", []domain.EventType{
+			domain.EventRunCreated, domain.EventModelRequestStarted,
+			domain.EventModelRequestRetrying, domain.EventModelRequestRetrying,
+		}, 2},
+		{"resolved by success", []domain.EventType{
+			domain.EventModelRequestStarted, domain.EventModelRequestRetrying,
+			domain.EventModelResponseCompleted,
+		}, 0},
+		{"resolved by terminal failure", []domain.EventType{
+			domain.EventModelRequestStarted, domain.EventModelRequestRetrying,
+			domain.EventModelRequestFailed, domain.EventRunFailed,
+		}, 0},
+		{"cancelled mid-wait", []domain.EventType{
+			domain.EventModelRequestStarted, domain.EventModelRequestRetrying,
+			domain.EventRunCancelled,
+		}, 0},
+		{"an earlier streak does not leak past a request boundary", []domain.EventType{
+			domain.EventModelRequestStarted, domain.EventModelRequestRetrying,
+			domain.EventModelRequestStarted, domain.EventModelRequestRetrying,
+		}, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var events []domain.Event
+			for i, typ := range tc.types {
+				events = append(events, ev(int64(i+1), typ))
+			}
+			if got := trailingRetryStreak(events); got != tc.want {
+				t.Fatalf("trailingRetryStreak = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRecoverRunSeedsStartRetryStreak locks the durable half of retry
+// counting: recovery after a crash mid-retry carries the streak into the
+// continuation run; a cleanly resolved log seeds nothing.
+func TestRecoverRunSeedsStartRetryStreak(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	sessionID := domain.NewSessionID()
+	message := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleUser,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}, CreatedAt: clock.Now(),
+	}
+	crashed := []domain.Event{
+		testAgentEvent(t, sessionID, 1, domain.EventRunCreated, struct{}{}, clock.Now()),
+		testAgentEvent(t, sessionID, 2, domain.EventModelRequestStarted, modelRequestAuditPayload{}, clock.Now()),
+		testAgentEvent(t, sessionID, 3, domain.EventModelRequestRetrying, modelRequestRetryingPayload{Attempt: 1}, clock.Now()),
+		testAgentEvent(t, sessionID, 4, domain.EventModelRequestRetrying, modelRequestRetryingPayload{Attempt: 2}, clock.Now()),
+	}
+	run, err := RecoverRun(sessionID, nil, []domain.Message{message}, crashed, 4, domain.DefaultLimits(), clock, nil)
+	if err != nil {
+		t.Fatalf("RecoverRun: %v", err)
+	}
+	if run.StartRetryStreak != 2 {
+		t.Fatalf("StartRetryStreak = %d, want 2 (crash mid-retry)", run.StartRetryStreak)
+	}
+
+	resolved := append(crashed, testAgentEvent(t, sessionID, 5, domain.EventModelRequestFailed, modelRequestFailedPayload{}, clock.Now()))
+	run, err = RecoverRun(sessionID, nil, []domain.Message{message}, resolved, 5, domain.DefaultLimits(), clock, nil)
+	if err != nil {
+		t.Fatalf("RecoverRun(resolved): %v", err)
+	}
+	if run.StartRetryStreak != 0 {
+		t.Fatalf("StartRetryStreak = %d, want 0 (the retry loop resolved)", run.StartRetryStreak)
+	}
+}
+
+// TestLoopExecuteStartRetryHonorsRecoveredStreak: the recovered streak
+// counts against the retry budget — a provider failing across crash
+// cycles exhausts MaxAttempts instead of getting a fresh budget per
+// restart. The streak is consumed by exactly one call.
+func TestLoopExecuteStartRetryHonorsRecoveredStreak(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+	run.StartRetryStreak = 3
+
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Err: rateLimitedStartError()},
+		fakes.ScriptEntry{Err: rateLimitedStartError()},
+		fakes.ScriptEntry{Text: "unreached", StopReason: domain.StopEndTurn},
+	)
+	loop := &Loop{
+		Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default(),
+		StartRetry: fastStartRetry, // MaxAttempts 5; streak 3 → one retry, then give up
+	}
+	if err := loop.Execute(context.Background()); err == nil {
+		t.Fatal("expected the budget-exhausted run to fail")
+	}
+	if run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("outcome = %s, want failed", run.State.Outcome)
+	}
+	if got := len(model.Calls()); got != 2 {
+		t.Fatalf("model calls = %d, want 2 (streak 3 + attempts 4,5)", got)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	if got := countEvents(events, domain.EventModelRequestRetrying); got != 1 {
+		t.Fatalf("model.request_retrying count = %d, want 1", got)
+	}
+	idx := eventIndex(events, domain.EventModelRequestRetrying)
+	var payload struct {
+		Attempt     int `json:"attempt"`
+		MaxAttempts int `json:"max_attempts"`
+	}
+	if err := json.Unmarshal(events[idx].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal retrying payload: %v", err)
+	}
+	if payload.Attempt != 4 || payload.MaxAttempts != fastStartRetry.MaxAttempts {
+		t.Fatalf("retrying attempt = %d/%d, want 4/%d (streak-aware)",
+			payload.Attempt, payload.MaxAttempts, fastStartRetry.MaxAttempts)
+	}
+	if run.StartRetryStreak != 0 {
+		t.Fatalf("StartRetryStreak = %d, want 0 (consumed by the call)", run.StartRetryStreak)
+	}
+}
+
+// TestOrphanedRunID pins the crash signature: only a tail run.created
+// with NO terminal event after it is an orphan.
+func TestOrphanedRunID(t *testing.T) {
+	sessionID := domain.NewSessionID()
+	runID := domain.NewRunID()
+	created := testAgentEvent(t, sessionID, 1, domain.EventRunCreated, struct {
+		RunID domain.RunID `json:"run_id"`
+	}{RunID: runID}, time.Now().UTC())
+	seq := int64(1)
+	ev := func(typ domain.EventType) domain.Event {
+		seq++
+		return testAgentEvent(t, sessionID, seq, typ, struct{}{}, time.Now().UTC())
+	}
+
+	if got := OrphanedRunID(nil); !got.IsZero() {
+		t.Fatalf("OrphanedRunID(nil) = %s, want zero", got)
+	}
+	// Crash mid-turn: created, activity, no terminal.
+	crashed := []domain.Event{created, ev(domain.EventModelRequestStarted), ev(domain.EventModelRequestRetrying)}
+	if got := OrphanedRunID(crashed); got != runID {
+		t.Fatalf("OrphanedRunID(crashed) = %s, want %s", got, runID)
+	}
+	// Resolved tails: each terminal outcome closes the run.
+	for _, terminal := range []domain.EventType{domain.EventRunCompleted, domain.EventRunFailed, domain.EventRunCancelled} {
+		resolved := append([]domain.Event{created, ev(domain.EventModelRequestStarted)}, ev(terminal))
+		if got := OrphanedRunID(resolved); !got.IsZero() {
+			t.Fatalf("OrphanedRunID(%s) = %s, want zero", terminal, got)
+		}
+	}
+	// A run.created with an undecodable payload degrades to zero rather
+	// than a false orphan.
+	broken := testAgentEvent(t, sessionID, 1, domain.EventRunCreated, nil, time.Now().UTC())
+	broken.Payload = json.RawMessage(`{`)
+	if got := OrphanedRunID([]domain.Event{broken}); !got.IsZero() {
+		t.Fatalf("OrphanedRunID(broken payload) = %s, want zero", got)
+	}
+}
+
+// TestRecoverRunMarksOrphanedRun: recovery after a crash writes the
+// interrupted marker for the dead run BEFORE opening the continuation;
+// a cleanly terminated tail writes none.
+func TestRecoverRunMarksOrphanedRun(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	sessionID := domain.NewSessionID()
+	message := domain.Message{
+		ID: domain.NewMessageID(), Sequence: 1, Role: domain.RoleUser,
+		Status: domain.MessageStatusFinal, Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}, CreatedAt: clock.Now(),
+	}
+	deadRunID := domain.NewRunID()
+	crashed := []domain.Event{
+		testAgentEvent(t, sessionID, 1, domain.EventRunCreated, struct {
+			RunID domain.RunID `json:"run_id"`
+		}{RunID: deadRunID}, clock.Now()),
+		testAgentEvent(t, sessionID, 2, domain.EventModelRequestStarted, modelRequestAuditPayload{}, clock.Now()),
+	}
+	run, err := RecoverRun(sessionID, nil, []domain.Message{message}, crashed, 2, domain.DefaultLimits(), clock, nil)
+	if err != nil {
+		t.Fatalf("RecoverRun: %v", err)
+	}
+	idx := eventIndex(run.PendingEvents(), domain.EventRunInterrupted)
+	if idx < 0 {
+		t.Fatal("no run.interrupted marker for the crash-orphaned run")
+	}
+	var payload struct {
+		RunID  domain.RunID `json:"run_id"`
+		Reason string       `json:"reason"`
+	}
+	if err := json.Unmarshal(run.PendingEvents()[idx].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal marker: %v", err)
+	}
+	if payload.RunID != deadRunID || payload.Reason == "" {
+		t.Fatalf("marker = %+v, want the dead run's ID with a reason", payload)
+	}
+	// The marker precedes the continuation's run.created.
+	if created := eventIndex(run.PendingEvents(), domain.EventRunCreated); created < idx {
+		t.Fatalf("marker at %d must precede run.created at %d", idx, created)
+	}
+	if !run.PendingEvents()[idx].Ignorable {
+		t.Fatal("run.interrupted is pure audit and must be ignorable")
+	}
+
+	// A cleanly terminated tail marks nothing.
+	resolved := append(crashed, testAgentEvent(t, sessionID, 3, domain.EventRunCompleted, struct{}{}, clock.Now()))
+	run, err = RecoverRun(sessionID, nil, []domain.Message{message}, resolved, 3, domain.DefaultLimits(), clock, nil)
+	if err != nil {
+		t.Fatalf("RecoverRun(resolved): %v", err)
+	}
+	if eventIndex(run.PendingEvents(), domain.EventRunInterrupted) >= 0 {
+		t.Fatal("run.interrupted written for a cleanly terminated run")
+	}
+}
+
+// TestLoopExecuteDoesNotRetryQuotaExhaustion locks the quota contract:
+// quota exhaustion rides a 429 but is not a transient rate limit — the
+// loop fails fast with a quota_exhausted audit instead of burning its
+// retry budget on waits that cannot help.
+func TestLoopExecuteDoesNotRetryQuotaExhaustion(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+
+	quotaErr := domain.NewError(domain.ErrQuotaExhausted, "openai provider: HTTP 429: insufficient_quota")
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Err: quotaErr},
+		fakes.ScriptEntry{Text: "unreached", StopReason: domain.StopEndTurn},
+	)
+	loop := &Loop{
+		Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default(),
+		StartRetry: fastStartRetry,
+	}
+	if err := loop.Execute(context.Background()); err == nil {
+		t.Fatal("expected quota exhaustion to fail the run")
+	}
+	if run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("outcome = %s, want failed", run.State.Outcome)
+	}
+	if got := len(model.Calls()); got != 1 {
+		t.Fatalf("model calls = %d, want 1 (quota errors are never retried)", got)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	if got := countEvents(events, domain.EventModelRequestRetrying); got != 0 {
+		t.Fatalf("model.request_retrying count = %d, want 0", got)
+	}
+	idx := eventIndex(events, domain.EventModelRequestFailed)
+	if idx < 0 {
+		t.Fatalf("model.request_failed not persisted: %v", collectEventTypes(events))
+	}
+	var payload struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(events[idx].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal failed payload: %v", err)
+	}
+	if payload.Code != string(domain.ErrQuotaExhausted) {
+		t.Fatalf("failed code = %s, want quota_exhausted", payload.Code)
 	}
 }
 

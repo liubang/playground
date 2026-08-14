@@ -206,6 +206,11 @@ func (a *StreamAggregator) Apply(evt domain.ModelEvent) error {
 		if evt.Error == "" {
 			evt.Error = "provider stream error"
 		}
+		if evt.Retryable {
+			// A transient stream failure (truncation, transport drop) keeps
+			// its classification so the loop can re-issue the request.
+			return domain.NewError(domain.ErrUnavailable, evt.Error, domain.WithRetryable(true))
+		}
 		return errors.New(evt.Error)
 	case domain.ModelEventResponseEnd:
 		if evt.StopReason == "" {
@@ -325,6 +330,14 @@ func (a *StreamAggregator) InterruptedMessage() domain.Message {
 // HasPartialContent reports whether the aggregator has any text content.
 func (a *StreamAggregator) HasPartialContent() bool {
 	return a.text != ""
+}
+
+// HasActivity reports whether the stream delivered anything user-visible
+// or persistable — text, reasoning, or a tool-call fragment. A failure
+// with no activity is as safely retryable as a start-stage failure:
+// nothing reached the UI or the transcript.
+func (a *StreamAggregator) HasActivity() bool {
+	return a.text != "" || a.reasoning != "" || len(a.reasoningBlocks) > 0 || len(a.tools) > 0
 }
 
 // consumeStream reads all events from a model stream into an aggregator.

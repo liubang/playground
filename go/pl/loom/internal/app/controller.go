@@ -87,6 +87,9 @@ type Snapshot struct {
 	// its UI from the snapshot alone (docs/SERVE_DESIGN.md §4.4).
 	PendingRequests []PendingRequest `json:"pending_requests,omitempty"`
 	PendingSteers   []string         `json:"pending_steers,omitempty"`
+	// PendingFollowups projects the cell's next-turn queue: messages held
+	// until the busy turn ends, relayed one per turn boundary.
+	PendingFollowups []string `json:"pending_followups,omitempty"`
 	// LastError projects the most recent unrecovered turn failure (a model
 	// request the loop gave up on, or a turn-level error) so a
 	// (re)connecting client can render a persistent error block from the
@@ -447,10 +450,13 @@ type SubmitResult struct {
 	// Steered is true when the prompt was queued into the active turn's
 	// SteerCell instead of starting a new turn immediately.
 	Steered bool
-	// QueueLen is the resulting pending-steer count (0 when started).
+	// Followup is true when the prompt was queued for AFTER the busy turn
+	// (next-turn delivery) rather than steering into it.
+	Followup bool
+	// QueueLen is the resulting pending-queue count (0 when started).
 	QueueLen int
 	// Turn is the session's turn counter after the submission (the new
-	// turn when started, the busy turn when steered).
+	// turn when started, the busy turn when queued).
 	Turn int
 }
 
@@ -469,9 +475,22 @@ func (c *Controller) SubmitPrompt(ctx context.Context, prompt string) (SubmitRes
 // dropped and only the text prompt is queued for steering (steer messages
 // are text-only).
 func (c *Controller) SubmitPromptWithImages(ctx context.Context, prompt string, images []domain.ImageContent) (SubmitResult, error) {
+	return c.submit(ctx, prompt, images, false)
+}
+
+// SubmitFollowup queues a text-only prompt for AFTER the busy turn: it is
+// held in the cell's followup (next-turn) queue and relayed as the next
+// turn's prompt, one per turn boundary — versus SubmitPrompt's steer
+// (next-step) delivery into the running turn. On an idle session a
+// followup simply starts the turn.
+func (c *Controller) SubmitFollowup(ctx context.Context, prompt string) (SubmitResult, error) {
+	return c.submit(ctx, prompt, nil, true)
+}
+
+func (c *Controller) submit(ctx context.Context, prompt string, images []domain.ImageContent, followup bool) (SubmitResult, error) {
 	resultCh := make(chan controllerResult, 1)
 	select {
-	case c.cmdCh <- controllerCommand{Kind: cmdSubmitPrompt, Prompt: prompt, Images: images, ResultCh: resultCh}:
+	case c.cmdCh <- controllerCommand{Kind: cmdSubmitPrompt, Prompt: prompt, Images: images, Followup: followup, ResultCh: resultCh}:
 	case <-ctx.Done():
 		return SubmitResult{}, ctx.Err()
 	case <-c.doneCh:
@@ -995,6 +1014,14 @@ func (c *Controller) steerCellPeek() []string {
 	return nil
 }
 
+// followupCellPeek returns the pending followup queue without draining it.
+func (c *Controller) followupCellPeek() []string {
+	if cell := c.steerCell(); cell != nil {
+		return cell.PeekFollowups()
+	}
+	return nil
+}
+
 // recordPlan stores the latest task plan for Snapshot projection.
 func (c *Controller) recordPlan(p domain.Plan) {
 	c.mu.Lock()
@@ -1266,22 +1293,35 @@ func (c *Controller) handleSteer(cmd controllerCommand) {
 	if c.steerHook != nil {
 		c.steerHook()
 	}
-	if err := cell.Put(cmd.Prompt); err != nil {
+	var err error
+	var n int
+	if cmd.Followup {
+		err = cell.PutFollowup(cmd.Prompt)
+		n = cell.FollowupLen()
+	} else {
+		err = cell.Put(cmd.Prompt)
+		n = cell.Len()
+	}
+	if err != nil {
 		cmd.ResultCh <- controllerResult{Err: err}
 		return
 	}
-	n := cell.Len()
 	// runID is written by the turn goroutine (runTurn) under c.mu; snapshot
 	// the publish identity under the same lock to avoid a data race.
 	c.mu.Lock()
 	sessionID, runID, turnCounter := c.sessionID, c.runID, c.turnCounter
 	turnOver := c.state == ControllerStateIdle
 	c.mu.Unlock()
+	queue := ""
+	if cmd.Followup {
+		queue = "followup"
+	}
 	c.publishEphemeral(sessionID, runID, turnCounter, runtimeevent.KindSteerQueued, runtimeevent.SteerQueuedPayload{
 		Text:     cmd.Prompt,
 		QueueLen: n,
+		Queue:    queue,
 	})
-	cmd.ResultCh <- controllerResult{Value: SubmitResult{Steered: true, QueueLen: n, Turn: turnCounter}}
+	cmd.ResultCh <- controllerResult{Value: SubmitResult{Steered: !cmd.Followup, Followup: cmd.Followup, QueueLen: n, Turn: turnCounter}}
 	// Review M21: dispatch routed this submission here from a state read
 	// taken BEFORE the cell.Put; the turn may have finished in between,
 	// with onTurnFinished's relay already past an empty cell — the message
@@ -1638,17 +1678,28 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 	c.relayPendingSteers()
 }
 
-// relayPendingSteers forwards leftover steer messages as the next turn's
-// prompt. The relay re-enters through cmdCh so submission stays
-// serialized with external input; the result channel is buffered, so
-// nobody has to read it. Relaying on every terminal outcome (completed,
-// cancelled, failed, budget) is what makes Ctrl+C flush pending steers.
+// relayPendingSteers forwards queued messages as the next turn's prompt.
+// Steer leftovers (queued after the loop's last drain) take priority and
+// merge into one prompt — mirroring dsh's next-step-before-next-turn
+// claim order; otherwise exactly ONE followup relays per turn boundary,
+// so a queued batch becomes one turn per message. The relay re-enters
+// through cmdCh so submission stays serialized with external input; the
+// result channel is buffered, so nobody has to read it. Relaying on
+// every terminal outcome (completed, cancelled, failed, budget) is what
+// makes Ctrl+C flush pending messages.
 func (c *Controller) relayPendingSteers() {
 	cell := c.steerCell()
-	if cell == nil || cell.Len() == 0 {
+	if cell == nil {
 		return
 	}
-	prompt := strings.Join(cell.Take(), "\n\n")
+	var prompt string
+	if cell.Len() > 0 {
+		prompt = strings.Join(cell.Take(), "\n\n")
+	} else if followup, ok := cell.TakeFollowup(); ok {
+		prompt = followup
+	} else {
+		return
+	}
 	select {
 	case c.cmdCh <- controllerCommand{Kind: cmdSubmitPrompt, Prompt: prompt, ResultCh: make(chan controllerResult, 1)}:
 	default:
@@ -2054,6 +2105,7 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 		PendingApprovals:    c.approver.PendingApprovals(),
 		PendingRequests:     pending,
 		PendingSteers:       c.steerCellPeek(),
+		PendingFollowups:    c.followupCellPeek(),
 		LastError:           c.lastError,
 		EventSeq:            c.appliedSeq,
 		Timestamp:           c.clock.Now(),
@@ -2225,6 +2277,11 @@ type controllerCommand struct {
 	Kind   string
 	Prompt string
 	Images []domain.ImageContent
+	// Followup marks a busy-time submission for the next-turn queue: it
+	// is held until the turn ends and relayed as the next prompt, instead
+	// of steering into the running turn. Text-only, like steers. On an
+	// idle session a followup simply starts the turn.
+	Followup bool
 	// ImageRefs carries the artifact-persisted form of Images, filled by
 	// handleSubmitPrompt before the turn starts (never populated on the
 	// steer path, which is text-only).
@@ -2661,7 +2718,10 @@ func (c *Controller) currentLastError() *SnapshotError {
 
 // lastErrorFromEvents rebuilds the last-failure projection from the
 // persisted timeline on session resume: a request failure sticks until a
-// later successful response or a new run supersedes it.
+// later successful response or a new run supersedes it. A crash-orphaned
+// tail run (no terminal event — the process died mid-turn) projects an
+// interruption notice, so the dead turn does not vanish silently from a
+// reconnecting client's view.
 func lastErrorFromEvents(events []domain.Event) *SnapshotError {
 	var last *SnapshotError
 	for _, ev := range events {
@@ -2678,6 +2738,9 @@ func lastErrorFromEvents(events []domain.Event) *SnapshotError {
 		case domain.EventModelResponseCompleted, domain.EventRunCreated:
 			last = nil
 		}
+	}
+	if last == nil && !agent.OrphanedRunID(events).IsZero() {
+		last = &SnapshotError{Message: "previous turn ended abruptly (process exit or crash); the session recovered and can continue"}
 	}
 	return last
 }

@@ -824,7 +824,7 @@ func (m Model) planPanelHeight() int {
 // the global spacer row written by renderBase (or the previous element's
 // trailing blank).
 func (m Model) renderSteerPanel() string {
-	if len(m.pendingSteers) == 0 {
+	if len(m.pendingSteers) == 0 && len(m.pendingFollowups) == 0 {
 		return ""
 	}
 	width := m.width - 2
@@ -832,23 +832,37 @@ func (m Model) renderSteerPanel() string {
 		width = 10
 	}
 	var b strings.Builder
-	b.WriteString(m.theme.Dim.Render(fmt.Sprintf(
-		"  Steering (%d queued — injects before next model call, Ctrl+C flushes now):", len(m.pendingSteers),
-	)))
-	for _, text := range m.pendingSteers {
-		b.WriteString("\n  " + m.theme.Dim.Render("↳ "+truncateDisplayWidth(strings.ReplaceAll(text, "\n", " "), width-6)))
+	section := func(title string, items []string) {
+		b.WriteString(m.theme.Dim.Render(title))
+		for _, text := range items {
+			b.WriteString("\n  " + m.theme.Dim.Render("↳ "+truncateDisplayWidth(strings.ReplaceAll(text, "\n", " "), width-6)))
+		}
+		b.WriteString("\n") // separate from the next element below
 	}
-	b.WriteString("\n") // separate from the next element below
+	if len(m.pendingSteers) > 0 {
+		section(fmt.Sprintf(
+			"  Steering (%d queued — injects before next model call, Ctrl+C flushes now):", len(m.pendingSteers),
+		), m.pendingSteers)
+	}
+	if len(m.pendingFollowups) > 0 {
+		section(fmt.Sprintf(
+			"  Followups (%d queued — each runs as its own turn after this one):", len(m.pendingFollowups),
+		), m.pendingFollowups)
+	}
 	return b.String()
 }
 
-// steerPanelHeight returns the rows the steer panel occupies: title +
-// items + trailing blank (0 when hidden).
+// steerPanelHeight returns the rows the steer panel occupies: per section,
+// title + items + trailing blank (0 when hidden).
 func (m Model) steerPanelHeight() int {
-	if len(m.pendingSteers) == 0 {
-		return 0
+	height := 0
+	if len(m.pendingSteers) > 0 {
+		height += len(m.pendingSteers) + 2
 	}
-	return len(m.pendingSteers) + 2
+	if len(m.pendingFollowups) > 0 {
+		height += len(m.pendingFollowups) + 2
+	}
+	return height
 }
 
 func (m Model) renderPlanPanel() string {

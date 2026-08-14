@@ -761,6 +761,92 @@ func TestControllerSteerLandingAfterTurnEndRelaysImmediately(t *testing.T) {
 	}
 }
 
+// TestControllerFollowupWaitsForTurnBoundary pins next-turn delivery
+// (deepseek-harness followup semantics): a followup queued while busy is
+// NOT injected into the running turn; it relays as its own prompt once
+// the turn ends, one per boundary, in FIFO order.
+func TestControllerFollowupWaitsForTurnBoundary(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	inner := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "first", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "second", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "third", StopReason: domain.StopEndTurn},
+	)
+	model := newGateModel(inner)
+	controller := NewController(ControllerConfig{
+		Bootstrap: testBootstrap(store, model),
+		Broker:    runtimeevent.NewBroker(),
+		Approver:  NewChannelApprover(),
+		Clock:     domain.RealClock{},
+	})
+	go controller.Run(ctx)
+	defer controller.Shutdown(context.Background())
+
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if _, err := controller.SubmitPrompt(ctx, "one"); err != nil {
+		t.Fatalf("SubmitPrompt(one): %v", err)
+	}
+	<-model.started // the first model call is in flight: the turn is busy
+
+	res, err := controller.SubmitFollowup(ctx, "two")
+	if err != nil {
+		t.Fatalf("SubmitFollowup(two): %v", err)
+	}
+	if !res.Followup || res.Steered || res.QueueLen != 1 {
+		t.Fatalf("SubmitResult = %+v, want followup with queue length 1", res)
+	}
+	if res, err = controller.SubmitFollowup(ctx, "three"); err != nil {
+		t.Fatalf("SubmitFollowup(three): %v", err)
+	} else if res.QueueLen != 2 {
+		t.Fatalf("SubmitResult = %+v, want queue length 2", res)
+	}
+	snapshot, err := controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if !slices.Equal(snapshot.PendingFollowups, []string{"two", "three"}) {
+		t.Fatalf("PendingFollowups = %v, want [two three]", snapshot.PendingFollowups)
+	}
+	if len(snapshot.PendingSteers) != 0 {
+		t.Fatalf("PendingSteers = %v, want empty (followups are not steers)", snapshot.PendingSteers)
+	}
+
+	// Release the turn. The followups must NOT join turn 1's context;
+	// each relays as its own prompt at a turn boundary, in order.
+	model.Open()
+	waitForCalls(t, inner, 3)
+	waitForIdle(t, controller)
+
+	calls := inner.Calls()
+	if got := userTexts(calls[0].Messages); slices.Contains(got, "two") || slices.Contains(got, "three") {
+		t.Fatalf("turn 1 user messages = %v, must not contain the queued followups", got)
+	}
+	if got, want := userTexts(calls[1].Messages), []string{"one", "two"}; !slices.Equal(got, want) {
+		t.Fatalf("turn 2 user messages = %v, want %v (first followup relayed alone)", got, want)
+	}
+	if got := userTexts(calls[2].Messages); !slices.Contains(got, "three") {
+		t.Fatalf("turn 3 user messages = %v, want one containing %q", got, "three")
+	}
+
+	snapshot, err = controller.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot: %v", err)
+	}
+	if len(snapshot.PendingFollowups) != 0 {
+		t.Fatalf("PendingFollowups after relays = %v, want empty", snapshot.PendingFollowups)
+	}
+}
+
 // slowModel delays each Stream call so the turn stays alive long enough
 // for concurrent commands to overlap the turn goroutine, while still
 // respecting cancellation.
@@ -1766,6 +1852,56 @@ func TestLastErrorFromEvents(t *testing.T) {
 	}
 	if got := lastErrorFromEvents(events); got != nil {
 		t.Fatalf("lastError after a new run = %+v, want nil", got)
+	}
+}
+
+// TestLastErrorFromEventsProjectsOrphanedTurn: a log whose tail run
+// never terminated (the process died mid-turn) projects an interruption
+// notice instead of leaving the dead turn invisible; a genuine request
+// failure still wins, and a terminal tail projects nothing.
+func TestLastErrorFromEventsProjectsOrphanedTurn(t *testing.T) {
+	sessionID := domain.NewSessionID()
+	seq := int64(0)
+	ev := func(typ domain.EventType, payload any) domain.Event {
+		seq++
+		var raw json.RawMessage
+		if payload != nil {
+			data, err := json.Marshal(payload)
+			if err != nil {
+				t.Fatalf("marshal payload: %v", err)
+			}
+			raw = data
+		}
+		return domain.Event{ID: domain.NewEventID(), Sequence: seq, SessionID: sessionID, Type: typ, Payload: raw}
+	}
+	created := func() domain.Event {
+		return ev(domain.EventRunCreated, struct {
+			RunID domain.RunID `json:"run_id"`
+		}{RunID: domain.NewRunID()})
+	}
+	started := func() domain.Event {
+		return ev(domain.EventModelRequestStarted, struct{}{})
+	}
+
+	// Crash mid-turn: the tail run never resolved.
+	orphan := []domain.Event{created(), started()}
+	got := lastErrorFromEvents(orphan)
+	if got == nil || !strings.Contains(got.Message, "ended abruptly") {
+		t.Fatalf("orphan lastError = %+v, want the interruption notice", got)
+	}
+
+	// A terminal tail projects nothing.
+	resolved := append(orphan, ev(domain.EventRunCompleted, struct{}{}))
+	if got := lastErrorFromEvents(resolved); got != nil {
+		t.Fatalf("resolved lastError = %+v, want nil", got)
+	}
+
+	// A genuine failure keeps its richer structured reason.
+	failed := modelRequestFailedDTO{Stage: "start", Code: "quota_exhausted", Message: "HTTP 429 insufficient_quota"}
+	withFailure := []domain.Event{created(), started(), ev(domain.EventModelRequestFailed, failed)}
+	got = lastErrorFromEvents(withFailure)
+	if got == nil || got.Code != "quota_exhausted" {
+		t.Fatalf("failure lastError = %+v, want the quota_exhausted reason", got)
 	}
 }
 

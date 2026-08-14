@@ -954,15 +954,22 @@ func finishReadError(ctx context.Context, state *streamState, err error, emit st
 		emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: ctx.Err().Error()})
 		emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopCancelled})
 	case errors.Is(err, io.EOF):
-		finishWithError(state, fmt.Errorf("anthropic provider: stream closed before message_stop"), emit)
+		finishStreamError(state, fmt.Errorf("anthropic provider: stream closed before message_stop"), true, emit)
 	default:
-		finishWithError(state, fmt.Errorf("anthropic provider: stream read failed: %w", err), emit)
+		finishStreamError(state, fmt.Errorf("anthropic provider: stream read failed: %w", err), true, emit)
 	}
 }
 
 func finishWithError(state *streamState, err error, emit stream.Emitter) {
+	finishStreamError(state, err, false, emit)
+}
+
+// finishStreamError ends the stream on a failure; retryable marks the
+// transient read failures (truncated body, transport drop) so the agent
+// loop can re-issue the request while nothing was delivered yet.
+func finishStreamError(state *streamState, err error, retryable bool, emit stream.Emitter) {
 	state.closeOpenBlocks(emit)
-	emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: err.Error()})
+	emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: err.Error(), Retryable: retryable})
 	emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopProviderError})
 }
 
