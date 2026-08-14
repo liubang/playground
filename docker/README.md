@@ -328,13 +328,12 @@ SHOW BACKENDS\G
 
 FoundationDB 实验集群：3 个节点容器，每节点由 `fdbmonitor`（生产同款进程监管）托管 2 个 `fdbserver` 进程，共 6 进程；3 个 coordinator，`double` 副本 + `ssd`（SQLite）引擎，数据持久化在命名卷。
 
-| 服务             | 容器内地址               | 角色                                       |
-| ---------------- | ------------------------ | ------------------------------------------ |
-| fdb-node-1       | 172.28.11.11:4500/4501   | coordinator + storage/tlog 等              |
-| fdb-node-2       | 172.28.11.12:4500/4501   | coordinator + storage/tlog 等              |
-| fdb-node-3       | 172.28.11.13:4500/4501   | coordinator + storage/tlog 等              |
-| status-collector | —                        | 周期性 `fdbcli status json` 写入共享卷     |
-| fdb-exporter     | monitor 网络 :9189       | status json 展平为 Prometheus 指标         |
+| 服务         | 容器内地址             | 角色                                          |
+| ------------ | ---------------------- | --------------------------------------------- |
+| fdb-node-1   | 172.28.11.11:4500/4501 | coordinator + storage/tlog 等                 |
+| fdb-node-2   | 172.28.11.12:4500/4501 | coordinator + storage/tlog 等                 |
+| fdb-node-3   | 172.28.11.13:4500/4501 | coordinator + storage/tlog 等                 |
+| fdb-exporter | monitor 网络 :9444     | Prometheus 指标导出（aikoven/foundationdb-exporter） |
 
 FDB 客户端需要直连集群中的**每个**进程（coordinator、proxy、storage server），macOS 宿主机无法路由到容器 IP，且 fdbserver 的双 public address 必须分属不同 TLS 状态，因此本模块不做宿主机端口映射，客户端一律通过容器网络访问：
 
@@ -355,13 +354,19 @@ docker compose exec fdb-node-1 fdbcli -C /var/fdb/fdb.cluster
 
 ### 监控（Prometheus + Grafana）
 
-集群指标通过两个附加服务导出：`status-collector` 每 15s 执行一次 `fdbcli status json` 并原子写入共享卷；`fdb-exporter`（纯 Python 标准库，见 `exporter/exporter.py`）读取该 JSON，将 cluster/process/machine/client 各层数值字段展平为 `fdb_*` 指标，暴露在 `:9189/metrics`，并加入 [`monitor/`](./monitor) 模块的共享网络供 Prometheus 抓取（job 名 `foundationdb`）。
+指标导出采用社区方案 [`aikoven/foundationdb-exporter`](https://github.com/aikoven/foundationdb-exporter)：通过 FDB Node 客户端实时读取 `\xff\xff/status/json`（每次抓取实时采集），暴露 `:9444/metrics`，并加入 [`monitor/`](./monitor) 模块的共享网络供 Prometheus 抓取（job 名 `foundationdb`）。`bootstrap.sh` 启动前会自动检测并在需要时拉起 monitor 模块。
 
-`bootstrap.sh` 启动前会自动检测并在需要时拉起 monitor 模块；Grafana 内置 **FoundationDB Overview** 仪表盘（可用性、副本状态、事务/读写速率、QoS 限流、数据迁移、进程 CPU/内存/磁盘/网络等）。exporter 未映射宿主机端口，容器网络内验证：
+Grafana 内置配套仪表盘 **FoundationDB**（40 面板：可用性、事务/读写速率、QoS 限流、数据迁移、commit/GRV proxy 延迟 p50-p99 分布、storage 读延迟、latency probe、进程资源等）。exporter 未映射宿主机端口，容器网络内验证：
 
 ```bash
-docker compose exec fdb-node-1 wget -q -O- http://fdb-exporter:9189/metrics | head
+docker compose exec fdb-node-1 wget -q -O- http://fdb-exporter:9444/metrics | head
 ```
+
+注意事项：
+
+- 镜像仅发布 **amd64**，Apple Silicon 需 Rosetta 模拟运行
+- **必须用 `3.1.0` tag**：`latest` 指向 2024-11 的旧构建（内置 FDB 7.1 客户端，连不上 7.3 集群，报 `IncompatibleProtocolVersion`）；`3.1.0`（2025-10）内置 7.3.56 客户端
+- exporter 容器的 FDB 客户端 trace 日志在 `/tmp/trace`（tmpfs），排障用：`docker exec fdb-exporter ls /tmp/trace`
 
 ---
 
@@ -410,9 +415,9 @@ Prometheus + Grafana 监控栈。
 cd monitor && ./bootstrap.sh
 ```
 
-Prometheus 抓取配置见 `prometheus/prometheus.yml`：除自身外，默认抓取 [`fdb/`](./fdb) 模块的 `fdb-exporter:9189`（job `foundationdb`，fdb 未启动时该 target 显示 DOWN 不影响其他 job），可按需继续添加 target。
+Prometheus 抓取配置见 `prometheus/prometheus.yml`：除自身外，默认抓取 [`fdb/`](./fdb) 模块的 `fdb-exporter:9444`（job `foundationdb`，fdb 未启动时该 target 显示 DOWN 不影响其他 job），可按需继续添加 target。
 
-Grafana 通过 `grafana/provisioning/` 自动配置：Prometheus 数据源（uid `prometheus`）与 `grafana/dashboards/` 下的仪表盘（当前含 **FoundationDB Overview**）。Grafana 用户名默认为 `admin`，随机密码由 `bootstrap.sh` 写入 `monitor/.env` 的 `GRAFANA_ADMIN_PASSWORD`；Prometheus 默认仅绑定本机且未启用认证。
+Grafana 通过 `grafana/provisioning/` 自动配置：Prometheus 数据源（uid `prometheus`）与 `grafana/dashboards/` 下的仪表盘（当前含 **FoundationDB**，来自 `aikoven/foundationdb-exporter` 仓库自带面板）。Grafana 用户名默认为 `admin`，随机密码由 `bootstrap.sh` 写入 `monitor/.env` 的 `GRAFANA_ADMIN_PASSWORD`；Prometheus 默认仅绑定本机且未启用认证。
 
 其他模块接入监控的方式：服务加入本模块的 `monitor_monitor` 网络（`external: true`），再在 `prometheus/prometheus.yml` 添加对应 job 即可（`fdb/` 模块即采用该方式，其 `bootstrap.sh` 会在网络不存在时自动拉起本模块）。
 
