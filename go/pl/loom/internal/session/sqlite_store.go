@@ -993,6 +993,7 @@ SELECT session_id, data FROM checkpoints ORDER BY session_id, sequence, created_
 		refs      map[domain.ArtifactID]int64
 	}
 	var all []migrated
+	bySession := make(map[domain.SessionID]int) // sessionID -> index in all
 	for rows.Next() {
 		var rawSession string
 		var data []byte
@@ -1007,13 +1008,43 @@ SELECT session_id, data FROM checkpoints ORDER BY session_id, sequence, created_
 		if err := json.Unmarshal(data, &checkpoint); err != nil {
 			return storeError("decode checkpoint for artifact reference migration", err)
 		}
-		all = append(all, migrated{sessionID: sessionID, refs: checkpointArtifactRefs(checkpoint)})
+		idx, ok := bySession[sessionID]
+		if !ok {
+			idx = len(all)
+			bySession[sessionID] = idx
+			all = append(all, migrated{sessionID: sessionID, refs: map[domain.ArtifactID]int64{}})
+		}
+		for id, size := range checkpointArtifactRefs(checkpoint) {
+			if old, exists := all[idx].refs[id]; !exists || size > old {
+				all[idx].refs[id] = size
+			}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return storeError("iterate migration checkpoints", err)
 	}
 	if err := rows.Close(); err != nil {
 		return storeError("close migration checkpoints", err)
+	}
+	// Directive events carry artifact references too; scanning them keeps
+	// the reference graph complete even for sessions whose checkpoints are
+	// gone (docs/SURFACE_DESIGN.md §4.6).
+	directiveRefs, err := s.scanEventArtifactRefs(ctx, "")
+	if err != nil {
+		return err
+	}
+	for sessionID, refs := range directiveRefs {
+		idx, ok := bySession[sessionID]
+		if !ok {
+			idx = len(all)
+			bySession[sessionID] = idx
+			all = append(all, migrated{sessionID: sessionID, refs: map[domain.ArtifactID]int64{}})
+		}
+		for id, size := range refs {
+			if old, exists := all[idx].refs[id]; !exists || size > old {
+				all[idx].refs[id] = size
+			}
+		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1031,6 +1062,61 @@ SELECT session_id, data FROM checkpoints ORDER BY session_id, sequence, created_
 	return nil
 }
 
+// scanEventArtifactRefs scans the events that carry artifact
+// references — surface directives (masked/archived) and message events
+// (attachments) — and returns per-session references. An empty sessionID
+// scans all sessions. A corrupt payload fails the scan: a silently
+// under-pinned graph could let GC reclaim live artifacts.
+func (s *SQLiteStore) scanEventArtifactRefs(ctx context.Context, sessionID string) (map[domain.SessionID]map[domain.ArtifactID]int64, error) {
+	query := `SELECT session_id, type, payload FROM events WHERE type IN (` +
+		`'context.masked', 'context.archived', 'user.message_added', 'model.response_completed', 'tool.result_added', 'budget.notice')`
+	args := []any{}
+	if sessionID != "" {
+		query += ` AND session_id = ?`
+		args = append(args, sessionID)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, storeError("load reference-carrying events for artifact references", err)
+	}
+	defer rows.Close()
+	out := make(map[domain.SessionID]map[domain.ArtifactID]int64)
+	for rows.Next() {
+		var rawSession, evtType string
+		var payload []byte
+		if err := rows.Scan(&rawSession, &evtType, &payload); err != nil {
+			return nil, storeError("scan reference-carrying event for artifact references", err)
+		}
+		sid, err := domain.ParseSessionID(rawSession)
+		if err != nil {
+			return nil, storeError("decode reference-carrying event session ID", err)
+		}
+		evt := domain.Event{Type: domain.EventType(evtType), Payload: payload}
+		refs, err := surfaceDirectiveArtifactRefs(evt)
+		if err != nil {
+			return nil, storeError("scan directive artifact references", err)
+		}
+		msgRefs, err := messageEventArtifactRefs(evt)
+		if err != nil {
+			return nil, storeError("scan message artifact references", err)
+		}
+		refs = append(refs, msgRefs...)
+		if len(refs) == 0 {
+			continue
+		}
+		if out[sid] == nil {
+			out[sid] = make(map[domain.ArtifactID]int64)
+		}
+		for _, ref := range refs {
+			addArtifactRef(out[sid], ref)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, storeError("iterate reference-carrying events for artifact references", err)
+	}
+	return out, nil
+}
+
 func addArtifactRefs(ctx context.Context, tx *sql.Tx, sessionID domain.SessionID, refs map[domain.ArtifactID]int64) error {
 	for id, size := range refs {
 		if _, err := tx.ExecContext(ctx, `
@@ -1045,31 +1131,97 @@ ON CONFLICT(session_id, artifact_id) DO UPDATE SET size = MAX(size, excluded.siz
 
 func checkpointArtifactRefs(checkpoint domain.Checkpoint) map[domain.ArtifactID]int64 {
 	refs := make(map[domain.ArtifactID]int64)
-	add := func(ref *domain.ArtifactRef) {
-		if ref == nil || ref.ID.IsZero() || ref.Size < 0 {
-			return
-		}
-		if old, ok := refs[ref.ID]; !ok || ref.Size > old {
-			refs[ref.ID] = ref.Size
-		}
-	}
 	for _, message := range checkpoint.Messages {
 		for _, ref := range message.ArtifactRefs() {
-			ref := ref
-			add(&ref)
+			addArtifactRef(refs, ref)
 		}
 		// Compaction replacement messages can only carry text parts, so the
 		// artifact references their payload depends on travel in metadata.
 		if encoded := message.Metadata[domain.MetadataCompactedArtifacts]; encoded != "" {
 			var metaRefs []domain.ArtifactRef
 			if err := json.Unmarshal([]byte(encoded), &metaRefs); err == nil {
-				for i := range metaRefs {
-					add(&metaRefs[i])
+				for _, ref := range metaRefs {
+					addArtifactRef(refs, ref)
 				}
 			}
 		}
 	}
 	return refs
+}
+
+// addArtifactRef merges one reference into the map, keeping the max size.
+func addArtifactRef(refs map[domain.ArtifactID]int64, ref domain.ArtifactRef) {
+	if ref.ID.IsZero() || ref.Size < 0 {
+		return
+	}
+	if old, ok := refs[ref.ID]; !ok || ref.Size > old {
+		refs[ref.ID] = ref.Size
+	}
+}
+
+// surfaceDirectiveArtifactRefs extracts the artifact references carried by
+// surface directive events (docs/SURFACE_DESIGN.md §4.6): masked outputs
+// and archived spans, including the archive marker's inherited reference
+// list. Scanning them keeps directive-referenced artifacts alive even when
+// every checkpoint of the session is lost — the log alone must suffice to
+// rebuild the reference graph (checkpoint as pure cache, §2 principle 4).
+//
+// context.summarized is deliberately absent: buildSummaryReplacement
+// produces text-only messages (verbatim user text + summary bridge), so a
+// replacement currently carries no references. If that ever changes, add
+// the case here.
+func surfaceDirectiveArtifactRefs(evt domain.Event) ([]domain.ArtifactRef, error) {
+	switch evt.Type {
+	case domain.EventContextMasked:
+		var payload domain.ContextMaskedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+			return nil, fmt.Errorf("decode context.masked payload: %w", err)
+		}
+		refs := make([]domain.ArtifactRef, 0, len(payload.Masks))
+		for _, mask := range payload.Masks {
+			refs = append(refs, mask.Artifact)
+		}
+		return refs, nil
+	case domain.EventContextArchived:
+		var payload domain.ContextArchivedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+			return nil, fmt.Errorf("decode context.archived payload: %w", err)
+		}
+		refs := []domain.ArtifactRef{payload.Artifact}
+		if encoded := payload.Marker.Metadata[domain.MetadataCompactedArtifacts]; encoded != "" {
+			var metaRefs []domain.ArtifactRef
+			if err := json.Unmarshal([]byte(encoded), &metaRefs); err == nil {
+				refs = append(refs, metaRefs...)
+			}
+		}
+		return refs, nil
+	default:
+		return nil, nil
+	}
+}
+
+// messageEventArtifactRefs extracts artifact references carried by
+// message-carrying events (attachments, inline images): without any
+// checkpoint these are the only place attachment references survive.
+func messageEventArtifactRefs(evt domain.Event) ([]domain.ArtifactRef, error) {
+	var msg domain.Message
+	switch evt.Type {
+	case domain.EventUserMessageAdded, domain.EventModelResponseCompleted, domain.EventToolResultAdded:
+		payload, err := domain.UnmarshalMessageEventPayload(evt.Payload)
+		if err != nil {
+			return nil, fmt.Errorf("decode %s payload: %w", evt.Type, err)
+		}
+		msg = payload.Message
+	case domain.EventBudgetNotice:
+		var payload domain.BudgetNoticePayload
+		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+			return nil, fmt.Errorf("decode budget.notice payload: %w", err)
+		}
+		msg = payload.Message
+	default:
+		return nil, nil
+	}
+	return msg.ArtifactRefs(), nil
 }
 
 func formatTime(value time.Time) string {

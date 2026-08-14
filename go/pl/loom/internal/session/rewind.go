@@ -436,5 +436,37 @@ func recomputeArtifactRefs(ctx context.Context, tx *sql.Tx, sessionID domain.Ses
 	if err := rows.Close(); err != nil {
 		return storeError("close checkpoints for artifact references", err)
 	}
+	// Surviving directive events pin their artifacts too: the reference
+	// graph must stay complete even if the checkpoints that carried the
+	// same references were truncated (docs/SURFACE_DESIGN.md §4.6).
+	directiveRows, err := tx.QueryContext(ctx,
+		`SELECT type, payload FROM events WHERE session_id = ? AND type IN ('context.masked', 'context.archived')`,
+		sessionID.String())
+	if err != nil {
+		return storeError("load surviving directive events for artifact references", err)
+	}
+	for directiveRows.Next() {
+		var evtType string
+		var payload []byte
+		if err := directiveRows.Scan(&evtType, &payload); err != nil {
+			_ = directiveRows.Close()
+			return storeError("scan directive event for artifact references", err)
+		}
+		directiveRefs, err := surfaceDirectiveArtifactRefs(domain.Event{Type: domain.EventType(evtType), Payload: payload})
+		if err != nil {
+			_ = directiveRows.Close()
+			return storeError("scan directive artifact references", err)
+		}
+		for _, ref := range directiveRefs {
+			addArtifactRef(refs, ref)
+		}
+	}
+	if err := directiveRows.Err(); err != nil {
+		_ = directiveRows.Close()
+		return storeError("iterate directive events for artifact references", err)
+	}
+	if err := directiveRows.Close(); err != nil {
+		return storeError("close directive events for artifact references", err)
+	}
 	return addArtifactRefs(ctx, tx, sessionID, refs)
 }

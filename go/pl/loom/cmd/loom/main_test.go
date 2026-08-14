@@ -284,10 +284,11 @@ func TestContinueRunPersistsAtExistingSessionVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadEvents: %v", err)
 	}
-	if len(events) != 7 || events[0].Type != domain.EventRunCreated ||
+	if len(events) != 8 || events[0].Type != domain.EventRunCreated ||
 		events[1].Type != domain.EventUserMessageAdded || events[2].Type != domain.EventRunStateChanged ||
-		events[3].Type != domain.EventBudgetUpdated || events[4].Type != domain.EventModelRequestStarted ||
-		events[5].Type != domain.EventModelRequestFailed || events[6].Type != domain.EventRunFailed {
+		events[3].Type != domain.EventBudgetUpdated || events[4].Type != domain.EventModelRequestHeader ||
+		events[5].Type != domain.EventModelRequestStarted ||
+		events[6].Type != domain.EventModelRequestFailed || events[7].Type != domain.EventRunFailed {
 		t.Fatalf("unexpected continuation events: %+v", events)
 	}
 }
