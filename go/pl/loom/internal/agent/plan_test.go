@@ -280,7 +280,7 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 	loop := &Loop{Run: run}
 
 	// No plan: messages pass through untouched.
-	messages, _ := loop.effectiveMessages(context.Background())
+	messages, _, _ := loop.effectiveMessages(context.Background())
 	if len(messages) != 1 {
 		t.Fatalf("messages = %d without plan, want 1", len(messages))
 	}
@@ -290,7 +290,7 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
 		{Index: 2, Goal: "step three", Status: domain.PlanItemTodo},
 	}}
-	messages, _ = loop.effectiveMessages(context.Background())
+	messages, _, _ = loop.effectiveMessages(context.Background())
 	if len(messages) != 2 {
 		t.Fatalf("messages = %d with plan, want 2", len(messages))
 	}
@@ -312,7 +312,7 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 	// A complete plan is not re-injected.
 	run.Plan.Items[1].Status = domain.PlanItemDone
 	run.Plan.Items[2].Status = domain.PlanItemDone
-	messages, _ = loop.effectiveMessages(context.Background())
+	messages, _, _ = loop.effectiveMessages(context.Background())
 	if len(messages) != 1 {
 		t.Fatalf("messages = %d with complete plan, want 1", len(messages))
 	}

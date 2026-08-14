@@ -748,6 +748,9 @@ type modelRequestAuditPayload struct {
 	ManifestID   string         `json:"manifest_id"`
 	ManifestHash string         `json:"manifest_hash"`
 	PromptHash   string         `json:"prompt_hash"`
+	// HeaderHash anchors this request to its model.request_header event
+	// (docs/SURFACE_DESIGN.md §4.8): the full header text lives there.
+	HeaderHash string `json:"header_hash,omitempty"`
 }
 
 type modelRequestFailedPayload struct {
@@ -758,6 +761,33 @@ type modelRequestFailedPayload struct {
 	// failure, ...), so the failure is diagnosable from the event log
 	// alone instead of requiring server logs.
 	Message string `json:"message,omitempty"`
+}
+
+// logRequestHeader persists the full request header on first use
+// (initial/resume) and on content change, returning its canonical hash for
+// the request_started anchor (docs/SURFACE_DESIGN.md §4.8). Unchanged
+// headers log nothing.
+func (l *Loop) logRequestHeader(header domain.RequestHeader) string {
+	hash := header.CanonicalHash()
+	switch {
+	case !l.headerLogged:
+		reason := domain.HeaderReasonResume
+		if l.sessionFreshAtStart {
+			reason = domain.HeaderReasonInitial
+		}
+		l.Run.appendEvent(domain.EventModelRequestHeader, domain.RequestHeaderPayload{
+			Header: header, Reason: reason, Hash: hash,
+		})
+		l.headerLogged = true
+	case hash != l.lastHeaderHash:
+		l.Run.appendEvent(domain.EventModelRequestHeader, domain.RequestHeaderPayload{
+			Header: header, Reason: domain.HeaderReasonChange, Hash: hash,
+		})
+	default:
+		return hash
+	}
+	l.lastHeaderHash = hash
+	return hash
 }
 
 type permissionResolvedPayload struct {
@@ -933,6 +963,13 @@ type Loop struct {
 	// (runaway repeated-call detection).
 	lastCallSig       string
 	repeatedCallCount int
+	// Request-header bookkeeping (docs/SURFACE_DESIGN.md §4.8):
+	// sessionFreshAtStart is captured at Execute entry (before the initial
+	// flush) and distinguishes the 'initial' header reason from 'resume';
+	// headerLogged/lastHeaderHash implement log-once-then-on-change dedup.
+	sessionFreshAtStart bool
+	headerLogged        bool
+	lastHeaderHash      string
 	// consecutiveExecFailures counts execution-phase tool failures in a
 	// row (prepare failures excluded by design).
 	consecutiveExecFailures int
@@ -1135,6 +1172,7 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 		}
 	}()
 
+	l.sessionFreshAtStart = l.Run.persistedVersion == 0
 	if err := l.flushEvents(ctx); err != nil {
 		l.terminate(ctx, domain.OutcomeFailed)
 		return err
@@ -1264,7 +1302,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	if modelName == "" {
 		modelName = "default"
 	}
-	messages, rules := l.effectiveMessages(ctx)
+	messages, rules, systemText := l.effectiveMessages(ctx)
 	manifest, err := buildContextManifest(messages, rules)
 	if err != nil {
 		l.terminate(ctx, domain.OutcomeFailed)
@@ -1287,9 +1325,22 @@ func (l *Loop) callModel(ctx context.Context) error {
 	}
 
 	startedAt := l.Run.Clock.Now()
+	// Persist the full request header on first use and on change
+	// (docs/SURFACE_DESIGN.md §4.8): the header plus the replayed surface
+	// answers "what exactly did the model see on call N".
+	headerHash := l.logRequestHeader(domain.RequestHeader{
+		ModelName:   modelName,
+		Reasoning:   l.Reasoning,
+		MaxTokens:   l.Run.Limits.MaxOutputTokens,
+		Temperature: req.Temperature,
+		System:      systemText,
+		Tools:       req.Tools,
+		Rules:       manifest.Rules,
+	})
 	l.Run.appendEvent(domain.EventModelRequestStarted, modelRequestAuditPayload{
 		RequestID: req.ID, ModelName: modelName, ManifestID: manifest.ID,
 		ManifestHash: manifest.Hash, PromptHash: manifest.PromptHash,
+		HeaderHash: headerHash,
 	})
 	if err := l.flushEvents(ctx); err != nil {
 		l.terminate(ctx, domain.OutcomeFailed)
@@ -1428,10 +1479,11 @@ func (l *Loop) reportContextUsage() {
 // hint); OpenAI-compatible vendors keep the head system and downgrade the
 // rest to user text (GLM-class constraint, see openai.apiRole) — which
 // conveniently matches the codex "dynamic context as user fragments" model.
-func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domain.ContextRuleRef) {
+func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domain.ContextRuleRef, string) {
 	messages := append([]domain.Message(nil), l.Run.Messages...)
 	var prefix []domain.Message
 	var rules []domain.ContextRuleRef
+	var systemText string
 	if l.SystemPrompt != nil {
 		static, dynamic, refs, err := l.systemPromptParts(ctx)
 		switch {
@@ -1442,9 +1494,15 @@ func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domai
 		default:
 			if s := strings.TrimSpace(static); s != "" {
 				prefix = append(prefix, l.systemMessage(s, true))
+				systemText = s
 			}
 			if d := strings.TrimSpace(dynamic); d != "" {
 				prefix = append(prefix, l.systemMessage(d, false))
+				if systemText != "" {
+					systemText += "\n\n" + d
+				} else {
+					systemText = d
+				}
 			}
 			rules = refs
 		}
@@ -1456,7 +1514,7 @@ func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domai
 	if plan := l.Run.Plan; len(plan.Items) > 0 && !plan.IsComplete() {
 		prefix = append(prefix, l.systemMessage(planStatusNote(plan), false))
 	}
-	return append(prefix, messages...), rules
+	return append(prefix, messages...), rules, systemText
 }
 
 // systemPromptParts renders the system prompt split for caching. Builders
@@ -2168,6 +2226,9 @@ var contextOverflowNeedles = []string{
 	"prompt is too long", "too many tokens", "request too large",
 	"input is too long", "reduce the length", "exceeds the context",
 	"context overflow",
+	// Length-phrased variants observed on gateways that meter raw prompt
+	// length (aigc: "Prompt exceeds max length").
+	"exceeds max length", "maximum length",
 }
 
 // requestTooLargeNeedles fingerprints gateway/reverse-proxy body-size
@@ -2250,11 +2311,11 @@ func (l *Loop) handleContextOverflow(ctx context.Context, cause error) error {
 }
 
 // summarizeForCompaction asks the model to write a handoff summary of the
-// current transcript (checkpoint compaction). The call is internal: no
+// given surface (checkpoint compaction). The call is internal: no
 // tools are offered and stream hooks are suppressed so the UI never sees
 // the bookkeeping turn.
-func (l *Loop) summarizeForCompaction(ctx context.Context) (string, error) {
-	messages := append([]domain.Message(nil), l.Run.Messages...)
+func (l *Loop) summarizeForCompaction(ctx context.Context, base []domain.Message) (string, error) {
+	messages := append([]domain.Message(nil), base...)
 	messages = append(messages, domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser, Status: domain.MessageStatusFinal,
 		Revision: 1, Sequence: int64(len(messages) + 1),
@@ -2380,8 +2441,27 @@ func (l *Loop) compact(ctx context.Context) error {
 	}
 	occupancyBefore := l.contextOccupancy()
 	tokensBefore := estTokens(l.Run.Messages)
-	result := cond.Condense(ctx, &l.Run.Messages, l.Artifacts)
-	tokensAfter := estTokens(l.Run.Messages)
+
+	// The condenser emits pure directives (docs/SURFACE_DESIGN.md §4.2);
+	// they are applied through the shared domain application function —
+	// the same code path replay uses — and appended to the event log so
+	// the surface stays a pure function of the log.
+	ops := cond.Plan(ctx, l.Run.Messages, l.Artifacts, l.Run.Clock.Now())
+	newMessages := l.Run.Messages
+	if !ops.Empty() {
+		applied, err := domain.ApplySurfaceOps(l.Run.Messages, ops)
+		if err != nil {
+			// Directive self-validation failure: skip the mechanical pass
+			// entirely rather than persist a surface replay cannot rebuild.
+			if l.Logger != nil {
+				l.Logger.Warn("surface directive application failed; skipping mechanical compaction", "error", err)
+			}
+			ops = domain.SurfaceOps{}
+		} else {
+			newMessages = applied
+		}
+	}
+	tokensAfter := estTokens(newMessages)
 
 	// Level 3: when mechanical masking cannot reach the target, ask the
 	// model for a handoff summary and rebuild the transcript around it.
@@ -2389,30 +2469,50 @@ func (l *Loop) compact(ctx context.Context) error {
 	// the run.
 	summarized := false
 	summaryBytes := 0
-	truncatedUserMessages := 0
+	var retryArchives []domain.ContextArchivedPayload
 	if tokensAfter > cond.target() {
-		summary, err := l.summarizeForCompaction(ctx)
-		// The summarize request itself can overflow: drop the oldest
+		summary, err := l.summarizeForCompaction(ctx, newMessages)
+		// The summarize request itself can overflow: archive the oldest
 		// pairing-safe span and retry (codex remove_first_item style).
 		for attempts := 0; err != nil && isContextOverflowError(err) && attempts < maxCompactionSummaryRetries; attempts++ {
-			if !l.dropOldestForCompactionRetry() {
+			retryOp, ok := l.archiveOldestForSummaryRetry(ctx, newMessages)
+			if !ok {
 				break
 			}
-			summary, err = l.summarizeForCompaction(ctx)
+			droppedView, applyErr := domain.ApplyArchiveDirective(newMessages, retryOp)
+			if applyErr != nil {
+				if l.Logger != nil {
+					l.Logger.Warn("summary-retry archive directive failed to apply; stopping retries", "error", applyErr)
+				}
+				break
+			}
+			newMessages = droppedView
+			retryArchives = append(retryArchives, retryOp)
+			summary, err = l.summarizeForCompaction(ctx, newMessages)
 		}
 		if err != nil {
 			if l.Logger != nil {
 				l.Logger.Warn("summarizing compaction failed; keeping masked history", "error", err)
 			}
 		} else {
-			var dropped int
-			l.Run.Messages, dropped = buildSummaryReplacement(l.Run.Messages, summary, l.Run.Clock.Now(), cond.userMessageBudget())
-			truncatedUserMessages = dropped
-			summarized = true
-			summaryBytes = len(summary)
-			tokensAfter = estTokens(l.Run.Messages)
+			replacement, dropped := buildSummaryReplacement(newMessages, summary, l.Run.Clock.Now(), cond.userMessageBudget())
+			final, applyErr := domain.ApplyReplacementDirective(newMessages, replacement)
+			if applyErr != nil {
+				if l.Logger != nil {
+					l.Logger.Warn("summary replacement directive failed to apply; keeping masked history", "error", applyErr)
+				}
+			} else {
+				newMessages = final
+				ops.Replacement = &domain.ContextSummarizedPayload{
+					Replacement:         replacement,
+					DroppedUserMessages: dropped,
+				}
+				summarized = true
+				summaryBytes = len(summary)
+			}
 		}
 	}
+	tokensAfter = estTokens(newMessages)
 
 	// Fresh window: the next request's size is the pure estimate again,
 	// and occupancy notices re-arm (other dimensions never do). Remember
@@ -2424,14 +2524,53 @@ func (l *Loop) compact(ctx context.Context) error {
 	if l.noticeFired != nil {
 		delete(l.noticeFired, dimensionOccupancy)
 	}
-	l.lastCompactEst = estTokens(l.Run.Messages)
+	l.lastCompactEst = estTokens(newMessages)
+	l.Run.Messages = newMessages
+
+	// Directive events precede the audit event; replay applies them in log
+	// order to reconstruct this exact surface (docs/SURFACE_DESIGN.md §4.1.5).
+	if ops.Masks != nil {
+		l.Run.appendEvent(domain.EventContextMasked, *ops.Masks)
+	}
+	if ops.Archive != nil {
+		l.Run.appendEvent(domain.EventContextArchived, *ops.Archive)
+	}
+	for _, retry := range retryArchives {
+		l.Run.appendEvent(domain.EventContextArchived, retry)
+	}
+	if ops.Replacement != nil {
+		l.Run.appendEvent(domain.EventContextSummarized, *ops.Replacement)
+	}
+
+	// The audit facts derive from the directives themselves: one ledger,
+	// no parallel bookkeeping (docs/SURFACE_DESIGN.md §4.2).
+	var auditOutputs []maskedOutput
+	maskedBytes := 0
+	if ops.Masks != nil {
+		for _, mask := range ops.Masks.Masks {
+			maskedBytes += mask.OriginalBytes
+			auditOutputs = append(auditOutputs, maskedOutput{
+				MessageID: mask.MessageID.String(),
+				Bytes:     mask.OriginalBytes,
+				Artifact:  mask.Artifact.ID.String(),
+			})
+		}
+	}
+	archivedMessages := 0
+	if ops.Archive != nil {
+		archivedMessages = int(ops.Archive.ToSequence - ops.Archive.FromSequence + 1)
+	}
+	truncatedUserMessages := 0
+	if ops.Replacement != nil {
+		truncatedUserMessages = ops.Replacement.DroppedUserMessages
+	}
 
 	l.Run.appendEvent(domain.EventContextCompacted, contextCompactedPayload{
 		Trigger:               trigger,
 		Phase:                 phase,
-		MaskedOutputs:         len(result.outputs),
-		MaskedBytes:           result.bytesMasked,
-		ArchivedMessages:      result.archived,
+		MaskedOutputs:         len(auditOutputs),
+		MaskedBytes:           maskedBytes,
+		ArchivedMessages:      archivedMessages,
 		EstTokensBefore:       tokensBefore,
 		EstTokensAfter:        tokensAfter,
 		OccupancyBefore:       occupancyBefore,
@@ -2439,15 +2578,15 @@ func (l *Loop) compact(ctx context.Context) error {
 		Summarized:            summarized,
 		SummaryBytes:          summaryBytes,
 		TruncatedUserMessages: truncatedUserMessages,
-		Outputs:               result.outputs,
+		Outputs:               auditOutputs,
 	})
-	if l.Logger != nil && (len(result.outputs) > 0 || result.archived > 0 || summarized) {
+	if l.Logger != nil && (len(auditOutputs) > 0 || archivedMessages > 0 || summarized) {
 		l.Logger.Info("context compacted",
 			"trigger", trigger,
 			"phase", phase,
-			"masked_outputs", len(result.outputs),
-			"masked_bytes", result.bytesMasked,
-			"archived_messages", result.archived,
+			"masked_outputs", len(auditOutputs),
+			"masked_bytes", maskedBytes,
+			"archived_messages", archivedMessages,
 			"summarized", summarized,
 			"est_tokens_before", tokensBefore,
 			"est_tokens_after", tokensAfter)
@@ -2456,9 +2595,9 @@ func (l *Loop) compact(ctx context.Context) error {
 		l.traceRun.RecordEvent(ctx, "context.compacted", map[string]string{
 			"trigger":           trigger,
 			"phase":             phase,
-			"masked_outputs":    fmt.Sprintf("%d", len(result.outputs)),
-			"masked_bytes":      fmt.Sprintf("%d", result.bytesMasked),
-			"archived_messages": fmt.Sprintf("%d", result.archived),
+			"masked_outputs":    fmt.Sprintf("%d", len(auditOutputs)),
+			"masked_bytes":      fmt.Sprintf("%d", maskedBytes),
+			"archived_messages": fmt.Sprintf("%d", archivedMessages),
 			"summarized":        fmt.Sprintf("%t", summarized),
 			"est_tokens_before": fmt.Sprintf("%d", tokensBefore),
 			"est_tokens_after":  fmt.Sprintf("%d", tokensAfter),
@@ -2482,28 +2621,49 @@ func (l *Loop) compact(ctx context.Context) error {
 // compaction summarize request itself overflows the window.
 const maxCompactionSummaryRetries = 3
 
-// dropOldestForCompactionRetry drops the smallest pairing-safe prefix of
-// the transcript so the summarize request can fit the window. It reports
-// whether anything was dropped. Messages dropped here have already passed
-// Level-1 masking and (when eligible) Level-2 archival in this pass.
-func (l *Loop) dropOldestForCompactionRetry() bool {
-	msgs := l.Run.Messages
-	if len(msgs) <= 1 {
-		return false
+// archiveOldestForSummaryRetry archives the smallest pairing-safe prefix
+// of the surface so the summarize request can fit the window, returning
+// the directive for both application and the event log. Unlike the former
+// dropOldestForCompactionRetry this PRESERVES the span (full-fidelity
+// artifact + marker) whenever an artifact store is available; without one
+// it degrades to a drop marker with a zero artifact — the original
+// messages remain in the event log either way (docs/SURFACE_DESIGN.md).
+func (l *Loop) archiveOldestForSummaryRetry(ctx context.Context, messages []domain.Message) (domain.ContextArchivedPayload, bool) {
+	if len(messages) <= 1 {
+		return domain.ContextArchivedPayload{}, false
 	}
-	cut := pairingSafeCut(msgs, 1, len(msgs)-1)
+	cut := pairingSafeCut(messages, 1, len(messages)-1)
 	if cut == 0 {
-		return false
+		return domain.ContextArchivedPayload{}, false
 	}
-	remaining := append([]domain.Message(nil), msgs[cut:]...)
-	for i := range remaining {
-		remaining[i].Sequence = int64(i + 1)
+
+	if l.Artifacts != nil {
+		if archive, ok := archiveSpan(ctx, messages[:cut], l.Artifacts, l.Run.Clock.Now()); ok {
+			if l.Logger != nil {
+				l.Logger.Warn("compaction summarize overflow; archived oldest messages", "archived", cut)
+			}
+			return archive, true
+		}
 	}
-	l.Run.Messages = remaining
+	// No artifact store (or preservation failed): degrade to a drop marker
+	// with a zero artifact — the original messages remain in the event log.
+	marker := domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleSystem, Status: domain.MessageStatusFinal,
+		Revision: 1,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: fmt.Sprintf("%s %d messages dropped to fit the compaction summary request into the context window]",
+			archivedSpanMark, cut)}},
+		CreatedAt: l.Run.Clock.Now(),
+		Metadata:  map[string]string{"compacted": "archived"},
+		// Sequence is assigned by dense renumbering at application time.
+	}
 	if l.Logger != nil {
-		l.Logger.Warn("compaction summarize overflow; dropped oldest messages", "dropped", cut)
+		l.Logger.Warn("compaction summarize overflow; dropped oldest messages without preservation", "dropped", cut)
 	}
-	return true
+	return domain.ContextArchivedPayload{
+		FromSequence: messages[0].Sequence,
+		ToSequence:   messages[cut-1].Sequence,
+		Marker:       marker,
+	}, true
 }
 
 // ManagedPromptInfo is implemented by prompt builders backed by Langfuse
