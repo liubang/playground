@@ -44,18 +44,31 @@ func TestSessionIncrementalReadAndExit(t *testing.T) {
 		t.Fatal("session not running right after start")
 	}
 
-	// First drain picks up only the first line (second one is not out yet).
-	time.Sleep(150 * time.Millisecond)
-	out := session.Read(0)
-	if !strings.Contains(out.Data, "first") {
-		t.Fatalf("first Read() = %q, want it to contain 'first'", out.Data)
+	// First drain picks up only the first line (second one is not out
+	// yet). Poll instead of sleeping a fixed 150ms: python interpreter
+	// startup latency varies with sandbox load, and the fixed window was
+	// an intermittent failure under bazel (REVIEW: known flaky). The
+	// script prints "second" only 300ms after start, so a poll that
+	// returns as soon as "first" arrives still observes the incremental
+	// semantics — the first logical read never contains "second".
+	var firstOut string
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		firstOut += session.Read(0).Data
+		if strings.Contains(firstOut, "first") {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
-	if strings.Contains(out.Data, "second") {
-		t.Fatalf("first Read() = %q, must not contain 'second' yet", out.Data)
+	if !strings.Contains(firstOut, "first") {
+		t.Fatalf("first Read() = %q, want it to contain 'first'", firstOut)
+	}
+	if strings.Contains(firstOut, "second") {
+		t.Fatalf("first Read() = %q, must not contain 'second' yet", firstOut)
 	}
 
 	<-session.Done()
-	out = session.Read(0)
+	out := session.Read(0)
 	if out.Running {
 		t.Fatal("Read() reports running after Done")
 	}
