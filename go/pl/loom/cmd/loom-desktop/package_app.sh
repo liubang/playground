@@ -38,8 +38,13 @@ if [[ -z "${ZIP}" ]]; then
 fi
 
 DEST="${BUILD_WORKSPACE_DIRECTORY:-$PWD}/dist"
-rm -rf "${DEST}/Loom.app"
 mkdir -p "${DEST}"
+# dist holds only the LATEST packaging output: stale artifacts from a
+# previous version (old Loom.app, dated DMGs, versioned debs) are
+# removed before anything new lands. rm -rf on a non-matching glob is
+# a no-op.
+rm -rf "${DEST}/Loom.app" "${DEST}"/Loom-*.dmg "${DEST}"/loom_*.deb
+
 unzip -q "${ZIP}" -d "${DEST}"
 chmod +x "${DEST}/Loom.app/Contents/MacOS/loom-desktop"
 

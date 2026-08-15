@@ -52,6 +52,10 @@ WS="${BUILD_WORKSPACE_DIRECTORY:-$PWD}"
 cd "${WS}"
 DEST="${WS}/dist"
 mkdir -p "${DEST}"
+# dist holds only the LATEST packaging output: stale artifacts from a
+# previous version (old Loom.app, dated DMGs, versioned debs) are
+# removed before anything new lands.
+rm -rf "${DEST}/Loom.app" "${DEST}"/Loom-*.dmg "${DEST}"/loom_*.deb
 
 # Version identity: "<yyyymmdd>.<git-short-hash>" from the same single
 # producer the bazel builds use (tools/workspace_status.sh), injected
