@@ -45,6 +45,7 @@ export class Transcript {
     this.followups = [] // pending followup notice（{el, text}，FIFO，turn 边界接力）
     this.following = true
     this._rafPending = false
+    this._forceFollow = false // 新块强制回底：rAF 回调前不被 scroll 事件取消
     this._pendingStreamTs = '' // 首个 text_delta 事件时间，收笔注入草稿操作行
     this._turnAssistant = null // 本轮最新 assistant 块（轮结束时挂操作行）
     this._turnAssistantTs = '' // 该块内容的事件时间
@@ -78,6 +79,7 @@ export class Transcript {
     this.steers = []
     this.followups = []
     this.following = true
+    this._forceFollow = false
     this._pendingStreamTs = ''
     this._turnAssistant = null
     this._turnAssistantTs = ''
@@ -90,22 +92,31 @@ export class Transcript {
     this.scroller.scrollTop = this.scroller.scrollHeight
   }
 
-  _maybeFollow() {
-    if (!this.following || this._rafPending) return
+  _maybeFollow(force) {
+    // force=true（新块/审批卡/问答卡）：强制回底意图先记下，即使 rAF 回调
+    // 前用户滚动事件把 following 置回 false（手指滑动/惯性滚动），也照样
+    // 滚动——否则审批卡追加在视口外，用户看不到又无后续事件补滚。
+    // force=false（流式 delta）：严格遵循 following，上翻阅读时不打扰。
+    if (force) this._forceFollow = true
+    if (!this.following && !this._forceFollow) return
+    if (this._rafPending) return
     this._rafPending = true
     requestAnimationFrame(() => {
       this._rafPending = false
-      if (this.following) this._scrollToBottom()
+      const follow = this._forceFollow || this.following
+      this._forceFollow = false
+      if (follow) this._scrollToBottom()
     })
   }
 
   _append(node) {
-    // 新块到达视为收到新对话：强制回到底部。流式 delta 仍遵循 following
-    // 标志（用户上翻阅读时不被增量打扰），但下一个新块会重新带到底部。
+    // 新块到达视为收到新对话：强制回到底部（force，见 _maybeFollow——普通
+    // following 会被滚动中的 scroll 事件取消，导致审批卡不可见）。流式
+    // delta 仍遵循 following 标志（用户上翻阅读时不被增量打扰）。
     this.following = true
     if (this.followBtn) this.followBtn.hidden = true
     this.container.appendChild(node)
-    this._maybeFollow()
+    this._maybeFollow(true)
   }
 
   // 轮结束时把操作行（复制/反馈 + 时间）挂到本轮末段 assistant 块上。
