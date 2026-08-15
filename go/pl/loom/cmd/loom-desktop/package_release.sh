@@ -13,11 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# package_release.sh — build the four release artifacts into dist/:
+# package_release.sh — build the release artifacts into dist/:
 #
 #   Loom-<version>-macos-arm64.dmg    desktop app, Apple silicon
 #   Loom-<version>-macos-x86_64.dmg   desktop app, Intel
-#   loom_<deb-version>_amd64.deb      CLI (loom chat/run/serve), Linux x86_64
+#   loom-darwin-arm64.tar.gz          CLI, macOS arm64 (single `loom` binary)
+#   loom-darwin-amd64.tar.gz          CLI, macOS Intel
+#   loom-linux-arm64.tar.gz           CLI, Linux arm64
+#   loom-linux-amd64.tar.gz           CLI, Linux x86_64
+#   loom_<deb-version>_amd64.deb      CLI, Linux x86_64
 #   loom_<deb-version>_arm64.deb      CLI, Linux arm64
 #
 # macOS bundles take their metadata + icon from the Bazel-built
@@ -55,7 +59,7 @@ mkdir -p "${DEST}"
 # dist holds only the LATEST packaging output: stale artifacts from a
 # previous version (old Loom.app, dated DMGs, versioned debs) are
 # removed before anything new lands.
-rm -rf "${DEST}/Loom.app" "${DEST}"/Loom-*.dmg "${DEST}"/loom_*.deb
+rm -rf "${DEST}/Loom.app" "${DEST}"/Loom-*.dmg "${DEST}"/loom_*.deb "${DEST}"/loom-*.tar.gz
 
 # Version identity: "<yyyymmdd>.<git-short-hash>" from the same single
 # producer the bazel builds use (tools/workspace_status.sh), injected
@@ -149,4 +153,20 @@ for arch in amd64 arm64; do
     echo "package_release: building CLI linux_${arch} ..." 1>&2
     go_build "${TMP}/loom-linux-${arch}" linux "${arch}" ./pl/loom/cmd/loom
     make_deb "${arch}" "${TMP}/loom-linux-${arch}"
+    mkdir -p "${TMP}/tgz-linux-${arch}"
+    cp "${TMP}/loom-linux-${arch}" "${TMP}/tgz-linux-${arch}/loom"
+    tar -czf "${DEST}/loom-linux-${arch}.tar.gz" -C "${TMP}/tgz-linux-${arch}" loom
+    echo "packaged: ${DEST}/loom-linux-${arch}.tar.gz"
+done
+
+# --- macOS CLI (.tar.gz) ---
+# The Homebrew formula downloads loom-darwin-{arm64,amd64}.tar.gz; package
+# the same single-binary layout as the Linux tarballs.
+for arch in arm64 amd64; do
+    echo "package_release: building CLI darwin_${arch} ..." 1>&2
+    go_build "${TMP}/loom-darwin-${arch}" darwin "${arch}" ./pl/loom/cmd/loom
+    mkdir -p "${TMP}/tgz-darwin-${arch}"
+    cp "${TMP}/loom-darwin-${arch}" "${TMP}/tgz-darwin-${arch}/loom"
+    tar -czf "${DEST}/loom-darwin-${arch}.tar.gz" -C "${TMP}/tgz-darwin-${arch}" loom
+    echo "packaged: ${DEST}/loom-darwin-${arch}.tar.gz"
 done
