@@ -1,6 +1,6 @@
 # Loom Desktop 设计（M4）
 
-- 状态：Implemented v5（M4.0~M4.5 已落地。v5：macOS 平台集成与发布工程——版本号单源化（`internal/version`）、squircle 图标、TCC usage descriptions、单实例 GUI 提示、Finder 启动 workspace 选择、窗口几何持久化、Notification Center 镜像、release 四产物（macOS 双架构 DMG + Linux CLI deb）与 strip（-s -w），见 §3.5/§6.5。v4：R-B2 实锤——AssetServer 通道 ContentLength 恒为 -1 且 responseWriter 无 http.Flusher（SSE 不可能），前后端通道从「AssetServer 进程内挂载」改为「常驻 loopback 监听 + bootstrap 跳转」（原 §2.3 降级方案转正）；token 注入主通道随之回到 URL fragment。v3：token 注入定稿 meta 标签（已随通道更换退役）；R-B1 三项 Bazel 适配；.app 打包签名验证通过。v2：前后端通道更正为 AssetServer 挂载（后被 v4 取代）；分享复制点更正为 main.js）
+- 状态：Implemented v6（v6：移除 Notification Center 镜像——审批请求 webview 页内已展示，系统横幅纯噪音，且 ad-hoc 签名下 TCC 通知授权随每次重打包失效、反复弹授权框；`notifications.go`/`notify_darwin.go` 删除，§3.5 行为表与架构图同步更新。v5：macOS 平台集成与发布工程——版本号单源化（`internal/version`）、squircle 图标、TCC usage descriptions、单实例 GUI 提示、Finder 启动 workspace 选择、窗口几何持久化、release 四产物（macOS 双架构 DMG + Linux CLI deb）与 strip（-s -w），见 §3.5/§6.5。v4：R-B2 实锤——AssetServer 通道 ContentLength 恒为 -1 且 responseWriter 无 http.Flusher（SSE 不可能），前后端通道从「AssetServer 进程内挂载」改为「常驻 loopback 监听 + bootstrap 跳转」（原 §2.3 降级方案转正）；token 注入主通道随之回到 URL fragment。v3：token 注入定稿 meta 标签（已随通道更换退役）；R-B1 三项 Bazel 适配；.app 打包签名验证通过。v2：前后端通道更正为 AssetServer 挂载（后被 v4 取代）；分享复制点更正为 main.js）
 - 日期：2026-08-08
 - 前置文档：`SERVE_DESIGN.md`（§5 协议、§10 客户端契约）、`WEB_DESIGN.md`（§3.4 api.js、§7 静态托管与安全头）、`WORKSPACE_DESIGN.md`
 - 范围：基于 Wails 的桌面应用前端（`loom-desktop`），与 TUI、WebUI 三种 UI 并存；内网监听与会话分享；Bazel 直接产出 macOS `.app`
@@ -124,7 +124,6 @@ loom-desktop (单一进程)
 6. broker := runtimeevent.NewBroker(WithDurableQueue(4096))
    app.WireSubagentObserver(...)
    service := app.NewSessionService(...)
-   go watchNotifications(ctx, broker, logger)                ← v5，§3.5：事件镜像到通知中心
 7. token := 32 字节随机（crypto/rand，进程内存，不落盘不打印）
 8. uiSrv := server.New(Config{Listen: "127.0.0.1:0", Token: token, ...})
    uiSrv.Listen(); go uiSrv.Serve()                            ← UI 常驻 loopback
@@ -164,7 +163,6 @@ lock.Release()
 | 单实例提示 | flock 冲突时 `display dialog` 警告（`dialogs_darwin.go`） | Finder 启动的第二实例无可见 stderr，弹窗替代静默退出；osascript 失败按 stderr 是否含 "User canceled" 区分「用户取消」与「基础设施失败」（后者回退 home 目录，SSH 无 window server 场景不误判） |
 | workspace 选择 | Finder 启动（cwd=`/`）时 `choose folder` | 取消 = 干净退出；不再静默把 `$HOME` 当 workspace（agent 工具的文件操作范围过大）；终端启动行为不变 |
 | 窗口几何持久化 | `windowstate.go`：运行期每 2s 轮询、变更即写 `desktop-window.json`；启动时恢复尺寸与位置 | 位置校验当前屏幕可达性（拔掉外接屏不会在屏幕外复活）；wails 坐标是**当前屏 visibleFrame 相对值**（左上原点），跨屏移动无需特判 |
-| 通知中心镜像 | `notifications.go` 订阅 broker：`approval.requested`/`question.asked`/`turn.finished/failed` → `display notification` | v1 不做前台检测（`NSApp.isActive` 只能主线程安全读）；通知频率低（每 turn/审批一条），误报成本为一条自动消失的横幅 |
 
 ---
 
@@ -351,7 +349,7 @@ pkg_zip(name = "loom_desktop_app",
 | 新增（v5） | `internal/version/` | VERSION 单源 + embed 包 + 形态测试 | ✅ |
 | 新增（v5） | `cmd/loom-desktop/dialogs_darwin.go` | osascript 原生对话框（单实例提示 / workspace 选择） | ✅ |
 | 新增（v5） | `cmd/loom-desktop/windowstate.go` | 窗口几何轮询持久化与恢复 | ✅ |
-| 新增（v5） | `cmd/loom-desktop/notifications.go`、`notify_darwin.go` | broker 事件 → Notification Center | ✅ |
+| 新增（v5，v6 移除） | `cmd/loom-desktop/notifications.go`、`notify_darwin.go` | broker 事件 → Notification Center（v6 移除：审批页内已展示，横幅纯噪音，且 ad-hoc 签名下 TCC 授权随重打包反复弹窗） | ✅→❌ |
 | 新增（v5） | `cmd/loom-desktop/macos/Info.plist.tmpl`、`AppIcon.icns`、`generate_icon.sh` | plist 模板化（TCC/元数据）+ squircle 图标 | ✅ |
 | 新增（v5） | `cmd/loom-desktop/package_release.sh` | release 四产物打包 | ✅ |
 | 修改（v5） | `cmd/loom/main.go`、`cmd/loom-desktop/main.go` | 版本切换 `version.Version`；平台集成接线 | ✅ |
