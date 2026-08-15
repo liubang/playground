@@ -1,5 +1,7 @@
 # Loom 记忆系统设计
 
+> 状态：**已实现**（两阶段提取/整合、分层存储、`memory_list`/`memory_read`/`memory_search`/`memory_add_note` 工具、MEMORY.md/summary/raw 产物与后台 pipeline 均已落地；架构设计依据见下）
+
 > Codex 长期记忆架构的 1:1 复刻（两阶段提取/整合、分层存储、
 > 基于 git 的增量 diff 追踪、通过记忆工具实现渐进式披露）。
 

@@ -1,6 +1,6 @@
 # Plan 功能设计（update_plan）
 
-> 状态：草案 → 实现中
+> 状态：**已实现**（`update_plan` 工具、checkpoint 计划持久化、`plan.revised` 事件、`loom inspect` 计划输出均已落地）
 > 参考：OpenAI Codex CLI 的 `update_plan` 工具
 > 关联文档：DESIGN.md（事件溯源/预算语义）、TUI_DESIGN.md
 

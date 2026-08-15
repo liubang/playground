@@ -6,7 +6,7 @@
 
 ## 1. 背景与目标
 
-Loom 当前只有 14 个硬编码内置工具，无任何能力扩展机制。本设计为 Loom 增加完整的
+Loom 初期的内置工具是硬编码集合，无任何能力扩展机制。本设计为 Loom 增加完整的
 Skill 支持：用户把工作流程、工具用法、领域知识写成 `SKILL.md` 放进约定目录，Loom 在
 每次模型请求时把**技能清单（名称+描述+路径）**注入系统提示词，模型命中意图后
 **按需读取**技能正文并遵循执行（渐进式披露，progressive disclosure）。
@@ -36,7 +36,7 @@ Skill 支持：用户把工作流程、工具用法、领域知识写成 `SKILL.
 | 命名空间（`plugin:skill`） | 不采用；重名时高优先级 scope 覆盖，同 scope 先发现者胜出并记 LoadIssue | Loom 技能少，重名罕见 |
 | name ≤ 64 校验在 load 阶段；description load 阶段**只校验非空**（`loader.rs:770-785`） | 采用同一语义 | codex 的 1024 上限作用于 render 截断，不是 load 失败 |
 | 提示词只注入 name+description+path，正文按需读 | 采用；行格式沿用 `- name: desc (file: path)`（`render.rs:528-534`） | 渐进式披露是 token 效率的关键 |
-| 预算：token 口径，成本 = `len(bytes)/4`（`render.rs:109-111`），预算 = context window × 2% tokens，无 window 时 8000 字符 | 采用 token 口径（CJK 安全：中文 1 字符 = 3 字节 ≈ 0.75 token，字符口径会低估 3 倍）；无 window 时 8000 字符（≈2000 tokens） | 与 `LOOM_CONTEXT_WINDOW` 衔接 |
+| 预算：token 口径，成本 = `len(bytes)/4`（`render.rs:109-111`），预算 = context window × 2% tokens，无 window 时 8000 字符 | 采用 token 口径（CJK 安全：中文 1 字符 = 3 字节 ≈ 0.75 token，字符口径会低估 3 倍）；无 window 时 8000 字符（≈2000 tokens） | 与当前模型 `context_window`（config.yaml `providers[].models[].context_window`）衔接 |
 | 预算降级：全量 → 描述逐字节轮询分配截断（短描述让出份额，`render.rs:612-637`） → 仅保留 name+path → **跳过放不下的条目继续扫描更便宜的条目**（`render.rs:386-401`） | 完全对齐（逐字节轮询分配在 Go 实现成本相同，不做有损简化） | 预算利用最优 |
 | 预算超限时用户可见 warning（`render.rs:208-238`） | 简化为 `logger.Warn` + section 内注明省略数量 | Loom 无 telemetry 管线 |
 | 路径别名（r0/r1 压缩长路径） | 不采用 | Loom 技能路径短，属于过度设计 |
@@ -51,7 +51,7 @@ Skill 支持：用户把工作流程、工具用法、领域知识写成 `SKILL.
 ## 3. 总体设计
 
 ```
-~/.loom/skills/  ~/.agents/skills/  <ws>/.loom/skills/  <ws>/.agents/skills/  $LOOM_SKILLS_EXTRA_ROOTS
+~/.loom/skills/  ~/.agents/skills/  <ws>/.loom/skills/  <ws>/.agents/skills/  skills.extra_roots（config.yaml）
         │                 │                │                   │                  │
         └─────────────────┴────────────────┴───────────────────┴──────────────────┘
                           │  Loader.Load（每次 Build 重新扫描）
@@ -119,11 +119,11 @@ type LoadIssue struct{ Path, Message string }  // 单个技能失败不阻塞整
 
 ### 4.3 发现（`discover.go`）
 
-Root 枚举（不存在静默跳过；`LOOM_SKILLS_EXTRA_ROOTS` 以 `:` 分隔追加 user scope root）：
+Root 枚举（不存在静默跳过；`skills.extra_roots` 以列表追加 user scope root）：
 
 | scope | 路径 |
 |---|---|
-| User | `~/.loom/skills`、`~/.agents/skills`、`$LOOM_SKILLS_EXTRA_ROOTS` |
+| User | `~/.loom/skills`、`~/.agents/skills`、`skills.extra_roots` |
 | Repo | `<workspaceRoot>/.loom/skills`、`<workspaceRoot>/.agents/skills` |
 
 扫描规则：
@@ -201,8 +201,8 @@ section 位置：workspace rules 之后、环境快照之前（属于动态段�
 
 预算控制（token 口径，与 codex 完全一致的公式）：
 
-- 成本 = `len(lineBytes)/4` tokens；预算 = `LOOM_CONTEXT_WINDOW > 0 ?
-  windowTokens × 2% : 2000 tokens`（2000 ≈ codex 的 8000 字符 fallback）；
+- 成本 = `len(lineBytes)/4` tokens；预算 = `contextWindow > 0 ?
+  windowTokens × 2% : 2000 tokens`（2000 ≈ codex 的 8000 字符 fallback；contextWindow 来自当前模型元数据，config.yaml `providers[].models[].context_window`，0 时回退 2000）；
 - 降级链：① 全量 ≤ 预算 → 全量；② 超出 → description 逐字节轮询分配截断
   （短描述用满即停，余量让给长描述），超长 description 先在 1024 字符处截断加
   `...`（对齐 codex render 阶段的单条上限）；③ 仍超出 → 去掉 description 仅保留
@@ -235,16 +235,17 @@ type AtomicCatalog struct{ /* atomic.Value 存 *Catalog；零值可用（空 Cat
 - headless `runAgent`（`main.go:346-352` 工具注册、`main.go:401-410` promptOpts）；
 - TUI `NewBootstrap`（`bootstrap.go:259-312` `registerBuiltinTools`、`bootstrap.go:229-236`
   prompt builder）；
-- `LOOM_DISABLE_SYSTEM_PROMPT=1` 时 promptBuilder 为 nil：此时**也不注册 read_skill**
+- `prompt.disable_builtin: true`（config.yaml）时 promptBuilder 为 nil：此时**也不注册 read_skill**
   （无清单来源的工具只会误导模型），装配代码以同一条件控制两者；
 - 工作区在进程生命周期内固定（TUI new/resume 只换 sessionID），无需 session 切换
   挂钩。
 
 ### 4.7 配置
 
-- `LOOM_SKILLS=0`：整体禁用（不扫描、不注入、不注册工具；默认启用）；
-- `LOOM_SKILLS_EXTRA_ROOTS=dir1:dir2`：追加 user scope root；
-- 不新增配置文件；`LOOM.md` 规则文件机制不变。
+- `skills.enabled: false`（config.yaml）：整体禁用（不扫描、不注入、不注册工具；默认启用）；
+- `skills.extra_roots: [dir1, dir2]`（config.yaml，列表）：追加 user scope root；
+- `skills.disabled: [name]`（config.yaml）：按名压制个别技能（不进入模型可见清单）；
+- 不再有 `LOOM_SKILLS` / `LOOM_SKILLS_EXTRA_ROOTS` 环境变量（配置系统迁移，见 CONFIG_DESIGN.md）；`LOOM.md` 规则文件机制不变。
 
 ## 5. 安全模型
 
@@ -308,7 +309,7 @@ go/pl/loom/internal/tool/skillread/
 - prompt 接线：WithSkillsProvider 注入 section 且产出 ContextRuleRef、provider 出错
   仅缺 skills section 其余 sections/refs 完整、managed 模式下 skills section 仍存在
   且位置正确；
-- 装配：`LOOM_SKILLS=0` 下 `registry.Lookup("read_skill")` 失败且 prompt 无 section。
+- 装配：`skills.enabled: false` 下 `registry.Lookup("read_skill")` 失败且 prompt 无 section。
 
 ### 8.2 e2e 测试（新增 `go/pl/loom/e2e/` 包，进程内全链路，默认 `go test` 可跑）
 
@@ -324,7 +325,7 @@ Loader/Registry/prompt.Builder + httptest 无关（模型不走网络）：
 - 场景 B（user 技能 + 脚本执行）：`HOME` 指向临时目录，技能含 `scripts/greet.sh`，
   SKILL.md 指示用 run_cmd 执行；FakeModel 依次发起 read_skill、run_cmd（绝对路径，
   沙箱内执行，R2 自动批准）；断言脚本真实执行且输出进入最终回答；
-- 场景 C（`LOOM_SKILLS=0`）：FakeModel 断言系统提示词无技能 section，registry 无
+- 场景 C（`skills.enabled: false`）：FakeModel 断言系统提示词无技能 section，registry 无
   read_skill；
 - 另以真模型 + pty harness（临时脚本，不进仓库）手工复核一次场景 A/B 作为发布前
   确认。
@@ -344,8 +345,8 @@ runner 时可用）；若沙箱不可用，run_cmd 以 ErrSandboxUnavailable 失
 
 ## 10. 文档同步义务
 
-随实现一并更新 loom `DESIGN.md`：§8.1 提示词组成（新增 skills section）、工具清单
-（14 → 15）、§36 环境变量表（`LOOM_SKILLS`、`LOOM_SKILLS_EXTRA_ROOTS`）。
+已随实现完成 loom `DESIGN.md` 同步：§8.1 提示词组成（新增 skills section）、工具清单（read_skill 已列入）、§36 配置参考（`skills.enabled` / `skills.extra_roots`；原
+`LOOM_SKILLS` / `LOOM_SKILLS_EXTRA_ROOTS` 环境变量已随配置系统迁移删除）。
 
 ## 11. 开放问题
 
