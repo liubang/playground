@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 // writeStdinArgs is the model-visible schema of write_stdin.
@@ -84,7 +85,7 @@ func (t *WriteStdinTool) Prepare(ctx context.Context, call domain.ToolCall) (dom
 	if call.Name != t.def.Name {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
 	}
-	args, err := decodeStrict[writeStdinArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[writeStdinArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -127,22 +128,22 @@ func (t *WriteStdinTool) Prepare(ctx context.Context, call domain.ToolCall) (dom
 func (t *WriteStdinTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
 	if err := t.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-	args, err := decodeStrict[writeStdinArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[writeStdinArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	entry, ok := t.manager.Get(args.SessionID)
 	if !ok {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(
 			domain.ErrInvalidInput,
 			fmt.Sprintf("unknown session %q: it never existed or was reaped after 30 minutes idle; start a new one with exec_session", args.SessionID),
 		))
 	}
 	if err := entry.session.Write(args.Chars); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "cannot write to session", domain.WithCause(err)))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "cannot write to session", domain.WithCause(err)))
 	}
 
 	yieldMs := args.YieldTimeMs
@@ -155,7 +156,7 @@ func (t *WriteStdinTool) Execute(ctx context.Context, prepared domain.PreparedCa
 	}
 	awaitYield(ctx, entry, yieldMs)
 	output := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)
-	return successResult(prepared.Call.ID, startedAt, output)
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, output)
 }
 
 func (t *WriteStdinTool) verifyPreparedCall(prepared domain.PreparedCall) error {

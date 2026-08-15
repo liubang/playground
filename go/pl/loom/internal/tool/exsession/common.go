@@ -79,8 +79,6 @@ func (s *signer) verify(expected, actual string) bool {
 	return s.tk.VerifyRaw(expected, actual)
 }
 
-func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
-
 // commandArgs is the shared command-line shape of exec_session.
 type commandArgs struct {
 	Program            string            `json:"program"`
@@ -323,12 +321,4 @@ func displayArgv(program string, args []string) string {
 		quoted = append(quoted, item)
 	}
 	return strings.Join(quoted, " ")
-}
-
-func successResult(callID domain.ToolCallID, startedAt time.Time, payload any) domain.ToolResult {
-	return toolkit.SuccessResult(callID, startedAt, payload)
-}
-
-func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	return toolkit.ErrorResult(callID, startedAt, err)
 }

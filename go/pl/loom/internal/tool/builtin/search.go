@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -151,7 +152,7 @@ func NewSearchTool(validator *workspacepkg.PathValidator, runner rgRunner) (*Sea
 }
 
 func (t *SearchTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: each search spawns
@@ -230,31 +231,31 @@ func (t *SearchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Grep %q under %s", args.Pattern, args.Path)
-	return t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ReadPaths: []string{pathInfo.Absolute}, ApprovalDesc: approvalDesc})
 }
 
 func (t *SearchTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if len(prepared.ReadPaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
 	}
 
 	args, err := decodeStrict[searchArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	pathInfo, err := resolveExistingPath(t.base.validator, prepared.ReadPaths[0])
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if pathInfo.Display != args.Path {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 	}
 	if !pathInfo.Info.IsDir() && !pathInfo.Info.Mode().IsRegular() {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "path must refer to a file or directory"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "path must refer to a file or directory"))
 	}
 
 	if rgAvailable(t.runner) {
@@ -334,15 +335,15 @@ func (t *SearchTool) executeRipgrep(ctx context.Context, prepared domain.Prepare
 			// Linux fails closed); degrade to the built-in engine.
 			return t.executeGoFallback(ctx, prepared, root, args, startedAt)
 		}
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	events, partial, err := decodeRgEvents(stdout)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	matches, truncated := aggregateRgMatches(events, root, args.Context, args.HeadLimit)
 
-	return successResult(prepared.Call.ID, startedAt, searchOutput{
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, searchOutput{
 		Path:          args.Path,
 		Pattern:       args.Pattern,
 		Engine:        string(engineRipgrep),
@@ -424,7 +425,7 @@ func (t *SearchTool) executeGoFallback(ctx context.Context, prepared domain.Prep
 		output, err = searchSingleFile(ctx, root, legacy)
 	}
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	matches := make([]searchMatch, 0, len(output.Matches))
@@ -439,7 +440,7 @@ func (t *SearchTool) executeGoFallback(ctx context.Context, prepared domain.Prep
 		matches = matches[:args.HeadLimit]
 		output.Truncated = true
 	}
-	return successResult(prepared.Call.ID, startedAt, searchOutput{
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, searchOutput{
 		Path:            args.Path,
 		Pattern:         args.Pattern,
 		Engine:          string(engineGoFallback),

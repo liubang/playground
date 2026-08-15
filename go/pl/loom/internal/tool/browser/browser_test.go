@@ -27,6 +27,7 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/media"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -469,7 +470,7 @@ func TestMapBrowserError(t *testing.T) {
 func TestDecodeStrict(t *testing.T) {
 	t.Run("valid json", func(t *testing.T) {
 		raw := json.RawMessage(`{"action":"navigate","url":"https://example.com"}`)
-		args, err := decodeStrict[browserArgs](raw)
+		args, err := toolkit.DecodeStrict[browserArgs](raw)
 		assert.NoError(t, err)
 		assert.Equal(t, "navigate", args.Action)
 		assert.Equal(t, "https://example.com", args.URL)
@@ -477,19 +478,19 @@ func TestDecodeStrict(t *testing.T) {
 
 	t.Run("unknown field", func(t *testing.T) {
 		raw := json.RawMessage(`{"action":"navigate","unknown":"foo"}`)
-		_, err := decodeStrict[browserArgs](raw)
+		_, err := toolkit.DecodeStrict[browserArgs](raw)
 		assert.Error(t, err)
 	})
 
 	t.Run("trailing data", func(t *testing.T) {
 		raw := json.RawMessage(`{"action":"navigate"}{"extra":"data"}`)
-		_, err := decodeStrict[browserArgs](raw)
+		_, err := toolkit.DecodeStrict[browserArgs](raw)
 		assert.Error(t, err)
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
 		raw := json.RawMessage(`{not json}`)
-		_, err := decodeStrict[browserArgs](raw)
+		_, err := toolkit.DecodeStrict[browserArgs](raw)
 		assert.Error(t, err)
 	})
 }
@@ -498,7 +499,7 @@ func TestDecodeStrict(t *testing.T) {
 
 func TestSuccessResult(t *testing.T) {
 	callID := domain.NewToolCallID()
-	result := successResult(callID, time.Now(), browserOutput{
+	result := toolkit.SuccessResult(callID, time.Now(), browserOutput{
 		Action: "navigate",
 		Status: "ok",
 	})
@@ -511,7 +512,7 @@ func TestSuccessResult(t *testing.T) {
 func TestErrorResult(t *testing.T) {
 	callID := domain.NewToolCallID()
 	err := domain.NewError(domain.ErrInvalidInput, "test error")
-	result := errorResult(callID, time.Now(), err)
+	result := toolkit.ErrorResult(callID, time.Now(), err)
 	assert.Equal(t, callID, result.CallID)
 	assert.Equal(t, domain.ToolStatusError, result.Status)
 	assert.NotNil(t, result.Error)
@@ -520,14 +521,14 @@ func TestErrorResult(t *testing.T) {
 
 func TestErrorResult_Timeout(t *testing.T) {
 	callID := domain.NewToolCallID()
-	result := errorResult(callID, time.Now(), context.DeadlineExceeded)
+	result := toolkit.ErrorResult(callID, time.Now(), context.DeadlineExceeded)
 	assert.Equal(t, domain.ToolStatusTimeout, result.Status)
 	assert.Equal(t, "timeout", result.Error.Code)
 }
 
 func TestErrorResult_Cancelled(t *testing.T) {
 	callID := domain.NewToolCallID()
-	result := errorResult(callID, time.Now(), context.Canceled)
+	result := toolkit.ErrorResult(callID, time.Now(), context.Canceled)
 	assert.Equal(t, domain.ToolStatusCancelled, result.Status)
 	assert.Equal(t, "cancelled", result.Error.Code)
 }

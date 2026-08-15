@@ -47,8 +47,17 @@ const (
 // sees. NODE_OPTIONS is included so skill CLIs can inject loader hooks
 // (e.g. log-path redirects) into node child processes — inside the
 // sandbox this cannot escape isolation, it only affects the command's
-// own process tree.
-var defaultEnvAllowlist = []string{"PATH", "LANG", "LC_ALL", "TMPDIR", "HOME", "NODE_OPTIONS"}
+// own process tree. The GIT_* entries are the git tool's security
+// hardening: git tools run through the runner (REVIEW A6) and must keep
+// disarming repo/global configuration injection (GIT_CONFIG_NOSYSTEM,
+// GIT_CONFIG_GLOBAL=/dev/null) and interactive credential prompts
+// (GIT_TERMINAL_PROMPT=0). Allowing the model to set them in run_cmd is
+// harmless: inside the sandbox they only alter git's behavior, never the
+// sandbox boundary itself.
+var defaultEnvAllowlist = []string{
+	"PATH", "LANG", "LC_ALL", "TMPDIR", "HOME", "NODE_OPTIONS",
+	"GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_GLOBAL", "GIT_TERMINAL_PROMPT",
+}
 
 // allowedEnvPrefixes pass the allowlist by prefix: skill frameworks
 // namespace their settings (SKILL_REGION, SKILL_SCENE, ...), and the
@@ -321,7 +330,7 @@ func (r *Runner) validateSpec(spec CommandSpec) (validatedSpec, error) {
 	// the write boundary themselves before reaching the runner.
 	cwd, err := r.validator.ValidateRead(spec.Cwd)
 	if err != nil {
-		return validatedSpec{}, fmt.Errorf("validate cwd: %w", err)
+		return validatedSpec{}, fmt.Errorf("%w: %w", ErrInvalidCwd, err)
 	}
 	outputLimit := spec.OutputLimit
 	if outputLimit <= 0 {

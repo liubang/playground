@@ -34,6 +34,11 @@ var (
 	ErrSandboxUnavailable = errors.New("process sandbox is unavailable")
 	// ErrExecutableHashChanged reports that the resolved executable changed before start.
 	ErrExecutableHashChanged = errors.New("executable hash changed before start")
+	// ErrInvalidCwd reports that the command's working directory failed the
+	// validator's read-boundary check. Callers classify it as a security
+	// rejection instead of an execution failure (REVIEW A5 — the previous
+	// substring match on "validate cwd" silently broke on wording changes).
+	ErrInvalidCwd = errors.New("working directory is invalid")
 )
 
 // Isolation describes the active isolation mode used for a process.

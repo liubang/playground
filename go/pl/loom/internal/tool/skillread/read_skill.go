@@ -68,9 +68,8 @@ type readSkillArgs struct {
 // skill's directory via a per-skill workspace.PathValidator (reusing its
 // battle-tested Clean + EvalSymlinks + prefix checks).
 type ReadSkillTool struct {
-	def     domain.ToolDefinition
+	toolkit.BaseTool
 	catalog *skill.AtomicCatalog
-	signer  toolkit.Signer
 }
 
 // NewReadSkillTool creates the tool bound to the shared catalog snapshot.
@@ -91,18 +90,15 @@ func NewReadSkillTool(catalog *skill.AtomicCatalog) (*ReadSkillTool, error) {
 		Capabilities: []domain.Capability{domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
 	}
-	if err := def.Validate(); err != nil {
-		return nil, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
-	}
-	signer, err := toolkit.NewSigner()
+	bt, err := toolkit.NewBaseTool(def)
 	if err != nil {
 		return nil, err
 	}
-	return &ReadSkillTool{def: def, catalog: catalog, signer: signer}, nil
+	return &ReadSkillTool{BaseTool: bt, catalog: catalog}, nil
 }
 
 // Definition returns the tool definition.
-func (t *ReadSkillTool) Definition() domain.ToolDefinition { return t.def }
+func (t *ReadSkillTool) Definition() domain.ToolDefinition { return t.Def }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: skill reads are
 // independent file reads.
@@ -111,17 +107,7 @@ func (t *ReadSkillTool) ConcurrentSafe() bool { return true }
 // Prepare locates and resolves the target file without reading its contents
 // (side-effect free and deterministic across the freshness re-Prepare).
 func (t *ReadSkillTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.PreparedCall{}, err
-	}
-	if err := call.Validate(); err != nil {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
-	}
-	if call.Name != t.def.Name {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
-	}
-
-	raw, err := decodeStrict[readSkillArgs](call.Arguments)
+	raw, err := toolkit.DecodeStrict[readSkillArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -134,19 +120,10 @@ func (t *ReadSkillTool) Prepare(ctx context.Context, call domain.ToolCall) (doma
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 
-	prepared := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        call.ID,
-			Name:      t.def.Name,
-			Arguments: cloneRawMessage(canonical),
-		},
-		Definition:   t.def,
-		Risk:         t.def.Risk(),
+	return t.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{
 		ReadPaths:    []string{resolved},
 		ApprovalDesc: approvalDescription(args),
-	}
-	prepared.ArgsHash = t.signer.Sign(prepared)
-	return prepared, nil
+	})
 }
 
 // resolveArgs validates args and resolves the target file inside the owning
@@ -241,42 +218,42 @@ func resolveInsideSkillDir(sk *skill.Skill, rel string) (string, error) {
 // (fail closed on drift), then reads and paginates the file.
 func (t *ReadSkillTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-	args, err := decodeStrict[readSkillArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[readSkillArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if args.ResolvedPath == "" || len(prepared.ReadPaths) != 1 || prepared.ReadPaths[0] != args.ResolvedPath {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding is invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding is invalid"))
 	}
 
 	// Re-resolve from the current snapshot: the skill must still exist and
 	// the relative path must still resolve to the signed absolute path.
 	sk := t.catalog.Get().Find(args.Name)
 	if sk == nil {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity,
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity,
 			fmt.Sprintf("skill %q disappeared between prepare and execute", args.Name)))
 	}
 	resolved, err := resolveInsideSkillDir(sk, args.Path)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if resolved != args.ResolvedPath {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 	}
 
 	data, err := readFileBounded(ctx, resolved, maxFileBytes)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if toolkit.IsBinaryContent(data) {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "file appears to be binary or not valid UTF-8"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "file appears to be binary or not valid UTF-8"))
 	}
 	lines, err := splitLines(data)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	selected, first, last, truncated := sliceLines(lines, args.Offset, args.Limit)
 	return textResult(prepared.Call.ID, startedAt, formatReadSkillText(
@@ -321,10 +298,6 @@ func formatByteSize(n int64) string {
 	default:
 		return fmt.Sprintf("%.1f MB", float64(n)/(1024*1024))
 	}
-}
-
-func (t *ReadSkillTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	return t.signer.VerifyWithRisk(prepared, t.def)
 }
 
 func approvalDescription(args readSkillArgs) string {
@@ -406,10 +379,6 @@ func readFileBounded(ctx context.Context, path string, maxBytes int64) ([]byte, 
 	return data, nil
 }
 
-func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
-
-func cloneRawMessage(raw json.RawMessage) json.RawMessage { return toolkit.CloneRawMessage(raw) }
-
 // textResult builds a successful plain-text tool result.
 func textResult(callID domain.ToolCallID, startedAt time.Time, text string) domain.ToolResult {
 	return domain.ToolResult{
@@ -419,8 +388,4 @@ func textResult(callID domain.ToolCallID, startedAt time.Time, text string) doma
 		StartedAt:  startedAt,
 		FinishedAt: time.Now(),
 	}
-}
-
-func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	return toolkit.ErrorResult(callID, startedAt, err)
 }

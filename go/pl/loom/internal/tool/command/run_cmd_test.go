@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -959,9 +960,16 @@ func TestClassifyRunError(t *testing.T) {
 		{name: "sandbox required", err: process.ErrSandboxRequired, code: domain.ErrUnavailable},
 		{name: "sandbox unavailable", err: process.ErrSandboxUnavailable, code: domain.ErrUnavailable},
 		{name: "hash changed", err: process.ErrExecutableHashChanged, code: domain.ErrSecurity},
+		{name: "invalid cwd sentinel", err: fmt.Errorf("%w: boom", process.ErrInvalidCwd), code: domain.ErrSecurity},
 		{name: "cancelled", err: context.Canceled, code: domain.ErrCancelled},
 		{name: "timeout", err: context.DeadlineExceeded, code: domain.ErrTimeout},
 		{name: "not found", err: exec.ErrNotFound, code: domain.ErrInvalidInput},
+		// The old substring matches ("executable file not found",
+		// "validate cwd", "start command", ...) must not be needed: the
+		// same errors classified through a changed wording still land in
+		// the correct buckets (REVIEW A5).
+		{name: "not found wrapped", err: fmt.Errorf("look path %q: %w", "tool", exec.ErrNotFound), code: domain.ErrInvalidInput},
+		{name: "generic runner failure", err: errors.New("wait command: exit status 1"), code: domain.ErrUnavailable},
 		{name: "generic", err: errors.New("boom"), code: domain.ErrUnavailable},
 	}
 	for _, tc := range cases {

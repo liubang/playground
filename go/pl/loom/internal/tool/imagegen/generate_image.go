@@ -121,7 +121,7 @@ func NewGenerateImageTool(gen images.Generator, artifacts domain.ArtifactStore, 
 }
 
 func (t *GenerateImageTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: generations are
@@ -143,12 +143,12 @@ func (t *GenerateImageTool) Prepare(ctx context.Context, call domain.ToolCall) (
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Generate image (%s): %s", t.opts.Model, truncateRunes(strings.TrimSpace(args.Prompt), approvalPromptRunes))
-	return t.base.prepareCall(ctx, call, canonical, approvalDesc)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ApprovalDesc: approvalDesc})
 }
 
 func (t *GenerateImageTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	args, err := toolkit.DecodeStrict[generateImageArgs](prepared.Call.Arguments)

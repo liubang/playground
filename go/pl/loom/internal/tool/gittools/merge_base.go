@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -42,7 +44,7 @@ type GitMergeBaseTool struct {
 }
 
 // NewGitMergeBaseTool creates a git_merge_base tool.
-func NewGitMergeBaseTool(validator *workspacepkg.PathValidator) (*GitMergeBaseTool, error) {
+func NewGitMergeBaseTool(validator *workspacepkg.PathValidator, runner *process.Runner) (*GitMergeBaseTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "git_merge_base",
 		Description: "Compute the merge-base commit of HEAD and a branch — the correct base for reviewing everything " +
@@ -52,7 +54,7 @@ func NewGitMergeBaseTool(validator *workspacepkg.PathValidator) (*GitMergeBaseTo
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"branch":{"type":"string"},"merge_base":{"type":"string"},"base_ref":{"type":"string"}},"required":["repo_root","branch","merge_base","base_ref"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
-	}, validator)
+	}, validator, runner)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +62,7 @@ func NewGitMergeBaseTool(validator *workspacepkg.PathValidator) (*GitMergeBaseTo
 }
 
 func (t *GitMergeBaseTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: each invocation
@@ -68,7 +70,7 @@ func (t *GitMergeBaseTool) Definition() domain.ToolDefinition {
 func (t *GitMergeBaseTool) ConcurrentSafe() bool { return true }
 
 func (t *GitMergeBaseTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[gitMergeBaseArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[gitMergeBaseArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -76,7 +78,7 @@ func (t *GitMergeBaseTool) Prepare(ctx context.Context, call domain.ToolCall) (d
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	if err := confirmRepoRoot(ctx, t.base.gitPath, repoRoot); err != nil {
+	if err := confirmRepoRoot(ctx, &t.base, repoRoot); err != nil {
 		return domain.PreparedCall{}, err
 	}
 	if err := validateGitRef(args.Branch); err != nil {
@@ -89,38 +91,38 @@ func (t *GitMergeBaseTool) Prepare(ctx context.Context, call domain.ToolCall) (d
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Compute merge-base of HEAD and %s in %s", args.Branch, args.RepoRoot)
-	return t.base.prepareCall(ctx, call, canonical, []string{repoRoot.Absolute}, approvalDesc)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ReadPaths: []string{repoRoot.Absolute}, ApprovalDesc: approvalDesc})
 }
 
 func (t *GitMergeBaseTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if len(prepared.ReadPaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
 	}
 
-	args, err := decodeStrict[gitMergeBaseArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[gitMergeBaseArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	repoRoot, err := resolveRepoRoot(t.base.validator, prepared.ReadPaths[0])
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if repoRoot.Display != args.RepoRoot {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call repo_root binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call repo_root binding mismatch"))
 	}
-	if err := confirmRepoRoot(ctx, t.base.gitPath, repoRoot); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := confirmRepoRoot(ctx, &t.base, repoRoot); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
-	sha, usedRef, err := resolveMergeBase(ctx, t.base.gitPath, repoRoot.Absolute, args.Branch)
+	sha, usedRef, err := resolveMergeBase(ctx, &t.base, repoRoot.Absolute, args.Branch)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-	return successResult(prepared.Call.ID, startedAt, gitMergeBaseOutput{
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, gitMergeBaseOutput{
 		RepoRoot:  args.RepoRoot,
 		Branch:    args.Branch,
 		MergeBase: sha,

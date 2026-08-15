@@ -123,7 +123,7 @@ func NewWebFetchTool(artifacts domain.ArtifactStore) (*WebFetchTool, error) {
 }
 
 func (t *WebFetchTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: fetches are
@@ -155,12 +155,12 @@ func (t *WebFetchTool) Prepare(ctx context.Context, call domain.ToolCall) (domai
 	if host, ok := domain.HostFromURL(args.URL); ok {
 		urlReq = &domain.URLRequest{Host: host}
 	}
-	return t.base.prepareCall(ctx, call, canonical, approvalDesc, urlReq)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ApprovalDesc: approvalDesc, URLRequest: urlReq})
 }
 
 func (t *WebFetchTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	args, err := toolkit.DecodeStrict[fetchArgs](prepared.Call.Arguments)
@@ -169,7 +169,7 @@ func (t *WebFetchTool) Execute(ctx context.Context, prepared domain.PreparedCall
 	}
 
 	cacheKey := args.URL + "\x1f" + args.Format
-	if entry, ok := t.cache.get(cacheKey); ok {
+	if entry, ok := t.cache.Get(cacheKey); ok {
 		return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(ctx, args, entry, "hit"))
 	}
 
@@ -178,7 +178,7 @@ func (t *WebFetchTool) Execute(ctx context.Context, prepared domain.PreparedCall
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if entry.Status >= 200 && entry.Status < 300 && !entry.noStore {
-		t.cache.put(cacheKey, entry.cachedResponse)
+		t.cache.Put(cacheKey, entry.cachedResponse, len(entry.Body))
 	}
 	return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(ctx, args, entry.cachedResponse, "miss"))
 }

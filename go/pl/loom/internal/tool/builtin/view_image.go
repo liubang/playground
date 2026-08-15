@@ -26,6 +26,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/media"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -56,7 +57,10 @@ func prepareImagePathCall(base baseTool, ctx context.Context, call domain.ToolCa
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
-	return base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, fmt.Sprintf("%s %s", approvalVerb, args.Path))
+	return base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{
+		ReadPaths:    []string{pathInfo.Absolute},
+		ApprovalDesc: fmt.Sprintf("%s %s", approvalVerb, args.Path),
+	})
 }
 
 // loadImageArtifact implements the shared Execute pipeline of the image
@@ -64,7 +68,7 @@ func prepareImagePathCall(base baseTool, ctx context.Context, call domain.ToolCa
 // before the read, REVIEW M25), and persist the bytes as an artifact. The
 // media type is sniffed from the bytes — never from the file extension.
 func loadImageArtifact(base baseTool, artifacts domain.ArtifactStore, ctx context.Context, prepared domain.PreparedCall) (string, domain.ArtifactRef, []byte, error) {
-	if err := base.verifyPreparedCall(prepared); err != nil {
+	if err := base.VerifyPreparedCall(prepared); err != nil {
 		return "", domain.ArtifactRef{}, nil, err
 	}
 	if len(prepared.ReadPaths) != 1 {
@@ -158,7 +162,7 @@ func NewViewImageTool(validator *workspacepkg.PathValidator, artifacts domain.Ar
 }
 
 func (t *ViewImageTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: reads are independent.
@@ -172,7 +176,7 @@ func (t *ViewImageTool) Execute(ctx context.Context, prepared domain.PreparedCal
 	startedAt := time.Now()
 	path, ref, data, err := loadImageArtifact(t.base, t.artifacts, ctx, prepared)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	header := imageHeader(path, ref, data) +
 		"\nNote: the image is attached for your review at model-request time. It is not displayed " +

@@ -117,7 +117,7 @@ func newWebSearchTool(provider searchProvider, now func() time.Time) (*WebSearch
 }
 
 func (t *WebSearchTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: searches are
@@ -139,12 +139,12 @@ func (t *WebSearchTool) Prepare(ctx context.Context, call domain.ToolCall) (doma
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Search the web for %q (%s)", args.Query, t.provider.Name())
-	return t.base.prepareCall(ctx, call, canonical, approvalDesc)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ApprovalDesc: approvalDesc})
 }
 
 func (t *WebSearchTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	args, err := toolkit.DecodeStrict[searchArgs](prepared.Call.Arguments)
@@ -153,7 +153,7 @@ func (t *WebSearchTool) Execute(ctx context.Context, prepared domain.PreparedCal
 	}
 
 	cacheKey := t.provider.Name() + "\x1f" + args.Query + "\x1f" + fmt.Sprintf("%d", args.Count)
-	if entry, ok := t.cache.get(cacheKey); ok {
+	if entry, ok := t.cache.Get(cacheKey); ok {
 		var results []searchResult
 		if err := json.Unmarshal([]byte(entry.Body), &results); err == nil {
 			return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(args, results, "hit", entry.FetchedAt))
@@ -165,7 +165,7 @@ func (t *WebSearchTool) Execute(ctx context.Context, prepared domain.PreparedCal
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if body, err := json.Marshal(results); err == nil && len(body) <= cacheMaxBodyBytes {
-		t.cache.put(cacheKey, cachedResponse{FetchedAt: t.now().UTC(), Body: string(body)})
+		t.cache.Put(cacheKey, cachedResponse{FetchedAt: t.now().UTC(), Body: string(body)}, len(body))
 	}
 	return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(args, results, "miss", t.now().UTC()))
 }
