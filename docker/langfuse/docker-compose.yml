@@ -48,7 +48,7 @@ x-langfuse-depends-on: &langfuse-depends-on
     condition: service_healthy
 services:
   langfuse-web:
-    image: docker.io/langfuse/langfuse:3
+    image: docker.io/langfuse/langfuse:3.222.0
     restart: unless-stopped
     depends_on: *langfuse-depends-on
     ports:
@@ -59,7 +59,7 @@ services:
     networks:
       - langfuse
   langfuse-worker:
-    image: docker.io/langfuse/langfuse-worker:3
+    image: docker.io/langfuse/langfuse-worker:3.222.0
     restart: unless-stopped
     depends_on: *langfuse-depends-on
     environment: *langfuse-environment
@@ -85,7 +85,7 @@ services:
     networks:
       - langfuse
   clickhouse:
-    image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-latest}
+    image: docker.io/clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-25.12.11.4}
     restart: unless-stopped
     user: "101:101"
     environment:
@@ -127,7 +127,7 @@ services:
     networks:
       - langfuse
   minio:
-    image: cgr.dev/chainguard/minio:${MINIO_VERSION:-latest}
+    image: cgr.dev/chainguard/minio@sha256:f767919bd003062ac69713cdce920eb922c9fa3388efe96264e78b763342ca1a
     restart: unless-stopped
     entrypoint: sh
     command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
