@@ -1017,6 +1017,46 @@ func TestBrowseDirectories(t *testing.T) {
 		t.Fatalf("sub not listed in %v", b2["entries"])
 	}
 
+	// A symlink to a directory is listed and traversable, even when its
+	// target sits outside $HOME (the link is a door the user built under
+	// their home). Navigation must stay on the symlink view.
+	link := filepath.Join(home, "loom-browse-link-*")
+	home2, _ := os.MkdirTemp("", "loom-browse-out-*")
+	defer os.RemoveAll(home2)
+	if err := os.Mkdir(filepath.Join(home2, "inner"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	realLink, err := os.MkdirTemp(home, "loom-browse-src-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(realLink)
+	link = filepath.Join(realLink, "alias")
+	if err := os.Symlink(home2, link); err != nil {
+		t.Skipf("symlink: %v", err)
+	}
+	defer os.Remove(link)
+	status, b3 := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/files/browse?path="+link, "")
+	if status != http.StatusOK {
+		t.Fatalf("symlinked dir browse = %d, want 200", status)
+	}
+	if b3["path"] != link {
+		t.Fatalf("symlink browse path = %v, want the symlink form %s", b3["path"], link)
+	}
+	sawInner := false
+	for _, e := range b3["entries"].([]any) {
+		if e.(map[string]any)["name"].(string) == "inner" {
+			sawInner = true
+		}
+	}
+	if !sawInner {
+		t.Fatalf("inner not listed through symlink in %v", b3["entries"])
+	}
+	// The parent link climbs the symlink form, not the resolved target.
+	if b3["parent"] != realLink {
+		t.Fatalf("symlink parent = %v, want %s", b3["parent"], realLink)
+	}
+
 	// Paths outside $HOME are rejected: the browser never lists beyond it
 	// (REVIEW H11). /etc resolves (through a symlink on macOS) outside any
 	// realistic home directory.
