@@ -1900,6 +1900,83 @@ func TestApprovalResolvedEventClearsOverlay(t *testing.T) {
 	}
 }
 
+// TestApprovalRequestedPinsViewportToTail locks in the fix for the
+// invisible-approval bug: the overlay renders at the bottom (composer
+// area), so a user who scrolled up to read earlier output must be pulled
+// back to the tail when the approval arrives — otherwise the decision
+// prompt stays below the fold until a manual scroll.
+func TestApprovalRequestedPinsViewportToTail(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model", "/ws")
+	m.width, m.height = 80, 20
+	// Fill a long transcript and scroll away from the tail.
+	m = fillTranscript(t, m, 50)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	m = updated.(Model)
+	if m.followTail {
+		t.Fatal("PgUp should have paused follow-tail")
+	}
+	scrolledOffset := m.viewport.YOffset
+
+	payload := mustPayload(t, runtimeevent.ApprovalRequestedPayload{
+		ApprovalID: domain.NewEventID(),
+		CallID:     domain.NewToolCallID(),
+		ToolName:   "run_cmd",
+		Risk:       domain.R2,
+	})
+	updated, _ = m.handleRuntimeEvent(runtimeevent.RuntimeEvent{Kind: runtimeevent.KindApprovalRequested, Payload: payload})
+	m = updated.(Model)
+	if m.mode != ModeApproval || m.pendingApproval == nil {
+		t.Fatalf("approval overlay not armed: mode=%s pending=%v", m.mode, m.pendingApproval)
+	}
+	if !m.followTail {
+		t.Fatal("approval request must resume follow-tail")
+	}
+	if m.viewport.YOffset <= scrolledOffset {
+		t.Fatalf("viewport not pinned to tail: YOffset=%d (scrolled=%d)", m.viewport.YOffset, scrolledOffset)
+	}
+	maxOffset := max(0, m.viewport.TotalLineCount()-m.viewport.Height)
+	if m.viewport.YOffset != maxOffset {
+		t.Fatalf("viewport YOffset=%d, want bottom %d", m.viewport.YOffset, maxOffset)
+	}
+}
+
+// TestQuestionAskedPinsViewportToTail is the ask_user counterpart of the
+// approval pin: the question panel also replaces the composer at the
+// bottom and must pull a scrolled-up user back to the tail.
+func TestQuestionAskedPinsViewportToTail(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model", "/ws")
+	m.width, m.height = 80, 20
+	m = fillTranscript(t, m, 50)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	m = updated.(Model)
+	if m.followTail {
+		t.Fatal("PgUp should have paused follow-tail")
+	}
+	scrolledOffset := m.viewport.YOffset
+
+	payload := mustPayload(t, runtimeevent.QuestionAskedPayload{
+		QuestionID: domain.NewEventID(),
+		Text:       "Which option?",
+		Options: []domain.QuestionOption{
+			{Label: "A", Description: "first"},
+			{Label: "B", Description: "second"},
+		},
+	})
+	updated, _ = m.handleRuntimeEvent(runtimeevent.RuntimeEvent{Kind: runtimeevent.KindQuestionAsked, Payload: payload})
+	m = updated.(Model)
+	if m.mode != ModeQuestion || m.pendingQuestion == nil {
+		t.Fatalf("question overlay not armed: mode=%s pending=%v", m.mode, m.pendingQuestion)
+	}
+	if !m.followTail {
+		t.Fatal("question request must resume follow-tail")
+	}
+	if m.viewport.YOffset <= scrolledOffset {
+		t.Fatalf("viewport not pinned to tail: YOffset=%d (scrolled=%d)", m.viewport.YOffset, scrolledOffset)
+	}
+}
+
 func TestApprovalOverlayNavigation(t *testing.T) {
 	ctrl := newTestController(t)
 	m := NewModel(ctrl, "model", "/ws")
