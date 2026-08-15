@@ -31,8 +31,6 @@ go_library(
         "dialogs_darwin.go",
         "frameworks_darwin.go",
         "main.go",
-        "notifications.go",
-        "notify_darwin.go",
         "windowstate.go",
     ],
     cgo = True,
