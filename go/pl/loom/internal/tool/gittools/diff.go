@@ -28,6 +28,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -60,7 +62,7 @@ type GitDiffTool struct {
 }
 
 // NewGitDiffTool creates a git_diff tool.
-func NewGitDiffTool(validator *workspacepkg.PathValidator) (*GitDiffTool, error) {
+func NewGitDiffTool(validator *workspacepkg.PathValidator, runner *process.Runner) (*GitDiffTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "git_diff",
 		Description: "Read repository diff with bounded output. Default mode: working tree vs index (or the index vs HEAD " +
@@ -76,7 +78,7 @@ func NewGitDiffTool(validator *workspacepkg.PathValidator) (*GitDiffTool, error)
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"staged":{"type":"boolean"},"base":{"type":"string"},"base_ref":{"type":"string"},"path":{"type":"string"},"unified":{"type":"integer"},"diff":{"type":"string"},"untracked_files":{"type":"array","items":{"type":"string"}},"untracked_skipped":{"type":"array","items":{"type":"string"}},"truncated":{"type":"boolean"},"size_bytes":{"type":"integer"}},"required":["repo_root","staged","unified","diff","truncated","size_bytes"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
-	}, validator)
+	}, validator, runner)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +86,7 @@ func NewGitDiffTool(validator *workspacepkg.PathValidator) (*GitDiffTool, error)
 }
 
 func (t *GitDiffTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: each invocation
@@ -92,11 +94,11 @@ func (t *GitDiffTool) Definition() domain.ToolDefinition {
 func (t *GitDiffTool) ConcurrentSafe() bool { return true }
 
 func (t *GitDiffTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[gitDiffArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[gitDiffArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	args, readPaths, err := validateGitDiffArgs(ctx, t.base.validator, t.base.gitPath, args)
+	args, readPaths, err := validateGitDiffArgs(ctx, &t.base, args)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -109,57 +111,57 @@ func (t *GitDiffTool) Prepare(ctx context.Context, call domain.ToolCall) (domain
 	if args.Path != "" {
 		approvalDesc = fmt.Sprintf("Read git diff for %s limited to %s", args.RepoRoot, args.Path)
 	}
-	return t.base.prepareCall(ctx, call, canonical, readPaths, approvalDesc)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ReadPaths: readPaths, ApprovalDesc: approvalDesc})
 }
 
 func (t *GitDiffTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if len(prepared.ReadPaths) < 1 || len(prepared.ReadPaths) > 2 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
 	}
 
-	args, err := decodeStrict[gitDiffArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[gitDiffArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	repoRoot, err := resolveRepoRoot(t.base.validator, prepared.ReadPaths[0])
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if repoRoot.Display != args.RepoRoot {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call repo_root binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call repo_root binding mismatch"))
 	}
-	if err := confirmRepoRoot(ctx, t.base.gitPath, repoRoot); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := confirmRepoRoot(ctx, &t.base, repoRoot); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	repoRelativePath := ""
 	if args.Path != "" {
 		if len(prepared.ReadPaths) != 2 {
-			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding is missing"))
+			return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding is missing"))
 		}
 		pathInfo, err := resolveRepoPath(t.base.validator, repoRoot, args.Path)
 		if err != nil {
-			return errorResult(prepared.Call.ID, startedAt, err)
+			return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 		}
 		if prepared.ReadPaths[1] != pathInfo.Absolute {
-			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+			return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 		}
 		repoRelativePath = pathInfo.RepoRelative
 	} else if len(prepared.ReadPaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding is invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding is invalid"))
 	}
 
-	diffBase, baseRef, err := resolveDiffBase(ctx, t.base.gitPath, repoRoot.Absolute, args)
+	diffBase, baseRef, err := resolveDiffBase(ctx, &t.base, repoRoot.Absolute, args)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-	result, err := runGit(ctx, t.base.gitPath, buildDiffArgs(repoRoot.Absolute, args.Staged, requiredUnified(args), diffBase, repoRelativePath), maxGitDiffStdoutBytes, maxGitStderrBytes)
+	result, err := runGit(ctx, &t.base, repoRoot.Absolute, buildDiffArgs(repoRoot.Absolute, args.Staged, requiredUnified(args), diffBase, repoRelativePath), maxGitDiffStdoutBytes, maxGitStderrBytes)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, classifyGitError(err, result.stderr, "failed to read git diff"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, classifyGitError(err, result.stderr, "failed to read git diff"))
 	}
 
 	diffText := sanitizeUTF8(result.stdout)
@@ -178,7 +180,7 @@ func (t *GitDiffTool) Execute(ctx context.Context, prepared domain.PreparedCall)
 	if args.IncludeUntracked {
 		extra, included, skipped, err := t.untrackedDiff(ctx, repoRoot, repoRelativePath, requiredUnified(args), int(maxGitDiffStdoutBytes)-sizeBytes)
 		if err != nil {
-			return errorResult(prepared.Call.ID, startedAt, err)
+			return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 		}
 		output.UntrackedFiles = included
 		output.UntrackedSkipped = skipped
@@ -193,20 +195,19 @@ func (t *GitDiffTool) Execute(ctx context.Context, prepared domain.PreparedCall)
 	}
 	output.Diff = diffText
 	output.SizeBytes = sizeBytes
-	return successResult(prepared.Call.ID, startedAt, output)
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, output)
 }
 
 func validateGitDiffArgs(
 	ctx context.Context,
-	validator *workspacepkg.PathValidator,
-	gitPath string,
+	b *baseTool,
 	args gitDiffArgs,
 ) (gitDiffArgs, []string, error) {
-	repoRoot, err := resolveRepoRoot(validator, args.RepoRoot)
+	repoRoot, err := resolveRepoRoot(b.validator, args.RepoRoot)
 	if err != nil {
 		return gitDiffArgs{}, nil, err
 	}
-	if err := confirmRepoRoot(ctx, gitPath, repoRoot); err != nil {
+	if err := confirmRepoRoot(ctx, b, repoRoot); err != nil {
 		return gitDiffArgs{}, nil, err
 	}
 	if args.Unified == nil {
@@ -222,7 +223,7 @@ func validateGitDiffArgs(
 		return gitDiffArgs{}, nil, domain.NewError(domain.ErrInvalidInput, "include_untracked cannot be combined with staged")
 	}
 	if args.Base != "" && !strings.HasPrefix(args.Base, mergeBasePrefix) && args.Base != upstreamBase {
-		if err := verifyCommitRef(ctx, gitPath, repoRoot.Absolute, args.Base); err != nil {
+		if err := verifyCommitRef(ctx, b, repoRoot.Absolute, args.Base); err != nil {
 			return gitDiffArgs{}, nil, err
 		}
 	}
@@ -230,7 +231,7 @@ func validateGitDiffArgs(
 	args.RepoRoot = repoRoot.Display
 	readPaths := []string{repoRoot.Absolute}
 	if args.Path != "" {
-		pathInfo, err := resolveRepoPath(validator, repoRoot, args.Path)
+		pathInfo, err := resolveRepoPath(b.validator, repoRoot, args.Path)
 		if err != nil {
 			return gitDiffArgs{}, nil, err
 		}
@@ -265,21 +266,21 @@ const upstreamBase = "upstream"
 // resolveUpstreamDiffBase, and plain refs pass through after prepare-time
 // verification. baseRef reports which ref a merge-base or upstream came
 // from (the branch or its fresher upstream).
-func resolveDiffBase(ctx context.Context, gitPath, repoRoot string, args gitDiffArgs) (string, string, error) {
+func resolveDiffBase(ctx context.Context, b *baseTool, repoRoot string, args gitDiffArgs) (string, string, error) {
 	if args.Base == "" {
 		return "", "", nil
 	}
 	if args.Base == upstreamBase {
-		return resolveUpstreamDiffBase(ctx, gitPath, repoRoot)
+		return resolveUpstreamDiffBase(ctx, b, repoRoot)
 	}
 	if branch, ok := strings.CutPrefix(args.Base, mergeBasePrefix); ok {
-		sha, usedRef, err := resolveMergeBase(ctx, gitPath, repoRoot, branch)
+		sha, usedRef, err := resolveMergeBase(ctx, b, repoRoot, branch)
 		if err != nil {
 			return "", "", err
 		}
 		return sha, usedRef, nil
 	}
-	if err := verifyCommitRef(ctx, gitPath, repoRoot, args.Base); err != nil {
+	if err := verifyCommitRef(ctx, b, repoRoot, args.Base); err != nil {
 		return "", "", err
 	}
 	return args.Base, "", nil
@@ -297,7 +298,7 @@ const maxUntrackedFileBytes = 16 << 10
 // the total synthesized bytes appended to the regular diff.
 func (t *GitDiffTool) untrackedDiff(ctx context.Context, repoRoot repoRootResolution, repoRelativePath string, unified, budget int) (string, []string, []string, error) {
 	_ = unified // synthesized entries are pure additions; context is meaningless.
-	result, err := runGit(ctx, t.base.gitPath, buildLsFilesOthersArgs(repoRoot.Absolute), maxGitStatusStdoutBytes, maxGitStderrBytes)
+	result, err := runGit(ctx, &t.base, repoRoot.Absolute, buildLsFilesOthersArgs(repoRoot.Absolute), maxGitStatusStdoutBytes, maxGitStderrBytes)
 	if err != nil {
 		return "", nil, nil, classifyGitError(err, result.stderr, "failed to list untracked files")
 	}

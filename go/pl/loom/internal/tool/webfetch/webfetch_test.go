@@ -638,28 +638,28 @@ func TestResponseCacheExpiryAndEviction(t *testing.T) {
 	current := now
 	cache := newResponseCache(2, 1<<20, time.Minute, func() time.Time { return current })
 
-	cache.put("a", cachedResponse{Body: "A"})
-	cache.put("b", cachedResponse{Body: "B"})
-	if _, ok := cache.get("a"); !ok {
+	cache.Put("a", cachedResponse{Body: "A"}, len("A"))
+	cache.Put("b", cachedResponse{Body: "B"}, len("B"))
+	if _, ok := cache.Get("a"); !ok {
 		t.Fatal("expected hit for a")
 	}
 	// a is now most-recently-used; inserting c evicts b.
-	cache.put("c", cachedResponse{Body: "C"})
-	if _, ok := cache.get("b"); ok {
+	cache.Put("c", cachedResponse{Body: "C"}, len("C"))
+	if _, ok := cache.Get("b"); ok {
 		t.Fatal("expected b to be evicted")
 	}
-	if _, ok := cache.get("a"); !ok {
+	if _, ok := cache.Get("a"); !ok {
 		t.Fatal("expected a to survive eviction")
 	}
 
 	current = current.Add(2 * time.Minute)
-	if _, ok := cache.get("a"); ok {
+	if _, ok := cache.Get("a"); ok {
 		t.Fatal("expected a to expire after TTL")
 	}
 
 	// Oversized bodies are never stored.
-	cache.put("big", cachedResponse{Body: strings.Repeat("x", 2<<20)})
-	if _, ok := cache.get("big"); ok {
+	cache.Put("big", cachedResponse{Body: strings.Repeat("x", 2<<20)}, 2<<20)
+	if _, ok := cache.Get("big"); ok {
 		t.Fatal("oversized body should not be cached")
 	}
 }

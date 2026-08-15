@@ -18,9 +18,9 @@
 package websearch
 
 import (
-	"container/list"
-	"sync"
 	"time"
+
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 // cachedResponse holds the JSON-encoded result list of a successful search.
@@ -29,79 +29,10 @@ type cachedResponse struct {
 	Body      string
 }
 
-type cacheElement struct {
-	key       string
-	response  cachedResponse
-	expiresAt time.Time
-}
-
-// responseCache is a bounded in-process LRU with a TTL (same shape as the
-// webfetch cache; duplicated per-package per loom convention).
-type responseCache struct {
-	mu           sync.Mutex
-	ll           *list.List
-	items        map[string]*list.Element
-	maxEntries   int
-	maxBodyBytes int
-	ttl          time.Duration
-	now          func() time.Time
-}
+// responseCache is the shared bounded LRU cache (REVIEW N1), typed to the
+// search payload.
+type responseCache = toolkit.ResponseCache[cachedResponse]
 
 func newResponseCache(maxEntries, maxBodyBytes int, ttl time.Duration, now func() time.Time) *responseCache {
-	if now == nil {
-		now = time.Now
-	}
-	return &responseCache{
-		ll:           list.New(),
-		items:        make(map[string]*list.Element),
-		maxEntries:   maxEntries,
-		maxBodyBytes: maxBodyBytes,
-		ttl:          ttl,
-		now:          now,
-	}
-}
-
-func (c *responseCache) get(key string) (cachedResponse, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	elem, ok := c.items[key]
-	if !ok {
-		return cachedResponse{}, false
-	}
-	entry := elem.Value.(cacheElement)
-	if c.now().After(entry.expiresAt) {
-		c.removeLocked(elem)
-		return cachedResponse{}, false
-	}
-	c.ll.MoveToFront(elem)
-	return entry.response, true
-}
-
-func (c *responseCache) put(key string, resp cachedResponse) {
-	if c.maxEntries <= 0 || len(resp.Body) > c.maxBodyBytes {
-		return
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if elem, ok := c.items[key]; ok {
-		elem.Value = cacheElement{key: key, response: resp, expiresAt: c.now().Add(c.ttl)}
-		c.ll.MoveToFront(elem)
-		return
-	}
-	elem := c.ll.PushFront(cacheElement{key: key, response: resp, expiresAt: c.now().Add(c.ttl)})
-	c.items[key] = elem
-	for c.ll.Len() > c.maxEntries {
-		c.removeLocked(c.ll.Back())
-	}
-}
-
-func (c *responseCache) removeLocked(elem *list.Element) {
-	if elem == nil {
-		return
-	}
-	c.ll.Remove(elem)
-	delete(c.items, elem.Value.(cacheElement).key)
+	return toolkit.NewResponseCache[cachedResponse](maxEntries, maxBodyBytes, ttl, now)
 }

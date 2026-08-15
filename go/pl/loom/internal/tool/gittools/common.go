@@ -20,7 +20,6 @@ package gittools
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -29,10 +28,10 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
@@ -48,20 +47,15 @@ const (
 	maxGitStderrBytes         int64 = 16 << 10
 )
 
+// baseTool embeds the shared toolkit.BaseTool skeleton (definition +
+// signer + prepare/verify protocol, REVIEW R3) plus the git-specific
+// dependencies: path validator, process runner (REVIEW A6) and the
+// resolved git executable path.
 type baseTool struct {
-	def       domain.ToolDefinition
+	toolkit.BaseTool
 	validator *workspacepkg.PathValidator
+	runner    *process.Runner
 	gitPath   string
-	signer    toolkit.Signer
-}
-
-type preparedFingerprint struct {
-	CallID     string           `json:"call_id"`
-	ToolName   string           `json:"tool_name"`
-	Arguments  json.RawMessage  `json:"arguments"`
-	ReadPaths  []string         `json:"read_paths,omitempty"`
-	WritePaths []string         `json:"write_paths,omitempty"`
-	Risk       domain.RiskLevel `json:"risk"`
 }
 
 type repoRootResolution struct {
@@ -81,19 +75,12 @@ type gitRunResult struct {
 	truncated bool
 }
 
-type boundedBuffer struct {
-	mu        sync.Mutex
-	limit     int64
-	buf       bytes.Buffer
-	truncated bool
-}
-
-func newBaseTool(def domain.ToolDefinition, validator *workspacepkg.PathValidator) (baseTool, error) {
+func newBaseTool(def domain.ToolDefinition, validator *workspacepkg.PathValidator, runner *process.Runner) (baseTool, error) {
 	if validator == nil {
 		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "path validator is required")
 	}
-	if err := def.Validate(); err != nil {
-		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
+	if runner == nil {
+		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "process runner is required")
 	}
 
 	gitPath, err := exec.LookPath("git")
@@ -108,55 +95,12 @@ func newBaseTool(def domain.ToolDefinition, validator *workspacepkg.PathValidato
 		gitPath = resolved
 	}
 
-	signer, err := toolkit.NewSigner()
+	bt, err := toolkit.NewBaseTool(def)
 	if err != nil {
 		return baseTool{}, err
 	}
-
-	return baseTool{def: def, validator: validator, gitPath: gitPath, signer: signer}, nil
+	return baseTool{BaseTool: bt, validator: validator, runner: runner, gitPath: gitPath}, nil
 }
-
-func (b *baseTool) prepareCall(
-	ctx context.Context,
-	call domain.ToolCall,
-	canonicalArgs json.RawMessage,
-	readPaths []string,
-	approvalDesc string,
-) (domain.PreparedCall, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.PreparedCall{}, err
-	}
-	if err := call.Validate(); err != nil {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
-	}
-	if err := toolkit.ValidateCallName(call, b.def); err != nil {
-		return domain.PreparedCall{}, err
-	}
-
-	prepared := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        call.ID,
-			Name:      b.def.Name,
-			Arguments: toolkit.CloneRawMessage(canonicalArgs),
-		},
-		Definition:   b.def,
-		Risk:         b.def.Risk(),
-		ApprovalDesc: approvalDesc,
-		ReadPaths:    toolkit.SortedStrings(readPaths),
-	}
-	prepared.ArgsHash = b.signer.Sign(prepared)
-	return prepared, nil
-}
-
-func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	return b.signer.VerifyWithRisk(prepared, b.def)
-}
-
-func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
-
-func cloneRawMessage(raw json.RawMessage) json.RawMessage { return toolkit.CloneRawMessage(raw) }
-
-func sortedStrings(values []string) []string { return toolkit.SortedStrings(values) }
 
 func sortedUniqueStrings(values map[string]struct{}) []string {
 	if len(values) == 0 {
@@ -168,10 +112,6 @@ func sortedUniqueStrings(values map[string]struct{}) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func sameCapabilities(left, right []domain.Capability) bool {
-	return toolkit.SameCapabilities(left, right)
 }
 
 func resolveRepoRoot(validator *workspacepkg.PathValidator, input string) (repoRootResolution, error) {
@@ -254,8 +194,8 @@ func resolveRepoPath(
 	}, nil
 }
 
-func confirmRepoRoot(ctx context.Context, gitPath string, repoRoot repoRootResolution) error {
-	result, err := runGit(ctx, gitPath, buildRevParseArgs(repoRoot.Absolute), maxGitRevParseStdoutBytes, maxGitStderrBytes)
+func confirmRepoRoot(ctx context.Context, b *baseTool, repoRoot repoRootResolution) error {
+	result, err := runGit(ctx, b, repoRoot.Absolute, buildRevParseArgs(repoRoot.Absolute), maxGitRevParseStdoutBytes, maxGitStderrBytes)
 	if err != nil {
 		return classifyGitError(err, result.stderr, "failed to resolve git repository root")
 	}
@@ -282,8 +222,9 @@ func confirmRepoRoot(ctx context.Context, gitPath string, repoRoot repoRootResol
 // in response to the agent's (read-only) git activity. The fsmonitor and
 // untracked-cache features are disabled too: both can be armed through
 // repo-local .git/config (core.fsmonitor names an arbitrary hook command
-// that git status would execute), and these tools run outside the sandbox
-// (REVIEW M26).
+// that git status would execute). Since REVIEW A6 every git invocation
+// additionally runs inside the process sandbox, so even a successfully
+// injected hook stays confined to the workspace.
 func gitBaseArgs(repoRoot string) []string {
 	return []string{
 		"--no-pager",
@@ -360,8 +301,8 @@ func buildRemoteHeadArgs(repoRoot, remote string) []string {
 
 // resolveUpstream returns the upstream ref of the given local ref
 // ("" for HEAD), or "" when the ref has no upstream configured.
-func resolveUpstream(ctx context.Context, gitPath, repoRoot, ref string) string {
-	result, err := runGit(ctx, gitPath, buildUpstreamArgs(repoRoot, ref), maxGitRevParseStdoutBytes, maxGitStderrBytes)
+func resolveUpstream(ctx context.Context, b *baseTool, repoRoot, ref string) string {
+	result, err := runGit(ctx, b, repoRoot, buildUpstreamArgs(repoRoot, ref), maxGitRevParseStdoutBytes, maxGitStderrBytes)
 	if err != nil {
 		return ""
 	}
@@ -376,15 +317,15 @@ func resolveUpstream(ctx context.Context, gitPath, repoRoot, ref string) string 
 // mirroring codex's git-utils info.rs default_branch_name fallback chain:
 // the origin remote's symbolic HEAD first, then a local main/master probe.
 // Returns "" when nothing resolves (a detached, remote-less repository).
-func resolveDefaultBranch(ctx context.Context, gitPath, repoRoot string) string {
-	if result, err := runGit(ctx, gitPath, buildRemoteHeadArgs(repoRoot, "origin"), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
+func resolveDefaultBranch(ctx context.Context, b *baseTool, repoRoot string) string {
+	if result, err := runGit(ctx, b, repoRoot, buildRemoteHeadArgs(repoRoot, "origin"), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
 		short := strings.TrimSpace(sanitizeUTF8(result.stdout))
 		if branch, ok := strings.CutPrefix(short, "origin/"); ok && branch != "" && validateGitRef(branch) == nil {
 			return branch
 		}
 	}
 	for _, candidate := range []string{"main", "master"} {
-		if _, err := runGit(ctx, gitPath, buildRevParseVerifyArgs(repoRoot, "refs/heads/"+candidate), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
+		if _, err := runGit(ctx, b, repoRoot, buildRevParseVerifyArgs(repoRoot, "refs/heads/"+candidate), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
 			return candidate
 		}
 	}
@@ -396,18 +337,18 @@ func resolveDefaultBranch(ctx context.Context, gitPath, repoRoot string) string 
 // current branch's upstream when one exists, otherwise the merge-base with
 // the default branch. Returns the base ref and a human-readable baseRef
 // describing what was used; both empty when nothing resolves.
-func resolveUpstreamDiffBase(ctx context.Context, gitPath, repoRoot string) (string, string, error) {
-	if upstream := resolveUpstream(ctx, gitPath, repoRoot, "HEAD"); upstream != "" {
-		if err := verifyCommitRef(ctx, gitPath, repoRoot, upstream); err != nil {
+func resolveUpstreamDiffBase(ctx context.Context, b *baseTool, repoRoot string) (string, string, error) {
+	if upstream := resolveUpstream(ctx, b, repoRoot, "HEAD"); upstream != "" {
+		if err := verifyCommitRef(ctx, b, repoRoot, upstream); err != nil {
 			return "", "", err
 		}
 		return upstream, upstream, nil
 	}
-	defaultBranch := resolveDefaultBranch(ctx, gitPath, repoRoot)
+	defaultBranch := resolveDefaultBranch(ctx, b, repoRoot)
 	if defaultBranch == "" {
 		return "", "", domain.NewError(domain.ErrInvalidInput, "no upstream or default branch to diff against (set an upstream or pass an explicit base)")
 	}
-	sha, usedRef, err := resolveMergeBase(ctx, gitPath, repoRoot, defaultBranch)
+	sha, usedRef, err := resolveMergeBase(ctx, b, repoRoot, defaultBranch)
 	if err != nil {
 		return "", "", err
 	}
@@ -480,22 +421,22 @@ func literalGitPathspec(path string) string {
 // ahead of the local ref, the upstream's merge-base is the fresher review
 // base (the local branch is stale). Returns the base SHA and the ref that
 // produced it (branch or its upstream), so callers can show their work.
-func resolveMergeBase(ctx context.Context, gitPath, repoRoot, branch string) (string, string, error) {
+func resolveMergeBase(ctx context.Context, b *baseTool, repoRoot, branch string) (string, string, error) {
 	if err := validateGitRef(branch); err != nil {
 		return "", "", err
 	}
 
 	usedRef := branch
-	if upstreamResult, err := runGit(ctx, gitPath, buildUpstreamArgs(repoRoot, branch), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
+	if upstreamResult, err := runGit(ctx, b, repoRoot, buildUpstreamArgs(repoRoot, branch), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
 		if upstream := strings.TrimSpace(sanitizeUTF8(upstreamResult.stdout)); upstream != "" && upstream != branch && validateGitRef(upstream) == nil {
-			countResult, countErr := runGit(ctx, gitPath, append(gitBaseArgs(repoRoot), "rev-list", "--count", branch+".."+upstream), maxGitRevParseStdoutBytes, maxGitStderrBytes)
+			countResult, countErr := runGit(ctx, b, repoRoot, append(gitBaseArgs(repoRoot), "rev-list", "--count", branch+".."+upstream), maxGitRevParseStdoutBytes, maxGitStderrBytes)
 			if countErr == nil && strings.TrimSpace(sanitizeUTF8(countResult.stdout)) != "0" {
 				usedRef = upstream
 			}
 		}
 	}
 
-	result, err := runGit(ctx, gitPath, buildMergeBaseArgs(repoRoot, "HEAD", usedRef), maxGitRevParseStdoutBytes, maxGitStderrBytes)
+	result, err := runGit(ctx, b, repoRoot, buildMergeBaseArgs(repoRoot, "HEAD", usedRef), maxGitRevParseStdoutBytes, maxGitStderrBytes)
 	if err != nil {
 		return "", "", classifyGitError(err, result.stderr, fmt.Sprintf("failed to compute merge-base of HEAD and %s", usedRef))
 	}
@@ -510,11 +451,11 @@ func resolveMergeBase(ctx context.Context, gitPath, repoRoot, branch string) (st
 // fails at prepare time with a clear error instead of inside git diff.
 // Callers pass rev verbatim to git as a standalone revision argument, so
 // ancestry suffixes (~N/^N) are accepted here via validateGitRevision.
-func verifyCommitRef(ctx context.Context, gitPath, repoRoot, rev string) error {
+func verifyCommitRef(ctx context.Context, b *baseTool, repoRoot, rev string) error {
 	if err := validateGitRevision(rev); err != nil {
 		return err
 	}
-	result, err := runGit(ctx, gitPath, buildRevParseVerifyArgs(repoRoot, rev+"^{commit}"), maxGitRevParseStdoutBytes, maxGitStderrBytes)
+	result, err := runGit(ctx, b, repoRoot, buildRevParseVerifyArgs(repoRoot, rev+"^{commit}"), maxGitRevParseStdoutBytes, maxGitStderrBytes)
 	if err != nil {
 		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("revision %q does not resolve to a commit", rev), domain.WithCause(err))
 	}
@@ -522,41 +463,70 @@ func verifyCommitRef(ctx context.Context, gitPath, repoRoot, rev string) error {
 	return nil
 }
 
-func runGit(ctx context.Context, gitPath string, args []string, stdoutLimit, stderrLimit int64) (gitRunResult, error) {
-	commandCtx, cancel := context.WithTimeout(ctx, defaultGitCommandTimeout)
-	defer cancel()
+// gitExitError is the error returned when a git command exits non-zero
+// through the process runner. The runner itself reports exit status in
+// Result.ExitCode and returns a nil error for it (interpretWaitError), so
+// runGit wraps that into an error here to keep the callers' error path
+// (classifyGitError) unchanged.
+type gitExitError struct {
+	code int
+}
 
-	cmd := exec.CommandContext(commandCtx, gitPath, args...)
-	cmd.Env = []string{
-		"LANG=C",
-		"LC_ALL=C",
-		"GIT_CONFIG_NOSYSTEM=1",
-		"GIT_CONFIG_GLOBAL=/dev/null",
-		"GIT_TERMINAL_PROMPT=0",
+func (e *gitExitError) Error() string {
+	return fmt.Sprintf("git exited with code %d", e.code)
+}
+
+// runGit executes one git command through the shared process runner
+// (REVIEW A6: sandboxed, process-group isolated, bounded output, and
+// timeout handling are all the runner's, not a parallel implementation).
+// The command's working directory is the repository root, and the -C flag
+// in the built args redundantly points at the same directory so the
+// argument builders stay repo-relative.
+func runGit(ctx context.Context, b *baseTool, repoRoot string, args []string, stdoutLimit, stderrLimit int64) (gitRunResult, error) {
+	outputLimit := stdoutLimit
+	if stderrLimit > outputLimit {
+		outputLimit = stderrLimit
 	}
-	cmd.Stdin = bytes.NewReader(nil)
-
-	stdout := newBoundedBuffer(stdoutLimit)
-	stderr := newBoundedBuffer(stderrLimit)
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-
-	err := cmd.Run()
-	result := gitRunResult{
-		stdout:    stdout.Bytes(),
-		stderr:    stderr.Bytes(),
-		truncated: stdout.Truncated() || stderr.Truncated(),
+	result, err := b.runner.Run(ctx, process.CommandSpec{
+		Program:     b.gitPath,
+		Args:        args,
+		Cwd:         repoRoot,
+		Env:         gitCommandEnv,
+		Timeout:     defaultGitCommandTimeout,
+		OutputLimit: outputLimit,
+	})
+	gr := gitRunResult{
+		stdout:    result.Stdout,
+		stderr:    result.Stderr,
+		truncated: result.Truncated,
 	}
 	if err != nil {
-		if errors.Is(commandCtx.Err(), context.Canceled) {
-			return result, commandCtx.Err()
-		}
-		if errors.Is(commandCtx.Err(), context.DeadlineExceeded) {
-			return result, commandCtx.Err()
-		}
-		return result, err
+		return gr, err
 	}
-	return result, nil
+	switch {
+	case result.TimedOut:
+		return gr, context.DeadlineExceeded
+	case result.Cancelled:
+		return gr, context.Canceled
+	case result.ExitCode != 0:
+		return gr, &gitExitError{code: result.ExitCode}
+	}
+	return gr, nil
+}
+
+// gitCommandEnv is the environment every git invocation runs with: a
+// stable locale, system and global configuration disabled (a malicious
+// $HOME/.gitconfig or /etc/gitconfig must never arm hooks or aliases for
+// the agent's read-only git activity), and credential prompts disabled
+// (git must fail instead of hanging on a missing credential helper).
+// The keys are on the process runner's env allowlist, so they survive the
+// sandbox's minimal-environment filter (REVIEW A6).
+var gitCommandEnv = map[string]string{
+	"LANG":                "C",
+	"LC_ALL":              "C",
+	"GIT_CONFIG_NOSYSTEM": "1",
+	"GIT_CONFIG_GLOBAL":   "/dev/null",
+	"GIT_TERMINAL_PROMPT": "0",
 }
 
 func classifyGitError(err error, stderr []byte, fallback string) error {
@@ -568,8 +538,13 @@ func classifyGitError(err error, stderr []byte, fallback string) error {
 	}
 
 	stderrText := strings.TrimSpace(sanitizeUTF8(stderr))
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	var gitErr *gitExitError
+	if errors.As(err, &gitErr) {
+		// git's own stderr is an external protocol, not our error text, so
+		// there is no sentinel to match against (REVIEW N2). "not a git
+		// repository" is stable git core output across versions, and the
+		// match is deliberately narrow: everything else falls through to a
+		// generic unavailable error carrying the stderr text.
 		if strings.Contains(stderrText, "not a git repository") {
 			return domain.NewError(domain.ErrInvalidInput, "repo_root is not a git repository root", domain.WithCause(err))
 		}
@@ -638,90 +613,4 @@ func isUnderRoot(path, root string) bool {
 
 func sanitizeUTF8(data []byte) string {
 	return string(bytes.ToValidUTF8(data, []byte("?")))
-}
-
-func newBoundedBuffer(limit int64) *boundedBuffer {
-	return &boundedBuffer{limit: limit}
-}
-
-func (b *boundedBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	n := len(p)
-	remaining := b.limit - int64(b.buf.Len())
-	if remaining <= 0 {
-		b.truncated = true
-		return n, nil
-	}
-	if int64(len(p)) > remaining {
-		_, _ = b.buf.Write(p[:remaining])
-		b.truncated = true
-		return n, nil
-	}
-	_, _ = b.buf.Write(p)
-	return n, nil
-}
-
-func (b *boundedBuffer) Bytes() []byte {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return append([]byte(nil), b.buf.Bytes()...)
-}
-
-func (b *boundedBuffer) Truncated() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.truncated
-}
-
-func successResult(callID domain.ToolCallID, startedAt time.Time, payload any) domain.ToolResult {
-	content, err := json.Marshal(payload)
-	if err != nil {
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
-	}
-	finishedAt := time.Now()
-	return domain.ToolResult{
-		CallID:     callID,
-		Status:     domain.ToolStatusSuccess,
-		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(content)}},
-		StartedAt:  startedAt,
-		FinishedAt: finishedAt,
-	}
-}
-
-func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	status := domain.ToolStatusError
-	code := string(domain.ErrInternal)
-	message := "internal tool error"
-	retryable := false
-
-	switch {
-	case errors.Is(err, context.Canceled):
-		status = domain.ToolStatusCancelled
-		code = string(domain.ErrCancelled)
-		message = "operation cancelled"
-	case errors.Is(err, context.DeadlineExceeded):
-		status = domain.ToolStatusTimeout
-		code = string(domain.ErrTimeout)
-		message = "operation timed out"
-	default:
-		var agentErr *domain.AgentError
-		if errors.As(err, &agentErr) {
-			code = string(agentErr.Code)
-			message = agentErr.Message
-			retryable = agentErr.Retryable
-		} else if err != nil {
-			message = err.Error()
-		}
-	}
-
-	finishedAt := time.Now()
-	return domain.ToolResult{
-		CallID:     callID,
-		Status:     status,
-		Error:      &domain.ToolError{Code: code, Message: message, Retryable: retryable},
-		StartedAt:  startedAt,
-		FinishedAt: finishedAt,
-	}
 }

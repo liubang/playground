@@ -67,7 +67,7 @@ func NewReadFileTool(validator *workspacepkg.PathValidator, book *workspacepkg.F
 }
 
 func (t *ReadFileTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: reads are
@@ -89,7 +89,7 @@ func (t *ReadFileTool) Prepare(ctx context.Context, call domain.ToolCall) (domai
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Read %s (offset=%d, limit=%d)", args.Path, args.Offset, args.Limit)
-	return t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ReadPaths: []string{pathInfo.Absolute}, ApprovalDesc: approvalDesc})
 }
 
 func (t *ReadFileTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
@@ -99,43 +99,43 @@ func (t *ReadFileTool) Execute(ctx context.Context, prepared domain.PreparedCall
 }
 
 func (t *ReadFileTool) execute(ctx context.Context, prepared domain.PreparedCall, startedAt time.Time) domain.ToolResult {
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if len(prepared.ReadPaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
 	}
 
 	args, err := decodeStrict[readFileArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	pathInfo, err := resolveExistingPath(t.base.validator, prepared.ReadPaths[0])
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if pathInfo.Display != args.Path {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 	}
 	if pathInfo.Info.IsDir() {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "path must refer to a file"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "path must refer to a file"))
 	}
 	if !pathInfo.Info.Mode().IsRegular() {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "path must refer to a regular file"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "path must refer to a regular file"))
 	}
 
 	data, err := readSmallFile(ctx, pathInfo.Absolute, maxReadFileBytes)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if toolkit.IsBinaryContent(data) {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "file appears to be binary or not valid UTF-8"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "file appears to be binary or not valid UTF-8"))
 	}
 
 	lines, err := splitLines(data, maxReadFileBytes)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	selected, first, last, truncated := sliceReadFileLines(lines, args.Offset, args.Limit)
 	contentHash := sha256Hex(data)

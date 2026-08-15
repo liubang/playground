@@ -484,8 +484,10 @@ func TestRunnerRejectsSensitiveCwd(t *testing.T) {
 		Program: "noop",
 		Cwd:     filepath.Join(t.TempDir(), ".ssh"),
 	})
-	if err == nil || !strings.Contains(err.Error(), "validate cwd") {
-		t.Fatalf("Run() error = %v, want cwd validation failure", err)
+	// Assert the sentinel, not the wording: the runner wraps ErrInvalidCwd
+	// so callers classify cwd rejections structurally (REVIEW A5).
+	if err == nil || !errors.Is(err, ErrInvalidCwd) {
+		t.Fatalf("Run() error = %v, want ErrInvalidCwd", err)
 	}
 }
 

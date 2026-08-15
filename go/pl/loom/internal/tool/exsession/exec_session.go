@@ -23,6 +23,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -91,7 +92,7 @@ func (t *ExecSessionTool) Prepare(ctx context.Context, call domain.ToolCall) (do
 	if call.Name != t.def.Name {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
 	}
-	args, err := decodeStrict[commandArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[commandArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -138,15 +139,15 @@ func (t *ExecSessionTool) Prepare(ctx context.Context, call domain.ToolCall) (do
 func (t *ExecSessionTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
 	if err := t.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-	args, err := decodeStrict[commandArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[commandArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	absoluteDir, err := validateCommandArgs(t.validator, &args)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	yieldMs := args.YieldTimeMs
@@ -166,12 +167,12 @@ func (t *ExecSessionTool) Execute(ctx context.Context, prepared domain.PreparedC
 		Env:     args.Env,
 	}, grant, displayArgv(args.Program, args.Args))
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, classifyStartError(err))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, classifyStartError(err))
 	}
 
 	awaitYield(ctx, entry, yieldMs)
 	output := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)
-	return successResult(prepared.Call.ID, startedAt, output)
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, output)
 }
 
 func (t *ExecSessionTool) verifyPreparedCall(prepared domain.PreparedCall) error {
@@ -181,7 +182,7 @@ func (t *ExecSessionTool) verifyPreparedCall(prepared domain.PreparedCall) error
 	if prepared.Definition.Name != t.def.Name || prepared.Definition.Source != t.def.Source {
 		return domain.NewError(domain.ErrSecurity, "prepared call definition mismatch")
 	}
-	args, err := decodeStrict[commandArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[commandArgs](prepared.Call.Arguments)
 	if err != nil {
 		return domain.NewError(domain.ErrSecurity, "prepared call arguments are unreadable")
 	}

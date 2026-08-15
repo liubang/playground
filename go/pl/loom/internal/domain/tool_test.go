@@ -104,6 +104,29 @@ func TestToolDefinitionRisk(t *testing.T) {
 	}
 }
 
+// TestToolDefinitionValidateRejectsUnknownCapability locks in the
+// fail-loud behavior of REVIEW N3: a new Capability forgotten in
+// capabilityRiskTable must fail registration instead of silently grading
+// at a default risk.
+func TestToolDefinitionValidateRejectsUnknownCapability(t *testing.T) {
+	def := ToolDefinition{
+		Name:         "future_tool",
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		Capabilities: []Capability{"future.capability"},
+	}
+	if err := def.Validate(); err == nil {
+		t.Fatal("Validate() succeeded for an unmapped capability, want error")
+	}
+	// Risk() must also fail loud (panic) when bypassing Validate — the
+	// defensive path for a programming mistake.
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("Risk() did not panic for an unmapped capability")
+		}
+	}()
+	_ = def.Risk()
+}
+
 func TestToolCallValidation(t *testing.T) {
 	tests := []struct {
 		name    string

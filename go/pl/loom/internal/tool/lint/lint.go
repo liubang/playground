@@ -31,6 +31,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -93,11 +94,11 @@ func NewLintTool(validator *workspacepkg.PathValidator, runner cmdRunner) (*Lint
 }
 
 func (t *LintTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 func (t *LintTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[lintArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[lintArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -115,36 +116,39 @@ func (t *LintTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.Pr
 		linterLabel = "auto-detect"
 	}
 	approvalDesc := fmt.Sprintf("Lint %s (%s)", args.Path, linterLabel)
-	return t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{
+		ReadPaths:    []string{pathInfo.Absolute},
+		ApprovalDesc: approvalDesc,
+	})
 }
 
 func (t *LintTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if len(prepared.ReadPaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
 	}
 	if t.runner == nil {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "lint tool requires a process runner"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "lint tool requires a process runner"))
 	}
 
-	args, err := decodeStrict[lintArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[lintArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	pathInfo, err := resolveExistingPath(t.base.validator, prepared.ReadPaths[0])
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if pathInfo.Display != args.Path {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 	}
 
 	plan, err := t.detect(pathInfo, args)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	result, err := t.runner.Run(ctx, process.CommandSpec{
@@ -156,25 +160,25 @@ func (t *LintTool) Execute(ctx context.Context, prepared domain.PreparedCall) do
 		OutputLimit: lintOutputLimit,
 	})
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable,
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable,
 			fmt.Sprintf("failed to run %s", plan.Linter), domain.WithCause(err), domain.WithRetryable(true)))
 	}
 	if result.TimedOut {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrTimeout,
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrTimeout,
 			fmt.Sprintf("%s timed out after %s", plan.Linter, lintTimeout), domain.WithRetryable(true)))
 	}
 	if !exitCodeExpected(plan.Linter, result.ExitCode) {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable,
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable,
 			fmt.Sprintf("%s failed with exit code %d: %s", plan.Linter, result.ExitCode, stderrTail(result.Stderr))))
 	}
 
 	diags, note, err := decodeDiagnostics(plan, result)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	normalized, truncated := normalizeDiagnostics(diags, plan, t.base.validator.Root(), args.Severity, args.MaxDiagnostics)
 
-	return successResult(prepared.Call.ID, startedAt, lintOutput{
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, lintOutput{
 		Path:            args.Path,
 		ProjectRoot:     plan.DisplayRoot,
 		Linter:          plan.Linter,

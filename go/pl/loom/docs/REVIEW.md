@@ -42,7 +42,7 @@
 | --- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | R1  | `runtimeevent/aggregator.go`（全文件 226 行）                                                 | 是 `agent/stream_hooks.go` 的过期副本，除自身测试外零调用方，且不支持 reasoning 事件、无 malformed-arguments 兜底，已行为漂移                                                                                        | 已删除                                                             |
 | R2  | `session/sqlite_store.go:233-303` vs `307-387`                                                | `AppendEvents` 与 `AppendEventsAndCheckpoint` 约 70 行事务骨架完全重复，应抽 `appendEventsTx`                                                                                                                        | 已处理                                                             |
-| R3  | 7 个工具包的 baseTool 骨架                                                                    | `prepareCall/verifyPreparedCall/signPrepared/decodeStrict/errorResult` 等逐字复制且已漂移（gittools `errorResult` 多分支、skillread 丢 context.Canceled 映射）                                                       | ⬜ 未处理                                                             |
+| R3  | 7 个工具包的 baseTool 骨架                                                                    | `prepareCall/verifyPreparedCall/signPrepared/decodeStrict/errorResult` 等逐字复制且已漂移（gittools `errorResult` 多分支、skillread 丢 context.Canceled 映射）                                                       | ✅ 已修复（2026-08-15，见第三轮修复记录）                                                             |
 | R4  | `workspace/path.go:307`、`builtin/common.go:59`、`gittools/common.go:54`、`lint/common.go:41` | 敏感路径清单重复 4 份（skillread 唯一正确复用 `workspace.IsSensitive`）                                                                                                                                              | 已处理                                                             |
 | R5  | anthropic vs openai provider                                                                  | `toolResultContent`/`messageText`/schema 解码/Stream 骨架/read-error 收尾大段重复，建议抽 `model/wireutil`                                                                                                           | ⬜ 未处理                                                             |
 | R6  | `app/controller.go:262-564`                                                                   | 11 个公开方法共享 ~20 行 RPC 样板（约 200 行），抽 `call(ctx, cmd)` 私有助手                                                                                                                                         | ⬜ 未处理                                                             |
@@ -59,8 +59,8 @@
 | A2  | permission ↔ command           | 靠字符串契约耦合（见 M17），建议 `domain.PreparedCall` 增加类型化 `ExecArgv` 字段并纳入签名                                                                    | ⬜ 未处理 |
 | A3  | ui → app                       | UI 直接依赖具体类型 `*app.Controller` 与 `app.ControllerState`，无法脱离完整 app 装配单测；建议窄接口                                                          | ⬜ 未处理 |
 | A4  | `model/stream/stream.go:33-43` | `Emitter` 的 false-中止契约无人遵守（anthropic pump 全部丢弃返回值），契约是假的                                                                               | ⬜ 未处理 |
-| A5  | `tool/command/run_cmd.go:631`  | `classifyRunError` 对 process 包错误文本做子串匹配，改文案即静默失灵，应导出 sentinel errors                                                                   | ⬜ 未处理 |
-| A6  | `tool/gittools/common.go:422`  | 绕过 `process.Runner` 直接 exec：不经沙箱、无进程组隔离、限流/超时逻辑平行重复                                                                                 | ⬜ 未处理 |
+| A5  | `tool/command/run_cmd.go:631`  | `classifyRunError` 对 process 包错误文本做子串匹配，改文案即静默失灵，应导出 sentinel errors                                                                   | ✅ 已修复（2026-08-15，见第三轮修复记录） |
+| A6  | `tool/gittools/common.go:422`  | 绕过 `process.Runner` 直接 exec：不经沙箱、无进程组隔离、限流/超时逻辑平行重复                                                                                 | ✅ 已修复（2026-08-15，见第三轮修复记录） |
 | A7 | 注释与实现不符 | `run.go:1811,1823`「ArgsHash HMAC」实为截断 SHA-256 且 Execute 不校验；`policy.go:89`「root-owned」含 `/usr/local/bin`、`/opt/homebrew/bin`（均非 root-owned） | 已修复（trusted dirs 运行时校验；ArgsHash 部分经复核为 M9 修复后的误报——见修复记录） |
 | A8  | `domain/errors.go:80`          | `domain.As` 重复实现标准库且语义有偏差（As 返回 false 不再 unwrap、不支持 `Unwrap() []error`），建议删除改用 `errors.As`                                       | 已修复 |
 | A9  | `domain/context.go:85-97`      | `ContextManifest` 半数字段无生产者，YAGNI 过度设计                                                                                                             | ⬜ 未处理 |
@@ -371,3 +371,59 @@
 - `LOOM_E2E_LLM=1 go test ./e2e/ -run TestServeRealModelE2E`（本机真实 provider）：**PASS**（17.1s）——真实工具循环（read_file 暗号验证）、事件流水位交接、busy-turn steering、幂等提交、跨 client 会话恢复全链路通过。
 - `LOOM_E2E_LLM=1 go test ./e2e/ -run TestMemoryPipelineRealModelE2E`（本机真实 provider）：**PASS**（32.5s）——会话落盘 → 后台记忆提取（Claimed:1 Succeeded:1）→ Phase 2  consolidation（MEMORY.md/summary/raw 产物齐全）全链路通过。
 - 备注：`bazel test` 首轮 `process_test` 出现一次间歇性时序失败（`TestSessionIncrementalReadAndExit` 的 150ms 时序窗口），复跑及 `go test -count=10` 均稳定通过，与本批改动无关。
+
+## 七、第三轮 Review（2026-08-15）——内置工具设计
+
+> 本轮针对内置工具整体 review 报告（REVIEW A6/R3/A5/N1-N5）逐一修复，每项修复后独立回归验证并记录。编号沿用既有体系。
+
+### A6 gittools 迁移到 process.Runner（2026-08-15 修复）
+
+- **问题**：`tool/gittools` 绕过 `process.Runner` 直接 `exec.CommandContext`（common.go runGit）：不经沙箱、无进程组隔离、限流 buffer/超时/env 清洗全部平行实现，与 run_cmd 是两个世界；repo 级 `.git/config` 注入的 hook 即使被 `-c core.fsmonitor=false` 挡住，其余注入面也缺乏沙箱兜底。
+- **方案**：
+  - `runGit` 改走 `runner.Run`（`CommandSpec{Program: gitPath, Cwd: repoRoot, Env: gitCommandEnv, Timeout: defaultGitCommandTimeout, OutputLimit: max(stdout,stderr)}`）；自绘 `boundedBuffer` 删除（runner 的 streamCollector 替代）；超时/取消/非零退出语义保持不变（`Result.TimedOut/Cancelled/ExitCode` 映射回 `context.DeadlineExceeded/Canceled` 与 `gitExitError`，`classifyGitError` 调用点零改动）。
+  - 5 个工具构造函数新增 `runner *process.Runner` 参数；包级中间函数（`confirmRepoRoot`/`resolveUpstream`/`resolveDefaultBranch`/`resolveUpstreamDiffBase`/`resolveMergeBase`/`verifyCommitRef`/`validateXxxArgs`）统一由 `gitPath string` 改为 `*baseTool`。
+  - git 安全 env（`GIT_CONFIG_NOSYSTEM`/`GIT_CONFIG_GLOBAL=/dev/null`/`GIT_TERMINAL_PROMPT=0`）加入 `process.defaultEnvAllowlist` 与 bootstrap `EnvAllowlist`，经沙箱最小环境过滤后仍保留——防全局配置注入与凭据挂起不因迁移丢失。
+- **回归**：`gittools_test` 全部通过（测试 runner 用 `process.ExplicitTestSandbox`，跨平台）；新增 `TestGitToolsDisableRepoFsmonitor`（repo 级 fsmonitor 注入被 `-c core.fsmonitor=false` 挡住）与 `TestGitToolsIgnoreGlobalConfig`（恶意 `$HOME/.gitconfig` 因 `GIT_CONFIG_GLOBAL=/dev/null` 失效）。`app_test` 通过；`process_test` 的 `TestSessionIncrementalReadAndExit` 失败为已知间歇性时序问题（见第二轮备注，HEAD 上同样失败，与本改动无关）。`gofmt` 干净。
+- **遗留**：Linux 平台沙箱仍 fail-closed（`UnsupportedSandbox`）——git 工具与 run_cmd 同语义：Linux 上不可用，这是刻意的 fail-closed 而非静默降级。
+
+### R3 toolkit.BaseTool 骨架收敛（2026-08-15 修复）
+
+- **问题**：8 个工具包各有一份 `baseTool` 骨架（`newBaseTool`/`prepareCall`/`verifyPreparedCall` + 薄别名 `decodeStrict`/`cloneRawMessage`/`successResult`/`errorResult`），且已漂移：gittools 自绘 `errorResult`（丢 boundedDetail）、browser 的 prepareCall 多 risk/URLRequest 参数、edit 多 writePaths/WriteRequest、skillread 干脆手写 Prepare——新增工具抄错协议的风险高。
+- **方案**：
+  - `toolkit` 新增 `BaseTool`（`Def` + 私有 signer + `PrepareCall(ctx, call, canonicalArgs, PrepareOptions)` + `VerifyPreparedCall` + `VerifyPreparedCallStructural`）。`PrepareOptions{ReadPaths, WritePaths, ApprovalDesc, WriteRequest, URLRequest, Risk}` 统一承载全部契约字段，Risk 指针支持 browser 的 per-action 风险派生。
+  - 8 个包全部改为嵌入 `toolkit.BaseTool`：包内 `baseTool` 仅保留工具特有依赖（validator/runner/gitPath）；包级 `newBaseTool` 只做依赖校验后委托 `toolkit.NewBaseTool`。薄别名全部删除，调用点直调 `toolkit.Xxx`（builtin 的 `decodeStrict` 保留——它带 malformed-arguments 占位符增强，非纯别名）。
+  - browser 的 `verifyPreparedCall` 保留为包内方法：`VerifyPreparedCallStructural`（名称/定义/来源/能力/HMAC）后自行重派生 risk（per-action）；command 的自定义指纹（含完整 Definition）与 exsession/subagent/memory 的会话类协议维持原样——文档记录为有意保留。
+  - gittools 自绘 `successResult`/`errorResult` 删除，统一 `toolkit.SuccessResult`/`ErrorResult`（后者含 boundedDetail 诊断拼接，更完善）；`preparedFingerprint` 死代码删除。
+- **回归**：`bazel test //go/pl/loom/internal/tool/...` 13/13 全绿；`bazel build //go/pl/loom/...` 全量通过；`gofmt -l` 干净；全库 grep 无薄别名残留（仅 builtin 增强版 decodeStrict 与 toolkit 自身保留）。新增 `toolkit/base_test.go`：签名契约字段（ReadPaths/Risk override/URLRequest）、篡改拒绝（改 ReadPaths/跨实例）、以及 risk-override 场景下 `VerifyPreparedCall` 拒绝而 `VerifyPreparedCallStructural` 放行的设计语义（后者正是 browser 的使用路径）。
+- **遗留**：R5（provider 间重复）、R6（controller RPC 样板）、R7（pendingHub）与 R3 不同源，继续挂账。
+
+### N1 toolkit.ResponseCache 抽取（2026-08-15 修复）
+
+- **问题**：`webfetch/cache.go` 与 `websearch/cache.go` 的 bounded LRU+TTL cache 逐字重复，websearch 注释甚至标注 "duplicated per-package per loom convention"——新增网络工具会再复制一份。
+- **方案**：`toolkit` 新增泛型 `ResponseCache[T]`（Get/Put/过期清理/LRU 淘汰/超大拒绝），payload 类型由调用方实例化；`Put(key, value, bodyBytes)` 显式传字节数，cache 本体保持 payload 无关。webfetch/websearch 的 `responseCache` 改为类型别名 `toolkit.ResponseCache[cachedResponse]`，调用点改 `Get`/`Put`。
+- **回归**：webfetch/websearch/toolkit 测试全绿；`webfetch_test` 的 `TestResponseCacheExpiryAndEviction` 保留并适配新签名；新增 `toolkit/cache_test.go`（LRU 淘汰、TTL 过期、超大拒绝、maxEntries<=0 禁用、refresh 重置 TTL）。`gofmt` 干净。
+
+### A5/N2 错误分类 sentinel 化（2026-08-15 修复）
+
+- **问题（A5）**：`classifyRunError` 仍对 process 包错误文本做子串匹配：`"executable file not found"`（与 `exec.ErrNotFound` 重复）、`"validate cwd"`（runner 内部文案）、`"stdout pipe"/"stderr pipe"/"start command"/"wait command"`（与兜底分支完全同映射）。process 包改文案即静默失灵或冗余。
+- **方案**：process 包新增 sentinel `ErrInvalidCwd`，`validateSpec` 的 cwd 拒绝改 `fmt.Errorf("%w: %w", ErrInvalidCwd, err)`；`classifyRunError` 改 `errors.Is(err, process.ErrInvalidCwd)`，删除 "executable file not found" 冗余 Contains 与管道/启动/等待子串分支（兜底已覆盖同映射）。
+- **问题（N2）**：`classifyGitError` 对 git stderr 的 `"not a git repository"` 做文本匹配——git stderr 是外部协议，无 sentinel 可用；补充注释说明该匹配为何保留（git 核心输出跨版本稳定、匹配刻意窄化），其余 stderr 一律兜底 unavailable。
+- **回归**：`TestClassifyRunError` 新增 4 例——`ErrInvalidCwd` wrap → ErrSecurity、`exec.ErrNotFound` wrap（look path 前缀）→ ErrInvalidInput、以及"文案已变的 runner 错误"（`"wait command: exit status 1"`、`"start command"`）仍落 ErrUnavailable，证明子串匹配删除后分类不退化。command/gittools 测试全绿，`gofmt` 干净。
+
+### N3 capabilityRisk default 分支 fail-loud（2026-08-15 修复）
+
+- **问题**：`capabilityRisk` 的 default 分支静默返回 R2——新增 Capability 忘记映射时不会编译报错，而是默认中风险，权限语义被静默稀释。
+- **方案**：引入单一数据源 `capabilityRiskTable`（13 个已知 Capability → RiskLevel 映射）；`ToolDefinition.Validate()` 遍历 Capabilities 拒绝未映射项（所有注册路径都过 Validate，启动即暴露）；`capabilityRisk` 对未映射项 panic（防御编程错误，与 Validate 同表驱动不可能漂移）。
+- **回归**：新增 `TestToolDefinitionValidateRejectsUnknownCapability`（Validate 报错 + Risk panic 防御路径）；全库 `bazel build //go/pl/loom/...` 通过（无未映射 Capability 的现存定义）；`domain_test` 全绿，`gofmt` 干净。
+
+### N4/N5 评估决策（2026-08-15，不追加代码）
+
+- **N4 工具描述人肉契约**：评估后**不追加** description golden test——description 是给模型的自然语言，逐字断言会阻碍迭代；参数契约已由 `additionalProperties:false` + `DecodeStrict` 双锁（schema 拒绝未知字段，解码拒绝未知字段），描述准确性由 code review 保证（read_skill 的详细描述是范本）。
+- **N5 工具面膨胀**：评估后**不立即实施**懒加载/配置门控——主 agent 约 27 个工具 schema 占几千 token，仍在模型上下文可接受范围；动态工具列表会让模型工具调用计划不稳定。保留 `generate_image` 的条件注册（bootstrap.go）为后续 config 门控重型工具（browser/exec_session/imagegen）的范本。
+
+### 第三轮收尾验证（2026-08-15）
+
+> `bazel build //go/pl/loom/...` 通过；`bazel test //go/pl/loom/...` 45/47 通过。2 个失败均为已知环境性/会话前问题，与本轮改动无关：
+> 1. `process_test` 的 `TestSessionIncrementalReadAndExit`（150ms 时序窗口，REVIEW 第二轮已记录，HEAD 复现）与 `TestRunnerTimeoutKillsProcessGroup`（grandchild.pid 时序，HEAD 同因）。
+> 2. `e2e` snapshot golden 的 staged 修改（会话开始前已存在，把 expected.json 从多行缩进刷成紧凑格式，与当前代码序列化格式不符）——本轮未触碰这些 staged 文件，需用户确认是否保留（`LOOM_SNAPSHOT=refresh` 可重新生成）。
+> `go vet ./internal/tool/... ./internal/process/... ./internal/domain/... ./internal/app/...` 干净；`gofmt -l` 干净。

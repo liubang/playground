@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -55,7 +57,7 @@ type GitStatusTool struct {
 }
 
 // NewGitStatusTool creates a git_status tool.
-func NewGitStatusTool(validator *workspacepkg.PathValidator) (*GitStatusTool, error) {
+func NewGitStatusTool(validator *workspacepkg.PathValidator, runner *process.Runner) (*GitStatusTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "git_status",
 		Description: "Read repository status (branch, head, upstream, default branch, origin remote URL, ahead/behind counts, " +
@@ -66,7 +68,7 @@ func NewGitStatusTool(validator *workspacepkg.PathValidator) (*GitStatusTool, er
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"branch":{"type":"string"},"head":{"type":"string"},"upstream":{"type":"string"},"default_branch":{"type":"string"},"remote_url":{"type":"string"},"ahead":{"type":"integer"},"behind":{"type":"integer"},"staged":{"type":"array","items":{"type":"string"}},"unstaged":{"type":"array","items":{"type":"string"}},"untracked":{"type":"array","items":{"type":"string"}}},"required":["repo_root","branch","head","ahead","behind","staged","unstaged","untracked"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
-	}, validator)
+	}, validator, runner)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +76,7 @@ func NewGitStatusTool(validator *workspacepkg.PathValidator) (*GitStatusTool, er
 }
 
 func (t *GitStatusTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: each invocation
@@ -82,11 +84,11 @@ func (t *GitStatusTool) Definition() domain.ToolDefinition {
 func (t *GitStatusTool) ConcurrentSafe() bool { return true }
 
 func (t *GitStatusTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[gitStatusArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[gitStatusArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	args, repoRoot, err := validateGitStatusArgs(ctx, t.base.validator, t.base.gitPath, args)
+	args, repoRoot, err := validateGitStatusArgs(ctx, &t.base, args)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -96,67 +98,66 @@ func (t *GitStatusTool) Prepare(ctx context.Context, call domain.ToolCall) (doma
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Read git status for %s", args.RepoRoot)
-	return t.base.prepareCall(ctx, call, canonical, []string{repoRoot.Absolute}, approvalDesc)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ReadPaths: []string{repoRoot.Absolute}, ApprovalDesc: approvalDesc})
 }
 
 func (t *GitStatusTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if len(prepared.ReadPaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
 	}
 
-	args, err := decodeStrict[gitStatusArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[gitStatusArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	repoRoot, err := resolveRepoRoot(t.base.validator, prepared.ReadPaths[0])
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if repoRoot.Display != args.RepoRoot {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call repo_root binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call repo_root binding mismatch"))
 	}
-	if err := confirmRepoRoot(ctx, t.base.gitPath, repoRoot); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := confirmRepoRoot(ctx, &t.base, repoRoot); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
-	result, err := runGit(ctx, t.base.gitPath, buildStatusArgs(repoRoot.Absolute), maxGitStatusStdoutBytes, maxGitStderrBytes)
+	result, err := runGit(ctx, &t.base, repoRoot.Absolute, buildStatusArgs(repoRoot.Absolute), maxGitStatusStdoutBytes, maxGitStderrBytes)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, classifyGitError(err, result.stderr, "failed to read git status"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, classifyGitError(err, result.stderr, "failed to read git status"))
 	}
 	if result.truncated {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "git status output exceeded limit"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "git status output exceeded limit"))
 	}
 
 	output, err := parseGitStatusOutput(repoRoot.Display, result.stdout)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	// Remote URL is best-effort (a local-only repository has none), so a
 	// lookup failure never fails the call.
-	if remoteResult, err := runGit(ctx, t.base.gitPath, buildRemoteGetURLArgs(repoRoot.Absolute, "origin"), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
+	if remoteResult, err := runGit(ctx, &t.base, repoRoot.Absolute, buildRemoteGetURLArgs(repoRoot.Absolute, "origin"), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
 		output.RemoteURL = strings.TrimSpace(sanitizeUTF8(remoteResult.stdout))
 	}
 	// Default branch resolution is likewise best-effort (codex's
 	// default_branch_name chain: origin's symbolic HEAD, then main/master).
-	output.DefaultBranch = resolveDefaultBranch(ctx, t.base.gitPath, repoRoot.Absolute)
-	return successResult(prepared.Call.ID, startedAt, output)
+	output.DefaultBranch = resolveDefaultBranch(ctx, &t.base, repoRoot.Absolute)
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, output)
 }
 
 func validateGitStatusArgs(
 	ctx context.Context,
-	validator *workspacepkg.PathValidator,
-	gitPath string,
+	b *baseTool,
 	args gitStatusArgs,
 ) (gitStatusArgs, repoRootResolution, error) {
-	repoRoot, err := resolveRepoRoot(validator, args.RepoRoot)
+	repoRoot, err := resolveRepoRoot(b.validator, args.RepoRoot)
 	if err != nil {
 		return gitStatusArgs{}, repoRootResolution{}, err
 	}
-	if err := confirmRepoRoot(ctx, gitPath, repoRoot); err != nil {
+	if err := confirmRepoRoot(ctx, b, repoRoot); err != nil {
 		return gitStatusArgs{}, repoRootResolution{}, err
 	}
 	args.RepoRoot = repoRoot.Display

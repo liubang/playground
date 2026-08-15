@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -68,7 +70,7 @@ type GitBlameTool struct {
 }
 
 // NewGitBlameTool creates a git_blame tool.
-func NewGitBlameTool(validator *workspacepkg.PathValidator) (*GitBlameTool, error) {
+func NewGitBlameTool(validator *workspacepkg.PathValidator, runner *process.Runner) (*GitBlameTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "git_blame",
 		Description: "Read line-by-line authorship attribution for a tracked file (who last touched each line and in " +
@@ -81,7 +83,7 @@ func NewGitBlameTool(validator *workspacepkg.PathValidator) (*GitBlameTool, erro
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"path":{"type":"string"},"rev":{"type":"string"},"start_line":{"type":"integer"},"end_line":{"type":"integer"},"entries":{"type":"array","items":{"type":"object","properties":{"line":{"type":"integer"},"commit":{"type":"string"},"author":{"type":"string"},"date":{"type":"string"},"uncommitted":{"type":"boolean"}},"required":["line","commit","author","date"]}},"truncated":{"type":"boolean"}},"required":["repo_root","path","start_line","end_line","entries","truncated"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
-	}, validator)
+	}, validator, runner)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +91,7 @@ func NewGitBlameTool(validator *workspacepkg.PathValidator) (*GitBlameTool, erro
 }
 
 func (t *GitBlameTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: each invocation
@@ -97,11 +99,11 @@ func (t *GitBlameTool) Definition() domain.ToolDefinition {
 func (t *GitBlameTool) ConcurrentSafe() bool { return true }
 
 func (t *GitBlameTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[gitBlameArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[gitBlameArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	args, readPaths, err := validateGitBlameArgs(ctx, t.base.validator, t.base.gitPath, args)
+	args, readPaths, err := validateGitBlameArgs(ctx, &t.base, args)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -111,50 +113,50 @@ func (t *GitBlameTool) Prepare(ctx context.Context, call domain.ToolCall) (domai
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Read git blame for %s lines %d-%d", args.Path, args.StartLine, args.EndLine)
-	return t.base.prepareCall(ctx, call, canonical, readPaths, approvalDesc)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ReadPaths: readPaths, ApprovalDesc: approvalDesc})
 }
 
 func (t *GitBlameTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if len(prepared.ReadPaths) != 2 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
 	}
 
-	args, err := decodeStrict[gitBlameArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[gitBlameArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	repoRoot, err := resolveRepoRoot(t.base.validator, prepared.ReadPaths[0])
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if repoRoot.Display != args.RepoRoot {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call repo_root binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call repo_root binding mismatch"))
 	}
-	if err := confirmRepoRoot(ctx, t.base.gitPath, repoRoot); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := confirmRepoRoot(ctx, &t.base, repoRoot); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	pathInfo, err := resolveRepoPath(t.base.validator, repoRoot, args.Path)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if prepared.ReadPaths[1] != pathInfo.Absolute {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 	}
 
-	result, err := runGit(ctx, t.base.gitPath, buildBlameArgs(repoRoot.Absolute, args.Rev, args.StartLine, args.EndLine, pathInfo.RepoRelative), maxGitBlameStdoutBytes, maxGitStderrBytes)
+	result, err := runGit(ctx, &t.base, repoRoot.Absolute, buildBlameArgs(repoRoot.Absolute, args.Rev, args.StartLine, args.EndLine, pathInfo.RepoRelative), maxGitBlameStdoutBytes, maxGitStderrBytes)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, classifyGitError(err, result.stderr, "failed to read git blame"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, classifyGitError(err, result.stderr, "failed to read git blame"))
 	}
 
 	entries, err := parseBlamePorcelain(result.stdout)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-	return successResult(prepared.Call.ID, startedAt, gitBlameOutput{
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, gitBlameOutput{
 		RepoRoot:  args.RepoRoot,
 		Path:      args.Path,
 		Rev:       args.Rev,
@@ -167,19 +169,18 @@ func (t *GitBlameTool) Execute(ctx context.Context, prepared domain.PreparedCall
 
 func validateGitBlameArgs(
 	ctx context.Context,
-	validator *workspacepkg.PathValidator,
-	gitPath string,
+	b *baseTool,
 	args gitBlameArgs,
 ) (gitBlameArgs, []string, error) {
-	repoRoot, err := resolveRepoRoot(validator, args.RepoRoot)
+	repoRoot, err := resolveRepoRoot(b.validator, args.RepoRoot)
 	if err != nil {
 		return gitBlameArgs{}, nil, err
 	}
-	if err := confirmRepoRoot(ctx, gitPath, repoRoot); err != nil {
+	if err := confirmRepoRoot(ctx, b, repoRoot); err != nil {
 		return gitBlameArgs{}, nil, err
 	}
 	if args.Rev != "" {
-		if err := verifyCommitRef(ctx, gitPath, repoRoot.Absolute, args.Rev); err != nil {
+		if err := verifyCommitRef(ctx, b, repoRoot.Absolute, args.Rev); err != nil {
 			return gitBlameArgs{}, nil, err
 		}
 	}
@@ -196,7 +197,7 @@ func validateGitBlameArgs(
 		return gitBlameArgs{}, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("line window must be at most %d lines", maxBlameLines))
 	}
 
-	pathInfo, err := resolveRepoPath(validator, repoRoot, args.Path)
+	pathInfo, err := resolveRepoPath(b.validator, repoRoot, args.Path)
 	if err != nil {
 		return gitBlameArgs{}, nil, err
 	}
