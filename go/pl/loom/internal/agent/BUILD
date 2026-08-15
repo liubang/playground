@@ -37,6 +37,7 @@ go_library(
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/media:media_lib",
         "//go/pl/loom/internal/model/httpc:httpc_lib",
+        "//go/pl/loom/internal/model/replay:replay_lib",
         "//go/pl/loom/internal/prompt",
         "//go/pl/loom/internal/trace",
     ],

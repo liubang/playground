@@ -19,18 +19,13 @@ package e2e
 
 import (
 	"context"
-	"io"
-	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/liubang/playground/go/pl/loom/internal/app"
-	"github.com/liubang/playground/go/pl/loom/internal/client"
+	"github.com/liubang/playground/go/pl/loom/e2e/harness"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/memory"
-	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
 // TestMemoryPipelineRealModelE2E verifies the P0-A memory architecture
@@ -44,64 +39,32 @@ import (
 //  4. ProcessRuntime.Close returns fast — consolidation no longer runs on
 //     the exit path.
 func TestMemoryPipelineRealModelE2E(t *testing.T) {
-	if os.Getenv("LOOM_E2E_LLM") != "1" {
-		t.Skip("set LOOM_E2E_LLM=1 to run the real-model memory pipeline e2e")
-	}
-
 	ctx := context.Background()
-	resolved, tmp, workspace := realModelHome(t)
-	if !resolved.Memory.Enabled {
+	env := harness.NewEnv(t, harness.WithAdjust(func(resolved *config.ResolvedConfig) {
+		// Neutralize the process's own background pipeline so the test
+		// drives the pass manually: a huge idle window means the startup
+		// pass claims nothing, and a zero interval disables periodic reruns.
+		resolved.Memory.MinSessionIdle = 100000 * time.Hour
+		resolved.Memory.RunInterval = 0
+	}))
+	if !env.Resolved.Memory.Enabled {
 		t.Skip("memory system is disabled in the loaded config")
 	}
+	proc := env.Proc
+	svc := env.Svc
+	discard := env.Logger
 
-	// Neutralize the process's own background pipeline so the test drives
-	// the pass manually: a huge idle window means the startup pass claims
-	// nothing, and a zero interval disables periodic reruns.
-	resolved.Memory.MinSessionIdle = 100000 * time.Hour
-	resolved.Memory.RunInterval = 0
-
-	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
-		ArtifactDir: filepath.Join(tmp, "artifacts"),
-		Version:     "e2e",
-		Logger:      discard,
-	})
-	if err != nil {
-		t.Fatalf("NewProcessRuntime: %v", err)
-	}
-	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{
-		WorkspaceRoot: workspace,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkspaceBootstrap: %v", err)
-	}
-	defer bootstrap.Close()
-
-	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
-	defer broker.Close()
-	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
-
-	c := client.NewInProc(svc)
-	if err := c.NewSession(ctx); err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
-
-	eventsCtx, stopEvents := context.WithCancel(ctx)
-	defer stopEvents()
-	events, err := c.SubscribeEvents(eventsCtx, 0)
-	if err != nil {
-		t.Fatalf("SubscribeEvents: %v", err)
-	}
-	collector := &eventCollector{client: c, ch: events}
-	go collector.run()
+	c := env.NewClient(t)
+	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	go collector.Run()
 
 	// --- 1. one real turn carrying a memorable code word ---
 	const codeWord = "孔雀石-3141"
-	turns := collector.turnsDone()
+	turns := collector.TurnsDone()
 	if _, err := c.SubmitPrompt(ctx, "请记住这个暗号："+codeWord+"。这是长期偏好测试，之后只回复两个字：收到", nil); err != nil {
 		t.Fatalf("SubmitPrompt: %v", err)
 	}
-	collector.waitTurn(t, turns+1, 3*time.Minute)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
 	t.Log("turn ok: code word exchanged")
 
 	// --- 2. session shutdown enqueues a memory job (no model work) ---
@@ -164,7 +127,7 @@ func TestMemoryPipelineRealModelE2E(t *testing.T) {
 
 	// --- 4. process close is fast (no consolidation on the exit path) ---
 	closeStart := time.Now()
-	proc.Close()
+	env.CloseProc()
 	if elapsed := time.Since(closeStart); elapsed > 10*time.Second {
 		t.Fatalf("ProcessRuntime.Close took %v — exit path must be free of model work", elapsed)
 	}

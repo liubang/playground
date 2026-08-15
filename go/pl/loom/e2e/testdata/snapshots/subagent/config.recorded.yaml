@@ -1,0 +1,137 @@
+approval:
+  mode: unless-dangerous
+browser:
+  screenshot_quality: 100
+context:
+  compact_target_ratio: 0.5
+  compact_trigger_ratio: 0.9
+  notice_levels:
+    - 0.89
+  utilization: 0.95
+default: llm-openai/glm-5.3
+image:
+  model: gpt-image-1
+  provider: llm-image
+  size: auto
+limits:
+  max_artifact_bytes: 104857600
+  max_cost_usd: 10
+  max_input_tokens: 200000
+  max_output_tokens: 16384
+  max_tokens: 0
+  max_tool_output_bytes: 49152
+logging:
+  max_file_mb: 2048
+  max_total_mb: 10240
+prompt:
+  extra: Always reply in Chinese.
+  managed:
+    label: production
+providers:
+  - api_key: replay-keyless
+    base_url: https://replay.invalid
+    default_model: glm-5.2
+    max_retries: 2
+    models:
+      - context_window: 1000000
+        name: glm-5.3
+        wire_api: responses
+      - context_window: 1000000
+        name: glm-5.2
+        wire_api: responses
+      - context_window: 200000
+        name: glm-5.1
+        wire_api: responses
+      - context_window: 1024000
+        name: deepseek-v4-pro
+        wire_api: responses
+      - context_window: 1024000
+        name: deepseek-v4-flash
+        wire_api: responses
+      - context_window: 1000000
+        name: kimi-k3
+        wire_api: responses
+      - context_window: 256000
+        modalities:
+          - text
+          - image
+        name: kimi-k2.6
+      - context_window: 128000
+        modalities:
+          - text
+          - image
+        name: glm-4.6v
+    name: llm-openai
+    type: openai
+    wire_api: responses
+  - api_key: replay-keyless
+    auth_type: bearer
+    base_url: https://replay.invalid
+    default_model: glm-5.2
+    models:
+      - context_window: 1000000
+        name: glm-5.3
+        reasoning:
+          effort: high
+      - context_window: 1000000
+        name: glm-5.2
+        reasoning:
+          effort: high
+      - context_window: 200000
+        name: glm-5.1
+        reasoning:
+          effort: high
+      - context_window: 1024000
+        name: deepseek-v4-pro
+        reasoning:
+          effort: high
+      - context_window: 1024000
+        name: deepseek-v4-flash
+        reasoning:
+          effort: high
+      - context_window: 1000000
+        name: kimi-k3
+        reasoning:
+          effort: high
+    name: llm-anthropic
+    reasoning:
+      effort: high
+    type: anthropic
+  - api_key: replay-keyless
+    base_url: https://replay.invalid
+    models:
+      - name: gpt-image-1
+        wire_api: chat
+      - name: gpt-image-1.5
+        wire_api: chat
+      - name: gpt-image-2
+        wire_api: chat
+    name: llm-image
+    type: openai
+rules:
+  builtin: true
+  enabled: true
+  persist_remembered: true
+  project: true
+  project_allow: false
+runaway:
+  max_consecutive_failures: 5
+  max_repeated_calls: 3
+  stall_timeout: 15m
+  stall_warn_turns: 10
+share:
+  enabled: true
+skills:
+  enabled: true
+subagent:
+  enabled: true
+  max_tokens: 0
+tracing:
+  environment: dev
+  host: http://localhost:3100
+  include_content: true
+  public_key: replay-redacted
+  secret_key: replay-redacted
+ui:
+  alt_screen: true
+  icons: nerd

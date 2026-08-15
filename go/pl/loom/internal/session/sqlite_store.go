@@ -47,7 +47,10 @@ type SQLiteStore struct {
 // Deprecated: use domain.SessionInspection instead.
 type SessionInspection = domain.SessionInspection
 
-// OpenSQLiteStore opens or creates a SQLite event store and applies migrations.
+// OpenSQLiteStore opens or creates a SQLite event store and pins the schema
+// version. There are no in-code migrations: loom is still in development and
+// the only databases that exist are dev-local, so a stale database fails
+// loudly here — moving it forward is a one-off script, not store code.
 func OpenSQLiteStore(ctx context.Context, path string) (*SQLiteStore, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -142,8 +145,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TEXT NOT NULL,
     created_at_unix_nano INTEGER NOT NULL,
     updated_at TEXT NOT NULL,
-    updated_at_unix_nano INTEGER NOT NULL
+    updated_at_unix_nano INTEGER NOT NULL,
+    archived_at_unix_nano INTEGER,
+    workspace_id TEXT NOT NULL DEFAULT ''
 );
+CREATE INDEX IF NOT EXISTS idx_sessions_workspace_updated
+    ON sessions(workspace_id, updated_at_unix_nano DESC);
 CREATE TABLE IF NOT EXISTS events (
 event_id TEXT PRIMARY KEY,
 session_id TEXT NOT NULL,
@@ -161,6 +168,7 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     checkpoint_id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
     sequence INTEGER NOT NULL CHECK (sequence >= 0),
+    ledger_seq INTEGER NOT NULL DEFAULT 0,
     data BLOB NOT NULL,
     created_at TEXT NOT NULL,
     created_at_unix_nano INTEGER NOT NULL,
@@ -248,29 +256,9 @@ CREATE TABLE IF NOT EXISTS session_shares (
 	if err := s.db.QueryRowContext(ctx, "SELECT MAX(version) FROM schema_migrations").Scan(&newestVersion); err != nil {
 		return storeError("read sqlite schema version", err)
 	}
-	if newestVersion.Valid && newestVersion.Int64 > sqliteSchemaVersion {
+	if newestVersion.Valid && newestVersion.Int64 != sqliteSchemaVersion {
 		return domain.NewError(domain.ErrUnavailable,
-			fmt.Sprintf("sqlite schema version %d is newer than supported version %d", newestVersion.Int64, sqliteSchemaVersion))
-	}
-	if !newestVersion.Valid || newestVersion.Int64 < 2 {
-		if err := s.backfillArtifactRefs(ctx); err != nil {
-			return err
-		}
-	}
-	if !newestVersion.Valid || newestVersion.Int64 < 3 {
-		if err := s.migrateV3(ctx); err != nil {
-			return err
-		}
-	}
-	if !newestVersion.Valid || newestVersion.Int64 < 4 {
-		if err := s.migrateV4(ctx); err != nil {
-			return err
-		}
-	}
-	if !newestVersion.Valid || newestVersion.Int64 < 5 {
-		if err := s.migrateV5(ctx); err != nil {
-			return err
-		}
+			fmt.Sprintf("sqlite schema version %d is incompatible with supported version %d (recreate the dev database or migrate it with a one-off script)", newestVersion.Int64, sqliteSchemaVersion))
 	}
 	_, err := s.db.ExecContext(ctx,
 		"INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
@@ -873,64 +861,6 @@ SELECT artifact_id, MAX(size) FROM artifact_refs GROUP BY artifact_id ORDER BY a
 	return refs, nil
 }
 
-// migrateV3 adds the ledger_seq column to the checkpoints table so that
-// each checkpoint snapshots the file-change ledger position it covers.
-// The column defaults to 0, which is the safe direction for rewind:
-// legacy checkpoints (without a position) revert every recorded change.
-func (s *SQLiteStore) migrateV3(ctx context.Context) error {
-	// SQLite ALTER TABLE ADD COLUMN does not support IF NOT EXISTS, so
-	// attempt the migration and ignore the "duplicate column" error.
-	_, err := s.db.ExecContext(ctx,
-		"ALTER TABLE checkpoints ADD COLUMN ledger_seq INTEGER NOT NULL DEFAULT 0")
-	if err != nil {
-		msg := strings.ToLower(err.Error())
-		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
-			return storeError("migrate v3: add ledger_seq to checkpoints", err)
-		}
-	}
-	return nil
-}
-
-// migrateV4 adds the archived_at_unix_nano column to the sessions table
-// (NULL = active); archived sessions are hidden from default listings.
-func (s *SQLiteStore) migrateV4(ctx context.Context) error {
-	// Same duplicate-column tolerance as migrateV3.
-	_, err := s.db.ExecContext(ctx,
-		"ALTER TABLE sessions ADD COLUMN archived_at_unix_nano INTEGER")
-	if err != nil {
-		msg := strings.ToLower(err.Error())
-		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
-			return storeError("migrate v4: add archived_at_unix_nano to sessions", err)
-		}
-	}
-	return nil
-}
-
-// migrateV5 adds the workspace_id ownership column to the sessions table
-// (docs/WORKSPACE_DESIGN.md §7.1). The workspaces table itself is created by
-// the idempotent schema block above; this only handles the pre-existing
-// sessions-table ALTER. The column defaults to ” — the upgrade tail that
-// BackfillSessionWorkspaces reassigns to the process's default workspace.
-func (s *SQLiteStore) migrateV5(ctx context.Context) error {
-	// Same duplicate-column tolerance as migrateV3/V4.
-	_, err := s.db.ExecContext(ctx,
-		"ALTER TABLE sessions ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''")
-	if err != nil {
-		msg := strings.ToLower(err.Error())
-		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
-			return storeError("migrate v5: add workspace_id to sessions", err)
-		}
-	}
-	// The index must be created here — after the column exists — not in the
-	// idempotent schema block: a fresh database builds the v1 sessions table
-	// (no workspace_id) and only gains the column via this migration.
-	if _, err := s.db.ExecContext(ctx,
-		"CREATE INDEX IF NOT EXISTS idx_sessions_workspace_updated ON sessions(workspace_id, updated_at_unix_nano DESC)"); err != nil {
-		return storeError("migrate v5: index sessions workspace_id", err)
-	}
-	return nil
-}
-
 // DeleteSession removes a session and all of its persisted data. Events,
 // checkpoints and artifact_refs cascade from the sessions row; file_changes
 // and memory_jobs carry no foreign key and are deleted explicitly. All
@@ -988,142 +918,6 @@ func (s *SQLiteStore) SetSessionArchived(ctx context.Context, sessionID domain.S
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
 	return nil
-}
-
-func (s *SQLiteStore) backfillArtifactRefs(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `
-SELECT session_id, data FROM checkpoints ORDER BY session_id, sequence, created_at_unix_nano, checkpoint_id`)
-	if err != nil {
-		return storeError("load checkpoints for artifact reference migration", err)
-	}
-	defer rows.Close()
-	type migrated struct {
-		sessionID domain.SessionID
-		refs      map[domain.ArtifactID]int64
-	}
-	var all []migrated
-	bySession := make(map[domain.SessionID]int) // sessionID -> index in all
-	for rows.Next() {
-		var rawSession string
-		var data []byte
-		if err := rows.Scan(&rawSession, &data); err != nil {
-			return storeError("scan checkpoint for artifact reference migration", err)
-		}
-		sessionID, err := domain.ParseSessionID(rawSession)
-		if err != nil {
-			return storeError("decode migration session ID", err)
-		}
-		var checkpoint domain.Checkpoint
-		if err := json.Unmarshal(data, &checkpoint); err != nil {
-			return storeError("decode checkpoint for artifact reference migration", err)
-		}
-		idx, ok := bySession[sessionID]
-		if !ok {
-			idx = len(all)
-			bySession[sessionID] = idx
-			all = append(all, migrated{sessionID: sessionID, refs: map[domain.ArtifactID]int64{}})
-		}
-		for id, size := range checkpointArtifactRefs(checkpoint) {
-			if old, exists := all[idx].refs[id]; !exists || size > old {
-				all[idx].refs[id] = size
-			}
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return storeError("iterate migration checkpoints", err)
-	}
-	if err := rows.Close(); err != nil {
-		return storeError("close migration checkpoints", err)
-	}
-	// Directive events carry artifact references too; scanning them keeps
-	// the reference graph complete even for sessions whose checkpoints are
-	// gone (docs/SURFACE_DESIGN.md §4.6).
-	directiveRefs, err := s.scanEventArtifactRefs(ctx, "")
-	if err != nil {
-		return err
-	}
-	for sessionID, refs := range directiveRefs {
-		idx, ok := bySession[sessionID]
-		if !ok {
-			idx = len(all)
-			bySession[sessionID] = idx
-			all = append(all, migrated{sessionID: sessionID, refs: map[domain.ArtifactID]int64{}})
-		}
-		for id, size := range refs {
-			if old, exists := all[idx].refs[id]; !exists || size > old {
-				all[idx].refs[id] = size
-			}
-		}
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return storeError("begin artifact reference migration", err)
-	}
-	defer tx.Rollback()
-	for _, item := range all {
-		if err := addArtifactRefs(ctx, tx, item.sessionID, item.refs); err != nil {
-			return err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return storeError("commit artifact reference migration", err)
-	}
-	return nil
-}
-
-// scanEventArtifactRefs scans the events that carry artifact
-// references — surface directives (masked/archived) and message events
-// (attachments) — and returns per-session references. An empty sessionID
-// scans all sessions. A corrupt payload fails the scan: a silently
-// under-pinned graph could let GC reclaim live artifacts.
-func (s *SQLiteStore) scanEventArtifactRefs(ctx context.Context, sessionID string) (map[domain.SessionID]map[domain.ArtifactID]int64, error) {
-	query := `SELECT session_id, type, payload FROM events WHERE type IN (` +
-		`'context.masked', 'context.archived', 'user.message_added', 'model.response_completed', 'tool.result_added', 'budget.notice')`
-	args := []any{}
-	if sessionID != "" {
-		query += ` AND session_id = ?`
-		args = append(args, sessionID)
-	}
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, storeError("load reference-carrying events for artifact references", err)
-	}
-	defer rows.Close()
-	out := make(map[domain.SessionID]map[domain.ArtifactID]int64)
-	for rows.Next() {
-		var rawSession, evtType string
-		var payload []byte
-		if err := rows.Scan(&rawSession, &evtType, &payload); err != nil {
-			return nil, storeError("scan reference-carrying event for artifact references", err)
-		}
-		sid, err := domain.ParseSessionID(rawSession)
-		if err != nil {
-			return nil, storeError("decode reference-carrying event session ID", err)
-		}
-		evt := domain.Event{Type: domain.EventType(evtType), Payload: payload}
-		refs, err := surfaceDirectiveArtifactRefs(evt)
-		if err != nil {
-			return nil, storeError("scan directive artifact references", err)
-		}
-		msgRefs, err := messageEventArtifactRefs(evt)
-		if err != nil {
-			return nil, storeError("scan message artifact references", err)
-		}
-		refs = append(refs, msgRefs...)
-		if len(refs) == 0 {
-			continue
-		}
-		if out[sid] == nil {
-			out[sid] = make(map[domain.ArtifactID]int64)
-		}
-		for _, ref := range refs {
-			addArtifactRef(out[sid], ref)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, storeError("iterate reference-carrying events for artifact references", err)
-	}
-	return out, nil
 }
 
 func addArtifactRefs(ctx context.Context, tx *sql.Tx, sessionID domain.SessionID, refs map[domain.ArtifactID]int64) error {
@@ -1207,30 +1001,6 @@ func surfaceDirectiveArtifactRefs(evt domain.Event) ([]domain.ArtifactRef, error
 	default:
 		return nil, nil
 	}
-}
-
-// messageEventArtifactRefs extracts artifact references carried by
-// message-carrying events (attachments, inline images): without any
-// checkpoint these are the only place attachment references survive.
-func messageEventArtifactRefs(evt domain.Event) ([]domain.ArtifactRef, error) {
-	var msg domain.Message
-	switch evt.Type {
-	case domain.EventUserMessageAdded, domain.EventModelResponseCompleted, domain.EventToolResultAdded:
-		payload, err := domain.UnmarshalMessageEventPayload(evt.Payload)
-		if err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", evt.Type, err)
-		}
-		msg = payload.Message
-	case domain.EventBudgetNotice:
-		var payload domain.BudgetNoticePayload
-		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
-			return nil, fmt.Errorf("decode budget.notice payload: %w", err)
-		}
-		msg = payload.Message
-	default:
-		return nil, nil
-	}
-	return msg.ArtifactRefs(), nil
 }
 
 func formatTime(value time.Time) string {

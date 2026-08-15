@@ -1,6 +1,6 @@
 # Loom LLM 录制回放与 Snapshot 测试设计
 
-> 状态：草案 v2（2026-08-14；v1 后一轮 dsh 对照审查修正 3 处：并行 delegate_task 下首次出现顺序绑定不稳定，改为按父 tool call ID 绑定；ReplayModel scripts 注释与 R3 里程碑同步）
+> 状态：已落地 v3（2026-08-15；R1-R5 全部完成并通过真实模型录制 + keyless replay 验收；落地偏差见 §7 附注）
 > 作者：liubang
 > 日期：2026-08-14
 > 参考：deepseek-harness（`packages/test-support/llm-replay`、`packages/test-support/acp-snapshot`）的录制回放与 snapshot 机制；docs/SURFACE_DESIGN.md §4.8（request/header 持久化）
@@ -241,12 +241,21 @@ func NewEnv(t *testing.T, opts ...Option) *Env // config 隔离 + runtime 组装
 
 ## 7. 里程碑
 
-| 里程碑 | 内容 | 验收 |
-|---|---|---|
-| R1 | `internal/model/replay`：RecordingModel + ReplayModel + calls.jsonl 读写 + AssertConsumed | 录制/回放 round-trip 单测 |
-| R2 | e2e/harness 抽取 + 存量真实模型测试迁移 | 迁移后测试全绿 |
-| R3 | ctx 绑定键注入（`WithSessionRef`） + 子会话分流录制/按父 call ID 绑定 | subagent e2e 的回放 fixture 通过 |
-| R4 | snapshot 归一化 + 黄金文件 diff + 三模式 | 首批 3 个场景 fixture 入库（简单问答 / 工具循环 / 压缩触发） |
-| R5 | 请求指纹校验（依赖 SURFACE_DESIGN M4 的 header 机制） | prompt 改动场景下指纹告警可见 |
+| 里程碑 | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| R1 | `internal/model/replay`：RecordingModel + ReplayModel + calls.jsonl 读写 + AssertConsumed | 录制/回放 round-trip 单测 | ✅ |
+| R2 | e2e/harness 抽取 + 存量真实模型测试迁移 | 迁移后测试全绿 | ✅（8 个 LOOM_E2E_LLM 套件迁移） |
+| R3 | ctx 绑定键注入（`WithSessionRef`） + 子会话分流录制/按父 call ID 绑定 | subagent e2e 的回放 fixture 通过 | ✅（`Loop.ParentToolCallID` + delegate/manager 两处注点） |
+| R4 | snapshot 归一化 + 黄金文件 diff + 三模式 | 首批 3 个场景 fixture 入库（简单问答 / 工具循环 / 压缩触发） | ✅（4 场景：+ subagent） |
+| R5 | 请求指纹校验（依赖 SURFACE_DESIGN M4 的 header 机制） | prompt 改动场景下指纹告警可见 | ✅（含字段级 drift diff；`LOOM_REPLAY_STRICT=1` 升级失败） |
 
 依赖关系：R1-R4 独立于 SURFACE_DESIGN 可先行；R5 依赖其 M4。SURFACE_DESIGN M2 落地后，snapshot 场景库应扩充压缩/恢复类场景——那时回放 fixture 同时成为 surface/log 一致性的端到端验证（黄金文件中的 transcript 即 surface，指令事件在 log 中）。
+
+### §7 附注：落地偏差（v3 实录）
+
+1. **接线点上移**：RecordingModel/ReplayModel 不在 controller 插入，而是由 `e2e/harness` 在 `ResolvedConfig.Providers` 层整体装饰/替换（生产路径零侵入；同时覆盖 `PublishSubagentSnapshot` 的子代理模型通道）。生产侧唯一触点是 `Loop.Execute` 入口的 `replay.WithSessionRef` ctx 注入与 `Loop.ParentToolCallID` 字段。
+2. **稳定场景根目录**：录制的工具调用参数是任意碎的流式 delta，绝对路径可能跨越事件边界、无法事后 tokenize——replay 因此必须运行在与 record 相同的路径。record/replay 统一使用 `/tmp/loom-snapshot/<scenario>/` 固定根（go test 与 bazel 沙箱共享），fixture 内完整路径仍做 `{{cwd}}/{{home}}/{{artifacts}}` tokenize/detokenize 双保险。
+3. **events 黄金文件只保留 durable 事件**：ephemeral delta 的碎片化文本与 `delta_bytes` 等派生字段由 calls.jsonl 全保真锁定，不进黄金文件。
+4. **config.recorded.yaml**：record 时把生效 config 脱敏（api_key 占位、api_key_env 删除）入 fixture，replay 原样加载——工具集/limits/窗口与录制时严格一致，否则 request_header 的 tools 序列必然 diff。
+5. **归一化补充**（对照 dsh normalize.ts 的新增项）：loom ID/内容 hash/trace id 按首现序 token 化（map 键序遍历保证序号确定）；`Platform/Shell`、`Current date` 行归一（bazel 沙箱无 $SHELL）；macOS `/private` 路径别名；`WallTime/duration_ms/delta_bytes/est_tokens/started_at/finished_at` 归零；反引号包裹路径的边界感知替换。
+6. **R5 实现未依赖 M4 事件**：指纹直接在 Model 边界对 `ModelRequest` 投影计算（header 字段 + 全消息内容，剥离 ID/时间戳后哈希），比设计的"header 机制"更直接；告警附字段级 diff。

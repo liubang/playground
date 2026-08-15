@@ -303,15 +303,6 @@ func assembleRuntime(ctx context.Context, resolved *config.ResolvedConfig, root 
 			logger.Warn("workspace pre-register skipped", "root", wc.Root, "error", err)
 		}
 	}
-	// Backfill the pre-v5 session tail (workspace_id='') onto the default
-	// workspace. Idempotent; safe to run on every boot.
-	if store, ok := proc.Store.(domain.WorkspaceStore); ok {
-		if n, err := store.BackfillSessionWorkspaces(ctx, defaultWs.WorkspaceID); err != nil {
-			logger.Warn("session workspace backfill failed", "error", err)
-		} else if n > 0 {
-			logger.Info("assigned legacy sessions to default workspace", "count", n, "workspace_id", defaultWs.WorkspaceID.String())
-		}
-	}
 	return proc, registry, defaultWs, nil
 }
 

@@ -38,6 +38,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/media"
 	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
+	"github.com/liubang/playground/go/pl/loom/internal/model/replay"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
 )
@@ -1071,6 +1072,13 @@ type Loop struct {
 	// fire. Zero disables cost accounting.
 	CostInputUSDPerMTok  float64
 	CostOutputUSDPerMTok float64
+	// ParentToolCallID is the delegating delegate_task call for a
+	// sub-agent loop, zero for the root loop. Execute publishes it (with
+	// the session ID) onto the model-call context so the record/replay
+	// test infrastructure can bind sub-agent model calls to their own
+	// fixture shard (docs/REPLAY_TESTING_DESIGN.md §3.3). Production
+	// model implementations never read it.
+	ParentToolCallID domain.ToolCallID
 
 	prepared map[domain.ToolCallID]domain.PreparedCall
 	// traceRun is the active trace handle for the executing run.
@@ -1276,6 +1284,9 @@ func runSuccessScore(ctx context.Context, execErr error, outcome domain.Outcome)
 
 // Execute runs the agent loop to completion (or until cancelled).
 func (l *Loop) Execute(ctx context.Context) (execErr error) {
+	// Tag the model-call context with this loop's session identity; only
+	// the record/replay test infrastructure consumes it.
+	ctx = replay.WithSessionRef(ctx, l.Run.SessionID, l.ParentToolCallID)
 	recorder := l.Recorder
 	if recorder == nil {
 		recorder = trace.Noop()

@@ -21,18 +21,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/liubang/playground/go/pl/loom/e2e/harness"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/client"
-	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
@@ -54,61 +51,26 @@ import (
 //     (and thereby exercised when the policy requires them).
 func TestServeRealModelE2E(t *testing.T) {
 	ctx := context.Background()
-	resolved, tmp, workspace := realModelHome(t)
+	env := harness.NewEnv(t)
+	workspace := env.Workspace
 	const codeWord = "loom-e2e-m1-biplane-42"
 	if err := os.WriteFile(filepath.Join(workspace, "marker.txt"), []byte("口令是："+codeWord+"\n"), 0o600); err != nil {
 		t.Fatalf("write marker: %v", err)
 	}
 
-	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
-		ArtifactDir: filepath.Join(tmp, "artifacts"),
-		Version:     "e2e",
-		Logger:      discard,
-	})
-	if err != nil {
-		t.Fatalf("NewProcessRuntime: %v", err)
-	}
-	defer proc.Close()
-	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{
-		WorkspaceRoot: workspace,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkspaceBootstrap: %v", err)
-	}
-	defer bootstrap.Close()
-
-	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
-	defer broker.Close()
-	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		_ = svc.Shutdown(shutdownCtx)
-	}()
-
-	c := client.NewInProc(svc)
-	if err := c.NewSession(ctx); err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
+	c := env.NewClient(t)
 	sessionID := c.SessionID()
 
-	eventsCtx, stopEvents := context.WithCancel(ctx)
-	defer stopEvents()
-	events, err := c.SubscribeEvents(eventsCtx, 0)
-	if err != nil {
-		t.Fatalf("SubscribeEvents: %v", err)
-	}
-	collector := &eventCollector{client: c, ch: events}
-	go collector.run()
+	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	go collector.Run()
 
 	// --- 1+2. full turn with a real tool loop ---
 	prompt := fmt.Sprintf("用 read_file 工具读取 %s 这个文件，然后只回答文件里的口令本身，不要提问。", filepath.Join(workspace, "marker.txt"))
-	turns := collector.turnsDone()
+	turns := collector.TurnsDone()
 	if _, err := c.SubmitPrompt(ctx, prompt, nil); err != nil {
 		t.Fatalf("SubmitPrompt(turn1): %v", err)
 	}
-	collector.waitTurn(t, turns+1, 3*time.Minute)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
 
 	snap, err := c.RequestSnapshot(ctx)
 	if err != nil {
@@ -124,26 +86,26 @@ func TestServeRealModelE2E(t *testing.T) {
 	if snap.EventSeq == 0 {
 		t.Fatalf("snapshot EventSeq = 0, want a live watermark")
 	}
-	collector.assertSaw(
+	collector.AssertSaw(
 		t,
 		runtimeevent.KindTurnStarted,
 		runtimeevent.KindModelResponseCompleted,
 		runtimeevent.KindTurnFinished,
 	)
-	collector.assertSawAny(t, runtimeevent.KindToolStarted, runtimeevent.KindToolPrepared)
-	t.Logf("turn1 ok: code word verified via tool loop, %d events", collector.count())
+	collector.AssertSawAny(t, runtimeevent.KindToolStarted, runtimeevent.KindToolPrepared)
+	t.Logf("turn1 ok: code word verified via tool loop, %d events", collector.Count())
 
 	// --- 3. snapshot watermark handoff ---
 	live, err := c.SubscribeEvents(ctx, snap.EventSeq)
 	if err != nil {
 		t.Fatalf("SubscribeEvents(EventSeq=%d): %v (watermark handoff must succeed)", snap.EventSeq, err)
 	}
-	turns = collector.turnsDone()
+	turns = collector.TurnsDone()
 	if _, err := c.SubmitPrompt(ctx, "用一个字回答：好", nil); err != nil {
 		t.Fatalf("SubmitPrompt(turn2): %v", err)
 	}
 	waitForAnyEvent(t, live, sessionID, 2*time.Minute)
-	collector.waitTurn(t, turns+1, 3*time.Minute)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
 	t.Log("watermark handoff ok: subscribe at EventSeq, live events flow")
 
 	// --- 4. busy-turn steering ---
@@ -210,8 +172,8 @@ func TestServeRealModelE2E(t *testing.T) {
 	}
 	// The followup must not leak into the busy turn: it becomes its own
 	// turn right after — two more turn.finished events in total.
-	turns = collector.turnsDone()
-	collector.waitTurn(t, turns+2, 5*time.Minute)
+	turns = collector.TurnsDone()
+	collector.WaitTurn(t, turns+2, 5*time.Minute)
 	snap, err = c.RequestSnapshot(ctx)
 	if err != nil {
 		t.Fatalf("RequestSnapshot(after followup): %v", err)
@@ -226,19 +188,19 @@ func TestServeRealModelE2E(t *testing.T) {
 
 	// --- 5. idempotent submission ---
 	turnsBefore := snap.TurnCount
-	turns = collector.turnsDone()
+	turns = collector.TurnsDone()
 	if _, err := c.SubmitPrompt(ctx, "用一个字回答：嗯", nil); err != nil {
 		t.Fatalf("SubmitPrompt(turn4): %v", err)
 	}
-	collector.waitTurn(t, turns+1, 3*time.Minute)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
 	// Repeat the exact submission through the service's idempotency channel.
-	turns = collector.turnsDone()
-	res, dedup, err := svc.SubmitPrompt(ctx, sessionID, "用一个字回答：嗯", nil, "idem-e2e-1", false)
+	turns = collector.TurnsDone()
+	res, dedup, err := env.Svc.SubmitPrompt(ctx, sessionID, "用一个字回答：嗯", nil, "idem-e2e-1", false)
 	if err != nil {
 		t.Fatalf("SubmitPrompt(idem first): %v", err)
 	}
-	collector.waitTurn(t, turns+1, 3*time.Minute)
-	res2, dedup2, err := svc.SubmitPrompt(ctx, sessionID, "用一个字回答：嗯", nil, "idem-e2e-1", false)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
+	res2, dedup2, err := env.Svc.SubmitPrompt(ctx, sessionID, "用一个字回答：嗯", nil, "idem-e2e-1", false)
 	if err != nil {
 		t.Fatalf("SubmitPrompt(idem repeat): %v", err)
 	}
@@ -258,7 +220,7 @@ func TestServeRealModelE2E(t *testing.T) {
 	t.Log("idempotency ok")
 
 	// --- 6. resume via a fresh client ---
-	c2 := client.NewInProc(svc)
+	c2 := client.NewInProc(env.Svc)
 	if err := c2.ResumeSession(ctx, sessionID); err != nil {
 		t.Fatalf("ResumeSession: %v", err)
 	}
@@ -288,49 +250,13 @@ func TestServeRealModelE2E(t *testing.T) {
 // Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
 func TestServeRealModelPrepareFailureE2E(t *testing.T) {
 	ctx := context.Background()
-	resolved, tmp, workspace := realModelHome(t)
+	env := harness.NewEnv(t)
 
-	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
-		ArtifactDir: filepath.Join(tmp, "artifacts"),
-		Version:     "e2e",
-		Logger:      discard,
-	})
-	if err != nil {
-		t.Fatalf("NewProcessRuntime: %v", err)
-	}
-	defer proc.Close()
-	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{
-		WorkspaceRoot: workspace,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkspaceBootstrap: %v", err)
-	}
-	defer bootstrap.Close()
-
-	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
-	defer broker.Close()
-	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		_ = svc.Shutdown(shutdownCtx)
-	}()
-
-	c := client.NewInProc(svc)
-	if err := c.NewSession(ctx); err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
+	c := env.NewClient(t)
 	sessionID := c.SessionID()
 
-	eventsCtx, stopEvents := context.WithCancel(ctx)
-	defer stopEvents()
-	events, err := c.SubscribeEvents(eventsCtx, 0)
-	if err != nil {
-		t.Fatalf("SubscribeEvents: %v", err)
-	}
-	collector := &eventCollector{client: c, ch: events}
-	go collector.run()
+	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	go collector.Run()
 
 	// The path is deliberately absent from the workspace; the prompt pins
 	// the exact argument values so the failing call is deterministic.
@@ -338,11 +264,11 @@ func TestServeRealModelPrepareFailureE2E(t *testing.T) {
 	prompt := "调用一次 search 工具，参数原样使用：path 填 \"internal/config/example.go\"，pattern 填 \"storage\"。" +
 		"不要先确认文件是否存在，不要更换路径，不要调用其他工具，原样发出这一次工具调用。" +
 		"收到工具结果后，把工具返回的错误消息原文复述给我。"
-	turns := collector.turnsDone()
+	turns := collector.TurnsDone()
 	if _, err := c.SubmitPrompt(ctx, prompt, nil); err != nil {
 		t.Fatalf("SubmitPrompt: %v", err)
 	}
-	collector.waitTurn(t, turns+1, 3*time.Minute)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
 
 	// 1. The model-visible tool error must name the offending path.
 	snap, err := c.RequestSnapshot(ctx)
@@ -364,11 +290,7 @@ func TestServeRealModelPrepareFailureE2E(t *testing.T) {
 	t.Logf("model-visible error names the path: %q", strings.TrimSpace(toolErrText))
 
 	// 2. The durable degraded prepared event must carry args_summary.
-	store, err := sessionStoreReadOnly(ctx, resolved)
-	if err != nil {
-		t.Fatalf("open session store: %v", err)
-	}
-	defer store.Close()
+	store := env.OpenStoreReadOnly(t)
 	persisted, err := store.LoadEvents(ctx, sessionID, 0)
 	if err != nil {
 		t.Fatalf("LoadEvents: %v", err)
@@ -417,7 +339,7 @@ func TestServeRealModelPrepareFailureE2E(t *testing.T) {
 // Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
 func TestServeRealModelWritablePathsE2E(t *testing.T) {
 	ctx := context.Background()
-	resolved, tmp, workspace := realModelHome(t)
+	env := harness.NewEnv(t)
 	// The write target must sit outside BOTH the workspace and the
 	// sandbox's default writable temp dir — otherwise the write succeeds
 	// without any grant and the test accepts nothing (an earlier version
@@ -436,47 +358,11 @@ func TestServeRealModelWritablePathsE2E(t *testing.T) {
 	target := filepath.Join(outside, "result.txt")
 	const codeWord = "loom-writable-e2e-ok"
 
-	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
-		ArtifactDir: filepath.Join(tmp, "artifacts"),
-		Version:     "e2e",
-		Logger:      discard,
-	})
-	if err != nil {
-		t.Fatalf("NewProcessRuntime: %v", err)
-	}
-	defer proc.Close()
-	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{
-		WorkspaceRoot: workspace,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkspaceBootstrap: %v", err)
-	}
-	defer bootstrap.Close()
-
-	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
-	defer broker.Close()
-	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		_ = svc.Shutdown(shutdownCtx)
-	}()
-
-	c := client.NewInProc(svc)
-	if err := c.NewSession(ctx); err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
+	c := env.NewClient(t)
 	sessionID := c.SessionID()
 
-	eventsCtx, stopEvents := context.WithCancel(ctx)
-	defer stopEvents()
-	events, err := c.SubscribeEvents(eventsCtx, 0)
-	if err != nil {
-		t.Fatalf("SubscribeEvents: %v", err)
-	}
-	collector := &eventCollector{client: c, ch: events}
-	go collector.run()
+	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	go collector.Run()
 
 	// The prompt pins the OUT-OF-WORKSPACE target and the in-sandbox
 	// preference, but deliberately does NOT name the writable_paths
@@ -488,16 +374,16 @@ func TestServeRealModelWritablePathsE2E(t *testing.T) {
 		"2. 让命令留在沙箱内运行：如果默认沙箱拦截了这次写入，按工具描述和返回指引选择最小化的沙箱内授权方式重试，直到写入成功，不要放弃；\n"+
 		"3. 写入成功后用 run_cmd 读取该文件，把文件内容原样复述给我。",
 		codeWord, target)
-	turns := collector.turnsDone()
+	turns := collector.TurnsDone()
 	if _, err := c.SubmitPrompt(ctx, prompt, nil); err != nil {
 		t.Fatalf("SubmitPrompt: %v", err)
 	}
-	collector.waitTurn(t, turns+1, 5*time.Minute)
+	collector.WaitTurn(t, turns+1, 5*time.Minute)
 
 	// 1. The file must really have landed through the sandboxed grant.
 	data, err := os.ReadFile(target)
 	if err != nil {
-		t.Fatalf("target file was never written: %v (turn error: %s)", err, collector.lastTurnError())
+		t.Fatalf("target file was never written: %v (turn error: %s)", err, collector.LastTurnError())
 	}
 	if !strings.Contains(string(data), codeWord) {
 		t.Fatalf("target content = %q, want it to contain %q", data, codeWord)
@@ -506,11 +392,7 @@ func TestServeRealModelWritablePathsE2E(t *testing.T) {
 
 	// 2+3. Inspect the durable permission trail: no escalation, at least
 	// one scoped writable-path ask.
-	store, err := sessionStoreReadOnly(ctx, resolved)
-	if err != nil {
-		t.Fatalf("open session store: %v", err)
-	}
-	defer store.Close()
+	store := env.OpenStoreReadOnly(t)
 	persisted, err := store.LoadEvents(ctx, sessionID, 0)
 	if err != nil {
 		t.Fatalf("LoadEvents: %v", err)
@@ -547,12 +429,6 @@ func TestServeRealModelWritablePathsE2E(t *testing.T) {
 	t.Log("ACCEPTANCE PASS: out-of-workspace write completed via scoped writable_paths grant, zero sandbox escapes")
 }
 
-// sessionStoreReadOnly opens the isolated session store for post-turn
-// inspection of the durable event log.
-func sessionStoreReadOnly(ctx context.Context, cfg *config.ResolvedConfig) (*session.SQLiteStore, error) {
-	return session.OpenSQLiteStoreReadOnly(ctx, cfg.Storage.SessionDBPath())
-}
-
 // TestServeRealModelPruneCompactionE2E is the real-model acceptance for
 // the Level-0 tool-result pruner: a medium (8–16KB) tool output must be
 // middle-pruned INLINE during a forced compaction — head and tail
@@ -561,9 +437,9 @@ func sessionStoreReadOnly(ctx context.Context, cfg *config.ResolvedConfig) (*ses
 // ignorable marking on the persisted log (audit events marked,
 // transcript events not).
 func TestServeRealModelPruneCompactionE2E(t *testing.T) {
-	resolved, home, workspace := realModelHome(t)
 	ctx := context.Background()
-	svc := startRealModelService(t, ctx, resolved, home, workspace)
+	env := harness.NewEnv(t)
+	workspace := env.Workspace
 
 	// ~10KB: inside the [8KB, 16KB) prune band — below the mask threshold
 	// and below the ingestion truncation.
@@ -582,30 +458,21 @@ func TestServeRealModelPruneCompactionE2E(t *testing.T) {
 		t.Fatalf("write small file: %v", err)
 	}
 
-	c := client.NewInProc(svc)
-	if err := c.NewSession(ctx); err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
-	eventsCtx, stopEvents := context.WithCancel(ctx)
-	defer stopEvents()
-	events, err := c.SubscribeEvents(eventsCtx, 0)
-	if err != nil {
-		t.Fatalf("SubscribeEvents: %v", err)
-	}
-	collector := &eventCollector{client: c, ch: events}
-	go collector.run()
+	c := env.NewClient(t)
+	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	go collector.Run()
 
 	// Turn 1: the model reads the ~10KB file into the transcript.
-	turns := collector.turnsDone()
+	turns := collector.TurnsDone()
 	if _, err := c.SubmitPrompt(ctx, fmt.Sprintf("用 read_file 工具读取 %s 这个文件，然后只回答：好", bigPath), nil); err != nil {
 		t.Fatalf("SubmitPrompt(turn1): %v", err)
 	}
-	collector.waitTurn(t, turns+1, 3*time.Minute)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
 	// Turn 2 (filler): pushes the big output out of the keep-recent window.
 	if _, err := c.SubmitPrompt(ctx, fmt.Sprintf("用 read_file 工具读取 %s 这个文件，然后只回答：好", smallPath), nil); err != nil {
 		t.Fatalf("SubmitPrompt(turn2): %v", err)
 	}
-	collector.waitTurn(t, turns+2, 3*time.Minute)
+	collector.WaitTurn(t, turns+2, 3*time.Minute)
 
 	// Forced compaction ahead of turn 3: the big output sits outside the
 	// trailing window and must be middle-pruned inline.
@@ -615,7 +482,7 @@ func TestServeRealModelPruneCompactionE2E(t *testing.T) {
 	if _, err := c.SubmitPrompt(ctx, "用一个字回答：嗯", nil); err != nil {
 		t.Fatalf("SubmitPrompt(turn3): %v", err)
 	}
-	collector.waitTurn(t, turns+3, 3*time.Minute)
+	collector.WaitTurn(t, turns+3, 3*time.Minute)
 
 	// The transcript must show the pruned form: marker + head + tail.
 	snap, err := c.RequestSnapshot(ctx)
@@ -644,11 +511,7 @@ func TestServeRealModelPruneCompactionE2E(t *testing.T) {
 	// The durable audit: one context.masked directive carrying exactly one
 	// prune and zero masks; audit events are ignorable, transcript events
 	// are not.
-	store, err := sessionStoreReadOnly(ctx, resolved)
-	if err != nil {
-		t.Fatalf("open session store: %v", err)
-	}
-	defer store.Close()
+	store := env.OpenStoreReadOnly(t)
 	persisted, err := store.LoadEvents(ctx, c.SessionID(), 0)
 	if err != nil {
 		t.Fatalf("LoadEvents: %v", err)
@@ -691,19 +554,15 @@ func TestServeRealModelPruneCompactionE2E(t *testing.T) {
 // marker and a visible interruption projection, then continues with a
 // real turn.
 func TestServeRealModelOrphanRecoveryE2E(t *testing.T) {
-	resolved, home, workspace := realModelHome(t)
 	ctx := context.Background()
+	env := harness.NewEnv(t)
 
-	svc := startRealModelService(t, ctx, resolved, home, workspace)
-	c := client.NewInProc(svc)
-	if err := c.NewSession(ctx); err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
+	c := env.NewClient(t)
 	sessionID := c.SessionID()
 
 	// Craft the crash tail directly in the store: a run that started and
 	// showed activity but never reached a terminal event.
-	store, err := session.OpenSQLiteStore(ctx, resolved.Storage.SessionDBPath())
+	store, err := session.OpenSQLiteStore(ctx, env.Resolved.Storage.SessionDBPath())
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -748,12 +607,13 @@ func TestServeRealModelOrphanRecoveryE2E(t *testing.T) {
 	}
 
 	// Recovery only runs when no live controller owns the session: shut
-	// the first service down and resume through a fresh one.
+	// the first service down and resume through a fresh stack on the
+	// same home.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	_ = svc.Shutdown(shutdownCtx)
+	_ = env.Svc.Shutdown(shutdownCtx)
 	cancel()
-	svc2 := startRealModelService(t, ctx, resolved, home, workspace)
-	c2 := client.NewInProc(svc2)
+	env.StartStack(t)
+	c2 := client.NewInProc(env.Svc)
 	if err := c2.ResumeSession(ctx, sessionID); err != nil {
 		t.Fatalf("ResumeSession: %v", err)
 	}
@@ -768,26 +628,16 @@ func TestServeRealModelOrphanRecoveryE2E(t *testing.T) {
 	}
 
 	// The recovered session keeps working against the real model.
-	eventsCtx, stopEvents := context.WithCancel(ctx)
-	defer stopEvents()
-	events, err := c2.SubscribeEvents(eventsCtx, 0)
-	if err != nil {
-		t.Fatalf("SubscribeEvents: %v", err)
-	}
-	collector := &eventCollector{client: c2, ch: events}
-	go collector.run()
-	turns := collector.turnsDone()
+	collector := harness.NewCollector(c2, env.Subscribe(t, c2))
+	go collector.Run()
+	turns := collector.TurnsDone()
 	if _, err := c2.SubmitPrompt(ctx, "用一个字回答：好", nil); err != nil {
 		t.Fatalf("SubmitPrompt: %v", err)
 	}
-	collector.waitTurn(t, turns+1, 3*time.Minute)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
 
 	// The orphan marker persisted with the dead run's identity.
-	store2, err := sessionStoreReadOnly(ctx, resolved)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	defer store2.Close()
+	store2 := env.OpenStoreReadOnly(t)
 	persisted, err := store2.LoadEvents(ctx, sessionID, 0)
 	if err != nil {
 		t.Fatalf("LoadEvents: %v", err)
@@ -814,190 +664,6 @@ func TestServeRealModelOrphanRecoveryE2E(t *testing.T) {
 		t.Fatal("run.interrupted is pure audit and must be ignorable")
 	}
 	t.Log("ACCEPTANCE PASS: crash-orphaned run marked interrupted, session recovered with a real turn")
-}
-
-// readRealUserConfig reads the user's own loom config (<loom
-// home>/config.yaml; LOOM_HOME or ~/.loom) for the real-model suites.
-func readRealUserConfig(t *testing.T) []byte {
-	t.Helper()
-	home, err := config.HomeDir(os.LookupEnv)
-	if err != nil {
-		t.Skipf("no home dir: %v", err)
-	}
-	raw, err := os.ReadFile(config.ConfigPathForHome(home))
-	if err != nil {
-		t.Skipf("loom config not found at %s", config.ConfigPathForHome(home))
-	}
-	return raw
-}
-
-// loadIsolatedConfig copies raw into a fresh temp loom home and loads it
-// from there, so every writable location derives from the temp home and
-// the user's stores stay untouched. Returns the temp home and the
-// resolved config.
-func loadIsolatedConfig(t *testing.T, raw []byte) (string, *config.ResolvedConfig) {
-	t.Helper()
-	tmp := t.TempDir()
-	if err := os.WriteFile(config.ConfigPathForHome(tmp), raw, 0o600); err != nil {
-		t.Fatalf("write isolated config: %v", err)
-	}
-	resolved, err := config.Load(tmp, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
-	if err != nil {
-		t.Skipf("load loom config: %v", err)
-	}
-	return tmp, resolved
-}
-
-// realModelHome prepares an isolated loom home for the real-model suites:
-// the user's config copied into a temp home (so the user's stores stay
-// untouched) plus a throwaway workspace. Returns the resolved config, the
-// loom home, and the workspace root.
-func realModelHome(t *testing.T) (*config.ResolvedConfig, string, string) {
-	t.Helper()
-	if os.Getenv("LOOM_E2E_LLM") != "1" {
-		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
-	}
-	tmp, resolved := loadIsolatedConfig(t, readRealUserConfig(t))
-	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	workspace := filepath.Join(tmp, "ws")
-	if err := os.MkdirAll(workspace, 0o755); err != nil {
-		t.Fatalf("mkdir ws: %v", err)
-	}
-	return resolved, tmp, workspace
-}
-
-// startRealModelService brings up the serve-path stack (process runtime,
-// workspace bootstrap, broker, singleton service) on an isolated home.
-func startRealModelService(t *testing.T, ctx context.Context, resolved *config.ResolvedConfig, home, workspace string) *app.SessionService {
-	t.Helper()
-	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
-		ArtifactDir: filepath.Join(home, "artifacts"),
-		Version:     "e2e",
-		Logger:      discard,
-	})
-	if err != nil {
-		t.Fatalf("NewProcessRuntime: %v", err)
-	}
-	t.Cleanup(func() { proc.Close() })
-	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{WorkspaceRoot: workspace})
-	if err != nil {
-		t.Fatalf("NewWorkspaceBootstrap: %v", err)
-	}
-	t.Cleanup(func() { bootstrap.Close() })
-	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
-	t.Cleanup(broker.Close)
-	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
-	t.Cleanup(func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		_ = svc.Shutdown(shutdownCtx)
-	})
-	return svc
-}
-
-// eventCollector drains a subscription and auto-resolves any
-// approval/question requests so real-model turns never wedge.
-type eventCollector struct {
-	client client.Client
-	ch     <-chan runtimeevent.RuntimeEvent
-
-	mu    sync.Mutex
-	seen  map[runtimeevent.RuntimeEventKind]int
-	turns int
-	// lastTurnErr carries the Error field of the most recent
-	// KindTurnFinished event ("" for a clean finish) — the first thing to
-	// inspect when a real-model turn comes back empty.
-	lastTurnErr string
-}
-
-func (c *eventCollector) run() {
-	c.seen = make(map[runtimeevent.RuntimeEventKind]int)
-	for evt := range c.ch {
-		c.mu.Lock()
-		c.seen[evt.Kind]++
-		if evt.Kind == runtimeevent.KindTurnFinished {
-			c.turns++
-			var p runtimeevent.TurnFinishedPayload
-			if err := json.Unmarshal(evt.Payload, &p); err == nil {
-				c.lastTurnErr = p.Error
-			}
-		}
-		c.mu.Unlock()
-		switch evt.Kind {
-		case runtimeevent.KindApprovalRequested:
-			var p runtimeevent.ApprovalRequestedPayload
-			if err := json.Unmarshal(evt.Payload, &p); err == nil {
-				_, _ = c.client.ResolveApproval(context.Background(), app.ApprovalBinding{
-					ApprovalID: p.ApprovalID, CallID: p.CallID, ArgsHash: p.ArgsHash,
-				}, domain.DecisionAllow, nil)
-			}
-		case runtimeevent.KindQuestionAsked:
-			var p runtimeevent.QuestionAskedPayload
-			if err := json.Unmarshal(evt.Payload, &p); err == nil {
-				_, _ = c.client.AnswerQuestion(context.Background(), p.QuestionID, domain.QuestionAnswer{Skipped: true})
-			}
-		}
-	}
-}
-
-func (c *eventCollector) turnsDone() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.turns
-}
-
-func (c *eventCollector) lastTurnError() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.lastTurnErr
-}
-
-func (c *eventCollector) waitTurn(t *testing.T, n int, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if c.turnsDone() >= n {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for turn %d to finish (done=%d)", n, c.turnsDone())
-}
-
-func (c *eventCollector) assertSaw(t *testing.T, kinds ...runtimeevent.RuntimeEventKind) {
-	t.Helper()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, k := range kinds {
-		if c.seen[k] == 0 {
-			t.Fatalf("never saw event %q", k)
-		}
-	}
-}
-
-func (c *eventCollector) assertSawAny(t *testing.T, kinds ...runtimeevent.RuntimeEventKind) {
-	t.Helper()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, k := range kinds {
-		if c.seen[k] > 0 {
-			return
-		}
-	}
-	t.Fatalf("never saw any of %v", kinds)
-}
-
-func (c *eventCollector) count() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	n := 0
-	for _, v := range c.seen {
-		n += v
-	}
-	return n
 }
 
 func waitForAnyEvent(t *testing.T, ch <-chan runtimeevent.RuntimeEvent, want domain.SessionID, timeout time.Duration) {
