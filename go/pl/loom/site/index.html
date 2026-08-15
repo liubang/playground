@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Loom — 生产级 AI Coding Agent</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Cpath%20fill='%237fbbb3'%20d='M16%202%2030%2016%2016%2030%202%2016Z'/%3E%3Cpath%20fill='%231e2326'%20d='M16%208l8%208-8%208-8-8Z'/%3E%3C/svg%3E">
 <meta name="description" content="Loom 是面向软件工程任务的生产级 AI Coding Agent：交互式 TUI、Web UI、桌面应用与无头运行，事件溯源会话、安全沙箱与分级审批、Skills 扩展。">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <style>
@@ -113,11 +114,10 @@
 
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: .5px; }
   .brand-mark {
-    width: 30px; height: 30px; border-radius: 8px;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2) 60%, var(--accent-3));
+    width: 30px; height: 30px; border-radius: 7px;
+    background: linear-gradient(135deg, #2b3539, #1e2326);
     display: grid; place-items: center;
-    box-shadow: 0 0 24px rgba(94, 234, 212, 0.35);
-    font-weight: 800; font-size: 15px; color: #06121a;
+    box-shadow: 0 0 24px rgba(127, 187, 179, 0.25);
   }
 
   .nav-links { display: flex; gap: 28px; align-items: center; }
@@ -429,7 +429,7 @@
 <canvas id="bg-canvas" aria-hidden="true"></canvas>
 
 <nav id="nav">
-  <div class="brand"><span class="brand-mark">L</span> Loom</div>
+  <div class="brand"><span class="brand-mark"><svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true"><path fill="#7fbbb3" d="M16 2 30 16 16 30 2 16Z"/><path fill="#1e2326" d="M16 8l8 8-8 8-8-8Z"/></svg></span> Loom</div>
   <div class="nav-links">
     <a href="#features" class="hide-sm">特性</a>
     <a href="#cli" class="hide-sm">CLI</a>
@@ -444,7 +444,7 @@
   <h1>让 AI 真正<br>动手写代码</h1>
   <p class="sub">Loom 不是一个模型 API 包装器，而是一个 <strong>Agent Harness</strong>：受控工具运行时、可恢复可取消的 Agent 状态机、事件溯源的会话持久化，在有限预算内迭代直到任务完成。</p>
   <div class="hero-cta">
-    <a class="btn btn-primary" href="#install">安装 Loom <span class="kbd">bazel run</span></a>
+    <a class="btn btn-primary" href="#install">安装 Loom <span class="kbd">brew</span></a>
     <a class="btn btn-ghost" href="https://github.com/liubang/playground/tree/main/go/pl/loom" target="_blank" rel="noopener">查看源码 →</a>
   </div>
 
@@ -557,8 +557,8 @@
     <div class="step">
       <div class="step-label"><span class="num">1</span> 安装</div>
       <div class="code-block">
-        <button class="copy" data-copy="bazel run //go/pl/loom/cmd/loom:install">复制</button>
-        <span class="prompt">$</span> <span>bazel run //go/pl/loom/cmd/loom:install</span> <span class="dim"># 从源码安装 CLI（macOS / Linux）</span>
+        <button class="copy" data-copy="brew tap liubang/loom && brew install loom-cli">复制</button>
+        <span class="prompt">$</span> <span>brew tap liubang/loom &amp;&amp; brew install loom-cli</span> <span class="dim"># CLI（macOS / Linux）</span>
       </div>
     </div>
 
@@ -587,8 +587,8 @@
     <div class="step">
       <div class="step-label"><span class="num">4</span> 桌面版（macOS）</div>
       <div class="code-block">
-        <button class="copy" data-copy="bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_app">复制</button>
-        <span class="prompt">$</span> <span>bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_app</span> <span class="dim"># 或从官网下载 DMG（Apple Silicon / Intel）</span>
+        <button class="copy" data-copy="brew install --cask loom-agent">复制</button>
+        <span class="prompt">$</span> <span>brew install --cask loom-agent</span> <span class="dim"># 桌面版（Apple Silicon / Intel），或从官网下载 DMG</span>
       </div>
     </div>
 
