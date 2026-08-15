@@ -179,11 +179,14 @@ func TestCoversSensitiveLocation(t *testing.T) {
 		{filepath.Join(canonicalHome, "Library"), true}, // covers Library/Keychains
 		{filepath.Dir(canonicalHome), true},             // covers the home itself
 		{"/", true},
-		// Ordinary data directories stay grantable.
+		// Ordinary data directories stay grantable. Deliberately not /tmp:
+		// t.TempDir() lands under /tmp on Linux CI, so HOME becomes a
+		// descendant of /tmp and /tmp is correctly an ancestor of sensitive
+		// locations — a platform-independent directory gives a stable verdict.
 		{filepath.Join(canonicalHome, "Library", "Logs", "dsx"), false},
 		{filepath.Join(canonicalHome, ".talos"), false},
 		{filepath.Join(canonicalHome, "projects", "repo"), false},
-		{"/tmp", false},
+		{"/opt", false},
 		{"/usr/local/share", false},
 		// Relative input is not an absolute verdict.
 		{".ssh", false},
