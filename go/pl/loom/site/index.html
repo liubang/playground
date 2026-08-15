@@ -518,6 +518,26 @@
       <h3>可观测性</h3>
       <p>OpenTelemetry / Langfuse 追踪（默认关闭），Context Manifest 审计每次模型请求的上下文构成。</p>
     </div>
+    <div class="feature reveal" style="--fc:#e879f9">
+      <div class="icon"><i class="fa-solid fa-plug"></i></div>
+      <h3>MCP 生态</h3>
+      <p>原生 MCP 客户端，直接接入第三方 MCP Server（playwright、filesystem、github…），工具能力随生态扩展。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#60a5fa">
+      <div class="icon"><i class="fa-solid fa-sitemap"></i></div>
+      <h3>子代理并行探索</h3>
+      <p>delegate_task 委派独立子代理：独立上下文与预算、默认只读、深度受限，大型仓库并行调研与独立 Review。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#f97316">
+      <div class="icon"><i class="fa-solid fa-brain"></i></div>
+      <h3>跨会话记忆</h3>
+      <p>分层持久记忆（热 / 温 / 冷 + 滚动摘要），记住你的项目约定与偏好，越用越懂你。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#a3e635">
+      <div class="icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+      <h3>检查点回退</h3>
+      <p>事件溯源 + 检查点：任意时刻回滚或分支，撤销错误改动，对比历史快照。</p>
+    </div>
   </div>
 </section>
 
@@ -593,6 +613,21 @@ brew install loom-cli">复制</button>
       <div class="code-block">
         <button class="copy" data-copy="brew install --cask loom-agent">复制</button>
         <span class="prompt">$</span> <span>brew install --cask loom-agent</span> <span class="dim"># 桌面版（Apple Silicon / Intel），或从官网下载 DMG</span>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-label"><span class="num">5</span> 直接下载（免 Homebrew）</div>
+      <div class="code-block">
+        <button class="copy" data-copy="curl -sSL https://github.com/liubang/playground/releases/latest/download/loom-darwin-arm64.tar.gz -o loom.tar.gz
+tar xzf loom.tar.gz
+mkdir -p ~/bin && mv loom ~/bin/
+export PATH=\"$HOME/bin:$PATH\"">复制</button>
+        <span class="prompt">$</span> <span>curl -sSL https://github.com/liubang/playground/releases/latest/download/loom-darwin-arm64.tar.gz -o loom.tar.gz</span> <span class="dim"># macOS arm64；Linux 换 loom-linux-amd64 / loom-linux-arm64</span><br>
+        <span class="prompt">$</span> <span>tar xzf loom.tar.gz</span><br>
+        <span class="prompt">$</span> <span>mkdir -p ~/bin && mv loom ~/bin/</span> <span class="dim"># 或 sudo mv loom /usr/local/bin/</span><br>
+        <span class="prompt">$</span> <span>export PATH="$HOME/bin:$PATH"</span> <span class="dim"># 写入 ~/.zshrc / ~/.bashrc 持久生效</span><br>
+        <span class="dim">Linux 也可用 deb 包：<code>sudo dpkg -i loom_*.deb</code>；macOS 桌面版下载 DMG 拖入 Applications</span>
       </div>
     </div>
 
