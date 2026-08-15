@@ -252,6 +252,7 @@
     line-height: 1.9;
     color: #c3d0e4;
     min-height: 260px;
+    overflow: hidden; /* 打字动画期间高度固定，防溢出滚动条 */
   }
   .terminal-body .prompt { color: var(--accent); }
   .terminal-body .cmd { color: #e8edf6; }
@@ -863,6 +864,17 @@ const hero = document.querySelector('.hero');
 new IntersectionObserver((entries, obs) => {
   if (entries[0].isIntersecting && !started) { started = true; obs.disconnect(); typeNext(); }
 }, { threshold: 0.4 }).observe(hero);
+
+// 固定终端容器高度：先把完整内容渲染一遍量出最终高度，再清空开始打字。
+// 否则打字过程高度从 0 涨到满、循环清空时又收缩，页面持续跳动。
+(function () {
+  const full = lines.map(l => l.cls === 'comment'
+    ? `<span class="comment">${l.text}</span>`
+    : `<span class="prompt">$ </span>${l.text}`).join('<br>');
+  body.innerHTML = full;
+  body.style.height = body.scrollHeight + 'px';
+  body.innerHTML = '';
+})();
 </script>
 </body>
 </html>
