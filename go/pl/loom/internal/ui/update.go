@@ -2359,6 +2359,11 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 			})
 			m.questionShownAt = time.Now()
 			m.mode = ModeQuestion
+			// The question panel replaces the composer at the bottom; pin
+			// the viewport there too, exactly like approval requests, so a
+			// scrolled-up user still sees the question (REVIEW: same
+			// invisible-overlay class as the approval popup).
+			m.resumeFollowTail()
 		}
 		m.phase = "question"
 		m.setActivity("Waiting for your answer")
@@ -2380,6 +2385,12 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 			m.approvalCursor = 0
 			m.approvalShownAt = time.Now()
 			m.mode = ModeApproval
+			// The approval overlay lives at the bottom (composer area), so a
+			// user who scrolled up to read earlier output would otherwise
+			// never see it — pin the viewport to the tail so the decision
+			// prompt is always on screen (REVIEW: approval popup invisible
+			// until manual scroll).
+			m.resumeFollowTail()
 		}
 		m.phase = "approval"
 		m.setActivity("Waiting for your approval")
