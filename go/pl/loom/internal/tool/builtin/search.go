@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,7 @@ type searchArgs struct {
 	Glob          []string `json:"glob,omitempty"`
 	Type          string   `json:"type,omitempty"`
 	Context       int      `json:"context,omitempty"`
+	HeadLimit     int      `json:"head_limit,omitempty"`
 	CaseSensitive bool     `json:"case_sensitive,omitempty"`
 	FixedStrings  bool     `json:"fixed_strings,omitempty"`
 	NoIgnore      bool     `json:"no_ignore,omitempty"`
@@ -66,6 +68,15 @@ type searchOutput struct {
 }
 
 var typeNamePattern = regexp.MustCompile(`^[A-Za-z0-9_+-]+$`)
+
+// clampMatchBudget resolves the effective match cap: 0 (unset) takes the
+// default, and any explicit value stays within it.
+func clampMatchBudget(headLimit int) int {
+	if headLimit <= 0 || headLimit > maxSearchMatches {
+		return maxSearchMatches
+	}
+	return headLimit
+}
 
 // rgTypeSet probes `rg --type-list` once per process and caches the valid
 // type-name set. A nil set means ripgrep is unavailable (or the probe
@@ -115,19 +126,20 @@ type SearchTool struct {
 // through the sandboxed process runner; a nil runner forces the Go fallback.
 func NewSearchTool(validator *workspacepkg.PathValidator, runner rgRunner) (*SearchTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
-		Name: "search",
-		Description: "Search file contents. 'pattern' is a ripgrep regular expression " +
-			"(use fixed_strings=true for literal text). " +
+		Name: "grep",
+		Description: "Search file contents with ripgrep semantics. 'pattern' is a ripgrep regular expression " +
+			"(fixed_strings=true for literal text). " +
 			"'path' defaults to the workspace root and may point to a directory (searched recursively) or a single " +
 			"file, including absolute paths outside the workspace (credential locations are always excluded). " +
 			"Filter with glob (a pattern without '/' matches the file name at any depth, one with '/' matches the " +
 			"workspace-relative path; prefix with '!' to exclude; multiple patterns union) or with type (a ripgrep " +
-			"type name like 'go'; omit it when unsure — prefer glob for file-name filtering and never pass null " +
-			"or quoted values). " +
-			"Files matched by .gitignore are skipped by default. " +
+			"type name like 'go'; omit it when unsure — prefer glob for file-name filtering). " +
+			"head_limit caps the number of returned matches (default " + strconv.Itoa(maxSearchMatches) + "); " +
+			"context adds up to 5 surrounding lines per match. " +
+			"Files matched by .gitignore are skipped unless no_ignore=true. " +
 			"Uses the ripgrep engine when available and falls back to a built-in literal search otherwise (the " +
 			"fallback treats 'pattern' as literal text; unapplied filters are disclosed in the output's note).",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"pattern":{"type":"string","minLength":1,"maxLength":4096},"path":{"type":"string","minLength":1},"glob":{"type":"array","maxItems":16,"items":{"type":"string","minLength":1,"maxLength":256}},"type":{"type":"string","minLength":1,"maxLength":64},"context":{"type":"integer","minimum":0,"maximum":5},"case_sensitive":{"type":"boolean"},"fixed_strings":{"type":"boolean"},"no_ignore":{"type":"boolean"}},"required":["pattern"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"pattern":{"type":"string","minLength":1,"maxLength":4096},"path":{"type":"string","minLength":1},"glob":{"type":"array","maxItems":16,"items":{"type":"string","minLength":1,"maxLength":256}},"type":{"type":"string","minLength":1,"maxLength":64},"context":{"type":"integer","minimum":0,"maximum":5},"head_limit":{"type":"integer","minimum":1,"maximum":200},"case_sensitive":{"type":"boolean"},"fixed_strings":{"type":"boolean"},"no_ignore":{"type":"boolean"}},"required":["pattern"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"pattern":{"type":"string"},"engine":{"type":"string"},"case_sensitive":{"type":"boolean"},"match_count":{"type":"integer"},"truncated":{"type":"boolean"},"scanned_files":{"type":"integer"},"skipped_binary":{"type":"integer"},"skipped_too_large":{"type":"integer"},"matches":{"type":"array"}},"required":["path","pattern","engine","case_sensitive","match_count","truncated","matches"]}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
@@ -146,8 +158,65 @@ func (t *SearchTool) Definition() domain.ToolDefinition {
 // an independent rg process and shares no state across calls.
 func (t *SearchTool) ConcurrentSafe() bool { return true }
 
+// normalizeSearchJSON repairs the argument-shape deviations models make
+// in the wild before the strict decode, mirroring the tolerance the
+// type filter already applies: a lone glob string becomes the array the
+// schema names (some models inherit a string-typed glob from other
+// toolkits), and boolean fields arrive stringified. Everything the
+// patcher does not recognize passes through untouched, so the strict
+// decoder still rejects genuinely unknown shapes.
+func normalizeSearchJSON(raw json.RawMessage) json.RawMessage {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return raw
+	}
+	patched := false
+	fix := func(key string, rewrite func(json.RawMessage) (json.RawMessage, bool)) {
+		value, ok := fields[key]
+		if !ok {
+			return
+		}
+		if next, changed := rewrite(value); changed {
+			fields[key] = next
+			patched = true
+		}
+	}
+	fix("glob", func(value json.RawMessage) (json.RawMessage, bool) {
+		var single string
+		if err := json.Unmarshal(value, &single); err != nil {
+			return nil, false
+		}
+		out, err := json.Marshal([]string{single})
+		if err != nil {
+			return nil, false
+		}
+		return out, true
+	})
+	for _, key := range []string{"case_sensitive", "fixed_strings", "no_ignore"} {
+		fix(key, func(value json.RawMessage) (json.RawMessage, bool) {
+			var text string
+			if err := json.Unmarshal(value, &text); err != nil {
+				return nil, false
+			}
+			out, err := json.Marshal(strings.EqualFold(strings.TrimSpace(text), "true"))
+			if err != nil {
+				return nil, false
+			}
+			return out, true
+		})
+	}
+	if !patched {
+		return raw
+	}
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
 func (t *SearchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[searchArgs](call.Arguments)
+	args, err := decodeStrict[searchArgs](normalizeSearchJSON(call.Arguments))
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -160,7 +229,7 @@ func (t *SearchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
-	approvalDesc := fmt.Sprintf("Search %q under %s", args.Pattern, args.Path)
+	approvalDesc := fmt.Sprintf("Grep %q under %s", args.Pattern, args.Path)
 	return t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
 }
 
@@ -201,9 +270,16 @@ func validateSearchArgs(validator *workspacepkg.PathValidator, args searchArgs) 
 	if len(args.Pattern) > maxSearchQueryBytes {
 		return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("pattern exceeds %d bytes", maxSearchQueryBytes))
 	}
-	if args.Context < 0 || args.Context > maxSearchContextLines {
-		return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("context must be between 0 and %d", maxSearchContextLines))
+	if args.Context < 0 {
+		args.Context = 0
 	}
+	// Clamp rather than reject: models routinely probe a slightly larger
+	// window, and clamping costs nothing the output header does not
+	// already disclose (the read_file limit precedent).
+	if args.Context > maxSearchContextLines {
+		args.Context = maxSearchContextLines
+	}
+	args.HeadLimit = clampMatchBudget(args.HeadLimit)
 	args.Type = normalizeTypeFilter(args.Type)
 	if args.Type != "" {
 		if !typeNamePattern.MatchString(args.Type) {
@@ -264,7 +340,7 @@ func (t *SearchTool) executeRipgrep(ctx context.Context, prepared domain.Prepare
 	if err != nil {
 		return errorResult(prepared.Call.ID, startedAt, err)
 	}
-	matches, truncated := aggregateRgMatches(events, root, args.Context, maxSearchMatches)
+	matches, truncated := aggregateRgMatches(events, root, args.Context, args.HeadLimit)
 
 	return successResult(prepared.Call.ID, startedAt, searchOutput{
 		Path:          args.Path,
@@ -359,6 +435,10 @@ func (t *SearchTool) executeGoFallback(ctx context.Context, prepared domain.Prep
 	// filters have no fallback equivalent and must be disclosed in the note
 	// instead of silently ignored.
 	matches = filterMatchesByGlobs(matches, args.Glob)
+	if len(matches) > args.HeadLimit {
+		matches = matches[:args.HeadLimit]
+		output.Truncated = true
+	}
 	return successResult(prepared.Call.ID, startedAt, searchOutput{
 		Path:            args.Path,
 		Pattern:         args.Pattern,

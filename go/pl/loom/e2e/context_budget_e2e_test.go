@@ -503,8 +503,8 @@ func TestE2EUnifiedOutputTruncation(t *testing.T) {
 func TestE2EPrepareFailedPairingAndMalformedHint(t *testing.T) {
 	ws := t.TempDir()
 	mock := newMockOpenAI(t, []mockEntry{
-		{ToolName: "search", ToolArgs: `{"pattern":"x","context":10}`, UsageIn: 100, UsageOut: 10},
-		{ToolName: "search", ToolArgs: `{"pattern":`, UsageIn: 100, UsageOut: 10},
+		{ToolName: "grep", ToolArgs: `{"pattern":""}`, UsageIn: 100, UsageOut: 10},
+		{ToolName: "grep", ToolArgs: `{"pattern":`, UsageIn: 100, UsageOut: 10},
 		{Text: "recovered", UsageIn: 100, UsageOut: 10},
 	})
 	registry, artStore := realEnv(t, ws)
@@ -534,7 +534,7 @@ func TestE2EPrepareFailedPairingAndMalformedHint(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(errText, "context must be between 0 and 5") {
+	if !strings.Contains(errText, "pattern is required") {
 		t.Fatalf("range validation error missing: %q", errText)
 	}
 	if !strings.Contains(errText, "re-issue the tool call with valid arguments") {

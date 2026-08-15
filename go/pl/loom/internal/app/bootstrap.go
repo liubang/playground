@@ -677,7 +677,7 @@ func readOnlyToolFactories(validator *workspace.PathValidator, runner *process.R
 	return []toolFactory{
 		{"read_file", func() (domain.Tool, error) { return builtin.NewReadFileTool(validator, book) }},
 		{"list_dir", func() (domain.Tool, error) { return builtin.NewListDirTool(validator) }},
-		{"search", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
+		{"grep", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
 		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
 		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator, artStore) }},
 		{"present_image", func() (domain.Tool, error) { return builtin.NewPresentImageTool(validator, artStore) }},
