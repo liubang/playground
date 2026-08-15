@@ -12,21 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Version identity lives in the Go package (stamped from the workspace
-# status at build time — see tools/workspace_status.sh); the macOS
-# packaging reads the same status keys via bazel-out/stable-status.txt.
+# Build-time version stamping helpers (see .bazelrc
+# --workspace_status_command and tools/version_status.bzl).
 
-load("@rules_go//go:def.bzl", "go_library", "go_test")
-
-go_library(
-    name = "version",
-    srcs = ["version.go"],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/version",
-    visibility = ["//visibility:public"],
-)
-
-go_test(
-    name = "version_test",
-    srcs = ["version_test.go"],
-    embed = [":version"],
-)
+exports_files([
+    "version_status.bzl",
+    "workspace_status.sh",
+])

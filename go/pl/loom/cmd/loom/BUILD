@@ -45,6 +45,13 @@ go_binary(
     name = "loom",
     embed = [":loom_lib"],
     visibility = ["//visibility:public"],
+    # Version stamping: {STABLE_LOOM_VERSION} = "<yyyymmdd>.<git-short-hash>"
+    # from tools/workspace_status.sh, substituted under --stamp (the
+    # desktop config sets it; release binaries are stamped via ldflags in
+    # package_release.sh instead).
+    x_defs = {
+        "github.com/liubang/playground/go/pl/loom/internal/version.Version": "{STABLE_LOOM_VERSION}",
+    },
 )
 
 # Installs the built loom binary into GOBIN (default: $(go env GOPATH)/bin).
