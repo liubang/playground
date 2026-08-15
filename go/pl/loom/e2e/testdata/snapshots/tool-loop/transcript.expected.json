@@ -1038,6 +1038,109 @@
               },
               {
                 "capabilities": [
+                  "fs.read"
+                ],
+                "description": "Search file contents with ripgrep semantics. 'pattern' is a ripgrep regular expression (fixed_strings=true for literal text). 'path' defaults to the workspace root and may point to a directory (searched recursively) or a single file, including absolute paths outside the workspace (credential locations are always excluded). Filter with glob (a pattern without '/' matches the file name at any depth, one with '/' matches the workspace-relative path; prefix with '!' to exclude; multiple patterns union) or with type (a ripgrep type name like 'go'; omit it when unsure — prefer glob for file-name filtering). head_limit caps the number of returned matches (default 200); context adds up to 5 surrounding lines per match. Files matched by .gitignore are skipped unless no_ignore=true. Uses the ripgrep engine when available and falls back to a built-in literal search otherwise (the fallback treats 'pattern' as literal text; unapplied filters are disclosed in the output's note).",
+                "input_schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "case_sensitive": {
+                      "type": "boolean"
+                    },
+                    "context": {
+                      "maximum": 5,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "fixed_strings": {
+                      "type": "boolean"
+                    },
+                    "glob": {
+                      "items": {
+                        "maxLength": 256,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "head_limit": {
+                      "maximum": 200,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "no_ignore": {
+                      "type": "boolean"
+                    },
+                    "path": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "pattern": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": {
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "pattern"
+                  ],
+                  "type": "object"
+                },
+                "name": "grep",
+                "output_schema": {
+                  "properties": {
+                    "case_sensitive": {
+                      "type": "boolean"
+                    },
+                    "engine": {
+                      "type": "string"
+                    },
+                    "match_count": {
+                      "type": "integer"
+                    },
+                    "matches": {
+                      "type": "array"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "scanned_files": {
+                      "type": "integer"
+                    },
+                    "skipped_binary": {
+                      "type": "integer"
+                    },
+                    "skipped_too_large": {
+                      "type": "integer"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "pattern",
+                    "engine",
+                    "case_sensitive",
+                    "match_count",
+                    "truncated",
+                    "matches"
+                  ],
+                  "type": "object"
+                },
+                "source": "builtin"
+              },
+              {
+                "capabilities": [
                   "process.exec",
                   "fs.read"
                 ],
@@ -1690,104 +1793,6 @@
                 "source": "builtin"
               },
               {
-                "capabilities": [
-                  "fs.read"
-                ],
-                "description": "Search file contents. 'pattern' is a ripgrep regular expression (use fixed_strings=true for literal text). 'path' defaults to the workspace root and may point to a directory (searched recursively) or a single file, including absolute paths outside the workspace (credential locations are always excluded). Filter with glob (a pattern without '/' matches the file name at any depth, one with '/' matches the workspace-relative path; prefix with '!' to exclude; multiple patterns union) or with type (a ripgrep type name like 'go'; omit it when unsure — prefer glob for file-name filtering and never pass null or quoted values). Files matched by .gitignore are skipped by default. Uses the ripgrep engine when available and falls back to a built-in literal search otherwise (the fallback treats 'pattern' as literal text; unapplied filters are disclosed in the output's note).",
-                "input_schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "case_sensitive": {
-                      "type": "boolean"
-                    },
-                    "context": {
-                      "maximum": 5,
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    "fixed_strings": {
-                      "type": "boolean"
-                    },
-                    "glob": {
-                      "items": {
-                        "maxLength": 256,
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      "maxItems": 16,
-                      "type": "array"
-                    },
-                    "no_ignore": {
-                      "type": "boolean"
-                    },
-                    "path": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "pattern": {
-                      "maxLength": 4096,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "type": {
-                      "maxLength": 64,
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "pattern"
-                  ],
-                  "type": "object"
-                },
-                "name": "search",
-                "output_schema": {
-                  "properties": {
-                    "case_sensitive": {
-                      "type": "boolean"
-                    },
-                    "engine": {
-                      "type": "string"
-                    },
-                    "match_count": {
-                      "type": "integer"
-                    },
-                    "matches": {
-                      "type": "array"
-                    },
-                    "path": {
-                      "type": "string"
-                    },
-                    "pattern": {
-                      "type": "string"
-                    },
-                    "scanned_files": {
-                      "type": "integer"
-                    },
-                    "skipped_binary": {
-                      "type": "integer"
-                    },
-                    "skipped_too_large": {
-                      "type": "integer"
-                    },
-                    "truncated": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "path",
-                    "pattern",
-                    "engine",
-                    "case_sensitive",
-                    "match_count",
-                    "truncated",
-                    "matches"
-                  ],
-                  "type": "object"
-                },
-                "source": "builtin"
-              },
-              {
                 "capabilities": null,
                 "description": "Set, update, or close a cross-turn goal for long-running work. A goal persists across turns and context compactions; while a goal is active the run automatically continues with a reminder of the objective after each pause instead of ending, so use it for multi-step tasks that must be carried to a verified end state. Set 'objective' (with optional 'token_budget') to activate or redirect; the budget counts cumulative input+output tokens and, when exhausted, the goal is marked budget_limited and you get one final turn to summarize progress — it never hard-stops you mid-work. Call with status='complete' only when the objective is verifiably achieved (requirement-by-requirement evidence from the current state), or status='blocked' only when truly stuck without user input. When closing with status, you may also pass 'objective' as the final summary — it is recorded on the goal. Do not call this tool for trivial single-step tasks.",
                 "input_schema": {
@@ -2349,7 +2354,7 @@
         "ignorable": true,
         "payload": {
           "code": "internal",
-          "message": "App:**0573在模型:glm-5.3每分钟请求次数超过限制",
+          "message": "rate limit exceeded on model glm-5.3",
           "request_id": "{{id:9}}",
           "stage": "stream"
         },
