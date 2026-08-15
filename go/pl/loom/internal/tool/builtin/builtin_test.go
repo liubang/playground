@@ -372,7 +372,7 @@ func TestSearchGoFallbackSkipsBinaryAndSymlink(t *testing.T) {
 		t.Fatalf("NewSearchTool() error = %v", err)
 	}
 
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{
 		Pattern: "hello",
 		Context: 1,
 	}))
@@ -437,7 +437,7 @@ func TestSearchAcceptsSingleFilePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{
 		Pattern: "bind",
 		Path:    target,
 	}))
@@ -470,7 +470,7 @@ func TestSearchGoFallbackAppliesGlobFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{
 		Pattern: "hello",
 		Glob:    []string{"*.go"},
 	}))
@@ -493,7 +493,7 @@ func TestSearchGoFallbackAppliesGlobFilters(t *testing.T) {
 	}
 
 	// Negation excludes; exclusion wins over inclusion.
-	prepared, err = tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+	prepared, err = tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{
 		Pattern: "hello",
 		Glob:    []string{"*.go", "!sub/**"},
 	}))
@@ -517,7 +517,7 @@ func TestSearchGoFallbackNotesUnappliedFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{
 		Pattern: "hello",
 		Type:    "go",
 	}))
@@ -591,12 +591,12 @@ func TestSearchGoFallbackTruncateStrictJSONAndCancelled(t *testing.T) {
 
 	_, err = tool.Prepare(context.Background(), domain.ToolCall{
 		ID:        domain.NewToolCallID(),
-		Name:      "search",
+		Name:      "grep",
 		Arguments: json.RawMessage(`{"path":".","pattern":"needle","extra":true}`),
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{Pattern: "needle"}))
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{Pattern: "needle"}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -666,7 +666,7 @@ func TestSearchRipgrepEngineAggregatesMatchesAndContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{
 		Pattern: "func \\w+\\(",
 		Path:    "src",
 		Context: 1,
@@ -735,7 +735,7 @@ func TestSearchRipgrepOutsideWorkspaceRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{
 		Pattern: "hello",
 		Path:    outside,
 	}))
@@ -789,7 +789,7 @@ func TestSearchRipgrepToleratesSeamCorruption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{Pattern: "hello"}))
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{Pattern: "hello"}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -861,7 +861,7 @@ func TestSearchRipgrepErrorSurfacing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{Pattern: "("}))
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{Pattern: "("}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -882,7 +882,7 @@ func TestSearchFallsBackWhenSandboxUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{Pattern: "hello", Path: "src"}))
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{Pattern: "hello", Path: "src"}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -1071,7 +1071,7 @@ func TestSearchRipgrepRealEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchTool() error = %v", err)
 	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "search", searchArgs{
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "grep", searchArgs{
 		Pattern: `func \w+\(`,
 		Glob:    []string{"*.go"},
 	}))
