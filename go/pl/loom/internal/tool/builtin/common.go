@@ -133,7 +133,40 @@ func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
 // names without a bulk import change. They are zero-cost: the compiler
 // inlines them away.
 
-func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
+// malformedArgumentsKey marks the placeholder the agent loop substitutes
+// when a provider's streamed tool-call arguments fail to reassemble into
+// JSON (see agent.malformedArgumentsPlaceholder).
+const malformedArgumentsKey = "__malformed_arguments"
+
+// malformedArgumentsHint reports the placeholder's self-describing error
+// when raw carries one. Routing the placeholder through the strict
+// decoder instead would reject it on an unknown field whose name leaks
+// an internal marker to the model; the placeholder already carries the
+// actionable hint.
+func malformedArgumentsHint(raw json.RawMessage) (string, bool) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return "", false
+	}
+	payload, ok := fields[malformedArgumentsKey]
+	if !ok {
+		return "", false
+	}
+	hint := "model emitted invalid arguments JSON; re-issue the tool call with valid arguments"
+	if head := strings.TrimSpace(string(payload)); len(head) > 200 {
+		head = head[:200] + "…"
+		hint += "; arguments began with " + head
+	}
+	return hint, true
+}
+
+func decodeStrict[T any](raw json.RawMessage) (T, error) {
+	if hint, ok := malformedArgumentsHint(raw); ok {
+		var zero T
+		return zero, domain.NewError(domain.ErrInvalidInput, hint)
+	}
+	return toolkit.DecodeStrict[T](raw)
+}
 
 func cloneRawMessage(raw json.RawMessage) json.RawMessage { return toolkit.CloneRawMessage(raw) }
 

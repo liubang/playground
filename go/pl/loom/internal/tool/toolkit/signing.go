@@ -219,6 +219,22 @@ func SuccessResult(callID domain.ToolCallID, startedAt time.Time, payload any) d
 	}
 }
 
+// boundedDetail renders the diagnostic suffix an error message carries
+// into the tool result, capped so a runaway stderr cannot flood the
+// context: the model cannot correct what it cannot see, and an
+// unclassified failure is unauditable after the fact without its cause.
+func boundedDetail(err error) string {
+	if err == nil {
+		return ""
+	}
+	detail := err.Error()
+	const maxDetail = 300
+	if len(detail) > maxDetail {
+		detail = detail[:maxDetail] + "..."
+	}
+	return detail
+}
+
 // ErrorResult builds an error ToolResult from an error, classifying it
 // into the appropriate status/code.
 func ErrorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
@@ -241,6 +257,9 @@ func ErrorResult(callID domain.ToolCallID, startedAt time.Time, err error) domai
 		if errors.As(err, &agentErr) {
 			code = string(agentErr.Code)
 			message = agentErr.Message
+			if detail := boundedDetail(agentErr.Cause); detail != "" {
+				message += ": " + detail
+			}
 			retryable = agentErr.Retryable
 			switch agentErr.Code {
 			case domain.ErrCancelled:
@@ -248,6 +267,8 @@ func ErrorResult(callID domain.ToolCallID, startedAt time.Time, err error) domai
 			case domain.ErrTimeout:
 				status = domain.ToolStatusTimeout
 			}
+		} else if detail := boundedDetail(err); detail != "" {
+			message += ": " + detail
 		}
 	}
 
