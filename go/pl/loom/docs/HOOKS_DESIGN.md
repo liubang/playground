@@ -1,6 +1,6 @@
 # HOOKS_DESIGN — loom 生命周期钩子：用户可配置的工具事件拦截与反馈注入
 
-> 状态：Draft v1（待 review）
+> 状态：Draft v1（待 review；**尚未实现**——loom 目前没有 hooks 事件分发层）
 > 关联：PERMISSION_DESIGN.md（信任梯度、规则层）、CONTEXT_DESIGN.md（transcript 语义）、SUBAGENT_DESIGN.md（并行执行分段）、prompt/prompt.go（规则注入与安全护栏）
 > 参考实现：OpenAI Codex `codex-rs/hooks`（事件模型、输出协议、信任机制的主要来源）
 

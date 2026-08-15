@@ -286,7 +286,7 @@ UPDATE sessions SET workspace_id = ?1 WHERE workspace_id = '';
 
 CLI 每次启动都执行该语句（幂等，`workspace_id=''` 的行只会越来越少）。**并发安全**：同一 loom home 同时只有一个写进程（data-dir 排他锁 `loom.lock`，见 `ResolvedStorage.SessionsDir` 注释与 serve 的 `lock.go`），backfill 不存在多进程竞态。**已知让步**：如果用户长期在多个目录下使用 chat 后又升级，全部历史 session 会归属到"升级后第一次启动的 default workspace"。这是可接受的——归属信息此前根本不存在，任何启发式（如按 cwd 猜）都更错；文档与 release note 中说明。
 
-只读打开路径（`sqlite_store.go:81` 的 read-only 模式）的版本检查同步接受 v5。
+只读打开路径（`sqlite_store.go:86` 的 read-only 模式）的版本检查同步接受 v5。
 
 ### 7.3 WorkspaceStore 接口
 
@@ -357,7 +357,7 @@ CreateSessionIn(ctx context.Context, workspaceID domain.WorkspaceID) error // Cr
 | **D4** | `RememberedStore`（"allow always" 记忆）维持 user-global | 与现状一致；按 workspace 隔离更合理（A 项目的 `make deploy` 记忆不应作用于 B），但属于 PERMISSION_DESIGN 的范畴演进，不在本设计内改 |
 | **D5** | `MemoryStore` 维持 user-global | `memory.OpenStore(MemoriesDir())` 现状即全局；记忆按 workspace 分桶是 MEMORY_DESIGN 的演进，本设计只在 §17 预留 `workspace_id` 关联列的演进方向 |
 | **D6** | skills user-scope roots 进程级预载，repo-scope 随 workspace | `WireSkills` 的 `userRoots` 参数由 ProcessRuntime 算好传入，每个 WorkspaceRuntime 只替换 `workspaceRoot` 参数（`skills.go:78` `skill.NewLoader` 的第一参） |
-| **D7** | `SessionEnv` 归因不变 | per-session ctx 注入已实现（`bootstrap.go:213-218`），追加 `LOOM_WORKSPACE_ID` 环境变量（additive）供下游 CLI 归因 |
+| **D7** | `SessionEnv` 归因不变 | per-session ctx 注入已实现（`bootstrap.go:197-202`，`RunnerOptions.SessionEnv` 读 `process.SessionEnvFromContext`），追加 `LOOM_WORKSPACE_ID` 环境变量（additive）供下游 CLI 归因 |
 
 ## 10. 配置演进
 
@@ -398,15 +398,15 @@ workspaces:
 
 ### 11.4 CLI 子命令
 
-新增管理命令（复用 client 包）。**两条命令的访问路径不同**：
+新增管理命令（复用 client 包）。**三条命令的访问路径**（实现定稿，与初版设计相反——写操作改为本地直写 + 数据目录 flock，而非依赖 serve）：
 
 ```
-loom workspace list                     # 只读，直接走 OpenSQLiteStoreReadOnly（sqlite_store.go:81 的 mode=ro 路径），无需 serve 运行
-loom workspace add <path> [--name N]    # 写操作，需 serve 运行中，走 HTTP POST /v1/workspaces；serve 未运行时明确报错并提示启动
-loom workspace rm <id>                  # 删除元数据（§16.1）；与 add 同路径：serve 运行中时走 Web UI 或 DELETE /v1/workspaces/{id}
+loom workspace list                     # 只读，直接走 OpenSQLiteStoreReadOnly（sqlite_store.go:86 的 mode=ro 路径），无需 serve 运行
+loom workspace add <path> [--name N]    # 写操作：在数据目录 flock 下本地直写 store（canonical 校验 + 去重同 registry）；serve 正在运行时 flock 失败，明确报错提示改走 Web UI 或 POST /v1/workspaces
+loom workspace rm <id>                  # 删除元数据并级联删会话（§16.1）；与 add 同路径：本地直写，serve 运行时提示走 Web UI 或 DELETE /v1/workspaces/{id}
 ```
 
-`list` 不依赖 serve：只读路径本来就为 inspect 类场景存在（不含写），session/workspace 列表是典型只读查询。`add` 必须经 serve 的 `WorkspaceRegistry.Register`（需要 canonical 校验 + 并发 dedupe + 装配触发），不走第二条写路径——这与 SERVE_DESIGN §17 的单一写者原则一致。
+`list` 不依赖 serve：只读路径本来就为 inspect 类场景存在（不含写），session/workspace 列表是典型只读查询。`add`/`rm` 在**没有 serve 运行**时经数据目录 flock 保证与 serve 互斥（`server.AcquireDataDirLock`），直接写 store——canonical 校验与并发 dedupe 由 store 层保证；serve 运行时由锁拒绝并引导到 Web UI / REST 端点，单一写者原则由 flock 而非"必经 serve"实现。
 
 ## 12. 安全模型
 

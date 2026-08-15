@@ -1,6 +1,6 @@
 # BROWSER_DESIGN — loom 浏览器能力：GUI 打开通道与 agent 自主网页浏览
 
-> 状态：Draft v3（待 review；v3 起移除 `open_in_browser` 工具，通道收敛为两条）
+> 状态：**已实现**（`browser` 工具与 `run_cmd`/`exec_session` 的 `needs_gui_open` 通道已落地；原 Draft v3 待 review——v3 起移除 `open_in_browser` 工具，通道收敛为两条）
 > 关联：PERMISSION_DESIGN.md（三层信任梯度、grant 机制、域名规则）、DESKTOP_DESIGN.md、SERVE_DESIGN.md
 > 变更：v2 修复独立审查发现的 2 个 Blocker 与 8 个 Major；v3 按 review 决策砍掉 `open_in_browser`（原 M2），模型展示页面的诉求由 M1 的 `needs_gui_open` 通道覆盖。详见 §9 审查记录。
 

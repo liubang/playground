@@ -1,6 +1,6 @@
 # Loom Web SPA 设计（M3）
 
-- 状态：Draft v2（v1 经一轮对照代码实现的自审修订：diff 来源更正为 tool.prepared、补齐 SessionSummary 富化（§7.7）、prompt 幂等键、全局 401、SSE 活性看门狗、审批 actor 自报、allow_multiple、transcript 去重、X-Frame-Options 入列、首入落地态）
+- 状态：**已实现**（M3 Web SPA 已随 `loom serve` 落地：`internal/server/web/` 内嵌 SPA；`site/` 为独立营销落地页；原 Draft v2——v1 经一轮对照代码实现的自审修订：diff 来源更正为 tool.prepared、补齐 SessionSummary 富化（§7.7）、prompt 幂等键、全局 401、SSE 活性看门狗、审批 actor 自报、allow_multiple、transcript 去重、X-Frame-Options 入列、首入落地态）
 - 日期：2026-08-04
 - 前置文档：`SERVE_DESIGN.md`（§5 协议、§9 客户端契约、§12 里程碑）、`TUI_DESIGN.md`（设计语言来源）
 - 范围：`loom serve` 内嵌 Web 客户端（`internal/server/web/`），浏览器完整跑通对话/审批/问答/取消/恢复/重连

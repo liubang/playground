@@ -247,24 +247,20 @@ created → preparing → calling_model
 
 ```go
 type Limits struct {
-    MaxTurns            int
-    MaxToolCalls        int
-    MaxParallelTools    int
-    MaxInputTokens      int64
-    MaxOutputTokens     int64
-    MaxEstimatedCostUSD float64
-    MaxWallTime         time.Duration
-    MaxToolOutputBytes  int64
-    MaxArtifactBytes    int64
-    MaxRepeatedActions  int
+    MaxInputTokens      int64   // 模型未声明 context_window 时的回退窗口
+    MaxOutputTokens     int64   // 单次模型调用输出护栏
+    MaxEstimatedCostUSD float64 // 会话累计估算成本上限
+    MaxTokens           int64   // 会话累计 token 上限（0 = 不限，opt-in）
+    MaxToolOutputBytes  int64   // 单次工具结果模型可见字节上限
+    MaxArtifactBytes    int64   // 单个 artifact 字节上限
 }
 ```
 
-达到软阈值时提示模型收敛或压缩；达到硬阈值时安全终止并允许恢复。
+达到软阈值时提示模型收敛或压缩；达到硬阈值时安全终止并允许恢复。turn/tool-call 配额与墙钟上限已按设计移除（CONTEXT_DESIGN.md §4.4.3）；停滞/重复动作由 `RunawayConfig`（config.yaml `runaway.*`）检测。
 
-预算窗口语义：**Limits 是单个 prompt 的防失控上限，不是全 session 的消费账户**。每个新 prompt（`ContinueRun`/resume）开启新的预算窗口（`Run.ResetUsageForNewTurn`），checkpoint 中的累计用量不会带入下一个 prompt——否则长 session 的累计 input tokens 会在循环入口硬检查处逐出后续所有 prompt。崩溃恢复（`RecoverRun` 非终态分支）保留已恢复用量，被中断的 run 仍对已消费部分负责。所有 Limits 字段均可由 `LOOM_MAX_*` 环境变量覆盖（非法值启动即报错）。
+预算窗口语义：**Limits 是单个 prompt 的防失控上限，不是全 session 的消费账户**。每个新 prompt（`ContinueRun`/resume）开启新的预算窗口（`Run.ResetUsageForNewTurn`），checkpoint 中的累计用量不会带入下一个 prompt——否则长 session 的累计 input tokens 会在循环入口硬检查处逐出后续所有 prompt。崩溃恢复（`RecoverRun` 非终态分支）保留已恢复用量，被中断的 run 仍对已消费部分负责。Limits 经 `~/.loom/config.yaml` 的 `limits.*` 配置（非法值加载即报错；见 CONFIG_DESIGN.md）；turn/tool-call 配额与墙钟上限已按设计移除（CONTEXT_DESIGN.md §4.4.3），停滞与重复动作由 `runaway.*` 配置检测。
 
-状态栏的可观测性与预算语义对应：`turns/in/out/tools` 是当前 prompt 窗口的消耗；`compact:N` 是 session 内压缩次数；`ctx:~N` 是**下一次请求的估算上下文大小**（transcript 字节/4 估算，响应完成时附 provider 实测输入校准，工具批次结束刷新），`LOOM_CONTEXT_WINDOW` 设置模型窗口后显示为 `ctx:~N/W` 并在 ≥80% 时告警——压缩触发线与它在同一尺度上，用户能直接看到压缩逼近。
+状态栏的可观测性与预算语义对应：`turns/in/out/tools` 是当前 prompt 窗口的消耗；`compact:N` 是 session 内压缩次数；`ctx:~N` 是**下一次请求的估算上下文大小**（transcript 字节/4 估算，响应完成时附 provider 实测输入校准，工具批次结束刷新），模型窗口来自当前模型的 `context_window`（config.yaml `providers[].models[].context_window`，0 时回退 `limits.max_input_tokens`），显示为 `ctx:~N/W` 并在 ≥80% 时告警——压缩触发线与它在同一尺度上，用户能直接看到压缩逼近。
 
 ## 6. Agent Runtime
 
@@ -363,12 +359,13 @@ type ModelStream interface {
 2. Provider 协议要求；
 3. 用户偏好；
 4. 工作区规则（`LOOM.md`、`AGENTS.md`、`CLAUDE.md`）；
-5. 用户目标与约束；
-6. 计划、预算和验证状态；
-7. 最近对话；
-8. 相关代码与搜索结果；
-9. 最近工具结果；
-10. 历史压缩摘要。
+5. 技能清单（名称+描述+路径，预算降级注入；`loom://skills/catalog` 进入 Context Manifest，见 SKILL_DESIGN.md）；
+6. 用户目标与约束；
+7. 计划、预算和验证状态；
+8. 最近对话；
+9. 相关代码与搜索结果；
+10. 最近工具结果；
+11. 历史压缩摘要。
 
 ### 8.2 预算
 
@@ -443,14 +440,14 @@ type Tool interface {
 
 命名规范：动词 + 短名词、snake_case、优先日常词汇；`git_` 为命名空间前缀。
 
-当前集合（13 个）：
+当前集合（14 个）：
 
 | 工具 | 风险 | 职责 |
 |---|---:|---|
 | `read_file` | R1 | 分页读取 UTF-8 文件（带行号，offset/limit，二进制拒绝；编辑前必须先读） |
 | `list_dir` | R1 | 单层目录罗列（kind/size/mode/mtime，字典序，200 条截断，不递归） |
 | `glob` | R1 | 按 glob 模式发现文件（如 `**/*.go`），字典序，200 条截断 |
-| `search` | R1 | 正则/字面内容搜索（path/glob/type/context/case/fixed_strings）；`rg --json` 引擎优先，Go 实现回退，`.gitignore` 默认生效 |
+| `grep` | R1 | 正则/字面内容搜索（path/glob/type/context/case/fixed_strings/head_limit）；`rg --json` 引擎优先，Go 实现回退，`.gitignore` 默认生效（2026-08 由 `search` 更名） |
 | `write` | R2 | 创建（自动建父目录）或整文件覆写；审批展示路径/字节数/创建或覆盖；堵 `run_cmd` + heredoc 旁路 |
 | `edit` | R2 | `old_string`/`new_string` 精确替换（唯一匹配或 `replace_all`）；陈旧检测内部化（文件自上次读取后被外部修改则报可行动错误）；`expected_hash` 仅作可选高级校验 |
 | `run_cmd` | R2/R3 | 沙箱内执行程序；仅 `program` 必填，其余参数均有默认值；shell 语法用 `sh -c`（R3）；`sandbox_permissions=require_escalated` + `justification` 提权到沙箱外执行（R3，审批展示理由），沙箱失败（外网/DNS/写权限）时的标准出路 |
@@ -459,13 +456,14 @@ type Tool interface {
 | `git_log` | R1 | 提交历史（`limit` 分页） |
 | `lint` | R2 | 项目代码诊断：按标记文件确定性检测引擎（go.mod → golangci-lint/go vet，package.json → eslint，pyproject.toml → ruff，compile_commands.json → clang-tidy），沙箱内执行，输出归一化结构化 diagnostics |
 | `web_fetch` | R3 | HTTP/HTTPS GET 抓取网页：HTML 转 markdown（可 text/raw），SSRF 拨号时防护（默认拒绝私网/环回），重定向限 5 跳，大小截断走 artifact 溢出，成功响应进程内缓存 15 分钟 |
+| `web_search` | R3 | 网页检索（brave/tavily/ddg 后端：`LOOM_WEB_SEARCH_PROVIDER` 显式选择，否则按已配置的 API key 探测，再否则无 key DuckDuckGo），进程内缓存 |
 | `read_skill` | R1 | 按名称读取已发现技能的 SKILL.md 或其目录内文件（白名单寻址：技能目录内路径解析 + 复验 fail-closed，offset/limit 分页，256KB 上限）；技能发现/注入机制见 SKILL_DESIGN.md |
 
-分工边界（写入 system prompt）：找文件用 `glob`，找内容用 `search`，看目录用 `list_dir`，读文件用 `read_file`，新建/覆写用 `write`，局部修改用 `edit`，构建/测试/任意程序用 `run_cmd`，仓库信息用 `git_*`，代码诊断用 `lint`，网页内容用 `web_fetch`，技能正文与其目录内引用用 `read_skill`。
+分工边界（写入 system prompt）：找文件用 `glob`，找内容用 `grep`，看目录用 `list_dir`，读文件用 `read_file`，新建/覆写用 `write`，局部修改用 `edit`，构建/测试/任意程序用 `run_cmd`，仓库信息用 `git_*`，代码诊断用 `lint`，网页内容用 `web_fetch`，网页搜索用 `web_search`，技能正文与其目录内引用用 `read_skill`。
 
-技能（Skills）：`SKILL.md` 从 `<ws>/.loom/skills`、`<ws>/.agents/skills`、`~/.loom/skills`、`~/.agents/skills`（及 `LOOM_SKILLS_EXTRA_ROOTS`）发现；清单以 token 预算降级注入系统提示词（`loom://skills/catalog` 进入 Context Manifest），正文经 `read_skill` 渐进式披露读取；技能脚本走 `run_cmd` 既有沙箱/提权通道。完整设计见 SKILL_DESIGN.md。
+技能（Skills）：`SKILL.md` 从 `<ws>/.loom/skills`、`<ws>/.agents/skills`、`~/.loom/skills`、`~/.agents/skills`（及 config.yaml 的 `skills.extra_roots`）发现；清单以 token 预算降级注入系统提示词（`loom://skills/catalog` 进入 Context Manifest），正文经 `read_skill` 渐进式披露读取；技能脚本走 `run_cmd` 既有沙箱/提权通道。完整设计见 SKILL_DESIGN.md。
 
-合并与退役：`replace_text` 与 `apply_patch` 合并为 `edit`；`search_text` 重构为 `search`；`list_directory` 更名 `list_dir`；`run_command` 更名 `run_cmd`。旧 Session 中的已退役工具名在恢复时按 `unknown_tool` 语义处理。
+合并与退役：`replace_text` 与 `apply_patch` 合并为 `edit`；`search_text` 重构为 `grep`（2026-08 由 `search` 更名）；`list_directory` 更名 `list_dir`；`run_command` 更名 `run_cmd`。旧 Session 中的已退役工具名在恢复时按 `unknown_tool` 语义处理。
 
 进程工具与长期进程分开建模，避免一次 Tool Call 永久阻塞循环：后续 `start_process`、`poll_process`、`stop_process` 独立演进。
 
@@ -598,7 +596,7 @@ type SessionStore interface {
 
 - 未形成完整模型响应则标记中断并重新请求；
 - 只读幂等工具可重试；
-- 文件写通过操作 ID 和前后哈希确认是否完成；当前 `replace_text`/`apply_patch` 已实现前后哈希三态核对；
+- 文件写通过操作 ID 和前后哈希确认是否完成；当前 `edit` 已实现前后哈希三态核对（`replace_text`/`apply_patch` 已并入 `edit`）；
 - 普通 Shell 默认非幂等，不自动重放；当前 `run_cmd` 结果未知时阻断恢复并要求人工核实；
 - 后台进程只有在 PID、启动时间、可执行身份和 owner token 均可确认时才能接管；当前尚未实现后台进程 registry，因此不宣称可恢复；
 - 旧审批在恢复后失效；只读调用可明确标记为可重试，但当前不会静默自动执行；
@@ -618,7 +616,7 @@ type SessionStore interface {
 
 MCP 是主要工具扩展协议，先支持 stdio，后续支持标准远程传输、健康检查、超时和重连。
 
-未来 `loom serve` 暴露版本化 JSON-RPC 或本地 gRPC：创建/恢复/取消 Run、订阅事件、提交审批、查询计划/Artifact/diff、提供编辑器上下文和协议版本协商。客户端不能直接访问 SQLite 表。
+`loom serve` 已暴露版本化 REST+SSE 协议（见 SERVE_DESIGN.md）；未来可扩展 JSON-RPC 或本地 gRPC 适配器：创建/恢复/取消 Run、订阅事件、提交审批、查询计划/Artifact/diff、提供编辑器上下文和协议版本协商。客户端不能直接访问 SQLite 表。
 
 ## 16. 配置
 
@@ -676,15 +674,21 @@ Provider 契约测试使用脱敏夹具覆盖文本、多工具、参数分片�
 ```text
 loom                         交互模式
 loom run <prompt>            单次运行
-loom resume [session-id]     恢复
+loom resume <session-id> <prompt>  恢复并继续
+loom chat [--resume id]      显式交互入口
 loom sessions                会话列表
 loom inspect <session-id>    计划、事件、费用、变更
-loom diff [session-id]       Loom 归因修改
-loom config                  非敏感配置
-loom auth                    凭证引用
-loom mcp                     MCP 管理
-loom doctor                  环境与安全诊断
-loom eval                    运行评测
+loom workspace list|add|rm   多 workspace 管理（已实现，见 WORKSPACE_DESIGN.md）
+loom rules list|check|forget|import  声明式规则管理（已实现）
+loom serve                   HTTP/SSE Server 模式（已实现，见 SERVE_DESIGN.md）
+loom config init             生成带注释的配置模板（已实现）
+loom gc                      回收无引用 artifact（已实现）
+loom version                 版本号（已实现）
+loom diff [session-id]       Loom 归因修改（规划中）
+loom auth                    凭证引用（规划中）
+loom mcp                     MCP 管理（规划中）
+loom doctor                  环境与安全诊断（规划中）
+loom eval                    运行评测（规划中）
 ```
 
 流式 UI 展示模型可见文本、工具名称和安全参数摘要、执行状态、审批、计划、Token/费用和最终验证；不展示私有推理。非 TTY 环境输出稳定 JSON Lines，便于自动化。退出码区分成功、未验证、需用户、失败、取消和配置错误。
@@ -738,7 +742,7 @@ Phase 2 当前安全保证：
 - 当前已实现环境变量秘密剔除和审计 payload 最小化，但跨 Model/UI/Artifact/Trace/MCP 的完整秘密分类、脱敏和不可导出 handle 管线仍属于 Phase 5。
 - 大型命令输出已流式转存独立 stdout/stderr 内容寻址 Artifact；单 Artifact 默认仍受 `MaxArtifactBytes` 限制，超限后继续排空进程输出并明确标记 Artifact 截断。引用索引和显式 24 小时 grace-period 孤儿 GC 已实现，但自动调度、Session 级/全局配额、可配置保留策略和 Session 删除后的引用回收流程尚未实现。
 - Linux 生产沙箱尚未实现；在此之前，Linux 命令执行保持 fail closed。
-- CLI 尚未实现 `diff`、`config`、`auth`、`mcp`、`doctor` 和 `eval`；`resume` 当前是“恢复/继续同一 Session 并追加新 Prompt”，后续需拆分透明重试、Session continuation 和人工 resolution 命令。
+- CLI 已实现 `version`/`chat`/`run`/`resume`/`sessions`/`workspace`/`inspect`/`gc`/`rules`/`serve`/`config`；`diff`、`auth`、`mcp`、`doctor` 和 `eval` 仍未实现（§20 标注规划中）；`resume` 当前是“恢复/继续同一 Session 并追加新 Prompt”，后续需拆分透明重试、Session continuation 和人工 resolution 命令。
 - 最终变更归因目前依赖 `git_status`/`git_diff` 和 `file.changed` 事件，尚未形成跨恢复的完整归因报告。
 
 当前验证基线：
@@ -1101,83 +1105,28 @@ CLI 的 TTY、非 TTY 和 JSONL 行为必须版本化：stdout 仅承载结果/�
 
 每个 Phase 的 Acceptance Suite 必须绑定 Requirement ID、故障注入点、测试夹具版本、资源上限和不支持能力披露；“达到预设成功率”等不可量化表述必须在发布前由版本化 Eval Policy 给出具体阈值。
 
-## 36. 环境变量配置参考
+## 36. 配置参考
 
-Loom 的全部运行时配置经环境变量注入（无配置文件），按用途分组如下。**除明确标注“必需”的项外，其余均为可选**；所有可选项缺省时 Loom 行为不变。
+### 36.1 配置文件（唯一配置来源）
 
-### 36.1 模型接入（Model Gateway）
+配置统一存放在 `<loom home>/config.yaml`（默认 `~/.loom/config.yaml`），**无环境变量覆盖层、无静默默认值**（详见 CONFIG_DESIGN.md）。模型接入（`providers[]` / `default`）、预算（`limits.*`）、上下文（`context.*`）、系统提示词（`prompt.*`）、技能（`skills.*`）、权限规则（`rules.*`）、追踪（`tracing.*`）、UI 偏好（`ui.*`）、子代理（`subagent.*`）、停滞检测（`runaway.*`）等均在该文件内配置；密钥用 `api_key` 明文或 `api_key_env` 环境变量名引用（Langfuse 密钥同理为 `public_key_env` / `secret_key_env`）。
 
-| 变量 | 必需性 | 默认 | 说明 |
-|---|---|---|---|
-| `LOOM_MODEL` | headless 必需；TUI 可选 | `gpt-4o`（TUI） | 模型名。headless（`loom run`）未设置直接报错 |
-| `LOOM_BASE_URL` | 生产必需 | OpenAI 官方端点 | OpenAI 兼容 API 的 base URL（如自建网关 `https://your-gateway.example.com/v1`） |
-| `LOOM_API_KEY` | 生产必需 | 空 | API 密钥；空值请求会被上游拒绝 |
-| `LOOM_WIRE_API` | 可选 | `chat_completions` | 线协议：`chat_completions` 或 `responses` |
-
-### 36.2 会话与存储
+### 36.2 真实存在的环境变量（仅这些）
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `LOOM_SESSION_DB` | 已废弃（数据根目录由 `LOOM_HOME` 定位） | loom home（`LOOM_HOME`，默认 `~/.loom`）；SQLite 会话库固定为 `<loom home>/sessions/sessions.db`，artifact 与 prompt 缓存目录随其同级派生 |
-| `XDG_STATE_HOME` | 不再影响 loom | 旧版平台状态目录推导已废弃；所有数据统一位于 `~/.loom/` |
+| `LOOM_HOME` | `~/.loom` | loom home（数据根目录）定位器；配置文件 `<loom home>/config.yaml`、会话库、日志、记忆、规则、技能均派生其下 |
+| `LOOM_LANGFUSE_PUBLIC_KEY` / `LOOM_LANGFUSE_SECRET_KEY` | — | Langfuse 追踪密钥，经 config.yaml 的 `public_key_env` / `secret_key_env` 引用（默认关闭，见 §33） |
+| `LOOM_WEB_SEARCH_PROVIDER` | 自动探测 | `web_search` 工具后端：`brave` / `tavily` / `ddg`；显式指定时要求对应 API key（`BRAVE_SEARCH_API_KEY` / `TAVILY_API_KEY`）已配置，否则按已配置 key 探测，再否则无 key DuckDuckGo |
 
-### 36.3 系统提示词
+已随配置系统迁移删除、文档不再使用的 `LOOM_*` 配置变量（`LOOM_MODEL`/`LOOM_BASE_URL`/`LOOM_API_KEY`/`LOOM_WIRE_API`/`LOOM_CONTEXT_WINDOW`/`LOOM_SESSION_DB`/`LOOM_SYSTEM_PROMPT_EXTRA`/`LOOM_DISABLE_SYSTEM_PROMPT`/`LOOM_PROMPT_NAME`/`LOOM_PROMPT_LABEL`/`LOOM_SKILLS`/`LOOM_SKILLS_EXTRA_ROOTS`/`LOOM_RULES*`/`LOOM_MAX_*`/`LOOM_LANGFUSE_HOST`/`LOOM_LANGFUSE_ENVIRONMENT`/`LOOM_TRACE_CONTENT`/`LOOM_TRACE_USER`/`LOOM_COST_*`/`LOOM_ICONS`/`LOOM_ALT_SCREEN`/`LOOM_VERSION`/`XDG_STATE_HOME`）不再被读取；对应能力见 config.yaml 同名 section（§36.1）。测试专用变量（`LOOM_E2E_LLM`、`LOOM_SNAPSHOT`、`LOOM_REPLAY_STRICT`、`LOOM_E2E_VISION_MODEL`、`LOOM_MCP_TEST_HELPER`）只出现在测试代码中，不属于产品配置面。loom 注入子进程的 `LOOM_SESSION_ID`/`LOOM_AGENT_NAME`/`LOOM_AGENT_VERSION` 是运行时**输出**，非输入配置。
 
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `LOOM_DISABLE_SYSTEM_PROMPT` | 未设（启用） | 置 `1` 完全禁用内置系统提示词（调试/研究用途） |
-| `LOOM_SYSTEM_PROMPT_EXTRA` | 空 | 附加指令段，以 `loom://config/extra-instructions` 身份进入 Context Manifest |
-| `LOOM_PROMPT_NAME` | 空（内置） | Langfuse Prompt Management 中的提示词名；设置后系统提示词静态段由托管版本替换（需 Langfuse 已配置，拉取失败自动回退内置，见 §33、§36.5） |
-| `LOOM_PROMPT_LABEL` | `production` | 托管提示词的发布标签 |
-| `LOOM_SKILLS` | 未设（启用） | 置 `0` 整体禁用技能支持：不扫描、不注入技能清单、不注册 `read_skill` |
-| `LOOM_SKILLS_EXTRA_ROOTS` | 空 | 额外的 user 级技能根目录（`:` 分隔），与默认 root 按 canonical 路径去重 |
-
-工作区规则文件（`LOOM.md`/`AGENTS.md`/`CLAUDE.md`）按 §8 自动发现注入，不属于环境变量。
-
-### 36.4 预算（LOOM_MAX_*）
-
-全部可选，覆盖 `domain.Limits` 同名字段；非法值启动即报错（`domain.LimitsFromEnv` fail-fast）。预算语义见 §5.5：**单 prompt 防失控窗口，非 session 账户**。
+### 36.3 系统标准变量（非 Loom 配置）
 
 | 变量 | 说明 |
 |---|---|
-| `LOOM_MAX_TURNS` | 单 prompt 最大模型调用轮数 |
-| `LOOM_MAX_TOOL_CALLS` | 单 prompt 最大工具调用数 |
-| `LOOM_MAX_INPUT_TOKENS` | 输入 token 上限（软/硬阈值见 §5.5） |
-| `LOOM_MAX_OUTPUT_TOKENS` | 单次模型调用输出 token 上限 |
-| `LOOM_MAX_COST_USD` | 成本上限（需 provider 计费数据） |
-| `LOOM_MAX_WALL_TIME` | 单 prompt 墙钟时间上限 |
-| `LOOM_MAX_TOOL_OUTPUT_BYTES` | 单次工具结果模型可见字节上限 |
-| `LOOM_MAX_ARTIFACT_BYTES` | 单个 artifact 字节上限 |
-| `LOOM_MAX_REPEATED_ACTIONS` | 停滞检测的重复动作阈值 |
-
-### 36.5 观测（OTLP/Langfuse，全部可选）
-
-设计原则见 §33：**默认关闭；未配置、配置错误或后端宕机均不影响 agent 运行**（Setup 失败降级 no-op、上报全异步、超时熔断）。三项凭据齐全才启用。
-
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `LOOM_LANGFUSE_HOST` | 空 | Langfuse base URL。fallback 链：`LOOM_LANGFUSE_HOST` → `LANGFUSE_HOST` → `LANGFUSE_BASE_URL`（社区标准名兼容） |
-| `LOOM_LANGFUSE_PUBLIC_KEY` | 空 | 项目 public key（fallback：`LANGFUSE_PUBLIC_KEY`） |
-| `LOOM_LANGFUSE_SECRET_KEY` | 空 | 项目 secret key（fallback：`LANGFUSE_SECRET_KEY`） |
-| `LOOM_LANGFUSE_ENVIRONMENT` | `dev` | trace 的 environment 维度（dev/ci/prod…） |
-| `LOOM_TRACE_CONTENT` | `1` | 置 `0` 进入脱敏模式：消息/参数内容替换为结构摘要（角色、类型、字节数），代码与对话文本不出进程 |
-| `LOOM_TRACE_USER` | 自动探测 | trace user_id；未设时依次取 `git config user.email`、`$USER` |
-| `LOOM_VERSION` | 构建版本 | trace 的 release 标签，用于按版本对比错误率与消耗 |
-| `LOOM_COST_INPUT_USD_PER_MTOK` | 0（关闭） | 输入费率（USD/百万 token）；与下一项同时为正时上报 `cost_details` |
-| `LOOM_COST_OUTPUT_USD_PER_MTOK` | 0（关闭） | 输出费率 |
-
-### 36.6 TUI
-
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `LOOM_ICONS` | `nerd` | 图标集：`nerd`（Nerd Font 字形）或 `plain`（纯文本降级）；`TERM=dumb` 时强制 plain |
-| `LOOM_ALT_SCREEN` | 未设 | 置 `1` 启用终端 alternate screen（退出 TUI 后不留回滚内容） |
-| `NO_COLOR` | 未设 | 置任意值禁用一切颜色输出（惯例）；`TERM=dumb` 等效 |
-
-### 36.7 构建与调试
-
-| 变量 | 说明 |
-|---|---|
+| `NO_COLOR` | 置任意值禁用一切颜色输出（社区惯例）；`TERM=dumb` 等效 |
 | `BUILD_WORKSPACE_DIRECTORY` | Bazel `bazel run` 注入的工作区根，优先于 `os.Getwd()`；非 Bazel 环境无需关心 |
+| `SHELL` / `USER` / `HOME` / `TERM` | 只被读取用于环境快照、身份探测与终端能力判断，不构成配置 |
 
-另：主题（dark/light）由终端背景色自动探测（OSC 11），无配置项；`SHELL`、`USER` 只被读取用于环境快照与身份探测，不构成配置。
+另：主题（dark/light）由终端背景色自动探测（OSC 11），无配置项；工作区规则文件（`LOOM.md`/`AGENTS.md`/`CLAUDE.md`）按 §8 自动发现注入，不属于环境变量。

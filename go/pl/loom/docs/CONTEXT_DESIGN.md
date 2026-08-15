@@ -26,7 +26,7 @@
 | 预算无梯度提醒 | 软告警未接入主循环；notice 只有 occupancy 单维度两档 | 从"正常"直接跳到"硬杀" |
 | 硬上限无软着陆 | `CheckRunaway` 命中即 `terminate`；只有 goal token budget 有 wrap-up 回合 | 任务中途暴毙，零结论输出 |
 | 失控检测缺位 | `MaxRepeatedActions`/`MaxParallelTools` **无消费方（死配置，REVIEW R9）**，唯一防线是数回合 | 重复非法调用拦不住，正常长任务反被误杀 |
-| 工具输出上限偏小且割裂 | `MaxToolOutputBytes = 16KB` 仅 run_cmd 消费；read_file/search/list_dir 各有独立上限 | 大量输出外部化，压缩后被迫重读/重取 |
+| 工具输出上限偏小且割裂 | `MaxToolOutputBytes = 16KB` 仅 run_cmd 消费；read_file/grep/list_dir 各有独立上限 | 大量输出外部化，压缩后被迫重读/重取 |
 
 ### 1.3 codex 的对照做法
 
@@ -232,7 +232,7 @@ Level 3  summarize：模型生成 handoff 总结，围绕总结重建 transcript
 对齐 codex 的 `record_items` 截断哲学，把压力挡在 transcript 之外：
 
 - `MaxToolOutputBytes` 默认值 16KB → **48KB**（≈12k tokens，与 codex 的 per-model 10k tokens 对齐）；
-- **统一收口**（评审附录 A 确认现状割裂）：`MaxToolOutputBytes` 目前仅 run_cmd 消费，read_file/search/list_dir 各有独立上限。截断统一上收到工具结果入库处（`routeToolCalls`/结果修剪处），各工具的独立上限保留为领域性约束（如 read_file 的分页语义），但**入库前的最终截断只有一处**；
+- **统一收口**（评审附录 A 确认现状割裂）：`MaxToolOutputBytes` 目前仅 run_cmd 消费，read_file/grep/list_dir 各有独立上限。截断统一上收到工具结果入库处（`routeToolCalls`/结果修剪处），各工具的独立上限保留为领域性约束（如 read_file 的分页语义），但**入库前的最终截断只有一处**；
 - 超限输出的截断方式统一为**头尾保留**（各半），头部注入一行警告：
   `Warning: output truncated (original 96.2KB / ~24k tokens, showing first+last 24KB). Full output: <artifact path 或 "unavailable">`；
 - run_cmd 等大输出工具沿用现有 artifact 全量落盘（不变），截断文本中**必须附带 artifact 绝对路径**（评审确认现状：模型可见 payload 只有 `ArtifactRef{id,size}` 无路径，截断标记无指针——必须补齐，否则"外部化→无法回读→重新执行"循环照旧）；

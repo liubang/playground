@@ -56,7 +56,7 @@ loom 目前的全部配置都来自环境变量：模型接入只有一组 `LOOM
 | TUI | `LOOM_ICONS` / `LOOM_ALT_SCREEN` | `main.go` | 迁移：`ui.*` |
 | 发布标记 | `LOOM_VERSION` | `main.go` / `process/types.go` / `trace` | 不迁移：非用户配置；自我戳版机制改为装配层显式传入（§8） |
 | 配置定位 | `LOOM_HOME`（v3.4 起；前身为 v3.2 的 `LOOM_CONFIG`） | `main.go` | 不迁移：loom home **目录**定位器（类比 `CARGO_HOME`），非配置本身；默认 `~/.loom`，配置文件固定为 `<loom home>/config.yaml` |
-| 系统标准 | `XDG_STATE_HOME` / `NO_COLOR` / `TERM` / `SHELL` / `USER` / `HOME` | 多处 | 不迁移：社区/OS 标准，保持 env |
+| 系统标准 | `NO_COLOR` / `TERM` / `SHELL` / `USER` / `HOME` | 多处 | 不迁移：社区/OS 标准，保持 env（`XDG_STATE_HOME` 已废弃，不再影响 loom） |
 | 归因注入 | `LOOM_SESSION_ID` / `LOOM_AGENT_NAME` / `LOOM_AGENT_VERSION`（由 loom 注入 spawned 命令） | `process/` | 不迁移：运行时输出，非输入 |
 
 ### 2.2 已有地基
@@ -170,15 +170,20 @@ providers:
         context_window: 400000
 
 limits:                                     # 对应 domain.Limits，键名 snake_case
-  max_turns: 50
-  max_tool_calls: 100
-  max_input_tokens: 200000
-  max_output_tokens: 8192
+  max_input_tokens: 200000                   # 模型未声明 context_window 时的回退窗口
+  max_output_tokens: 8192                    # 单次模型调用输出护栏
   max_cost_usd: 5.0
-  max_wall_time: 30m                        # Go duration 字符串
+  max_tokens: 0                              # 会话累计 token 上限；0 = 不限（opt-in）
   max_tool_output_bytes: 65536
   max_artifact_bytes: 10485760
-  max_repeated_actions: 3
+# 注：turn/tool-call 配额与墙钟上限已按设计移除（CONTEXT_DESIGN.md §4.4.3）；
+# 停滞/重复动作检测在 runaway: 小节配置（max_repeated_calls / max_consecutive_failures / stall_*）。
+
+runaway:                                    # 停滞检测（域见 domain.RunawayConfig）
+  max_repeated_calls: 3                     # 同一 (工具, 参数) 连续重复上限
+  max_consecutive_failures: 5
+  stall_warn_turns: 10                       # 连续无进展回合数达到即注入收敛提醒（默认 10）
+  stall_timeout: 15m                        # Go duration 字符串；"0" 禁用看门狗
 
 prompt:
   extra: |                                  # LOOM_SYSTEM_PROMPT_EXTRA
@@ -303,7 +308,7 @@ Current  ProviderModelRef       // 启动默认，即 config.default 解析结�
 | `/model` | 状态栏显示当前 `provider/model` |
 | `/model <model>` | 全局唯一匹配则切换；歧义则错误提示并列出候选（`deepseek/deepseek-chat`、`other/deepseek-chat`） |
 | `/model <provider>/<model>` | 精确切换 |
-| `/model` + picker（P2） | 仿 `SessionPicker` 弹层：列出全部 `provider/model` + context window，↑↓ 选择，Enter 确认 |
+| `/model` + picker | 仿 `SessionPicker` 弹层：列出全部 `provider/model` + context window，↑↓ 选择，Enter 确认（已实现） |
 
 状态栏标题从 `Loom · <model>` 变为 `Loom · <provider>/<model>`。切换 ack 沿用 `modelChangedMsg` 通道。
 
@@ -341,7 +346,7 @@ Current  ProviderModelRef       // 启动默认，即 config.default 解析结�
 | `internal/app/skills.go` | `WireSkills` 的 `getenv` 参数改为解析后的 `skills.*` 结构（testability 注入口保留）；其 `contextWindow` 参数取启动默认模型的窗口——catalog 是启动时静态注入，切换模型不重建（可接受，catalog 规模远小于窗口） |
 | `internal/ui`（`update.go`/`view.go`） | `/model` 引用语法 + 歧义提示；状态栏 `provider/model`；`LOOM_ICONS`/`LOOM_ALT_SCREEN` 改由 `ResolvedConfig.UI` 经 `InitOptions` 传入 |
 | `internal/process/types.go`、`internal/trace` | `LOOM_VERSION` 改为装配层显式传入（版本戳是内部机制，非用户配置面）；loom 注入子进程的 `LOOM_SESSION_ID`/`LOOM_AGENT_*` 是**输出**，保留 |
-| 保留不动 | 系统/社区标准：`XDG_STATE_HOME`/`NO_COLOR`/`TERM`/`SHELL`/`USER`/`HOME`；bazel 环境的 `BUILD_WORKSPACE_DIRECTORY` |
+| 保留不动 | 系统/社区标准：`NO_COLOR`/`TERM`/`SHELL`/`USER`/`HOME`；bazel 环境的 `BUILD_WORKSPACE_DIRECTORY`（`XDG_STATE_HOME` 已废弃，不再影响 loom） |
 | `go.mod` / `MODULE.bazel` | 无新增依赖（`yaml.v3` 已有） |
 
 ---
@@ -386,7 +391,7 @@ Current  ProviderModelRef       // 启动默认，即 config.default 解析结�
 | 阶段 | 内容 | 验收 |
 |------|------|------|
 | **P1**（本期） | `internal/config` 包；用户层配置；provider registry；`SetModel` 引用解析；每模型 `context_window`；装配统一走 `ResolvedConfig`；`/model` 引用语法；**`LOOM_*` 配置 env 与消费代码整体删除**；无配置自动引导（默认 home 缺失配置自动创建模板；显式 `LOOM_HOME` fail fast 内嵌示例） | 全量测试在配置文件下绿；`grep -r "LOOM_MODEL\|LOOM_BASE_URL\|LOOM_API_KEY" --include='*.go'` 无配置读取点；配置文件端到端切换 provider |
-| **P2** | 项目层配置（§3.3 信任边界）；`/model` picker；`loom config init` | 恶意项目层样本全部报错；picker UI 测试 |
+| **P2** | 项目层配置（§3.3 信任边界）；`/model` picker；`loom config init` | 恶意项目层样本全部报错；picker UI 测试（注：`loom config init` 与 `/model` picker 已实现；项目层配置仍未实现） |
 | **P3**（待定） | `api_key_cmd`；配置热加载；模型能力标记；非 openai `type` | 按需求驱动 |
 
 ---
