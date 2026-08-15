@@ -66,8 +66,7 @@ prepare_env() {
     write_env_file .env \
         POSTGRES_VERSION "17" \
         REDIS_VERSION "7" \
-        CLICKHOUSE_VERSION "latest" \
-        MINIO_VERSION "latest" \
+        CLICKHOUSE_VERSION "25.12.11.4" \
         POSTGRES_USER "postgres" \
         POSTGRES_PASSWORD "$postgres_password" \
         POSTGRES_DB "postgres" \
