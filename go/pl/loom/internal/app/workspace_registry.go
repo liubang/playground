@@ -194,10 +194,6 @@ func (m *memWorkspaceStore) SessionWorkspace(_ context.Context, sessionID domain
 	return m.sessionWs[sessionID], nil
 }
 
-func (m *memWorkspaceStore) BackfillSessionWorkspaces(_ context.Context, id domain.WorkspaceID) (int64, error) {
-	return 0, nil
-}
-
 func (m *memWorkspaceStore) CountSessionsPerWorkspace(_ context.Context) (map[domain.WorkspaceID]int, error) {
 	return map[domain.WorkspaceID]int{}, nil
 }

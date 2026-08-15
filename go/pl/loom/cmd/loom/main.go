@@ -271,11 +271,10 @@ func resolveWorkspace(explicit string) (string, error) {
 }
 
 // assembleRuntime wires the shared ProcessRuntime, the workspace registry,
-// and the default workspace (the startup root), then backfills the pre-v5
-// session tail onto the default workspace (docs/WORKSPACE_DESIGN.md §7.2).
-// The three entry points (chat/run/serve) share it so they assemble
-// identically. The returned *Bootstrap is the default workspace's runtime;
-// callers that need workspace resolution use the registry.
+// and the default workspace (the startup root). The three entry points
+// (chat/run/serve) share it so they assemble identically. The returned
+// *Bootstrap is the default workspace's runtime; callers that need
+// workspace resolution use the registry.
 func assembleRuntime(ctx context.Context, resolved *config.ResolvedConfig, root string, logger *slog.Logger) (*app.ProcessRuntime, *app.WorkspaceRegistry, *app.Bootstrap, error) {
 	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
 		ArtifactDir: filepath.Join(resolved.Storage.SessionsDir(), artifactDirectoryName),
