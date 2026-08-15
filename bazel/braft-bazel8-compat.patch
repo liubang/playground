@@ -2,7 +2,7 @@ diff --git a/BUILD b/BUILD
 index 34dcf5a..3fc4114 100644
 --- a/BUILD
 +++ b/BUILD
-@@ -1,60 +1,59 @@
+@@ -1,60 +1,58 @@
 +load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 +load("@protobuf//bazel:proto_library.bzl", "proto_library")
 +load("@rules_cc//cc:defs.bzl", "cc_library")
@@ -84,7 +84,7 @@ index 34dcf5a..3fc4114 100644
 +        ":braft_cc_proto",
 +        "@brpc//:brpc",
          "@com_github_gflags_gflags//:gflags",
-         "@com_github_google_glog//:glog",
+-        "@com_github_google_glog//:glog",
 -        "@com_google_protobuf//:protobuf",        
 -        ":cc_braft_internal_proto",
 +        "@protobuf//:protobuf",
@@ -105,7 +105,7 @@ new file mode 100644
 index 0000000..1789f2a
 --- /dev/null
 +++ b/MODULE.bazel
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,17 @@
 +module(
 +  name = "braft",
 +  version = "1.1.2",
@@ -118,7 +118,6 @@ index 0000000..1789f2a
 +bazel_dep(name = 'brpc', version = '1.16.0')
 +bazel_dep(name = 'protobuf', version = '31.1')
 +bazel_dep(name = 'gflags', version = '2.2.2', repo_name = 'com_github_gflags_gflags')
-+bazel_dep(name = 'glog', version = '0.5.0', repo_name = 'com_github_google_glog')
 +bazel_dep(name = 'leveldb', version = '1.23', repo_name = 'com_github_google_leveldb')
 +bazel_dep(name = 'platforms', version = '1.0.0')
 +bazel_dep(name = 'rules_cc', version = '0.2.18')
