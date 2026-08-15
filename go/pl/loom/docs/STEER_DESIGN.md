@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | Draft v1.1（待 review；v1.1 自审第二轮：prepare 执行时机精确化、补齐 Peek、FIFO 对齐论证、接力后面板语义） |
+| 状态 | **已实现**（2026-08；原 Draft v1.1 待 review——v1.1 自审第二轮：prepare 执行时机精确化、补齐 Peek、FIFO 对齐论证、接力后面板语义） |
 | 日期 | 2026-07-26 |
 | 关联文档 | `DESIGN.md`（§25.3 用户交互、§26 模型协议）、`TUI_DESIGN.md`、`CONFIG_DESIGN.md` |
 | 目标读者 | loom 运行时与前端贡献者 |

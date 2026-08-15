@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | Draft v3（v1 自审 §15；v2 现状核对 §16；v3 架构定案 §17） |
+| 状态 | Draft v3（v1 自审 §15；v2 现状核对 §16；v3 架构定案 §17；**M1'（client 化，§18）、M2（REST+SSE 适配器）、M3（Web SPA，见 WEB_DESIGN.md）均已实现**；遗留：审批超时自动 deny（§4.6）与 direct 模式 flock（R5/O7）未实现） |
 | 日期 | 2026-08-03（v1：2026-07-26；v2/v3：2026-08-03） |
 | 关联文档 | `DESIGN.md`（§4 总体架构、§15 扩展与前端协议、§31 Runtime Ownership 与 Daemon）、`TUI_DESIGN.md` |
 | 目标读者 | loom 运行时与前端贡献者 |
@@ -435,7 +435,7 @@ SessionService 协议无关 ⇒ 新协议 = 新增适配器，不重设协议语
 | 审计 | slog JSON 审计流：session create/resume、prompt 提交（长度+hash，不落正文）、approval 决议（含 actor）、cancel、admin 操作；`LOOM_SERVE_AUDIT_LOG` 可定向到独立文件 |
 | 限流 | 全局并发 turn 闸门（§7）；SSE 连接数上限；prompt 频率软限制（burst 10/s 后 429） |
 | 数据目录互斥 | `flock` 排他锁（G10），锁文件 `<datadir>/loom.lock` |
-| 密钥卫生 | `LOOM_API_KEY` 等只存在于 server 进程环境，任何 API 响应不回显配置 |
+| 密钥卫生 | 模型 API 密钥（config.yaml `api_key` / `api_key_env` 解析结果）等只存在于 server 进程环境，任何 API 响应不回显配置 |
 
 威胁模型边界（明确写出）：信任本机持有 token 的客户端 == 信任用户本人；不防御能读用户 home 目录取 token 的本机恶意进程（与 SSH agent 同一假设）。
 
@@ -449,7 +449,9 @@ SessionService 协议无关 ⇒ 新协议 = 新增适配器，不重设协议语
 
 ### 7.2 资源上限一览
 
-| 项 | 默认 | 配置 |
+> 注：下表“配置”列中的 `LOOM_SERVE_*` 为**设计提案**。当前实现中这些上限是 `SessionServiceConfig`/server 代码内的硬编码默认（32 / 4 / 30min / 8 / 2048），**无环境变量覆盖**；审批超时自动 deny 未实现（见 §18.3）。`--listen`/`--token`/`--allow-origin`/`--no-web` 为 `loom serve` 的 CLI flag。
+
+| 项 | 默认 | 配置（设计提案） |
 |---|---|---|
 | 存活 session 数 | 32 | `LOOM_SERVE_MAX_SESSIONS` |
 | 全局并发 turn | 4 | `LOOM_SERVE_MAX_ACTIVE_TURNS` |
@@ -458,15 +460,15 @@ SessionService 协议无关 ⇒ 新协议 = 新增适配器，不重设协议语
 | 每 session 回放环 | 2048 events | `LOOM_SERVE_REPLAY_CAP` |
 | SSE 客户端队列 | 256 | 固定（溢出断开重连） |
 | 请求体 | 4MB | 固定 |
-| 审批超时 | 0（永不） | `LOOM_SERVE_APPROVAL_TIMEOUT` |
+| 审批超时 | 0（永不） | `LOOM_SERVE_APPROVAL_TIMEOUT`（未实现） |
 
 ### 7.3 优雅停机
 
-`SIGINT/SIGTERM` → ① 置 draining（`POST /sessions|prompts` 返回 503）→ ② SSE 广播 `server.draining` → ③ 等待活动 turn 完成，上限 `LOOM_SERVE_DRAIN_TIMEOUT`（默认 60s），超时 `CancelTurn` → ④ 全部 Controller `Shutdown`（pending approvals 自动 deny，现有语义）→ ⑤ broker.Close → ⑥ store/artifact flush & close（`Bootstrap.Close`）→ ⑦ 释放 flock。runner 的进程组/沙箱清理由现有 `process` 包在 turn ctx 取消时完成（设计验证点纳入 §11 测试）。
+`SIGINT/SIGTERM` → ① 置 draining（`POST /sessions|prompts` 返回 503）→ ② SSE 广播 `server.draining` → ③ 等待活动 turn 完成，上限 60s（设计提案 `LOOM_SERVE_DRAIN_TIMEOUT`，当前实现为固定值），超时 `CancelTurn` → ④ 全部 Controller `Shutdown`（pending approvals 自动 deny，现有语义）→ ⑤ broker.Close → ⑥ store/artifact flush & close（`Bootstrap.Close`）→ ⑦ 释放 flock。runner 的进程组/沙箱清理由现有 `process` 包在 turn ctx 取消时完成（设计验证点纳入 §11 测试）。
 
 ## 8. 可观测性
 
-- **日志**：server 模式 slog JSON 到 stderr（或 `LOOM_SERVE_LOG_FILE`）；审计流独立 logger（§6）。
+- **日志**：统一文件日志（`<loom home>/logs/`，glog 风格、按日轮转；设计提案的 `LOOM_SERVE_LOG_FILE` 未实现）+ stderr；审计流独立 logger（§6，经 `server.Config.AuditLogger` 接入）。
 - **Metrics**（M4）：进程内计数器 + 可选 `/metrics`（Prometheus 文本，默认关，`--metrics` 开启）：活跃 session/turn 数、SSE 连接数与断开原因、事件吞吐与回放命中/失效率、审批等待时长分位、pump resync 次数（应为 0）、SQLite 写入延迟。
 - **Trace**：agent 层沿用现有 Langfuse recorder；M4 可选为 REST handler 包一层 OTel span（复用 `internal/trace` 的 provider），不引入新 exporter。
 
@@ -680,10 +682,12 @@ M1'（client 化）已完成并全量测试绿。本节记录与设计正文有�
 
 ### 18.3 遗留到 M2 的已知事项
 
-- `SubscribeEvents` 尚不携带 `server.resync`/`server.draining` 线级事件与 instance ID（M2 SSE 适配层补，应用层语义已具备）；
-- `loom serve` 子命令、flock、token、审计日志未开始（M2 范围）；
-- direct 模式（chat/run）数据目录 flock 未加（R5/O7，M4）；
-- 审批超时自动 deny（§4.6，`LOOM_SERVE_APPROVAL_TIMEOUT`）未实现，属 M2 server 侧定时器。
+> 更新（M2/M3 落地后）：以下 1–3 项已在 M2 完成（`loom serve` 子命令、数据目录 flock、serve.token、审计日志、`server.resync`/`server.draining`/instance ID 线级事件均已实现）；第 4 项（审批超时自动 deny）与第 5 项（direct 模式 flock）**仍未实现**。
+
+- `SubscribeEvents` 尚不携带 `server.resync`/`server.draining` 线级事件与 instance ID（M2 SSE 适配层补，应用层语义已具备）——**已落地**（`handlers_events.go`）；
+- `loom serve` 子命令、flock、token、审计日志未开始（M2 范围）——**已落地**（`cmd/loom/main.go` `runServe`、`server.AcquireDataDirLock`、`serve.token`、`server.Config.AuditLogger`）；
+- direct 模式（chat/run）数据目录 flock 未加（R5/O7，M4）——**仍未实现**；
+- 审批超时自动 deny（§4.6，`LOOM_SERVE_APPROVAL_TIMEOUT`）未实现，属 M2 server 侧定时器——**仍未实现**。
 
 ---
 

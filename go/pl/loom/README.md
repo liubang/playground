@@ -10,7 +10,7 @@ Loom 不是模型 API 的命令行包装器，而是一个 Agent Harness：模�
 - **Headless 模式**：`loom run` 单次执行，最终回答写 stdout、诊断写 stderr；非 TTY 下审批自动拒绝（fail-closed），适合管道与脚本。
 - **事件溯源会话**：所有会话事件与检查点持久化于 SQLite，支持崩溃恢复、跨进程 `resume`、完整历史回放。
 - **安全基座**：工作区路径边界、命令沙箱（macOS sandbox-exec/Seatbelt；Linux 沙箱尚未实现，fail-closed 拒绝执行）、环境变量白名单、R0–R4 风险分级与交互审批，"allow always" 生成类别化命令前缀规则。
-- **丰富的内置工具**：`read_file` / `list_dir` / `search` / `glob` / `edit` / `write` / `run_cmd` / `exec_session` / `write_stdin`（交互式后台进程会话）/ `git_status` / `git_diff` / `git_log` / `lint` / `web_fetch` / `update_goal` / `update_plan` / `read_skill`。
+- **丰富的内置工具**：`read_file` / `list_dir` / `grep` / `glob` / `edit` / `write` / `run_cmd` / `exec_session` / `write_stdin`（交互式后台进程会话）/ `git_status` / `git_diff` / `git_log` / `lint` / `web_fetch` / `web_search` / `update_goal` / `update_plan` / `read_skill`。
 - **Skills**：从工作区与用户目录发现 `SKILL.md` 技能，清单注入系统提示词，正文按需渐进披露。
 - **上下文工程**：上下文窗口占用感知、自动压缩（掩码 + 摘要交接）、预算提醒。
 - **可观测性**：OpenTelemetry / Langfuse 追踪（默认关闭），Context Manifest 审计每次模型请求的上下文构成。
@@ -20,7 +20,7 @@ Loom 不是模型 API 的命令行包装器，而是一个 Agent Harness：模�
 ### 构建
 
 ```bash
-# Go（Go 1.25+）
+# Go（Go 1.26+）
 cd go && go build ./pl/loom/cmd/loom
 
 # 或 Bazel
@@ -30,9 +30,8 @@ bazel build //go/pl/loom/...
 ### 配置
 
 ```bash
-export LOOM_API_KEY=sk-...
-export LOOM_BASE_URL=https://api.openai.com/v1   # 任意 OpenAI 兼容端点
-export LOOM_MODEL=gpt-4o
+loom                              # 首次运行自动生成 ~/.loom/config.yaml 模板
+$EDITOR ~/.loom/config.yaml       # 填入 api_key（或 api_key_env）与 base_url
 ```
 
 ### 使用
@@ -51,21 +50,16 @@ loom gc                           # 回收无引用的 artifact
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `LOOM_MODEL` | `gpt-4o`（chat） | 模型标识；`loom run` 必填 |
-| `LOOM_BASE_URL` / `LOOM_API_KEY` | — | OpenAI 兼容端点与密钥 |
-| `LOOM_WIRE_API` | `chat_completions` | 线协议：`chat_completions` 或 `responses` |
-| `LOOM_CONTEXT_WINDOW` | 0（自动） | 模型上下文窗口 token 数，驱动压缩 |
 | `LOOM_HOME` | `~/.loom` | loom home（数据根目录）：配置文件 `<loom home>/config.yaml`、会话库、日志、记忆、规则、技能均派生其下 |
-| `LOOM_SESSION_DB` | 已废弃 | 会话库固定派生为 `<loom home>/sessions/sessions.db` |
-| `LOOM_SYSTEM_PROMPT_EXTRA` | — | 追加到系统提示词的自定义指令 |
-| `LOOM_SKILLS` / `LOOM_SKILLS_EXTRA_ROOTS` | 开 / — | 技能开关与额外发现根目录 |
-| `LOOM_RULES` | 开 | 用户/项目声明式权限规则（`.loom/rules/*.json`） |
-| `LOOM_LANGFUSE_*` | 关 | Langfuse 追踪（详见 `docs/DESIGN.md` §33） |
+| `LOOM_LANGFUSE_PUBLIC_KEY` / `LOOM_LANGFUSE_SECRET_KEY` | — | Langfuse 追踪密钥，经 config.yaml 的 `public_key_env` / `secret_key_env` 引用（默认关闭） |
+| `LOOM_WEB_SEARCH_PROVIDER` | 自动探测 | web_search 工具后端：`brave` / `tavily` / `ddg`（需对应 API key；未显式指定时按已配置 key 探测，再否则无 key DuckDuckGo） |
+
+其余配置（`base_url`、`wire_api`、`api_key` / `api_key_env`、`context_window` 等）均在 `~/.loom/config.yaml` 中；无环境变量覆盖层。
 
 ## 架构
 
 ```text
-Frontend（TUI；未来: loom serve + Web）
+Frontend（TUI / loom serve + Web）
     │  命令 + 事件订阅
 Application（app.Controller / Bootstrap）
     │
@@ -99,7 +93,7 @@ Model Provider（OpenAI 兼容）   Tool Runtime（registry / policy / approval 
 | [docs/TUI_DESIGN.md](docs/TUI_DESIGN.md) | TUI 前端设计 |
 | [docs/PLAN_DESIGN.md](docs/PLAN_DESIGN.md) | 计划（Plan）子系统设计 |
 | [docs/SKILL_DESIGN.md](docs/SKILL_DESIGN.md) | Skills 发现、注入与读取设计 |
-| [docs/SERVE_DESIGN.md](docs/SERVE_DESIGN.md) | Server 模式设计（HTTP/SSE API + Web 纯渲染前端，进行中） |
+| [docs/SERVE_DESIGN.md](docs/SERVE_DESIGN.md) | Server 模式设计（HTTP/SSE API + Web 纯渲染前端，已实现） |
 
 ## 开发
 

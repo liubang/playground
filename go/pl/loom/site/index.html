@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loom — 生产级 AI Coding Agent</title>
+<meta name="description" content="Loom 是面向软件工程任务的生产级 AI Coding Agent：交互式 TUI、Web UI、桌面应用与无头运行，事件溯源会话、安全沙箱与分级审批、Skills 扩展。">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<style>
+  :root {
+    --bg: #070b12;
+    --bg-2: #0b1220;
+    --panel: rgba(255, 255, 255, 0.04);
+    --panel-border: rgba(255, 255, 255, 0.09);
+    --text: #e8edf6;
+    --text-dim: #93a0b8;
+    --text-faint: #5c6a82;
+    --accent: #5eead4;
+    --accent-2: #38bdf8;
+    --accent-3: #a78bfa;
+    --danger: #f472b6;
+    --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: rgba(94, 234, 212, 0.25); }
+
+  /* ---------- background effects ---------- */
+  .bg-glow {
+    position: fixed; inset: 0; z-index: -4;
+    background:
+      radial-gradient(ellipse 45% 35% at 15% 0%, rgba(56, 189, 248, 0.14), transparent 60%),
+      radial-gradient(ellipse 40% 30% at 85% 5%, rgba(167, 139, 250, 0.12), transparent 60%),
+      radial-gradient(ellipse 55% 40% at 50% 60%, rgba(94, 234, 212, 0.05), transparent 65%);
+  }
+
+  /* drifting aurora blobs */
+  .aurora {
+    position: fixed; z-index: -3; border-radius: 50%;
+    filter: blur(90px);
+    pointer-events: none;
+    will-change: transform;
+  }
+  .aurora-1 {
+    width: 46vw; height: 46vw; left: -10vw; top: -14vw;
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.16), transparent 65%);
+    animation: auroraDrift 26s ease-in-out infinite alternate;
+  }
+  .aurora-2 {
+    width: 40vw; height: 40vw; right: -12vw; top: 6vh;
+    background: radial-gradient(circle, rgba(167, 139, 250, 0.14), transparent 65%);
+    animation: auroraDrift 32s ease-in-out infinite alternate-reverse;
+  }
+  .aurora-3 {
+    width: 52vw; height: 52vw; left: 22vw; bottom: -22vw;
+    background: radial-gradient(circle, rgba(94, 234, 212, 0.10), transparent 65%);
+    animation: auroraDrift 38s ease-in-out infinite alternate;
+  }
+
+  .bg-grid {
+    position: fixed; inset: 0; z-index: -2;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 30%, transparent 75%);
+    will-change: transform;
+  }
+
+  /* matrix code rain */
+  #bg-canvas {
+    position: fixed; inset: 0; z-index: -1;
+    pointer-events: none;
+    mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 78%, transparent 97%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 78%, transparent 97%);
+  }
+
+  @keyframes auroraDrift {
+    0%   { transform: translate(0, 0) scale(1); }
+    50%  { transform: translate(4vw, 3vh) scale(1.12); }
+    100% { transform: translate(-3vw, 5vh) scale(0.94); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .aurora { animation: none; opacity: 0; }
+  }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px clamp(20px, 5vw, 64px);
+    backdrop-filter: blur(12px);
+    background: rgba(7, 11, 18, 0.6);
+    border-bottom: 1px solid transparent;
+    transition: border-color .3s;
+  }
+  nav.scrolled { border-bottom-color: var(--panel-border); }
+
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: .5px; }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2) 60%, var(--accent-3));
+    display: grid; place-items: center;
+    box-shadow: 0 0 24px rgba(94, 234, 212, 0.35);
+    font-weight: 800; font-size: 15px; color: #06121a;
+  }
+
+  .nav-links { display: flex; gap: 28px; align-items: center; }
+  .nav-links a { color: var(--text-dim); text-decoration: none; font-size: 14px; transition: color .2s; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta {
+    padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    color: #06121a; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    text-decoration: none; box-shadow: 0 4px 20px rgba(56, 189, 248, 0.3);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(56, 189, 248, 0.45); }
+
+  @media (max-width: 720px) {
+    .nav-links .hide-sm { display: none; }
+  }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+    padding: 120px 24px 80px;
+  }
+
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 16px; border-radius: 999px;
+    font-size: 13px; color: var(--accent);
+    background: rgba(94, 234, 212, 0.08);
+    border: 1px solid rgba(94, 234, 212, 0.25);
+    margin-bottom: 28px;
+    animation: fadeUp .8s ease both;
+  }
+  .hero-badge .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+    animation: pulse 2s infinite;
+  }
+
+  .hero h1 {
+    font-size: clamp(42px, 7.5vw, 84px);
+    font-weight: 800;
+    line-height: 1.12;
+    letter-spacing: -1.5px;
+    background: linear-gradient(120deg, #f4f8ff 30%, var(--accent) 55%, var(--accent-2) 80%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: fadeUp .8s .1s ease both;
+  }
+
+  .hero .sub {
+    margin-top: 24px;
+    max-width: 640px;
+    font-size: clamp(16px, 2.2vw, 20px);
+    color: var(--text-dim);
+    animation: fadeUp .8s .2s ease both;
+  }
+  .hero .sub strong { color: var(--text); font-weight: 600; }
+
+  .hero-cta {
+    margin-top: 40px;
+    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+    animation: fadeUp .8s .3s ease both;
+  }
+  .btn {
+    padding: 14px 30px; border-radius: 12px;
+    font-size: 15px; font-weight: 600; text-decoration: none;
+    transition: transform .2s, box-shadow .2s, background .2s;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .btn-primary {
+    color: #06121a;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 6px 30px rgba(56, 189, 248, 0.35);
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(56, 189, 248, 0.5); }
+  .btn-ghost {
+    color: var(--text); border: 1px solid var(--panel-border);
+    background: var(--panel);
+  }
+  .btn-ghost:hover { transform: translateY(-2px); background: rgba(255,255,255,0.08); }
+  .btn .kbd {
+    font-family: var(--mono); font-size: 12px; opacity: .75;
+    padding: 2px 8px; border-radius: 6px; background: rgba(6,18,26,.2);
+  }
+
+  .hero-scroll {
+    position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%);
+    color: var(--text-faint); font-size: 12px; letter-spacing: 2px;
+    animation: fadeUp .8s .6s ease both;
+  }
+  .hero-scroll::after {
+    content: ""; display: block; width: 1px; height: 44px; margin: 10px auto 0;
+    background: linear-gradient(var(--text-faint), transparent);
+    animation: scrollLine 2s infinite;
+  }
+
+  /* ---------- terminal mock ---------- */
+  .terminal-wrap {
+    width: min(860px, 92vw);
+    margin: 0 auto;
+    animation: fadeUp .9s .4s ease both;
+  }
+  .terminal {
+    margin-top: 72px;
+    border-radius: 16px;
+    background: rgba(10, 16, 28, 0.85);
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 80px rgba(56, 189, 248, 0.07);
+    overflow: hidden;
+    text-align: left;
+    backdrop-filter: blur(8px);
+  }
+  .terminal-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 13px 18px;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .term-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .term-dot:nth-child(1) { background: #ff5f57; }
+  .term-dot:nth-child(2) { background: #febc2e; }
+  .term-dot:nth-child(3) { background: #28c840; }
+  .terminal-bar .title { margin-left: 10px; font-size: 12.5px; color: var(--text-faint); font-family: var(--mono); }
+  .terminal-body {
+    padding: 22px 24px 26px;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.9;
+    color: #c3d0e4;
+    min-height: 260px;
+  }
+  .terminal-body .prompt { color: var(--accent); }
+  .terminal-body .cmd { color: #e8edf6; }
+  .terminal-body .comment { color: var(--text-faint); }
+  .terminal-body .ok { color: #4ade80; }
+  .terminal-body .warn { color: #fbbf24; }
+  .cursor {
+    display: inline-block; width: 8px; height: 16px;
+    background: var(--accent); vertical-align: -2px;
+    animation: blink 1s steps(1) infinite;
+    border-radius: 1px;
+  }
+
+  /* ---------- sections ---------- */
+  section { padding: 110px clamp(20px, 5vw, 64px) 40px; max-width: 1120px; margin: 0 auto; }
+
+  .sec-head { text-align: center; margin-bottom: 64px; }
+  .sec-head .eyebrow {
+    font-size: 13px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--accent-2); font-weight: 600; margin-bottom: 14px;
+  }
+  .sec-head h2 { font-size: clamp(28px, 4vw, 42px); font-weight: 800; letter-spacing: -0.5px; }
+  .sec-head p { margin-top: 14px; color: var(--text-dim); max-width: 560px; margin-inline: auto; font-size: 16px; }
+
+  /* ---------- features ---------- */
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .feature {
+    padding: 30px 28px;
+    border-radius: 16px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    transition: transform .25s, border-color .25s, background .25s;
+    position: relative; overflow: hidden;
+  }
+  .feature::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--fc, var(--accent)), transparent);
+    opacity: 0; transition: opacity .25s;
+  }
+  .feature:hover { transform: translateY(-4px); border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.06); }
+  .feature:hover::before { opacity: 1; }
+  .feature .icon {
+    width: 42px; height: 42px; border-radius: 10px;
+    display: grid; place-items: center; font-size: 20px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--panel-border);
+    margin-bottom: 18px;
+  }
+  .feature .icon i { font-size: 20px; color: var(--fc, var(--accent)); }
+  .feature h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+  .feature p { font-size: 14.5px; color: var(--text-dim); }
+
+  /* ---------- terminal section: tool grid ---------- */
+  .tool-band {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center;
+  }
+  @media (max-width: 860px) { .tool-band { grid-template-columns: 1fr; } }
+  .tool-band h2 { font-size: clamp(24px, 3.4vw, 34px); font-weight: 800; letter-spacing: -0.5px; margin-bottom: 18px; }
+  .tool-band > div > p { color: var(--text-dim); font-size: 15.5px; margin-bottom: 22px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 10px; }
+  .tool-tag {
+    font-family: var(--mono); font-size: 13px;
+    padding: 7px 14px; border-radius: 8px;
+    background: rgba(94, 234, 212, 0.06);
+    border: 1px solid rgba(94, 234, 212, 0.2);
+    color: var(--accent);
+  }
+
+  .mini-term {
+    border-radius: 14px; overflow: hidden;
+    background: rgba(10, 16, 28, 0.8);
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    font-family: var(--mono); font-size: 13px; line-height: 2;
+    padding: 22px 24px; color: #c3d0e4;
+  }
+  .mini-term .c { color: var(--text-faint); }
+  .mini-term .g { color: #4ade80; }
+  .mini-term .a { color: var(--accent); }
+
+  /* ---------- install ---------- */
+  .install {
+    background:
+      radial-gradient(ellipse 60% 80% at 50% 0%, rgba(94, 234, 212, 0.07), transparent 70%),
+      var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 20px;
+    padding: clamp(30px, 5vw, 56px);
+    margin-top: 30px;
+  }
+  .install h2 { text-align: center; font-size: clamp(24px, 3.4vw, 34px); font-weight: 800; margin-bottom: 10px; }
+  .install .sub { text-align: center; color: var(--text-dim); margin-bottom: 40px; font-size: 15px; }
+  .install .step { margin-bottom: 28px; }
+  .install .step-label {
+    font-size: 13px; color: var(--text-faint); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .install .step-label .num {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(94, 234, 212, 0.12); color: var(--accent);
+    font-family: var(--mono); font-size: 12px;
+    border: 1px solid rgba(94, 234, 212, 0.3);
+  }
+  .code-block {
+    position: relative;
+    background: rgba(7, 11, 18, 0.9);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    font-family: var(--mono); font-size: 13.5px;
+    color: #d7e2f4;
+    overflow-x: auto;
+  }
+  .code-block .prompt { color: var(--accent-2); }
+  .code-block .dim { color: var(--text-faint); }
+  .code-block .copy {
+    position: absolute; top: 10px; right: 10px;
+    background: rgba(255,255,255,0.06); border: 1px solid var(--panel-border);
+    color: var(--text-dim); font-size: 11px; padding: 4px 10px; border-radius: 6px;
+    cursor: pointer; font-family: var(--sans); transition: all .2s;
+  }
+  .code-block .copy:hover { color: var(--text); background: rgba(255,255,255,0.12); }
+  .code-block .copy.copied { color: #4ade80; border-color: rgba(74, 222, 128, 0.4); }
+
+  .env-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 34px; }
+  .env-item {
+    padding: 16px 18px; border-radius: 12px;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--panel-border);
+  }
+  .env-item .k { font-family: var(--mono); font-size: 12.5px; color: var(--accent-2); display: block; margin-bottom: 6px; }
+  .env-item .v { font-size: 13px; color: var(--text-dim); }
+
+  /* ---------- final CTA ---------- */
+  .final-cta { text-align: center; padding: 120px 24px 100px; }
+  .final-cta h2 {
+    font-size: clamp(30px, 5vw, 52px); font-weight: 800; letter-spacing: -1px;
+    background: linear-gradient(120deg, #f4f8ff 30%, var(--accent) 70%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .final-cta p { color: var(--text-dim); margin-top: 18px; font-size: 17px; }
+  .final-cta .hero-cta { margin-top: 36px; }
+
+  /* ---------- footer ---------- */
+  footer {
+    border-top: 1px solid var(--panel-border);
+    padding: 40px clamp(20px, 5vw, 64px);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 16px;
+    color: var(--text-faint); font-size: 13.5px;
+  }
+  footer .links { display: flex; gap: 24px; }
+  footer a { color: var(--text-dim); text-decoration: none; transition: color .2s; }
+  footer a:hover { color: var(--text); }
+
+  /* ---------- reveal on scroll ---------- */
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  /* ---------- animations ---------- */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  @keyframes scrollLine { 0% { transform: scaleY(0); transform-origin: top; } 45% { transform: scaleY(1); transform-origin: top; } 55% { transform: scaleY(1); transform-origin: bottom; } 100% { transform: scaleY(0); transform-origin: bottom; } }
+</style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+<div class="aurora aurora-1"></div>
+<div class="aurora aurora-2"></div>
+<div class="aurora aurora-3"></div>
+<div class="bg-grid"></div>
+<canvas id="bg-canvas" aria-hidden="true"></canvas>
+
+<nav id="nav">
+  <div class="brand"><span class="brand-mark">L</span> Loom</div>
+  <div class="nav-links">
+    <a href="#features" class="hide-sm">特性</a>
+    <a href="#cli" class="hide-sm">CLI</a>
+    <a href="#install" class="hide-sm">安装</a>
+    <a href="https://github.com/liubang/playground/tree/main/go/pl/loom" target="_blank" rel="noopener" class="hide-sm">GitHub</a>
+    <a class="nav-cta" href="#install">立即安装</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-badge"><span class="dot"></span> Loom · 生产级 AI Coding Agent</div>
+  <h1>让 AI 真正<br>动手写代码</h1>
+  <p class="sub">Loom 不是一个模型 API 包装器，而是一个 <strong>Agent Harness</strong>：受控工具运行时、可恢复可取消的 Agent 状态机、事件溯源的会话持久化，在有限预算内迭代直到任务完成。</p>
+  <div class="hero-cta">
+    <a class="btn btn-primary" href="#install">安装 Loom <span class="kbd">bazel run</span></a>
+    <a class="btn btn-ghost" href="https://github.com/liubang/playground/tree/main/go/pl/loom" target="_blank" rel="noopener">查看源码 →</a>
+  </div>
+
+  <div class="terminal-wrap">
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+        <span class="title">loom — zsh</span>
+      </div>
+      <div class="terminal-body" id="term-body"></div>
+    </div>
+  </div>
+
+  <div class="hero-scroll">SCROLL</div>
+</header>
+
+<section id="features">
+  <div class="sec-head reveal">
+    <div class="eyebrow">Why Loom</div>
+    <h2>为软件工程任务而生</h2>
+    <p>不是聊天机器人，而是能在真实仓库里完成工作的 Agent：读代码、改文件、跑命令、验证结果。</p>
+  </div>
+  <div class="features">
+    <div class="feature reveal" style="--fc:#5eead4">
+      <div class="icon"><i class="fa-solid fa-terminal"></i></div>
+      <h3>交互式 TUI</h3>
+      <p>流式输出、工具调用块、diff 预览、审批弹窗、会话恢复与历史浏览，基于 Bubble Tea 的沉浸式终端体验。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#38bdf8">
+      <div class="icon"><i class="fa-solid fa-bolt"></i></div>
+      <h3>Headless 模式</h3>
+      <p><code>loom run</code> 单次执行，最终回答写 stdout、诊断写 stderr；非 TTY 下审批自动拒绝（fail-closed），适合管道与脚本。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#fb923c">
+      <div class="icon"><i class="fa-solid fa-globe"></i></div>
+      <h3>Web UI</h3>
+      <p><code>loom serve</code> 启动 HTTP/SSE 服务，浏览器中管理会话、查看流式事件与工具调用，团队远程协作。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#34d399">
+      <div class="icon"><i class="fa-solid fa-desktop"></i></div>
+      <h3>桌面版</h3>
+      <p>基于 Wails 的原生 macOS 应用（Apple Silicon / Intel），开箱即用的图形界面，无需接触终端。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#a78bfa">
+      <div class="icon"><i class="fa-solid fa-timeline"></i></div>
+      <h3>事件溯源会话</h3>
+      <p>所有会话事件与检查点持久化于 SQLite，支持崩溃恢复、跨进程 resume、完整历史回放。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#f472b6">
+      <div class="icon"><i class="fa-solid fa-shield-halved"></i></div>
+      <h3>安全基座</h3>
+      <p>工作区路径边界、命令沙箱（macOS sandbox-exec/Seatbelt）、环境变量白名单、R0–R4 风险分级与交互审批。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#fbbf24">
+      <div class="icon"><i class="fa-solid fa-toolbox"></i></div>
+      <h3>丰富的内置工具</h3>
+      <p>read_file / edit / write / run_cmd / exec_session / git_diff / lint / web_fetch / update_goal / update_plan …</p>
+    </div>
+    <div class="feature reveal" style="--fc:#4ade80">
+      <div class="icon"><i class="fa-solid fa-puzzle-piece"></i></div>
+      <h3>Skills 扩展</h3>
+      <p>从工作区与用户目录发现 SKILL.md 技能，清单注入系统提示词，正文按需渐进披露。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#22d3ee">
+      <div class="icon"><i class="fa-solid fa-bullseye"></i></div>
+      <h3>上下文工程</h3>
+      <p>上下文窗口占用感知、自动压缩（掩码 + 摘要交接）、预算提醒，长任务不失控。</p>
+    </div>
+    <div class="feature reveal" style="--fc:#818cf8">
+      <div class="icon"><i class="fa-solid fa-chart-line"></i></div>
+      <h3>可观测性</h3>
+      <p>OpenTelemetry / Langfuse 追踪（默认关闭），Context Manifest 审计每次模型请求的上下文构成。</p>
+    </div>
+  </div>
+</section>
+
+<section id="cli">
+  <div class="tool-band">
+    <div class="reveal">
+      <div class="eyebrow">Model-Agnostic</div>
+      <h2>一个 Agent Harness，<br>任意模型端点</h2>
+      <p>模型无关的消息/工具协议，兼容任意 OpenAI 兼容端点。在 <code>~/.loom/config.yaml</code> 中用 <code>base_url</code> 切换 API 提供商、<code>wire_api</code> 切换线协议（chat / responses / messages）。</p>
+      <div class="tools">
+        <span class="tool-tag">gpt-4o</span>
+        <span class="tool-tag">deepseek</span>
+        <span class="tool-tag">qwen</span>
+        <span class="tool-tag">glm</span>
+        <span class="tool-tag">ollama</span>
+        <span class="tool-tag">vllm</span>
+        <span class="tool-tag">…任何 OpenAI 兼容端点</span>
+      </div>
+    </div>
+    <div class="mini-term reveal">
+      <div><span class="c"># loom run "修复 ./pkg 下的编译错误"</span></div>
+      <div><span class="a">●</span> 已读取 <span class="g">14</span> 个文件，定位到 <span class="g">3</span> 处编译错误</div>
+      <div><span class="a">●</span> run_cmd: <span class="c">bazel build //pkg/...</span> <span class="g">✓ 通过</span></div>
+      <div><span class="a">●</span> edit: <span class="c">src/types.go:217</span> <span class="g">+4 -2</span></div>
+      <div><span class="a">●</span> run_cmd: <span class="c">go test ./pkg/...</span> <span class="g">✓ 全部通过</span></div>
+      <div><span class="a">●</span> 任务完成，用时 <span class="g">1m 42s</span>，预算 <span class="g">38%</span> 剩余</div>
+      <div><span class="c">$ </span><span class="cursor"></span></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="install reveal">
+    <h2>两分钟上手</h2>
+    <p class="sub">CLI 支持 macOS / Linux · 桌面版支持 macOS（Apple Silicon / Intel）· 任意 OpenAI 兼容模型端点</p>
+
+    <div class="step">
+      <div class="step-label"><span class="num">1</span> 安装</div>
+      <div class="code-block">
+        <button class="copy" data-copy="bazel run //go/pl/loom/cmd/loom:install">复制</button>
+        <span class="prompt">$</span> <span>bazel run //go/pl/loom/cmd/loom:install</span> <span class="dim"># 从源码安装 CLI（macOS / Linux）</span>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-label"><span class="num">2</span> 配置</div>
+      <div class="code-block">
+        <button class="copy" data-copy="loom
+# 首次运行自动生成 ~/.loom/config.yaml 模板
+# 编辑填入 api_key（或 api_key_env）与 base_url，保存后重新执行">复制</button>
+        <span class="prompt">$</span> <span>loom</span> <span class="dim"># 首次运行：自动生成 ~/.loom/config.yaml 模板</span><br>
+        <span class="prompt">$</span> <span>$EDITOR ~/.loom/config.yaml</span> <span class="dim"># 填入 api_key（或 api_key_env）、base_url、model</span>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-label"><span class="num">3</span> 开始</div>
+      <div class="code-block">
+        <button class="copy" data-copy="loom">复制</button>
+        <span class="prompt">$</span> <span>loom</span> <span class="dim"># 进入交互式 TUI</span><br>
+        <span class="prompt">$</span> <span>loom run "修复 ./pkg 下的编译错误"</span> <span class="dim"># 单次执行（headless）</span><br>
+        <span class="prompt">$</span> <span>loom resume &lt;session-id&gt; "继续"</span> <span class="dim"># 恢复会话</span><br>
+        <span class="prompt">$</span> <span>loom serve</span> <span class="dim"># 启动 Web UI（浏览器访问）</span>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-label"><span class="num">4</span> 桌面版（macOS）</div>
+      <div class="code-block">
+        <button class="copy" data-copy="bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_app">复制</button>
+        <span class="prompt">$</span> <span>bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_app</span> <span class="dim"># 或从官网下载 DMG（Apple Silicon / Intel）</span>
+      </div>
+    </div>
+
+    <div class="env-grid">
+      <div class="env-item"><span class="k">LOOM_HOME</span><span class="v">数据根目录（默认 ~/.loom）：配置、会话库、日志、记忆、规则、技能</span></div>
+      <div class="env-item"><span class="k">context_window</span><span class="v">config.yaml 字段：模型上下文窗口 token 数，驱动自动压缩</span></div>
+      <div class="env-item"><span class="k">LOOM_LANGFUSE_PUBLIC_KEY / SECRET_KEY</span><span class="v">经 config.yaml 的 public_key_env / secret_key_env 引用的追踪密钥（默认关闭）</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="final-cta">
+  <h2 class="reveal">让 AI 替你写代码，<br>你来掌控一切</h2>
+  <p class="reveal">安全、可控、可恢复、可观测。</p>
+  <div class="hero-cta reveal">
+    <a class="btn btn-primary" href="#install">安装 Loom</a>
+    <a class="btn btn-ghost" href="https://github.com/liubang/playground/tree/main/go/pl/loom/docs" target="_blank" rel="noopener">阅读设计文档 →</a>
+  </div>
+</section>
+
+<footer>
+  <div>© 2026 Loom · Apache License 2.0 · loom.liubang.cc</div>
+  <div class="links">
+    <a href="https://github.com/liubang/playground" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://liubang.cc" target="_blank" rel="noopener">关于作者</a>
+  </div>
+</footer>
+
+<script>
+// ---------- nav scroll state ----------
+const nav = document.getElementById('nav');
+addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', scrollY > 10);
+}, { passive: true });
+
+// ---------- reveal on scroll ----------
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
+  }
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+// ---------- copy buttons ----------
+document.querySelectorAll('.copy').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(btn.dataset.copy);
+      btn.textContent = '已复制';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('copied'); }, 1600);
+    } catch (_) { /* clipboard unavailable */ }
+  });
+});
+
+// ---------- background: particle field ----------
+(function () {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const canvas = document.getElementById('bg-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const COLORS = ['94,234,212', '56,189,248', '167,139,250', '232,237,246'];
+  let W = 0, H = 0, dpr = 1, parts = [];
+  const mouse = { x: -9999, y: -9999, active: false };
+
+  function resize() {
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    W = canvas.width = innerWidth * dpr;
+    H = canvas.height = innerHeight * dpr;
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+    const count = Math.min(150, Math.floor((innerWidth * innerHeight) / 14000));
+    parts = [];
+    for (let i = 0; i < count; i++) {
+      parts.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.42 * dpr,
+        vy: (Math.random() - 0.5) * 0.42 * dpr,
+        r: (Math.random() * 1.7 + 0.9) * dpr,
+        c: COLORS[Math.floor(Math.random() * COLORS.length)],
+        a: Math.random() * 0.4 + 0.4,
+        tw: Math.random() * Math.PI * 2,   // twinkle phase
+        ts: Math.random() * 0.045 + 0.015, // twinkle speed
+      });
+    }
+  }
+
+  function tick() {
+    ctx.clearRect(0, 0, W, H);
+    const LINK = 130 * dpr, M_LINK = 200 * dpr, R = 120 * dpr;
+    const mx = mouse.x, my = mouse.y, inView = mouse.active;
+
+    // halo glow around the cursor
+    if (inView) {
+      const g = ctx.createRadialGradient(mx, my, 0, mx, my, R * 1.15);
+      g.addColorStop(0, 'rgba(94,234,212,0.16)');
+      g.addColorStop(0.55, 'rgba(56,189,248,0.07)');
+      g.addColorStop(1, 'rgba(56,189,248,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(mx, my, R * 1.15, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // move particles, twinkle, and repel from cursor (strong)
+    for (const p of parts) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < -20) p.x = W + 20; else if (p.x > W + 20) p.x = -20;
+      if (p.y < -20) p.y = H + 20; else if (p.y > H + 20) p.y = -20;
+      if (inView) {
+        const dx = p.x - mx, dy = p.y - my;
+        const md = Math.hypot(dx, dy);
+        if (md < R && md > 0.01) {
+          const f = (1 - md / R) * 2.2;
+          p.x += (dx / md) * f * dpr;
+          p.y += (dy / md) * f * dpr;
+        }
+      }
+      p.tw += p.ts;
+      const alpha = p.a * (0.55 + 0.45 * Math.sin(p.tw));
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${p.c},${alpha})`;
+      ctx.fill();
+    }
+
+    // links between close particles + links to cursor
+    for (let i = 0; i < parts.length; i++) {
+      const a = parts[i];
+      for (let j = i + 1; j < parts.length; j++) {
+        const b = parts[j];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < LINK * LINK) {
+          const alpha = (1 - Math.sqrt(d2) / LINK) * 0.22;
+          ctx.strokeStyle = `rgba(120,190,255,${alpha})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+      if (inView) {
+        const dx = a.x - mx, dy = a.y - my;
+        const d = Math.hypot(dx, dy);
+        if (d < M_LINK) {
+          const alpha = (1 - d / M_LINK) * 0.4;
+          ctx.strokeStyle = `rgba(94,234,212,${alpha})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(mx, my);
+          ctx.stroke();
+        }
+      }
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  addEventListener('resize', resize);
+  addEventListener('pointermove', (e) => {
+    mouse.x = e.clientX * dpr;
+    mouse.y = e.clientY * dpr;
+    mouse.active = true;
+  }, { passive: true });
+  addEventListener('pointerleave', () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; });
+
+  resize();
+  requestAnimationFrame(tick);
+})();
+
+// ---------- grid parallax ----------
+(function () {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const grid = document.querySelector('.bg-grid');
+  if (!grid) return;
+  let tx = 0, ty = 0, cx = 0, cy = 0, raf = null;
+  addEventListener('pointermove', (e) => {
+    tx = (e.clientX / innerWidth - 0.5) * -18;
+    ty = (e.clientY / innerHeight - 0.5) * -18;
+    if (!raf) loop();
+  }, { passive: true });
+  function loop() {
+    cx += (tx - cx) * 0.08;
+    cy += (ty - cy) * 0.08;
+    grid.style.transform = `translate3d(${cx}px, ${cy}px, 0)`;
+    raf = (Math.abs(tx - cx) > 0.1 || Math.abs(ty - cy) > 0.1) ? requestAnimationFrame(loop) : null;
+  }
+})();
+
+// ---------- terminal typing animation ----------
+const lines = [
+  { text: '# loom run "修复 ./pkg 下的编译错误"', cls: 'comment' },
+  { text: '● 计划: 读取代码 -> 定位错误 -> 修复 -> 验证', cls: '' },
+  { text: '● read_file: 14 个文件, 找到 3 处编译错误', cls: '' },
+  { text: '● run_cmd: bazel build //pkg/...  ✓ 通过', cls: 'ok' },
+  { text: '● edit: src/types.go:217 (+4 -2)', cls: '' },
+  { text: '● run_cmd: go test ./pkg/...  ✓ 全部通过', cls: 'ok' },
+  { text: '● 任务完成, 用时 1m 42s, 预算剩余 38%', cls: 'warn' },
+  { text: 'loom> _', cls: '' },
+];
+const body = document.getElementById('term-body');
+let li = 0, ci = 0, started = false;
+
+function typeNext() {
+  if (li >= lines.length) {
+    setTimeout(() => { body.innerHTML = ''; li = 0; ci = 0; typeNext(); }, 5000);
+    return;
+  }
+  const line = lines[li];
+  const prefix = line.cls === 'comment' ? '' : '<span class="prompt">$ </span>';
+  const t = line.text;
+  if (ci <= t.length) {
+    const shown = t.slice(0, ci);
+    const cls = line.cls ? ` class="${line.cls}"` : '';
+    body.innerHTML = lines.slice(0, li).map(l => l.cls === 'comment'
+      ? `<span class="comment">${l.text}</span>`
+      : `<span class="prompt">$ </span>${l.text}`).join('<br>')
+      + (li > 0 ? '<br>' : '')
+      + (line.cls === 'comment' ? `<span class="comment">${shown}</span>` : `${prefix}<span${cls}>${shown}</span>`)
+      + '<span class="cursor"></span>';
+    ci++;
+    setTimeout(typeNext, line.cls === 'comment' ? 32 : 26);
+  } else {
+    li++; ci = 0;
+    setTimeout(typeNext, 380);
+  }
+}
+
+// start typing when hero enters viewport
+const hero = document.querySelector('.hero');
+new IntersectionObserver((entries, obs) => {
+  if (entries[0].isIntersecting && !started) { started = true; obs.disconnect(); typeNext(); }
+}, { threshold: 0.4 }).observe(hero);
+</script>
+</body>
+</html>

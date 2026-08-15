@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | Draft v1（V1 同步版已实现；V2 异步版为演进方向） |
+| 状态 | **已实现**（V1 同步版与 V2 异步版均已落地：`delegate_task` 同步/异步、`wait_subagent`、`resume_subagent`、`subagent.*` 配置；原 Draft v1 中"V2 异步版为演进方向"已兑现） |
 | 日期 | 2026-07-31 |
 | 关联文档 | `DESIGN.md`（§15 扩展与前端协议、§22 关键取舍）、`CONTEXT_DESIGN.md`、`PERMISSION_DESIGN.md`、`STEER_DESIGN.md` |
 | 目标读者 | loom 运行时与前端贡献者 |
@@ -25,7 +25,7 @@
 
 ### 1.1 非目标（本期不做）
 
-- **异步 spawn/wait 模型**（codex V2 路线：spawn 立即返回、邮箱通信、父子并发）：需要重写 Controller 并发模型与审批桥，见 §8 演进路径；
+- **异步 spawn/wait 模型**（codex V2 路线：spawn 立即返回、邮箱通信、父子并发）：需要重写 Controller 并发模型与审批桥，见 §8 演进路径——**已于 2026-08 实现**（`delegate_task async=true`、`wait_subagent`、`resume_subagent`）；
 - **可写子 Agent**：写操作、审批桥接留待后续；子 Agent 的写需求由主 Agent 消化结论后自行执行（主 Agent 负责验证及修改）；
 - **递归委托**：子 Agent 的工具集不含 `delegate_task`，深度恒为 1；
 - **fork 父上下文**：`fork_turns` 语义预留（§8），V1 子 Agent 一律全新上下文；
@@ -128,7 +128,7 @@ codex 的 multi-agent 仍在快速演进：V1/V2 并存、`multiAgentMode` 已�
 
 ### 4.2 子 Agent 工具集（只读子集）
 
-`read_file`、`list_dir`、`search`、`glob`、`git_status`、`git_diff`、`git_log`、`web_fetch`。
+`read_file`、`list_dir`、`grep`、`glob`、`view_image`、`present_image`、`git_status`、`git_diff`、`git_log`、`git_merge_base`、`git_blame`、`web_fetch`、`web_search`。
 明确排除：`edit`/`write`（写）、`run_cmd`（进程执行）、`lint`（进程执行）、`update_goal`/`update_plan`（父 run 状态）、`ask_user`（无交互对象）、`delegate_task`（递归）。
 
 ### 4.3 子 Agent 系统提示
@@ -205,7 +205,7 @@ subagent:
 
 1. 父 run 崩溃恢复后，是否应通过委托边找回已完成子 run 的结论（避免重复委托烧钱）？需要 `RecoverySpec` 扩展 `subagent_run` kind + 子 session 终态查询；
 2. 子 Agent 的 trace 与父 trace 在 Langfuse 侧的关联展示（当前靠 RunMeta 的 parent 引用，是否需要一等字段）；
-3. 并行 delegate 时只读工具的并发安全审计（`web_fetch` artifact staging、`search` runner 复用）。
+3. 并行 delegate 时只读工具的并发安全审计（`web_fetch` artifact staging、`grep` runner 复用）。
 
 ---
 
@@ -245,7 +245,7 @@ subagent:
 
 ### 11.1 机制
 
-1. **opt-in 接口**：`domain.ConcurrentSafely`（`ConcurrentSafe() bool`）是工具实现的显式声明——共享状态必须只有 mutex 保护的基础设施（file-state book、artifact store、response cache），副作用必须限于本调用。已接入：全部只读工具（read_file/list_dir/search/glob/git_*/read_skill/web_fetch）与 `delegate_task`（每次委托都是全新隔离 session）。未接入（默认串行）：edit/write/run_cmd/lint/update_goal/update_plan/ask_user；
+1. **opt-in 接口**：`domain.ConcurrentSafely`（`ConcurrentSafe() bool`）是工具实现的显式声明——共享状态必须只有 mutex 保护的基础设施（file-state book、artifact store、response cache），副作用必须限于本调用。已接入：全部只读工具（read_file/list_dir/grep/glob/view_image/present_image/git_*/web_fetch/web_search/read_skill）与 `delegate_task`（每次委托都是全新隔离 session）。未接入（默认串行）：edit/write/run_cmd/lint/update_goal/update_plan/ask_user/browser；
 2. **分段**：一个批次的调用按原始顺序切成「连续安全调用」的最大段。段内并行，段间严格串行——写操作永远不会和读操作重叠，顺序语义不受影响；
 3. **持久化不变量不变**：并行段的**全部** `tool.execution_started` 事件在任何副作用发生前一次性 flush——崩溃恢复对每个 started-but-uncompleted 调用的 reconcile 证据与串行路径完全一致；
 4. **投影保持单线程**：只有 `tool.Execute` 并发；结果收集后**按调用顺序**串行记录（RecordToolResult / trace / 用量折算 / runaway 计数），transcript、事件序列、预算记账全部确定；
