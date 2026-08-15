@@ -63,6 +63,13 @@ jobs:
           repository-cache: true
           disk-cache: ${{ github.workflow }}-${{ runner.os }}
 
+      # package_release.sh shells out to `go build` (cross-compile CLI +
+      # desktop), so a Go toolchain on PATH is required even though the
+      # bundle itself is built with Bazel.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+
       - name: build release artifacts
         run: |
           bazel run \
