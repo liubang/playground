@@ -13,28 +13,34 @@
 // limitations under the License.
 
 // Package version is the single source of truth for the Loom version
-// identity. The VERSION file in this directory holds the canonical string;
-// every consumer derives from it:
+// identity. The version is stamped at BUILD time from the workspace
+// status (tools/workspace_status.sh) as "<yyyymmdd>.<git-short-hash>"
+// (e.g. "20260815.82f4e2a53") — no hand-maintained release numbers.
 //
-//   - Go binaries (cmd/loom, cmd/loom-desktop) read Version/Release below.
-//   - macOS packaging renders cmd/loom-desktop/macos/Info.plist.tmpl from
-//     the same VERSION file at build time (see cmd/loom-desktop/BUILD).
+// Consumers:
+//   - Go binaries (cmd/loom, cmd/loom-desktop) carry Version via bazel
+//     x_defs on their go_binary targets ({STABLE_LOOM_VERSION}).
+//   - macOS packaging renders cmd/loom-desktop/macos/Info.plist.tmpl
+//     from the same workspace status keys (cmd/loom-desktop/BUILD).
 //
-// To cut a new version, edit VERSION and nothing else.
+// Unstamped builds — plain `go build`, `go test` — report "dev".
 package version
 
-import (
-	_ "embed"
-	"strings"
-)
+import "strings"
 
-//go:embed VERSION
-var rawVersion string
+// Version is the full version string, e.g. "20260815.82f4e2a"; "dev"
+// when the build was not stamped.
+var Version = "dev"
 
-var (
-	// Version is the full version string, e.g. "0.2.0-dev".
-	Version = strings.TrimSpace(rawVersion)
-	// Release is Version without any pre-release suffix, e.g. "0.2.0".
-	// It is suitable for CFBundleShortVersionString, which forbids suffixes.
-	Release = strings.SplitN(Version, "-", 2)[0]
-)
+// Release is the numeric-only prefix of Version ("20260815"), suitable
+// for CFBundleShortVersionString, which forbids non-numeric parts.
+var Release = releaseOf(Version)
+
+// releaseOf strips the git-hash segment: everything before the first
+// "." of a stamped "<date>.<hash>"; a hashless value stays as is.
+func releaseOf(v string) string {
+	if i := strings.IndexByte(v, '.'); i >= 0 {
+		return v[:i]
+	}
+	return v
+}
