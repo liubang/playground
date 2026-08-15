@@ -97,6 +97,17 @@ func (d ToolDefinition) Validate() error {
 	if len(d.OutputSchema) > 0 && !json.Valid(d.OutputSchema) {
 		return fmt.Errorf("invalid output_schema JSON")
 	}
+	// Fail loud on capabilities that have no risk mapping: a new
+	// Capability forgotten in capabilityRiskTable would otherwise default
+	// to an arbitrary level silently (REVIEW N3). Every registry
+	// registration runs Validate, so the miss surfaces at startup, and
+	// MCP/config tool definitions with a stray capability are rejected
+	// instead of silently graded.
+	for _, cap := range d.Capabilities {
+		if _, ok := capabilityRiskTable[cap]; !ok {
+			return fmt.Errorf("capability %q has no risk mapping; add it to capabilityRiskTable in domain/tool.go", cap)
+		}
+	}
 	return nil
 }
 
@@ -111,21 +122,31 @@ func (d ToolDefinition) Risk() RiskLevel {
 	return max
 }
 
+// capabilityRiskTable is the single source of truth mapping every known
+// capability to its risk level. Validate rejects capabilities missing
+// from this table, and capabilityRisk panics on them as a defensive
+// path — the two cannot drift apart.
+var capabilityRiskTable = map[Capability]RiskLevel{
+	CapUserInteract:    R0,
+	CapFSRead:          R1,
+	CapGitRead:         R1,
+	CapFSWrite:         R2,
+	CapProcessExec:     R2,
+	CapFSDelete:        R3,
+	CapWorkspaceOut:    R3,
+	CapNetworkConnect:  R3,
+	CapProcessBg:       R3,
+	CapProcessInteract: R3,
+	CapGitRemoteWrite:  R4,
+	CapSecretUse:       R4,
+	CapAgentDelegate:   R4,
+}
+
 func capabilityRisk(c Capability) RiskLevel {
-	switch c {
-	case CapUserInteract:
-		return R0
-	case CapFSRead, CapGitRead:
-		return R1
-	case CapFSWrite, CapProcessExec:
-		return R2
-	case CapFSDelete, CapWorkspaceOut, CapNetworkConnect, CapProcessBg, CapProcessInteract:
-		return R3
-	case CapGitRemoteWrite, CapSecretUse, CapAgentDelegate:
-		return R4
-	default:
-		return R2
+	if r, ok := capabilityRiskTable[c]; ok {
+		return r
 	}
+	panic("capability " + string(c) + " has no risk mapping; add it to capabilityRiskTable in domain/tool.go")
 }
 
 // ToolCall represents a model's invocation of a tool.

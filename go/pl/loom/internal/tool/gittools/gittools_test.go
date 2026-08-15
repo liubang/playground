@@ -28,12 +28,13 @@ import (
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 func TestGitStatusToolClassifiesChanges(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	mustWriteFile(t, filepath.Join(repoRoot, "tracked.txt"), []byte("base\n"))
@@ -48,7 +49,7 @@ func TestGitStatusToolClassifiesChanges(t *testing.T) {
 	mustWriteFile(t, filepath.Join(repoRoot, "mixed.txt"), []byte("v2\n"))
 	mustWriteFile(t, filepath.Join(repoRoot, "untracked.txt"), []byte("u\n"))
 
-	tool, err := NewGitStatusTool(validator)
+	tool, err := NewGitStatusTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitStatusTool() error = %v", err)
 	}
@@ -82,7 +83,7 @@ func TestGitStatusToolClassifiesChanges(t *testing.T) {
 
 func TestGitDiffToolSupportsStagedAndPath(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	mustWriteFile(t, filepath.Join(repoRoot, "tracked.txt"), []byte("one\ntwo\n"))
@@ -94,7 +95,7 @@ func TestGitDiffToolSupportsStagedAndPath(t *testing.T) {
 	mustWriteFile(t, filepath.Join(repoRoot, "other.txt"), []byte("other changed\n"))
 	gitRun(t, repoRoot, "add", "tracked.txt")
 
-	tool, err := NewGitDiffTool(validator)
+	tool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -163,17 +164,17 @@ func TestGitDiffToolSupportsStagedAndPath(t *testing.T) {
 
 func TestGitToolsRejectTamperingAndEscapes(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 	mustWriteFile(t, filepath.Join(repoRoot, "tracked.txt"), []byte("base\n"))
 	gitRun(t, repoRoot, "add", "tracked.txt")
 	gitRun(t, repoRoot, "commit", "-m", "init")
 
-	statusTool, err := NewGitStatusTool(validator)
+	statusTool, err := NewGitStatusTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitStatusTool() error = %v", err)
 	}
-	diffTool, err := NewGitDiffTool(validator)
+	diffTool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -224,7 +225,7 @@ func TestGitToolsRejectTamperingAndEscapes(t *testing.T) {
 
 func TestGitDiffToolRejectsPathspecMagicExpansion(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	literalMagic := ":(glob)*.txt"
@@ -236,7 +237,7 @@ func TestGitDiffToolRejectsPathspecMagicExpansion(t *testing.T) {
 	mustWriteFile(t, filepath.Join(repoRoot, literalMagic), []byte("ONE\n"))
 	mustWriteFile(t, filepath.Join(repoRoot, "other.txt"), []byte("TWO\n"))
 
-	tool, err := NewGitDiffTool(validator)
+	tool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -278,7 +279,7 @@ func TestGitDiffToolRejectsPathspecMagicExpansion(t *testing.T) {
 
 func TestGitDiffToolSupportsLiteralGlobCharacters(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	literalName := "star[1]?.txt"
@@ -290,7 +291,7 @@ func TestGitDiffToolSupportsLiteralGlobCharacters(t *testing.T) {
 	mustWriteFile(t, filepath.Join(repoRoot, literalName), []byte("after\n"))
 	mustWriteFile(t, filepath.Join(repoRoot, "other.txt"), []byte("other changed\n"))
 
-	tool, err := NewGitDiffTool(validator)
+	tool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -317,7 +318,7 @@ func TestGitDiffToolSupportsLiteralGlobCharacters(t *testing.T) {
 
 func TestGitDiffToolTruncatesLargeOutput(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	base := strings.Repeat("base line for large diff\n", 5000)
@@ -327,7 +328,7 @@ func TestGitDiffToolTruncatesLargeOutput(t *testing.T) {
 	gitRun(t, repoRoot, "commit", "-m", "init")
 	mustWriteFile(t, filepath.Join(repoRoot, "large.txt"), []byte(changed))
 
-	tool, err := NewGitDiffTool(validator)
+	tool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -363,7 +364,7 @@ func ensureGitAvailable(t *testing.T) {
 }
 
 func TestGitLogToolReturnsRecentCommits(t *testing.T) {
-	validator, _, repoRoot := newGitValidator(t)
+	validator, runner, _, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\n"))
 	gitRun(t, repoRoot, "add", ".")
@@ -372,7 +373,7 @@ func TestGitLogToolReturnsRecentCommits(t *testing.T) {
 	gitRun(t, repoRoot, "add", ".")
 	gitRun(t, repoRoot, "commit", "-m", "second commit")
 
-	tool, err := NewGitLogTool(validator)
+	tool, err := NewGitLogTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitLogTool() error = %v", err)
 	}
@@ -403,7 +404,7 @@ func TestGitLogToolReturnsRecentCommits(t *testing.T) {
 // when the repo lives in a workspace subdirectory (REVIEW H8).
 func TestGitLogToolPathFilterWithSubdirRepoRoot(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, _, repoRoot := newGitValidator(t)
+	validator, runner, _, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\n"))
 	gitRun(t, repoRoot, "add", ".")
@@ -412,7 +413,7 @@ func TestGitLogToolPathFilterWithSubdirRepoRoot(t *testing.T) {
 	gitRun(t, repoRoot, "add", ".")
 	gitRun(t, repoRoot, "commit", "-m", "touch b")
 
-	tool, err := NewGitLogTool(validator)
+	tool, err := NewGitLogTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitLogTool() error = %v", err)
 	}
@@ -435,13 +436,13 @@ func TestGitLogToolPathFilterWithSubdirRepoRoot(t *testing.T) {
 // repo_root and limit are optional: empty values default to "." (workspace
 // root) and 20 respectively.
 func TestGitToolsDefaultRepoRootAndLimit(t *testing.T) {
-	validator, workspaceRoot, _ := newGitValidator(t)
+	validator, runner, workspaceRoot, _ := newGitValidator(t)
 	configureGitRepo(t, workspaceRoot)
 	mustWriteFile(t, filepath.Join(workspaceRoot, "a.txt"), []byte("one\n"))
 	gitRun(t, workspaceRoot, "add", ".")
 	gitRun(t, workspaceRoot, "commit", "-m", "initial")
 
-	statusTool, err := NewGitStatusTool(validator)
+	statusTool, err := NewGitStatusTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitStatusTool() error = %v", err)
 	}
@@ -454,7 +455,7 @@ func TestGitToolsDefaultRepoRootAndLimit(t *testing.T) {
 		t.Fatalf("git_status Execute() status = %s, want success: %+v", result.Status, result.Error)
 	}
 
-	logTool, err := NewGitLogTool(validator)
+	logTool, err := NewGitLogTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitLogTool() error = %v", err)
 	}
@@ -478,14 +479,14 @@ func TestGitToolsDefaultRepoRootAndLimit(t *testing.T) {
 // A missing repo_root must be named in the error so the model can
 // correct course without guessing.
 func TestResolveRepoRootErrorNamesPath(t *testing.T) {
-	validator, _, _ := newGitValidator(t)
+	validator, _, _, _ := newGitValidator(t)
 	_, err := resolveRepoRoot(validator, "no/such/repo")
 	if err == nil || !strings.Contains(err.Error(), `repo_root does not exist: "no/such/repo"`) {
 		t.Fatalf("error = %v, want the offending path named", err)
 	}
 }
 
-func newGitValidator(t *testing.T) (*workspacepkg.PathValidator, string, string) {
+func newGitValidator(t *testing.T) (*workspacepkg.PathValidator, *process.Runner, string, string) {
 	t.Helper()
 	workspaceRoot := filepath.Join(t.TempDir(), "workspace")
 	repoRoot := filepath.Join(workspaceRoot, "repo")
@@ -494,7 +495,16 @@ func newGitValidator(t *testing.T) (*workspacepkg.PathValidator, string, string)
 	if err != nil {
 		t.Fatalf("NewPathValidator() error = %v", err)
 	}
-	return validator, workspaceRoot, repoRoot
+	// Tests exercise the runner path with the explicit test sandbox
+	// (process-group isolation, cross-platform): git tool behavior is what
+	// is under test, not the seatbelt profile.
+	runner, err := process.NewRunner(validator, process.RunnerOptions{
+		Sandbox: process.ExplicitTestSandbox{},
+	})
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+	return validator, runner, workspaceRoot, repoRoot
 }
 
 func configureGitRepo(t *testing.T, repoRoot string) {
@@ -618,7 +628,7 @@ func mustMkdirAll(t *testing.T, path string) {
 
 func TestGitMergeBaseToolReturnsAncestralCommit(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\n"))
@@ -640,7 +650,7 @@ func TestGitMergeBaseToolReturnsAncestralCommit(t *testing.T) {
 	gitRun(t, repoRoot, "add", ".")
 	gitRun(t, repoRoot, "commit", "-m", "main commit")
 
-	tool, err := NewGitMergeBaseTool(validator)
+	tool, err := NewGitMergeBaseTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitMergeBaseTool() error = %v", err)
 	}
@@ -671,7 +681,7 @@ func TestGitMergeBaseToolReturnsAncestralCommit(t *testing.T) {
 
 func TestGitDiffWithBaseRef(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("original\n"))
@@ -681,7 +691,7 @@ func TestGitDiffWithBaseRef(t *testing.T) {
 	// Modify working tree — default diff shows working-tree vs index.
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("original\nmodified\n"))
 
-	tool, err := NewGitDiffTool(validator)
+	tool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -708,7 +718,7 @@ func TestGitDiffWithBaseRef(t *testing.T) {
 
 func TestGitDiffWithMergeBasePrefix(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\n"))
@@ -726,7 +736,7 @@ func TestGitDiffWithMergeBasePrefix(t *testing.T) {
 	gitRun(t, repoRoot, "add", ".")
 	gitRun(t, repoRoot, "commit", "-m", "main")
 
-	tool, err := NewGitDiffTool(validator)
+	tool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -750,13 +760,13 @@ func TestGitDiffWithMergeBasePrefix(t *testing.T) {
 
 func TestGitDiffBaseAndStagedMutuallyExclusive(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\n"))
 	gitRun(t, repoRoot, "add", ".")
 	gitRun(t, repoRoot, "commit", "-m", "init")
 
-	tool, err := NewGitDiffTool(validator)
+	tool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -835,7 +845,7 @@ func TestValidateGitRevisionAcceptsAncestryOperators(t *testing.T) {
 
 func TestGitDiffWithAncestryBaseRef(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("original\n"))
@@ -851,7 +861,7 @@ func TestGitDiffWithAncestryBaseRef(t *testing.T) {
 	// Uncommitted working-tree change on top of the second commit.
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("original\nsecond\nmodified\n"))
 
-	tool, err := NewGitDiffTool(validator)
+	tool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -900,7 +910,7 @@ func TestGitDiffWithAncestryBaseRef(t *testing.T) {
 
 func TestGitStatusReportsRemoteURL(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\n"))
@@ -910,7 +920,7 @@ func TestGitStatusReportsRemoteURL(t *testing.T) {
 	fakeRemote := t.TempDir()
 	gitRun(t, repoRoot, "remote", "add", "origin", fakeRemote)
 
-	tool, err := NewGitStatusTool(validator)
+	tool, err := NewGitStatusTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitStatusTool() error = %v", err)
 	}
@@ -933,9 +943,9 @@ func TestGitStatusReportsRemoteURL(t *testing.T) {
 
 // setupRepoWithUpstream builds a repo whose branch tracks a local bare
 // remote, so upstream-dependent behavior can be tested without a network.
-func setupRepoWithUpstream(t *testing.T) (*workspacepkg.PathValidator, string, string) {
+func setupRepoWithUpstream(t *testing.T) (*workspacepkg.PathValidator, *process.Runner, string, string) {
 	t.Helper()
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 	gitRun(t, repoRoot, "checkout", "-b", "main")
 
@@ -950,14 +960,14 @@ func setupRepoWithUpstream(t *testing.T) (*workspacepkg.PathValidator, string, s
 	// origin/HEAD -> main, so default-branch resolution exercises the
 	// symbolic-ref path.
 	gitRun(t, repoRoot, "remote", "set-head", "origin", "main")
-	return validator, workspaceRoot, repoRoot
+	return validator, runner, workspaceRoot, repoRoot
 }
 
 func TestGitStatusReportsUpstreamAndDefaultBranch(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, _ := setupRepoWithUpstream(t)
+	validator, runner, workspaceRoot, _ := setupRepoWithUpstream(t)
 
-	tool, err := NewGitStatusTool(validator)
+	tool, err := NewGitStatusTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitStatusTool() error = %v", err)
 	}
@@ -983,7 +993,7 @@ func TestGitStatusReportsUpstreamAndDefaultBranch(t *testing.T) {
 
 func TestGitDiffToolUpstreamBase(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := setupRepoWithUpstream(t)
+	validator, runner, workspaceRoot, repoRoot := setupRepoWithUpstream(t)
 
 	// A pushed commit (invisible to the upstream diff) plus an unpushed
 	// working-tree change (visible).
@@ -993,7 +1003,7 @@ func TestGitDiffToolUpstreamBase(t *testing.T) {
 	gitRun(t, repoRoot, "push")
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\npushed\nunpushed\n"))
 
-	tool, err := NewGitDiffTool(validator)
+	tool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -1023,7 +1033,7 @@ func TestGitDiffToolUpstreamBase(t *testing.T) {
 
 func TestGitDiffToolIncludeUntracked(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 	mustWriteFile(t, filepath.Join(repoRoot, "tracked.txt"), []byte("base\n"))
 	gitRun(t, repoRoot, "add", ".")
@@ -1031,7 +1041,7 @@ func TestGitDiffToolIncludeUntracked(t *testing.T) {
 	mustWriteFile(t, filepath.Join(repoRoot, "new.txt"), []byte("hello\nworld\n"))
 	mustWriteFile(t, filepath.Join(repoRoot, "bin.dat"), []byte{'a', 0, 'b'})
 
-	tool, err := NewGitDiffTool(validator)
+	tool, err := NewGitDiffTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitDiffTool() error = %v", err)
 	}
@@ -1069,7 +1079,7 @@ func TestGitDiffToolSynthesizedUntrackedNoEOL(t *testing.T) {
 
 func TestGitBlameToolAttributesLines(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\ntwo\n"))
@@ -1085,7 +1095,7 @@ func TestGitBlameToolAttributesLines(t *testing.T) {
 	// An uncommitted working-tree edit to line 1.
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one dirty\ntwo changed\n"))
 
-	tool, err := NewGitBlameTool(validator)
+	tool, err := NewGitBlameTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitBlameTool() error = %v", err)
 	}
@@ -1139,13 +1149,13 @@ func TestGitBlameToolAttributesLines(t *testing.T) {
 
 func TestGitBlameToolValidatesWindow(t *testing.T) {
 	ensureGitAvailable(t)
-	validator, workspaceRoot, repoRoot := newGitValidator(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
 	configureGitRepo(t, repoRoot)
 	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\n"))
 	gitRun(t, repoRoot, "add", ".")
 	gitRun(t, repoRoot, "commit", "-m", "init")
 
-	tool, err := NewGitBlameTool(validator)
+	tool, err := NewGitBlameTool(validator, runner)
 	if err != nil {
 		t.Fatalf("NewGitBlameTool() error = %v", err)
 	}
@@ -1189,5 +1199,83 @@ func TestParseBlamePorcelainFillsRepeatedCommitFromCache(t *testing.T) {
 	}
 	if entries[0].Commit != "aaaaaaaa" {
 		t.Fatalf("entries[0].Commit = %q, want aaaaaaaa", entries[0].Commit)
+	}
+}
+
+// TestGitToolsDisableRepoFsmonitor arms a repo-local core.fsmonitor that
+// would execute on git status and asserts the git tools still refuse to
+// run it (gitBaseArgs passes -c core.fsmonitor=false; REVIEW M26). This
+// also exercises the post-A6 path: the git process now runs through the
+// process runner, so the protection must survive that migration.
+func TestGitToolsDisableRepoFsmonitor(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	mustWriteFile(t, filepath.Join(repoRoot, "tracked.txt"), []byte("base\n"))
+	gitRun(t, repoRoot, "add", "tracked.txt")
+	gitRun(t, repoRoot, "commit", "-m", "init")
+
+	marker := filepath.Join(t.TempDir(), "fsmonitor-ran")
+	script := filepath.Join(t.TempDir(), "evil-fsmonitor.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755); err != nil {
+		t.Fatalf("os.WriteFile(script) error = %v", err)
+	}
+	gitRun(t, repoRoot, "config", "core.fsmonitor", script)
+
+	tool, err := NewGitStatusTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewGitStatusTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_status", gitStatusArgs{RepoRoot: filepath.Join(workspaceRoot, "repo")}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("repo fsmonitor executed despite -c core.fsmonitor=false (marker %s exists)", marker)
+	}
+}
+
+// TestGitToolsIgnoreGlobalConfig plants a malicious $HOME/.gitconfig and
+// asserts git tools are immune: the runner's env allowlist keeps
+// GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1 (REVIEW A6), so a
+// crafted global config can neither arm hooks nor alias commands.
+func TestGitToolsIgnoreGlobalConfig(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	mustWriteFile(t, filepath.Join(repoRoot, "tracked.txt"), []byte("base\n"))
+	gitRun(t, repoRoot, "add", "tracked.txt")
+	gitRun(t, repoRoot, "commit", "-m", "init")
+
+	home := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "global-config-ran")
+	script := filepath.Join(t.TempDir(), "evil-global.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755); err != nil {
+		t.Fatalf("os.WriteFile(script) error = %v", err)
+	}
+	globalConfig := "[core]\n\tfsmonitor = " + script + "\n[alias]\n\tstatus = !touch " + marker + "\n"
+	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), []byte(globalConfig), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(.gitconfig) error = %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	tool, err := NewGitStatusTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewGitStatusTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_status", gitStatusArgs{RepoRoot: filepath.Join(workspaceRoot, "repo")}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("global gitconfig fsmonitor/alias executed despite GIT_CONFIG_GLOBAL=/dev/null (marker %s exists)", marker)
 	}
 }
