@@ -18,6 +18,7 @@
 package server
 
 import (
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -143,6 +144,15 @@ type dirEntry struct {
 // Query params: path (absolute or "~"-leading; empty or "~" = $HOME). The
 // response carries the canonical absolute path, its parent (browseable unless
 // above $HOME), and its visible subdirectories.
+//
+// Symlinks-to-directories are listed and traversable: os.ReadDir reports
+// lstat semantics (a symlink entry is not IsDir), so link entries are
+// followed with Stat to decide visibility. Navigation stays on the
+// REQUESTED path form (symlink-bearing): responses echo it and parent
+// links climb it, so a user entering ~/work keeps seeing ~/work/... even
+// when the link resolves outside $HOME — the link itself is a door the
+// user built under their home; workspace registration canonicalizes the
+// root with EvalSymlinks anyway.
 func (s *Server) handleBrowseDirectories(w http.ResponseWriter, r *http.Request) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -171,17 +181,26 @@ func (s *Server) handleBrowseDirectories(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// The browser is confined to $HOME (see the comment above): the request
-	// path itself must resolve inside it, not just the returned parent link.
+	// The browser is anchored at $HOME (see the comment above): the
+	// requested path — in its user-facing, symlink-bearing form — must
+	// start under $HOME. Its resolved target may sit elsewhere (the user
+	// followed their own symlink), but browsing can never be ENTERED
+	// from outside $HOME.
 	homeResolved := home
 	if h, herr := filepath.EvalSymlinks(home); herr == nil {
 		homeResolved = h
 	}
-	if resolved != homeResolved && !strings.HasPrefix(resolved, homeResolved+string(filepath.Separator)) {
+	withinHome := func(p string) bool {
+		return p == homeResolved || strings.HasPrefix(p, homeResolved+string(filepath.Separator))
+	}
+	if !withinHome(abs) && !withinHome(resolved) {
 		writeError(w, invalidInput("path is outside the home directory"))
 		return
 	}
 
+	// Entries are addressed on the requested path form so subsequent
+	// clicks keep navigating through the symlink view.
+	displayPath := abs
 	entries, err := os.ReadDir(resolved)
 	if err != nil {
 		writeError(w, invalidInput("cannot read directory"))
@@ -189,24 +208,33 @@ func (s *Server) handleBrowseDirectories(w http.ResponseWriter, r *http.Request)
 	}
 	dirs := make([]dirEntry, 0)
 	for _, e := range entries {
-		if !e.IsDir() || hiddenDir.MatchString(e.Name()) {
+		if hiddenDir.MatchString(e.Name()) {
 			continue
 		}
-		dirs = append(dirs, dirEntry{Name: e.Name(), Path: filepath.Join(resolved, e.Name())})
+		if !e.IsDir() {
+			// ReadDir carries lstat semantics: a symlink to a
+			// directory is not IsDir. Follow it before hiding.
+			if e.Type()&fs.ModeSymlink == 0 {
+				continue
+			}
+			target, err := os.Stat(filepath.Join(resolved, e.Name()))
+			if err != nil || !target.IsDir() {
+				continue
+			}
+		}
+		dirs = append(dirs, dirEntry{Name: e.Name(), Path: filepath.Join(displayPath, e.Name())})
 	}
 	// Stable, human-friendly ordering by name.
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name < dirs[j].Name })
 
-	// Parent is browseable unless it would climb above $HOME.
+	// Parent climbs the requested path form, browseable unless it would
+	// climb above $HOME.
 	parent := ""
-	if resolved != homeResolved {
-		p := filepath.Dir(resolved)
-		if p != resolved && (p == homeResolved || strings.HasPrefix(p, homeResolved+string(filepath.Separator))) {
-			parent = p
-		}
+	if p := filepath.Dir(displayPath); p != displayPath && withinHome(p) {
+		parent = p
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"path":    resolved,
+		"path":    displayPath,
 		"parent":  parent,
 		"home":    home,
 		"entries": dirs,
