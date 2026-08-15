@@ -28,6 +28,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -87,11 +88,11 @@ func NewWriteTool(validator *workspacepkg.PathValidator) (*WriteTool, error) {
 }
 
 func (t *WriteTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 func (t *WriteTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[writeArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[writeArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -139,7 +140,7 @@ func (t *WriteTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.P
 	if external {
 		approvalDesc += " [outside workspace]"
 	}
-	prepared, err := t.base.prepareCall(ctx, call, rawCanonical, []string{pathInfo.Absolute}, approvalDesc, writeRequestOf(pathInfo, external))
+	prepared, err := t.base.PrepareCall(ctx, call, rawCanonical, toolkit.PrepareOptions{WritePaths: []string{pathInfo.Absolute}, ApprovalDesc: approvalDesc, WriteRequest: writeRequestOf(pathInfo, external)})
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -164,26 +165,26 @@ func (t *WriteTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.P
 
 func (t *WriteTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if len(prepared.WritePaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call write paths are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call write paths are invalid"))
 	}
 
-	canonical, err := decodeStrict[writeCanonical](prepared.Call.Arguments)
+	canonical, err := toolkit.DecodeStrict[writeCanonical](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	pathInfo, _, err := resolveWritePath(t.base.validator, prepared.WritePaths[0])
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if pathInfo.Display != canonical.Path {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 	}
 	if err := verifyWriteRequestBinding(prepared, pathInfo); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	// The file state must still match what the approval was bound to.
@@ -191,22 +192,22 @@ func (t *WriteTool) Execute(ctx context.Context, prepared domain.PreparedCall) d
 	switch {
 	case statErr == nil:
 		if canonical.Created {
-			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "file was created since approval; re-check and re-issue the write"))
+			return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "file was created since approval; re-check and re-issue the write"))
 		}
 		if snapshot.SHA256 != canonical.OldHash {
-			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "file changed since approval; read it again and re-issue the write"))
+			return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "file changed since approval; read it again and re-issue the write"))
 		}
 	case errors.Is(statErr, os.ErrNotExist):
 		if !canonical.Created {
-			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "file was deleted since approval"))
+			return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "file was deleted since approval"))
 		}
 	default:
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "path is not a writable regular file", domain.WithCause(statErr)))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "path is not a writable regular file", domain.WithCause(statErr)))
 	}
 
 	if canonical.Created {
 		if err := os.MkdirAll(filepath.Dir(pathInfo.Absolute), 0o755); err != nil {
-			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "failed to create parent directories", domain.WithCause(err)))
+			return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "failed to create parent directories", domain.WithCause(err)))
 		}
 	}
 	resultSnapshot, err := t.base.validator.AtomicWriteResolved(pathInfo, []byte(canonical.Content), workspacepkg.AtomicWriteOptions{
@@ -214,7 +215,7 @@ func (t *WriteTool) Execute(ctx context.Context, prepared domain.PreparedCall) d
 		SyncParent:   true,
 	})
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, normalizeAtomicWriteError(err))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, normalizeAtomicWriteError(err))
 	}
 
 	out := writeOutput{
@@ -226,5 +227,5 @@ func (t *WriteTool) Execute(ctx context.Context, prepared domain.PreparedCall) d
 	if !canonical.Created {
 		out.OldHash = canonical.OldHash
 	}
-	return successResult(prepared.Call.ID, startedAt, out)
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, out)
 }

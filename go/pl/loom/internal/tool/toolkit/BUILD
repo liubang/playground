@@ -20,7 +20,9 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "toolkit_lib",
     srcs = [
+        "base.go",
         "binary.go",
+        "cache.go",
         "signing.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/toolkit",
@@ -32,6 +34,10 @@ go_library(
 
 go_test(
     name = "toolkit_test",
-    srcs = ["binary_test.go"],
+    srcs = [
+        "base_test.go",
+        "binary_test.go",
+        "cache_test.go",
+    ],
     embed = [":toolkit_lib"],
 )

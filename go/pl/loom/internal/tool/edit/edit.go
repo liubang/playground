@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -67,11 +68,11 @@ func NewEditTool(validator *workspacepkg.PathValidator, book *workspacepkg.FileS
 }
 
 func (t *EditTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 func (t *EditTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[editArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[editArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -89,7 +90,7 @@ func (t *EditTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.Pr
 	if external {
 		approvalDesc += " [outside workspace]"
 	}
-	prepared, err := t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc, writeRequestOf(pathInfo, external))
+	prepared, err := t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{WritePaths: []string{pathInfo.Absolute}, ApprovalDesc: approvalDesc, WriteRequest: writeRequestOf(pathInfo, external)})
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -107,53 +108,53 @@ func (t *EditTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.Pr
 
 func (t *EditTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if len(prepared.WritePaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call write paths are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call write paths are invalid"))
 	}
 
-	args, err := decodeStrict[editArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[editArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	pathInfo, _, oldSnapshot, data, err := ensureExistingTextFile(t.base.validator, prepared.WritePaths[0])
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if pathInfo.Display != args.Path {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 	}
 	if err := verifyWriteRequestBinding(prepared, pathInfo); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	// Drift checks: the explicit hash (when supplied) is authoritative;
 	// otherwise the shared file-state book detects external modification
 	// since the agent's last read.
 	if args.ExpectedHash != "" && oldSnapshot.SHA256 != args.ExpectedHash {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "file changed since expected_hash was computed"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "file changed since expected_hash was computed"))
 	}
 	if args.ExpectedHash == "" {
 		if known, stale := t.book.Stale(pathInfo.Absolute, oldSnapshot.SHA256); known && stale {
-			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "file changed since your last read; read it again and re-apply the edit"))
+			return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrConflict, "file changed since your last read; read it again and re-apply the edit"))
 		}
 	}
 
 	newContent, err := applyEditReplacement(string(data), args)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	resultSnapshot, err := t.base.validator.AtomicWriteResolved(pathInfo, []byte(newContent), workspacepkg.AtomicWriteOptions{
 		ExpectedHash: oldSnapshot.SHA256,
 		SyncParent:   true,
 	})
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, normalizeAtomicWriteError(err))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, normalizeAtomicWriteError(err))
 	}
 	t.book.Record(pathInfo.Absolute, resultSnapshot.SHA256)
-	return successResult(prepared.Call.ID, startedAt, editOutput{
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, editOutput{
 		Path:    resultSnapshot.Path,
 		OldHash: oldSnapshot.SHA256,
 		NewHash: resultSnapshot.SHA256,

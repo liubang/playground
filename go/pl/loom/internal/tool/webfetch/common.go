@@ -18,67 +18,24 @@
 package webfetch
 
 import (
-	"context"
-	"encoding/json"
-
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
-// baseTool is the webfetch-local variant of the shared tool skeleton,
-// delegating signing and verification to the toolkit package. The
-// fingerprint includes the typed URLRequest for domain-rule evaluation
-// by the policy layer.
+// baseTool embeds the shared toolkit.BaseTool skeleton (definition +
+// signer + prepare/verify protocol, REVIEW R3); webfetch has no
+// tool-specific dependencies beyond it. The URLRequest fingerprint is
+// passed through PrepareOptions at call time.
 type baseTool struct {
-	def    domain.ToolDefinition
-	signer toolkit.Signer
+	toolkit.BaseTool
 }
 
 func newBaseTool(def domain.ToolDefinition) (baseTool, error) {
-	if err := def.Validate(); err != nil {
-		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
-	}
-	signer, err := toolkit.NewSigner()
+	bt, err := toolkit.NewBaseTool(def)
 	if err != nil {
 		return baseTool{}, err
 	}
-	return baseTool{def: def, signer: signer}, nil
-}
-
-func (b *baseTool) prepareCall(
-	ctx context.Context,
-	call domain.ToolCall,
-	canonicalArgs json.RawMessage,
-	approvalDesc string,
-	urlRequest *domain.URLRequest,
-) (domain.PreparedCall, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.PreparedCall{}, err
-	}
-	if err := call.Validate(); err != nil {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
-	}
-	if err := toolkit.ValidateCallName(call, b.def); err != nil {
-		return domain.PreparedCall{}, err
-	}
-
-	prepared := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        call.ID,
-			Name:      b.def.Name,
-			Arguments: toolkit.CloneRawMessage(canonicalArgs),
-		},
-		Definition:   b.def,
-		Risk:         b.def.Risk(),
-		ApprovalDesc: approvalDesc,
-		URLRequest:   urlRequest,
-	}
-	prepared.ArgsHash = b.signer.Sign(prepared)
-	return prepared, nil
-}
-
-func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	return b.signer.VerifyWithRisk(prepared, b.def)
+	return baseTool{BaseTool: bt}, nil
 }
 
 // extractURLRequest parses a URL string and returns a typed URLRequest

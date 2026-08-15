@@ -184,6 +184,11 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		EnvAllowlist: []string{
 			"PATH", "LANG", "LC_ALL", "TMPDIR", "HOME",
 			"GOCACHE", "GOPATH", "GOMODCACHE", "GOPROXY", "GOSUMDB", "GOFLAGS",
+			// Git tool security hardening rides the runner (REVIEW A6):
+			// GIT_CONFIG_NOSYSTEM / GIT_CONFIG_GLOBAL=/dev/null disarm
+			// system/global config injection, GIT_TERMINAL_PROMPT=0 makes
+			// git fail instead of hanging on credential prompts.
+			"GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_GLOBAL", "GIT_TERMINAL_PROMPT",
 		},
 		// Per-session attribution rides the turn context (Controller
 		// path, docs/SERVE_DESIGN.md §4.3); the process-level atomic
@@ -681,11 +686,11 @@ func readOnlyToolFactories(validator *workspace.PathValidator, runner *process.R
 		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
 		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator, artStore) }},
 		{"present_image", func() (domain.Tool, error) { return builtin.NewPresentImageTool(validator, artStore) }},
-		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator) }},
-		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator) }},
-		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator) }},
-		{"git_merge_base", func() (domain.Tool, error) { return gittools.NewGitMergeBaseTool(validator) }},
-		{"git_blame", func() (domain.Tool, error) { return gittools.NewGitBlameTool(validator) }},
+		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator, runner) }},
+		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator, runner) }},
+		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator, runner) }},
+		{"git_merge_base", func() (domain.Tool, error) { return gittools.NewGitMergeBaseTool(validator, runner) }},
+		{"git_blame", func() (domain.Tool, error) { return gittools.NewGitBlameTool(validator, runner) }},
 		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(artStore) }},
 		{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }},
 	}

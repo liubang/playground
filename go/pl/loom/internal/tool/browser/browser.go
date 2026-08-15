@@ -30,6 +30,7 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/media"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 const (
@@ -153,7 +154,7 @@ func NewBrowserTool(manager *Manager, artifacts domain.ArtifactStore, navTimeout
 const defaultScreenshotQuality = 80
 
 func (t *BrowserTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: browser operations
@@ -162,7 +163,7 @@ func (t *BrowserTool) Definition() domain.ToolDefinition {
 func (t *BrowserTool) ConcurrentSafe() bool { return false }
 
 func (t *BrowserTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[browserArgs](call.Arguments)
+	args, err := toolkit.DecodeStrict[browserArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -187,7 +188,12 @@ func (t *BrowserTool) Prepare(ctx context.Context, call domain.ToolCall) (domain
 		urlReq = extractURLRequest(args.URL)
 	}
 
-	return t.base.prepareCall(ctx, call, canonical, approvalDesc, riskForAction(args.Action), urlReq)
+	risk := riskForAction(args.Action)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{
+		ApprovalDesc: approvalDesc,
+		Risk:         &risk,
+		URLRequest:   urlReq,
+	})
 }
 
 // riskForAction grades the call's risk by action (docs/BROWSER_DESIGN.md
@@ -212,11 +218,11 @@ func riskForAction(action string) domain.RiskLevel {
 func (t *BrowserTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
 	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-	args, err := decodeStrict[browserArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[browserArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	// Per-action timeout.
@@ -241,14 +247,14 @@ func (t *BrowserTool) Execute(ctx context.Context, prepared domain.PreparedCall)
 	case "close":
 		return t.doClose(prepared.Call.ID, startedAt)
 	default:
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("unknown browser action: %q", args.Action)))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("unknown browser action: %q", args.Action)))
 	}
 }
 
 func (t *BrowserTool) doNavigate(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
 	browserCtx, err := t.manager.Acquire()
 	if err != nil {
-		return errorResult(callID, startedAt, err)
+		return toolkit.ErrorResult(callID, startedAt, err)
 	}
 
 	navCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
@@ -270,7 +276,7 @@ func (t *BrowserTool) doNavigate(ctx context.Context, callID domain.ToolCallID, 
 	t.manager.Touch()
 
 	if err != nil {
-		return errorResult(callID, startedAt, mapBrowserError(err))
+		return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
 	}
 
 	// Invalidate refs: navigation changes the page.
@@ -287,7 +293,7 @@ func (t *BrowserTool) doNavigate(ctx context.Context, callID domain.ToolCallID, 
 			"if the page content did not switch, this SPA uses history-mode routing — " +
 			"snapshot the page and click the target element by ref instead of navigating by fragment"
 	}
-	return successResult(callID, startedAt, out)
+	return toolkit.SuccessResult(callID, startedAt, out)
 }
 
 // sameDocumentURL reports whether two URLs address the same document,
@@ -306,7 +312,7 @@ func sameDocumentURL(a, b string) bool {
 func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
 	browserCtx, err := t.manager.Acquire()
 	if err != nil {
-		return errorResult(callID, startedAt, err)
+		return toolkit.ErrorResult(callID, startedAt, err)
 	}
 
 	shotCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
@@ -337,7 +343,7 @@ func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID
 	t.manager.Touch()
 
 	if err != nil {
-		return errorResult(callID, startedAt, mapBrowserError(err))
+		return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
 	}
 
 	// Deliver the screenshot the same way every image source does: persist
@@ -348,7 +354,7 @@ func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID
 	// generic output truncation layer.
 	ref, err := media.StoreImage(ctx, t.artifacts, buf)
 	if err != nil {
-		return errorResult(callID, startedAt, err)
+		return toolkit.ErrorResult(callID, startedAt, err)
 	}
 	payload := &screenshotPayload{
 		Format:   format,
@@ -364,7 +370,7 @@ func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID
 		Status:     "ok",
 	})
 	if err != nil {
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
+		return toolkit.ErrorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
 	}
 	content := []domain.ContentPart{
 		{Kind: domain.PartText, Text: string(header)},
@@ -383,7 +389,7 @@ func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID
 func (t *BrowserTool) doScroll(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
 	browserCtx, err := t.manager.Acquire()
 	if err != nil {
-		return errorResult(callID, startedAt, err)
+		return toolkit.ErrorResult(callID, startedAt, err)
 	}
 
 	scrollCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
@@ -405,7 +411,7 @@ func (t *BrowserTool) doScroll(ctx context.Context, callID domain.ToolCallID, ar
 	t.manager.Touch()
 
 	if err != nil {
-		return errorResult(callID, startedAt, mapBrowserError(err))
+		return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
 	}
 
 	// Read back the current scroll position.
@@ -416,7 +422,7 @@ func (t *BrowserTool) doScroll(ctx context.Context, callID domain.ToolCallID, ar
 		chromedp.Evaluate("window.scrollY", &scrollY),
 	)
 
-	return successResult(callID, startedAt, browserOutput{
+	return toolkit.SuccessResult(callID, startedAt, browserOutput{
 		Action: "scroll",
 		ScrollPos: &scrollPosition{
 			X: int(scrollX),
@@ -429,7 +435,7 @@ func (t *BrowserTool) doScroll(ctx context.Context, callID domain.ToolCallID, ar
 func (t *BrowserTool) doClose(callID domain.ToolCallID, startedAt time.Time) domain.ToolResult {
 	t.manager.CloseInstance()
 	t.registry.invalidate()
-	return successResult(callID, startedAt, browserOutput{
+	return toolkit.SuccessResult(callID, startedAt, browserOutput{
 		Action:  "close",
 		Status:  "ok",
 		Message: "browser instance closed",

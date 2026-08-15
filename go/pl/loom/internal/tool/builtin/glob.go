@@ -31,6 +31,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -81,7 +82,7 @@ func NewGlobTool(validator *workspacepkg.PathValidator, runner rgRunner) (*GlobT
 }
 
 func (t *GlobTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: each glob spawns
@@ -113,28 +114,28 @@ func (t *GlobTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.Pr
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Find files matching %q under %s", args.Pattern, args.Path)
-	return t.base.prepareCall(ctx, call, canonical, []string{pathInfo.Absolute}, approvalDesc)
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ReadPaths: []string{pathInfo.Absolute}, ApprovalDesc: approvalDesc})
 }
 
 func (t *GlobTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.base.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+	if err := t.base.VerifyPreparedCall(prepared); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if len(prepared.ReadPaths) != 1 {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call read paths are invalid"))
 	}
 
 	args, err := decodeStrict[globArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	pathInfo, err := resolveExistingPath(t.base.validator, prepared.ReadPaths[0])
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if pathInfo.Display != args.Path {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call path binding mismatch"))
 	}
 
 	if rgAvailable(t.runner) {
@@ -159,7 +160,7 @@ func (t *GlobTool) executeRipgrep(ctx context.Context, prepared domain.PreparedC
 			// Linux fails closed); degrade to the built-in engine.
 			return t.executeGoFallback(ctx, prepared, root, args, startedAt)
 		}
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if rgTruncated {
 		// A truncated preview splices the head and tail mid-line; drop the
@@ -169,7 +170,7 @@ func (t *GlobTool) executeRipgrep(ctx context.Context, prepared domain.PreparedC
 
 	lines, err := splitLines(stdout, maxSearchFileBytes)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	files := []string{}
 	for _, line := range lines {
@@ -184,7 +185,7 @@ func (t *GlobTool) executeRipgrep(ctx context.Context, prepared domain.PreparedC
 		files = files[:maxGlobResults]
 		truncated = true
 	}
-	return successResult(prepared.Call.ID, startedAt, globOutput{
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, globOutput{
 		Path: args.Path, Pattern: args.Pattern, Engine: string(engineRipgrep),
 		Files: files, Count: len(files), Truncated: truncated,
 	})
@@ -194,7 +195,7 @@ func (t *GlobTool) executeRipgrep(ctx context.Context, prepared domain.PreparedC
 
 func (t *GlobTool) executeGoFallback(ctx context.Context, prepared domain.PreparedCall, root pathResolution, args globArgs, startedAt time.Time) domain.ToolResult {
 	if _, err := path.Match(args.Pattern, ""); err != nil && !strings.Contains(args.Pattern, "**") {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "invalid glob pattern", domain.WithCause(err)))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput, "invalid glob pattern", domain.WithCause(err)))
 	}
 
 	files := []string{}
@@ -239,11 +240,11 @@ func (t *GlobTool) executeGoFallback(ctx context.Context, prepared domain.Prepar
 		return nil
 	})
 	if walkErr != nil && walkErr != io.EOF {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "failed to walk directory", domain.WithCause(walkErr)))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "failed to walk directory", domain.WithCause(walkErr)))
 	}
 
 	sort.Strings(files)
-	return successResult(prepared.Call.ID, startedAt, globOutput{
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, globOutput{
 		Path: args.Path, Pattern: args.Pattern, Engine: string(engineGoFallback),
 		Files: files, Count: len(files), Truncated: truncated,
 	})

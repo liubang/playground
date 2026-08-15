@@ -30,7 +30,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
@@ -53,10 +52,12 @@ const (
 	chunkSize = 32 << 10
 )
 
+// baseTool embeds the shared toolkit.BaseTool skeleton (definition +
+// signer + prepare/verify protocol, REVIEW R3) plus the path validator
+// every builtin file tool needs.
 type baseTool struct {
-	def       domain.ToolDefinition
+	toolkit.BaseTool
 	validator *workspacepkg.PathValidator
-	signer    toolkit.Signer
 }
 
 type contextLine struct {
@@ -82,56 +83,12 @@ func newBaseTool(def domain.ToolDefinition, validator *workspacepkg.PathValidato
 	if validator == nil {
 		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "path validator is required")
 	}
-	if err := def.Validate(); err != nil {
-		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
-	}
-	signer, err := toolkit.NewSigner()
+	bt, err := toolkit.NewBaseTool(def)
 	if err != nil {
 		return baseTool{}, err
 	}
-	return baseTool{def: def, validator: validator, signer: signer}, nil
+	return baseTool{BaseTool: bt, validator: validator}, nil
 }
-
-func (b *baseTool) prepareCall(
-	ctx context.Context,
-	call domain.ToolCall,
-	canonicalArgs json.RawMessage,
-	readPaths []string,
-	approvalDesc string,
-) (domain.PreparedCall, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.PreparedCall{}, err
-	}
-	if err := call.Validate(); err != nil {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
-	}
-	if err := toolkit.ValidateCallName(call, b.def); err != nil {
-		return domain.PreparedCall{}, err
-	}
-
-	prepared := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        call.ID,
-			Name:      b.def.Name,
-			Arguments: toolkit.CloneRawMessage(canonicalArgs),
-		},
-		Definition:   b.def,
-		Risk:         b.def.Risk(),
-		ApprovalDesc: approvalDesc,
-		ReadPaths:    toolkit.SortedStrings(readPaths),
-	}
-	prepared.ArgsHash = b.signer.Sign(prepared)
-	return prepared, nil
-}
-
-func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	return b.signer.VerifyWithRisk(prepared, b.def)
-}
-
-// --- Local aliases to the shared toolkit helpers ---
-// These thin wrappers let the rest of the package keep using the short
-// names without a bulk import change. They are zero-cost: the compiler
-// inlines them away.
 
 // malformedArgumentsKey marks the placeholder the agent loop substitutes
 // when a provider's streamed tool-call arguments fail to reassemble into
@@ -160,28 +117,15 @@ func malformedArgumentsHint(raw json.RawMessage) (string, bool) {
 	return hint, true
 }
 
+// decodeStrict is the builtin variant of toolkit.DecodeStrict: it first
+// routes the provider's malformed-arguments placeholder to a
+// self-describing error instead of rejecting it as an unknown field.
 func decodeStrict[T any](raw json.RawMessage) (T, error) {
 	if hint, ok := malformedArgumentsHint(raw); ok {
 		var zero T
 		return zero, domain.NewError(domain.ErrInvalidInput, hint)
 	}
 	return toolkit.DecodeStrict[T](raw)
-}
-
-func cloneRawMessage(raw json.RawMessage) json.RawMessage { return toolkit.CloneRawMessage(raw) }
-
-func sortedStrings(values []string) []string { return toolkit.SortedStrings(values) }
-
-func sameCapabilities(left, right []domain.Capability) bool {
-	return toolkit.SameCapabilities(left, right)
-}
-
-func successResult(callID domain.ToolCallID, startedAt time.Time, payload any) domain.ToolResult {
-	return toolkit.SuccessResult(callID, startedAt, payload)
-}
-
-func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	return toolkit.ErrorResult(callID, startedAt, err)
 }
 
 // resolveExistingPath resolves an existing filesystem path for the builtin

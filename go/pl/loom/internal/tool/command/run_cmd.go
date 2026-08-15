@@ -229,7 +229,7 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
 	}
 
-	rawArgs, err := decodeStrict[rawRunCmdArgs](call.Arguments)
+	rawArgs, err := toolkit.DecodeStrict[rawRunCmdArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -247,7 +247,7 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 		Call: domain.ToolCall{
 			ID:        call.ID,
 			Name:      t.def.Name,
-			Arguments: cloneRawMessage(canonical),
+			Arguments: toolkit.CloneRawMessage(canonical),
 		},
 		Definition: t.def,
 		Risk:       riskForArgs(args, t.def.Risk()),
@@ -289,24 +289,24 @@ func riskForArgs(args runCmdArgs, base domain.RiskLevel) domain.RiskLevel {
 func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
 	if err := t.verifyPreparedCall(prepared); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if !hasOnlyWorkspaceRoot(prepared.ReadPaths, t.validator.Root()) || !hasOnlyWorkspaceRoot(prepared.WritePaths, t.validator.Root()) {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call workspace bindings are invalid"))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call workspace bindings are invalid"))
 	}
 
-	args, err := decodeStrict[runCmdArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[runCmdArgs](prepared.Call.Arguments)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	_, resolvedDir, err := validateCanonicalArgs(t.validator, args)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 
 	stdoutStage, stderrStage, err := t.beginOutputArtifacts(ctx)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if stdoutStage != nil {
 		defer stdoutStage.Abort()
@@ -334,7 +334,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	// (defense in depth; the cheap check runs once per execution).
 	for _, p := range prepared.Grant.WritablePaths {
 		if workspacepkg.CoversSensitiveLocation(filepath.Clean(p)) {
-			return errorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "grant writable path covers a credential location"))
+			return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "grant writable path covers a credential location"))
 		}
 	}
 	grant := process.Grant{
@@ -354,7 +354,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		StderrWriter: stderrStage,
 	}, grant)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, classifyRunError(err))
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, classifyRunError(err))
 	}
 
 	commitCtx := ctx
@@ -369,7 +369,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	defer cancelCommit()
 	stdoutRef, stderrRef, err := commitOutputArtifacts(commitCtx, stdoutStage, stderrStage)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, domain.NewError(
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(
 			domain.ErrUnavailable, "command completed but captured output could not be committed",
 			domain.WithCause(err),
 		))
@@ -413,7 +413,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		),
 	}
 	if err := boundCommandOutput(&payload, t.modelOutputBytes); err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	status := domain.ToolStatusSuccess
 	if runnerResult.TimedOut {
@@ -434,7 +434,7 @@ func (t *RunCmdTool) verifyPreparedCall(prepared domain.PreparedCall) error {
 	// The risk tier depends on the program and sandbox mode (shell or
 	// escalated ⇒ R3), so recompute it from the signed arguments instead of
 	// assuming the definition default.
-	args, err := decodeStrict[runCmdArgs](prepared.Call.Arguments)
+	args, err := toolkit.DecodeStrict[runCmdArgs](prepared.Call.Arguments)
 	if err != nil {
 		return domain.NewError(domain.ErrSecurity, "prepared call arguments are unreadable")
 	}
@@ -878,22 +878,21 @@ func classifyRunError(err error) error {
 	if errors.As(err, &exitErr) {
 		return domain.NewError(domain.ErrUnavailable, "command execution failed", domain.WithCause(err))
 	}
-	if errors.Is(err, exec.ErrNotFound) || strings.Contains(err.Error(), "executable file not found") {
+	if errors.Is(err, exec.ErrNotFound) {
 		return domain.NewError(domain.ErrInvalidInput,
 			"program could not be resolved on PATH ("+os.Getenv("PATH")+"); "+
 				"use an absolute program path, pass env={\"PATH\": \"<dir>:...\"}, or register the directory in tools.path_extra in the loom config",
 			domain.WithCause(err))
 	}
-	if strings.Contains(err.Error(), "validate cwd") {
+	if errors.Is(err, process.ErrInvalidCwd) {
 		return domain.NewError(domain.ErrSecurity, "working_dir escapes workspace or is invalid", domain.WithCause(err))
 	}
-	if strings.Contains(err.Error(), "stdout pipe") || strings.Contains(err.Error(), "stderr pipe") || strings.Contains(err.Error(), "start command") || strings.Contains(err.Error(), "wait command") {
-		return domain.NewError(domain.ErrUnavailable, "command execution failed", domain.WithCause(err))
-	}
+	// Anything else — pipe setup, start, wait, output capture — is an
+	// execution failure surfaced as-is (REVIEW A5: the previous substring
+	// matches on "stdout pipe"/"start command"/"wait command" were pure
+	// aliases of this same fallback).
 	return domain.NewError(domain.ErrUnavailable, "command execution failed", domain.WithCause(err))
 }
-
-func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
 
 func boundCommandOutput(payload *runCmdOutput, limit int) error {
 	if payload == nil || limit <= 0 {
@@ -1042,7 +1041,7 @@ func contentResultWithArtifacts(
 ) domain.ToolResult {
 	content, err := json.Marshal(payload)
 	if err != nil {
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
+		return toolkit.ErrorResult(callID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode tool output", domain.WithCause(err)))
 	}
 	parts := []domain.ContentPart{{Kind: domain.PartText, Text: string(content)}}
 	metadata := map[string]string{}
@@ -1073,10 +1072,6 @@ func contentResultWithArtifacts(
 	}
 }
 
-func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	return toolkit.ErrorResult(callID, startedAt, err)
-}
-
 func sameDefinition(left, right domain.ToolDefinition) bool {
 	if left.Name != right.Name || left.Description != right.Description || left.Source != right.Source {
 		return false
@@ -1094,8 +1089,6 @@ func sameDefinition(left, right domain.ToolDefinition) bool {
 	}
 	return true
 }
-
-func cloneRawMessage(raw json.RawMessage) json.RawMessage { return toolkit.CloneRawMessage(raw) }
 
 func cloneStringMap(values map[string]string) map[string]string {
 	if len(values) == 0 {

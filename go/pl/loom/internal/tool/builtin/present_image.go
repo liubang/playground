@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -64,7 +65,7 @@ func NewPresentImageTool(validator *workspacepkg.PathValidator, artifacts domain
 }
 
 func (t *PresentImageTool) Definition() domain.ToolDefinition {
-	return t.base.def
+	return t.base.Def
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: reads are independent.
@@ -78,7 +79,7 @@ func (t *PresentImageTool) Execute(ctx context.Context, prepared domain.Prepared
 	startedAt := time.Now()
 	path, ref, data, err := loadImageArtifact(t.base, t.artifacts, ctx, prepared)
 	if err != nil {
-		return errorResult(prepared.Call.ID, startedAt, err)
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	header := imageHeader(path, ref, data) +
 		"\nNote: the image is now displayed to the user. It is not attached to your context; " +

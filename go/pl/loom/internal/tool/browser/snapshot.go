@@ -36,6 +36,7 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/kb"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 // maxSnapshotRunes is the token budget for AX tree serialization. Output
@@ -174,7 +175,7 @@ func (r *refRegistry) replace(refs map[string]*axNode) {
 func (t *BrowserTool) doSnapshot(ctx context.Context, callID domain.ToolCallID, timeout time.Duration, startedAt time.Time) domain.ToolResult {
 	browserCtx, err := t.manager.Acquire()
 	if err != nil {
-		return errorResult(callID, startedAt, err)
+		return toolkit.ErrorResult(callID, startedAt, err)
 	}
 
 	snapCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
@@ -196,13 +197,13 @@ func (t *BrowserTool) doSnapshot(ctx context.Context, callID domain.ToolCallID, 
 	)
 	t.manager.Touch()
 	if err != nil {
-		return errorResult(callID, startedAt, mapBrowserError(err))
+		return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
 	}
 
 	// Build the serialized tree and populate the ref registry.
 	serialized := t.serializeAXTree(nodes)
 
-	return successResult(callID, startedAt, browserOutput{
+	return toolkit.SuccessResult(callID, startedAt, browserOutput{
 		Action: "snapshot",
 		Status: "ok",
 		Output: serialized,
@@ -336,12 +337,12 @@ func (t *BrowserTool) unknownRefError(ref string) error {
 func (t *BrowserTool) doClick(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
 	node := t.registry.resolve(args.Ref)
 	if node == nil {
-		return errorResult(callID, startedAt, t.unknownRefError(args.Ref))
+		return toolkit.ErrorResult(callID, startedAt, t.unknownRefError(args.Ref))
 	}
 
 	browserCtx, err := t.manager.Acquire()
 	if err != nil {
-		return errorResult(callID, startedAt, err)
+		return toolkit.ErrorResult(callID, startedAt, err)
 	}
 
 	clickCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
@@ -358,9 +359,9 @@ func (t *BrowserTool) doClick(ctx context.Context, callID domain.ToolCallID, arg
 	if err != nil {
 		// Context failures are timeouts/cancellations, not element problems.
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return errorResult(callID, startedAt, mapBrowserError(err))
+			return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
 		}
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
+		return toolkit.ErrorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
 			fmt.Sprintf("failed to click ref %q (%s); the element may be gone or not clickable, take a new snapshot", args.Ref, node),
 			domain.WithCause(err)))
 	}
@@ -368,7 +369,7 @@ func (t *BrowserTool) doClick(ctx context.Context, callID domain.ToolCallID, arg
 	// After click, the page may have changed. Invalidate refs.
 	t.registry.invalidate()
 
-	return successResult(callID, startedAt, browserOutput{
+	return toolkit.SuccessResult(callID, startedAt, browserOutput{
 		Action:  "click",
 		Ref:     args.Ref,
 		Status:  "ok",
@@ -381,17 +382,17 @@ func (t *BrowserTool) doClick(ctx context.Context, callID domain.ToolCallID, arg
 func (t *BrowserTool) doType(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
 	node := t.registry.resolve(args.Ref)
 	if node == nil {
-		return errorResult(callID, startedAt, t.unknownRefError(args.Ref))
+		return toolkit.ErrorResult(callID, startedAt, t.unknownRefError(args.Ref))
 	}
 
 	if args.Text == "" {
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
+		return toolkit.ErrorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
 			"text is required for type action"))
 	}
 
 	browserCtx, err := t.manager.Acquire()
 	if err != nil {
-		return errorResult(callID, startedAt, err)
+		return toolkit.ErrorResult(callID, startedAt, err)
 	}
 
 	typeCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
@@ -411,9 +412,9 @@ func (t *BrowserTool) doType(ctx context.Context, callID domain.ToolCallID, args
 	if err != nil {
 		t.manager.Touch()
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return errorResult(callID, startedAt, mapBrowserError(err))
+			return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
 		}
-		return errorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
+		return toolkit.ErrorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
 			fmt.Sprintf("failed to type into ref %q (%s); take a new snapshot", args.Ref, node),
 			domain.WithCause(err)))
 	}
@@ -423,7 +424,7 @@ func (t *BrowserTool) doType(ctx context.Context, callID domain.ToolCallID, args
 		err = chromedp.Run(typeCtx, chromedp.KeyEvent(kb.Enter))
 		if err != nil {
 			t.manager.Touch()
-			return errorResult(callID, startedAt, mapBrowserError(err))
+			return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
 		}
 	}
 	t.manager.Touch()
@@ -431,7 +432,7 @@ func (t *BrowserTool) doType(ctx context.Context, callID domain.ToolCallID, args
 	// After type/submit, the page may have changed. Invalidate refs.
 	t.registry.invalidate()
 
-	return successResult(callID, startedAt, browserOutput{
+	return toolkit.SuccessResult(callID, startedAt, browserOutput{
 		Action:  "type",
 		Ref:     args.Ref,
 		Status:  "ok",

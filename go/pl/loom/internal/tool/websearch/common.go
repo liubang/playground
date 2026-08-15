@@ -18,61 +18,21 @@
 package websearch
 
 import (
-	"context"
-	"encoding/json"
-
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
-// baseTool is the websearch-local variant of the shared tool skeleton,
-// delegating signing and verification to the toolkit package.
+// baseTool embeds the shared toolkit.BaseTool skeleton (definition +
+// signer + prepare/verify protocol, REVIEW R3); websearch has no
+// tool-specific dependencies beyond it.
 type baseTool struct {
-	def    domain.ToolDefinition
-	signer toolkit.Signer
+	toolkit.BaseTool
 }
 
 func newBaseTool(def domain.ToolDefinition) (baseTool, error) {
-	if err := def.Validate(); err != nil {
-		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
-	}
-	signer, err := toolkit.NewSigner()
+	bt, err := toolkit.NewBaseTool(def)
 	if err != nil {
 		return baseTool{}, err
 	}
-	return baseTool{def: def, signer: signer}, nil
-}
-
-func (b *baseTool) prepareCall(
-	ctx context.Context,
-	call domain.ToolCall,
-	canonicalArgs json.RawMessage,
-	approvalDesc string,
-) (domain.PreparedCall, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.PreparedCall{}, err
-	}
-	if err := call.Validate(); err != nil {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
-	}
-	if err := toolkit.ValidateCallName(call, b.def); err != nil {
-		return domain.PreparedCall{}, err
-	}
-
-	prepared := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        call.ID,
-			Name:      b.def.Name,
-			Arguments: toolkit.CloneRawMessage(canonicalArgs),
-		},
-		Definition:   b.def,
-		Risk:         b.def.Risk(),
-		ApprovalDesc: approvalDesc,
-	}
-	prepared.ArgsHash = b.signer.Sign(prepared)
-	return prepared, nil
-}
-
-func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	return b.signer.VerifyWithRisk(prepared, b.def)
+	return baseTool{BaseTool: bt}, nil
 }

@@ -25,79 +25,37 @@ package browser
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
-// baseTool is the browser-local variant of the shared tool skeleton,
-// delegating signing and verification to the toolkit package. The
-// fingerprint includes the typed URLRequest for domain-rule evaluation
-// by the policy layer (docs/BROWSER_DESIGN.md §5.3).
+// baseTool embeds the shared toolkit.BaseTool skeleton (definition +
+// signer + prepare/verify protocol, REVIEW R3). Risk is graded per action
+// (riskForAction), so Prepare passes an explicit Risk override and
+// Execute re-derives it from the signed arguments before verifying.
 type baseTool struct {
-	def    domain.ToolDefinition
-	signer toolkit.Signer
+	toolkit.BaseTool
 }
 
 func newBaseTool(def domain.ToolDefinition) (baseTool, error) {
-	if err := def.Validate(); err != nil {
-		return baseTool{}, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
-	}
-	signer, err := toolkit.NewSigner()
+	bt, err := toolkit.NewBaseTool(def)
 	if err != nil {
 		return baseTool{}, err
 	}
-	return baseTool{def: def, signer: signer}, nil
+	return baseTool{BaseTool: bt}, nil
 }
 
-func (b *baseTool) prepareCall(
-	ctx context.Context,
-	call domain.ToolCall,
-	canonicalArgs json.RawMessage,
-	approvalDesc string,
-	risk domain.RiskLevel,
-	urlRequest *domain.URLRequest,
-) (domain.PreparedCall, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.PreparedCall{}, err
-	}
-	if err := call.Validate(); err != nil {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
-	}
-	if err := toolkit.ValidateCallName(call, b.def); err != nil {
-		return domain.PreparedCall{}, err
-	}
-
-	prepared := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        call.ID,
-			Name:      b.def.Name,
-			Arguments: toolkit.CloneRawMessage(canonicalArgs),
-		},
-		Definition:   b.def,
-		Risk:         risk,
-		ApprovalDesc: approvalDesc,
-		URLRequest:   urlRequest,
-	}
-	prepared.ArgsHash = b.signer.Sign(prepared)
-	return prepared, nil
-}
-
+// verifyPreparedCall verifies the prepared call with the shared structural
+// checks (name, definition, source, capabilities, HMAC) and then re-derives
+// the risk from the signed action — the same re-derivation run_cmd
+// performs for riskForArgs. The shared VerifyPreparedCall cannot be used
+// directly because the definition-level default risk is not the graded one.
 func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	if prepared.Call.Name != b.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call tool name mismatch")
+	if err := b.BaseTool.VerifyPreparedCallStructural(prepared); err != nil {
+		return err
 	}
-	if prepared.Definition.Name != b.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call definition mismatch")
-	}
-	if prepared.Definition.Source != b.def.Source {
-		return domain.NewError(domain.ErrSecurity, "prepared call source mismatch")
-	}
-	// Risk is graded per action (riskForAction), so recompute it from the
-	// signed arguments instead of assuming the definition default — the
-	// same re-derivation run_cmd performs for riskForArgs.
 	args, err := toolkit.DecodeStrict[browserArgs](prepared.Call.Arguments)
 	if err != nil {
 		return domain.NewError(domain.ErrSecurity, "prepared call arguments are unreadable")
@@ -105,11 +63,7 @@ func (b *baseTool) verifyPreparedCall(prepared domain.PreparedCall) error {
 	if prepared.Risk != riskForAction(args.Action) {
 		return domain.NewError(domain.ErrSecurity, "prepared call risk mismatch")
 	}
-	if !toolkit.SameCapabilities(prepared.Definition.Capabilities, b.def.Capabilities) {
-		return domain.NewError(domain.ErrSecurity, "prepared call capabilities mismatch")
-	}
-
-	return b.signer.Verify(prepared, b.def)
+	return nil
 }
 
 // extractURLRequest parses a URL string and returns a typed URLRequest
@@ -135,25 +89,4 @@ func withOpTimeout(ctx, browserCtx context.Context, timeout time.Duration) (cont
 		stop()
 		cancel()
 	}
-}
-
-// --- Local aliases to the shared toolkit helpers ---
-// These thin wrappers let the rest of the package keep using the short
-// names without a bulk import change. They are zero-cost: the compiler
-// inlines them away.
-
-func decodeStrict[T any](raw json.RawMessage) (T, error) { return toolkit.DecodeStrict[T](raw) }
-
-func cloneRawMessage(raw json.RawMessage) json.RawMessage { return toolkit.CloneRawMessage(raw) }
-
-func sameCapabilities(left, right []domain.Capability) bool {
-	return toolkit.SameCapabilities(left, right)
-}
-
-func successResult(callID domain.ToolCallID, startedAt time.Time, payload any) domain.ToolResult {
-	return toolkit.SuccessResult(callID, startedAt, payload)
-}
-
-func errorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	return toolkit.ErrorResult(callID, startedAt, err)
 }
