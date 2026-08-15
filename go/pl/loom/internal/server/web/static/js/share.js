@@ -2,9 +2,25 @@
 // Transcript/blocks 渲染管线；无 SSE、无 composer、无鉴权（token 即凭证）。
 
 import { Transcript } from './components/transcript.js'
+import { icon } from './icons.js'
 
 const THEME_KEY = 'loom_theme'
 const $ = (id) => document.getElementById(id)
+
+// 分享页默认钉在底部（applySnapshot 收尾滚动到尾部）；长会话里提供
+// 一键回顶按钮：滚动离开顶部超过阈值时显示，点击平滑回到顶部。
+const TOP_BTN_SHOW_PX = 400
+function initBackToTop(scroller, btn) {
+  btn.innerHTML = icon('arrow-up')
+  btn.addEventListener('click', () => {
+    scroller.scrollTo({ top: 0, behavior: 'smooth' })
+  })
+  const update = () => {
+    btn.hidden = scroller.scrollTop < TOP_BTN_SHOW_PX
+  }
+  scroller.addEventListener('scroll', update, { passive: true })
+  return update
+}
 
 // 主题与主应用一致：默认深色，仅显式存了 "light" 才用浅色。
 const saved = sessionStorage.getItem(THEME_KEY)
@@ -74,6 +90,10 @@ async function boot() {
   // state 固定 "closed"，applySnapshot 会为最后一轮补齐操作行（复制/时间）。
   const transcript = new Transcript($('transcript'), $('blocks'), { fetchArtifactURL })
   transcript.applySnapshot({ messages: view.messages || [], state: 'closed' })
+
+  // 回到顶部按钮：applySnapshot 已钉到底部，此刻按当前滚动位置初始化显示态。
+  const updateTopBtn = initBackToTop($('transcript'), $('share-top'))
+  updateTopBtn()
 }
 
 boot()
