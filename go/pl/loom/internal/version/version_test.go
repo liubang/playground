@@ -14,22 +14,32 @@
 
 package version
 
-import (
-	"regexp"
-	"strings"
-	"testing"
-)
+import "testing"
 
-var semverPattern = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+// TestUnstampedDefaults: `go test` binaries are never stamped; the
+// package must boot with the documented default instead of panicking
+// or guessing a number.
+func TestUnstampedDefaults(t *testing.T) {
+	if Version != "dev" {
+		t.Fatalf("unstamped Version = %q, want %q", Version, "dev")
+	}
+	if Release != "dev" {
+		t.Fatalf("unstamped Release = %q, want %q", Release, "dev")
+	}
+}
 
-func TestVersionShape(t *testing.T) {
-	if !semverPattern.MatchString(Version) {
-		t.Fatalf("Version = %q, want semver like 1.2.3 or 1.2.3-dev", Version)
+// TestReleaseOf: a stamped version is "<yyyymmdd>.<git-short-hash>";
+// Release keeps only the date segment (CFBundleShortVersionString is
+// numeric-only).
+func TestReleaseOf(t *testing.T) {
+	cases := map[string]string{
+		"20260815.82f4e2a53": "20260815",
+		"20260815.unknown":   "20260815",
+		"dev":                "dev",
 	}
-	if !strings.HasPrefix(Version, Release) {
-		t.Fatalf("Release = %q is not a prefix of Version = %q", Release, Version)
-	}
-	if strings.Contains(Release, "-") {
-		t.Fatalf("Release = %q must not carry a pre-release suffix", Release)
+	for in, want := range cases {
+		if got := releaseOf(in); got != want {
+			t.Errorf("releaseOf(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

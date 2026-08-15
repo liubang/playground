@@ -70,6 +70,7 @@ build:macos --cxxopt=-Wno-error=unused-but-set-parameter
 # compiles, so set it globally for desktop builds).
 # Usage: bazel build --config=desktop //go/pl/loom/cmd/loom-desktop:loom_desktop_app
 build:desktop --@rules_go//go/config:tags=production
+build:desktop --stamp
 
 # test in Release mode
 test -c opt
@@ -85,3 +86,7 @@ common:ci --repo_env=PYPI_INDEX_URL=https://pypi.org/simple
 build:ci --jobs=auto
 test:ci --cache_test_results
 test:ci --test_output=errors
+
+# Version stamping: date + git hash (tools/workspace_status.sh); consumed by
+# go_binary x_defs and the info_plist genrule.
+build --workspace_status_command=tools/workspace_status.sh

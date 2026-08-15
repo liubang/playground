@@ -53,6 +53,14 @@ cd "${WS}"
 DEST="${WS}/dist"
 mkdir -p "${DEST}"
 
+# Version identity: "<yyyymmdd>.<git-short-hash>" from the same single
+# producer the bazel builds use (tools/workspace_status.sh), injected
+# into every binary below — matching the Info.plist the bazel bundle
+# already carries.
+LOOM_VERSION="$(bash "${WS}/tools/workspace_status.sh" | awk '$1 == "STABLE_LOOM_VERSION" {print $2}')"
+[[ -n "${LOOM_VERSION}" ]] || LOOM_VERSION="dev"
+VERSION_PKG="github.com/liubang/playground/go/pl/loom/internal/version"
+
 TMP="$(mktemp -d /tmp/loom_release_XXXXXX)"
 trap 'rm -rf "${TMP}"' EXIT
 
@@ -60,7 +68,9 @@ trap 'rm -rf "${TMP}"' EXIT
 go_build() {
     local out="$1" goos="$2" goarch="$3" pkg="$4"
     shift 4
-    (cd "${WS}/go" && GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build -ldflags="-s -w" -o "${out}" "$@" "${pkg}") 1>&2
+    (cd "${WS}/go" && GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build \
+        -ldflags="-s -w -X ${VERSION_PKG}.Version=${LOOM_VERSION}" \
+        -o "${out}" "$@" "${pkg}") 1>&2
 }
 
 # --- macOS desktop (per-arch .app + DMG) ---
@@ -72,7 +82,9 @@ go_build() {
 for arch in arm64 amd64; do
     [[ "${arch}" == "amd64" ]] && label="x86_64" || label="arm64"
     echo "package_release: building desktop darwin_${arch} ..." 1>&2
-    (cd "${WS}/go" && GOOS=darwin GOARCH="${arch}" CGO_ENABLED=1 go build -tags production -ldflags="-s -w" -o "${TMP}/loom-desktop-${arch}" ./pl/loom/cmd/loom-desktop) 1>&2
+    (cd "${WS}/go" && GOOS=darwin GOARCH="${arch}" CGO_ENABLED=1 go build -tags production \
+        -ldflags="-s -w -X ${VERSION_PKG}.Version=${LOOM_VERSION}" \
+        -o "${TMP}/loom-desktop-${arch}" ./pl/loom/cmd/loom-desktop) 1>&2
 
     APP="${TMP}/app-${arch}/Loom.app"
     mkdir -p "${TMP}/app-${arch}"
@@ -93,8 +105,9 @@ for arch in arm64 amd64; do
 done
 
 # --- Linux CLI (.deb) ---
-# Debian versions cannot contain "-" without a revision: 0.2.0-dev ->
-# 0.2.0~dev-1 (~ sorts before the release, so 0.2.0~dev-1 < 0.2.0-1).
+# Debian versions cannot contain "-" outside the revision: a stamped
+# "20260815.82f4e2a" has none, but the ~ rewrite keeps hypothetical
+# dash-bearing versions valid (~ sorts before any release suffix).
 DEB_VERSION="${VERSION//-/~}-1"
 
 make_deb() { # <deb-arch> <binary>

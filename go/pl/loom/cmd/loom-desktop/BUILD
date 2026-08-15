@@ -24,6 +24,7 @@ load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("//tools:version_status.bzl", "stable_status")
 
 go_library(
     name = "loom_desktop_lib",
@@ -80,6 +81,11 @@ go_binary(
     # does not reach external repo compiles).
     tags = ["manual"],
     visibility = ["//visibility:public"],
+    # Version stamping: same {STABLE_LOOM_VERSION} as cmd/loom (substituted
+    # under --stamp; the desktop config sets it).
+    x_defs = {
+        "github.com/liubang/playground/go/pl/loom/internal/version.Version": "{STABLE_LOOM_VERSION}",
+    },
 )
 
 go_test(
@@ -107,18 +113,22 @@ pkg_files(
 )
 
 # Renders Info.plist from the template, injecting @VERSION@/@RELEASE@ from
-# the canonical //go/pl/loom/internal/version:VERSION file so bundle
-# metadata can never drift from the Go binaries.
+# the STABLE workspace status keys — the same keys the go_binary x_defs
+# stamp into the binaries (tools/workspace_status.sh) — so bundle metadata
+# can never drift from the Go binaries.
+stable_status(name = "loom_stable_status")
+
 genrule(
     name = "info_plist",
     srcs = [
         "macos/Info.plist.tmpl",
-        "//go/pl/loom/internal/version:version_file",
+        ":loom_stable_status",
     ],
     outs = ["Info.plist"],
     cmd = """
-VERSION=$$(tr -d '[:space:]' < $(location //go/pl/loom/internal/version:version_file)); \\
-RELEASE=$${VERSION%%-*}; \\
+VERSION=$$(awk '$$1 == "STABLE_LOOM_VERSION" {print $$2}' $(location :loom_stable_status)); \\
+RELEASE=$$(awk '$$1 == "STABLE_LOOM_DATE" {print $$2}' $(location :loom_stable_status)); \\
+[ -n "$$VERSION" ] || { echo "STABLE_LOOM_VERSION missing from workspace status" >&2; exit 1; }; \\
 sed -e "s/@VERSION@/$$VERSION/g" -e "s/@RELEASE@/$$RELEASE/g" $(location macos/Info.plist.tmpl) > $@
 """,
     tags = ["manual"],
