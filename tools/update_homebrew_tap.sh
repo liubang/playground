@@ -80,7 +80,7 @@ PY
 python3 - "$VERSION" "$DMG_ARM" "$DMG_AMD" <<'PY'
 import re, sys
 version, dmg_arm, dmg_amd = sys.argv[1:]
-p = "Cask/loom-agent.rb"
+p = "Casks/loom-agent.rb"
 s = open(p).read()
 s = re.sub(r'version "[^"]*"', f'version "{version}"', s, count=1)
 s = re.sub(r'sha256 arm:\s*"[^"]*"', f'sha256 arm:   "{dmg_arm}"', s, count=1)
@@ -89,6 +89,7 @@ open(p, "w").write(s)
 PY
 
 test -f Formula/loom-cli.rb || { echo "Formula/loom-cli.rb not found in tap" >&2; exit 1; }
+test -f Casks/loom-agent.rb || { echo "Casks/loom-agent.rb not found in tap" >&2; exit 1; }
 
 git config user.name "liubang"
 git config user.email "it.liubang@gmail.com"
