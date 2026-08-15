@@ -251,7 +251,7 @@ l.Run.appendEvent(domain.EventContextCompacted, ...)   // 审计事件，不变
 - `lastCompactEst`、`ForceCompact`、notice re-arm 等簿记不变；
 - 崩溃安全不变：指令事件与 checkpoint 同事务，崩溃后要么都在要么都不在；`RecoverRun` 现有逻辑不感知压缩，无需改动。
 
-**运行时不变量自检（借自 dsh invariant 机制）**：dsh 在每次请求前校验 "从 log 折叠出的 messages == 即将发送的 messages"。本设计引入等价的 strict 模式自检（`LOOM_STRICT_REPLAY=1` 或 debug 构建）：`callModel` 组装完 `effectiveMessages()` 后，用 `session.Replay`（内存事件副本）折叠出的 surface 与之做深度比较，不一致即 panic/log-fatal。常态关闭（有回放成本），CI 的 loop 测试全程开启——它把 §5.1 的黄金断言从"事后测试"升级为"每次请求时的在线校验"，能在压缩 bug 造成污染的第一现场暴露。
+**运行时不变量自检（借自 dsh invariant 机制）**：dsh 在每次请求前校验 "从 log 折叠出的 messages == 即将发送的 messages"。本设计引入等价的 strict 模式自检（`LOOM_REPLAY_STRICT=1`，replay 测试 harness 的既有 env；见 REPLAY_TESTING_DESIGN.md）：`callModel` 组装完 `effectiveMessages()` 后，用 `session.Replay`（内存事件副本）折叠出的 surface 与之做深度比较，不一致即 panic/log-fatal。常态关闭（有回放成本），CI 的 loop 测试全程开启——它把 §5.1 的黄金断言从"事后测试"升级为"每次请求时的在线校验"，能在压缩 bug 造成污染的第一现场暴露。
 
 ### 4.5 回放与消费方的语义变化
 
