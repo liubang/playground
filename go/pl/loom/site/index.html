@@ -557,8 +557,12 @@
     <div class="step">
       <div class="step-label"><span class="num">1</span> 安装</div>
       <div class="code-block">
-        <button class="copy" data-copy="brew tap liubang/loom && brew install loom-cli">复制</button>
-        <span class="prompt">$</span> <span>brew tap liubang/loom &amp;&amp; brew install loom-cli</span> <span class="dim"># CLI（macOS / Linux）</span>
+        <button class="copy" data-copy="brew tap liubang/loom
+brew trust liubang/loom
+brew install loom-cli">复制</button>
+        <span class="prompt">$</span> <span>brew tap liubang/loom</span><br>
+        <span class="prompt">$</span> <span>brew trust liubang/loom <span class="dim"># macOS：信任第三方 tap（新版 Homebrew 要求）</span></span><br>
+        <span class="prompt">$</span> <span>brew install loom-cli <span class="dim"># CLI（macOS / Linux）</span></span>
       </div>
     </div>
 
