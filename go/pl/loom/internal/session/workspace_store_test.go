@@ -19,7 +19,6 @@ package session
 
 import (
 	"context"
-	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -92,7 +91,7 @@ func TestWorkspaceLookupByIDAndRoot(t *testing.T) {
 	}
 }
 
-func TestSessionWorkspaceBindingAndBackfill(t *testing.T) {
+func TestSessionWorkspaceBinding(t *testing.T) {
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
 	ctx := context.Background()
 
@@ -113,28 +112,13 @@ func TestSessionWorkspaceBindingAndBackfill(t *testing.T) {
 		t.Fatalf("SessionWorkspace bound: %s err=%v, want %s", got, err, ws.ID)
 	}
 
-	// A zero-workspace session simulates the pre-v5 upgrade tail; the backfill
-	// reassigns it to the default workspace.
-	legacy := domain.NewSessionID()
-	if err := store.CreateSession(ctx, legacy, domain.WorkspaceID{}); err != nil {
-		t.Fatalf("CreateSession legacy: %v", err)
+	// A session created without a workspace reports the zero ID.
+	unbound := domain.NewSessionID()
+	if err := store.CreateSession(ctx, unbound, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession unbound: %v", err)
 	}
-	if got, _ := store.SessionWorkspace(ctx, legacy); !got.IsZero() {
-		t.Fatalf("legacy session should start unassigned, got %s", got)
-	}
-	n, err := store.BackfillSessionWorkspaces(ctx, ws.ID)
-	if err != nil {
-		t.Fatalf("BackfillSessionWorkspaces: %v", err)
-	}
-	if n != 1 {
-		t.Fatalf("backfill affected %d rows, want 1", n)
-	}
-	if got, _ := store.SessionWorkspace(ctx, legacy); got != ws.ID {
-		t.Fatalf("legacy session after backfill: %s, want %s", got, ws.ID)
-	}
-	// Idempotent: a second backfill touches nothing.
-	if n, _ := store.BackfillSessionWorkspaces(ctx, ws.ID); n != 0 {
-		t.Fatalf("second backfill affected %d rows, want 0", n)
+	if got, _ := store.SessionWorkspace(ctx, unbound); !got.IsZero() {
+		t.Fatalf("unbound session should report the zero workspace, got %s", got)
 	}
 }
 
@@ -265,52 +249,5 @@ func TestDeleteWorkspace(t *testing.T) {
 	summaries, _, err := store.ListSessions(ctx, "", 10, false, other.ID)
 	if err != nil || len(summaries) != 1 || summaries[0].ID != keep {
 		t.Fatalf("ListSessions other workspace: %+v err=%v, want the surviving session", summaries, err)
-	}
-}
-
-// TestMigrateV5FromV4 drives the upgrade path: a hand-built v4 database (no
-// workspace_id column) opened by the current store must gain the column and
-// the workspaces table, and accept workspace-bound sessions afterwards.
-func TestMigrateV5FromV4(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "sessions.db")
-	ctx := context.Background()
-
-	// Build a minimal v4-shaped database: v4 sessions table (archived_at, no
-	// workspace_id) plus a schema_migrations row pinning version 4.
-	raw, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path))
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	_, err = raw.ExecContext(ctx, `
-CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_migrations(version, applied_at) VALUES (4, '`+time.Now().UTC().Format(time.RFC3339Nano)+`');
-CREATE TABLE sessions (
-    session_id TEXT PRIMARY KEY,
-    version INTEGER NOT NULL CHECK (version >= 0),
-    created_at TEXT NOT NULL,
-    created_at_unix_nano INTEGER NOT NULL,
-    updated_at TEXT NOT NULL,
-    updated_at_unix_nano INTEGER NOT NULL,
-    archived_at_unix_nano INTEGER
-);`)
-	if err != nil {
-		t.Fatalf("build v4 database: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close v4 database: %v", err)
-	}
-
-	store := openTestSQLiteStore(t, path)
-	// After migration the store accepts a workspace-bound session.
-	ws, err := store.UpsertWorkspace(ctx, domain.Workspace{ID: domain.NewWorkspaceID(), Name: "w", RootPath: filepath.Join(t.TempDir(), "w")})
-	if err != nil {
-		t.Fatalf("UpsertWorkspace after migration: %v", err)
-	}
-	sid := domain.NewSessionID()
-	if err := store.CreateSession(ctx, sid, ws.ID); err != nil {
-		t.Fatalf("CreateSession after migration: %v", err)
-	}
-	if got, _ := store.SessionWorkspace(ctx, sid); got != ws.ID {
-		t.Fatalf("SessionWorkspace after migration: %s, want %s", got, ws.ID)
 	}
 }

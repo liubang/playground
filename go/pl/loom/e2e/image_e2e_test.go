@@ -26,8 +26,6 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
-	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,11 +34,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/liubang/playground/go/pl/loom/e2e/harness"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/client"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
-	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
 // TestServeRealModelImageE2E is the acceptance suite for the artifact-based
@@ -68,12 +66,8 @@ import (
 //  6. text-only models reject NEW image attachments with an actionable
 //     error instead of failing deep inside the provider call.
 func TestServeRealModelImageE2E(t *testing.T) {
-	if os.Getenv("LOOM_E2E_LLM") != "1" {
-		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
-	}
-
 	ctx := context.Background()
-	configRaw := readRealUserConfig(t)
+	configRaw := harness.ReadRealUserConfig(t)
 
 	visionRef := os.Getenv("LOOM_E2E_VISION_MODEL")
 	if visionRef == "" {
@@ -81,59 +75,15 @@ func TestServeRealModelImageE2E(t *testing.T) {
 	}
 	patched := patchConfigModalities(t, configRaw, visionRef)
 
-	// The patched config copy loads from a temp loom home, so the user's
-	// stores are never touched.
-	tmp, resolved := loadIsolatedConfig(t, patched)
-	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	workspace := filepath.Join(tmp, "ws")
-	if err := os.MkdirAll(workspace, 0o755); err != nil {
-		t.Fatalf("mkdir ws: %v", err)
-	}
+	env := harness.NewEnv(t, harness.WithConfigRaw(patched))
+	workspace := env.Workspace
+	artifactDir := env.ArtifactDir
 
-	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	artifactDir := filepath.Join(tmp, "artifacts")
-	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
-		ArtifactDir: artifactDir,
-		Version:     "e2e",
-		Logger:      discard,
-	})
-	if err != nil {
-		t.Fatalf("NewProcessRuntime: %v", err)
-	}
-	defer proc.Close()
-	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{
-		WorkspaceRoot: workspace,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkspaceBootstrap: %v", err)
-	}
-	defer bootstrap.Close()
-
-	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
-	defer broker.Close()
-	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		_ = svc.Shutdown(shutdownCtx)
-	}()
-
-	c := client.NewInProc(svc)
-	if err := c.NewSession(ctx); err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
+	c := env.NewClient(t)
 	sessionID := c.SessionID()
 
-	eventsCtx, stopEvents := context.WithCancel(ctx)
-	defer stopEvents()
-	events, err := c.SubscribeEvents(eventsCtx, 0)
-	if err != nil {
-		t.Fatalf("SubscribeEvents: %v", err)
-	}
-	collector := &eventCollector{client: c, ch: events}
-	go collector.run()
+	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	go collector.Run()
 
 	// Switch to the vision model; the patched modalities must be visible.
 	modelResult, err := c.SetModel(ctx, visionRef)
@@ -148,13 +98,13 @@ func TestServeRealModelImageE2E(t *testing.T) {
 	b64 := base64.StdEncoding.EncodeToString(pngBytes)
 
 	// --- 1. attachment ingress: the model must actually see the image ---
-	turns := collector.turnsDone()
+	turns := collector.TurnsDone()
 	if _, err := c.SubmitPrompt(ctx,
 		"这张图片是纯色的。它是什么颜色？只回答一个中文颜色词，不要解释。",
 		[]domain.ImageContent{{MediaType: "image/png", Data: b64}}); err != nil {
 		t.Fatalf("SubmitPrompt(image turn): %v", err)
 	}
-	collector.waitTurn(t, turns+1, 3*time.Minute)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
 
 	snap, err := c.RequestSnapshot(ctx)
 	if err != nil {
@@ -171,10 +121,7 @@ func TestServeRealModelImageE2E(t *testing.T) {
 	attachRef := findUserImageArtifact(t, snap.Messages)
 	assertNoInlineImages(t, snap.Messages)
 
-	store, err := sessionStoreReadOnly(ctx, resolved)
-	if err != nil {
-		t.Fatalf("open session store: %v", err)
-	}
+	store := env.OpenStoreReadOnly(t)
 	persisted, err := store.LoadEvents(ctx, sessionID, 0)
 	if err != nil {
 		t.Fatalf("LoadEvents: %v", err)
@@ -189,7 +136,6 @@ func TestServeRealModelImageE2E(t *testing.T) {
 			sawArtifactRef = true
 		}
 	}
-	store.Close()
 	if !sawArtifactRef {
 		t.Fatalf("no durable event references the attachment artifact %s", attachRef.ID)
 	}
@@ -214,13 +160,13 @@ func TestServeRealModelImageE2E(t *testing.T) {
 	if err := os.WriteFile(swatch, pngBytes, 0o600); err != nil {
 		t.Fatalf("write swatch: %v", err)
 	}
-	turns = collector.turnsDone()
+	turns = collector.TurnsDone()
 	if _, err := c.SubmitPrompt(ctx, fmt.Sprintf(
 		"调用 view_image 工具查看图片 %s，然后只回答一个中文颜色词，不要解释。", swatch,
 	), nil); err != nil {
 		t.Fatalf("SubmitPrompt(view_image turn): %v", err)
 	}
-	collector.waitTurn(t, turns+1, 3*time.Minute)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
 
 	snap, err = c.RequestSnapshot(ctx)
 	if err != nil {
@@ -239,12 +185,12 @@ func TestServeRealModelImageE2E(t *testing.T) {
 	if _, err := c.SetModel(ctx, "aigc-openai/glm-5.2"); err != nil {
 		t.Fatalf("SetModel(glm-5.2): %v", err)
 	}
-	turns = collector.turnsDone()
+	turns = collector.TurnsDone()
 	if _, err := c.SubmitPrompt(ctx,
 		"直接回答：你现在能看到我们对话里的图片吗？一句话。", nil); err != nil {
 		t.Fatalf("SubmitPrompt(gated turn): %v", err)
 	}
-	collector.waitTurn(t, turns+1, 3*time.Minute)
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
 	snap, err = c.RequestSnapshot(ctx)
 	if err != nil {
 		t.Fatalf("RequestSnapshot(after gating): %v", err)
@@ -383,9 +329,9 @@ func assertToolResultImageArtifact(t *testing.T, messages []domain.Message) {
 // dumpImageTurnFailure prints the diagnostics that matter when a vision
 // turn comes back empty: the controller state, the turn error observed on
 // the event stream, and a shape summary of every transcript message.
-func dumpImageTurnFailure(t *testing.T, snap client.Snapshot, collector *eventCollector) {
+func dumpImageTurnFailure(t *testing.T, snap client.Snapshot, collector *harness.Collector) {
 	t.Helper()
-	t.Logf("state=%s turns=%d lastTurnError=%q", snap.State, snap.TurnCount, collector.lastTurnError())
+	t.Logf("state=%s turns=%d lastTurnError=%q", snap.State, snap.TurnCount, collector.LastTurnError())
 	for i, msg := range snap.Messages {
 		kinds := make([]string, 0, len(msg.Parts))
 		for _, part := range msg.Parts {

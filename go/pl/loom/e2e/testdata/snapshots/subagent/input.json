@@ -1,0 +1,9 @@
+{
+  "steps": [
+    {
+      "op": "prompt",
+      "text": "使用 delegate_task 工具委派一个子代理来完成这个任务：用 read_file 读取工作区里的 marker.txt 并报告文件中的口令。子代理完成后，只把口令本身告诉我，不要提问。"
+    },
+    { "op": "wait_turn_end" }
+  ]
+}

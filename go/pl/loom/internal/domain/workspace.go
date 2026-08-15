@@ -61,9 +61,6 @@ type WorkspaceStore interface {
 	// SessionWorkspace is ResumeSession's lightweight ownership lookup: the
 	// workspace a session belongs to, without loading its events.
 	SessionWorkspace(ctx context.Context, sessionID SessionID) (WorkspaceID, error)
-	// BackfillSessionWorkspaces assigns every session with an empty
-	// workspace_id (the v4→v5 upgrade tail) to id. Returns rows affected.
-	BackfillSessionWorkspaces(ctx context.Context, id WorkspaceID) (int64, error)
 	// CountSessionsPerWorkspace returns live session counts keyed by
 	// workspace ID, for the list-workspaces endpoint.
 	CountSessionsPerWorkspace(ctx context.Context) (map[WorkspaceID]int, error)

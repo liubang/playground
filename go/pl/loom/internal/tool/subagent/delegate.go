@@ -427,6 +427,9 @@ func (t *DelegateTaskTool) executeSync(ctx context.Context, prepared domain.Prep
 		// it answers the task and stops.
 		CostInputUSDPerMTok:  t.f.CostInputUSDPerMTok,
 		CostOutputUSDPerMTok: t.f.CostOutputUSDPerMTok,
+		// The delegation edge binds this child's model calls to their own
+		// record/replay fixture shard.
+		ParentToolCallID: prepared.Call.ID,
 	}
 
 	execErr := loop.Execute(ctx)
