@@ -607,7 +607,11 @@ func TestExecuteRealGoVet(t *testing.T) {
 		t.Skip("go toolchain not available")
 	}
 	validator, root := newValidator(t)
-	mustWriteFile(t, filepath.Join(root, "go.mod"), []byte("module example.com/vetcase\n\ngo 1.25\n"))
+	// go directive must not exceed the CI image's bundled toolchain
+	// (ubuntu-24.04 ships go 1.22): a newer version would trigger a
+	// GOTOOLCHAIN download, which fails in the offline CI sandbox.
+	// 1.21 is vet'd directly by any go >= 1.21 without downloading.
+	mustWriteFile(t, filepath.Join(root, "go.mod"), []byte("module example.com/vetcase\n\ngo 1.21\n"))
 	mustWriteFile(t, filepath.Join(root, "main.go"), []byte(`package main
 
 import "fmt"

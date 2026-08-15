@@ -1049,11 +1049,14 @@ func TestValidateWritablePaths(t *testing.T) {
 	ordinary := filepath.Join(canonicalHome, "Library", "Logs", "myapp")
 
 	t.Run("canonicalizes expands tilde sorts and dedups", func(t *testing.T) {
-		got, err := validateWritablePaths([]string{ordinary + "/", "~/Library/Logs/myapp", "/tmp"})
+		// Deliberately not /tmp: HOME is set to t.TempDir(), which lands under
+		// /tmp on Linux CI, making /tmp an ancestor of a sensitive location
+		// (correctly rejected). /opt is platform-independent.
+		got, err := validateWritablePaths([]string{ordinary + "/", "~/Library/Logs/myapp", "/opt"})
 		if err != nil {
 			t.Fatalf("validateWritablePaths() error = %v", err)
 		}
-		want := []string{workspacepkg.Canonicalize("/tmp"), ordinary}
+		want := []string{workspacepkg.Canonicalize("/opt"), ordinary}
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("validateWritablePaths() = %v, want %v", got, want)
 		}
