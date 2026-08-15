@@ -8,5 +8,13 @@ go/pl/loom/internal/server/web/static/vendor/
 # prettier 无法解析
 *.flux
 
+# 官网落地页：手工紧凑排版，与 prettier 风格冲突（重排会爆炸成 2 倍行数）
+go/pl/loom/site/index.html
+
 # maven 依赖锁文件，由 bazel run @maven//:pin 生成并重写
 maven_install.json
+
+# JSON/JSONL：生成文件/数据快照（compile_commands.json、e2e 快照等），
+# 且 JSONL 逐行 JSON prettier 无法解析，一律不格式化
+*.json
+*.jsonl

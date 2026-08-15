@@ -39,7 +39,10 @@ for f in \
     "${DIST}/loom-linux-amd64.tar.gz" \
     "${DIST}"/Loom-*-macos-arm64.dmg \
     "${DIST}"/Loom-*-macos-x86_64.dmg; do
-    test -s "$f" || { echo "update_homebrew_tap: missing artifact $f" >&2; exit 1; }
+    test -s "$f" || {
+        echo "update_homebrew_tap: missing artifact $f" >&2
+        exit 1
+    }
 done
 
 TMP="$(mktemp -d)"
@@ -88,8 +91,14 @@ s = re.sub(r'intel:\s*"[^"]*"', f'intel: "{dmg_amd}"', s, count=1)
 open(p, "w").write(s)
 PY
 
-test -f Formula/loom-cli.rb || { echo "Formula/loom-cli.rb not found in tap" >&2; exit 1; }
-test -f Casks/loom-agent.rb || { echo "Casks/loom-agent.rb not found in tap" >&2; exit 1; }
+test -f Formula/loom-cli.rb || {
+    echo "Formula/loom-cli.rb not found in tap" >&2
+    exit 1
+}
+test -f Casks/loom-agent.rb || {
+    echo "Casks/loom-agent.rb not found in tap" >&2
+    exit 1
+}
 
 git config user.name "liubang"
 git config user.email "it.liubang@gmail.com"
