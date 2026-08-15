@@ -7,8 +7,16 @@
 *.pb.go linguist-generated=true
 # 第三方 vendor 静态资源
 go/pl/loom/internal/server/web/static/vendor/** linguist-generated=true
+# 官网落地页是手工紧凑排版（单行 CSS 声明/单行 JS），与 prettier 风格
+# 冲突；prettier 重排会爆炸成 2 倍行数，故排除（同 *.flux 先例）
+go/pl/loom/site/index.html rules-lint-ignored=true
 # maven 依赖锁文件由 bazel run @maven//:pin 生成，repin 会整体重写
 maven_install.json linguist-generated=true
+# JSON/JSONL 多为生成文件或数据快照（compile_commands.json、e2e 快照
+# testdata、multitool.lock.json 等），且 JSONL 是逐行 JSON，prettier 无法
+# 解析——统一排除，不交给任何 formatter
+*.json rules-lint-ignored=true
+*.jsonl rules-lint-ignored=true
 # clang-format/clang-tidy 配置是 YAML，但 linguist 的 YAML 文件名规则会命中它们；
 # 这些是手工维护/上游同步的样例，不交给 yamlfmt 重排
 .clang-format rules-lint-ignored=true

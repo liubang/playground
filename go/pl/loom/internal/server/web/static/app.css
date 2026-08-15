@@ -1824,7 +1824,9 @@ body.lightbox-open {
   font-size: var(--text-sm);
   cursor: pointer;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 .share-top:hover {
   background: var(--bg2);
