@@ -448,13 +448,22 @@ function sessionListSig(list) {
   )
 }
 
+// 工作区签名：侧栏按工作区分组渲染，注册/删除一个（空）工作区不会改变
+// 会话列表，必须让工作区集合本身参与 refreshSessions 的跳过判断，否则
+// 新工作区要等手动刷新页面才出现。
+function workspacesSig(list) {
+  return (list || [])
+    .map((w) => `${w.id}:${w.name || ''}:${w.root_path || ''}:${w.session_count}`)
+    .join(',')
+}
+
 async function refreshSessions() {
   try {
     const limit = Math.max(app.sessionList.length, SESSION_PAGE_SIZE)
     const { sessions, next_cursor } = await app.api.listSessions(limit, '', app.showArchived, 'all')
     app.sessionList = sessions || []
     app.sessCursor = next_cursor || ''
-    const sig = sessionListSig(app.sessionList)
+    const sig = sessionListSig(app.sessionList) + '|' + workspacesSig(app.workspaces)
     if (sig !== app.sessSig) {
       app.sessSig = sig
       app.sidebar.render(app.sessionList, app.workspaces)
@@ -479,7 +488,7 @@ async function loadMoreSessions() {
     )
     app.sessionList = app.sessionList.concat(sessions || [])
     app.sessCursor = next_cursor || ''
-    app.sessSig = sessionListSig(app.sessionList)
+    app.sessSig = sessionListSig(app.sessionList) + '|' + workspacesSig(app.workspaces)
     app.sidebar.render(app.sessionList, app.workspaces)
     if (app.sessionId) app.sidebar.setActive(app.sessionId)
   } catch (e) {
