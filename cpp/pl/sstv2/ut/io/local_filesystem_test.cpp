@@ -108,7 +108,12 @@ TEST_F(LocalFileSystemTest, IdentityFencedOpenRejectsContentAndObjectReplacement
     ASSERT_TRUE(filesystem_.remove(path("table.sst")).ok());
     auto replacement = filesystem_.create(path("table.sst"));
     ASSERT_TRUE(replacement.ok());
-    ASSERT_TRUE(filesystem_.append(*replacement, bytes("original")).ok());
+    // Write different content than the original: POSIX inode numbers can be
+    // immediately reused for a same-named replacement (e.g. ext4), so an
+    // identical copy would be indistinguishable from the original object
+    // under an inode+size+checksum identity. A replaced object is still
+    // rejected because its checksum no longer matches.
+    ASSERT_TRUE(filesystem_.append(*replacement, bytes("replaced")).ok());
     ASSERT_TRUE(filesystem_.close(*replacement).ok());
     EXPECT_EQ(filesystem_.open(path("table.sst"), *identity).status().code(),
               absl::StatusCode::kFailedPrecondition);
@@ -126,10 +131,15 @@ TEST_F(LocalFileSystemTest, IdentityFencedRemoveIsIdempotentAndRejectsReplacemen
 
     auto replacement_writer = filesystem_.create(path("table.sst"));
     ASSERT_TRUE(replacement_writer.ok());
-    ASSERT_TRUE(filesystem_.append(*replacement_writer, bytes("original")).ok());
+    // Same rationale as IdentityFencedOpenRejectsContentAndObjectReplacement:
+    // use different content so the replacement is distinguishable even when
+    // the OS reuses the freed inode for the new file.
+    ASSERT_TRUE(filesystem_.append(*replacement_writer, bytes("replaced")).ok());
     auto replacement = filesystem_.close(*replacement_writer);
     ASSERT_TRUE(replacement.ok());
-    ASSERT_NE(replacement->file_id, original->file_id);
+    // Content differs, so the identity must differ even if the OS reused the
+    // freed inode (file_id is st_ino and is NOT guaranteed to change).
+    ASSERT_NE(replacement->checksum, original->checksum);
 
     EXPECT_EQ(filesystem_.remove(path("table.sst"), *original).code(),
               absl::StatusCode::kFailedPrecondition);
