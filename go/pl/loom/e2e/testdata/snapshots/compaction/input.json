@@ -1,0 +1,11 @@
+{
+  "steps": [
+    { "op": "prompt", "text": "用 read_file 工具读取 band.txt 这个文件，然后只回答：好" },
+    { "op": "wait_turn_end" },
+    { "op": "prompt", "text": "用 read_file 工具读取 small.txt 这个文件，然后只回答：好" },
+    { "op": "wait_turn_end" },
+    { "op": "compact" },
+    { "op": "prompt", "text": "用一个字回答：嗯" },
+    { "op": "wait_turn_end" }
+  ]
+}

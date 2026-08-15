@@ -20,8 +20,6 @@ package e2e
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liubang/playground/go/pl/loom/e2e/harness"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/client"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -52,52 +51,15 @@ import (
 // Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
 func TestUserIntentRealModelE2E(t *testing.T) {
 	ctx := context.Background()
-	resolved, tmp, workspace := realModelHome(t)
+	env := harness.NewEnv(t)
 	// Act 2's URL must reach the transcript via a tool result, never via a
 	// user message — iana.org carries no builtin rule opinion.
-	if err := os.WriteFile(filepath.Join(workspace, "target.txt"), []byte("https://www.iana.org/domains/reserved\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(env.Workspace, "target.txt"), []byte("https://www.iana.org/domains/reserved\n"), 0o600); err != nil {
 		t.Fatalf("write target: %v", err)
 	}
 
-	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	proc, err := app.NewProcessRuntime(ctx, resolved, app.ProcessRuntimeConfig{
-		ArtifactDir: filepath.Join(tmp, "artifacts"),
-		Version:     "e2e",
-		Logger:      discard,
-	})
-	if err != nil {
-		t.Fatalf("NewProcessRuntime: %v", err)
-	}
-	defer proc.Close()
-	bootstrap, err := app.NewWorkspaceBootstrap(ctx, proc, app.BootstrapConfig{
-		WorkspaceRoot: workspace,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkspaceBootstrap: %v", err)
-	}
-	defer bootstrap.Close()
-
-	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
-	defer broker.Close()
-	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{Logger: discard})
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		_ = svc.Shutdown(shutdownCtx)
-	}()
-
-	c := client.NewInProc(svc)
-	if err := c.NewSession(ctx); err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
-
-	eventsCtx, stopEvents := context.WithCancel(ctx)
-	defer stopEvents()
-	events, err := c.SubscribeEvents(eventsCtx, 0)
-	if err != nil {
-		t.Fatalf("SubscribeEvents: %v", err)
-	}
-	recorder := &approvalRecorder{client: c, ch: events}
+	c := env.NewClient(t)
+	recorder := &approvalRecorder{client: c, ch: env.Subscribe(t, c)}
 	go recorder.run()
 
 	// --- Act 1 (positive): user-mentioned URL fetches without approval ---

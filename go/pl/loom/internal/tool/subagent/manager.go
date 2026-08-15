@@ -271,6 +271,9 @@ func (m *Manager) drive(ctx context.Context, cancel context.CancelFunc, mr *mana
 		// No GoalCell/PlanCell/SteerCell: the child is single-purpose.
 		CostInputUSDPerMTok:  m.factory.CostInputUSDPerMTok,
 		CostOutputUSDPerMTok: m.factory.CostOutputUSDPerMTok,
+		// The delegation edge binds this child's model calls to their own
+		// record/replay fixture shard.
+		ParentToolCallID: callID,
 	}
 
 	execErr := loop.Execute(ctx)

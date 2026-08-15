@@ -1,0 +1,8 @@
+{"durable":true,"kind":"turn.started","payload":{"prompt":"用 read_file 工具读取 marker.txt 这个文件，然后只回答文件里的口令本身，不要提问。","turn_index":1},"run_id":"","sequence":0,"session_id":"{{id:1}}","time":0,"turn":1,"version":1}
+{"durable":true,"kind":"session.opened","payload":{"message_count":1,"model":"llm-openai/glm-5.3","resumed":false,"workspace":"{{cwd}}"},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"turn":1,"version":1}
+{"durable":true,"kind":"run.phase_changed","payload":{"phase":"calling_model"},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
+{"durable":true,"kind":"budget.updated","payload":{"input_tokens":0,"output_tokens":0,"tool_calls":0,"turns":1},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
+{"durable":true,"kind":"model.request_started","payload":{"model_name":"glm-5.3","request_id":"{{id:3}}","turn":0},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
+{"durable":true,"kind":"model.request_failed","payload":{"code":"internal","message":"App:**0573在模型:glm-5.3每分钟请求次数超过限制","request_id":"{{id:3}}","stage":"stream"},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
+{"durable":true,"kind":"runtime.fatal","payload":{"message":"run failed: App:**0573在模型:glm-5.3每分钟请求次数超过限制"},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
+{"durable":true,"kind":"turn.finished","payload":{"error":"model stream: App:**0573在模型:glm-5.3每分钟请求次数超过限制"},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"turn":1,"version":1}

@@ -206,25 +206,6 @@ func (s *SQLiteStore) SessionWorkspace(ctx context.Context, sessionID domain.Ses
 	return domain.ParseWorkspaceID(raw)
 }
 
-// BackfillSessionWorkspaces reassigns the upgrade tail (sessions whose
-// workspace_id is the v5-migration default ”) to the given workspace
-// (docs/WORKSPACE_DESIGN.md §7.2). Idempotent; safe to run at every startup.
-func (s *SQLiteStore) BackfillSessionWorkspaces(ctx context.Context, id domain.WorkspaceID) (int64, error) {
-	if id.IsZero() {
-		return 0, domain.NewError(domain.ErrInvalidInput, "workspace ID is required")
-	}
-	res, err := s.db.ExecContext(ctx,
-		"UPDATE sessions SET workspace_id = ? WHERE workspace_id = ''", id.String())
-	if err != nil {
-		return 0, storeError("backfill session workspaces", err)
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return 0, storeError("backfill session workspaces result", err)
-	}
-	return affected, nil
-}
-
 // CountSessionsPerWorkspace returns per-workspace session counts (all
 // sessions, archived included) for the list-workspaces endpoint.
 func (s *SQLiteStore) CountSessionsPerWorkspace(ctx context.Context) (map[domain.WorkspaceID]int, error) {
