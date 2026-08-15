@@ -1,0 +1,132 @@
+# Copyright (c) 2026 The Authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Manual release workflow for Loom.
+#
+# Usage: Actions → release-loom → Run workflow (workflow_dispatch).
+#
+# 1. Builds all release artifacts on a macOS runner by running
+#    `bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_release`
+#    (the existing local packaging script: 4 CLI tarballs + 2 DMGs + 2 debs).
+# 2. Creates a GitHub Release on liubang/playground tagged with the version
+#    (default: <yyyymmdd>.<git-short-hash> from tools/workspace_status.sh)
+#    and uploads all artifacts.
+# 3. Pushes the same version + sha256 into the Homebrew tap
+#    liubang/homebrew-loom (requires the LOOM_TAP_TOKEN secret, see below).
+#
+# Prerequisite secret:
+#   LOOM_TAP_TOKEN — a PAT with `contents: write` on liubang/homebrew-loom
+#   (the workflow's built-in GITHUB_TOKEN cannot push to another repository).
+name: release-loom
+
+"on":
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          版本号（留空则自动生成 <yyyymmdd>.<短hash>，如 20260815.1fc8010d）
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: 发版来源分支/tag（默认 main）
+        required: false
+        type: string
+        default: main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build & publish
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+          disk-cache: ${{ github.workflow }}-${{ runner.os }}
+
+      - name: build release artifacts
+        run: |
+          bazel run \
+            --config=desktop \
+            //go/pl/loom/cmd/loom-desktop:package_release
+
+      - name: verify artifacts
+        run: |
+          ls -la dist/
+          for f in \
+            dist/loom-darwin-arm64.tar.gz \
+            dist/loom-darwin-amd64.tar.gz \
+            dist/loom-linux-arm64.tar.gz \
+            dist/loom-linux-amd64.tar.gz \
+            dist/Loom-*-macos-arm64.dmg \
+            dist/Loom-*-macos-x86_64.dmg \
+            dist/loom_*.deb; do
+            test -s "$f" || { echo "missing artifact: $f" >&2; exit 1; }
+          done
+
+      - name: compute version
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="$(bash tools/workspace_status.sh | awk '$1 == "STABLE_LOOM_VERSION" {print $2}')"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "release $VERSION already exists; aborting" >&2
+            exit 1
+          fi
+          gh release create "$VERSION" \
+            dist/loom-darwin-arm64.tar.gz \
+            dist/loom-darwin-amd64.tar.gz \
+            dist/loom-linux-arm64.tar.gz \
+            dist/loom-linux-amd64.tar.gz \
+            dist/Loom-*-macos-arm64.dmg \
+            dist/Loom-*-macos-x86_64.dmg \
+            dist/loom_*.deb \
+            --title "Loom $VERSION" \
+            --generate-notes
+
+      - name: update homebrew tap
+        if: ${{ env.LOOM_TAP_TOKEN != '' }}
+        env:
+          LOOM_TAP_TOKEN: ${{ secrets.LOOM_TAP_TOKEN }}
+          GH_TOKEN: ${{ secrets.LOOM_TAP_TOKEN }}
+        run: |
+          chmod +x tools/update_homebrew_tap.sh
+          tools/update_homebrew_tap.sh \
+            "${{ steps.version.outputs.version }}" \
+            "${GITHUB_WORKSPACE}/dist"
+
+      - name: warn about missing tap token
+        if: ${{ env.LOOM_TAP_TOKEN == '' }}
+        env:
+          LOOM_TAP_TOKEN: ${{ secrets.LOOM_TAP_TOKEN }}
+        run: |
+          echo "::warning::LOOM_TAP_TOKEN 未配置，已跳过 homebrew tap 更新。"
+          echo "请在仓库 Settings → Secrets 添加 LOOM_TAP_TOKEN（对 liubang/homebrew-loom 有 contents: write 权限的 PAT）。"
