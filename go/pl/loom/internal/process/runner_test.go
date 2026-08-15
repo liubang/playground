@@ -336,7 +336,12 @@ func TestRunnerTimeoutKillsProcessGroup(t *testing.T) {
 		Program: "timeout",
 		Args:    []string{pidFile},
 		Cwd:     root,
-		Timeout: 300 * time.Millisecond,
+		// The window must be long enough for python to start, spawn the
+		// grandchild and write its pid file BEFORE the timeout fires —
+		// otherwise the process group has no grandchild to kill and the
+		// test proves nothing. 300ms was flaky under bazel's sandbox
+		// where interpreter startup is slower (REVIEW: known flaky).
+		Timeout: 2 * time.Second,
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
