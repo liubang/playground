@@ -19,7 +19,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -27,11 +26,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/config"
-	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
 // TestLastActiveWorkspaceRootNoHistory: with no session store there is
@@ -78,20 +75,6 @@ func TestAppleScriptString(t *testing.T) {
 	}
 }
 
-func TestTruncateRunes(t *testing.T) {
-	if got := truncateRunes("short", 10); got != "short" {
-		t.Fatalf("short = %q", got)
-	}
-	if got := truncateRunes(strings.Repeat("x", 200), 120); len([]rune(got)) != 120 {
-		t.Fatalf("truncated rune len = %d, want 120", len([]rune(got)))
-	}
-	// Multibyte content must be truncated by runes, not bytes.
-	got := truncateRunes(strings.Repeat("中", 50), 10)
-	if len([]rune(got)) != 10 || !strings.HasSuffix(got, "…") {
-		t.Fatalf("multibyte = %q", got)
-	}
-}
-
 func TestLoadWindowState(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "desktop-window.json")
@@ -129,81 +112,6 @@ func TestWriteWindowStateRoundtrip(t *testing.T) {
 	got, ok := loadWindowState(path)
 	if !ok || got != want {
 		t.Fatalf("roundtrip = %+v, ok=%v, want %+v", got, ok, want)
-	}
-}
-
-// captureNotifications swaps notifyFunc for a recorder and restores it.
-func captureNotifications(t *testing.T) *struct {
-	mu    sync.Mutex
-	calls []string
-} {
-	t.Helper()
-	rec := &struct {
-		mu    sync.Mutex
-		calls []string
-	}{}
-	orig := notifyFunc
-	notifyFunc = func(title, body string) {
-		rec.mu.Lock()
-		defer rec.mu.Unlock()
-		rec.calls = append(rec.calls, title+"|"+body)
-	}
-	t.Cleanup(func() { notifyFunc = orig })
-	return rec
-}
-
-func TestNotifyForEvent(t *testing.T) {
-	rec := captureNotifications(t)
-	payload := func(v any) json.RawMessage {
-		t.Helper()
-		raw, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return raw
-	}
-
-	// Approval carries tool + description.
-	if err := notifyForEvent(runtimeevent.RuntimeEvent{
-		Kind:    runtimeevent.KindApprovalRequested,
-		Payload: payload(runtimeevent.ApprovalRequestedPayload{ToolName: "shell", Description: "run tests"}),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	// Turn failure surfaces the error; clean finish is a plain banner.
-	_ = notifyForEvent(runtimeevent.RuntimeEvent{
-		Kind:    runtimeevent.KindTurnFinished,
-		Payload: payload(runtimeevent.TurnFinishedPayload{Error: "boom"}),
-	})
-	_ = notifyForEvent(runtimeevent.RuntimeEvent{
-		Kind:    runtimeevent.KindTurnFinished,
-		Payload: payload(runtimeevent.TurnFinishedPayload{}),
-	})
-	_ = notifyForEvent(runtimeevent.RuntimeEvent{
-		Kind:    runtimeevent.KindQuestionAsked,
-		Payload: payload(runtimeevent.QuestionAskedPayload{Text: "which option?"}),
-	})
-	// Noise kinds never notify.
-	_ = notifyForEvent(runtimeevent.RuntimeEvent{
-		Kind:    runtimeevent.KindModelTextDelta,
-		Payload: payload(runtimeevent.ModelTextDeltaPayload{Delta: "hi"}),
-	})
-
-	rec.mu.Lock()
-	defer rec.mu.Unlock()
-	want := []string{
-		"Approval needed|shell: run tests",
-		"Turn failed|boom",
-		"Turn finished|Loom finished the current turn.",
-		"Loom has a question|which option?",
-	}
-	if len(rec.calls) != len(want) {
-		t.Fatalf("calls = %v, want %v", rec.calls, want)
-	}
-	for i := range want {
-		if rec.calls[i] != want[i] {
-			t.Fatalf("call[%d] = %q, want %q", i, rec.calls[i], want[i])
-		}
 	}
 }
 

@@ -169,13 +169,10 @@ func run(ctx context.Context, args []string) error {
 		Logger:        logger,
 		ShareEndpoint: shareMgr,
 		RulesDir:      resolved.Storage.RulesDir(),
-		// watchNotifications below already mirrors approval requests to the
-		// Notification Center; the approver must not fire a second banner.
+		// The webview surfaces approval requests in-page; a desktop
+		// banner on top of that is noise for the user staring at it.
 		DisableApprovalNotify: true,
 	})
-
-	// Mirror attention-worthy agent milestones to Notification Center.
-	go watchNotifications(ctx, broker, logger)
 
 	// UI loopback listener: always on, random port. The webview talks real
 	// HTTP here because the Wails AssetServer channel cannot carry our
