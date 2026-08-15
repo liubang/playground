@@ -1,0 +1,3 @@
+{
+  "steps": [{ "op": "prompt", "text": "用一个字回答：好" }, { "op": "wait_turn_end" }]
+}
