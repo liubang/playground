@@ -203,7 +203,8 @@ function setBadge(el, cls, text) {
   el.querySelector('.txt').textContent = text
 }
 
-function setConn(state, detail) {
+function renderConnBadge(state, detail) {
+  connShownState = state
   const map = {
     connecting: ['is-reconnecting', 'connecting…'],
     live: ['is-live', 'live'],
@@ -213,6 +214,37 @@ function setConn(state, detail) {
   }
   const [cls, text] = map[state] || ['', state]
   setBadge($('hdr-conn'), cls, text)
+}
+
+// 重连徽标防抖：从 live 切入 connecting/reconnecting 时延迟 400ms 显示——
+// 瞬态断流（遮挡恢复、ensureLive 主动重连）在延迟期内恢复 live 就完全
+// 不打断视觉；只有真正持续的重连才亮徽标。live/dead/draining 立即生效。
+const CONN_BADGE_DELAY_MS = 400
+let connBadgeTimer = null
+let connPending = null // 延迟期内最新一次重连态 {state, detail}
+let connShownState = '' // 徽标当前实际展示的 state
+
+function setConn(state, detail) {
+  const transient = state === 'connecting' || state === 'reconnecting'
+  const showingTransient = connShownState === 'connecting' || connShownState === 'reconnecting'
+  if (transient && !showingTransient) {
+    connPending = { state, detail }
+    if (!connBadgeTimer) {
+      connBadgeTimer = setTimeout(() => {
+        connBadgeTimer = null
+        const p = connPending
+        connPending = null
+        if (p) renderConnBadge(p.state, p.detail)
+      }, CONN_BADGE_DELAY_MS)
+    }
+    return
+  }
+  if (connBadgeTimer) {
+    clearTimeout(connBadgeTimer)
+    connBadgeTimer = null
+    connPending = null
+  }
+  renderConnBadge(state, detail)
 }
 
 // 断连强提示：前几次自动重连只更新徽标（瞬态抖动不打扰）；连续失败达到
@@ -580,9 +612,13 @@ function restoreComposerDraft(id) {
 }
 
 async function openSession(id) {
+  // 同会话重开 = resync（断流恢复/手动重试）：保留滚动位置，不拽回底部。
+  const isResync = app.sessionId === id
   stashComposerDraft()
   clearArtifactURLCache()
   app.stream.detach()
+  // detach 后追帧队列里残留的都是旧会话/旧快照之前的事件，snapshot 已覆盖，直接丢弃。
+  eventQueue.length = 0
   app.sessionId = id
   restoreComposerDraft(id)
   app.sidebar.setActive(id, { scroll: true })
@@ -604,7 +640,7 @@ async function openSession(id) {
       throw e
     }
   }
-  app.transcript.applySnapshot(snap)
+  app.transcript.applySnapshot(snap, { preserveScroll: isResync })
   renderPlanInto($('plan-panel'), snap.plan)
   setReadOnly(snap)
   setSessionState(snap.state)
@@ -833,7 +869,32 @@ async function pickReasoning(effort) {
 
 // ---------- events ----------
 
+// SSE 事件分批渲染：重连追帧时事件成突发到达（几百上千条），逐事件同步
+// 处理会把主线程连成多秒长任务（布局/绘制全被打断，肉眼就是界面闪烁+
+// 卡死）。排队 + rAF 合帧、每帧最多 EVENTS_PER_FRAME 条：帧间让出主线程，
+// 追帧进度可见且界面保持响应。实时流的额外延迟 ≤ 一帧，无感知。
+const EVENTS_PER_FRAME = 120
+const eventQueue = []
+let eventFlushScheduled = false
+
 function onRuntimeEvent(evt) {
+  eventQueue.push(evt)
+  if (eventFlushScheduled) return
+  eventFlushScheduled = true
+  requestAnimationFrame(flushEventQueue)
+}
+
+function flushEventQueue() {
+  const batch = eventQueue.splice(0, EVENTS_PER_FRAME)
+  for (const evt of batch) applyRuntimeEvent(evt)
+  if (eventQueue.length > 0) {
+    requestAnimationFrame(flushEventQueue)
+  } else {
+    eventFlushScheduled = false
+  }
+}
+
+function applyRuntimeEvent(evt) {
   app.transcript.handleEvent(evt)
   switch (evt.kind) {
     case 'turn.started':
