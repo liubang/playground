@@ -119,7 +119,7 @@ func runSnapshotScenario(t *testing.T, dir string, mode string) {
 	}
 
 	c := env.NewClient(t)
-	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	collector := harness.NewCollector(t.Context(), c, env.Subscribe(t, c))
 	go collector.Run()
 
 	turns := 0

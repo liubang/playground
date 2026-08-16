@@ -32,6 +32,10 @@ import (
 // answered from a scripted FIFO decision queue (snapshot scenarios drive
 // it via their approve steps); an empty queue defaults to allow.
 type Collector struct {
+	// ctx bounds the auto-resolves (approval/question answers): when the
+	// owning test is cancelled, they stop instead of retrying against a
+	// torn-down server.
+	ctx    context.Context
 	client client.Client
 	ch     <-chan runtimeevent.RuntimeEvent
 
@@ -44,8 +48,8 @@ type Collector struct {
 
 // NewCollector creates a collector over the client's subscription.
 // Call Run in a goroutine to start draining.
-func NewCollector(c client.Client, ch <-chan runtimeevent.RuntimeEvent) *Collector {
-	return &Collector{client: c, ch: ch}
+func NewCollector(ctx context.Context, c client.Client, ch <-chan runtimeevent.RuntimeEvent) *Collector {
+	return &Collector{ctx: ctx, client: c, ch: ch}
 }
 
 // EnqueueDecision scripts the answer to the next approval request.
@@ -75,14 +79,14 @@ func (c *Collector) Run() {
 		case runtimeevent.KindApprovalRequested:
 			var p runtimeevent.ApprovalRequestedPayload
 			if err := json.Unmarshal(evt.Payload, &p); err == nil {
-				_, _ = c.client.ResolveApproval(context.Background(), app.ApprovalBinding{
+				_, _ = c.client.ResolveApproval(c.ctx, app.ApprovalBinding{
 					ApprovalID: p.ApprovalID, CallID: p.CallID, ArgsHash: p.ArgsHash,
 				}, c.nextDecision(), nil)
 			}
 		case runtimeevent.KindQuestionAsked:
 			var p runtimeevent.QuestionAskedPayload
 			if err := json.Unmarshal(evt.Payload, &p); err == nil {
-				_, _ = c.client.AnswerQuestion(context.Background(), p.QuestionID, domain.QuestionAnswer{Skipped: true})
+				_, _ = c.client.AnswerQuestion(c.ctx, p.QuestionID, domain.QuestionAnswer{Skipped: true})
 			}
 		}
 	}
