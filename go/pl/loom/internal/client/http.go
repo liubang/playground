@@ -43,6 +43,12 @@ import (
 // web SPA milestone, docs/SERVE_DESIGN.md §16.3 D2).
 var ErrUnsupported = errors.New("operation is not supported by the http transport yet")
 
+// errBindingMismatch is the wire's 409 binding_mismatch: the targeted
+// approval/question was already resolved or superseded. Matched with
+// errors.Is — never by sniffing message text, which the server is free
+// to reword.
+var errBindingMismatch = errors.New("binding mismatch")
+
 // httpClient implements Client over the REST+SSE wire protocol
 // (docs/SERVE_DESIGN.md §5). It is one of the two reference
 // implementations; the contract test suite runs against both this and the
@@ -191,6 +197,8 @@ func mapWireError(code, message string) error {
 		return app.ErrCursorInvalid
 	case "rate_limited":
 		return app.ErrTooManyTurns
+	case "binding_mismatch":
+		return errBindingMismatch
 	}
 	return fmt.Errorf("%s: %s", code, message)
 }
@@ -375,7 +383,7 @@ func (c *httpClient) AnswerQuestion(ctx context.Context, id domain.EventID, answ
 	if err := c.do(ctx, http.MethodPost, path+"/questions/"+id.String(), answer, nil); err != nil {
 		// The wire reports an unknown/already-resolved question as a 409
 		// binding_mismatch — the one-shot semantic maps to Resolved=false.
-		if strings.Contains(err.Error(), "binding_mismatch") {
+		if errors.Is(err, errBindingMismatch) {
 			return AnswerQuestionResult{Resolved: false}, nil
 		}
 		return AnswerQuestionResult{}, err
