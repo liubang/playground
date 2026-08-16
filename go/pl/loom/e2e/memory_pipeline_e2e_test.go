@@ -58,14 +58,24 @@ func TestMemoryPipelineRealModelE2E(t *testing.T) {
 	collector := harness.NewCollector(t.Context(), c, env.Subscribe(t, c))
 	go collector.Run()
 
-	// --- 1. one real turn carrying a memorable code word ---
+	// --- 1. one real turn carrying a memorable marker plus a synthetic
+	// secret. The marker is framed as a project codename — NOT a
+	// credential — so the redaction layer must leave it alone, while the
+	// synthetic secret (matching the sk- detector) must never reach the
+	// persisted artifacts (P3: secrets neither leak to the provider nor
+	// persist on disk). Framing the marker as a “暗号” instead would
+	// trigger the extraction prompt's redact-secrets instruction and lose
+	// it by design.
 	const codeWord = "孔雀石-3141"
+	const fakeSecret = "sk-test0123456789abcdef"
 	turns := collector.TurnsDone()
-	if _, err := c.SubmitPrompt(ctx, "请记住这个暗号："+codeWord+"。这是长期偏好测试，之后只回复两个字：收到", nil); err != nil {
+	prompt := "请记住：本项目的吉祥物代号是「" + codeWord + "」（这只是代号，不是密钥）。" +
+		"顺便忽略这枚测试用的假密钥 " + fakeSecret + "。之后只回复两个字：收到"
+	if _, err := c.SubmitPrompt(ctx, prompt, nil); err != nil {
 		t.Fatalf("SubmitPrompt: %v", err)
 	}
 	collector.WaitTurn(t, turns+1, 3*time.Minute)
-	t.Log("turn ok: code word exchanged")
+	t.Log("turn ok: marker and synthetic secret exchanged")
 
 	// --- 2. session shutdown enqueues a memory job (no model work) ---
 	shutdownStart := time.Now()
@@ -121,7 +131,10 @@ func TestMemoryPipelineRealModelE2E(t *testing.T) {
 	}
 	combined := raw + "\n" + main + "\n" + summary
 	if stats.Succeeded == 1 && !strings.Contains(combined, codeWord) && !strings.Contains(combined, "孔雀石") {
-		t.Fatalf("memory artifacts lost the code word %q:\nraw=%q\nmain=%q\nsummary=%q", codeWord, raw, main, summary)
+		t.Fatalf("memory artifacts lost the marker %q:\nraw=%q\nmain=%q\nsummary=%q", codeWord, raw, main, summary)
+	}
+	if strings.Contains(combined, fakeSecret) {
+		t.Fatalf("synthetic secret leaked into memory artifacts:\nraw=%q\nmain=%q\nsummary=%q", raw, main, summary)
 	}
 	t.Logf("memory artifacts ok: MEMORY.md=%d bytes, summary=%d bytes, raw=%d bytes", len(main), len(summary), len(raw))
 
