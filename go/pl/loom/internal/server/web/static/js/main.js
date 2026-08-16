@@ -36,7 +36,13 @@ const embeddedToken =
   ''
 // In the desktop shell the token is the process's random in-process one —
 // no user-pasteable credential exists, so the token gate is pointless there.
-const isDesktopShell = embeddedToken !== ''
+// The #token fragment is stripped from the URL right after boot (see the
+// history.replaceState below), so a webview reload arrives with no token
+// and must still be recognized as the desktop shell — otherwise the
+// desktop-only chrome (hidden 工作区 title, drag regions) silently
+// reverts to browser styling. The native message bridge exists only
+// inside the desktop webview and survives reloads.
+const isDesktopShell = embeddedToken !== '' || !!window.webkit?.messageHandlers?.external
 // 桌面端隐藏了原生标题栏（mac.TitleBarHidden），红绿灯悬浮在内容之上；
 // body.is-desktop 用于开启让位/拖动区样式（见 app.css 末尾）。
 if (isDesktopShell) {
