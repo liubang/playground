@@ -2165,25 +2165,99 @@ func (m Model) handleSnapshot(msg snapshotMsg) (tea.Model, tea.Cmd) {
 		m.mergeSnapshot(msg.snapshot.Messages)
 	}
 	m.initialSnapshotPending = false
-	// A stale overlay must not survive a snapshot: approvals that are no
-	// longer pending at the runtime are dismissed.
-	if m.pendingApproval != nil {
-		stillPending := false
-		for _, id := range msg.snapshot.PendingApprovals {
-			if id == m.pendingApproval.ApprovalID {
-				stillPending = true
-				break
+	// The snapshot is the authoritative source for pending approvals and
+	// ask_user questions: their requested/asked events may never reach this
+	// frontend (a session switch re-subscribes at the global cursor, which
+	// other sessions advance, and question.asked is ephemeral), so the
+	// overlays are reconciled both ways — stale ones dismissed, missed ones
+	// restored. Without the restore half a session awaiting approval shows
+	// no prompt at all and its run blocks forever.
+	m.reconcilePendingRequests(msg.snapshot.PendingRequests)
+	m.resumeFollowTail()
+	return m, nil
+}
+
+// reconcilePendingRequests aligns the approval/question overlays with the
+// runtime's pending requests: overlays whose request is gone are dismissed,
+// overlays whose event this frontend missed (session switch, event-stream
+// resync) are restored. The run loop awaits requests serially, so at most
+// one request is pending at a time.
+func (m *Model) reconcilePendingRequests(pending []app.PendingRequest) {
+	var approval *runtimeevent.ApprovalRequestedPayload
+	var question *domain.Question
+	for i := range pending {
+		pr := &pending[i]
+		switch pr.Kind {
+		case app.PendingRequestApproval:
+			if approval == nil && pr.Approval != nil {
+				approval = pr.Approval
 			}
-		}
-		if !stillPending {
-			m.pendingApproval = nil
-			if m.mode == ModeApproval {
-				m.mode = ModeChat
+		case app.PendingRequestQuestion:
+			if question == nil && pr.Question != nil {
+				question = pr.Question
 			}
 		}
 	}
+
+	if m.pendingApproval != nil && (approval == nil || approval.ApprovalID != m.pendingApproval.ApprovalID) {
+		m.pendingApproval = nil
+		if m.mode == ModeApproval {
+			m.mode = ModeChat
+		}
+	}
+	if m.pendingQuestion != nil && (question == nil || question.ID != m.pendingQuestion.QuestionID) {
+		m.pendingQuestion = nil
+		m.choiceList = nil
+		if m.mode == ModeQuestion {
+			m.mode = ModeChat
+		}
+	}
+
+	// Restore at most one overlay; an approval outranks a question.
+	if m.pendingApproval == nil && m.pendingQuestion == nil {
+		switch {
+		case approval != nil:
+			m.showApprovalOverlay(*approval)
+		case question != nil:
+			m.showQuestionOverlay(*question)
+		}
+	}
+}
+
+// showApprovalOverlay raises the approval overlay for a requested payload.
+// The overlay lives at the bottom (composer area), so the viewport is
+// pinned to the tail: a user who scrolled up to read earlier output would
+// otherwise never see the decision prompt.
+func (m *Model) showApprovalOverlay(payload runtimeevent.ApprovalRequestedPayload) {
+	m.pendingApproval = &payload
+	m.approvalCursor = 0
+	m.approvalShownAt = time.Now()
+	m.mode = ModeApproval
 	m.resumeFollowTail()
-	return m, nil
+}
+
+// showQuestionOverlay raises the ask_user overlay for a pending question,
+// pinning the viewport to the tail exactly like the approval overlay.
+func (m *Model) showQuestionOverlay(q domain.Question) {
+	items := make([]ChoiceItem, 0, len(q.Options))
+	for _, opt := range q.Options {
+		items = append(items, ChoiceItem{Label: opt.Label, Desc: opt.Description})
+	}
+	m.pendingQuestion = &runtimeevent.QuestionAskedPayload{
+		QuestionID:    q.ID,
+		Text:          q.Text,
+		Options:       q.Options,
+		AllowMultiple: q.AllowMultiple,
+	}
+	m.choiceList = NewChoiceList(ChoiceListConfig{
+		Title:    "Model asks:\n" + q.Text,
+		Items:    items,
+		Multi:    q.AllowMultiple,
+		OtherRow: true,
+	})
+	m.questionShownAt = time.Now()
+	m.mode = ModeQuestion
+	m.resumeFollowTail()
 }
 
 func (m *Model) mergeSnapshot(messages []domain.Message) {
@@ -2346,24 +2420,12 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 	case runtimeevent.KindQuestionAsked:
 		var payload runtimeevent.QuestionAskedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
-			items := make([]ChoiceItem, 0, len(payload.Options))
-			for _, opt := range payload.Options {
-				items = append(items, ChoiceItem{Label: opt.Label, Desc: opt.Description})
-			}
-			m.pendingQuestion = &payload
-			m.choiceList = NewChoiceList(ChoiceListConfig{
-				Title:    "Model asks:\n" + payload.Text,
-				Items:    items,
-				Multi:    payload.AllowMultiple,
-				OtherRow: true,
+			m.showQuestionOverlay(domain.Question{
+				ID:            payload.QuestionID,
+				Text:          payload.Text,
+				Options:       payload.Options,
+				AllowMultiple: payload.AllowMultiple,
 			})
-			m.questionShownAt = time.Now()
-			m.mode = ModeQuestion
-			// The question panel replaces the composer at the bottom; pin
-			// the viewport there too, exactly like approval requests, so a
-			// scrolled-up user still sees the question (REVIEW: same
-			// invisible-overlay class as the approval popup).
-			m.resumeFollowTail()
 		}
 		m.phase = "question"
 		m.setActivity("Waiting for your answer")
@@ -2381,16 +2443,7 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 	case runtimeevent.KindApprovalRequested:
 		var payload runtimeevent.ApprovalRequestedPayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
-			m.pendingApproval = &payload
-			m.approvalCursor = 0
-			m.approvalShownAt = time.Now()
-			m.mode = ModeApproval
-			// The approval overlay lives at the bottom (composer area), so a
-			// user who scrolled up to read earlier output would otherwise
-			// never see it — pin the viewport to the tail so the decision
-			// prompt is always on screen (REVIEW: approval popup invisible
-			// until manual scroll).
-			m.resumeFollowTail()
+			m.showApprovalOverlay(payload)
 		}
 		m.phase = "approval"
 		m.setActivity("Waiting for your approval")
