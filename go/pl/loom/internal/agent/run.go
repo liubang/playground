@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,6 +45,18 @@ import (
 )
 
 // Run represents an in-memory projection of a single agent run.
+//
+// Concurrency contract: Run is NOT safe for concurrent use. Exactly one
+// goroutine owns it for the run's whole lifetime — the agent loop
+// driving it (Loop.Execute). Cross-goroutine input never touches Run
+// directly: user steers, goal and plan updates flow through the mailbox
+// cells (SteerCell/GoalCell/PlanCell), which the loop drains at
+// transcript-pairing-safe points; tool executions may fan out
+// (executeSegmentParallel), but their results are recorded serially by
+// the loop after the workers join. Outbound state reaches observers
+// through the persisted event log and checkpoints, never through shared
+// memory. New readers of a live run must add a mailbox, not a field
+// access — the race detector watches the suite, and it will know.
 type Run struct {
 	ID        domain.RunID
 	SessionID domain.SessionID
@@ -752,6 +765,11 @@ func (r *Run) normalizeMessage(msg *domain.Message) {
 func (r *Run) newEvent(evtType domain.EventType, payload any) domain.Event {
 	raw, err := domain.MarshalPayload(payload)
 	if err != nil {
+		// Payloads are statically known internal structs: a marshal
+		// failure is a programmer error, not a runtime condition, so it
+		// panics by contract. Loop.Execute's boundary recover converts it
+		// into a graceful run failure (terminal event + checkpoint)
+		// instead of taking the whole process down.
 		panic(fmt.Sprintf("marshal internal event payload: %v", err))
 	}
 	return domain.Event{
@@ -1015,7 +1033,9 @@ type SectionedPromptBuilder interface {
 	BuildSections(ctx context.Context) (prompt.Sections, error)
 }
 
-// Loop drives the main agent loop for a Run.
+// Loop drives the main agent loop for a Run. Execute is single
+// goroutine: it owns l.Run exclusively (see Run's concurrency contract)
+// and all unexported bookkeeping fields; none of them carry locks.
 type Loop struct {
 	Run          *Run
 	Model        domain.Model
@@ -1086,22 +1106,11 @@ type Loop struct {
 	// lastCallInput is the provider-metered input token count of the most
 	// recent completed model call, republished with context-usage events.
 	lastCallInput int64
-	// compactFitFailures counts consecutive failures to fit the next
-	// request into the context window (provider context-overflow, or a
-	// compaction that left occupancy above the window); two in a row is
-	// fatal — the window genuinely cannot hold the work.
-	compactFitFailures int
-	// noticeFired tracks the highest fired level per budget-notice
-	// dimension (occupancy/wall_time/cost_usd/runaway) so each graduated
-	// reminder fires at most once per prompt; compaction re-arms occupancy.
-	noticeFired map[string]int
-	// pendingNotices queues runaway warnings detected at pairing-unsafe
-	// points (tool routing); prepare drains them before the next call.
-	pendingNotices []domain.BudgetNoticePayload
-	// lastCallSig/repeatedCallCount track consecutive identical tool calls
-	// (runaway repeated-call detection).
-	lastCallSig       string
-	repeatedCallCount int
+	// notices graduates budget/runaway reminders (budget.go); runaway
+	// holds the behavior-based detection state (runaway.go). Both are
+	// owned by the loop goroutine like every other field below.
+	notices noticeCenter
+	runaway runawayDetector
 	// Request-header bookkeeping (docs/SURFACE_DESIGN.md §4.8):
 	// sessionFreshAtStart is captured at Execute entry (before the initial
 	// flush) and distinguishes the 'initial' header reason from 'resume';
@@ -1109,41 +1118,14 @@ type Loop struct {
 	sessionFreshAtStart bool
 	headerLogged        bool
 	lastHeaderHash      string
-	// consecutiveExecFailures counts execution-phase tool failures in a
-	// row (prepare failures excluded by design).
-	consecutiveExecFailures int
-	// seenCallSigs records every (tool, args_hash) signature executed this
-	// run; a first-seen signature is a progress signal (new information
-	// fetched), which keeps read-only research tasks from stalling out.
-	seenCallSigs map[string]struct{}
-	// stallTurns counts consecutive turns without any progress signal.
-	stallTurns int
-	// progressThisTurn is set by any progress signal and consumed by the
-	// next prepare.
-	progressThisTurn bool
-	// lastProgressAt anchors the stall watchdog: the ACTIVE time since
-	// the last progress signal. Approval waits shift it forward so user
-	// thinking time never counts (docs/CONTEXT_DESIGN.md §4.4.3).
-	lastProgressAt time.Time
 	// StartRetry bounds start-stage retries of retryable provider failures
 	// (rate limits, transient 5xx/transport errors). The zero value applies
 	// documented defaults.
 	StartRetry StartRetryPolicy
-	// ForceCompact demands compaction before the next model call. It is set
-	// internally after a provider context-overflow rejection, and may be set
-	// by the caller (e.g. a manual /compact request) to force a pass ahead
-	// of the automatic pressure triggers.
-	ForceCompact bool
-	// CompactTriggerHint labels the next compaction pass's trigger
-	// ("manual"/"overflow"/"downshift") for the audit event; empty means
-	// automatic pressure.
-	CompactTriggerHint string
-	// lastCompactEst is the transcript estimate right after the most recent
-	// compaction pass. Re-compacting is pointless until the transcript grows
-	// past it: on an unchanged transcript the condenser cannot make progress
-	// (e.g. everything sits inside the keep-recent window), and the loop
-	// would otherwise spin forever, spamming compaction events/checkpoints.
-	lastCompactEst int
+	// Compaction carries the compaction controls (forced passes, trigger
+	// audit hints) and the per-run compaction bookkeeping (no-growth
+	// guard, fit-failure streak). See compact.go.
+	Compaction CompactionControl
 	// planReconcileUsed bounds the unfinished-plan closing nudge to one
 	// extra turn per run: advisory bookkeeping is routinely forgotten on the
 	// final step, and an unbounded nudge would loop forever.
@@ -1317,6 +1299,30 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 			l.traceRun.Score(ctx, "run_success", value, comment)
 		}
 	}()
+	// Programmer-error guard: a panic deep in the loop (e.g. an
+	// unmarshalable internal event payload — a coding mistake by
+	// contract) must not crash the whole process. Recover at the
+	// boundary, persist the terminal event and checkpoint, and surface
+	// the failure as an ordinary error. Registered after the trace defer
+	// so it runs first (LIFO) and the trace observes the failed outcome.
+	defer func() {
+		p := recover()
+		if p == nil {
+			return
+		}
+		if l.Logger != nil {
+			l.Logger.Error("agent loop panic; terminating run", "panic", p, "stack", string(debug.Stack()))
+		}
+		execErr = fmt.Errorf("agent loop panic: %v", p)
+		// terminate touches the persistence path that may itself have
+		// been the panic source; never re-panic from recovery.
+		defer func() {
+			if p2 := recover(); p2 != nil && l.Logger != nil {
+				l.Logger.Error("terminate during panic recovery failed", "panic", p2)
+			}
+		}()
+		l.terminate(ctx, domain.OutcomeFailed)
+	}()
 
 	l.sessionFreshAtStart = l.Run.persistedVersion == 0
 	if err := l.flushEvents(ctx); err != nil {
@@ -1341,7 +1347,9 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 				if check := l.Run.CheckBudget(); check.HasHard() {
 					l.startBudgetWrapUp(check.HardBreaches)
 				}
-				l.checkStallTimeout()
+				if l.runaway.stallExpired(l.runawayConfig(), l.Run.Clock) {
+					l.startBudgetWrapUp([]string{dimensionStall})
+				}
 			}
 			// Single compaction decision point: before each model call,
 			// compact when occupancy pressure or a forced retry after
@@ -1405,9 +1413,9 @@ func (l *Loop) prepare(ctx context.Context) error {
 	// call, after tool results are recorded — keeps the transcript
 	// pairing-safe by construction. Runaway warnings detected during
 	// routing are queued for exactly this point.
-	l.drainPendingNotices()
+	l.notices.drain(l.Run)
 	l.injectBudgetNotices()
-	l.trackStall()
+	l.runaway.trackStall(l.runawayConfig(), l.Run, &l.notices)
 	return nil
 }
 
@@ -1626,7 +1634,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 		l.Logger.Warn("rewrote colliding provider tool call ids", "count", len(rewritten))
 	}
 	if text := strings.Join(response.TextParts(), ""); strings.TrimSpace(text) != "" {
-		l.markProgress()
+		l.runaway.markProgress(l.Run.Clock)
 	}
 	l.recordGeneration(ctx, trace.GenerationRecord{
 		RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
@@ -1647,7 +1655,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 	l.lastCallInput = inputTokens
 	// A completed call proves the request fit the window.
-	l.compactFitFailures = 0
+	l.Compaction.noteFit(true)
 	// Consecutive-streak bookkeeping (REVIEW H15): a response that did not
 	// hit the output cap breaks the truncation streak, and a recognized
 	// stop reason breaks the unknown-stop retry streak.
@@ -1895,7 +1903,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 		tool, ok := l.Registry.Lookup(tc.Name)
 		if !ok {
 			l.recordToolError(ctx, tc, "unknown_tool", fmt.Sprintf("tool %q not found", tc.Name))
-			if reason := l.trackToolCall(tc.Name, tc.Arguments); reason != "" {
+			if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, tc.Arguments, &l.notices, l.Run.Clock); reason != "" {
 				return l.terminateRunaway(ctx, reason)
 			}
 			continue
@@ -1905,7 +1913,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 			rawHash := rawArgsHash(tc.Arguments)
 			l.appendPrepareFailureEvents(tc, rawHash)
 			l.recordToolError(ctx, tc, "prepare_failed", prepareErrorMessage(tc, err))
-			if reason := l.trackToolCall(tc.Name, tc.Arguments); reason != "" {
+			if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, tc.Arguments, &l.notices, l.Run.Clock); reason != "" {
 				return l.terminateRunaway(ctx, reason)
 			}
 			continue
@@ -1913,7 +1921,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 		l.Run.appendEvent(domain.EventToolCallPrepared, makeToolCallAuditPayload(prepared))
 		// Repeat detection hashes the canonical arguments, not the HMAC
 		// call signature (which embeds the unique call ID).
-		if reason := l.trackToolCall(tc.Name, prepared.Call.Arguments); reason != "" {
+		if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, prepared.Call.Arguments, &l.notices, l.Run.Clock); reason != "" {
 			return l.terminateRunaway(ctx, reason)
 		}
 		verdict := policy.Evaluate(prepared)
@@ -2107,11 +2115,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 	// the stall watchdog by shifting its baseline forward on the way out
 	// (docs/CONTEXT_DESIGN.md §4.4.3).
 	suspendStart := l.Run.Clock.Now()
-	defer func() {
-		if !l.lastProgressAt.IsZero() {
-			l.lastProgressAt = l.lastProgressAt.Add(l.Run.Clock.Since(suspendStart))
-		}
-	}()
+	defer func() { l.runaway.compensateSuspend(l.Run.Clock, suspendStart) }()
 	policy := l.policy()
 	for _, tc := range lastToolCalls(l.Run.Messages) {
 		prepared, ok := l.prepared[tc.ID]
@@ -2278,7 +2282,7 @@ func (l *Loop) executeOne(ctx context.Context, item preparedExec) error {
 	}
 	result := l.executeTool(ctx, item)
 	l.recordToolOutcome(ctx, item, result)
-	if reason := l.trackExecResult(result); reason != "" {
+	if reason := l.runaway.trackExecResult(l.runawayConfig(), result); reason != "" {
 		return l.terminateRunaway(ctx, reason)
 	}
 	return nil
@@ -2304,9 +2308,7 @@ func (l *Loop) executeTool(ctx context.Context, item preparedExec) domain.ToolRe
 	}
 	waitStart := l.Run.Clock.Now()
 	result := item.tool.Execute(ctx, item.prepared)
-	if !l.lastProgressAt.IsZero() {
-		l.lastProgressAt = l.lastProgressAt.Add(l.Run.Clock.Since(waitStart))
-	}
+	l.runaway.compensateSuspend(l.Run.Clock, waitStart)
 	return result
 }
 
@@ -2345,7 +2347,7 @@ func (l *Loop) executeSegmentParallel(ctx context.Context, segment []preparedExe
 
 	for i, item := range segment {
 		l.recordToolOutcome(ctx, item, results[i])
-		if reason := l.trackExecResult(results[i]); reason != "" {
+		if reason := l.runaway.trackExecResult(l.runawayConfig(), results[i]); reason != "" {
 			return l.terminateRunaway(ctx, reason)
 		}
 	}
@@ -2361,7 +2363,7 @@ func (l *Loop) recordToolOutcome(ctx context.Context, item preparedExec, result 
 	l.recordTool(ctx, item.prepared, result)
 	l.foldExternalUsage(result)
 	if changed, ok := extractFileChanged(result, item.prepared); ok {
-		l.markProgress()
+		l.runaway.markProgress(l.Run.Clock)
 		l.Run.appendEvent(domain.EventFileChanged, changed)
 		// Record the file change directly into the ledger with beforeContent
 		// from the PreparedCall's Recovery spec. This captures the original
@@ -2390,13 +2392,13 @@ func (l *Loop) recordToolOutcome(ctx context.Context, item preparedExec, result 
 //     only the provider-calibrated occupancy does
 //     (docs/CONTEXT_DESIGN.md §4.2).
 func (l *Loop) shouldCompact() bool {
-	if l.ForceCompact {
+	if l.Compaction.Force {
 		return true
 	}
 	if !l.Window.Usable() {
 		return false
 	}
-	if l.lastCompactEst > 0 && estTokens(l.Run.Messages) <= l.lastCompactEst {
+	if l.Compaction.noGrowthSince(estTokens(l.Run.Messages)) {
 		// Nothing grew since the last pass; another pass cannot shrink the
 		// transcript either, so let the run proceed to the next model call.
 		return false
@@ -2542,16 +2544,14 @@ func isRequestTooLargeError(err error) bool {
 // consecutive failures to fit mean the request genuinely cannot be made
 // to fit.
 func (l *Loop) handleContextOverflow(ctx context.Context, cause error) error {
-	l.compactFitFailures++
-	if l.compactFitFailures >= 2 {
+	if l.Compaction.noteFit(false) >= 2 {
 		l.terminate(ctx, domain.OutcomeBudgetExhausted)
 		if isRequestTooLargeError(cause) {
 			return fmt.Errorf("the gateway rejected the request body as too large (HTTP 413) twice in a row (last: %v); compaction cannot shrink a single oversized element (inline image, huge tool result, or the tools schema) — raise the gateway body limit or reduce the payload", cause)
 		}
 		return fmt.Errorf("model rejected the request for context size twice in a row (last: %v); start a new session or check the model's context_window configuration", cause)
 	}
-	l.ForceCompact = true
-	l.CompactTriggerHint = "overflow"
+	l.Compaction.demand("overflow")
 	if l.Logger != nil {
 		l.Logger.Warn("provider rejected the request as too large; forcing compaction", "error", cause)
 	}
@@ -2680,10 +2680,7 @@ func (l *Loop) compact(ctx context.Context) error {
 	if !cond.Window.Usable() {
 		cond.Window = l.Window
 	}
-	trigger := l.CompactTriggerHint
-	if trigger == "" {
-		trigger = "auto"
-	}
+	trigger := l.Compaction.triggerLabel()
 	phase := "pre_turn"
 	if l.Run.Usage.Turns > 0 {
 		phase = "mid_turn"
@@ -2768,12 +2765,8 @@ func (l *Loop) compact(ctx context.Context) error {
 	// the post-pass estimate so shouldCompact only re-fires on real
 	// transcript growth.
 	l.lastCallInput = 0
-	l.ForceCompact = false
-	l.CompactTriggerHint = ""
-	if l.noticeFired != nil {
-		delete(l.noticeFired, dimensionOccupancy)
-	}
-	l.lastCompactEst = estTokens(newMessages)
+	l.Compaction.complete(estTokens(newMessages))
+	l.notices.rearm(dimensionOccupancy)
 	l.Run.Messages = newMessages
 
 	// Directive events precede the audit event; replay applies them in log
@@ -2868,8 +2861,7 @@ func (l *Loop) compact(ctx context.Context) error {
 	// Fit check: a compaction that leaves occupancy at or above the window
 	// counts as a fit failure; the next successful call resets it.
 	if l.Window.Usable() && l.contextOccupancy() >= l.Window.Effective {
-		l.compactFitFailures++
-		if l.compactFitFailures >= 2 {
+		if l.Compaction.noteFit(false) >= 2 {
 			l.terminate(ctx, domain.OutcomeBudgetExhausted)
 			return fmt.Errorf("context still occupies ~%d tokens after repeated compactions (effective window %d); start a new session", l.contextOccupancy(), l.Window.Effective)
 		}
