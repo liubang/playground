@@ -16,8 +16,8 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2026/05/14 16:22
 
-# Vector Recall Service — 端到端测试脚本
-# 用法: bash cpp/pl/recall/test.sh
+# MiniSearch Server — 端到端测试脚本
+# 用法: bash cpp/pl/minisearch/test.sh
 #
 # 流程: 编译 → 启动 server → curl 打全部 API → 关闭 server → 汇总结果
 
@@ -26,7 +26,7 @@ set -uo pipefail
 PORT=18200
 DIM=4
 SERVER="http://127.0.0.1:${PORT}"
-SNAPSHOT_DIR="/tmp/recall_test_snapshot_$$"
+SNAPSHOT_DIR="/tmp/minisearch_test_snapshot_$$"
 PASS=0
 FAIL=0
 SERVER_PID=""
@@ -61,12 +61,12 @@ check() {
 
 # ── 1. 编译 ──
 echo "━━━ Building ━━━"
-bazel build //cpp/pl/recall:recall_server //cpp/pl/recall:recall_client 2>&1 | tail -3
+bazel build //cpp/pl/minisearch:minisearch_server //cpp/pl/minisearch:minisearch_client 2>&1 | tail -3
 
 # ── 2. 启动 server ──
 echo ""
 echo "━━━ Starting server (port=${PORT}, dim=${DIM}) ━━━"
-bazel-bin/cpp/pl/recall/recall_server \
+bazel-bin/cpp/pl/minisearch/minisearch_server \
     --port="${PORT}" --dimension="${DIM}" --index_type=Flat >/dev/null 2>&1 &
 SERVER_PID=$!
 

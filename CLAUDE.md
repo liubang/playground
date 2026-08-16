@@ -76,7 +76,7 @@ bazel/           Build patches for third-party deps (brpc, braft, faiss)
 | `cpp/pl/sst/` | LSM-Tree SSTable — block codec, bloom, compression, iterators |
 | `cpp/pl/sstv2/` | SSTable v2 rewrite — modular: `block/`, `bloom/`, `codec/`, `compress/`, `index/`, `pattern/`, `types/`, `format/`, `file/` |
 | `cpp/pl/braft/` | Raft state machine example using braft |
-| `cpp/pl/recall/` | FAISS vector recall with gRPC |
+| `cpp/pl/minisearch/` | MiniSearch — hybrid search service (FAISS + inverted index + BM25 + RRF, brpc HTTP) |
 | `cpp/meta/` | Template metaprogramming: type lists, expression templates, pattern matching, tuple iteration |
 
 ### Third-party deps
@@ -88,4 +88,4 @@ GitHub Actions in `.github/workflows/`:
 - `build_java.yml`, `build_go.yml`, `build_python.yml` — per-language
 
 ### Bazel registry
-`registry/` holds `MODULE.bazel` stubs for modules not in BCR: `colm`, `isa-l`, `lemon`, `leveldb`, `nanobench`, `openblas`, `ragel`. Referenced via `--registry=file://%workspace%/registry` in `.bazelrc`.
+`registry/` holds `MODULE.bazel` stubs for modules not in BCR: `colm`, `darts_clone`, `isa-l`, `jieba_cpp`, `lemon`, `leveldb`, `nanobench`, `openblas`, `ragel`. Referenced via `--registry=file://%workspace%/registry` in `.bazelrc`.

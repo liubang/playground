@@ -1,0 +1,9 @@
+{
+  "url": "https://github.com/ClickHouse/Jieba-CPP/archive/692f6001a948b9b751bf09e383e678f8f248a20f.tar.gz",
+  "strip_prefix": "Jieba-CPP-692f6001a948b9b751bf09e383e678f8f248a20f",
+  "integrity": "sha256-FIDxPqq4aCvs8Kl5fgpVDV9FxjHoB0PodehtLQnfIfc=",
+  "patch_strip": 1,
+  "patches": {
+    "bazel-build.patch": "sha256-1wprb1XZy0iEkxLaBnuNEFaeWZt0PL9cFIEhsZ5Lodo="
+  }
+}

@@ -43,33 +43,33 @@ cc_library(
 )
 
 cc_library(
-    name = "recall_service_impl",
-    srcs = ["recall_service.cpp"],
-    hdrs = ["recall_service.h"],
+    name = "minisearch_service_impl",
+    srcs = ["minisearch_service.cpp"],
+    hdrs = ["minisearch_service.h"],
     copts = COPTS,
     deps = [
         ":embedding_client",
         ":faiss_index",
-        "//cpp/pl/recall/proto:recall_cc_proto",
+        "//cpp/pl/minisearch/proto:minisearch_cc_proto",
         "@brpc",
     ],
 )
 
 cc_binary(
-    name = "recall_server",
-    srcs = ["recall_server.cpp"],
+    name = "minisearch_server",
+    srcs = ["minisearch_server.cpp"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        ":recall_service_impl",
+        ":minisearch_service_impl",
         "@brpc",
         "@gflags",
     ],
 )
 
 cc_binary(
-    name = "recall_client",
-    srcs = ["recall_client.cpp"],
+    name = "minisearch_client",
+    srcs = ["minisearch_client.cpp"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [

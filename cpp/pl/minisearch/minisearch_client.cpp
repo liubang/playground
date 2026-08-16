@@ -16,7 +16,7 @@
 // Created: 2026/05/14 10:44
 
 // HTTP/JSON 客户端示例
-// 使用 brpc::Channel 发送 HTTP 请求到 VectorRecallService
+// 使用 brpc::Channel 发送 HTTP 请求到 MiniSearch Server
 
 #include <brpc/channel.h>
 #include <brpc/controller.h>
@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
     // 5. 保存快照
     // ========================================================================
     {
-        std::string body = R"({"path":"/tmp/recall_snapshot"})";
+        std::string body = R"({"path":"/tmp/minisearch_snapshot"})";
         auto resp = http_post(channel, "/api/recall/snapshot/save", body);
         LOG(INFO) << "SaveSnapshot => " << resp;
     }
@@ -203,7 +203,7 @@ int main(int argc, char* argv[]) {
     // 6. 加载快照
     // ========================================================================
     {
-        std::string body = R"({"path":"/tmp/recall_snapshot"})";
+        std::string body = R"({"path":"/tmp/minisearch_snapshot"})";
         auto resp = http_post(channel, "/api/recall/snapshot/load", body);
         LOG(INFO) << "LoadSnapshot => " << resp;
     }
