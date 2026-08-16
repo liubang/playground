@@ -15,13 +15,13 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/14 10:44
 
-#include "cpp/pl/recall/faiss_index.h"
+#include "cpp/pl/minisearch/faiss_index.h"
 
 #include <faiss/index_factory.h>
 #include <faiss/index_io.h>
 #include <fstream>
 
-namespace pl::recall {
+namespace pl::minisearch {
 
 FaissIndex::FaissIndex(int dimension, const std::string& index_type)
     : dimension_(dimension), index_type_(index_type) {
@@ -58,7 +58,7 @@ int FaissIndex::add_batch(const std::vector<int64_t>& ids, const float* embeddin
     }
 }
 
-std::vector<RecallResult> FaissIndex::search(const float* query, int top_k) const {
+std::vector<SearchResult> FaissIndex::search(const float* query, int top_k) const {
     std::vector<float> distances(top_k);
     std::vector<int64_t> labels(top_k);
 
@@ -67,7 +67,7 @@ std::vector<RecallResult> FaissIndex::search(const float* query, int top_k) cons
         index_->search(1, query, top_k, distances.data(), labels.data());
     }
 
-    std::vector<RecallResult> results;
+    std::vector<SearchResult> results;
     results.reserve(top_k);
     for (size_t i = 0; i < static_cast<size_t>(top_k); ++i) {
         // faiss 用 -1 表示无效结果（向量数不足 top_k 时）
@@ -203,4 +203,4 @@ int64_t IdMapper::size() const {
     return static_cast<int64_t>(id_to_table_.size());
 }
 
-} // namespace pl::recall
+} // namespace pl::minisearch

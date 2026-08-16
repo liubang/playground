@@ -18,8 +18,8 @@
 #include <brpc/server.h>
 #include <gflags/gflags.h>
 
-#include "cpp/pl/recall/embedding_client.h"
-#include "cpp/pl/recall/recall_service.h"
+#include "cpp/pl/minisearch/embedding_client.h"
+#include "cpp/pl/minisearch/minisearch_service.h"
 
 DEFINE_int32(port, 8200, "TCP port of this server");
 DEFINE_int32(idle_timeout_s,
@@ -43,15 +43,15 @@ int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     // 初始化 Embedding 客户端（可选）
-    std::shared_ptr<pl::recall::EmbeddingClient> embedding_client;
+    std::shared_ptr<pl::minisearch::EmbeddingClient> embedding_client;
     if (!FLAGS_embedding_endpoint.empty() && !FLAGS_embedding_model.empty()) {
-        pl::recall::OpenAIEmbeddingClient::Options opts;
+        pl::minisearch::OpenAIEmbeddingClient::Options opts;
         opts.endpoint = FLAGS_embedding_endpoint;
         opts.model = FLAGS_embedding_model;
         opts.api_key = FLAGS_embedding_api_key;
         opts.path = FLAGS_embedding_path;
         opts.timeout_ms = FLAGS_embedding_timeout_ms;
-        embedding_client = std::make_shared<pl::recall::OpenAIEmbeddingClient>(std::move(opts));
+        embedding_client = std::make_shared<pl::minisearch::OpenAIEmbeddingClient>(std::move(opts));
         LOG(INFO) << "Embedding client configured: endpoint=" << FLAGS_embedding_endpoint
                   << " model=" << FLAGS_embedding_model;
     } else {
@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
 
     brpc::Server server;
 
-    auto service = std::make_unique<pl::recall::RecallHttpServiceImpl>(
+    auto service = std::make_unique<pl::minisearch::MiniSearchHttpServiceImpl>(
         FLAGS_dimension, FLAGS_index_type, embedding_client);
 
     // 启动时加载快照（如果指定了路径）
@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
                           "/api/recall/snapshot/save    => default_method,"
                           "/api/recall/snapshot/load    => default_method,"
                           "/api/recall/stats            => default_method") != 0) {
-        LOG(ERROR) << "Failed to add RecallHttpService";
+        LOG(ERROR) << "Failed to add MiniSearchHttpService";
         return -1;
     }
 
@@ -97,7 +97,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    LOG(INFO) << "VectorRecallService (HTTP/JSON) started on port " << FLAGS_port
+    LOG(INFO) << "MiniSearch Server (HTTP/JSON) started on port " << FLAGS_port
               << " dimension=" << FLAGS_dimension << " index_type=" << FLAGS_index_type;
 
     server.RunUntilAskedToQuit();

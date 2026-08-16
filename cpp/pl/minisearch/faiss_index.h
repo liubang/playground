@@ -25,10 +25,10 @@
 #include <unordered_map>
 #include <vector>
 
-namespace pl::recall {
+namespace pl::minisearch {
 
 // 单条召回结果
-struct RecallResult {
+struct SearchResult {
     int64_t id;
     float distance;
 };
@@ -51,7 +51,7 @@ public:
     int add_batch(const std::vector<int64_t>& ids, const float* embeddings, int count);
 
     // 检索 top-k 最近邻
-    std::vector<RecallResult> search(const float* query, int top_k) const;
+    std::vector<SearchResult> search(const float* query, int top_k) const;
 
     // 持久化到磁盘
     bool save(const std::string& path) const;
@@ -103,4 +103,4 @@ private:
     int64_t next_id_ = 0;
 };
 
-} // namespace pl::recall
+} // namespace pl::minisearch

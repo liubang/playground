@@ -26,13 +26,13 @@ Client  ──HTTP POST──▶  FastAPI (/v1/embeddings)
 
 ```bash
 # 构建
-bazel build //cpp/pl/recall/embedding_server:embedding_server
+bazel build //cpp/pl/minisearch/embedding_server:embedding_server
 
 # 运行（默认加载 BAAI/bge-m3 模型）
-bazel run //cpp/pl/recall/embedding_server:embedding_server
+bazel run //cpp/pl/minisearch/embedding_server:embedding_server
 
 # 自定义参数
-bazel run //cpp/pl/recall/embedding_server:embedding_server -- \
+bazel run //cpp/pl/minisearch/embedding_server:embedding_server -- \
     --model BAAI/bge-m3 \
     --host 0.0.0.0 \
     --port 8000 \
@@ -43,7 +43,7 @@ bazel run //cpp/pl/recall/embedding_server:embedding_server -- \
 
 ```bash
 pip install mlx numpy transformers fastapi 'uvicorn[standard]' huggingface-hub safetensors
-python cpp/pl/recall/embedding_server/server.py --model BAAI/bge-m3
+python cpp/pl/minisearch/embedding_server/server.py --model BAAI/bge-m3
 ```
 
 ## API
@@ -103,12 +103,12 @@ OpenAI 兼容的 Embedding 接口。
 curl http://localhost:8000/health
 ```
 
-## 与 Recall Service 集成
+## 与 MiniSearch Server 集成
 
-在 recall_server 启动时指定 embedding 服务地址：
+在 minisearch_server 启动时指定 embedding 服务地址：
 
 ```bash
-./recall_server \
+./minisearch_server \
     --embedding_url=http://localhost:8000/v1/embeddings \
     --embedding_model=bge-m3 \
     --embedding_dim=1024
@@ -129,10 +129,10 @@ curl http://localhost:8000/health
 依赖声明在 `requirements.in`，锁定文件通过以下命令生成：
 
 ```bash
-uv pip compile cpp/pl/recall/embedding_server/requirements.in \
+uv pip compile cpp/pl/minisearch/embedding_server/requirements.in \
     --python-platform aarch64-apple-darwin \
     --python-version 3.13 \
-    -o cpp/pl/recall/embedding_server/requirements_lock.txt
+    -o cpp/pl/minisearch/embedding_server/requirements_lock.txt
 ```
 
 注意：由于 MLX 仅支持 Apple Silicon，lock 文件限定了 `aarch64-apple-darwin` 平台，

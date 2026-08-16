@@ -87,7 +87,7 @@ jobs:
             --cxxopt=-Wno-error=unused-but-set-parameter \
             --linkopt=-stdlib=libstdc++ \
             --test_env=FLUX_MYSQL_TEST_DSN=mysql://flux:flux@127.0.0.1:3306/flux_test \
-            -- //cpp/... -//cpp/pl/recall/embedding_server/...
+            -- //cpp/... -//cpp/pl/minisearch/embedding_server/...
   # gcc job: run coverage (which also executes all tests), then deploy report
   coverage-linux-gcc:
     name: coverage-linux-gcc
@@ -137,7 +137,7 @@ jobs:
             --test_env=FLUX_MYSQL_TEST_DSN=mysql://flux:flux@127.0.0.1:3306/flux_test \
             --combined_report=lcov \
             --instrumentation_filter="//cpp/pl[/:]" \
-            -- //cpp/... -//cpp/pl/recall/embedding_server/...
+            -- //cpp/... -//cpp/pl/minisearch/embedding_server/...
       - name: generate html report
         if: steps.coverage.outcome == 'success'
         run: |

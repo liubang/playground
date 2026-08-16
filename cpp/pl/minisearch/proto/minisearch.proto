@@ -17,7 +17,7 @@
 
 syntax = "proto3";
 
-package pl.recall.proto;
+package pl.minisearch.proto;
 
 option cc_generic_services = true;
 
@@ -136,7 +136,7 @@ message HttpRequest {}
 message HttpResponse {}
 
 // HTTP 服务入口，所有 /api/recall/* 请求路由到 default_method
-service RecallHttpService {
+service MiniSearchHttpService {
   rpc default_method(HttpRequest) returns (HttpResponse);
 }
 
