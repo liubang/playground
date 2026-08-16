@@ -618,3 +618,78 @@ func TestSessionServiceSubscribeShutdownRace(t *testing.T) {
 		wg.Wait()
 	}
 }
+
+// TestWorkspaceRegistryDeleteRePinsDefault verifies that deleting the default
+// workspace automatically re-pins the default to the newest remaining
+// workspace, and clears it when no workspaces remain.
+func TestWorkspaceRegistryDeleteRePinsDefault(t *testing.T) {
+	ctx := context.Background()
+
+	resolved := testResolvedConfig(fakes.NewFakeModel())
+	baseDir := t.TempDir()
+	resolved.Storage = config.ResolvedStorage{BaseDir: baseDir}
+	if err := os.MkdirAll(resolved.Storage.SessionsDir(), 0o700); err != nil {
+		t.Fatalf("mkdir sessions: %v", err)
+	}
+	proc, err := NewProcessRuntime(ctx, resolved, ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(baseDir, "artifacts"),
+	})
+	if err != nil {
+		t.Fatalf("NewProcessRuntime: %v", err)
+	}
+	t.Cleanup(proc.Close)
+
+	reg, err := NewWorkspaceRegistry(proc)
+	if err != nil {
+		t.Fatalf("NewWorkspaceRegistry: %v", err)
+	}
+
+	// Register three workspaces: A (oldest), B (middle), C (newest=default).
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+	dirC := t.TempDir()
+
+	wsA, err := reg.Register(ctx, dirA, "alpha")
+	if err != nil {
+		t.Fatalf("Register A: %v", err)
+	}
+	wsB, err := reg.Register(ctx, dirB, "beta")
+	if err != nil {
+		t.Fatalf("Register B: %v", err)
+	}
+	wsC, err := reg.RegisterDefault(ctx, dirC)
+	if err != nil {
+		t.Fatalf("RegisterDefault C: %v", err)
+	}
+
+	if reg.DefaultID() != wsC.WorkspaceID {
+		t.Fatalf("expected default=C, got %v", reg.DefaultID())
+	}
+
+	// Delete C (the default): should re-pin to B (newest remaining).
+	if _, err := reg.Delete(ctx, wsC.WorkspaceID); err != nil {
+		t.Fatalf("Delete C: %v", err)
+	}
+	if reg.DefaultID() != wsB.WorkspaceID {
+		t.Fatalf("expected default=B after deleting C, got %v", reg.DefaultID())
+	}
+
+	// Delete B (now the default): should re-pin to A.
+	if _, err := reg.Delete(ctx, wsB.WorkspaceID); err != nil {
+		t.Fatalf("Delete B: %v", err)
+	}
+	if reg.DefaultID() != wsA.WorkspaceID {
+		t.Fatalf("expected default=A after deleting B, got %v", reg.DefaultID())
+	}
+
+	// Delete A (the last one): should clear the default.
+	if _, err := reg.Delete(ctx, wsA.WorkspaceID); err != nil {
+		t.Fatalf("Delete A: %v", err)
+	}
+	if !reg.DefaultID().IsZero() {
+		t.Fatalf("expected zero default after deleting all workspaces, got %v", reg.DefaultID())
+	}
+	if reg.Default() != nil {
+		t.Fatal("expected nil Default() after deleting all workspaces")
+	}
+}

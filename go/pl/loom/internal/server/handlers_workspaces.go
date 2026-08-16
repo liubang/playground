@@ -30,8 +30,8 @@ import (
 )
 
 // workspaceEntry is the wire shape of one workspace, with its session count
-// and a default-workspace marker (the default cannot be deleted; frontends
-// use it to hide the delete affordance).
+// and a default-workspace marker. The default workspace can be deleted;
+// is_default is informational (e.g. for UI badges).
 type workspaceEntry struct {
 	domain.Workspace
 	SessionCount int  `json:"session_count"`
