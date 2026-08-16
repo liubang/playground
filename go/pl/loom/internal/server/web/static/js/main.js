@@ -339,6 +339,13 @@ async function fetchArtifactURL(id, size) {
   return entry
 }
 
+// 切会话时释放全部 artifact blob URL，避免频繁带图会话里缓存无界增长。
+// artifact 是内容寻址的不可变 blob，新会话再次引用时重新 fetch 即可。
+function clearArtifactURLCache() {
+  for (const entry of artifactURLCache.values()) URL.revokeObjectURL(entry.url)
+  artifactURLCache.clear()
+}
+
 // 复制完整工具输出：实时 tool.completed 事件只带有界 preview，
 // 完整内容从 snapshot 消息历史里按 call_id 取。
 async function fetchToolOutput(callId) {
@@ -547,9 +554,31 @@ function setReadOnly(snap) {
   badge.title = snap.parent_session_id ? `parent: ${snap.parent_session_id}` : ''
 }
 
+// composer 草稿按会话隔离：切走前暂存当前输入文本，切回时还原。
+// 附件（blob URL 预览）不跨会话保留——它们是针对当时会话语境挑选的。
+const composerDrafts = new Map()
+
+function stashComposerDraft() {
+  if (!app.sessionId || !app.composer) return
+  const d = app.composer.draft()
+  if (d) composerDrafts.set(app.sessionId, d)
+  else composerDrafts.delete(app.sessionId)
+}
+
+function restoreComposerDraft(id) {
+  if (!app.composer) return
+  app.composer.clearDraft()
+  const saved = composerDrafts.get(id)
+  if (saved) app.composer.restoreDraft(saved)
+  composerDrafts.delete(id)
+}
+
 async function openSession(id) {
+  stashComposerDraft()
+  clearArtifactURLCache()
   app.stream.detach()
   app.sessionId = id
+  restoreComposerDraft(id)
   app.sidebar.setActive(id, { scroll: true })
   $('empty-state').hidden = true
   $('hdr-session').hidden = false
