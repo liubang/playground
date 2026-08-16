@@ -777,7 +777,7 @@ func TestShouldCompactTriggers(t *testing.T) {
 
 	t.Run("forced compaction after provider context overflow", func(t *testing.T) {
 		loop := newLoop()
-		loop.ForceCompact = true
+		loop.Compaction.Force = true
 		if !loop.shouldCompact() {
 			t.Fatal("forceCompact must trigger compaction with no other pressure")
 		}

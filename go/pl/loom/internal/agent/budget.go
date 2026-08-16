@@ -86,32 +86,74 @@ func noticeText(dimension string, level int, usage, limit int64) string {
 	return ""
 }
 
-// injectBudgetNotices fires the graduated reminders whose thresholds the
-// current usage just crossed: occupancy (window-derived levels), session
-// tokens and cost (80%/95%). Each dimension+level fires at most once per
-// prompt; compaction re-arms occupancy. Callers must be at a
-// transcript-pairing-safe point (prepare).
-func (l *Loop) injectBudgetNotices() {
-	if l.Window.Usable() {
-		occupancy := l.contextOccupancy()
-		for level, threshold := range l.Window.NoticeLevels {
-			if occupancy >= threshold && l.fireNoticeOnce(dimensionOccupancy, level+1) {
-				l.Run.AddBudgetNotice(domain.BudgetNoticePayload{
+// noticeCenter owns the graduated-reminder bookkeeping: each
+// dimension+level fires at most once per prompt (compaction re-arms
+// occupancy), and detections made at transcript-unsafe points (tool
+// routing) queue for injection at the next pairing-safe prepare.
+type noticeCenter struct {
+	fired   map[string]int
+	pending []domain.BudgetNoticePayload
+}
+
+// fireOnce records the highest fired level per dimension and reports
+// whether the given level is new.
+func (n *noticeCenter) fireOnce(dimension string, level int) bool {
+	if n.fired == nil {
+		n.fired = make(map[string]int)
+	}
+	if n.fired[dimension] >= level {
+		return false
+	}
+	n.fired[dimension] = level
+	return true
+}
+
+// queue defers a reminder detected at a transcript-unsafe point to the
+// next prepare.
+func (n *noticeCenter) queue(payload domain.BudgetNoticePayload) {
+	n.pending = append(n.pending, payload)
+}
+
+// drain injects queued reminders at the pairing-safe point.
+func (n *noticeCenter) drain(run *Run) {
+	for _, payload := range n.pending {
+		payload.Message.CreatedAt = run.Clock.Now()
+		run.AddBudgetNotice(payload)
+	}
+	n.pending = n.pending[:0]
+}
+
+// rearm lets one dimension fire again. Compaction re-arms occupancy (the
+// fresh window resets the pressure); other dimensions never re-arm.
+func (n *noticeCenter) rearm(dimension string) {
+	delete(n.fired, dimension)
+}
+
+// inject fires the graduated reminders whose thresholds the current usage
+// just crossed: occupancy (window-derived levels), session tokens and
+// cost (80%/95%). occupancy is consulted lazily, only with a usable
+// window. Callers must be at a transcript-pairing-safe point (prepare).
+func (n *noticeCenter) inject(run *Run, window WindowModel, occupancy func() int64) {
+	if window.Usable() {
+		current := occupancy()
+		for level, threshold := range window.NoticeLevels {
+			if current >= threshold && n.fireOnce(dimensionOccupancy, level+1) {
+				run.AddBudgetNotice(domain.BudgetNoticePayload{
 					Dimension: dimensionOccupancy, Level: level + 1,
-					Usage: occupancy, Limit: l.Window.Effective,
-					Message: noticeMessage(noticeText(dimensionOccupancy, level+1, occupancy, l.Window.Effective), l.Run.Clock.Now()),
+					Usage: current, Limit: window.Effective,
+					Message: noticeMessage(noticeText(dimensionOccupancy, level+1, current, window.Effective), run.Clock.Now()),
 				})
 				break // at most one level per dimension per injection point
 			}
 		}
 	}
-	l.injectScaledNotice(dimensionTokens, l.Run.Usage.InputTokens+l.Run.Usage.OutputTokens, l.Run.Limits.MaxTokens)
-	l.injectScaledNotice(dimensionCostUSD, int64(l.Run.Usage.CostUSD*microUSD), int64(l.Run.Limits.MaxEstimatedCostUSD*microUSD))
+	n.injectScaled(run, dimensionTokens, run.Usage.InputTokens+run.Usage.OutputTokens, run.Limits.MaxTokens)
+	n.injectScaled(run, dimensionCostUSD, int64(run.Usage.CostUSD*microUSD), int64(run.Limits.MaxEstimatedCostUSD*microUSD))
 }
 
-// injectScaledNotice fires the 80%/95% reminders for one
-// absolute-scaled dimension (wall time nanoseconds, cost micro-USD).
-func (l *Loop) injectScaledNotice(dimension string, usage, limit int64) {
+// injectScaled fires the 80%/95% reminders for one absolute-scaled
+// dimension (session tokens, cost micro-USD).
+func (n *noticeCenter) injectScaled(run *Run, dimension string, usage, limit int64) {
 	if limit <= 0 {
 		return
 	}
@@ -125,41 +167,19 @@ func (l *Loop) injectScaledNotice(dimension string, usage, limit int64) {
 	default:
 		return
 	}
-	if !l.fireNoticeOnce(dimension, level) {
+	if !n.fireOnce(dimension, level) {
 		return
 	}
-	l.Run.AddBudgetNotice(domain.BudgetNoticePayload{
+	run.AddBudgetNotice(domain.BudgetNoticePayload{
 		Dimension: dimension, Level: level, Usage: usage, Limit: limit,
-		Message: noticeMessage(noticeText(dimension, level, usage, limit), l.Run.Clock.Now()),
+		Message: noticeMessage(noticeText(dimension, level, usage, limit), run.Clock.Now()),
 	})
 }
 
-// fireNoticeOnce records the highest fired level per dimension and
-// reports whether the given level is new.
-func (l *Loop) fireNoticeOnce(dimension string, level int) bool {
-	if l.noticeFired == nil {
-		l.noticeFired = make(map[string]int)
-	}
-	if l.noticeFired[dimension] >= level {
-		return false
-	}
-	l.noticeFired[dimension] = level
-	return true
-}
-
-// queueNotice defers a reminder detected at a transcript-unsafe point
-// (tool routing) to the next prepare.
-func (l *Loop) queueNotice(payload domain.BudgetNoticePayload) {
-	l.pendingNotices = append(l.pendingNotices, payload)
-}
-
-// drainPendingNotices injects queued reminders at the pairing-safe point.
-func (l *Loop) drainPendingNotices() {
-	for _, payload := range l.pendingNotices {
-		payload.Message.CreatedAt = l.Run.Clock.Now()
-		l.Run.AddBudgetNotice(payload)
-	}
-	l.pendingNotices = l.pendingNotices[:0]
+// injectBudgetNotices fires the graduated reminders whose thresholds the
+// current usage just crossed (see noticeCenter.inject).
+func (l *Loop) injectBudgetNotices() {
+	l.notices.inject(l.Run, l.Window, l.contextOccupancy)
 }
 
 // noticeMessage wraps reminder text in a system-role transcript message.
@@ -233,7 +253,7 @@ func (l *Loop) budgetDimensionUsage(dimension string) (usage, limit int64) {
 	case dimensionCostUSD:
 		return int64(l.Run.Usage.CostUSD * microUSD), int64(l.Run.Limits.MaxEstimatedCostUSD * microUSD)
 	case dimensionStall:
-		return int64(l.stallActiveDuration()), int64(l.runawayConfig().StallTimeout)
+		return int64(l.runaway.stallActiveDuration(l.Run.Clock)), int64(l.runawayConfig().StallTimeout)
 	case dimensionMaxOutput:
 		return int64(l.maxOutputStops), int64(maxOutputContinuationLimit)
 	default: // tokens

@@ -55,10 +55,78 @@ const (
 	// history (docs/CONTEXT_DESIGN.md §4.3.3).
 	summaryUserMessageBudgetRatio = 0.20
 	// bytesPerTokenEstimate is the rough text-bytes-per-token ratio used for
-	// before/after reporting only; budget accounting always uses
-	// provider-metered usage.
+	// before/after reporting and occupancy estimation; hard budget
+	// accounting always uses provider-metered usage.
 	bytesPerTokenEstimate = 4
 )
+
+// CompactionControl carries the compaction knobs for a run together with
+// the per-run compaction bookkeeping, so the loop struct does not sprawl
+// the individual counters (docs/CONTEXT_DESIGN.md §4.2).
+type CompactionControl struct {
+	// Force demands compaction before the next model call. It is set
+	// internally after a provider context-overflow rejection, and may be
+	// set by the caller (e.g. a manual /compact request) to force a pass
+	// ahead of the automatic pressure triggers.
+	Force bool
+	// TriggerHint labels the next compaction pass's trigger
+	// ("manual"/"overflow"/"downshift") for the audit event; empty means
+	// automatic pressure.
+	TriggerHint string
+
+	// lastEst is the transcript estimate right after the most recent
+	// compaction pass. Re-compacting is pointless until the transcript
+	// grows past it: on an unchanged transcript the condenser cannot make
+	// progress (e.g. everything sits inside the keep-recent window), and
+	// the loop would otherwise spin forever, spamming compaction
+	// events/checkpoints.
+	lastEst int
+	// fitFailures counts consecutive failures to fit the next request into
+	// the context window (provider context-overflow, or a compaction that
+	// left occupancy above the window); two in a row is fatal — the
+	// window genuinely cannot hold the work.
+	fitFailures int
+}
+
+// demand arms a forced pass labelled with the given trigger hint.
+func (c *CompactionControl) demand(hint string) {
+	c.Force = true
+	c.TriggerHint = hint
+}
+
+// triggerLabel returns the audit label for the next pass.
+func (c *CompactionControl) triggerLabel() string {
+	if c.TriggerHint == "" {
+		return "auto"
+	}
+	return c.TriggerHint
+}
+
+// noGrowthSince reports whether the transcript estimate has not grown
+// past the last completed pass — in which case another pass cannot make
+// progress and compaction must not retrigger.
+func (c *CompactionControl) noGrowthSince(est int) bool {
+	return c.lastEst > 0 && est <= c.lastEst
+}
+
+// complete records a finished pass: the forced demand is consumed and the
+// post-pass estimate remembered for the no-growth guard.
+func (c *CompactionControl) complete(est int) {
+	c.Force = false
+	c.TriggerHint = ""
+	c.lastEst = est
+}
+
+// noteFit records whether the last request fit the window and returns the
+// consecutive fit-failure streak (a success resets it).
+func (c *CompactionControl) noteFit(fit bool) int {
+	if fit {
+		c.fitFailures = 0
+	} else {
+		c.fitFailures++
+	}
+	return c.fitFailures
+}
 
 // CompactionSummonPrompt asks the model to write a handoff summary of the
 // current transcript for the model that resumes after compaction.

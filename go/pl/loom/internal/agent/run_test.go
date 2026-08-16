@@ -3487,7 +3487,7 @@ func TestShouldCompactOnOccupancy(t *testing.T) {
 	if loop.shouldCompact() {
 		t.Fatal("occupancy below the trigger must not compact")
 	}
-	loop.ForceCompact = true
+	loop.Compaction.Force = true
 	if !loop.shouldCompact() {
 		t.Fatal("forceCompact must trigger compaction")
 	}
@@ -3514,7 +3514,7 @@ func TestShouldCompactDoesNotRetriggerWithoutGrowth(t *testing.T) {
 	}
 
 	// Simulate a no-progress pass: the condenser left the transcript unchanged.
-	loop.lastCompactEst = estTokens(run.Messages)
+	loop.Compaction.lastEst = estTokens(run.Messages)
 	if loop.shouldCompact() {
 		t.Fatal("compaction must not retrigger while the transcript has not grown")
 	}
@@ -3527,11 +3527,11 @@ func TestShouldCompactDoesNotRetriggerWithoutGrowth(t *testing.T) {
 	}
 
 	// A provider context-overflow rejection still forces a pass.
-	loop.ForceCompact = true
+	loop.Compaction.Force = true
 	if !loop.shouldCompact() {
 		t.Fatal("forceCompact must bypass the no-growth guard")
 	}
-	loop.ForceCompact = false
+	loop.Compaction.Force = false
 	loop.lastCallInput = 0
 
 	// Real transcript growth re-arms compaction.
@@ -3593,9 +3593,9 @@ func TestBudgetNoticeInjection(t *testing.T) {
 	if err := loop.compact(context.Background()); err != nil {
 		t.Fatalf("compact() error = %v", err)
 	}
-	if loop.noticeFired[dimensionOccupancy] != 0 || loop.lastCallInput != 0 {
+	if loop.notices.fired[dimensionOccupancy] != 0 || loop.lastCallInput != 0 {
 		t.Fatalf("compact must re-arm occupancy notices and reset occupancy: fired=%d lastCallInput=%d",
-			loop.noticeFired[dimensionOccupancy], loop.lastCallInput)
+			loop.notices.fired[dimensionOccupancy], loop.lastCallInput)
 	}
 }
 
@@ -3650,8 +3650,8 @@ func TestContextOverflowForcesCompactionAndRetries(t *testing.T) {
 	if !foundCompaction {
 		t.Fatal("overflow must force a compaction before the retry")
 	}
-	if loop.compactFitFailures != 0 {
-		t.Fatalf("successful retry must reset fit failures, got %d", loop.compactFitFailures)
+	if loop.Compaction.fitFailures != 0 {
+		t.Fatalf("successful retry must reset fit failures, got %d", loop.Compaction.fitFailures)
 	}
 }
 
@@ -4483,7 +4483,7 @@ func TestHandleContextOverflow413ForcesCompactionThenTerminates(t *testing.T) {
 	if err := loop.handleContextOverflow(context.Background(), cause); err != nil {
 		t.Fatalf("first 413 = %v, want forced compaction instead of an error", err)
 	}
-	if !loop.ForceCompact {
+	if !loop.Compaction.Force {
 		t.Fatal("first 413 must arm ForceCompact")
 	}
 
