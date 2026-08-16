@@ -20,11 +20,11 @@ load("@rules_proto_grpc_cpp//:defs.bzl", "cpp_proto_library")
 package(default_visibility = ["//visibility:public"])
 
 proto_library(
-    name = "recall_proto",
-    srcs = ["recall.proto"],
+    name = "minisearch_proto",
+    srcs = ["minisearch.proto"],
 )
 
 cpp_proto_library(
-    name = "recall_cc_proto",
-    protos = [":recall_proto"],
+    name = "minisearch_cc_proto",
+    protos = [":minisearch_proto"],
 )

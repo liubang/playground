@@ -15,7 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/14 10:44
 
-#include "cpp/pl/recall/recall_service.h"
+#include "cpp/pl/minisearch/minisearch_service.h"
 
 #include <brpc/closure_guard.h>
 #include <brpc/controller.h>
@@ -25,7 +25,7 @@
 #include <json2pb/pb_to_json.h>
 #include <unordered_set>
 
-namespace pl::recall {
+namespace pl::minisearch {
 
 // =========================================================================
 // MetaStore
@@ -107,7 +107,7 @@ bool MetaStore::load(const std::string& path) {
 // =========================================================================
 
 template <typename T>
-bool RecallHttpServiceImpl::ParseJsonBody(brpc::Controller* cntl, T* message) {
+bool MiniSearchHttpServiceImpl::ParseJsonBody(brpc::Controller* cntl, T* message) {
     const std::string body = cntl->request_attachment().to_string();
     std::string error;
     if (!json2pb::JsonToProtoMessage(body, message, &error)) {
@@ -118,9 +118,9 @@ bool RecallHttpServiceImpl::ParseJsonBody(brpc::Controller* cntl, T* message) {
 }
 
 template <typename T>
-void RecallHttpServiceImpl::SendJsonResponse(brpc::Controller* cntl,
-                                             const T& message,
-                                             int status_code) {
+void MiniSearchHttpServiceImpl::SendJsonResponse(brpc::Controller* cntl,
+                                                 const T& message,
+                                                 int status_code) {
     cntl->http_response().set_status_code(status_code);
     cntl->http_response().set_content_type("application/json");
 
@@ -131,24 +131,23 @@ void RecallHttpServiceImpl::SendJsonResponse(brpc::Controller* cntl,
     cntl->response_attachment().append(json);
 }
 
-void RecallHttpServiceImpl::SendErrorResponse(brpc::Controller* cntl,
-                                              int status_code,
-                                              const std::string& error) {
+void MiniSearchHttpServiceImpl::SendErrorResponse(brpc::Controller* cntl,
+                                                  int status_code,
+                                                  const std::string& error) {
     cntl->http_response().set_status_code(status_code);
     cntl->http_response().set_content_type("application/json");
     cntl->response_attachment().append(R"({"error":")" + error + R"("})");
 }
 
 // =========================================================================
-// RecallHttpServiceImpl
+// MiniSearchHttpServiceImpl
 // =========================================================================
 
-RecallHttpServiceImpl::RecallHttpServiceImpl(int dimension,
-                                             const std::string& index_type,
-                                             std::shared_ptr<EmbeddingClient> embedding_client)
+MiniSearchHttpServiceImpl::MiniSearchHttpServiceImpl(
+    int dimension, const std::string& index_type, std::shared_ptr<EmbeddingClient> embedding_client)
     : index_(dimension, index_type), embedding_client_(std::move(embedding_client)) {}
 
-bool RecallHttpServiceImpl::Init(const std::string& snapshot_path) {
+bool MiniSearchHttpServiceImpl::Init(const std::string& snapshot_path) {
     if (snapshot_path.empty()) {
         return true;
     }
@@ -157,10 +156,10 @@ bool RecallHttpServiceImpl::Init(const std::string& snapshot_path) {
     return index_.load(index_path) && id_mapper_.load(mapper_path);
 }
 
-void RecallHttpServiceImpl::default_method(google::protobuf::RpcController* controller_base,
-                                           const proto::HttpRequest* /*request*/,
-                                           proto::HttpResponse* /*response*/,
-                                           google::protobuf::Closure* done) {
+void MiniSearchHttpServiceImpl::default_method(google::protobuf::RpcController* controller_base,
+                                               const proto::HttpRequest* /*request*/,
+                                               proto::HttpResponse* /*response*/,
+                                               google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(controller_base);
 
@@ -193,7 +192,7 @@ void RecallHttpServiceImpl::default_method(google::protobuf::RpcController* cont
 // HTTP Handlers
 // =========================================================================
 
-void RecallHttpServiceImpl::HandleAdd(brpc::Controller* cntl) {
+void MiniSearchHttpServiceImpl::HandleAdd(brpc::Controller* cntl) {
     proto::AddRequest req;
     if (!ParseJsonBody(cntl, &req)) {
         return;
@@ -227,7 +226,7 @@ void RecallHttpServiceImpl::HandleAdd(brpc::Controller* cntl) {
               << cntl->remote_side();
 }
 
-void RecallHttpServiceImpl::HandleBatchAdd(brpc::Controller* cntl) {
+void MiniSearchHttpServiceImpl::HandleBatchAdd(brpc::Controller* cntl) {
     proto::BatchAddRequest req;
     if (!ParseJsonBody(cntl, &req)) {
         return;
@@ -261,7 +260,7 @@ void RecallHttpServiceImpl::HandleBatchAdd(brpc::Controller* cntl) {
               << cntl->remote_side();
 }
 
-void RecallHttpServiceImpl::HandleSearch(brpc::Controller* cntl) {
+void MiniSearchHttpServiceImpl::HandleSearch(brpc::Controller* cntl) {
     proto::SearchRequest req;
     if (!ParseJsonBody(cntl, &req)) {
         return;
@@ -291,7 +290,7 @@ void RecallHttpServiceImpl::HandleSearch(brpc::Controller* cntl) {
     SendJsonResponse(cntl, resp);
 }
 
-void RecallHttpServiceImpl::HandleSaveSnapshot(brpc::Controller* cntl) {
+void MiniSearchHttpServiceImpl::HandleSaveSnapshot(brpc::Controller* cntl) {
     proto::SnapshotRequest req;
     if (!ParseJsonBody(cntl, &req)) {
         return;
@@ -336,7 +335,7 @@ void RecallHttpServiceImpl::HandleSaveSnapshot(brpc::Controller* cntl) {
     SendJsonResponse(cntl, resp, ok ? 200 : 500);
 }
 
-void RecallHttpServiceImpl::HandleLoadSnapshot(brpc::Controller* cntl) {
+void MiniSearchHttpServiceImpl::HandleLoadSnapshot(brpc::Controller* cntl) {
     proto::SnapshotRequest req;
     if (!ParseJsonBody(cntl, &req)) {
         return;
@@ -394,7 +393,7 @@ static std::vector<std::string> SplitTextViews(const std::string& full_text,
     return views;
 }
 
-void RecallHttpServiceImpl::HandleAddByText(brpc::Controller* cntl) {
+void MiniSearchHttpServiceImpl::HandleAddByText(brpc::Controller* cntl) {
     if (!embedding_client_) {
         SendErrorResponse(cntl, 503, "embedding service not configured");
         return;
@@ -452,7 +451,7 @@ void RecallHttpServiceImpl::HandleAddByText(brpc::Controller* cntl) {
               << " added=" << added << " from " << cntl->remote_side();
 }
 
-void RecallHttpServiceImpl::HandleBatchAddByText(brpc::Controller* cntl) {
+void MiniSearchHttpServiceImpl::HandleBatchAddByText(brpc::Controller* cntl) {
     if (!embedding_client_) {
         SendErrorResponse(cntl, 503, "embedding service not configured");
         return;
@@ -534,7 +533,7 @@ void RecallHttpServiceImpl::HandleBatchAddByText(brpc::Controller* cntl) {
               << cntl->remote_side();
 }
 
-void RecallHttpServiceImpl::HandleSearchByText(brpc::Controller* cntl) {
+void MiniSearchHttpServiceImpl::HandleSearchByText(brpc::Controller* cntl) {
     if (!embedding_client_) {
         SendErrorResponse(cntl, 503, "embedding service not configured");
         return;
@@ -599,7 +598,7 @@ void RecallHttpServiceImpl::HandleSearchByText(brpc::Controller* cntl) {
               << " results=" << resp.results_size() << " from " << cntl->remote_side();
 }
 
-void RecallHttpServiceImpl::HandleGetStats(brpc::Controller* cntl) {
+void MiniSearchHttpServiceImpl::HandleGetStats(brpc::Controller* cntl) {
     proto::StatsResponse resp;
     resp.set_total_vectors(index_.size());
     resp.set_dimension(index_.dimension());
@@ -608,4 +607,4 @@ void RecallHttpServiceImpl::HandleGetStats(brpc::Controller* cntl) {
     SendJsonResponse(cntl, resp);
 }
 
-} // namespace pl::recall
+} // namespace pl::minisearch

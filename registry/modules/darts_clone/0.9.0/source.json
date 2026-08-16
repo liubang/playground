@@ -1,0 +1,9 @@
+{
+  "url": "https://github.com/s-yata/darts-clone/archive/e40ce4627526985a7767444b6ed6893ab6ff8983.tar.gz",
+  "strip_prefix": "darts-clone-e40ce4627526985a7767444b6ed6893ab6ff8983",
+  "integrity": "sha256-SlYoJOwvuw73vQBY2fczABc9IHV7M7tpuqflA0n2WCA=",
+  "patch_strip": 1,
+  "patches": {
+    "add-build.patch": "sha256-4tFFlyiyWhjAm3Jmgz0OLfDSJ+aUh8oflp1srcqOlrY="
+  }
+}
