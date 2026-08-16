@@ -60,12 +60,22 @@ func OpenSQLiteStore(ctx context.Context, path string) (*SQLiteStore, error) {
 		return nil, domain.NewError(domain.ErrInvalidInput, "sqlite database path is required")
 	}
 
-	db, err := sql.Open("sqlite", path)
+	// The pragmas ride the DSN so EVERY pooled connection gets them —
+	// database/sql opens conns on demand, and an Exec-applied pragma
+	// would silently miss later connections (foreign_keys, busy_timeout).
+	dsn := "file:" + filepath.ToSlash(path) +
+		"?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)" +
+		"&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, storeError("open sqlite database", err)
 	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	// WAL allows one writer plus concurrent readers: two connections let
+	// a long write transaction (event batch + checkpoint) proceed without
+	// starving reads, while contending writers are serialized by
+	// SQLite itself and spared instant SQLITE_BUSY by busy_timeout.
+	db.SetMaxOpenConns(2)
+	db.SetMaxIdleConns(2)
 	store := &SQLiteStore{db: db}
 	if err := store.initialize(ctx); err != nil {
 		_ = db.Close()
@@ -120,16 +130,7 @@ func (s *SQLiteStore) Close() error {
 }
 
 func (s *SQLiteStore) initialize(ctx context.Context) error {
-	for _, statement := range []string{
-		"PRAGMA foreign_keys = ON",
-		"PRAGMA journal_mode = WAL",
-		"PRAGMA synchronous = FULL",
-		"PRAGMA busy_timeout = 5000",
-	} {
-		if _, err := s.db.ExecContext(ctx, statement); err != nil {
-			return storeError("configure sqlite database", err)
-		}
-	}
+	// Connection pragmas are bound in the DSN (see OpenSQLiteStore).
 	if err := s.db.PingContext(ctx); err != nil {
 		return storeError("ping sqlite database", err)
 	}
