@@ -66,6 +66,29 @@ func runLoopWithTool(t *testing.T, tool domain.Tool, script ...fakes.ScriptEntry
 	return run, loop, loop.Execute(context.Background())
 }
 
+// panicTool explodes inside Execute, simulating a programmer error deep
+// in the tool path. Definition/Prepare come from the embedded fake so
+// the call routes exactly like a production tool.
+type panicTool struct{ *fakes.FakeTool }
+
+func (panicTool) Execute(context.Context, domain.PreparedCall) domain.ToolResult {
+	panic("tool exploded")
+}
+
+// Regression: a panic deep in the loop used to crash the whole process
+// with no terminal event and no checkpoint. The loop boundary recovers
+// it, fails the run gracefully, and returns an ordinary error.
+func TestExecuteRecoversPanics(t *testing.T) {
+	call := domain.ToolCall{Name: "read_file", Arguments: json.RawMessage(`{"path":"a.go"}`)}
+	run, _, err := runLoopWithTool(t, panicTool{fakes.ReadFileTool()}, scriptToolCalls(call, 1, "")...)
+	if err == nil || !strings.Contains(err.Error(), "agent loop panic") {
+		t.Fatalf("Execute error = %v, want recovered panic", err)
+	}
+	if run.State.Lifecycle != domain.LifecycleTerminal || run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("state = %+v, want terminal/failed", run.State)
+	}
+}
+
 // The repeated-call detector warns on the second identical call and
 // terminates on the third (docs/CONTEXT_DESIGN.md §4.4.3).
 func TestRunawayRepeatedCallsTerminate(t *testing.T) {

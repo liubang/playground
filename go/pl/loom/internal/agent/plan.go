@@ -82,7 +82,7 @@ func (l *Loop) drainPlanUpdates() {
 	}
 	l.Run.Plan = plan
 	l.planRevisedThisRun = true
-	l.markProgress()
+	l.runaway.markProgress(l.Run.Clock)
 	l.Run.appendEvent(domain.EventPlanRevised, plan)
 }
 
