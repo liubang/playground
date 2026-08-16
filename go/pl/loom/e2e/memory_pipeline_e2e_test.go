@@ -55,7 +55,7 @@ func TestMemoryPipelineRealModelE2E(t *testing.T) {
 	discard := env.Logger
 
 	c := env.NewClient(t)
-	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	collector := harness.NewCollector(t.Context(), c, env.Subscribe(t, c))
 	go collector.Run()
 
 	// --- 1. one real turn carrying a memorable code word ---
