@@ -50,22 +50,40 @@ func (m Model) NewSessionFinder() *Finder[app.SessionSummary] {
 }
 
 // sessionFinderItems maps session summaries onto finder rows: the short
-// ID filters and displays, version and age ride along as the hint.
+// ID filters and displays, version and age ride along as the hint. Live
+// states are surfaced so a session blocked on a human is discoverable
+// from the picker (mirroring the WebUI sidebar's status dots): a session
+// awaiting approval gets a loud badge and hint, a running one a quiet
+// hint prefix.
 func sessionFinderItems(summaries []app.SessionSummary) []FinderItem[app.SessionSummary] {
 	items := make([]FinderItem[app.SessionSummary], 0, len(summaries))
 	for _, s := range summaries {
+		hint := fmt.Sprintf("v%d · %s", s.Version, formatTimeAgo(s.UpdatedAt))
+		badge := ""
+		switch s.State {
+		case app.ControllerStateAwaitingApproval:
+			badge = "!"
+			hint = "awaiting approval · " + hint
+		case app.ControllerStateRunning, app.ControllerStateCancelling:
+			hint = "running · " + hint
+		}
 		items = append(items, FinderItem[app.SessionSummary]{
 			Value: s,
 			Text:  s.ID.String(),
-			Hint:  fmt.Sprintf("v%d · %s", s.Version, formatTimeAgo(s.UpdatedAt)),
+			Hint:  hint,
+			Badge: badge,
 		})
 	}
 	return items
 }
 
 func sessionPreview(s app.SessionSummary) string {
-	return fmt.Sprintf("ID:       %s\nVersion:  %d\nCreated:  %s\nUpdated:  %s",
-		s.ID, s.Version,
+	state := string(s.State)
+	if state == "" {
+		state = "closed"
+	}
+	return fmt.Sprintf("ID:       %s\nVersion:  %d\nState:    %s\nCreated:  %s\nUpdated:  %s",
+		s.ID, s.Version, state,
 		s.CreatedAt.Format("2006-01-02 15:04:05"),
 		s.UpdatedAt.Format("2006-01-02 15:04:05"))
 }
