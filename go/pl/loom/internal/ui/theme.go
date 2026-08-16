@@ -129,21 +129,22 @@ var everforestDarkHard = palette{
 	panel:     lipgloss.Color("#272e33"),
 }
 
-// everforestLightHard is the light counterpart (Everforest Light Hard):
+// everforestLightMedium is the light counterpart (Everforest Light Medium,
+// muted uses grey1 for better contrast on the light background):
 //
-//	bg0 #fffbef  fg #5c6a72  grey1 #a6b0a0
+//	bg0 #fdf6e3  bg1 #f4f0d9  fg #5c6a72  grey1 #939f91
 //	red #f85552  orange #f57d26  yellow #dfa000
 //	green #8da101  blue #3a94c5
-var everforestLightHard = palette{
+var everforestLightMedium = palette{
 	primary:   lipgloss.Color("#3a94c5"),
 	secondary: lipgloss.Color("#8da101"),
 	success:   lipgloss.Color("#8da101"),
 	warning:   lipgloss.Color("#dfa000"),
 	error:     lipgloss.Color("#f85552"),
-	muted:     lipgloss.Color("#a6b0a0"),
+	muted:     lipgloss.Color("#939f91"),
 	highlight: lipgloss.Color("#f57d26"),
-	onAccent:  lipgloss.Color("#fffbef"),
-	panel:     lipgloss.Color("#efebd4"),
+	onAccent:  lipgloss.Color("#fdf6e3"),
+	panel:     lipgloss.Color("#f4f0d9"),
 }
 
 // DefaultTheme returns the default dark theme: Everforest Dark Hard, so the
@@ -152,10 +153,10 @@ func DefaultTheme() *Theme {
 	return themeFromPalette(everforestDarkHard, "dark")
 }
 
-// LightTheme returns the Everforest Light Hard theme for light-background
+// LightTheme returns the Everforest Light Medium theme for light-background
 // terminals.
 func LightTheme() *Theme {
-	return themeFromPalette(everforestLightHard, "light")
+	return themeFromPalette(everforestLightMedium, "light")
 }
 
 // DetectTheme picks dark or light based on the terminal's actual background

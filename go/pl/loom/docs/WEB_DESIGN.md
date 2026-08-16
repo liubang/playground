@@ -369,13 +369,13 @@ unified diff 字符串有两个来源：**`tool.prepared.payload.diff`**（edit 
   --purple: #d699b6;
   --on-accent: #1e2326;
 }
-[data-theme="light"] {                /* Everforest Light Hard */
-  --bg0: #fffbef;  --bg1: #efebd4;  --bg2: #f2efdf;
-  --fg:  #5c6a72;  --muted: #a6b0a0;
+[data-theme="light"] {                /* Everforest Light Medium（muted 用 grey1 提升对比度） */
+  --bg0: #fdf6e3;  --bg1: #f4f0d9;  --bg2: #efebd4;
+  --fg:  #5c6a72;  --muted: #939f91;
   --primary: #3a94c5;  --success: #8da101;  --info: #35a77c;
   --warning: #dfa000;  --error: #f85552;    --highlight: #f57d26;
   --purple: #df69ba;
-  --on-accent: #fffbef;
+  --on-accent: #fdf6e3;
 }
 ```
 
