@@ -1625,6 +1625,12 @@ func (m Model) handleSessionSwitched(msg sessionSwitchedMsg) (tea.Model, tea.Cmd
 	m.pendingFollowups = nil
 	m.subOverlay = nil
 	m.mode = ModeChat
+	// The fresh subscription belongs to a fresh session: a dead-stream
+	// lockout or a spent resubscribe budget from the previous session must
+	// not carry over, or prompt submission would stay blocked even though
+	// the new stream is healthy.
+	m.resubscribes = 0
+	m.eventsDead = false
 	m.setStatus(msg.action.success, false)
 	// The subscription is bound to a session: after a switch the old stream
 	// only carries the previous session's events, so re-attach to the new

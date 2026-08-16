@@ -567,6 +567,29 @@ func TestSessionSwitchIgnoresReplacedSubscriptionClose(t *testing.T) {
 	}
 }
 
+// Regression: a dead-stream lockout (eventsDead after three failed
+// resubscribes) used to survive a session switch. The fresh session's
+// subscription was healthy, but submitUserInput still refused every
+// prompt with "runtime event stream is down" until the process
+// restarted. The switch must re-arm the recovery state.
+func TestSessionSwitchResetsEventStreamLockout(t *testing.T) {
+	m := NewModel(newTestController(t), "test-model", "/ws")
+	m.resubscribes = maxEventResubscribes
+	m.eventsDead = true
+
+	updated, cmd := m.handleSessionSwitched(sessionSwitchedMsg{
+		action: sessionAction{name: "New", success: "New session"},
+	})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("session switch must reattach the event stream")
+	}
+	if m.eventsDead || m.resubscribes != 0 {
+		t.Fatalf("session switch kept stale stream state: eventsDead = %v, resubscribes = %d",
+			m.eventsDead, m.resubscribes)
+	}
+}
+
 func TestTurnStartedClearsPlanPanel(t *testing.T) {
 	m := NewModel(newTestController(t), "test-model", "/ws")
 	m.plan = domain.Plan{Items: []domain.PlanItem{
