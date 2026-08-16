@@ -154,9 +154,9 @@ export class Sidebar {
         this.onNewSession(wsId)
       }
       node.appendChild(newBtn)
-      // 删除入口只对已注册且非 default 的工作区显示（default 不可删；
-      // 悬空工作区组没有实体可删）。
-      if (ws && !ws.is_default) {
+      // 删除入口对所有已注册工作区显示（含默认工作区；悬空工作区组没有
+      // 实体可删）。
+      if (ws) {
         const delBtn = el('button', 'ws-del')
         delBtn.innerHTML = icon('trash')
         delBtn.type = 'button'

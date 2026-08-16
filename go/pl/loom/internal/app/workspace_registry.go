@@ -37,9 +37,9 @@ var (
 	// ErrWorkspaceUnavailable reports that a registered workspace's root is
 	// no longer reachable (moved/deleted) or no longer canonical-consistent.
 	ErrWorkspaceUnavailable = errors.New("workspace root is unavailable")
-	// ErrWorkspaceInUse rejects deleting the default workspace (the launch
-	// directory, W5): every legacy entry point falls back to it. Transports
-	// map it to 409 Conflict.
+	// ErrWorkspaceInUse was returned when deleting the default workspace.
+	// Retained for backward compatibility: older servers may still produce
+	// this error; transports map it to 409 Conflict.
 	ErrWorkspaceInUse = errors.New("workspace is in use")
 )
 
@@ -334,10 +334,14 @@ func (r *WorkspaceRegistry) List(ctx context.Context) ([]domain.Workspace, error
 
 // Delete removes a workspace entity: the persisted row (cascading to its
 // sessions, docs/WORKSPACE_DESIGN.md §16.1) and the in-memory indexes. The
-// on-disk root directory is never touched. The default workspace (W5)
-// cannot be deleted — every legacy entry point falls back to it. Live
-// sessions owned by the workspace are torn down by the caller
-// (SessionService owns the live handles).
+// on-disk root directory is never touched. Live sessions owned by the
+// workspace are torn down by the caller (SessionService owns the live
+// handles).
+//
+// Deleting the default workspace (W5) is allowed: the registry automatically
+// re-pins the default to the most recently registered workspace; when no
+// workspaces remain, the default is cleared (zero). Callers that need a
+// fallback (resolveWorkspace) should handle the zero default gracefully.
 //
 // Delete returns the evicted runtime WITHOUT closing it: the caller
 // (SessionService.DeleteWorkspace) holds its session lock across this call
@@ -348,12 +352,6 @@ func (r *WorkspaceRegistry) Delete(ctx context.Context, id domain.WorkspaceID) (
 	if id.IsZero() {
 		return nil, ErrWorkspaceNotFound
 	}
-	r.mu.Lock()
-	if id == r.def {
-		r.mu.Unlock()
-		return nil, fmt.Errorf("%w: default workspace", ErrWorkspaceInUse)
-	}
-	r.mu.Unlock()
 
 	// Serialize against a concurrent lazy assembly (Resolve): the workspace
 	// must not re-appear in the indexes after its row is gone.
@@ -371,6 +369,16 @@ func (r *WorkspaceRegistry) Delete(ctx context.Context, id domain.WorkspaceID) (
 	rt := r.byID[id]
 	delete(r.byID, id)
 	delete(r.byRoot, ws.RootPath)
+	// Re-pin the default when the deleted workspace was the default:
+	// pick the newest remaining workspace, or clear when none remain.
+	if id == r.def {
+		r.def = domain.WorkspaceID{}
+		remaining, err := r.store.ListWorkspaces(ctx)
+		if err == nil && len(remaining) > 0 {
+			// ListWorkspaces returns newest first (updated_at DESC).
+			r.def = remaining[0].ID
+		}
+	}
 	r.mu.Unlock()
 	return rt, nil
 }

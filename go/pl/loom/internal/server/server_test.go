@@ -880,8 +880,7 @@ func TestDeleteWorkspaceEndpoint(t *testing.T) {
 	}
 	idB := wsB.WorkspaceID.String()
 
-	// The list endpoint marks the default workspace (frontends hide its
-	// delete affordance; the server refuses its deletion regardless).
+	// The list endpoint marks the default workspace (informational only).
 	_, list := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/workspaces", "")
 	for _, w := range list["workspaces"].([]any) {
 		m := w.(map[string]any)
@@ -903,20 +902,17 @@ func TestDeleteWorkspaceEndpoint(t *testing.T) {
 	_, bodyB := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions", fmt.Sprintf(`{"workspace_id":%q}`, idB))
 	sessB, _ := bodyB["session_id"].(string)
 
-	// The default workspace is never deletable (legacy clients fall back to it).
-	status, body := doJSON(t, ts.Client(), "DELETE", ts.URL+"/v1/workspaces/"+defWs.WorkspaceID.String(), "")
-	if status != http.StatusConflict {
-		t.Fatalf("delete default = (%d, %v), want 409", status, body)
-	}
-	if code, _ := body["error"].(map[string]any)["code"].(string); code != "workspace_in_use" {
-		t.Fatalf("error code = %q, want workspace_in_use", code)
+	// The default workspace is deletable; the registry auto-re-pins the
+	// default to the newest remaining workspace.
+	if status := doDelete(t, ts.Client(), ts.URL+"/v1/workspaces/"+defWs.WorkspaceID.String()); status != http.StatusNoContent {
+		t.Fatalf("delete default = %d, want 204", status)
 	}
 
 	// Malformed / unknown IDs: 400 and 404 respectively.
 	if status := doDelete(t, ts.Client(), ts.URL+"/v1/workspaces/bogus"); status != http.StatusBadRequest {
 		t.Fatalf("delete malformed id = %d, want 400", status)
 	}
-	status, _ = doJSON(t, ts.Client(), "DELETE", ts.URL+"/v1/workspaces/ws_00000000000000000000000000000000", "")
+	status, _ := doJSON(t, ts.Client(), "DELETE", ts.URL+"/v1/workspaces/ws_00000000000000000000000000000000", "")
 	if status != http.StatusNotFound {
 		t.Fatalf("delete unknown id = %d, want 404", status)
 	}
@@ -926,7 +922,7 @@ func TestDeleteWorkspaceEndpoint(t *testing.T) {
 	if status := doDelete(t, ts.Client(), ts.URL+"/v1/workspaces/"+idB); status != http.StatusNoContent {
 		t.Fatalf("delete workspace = %d, want 204", status)
 	}
-	status, body = doJSON(t, ts.Client(), "GET", ts.URL+"/v1/workspaces/"+idB, "")
+	status, body := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/workspaces/"+idB, "")
 	if status != http.StatusNotFound {
 		t.Fatalf("get after delete = (%d, %v), want 404", status, body)
 	}
