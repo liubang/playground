@@ -485,12 +485,14 @@ func (m Model) renderQuestionOverlay() string {
 }
 
 // questionOverlayHeight reserves the overlay's rendered height plus its
-// border so the transcript above never gets overdrawn.
+// border so the transcript above never gets overdrawn. Height() computes
+// the line count arithmetically — rendering just to count newlines cost
+// a full overlay render per frame.
 func (m Model) questionOverlayHeight() int {
 	if m.choiceList == nil {
 		return 0
 	}
-	return strings.Count(m.choiceList.Render(m.dialogWidth()-4, 0), "\n") + 1 + 2
+	return m.choiceList.Height() + 2
 }
 
 // renderTranscript renders the transcript viewport. The content itself is
