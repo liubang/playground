@@ -210,6 +210,25 @@ func TestChoiceListInsertModeLifecycle(t *testing.T) {
 	}
 }
 
+// Height must always agree with Render's actual line count — the layout
+// reserves vertical space by it, so a drift shows up as overdrawn
+// transcript lines or a floating gap beneath the overlay.
+func TestChoiceListHeightMatchesRender(t *testing.T) {
+	cases := []ChoiceListConfig{
+		{Title: "", Items: []ChoiceItem{{Label: "a"}, {Label: "b"}}},
+		{Title: "one line", Items: []ChoiceItem{{Label: "a"}}},
+		{Title: "two\nlines", Items: []ChoiceItem{{Label: "a"}, {Label: "b"}}, OtherRow: true},
+		{Title: "way\ntoo\nmany\ntitle\nlines\nhere\nfriend", Items: []ChoiceItem{{Label: "a"}}, Multi: true},
+	}
+	for i, cfg := range cases {
+		l := NewChoiceList(cfg)
+		want := strings.Count(l.Render(60, 0), "\n") + 1
+		if got := l.Height(); got != want {
+			t.Errorf("case %d: Height() = %d, Render line count = %d", i, got, want)
+		}
+	}
+}
+
 func TestChoiceListRender(t *testing.T) {
 	l := NewChoiceList(ChoiceListConfig{Title: "pick", Items: testChoiceItems(), Multi: true, OtherRow: true})
 	l.Toggle()

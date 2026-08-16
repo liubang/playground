@@ -260,6 +260,20 @@ func (l *ChoiceList) Confirm() (domain.QuestionAnswer, bool) {
 	return domain.QuestionAnswer{}, false
 }
 
+// Height returns the number of terminal lines Render(w, 0) produces,
+// without rendering anything: title lines (capped) + blank + rows +
+// blank + footer. Truncation never wraps, so the width is irrelevant to
+// the line count. The layout calls this every frame to reserve the
+// overlay's space; rendering just to count lines was a per-frame waste.
+func (l *ChoiceList) Height() int {
+	n := l.rows() + 2 // rows + blank line + footer
+	if l.title != "" {
+		titleLines := len(strings.Split(l.title, "\n"))
+		n += min(titleLines, maxChoiceTitleLines) + 1 // title + blank line
+	}
+	return n
+}
+
 // Render renders the overlay as a string for viewport display, windowed
 // around the cursor when the list exceeds the height budget.
 func (l *ChoiceList) Render(width, height int) string {
