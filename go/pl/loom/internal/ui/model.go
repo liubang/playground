@@ -152,6 +152,10 @@ type Model struct {
 	searchQuery   string
 	searchMatches []string // matching block IDs in document order
 	searchIndex   int
+	// searchGen guards the debounced search: every keystroke bumps it and
+	// schedules a tick; a tick whose generation fell behind (or whose search
+	// mode was exited) is dropped instead of rescanning the blocks.
+	searchGen int
 
 	// Composer
 	textArea textarea.Model

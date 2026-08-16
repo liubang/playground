@@ -181,6 +181,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next, cmd = m.handleEventsClosed(msg)
 	case snapshotMsg:
 		next, cmd = m.handleSnapshot(msg)
+	case searchDebounceMsg:
+		// A stale tick (newer keystrokes arrived, or search was exited)
+		// must not rescan: only the latest generation in search mode runs.
+		if msg.gen == m.searchGen && m.mode == ModeSearch {
+			m.updateSearch()
+		}
+		next = m
 	case subagentViewMsg:
 		next, cmd = m.handleSubagentViewMsg(msg)
 	case subagentTickMsg:
@@ -2602,6 +2609,24 @@ func (m Model) sessionCmd(action sessionAction) tea.Cmd {
 
 // --- transcript search (Ctrl+F) ---
 
+// searchDebounceDelay paces the full-block scan: matching runs once the
+// user pauses typing instead of on every keystroke.
+const searchDebounceDelay = 150 * time.Millisecond
+
+// searchDebounceMsg fires the debounced scan for one query generation.
+type searchDebounceMsg struct{ gen int }
+
+// debounceSearch bumps the query generation and schedules the scan. A
+// tick that arrives after a newer keystroke (or after search was exited)
+// is stale and ignored.
+func (m *Model) debounceSearch() tea.Cmd {
+	m.searchGen++
+	gen := m.searchGen
+	return tea.Tick(searchDebounceDelay, func(time.Time) tea.Msg {
+		return searchDebounceMsg{gen: gen}
+	})
+}
+
 func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
@@ -2614,13 +2639,12 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.searchQuery != "" {
 			runes := []rune(m.searchQuery)
 			m.searchQuery = string(runes[:len(runes)-1])
-			m.updateSearch()
+			return m, m.debounceSearch()
 		}
 		return m, nil
 	case tea.KeyRunes:
 		m.searchQuery += string(msg.Runes)
-		m.updateSearch()
-		return m, nil
+		return m, m.debounceSearch()
 	case tea.KeyCtrlC:
 		// Keep Ctrl+C's global meaning (cancel/quit) even in search mode.
 		m.exitSearch()
@@ -2642,6 +2666,7 @@ func (m *Model) exitSearch() {
 	m.searchQuery = ""
 	m.searchMatches = nil
 	m.searchIndex = 0
+	m.searchGen++ // invalidate any debounce tick still in flight
 }
 
 // updateSearch recomputes matches for the current query and jumps to the
