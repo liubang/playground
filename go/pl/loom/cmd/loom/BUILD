@@ -20,7 +20,15 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 go_library(
     name = "loom_lib",
-    srcs = ["main.go"],
+    srcs = [
+        "agent.go",
+        "approver.go",
+        "chat.go",
+        "main.go",
+        "offline.go",
+        "rules.go",
+        "serve.go",
+    ],
     importpath = "github.com/liubang/playground/go/pl/loom/cmd/loom",
     visibility = ["//visibility:private"],
     deps = [
