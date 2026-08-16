@@ -364,8 +364,9 @@ func (s *SessionService) CountSessionsPerWorkspace(ctx context.Context) (map[dom
 // session it owns, the registry's in-memory indexes, and the assembled
 // runtime. Live sessions are torn down (subscribers dropped, controllers
 // shut down) instead of blocking the deletion. The on-disk root directory
-// is never touched. The default workspace cannot be deleted
-// (ErrWorkspaceInUse) — every legacy entry point falls back to it.
+// is never touched. Deleting the default workspace is allowed — the
+// registry auto-re-pins the default to the newest remaining workspace, or
+// clears it when no workspaces remain.
 //
 // Concurrency: the registry deletion and the live-handle eviction run
 // inside one s.mu critical section, and CreateSession/ResumeSession

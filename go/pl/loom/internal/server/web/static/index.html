@@ -81,6 +81,19 @@
             ></span>
           </header>
 
+          <!-- 零工作区引导态：无任何工作区时占据主区域，隐藏对话和侧栏列表 -->
+          <div id="no-workspace" class="no-workspace" hidden>
+            <div class="no-workspace-card">
+              <div class="brand">◆ loom</div>
+              <h2>添加你的第一个工作区</h2>
+              <p class="no-workspace-desc">
+                工作区是 Loom 的代码上下文根目录——选定一个项目目录，即可开始对话。
+              </p>
+              <button id="no-ws-add" class="btn btn-primary" type="button" data-icon="folder-plus">
+                添加工作区
+              </button>
+            </div>
+          </div>
           <div id="transcript" class="transcript">
             <div id="blocks" class="transcript-inner"></div>
             <div id="empty-state" class="empty-state" hidden>

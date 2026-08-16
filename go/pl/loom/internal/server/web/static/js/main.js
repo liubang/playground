@@ -730,6 +730,8 @@ async function confirmDirPicker() {
     toast('已添加工作区 ' + (workspace.name || rootPath), true)
     await loadWorkspaces()
     await refreshSessions()
+    // 添加首个工作区后从引导态恢复到落地页（仅当没有打开的会话）
+    if (app.workspaces.length === 1 && !app.sessionId) showLandingState()
   } catch (e) {
     if (e.status !== 401) toast('添加工作区失败: ' + e.message)
   }
@@ -764,8 +766,26 @@ async function deleteWorkspace(wsId) {
     if (e.status !== 401) toast('删除工作区失败: ' + e.message)
     return
   }
+  // 当前打开的会话如果属于被删工作区，断开流并清空 transcript
+  if (app.sessionId) {
+    const sess = app.sessionList.find((s) => s.id === app.sessionId)
+    if (sess && sess.workspace_id === wsId) {
+      app.stream.detach()
+      app.sessionId = null
+      app.transcript.clear()
+      app.ctxgauge.reset()
+      renderPlanInto($('plan-panel'), null)
+      $('hdr-session').hidden = true
+      $('hdr-share').hidden = true
+      $('hdr-ws').hidden = true
+      setSessionState('closed')
+    }
+  }
   await loadWorkspaces()
   await refreshSessions()
+  // 删除后可能进入零工作区引导态；否则回落地页（仅当没有打开的会话）
+  if (syncWorkspaceGate()) return
+  if (!app.sessionId) showLandingState()
 }
 
 // ---------- model / reasoning 切换 ----------
@@ -975,6 +995,10 @@ async function boot() {
   $('empty-add-ws').onclick = () => {
     openDirPicker()
   }
+  // 零工作区引导态的添加按钮
+  $('no-ws-add').onclick = () => {
+    openDirPicker()
+  }
   $('dir-up').onclick = () => {
     if (dirPicker.parent) browseDir(dirPicker.parent)
   }
@@ -1171,9 +1195,42 @@ async function boot() {
   }
 }
 
+// 零工作区引导态：无任何工作区时隐藏对话区和侧栏列表，只展示一个
+// 居中的“添加工作区”卡片。用户删除全部工作区后也会进入此态。
+function showNoWorkspace() {
+  $('no-workspace').hidden = false
+  $('transcript').style.display = 'none'
+  document.querySelector('.composer').style.display = 'none'
+  $('empty-state').hidden = true
+  $('hdr-session').hidden = true
+  $('hdr-share').hidden = true
+  $('hdr-ws').hidden = true
+  // 侧栏会话列表区在无工作区时无内容可渲染，只留工作区添加入口
+  $('session-list').style.display = 'none'
+}
+
+function hideNoWorkspace() {
+  $('no-workspace').hidden = true
+  $('transcript').style.display = ''
+  document.querySelector('.composer').style.display = ''
+  $('session-list').style.display = ''
+}
+
+// 工作区状态守卫：在加载/删除工作区后检查，零工作区时切换到引导态，
+// 有工作区时恢复并展示落地页。
+function syncWorkspaceGate() {
+  if (app.workspaces.length === 0) {
+    showNoWorkspace()
+    return true
+  }
+  hideNoWorkspace()
+  return false
+}
+
 // 首入落地页：不自动打开任何会话（桌面端启动应是廉价且可预期的）。
 // 零会话时给出首次引导（添加工作区 CTA）；有会话时提示从侧栏选择。
 function showLandingState() {
+  if (syncWorkspaceGate()) return
   const hasSessions = app.sessionList.length > 0
   $('empty-hint').textContent = hasSessions
     ? 'Pick a session from the sidebar, or just start typing.'
