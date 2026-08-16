@@ -185,6 +185,47 @@ func TestSessionFinderItemsAndPreview(t *testing.T) {
 	}
 }
 
+// A session blocked on a human must stand out in the /sessions picker
+// (mirroring the WebUI sidebar's amber dot): awaiting_approval gets a
+// badge plus a loud hint, running a quiet hint prefix, idle stays silent.
+func TestSessionFinderItemsSurfaceLiveState(t *testing.T) {
+	summaries := []app.SessionSummary{
+		{ID: domain.NewSessionID(), Version: 1, UpdatedAt: time.Now(), State: app.ControllerStateAwaitingApproval},
+		{ID: domain.NewSessionID(), Version: 2, UpdatedAt: time.Now(), State: app.ControllerStateRunning},
+		{ID: domain.NewSessionID(), Version: 3, UpdatedAt: time.Now(), State: app.ControllerStateIdle},
+	}
+	items := sessionFinderItems(summaries)
+	if items[0].Badge == "" {
+		t.Errorf("awaiting_approval session missing badge: %+v", items[0])
+	}
+	if !strings.Contains(items[0].Hint, "awaiting approval") {
+		t.Errorf("awaiting_approval session missing hint: %+v", items[0])
+	}
+	if !strings.Contains(items[1].Hint, "running") {
+		t.Errorf("running session missing hint: %+v", items[1])
+	}
+	if items[2].Badge != "" || strings.Contains(items[2].Hint, "awaiting") || strings.Contains(items[2].Hint, "running") {
+		t.Errorf("idle session should stay quiet: %+v", items[2])
+	}
+	// The fuzzy-filter text stays the bare session ID for every state.
+	for _, item := range items {
+		if item.Text != item.Value.ID.String() {
+			t.Errorf("filter text = %q, want %q", item.Text, item.Value.ID.String())
+		}
+	}
+}
+
+func TestSessionPreviewIncludesState(t *testing.T) {
+	live := sessionPreview(app.SessionSummary{State: app.ControllerStateAwaitingApproval})
+	if !strings.Contains(live, "State:    awaiting_approval") {
+		t.Errorf("preview missing live state:\n%s", live)
+	}
+	detached := sessionPreview(app.SessionSummary{})
+	if !strings.Contains(detached, "State:    closed") {
+		t.Errorf("preview should report detached sessions as closed:\n%s", detached)
+	}
+}
+
 func TestFormatTokens(t *testing.T) {
 	cases := map[int64]string{
 		0:       "0",

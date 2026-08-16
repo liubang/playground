@@ -982,6 +982,139 @@ func TestSnapshotDismissesStaleApproval(t *testing.T) {
 	}
 }
 
+// A frontend that (re)attaches to a session already awaiting approval
+// never sees the approval.requested event (a session switch re-subscribes
+// at the global cursor, which other sessions advance past the request):
+// the snapshot must rebuild the overlay or the run blocks forever.
+func TestSnapshotRestoresPendingApproval(t *testing.T) {
+	approvalID := domain.NewEventID()
+	m := Model{blocks: NewBlockIndex(), mode: ModeChat}
+	updated, _ := m.handleSnapshot(snapshotMsg{snapshot: app.Snapshot{
+		PendingRequests: []app.PendingRequest{{
+			Kind: app.PendingRequestApproval,
+			ID:   approvalID,
+			Approval: &runtimeevent.ApprovalRequestedPayload{
+				ApprovalID: approvalID,
+				CallID:     domain.NewToolCallID(),
+				ToolName:   "run_cmd",
+			},
+		}},
+	}})
+	m = updated.(Model)
+	if m.pendingApproval == nil || m.pendingApproval.ApprovalID != approvalID {
+		t.Fatalf("pending approval not restored: %+v", m.pendingApproval)
+	}
+	if m.mode != ModeApproval {
+		t.Fatalf("mode = %s, want %s", m.mode, ModeApproval)
+	}
+	if m.approvalShownAt.IsZero() {
+		t.Fatal("approvalShownAt not set: the decision guard window is disabled")
+	}
+}
+
+// question.asked is published as an EPHEMERAL event, so a missed one is
+// never replayed; the snapshot's pending_requests are the only recovery.
+func TestSnapshotRestoresPendingQuestion(t *testing.T) {
+	questionID := domain.NewEventID()
+	m := Model{blocks: NewBlockIndex(), mode: ModeChat}
+	updated, _ := m.handleSnapshot(snapshotMsg{snapshot: app.Snapshot{
+		PendingRequests: []app.PendingRequest{{
+			Kind: app.PendingRequestQuestion,
+			ID:   questionID,
+			Question: &domain.Question{
+				ID:      questionID,
+				Text:    "which one?",
+				Options: []domain.QuestionOption{{Label: "a"}, {Label: "b"}},
+			},
+		}},
+	}})
+	m = updated.(Model)
+	if m.pendingQuestion == nil || m.pendingQuestion.QuestionID != questionID {
+		t.Fatalf("pending question not restored: %+v", m.pendingQuestion)
+	}
+	if m.choiceList == nil {
+		t.Fatal("choice list not built for restored question")
+	}
+	if m.mode != ModeQuestion {
+		t.Fatalf("mode = %s, want %s", m.mode, ModeQuestion)
+	}
+}
+
+func TestSnapshotDismissesStaleQuestion(t *testing.T) {
+	m := Model{blocks: NewBlockIndex(), mode: ModeQuestion}
+	m.pendingQuestion = &runtimeevent.QuestionAskedPayload{QuestionID: domain.NewEventID()}
+	m.choiceList = NewChoiceList(ChoiceListConfig{Title: "q", Items: []ChoiceItem{{Label: "a"}}})
+	updated, _ := m.handleSnapshot(snapshotMsg{snapshot: app.Snapshot{}})
+	m = updated.(Model)
+	if m.pendingQuestion != nil || m.choiceList != nil || m.mode != ModeChat {
+		t.Fatalf("stale question survived snapshot: pending=%v mode=%s", m.pendingQuestion, m.mode)
+	}
+}
+
+// An overlay for a request the runtime no longer holds is replaced by the
+// one the runtime is actually waiting on (e.g. the old one was resolved
+// while this frontend was detached).
+func TestSnapshotReplacesSupersededApproval(t *testing.T) {
+	oldID, newID := domain.NewEventID(), domain.NewEventID()
+	m := Model{blocks: NewBlockIndex(), mode: ModeApproval}
+	m.pendingApproval = &runtimeevent.ApprovalRequestedPayload{
+		ApprovalID: oldID,
+		CallID:     domain.NewToolCallID(),
+	}
+	updated, _ := m.handleSnapshot(snapshotMsg{snapshot: app.Snapshot{
+		PendingRequests: []app.PendingRequest{{
+			Kind: app.PendingRequestApproval,
+			ID:   newID,
+			Approval: &runtimeevent.ApprovalRequestedPayload{
+				ApprovalID: newID,
+				CallID:     domain.NewToolCallID(),
+				ToolName:   "run_cmd",
+			},
+		}},
+	}})
+	m = updated.(Model)
+	if m.pendingApproval == nil || m.pendingApproval.ApprovalID != newID {
+		t.Fatalf("superseded approval not replaced: %+v", m.pendingApproval)
+	}
+	if m.mode != ModeApproval {
+		t.Fatalf("mode = %s, want %s", m.mode, ModeApproval)
+	}
+}
+
+// An overlay still pending at the runtime must survive the snapshot
+// untouched — in particular its shown-at timestamp, which arms the
+// decision guard against leaked keypresses.
+func TestSnapshotKeepsLiveApproval(t *testing.T) {
+	approvalID := domain.NewEventID()
+	shownAt := time.Now().Add(-time.Minute)
+	m := Model{blocks: NewBlockIndex(), mode: ModeApproval}
+	m.pendingApproval = &runtimeevent.ApprovalRequestedPayload{
+		ApprovalID: approvalID,
+		CallID:     domain.NewToolCallID(),
+	}
+	m.approvalShownAt = shownAt
+	updated, _ := m.handleSnapshot(snapshotMsg{snapshot: app.Snapshot{
+		PendingRequests: []app.PendingRequest{{
+			Kind: app.PendingRequestApproval,
+			ID:   approvalID,
+			Approval: &runtimeevent.ApprovalRequestedPayload{
+				ApprovalID: approvalID,
+				CallID:     domain.NewToolCallID(),
+			},
+		}},
+	}})
+	m = updated.(Model)
+	if m.pendingApproval == nil || m.pendingApproval.ApprovalID != approvalID {
+		t.Fatalf("live approval dismissed: %+v", m.pendingApproval)
+	}
+	if !m.approvalShownAt.Equal(shownAt) {
+		t.Fatal("live approval overlay was reset")
+	}
+	if m.mode != ModeApproval {
+		t.Fatalf("mode = %s, want %s", m.mode, ModeApproval)
+	}
+}
+
 func TestRebuildTranscript(t *testing.T) {
 	messages := []domain.Message{
 		{ID: domain.NewMessageID(), Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "question"}}},
