@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
@@ -376,6 +377,50 @@ func TestSearchFlowMatchesAndJumps(t *testing.T) {
 	m.exitSearch()
 	if m.mode != ModeChat || m.searchQuery != "" {
 		t.Fatal("exitSearch should reset search state")
+	}
+}
+
+// The search scan is debounced: keystrokes update the query immediately
+// but matching waits for the pause tick, and stale ticks are dropped.
+func TestSearchDebounce(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 80, height: 24}
+	m.blocks = NewBlockIndex()
+	m.viewport = lineView{Width: 80, Height: 2}
+	m.textArea = textarea.New()
+	m.blocks.Add(&TranscriptBlock{ID: "t1", Kind: BlockKindTool, Title: "run_cmd", Status: "success", Preview: "FAIL pkg/b", Done: true})
+	m.enterSearch()
+
+	// A keystroke updates the query but must not scan synchronously.
+	updated, cmd := m.handleSearchKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("keystroke must schedule a debounce tick")
+	}
+	if m.searchQuery != "f" || len(m.searchMatches) != 0 {
+		t.Fatalf("query = %q matches = %v, want query updated without an immediate scan", m.searchQuery, m.searchMatches)
+	}
+
+	// A stale generation (superseded by a newer keystroke) is dropped.
+	m.searchGen++
+	updated, _ = m.Update(searchDebounceMsg{gen: m.searchGen - 1})
+	m = updated.(Model)
+	if len(m.searchMatches) != 0 {
+		t.Fatal("stale debounce tick must not scan")
+	}
+
+	// The current generation in search mode runs the scan.
+	updated, _ = m.Update(searchDebounceMsg{gen: m.searchGen})
+	m = updated.(Model)
+	if len(m.searchMatches) != 1 || m.searchMatches[0] != "t1" {
+		t.Fatalf("matches = %v, want [t1]", m.searchMatches)
+	}
+
+	// Exiting search invalidates an in-flight tick.
+	m.exitSearch()
+	updated, _ = m.Update(searchDebounceMsg{gen: m.searchGen})
+	m = updated.(Model)
+	if m.mode != ModeChat || len(m.searchMatches) != 0 {
+		t.Fatal("tick after exit must be a no-op")
 	}
 }
 
