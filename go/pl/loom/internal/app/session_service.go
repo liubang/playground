@@ -1250,6 +1250,11 @@ func (s *SessionService) dispatch(evt runtimeevent.RuntimeEvent) {
 		}
 	}
 	h.mu.Unlock()
+	if len(slow) > 0 {
+		// 慢消费者断连是断流重连循环的 server 侧起点，此前完全无日志。
+		s.logger.Warn("dropping slow event subscriber; client must resync",
+			"session_id", evt.SessionID, "dropped", len(slow), "queue", s.subscriberQueue)
+	}
 	for _, ch := range slow {
 		close(ch)
 	}
