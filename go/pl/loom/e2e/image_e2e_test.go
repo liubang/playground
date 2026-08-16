@@ -82,7 +82,7 @@ func TestServeRealModelImageE2E(t *testing.T) {
 	c := env.NewClient(t)
 	sessionID := c.SessionID()
 
-	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	collector := harness.NewCollector(t.Context(), c, env.Subscribe(t, c))
 	go collector.Run()
 
 	// Switch to the vision model; the patched modalities must be visible.

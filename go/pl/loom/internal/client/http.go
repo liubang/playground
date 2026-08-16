@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -57,6 +58,11 @@ type httpClient struct {
 	// so State() can stay honest on transient network failures (M19).
 	lastState ControllerState
 
+	// closeCtx is cancelled by Close, so in-flight and future State calls
+	// unwind immediately instead of riding out their timeout.
+	closeCtx    context.Context
+	closeCancel context.CancelFunc
+
 	done     chan struct{}
 	doneOnce sync.Once
 }
@@ -64,17 +70,44 @@ type httpClient struct {
 // NewHTTP returns a Client talking to a loom serve endpoint
 // (e.g. "http://127.0.0.1:7680") with the given bearer token.
 func NewHTTP(baseURL, token string) Client {
+	closeCtx, closeCancel := context.WithCancel(context.Background())
 	return &httpClient{
-		base:      strings.TrimRight(baseURL, "/"),
-		token:     token,
-		client:    &http.Client{},
-		lastState: ControllerStateBooting,
-		done:      make(chan struct{}),
+		base:  strings.TrimRight(baseURL, "/"),
+		token: token,
+		client: &http.Client{
+			// No Client.Timeout: it would clip long-lived SSE streams
+			// (SubscribeEvents). Ordinary requests are bounded by caller
+			// contexts; these transport timeouts guard against a wedged
+			// peer (dial/TLS/response-header stalls).
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+				DialContext: (&net.Dialer{
+					Timeout:   10 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				// Custom DialContext disables the automatic HTTP/2
+				// upgrade; restore it so remote https endpoints keep
+				// the default transport's behavior.
+				ForceAttemptHTTP2:     true,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ResponseHeaderTimeout: 30 * time.Second,
+				IdleConnTimeout:       90 * time.Second,
+			},
+		},
+		lastState:   ControllerStateBooting,
+		closeCtx:    closeCtx,
+		closeCancel: closeCancel,
+		done:        make(chan struct{}),
 	}
 }
 
 // Close releases the client: Done() closes and in-flight streams unwind.
-func (c *httpClient) Close() { c.doneOnce.Do(func() { close(c.done) }) }
+func (c *httpClient) Close() {
+	c.doneOnce.Do(func() {
+		c.closeCancel()
+		close(c.done)
+	})
+}
 
 // --- wire helpers ---
 
@@ -225,7 +258,14 @@ func (c *httpClient) State() ControllerState {
 		// booting (same convention as the inproc client).
 		return ControllerStateBooting
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// An explicitly closed client must not ride out the timeout: the
+	// session is unreachable by definition.
+	select {
+	case <-c.done:
+		return ControllerStateClosed
+	default:
+	}
+	ctx, cancel := context.WithTimeout(c.closeCtx, 5*time.Second)
 	defer cancel()
 	var snap Snapshot
 	if err := c.do(ctx, http.MethodGet, path+"/snapshot", nil, &snap); err != nil {

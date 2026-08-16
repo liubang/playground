@@ -61,7 +61,7 @@ func TestServeRealModelE2E(t *testing.T) {
 	c := env.NewClient(t)
 	sessionID := c.SessionID()
 
-	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	collector := harness.NewCollector(t.Context(), c, env.Subscribe(t, c))
 	go collector.Run()
 
 	// --- 1+2. full turn with a real tool loop ---
@@ -255,7 +255,7 @@ func TestServeRealModelPrepareFailureE2E(t *testing.T) {
 	c := env.NewClient(t)
 	sessionID := c.SessionID()
 
-	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	collector := harness.NewCollector(t.Context(), c, env.Subscribe(t, c))
 	go collector.Run()
 
 	// The path is deliberately absent from the workspace; the prompt pins
@@ -361,7 +361,7 @@ func TestServeRealModelWritablePathsE2E(t *testing.T) {
 	c := env.NewClient(t)
 	sessionID := c.SessionID()
 
-	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	collector := harness.NewCollector(t.Context(), c, env.Subscribe(t, c))
 	go collector.Run()
 
 	// The prompt pins the OUT-OF-WORKSPACE target and the in-sandbox
@@ -459,7 +459,7 @@ func TestServeRealModelPruneCompactionE2E(t *testing.T) {
 	}
 
 	c := env.NewClient(t)
-	collector := harness.NewCollector(c, env.Subscribe(t, c))
+	collector := harness.NewCollector(t.Context(), c, env.Subscribe(t, c))
 	go collector.Run()
 
 	// Turn 1: the model reads the ~10KB file into the transcript.
@@ -628,7 +628,7 @@ func TestServeRealModelOrphanRecoveryE2E(t *testing.T) {
 	}
 
 	// The recovered session keeps working against the real model.
-	collector := harness.NewCollector(c2, env.Subscribe(t, c2))
+	collector := harness.NewCollector(t.Context(), c2, env.Subscribe(t, c2))
 	go collector.Run()
 	turns := collector.TurnsDone()
 	if _, err := c2.SubmitPrompt(ctx, "用一个字回答：好", nil); err != nil {
