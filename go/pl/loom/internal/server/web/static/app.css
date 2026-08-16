@@ -714,6 +714,9 @@ button {
 /* transcript */
 .transcript {
   overflow-y: auto;
+  /* 兜底：子元素任何残留横向溢出裁掉，不冒泡成页面级横向滚动条；
+     超宽代码/表格/diff 均有各自的 overflow-x 滚动容器，不受影响。 */
+  overflow-x: hidden;
   position: relative;
 }
 .transcript-inner {
@@ -844,10 +847,19 @@ button {
 /* assistant：左侧纯文本，无标签 */
 .block-assistant {
   align-self: stretch;
+  min-width: 0; /* flex 列容器内允许收缩，长内容不撑破内容列 */
 }
 .block-assistant .md {
   font-size: var(--text-lg);
   line-height: 1.7;
+}
+/* 长 URL / 无空格 token 在词间断行，不撑破内容列（移动端防页面级横向滚动条）。
+   pre 内 white-space: pre 不受影响，超宽代码仍走 pre 自身的横向滚动。 */
+.md {
+  overflow-wrap: break-word;
+}
+.md code {
+  overflow-wrap: anywhere;
 }
 
 /* markdown 渲染区 */
@@ -1783,14 +1795,20 @@ body.lightbox-open {
 /* ============================== 分享页（/share/{token} 只读） ============================== */
 .share-body {
   height: 100vh;
+  height: 100dvh; /* 移动端动态视口高，随浏览器工具栏伸缩，避免内容被遮挡 */
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow-x: clip; /* 兜底：分享页永不出现横向滚动条 */
 }
 .share-header {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 20px;
+  /* grid 子项的自动最小尺寸 = min-content：标题 nowrap 的全宽会把 share-body
+     的隐式列轨道撑出视口（页面级横向滚动条的真实来源）。显式 min-width: 0
+     让轨道可收缩，标题再由自身 ellipsis 截断。 */
+  min-width: 0;
   min-height: 44px;
   background: var(--bg0);
   border-bottom: 1px solid var(--bg2);
@@ -1809,6 +1827,7 @@ body.lightbox-open {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0; /* flex 内可收缩，长标题截断而非挤破头部 */
 }
 .share-meta {
   flex: none;
@@ -1817,6 +1836,7 @@ body.lightbox-open {
 }
 .share-transcript {
   min-height: 0;
+  min-width: 0; /* 同为 grid 子项，防御性允许横向收缩（同 share-header） */
 }
 .share-error {
   text-align: center;
@@ -3112,6 +3132,23 @@ select.set-input {
   .composer-box,
   .plan-panel {
     max-width: none;
+  }
+
+  /* 分享页窄屏适配：收紧边距、气泡放宽、隐藏次要元信息，
+     把有限宽度让给会话内容 */
+  .share-body .transcript-inner {
+    padding: 16px 12px 12px;
+    gap: 14px;
+  }
+  .share-body .block-user {
+    max-width: 88%;
+  }
+  .share-header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .share-meta {
+    display: none;
   }
 }
 
