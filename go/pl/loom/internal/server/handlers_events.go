@@ -60,6 +60,7 @@ func (s *Server) handleSessionEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.acquireSSE(id.String()) {
+		s.logger.Warn("sse stream rejected: too many streams", "session_id", id.String(), "max", maxSSEPerSession)
 		writeError(w, &statusError{status: http.StatusTooManyRequests, code: "rate_limited", message: "too many event streams for this session"})
 		return
 	}
@@ -69,6 +70,7 @@ func (s *Server) handleSessionEvents(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, app.ErrCursorInvalid) {
 		// The cursor can no longer be honored: instruct the client to
 		// rebuild from a snapshot and close (docs/SERVE_DESIGN.md §5.4).
+		s.logger.Info("sse cursor invalid; client instructed to resync", "session_id", id.String(), "after", after)
 		s.writeSSEHeaders(w)
 		fmt.Fprintf(w, ": connected, instance=%s\n\n", s.instance)
 		writeSSEEvent(w, "server.resync", map[string]string{"reason": "cursor_invalid"})
@@ -83,6 +85,12 @@ func (s *Server) handleSessionEvents(w http.ResponseWriter, r *http.Request) {
 	s.writeSSEHeaders(w)
 	fmt.Fprintf(w, ": connected, instance=%s\n\n", s.instance)
 	flusher.Flush()
+	s.logger.Info("sse stream attached", "session_id", id.String(), "after", after)
+	defer func() {
+		// 覆盖所有退出路径（慢消费者断流、pump 重同步、客户端断开、drain）：
+		// SSE 建断连此前无任何日志，断流重连类问题只能靠反推。
+		s.logger.Info("sse stream detached", "session_id", id.String(), "draining", s.draining())
+	}()
 
 	heartbeat := time.NewTicker(sseHeartbeatInterval)
 	defer heartbeat.Stop()

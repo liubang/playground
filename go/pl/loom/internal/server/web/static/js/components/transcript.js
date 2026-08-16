@@ -165,7 +165,12 @@ export class Transcript {
 
   // --- 首屏：snapshot → 块（§3.3） ---
 
-  applySnapshot(snap) {
+  // preserveScroll（同会话 resync/重连重建）：用户上翻阅读时保留滚动位置，
+  // 不再无条件回底——否则断流恢复一次就把用户拽到底部，肉眼即是「界面闪
+  // 一下 + 位置被抢」。切会话/首屏（preserveScroll=false）维持回底行为。
+  applySnapshot(snap, { preserveScroll = false } = {}) {
+    const prevTop = this.scroller.scrollTop
+    const wasFollowing = this.following
     this.clear()
     const histTools = new Map() // call_id → tool block api（跨消息配对 tool_result）
     let lastAssistant = null // 本轮最新 assistant 块（轮结束时挂操作行）
@@ -310,7 +315,17 @@ export class Transcript {
     } else {
       closeTurn()
     }
-    this._scrollToBottom()
+    if (preserveScroll && !wasFollowing) {
+      // 重建期间的 _append 已把 following/_forceFollow 置位并挂了回底 rAF；
+      // 这些回调在本同步方法结束后才触发，这里复位即可压掉它们，再把视口
+      // 恢复到重建前的位置（内容同源，scrollTop 近似有效）。
+      this.following = false
+      this._forceFollow = false
+      this.scroller.scrollTop = prevTop
+      if (this.followBtn) this.followBtn.hidden = false
+    } else {
+      this._scrollToBottom()
+    }
   }
 
   // --- SSE 事件调度（§5；未知 kind 忽略） ---
