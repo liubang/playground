@@ -63,9 +63,22 @@ func OpenSQLiteStore(ctx context.Context, path string) (*SQLiteStore, error) {
 	// The pragmas ride the DSN so EVERY pooled connection gets them —
 	// database/sql opens conns on demand, and an Exec-applied pragma
 	// would silently miss later connections (foreign_keys, busy_timeout).
+	//
+	// _txlock=immediate makes every write transaction BEGIN IMMEDIATE:
+	// the write lock is acquired at BEGIN, so busy_timeout genuinely
+	// applies and contending writers queue instead of failing. With the
+	// default deferred mode a transaction snapshots at its first SELECT
+	// and upgrades to a write lock at the first INSERT — a concurrent
+	// commit in between makes SQLite return SQLITE_BUSY_SNAPSHOT at once,
+	// bypassing busy_timeout entirely (observed in production: a turn's
+	// terminal event lost to "database is locked (5)" while a sub-agent
+	// session committed within the same millisecond). Read-only
+	// transactions (InspectSession) stay deferred — the driver only
+	// applies the txlock to read-write transactions.
 	dsn := "file:" + filepath.ToSlash(path) +
 		"?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)" +
-		"&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)"
+		"&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)" +
+		"&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, storeError("open sqlite database", err)
@@ -318,7 +331,38 @@ func (s *SQLiteStore) AppendEvents(ctx context.Context, sessionID domain.Session
 	if err := validateContiguousEvents(sessionID, expectedVersion, events); err != nil {
 		return err
 	}
-	return s.appendEventsTx(ctx, sessionID, expectedVersion, events, nil)
+	return appendWithRetry(ctx, func() error {
+		return s.appendEventsTx(ctx, sessionID, expectedVersion, events, nil)
+	})
+}
+
+// appendBusyRetries bounds how often an append batch is re-executed after
+// a retryable store failure (SQLITE_BUSY once every writer queue wait
+// exhausts busy_timeout — possible under fsync stalls even with BEGIN
+// IMMEDIATE). Only retryable errors are re-executed: conflicts (version
+// mismatch, duplicate events) and validation failures can never succeed on
+// retry and return immediately. The retried operation is a fresh
+// transaction over the same batch, so a retry either applies the whole
+// batch once or not at all — a commit that secretly succeeded before
+// failing would surface as ErrConflict on retry rather than duplicate
+// data.
+const appendBusyRetries = 3
+
+func appendWithRetry(ctx context.Context, op func() error) error {
+	var err error
+	for attempt := 0; ; attempt++ {
+		if err = op(); err == nil || !domain.IsRetryable(err) || attempt >= appendBusyRetries {
+			return err
+		}
+		delay := time.Duration(25*(attempt+1)*(attempt+1)) * time.Millisecond
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return err
+		case <-timer.C:
+		}
+	}
 }
 
 // appendEventsTx runs the shared append skeleton in one transaction:
@@ -408,23 +452,25 @@ func (s *SQLiteStore) AppendEventsAndCheckpoint(ctx context.Context, sessionID d
 	if err != nil {
 		return domain.NewError(domain.ErrInvalidInput, "encode checkpoint", domain.WithCause(err))
 	}
-	return s.appendEventsTx(ctx, sessionID, expectedVersion, events, func(ctx context.Context, tx *sql.Tx) error {
-		// Snapshot the current file-change ledger position so that rewind
-		// knows exactly which changes postdate this checkpoint.
-		ledgerSeq, err := ledgerPositionTx(ctx, tx, sessionID)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
+	return appendWithRetry(ctx, func() error {
+		return s.appendEventsTx(ctx, sessionID, expectedVersion, events, func(ctx context.Context, tx *sql.Tx) error {
+			// Snapshot the current file-change ledger position so that rewind
+			// knows exactly which changes postdate this checkpoint.
+			ledgerSeq, err := ledgerPositionTx(ctx, tx, sessionID)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `
 INSERT INTO checkpoints(checkpoint_id, session_id, sequence, ledger_seq, data, created_at, created_at_unix_nano)
 VALUES (?, ?, ?, ?, ?, ?, ?)`, checkpoint.ID.String(), sessionID.String(), checkpoint.Sequence,
-			ledgerSeq, data, formatTime(checkpoint.CreatedAt), checkpoint.CreatedAt.UTC().UnixNano()); err != nil {
-			if isUniqueConstraint(err) {
-				return domain.NewError(domain.ErrConflict, "checkpoint already exists", domain.WithCause(err))
+				ledgerSeq, data, formatTime(checkpoint.CreatedAt), checkpoint.CreatedAt.UTC().UnixNano()); err != nil {
+				if isUniqueConstraint(err) {
+					return domain.NewError(domain.ErrConflict, "checkpoint already exists", domain.WithCause(err))
+				}
+				return storeError("save checkpoint", err)
 			}
-			return storeError("save checkpoint", err)
-		}
-		return addArtifactRefs(ctx, tx, sessionID, checkpointArtifactRefs(checkpoint))
+			return addArtifactRefs(ctx, tx, sessionID, checkpointArtifactRefs(checkpoint))
+		})
 	})
 }
 

@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -873,6 +874,100 @@ func TestSQLiteStoreContextCancellationAndDuplicateSession(t *testing.T) {
 	cancel()
 	if err := store.AppendEvents(cancelled, sessionID, 0, nil); !errors.Is(err, context.Canceled) || errorCode(err) != domain.ErrCancelled {
 		t.Fatalf("cancelled AppendEvents error = %v, want cancelled code and context.Canceled in chain", err)
+	}
+}
+
+// TestSQLiteStoreConcurrentAppendsAndInspections replays the production
+// failure mode behind "insert event: database is locked (5) (SQLITE_BUSY)":
+// a parent run and its sub-agent sessions flush event batches plus
+// checkpoints concurrently against one database while reads stream in.
+// With deferred transactions the read→write upgrade raced concurrent
+// commits and failed instantly (SQLITE_BUSY_SNAPSHOT bypasses
+// busy_timeout); with BEGIN IMMEDIATE writers queue on the write lock and
+// every batch must land.
+func TestSQLiteStoreConcurrentAppendsAndInspections(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+
+	const writers = 8
+	const batches = 12
+
+	sessionIDs := make([]domain.SessionID, writers)
+	for i := range sessionIDs {
+		sessionIDs[i] = domain.NewSessionID()
+		if err := store.CreateSession(ctx, sessionIDs[i], domain.WorkspaceID{}); err != nil {
+			t.Fatalf("CreateSession %d: %v", i, err)
+		}
+	}
+
+	errs := make(chan error, writers+1)
+	stopReader := make(chan struct{})
+	readerDone := make(chan struct{})
+
+	// A reader hammering InspectSession: in WAL mode it must neither block
+	// nor be blocked by the concurrent writers.
+	go func() {
+		defer close(readerDone)
+		for {
+			select {
+			case <-stopReader:
+				return
+			default:
+			}
+			if _, err := store.InspectSession(ctx, sessionIDs[0]); err != nil {
+				errs <- fmt.Errorf("InspectSession: %w", err)
+				return
+			}
+		}
+	}()
+
+	var wait sync.WaitGroup
+	for w := range writers {
+		wait.Add(1)
+		go func(sessionID domain.SessionID) {
+			defer wait.Done()
+			var version int64
+			for range batches {
+				events := []domain.Event{
+					newEvent(sessionID, version+1, domain.EventRunStateChanged, nil),
+					newEvent(sessionID, version+2, domain.EventBudgetUpdated, nil),
+				}
+				checkpoint := testCheckpoint(sessionID, version+2, time.Now().UTC())
+				if err := store.AppendEventsAndCheckpoint(ctx, sessionID, version, events, checkpoint); err != nil {
+					errs <- fmt.Errorf("AppendEventsAndCheckpoint(%s, version %d): %w", sessionID, version, err)
+					return
+				}
+				version += int64(len(events))
+			}
+		}(sessionIDs[w])
+	}
+	wait.Wait()
+	close(stopReader)
+	<-readerDone
+	close(errs)
+	for err := range errs {
+		t.Errorf("concurrent store operation failed: %v", err)
+	}
+	if t.Failed() {
+		return
+	}
+
+	// Every batch landed exactly once: version, event count and the latest
+	// checkpoint sequence must agree for each session.
+	for i, sessionID := range sessionIDs {
+		inspection, err := store.InspectSession(ctx, sessionID)
+		if err != nil {
+			t.Fatalf("InspectSession %d: %v", i, err)
+		}
+		if want := int64(2 * batches); inspection.Session.Version != want {
+			t.Errorf("session %d version = %d, want %d", i, inspection.Session.Version, want)
+		}
+		if inspection.Checkpoint == nil {
+			t.Fatalf("session %d has no checkpoint", i)
+		}
+		if want := int64(2 * batches); inspection.Checkpoint.Sequence != want {
+			t.Errorf("session %d checkpoint sequence = %d, want %d", i, inspection.Checkpoint.Sequence, want)
+		}
 	}
 }
 
