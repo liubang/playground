@@ -1,0 +1,114 @@
+diff --git a/BUILD.bazel b/BUILD.bazel
+new file mode 100644
+index 0000000..91115f2
+--- /dev/null
++++ b/BUILD.bazel
+@@ -0,0 +1,54 @@
++package(default_visibility = ["//visibility:public"])
++
++load("@rules_cc//cc:defs.bzl", "cc_library")
++
++exports_files(["LICENSE"])
++
++# C++23 #embed requires --embed-dir (clang 19+); generate plain C arrays instead
++# so the library builds with the workspace compiler matrix (C++20, GCC 14 / Apple Clang).
++genrule(
++    name = "dict_le_h",
++    srcs = [
++        "data/dict_le.dat.zst",
++        "tools/bin2c.py",
++    ],
++    outs = ["dict_le.dat.zst.h"],
++    cmd = "python3 $(location tools/bin2c.py) resource_jieba_dict_zst $(location data/dict_le.dat.zst) > $@",
++)
++
++genrule(
++    name = "dict_be_h",
++    srcs = [
++        "data/dict_be.dat.zst",
++        "tools/bin2c.py",
++    ],
++    outs = ["dict_be.dat.zst.h"],
++    cmd = "python3 $(location tools/bin2c.py) resource_jieba_dict_zst $(location data/dict_be.dat.zst) > $@",
++)
++
++cc_library(
++    name = "jieba",
++    srcs = [
++        "src/jieba.cpp",
++        "src/jieba_dict.cpp",
++        "src/jieba_hmm_seg.cpp",
++        "src/jieba_mp_seg.cpp",
++    ],
++    hdrs = [
++        "include/jieba.h",
++        "include/jieba_common.h",
++        "include/jieba_dict.h",
++        "data/jieba_hmm_model.dat",
++        ":dict_be_h",
++        ":dict_le_h",
++    ],
++    includes = [
++        "data",
++        "include",
++    ],
++    deps = [
++        "@abseil-cpp//absl/container:flat_hash_set",
++        "@darts_clone//:darts_clone",
++        "@zstd",
++    ],
++)
+diff --git a/src/jieba.cpp b/src/jieba.cpp
+index 416242f..8854831 100644
+--- a/src/jieba.cpp
++++ b/src/jieba.cpp
+@@ -1,6 +1,6 @@
+ #include <jieba.h>
+ 
+-#include <absl/container/flat_hash_set.h>
++#include "absl/container/flat_hash_set.h"
+ 
+ namespace Jieba
+ {
+diff --git a/src/jieba_dict.cpp b/src/jieba_dict.cpp
+index d7b1c72..e744b9a 100644
+--- a/src/jieba_dict.cpp
++++ b/src/jieba_dict.cpp
+@@ -21,14 +21,13 @@
+ /// host endianness — bytes are emitted in an explicit big-endian order with the
+ /// high bit set in every byte.
+ 
+-constexpr unsigned char resource_jieba_dict_zst[] =
+-{
++// Bazel build: the dictionary is embedded via generated headers (see BUILD.bazel,
++// tools/bin2c.py) instead of C++23 #embed, which requires --embed-dir (clang 19+).
+ #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+-    #embed "dict_be.dat.zst"
++#include "dict_be.dat.zst.h"
+ #else
+-    #embed "dict_le.dat.zst"
++#include "dict_le.dat.zst.h"
+ #endif
+-};
+ 
+ namespace Jieba
+ {
+diff --git a/tools/bin2c.py b/tools/bin2c.py
+new file mode 100644
+index 0000000..dd6d96f
+--- /dev/null
++++ b/tools/bin2c.py
+@@ -0,0 +1,13 @@
++#!/usr/bin/env python3
++# Embed a binary file as a C++ array definition.
++# Usage: bin2c.py SYMBOL INPUT > output.h
++import sys
++
++symbol, path = sys.argv[1], sys.argv[2]
++with open(path, "rb") as f:
++    data = f.read()
++
++print(f"constexpr unsigned char {symbol}[] = {{")
++for i in range(0, len(data), 32):
++    print("    " + ",".join(f"0x{b:02x}" for b in data[i : i + 32]) + ",")
++print("};")

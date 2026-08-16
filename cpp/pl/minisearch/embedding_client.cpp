@@ -15,7 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/14 16:21
 
-#include "cpp/pl/recall/embedding_client.h"
+#include "cpp/pl/minisearch/embedding_client.h"
 
 #include <brpc/channel.h>
 #include <brpc/controller.h>
@@ -26,7 +26,7 @@
 
 namespace rj = BUTIL_RAPIDJSON_NAMESPACE;
 
-namespace pl::recall {
+namespace pl::minisearch {
 
 // =========================================================================
 // EmbeddingClient 默认批量实现
@@ -258,4 +258,4 @@ BatchEmbeddingResult OpenAIEmbeddingClient::EmbedBatch(const std::vector<std::st
     return result;
 }
 
-} // namespace pl::recall
+} // namespace pl::minisearch

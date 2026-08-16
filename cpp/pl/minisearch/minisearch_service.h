@@ -22,11 +22,11 @@
 #include <string>
 #include <unordered_map>
 
-#include "cpp/pl/recall/embedding_client.h"
-#include "cpp/pl/recall/faiss_index.h"
-#include "cpp/pl/recall/proto/recall.pb.h"
+#include "cpp/pl/minisearch/embedding_client.h"
+#include "cpp/pl/minisearch/faiss_index.h"
+#include "cpp/pl/minisearch/proto/minisearch.pb.h"
 
-namespace pl::recall {
+namespace pl::minisearch {
 
 // 库表元信息缓存，与向量索引配合使用
 class MetaStore {
@@ -46,7 +46,7 @@ private:
 
 // HTTP/JSON 服务实现
 //
-// 继承自 proto 生成的 RecallHttpService，通过 default_method 接收所有 HTTP 请求，
+// 继承自 proto 生成的 MiniSearchHttpService，通过 default_method 接收所有 HTTP 请求，
 // 根据 URL path 分发到不同的处理逻辑。
 //
 // RESTful API:
@@ -59,13 +59,13 @@ private:
 //   POST /api/recall/snapshot/save    保存快照
 //   POST /api/recall/snapshot/load    加载快照
 //   GET  /api/recall/stats            查询索引状态
-class RecallHttpServiceImpl : public proto::RecallHttpService {
+class MiniSearchHttpServiceImpl : public proto::MiniSearchHttpService {
 public:
     // embedding_client 可为 nullptr，此时 *_by_text 接口返回 503
-    RecallHttpServiceImpl(int dimension,
-                          const std::string& index_type,
-                          std::shared_ptr<EmbeddingClient> embedding_client = nullptr);
-    ~RecallHttpServiceImpl() override = default;
+    MiniSearchHttpServiceImpl(int dimension,
+                              const std::string& index_type,
+                              std::shared_ptr<EmbeddingClient> embedding_client = nullptr);
+    ~MiniSearchHttpServiceImpl() override = default;
 
     // 启动时加载快照，在 AddService 之前调用
     bool Init(const std::string& snapshot_path);
@@ -103,4 +103,4 @@ private:
     std::shared_ptr<EmbeddingClient> embedding_client_;
 };
 
-} // namespace pl::recall
+} // namespace pl::minisearch

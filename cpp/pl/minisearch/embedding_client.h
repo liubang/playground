@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace pl::recall {
+namespace pl::minisearch {
 
 // Embedding 请求结果
 struct EmbeddingResult {
@@ -92,4 +92,4 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace pl::recall
+} // namespace pl::minisearch
