@@ -30,7 +30,9 @@ import (
 	"github.com/liubang/playground/go/pl/loom/e2e/harness"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/client"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
@@ -51,7 +53,16 @@ import (
 // Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
 func TestUserIntentRealModelE2E(t *testing.T) {
 	ctx := context.Background()
-	env := harness.NewEnv(t)
+	// Pin on-request mode: unless-dangerous deliberately allows every
+	// builtin web_fetch without asking (a credential-less GET is strictly
+	// weaker than the sandboxed needs_network egress that mode already
+	// grants any host), so the baseline approval gate this suite asserts
+	// only exists in on-request mode — and act 1 then exercises exactly
+	// what the user-intent decider is for: skipping that gate for a
+	// user-mentioned host.
+	env := harness.NewEnv(t, harness.WithAdjust(func(resolved *config.ResolvedConfig) {
+		resolved.Approval.Mode = permission.ModeOnRequest
+	}))
 	// Act 2's URL must reach the transcript via a tool result, never via a
 	// user message — iana.org carries no builtin rule opinion.
 	if err := os.WriteFile(filepath.Join(env.Workspace, "target.txt"), []byte("https://www.iana.org/domains/reserved\n"), 0o600); err != nil {
