@@ -63,10 +63,19 @@ if [[ -n "${PYBIN}" && -d "${VENV_BIN}" ]]; then
     ln -s "$(python3 -c "import os,sys;print(os.path.relpath(sys.argv[1],sys.argv[2]))" "${PYBIN}" "${VENV_BIN}")" \
         "${VENV_BIN}/python3"
 fi
-# Console 静态文件：源码 cpp/pl/minisearch/web/ → 包根 web/
-if [[ -d "${WS}/cpp/pl/minisearch/web" ]]; then
+# Console 静态文件：Vue3 构建产物（web/dist/，npm run build 生成，不入库）→ 包根 web/
+WEB_DIR="${WS}/cpp/pl/minisearch/web"
+WEB_DIST="${WEB_DIR}/dist"
+if [[ ! -d "${WEB_DIST}" ]]; then
+    echo "==> web/dist missing, building console (npm ci && npm run build)..."
+    (cd "${WEB_DIR}" && npm ci --no-audit --no-fund && npm run build) || {
+        echo "ERROR: failed to build console; install node/npm first" >&2
+        exit 1
+    }
+fi
+if [[ -d "${WEB_DIST}" ]]; then
     mkdir -p "${PKG}/web"
-    cp -RL "${WS}/cpp/pl/minisearch/web/"* "${PKG}/web/"
+    cp -RL "${WEB_DIST}/"* "${PKG}/web/"
 fi
 
 cp "$(realpath "${MAIN}/cpp/pl/minisearch/packaging/control")" "${PKG}/control"

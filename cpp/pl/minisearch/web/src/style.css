@@ -1,0 +1,143 @@
+/* 全局微调样式 */
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #f6f7fb;
+}
+
+/* 应用区背景：柔和渐变 + 极淡网格，避免大块纯色 */
+.n-config-provider {
+  background:
+    radial-gradient(ellipse 60% 40% at 85% 0%, rgba(99, 102, 241, 0.06), transparent),
+    radial-gradient(ellipse 50% 35% at 10% 100%, rgba(14, 165, 233, 0.05), transparent);
+}
+.n-dark .n-config-provider {
+  background:
+    radial-gradient(ellipse 60% 40% at 85% 0%, rgba(99, 102, 241, 0.08), transparent),
+    radial-gradient(ellipse 50% 35% at 10% 100%, rgba(14, 165, 233, 0.06), transparent);
+}
+
+/* 纵向堆叠布局（替代嵌套 n-space，规避 Naive UI NSpace 嵌套不渲染问题） */
+.mss-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 精致滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
+
+/* 页面进入动画 */
+@keyframes mss-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.route-page,
+.page-content > div {
+  animation: mss-fade-up 0.25s ease-out;
+}
+
+/* 搜索结果中命中的关键词 */
+mark.mss-mark {
+  background: rgba(99, 102, 241, 0.16);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+  font-weight: 600;
+}
+
+.n-dark mark.mss-mark {
+  background: rgba(129, 140, 248, 0.3);
+}
+
+/* Markdown 渲染容器（搜索结果/文档详情） */
+.mss-markdown {
+  word-break: break-word;
+  line-height: 1.7;
+}
+.mss-markdown h1,
+.mss-markdown h2,
+.mss-markdown h3,
+.mss-markdown h4 {
+  margin: 0.6em 0 0.3em;
+  line-height: 1.35;
+}
+.mss-markdown h1 {
+  font-size: 1.35em;
+}
+.mss-markdown h2 {
+  font-size: 1.2em;
+}
+.mss-markdown h3 {
+  font-size: 1.1em;
+}
+.mss-markdown p {
+  margin: 0.4em 0;
+}
+.mss-markdown ul,
+.mss-markdown ol {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+}
+.mss-markdown code {
+  background: rgba(127, 127, 127, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: var(--mono, monospace);
+  font-size: 0.9em;
+}
+.mss-markdown pre {
+  background: rgba(127, 127, 127, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+}
+.mss-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.mss-markdown blockquote {
+  margin: 0.4em 0;
+  padding-left: 12px;
+  border-left: 3px solid rgba(127, 127, 127, 0.35);
+  color: rgba(127, 127, 127, 0.9);
+}
+.mss-markdown table {
+  border-collapse: collapse;
+  margin: 0.4em 0;
+}
+.mss-markdown th,
+.mss-markdown td {
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  padding: 4px 10px;
+}
+.mss-markdown a {
+  color: var(--primary, #6366f1);
+}
