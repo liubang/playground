@@ -81,7 +81,7 @@ v5.0 的核心动机：服务从单一场景的向量召回 API 演进为通用�
                           ┌─────────────────────────────────┐
                           │  MLX Embedding Server（本项目自带 │
                           │  BGE-M3 / bge-large-zh，本地推理）│
-                          │  或 Ollama / OpenAI 兼容 API       │
+                          │  或 Ollama / OpenAI 兼容 API      │
                           └─────────────────────────────────┘
 ```
 
@@ -95,7 +95,7 @@ v5.0 的核心动机：服务从单一场景的向量召回 API 演进为通用�
 | **Collection Registry** | collection 元数据（schema/settings）管理，进程内单例               |
 | **Storage Engine**   | 文档与索引的存储、持久化、compaction（M1 简化形态，M3 segment 化）   |
 | **EmbeddingClient**  | 复用 v4 抽象，per-collection 配置，query 结果 LRU 缓存                |
-| **RerankClient**     | OpenAI/Cohere 兼容 rerank API 客户端（远端 API 或本地模型），可选            |
+| **RerankClient**     | OpenAI/Cohere 兼容 rerank API 客户端（远端 API 或本地模型），可选      |
 | **MCP Endpoint**     | 独立 binary，stdio MCP server，包装 search/list/get 工具             |
 
 ## 4. Data Model
@@ -129,23 +129,25 @@ v5.0 的核心动机：服务从单一场景的向量召回 API 演进为通用�
 - **text**：分词后进倒排；`analyzer` 可按字段覆盖（如代码片段字段用空白分词）。
 - **keyword**：不分词，精确匹配，用于 filter 与未来聚合。
 - **numeric**：范围 filter。
-- **vector**：两种来源——`mode: "server"`（服务端对 `source.field` 自动 embedding，复用 v4 文本直通模式）或 `mode: "client"`（客户端在文档 `fields.<vec_field>` 中直接传 `float` 数组，对应 v4 向量模式，此时 schema 无需 `source`）。**向量维度与 metric 在 schema 创建时锁定**。
+- **vector**：两种来源——`mode: "server"`（服务端对 `source.field` 自动 embedding，复用 v4 文本直通模式）或 `mode: "client"`（客户端在文档 `fields.<vec_field>` 中直接传 `float` 数组，对应 v4 向量模式，此时 schema 无需 `source`）。**向量维度与 metric 在 schema 创建时锁定**。metric 已实现：`cosine` 由服务端在写入与查询两侧 L2 归一化 + 内积索引实现，`dot_product` 用内积索引，`l2_norm` 用 L2 索引。
+- collection 与 tenant 名只允许 `[A-Za-z0-9_-]{1,64}`（会拼入磁盘路径与 key store 文件）；文档 id 无字符限制，允许包含 `/`（REST 路径中 `documents/` 之后的剩余部分整体作为 id）。
 - `query_prefix` / `doc_prefix`：BGE 系列模型对短查询可能需要 instruction 前缀（如 bge-large-zh 的检索指令），per-collection 配置，评测集上验证后设定。
 
 ### 4.2 Document
 
 ```json
 {
-  "id": "docs/presto-tuning.md#L23",     // 客户端定义，collection 内唯一
+  "id": "docs/presto-tuning.md#L23",     // 客户端定义，collection 内唯一，可含 '/'
   "version": 1723737600000,              // 可选；后写覆盖先写（LWW），用于幂等 upsert
-  "fields": {"title": "Presto 调优", "content": "当 CPU 热点出现在 join 阶段……", "source": "wiki"},
-  "payload": {...}                        // 不索引、原样存储、检索时返回
+  "fields": {"title": "Presto 调优", "content": "当 CPU 热点出现在 join 阶段……", "source": "wiki"}
 }
 ```
 
+- v4 的 `payload` 概念不再单设：`indexed: false, stored: true` 的字段即“只存不索引、检索时返回”的语义等价物。
+
 - **upsert 语义**：同 id 写入即替换（M1：tombstone 旧版本 + 追加新版本，查询时去重取最新）。
 - **delete**：tombstone（M1：内存 hash set + 查询过滤；M3：进 segment 并在 merge 时压实）。
-- v4 兼容映射：`table_id` → `id`，`meta` → `payload`，向量 → 单一 vector 字段。
+- v4 兼容映射：`table_id` → `id`，`meta` → stored-only 字段，向量 → 单一 vector 字段。
 
 ### 4.3 DocID 内部表示
 
@@ -164,7 +166,7 @@ v5.0 的核心动机：服务从单一场景的向量召回 API 演进为通用�
 Collection (in-memory)
   ├── 活跃内存索引：增量倒排（hash map: term → posting vector）
   ├── FAISS IndexIDMap（增量 add）
-  ├── docstore：unordered_map<int64, Document>（payload + stored fields）
+  ├── docstore：unordered_map<int64, Document>（stored fields）
   ├── tombstones：hash set<int64>（delete/旧版本）
   └── 周期 checkpoint（复用 v4 snapshot 机制，自动触发：N 次写或 T 秒）
 ```
@@ -186,15 +188,16 @@ Collection (in-memory)
 ```
 <data_dir>/minisearch/
   ├── auth/
-  │   └── keys.json                    # key store（sha256 + 元数据，原子写，§10.3）
+  │   └── keys.json                    # key store（sha256 + 元数据，JSON，原子写，§10.3）
   └── <tenant>/
       └── <collection>/
           ├── manifest.json            # schema + settings + 文件清单 + checkpoint 元信息
           ├── checkpoint.<seq>.faiss   # 向量索引（faiss::write_index 格式，复用 v4）
-          ├── checkpoint.<seq>.inv     # 倒排序列化（M1：二进制 dump）
-          ├── checkpoint.<seq>.docs    # docstore 序列化（protobuf length-prefixed）
-          └── idmap.<seq>.bin          # v4 IdMapper 格式复用
+          └── checkpoint.<seq>.docs    # docstore 序列化（protobuf length-prefixed，含 internal_docid）
 ```
+
+- **倒排索引不落盘**：恢复时对快照文档重新分词重建。重启零丢失的语义不变（BM25 路恢复后立即可用），且重建天然压实 tombstone 占据的 posting；代价是冷启动多一次全量分词（5 万 doc 秒级，在 §12 目标内）。
+- **idmap 不单设文件**：`internal_docid` 随 docs 帧持久化，`Restore` 重建映射并恢复 docid 高水位，docid 跨重启不复用。
 
 ## 6. Text Analysis Pipeline
 
@@ -244,13 +247,13 @@ SearchRequest
   │
   ├─ 1. Query Analyzer（query 侧 analyzer + 同义词扩展 + 短查询兜底）
   │
-  ├─ 2. 并行两路：
+  ├─ 2. 两路检索（M1 实现为串行，在 §12 延迟目标内；并行化留作优化项）：
   │     ├─ BM25：倒排检索 top-K1（K1 = max(top_k * 5, 50)，WAND 优化后置）
   │     └─ ANN：query embedding（LRU 缓存，miss 时调 embedding API）
-  │              → FAISS top-K2（K2 = max(top_k * 5, 50))
-  │     （filter 应用分阶段：M1 在两路结果上后置收敛——结果集 ≤ 数百，
-  │       代价可忽略；M2 建 docvalues 后下推预过滤——倒排侧交集 docid、
-  │       FAISS 侧构造 IDSelector bitmap，避免"检索后过滤导致结果不足"）
+  │              → FAISS top-K2（K2 = max(top_k * 5, 50)，跳过 tombstoned docid）
+  │     （filter M1 已落地为后置收敛——结果集 ≤ 数百，代价可忽略；
+  │       M2 建 docvalues 后下推预过滤——倒排侧交集 docid、FAISS 侧构造
+  │       IDSelector bitmap，避免"检索后过滤导致结果不足"）
   │
   ├─ 3. RRF 融合：score(d) = Σ_i w_i / (rrf_k + rank_i(d))，默认 rrf_k=60
   │     （只出现在单一列表的文档参与排序；两路都命中的自然上位）
@@ -258,10 +261,10 @@ SearchRequest
   ├─ 4. 可选 rerank：取融合后 top-N（N=50）交 cross-encoder 重打分，
   │     返回重排后的 top_k（embedding/rerank 不可用时跳过，结果标记 degraded）
   │
-  ├─ 5. 版本收敛：内部 docid → 字符串 id，按字符串 id 滤 tombstone 旧版本
-  │     （保留最新 version 的 docid），M1 后置 filter 谓词亦在此应用
+  ├─ 5. 版本收敛 + 后置 filter：内部 docid → 字符串 id，滤 tombstone 旧版本
+  │     （保留最新 version 的 docid），随后应用 filter 谓词，按融合分取满 top_k
   │
-  └─ 6. 装配 hits：stored fields + payload + score + highlight（term 偏移标记）
+  └─ 6. 装配 hits：stored fields + score + highlight（term 偏移标记，M2）
 ```
 
 ### 7.2 BM25
@@ -272,13 +275,15 @@ SearchRequest
 
 ```json
 {"filter": {"and": [
-    {"field": "source", "op": "=", "value": "wiki"},
-    {"field": "tags", "op": "in", "value": ["presto", "oncall"]},
-    {"field": "created", "op": ">", "value": 1700000000}
+    {"field": "source", "op": "=", "values": [{"s": "wiki"}]},
+    {"field": "tags", "op": "in", "values": [{"s": "presto"}, {"s": "oncall"}]},
+    {"field": "created", "op": ">", "values": [{"n": 1700000000}]}
 ]}}
 ```
 
-M1：filter 在两路检索结果上后置应用（结果集 ≤ 数百，代价可忽略）。M2：keyword/numeric 建 docvalues 后预下推。**M1 不做 M2 的优化**——先验证 filter 的真实使用频率。
+- op：`= != > >= < <= in`；`=`/`!=`/范围操作取单值，`in` 取多值；类型须与字段匹配（text/keyword ← string，numeric ← double，vector 不可过滤）。
+- 子句间取 AND；文档缺字段时 `!=` 为 true，其余 op 为 false。
+- M1（已实现）：filter 在收敛阶段后置应用。M2：keyword/numeric 建 docvalues 后预下推。**M1 不做 M2 的优化**——先验证 filter 的真实使用频率。
 
 ### 7.4 中文短查询兜底
 
@@ -292,13 +297,13 @@ M1：filter 在两路检索结果上后置应用（结果集 ≤ 数百，代价
 | rerank 不可用     | 跳过重排，RRF 序直接返回                 | `"degraded": ["rerank"]` |
 | 部分文档无向量    | 该文档只参与 BM25 路（向量字段可选语义） | —                 |
 
-BM25-only 降级路径的可用性依据：ArXiv 2602.23368（agentic 关键词检索可达 RAG 90% 以上效果，无需向量库）。
+BM25-only 降级路径的可用性依据：agentic 场景的经验是，高质量分词 + BM25 的关键词检索可达到接近向量检索的效果，足以作为向量路不可用时的兜底。降级行为通过响应的 `degraded` 字段显式标记（已实现）。
 
 ## 8. Embedding & Rerank Integration
 
 ### 8.1 Per-Collection Embedding
 
-v4 的全局 `--embedding_endpoint` 演进为 collection settings 内配置（不同 collection 可用不同模型/维度/端点：KB 用本地 MLX BGE-M3，代码检索用专用 code-embedding 服务）。`EmbeddingClient` 抽象与 `OpenAIEmbeddingClient` 实现原样复用，按 endpoint+model 实例化并池化。
+v4 的全局 `--embedding_endpoint` 演进为 collection settings 内配置（不同 collection 可用不同模型/维度/端点：KB 用本地 MLX BGE-M3，代码检索用专用 code-embedding 服务）。`EmbeddingClient` 抽象与 `OpenAIEmbeddingClient` 实现原样复用，按 endpoint+model 实例化并池化。当前实现仍为全局 gflag 配置（M1），per-collection 化在 M2 落地。
 
 ### 8.2 Query 向量缓存
 
@@ -306,11 +311,11 @@ LRU（容量 1024，key = hash(collection + model + query text)）。KB 场景 q
 
 ### 8.3 Rerank 客户端
 
-`RerankClient` 抽象（`Rerank(query, docs []string) []float32`），首版实现对接 OpenAI 兼容 `/v1/rerank`（OpenAI 兼容网关或本地 rerank 服务均可）；MLX reranker（bge-reranker-v2-m3 的 MLX 移植）列为 M2 评估项。rerank 输入 = top-50 的 `title + content` 截断（512 token），输出重排序。rerank 对排序质量的贡献通常大于分词与参数调优（业界经验，以 §11 评测验证）。
+`RerankClient` 抽象（`Rerank(query, docs []string) []float32`），首版实现对接 Cohere 风格 `/v1/rerank`（OpenAI 兼容网关或本地 rerank 服务均可）。本地默认后端即本项目自带的 MLX reranker：embedding_server 以 `--rerank-model BAAI/bge-reranker-v2-m3` 启动后提供 `/v1/rerank`（已实现，与 embedding 同进程，见 §8.4）。rerank 输入 = 融合后 top-50 的各 text 字段拼接截断（约 2000 字符），输出重排序；未配置或调用失败时保持 RRF 序并标记 `degraded: ["rerank"]`（已实现）。rerank 对排序质量的贡献通常大于分词与参数调优（业界经验，以 §11 评测验证）。
 
-### 8.4 MLX Embedding Server
+### 8.4 MLX Embedding & Rerank Server
 
-v4 资产原样保留（目录随模块改名迁移），继续作为默认本地后端。其 Future 项中的 dynamic batching、模型热切换维持原计划，与本设计无耦合。
+v4 资产演进（目录随模块改名迁移）：在原有 `/v1/embeddings` 之上新增 Cohere 风格 `/v1/rerank`，一个进程同时承载 embedding 与 rerank 模型。推理层泛化为 BERT / (XLM-)RoBERTa 双架构支持（权重前缀归一化、可选 token-type embedding、position id 偏移、按 sentence-transformers 配置选择 pooling），默认组合 BAAI/bge-m3（1024 维）+ BAAI/bge-reranker-v2-m3。其 Future 项中的 dynamic batching、模型热切换维持原计划，与本设计无耦合。
 
 ## 9. HTTP API v2
 
@@ -321,13 +326,12 @@ v4 资产原样保留（目录随模块改名迁移），继续作为默认本�
 | POST   | `/api/v2/collections`             | 创建 collection（body = §4.1 定义，tenant_admin+）|
 | GET    | `/api/v2/collections`             | 列出本租户 collection 及统计                   |
 | DELETE | `/api/v2/collections/{name}`      | 删除（含数据目录，tenant_admin+，`?confirm=<name>` 防误删）|
-| PUT    | `/api/v2/{col}/documents/{id}`    | upsert 单文档（writer+）                       |
-| POST   | `/api/v2/{col}/documents:bulk`    | 批量 upsert（batch embedding 一次调用，writer+）|
+| PUT    | `/api/v2/{col}/documents/{id}`    | upsert 单文档（writer+；id 可含 `/`，路径尾部整体作为 id）|
+| POST   | `/api/v2/{col}/documents:bulk`    | 批量 upsert（batch embedding 一次调用，writer+；M2 实现）|
 | GET    | `/api/v2/{col}/documents/{id}`    | 读取原文（reader+）                            |
 | DELETE | `/api/v2/{col}/documents/{id}`    | tombstone 删除（writer+）                      |
 | POST   | `/api/v2/{col}/search`            | hybrid 检索（§7.1 完整管道，reader+）           |
 | POST   | `/api/v2/{col}/queries:analyze`   | analyzer 调试：返回分词 + 同义词展开（reader+）  |
-| POST   | `/api/v2/admin/tenants`           | 创建租户（admin）                              |
 | GET    | `/api/v2/admin/tenants`           | 列出租户与用量（admin）                        |
 | DELETE | `/api/v2/admin/tenants/{name}`    | 删除租户（admin，`?confirm=<name>`）           |
 | POST   | `/api/v2/admin/tenants/{t}/keys`  | 签发 API key（admin / tenant_admin，§10.5）    |
@@ -335,6 +339,8 @@ v4 资产原样保留（目录随模块改名迁移），继续作为默认本�
 | DELETE | `/api/v2/admin/tenants/{t}/keys/{key_id}` | 吊销 key                              |
 | GET    | `/api/v2/admin/stats`             | 全局/分租户统计（admin）                       |
 | GET    | `/healthz`                        | 健康检查（**唯一免认证端点**）                  |
+
+租户不设显式创建端点：随首把 key 的签发隐式创建（懒加载数据目录与 registry）。
 
 认证规则（详见 §10）：除 `/healthz` 外所有端点在 `--auth=on` 时必须携带 `Authorization: Bearer msk_...`；未认证 401、角色/白名单越权 403。`<col>` 均指**当前 key 所属租户内**的 collection，跨租户访问在鉴权层拒绝，路径不携带租户参数。
 
@@ -345,23 +351,23 @@ curl -X POST http://localhost:8200/api/v2/loom-kb/search \
   -H 'Content-Type: application/json' \
   -d '{
     "text": "presto join 阶段 CPU 热点怎么排查",
-    "filter": {"field": "tags", "op": "in", "value": ["presto", "oncall"]},
+    "filter": {"and": [{"field": "tags", "op": "in",
+                        "values": [{"s": "presto"}, {"s": "oncall"}]}]},
     "top_k": 5,
     "weights": {"bm25": 1.0, "vector": 1.0},
-    "rerank": true,
-    "highlight": true
+    "rerank": true
   }'
 
 # {
 #   "hits": [
 #     {"id": "docs/presto-tuning.md#L23", "score": 0.031,
-#      "fields": {"title": "Presto 调优", "source": "wiki"},
-#      "payload": {...},
-#      "highlight": "当 CPU 热点出现在 <em>join</em> 阶段时，优先检查统计信息……"},
+#      "document": {"id": "docs/presto-tuning.md#L23", "version": 1723737600000,
+#                   "fields": {"title": {"s": "Presto 调优"}, "source": {"s": "wiki"}}}},
 #     ...
 #   ],
 #   "took_ms": 42, "degraded": []
 # }
+# highlight 在 M2 随 analyzer 偏移信息一起落地（token 偏移已在分词结果中保留）。
 ```
 
 请求级参数覆盖 collection settings 默认值：`weights`/`rrf_k` 未传时取 collection settings（§4.1），`weights` 传 `{"bm25": 0}` 或 `{"vector": 0}` 即显式关闭某一路（等价于单路检索，可用于评测基线）。
@@ -402,11 +408,11 @@ MCP server 是 HTTP API 的薄壳，认证随配置透传：启动参数 `--endp
 
 ### 10.3 Key 签发与存储
 
-- 格式：`msk_` + 32 字节 CSPRNG（base62，总长约 48 字符）。**服务端只存 sha256(key) + key_id + 元数据**（role、tenant、collections 白名单、created_at、revoked、last_used_ts）。
+- 格式：`msk_` + 32 字节 CSPRNG（base62 编码）。**服务端只存 sha256(key) + key_id + 元数据**（role、tenant、collections 白名单、created_at、revoked）。
 - 明文仅在签发响应中返回一次，之后不可找回（丢失只能吊销重签）。
-- 存储：`<data_dir>/minisearch/auth/keys.json`（tmp + rename 原子写）；启动全量加载到内存索引 `sha256 → Principal`，吊销即时生效。
+- 存储：`<data_dir>/minisearch/auth/keys.json`，JSON 格式 `{"keys": [...]}`（tmp + rename 原子写）；启动全量加载到内存索引 `sha256 → Principal`，吊销即时生效。
 - **Bootstrap**：`--auth=on` 且 key store 为空时，首次启动生成 admin key，写入 `<data_dir>/bootstrap.key`（0600）并打印日志提示"妥善保存后删除该文件"。第二次启动检测到 key store 非空则不再生成。
-- `last_used` 异步批量更新（离线刷盘），不阻塞请求路径。
+- `last_used` 追踪未实现（需要异步批量更新以避免阻塞请求路径，随 M2 审计一起评估）。
 
 ### 10.4 认证中间件
 
@@ -419,9 +425,10 @@ MCP server 是 HTTP API 的薄壳，认证随配置透传：启动参数 `--endp
 
 端点清单见 §9.1。要点：
 
-- 签发请求体：`{"role": "writer", "collections": ["loom-kb"], "ttl_days": 90}`（`collections` 为空/缺省 = 本租户全部；`ttl_days` 缺省 = 永久）。响应体一次性返回 `{"key_id": "k_...", "key": "msk_..."}`。
-- 吊销：软删除（`revoked=true` 落盘），内存索引同步摘除。
-- 租户删除：`?confirm=<tenant-name>` 显式确认；数据目录与该租户全部 key 一并删除，`admin` 专用。
+- 签发请求体：`{"role": "writer", "collections": ["loom-kb"]}`（`collections` 为空/缺省 = 本租户全部）。响应体一次性返回 `{"key_id": "k_...", "key": "msk_..."}`。key 暂为永久有效（`ttl_days` 未实现，与 M2 配额/审计一起评估）。
+- 签发权限：admin 可签任意角色（除 admin）；tenant_admin 只能签发本租户的 writer/reader（不能复制自身权限）。
+- 吊销：软删除（`revoked=true` 落盘），认证即时失效。
+- 租户删除：`?confirm=<tenant-name>` 显式确认；数据目录删除，`admin` 专用。
 
 ### 10.6 配额（最小集）
 
@@ -492,8 +499,8 @@ eval/golden/<collection>.jsonl
 
 | Milestone | Scope                                                                                          | 退出标准（可验证）                                        |
 | --------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| **M0** 基础重构（~2–3 个周末） | 目录改名；全新 v2 API（无 legacy 适配层，§9.3）；多 collection + schema；upsert/delete/tombstone；自动 checkpoint；`queries:analyze`；**认证中间件 + 租户/Key 管理 + bootstrap（§10.8）**；eval 骨架 | `test.sh` 重写为 v2 用例后全绿；collection CRUD 可用；重启零丢失；**认证用例通过（401/403/租户隔离/吊销生效）** |
-| **M1** 中文 hybrid（~2–3 个周末） | jieba analyzer（Jieba-CPP，集成已完成）+ 内存倒排 + BM25 + ANN 并行 + RRF + 降级；rerank 钩子（Cohere 风格 API）；golden set 50 条 | loom KB 上线；eval：hybrid 的 Recall@5 显著高于 vector-only 与 BM25-only 基线 |
+| **M0** 基础重构（~2–3 个周末） | 目录改名；全新 v2 API（无 legacy 适配层，§9.3）；多 collection + schema；upsert/delete/tombstone；自动 checkpoint；`queries:analyze`；**认证中间件 + 租户/Key 管理 + bootstrap（§10.8）**；eval 骨架 | `test.sh` 重写为 v2 用例后全绿（功能回归 + auth 阶段 + 持久化重启阶段）；collection CRUD 可用；重启零丢失（含倒排重建）；**认证用例通过（401/403/租户隔离/白名单/吊销生效/fail-closed）** |
+| **M1** 中文 hybrid（~2–3 个周末） | jieba analyzer（Jieba-CPP，集成已完成）+ 内存倒排 + BM25 + ANN + RRF + 降级（degraded 标记）；请求级 weights/filter；rerank 钩子（Cohere 风格 API）；golden set 50 条 | loom KB 上线；eval：hybrid 的 Recall@5 显著高于 vector-only 与 BM25-only 基线 |
 | **M2** 通用性 | docvalues + filter 下推；per-collection embedding + query 缓存；同义词/驼峰归一化；高亮；MCP server（含 `--api-key`）；**collection 白名单 + 配额 + 审计**；golden set 200 条 | loom + 至少一个非 KB 场景（如代码检索 collection）稳定运行 |
 | **M3** 引擎化（**条件触发**） | segment/merge/manifest/WAL；HNSW 选项；posting 压缩；f16                                        | 触发条件（任一）：单 collection > 50 万 doc；checkpoint > 5s；并发写出现锁争用实测 |
 
@@ -507,7 +514,7 @@ M1 不引入 M3 架构。依据：目标写入频率为每天数十次 upsert（
 | 2 | MLX BGE-M3 与 query/doc 不对称（instruction 前缀） | per-collection `query_prefix` 配置；评测集上 A/B 后定值 |
 | 3 | 远端 embedding/rerank API 的可用性与延迟 | 本地 MLX 为默认兜底；降级矩阵保证 BM25-only 可用 |
 | 4 | 分词上游风险：yanyiwu/cpp-jieba 仓库已删除（本风险已应验） | 已采用 ClickHouse/Jieba-CPP（commit 692f6001），本地 registry 模块 `jieba_cpp` 0.1.0 + `darts_clone` 0.9.0；C++23 `#embed` 由 genrule（bin2c）生成的 C 数组替代以兼容 C++20 编译矩阵；`analysis/jieba_test` 通过 |
-| 5 | FAISS `remove` 成本（M1 upsert 需删旧向量） | M1 不调 FAISS remove：tombstone 过滤 + checkpoint 重建时物理清除 |
+| 5 | FAISS `remove` 成本（M1 upsert 需删旧向量） | M1 不调 FAISS remove：检索时跳过 tombstoned docid + checkpoint 落盘后重启时物理清除 |
 | 6 | scope creep（DSL/分布式/企业权限诱惑） | Non-Goals 写死；新想法一律先进 §16 待议清单 |
 | 7 | 多 collection 常驻内存叠加 | collection 级 LRU 淘汰（闲置卸载、按需重载），M2 实现 |
 | 8 | key 泄漏（明文只显一次，用户存明文于脚本/MCP 配置） | TTL 签发 + 即时吊销 + 审计行含 key_id 可追溯；泄露面与常规 API 服务等同 |
@@ -523,7 +530,7 @@ M1 不引入 M3 架构。依据：目标写入频率为每天数十次 upsert（
 | ------- | ------- |
 | `FaissIndex`（IDMap 封装） | **复用**，包进 `index/vector/`，接口不变 |
 | `IdMapper` | **演进**：per-collection 化，随 manifest 持久化 |
-| `MetaStore` | **演进**：成为 docstore（stored fields + payload 存储） |
+| `MetaStore` | **演进**：成为 docstore（stored fields 存储） |
 | `EmbeddingClient` / `OpenAIEmbeddingClient` | **复用**，per-collection 实例化 + LRU 缓存 |
 | MLX embedding server | **原样保留**（目录随改名迁移，Bazel 集成不动） |
 | `RecallHttpServiceImpl`（brpc + json2pb 模式） | **复用骨架模式**（`default_method` 路由 + json2pb 转换），handler 按 v2 API 全部重写 |

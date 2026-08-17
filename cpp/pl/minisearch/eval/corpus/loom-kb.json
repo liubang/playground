@@ -1,0 +1,64 @@
+{
+  "name": "loom-kb",
+  "default_analyzer": "cjk_jieba",
+  "fields": [
+    {"name": "title", "type": "text", "indexed": true, "stored": true},
+    {"name": "content", "type": "text", "indexed": true, "stored": true},
+    {"name": "tags", "type": "keyword", "indexed": true, "stored": true},
+    {
+      "name": "content_vec", "type": "vector", "indexed": false, "stored": false,
+      "dims": 1024, "metric": "cosine",
+      "source_field": "content", "mode": "server"
+    }
+  ],
+  "documents": [
+    {
+      "id": "kb-presto-tuning",
+      "fields": {
+        "title": {"s": "Presto 查询性能调优指南：join 阶段 CPU 热点排查、统计信息过期与数据倾斜"},
+        "content": {"s": "当 CPU 热点出现在 join 阶段时，优先检查统计信息是否过期，然后考虑加大 join 分布式内存。如果是 IO 密集型，检查数据倾斜和分区裁剪。"},
+        "tags": {"s": "presto"}
+      }
+    },
+    {
+      "id": "kb-presto-memory",
+      "fields": {
+        "title": {"s": "Presto 内存管理与 OOM 排查：reserved pool、broadcast join 与溢写目录"},
+        "content": {"s": "query.max-memory 配置单查询上限，内存不足时先看 reserved pool 占比，再检查 broadcast join 是否过大的维表。溢写目录配置决定降级行为。"},
+        "tags": {"s": "presto"}
+      }
+    },
+    {
+      "id": "kb-loom-arch",
+      "fields": {
+        "title": {"s": "Loom 会话架构设计：事件溯源 SQLite 持久化与崩溃恢复"},
+        "content": {"s": "事件溯源 + checkpoint 恢复。所有会话事件写入 SQLite，崩溃后按检查点回放。工具调用经 prepare-approve-execute 三阶段。"},
+        "tags": {"s": "loom"}
+      }
+    },
+    {
+      "id": "kb-loom-memory",
+      "fields": {
+        "title": {"s": "Loom 记忆子系统设计：两阶段管线与 git 版本化存储"},
+        "content": {"s": "两阶段抽取/整理管线，文件式存储 git 版本化。热层 memory_summary 注入系统提示词，冷层按需检索。金标准评测集驱动迭代。"},
+        "tags": {"s": "loom"}
+      }
+    },
+    {
+      "id": "kb-minisearch-overview",
+      "fields": {
+        "title": {"s": "MiniSearch 通用混合检索服务架构：brpc FAISS BM25 RRF"},
+        "content": {"s": "brpc HTTP/JSON + FAISS 向量索引 + 内存倒排 BM25 + RRF 融合。多 Collection Schema 化字段，API key 认证多租户，自动 checkpoint 持久化。"},
+        "tags": {"s": "minisearch"}
+      }
+    },
+    {
+      "id": "kb-minisearch-analysis",
+      "fields": {
+        "title": {"s": "中文分词与混合检索：Jieba-CPP 词典 HMM BM25 向量 RRF 融合"},
+        "content": {"s": "Jieba-CPP 词典加 HMM 新词识别，ASCII 字母数字串保持整词。BM25 倒排路与 ANN 向量路并行检索，RRF 排名融合后经 tombstone 收敛。"},
+        "tags": {"s": "minisearch"}
+      }
+    }
+  ]
+}

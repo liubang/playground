@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/usr/bin/env bash
 # Copyright (c) 2026 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,222 +14,363 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/05/14 16:22
+# Created: 2026/05/14 10:46
 
-# MiniSearch Server — 端到端测试脚本
-# 用法: bash cpp/pl/minisearch/test.sh
-#
-# 流程: 编译 → 启动 server → curl 打全部 API → 关闭 server → 汇总结果
+# MiniSearch Server — v2 API 端到端测试
+# 阶段 1: 内存模式功能回归（collections/documents/search/drop）
+# 阶段 2: 认证与多租户（401/403/白名单/吊销/bootstrap/fail-closed）
+# 阶段 3: 持久化重启（checkpoint 恢复 + 倒排重建）
 
-set -uo pipefail
+set -u
 
-PORT=18200
-DIM=4
-SERVER="http://127.0.0.1:${PORT}"
-SNAPSHOT_DIR="/tmp/minisearch_test_snapshot_$$"
+BIN=bazel-bin/cpp/pl/minisearch/minisearch_server
 PASS=0
 FAIL=0
-SERVER_PID=""
-
-# ── 颜色 ──
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+SERVER_PIDS=()
+DATA_DIRS=()
 
 cleanup() {
-    if [[ -n "${SERVER_PID}" ]]; then
-        kill "${SERVER_PID}" 2>/dev/null || true
-        wait "${SERVER_PID}" 2>/dev/null || true
-    fi
-    rm -rf "${SNAPSHOT_DIR}"
+    for pid in "${SERVER_PIDS[@]:-}"; do
+        kill "${pid}" 2>/dev/null
+        wait "${pid}" 2>/dev/null
+    done
+    for dir in "${DATA_DIRS[@]:-}"; do
+        rm -rf "${dir}"
+    done
 }
 trap cleanup EXIT
 
-check() {
-    local name="$1" response="$2" expected="$3"
-    if echo "${response}" | grep -q "${expected}"; then
-        printf "${GREEN}✓ PASS${NC}  %s\n" "${name}"
+check() { # check <name> <expected_status> <actual_status> <body> [body_contains]
+    local name="$1" expected="$2" actual="$3" body="$4" contains="${5:-}"
+    if [ "$expected" = "$actual" ] && {
+        [ -z "$contains" ] || echo "$body" | grep -qF "$contains"
+    }; then
+        echo "PASS: ${name}"
         PASS=$((PASS + 1))
     else
-        printf "${RED}✗ FAIL${NC}  %s\n" "${name}"
-        printf "  expected to contain: %s\n" "${expected}"
-        printf "  got: %s\n" "${response}"
+        echo "FAIL: ${name} (expected=${expected} actual=${actual} body=${body})"
         FAIL=$((FAIL + 1))
     fi
 }
 
-# ── 1. 编译 ──
-echo "━━━ Building ━━━"
-bazel build //cpp/pl/minisearch:minisearch_server //cpp/pl/minisearch:minisearch_client 2>&1 | tail -3
-
-# ── 2. 启动 server ──
-echo ""
-echo "━━━ Starting server (port=${PORT}, dim=${DIM}) ━━━"
-bazel-bin/cpp/pl/minisearch/minisearch_server \
-    --port="${PORT}" --dimension="${DIM}" --index_type=Flat >/dev/null 2>&1 &
-SERVER_PID=$!
-
-# 等待 server 就绪
-for i in $(seq 1 30); do
-    if curl -s "${SERVER}/api/recall/stats" >/dev/null 2>&1; then
-        echo "Server ready (pid=${SERVER_PID})"
-        break
+check_absent() { # check_absent <name> <expected_status> <actual_status> <body> <body_must_not_contain>
+    local name="$1" expected="$2" actual="$3" body="$4" absent="$5"
+    if [ "$expected" = "$actual" ] && ! echo "$body" | grep -qF "$absent"; then
+        echo "PASS: ${name}"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL: ${name} (expected=${expected} actual=${actual} body=${body})"
+        FAIL=$((FAIL + 1))
     fi
-    if [[ $i -eq 30 ]]; then
-        echo "Server failed to start"
-        exit 1
-    fi
-    sleep 0.2
-done
+}
 
-echo ""
-echo "━━━ Running API Tests ━━━"
-echo ""
+status_of() { # status_of <curl args...> ; prints "<status> <body>"
+    local out
+    out=$(curl -s -w '\n%{http_code}' "$@")
+    local code="${out##*$'\n'}"
+    local body="${out%$'\n'*}"
+    echo "${code} ${body}"
+}
 
-# ── 3. Add ──
-RESP=$(curl -s -X POST "${SERVER}/api/recall/add" \
-    -H 'Content-Type: application/json' \
-    -d '{
-        "table_id": "default.user_info",
-        "embedding": [0.1, 0.2, 0.3, 0.4],
-        "meta": {
-            "database": "default",
-            "table": "user_info",
-            "comment": "用户基本信息表"
-        }
-    }')
-check "POST /api/recall/add" "${RESP}" '"success":true'
+json_field() { # json_field <field> — stdin 中提取 "field":"value"
+    sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"
+}
 
-# ── 4. Add 第二条 ──
-RESP=$(curl -s -X POST "${SERVER}/api/recall/add" \
-    -H 'Content-Type: application/json' \
-    -d '{
-        "table_id": "default.order_detail",
-        "embedding": [0.9, 0.8, 0.7, 0.6],
-        "meta": {
-            "database": "default",
-            "table": "order_detail",
-            "comment": "订单明细表"
-        }
-    }')
-check "POST /api/recall/add (2nd)" "${RESP}" '"success":true'
+start_server() { # start_server <port> [extra args...] ; waits for healthz
+    local port="$1"
+    shift
+    "${BIN}" --port="${port}" "$@" &
+    SERVER_PIDS+=($!)
+    for _ in $(seq 1 50); do
+        if curl -sf "http://127.0.0.1:${port}/healthz" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 0.2
+    done
+    echo "server failed to start on :${port}"
+    exit 1
+}
 
-# ── 5. Add 维度不匹配 → 应返回 400 ──
-RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${SERVER}/api/recall/add" \
-    -H 'Content-Type: application/json' \
-    -d '{
-        "table_id": "bad.dim",
-        "embedding": [0.1, 0.2]
-    }')
-check "POST /api/recall/add (dim mismatch → 400)" "${RESP}" "400"
+stop_last_server() {
+    local last=$((${#SERVER_PIDS[@]} - 1))
+    local pid="${SERVER_PIDS[${last}]}"
+    kill "${pid}" 2>/dev/null
+    wait "${pid}" 2>/dev/null
+    unset "SERVER_PIDS[${last}]"
+}
 
-# ── 6. BatchAdd ──
-RESP=$(curl -s -X POST "${SERVER}/api/recall/batch_add" \
-    -H 'Content-Type: application/json' \
-    -d '{
-        "items": [
-            {
-                "table_id": "analytics.daily_report",
-                "embedding": [0.5, 0.5, 0.5, 0.5],
-                "meta": {"database":"analytics","table":"daily_report","comment":"日报"}
-            },
-            {
-                "table_id": "analytics.weekly_summary",
-                "embedding": [0.3, 0.3, 0.7, 0.7],
-                "meta": {"database":"analytics","table":"weekly_summary","comment":"周报"}
-            }
-        ]
-    }')
-check "POST /api/recall/batch_add" "${RESP}" '"success_count":2'
+cd "$(dirname "$0")/../../.." || exit 1
 
-# ── 7. Stats ──
-RESP=$(curl -s "${SERVER}/api/recall/stats")
-check "GET  /api/recall/stats (total_vectors)" "${RESP}" '"total_vectors":4'
-check "GET  /api/recall/stats (dimension)" "${RESP}" '"dimension":4'
-check "GET  /api/recall/stats (is_trained)" "${RESP}" '"is_trained":true'
+echo "==> building minisearch_server"
+bazel build //cpp/pl/minisearch:minisearch_server || exit 1
 
-# ── 8. Search ──
-RESP=$(curl -s -X POST "${SERVER}/api/recall/search" \
-    -H 'Content-Type: application/json' \
-    -d '{
-        "embedding": [0.1, 0.2, 0.3, 0.4],
-        "top_k": 2
-    }')
-check "POST /api/recall/search (has results)" "${RESP}" '"table_id"'
-check "POST /api/recall/search (top result)" "${RESP}" 'user_info'
+# ======================================================================
+# 阶段 1: 内存模式功能回归
+# ======================================================================
+PORT=18200
+BASE="http://127.0.0.1:${PORT}"
 
-# ── 9. Search 维度不匹配 → 400 ──
-RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${SERVER}/api/recall/search" \
-    -H 'Content-Type: application/json' \
-    -d '{"embedding": [0.1], "top_k": 2}')
-check "POST /api/recall/search (dim mismatch → 400)" "${RESP}" "400"
+echo "==> phase 1: in-memory functional regression on :${PORT}"
+start_server "${PORT}"
 
-# ── 10. SaveSnapshot ──
-mkdir -p "${SNAPSHOT_DIR}"
-RESP=$(curl -s -X POST "${SERVER}/api/recall/snapshot/save" \
-    -H 'Content-Type: application/json' \
-    -d "{\"path\": \"${SNAPSHOT_DIR}\"}")
-check "POST /api/recall/snapshot/save" "${RESP}" '"success":true'
+SCHEMA='{"name":"kb","default_analyzer":"cjk_jieba","fields":[{"name":"title","type":"text","indexed":true,"stored":true},{"name":"tags","type":"keyword","indexed":true,"stored":true},{"name":"vec","type":"vector","indexed":false,"stored":true,"dims":4,"metric":"cosine","mode":"client"}]}'
+DOC1='{"version":1,"fields":{"title":{"s":"presto 调优"},"tags":{"s":"wiki"},"vec":{"v":{"data":[1.0,0.0,0.0,0.0]}}}}'
+DOC2='{"version":1,"fields":{"title":{"s":"loom 架构"},"tags":{"s":"wiki"},"vec":{"v":{"data":[0.0,1.0,0.0,0.0]}}}}'
 
-# 验证快照文件存在
-if [[ -f "${SNAPSHOT_DIR}/faiss.index" && -f "${SNAPSHOT_DIR}/id_mapper.bin" ]]; then
-    printf "${GREEN}✓ PASS${NC}  Snapshot files exist on disk\n"
+# --- collections ---
+R=$(status_of -X POST "${BASE}/api/v2/collections" -H 'Content-Type: application/json' -d "${SCHEMA}")
+check "create collection" 200 "${R%% *}" "${R#* }" '"ok":true'
+
+R=$(status_of -X POST "${BASE}/api/v2/collections" -H 'Content-Type: application/json' -d "${SCHEMA}")
+check "duplicate collection -> 409" 409 "${R%% *}" "${R#* }"
+
+R=$(status_of "${BASE}/api/v2/collections")
+check "list collections" 200 "${R%% *}" "${R#* }" '"kb"'
+
+R=$(status_of -X POST "${BASE}/api/v2/collections" -H 'Content-Type: application/json' \
+    -d '{"name":"bad","fields":[{"name":"v","type":"vector","dims":0,"mode":"client"}]}')
+check "invalid schema -> 400" 400 "${R%% *}" "${R#* }"
+
+R=$(status_of -X POST "${BASE}/api/v2/collections" -H 'Content-Type: application/json' \
+    -d '{"name":"bad/name","fields":[{"name":"t","type":"text"}]}')
+check "invalid collection name -> 400" 400 "${R%% *}" "${R#* }"
+
+# --- documents ---
+R=$(status_of -X PUT "${BASE}/api/v2/kb/documents/doc1" -H 'Content-Type: application/json' -d "${DOC1}")
+check "upsert doc1" 200 "${R%% *}" "${R#* }" '"ok":true'
+
+R=$(status_of -X PUT "${BASE}/api/v2/kb/documents/doc2" -H 'Content-Type: application/json' -d "${DOC2}")
+check "upsert doc2" 200 "${R%% *}" "${R#* }" '"ok":true'
+
+R=$(status_of -X PUT "${BASE}/api/v2/kb/documents/doc1" -H 'Content-Type: application/json' -d "${DOC1}")
+check "stale version -> 409" 409 "${R%% *}" "${R#* }" 'stale'
+
+R=$(status_of "${BASE}/api/v2/kb/documents/doc1")
+check "get doc1" 200 "${R%% *}" "${R#* }" 'presto'
+
+R=$(status_of "${BASE}/api/v2/kb/documents/missing")
+check "get missing -> 404" 404 "${R%% *}" "${R#* }"
+
+R=$(status_of "${BASE}/api/v2/missing/documents/x")
+check "unknown collection -> 404" 404 "${R%% *}" "${R#* }"
+
+# 文档 id 允许包含 '/'
+R=$(status_of -X PUT "${BASE}/api/v2/kb/documents/docs/a.md" -H 'Content-Type: application/json' -d "${DOC1}")
+check "upsert doc with slash id" 200 "${R%% *}" "${R#* }" '"ok":true'
+R=$(status_of "${BASE}/api/v2/kb/documents/docs/a.md")
+check "get doc with slash id" 200 "${R%% *}" "${R#* }" 'docs/a.md'
+R=$(status_of -X DELETE "${BASE}/api/v2/kb/documents/docs/a.md")
+check "delete doc with slash id" 200 "${R%% *}" "${R#* }" '"ok":true'
+
+# --- search ---
+R=$(status_of -X POST "${BASE}/api/v2/kb/search" -H 'Content-Type: application/json' \
+    -d '{"embedding":[0.9,0.1,0.0,0.0],"top_k":1}')
+check "search nearest" 200 "${R%% *}" "${R#* }" 'doc1'
+
+R=$(status_of -X POST "${BASE}/api/v2/kb/search" -H 'Content-Type: application/json' -d '{"text":"调优"}')
+check "text query degrades to bm25 (no embedding service)" 200 "${R%% *}" "${R#* }" 'doc1'
+check "degraded marker present" 200 "${R%% *}" "${R#* }" '"degraded":["vector"]'
+
+R=$(status_of -X POST "${BASE}/api/v2/kb/search" -H 'Content-Type: application/json' \
+    -d '{"text":"调优","filter":{"and":[{"field":"tags","op":"=","values":[{"s":"other"}]}]}}')
+check_absent "filtered search excludes doc1" 200 "${R%% *}" "${R#* }" 'doc1'
+
+R=$(status_of -X POST "${BASE}/api/v2/kb/search" -H 'Content-Type: application/json' \
+    -d '{"embedding":[1.0,0.0],"top_k":1}')
+check "query dims mismatch -> 400" 400 "${R%% *}" "${R#* }"
+
+# --- delete ---
+R=$(status_of -X DELETE "${BASE}/api/v2/kb/documents/doc2")
+check "delete doc2" 200 "${R%% *}" "${R#* }" '"ok":true'
+
+R=$(status_of -X POST "${BASE}/api/v2/kb/search" -H 'Content-Type: application/json' \
+    -d '{"embedding":[0.0,1.0,0.0,0.0],"top_k":5}')
+check_absent "deleted doc drops from search" 200 "${R%% *}" "${R#* }" 'doc2'
+
+# --- drop ---
+R=$(status_of -X DELETE "${BASE}/api/v2/collections/kb")
+check "drop without confirm -> 400" 400 "${R%% *}" "${R#* }"
+
+R=$(status_of -X DELETE "${BASE}/api/v2/collections/kb?confirm=kb")
+check "drop collection" 200 "${R%% *}" "${R#* }" '"ok":true'
+
+R=$(status_of "${BASE}/api/v2/collections")
+check_absent "list after drop" 200 "${R%% *}" "${R#* }" 'kb'
+
+stop_last_server
+
+# ======================================================================
+# 阶段 2: 认证与多租户
+# ======================================================================
+AUTH_PORT=18201
+AUTH_BASE="http://127.0.0.1:${AUTH_PORT}"
+AUTH_DIR=$(mktemp -d /tmp/minisearch_auth_test_XXXXXX)
+DATA_DIRS+=("${AUTH_DIR}")
+
+echo "==> phase 2: auth & tenancy on :${AUTH_PORT}"
+start_server "${AUTH_PORT}" --data_dir="${AUTH_DIR}" --auth=true
+
+# fail-closed：非回环监听 + auth=off 必须拒绝启动（进程应立即退出）
+"${BIN}" --port=18299 --listen=0.0.0.0 >/dev/null 2>&1 &
+REFUSE_PID=$!
+sleep 2
+if kill -0 ${REFUSE_PID} 2>/dev/null; then
+    echo "FAIL: non-loopback without auth refused (fail-closed)"
+    FAIL=$((FAIL + 1))
+    kill ${REFUSE_PID} 2>/dev/null
+    wait ${REFUSE_PID} 2>/dev/null
+else
+    echo "PASS: non-loopback without auth refused (fail-closed)"
+    PASS=$((PASS + 1))
+    wait ${REFUSE_PID} 2>/dev/null
+fi
+
+# bootstrap admin key
+if [ -f "${AUTH_DIR}/bootstrap.key" ]; then
+    echo "PASS: bootstrap key file created"
     PASS=$((PASS + 1))
 else
-    printf "${RED}✗ FAIL${NC}  Snapshot files missing\n"
+    echo "FAIL: bootstrap key file created"
     FAIL=$((FAIL + 1))
 fi
+ADMIN_KEY=$(tr -d '\n' <"${AUTH_DIR}/bootstrap.key")
 
-# ── 11. LoadSnapshot ──
-RESP=$(curl -s -X POST "${SERVER}/api/recall/snapshot/load" \
-    -H 'Content-Type: application/json' \
-    -d "{\"path\": \"${SNAPSHOT_DIR}\"}")
-check "POST /api/recall/snapshot/load" "${RESP}" '"success":true'
+R=$(status_of "${AUTH_BASE}/api/v2/collections")
+check "no token -> 401" 401 "${R%% *}" "${R#* }"
 
-# ── 12. 404 ──
-RESP=$(curl -s -o /dev/null -w "%{http_code}" "${SERVER}/api/recall/nonexistent")
-check "GET  /api/recall/nonexistent (→ 404)" "${RESP}" "404"
+R=$(status_of "${AUTH_BASE}/api/v2/collections" -H "Authorization: Bearer msk_bogus")
+check "bogus token -> 401" 401 "${R%% *}" "${R#* }"
 
-# ── 13. 无效 JSON ──
-RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${SERVER}/api/recall/add" \
-    -H 'Content-Type: application/json' \
-    -d 'not json at all')
-check "POST /api/recall/add (bad JSON → 400)" "${RESP}" "400"
+R=$(status_of "${AUTH_BASE}/healthz")
+check "healthz unauthenticated" 200 "${R%% *}" "${R#* }" 'ok'
 
-# ── 14. *_by_text 接口（未配置 embedding → 503）──
-echo ""
-echo "━━━ Text-based API Tests (no embedding configured → 503) ━━━"
-echo ""
+R=$(status_of "${AUTH_BASE}/api/v2/admin/tenants" -H "Authorization: Bearer ${ADMIN_KEY}")
+check "admin list tenants" 200 "${R%% *}" "${R#* }"
 
-RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${SERVER}/api/recall/add_by_text" \
-    -H 'Content-Type: application/json' \
-    -d '{"table_id":"test.t1","text":"user info table"}')
-check "POST /api/recall/add_by_text (no embedding → 503)" "${RESP}" "503"
+# admin 在 team-a 建 kb / other
+R=$(status_of -X POST "${AUTH_BASE}/api/v2/collections?tenant=team-a" \
+    -H "Authorization: Bearer ${ADMIN_KEY}" -H 'Content-Type: application/json' -d "${SCHEMA}")
+check "admin create kb in team-a" 200 "${R%% *}" "${R#* }" '"ok":true'
+R=$(status_of -X POST "${AUTH_BASE}/api/v2/collections?tenant=team-a" \
+    -H "Authorization: Bearer ${ADMIN_KEY}" -H 'Content-Type: application/json' \
+    -d '{"name":"other","fields":[{"name":"t","type":"text"}]}')
+check "admin create other in team-a" 200 "${R%% *}" "${R#* }" '"ok":true'
 
-RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${SERVER}/api/recall/batch_add_by_text" \
-    -H 'Content-Type: application/json' \
-    -d '{"items":[{"table_id":"test.t1","text":"user info"}]}')
-check "POST /api/recall/batch_add_by_text (no embedding → 503)" "${RESP}" "503"
+# 签发 writer（白名单 kb）
+R=$(status_of -X POST "${AUTH_BASE}/api/v2/admin/tenants/team-a/keys" \
+    -H "Authorization: Bearer ${ADMIN_KEY}" -H 'Content-Type: application/json' \
+    -d '{"role":"writer","collections":["kb"]}')
+check "issue writer key" 200 "${R%% *}" "${R#* }" '"key":"msk_'
+WRITER_KEY=$(echo "${R#* }" | json_field key)
+WRITER_KEY_ID=$(echo "${R#* }" | json_field key_id)
 
-RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${SERVER}/api/recall/search_by_text" \
-    -H 'Content-Type: application/json' \
-    -d '{"text":"find user table","top_k":3}')
-check "POST /api/recall/search_by_text (no embedding → 503)" "${RESP}" "503"
+R=$(status_of -X PUT "${AUTH_BASE}/api/v2/kb/documents/doc1" \
+    -H "Authorization: Bearer ${WRITER_KEY}" -H 'Content-Type: application/json' -d "${DOC1}")
+check "writer upsert in whitelist" 200 "${R%% *}" "${R#* }" '"ok":true'
 
-# 验证 503 响应体包含有意义的错误信息
-RESP=$(curl -s -X POST "${SERVER}/api/recall/search_by_text" \
-    -H 'Content-Type: application/json' \
-    -d '{"text":"find user table","top_k":3}')
-check "POST /api/recall/search_by_text (error message)" "${RESP}" 'embedding service not configured'
+R=$(status_of -X PUT "${AUTH_BASE}/api/v2/other/documents/doc1" \
+    -H "Authorization: Bearer ${WRITER_KEY}" -H 'Content-Type: application/json' -d "${DOC1}")
+check "writer upsert outside whitelist -> 403" 403 "${R%% *}" "${R#* }"
 
-# ── 汇总 ──
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-TOTAL=$((PASS + FAIL))
-printf "Total: %d  ${GREEN}Passed: %d${NC}  ${RED}Failed: %d${NC}\n" "${TOTAL}" "${PASS}" "${FAIL}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+R=$(status_of "${AUTH_BASE}/api/v2/other/documents/doc1" -H "Authorization: Bearer ${WRITER_KEY}")
+check "writer read outside whitelist -> 403" 403 "${R%% *}" "${R#* }"
 
-if [[ ${FAIL} -gt 0 ]]; then
-    exit 1
-fi
+R=$(status_of -X POST "${AUTH_BASE}/api/v2/collections" \
+    -H "Authorization: Bearer ${WRITER_KEY}" -H 'Content-Type: application/json' -d "${SCHEMA}")
+check "writer create collection -> 403" 403 "${R%% *}" "${R#* }"
+
+# 租户隔离：default 命名空间看不到 team-a 的 collection
+R=$(status_of "${AUTH_BASE}/api/v2/collections" -H "Authorization: Bearer ${ADMIN_KEY}")
+check_absent "tenant isolation" 200 "${R%% *}" "${R#* }" 'kb'
+
+# tenant_admin 不能签发 tenant_admin
+R=$(status_of -X POST "${AUTH_BASE}/api/v2/admin/tenants/team-a/keys" \
+    -H "Authorization: Bearer ${ADMIN_KEY}" -H 'Content-Type: application/json' \
+    -d '{"role":"tenant_admin"}')
+TA_KEY=$(echo "${R#* }" | json_field key)
+R=$(status_of -X POST "${AUTH_BASE}/api/v2/admin/tenants/team-a/keys" \
+    -H "Authorization: Bearer ${TA_KEY}" -H 'Content-Type: application/json' \
+    -d '{"role":"tenant_admin"}')
+check "tenant_admin issue tenant_admin -> 400" 400 "${R%% *}" "${R#* }"
+R=$(status_of -X POST "${AUTH_BASE}/api/v2/admin/tenants/team-a/keys" \
+    -H "Authorization: Bearer ${TA_KEY}" -H 'Content-Type: application/json' \
+    -d '{"role":"reader"}')
+check "tenant_admin issue reader" 200 "${R%% *}" "${R#* }" '"key":"msk_'
+
+# 非法租户名
+R=$(status_of -X POST "${AUTH_BASE}/api/v2/admin/tenants/bad..name/keys" \
+    -H "Authorization: Bearer ${ADMIN_KEY}" -H 'Content-Type: application/json' \
+    -d '{"role":"reader"}')
+check "invalid tenant name -> 400" 400 "${R%% *}" "${R#* }"
+
+# stats
+R=$(status_of "${AUTH_BASE}/api/v2/admin/stats" -H "Authorization: Bearer ${ADMIN_KEY}")
+check "admin stats" 200 "${R%% *}" "${R#* }" '"total_collections":2'
+R=$(status_of "${AUTH_BASE}/api/v2/admin/stats" -H "Authorization: Bearer ${WRITER_KEY}")
+check "stats non-admin -> 403" 403 "${R%% *}" "${R#* }"
+
+# 吊销立即生效
+R=$(status_of -X DELETE "${AUTH_BASE}/api/v2/admin/tenants/team-a/keys/${WRITER_KEY_ID}" \
+    -H "Authorization: Bearer ${ADMIN_KEY}")
+check "revoke writer key" 200 "${R%% *}" "${R#* }" '"ok":true'
+R=$(status_of "${AUTH_BASE}/api/v2/collections" -H "Authorization: Bearer ${WRITER_KEY}")
+check "revoked key -> 401" 401 "${R%% *}" "${R#* }"
+
+stop_last_server
+
+# ======================================================================
+# 阶段 3: 持久化重启（checkpoint 恢复 + 倒排重建）
+# ======================================================================
+PERSIST_PORT=18202
+PERSIST_BASE="http://127.0.0.1:${PERSIST_PORT}"
+PERSIST_DIR=$(mktemp -d /tmp/minisearch_persist_test_XXXXXX)
+DATA_DIRS+=("${PERSIST_DIR}")
+
+echo "==> phase 3: persistence & restart on :${PERSIST_PORT}"
+start_server "${PERSIST_PORT}" --data_dir="${PERSIST_DIR}"
+
+R=$(status_of -X POST "${PERSIST_BASE}/api/v2/collections" -H 'Content-Type: application/json' -d "${SCHEMA}")
+check "persist: create collection" 200 "${R%% *}" "${R#* }" '"ok":true'
+R=$(status_of -X PUT "${PERSIST_BASE}/api/v2/kb/documents/doc1" -H 'Content-Type: application/json' -d "${DOC1}")
+check "persist: upsert doc1" 200 "${R%% *}" "${R#* }" '"ok":true'
+R=$(status_of -X PUT "${PERSIST_BASE}/api/v2/kb/documents/doc2" -H 'Content-Type: application/json' -d "${DOC2}")
+check "persist: upsert doc2" 200 "${R%% *}" "${R#* }" '"ok":true'
+R=$(status_of -X DELETE "${PERSIST_BASE}/api/v2/kb/documents/doc2")
+check "persist: delete doc2 (tombstone)" 200 "${R%% *}" "${R#* }" '"ok":true'
+
+# 停服 -> 触发退出前 final flush checkpoint -> 重启
+stop_last_server
+start_server "${PERSIST_PORT}" --data_dir="${PERSIST_DIR}"
+
+R=$(status_of "${PERSIST_BASE}/api/v2/collections")
+check "restart: collection restored" 200 "${R%% *}" "${R#* }" '"active_documents":1'
+
+R=$(status_of "${PERSIST_BASE}/api/v2/kb/documents/doc1")
+check "restart: doc1 survives" 200 "${R%% *}" "${R#* }" 'presto'
+
+R=$(status_of "${PERSIST_BASE}/api/v2/kb/documents/doc2")
+check "restart: deleted doc2 stays gone" 404 "${R%% *}" "${R#* }"
+
+# 倒排索引重启后重建：BM25 文本检索立即可用
+R=$(status_of -X POST "${PERSIST_BASE}/api/v2/kb/search" -H 'Content-Type: application/json' \
+    -d '{"text":"调优","top_k":5}')
+check "restart: bm25 works (inverted rebuilt)" 200 "${R%% *}" "${R#* }" 'doc1'
+
+# 向量索引从 checkpoint 恢复
+R=$(status_of -X POST "${PERSIST_BASE}/api/v2/kb/search" -H 'Content-Type: application/json' \
+    -d '{"embedding":[0.9,0.1,0.0,0.0],"top_k":1}')
+check "restart: vector search works" 200 "${R%% *}" "${R#* }" 'doc1'
+
+# 恢复后 docid 不复用
+R=$(status_of -X PUT "${PERSIST_BASE}/api/v2/kb/documents/doc3" -H 'Content-Type: application/json' \
+    -d '{"version":1,"fields":{"title":{"s":"新文档"},"tags":{"s":"wiki"},"vec":{"v":{"data":[0.0,0.0,1.0,0.0]}}}}')
+check "restart: new upsert ok" 200 "${R%% *}" "${R#* }" '"ok":true'
+
+stop_last_server
+
+echo
+echo "==================================="
+echo "PASS: ${PASS}  FAIL: ${FAIL}"
+echo "==================================="
+
+[ "${FAIL}" = "0" ]
