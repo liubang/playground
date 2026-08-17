@@ -61,6 +61,11 @@ bool TenantContext::DropTenant(const std::string& tenant) {
     return true;
 }
 
+bool TenantContext::HasTenant(const std::string& tenant) const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return registries_.count(tenant) > 0;
+}
+
 std::vector<TenantContext::TenantInfo> TenantContext::Tenants() const {
     std::lock_guard<std::mutex> lock(mu_);
     std::vector<TenantInfo> out;

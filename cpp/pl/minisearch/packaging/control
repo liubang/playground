@@ -32,6 +32,9 @@ source "${CONF}"
 
 DATA="${DATA_DIR:-data}"
 [[ "${DATA}" = /* ]] || DATA="${ROOT}/${DATA}"
+# Console 静态文件目录：相对路径解析到包根；WEB_DIR 为空 = 不 serve /console/*
+WEB="${WEB_DIR:-}"
+[[ -z "${WEB}" || "${WEB}" = /* ]] || WEB="${ROOT}/${WEB}"
 LOGD="${ROOT}/log"
 RUND="${ROOT}/run"
 mkdir -p "${DATA}" "${LOGD}" "${RUND}"
@@ -56,6 +59,13 @@ minisearch_args() {
 	fi
 	if [[ -n "${RERANK_MODEL:-}" ]]; then
 		args+=(--rerank_endpoint="${EMBEDDING_ENDPOINT}" --rerank_model="${RERANK_MODEL}")
+	fi
+	if [[ -n "${WEB}" ]]; then
+		args+=(--web_dir="${WEB}")
+	fi
+	if [[ -n "${CONSOLE_ADMIN_USER:-}" ]]; then
+		args+=(--console_admin_user="${CONSOLE_ADMIN_USER}"
+			--console_admin_password="${CONSOLE_ADMIN_PASSWORD:-}")
 	fi
 	printf '%s\0' "${args[@]}"
 }

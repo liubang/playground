@@ -17,8 +17,10 @@
 
 #include "cpp/pl/minisearch/server/http_api.h"
 
+#include <algorithm>
 #include <butil/logging.h>
 #include <chrono>
+#include <cstdlib>
 #include <json2pb/json_to_pb.h>
 #include <json2pb/pb_to_json.h>
 #include <utility>
@@ -26,7 +28,9 @@
 
 #include "cpp/pl/minisearch/server/codec.h"
 #include "cpp/pl/minisearch/server/filter.h"
+#include "cpp/pl/minisearch/server/markdown.h"
 #include "cpp/pl/minisearch/server/search_pipeline.h"
+#include "cpp/pl/minisearch/server/static_files.h"
 
 namespace pl::minisearch::server {
 
@@ -112,12 +116,16 @@ HttpApiService::HttpApiService(TenantContext* context,
                                auth::KeyStore* keys,
                                bool auth_on,
                                std::shared_ptr<EmbeddingClient> embedding_client,
-                               std::shared_ptr<RerankClient> rerank_client)
+                               std::shared_ptr<RerankClient> rerank_client,
+                               auth::ConsoleAuth* console_auth,
+                               std::string web_dir)
     : context_(context),
       keys_(keys),
       auth_on_(auth_on),
       embedding_client_(std::move(embedding_client)),
-      rerank_client_(std::move(rerank_client)) {}
+      rerank_client_(std::move(rerank_client)),
+      console_auth_(console_auth),
+      web_dir_(std::move(web_dir)) {}
 
 std::optional<auth::Principal> HttpApiService::Authenticate(brpc::Controller* cntl) {
     if (!auth_on_) {
@@ -133,7 +141,12 @@ std::optional<auth::Principal> HttpApiService::Authenticate(brpc::Controller* cn
         SendErrorResponse(cntl, 401, "missing bearer token");
         return std::nullopt;
     }
-    auto principal = keys_->Authenticate(header->substr(prefix.size()));
+    const std::string token = header->substr(prefix.size());
+    auto principal = keys_->Authenticate(token);
+    if (!principal.has_value() && console_auth_ != nullptr) {
+        // session token（console 账号密码登录）与 API key 共用 Bearer 头
+        principal = console_auth_->Authenticate(token);
+    }
     if (!principal.has_value()) {
         SendErrorResponse(cntl, 401, "invalid or revoked token");
         return std::nullopt;
@@ -178,6 +191,28 @@ void HttpApiService::default_method(google::protobuf::RpcController* controller,
         return HandleHealthz(cntl);
     }
 
+    // console 静态文件：免认证（登录页本身需要加载）
+    if (!web_dir_.empty() && method == brpc::HTTP_METHOD_GET) {
+        if (path == "/") {
+            cntl->http_response().set_status_code(302);
+            cntl->http_response().SetHeader("Location", "/console/");
+            return;
+        }
+        if (path.rfind("/console/", 0) == 0) {
+            if (!ServeStaticFile(web_dir_, path.substr(9), cntl)) {
+                SendErrorResponse(cntl, 404, "not found: " + path);
+            }
+            return;
+        }
+    }
+    // 账号密码登录与修改密码：免 Bearer（凭据本身即认证）
+    if (path == "/api/v2/auth/login" && method == brpc::HTTP_METHOD_POST) {
+        return HandleLogin(cntl);
+    }
+    if (path == "/api/v2/auth/password" && method == brpc::HTTP_METHOD_POST) {
+        return HandleChangePassword(cntl);
+    }
+
     auto principal = Authenticate(cntl);
     if (!principal.has_value()) {
         return; // 401 已发送
@@ -199,9 +234,23 @@ void HttpApiService::default_method(google::protobuf::RpcController* controller,
         return;
     }
 
+    if (parts.size() == 4 && parts[2] == "auth") {
+        if (parts[3] == "logout" && method == brpc::HTTP_METHOD_POST) {
+            return HandleLogout(cntl);
+        }
+        if (parts[3] == "whoami" && method == brpc::HTTP_METHOD_GET) {
+            return HandleWhoAmI(cntl, *principal);
+        }
+        SendErrorResponse(cntl, 404, "not found: " + path);
+        return;
+    }
+
     if (parts.size() >= 3 && parts[2] == "admin") {
         if (parts.size() == 4 && parts[3] == "tenants" && method == brpc::HTTP_METHOD_GET) {
             return HandleListTenants(cntl, *principal);
+        }
+        if (parts.size() == 4 && parts[3] == "tenants" && method == brpc::HTTP_METHOD_POST) {
+            return HandleCreateTenant(cntl, *principal);
         }
         if (parts.size() == 5 && parts[3] == "tenants" && method == brpc::HTTP_METHOD_DELETE) {
             return HandleDropTenant(cntl, *principal, parts[4]);
@@ -257,6 +306,18 @@ void HttpApiService::default_method(google::protobuf::RpcController* controller,
         if (method == brpc::HTTP_METHOD_DELETE) {
             return HandleDelete(cntl, *principal, parts[2], id);
         }
+    }
+    if (parts.size() == 4 && parts[3] == "documents" && method == brpc::HTTP_METHOD_GET) {
+        if (!Allow(*principal, parts[2], /*write=*/false)) {
+            return SendErrorResponse(cntl, 403, "forbidden");
+        }
+        return HandleListDocuments(cntl, *principal, parts[2]);
+    }
+    if (parts.size() == 4 && parts[3] == "documents:import" && method == brpc::HTTP_METHOD_POST) {
+        if (!Allow(*principal, parts[2], /*write=*/true)) {
+            return SendErrorResponse(cntl, 403, "forbidden");
+        }
+        return HandleImport(cntl, *principal, parts[2]);
     }
     if (parts.size() == 4 && parts[3] == "search" && method == brpc::HTTP_METHOD_POST) {
         if (!Allow(*principal, parts[2], /*write=*/false)) {
@@ -376,23 +437,13 @@ void HttpApiService::HandleUpsert(brpc::Controller* cntl,
     }
 
     // Server-side embedding for vector fields with mode="server".
-    if (const core::FieldDef* vec = CollectionRegistry::VectorField(entry->docs.schema());
-        vec != nullptr && vec->server_embedded && doc.fields.count(vec->name) == 0) {
-        const auto it = doc.fields.find(vec->source_field);
-        if (it == doc.fields.end()) {
-            SendErrorResponse(cntl, 400, "source field absent: " + vec->source_field);
+    {
+        int status = 0;
+        std::string embed_error;
+        if (!ApplyServerEmbedding(*entry, &doc, nullptr, &status, &embed_error)) {
+            SendErrorResponse(cntl, status, embed_error);
             return;
         }
-        if (embedding_client_ == nullptr) {
-            SendErrorResponse(cntl, 503, "embedding service not configured");
-            return;
-        }
-        auto result = embedding_client_->Embed(std::get<std::string>(it->second));
-        if (!result.ok) {
-            SendErrorResponse(cntl, 502, "embedding failed: " + result.error);
-            return;
-        }
-        doc.fields[vec->name] = std::move(result.embedding);
     }
 
     auto upserted = entry->docs.Upsert(std::move(doc));
@@ -414,6 +465,42 @@ void HttpApiService::HandleUpsert(brpc::Controller* cntl,
         entry->IndexText(upserted.internal_docid, stored);
     }
     SendJsonResponse(cntl, resp);
+}
+
+bool HttpApiService::ApplyServerEmbedding(const CollectionEntry& entry,
+                                          core::Document* doc,
+                                          const std::string* embed_text_override,
+                                          int* status,
+                                          std::string* error) {
+    const core::FieldDef* vec = CollectionRegistry::VectorField(entry.docs.schema());
+    if (vec == nullptr || !vec->server_embedded || doc->fields.count(vec->name) != 0) {
+        return true;
+    }
+    std::string text;
+    if (embed_text_override != nullptr) {
+        text = *embed_text_override;
+    } else {
+        const auto it = doc->fields.find(vec->source_field);
+        if (it == doc->fields.end()) {
+            *status = 400;
+            *error = "source field absent: " + vec->source_field;
+            return false;
+        }
+        text = std::get<std::string>(it->second);
+    }
+    if (embedding_client_ == nullptr) {
+        *status = 503;
+        *error = "embedding service not configured";
+        return false;
+    }
+    auto result = embedding_client_->Embed(text);
+    if (!result.ok) {
+        *status = 502;
+        *error = "embedding failed: " + result.error;
+        return false;
+    }
+    doc->fields[vec->name] = std::move(result.embedding);
+    return true;
 }
 
 void HttpApiService::HandleGet(brpc::Controller* cntl,
@@ -456,6 +543,197 @@ void HttpApiService::HandleDelete(brpc::Controller* cntl,
     proto::GenericResponse resp;
     resp.set_ok(entry->docs.Delete(id));
     SendJsonResponse(cntl, resp, resp.ok() ? 200 : 404);
+}
+
+void HttpApiService::HandleListDocuments(brpc::Controller* cntl,
+                                         const auth::Principal& principal,
+                                         const std::string& collection) {
+    auto registry = context_->Registry(principal.tenant);
+    if (registry == nullptr) {
+        SendErrorResponse(cntl, 400, "invalid tenant: " + principal.tenant);
+        return;
+    }
+    auto entry = registry->Find(collection);
+    if (entry == nullptr) {
+        SendErrorResponse(cntl, 404, "unknown collection: " + collection);
+        return;
+    }
+    size_t offset = 0;
+    size_t limit = 50;
+    if (const std::string* q = cntl->http_request().uri().GetQuery("offset"); q != nullptr) {
+        long v = std::atol(q->c_str());
+        offset = v > 0 ? static_cast<size_t>(v) : 0;
+    }
+    if (const std::string* q = cntl->http_request().uri().GetQuery("limit"); q != nullptr) {
+        long v = std::atol(q->c_str());
+        if (v > 0)
+            limit = static_cast<size_t>(v);
+    }
+    limit = std::min(limit, static_cast<size_t>(200));
+    size_t total = 0;
+    auto docs = entry->docs.ListDocuments(offset, limit, &total);
+    proto::ListDocumentsResponse resp;
+    resp.set_total(static_cast<int64_t>(total));
+    const core::FieldDef* vec = CollectionRegistry::VectorField(entry->docs.schema());
+    for (const auto& doc : docs) {
+        auto* out = resp.add_documents();
+        ToProtoDocument(doc, out, /*include_internal=*/false);
+        if (vec != nullptr) {
+            out->mutable_fields()->erase(vec->name); // 向量不出现在列表响应
+        }
+    }
+    SendJsonResponse(cntl, resp);
+}
+
+void HttpApiService::HandleImport(brpc::Controller* cntl,
+                                  const auth::Principal& principal,
+                                  const std::string& collection) {
+    auto registry = context_->Registry(principal.tenant);
+    if (registry == nullptr) {
+        SendErrorResponse(cntl, 400, "invalid tenant: " + principal.tenant);
+        return;
+    }
+    auto entry = registry->Find(collection);
+    if (entry == nullptr) {
+        SendErrorResponse(cntl, 404, "unknown collection: " + collection);
+        return;
+    }
+    proto::ImportDocumentsRequest req;
+    if (!ParseJsonBody(cntl, &req)) {
+        return;
+    }
+    if (req.name().empty() || req.name().find('#') != std::string::npos) {
+        SendErrorResponse(cntl, 400, "name must be non-empty and must not contain '#'");
+        return;
+    }
+    if (req.content().empty()) {
+        SendErrorResponse(cntl, 400, "content must not be empty");
+        return;
+    }
+    const core::Schema& schema = entry->docs.schema();
+
+    // 正文字段：显式指定 > body > content > 首个 text 字段
+    std::string text_field = req.text_field();
+    if (text_field.empty()) {
+        if (schema.Find("body") != nullptr && schema.Find("body")->type == core::FieldType::kText) {
+            text_field = "body";
+        } else if (schema.Find("content") != nullptr &&
+                   schema.Find("content")->type == core::FieldType::kText) {
+            text_field = "content";
+        } else {
+            for (const auto& [name, def] : schema.fields) {
+                if (def.type == core::FieldType::kText) {
+                    text_field = name;
+                    break;
+                }
+            }
+        }
+    }
+    const core::FieldDef* text_def = schema.Find(text_field);
+    if (text_def == nullptr || text_def->type != core::FieldType::kText) {
+        SendErrorResponse(cntl, 400, "no usable text field: " + text_field);
+        return;
+    }
+    // 标题路径字段：显式指定 > 存在 "title" 字段
+    std::string title_field = req.title_field();
+    if (title_field.empty() && schema.Find("title") != nullptr) {
+        title_field = "title";
+    }
+    if (!title_field.empty()) {
+        const core::FieldDef* def = schema.Find(title_field);
+        if (def == nullptr ||
+            (def->type != core::FieldType::kText && def->type != core::FieldType::kKeyword)) {
+            SendErrorResponse(cntl, 400, "invalid title field: " + title_field);
+            return;
+        }
+    }
+
+    ChunkOptions opts;
+    if (req.chunk_size() > 0)
+        opts.max_chars = static_cast<size_t>(req.chunk_size());
+    if (req.chunk_overlap() >= 0)
+        opts.overlap_chars = static_cast<size_t>(req.chunk_overlap());
+    const std::string strategy = req.strategy().empty() ? "markdown" : req.strategy();
+    std::vector<MarkdownChunk> chunks;
+    if (strategy == "markdown") {
+        chunks = ChunkMarkdown(req.content(), opts);
+    } else if (strategy == "fixed") {
+        chunks = ChunkFixed(req.content(), opts);
+    } else {
+        SendErrorResponse(cntl, 400, "unknown strategy: " + strategy);
+        return;
+    }
+    if (chunks.empty()) {
+        SendErrorResponse(cntl, 400, "content produced no chunks");
+        return;
+    }
+
+    // 幂等重导：按 id 前缀删掉同名文档的旧 chunk
+    const std::string prefix = req.name() + "#chunk_";
+    std::vector<std::string> stale;
+    entry->docs.ForEachActive([&](const core::Document& doc) {
+        if (doc.id.rfind(prefix, 0) == 0)
+            stale.push_back(doc.id);
+    });
+    for (const auto& id : stale) {
+        entry->docs.Delete(id);
+    }
+
+    const core::FieldDef* vec = CollectionRegistry::VectorField(schema);
+    proto::ImportDocumentsResponse resp;
+    resp.set_ok(true);
+    for (size_t i = 0; i < chunks.size(); ++i) {
+        proto::Document body;
+        body.set_id(prefix + std::to_string(i));
+        (*body.mutable_fields())[text_field].set_s(chunks[i].text);
+        if (!title_field.empty() && !chunks[i].title_path.empty()) {
+            (*body.mutable_fields())[title_field].set_s(chunks[i].title_path);
+        }
+        for (const auto& [k, v] : req.fields()) {
+            if (!body.mutable_fields()->count(k)) {
+                (*body.mutable_fields())[k] = v;
+            }
+        }
+        core::Document doc;
+        std::string error;
+        if (!ToCoreDocument(body, &doc, &error)) {
+            resp.set_ok(false);
+            resp.set_error(error);
+            SendJsonResponse(cntl, resp, 400);
+            return;
+        }
+        // 向量 embedding 输入带标题前缀（轻量 contextual），存储正文不含前缀。
+        std::string embed_text;
+        const std::string* override_ptr = nullptr;
+        if (vec != nullptr && vec->server_embedded && vec->source_field == text_field) {
+            embed_text = chunks[i].title_path.empty()
+                             ? chunks[i].text
+                             : chunks[i].title_path + "\n" + chunks[i].text;
+            override_ptr = &embed_text;
+        }
+        int status = 0;
+        if (!ApplyServerEmbedding(*entry, &doc, override_ptr, &status, &error)) {
+            resp.set_ok(false);
+            resp.set_error(error);
+            SendJsonResponse(cntl, resp, status);
+            return;
+        }
+        auto upserted = entry->docs.Upsert(std::move(doc));
+        if (!upserted.ok) {
+            resp.set_ok(false);
+            resp.set_error(upserted.error);
+            SendJsonResponse(cntl, resp, 400);
+            return;
+        }
+        core::Document stored;
+        if (entry->docs.GetByInternal(upserted.internal_docid, &stored)) {
+            entry->IndexVector(upserted.internal_docid, stored);
+            entry->IndexText(upserted.internal_docid, stored);
+        }
+        resp.add_document_ids(prefix + std::to_string(i));
+    }
+    resp.set_chunks(static_cast<int64_t>(chunks.size()));
+    SendJsonResponse(cntl, resp);
 }
 
 void HttpApiService::HandleSearch(brpc::Controller* cntl,
@@ -625,9 +903,105 @@ void HttpApiService::HandleAnalyze(brpc::Controller* cntl,
 }
 
 // ---------------------------------------------------------------------------
+// console session：账号密码登录与自服务
+// ---------------------------------------------------------------------------
+
+void HttpApiService::HandleLogin(brpc::Controller* cntl) {
+    if (console_auth_ == nullptr || !console_auth_->enabled()) {
+        SendErrorResponse(cntl, 404, "console login not enabled");
+        return;
+    }
+    proto::LoginRequest req;
+    if (!ParseJsonBody(cntl, &req)) {
+        return;
+    }
+    auto token = console_auth_->Login(req.user(), req.password());
+    if (!token.has_value()) {
+        SendErrorResponse(cntl, 401, "invalid user or password");
+        return;
+    }
+    proto::LoginResponse resp;
+    resp.set_ok(true);
+    resp.set_token(*token);
+    resp.set_role("admin");
+    resp.set_tenant("default");
+    resp.set_expires_in(console_auth_->token_ttl_seconds());
+    SendJsonResponse(cntl, resp);
+}
+
+void HttpApiService::HandleChangePassword(brpc::Controller* cntl) {
+    if (console_auth_ == nullptr || !console_auth_->enabled()) {
+        SendErrorResponse(cntl, 404, "console login not enabled");
+        return;
+    }
+    proto::ChangePasswordRequest req;
+    if (!ParseJsonBody(cntl, &req)) {
+        return;
+    }
+    proto::GenericResponse resp;
+    resp.set_ok(console_auth_->ChangePassword(req.user(), req.old_password(), req.new_password()));
+    if (!resp.ok()) {
+        resp.set_error("invalid credentials or new password too short (>= 6)");
+    }
+    SendJsonResponse(cntl, resp, resp.ok() ? 200 : 400);
+}
+
+void HttpApiService::HandleLogout(brpc::Controller* cntl) {
+    if (console_auth_ != nullptr) {
+        const std::string* header = cntl->http_request().GetHeader("Authorization");
+        const std::string prefix = "Bearer ";
+        if (header != nullptr && header->rfind(prefix, 0) == 0) {
+            console_auth_->Logout(header->substr(prefix.size()));
+        }
+    }
+    proto::GenericResponse resp;
+    resp.set_ok(true);
+    SendJsonResponse(cntl, resp);
+}
+
+void HttpApiService::HandleWhoAmI(brpc::Controller* cntl, const auth::Principal& principal) {
+    proto::WhoAmIResponse resp;
+    resp.set_tenant(principal.tenant);
+    resp.set_role(auth::RoleToString(principal.role));
+    resp.set_key_id(principal.key_id);
+    if (principal.key_id == "anonymous") {
+        resp.set_auth_type("anonymous");
+    } else if (principal.key_id.rfind("session:", 0) == 0) {
+        resp.set_auth_type("session");
+    } else {
+        resp.set_auth_type("api_key");
+    }
+    SendJsonResponse(cntl, resp);
+}
+
+// ---------------------------------------------------------------------------
 // admin：租户与 key（DESIGN.md §10.5）
 // ---------------------------------------------------------------------------
 
+void HttpApiService::HandleCreateTenant(brpc::Controller* cntl, const auth::Principal& principal) {
+    if (!is_admin(principal)) {
+        return SendErrorResponse(cntl, 403, "admin role required");
+    }
+    proto::AdminCreateTenantRequest req;
+    if (!ParseJsonBody(cntl, &req)) {
+        return;
+    }
+    if (!core::IsValidResourceName(req.name())) {
+        SendErrorResponse(cntl, 400, "tenant name must match [A-Za-z0-9_-]{1,64}");
+        return;
+    }
+    if (context_->HasTenant(req.name())) {
+        SendErrorResponse(cntl, 409, "tenant exists: " + req.name());
+        return;
+    }
+    if (context_->Registry(req.name()) == nullptr) {
+        SendErrorResponse(cntl, 400, "invalid tenant: " + req.name());
+        return;
+    }
+    proto::GenericResponse resp;
+    resp.set_ok(true);
+    SendJsonResponse(cntl, resp);
+}
 void HttpApiService::HandleListTenants(brpc::Controller* cntl, const auth::Principal& principal) {
     if (!is_admin(principal)) {
         return SendErrorResponse(cntl, 403, "admin role required");

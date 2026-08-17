@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include "cpp/pl/minisearch/auth/console_auth.h"
 #include "cpp/pl/minisearch/auth/keystore.h"
 #include "cpp/pl/minisearch/server/context.h"
 #include "cpp/pl/minisearch/server/http_api.h"
@@ -55,9 +56,16 @@ protected:
         if (auth_on_) {
             admin_key_ = keys_->BootstrapIfNeeded(tmp_dir_).value();
         }
+        // console auth: bootstrap admin/changeme for console tests
+        pl::minisearch::auth::ConsoleAuth::Options console_opts;
+        console_opts.path = tmp_dir_ + "/console_users.json";
+        console_opts.bootstrap_user = "admin";
+        console_opts.bootstrap_password = "changeme";
+        console_auth_ =
+            std::make_unique<pl::minisearch::auth::ConsoleAuth>(std::move(console_opts));
         context_ = std::make_unique<pl::minisearch::server::TenantContext>("", "Flat");
         service_ = std::make_unique<pl::minisearch::server::HttpApiService>(
-            context_.get(), keys_.get(), auth_on_, nullptr, nullptr);
+            context_.get(), keys_.get(), auth_on_, nullptr, nullptr, console_auth_.get(), "");
         ASSERT_EQ(0,
                   server_.AddService(service_.get(),
                                      brpc::SERVER_DOESNT_OWN_SERVICE,
@@ -142,6 +150,7 @@ protected:
     std::string base_;
     std::string tmp_dir_;
     std::unique_ptr<pl::minisearch::auth::KeyStore> keys_;
+    std::unique_ptr<pl::minisearch::auth::ConsoleAuth> console_auth_;
     std::unique_ptr<pl::minisearch::server::TenantContext> context_;
     std::unique_ptr<pl::minisearch::server::HttpApiService> service_;
     bool auth_on_;
@@ -487,6 +496,151 @@ TEST_F(HttpApiTest, AdminStatsEndpoint) {
     EXPECT_EQ(stats.status, 200);
     EXPECT_NE(stats.body.find("\"total_collections\":1"), std::string::npos) << stats.body;
     EXPECT_NE(stats.body.find("\"total_active_documents\":1"), std::string::npos) << stats.body;
+}
+
+// ---------------------------------------------------------------------------
+// Console session login / whoami / logout / change password
+// (auth_on=true so Authenticate actually checks Bearer tokens)
+// ---------------------------------------------------------------------------
+
+TEST_F(AuthApiTest, ConsoleLoginAndSession) {
+    // login with bootstrap credentials
+    auto login = Request("POST", "/api/v2/auth/login", R"({"user":"admin","password":"changeme"})");
+    ASSERT_EQ(login.status, 200);
+    EXPECT_NE(login.body.find("\"ok\":true"), std::string::npos) << login.body;
+    EXPECT_NE(login.body.find("\"token\":\"mss_"), std::string::npos) << login.body;
+
+    const std::string session_token = extract(login.body, "token");
+    ASSERT_FALSE(session_token.empty());
+
+    // whoami with session token
+    auto whoami = Request("GET", "/api/v2/auth/whoami", "", session_token);
+    EXPECT_EQ(whoami.status, 200);
+    EXPECT_NE(whoami.body.find("\"auth_type\":\"session\""), std::string::npos) << whoami.body;
+    EXPECT_NE(whoami.body.find("\"role\":\"admin\""), std::string::npos) << whoami.body;
+
+    // session token works for API calls
+    auto collections = Request("GET", "/api/v2/collections", "", session_token);
+    EXPECT_EQ(collections.status, 200);
+
+    // logout
+    auto logout = Request("POST", "/api/v2/auth/logout", "", session_token);
+    EXPECT_EQ(logout.status, 200);
+}
+
+TEST_F(AuthApiTest, ConsoleLoginBadPassword) {
+    auto bad = Request("POST", "/api/v2/auth/login", R"({"user":"admin","password":"wrong"})");
+    EXPECT_EQ(bad.status, 401);
+}
+
+TEST_F(AuthApiTest, ConsoleChangePassword) {
+    auto login = Request("POST", "/api/v2/auth/login", R"({"user":"admin","password":"changeme"})");
+    ASSERT_EQ(login.status, 200);
+
+    // change password
+    auto change =
+        Request("POST",
+                "/api/v2/auth/password",
+                R"({"user":"admin","old_password":"changeme","new_password":"newpass123"})");
+    EXPECT_EQ(change.status, 200);
+    EXPECT_NE(change.body.find("\"ok\":true"), std::string::npos) << change.body;
+
+    // old password fails
+    auto old_login =
+        Request("POST", "/api/v2/auth/login", R"({"user":"admin","password":"changeme"})");
+    EXPECT_EQ(old_login.status, 401);
+
+    // new password works
+    auto new_login =
+        Request("POST", "/api/v2/auth/login", R"({"user":"admin","password":"newpass123"})");
+    EXPECT_EQ(new_login.status, 200);
+
+    // change back for other tests
+    Request("POST",
+            "/api/v2/auth/password",
+            R"({"user":"admin","old_password":"newpass123","new_password":"changeme"})");
+}
+
+// ---------------------------------------------------------------------------
+// Create tenant + List documents
+// ---------------------------------------------------------------------------
+
+TEST_F(HttpApiTest, CreateTenantAndListDocuments) {
+    // create tenant
+    auto create_t = Request("POST", "/api/v2/admin/tenants", R"({"name":"test-tenant"})");
+    EXPECT_EQ(create_t.status, 200);
+    EXPECT_NE(create_t.body.find("\"ok\":true"), std::string::npos) << create_t.body;
+
+    // duplicate create -> 409
+    auto dup = Request("POST", "/api/v2/admin/tenants", R"({"name":"test-tenant"})");
+    EXPECT_EQ(dup.status, 409);
+
+    // create collection in test-tenant
+    auto create_c =
+        Request("POST", "/api/v2/collections?tenant=test-tenant", collection_body("kb"));
+    EXPECT_EQ(create_c.status, 200);
+
+    // upsert a document
+    EXPECT_EQ(Request("PUT", "/api/v2/kb/documents/doc1?tenant=test-tenant", doc1).status, 200);
+
+    // list documents
+    auto list = Request("GET", "/api/v2/kb/documents?tenant=test-tenant");
+    EXPECT_EQ(list.status, 200);
+    EXPECT_NE(list.body.find("\"total\":1"), std::string::npos) << list.body;
+    EXPECT_NE(list.body.find("doc1"), std::string::npos) << list.body;
+
+    // list with pagination
+    auto page = Request("GET", "/api/v2/kb/documents?tenant=test-tenant&offset=0&limit=10");
+    EXPECT_EQ(page.status, 200);
+    EXPECT_NE(page.body.find("\"total\":1"), std::string::npos) << page.body;
+}
+
+// ---------------------------------------------------------------------------
+// Markdown import
+// ---------------------------------------------------------------------------
+
+TEST_F(HttpApiTest, MarkdownImport) {
+    ASSERT_EQ(Request("POST", "/api/v2/collections", collection_body("kb")).status, 200);
+
+    // Markdown with headings; the collection schema has "title" (text) field.
+    // We use title as the text_field for chunk content.
+    // Note: newlines and quotes in JSON string must be escaped.
+    std::string md = "# Heading 1\\n\\nThis is the first paragraph.\\n\\n## Subsection\\n\\nSecond "
+                     "paragraph here.\\n\\n";
+    auto import = Request("POST",
+                          "/api/v2/kb/documents:import",
+                          R"({"name":"test","content":")" + md + R"(","text_field":"title"})");
+    // The collection "kb" has vec with mode=client, so no server embedding needed.
+    EXPECT_EQ(import.status, 200);
+    EXPECT_NE(import.body.find("\"ok\":true"), std::string::npos) << import.body;
+    EXPECT_NE(import.body.find("\"chunks\":"), std::string::npos) << import.body;
+
+    // verify chunks are in document list
+    auto list = Request("GET", "/api/v2/kb/documents");
+    EXPECT_NE(list.body.find("test#chunk_"), std::string::npos) << list.body;
+
+    // re-import (idempotent): should replace, not duplicate
+    auto reimport = Request("POST",
+                            "/api/v2/kb/documents:import",
+                            R"({"name":"test","content":")" + md + R"(","text_field":"title"})");
+    EXPECT_EQ(reimport.status, 200);
+
+    // count should not double
+    auto list2 = Request("GET", "/api/v2/kb/documents");
+    // extract total
+    const std::string total_key = "\"total\":";
+    size_t pos1 = list.body.find(total_key);
+    size_t pos2 = list2.body.find(total_key);
+    if (pos1 != std::string::npos && pos2 != std::string::npos) {
+        // parse the numbers
+        size_t start1 = pos1 + total_key.size();
+        size_t end1 = list.body.find_first_of(",}", start1);
+        size_t start2 = pos2 + total_key.size();
+        size_t end2 = list2.body.find_first_of(",}", start2);
+        std::string total1 = list.body.substr(start1, end1 - start1);
+        std::string total2 = list2.body.substr(start2, end2 - start2);
+        EXPECT_EQ(total1, total2) << "re-import should be idempotent";
+    }
 }
 
 } // namespace

@@ -38,6 +38,19 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "console_auth",
+    srcs = ["console_auth.cpp"],
+    hdrs = ["console_auth.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":keystore",
+        "@brpc",
+        "@openssl//:crypto",
+    ],
+)
+
 cc_test(
     name = "keystore_test",
     srcs = ["ut/keystore_test.cc"],
@@ -45,6 +58,17 @@ cc_test(
     linkopts = LINKOPTS,
     deps = [
         ":keystore",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "console_auth_test",
+    srcs = ["ut/console_auth_test.cc"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":console_auth",
         "@googletest//:gtest_main",
     ],
 )

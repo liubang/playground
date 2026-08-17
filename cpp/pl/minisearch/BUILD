@@ -60,6 +60,7 @@ cc_binary(
     name = "minisearch_server",
     srcs = ["minisearch_server.cpp"],
     copts = COPTS,
+    data = glob(["web/**"]),
     linkopts = LINKOPTS,
     deps = [
         ":rerank_client",

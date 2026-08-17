@@ -17,6 +17,7 @@
 
 #include "cpp/pl/minisearch/core/collection.h"
 
+#include <algorithm>
 #include <chrono>
 
 namespace pl::minisearch::core {
@@ -152,6 +153,21 @@ void Collection::ForEachActive(const std::function<void(const Document&)>& fn) c
             fn(doc);
         }
     }
+}
+
+std::vector<Document> Collection::ListDocuments(size_t offset, size_t limit, size_t* total) const {
+    std::vector<Document> all;
+    ForEachActive([&](const Document& doc) { all.push_back(doc); });
+    std::sort(all.begin(), all.end(), [](const Document& a, const Document& b) {
+        return a.internal_docid < b.internal_docid;
+    });
+    *total = all.size();
+    if (offset >= all.size()) {
+        return {};
+    }
+    const size_t end = std::min(all.size(), offset + limit);
+    return {all.begin() + static_cast<std::ptrdiff_t>(offset),
+            all.begin() + static_cast<std::ptrdiff_t>(end)};
 }
 
 size_t Collection::PendingWrites() const {

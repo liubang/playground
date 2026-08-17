@@ -45,6 +45,9 @@ public:
     // 线程），数据目录删除。注册表中没有该租户时返回 false。
     bool DropTenant(const std::string& tenant);
 
+    // 租户是否已存在（注册表中有 registry）。
+    bool HasTenant(const std::string& tenant) const;
+
     struct TenantInfo {
         std::string name;
         size_t collections = 0;

@@ -76,6 +76,10 @@ public:
     // held for the duration of the callback.
     void ForEachActive(const std::function<void(const Document&)>& fn) const;
 
+    // 活跃文档的分页快照（按 internal docid 升序，console 文档列表）。
+    // total 返回活跃文档总数（不受分页影响）。
+    std::vector<Document> ListDocuments(size_t offset, size_t limit, size_t* total) const;
+
     // Number of writes (upserts/deletes) since the last MarkCheckpointed.
     // Checkpoint scheduling input.
     size_t PendingWrites() const;

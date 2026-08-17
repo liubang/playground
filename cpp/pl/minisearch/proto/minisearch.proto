@@ -208,6 +208,67 @@ message AdminListKeysResponse {
   repeated AdminKeyEntry keys = 1;
 }
 
+// 显式创建租户（console 管理面）
+message AdminCreateTenantRequest {
+  string name = 1;  // [A-Za-z0-9_-]{1,64}
+}
+
+// 文档分页列表（console 文档管理）。向量字段不出现在列表响应中。
+message ListDocumentsResponse {
+  repeated Document documents = 1;
+  int64 total = 2;  // 活跃文档总数（不受分页影响）
+}
+
+// markdown 批量导入：服务端切分 + 逐 chunk upsert（含 server-side embedding）。
+// chunk 文档 id 为 "<name>#chunk_<i>"；重导同名文档先按该前缀删除旧 chunk，
+// 保证幂等。
+message ImportDocumentsRequest {
+  string name = 1;      // 源文档名（chunk id 前缀，不得包含 '#'）
+  string content = 2;   // markdown 全文
+  string strategy = 3;  // "markdown"（默认，标题感知）| "fixed"（定长+overlap）
+  int32 chunk_size = 4;     // 目标 chunk 字节数，<=0 取默认 1000
+  int32 chunk_overlap = 5;  // 二级切分重叠字节数，<0 取默认 100
+  string text_field = 6;    // 正文写入的 text 字段；空 = 自动探测（body/content/首个 text 字段）
+  string title_field = 7;   // 标题路径写入字段；空 = 自动探测（schema 含 "title" 则写入）
+  map<string, FieldValue> fields = 8;  // 合并进每个 chunk 的静态字段
+}
+
+message ImportDocumentsResponse {
+  bool ok = 1;
+  string error = 2;
+  int64 chunks = 3;
+  repeated string document_ids = 4;
+}
+
+// console 账号密码登录（session token，内存态，TTL 有限）
+message LoginRequest {
+  string user = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  bool ok = 1;
+  string error = 2;
+  string token = 3;       // Bearer token（"mss_" 前缀）
+  string role = 4;
+  string tenant = 5;
+  int64 expires_in = 6;   // seconds
+}
+
+message WhoAmIResponse {
+  string tenant = 1;
+  string role = 2;
+  string key_id = 3;
+  string auth_type = 4;  // "session" | "api_key" | "anonymous"
+}
+
+// 修改 console 账号密码（凭旧密码自助，无需已有 session）
+message ChangePasswordRequest {
+  string user = 1;
+  string old_password = 2;
+  string new_password = 3;
+}
+
 service MiniSearchHttpService {
   rpc default_method(HttpRequest) returns (HttpResponse);
 }
