@@ -829,6 +829,24 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "@@apple_rules_lint+//lint:extensions.bzl%linter": {
+      "general": {
+        "bzlTransitiveDigest": "g7izj5kLCmsajh8IospHh4ZQ35dyM0FIrA8D4HapAsM=",
+        "usagesDigest": "4RWlIKR/sSQ9MqPQRCROVLeGPbvTKmkbEpxkI3mbaCI=",
+        "recordedFileInputs": {},
+        "recordedDirentsInputs": {},
+        "envVariables": {},
+        "generatedRepoSpecs": {
+          "apple_linters": {
+            "repoRuleId": "@@apple_rules_lint+//lint/private:register_linters.bzl%register_linters",
+            "attributes": {
+              "linters": {}
+            }
+          }
+        },
+        "recordedRepoMappingEntries": []
+      }
+    },
     "@@aspect_tools_telemetry+//:extension.bzl%telemetry": {
       "general": {
         "bzlTransitiveDigest": "cl5A2O84vDL6Tt+Qga8FCj1DUDGqn+e7ly5rZ+4xvcc=",
@@ -1333,6 +1351,68 @@
           }
         },
         "recordedRepoMappingEntries": []
+      }
+    },
+    "@@rules_proto_grpc_java+//:module_extensions.bzl%download_plugins": {
+      "general": {
+        "bzlTransitiveDigest": "teyVQFklxa/pPYXLKtoOGR74nq2W6ca1kM8doXXAOnA=",
+        "usagesDigest": "QLMlNNEIKA7pTDNTyvjS58dkCcrTTmUgPwGYxofkFyk=",
+        "recordedFileInputs": {},
+        "recordedDirentsInputs": {},
+        "envVariables": {},
+        "generatedRepoSpecs": {
+          "grpc_java_plugin_darwin_arm64": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
+            "attributes": {
+              "executable": true,
+              "sha256": "7f286de20e82ea674a5cdf59b6012f056a6d0ee57eb2a85eda0cec4bc3db4761",
+              "url": "https://repo1.maven.org/maven2/io/grpc/protoc-gen-grpc-java/1.74.0/protoc-gen-grpc-java-1.74.0-osx-aarch_64.exe"
+            }
+          },
+          "grpc_java_plugin_darwin_x86_64": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
+            "attributes": {
+              "executable": true,
+              "sha256": "7f286de20e82ea674a5cdf59b6012f056a6d0ee57eb2a85eda0cec4bc3db4761",
+              "url": "https://repo1.maven.org/maven2/io/grpc/protoc-gen-grpc-java/1.74.0/protoc-gen-grpc-java-1.74.0-osx-x86_64.exe"
+            }
+          },
+          "grpc_java_plugin_linux_arm64": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
+            "attributes": {
+              "executable": true,
+              "sha256": "b4d0525c624e38efbec104d027a555e7a256a96eaf3e409972777d659a4b1eb6",
+              "url": "https://repo1.maven.org/maven2/io/grpc/protoc-gen-grpc-java/1.74.0/protoc-gen-grpc-java-1.74.0-linux-aarch_64.exe"
+            }
+          },
+          "grpc_java_plugin_linux_x86_64": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
+            "attributes": {
+              "executable": true,
+              "sha256": "bb6f37cbacea579cba9916d07b05b15beaaf9abdea271323fabdea4b6568f18c",
+              "url": "https://repo1.maven.org/maven2/io/grpc/protoc-gen-grpc-java/1.74.0/protoc-gen-grpc-java-1.74.0-linux-x86_64.exe"
+            }
+          },
+          "grpc_java_plugin_windows_x86_64": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
+            "attributes": {
+              "executable": true,
+              "sha256": "6c265e8cefbb2158b044807af1188ad303d35e973f562209f337f93a8198fa37",
+              "url": "https://repo1.maven.org/maven2/io/grpc/protoc-gen-grpc-java/1.74.0/protoc-gen-grpc-java-1.74.0-windows-x86_64.exe"
+            }
+          }
+        },
+        "moduleExtensionMetadata": {
+          "useAllRepos": "REGULAR",
+          "reproducible": false
+        },
+        "recordedRepoMappingEntries": [
+          [
+            "rules_proto_grpc_java+",
+            "bazel_tools",
+            "bazel_tools"
+          ]
+        ]
       }
     },
     "@@rules_python+//python/uv:uv.bzl%uv": {
