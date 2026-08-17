@@ -63,6 +63,12 @@ if [[ -n "${PYBIN}" && -d "${VENV_BIN}" ]]; then
     ln -s "$(python3 -c "import os,sys;print(os.path.relpath(sys.argv[1],sys.argv[2]))" "${PYBIN}" "${VENV_BIN}")" \
         "${VENV_BIN}/python3"
 fi
+# Console 静态文件：源码 cpp/pl/minisearch/web/ → 包根 web/
+if [[ -d "${WS}/cpp/pl/minisearch/web" ]]; then
+    mkdir -p "${PKG}/web"
+    cp -RL "${WS}/cpp/pl/minisearch/web/"* "${PKG}/web/"
+fi
+
 cp "$(realpath "${MAIN}/cpp/pl/minisearch/packaging/control")" "${PKG}/control"
 cp "$(realpath "${MAIN}/cpp/pl/minisearch/packaging/minisearch.ini")" "${PKG}/conf/minisearch.ini"
 chmod +x "${PKG}/control" "${PKG}/bin/minisearch" "${PKG}/bin/embedding"
