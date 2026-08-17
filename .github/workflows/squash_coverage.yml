@@ -24,14 +24,25 @@ jobs:
       - name: squash history into single commit
         run: |
           set -euo pipefail
-          # checkout --orphan 后 index 清空、工作树保留（即当前全部覆盖报告），
-          # 直接 add -A 重建单 commit 即可，无需移动文件。
-          git checkout --orphan squash-tmp
-          git add -A
-          git -c user.name="liubang" -c user.email="it.liubang@gmail.com" \
-            commit -m "coverage: squash history" --quiet
-          git branch -M squash-tmp coverage
-          # 覆盖式推送（该分支只存 CI 产物，历史回退无副作用；认证来自
-          # actions/checkout 注入的 persistent credentials）
-          git push --force origin coverage
-          git log --oneline -1
+          # 并发防护：4 个 coverage deploy job（main push 触发，无固定时间）与本次
+          # cron 可能同时写 coverage 分支。用 --force-with-lease 检测并发——远程头
+          # 变化则放弃本次、重新基于最新远程重建再试，避免覆盖刚部署的报告。
+          # 孤儿 commit 保证历史恒定 1 条。
+          for i in 1 2 3; do
+            git fetch -q origin coverage
+            git branch -D squash-tmp >/dev/null 2>&1 || true
+            git checkout -q --orphan squash-tmp
+            find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+            git checkout -q origin/coverage -- .
+            git add -A
+            git -c user.name="liubang" -c user.email="it.liubang@gmail.com" \
+              commit -q -m "coverage: squash history"
+            if git push --force-with-lease origin squash-tmp:coverage; then
+              echo "squashed coverage to $(git rev-parse --short HEAD)"
+              exit 0
+            fi
+            echo "::warning::push rejected (attempt $i): coverage deploy may be racing; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::failed to squash coverage branch after 3 attempts"
+          exit 1
