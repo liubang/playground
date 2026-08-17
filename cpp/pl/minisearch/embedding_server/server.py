@@ -18,14 +18,22 @@
 # Created: 2026/05/14 16:21
 
 """
-MLX-based Embedding Server — OpenAI-compatible /v1/embeddings API.
+MLX-based Embedding & Rerank Server.
 
-This server loads a Transformer embedding model (default: BAAI/bge-m3) using
-Apple MLX for inference on Apple Silicon, and exposes an HTTP endpoint that
-is wire-compatible with the OpenAI Embeddings API.
+Loads Transformer models (default: BAAI/bge-m3 for embeddings, optionally
+BAAI/bge-reranker-v2-m3 for reranking) using Apple MLX for inference on
+Apple Silicon, and exposes:
+
+  - POST /v1/embeddings  — wire-compatible with the OpenAI Embeddings API
+  - POST /v1/rerank      — Cohere-style rerank API
+
+Both BERT-style and (XLM-)RoBERTa-style checkpoints are supported
+(weight-prefix normalization, optional token-type embeddings, position-id
+offset, pooling mode read from the sentence-transformers 1_Pooling config).
 
 Usage:
-    python server.py [--model BAAI/bge-m3] [--host 0.0.0.0] [--port 8000] [--max-length 512]
+    python server.py [--model BAAI/bge-m3] [--rerank-model BAAI/bge-reranker-v2-m3] \
+        [--host 0.0.0.0] [--port 8000] [--max-length 512]
 """
 
 from __future__ import annotations
@@ -125,13 +133,49 @@ class EmbeddingResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Pydantic request / response models (Cohere-style rerank)
+# ---------------------------------------------------------------------------
+
+
+class RerankRequest(BaseModel):
+    query: str = Field(..., description="Query text")
+    documents: list[str] = Field(..., description="Candidate documents")
+    model: str = Field(
+        default="bge-reranker", description="Model identifier (informational)"
+    )
+    top_n: int | None = Field(default=None, description="Return at most top_n results")
+
+
+class RerankResultItem(BaseModel):
+    index: int
+    relevance_score: float
+
+
+class RerankResponse(BaseModel):
+    results: list[RerankResultItem]
+    model: str
+
+
+# ---------------------------------------------------------------------------
 # MLX Transformer Embedding Model
 # ---------------------------------------------------------------------------
 
 
-class MLXEmbeddingModel:
-    """Loads a HuggingFace transformer model into MLX and runs mean-pooling
-    inference entirely on the Apple GPU / ANE via MLX."""
+# Checkpoint key prefixes stripped at load time so that BERT-style and
+# (XLM-)RoBERTa-style checkpoints share one lookup scheme.
+_WEIGHT_PREFIXES = ("roberta.", "bert.", "model.", "transformer.")
+
+
+def _normalize_key(key: str) -> str:
+    for prefix in _WEIGHT_PREFIXES:
+        if key.startswith(prefix):
+            return key[len(prefix) :]
+    return key
+
+
+class MLXTransformerEncoder:
+    """Loads a HuggingFace BERT / (XLM-)RoBERTa checkpoint into MLX and runs
+    the encoder forward pass entirely on the Apple GPU / ANE via MLX."""
 
     def __init__(self, model_name_or_path: str, max_length: int = 512):
         self.max_length = max_length
@@ -140,6 +184,7 @@ class MLXEmbeddingModel:
         # Download model if needed
         logger.info("Loading model: %s", model_name_or_path)
         local_path = self._resolve_model_path(model_name_or_path)
+        self.local_path = local_path
 
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(local_path)
@@ -150,12 +195,20 @@ class MLXEmbeddingModel:
         self.num_attention_heads = config.num_attention_heads
         self.num_hidden_layers = config.num_hidden_layers
         self.layer_norm_eps = getattr(config, "layer_norm_eps", 1e-5)
+        self.model_type = getattr(config, "model_type", "bert")
+        # (XLM-)RoBERTa reserves position ids [0, padding_idx] for padding;
+        # real positions start at padding_idx + 1. BERT starts at 0.
+        self.position_offset = 0
+        if self.model_type in ("xlm-roberta", "roberta"):
+            self.position_offset = getattr(config, "pad_token_id", 1) + 1
 
         # Load weights into MLX arrays
         self.weights = self._load_weights(local_path)
         logger.info(
-            "Model loaded: hidden_size=%d, num_heads=%d, num_layers=%d, "
+            "Model loaded: %s type=%s hidden_size=%d, num_heads=%d, num_layers=%d, "
             "max_length=%d, weights=%d tensors",
+            model_name_or_path,
+            self.model_type,
             self.hidden_size,
             self.num_attention_heads,
             self.num_hidden_layers,
@@ -191,13 +244,13 @@ class MLXEmbeddingModel:
             for sf_file in sf_files:
                 with safe_open(str(sf_file), framework="numpy") as f:
                     for key in f.keys():
-                        weights[key] = mx.array(f.get_tensor(key))
+                        weights[_normalize_key(key)] = mx.array(f.get_tensor(key))
             return weights
 
         # --- Strategy 2: pytorch_model.bin (torch.save format) ---
         bin_files = sorted(model_path.glob("pytorch_model*.bin"))
         if bin_files:
-            weights = MLXEmbeddingModel._load_pytorch_bin(bin_files)
+            weights = MLXTransformerEncoder._load_pytorch_bin(bin_files)
             if weights:
                 return weights
 
@@ -362,7 +415,7 @@ class MLXEmbeddingModel:
                         arr = arr[offset_elements : offset_elements + total_elements]
                         tensor = arr.reshape(size)
 
-                    weights[param_name] = mx.array(tensor)
+                    weights[_normalize_key(param_name)] = mx.array(tensor)
 
         return weights
 
@@ -371,6 +424,9 @@ class MLXEmbeddingModel:
         if name not in self.weights:
             raise KeyError(f"Weight '{name}' not found in model")
         return self.weights[name]
+
+    def _has_weight(self, name: str) -> bool:
+        return name in self.weights
 
     def _layer_norm(
         self, x: mx.array, weight_key: str, bias_key: str, eps: float | None = None
@@ -462,18 +518,23 @@ class MLXEmbeddingModel:
         )
         return hidden
 
-    def _forward(self, input_ids: mx.array, attention_mask: mx.array) -> mx.array:
-        """Full forward pass through the BERT-like encoder."""
+    def forward(self, input_ids: mx.array, attention_mask: mx.array) -> mx.array:
+        """Full forward pass through the BERT / (XLM-)RoBERTa encoder."""
         # Embeddings
         word_emb = self._get_weight("embeddings.word_embeddings.weight")[input_ids]
-        pos_ids = mx.arange(input_ids.shape[1])[None, :]
+        pos_ids = mx.arange(input_ids.shape[1])[None, :] + self.position_offset
         pos_emb = self._get_weight("embeddings.position_embeddings.weight")[pos_ids]
-        tok_type_ids = mx.zeros_like(input_ids)
-        tok_emb = self._get_weight("embeddings.token_type_embeddings.weight")[
-            tok_type_ids
-        ]
 
-        hidden = word_emb + pos_emb + tok_emb
+        hidden = word_emb + pos_emb
+        # RoBERTa-family checkpoints have no token-type embeddings.
+        if self._has_weight("embeddings.token_type_embeddings.weight"):
+            tok_type_ids = mx.zeros_like(input_ids)
+            hidden = (
+                hidden
+                + self._get_weight("embeddings.token_type_embeddings.weight")[
+                    tok_type_ids
+                ]
+            )
         hidden = self._layer_norm(
             hidden,
             "embeddings.LayerNorm.weight",
@@ -487,26 +548,81 @@ class MLXEmbeddingModel:
 
         return hidden
 
-    def encode(self, texts: list[str]) -> list[list[float]]:
-        """Tokenize, run forward pass, mean-pool, L2-normalize, return embeddings."""
-        encoded = self.tokenizer(
-            texts,
-            padding=True,
-            truncation=True,
-            max_length=self.max_length,
-            return_tensors="np",
-        )
-
+    def tokenize(
+        self,
+        texts: list[str],
+        text_pair: list[str] | None = None,
+    ) -> tuple[mx.array, mx.array]:
+        if text_pair is not None:
+            encoded = self.tokenizer(
+                texts,
+                text_pair,
+                padding=True,
+                truncation="only_second",
+                max_length=self.max_length,
+                return_tensors="np",
+            )
+        else:
+            encoded = self.tokenizer(
+                texts,
+                padding=True,
+                truncation=True,
+                max_length=self.max_length,
+                return_tensors="np",
+            )
         input_ids = mx.array(encoded["input_ids"])
         attention_mask = mx.array(encoded["attention_mask"]).astype(mx.float32)
+        return input_ids, attention_mask
 
-        hidden = self._forward(input_ids, attention_mask)
 
-        # Mean pooling: average over non-padding tokens
-        mask_expanded = attention_mask[:, :, None]
-        summed = mx.sum(hidden * mask_expanded, axis=1)
-        counts = mx.sum(mask_expanded, axis=1)
-        pooled = summed / mx.maximum(counts, mx.array(1e-9))
+class MLXEmbeddingModel:
+    """Text embedding model: encoder forward + pooling + L2 normalize.
+
+    Pooling mode follows the sentence-transformers ``1_Pooling/config.json``
+    shipped with the checkpoint when present (BGE family uses CLS);
+    otherwise falls back to mean pooling.
+    """
+
+    def __init__(self, model_name_or_path: str, max_length: int = 512):
+        self.encoder = MLXTransformerEncoder(model_name_or_path, max_length)
+        self.model_name = model_name_or_path
+        self.max_length = max_length
+        self.pooling = self._detect_pooling(self.encoder.local_path)
+        logger.info("Embedding pooling mode: %s", self.pooling)
+
+    @staticmethod
+    def _detect_pooling(local_path: str) -> str:
+        import json
+
+        pooling_cfg = Path(local_path) / "1_Pooling" / "config.json"
+        if pooling_cfg.is_file():
+            try:
+                cfg = json.loads(pooling_cfg.read_text())
+                if cfg.get("pooling_mode_cls_token"):
+                    return "cls"
+                if cfg.get("pooling_mode_mean_tokens"):
+                    return "mean"
+            except (ValueError, OSError):
+                pass
+        return "mean"
+
+    @property
+    def tokenizer(self):
+        return self.encoder.tokenizer
+
+    def encode(self, texts: list[str]) -> list[list[float]]:
+        """Tokenize, run forward pass, pool, L2-normalize, return embeddings."""
+        input_ids, attention_mask = self.encoder.tokenize(texts)
+        hidden = self.encoder.forward(input_ids, attention_mask)
+
+        if self.pooling == "cls":
+            pooled = hidden[:, 0, :]
+        else:
+            # Mean pooling: average over non-padding tokens
+            mask_expanded = attention_mask[:, :, None]
+            summed = mx.sum(hidden * mask_expanded, axis=1)
+            counts = mx.sum(mask_expanded, axis=1)
+            pooled = summed / mx.maximum(counts, mx.array(1e-9))
 
         # L2 normalize
         norms = mx.sqrt(mx.sum(pooled * pooled, axis=-1, keepdims=True))
@@ -516,17 +632,67 @@ class MLXEmbeddingModel:
         return np.array(normalized).tolist()
 
 
+class MLXRerankModel:
+    """Cross-encoder reranker: scores (query, document) pairs with the
+    sequence-classification head over the [CLS] representation."""
+
+    _MAX_BATCH = 32  # cap pair batch to bound memory
+
+    def __init__(self, model_name_or_path: str, max_length: int = 512):
+        self.encoder = MLXTransformerEncoder(model_name_or_path, max_length)
+        self.model_name = model_name_or_path
+        self.max_length = max_length
+
+    def _classify(self, cls_vec: mx.array) -> mx.array:
+        w = self.encoder.weights
+        if "classifier.dense.weight" in w:
+            # (XLM-)RoBERTa sequence-classification head: dense -> tanh -> out_proj
+            h = cls_vec @ w["classifier.dense.weight"].T
+            if "classifier.dense.bias" in w:
+                h = h + w["classifier.dense.bias"]
+            h = mx.tanh(h)
+            logit = h @ w["classifier.out_proj.weight"].T
+            if "classifier.out_proj.bias" in w:
+                logit = logit + w["classifier.out_proj.bias"]
+            return logit.reshape(-1)
+        # BERT sequence-classification head: single linear
+        logit = cls_vec @ w["classifier.weight"].T
+        if "classifier.bias" in w:
+            logit = logit + w["classifier.bias"]
+        return logit.reshape(-1)
+
+    def score(self, query: str, documents: list[str]) -> list[float]:
+        """Return a relevance score in [0, 1] for each document."""
+        scores: list[float] = []
+        for start in range(0, len(documents), self._MAX_BATCH):
+            batch = documents[start : start + self._MAX_BATCH]
+            input_ids, attention_mask = self.encoder.tokenize(
+                [query] * len(batch), batch
+            )
+            hidden = self.encoder.forward(input_ids, attention_mask)
+            logits = self._classify(hidden[:, 0, :])
+            probs = 1.0 / (1.0 + mx.exp(-logits))
+            mx.eval(probs)
+            scores.extend(np.array(probs).tolist())
+        return scores
+
+
 # ---------------------------------------------------------------------------
 # FastAPI application
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="MLX Embedding Server", version="1.0.0")
+app = FastAPI(title="MLX Embedding & Rerank Server", version="2.0.0")
 model: MLXEmbeddingModel | None = None
+rerank_model: MLXRerankModel | None = None
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": model.model_name if model else None}
+    return {
+        "status": "ok",
+        "model": model.model_name if model else None,
+        "rerank_model": rerank_model.model_name if rerank_model else None,
+    }
 
 
 @app.post("/v1/embeddings", response_model=EmbeddingResponse)
@@ -559,6 +725,33 @@ async def create_embeddings(request: EmbeddingRequest):
     )
 
 
+@app.post("/v1/rerank", response_model=RerankResponse)
+async def create_rerank(request: RerankRequest):
+    if rerank_model is None:
+        raise HTTPException(status_code=503, detail="Rerank model not loaded")
+    if not request.documents:
+        return RerankResponse(results=[], model=request.model)
+
+    t0 = time.perf_counter()
+    scores = rerank_model.score(request.query, request.documents)
+    elapsed = time.perf_counter() - t0
+
+    order = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    if request.top_n is not None and request.top_n > 0:
+        order = order[: request.top_n]
+
+    logger.info(
+        "Reranked %d document(s) in %.3fs (top score %.4f)",
+        len(request.documents),
+        elapsed,
+        scores[order[0]] if order else 0.0,
+    )
+    return RerankResponse(
+        results=[RerankResultItem(index=i, relevance_score=scores[i]) for i in order],
+        model=request.model,
+    )
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
@@ -570,7 +763,14 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="BAAI/bge-m3",
-        help="HuggingFace model name or local path",
+        help="HuggingFace embedding model name or local path",
+    )
+    parser.add_argument(
+        "--rerank-model",
+        type=str,
+        default="",
+        help="HuggingFace cross-encoder rerank model (e.g. BAAI/bge-reranker-v2-m3); "
+        "empty disables the /v1/rerank endpoint",
     )
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Bind host")
     parser.add_argument("--port", type=int, default=8000, help="Bind port")
@@ -582,8 +782,10 @@ def parse_args() -> argparse.Namespace:
 
 def main():
     args = parse_args()
-    global model
+    global model, rerank_model
     model = MLXEmbeddingModel(args.model, max_length=args.max_length)
+    if args.rerank_model:
+        rerank_model = MLXRerankModel(args.rerank_model, max_length=args.max_length)
     logger.info("Starting server on %s:%d", args.host, args.port)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
