@@ -21,6 +21,7 @@
 #include <brpc/channel.h>
 #include <brpc/server.h>
 #include <cstdio>
+#include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
@@ -37,12 +38,14 @@ namespace {
 struct HttpReply {
     int status = 0;
     std::string body;
+    std::string location; // Location 响应头（重定向断言用）
 };
 
 // 共享装配：auth 开关决定鉴权路径；auth 开启时 bootstrap 一把 admin key。
 class HttpApiTestFixture : public ::testing::Test {
 protected:
-    explicit HttpApiTestFixture(bool auth_on) : auth_on_(auth_on) {}
+    explicit HttpApiTestFixture(bool auth_on, std::string web_dir = "")
+        : web_dir_(std::move(web_dir)), auth_on_(auth_on) {}
 
     void SetUp() override {
         // bootstrap 会写 <dir>/bootstrap.key，用独立临时目录避免污染环境
@@ -64,13 +67,20 @@ protected:
         console_auth_ =
             std::make_unique<pl::minisearch::auth::ConsoleAuth>(std::move(console_opts));
         context_ = std::make_unique<pl::minisearch::server::TenantContext>("", "Flat");
-        service_ = std::make_unique<pl::minisearch::server::HttpApiService>(
-            context_.get(), keys_.get(), auth_on_, nullptr, nullptr, console_auth_.get(), "");
+        service_ = std::make_unique<pl::minisearch::server::HttpApiService>(context_.get(),
+                                                                            keys_.get(),
+                                                                            auth_on_,
+                                                                            nullptr,
+                                                                            nullptr,
+                                                                            console_auth_.get(),
+                                                                            web_dir_.c_str());
         ASSERT_EQ(0,
                   server_.AddService(service_.get(),
                                      brpc::SERVER_DOESNT_OWN_SERVICE,
                                      "/api/v2/* => default_method,"
-                                     "/healthz => default_method"));
+                                     "/healthz => default_method,"
+                                     "/console/* => default_method,"
+                                     "/ => default_method"));
         ASSERT_EQ(0, server_.Start("127.0.0.1:0", nullptr));
 
         char addr[64];
@@ -125,6 +135,10 @@ protected:
         HttpReply reply;
         reply.status = cntl.http_response().status_code();
         reply.body = cntl.response_attachment().to_string();
+        const std::string* loc = cntl.http_response().GetHeader("Location");
+        if (loc != nullptr) {
+            reply.location = *loc;
+        }
         return reply;
     }
 
@@ -151,6 +165,7 @@ protected:
     std::string tmp_dir_;
     std::unique_ptr<pl::minisearch::auth::KeyStore> keys_;
     std::unique_ptr<pl::minisearch::auth::ConsoleAuth> console_auth_;
+    std::string web_dir_;
     std::unique_ptr<pl::minisearch::server::TenantContext> context_;
     std::unique_ptr<pl::minisearch::server::HttpApiService> service_;
     bool auth_on_;
@@ -641,6 +656,60 @@ TEST_F(HttpApiTest, MarkdownImport) {
         std::string total2 = list2.body.substr(start2, end2 - start2);
         EXPECT_EQ(total1, total2) << "re-import should be idempotent";
     }
+
+    // chunk id 含 '#'，GET/DELETE 必须支持 URL 编码（%23）访问：
+    // brpc uri().path() 不解码，服务端需还原后再定位文档。
+    auto get_encoded = Request("GET", "/api/v2/kb/documents/test%23chunk_0");
+    EXPECT_EQ(get_encoded.status, 200) << get_encoded.body;
+    EXPECT_NE(get_encoded.body.find("\"found\":true"), std::string::npos) << get_encoded.body;
+
+    auto del_encoded = Request("DELETE", "/api/v2/kb/documents/test%23chunk_1?confirm=test");
+    EXPECT_EQ(del_encoded.status, 200) << del_encoded.body;
+    EXPECT_NE(del_encoded.body.find("\"ok\":true"), std::string::npos) << del_encoded.body;
+}
+
+// ---------------------------------------------------------------------------
+// console 静态文件：/console 重定向 + index.html 兜底
+// ---------------------------------------------------------------------------
+
+class StaticFileTest : public HttpApiTestFixture {
+protected:
+    StaticFileTest() : HttpApiTestFixture(false) {
+        // web_dir 指向临时目录下的 web/，SetUp 前准备好 index.html
+        web_dir_ = "/tmp/minisearch_http_api_test_XXXXXX";
+        std::vector<char> buf(web_dir_.begin(), web_dir_.end());
+        buf.push_back('\0');
+        if (::mkdtemp(buf.data()) != nullptr) {
+            web_dir_ = buf.data();
+            const std::string index = web_dir_ + "/index.html";
+            std::ofstream out(index);
+            out << "<html>console-index</html>";
+            out.close();
+        }
+    }
+
+    ~StaticFileTest() override {
+        if (!web_dir_.empty() && web_dir_.find("XXXXXX") == std::string::npos) {
+            const std::string cmd = "rm -rf '" + web_dir_ + "'";
+            EXPECT_EQ(0, system(cmd.c_str()));
+        }
+    }
+};
+
+TEST_F(StaticFileTest, ConsoleRedirectsAndServesIndex) {
+    // 无尾斜杠 /console 必须 302 到 /console/（此前落入认证分支 401）
+    auto no_slash = Request("GET", "/console");
+    EXPECT_EQ(no_slash.status, 302) << no_slash.body;
+    EXPECT_EQ(no_slash.location, "/console/");
+
+    // /console/ 兜底到 index.html（免认证，登录页本身需要加载）
+    auto index = Request("GET", "/console/");
+    EXPECT_EQ(index.status, 200);
+    EXPECT_NE(index.body.find("console-index"), std::string::npos) << index.body;
+
+    // 深层路径 404 正常返回 JSON 错误而非 401
+    auto missing = Request("GET", "/console/nope.js");
+    EXPECT_EQ(missing.status, 404);
 }
 
 } // namespace
