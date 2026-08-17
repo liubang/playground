@@ -96,14 +96,22 @@ std::vector<std::string> split_blocks(const std::string& text) {
 }
 
 // 单个超长块按 max_chars 硬切（保留 overlap）。
+// 起止位置都回退/对齐到 UTF-8 字符边界，避免产出非法 UTF-8 的 chunk。
 void hard_split(const std::string& block, const ChunkOptions& opts, std::vector<std::string>* out) {
     const size_t step =
         opts.max_chars > opts.overlap_chars ? opts.max_chars - opts.overlap_chars : opts.max_chars;
     size_t pos = 0;
     while (pos < block.size()) {
+        // 起点对齐：跳过上一 chunk 尾部截断残留的 UTF-8 continuation bytes
+        while (pos < block.size() && (static_cast<unsigned char>(block[pos]) & 0xC0) == 0x80) {
+            ++pos;
+        }
+        if (pos >= block.size()) {
+            break;
+        }
         size_t len = opts.max_chars;
         if (pos + len < block.size()) {
-            // 避免切断 UTF-8 多字节字符：回退到字符边界
+            // 终点回退到字符边界
             while (len > 0 && (static_cast<unsigned char>(block[pos + len]) & 0xC0) == 0x80) {
                 --len;
             }

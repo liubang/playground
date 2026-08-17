@@ -87,6 +87,17 @@ cc_library(
     linkopts = LINKOPTS,
 )
 
+cc_test(
+    name = "markdown_test",
+    srcs = ["ut/markdown_test.cc"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":markdown",
+        "@googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "static_files",
     srcs = ["static_files.cpp"],
