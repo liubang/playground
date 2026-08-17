@@ -68,6 +68,36 @@ std::string join_path(const std::vector<std::string>& parts, size_t from) {
     return out;
 }
 
+// URL 百分号解码（%XX -> 字节）。brpc 的 uri().path() 返回原始未解码路径，
+// 而文档 id 可能含 '#'（markdown 导入的 chunk id 形如 "<name>#chunk_<i>"），
+// 前端必须编码后传输，这里解码还原。非法编码原样保留。
+std::string url_decode(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '%' && i + 2 < s.size()) {
+            const auto hex = [](char c) -> int {
+                if (c >= '0' && c <= '9')
+                    return c - '0';
+                if (c >= 'a' && c <= 'f')
+                    return c - 'a' + 10;
+                if (c >= 'A' && c <= 'F')
+                    return c - 'A' + 10;
+                return -1;
+            };
+            const int hi = hex(s[i + 1]);
+            const int lo = hex(s[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                out.push_back(static_cast<char>((hi << 4) | lo));
+                i += 2;
+                continue;
+            }
+        }
+        out.push_back(s[i]);
+    }
+    return out;
+}
+
 // Copies a repeated float field into std::vector<float> (see codec.cpp for the
 // ASan note on element-wise access).
 std::vector<float> copy_floats(const google::protobuf::RepeatedField<float>& field) {
@@ -193,7 +223,9 @@ void HttpApiService::default_method(google::protobuf::RpcController* controller,
 
     // console 静态文件：免认证（登录页本身需要加载）
     if (!web_dir_.empty() && method == brpc::HTTP_METHOD_GET) {
-        if (path == "/") {
+        // "/" 与 "/console"（无尾斜杠）统一 302 到 "/console/"，
+        // 由 ServeStaticFile 补 index.html；否则 /console 会落入认证分支返回 401。
+        if (path == "/" || path == "/console") {
             cntl->http_response().set_status_code(302);
             cntl->http_response().SetHeader("Location", "/console/");
             return;
@@ -293,7 +325,9 @@ void HttpApiService::default_method(google::protobuf::RpcController* controller,
     }
     // 文档路由：id 允许包含 '/'，路径剩余部分整体作为 id。
     if (parts.size() >= 5 && parts[3] == "documents") {
-        const std::string id = join_path(parts, 4);
+        // path 未解码（brpc uri().path() 返回原始字节），%23 等需还原，
+        // 否则含 '#' 的 chunk id（markdown 导入）无法定位。
+        const std::string id = url_decode(join_path(parts, 4));
         if (!Allow(*principal, parts[2], /*write=*/method != brpc::HTTP_METHOD_GET)) {
             return SendErrorResponse(cntl, 403, "forbidden");
         }
