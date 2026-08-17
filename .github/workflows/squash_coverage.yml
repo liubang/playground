@@ -1,0 +1,37 @@
+name: squash-coverage
+# 定期压缩 coverage 分支历史：该分支由多个 CI workflow 用
+# peaceiris/actions-gh-pages 逐次追加 commit（每次部署一个），历史会无限增长。
+# 本 job 把整个分支压成单个 orphan commit（文件内容不变），force push 回去。
+on:
+  schedule:
+    # 每天 UTC 04:17 执行（避开各语言 coverage job 的常见触发窗口）
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+concurrency:
+  group: squash-coverage
+  cancel-in-progress: false
+jobs:
+  squash:
+    name: squash coverage branch
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: coverage
+          fetch-depth: 0
+      - name: squash history into single commit
+        run: |
+          set -euo pipefail
+          # checkout --orphan 后 index 清空、工作树保留（即当前全部覆盖报告），
+          # 直接 add -A 重建单 commit 即可，无需移动文件。
+          git checkout --orphan squash-tmp
+          git add -A
+          git -c user.name="liubang" -c user.email="it.liubang@gmail.com" \
+            commit -m "coverage: squash history" --quiet
+          git branch -M squash-tmp coverage
+          # 覆盖式推送（该分支只存 CI 产物，历史回退无副作用；认证来自
+          # actions/checkout 注入的 persistent credentials）
+          git push --force origin coverage
+          git log --oneline -1
