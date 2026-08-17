@@ -13,69 +13,46 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/05/14 10:44
+# Created: 2026/08/17
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",
     "LINKOPTS",
+    "TEST_COPTS",
 )
 
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "faiss_index",
-    srcs = ["faiss_index.cpp"],
-    hdrs = ["faiss_index.h"],
-    copts = COPTS,
-    deps = [
-        "@faiss",
-    ],
-)
-
-cc_library(
-    name = "embedding_client",
-    srcs = ["embedding_client.cpp"],
-    hdrs = ["embedding_client.h"],
+    name = "checkpoint",
+    srcs = ["checkpoint.cpp"],
+    hdrs = ["checkpoint.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
+        "//cpp/pl/minisearch:faiss_index",
+        "//cpp/pl/minisearch/core",
+        "//cpp/pl/minisearch/proto:minisearch_cc_proto",
+        "//cpp/pl/minisearch/server:codec",
         "@brpc",
     ],
 )
 
-cc_library(
-    name = "rerank_client",
-    srcs = ["rerank_client.cpp"],
-    hdrs = ["rerank_client.h"],
-    copts = COPTS,
+cc_test(
+    name = "checkpoint_test",
+    srcs = ["ut/checkpoint_test.cc"],
+    copts = TEST_COPTS,
+    env = {"ASAN_OPTIONS": "detect_container_overflow=0"},
     linkopts = LINKOPTS,
     deps = [
-        "@brpc",
-    ],
-)
-
-cc_binary(
-    name = "minisearch_server",
-    srcs = ["minisearch_server.cpp"],
-    copts = COPTS,
-    linkopts = LINKOPTS,
-    deps = [
-        ":rerank_client",
+        ":checkpoint",
+        "//cpp/pl/minisearch:faiss_index",
+        "//cpp/pl/minisearch/core",
+        "//cpp/pl/minisearch/proto:minisearch_cc_proto",
         "//cpp/pl/minisearch/server",
         "@brpc",
-        "@gflags",
-    ],
-)
-
-cc_binary(
-    name = "minisearch_client",
-    srcs = ["minisearch_client.cpp"],
-    copts = COPTS,
-    linkopts = LINKOPTS,
-    deps = [
-        "@brpc",
-        "@gflags",
+        "@googletest//:gtest_main",
     ],
 )
