@@ -82,6 +82,12 @@ var toolMemoryEligible = map[string]struct{}{
 	// honest, so the egress target can never be argument-shaped. No
 	// filesystem effect.
 	"web_search": {},
+	// Knowledge base tools (kb_search/kb_read): the minisearch endpoint is
+	// pinned by the knowledge_base configuration — never argument-shaped —
+	// and the tools are read-only (no filesystem effect). One interactive
+	// approval covers every future query on every configured collection.
+	"kb_search": {},
+	"kb_read":   {},
 }
 
 // mcpToolPrefix is the qualified-name prefix of MCP-sourced tools
