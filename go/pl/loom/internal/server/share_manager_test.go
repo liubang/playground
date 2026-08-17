@@ -185,7 +185,7 @@ share:
 		})
 	}, nil)
 	t.Cleanup(mgr.Close)
-	svc = newTestServiceFull(t, fakes.NewFakeModel(), nil, app.SessionServiceConfig{ShareEndpoint: mgr})
+	svc, _ = newTestServiceFull(t, fakes.NewFakeModel(), nil, app.SessionServiceConfig{ShareEndpoint: mgr})
 	srv, err := New(Config{Token: testToken, Version: "test", Service: svc, ConfigPath: cfgPath, Share: mgr})
 	if err != nil {
 		t.Fatalf("New: %v", err)

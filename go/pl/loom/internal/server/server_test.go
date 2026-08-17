@@ -19,10 +19,13 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -56,12 +59,13 @@ func newTestService(t *testing.T, model domain.Model) *app.SessionService {
 // recorder wired into the process runtime (nil = tracing disabled).
 func newTestServiceWithRecorder(t *testing.T, model domain.Model, rec trace.Recorder) *app.SessionService {
 	t.Helper()
-	return newTestServiceFull(t, model, rec, app.SessionServiceConfig{})
+	svc, _ := newTestServiceFull(t, model, rec, app.SessionServiceConfig{})
+	return svc
 }
 
 // newTestServiceFull is newTestServiceWithRecorder with an explicit
 // SessionServiceConfig (e.g. wiring the share-endpoint controller).
-func newTestServiceFull(t *testing.T, model domain.Model, rec trace.Recorder, svcCfg app.SessionServiceConfig) *app.SessionService {
+func newTestServiceFull(t *testing.T, model domain.Model, rec trace.Recorder, svcCfg app.SessionServiceConfig) (*app.SessionService, *runtimeevent.Broker) {
 	t.Helper()
 	ctx := context.Background()
 	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
@@ -105,7 +109,46 @@ func newTestServiceFull(t *testing.T, model domain.Model, rec trace.Recorder, sv
 		Registry:       agent.NewToolRegistry(),
 	}, broker, svcCfg)
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
-	return svc
+	return svc, broker
+}
+
+// syncLogBuffer collects concurrently written log output (the event pump
+// logs from its own goroutine).
+type syncLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// newTestServerWithBroker is newTestServer plus access to the event broker
+// (to flood the pump directly) and an explicit service config (a small
+// SubscriberQueue deterministically triggers the slow-consumer drop).
+func newTestServerWithBroker(t *testing.T, model domain.Model, svcCfg app.SessionServiceConfig, logger *slog.Logger) (*httptest.Server, *runtimeevent.Broker) {
+	t.Helper()
+	svc, broker := newTestServiceFull(t, model, nil, svcCfg)
+	srv, err := New(Config{
+		Token:   testToken,
+		Version: "test",
+		Service: svc,
+		Logger:  logger,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv.http.Handler)
+	t.Cleanup(ts.Close)
+	return ts, broker
 }
 
 // newTestServer builds a SessionService over a real SQLite store with a
@@ -450,7 +493,9 @@ func TestSSEEventStream(t *testing.T) {
 }
 
 func TestSSEInvalidCursorResync(t *testing.T) {
-	ts, _ := newTestServer(t, fakes.NewFakeModel())
+	var logBuf syncLogBuffer
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
+	ts, _ := newTestServerWithBroker(t, fakes.NewFakeModel(), app.SessionServiceConfig{}, logger)
 	id := createTestSession(t, ts)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -469,6 +514,71 @@ func TestSSEInvalidCursorResync(t *testing.T) {
 	if !strings.Contains(string(body), "event: server.resync") {
 		t.Fatalf("body = %q, want a server.resync frame", body)
 	}
+	// The resync directive must be logged: this path fires in every
+	// cross-lifetime/evicted-cursor reconnect and was previously silent.
+	if !strings.Contains(logBuf.String(), "sse cursor invalid") {
+		t.Fatalf("cursor-invalid resync was not logged:\n%s", logBuf.String())
+	}
+}
+
+// TestSSESlowConsumerDropLogged reproduces the server side of the desktop
+// flicker incident: an SSE client that is TCP-healthy but stops consuming
+// (the equivalent of the OS suspending the desktop WebContent process).
+// Kernel buffers and the bounded server queues fill up, and the pump must
+// disconnect the slow consumer — and log it (this path was previously
+// silent, leaving reconnect loops un-diagnosable).
+func TestSSESlowConsumerDropLogged(t *testing.T) {
+	var logBuf syncLogBuffer
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
+	ts, broker := newTestServerWithBroker(t, fakes.NewFakeModel(),
+		app.SessionServiceConfig{SubscriberQueue: 4, Logger: logger}, logger)
+	id := createTestSession(t, ts)
+	sid, err := domain.ParseSessionID(id)
+	if err != nil {
+		t.Fatalf("ParseSessionID: %v", err)
+	}
+
+	// Raw TCP client: read the connected banner (the subscription is live),
+	// then never read again. A tiny receive buffer clamps the TCP window
+	// (disabling autotuning) so backpressure reaches the server
+	// deterministically on any platform.
+	addr := strings.TrimPrefix(ts.URL, "http://")
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	if err := conn.(*net.TCPConn).SetReadBuffer(2048); err != nil {
+		t.Fatalf("SetReadBuffer: %v", err)
+	}
+	fmt.Fprintf(conn, "GET /v1/sessions/%s/events HTTP/1.1\r\nHost: %s\r\nAuthorization: Bearer %s\r\n\r\n", id, addr, testToken)
+	r := bufio.NewReader(conn)
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read SSE banner: %v", err)
+		}
+		if strings.HasPrefix(line, ": connected") {
+			break
+		}
+	}
+
+	// Flood big-payload events: the socket write blocks, the stitched queue
+	// (4) fills, the live queue (4) fills, and the pump drops the subscriber.
+	payload := runtimeevent.ModelTextDeltaPayload{Delta: strings.Repeat("x", 64*1024)}
+	for i := 0; i < 100; i++ {
+		if err := broker.PublishDurable(sid, domain.RunID{}, 1, runtimeevent.KindModelTextDelta, payload); err != nil {
+			t.Fatalf("PublishDurable: %v", err)
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(logBuf.String(), "dropping slow event subscriber") {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("slow-consumer drop was not logged:\n%s", logBuf.String())
 }
 
 func TestDrainingRejectsNewWork(t *testing.T) {
