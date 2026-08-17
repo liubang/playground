@@ -30,7 +30,7 @@ import (
 // packsServer builds a server over a service with the given rules dir.
 func packsServer(t *testing.T, rulesDir string) *httptest.Server {
 	t.Helper()
-	svc := newTestServiceFull(t, nil, nil, app.SessionServiceConfig{RulesDir: rulesDir})
+	svc, _ := newTestServiceFull(t, nil, nil, app.SessionServiceConfig{RulesDir: rulesDir})
 	srv, err := New(Config{Token: testToken, Version: "test", Service: svc})
 	if err != nil {
 		t.Fatalf("New: %v", err)
