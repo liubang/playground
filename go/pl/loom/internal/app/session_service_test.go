@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -616,6 +617,86 @@ func TestSessionServiceSubscribeShutdownRace(t *testing.T) {
 		// arrives — immaterial here, the subscriptions are what matters.
 		_ = svc.Shutdown(ctx)
 		wg.Wait()
+	}
+}
+
+// syncLogBuffer collects concurrently written log output (the event pump
+// logs from its own goroutine).
+type syncLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// TestSessionServiceSlowSubscriberDropped locks the dispatch contract behind
+// the desktop flicker incident: a subscriber that stops draining fills the
+// bounded queue and is disconnected (it must resync via its cursor), losing
+// the backlog rather than blocking the pump — and the drop is logged.
+func TestSessionServiceSlowSubscriberDropped(t *testing.T) {
+	var logBuf syncLogBuffer
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
+	ctx := context.Background()
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
+	t.Cleanup(broker.Close)
+	svc := NewSingletonWorkspaceService(testBootstrap(store, fakes.NewFakeModel()), broker,
+		SessionServiceConfig{SubscriberQueue: 4, Logger: logger})
+	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
+
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	ch, err := svc.SubscribeEvents(ctx, h.ID, 0)
+	if err != nil {
+		t.Fatalf("SubscribeEvents: %v", err)
+	}
+	// The subscriber stalls completely (the OS-suspended desktop WebContent
+	// equivalent): once the bounded queues fill, the pump must disconnect
+	// this slow consumer instead of blocking behind it.
+	const total = 50
+	for i := 0; i < total; i++ {
+		if err := broker.PublishDurable(h.ID, domain.RunID{}, 1, runtimeevent.KindModelTextDelta,
+			runtimeevent.ModelTextDeltaPayload{Delta: "x"}); err != nil {
+			t.Fatalf("PublishDurable: %v", err)
+		}
+	}
+	// Reading resumes after the flood: only the small buffered head is
+	// delivered, then the channel must be closed by the drop.
+	received := 0
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				goto closed
+			}
+			received++
+		case <-deadline:
+			t.Fatalf("slow subscriber channel was not closed (received %d events)", received)
+		}
+	}
+closed:
+	if received >= total {
+		t.Fatalf("received %d/%d events; the drop must lose the backlog", received, total)
+	}
+	if !strings.Contains(logBuf.String(), "dropping slow event subscriber") {
+		t.Fatalf("slow-subscriber drop was not logged:\n%s", logBuf.String())
 	}
 }
 

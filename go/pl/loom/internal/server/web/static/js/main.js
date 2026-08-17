@@ -887,7 +887,8 @@ let eventFlushScheduled = false
 // transcript 上重复渲染（同一命令两份 output 的 bug 来源）。
 let eventFloor = 0
 
-function onRuntimeEvent(evt) {
+// export：jsdom 组件测试的分批渲染探针（模块脚本下无副作用）。
+export function onRuntimeEvent(evt) {
   // 上一会话的迟到帧（切换会话后旧连接的残余）不进入新会话的视图。
   if (evt.session_id && app.sessionId && evt.session_id !== app.sessionId) return
   if (evt.sequence && evt.sequence <= eventFloor) return
