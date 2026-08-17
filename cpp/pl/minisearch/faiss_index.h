@@ -22,15 +22,22 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace pl::minisearch {
 
-// 单条召回结果
+// 单条检索结果
 struct SearchResult {
     int64_t id;
     float distance;
+};
+
+// 向量距离度量（schema 中的 metric 字段，DESIGN.md §4.1）。
+// cosine 以 L2 归一化 + 内积实现（写入与查询两侧都归一化）。
+enum class VectorMetric {
+    kL2,
+    kInnerProduct,
+    kCosine,
 };
 
 // 线程安全的 faiss 索引封装，支持增量写入和并发读取
@@ -38,7 +45,10 @@ class FaissIndex {
 public:
     // dimension: 向量维度
     // index_type: faiss 索引描述字符串，如 "Flat", "IVF256,Flat", "HNSW32"
-    FaissIndex(int dimension, const std::string& index_type);
+    // metric: 距离度量；cosine 在 add/search 时归一化并用内积索引
+    FaissIndex(int dimension,
+               const std::string& index_type,
+               VectorMetric metric = VectorMetric::kL2);
     ~FaissIndex();
 
     FaissIndex(const FaissIndex&) = delete;
@@ -64,43 +74,18 @@ public:
 
     int dimension() const { return dimension_; }
     const std::string& index_type() const { return index_type_; }
+    VectorMetric metric() const { return metric_; }
     bool is_trained() const;
 
 private:
+    // 按 metric 预处理（cosine: L2 归一化拷贝）；其他 metric 原样返回别名。
+    std::vector<float> prepare(const float* vec, int count) const;
+
     int dimension_;
     std::string index_type_;
+    VectorMetric metric_;
     std::unique_ptr<faiss::IndexIDMap> index_;
     mutable std::mutex mu_;
-};
-
-// id <-> table_id 的双向映射
-//
-// 支持多向量模式：同一个 table_id 可以对应多个 numeric_id（用于多视角 embedding）。
-// - assign_new(table_id): 总是分配一个新的 numeric_id（多向量入库用）
-// - get_or_assign(table_id): 兼容旧接口，首次分配，后续返回已有 id
-// - get_table_id(numeric_id): 反查 table_id
-class IdMapper {
-public:
-    // 分配或获取已有的数值 id（兼容旧接口）
-    int64_t get_or_assign(const std::string& table_id);
-
-    // 总是分配一个新的 numeric_id，映射到同一个 table_id（多向量入库用）
-    int64_t assign_new(const std::string& table_id);
-
-    // 数值 id -> table_id
-    std::string get_table_id(int64_t id) const;
-
-    // 持久化
-    bool save(const std::string& path) const;
-    bool load(const std::string& path);
-
-    int64_t size() const;
-
-private:
-    mutable std::mutex mu_;
-    std::unordered_map<std::string, int64_t> table_to_id_;
-    std::unordered_map<int64_t, std::string> id_to_table_;
-    int64_t next_id_ = 0;
 };
 
 } // namespace pl::minisearch

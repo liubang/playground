@@ -26,33 +26,48 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "analyzer",
-    srcs = ["analyzer.cpp"],
-    hdrs = ["analyzer.h"],
+    name = "core",
+    srcs = [
+        "collection.cpp",
+        "id_mapper.cpp",
+        "schema.cpp",
+    ],
+    hdrs = [
+        "collection.h",
+        "document.h",
+        "id_mapper.h",
+        "schema.h",
+    ],
     copts = COPTS,
     linkopts = LINKOPTS,
-    deps = [
-        "@jieba_cpp//:jieba",
-    ],
 )
 
 cc_test(
-    name = "analyzer_test",
-    srcs = ["ut/analyzer_test.cc"],
+    name = "schema_test",
+    srcs = ["ut/schema_test.cc"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS,
     deps = [
-        ":analyzer",
+        ":core",
         "@googletest//:gtest_main",
     ],
 )
 
 cc_test(
-    name = "jieba_test",
-    srcs = ["ut/jieba_test.cc"],
+    name = "id_mapper_test",
+    srcs = ["ut/id_mapper_test.cc"],
     copts = TEST_COPTS,
     deps = [
+        ":core",
         "@googletest//:gtest_main",
-        "@jieba_cpp//:jieba",
+    ],
+)
+
+cc_test(
+    name = "collection_test",
+    srcs = ["ut/collection_test.cc"],
+    copts = TEST_COPTS,
+    deps = [
+        ":core",
+        "@googletest//:gtest_main",
     ],
 )
