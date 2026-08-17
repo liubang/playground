@@ -49,6 +49,7 @@ const KNOWN_TOP_KEYS = new Set([
   'memory',
   'image',
   'browser',
+  'knowledge_base',
   'mcp_servers',
   'workspaces',
 ])
@@ -84,6 +85,7 @@ function preserveUnmanaged(cfg, orig) {
 // spec: {key, label, hint, ph, type, options, step, rows, def, required, revealRef, flagValue}
 // type ∈ text | password | number | bool | tristate | select | textarea |
 //       list-text（每行一项 → []string）| kv-text（每行 k=v → map）|
+//       pair-list（每行 "name: description" → [{name, description}]）|
 //       float-list（逗号分隔 → []number）|
 //       flag-list（勾选 → 写入固定 []string（spec.flagValue），不勾 = 省略）
 // revealRef: password 控件的明文定位（对象或返回对象的函数），见
@@ -105,7 +107,7 @@ function makeControl(spec) {
     ctl = el('input', 'set-check')
     ctl.type = 'checkbox'
     if (t === 'flag-list') ctl._flagValue = spec.flagValue || []
-  } else if (t === 'textarea' || t === 'list-text' || t === 'kv-text') {
+  } else if (t === 'textarea' || t === 'list-text' || t === 'kv-text' || t === 'pair-list') {
     ctl = el('textarea', 'set-input mono')
     ctl.rows = spec.rows || 3
     ctl.spellcheck = false
@@ -207,6 +209,11 @@ function fillControl(ctl, value) {
     case 'list-text':
       ctl.value = (value || []).join('\n')
       break
+    case 'pair-list':
+      ctl.value = (value || [])
+        .map((c) => (c.description ? `${c.name}: ${c.description}` : c.name))
+        .join('\n')
+      break
     case 'kv-text':
       ctl.value = Object.entries(value || {})
         .map(([k, v]) => `${k}=${v}`)
@@ -258,6 +265,20 @@ function collectControl(ctl, obj) {
         .split('\n')
         .map((s) => s.trim())
         .filter(Boolean)
+      if (items.length) setPath(obj, key, items)
+      break
+    }
+    case 'pair-list': {
+      const items = ctl.value
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const i = line.indexOf(':')
+          return i > 0
+            ? { name: line.slice(0, i).trim(), description: line.slice(i + 1).trim() }
+            : { name: line }
+        })
       if (items.length) setPath(obj, key, items)
       break
     }
@@ -711,6 +732,72 @@ const TABS = [
   },
   { id: 'skills', label: 'Skills', icon: 'puzzle-piece' }, // 自定义渲染（配置 + 运行时发现视图）
   { id: 'mcp', label: 'MCP', icon: 'plug' }, // 自定义渲染（概览 → 详情两级）
+  {
+    id: 'kb',
+    label: '知识库',
+    icon: 'database',
+    sections: [
+      [
+        '连接',
+        [
+          {
+            key: 'knowledge_base.enabled',
+            label: '启用知识库',
+            type: 'tristate',
+            def: '关',
+            hint: '开启后注册 kb_search / kb_read 工具；修改需重启生效',
+          },
+          {
+            key: 'knowledge_base.base_url',
+            label: '服务地址',
+            ph: 'http://127.0.0.1:8200',
+            hint: 'minisearch v2 REST 地址',
+            required: true,
+          },
+          {
+            key: 'knowledge_base.api_key',
+            label: 'API 密钥',
+            type: 'password',
+            revealRef: { kind: 'knowledge_base' },
+            hint: 'minisearch bearer token（msk_…）；--auth=off 时留空',
+          },
+          {
+            key: 'knowledge_base.timeout_ms',
+            label: '请求超时 (ms)',
+            type: 'number',
+            ph: '10000',
+            hint: '范围 1000–60000',
+          },
+        ],
+      ],
+      [
+        '检索',
+        [
+          {
+            key: 'knowledge_base.default_top_k',
+            label: '默认返回数',
+            type: 'number',
+            ph: '5',
+            hint: '范围 1–20',
+          },
+          {
+            key: 'knowledge_base.default_collection',
+            label: '默认集合',
+            ph: '留空取第一个',
+          },
+          {
+            key: 'knowledge_base.collections',
+            label: '集合列表',
+            type: 'pair-list',
+            rows: 4,
+            ph: 'name: 描述（每行一个）',
+            hint: '至少一个；描述会写入工具 schema 帮助模型按主题路由',
+            required: true,
+          },
+        ],
+      ],
+    ],
+  },
   {
     id: 'system',
     label: '系统',

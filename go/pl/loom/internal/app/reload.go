@@ -156,6 +156,12 @@ func classifyConfigChanges(prev, next *config.ResolvedConfig) ConfigApplyReport 
 	if !reflect.DeepEqual(prev.Browser, next.Browser) {
 		r.Restart = append(r.Restart, "browser")
 	}
+	// Knowledge base tools (kb_search/kb_read) are registered at assembly
+	// from the knowledge_base section; the client and tool definitions are
+	// frozen for the registry's lifetime, so any change needs a restart.
+	if !reflect.DeepEqual(prev.KnowledgeBase, next.KnowledgeBase) {
+		r.Restart = append(r.Restart, "knowledge_base")
+	}
 	// The share listener is runtime-managed: ApplyConfig reconciles it
 	// immediately (start/stop/rebind), no restart required. The runtime
 	// toggle writes through to share.enabled, so this reconcile is the
