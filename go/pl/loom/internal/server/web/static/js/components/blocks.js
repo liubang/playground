@@ -276,9 +276,15 @@ export function toolBlock(payload, hooks = {}) {
   head.appendChild(dur)
   b.appendChild(head)
   let errEl = null
+  let done = false
   return {
     el: b,
     complete(p) {
+      // 幂等：迟到/重放的 tool.completed（旧连接的追帧残余、快照重建后
+      // 又配对的重复帧）不二次追加输出——否则同一命令出现两份 output
+      // 和两份 artifact。
+      if (done) return
+      done = true
       const st = p.status === 'success' ? 'ok' : p.status === 'error' ? 'err' : 'canceled'
       status.className = 'tool-status ' + st
       const meta = TOOL_STATUS[st]
