@@ -102,26 +102,27 @@ func (p *ResolvedProvider) modelMeta(name string) (Model, bool) {
 // ResolvedConfig is the validated, secret-resolved, fully assembled
 // configuration. Consumers never touch the raw File schema.
 type ResolvedConfig struct {
-	Providers []ResolvedProvider
-	Default   ProviderModelRef
-	Limits    domain.Limits
-	Context   domain.ContextConfig
-	Runaway   domain.RunawayConfig
-	Prompt    Prompt
-	Skills    ResolvedSkills
-	Rules     ResolvedRules
-	Approval  ResolvedApproval
-	Tools     ResolvedTools
-	Tracing   trace.Config
-	Storage   ResolvedStorage
-	Share     ResolvedShare
-	Logging   ResolvedLogging
-	UI        UI
-	Subagent  ResolvedSubagent
-	Memory    ResolvedMemory
-	Image     ResolvedImage
-	Browser   ResolvedBrowser
-	MCP       ResolvedMCP
+	Providers     []ResolvedProvider
+	Default       ProviderModelRef
+	Limits        domain.Limits
+	Context       domain.ContextConfig
+	Runaway       domain.RunawayConfig
+	Prompt        Prompt
+	Skills        ResolvedSkills
+	Rules         ResolvedRules
+	Approval      ResolvedApproval
+	Tools         ResolvedTools
+	Tracing       trace.Config
+	Storage       ResolvedStorage
+	Share         ResolvedShare
+	Logging       ResolvedLogging
+	UI            UI
+	Subagent      ResolvedSubagent
+	Memory        ResolvedMemory
+	Image         ResolvedImage
+	Browser       ResolvedBrowser
+	KnowledgeBase ResolvedKnowledgeBase
+	MCP           ResolvedMCP
 	// Workspaces are the pre-registered project workspaces (docs/WORKSPACE_DESIGN.md §10).
 	Workspaces []ResolvedWorkspace
 }
@@ -734,6 +735,14 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 	}
 	out.MCP = resolvedMCP
 
+	// Knowledge base tools (kb_search/kb_read): opt-in, like image and
+	// browser — an unconfigured deployment never advertises the tools.
+	kb, err := resolveKnowledgeBase(f.KnowledgeBase)
+	if err != nil {
+		return nil, err
+	}
+	out.KnowledgeBase = kb
+
 	workspaces, err := resolveWorkspaces(f.Workspaces)
 	if err != nil {
 		return nil, err
@@ -958,6 +967,102 @@ func resolveImage(in Image, auths map[string]providerAuth) (ResolvedImage, error
 		Size:      in.Size,
 		Quality:   in.Quality,
 		Generator: gen,
+	}, nil
+}
+
+// ResolvedKnowledgeBase is the knowledge_base section with defaults
+// applied; Timeout is the parsed request timeout. Enabled is false when
+// the section is absent or explicitly disabled.
+type ResolvedKnowledgeBase struct {
+	Enabled           bool
+	BaseURL           string
+	APIKey            string
+	Timeout           time.Duration
+	DefaultTopK       int
+	DefaultCollection string
+	Collections       []ResolvedKBCollection
+}
+
+// ResolvedKBCollection is one searchable collection.
+type ResolvedKBCollection struct {
+	Name        string
+	Description string
+}
+
+const (
+	defaultKBTimeoutMs = 10000
+	minKBTimeoutMs     = 1000
+	maxKBTimeoutMs     = 60000
+	defaultKBTopK      = 5
+	maxKBTopK          = 20
+)
+
+// resolveKnowledgeBase validates the knowledge_base section and applies
+// defaults. The section is opt-in (like image/browser): absent or disabled
+// yields a disabled result; an explicit enabled: true requires base_url
+// and at least one collection.
+func resolveKnowledgeBase(in KnowledgeBase) (ResolvedKnowledgeBase, error) {
+	if in.Enabled != nil && !*in.Enabled {
+		return ResolvedKnowledgeBase{}, nil
+	}
+	baseURL := strings.TrimSpace(in.BaseURL)
+	if baseURL == "" {
+		if in.Enabled != nil {
+			return ResolvedKnowledgeBase{}, fmt.Errorf("config: knowledge_base.base_url is required when enabled")
+		}
+		if in.APIKey != "" || in.TimeoutMs != 0 || in.DefaultTopK != 0 || in.DefaultCollection != "" || len(in.Collections) > 0 {
+			return ResolvedKnowledgeBase{}, fmt.Errorf("config: knowledge_base: base_url is required to enable the section")
+		}
+		return ResolvedKnowledgeBase{}, nil
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return ResolvedKnowledgeBase{}, fmt.Errorf("config: knowledge_base.base_url: must be a valid http(s) URL, got %q", baseURL)
+	}
+	timeoutMs := in.TimeoutMs
+	if timeoutMs == 0 {
+		timeoutMs = defaultKBTimeoutMs
+	}
+	if timeoutMs < minKBTimeoutMs || timeoutMs > maxKBTimeoutMs {
+		return ResolvedKnowledgeBase{}, fmt.Errorf("config: knowledge_base.timeout_ms must be between %d and %d", minKBTimeoutMs, maxKBTimeoutMs)
+	}
+	topK := in.DefaultTopK
+	if topK == 0 {
+		topK = defaultKBTopK
+	}
+	if topK < 1 || topK > maxKBTopK {
+		return ResolvedKnowledgeBase{}, fmt.Errorf("config: knowledge_base.default_top_k must be between 1 and %d", maxKBTopK)
+	}
+	if len(in.Collections) == 0 {
+		return ResolvedKnowledgeBase{}, fmt.Errorf("config: knowledge_base.collections: at least one collection is required")
+	}
+	seen := make(map[string]struct{}, len(in.Collections))
+	cols := make([]ResolvedKBCollection, 0, len(in.Collections))
+	for i, c := range in.Collections {
+		name := strings.TrimSpace(c.Name)
+		if name == "" {
+			return ResolvedKnowledgeBase{}, fmt.Errorf("config: knowledge_base.collections[%d].name: must not be empty", i)
+		}
+		if _, dup := seen[name]; dup {
+			return ResolvedKnowledgeBase{}, fmt.Errorf("config: knowledge_base.collections[%d]: duplicate collection %q", i, name)
+		}
+		seen[name] = struct{}{}
+		cols = append(cols, ResolvedKBCollection{Name: name, Description: strings.TrimSpace(c.Description)})
+	}
+	defaultCol := strings.TrimSpace(in.DefaultCollection)
+	if defaultCol == "" {
+		defaultCol = cols[0].Name
+	} else if _, ok := seen[defaultCol]; !ok {
+		return ResolvedKnowledgeBase{}, fmt.Errorf("config: knowledge_base.default_collection: %q is not in collections", defaultCol)
+	}
+	return ResolvedKnowledgeBase{
+		Enabled:           true,
+		BaseURL:           baseURL,
+		APIKey:            in.APIKey,
+		Timeout:           time.Duration(timeoutMs) * time.Millisecond,
+		DefaultTopK:       topK,
+		DefaultCollection: defaultCol,
+		Collections:       cols,
 	}, nil
 }
 

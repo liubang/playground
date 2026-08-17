@@ -43,6 +43,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/exsession"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/imagegen"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/kbsearch"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/lint"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
@@ -232,6 +233,19 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
 
+	// Knowledge base tools (kb_search/kb_read): registered only when the
+	// knowledge_base section is enabled. Like generate_image, an
+	// unconfigured deployment must not advertise the tools. The main-agent
+	// registry is registered here; researcher/coder sub-agent registries
+	// register their own after assembly so delegated runs can also query.
+	if resolved.KnowledgeBase.Enabled {
+		if err := registerKBTools(registry, resolved.KnowledgeBase); err != nil {
+			logger.Warn("knowledge base tools registration failed", "error", err)
+		} else {
+			logger.Info("knowledge base tools enabled", "collections", len(resolved.KnowledgeBase.Collections))
+		}
+	}
+
 	// Browser tool: registered only when the browser section is enabled
 	// (config.browser) and Chrome is found. Like generate_image, an
 	// unconfigured deployment must not advertise the tool to the model.
@@ -330,6 +344,13 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		if err != nil {
 			return nil, fmt.Errorf("build sub-agent registry: %w", err)
 		}
+		// Knowledge base tools are read-only and useful for researcher runs;
+		// mirror them into the sub-agent registry when the section is enabled.
+		if resolved.KnowledgeBase.Enabled {
+			if err := registerKBTools(researcherRegistry, resolved.KnowledgeBase); err != nil {
+				logger.Warn("researcher knowledge base tools registration failed", "error", err)
+			}
+		}
 		childLimits := resolved.Limits
 		if resolved.Subagent.MaxTokens > 0 {
 			childLimits.MaxTokens = resolved.Subagent.MaxTokens
@@ -353,6 +374,11 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		coderRegistry, err := buildCoderRegistry(validator, runner, proc.Artifact, book, int(resolved.Limits.MaxToolOutputBytes))
 		if err != nil {
 			return nil, fmt.Errorf("build coder registry: %w", err)
+		}
+		if resolved.KnowledgeBase.Enabled {
+			if err := registerKBTools(coderRegistry, resolved.KnowledgeBase); err != nil {
+				logger.Warn("coder knowledge base tools registration failed", "error", err)
+			}
 		}
 		coderPrompt := prompt.NewBuilder(cfg.WorkspaceRoot,
 			prompt.WithExtraInstructions(subagent.CoderInstructions),
@@ -705,6 +731,35 @@ func registerMemoryTools(registry *agent.ToolRegistry, store *memory.Store) erro
 		{"memory_search", func() (domain.Tool, error) { return memory.NewSearchTool(store) }},
 		{"memory_add_note", func() (domain.Tool, error) { return memory.NewAddNoteTool(store) }},
 	})
+}
+
+// registerKBTools registers the kb_search/kb_read tools from the resolved
+// knowledge_base configuration into the given registry (main, researcher,
+// coder). Both tools are registered together: search discovers, read
+// deepens.
+func registerKBTools(registry *agent.ToolRegistry, kb config.ResolvedKnowledgeBase) error {
+	collections := make([]kbsearch.Collection, len(kb.Collections))
+	for i, c := range kb.Collections {
+		collections[i] = kbsearch.Collection{Name: c.Name, Description: c.Description}
+	}
+	search, read, err := kbsearch.New(kbsearch.Options{
+		BaseURL:           kb.BaseURL,
+		APIKey:            kb.APIKey,
+		Timeout:           kb.Timeout,
+		DefaultTopK:       kb.DefaultTopK,
+		DefaultCollection: kb.DefaultCollection,
+		Collections:       collections,
+	})
+	if err != nil {
+		return fmt.Errorf("kbsearch: %w", err)
+	}
+	if err := registry.Register(search); err != nil {
+		return fmt.Errorf("register kb_search: %w", err)
+	}
+	if err := registry.Register(read); err != nil {
+		return fmt.Errorf("register kb_read: %w", err)
+	}
+	return nil
 }
 
 func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager, imageCfg config.ResolvedImage) error {

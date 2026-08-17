@@ -175,8 +175,10 @@ func lookupSecret(f *config.File, req secretReveal) (string, error) {
 		if srv, ok := f.MCPServers[req.Name]; ok {
 			value = srv.Headers[req.Field]
 		}
+	case "knowledge_base":
+		value = f.KnowledgeBase.APIKey
 	default:
-		return "", invalidInput("kind must be provider, tracing, or mcp_header")
+		return "", invalidInput("kind must be provider, tracing, mcp_header, or knowledge_base")
 	}
 	if value == "" {
 		return "", errSecretNotFound

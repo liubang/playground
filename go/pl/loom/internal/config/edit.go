@@ -138,6 +138,9 @@ func (f *File) MaskSecrets() {
 	if f.Tracing.SecretKey != "" {
 		f.Tracing.SecretKey = SecretMask
 	}
+	if f.KnowledgeBase.APIKey != "" {
+		f.KnowledgeBase.APIKey = SecretMask
+	}
 	for name, srv := range f.MCPServers {
 		for k, v := range srv.Headers {
 			if !headerEnvRef.MatchString(v) {
@@ -178,6 +181,9 @@ func (f *File) RestoreSecretsFrom(cur *File) error {
 		return err
 	}
 	if err := restoreSecret(&f.Tracing.SecretKey, cur.Tracing.SecretKey, "tracing.secret_key"); err != nil {
+		return err
+	}
+	if err := restoreSecret(&f.KnowledgeBase.APIKey, cur.KnowledgeBase.APIKey, "knowledge_base.api_key"); err != nil {
 		return err
 	}
 	for name, srv := range f.MCPServers {

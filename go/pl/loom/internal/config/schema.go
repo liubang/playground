@@ -46,23 +46,30 @@ type File struct {
 	// Providers is the only required section: at least one entry.
 	Providers []Provider `yaml:"providers"`
 
-	Limits     Limits               `yaml:"limits,omitempty"`
-	Context    Context              `yaml:"context,omitempty"`
-	Runaway    Runaway              `yaml:"runaway,omitempty"`
-	Prompt     Prompt               `yaml:"prompt,omitempty"`
-	Skills     Skills               `yaml:"skills,omitempty"`
-	Tools      Tools                `yaml:"tools,omitempty"`
-	Rules      Rules                `yaml:"rules,omitempty"`
-	Approval   Approval             `yaml:"approval,omitempty"`
-	Tracing    Tracing              `yaml:"tracing,omitempty"`
-	Share      Share                `yaml:"share,omitempty"`
-	Logging    Logging              `yaml:"logging,omitempty"`
-	UI         UI                   `yaml:"ui,omitempty"`
-	Subagent   Subagent             `yaml:"subagent,omitempty"`
-	Memory     Memory               `yaml:"memory,omitempty"`
-	Image      Image                `yaml:"image,omitempty"`
-	Browser    Browser              `yaml:"browser,omitempty"`
-	MCPServers map[string]MCPServer `yaml:"mcp_servers,omitempty"`
+	Limits   Limits   `yaml:"limits,omitempty"`
+	Context  Context  `yaml:"context,omitempty"`
+	Runaway  Runaway  `yaml:"runaway,omitempty"`
+	Prompt   Prompt   `yaml:"prompt,omitempty"`
+	Skills   Skills   `yaml:"skills,omitempty"`
+	Tools    Tools    `yaml:"tools,omitempty"`
+	Rules    Rules    `yaml:"rules,omitempty"`
+	Approval Approval `yaml:"approval,omitempty"`
+	Tracing  Tracing  `yaml:"tracing,omitempty"`
+	Share    Share    `yaml:"share,omitempty"`
+	Logging  Logging  `yaml:"logging,omitempty"`
+	UI       UI       `yaml:"ui,omitempty"`
+	Subagent Subagent `yaml:"subagent,omitempty"`
+	Memory   Memory   `yaml:"memory,omitempty"`
+	Image    Image    `yaml:"image,omitempty"`
+	Browser  Browser  `yaml:"browser,omitempty"`
+	// KnowledgeBase configures the minisearch-backed knowledge base tools
+	// (kb_search/kb_read). The section is opt-in: absent means disabled,
+	// and an unconfigured deployment never advertises the tools to the
+	// model. Unlike provider keys, the credential lives inline (no env
+	// indirection): a reader-role key is all that's needed, and the file
+	// already holds the LLM provider keys.
+	KnowledgeBase KnowledgeBase        `yaml:"knowledge_base,omitempty"`
+	MCPServers    map[string]MCPServer `yaml:"mcp_servers,omitempty"`
 	// Workspaces pre-registers project workspaces at startup
 	// (docs/WORKSPACE_DESIGN.md §10). Optional; the startup directory is
 	// always registered as the default workspace regardless of this list.
@@ -391,6 +398,37 @@ type Browser struct {
 	ScreenshotQ    int    `yaml:"screenshot_quality,omitempty"`
 	ViewportWidth  int    `yaml:"viewport_width,omitempty"`
 	ViewportHeight int    `yaml:"viewport_height,omitempty"`
+}
+
+// KnowledgeBase configures the minisearch-backed knowledge base tools
+// (kb_search/kb_read). Enabled is nil-typed so "absent" defaults to
+// "disabled" — the section must be turned on explicitly (it points at an
+// external service the operator must stand up). The credential lives
+// inline: a reader-role key is sufficient for the read-only tools, and
+// env indirection is intentionally not offered (see Provider.APIKey for
+// the inline convention; a trailing "/" in base_url is normalized away).
+type KnowledgeBase struct {
+	Enabled *bool  `yaml:"enabled,omitempty"`
+	BaseURL string `yaml:"base_url,omitempty"`
+	// APIKey is the minisearch bearer token (msk_…). Optional: a
+	// minisearch deployment running with --auth=off needs none.
+	APIKey string `yaml:"api_key,omitempty"`
+	// TimeoutMs bounds each request; 0 keeps the default (10000).
+	TimeoutMs int `yaml:"timeout_ms,omitempty"`
+	// DefaultTopK is the default result count; 0 keeps the default (5).
+	DefaultTopK int `yaml:"default_top_k,omitempty"`
+	// Collections lists the searchable collections. At least one is
+	// required when enabled; each carries a description surfaced to the
+	// model so it can route by topic without a discovery round-trip.
+	Collections []KBCollection `yaml:"collections,omitempty"`
+	// DefaultCollection selects the default; empty means the first entry.
+	DefaultCollection string `yaml:"default_collection,omitempty"`
+}
+
+// KBCollection names one searchable minisearch collection.
+type KBCollection struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description,omitempty"`
 }
 
 // MCPServer configures one MCP server connection. The key in MCPServers
