@@ -13,78 +13,37 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/05/14 10:44
+// Created: 2026/05/14 10:45
 
-// HTTP/JSON 客户端示例
-// 使用 brpc::Channel 发送 HTTP 请求到 MiniSearch Server
+// v2 API 示例客户端：创建 collection、写入文档（client 向量）、检索、读取、删除。
+// 使用 brpc HTTP Channel 发送 JSON 请求。
 
 #include <brpc/channel.h>
-#include <brpc/controller.h>
-#include <butil/logging.h>
 #include <gflags/gflags.h>
-#include <random>
-#include <sstream>
+#include <iostream>
 #include <string>
 
-DEFINE_string(server, "http://127.0.0.1:8200", "Server address (HTTP)");
-DEFINE_int32(timeout_ms, 3000, "RPC timeout in milliseconds");
-DEFINE_int32(max_retry, 3, "Max retry count");
-DEFINE_int32(dimension, 768, "Embedding vector dimension");
+DEFINE_string(server, "http://127.0.0.1:8200", "MiniSearch server address");
 
 namespace {
 
-// 生成随机 embedding 用于演示
-std::vector<float> random_embedding(int dim) {
-    static std::mt19937 gen(42);
-    static std::normal_distribution<float> dist(0.0f, 1.0f);
-    std::vector<float> vec(dim);
-    for (auto& v : vec) {
-        v = dist(gen);
-    }
-    return vec;
-}
+struct Reply {
+    int status = 0;
+    std::string body;
+};
 
-// 将 float 数组序列化为 JSON 数组字符串
-std::string embedding_to_json_array(const std::vector<float>& emb) {
-    std::ostringstream oss;
-    oss << "[";
-    for (size_t i = 0; i < emb.size(); ++i) {
-        if (i > 0)
-            oss << ",";
-        oss << emb[i];
-    }
-    oss << "]";
-    return oss.str();
-}
-
-// 发送 HTTP POST 请求
-std::string http_post(brpc::Channel& channel, const std::string& path, const std::string& body) {
+Reply http_request(brpc::Channel& channel,
+                   brpc::HttpMethod method,
+                   const std::string& path,
+                   const std::string& body = "") {
     brpc::Controller cntl;
-    cntl.http_request().uri() = path;
-    cntl.http_request().set_method(brpc::HTTP_METHOD_POST);
-    cntl.http_request().set_content_type("application/json");
-    cntl.request_attachment().append(body);
-
-    channel.CallMethod(nullptr, &cntl, nullptr, nullptr, nullptr);
-    if (cntl.Failed()) {
-        LOG(ERROR) << "POST " << path << " failed: " << cntl.ErrorText();
-        return "";
+    cntl.http_request().set_method(method);
+    cntl.http_request().uri() = FLAGS_server + path;
+    if (!body.empty()) {
+        cntl.request_attachment().append(body);
     }
-    return cntl.response_attachment().to_string();
-}
-
-// 发送 HTTP GET 请求
-std::string http_get(brpc::Channel& channel, const std::string& path) {
-    brpc::Controller cntl;
-    cntl.http_request().uri() = path;
-    cntl.http_request().set_method(brpc::HTTP_METHOD_GET);
-
     channel.CallMethod(nullptr, &cntl, nullptr, nullptr, nullptr);
-    if (cntl.Failed()) {
-        LOG(ERROR) << "GET " << path << " failed: " << cntl.ErrorText();
-        return "";
-    }
-    return cntl.response_attachment().to_string();
+    return {cntl.http_response().status_code(), cntl.response_attachment().to_string()};
 }
 
 } // namespace
@@ -92,122 +51,53 @@ std::string http_get(brpc::Channel& channel, const std::string& path) {
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    // 初始化 HTTP channel
     brpc::Channel channel;
     brpc::ChannelOptions options;
-    options.protocol = brpc::PROTOCOL_HTTP;
-    options.timeout_ms = FLAGS_timeout_ms;
-    options.max_retry = FLAGS_max_retry;
-
-    if (channel.Init(FLAGS_server.c_str(), &options) != 0) {
-        LOG(ERROR) << "Failed to initialize channel to " << FLAGS_server;
+    options.protocol = "http";
+    if (channel.Init(FLAGS_server.substr(FLAGS_server.find("://") + 3).c_str(), "", &options) !=
+        0) {
+        std::cerr << "Failed to init channel to " << FLAGS_server << std::endl;
         return -1;
     }
 
-    LOG(INFO) << "Connected to " << FLAGS_server;
+    // 1. 创建 collection（title text / tags keyword / vec vector(4, client 模式）
+    const std::string schema =
+        R"({"name":"demo","default_analyzer":"cjk_jieba","fields":[)"
+        R"({"name":"title","type":"text","indexed":true,"stored":true},)"
+        R"({"name":"tags","type":"keyword","indexed":true,"stored":true},)"
+        R"({"name":"vec","type":"vector","indexed":false,"stored":true,"dims":4,)"
+        R"("metric":"cosine","mode":"client"}]})";
+    auto reply = http_request(channel, brpc::HTTP_METHOD_POST, "/api/v2/collections", schema);
+    std::cout << "[create] " << reply.status << " " << reply.body << std::endl;
 
-    // ========================================================================
-    // 1. 逐条添加库表向量
-    // ========================================================================
-    const std::vector<std::string> table_ids = {
-        "default.user_info",
-        "default.order_detail",
-        "default.product_catalog",
-        "default.payment_record",
-        "default.delivery_tracking",
-    };
+    // 2. 写入两条文档
+    const std::string doc1 =
+        R"({"version":1,"fields":{"title":{"s":"presto 调优"},"tags":{"s":"wiki"},)"
+        R"("vec":{"v":{"data":[1.0,0.0,0.0,0.0]}}}})";
+    const std::string doc2 =
+        R"({"version":1,"fields":{"title":{"s":"loom 架构"},"tags":{"s":"wiki"},)"
+        R"("vec":{"v":{"data":[0.0,1.0,0.0,0.0]}}}})";
+    reply = http_request(channel, brpc::HTTP_METHOD_PUT, "/api/v2/demo/documents/doc1", doc1);
+    std::cout << "[upsert doc1] " << reply.status << " " << reply.body << std::endl;
+    reply = http_request(channel, brpc::HTTP_METHOD_PUT, "/api/v2/demo/documents/doc2", doc2);
+    std::cout << "[upsert doc2] " << reply.status << " " << reply.body << std::endl;
 
-    for (const auto& table_id : table_ids) {
-        auto emb = random_embedding(FLAGS_dimension);
-        auto emb_json = embedding_to_json_array(emb);
+    // 3. 向量检索（靠近 doc1 的 query）
+    reply = http_request(channel,
+                         brpc::HTTP_METHOD_POST,
+                         "/api/v2/demo/search",
+                         R"({"embedding":[0.9,0.1,0.0,0.0],"top_k":1})");
+    std::cout << "[search] " << reply.status << " " << reply.body << std::endl;
 
-        // 简单解析 database.table
-        std::string database, table;
-        auto dot = table_id.find('.');
-        if (dot != std::string::npos) {
-            database = table_id.substr(0, dot);
-            table = table_id.substr(dot + 1);
-        }
+    // 4. 读取、删除
+    reply = http_request(channel, brpc::HTTP_METHOD_GET, "/api/v2/demo/documents/doc1");
+    std::cout << "[get doc1] " << reply.status << " " << reply.body << std::endl;
+    reply = http_request(channel, brpc::HTTP_METHOD_DELETE, "/api/v2/demo/documents/doc2");
+    std::cout << "[delete doc2] " << reply.status << " " << reply.body << std::endl;
 
-        std::ostringstream body;
-        body << "{"
-             << R"("table_id":")" << table_id << R"(",)"
-             << R"("embedding":)" << emb_json << ","
-             << R"("meta":{)"
-             << R"("database":")" << database << R"(",)"
-             << R"("table":")" << table << R"(",)"
-             << R"("comment":"demo table: )" << table_id << R"(")"
-             << "}"
-             << "}";
-
-        auto resp = http_post(channel, "/api/recall/add", body.str());
-        LOG(INFO) << "Add " << table_id << " => " << resp;
-    }
-
-    // ========================================================================
-    // 2. 批量添加示例
-    // ========================================================================
-    {
-        auto emb1 = random_embedding(FLAGS_dimension);
-        auto emb2 = random_embedding(FLAGS_dimension);
-
-        std::ostringstream body;
-        body << R"({"items":[)"
-             << R"({"table_id":"analytics.daily_report",)"
-             << R"("embedding":)" << embedding_to_json_array(emb1) << ","
-             << R"("meta":{"database":"analytics","table":"daily_report",)"
-             << R"("comment":"batch item 1"}},)"
-             << R"({"table_id":"analytics.weekly_summary",)"
-             << R"("embedding":)" << embedding_to_json_array(emb2) << ","
-             << R"("meta":{"database":"analytics","table":"weekly_summary",)"
-             << R"("comment":"batch item 2"}})"
-             << "]}";
-
-        auto resp = http_post(channel, "/api/recall/batch_add", body.str());
-        LOG(INFO) << "BatchAdd => " << resp;
-    }
-
-    // ========================================================================
-    // 3. 查询索引状态
-    // ========================================================================
-    {
-        auto resp = http_get(channel, "/api/recall/stats");
-        LOG(INFO) << "Stats => " << resp;
-    }
-
-    // ========================================================================
-    // 4. 向量检索
-    // ========================================================================
-    {
-        auto query = random_embedding(FLAGS_dimension);
-        std::ostringstream body;
-        body << "{"
-             << R"("embedding":)" << embedding_to_json_array(query) << ","
-             << R"("top_k":3)"
-             << "}";
-
-        auto resp = http_post(channel, "/api/recall/search", body.str());
-        LOG(INFO) << "Search => " << resp;
-    }
-
-    // ========================================================================
-    // 5. 保存快照
-    // ========================================================================
-    {
-        std::string body = R"({"path":"/tmp/minisearch_snapshot"})";
-        auto resp = http_post(channel, "/api/recall/snapshot/save", body);
-        LOG(INFO) << "SaveSnapshot => " << resp;
-    }
-
-    // ========================================================================
-    // 6. 加载快照
-    // ========================================================================
-    {
-        std::string body = R"({"path":"/tmp/minisearch_snapshot"})";
-        auto resp = http_post(channel, "/api/recall/snapshot/load", body);
-        LOG(INFO) << "LoadSnapshot => " << resp;
-    }
-
-    LOG(INFO) << "All done.";
+    // 5. 删除 collection（需 confirm）
+    reply =
+        http_request(channel, brpc::HTTP_METHOD_DELETE, "/api/v2/collections/demo?confirm=demo");
+    std::cout << "[drop] " << reply.status << " " << reply.body << std::endl;
     return 0;
 }
