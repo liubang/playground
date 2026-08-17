@@ -651,6 +651,11 @@ async function openSession(id) {
   // occupancy 缺省时按 snapshot 消息本地估算（与后端 estTokens 同算法）
   app.ctxgauge.setWindow(snap.window, snap.context_window)
   app.ctxgauge.setOccupancy(snap.occupancy || estTranscriptTokens(snap.messages))
+  // attach 前再清一次追帧队列：快照拉取期间旧连接 dispatched 的残余事件
+  // 要么已被快照覆盖（seq ≤ event_seq），要么会被新流从 event_seq 重放，
+  // 丢弃是无损的；留给 rAF 冲刷就会渲染到重建后的 transcript 上造成重复。
+  eventFloor = snap.event_seq || 0
+  eventQueue.length = 0
   app.stream.attach(id, snap.event_seq || 0)
 }
 
@@ -876,8 +881,16 @@ async function pickReasoning(effort) {
 const EVENTS_PER_FRAME = 120
 const eventQueue = []
 let eventFlushScheduled = false
+// 事件水位：snapshot 的 event_seq 是服务端投影水印，序号 ≤ 它的事件效果
+// 已包含在快照里（后端保证水印不落后于投影）。重挂流后迟到的旧帧
+// （垂死连接的追帧残余）序号必然 ≤ 水位，直接丢弃，避免在重建后的
+// transcript 上重复渲染（同一命令两份 output 的 bug 来源）。
+let eventFloor = 0
 
 function onRuntimeEvent(evt) {
+  // 上一会话的迟到帧（切换会话后旧连接的残余）不进入新会话的视图。
+  if (evt.session_id && app.sessionId && evt.session_id !== app.sessionId) return
+  if (evt.sequence && evt.sequence <= eventFloor) return
   eventQueue.push(evt)
   if (eventFlushScheduled) return
   eventFlushScheduled = true

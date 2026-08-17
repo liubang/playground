@@ -414,6 +414,9 @@ export class Transcript {
       }
       case 'tool.prepared': {
         this._hideThinking()
+        // 去重：迟到/重放的 prepared（旧连接追帧残余、快照已重建过该调用）
+        // 不再追加孪生块——否则同一命令会出现一个永远 running 的多余卡片。
+        if (p.call_id && this.tools.has(p.call_id)) break
         // 实时事件只带有界 preview；完整输出经 io.fetchToolOutput 按需取
         const tb = toolBlock(p, {
           onCopy: this.io.fetchToolOutput ? () => this.io.fetchToolOutput(p.call_id) : null,
