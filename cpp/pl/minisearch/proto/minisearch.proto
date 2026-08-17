@@ -21,132 +21,193 @@ package pl.minisearch.proto;
 
 option cc_generic_services = true;
 
-// =========================================================================
-// 业务消息定义（用于 JSON 序列化/反序列化）
-// =========================================================================
-
-// 库表元信息，作为召回结果返回
-message TableMeta {
-  string database = 1;
-  string table = 2;
-  string comment = 3;
-  repeated ColumnMeta columns = 4;
-}
-
-message ColumnMeta {
+// 字段定义，type: "text" | "keyword" | "numeric" | "vector"
+message FieldDef {
   string name = 1;
   string type = 2;
-  string comment = 3;
+  bool indexed = 3;
+  bool stored = 4;
+  string analyzer = 5;
+  int32 dims = 6;
+  string metric = 7;
+  // vector only: source text field for server-side embedding
+  string source_field = 8;
+  // vector only: "server" | "client"
+  string mode = 9;
 }
 
-// 向索引中添加库表向量
-message AddRequest {
-  // 库表唯一标识 (database.table)
-  string table_id = 1;
-  // 预计算好的 embedding 向量
-  repeated float embedding = 2;
-  // 库表元信息
-  TableMeta meta = 3;
+message CollectionSpec {
+  string name = 1;
+  repeated FieldDef fields = 2;
+  string default_analyzer = 3;
 }
 
-message AddResponse {
-  bool success = 1;
-  string message = 2;
+message GenericResponse {
+  bool ok = 1;
+  string error = 2;
 }
 
-// 批量添加
-message BatchAddRequest {
-  repeated AddRequest items = 1;
+message CollectionEntryMsg {
+  string name = 1;
+  int64 active_documents = 2;
 }
 
-message BatchAddResponse {
-  int32 success_count = 1;
-  int32 fail_count = 2;
-  string message = 3;
+message ListCollectionsResponse {
+  repeated CollectionEntryMsg collections = 1;
 }
 
-// 向量检索请求
+// 动态类型字段值
+message FieldValue {
+  oneof kind {
+    string s = 1;
+    double n = 2;
+    FloatVector v = 3;
+  }
+}
+
+message FloatVector {
+  repeated float data = 1;
+}
+
+message Document {
+  string id = 1;
+  int64 version = 2;
+  map<string, FieldValue> fields = 3;
+  // Checkpoint 内部字段：文档的内部 docid。API 请求忽略（服务端分配）。
+  int64 internal_docid = 4;
+}
+
+message UpsertResponse {
+  bool ok = 1;
+  string error = 2;
+  int64 internal_docid = 3;
+  int64 superseded_docid = 4;
+}
+
+message GetDocumentResponse {
+  bool found = 1;
+  Document document = 2;
+}
+
+message Hit {
+  string id = 1;
+  double score = 2;
+  Document document = 3;
+}
+
+// RRF 融合权重（DESIGN.md §7.1）。权重为 0 显式关闭对应检索路。
+message SearchWeights {
+  double bm25 = 1;
+  double vector = 2;
+}
+
+// 单个过滤子句。op: "=" | "!=" | ">" | ">=" | "<" | "<=" | "in"。
+// = / != / 范围操作取 values[0]；in 取全部 values。
+message FilterClause {
+  string field = 1;
+  string op = 2;
+  repeated FieldValue values = 3;
+}
+
+// 过滤表达式（DESIGN.md §7.3）：所有子句取 AND，M1 后置应用。
+message Filter {
+  repeated FilterClause and = 1;
+}
+
 message SearchRequest {
-  // query 的 embedding 向量
-  repeated float embedding = 1;
-  // 返回 top-k 个结果
-  int32 top_k = 2;
-}
-
-message SearchResult {
-  string table_id = 1;
-  float distance = 2;
-  TableMeta meta = 3;
+  string collection = 1;
+  // 原始查询文本，服务端调用 embedding（需要配置 embedding client）
+  string text = 2;
+  // 预计算 query 向量（与 text 二选一，同时提供时 embedding 优先）
+  repeated float embedding = 3;
+  int32 top_k = 4;
+  // 缺省 = collection 默认（1.0/1.0）
+  SearchWeights weights = 5;
+  Filter filter = 6;
+  // 请求 cross-encoder 重排（需要配置 rerank client，否则降级并标记）
+  bool rerank = 7;
 }
 
 message SearchResponse {
-  repeated SearchResult results = 1;
+  repeated Hit hits = 1;
+  string error = 2;
+  // 降级标记（DESIGN.md §7.5）："vector" | "rerank"
+  repeated string degraded = 3;
+  int64 took_ms = 4;
 }
 
-// 索引快照管理
-message SnapshotRequest {
-  string path = 1;
-}
-
-message SnapshotResponse {
-  bool success = 1;
-  string message = 2;
-}
-
-// 索引状态
-message StatsRequest {}
-
-message StatsResponse {
-  int64 total_vectors = 1;
-  int32 dimension = 2;
-  string index_type = 3;
-  bool is_trained = 4;
-}
-
-// =========================================================================
-// 文本直通接口（服务端自动调用 Embedding API）
-// =========================================================================
-
-// 通过文本添加库表向量（服务端自动计算 embedding）
-message AddByTextRequest {
-  string table_id = 1;
-  // 用于计算 embedding 的文本（通常是 "database.table: comment, col1 type1, col2 type2, ..."）
-  string text = 2;
-  TableMeta meta = 3;
-}
-
-// 批量文本添加
-message BatchAddByTextRequest {
-  repeated AddByTextRequest items = 1;
-}
-
-// 通过文本检索（服务端自动计算 query embedding）
-message SearchByTextRequest {
-  // 用户的自然语言查询
+// queries:analyze 调试端点（DESIGN.md §6.2）
+message AnalyzeRequest {
   string text = 1;
-  int32 top_k = 2;
 }
 
-// =========================================================================
-// HTTP 服务入口（brpc 要求通过 protobuf service 注册）
-// =========================================================================
+message AnalyzedToken {
+  string term = 1;
+  uint32 pos = 2;
+  uint32 begin = 3;
+  uint32 end = 4;
+}
 
-// 空消息，HTTP body 由服务端手动解析 JSON
+message AnalyzeResponse {
+  repeated AnalyzedToken tokens = 1;
+}
+
+message AdminTenantStats {
+  string name = 1;
+  int64 collections = 2;
+  int64 active_documents = 3;
+}
+
+message AdminStatsResponse {
+  repeated AdminTenantStats tenants = 1;
+  int64 total_collections = 2;
+  int64 total_active_documents = 3;
+}
+
 message HttpRequest {}
 message HttpResponse {}
 
-// HTTP 服务入口，所有 /api/recall/* 请求路由到 default_method
+// checkpoint manifest（storage 层内部格式，见 storage/checkpoint.h）
+message CheckpointManifest {
+  int64 seq = 1;
+  CollectionSpec spec = 2;
+  string index_type = 3;
+  repeated string files = 4;
+}
+
+// 租户与 API key 管理（DESIGN.md §10.5）
+message AdminTenantEntry {
+  string name = 1;
+  int64 collections = 2;
+}
+
+message AdminListTenantsResponse {
+  repeated AdminTenantEntry tenants = 1;
+}
+
+message AdminIssueKeyRequest {
+  string role = 1;  // tenant_admin | writer | reader（admin 仅 bootstrap）
+  repeated string collections = 2;  // 白名单，空 = 本租户全部
+}
+
+message AdminIssueKeyResponse {
+  string key_id = 1;
+  string key = 2;  // 明文仅此一次返回
+}
+
+message AdminKeyEntry {
+  string key_id = 1;
+  string tenant = 2;
+  string role = 3;
+  repeated string collections = 4;
+  int64 created_at = 5;
+  bool revoked = 6;
+}
+
+message AdminListKeysResponse {
+  repeated AdminKeyEntry keys = 1;
+}
+
 service MiniSearchHttpService {
   rpc default_method(HttpRequest) returns (HttpResponse);
 }
-
-// HTTP API 路由（由 C++ 服务端在 default_method 中分发）:
-//   POST /api/recall/add              -> AddRequest / AddResponse
-//   POST /api/recall/batch_add        -> BatchAddRequest / BatchAddResponse
-//   POST /api/recall/search           -> SearchRequest / SearchResponse
-//   POST /api/recall/add_by_text      -> AddByTextRequest / AddResponse
-//   POST /api/recall/batch_add_by_text -> BatchAddByTextRequest / BatchAddResponse
-//   POST /api/recall/search_by_text   -> SearchByTextRequest / SearchResponse
-//   POST /api/recall/snapshot/save    -> SnapshotRequest / SnapshotResponse
-//   POST /api/recall/snapshot/load    -> SnapshotRequest / SnapshotResponse
-//   GET  /api/recall/stats            -> StatsResponse

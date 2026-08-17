@@ -26,33 +26,21 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "analyzer",
-    srcs = ["analyzer.cpp"],
-    hdrs = ["analyzer.h"],
+    name = "inverted",
+    srcs = ["inverted_index.cpp"],
+    hdrs = ["inverted_index.h"],
     copts = COPTS,
     linkopts = LINKOPTS,
-    deps = [
-        "@jieba_cpp//:jieba",
-    ],
+    deps = ["//cpp/pl/minisearch/analysis:analyzer"],
 )
 
 cc_test(
-    name = "analyzer_test",
-    srcs = ["ut/analyzer_test.cc"],
+    name = "inverted_index_test",
+    srcs = ["ut/inverted_index_test.cc"],
     copts = TEST_COPTS,
     linkopts = LINKOPTS,
     deps = [
-        ":analyzer",
+        ":inverted",
         "@googletest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "jieba_test",
-    srcs = ["ut/jieba_test.cc"],
-    copts = TEST_COPTS,
-    deps = [
-        "@googletest//:gtest_main",
-        "@jieba_cpp//:jieba",
     ],
 )
