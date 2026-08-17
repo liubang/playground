@@ -1,0 +1,10 @@
+{"query": "presto 查询慢怎么排查", "expect": ["kb-presto-tuning"]}
+{"query": "join 阶段 CPU 热点", "expect": ["kb-presto-tuning"]}
+{"query": "presto 内存不足 OOM", "expect": ["kb-presto-memory"]}
+{"query": "loom 会话怎么恢复", "expect": ["kb-loom-arch"]}
+{"query": "loom 记忆是怎么存储的", "expect": ["kb-loom-memory"]}
+{"query": "minisearch 架构是什么", "expect": ["kb-minisearch-overview"]}
+{"query": "中文分词方案", "expect": ["kb-minisearch-analysis"]}
+{"query": "RRF 融合排名", "expect": ["kb-minisearch-analysis"]}
+{"query": "事件溯源 checkpoint", "expect": ["kb-loom-arch"]}
+{"query": "数据倾斜统计信息过期", "expect": ["kb-presto-tuning"]}
