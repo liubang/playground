@@ -22,6 +22,7 @@
 #include <optional>
 #include <string>
 
+#include "cpp/pl/minisearch/auth/console_auth.h"
 #include "cpp/pl/minisearch/auth/keystore.h"
 #include "cpp/pl/minisearch/embedding_client.h"
 #include "cpp/pl/minisearch/proto/minisearch.pb.h"
@@ -41,7 +42,9 @@ public:
                    auth::KeyStore* keys,
                    bool auth_on,
                    std::shared_ptr<EmbeddingClient> embedding_client,
-                   std::shared_ptr<RerankClient> rerank_client);
+                   std::shared_ptr<RerankClient> rerank_client,
+                   auth::ConsoleAuth* console_auth = nullptr,
+                   std::string web_dir = "");
 
     void default_method(google::protobuf::RpcController* controller,
                         const proto::HttpRequest* /*request*/,
@@ -67,6 +70,12 @@ private:
                    const auth::Principal&,
                    const std::string& collection,
                    const std::string& id);
+    void HandleListDocuments(brpc::Controller* cntl,
+                             const auth::Principal&,
+                             const std::string& collection);
+    void HandleImport(brpc::Controller* cntl,
+                      const auth::Principal&,
+                      const std::string& collection);
     void HandleDelete(brpc::Controller* cntl,
                       const auth::Principal&,
                       const std::string& collection,
@@ -79,7 +88,14 @@ private:
                        const std::string& collection);
     void HandleHealthz(brpc::Controller* cntl);
 
+    // Console session：账号密码登录（免 Bearer）与自服务（DESIGN.md §10 扩展）
+    void HandleLogin(brpc::Controller* cntl);
+    void HandleChangePassword(brpc::Controller* cntl);
+    void HandleLogout(brpc::Controller* cntl);
+    void HandleWhoAmI(brpc::Controller* cntl, const auth::Principal&);
+
     // Admin: /api/v2/admin/tenants... (DESIGN.md §10.5)
+    void HandleCreateTenant(brpc::Controller* cntl, const auth::Principal&);
     void HandleListTenants(brpc::Controller* cntl, const auth::Principal&);
     void HandleDropTenant(brpc::Controller* cntl, const auth::Principal&, const std::string& name);
     void HandleIssueKey(brpc::Controller* cntl, const auth::Principal&, const std::string& tenant);
@@ -89,6 +105,15 @@ private:
                          const std::string& tenant,
                          const std::string& key_id);
     void HandleStats(brpc::Controller* cntl, const auth::Principal&);
+
+    // Server-side embedding（upsert / import 共用）：vec 字段 mode=server
+    // 且文档未带向量时，对 source 字段文本（或 override 文本）做 embedding
+    // 并写回 doc。失败时填充 status/error 并返回 false。
+    bool ApplyServerEmbedding(const CollectionEntry& entry,
+                              core::Document* doc,
+                              const std::string* embed_text_override,
+                              int* status,
+                              std::string* error);
 
     template <typename T> bool ParseJsonBody(brpc::Controller* cntl, T* message);
     template <typename T>
@@ -100,6 +125,8 @@ private:
     bool auth_on_;
     std::shared_ptr<EmbeddingClient> embedding_client_;
     std::shared_ptr<RerankClient> rerank_client_;
+    auth::ConsoleAuth* console_auth_; // nullable；session 登录链路
+    std::string web_dir_;             // 空 = 不 serve console 静态文件
 };
 
 } // namespace pl::minisearch::server

@@ -24,6 +24,7 @@
 #include <sys/stat.h>
 #include <thread>
 
+#include "cpp/pl/minisearch/auth/console_auth.h"
 #include "cpp/pl/minisearch/auth/keystore.h"
 #include "cpp/pl/minisearch/embedding_client.h"
 #include "cpp/pl/minisearch/rerank_client.h"
@@ -65,6 +66,17 @@ DEFINE_string(rerank_model, "", "Rerank model name, e.g. bge-reranker-v2-m3");
 DEFINE_string(rerank_api_key, "", "API key for rerank service (optional)");
 DEFINE_string(rerank_path, "/v1/rerank", "API path for rerank service");
 DEFINE_int32(rerank_timeout_ms, 30000, "Rerank API timeout in milliseconds");
+
+// Console 控制台配置（可选）：账号密码登录 + 静态文件目录
+DEFINE_string(web_dir,
+              "",
+              "Directory holding the console static files; empty disables /console/* serving");
+DEFINE_string(console_admin_user,
+              "",
+              "Bootstrap console admin username; empty disables account/password login");
+DEFINE_string(console_admin_password,
+              "",
+              "Bootstrap console admin password (only used to seed the store on first start)");
 
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -118,10 +130,14 @@ int main(int argc, char* argv[]) {
     brpc::Server server;
 
     // key store（auth）：sha256 持久化 + 一次性 bootstrap admin key。
+    // auth/ 目录在配置了 data_dir 时总是创建——console users 与 keys 共用该目录。
+    if (!FLAGS_data_dir.empty()) {
+        ::mkdir(FLAGS_data_dir.c_str(), 0755);
+        ::mkdir((FLAGS_data_dir + "/auth").c_str(), 0755);
+    }
     auto keys = std::make_unique<pl::minisearch::auth::KeyStore>(
         FLAGS_data_dir.empty() ? "" : FLAGS_data_dir + "/auth/keys.json");
     if (FLAGS_auth) {
-        ::mkdir(FLAGS_data_dir.c_str(), 0755);
         auto boot = keys->BootstrapIfNeeded(FLAGS_data_dir);
         if (boot.has_value()) {
             LOG(WARNING) << "bootstrapped admin key written to " << FLAGS_data_dir
@@ -129,17 +145,33 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // console 账号密码登录（session）：仅配置了 bootstrap user 时启用；
+    // users 持久化到 <data_dir>/auth/console_users.json（data_dir 为空时纯内存）
+    pl::minisearch::auth::ConsoleAuth::Options console_opts;
+    console_opts.path = FLAGS_data_dir.empty() ? "" : FLAGS_data_dir + "/auth/console_users.json";
+    console_opts.bootstrap_user = FLAGS_console_admin_user;
+    console_opts.bootstrap_password = FLAGS_console_admin_password;
+    auto console_auth =
+        std::make_unique<pl::minisearch::auth::ConsoleAuth>(std::move(console_opts));
+
     auto context =
         std::make_unique<pl::minisearch::server::TenantContext>(FLAGS_data_dir, FLAGS_index_type);
-    auto service = std::make_unique<pl::minisearch::server::HttpApiService>(
-        context.get(), keys.get(), FLAGS_auth, embedding_client, rerank_client);
+    auto service = std::make_unique<pl::minisearch::server::HttpApiService>(context.get(),
+                                                                            keys.get(),
+                                                                            FLAGS_auth,
+                                                                            embedding_client,
+                                                                            rerank_client,
+                                                                            console_auth.get(),
+                                                                            FLAGS_web_dir);
 
     // /api/v2/* 通配路由 + /healthz（唯一免认证端点），路径段在
     // HttpApiService::default_method 内分发
     if (server.AddService(service.get(),
                           brpc::SERVER_DOESNT_OWN_SERVICE,
                           "/api/v2/* => default_method,"
-                          "/healthz => default_method") != 0) {
+                          "/healthz => default_method,"
+                          "/console/* => default_method,"
+                          "/ => default_method") != 0) {
         LOG(ERROR) << "Failed to add MiniSearchHttpService";
         return -1;
     }
@@ -162,7 +194,9 @@ int main(int argc, char* argv[]) {
     }
 
     LOG(INFO) << "MiniSearch Server (HTTP/JSON) started on " << address
-              << " auth=" << (FLAGS_auth ? "on" : "off") << " index_type=" << FLAGS_index_type;
+              << " auth=" << (FLAGS_auth ? "on" : "off") << " index_type=" << FLAGS_index_type
+              << " console_login=" << (console_auth->enabled() ? "on" : "off")
+              << " web_dir=" << (FLAGS_web_dir.empty() ? "(off)" : FLAGS_web_dir);
 
     while (!quit.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));

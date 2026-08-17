@@ -80,6 +80,25 @@ cc_library(
 )
 
 cc_library(
+    name = "markdown",
+    srcs = ["markdown.cpp"],
+    hdrs = ["markdown.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+)
+
+cc_library(
+    name = "static_files",
+    srcs = ["static_files.cpp"],
+    hdrs = ["static_files.h"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "@brpc",
+    ],
+)
+
+cc_library(
     name = "server",
     srcs = [
         "collection_registry.cpp",
@@ -96,11 +115,14 @@ cc_library(
     deps = [
         ":codec",
         ":filter",
+        ":markdown",
         ":search_pipeline",
+        ":static_files",
         "//cpp/pl/minisearch:embedding_client",
         "//cpp/pl/minisearch:faiss_index",
         "//cpp/pl/minisearch:rerank_client",
         "//cpp/pl/minisearch/analysis:analyzer",
+        "//cpp/pl/minisearch/auth:console_auth",
         "//cpp/pl/minisearch/auth:keystore",
         "//cpp/pl/minisearch/core",
         "//cpp/pl/minisearch/index:inverted",
@@ -120,6 +142,8 @@ cc_test(
     linkopts = LINKOPTS,
     deps = [
         ":server",
+        "//cpp/pl/minisearch/auth:console_auth",
+        "//cpp/pl/minisearch/auth:keystore",
         "//cpp/pl/minisearch/core",
         "@brpc",
         "@googletest//:gtest_main",
