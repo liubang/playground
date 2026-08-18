@@ -106,8 +106,8 @@ providers:
     type: openai                # openai（兼容网关，默认）| anthropic（Messages API）
     base_url: https://api.deepseek.com/v1
     # 密钥二选一（互斥）: api_key 明文书写 | api_key_env 引用环境变量名
-    api_key: <your-api-key>
-    # api_key_env: DEEPSEEK_API_KEY
+    #   api_key: <your-api-key>
+    #   api_key_env: DEEPSEEK_API_KEY
     wire_api: chat              # openai: chat（默认）| responses；anthropic: messages
     max_retries: 2
     default_model: deepseek-chat
