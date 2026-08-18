@@ -19,6 +19,7 @@
 
 #include <butil/logging.h>
 #include <chrono>
+#include <mutex>
 #include <string_view>
 #include <unordered_set>
 #include <utility>

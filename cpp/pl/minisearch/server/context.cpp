@@ -18,6 +18,7 @@
 #include "cpp/pl/minisearch/server/context.h"
 
 #include <filesystem>
+#include <mutex>
 
 #include "cpp/pl/minisearch/core/schema.h"
 
