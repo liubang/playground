@@ -18,7 +18,6 @@ import {
 import {
   SearchOutline,
   FolderOpenOutline,
-  DocumentTextOutline,
   BusinessOutline,
   KeyOutline,
   BarChartOutline,
@@ -44,8 +43,7 @@ const icon = (c) => () => h(c)
 const menuOptions = computed(() => {
   const items = [
     { label: '搜索', key: 'search', icon: icon(SearchOutline) },
-    { label: 'Collections', key: 'collections', icon: icon(FolderOpenOutline) },
-    { label: '文档', key: 'documents', icon: icon(DocumentTextOutline) },
+    { label: '数据管理', key: 'collections', icon: icon(FolderOpenOutline) },
   ]
   if (session.role === 'admin' || session.role === 'tenant_admin') {
     items.push({ label: '密钥管理', key: 'keys', icon: icon(KeyOutline) })
@@ -154,9 +152,6 @@ const displayName = computed(() => session.user || session.tenant || 'console')
           <span class="topbar-title">{{ route.meta?.title || '' }}</span>
         </div>
         <div class="topbar-right">
-          <n-tag v-if="session.tenant" size="small" :bordered="false" type="primary" round
-            >租户: {{ session.tenant }}</n-tag
-          >
           <n-button quaternary circle class="icon-btn" @click="toggleDark">
             <template #icon>
               <n-icon :component="darkThemeState.dark ? SunnyOutline : MoonOutline" />
@@ -229,6 +224,20 @@ const displayName = computed(() => session.user || session.tenant || 'console')
 }
 :deep(.n-menu) {
   --n-item-height: 40px;
+}
+/* 折叠态：naive 默认 grid 会给不可见的 header 文本保留一列宽度，导致图标偏左；
+   改为 flex 布局并隐藏 header，让图标在高亮背景中居中 */
+:deep(.n-menu--collapsed .n-menu-item-content) {
+  display: flex !important;
+  padding: 0 !important;
+  justify-content: center;
+  align-items: center;
+}
+:deep(.n-menu--collapsed .n-menu-item-content__icon) {
+  margin: 0 !important;
+}
+:deep(.n-menu--collapsed .n-menu-item-content-header) {
+  display: none !important;
 }
 .sider-footer {
   padding: 12px;

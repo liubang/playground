@@ -5,13 +5,17 @@ const BASE = '/api/v2'
 /**
  * 底层 fetch 封装。401 时清会话并跳登录页。
  * 后端错误统一为 { ok:false, error: "..." }，非 2xx 一律抛 Error。
+ *
+ * 租户语义（DESIGN.md §10）：租户不出现在 URL 路径，数据面请求解析为凭证所属
+ * 租户；admin 可通过 ?tenant= 覆盖。数据面函数的 tenant 参数由调用方（页面）
+ * 显式传入；非 admin 的 ?tenant= 会被服务端忽略，因此各角色可统一传参。
  */
 async function request(method, path, body = null, query = null) {
   let url = BASE + path
   if (query) {
     const params = new URLSearchParams()
     for (const [k, v] of Object.entries(query)) {
-      if (v !== undefined && v !== null) params.set(k, String(v))
+      if (v !== undefined && v !== null && v !== '') params.set(k, String(v))
     }
     const qs = params.toString()
     if (qs) url += '?' + qs
@@ -82,50 +86,107 @@ export function changePassword(user, oldPassword, newPassword) {
 }
 
 // ---- Collections ----
-export function listCollections() {
-  return request('GET', '/collections')
+export function listCollections(tenant) {
+  return request('GET', '/collections', null, { tenant })
 }
 
-export function createCollection(spec) {
-  return request('POST', '/collections', spec)
+export function createCollection(spec, tenant) {
+  return request('POST', '/collections', spec, { tenant })
 }
 
-export function dropCollection(name) {
-  return request('DELETE', `/collections/${encodeURIComponent(name)}`, null, { confirm: name })
+export function dropCollection(name, tenant) {
+  return request('DELETE', `/collections/${encodeURIComponent(name)}`, null, {
+    confirm: name,
+    tenant,
+  })
 }
 
 // ---- Documents ----
-export function listDocuments(collection, offset = 0, limit = 50) {
-  return request('GET', `/${encodeURIComponent(collection)}/documents`, null, { offset, limit })
+export function listDocuments(collection, offset = 0, limit = 50, tenant) {
+  return request('GET', `/${encodeURIComponent(collection)}/documents`, null, {
+    offset,
+    limit,
+    tenant,
+  })
 }
 
-export function getDocument(collection, id) {
-  return request('GET', `/${encodeURIComponent(collection)}/documents/${encodeURIComponent(id)}`)
+// 分块文档的 chunk id 形如 "<name>#chunk_<i>"；不含该后缀的视为单文档
+const CHUNK_ID_RE = /^(.*)#chunk_(\d+)$/
+
+export function docNameOf(id) {
+  const m = id.match(CHUNK_ID_RE)
+  return m ? m[1] : id
 }
 
-export function upsertDocument(collection, id, doc) {
+export function chunkIndexOf(id) {
+  const m = id.match(CHUNK_ID_RE)
+  return m ? Number(m[2]) : null
+}
+
+/**
+ * 拉取 collection 全量 chunk（listDocuments 按 chunk 平铺返回），
+ * 在前端按文档名聚合成顶层文档列表：[{ name, chunks, docs }]。
+ */
+export async function listTopLevelDocuments(collection, tenant) {
+  const agg = new Map()
+  let offset = 0
+  const limit = 200
+  let total = 0
+  do {
+    const resp = await listDocuments(collection, offset, limit, tenant)
+    total = resp.total || 0
+    for (const d of resp.documents || []) {
+      const name = docNameOf(d.id)
+      const e = agg.get(name) || { name, chunks: 0, docs: [] }
+      e.chunks++
+      e.docs.push(d)
+      agg.set(name, e)
+    }
+    offset += limit
+  } while (offset < total)
+  return Array.from(agg.values())
+}
+
+export function getDocument(collection, id, tenant) {
+  return request(
+    'GET',
+    `/${encodeURIComponent(collection)}/documents/${encodeURIComponent(id)}`,
+    null,
+    {
+      tenant,
+    },
+  )
+}
+
+export function upsertDocument(collection, id, doc, tenant) {
   return request(
     'PUT',
     `/${encodeURIComponent(collection)}/documents/${encodeURIComponent(id)}`,
     doc,
+    { tenant },
   )
 }
 
-export function deleteDocument(collection, id) {
-  return request('DELETE', `/${encodeURIComponent(collection)}/documents/${encodeURIComponent(id)}`)
+export function deleteDocument(collection, id, tenant) {
+  return request(
+    'DELETE',
+    `/${encodeURIComponent(collection)}/documents/${encodeURIComponent(id)}`,
+    null,
+    { tenant },
+  )
 }
 
-export function importMarkdown(collection, body) {
-  return request('POST', `/${encodeURIComponent(collection)}/documents:import`, body)
+export function importMarkdown(collection, body, tenant) {
+  return request('POST', `/${encodeURIComponent(collection)}/documents:import`, body, { tenant })
 }
 
 // ---- Search ----
-export function search(collection, params) {
-  return request('POST', `/${encodeURIComponent(collection)}/search`, params)
+export function search(collection, params, tenant) {
+  return request('POST', `/${encodeURIComponent(collection)}/search`, params, { tenant })
 }
 
-export function analyze(collection, text) {
-  return request('POST', `/${encodeURIComponent(collection)}/queries:analyze`, { text })
+export function analyze(collection, text, tenant) {
+  return request('POST', `/${encodeURIComponent(collection)}/queries:analyze`, { text }, { tenant })
 }
 
 // ---- Admin: Tenants ----
@@ -139,6 +200,15 @@ export function createTenant(name) {
 
 export function dropTenant(name) {
   return request('DELETE', `/admin/tenants/${encodeURIComponent(name)}`, null, { confirm: name })
+}
+
+// Collection 跨租户迁移（admin）：POST /admin/tenants/{src}/collections/{name}:move
+export function moveCollection(srcTenant, name, target) {
+  return request(
+    'POST',
+    `/admin/tenants/${encodeURIComponent(srcTenant)}/collections/${encodeURIComponent(name)}:move`,
+    { target },
+  )
 }
 
 // ---- Admin: Keys ----
@@ -156,6 +226,15 @@ export function revokeKey(tenant, keyId) {
   return request(
     'DELETE',
     `/admin/tenants/${encodeURIComponent(tenant)}/keys/${encodeURIComponent(keyId)}`,
+  )
+}
+
+// API Key 跨租户迁移（admin）：POST /admin/tenants/{src}/keys/{key_id}:move
+export function moveKey(srcTenant, keyId, target) {
+  return request(
+    'POST',
+    `/admin/tenants/${encodeURIComponent(srcTenant)}/keys/${encodeURIComponent(keyId)}:move`,
+    { target },
   )
 }
 
