@@ -744,8 +744,8 @@ const TABS = [
             key: 'knowledge_base.enabled',
             label: '启用知识库',
             type: 'tristate',
-            def: '关',
-            hint: '开启后注册 kb_search / kb_read 工具；修改需重启生效',
+            def: '自动',
+            hint: '自动 = 有 base_url 即启用；修改需重启生效',
           },
           {
             key: 'knowledge_base.base_url',

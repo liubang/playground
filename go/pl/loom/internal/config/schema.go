@@ -401,12 +401,11 @@ type Browser struct {
 }
 
 // KnowledgeBase configures the minisearch-backed knowledge base tools
-// (kb_search/kb_read). Enabled is nil-typed so "absent" defaults to
-// "disabled" — the section must be turned on explicitly (it points at an
-// external service the operator must stand up). The credential lives
-// inline: a reader-role key is sufficient for the read-only tools, and
-// env indirection is intentionally not offered (see Provider.APIKey for
-// the inline convention; a trailing "/" in base_url is normalized away).
+// (kb_search/kb_read). Enabled is nil-typed: absent means "enabled when
+// base_url is set" (like image), an explicit false always disables.
+// The credential lives inline: a reader-role key is sufficient for the
+// read-only tools, and env indirection is intentionally not offered (see
+// Provider.APIKey for the inline convention).
 type KnowledgeBase struct {
 	Enabled *bool  `yaml:"enabled,omitempty"`
 	BaseURL string `yaml:"base_url,omitempty"`

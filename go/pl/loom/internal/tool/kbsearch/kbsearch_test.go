@@ -405,6 +405,7 @@ func TestNew_InvalidOptions(t *testing.T) {
 		{"no collections", Options{BaseURL: "http://x", Timeout: time.Second, DefaultTopK: 5}},
 		{"bad top_k", Options{BaseURL: "http://x", Timeout: time.Second, DefaultTopK: 99, Collections: []Collection{{Name: "c"}}}},
 		{"zero timeout", Options{BaseURL: "http://x", DefaultTopK: 5, Collections: []Collection{{Name: "c"}}}},
+		{"default_collection not in collections", Options{BaseURL: "http://x", Timeout: time.Second, DefaultTopK: 5, DefaultCollection: "missing", Collections: []Collection{{Name: "c"}}}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
