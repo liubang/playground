@@ -20,14 +20,8 @@ const router = createRouter({
         {
           path: 'collections',
           name: 'collections',
-          meta: { title: 'Collections' },
+          meta: { title: '数据管理' },
           component: () => import('../views/CollectionsView.vue'),
-        },
-        {
-          path: 'documents',
-          name: 'documents',
-          meta: { title: '文档管理' },
-          component: () => import('../views/DocumentsView.vue'),
         },
         {
           path: 'tenants',

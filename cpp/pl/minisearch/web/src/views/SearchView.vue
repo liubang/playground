@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import {
   NCard,
   NSelect,
@@ -22,11 +22,15 @@ import {
 } from 'naive-ui'
 import { SearchOutline, CutOutline, FlashOutline } from '@vicons/ionicons5'
 import * as api from '../api/client'
+import { session } from '../store/session'
 import SearchHitCard from '../components/SearchHitCard.vue'
 import { extractTerms } from '../utils/highlight'
 
 const message = useMessage()
 
+const isAdmin = session.role === 'admin'
+const tenants = ref([])
+const tenant = ref('')
 const collections = ref([])
 const collection = ref('')
 const query = ref('')
@@ -59,20 +63,59 @@ const analyzeColumns = [
   { title: 'end', key: 'end', width: 70 },
 ]
 
+async function loadTenants() {
+  if (isAdmin) {
+    try {
+      const resp = await api.listTenants()
+      tenants.value = (resp.tenants || []).map((t) => ({
+        label: t.name,
+        value: t.name,
+      }))
+      if (!tenant.value && tenants.value.length > 0) {
+        tenant.value = tenants.value[0].value
+      }
+    } catch (err) {
+      message.error('加载租户失败: ' + err.message)
+    }
+  } else {
+    tenant.value = session.tenant
+    tenants.value = [{ label: session.tenant, value: session.tenant }]
+  }
+  if (tenant.value) await loadCollections()
+}
+
 async function loadCollections() {
+  if (!tenant.value) return
   try {
-    const resp = await api.listCollections()
+    const resp = await api.listCollections(tenant.value)
     collections.value = (resp.collections || []).map((c) => ({
-      label: `${c.name} (${c.active_documents})`,
+      label: c.name,
       value: c.name,
     }))
     if (!collection.value && collections.value.length > 0) {
       collection.value = collections.value[0].value
     }
+    for (const c of resp.collections || []) {
+      api
+        .listTopLevelDocuments(c.name, tenant.value)
+        .then((docs) => {
+          const opt = collections.value.find((o) => o.value === c.name)
+          if (opt) opt.label = `${c.name} (${docs.length} 篇)`
+        })
+        .catch(() => {})
+    }
   } catch (err) {
     message.error('加载 Collections 失败: ' + err.message)
   }
 }
+
+watch(tenant, () => {
+  collection.value = ''
+  collections.value = []
+  hits.value = []
+  searched.value = false
+  if (tenant.value) loadCollections()
+})
 
 async function doSearch() {
   if (!collection.value) {
@@ -89,7 +132,7 @@ async function doSearch() {
   try {
     // 并行获取分词结果，用于命中高亮
     const analyzePromise = api
-      .analyze(collection.value, text)
+      .analyze(collection.value, text, tenant.value)
       .then((r) => {
         terms.value = extractTerms(text, r.tokens || [])
       })
@@ -105,7 +148,7 @@ async function doSearch() {
     if (bm25Weight.value !== 1.0 || vecWeight.value !== 1.0) {
       params.weights = { bm25: bm25Weight.value, vector: vecWeight.value }
     }
-    const resp = await api.search(collection.value, params)
+    const resp = await api.search(collection.value, params, tenant.value)
     hits.value = resp.hits || []
     totalHits.value = hits.value.length
     tookMs.value = resp.took_ms || 0
@@ -133,7 +176,7 @@ async function openAnalyze() {
   analyzeLoading.value = true
   analyzeTokens.value = []
   try {
-    const resp = await api.analyze(collection.value, text)
+    const resp = await api.analyze(collection.value, text, tenant.value)
     analyzeTokens.value = resp.tokens || []
   } catch (err) {
     message.error('分词失败: ' + err.message)
@@ -157,7 +200,7 @@ function onKeydown(e) {
 }
 
 onMounted(() => {
-  loadCollections()
+  loadTenants()
   window.addEventListener('keydown', onKeydown)
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
@@ -170,6 +213,14 @@ const degradedLabel = (d) =>
   <div class="mss-stack">
     <n-card :bordered="true" class="search-panel">
       <div class="search-row">
+        <n-select
+          v-if="isAdmin"
+          v-model:value="tenant"
+          :options="tenants"
+          placeholder="租户"
+          style="width: 160px"
+          filterable
+        />
         <n-select
           v-model:value="collection"
           :options="collections"

@@ -37,7 +37,7 @@ onMounted(load)
         <n-card :bordered="true" class="stat-card">
           <n-statistic label="总活跃文档">
             <template #prefix><n-icon :component="DocumentTextOutline" /></template>
-            {{ stats?.total_active_documents ?? 0 }}
+            {{ stats?.total_documents ?? 0 }}
           </n-statistic>
         </n-card>
       </div>
@@ -56,7 +56,8 @@ onMounted(load)
             </div>
             <div class="tenant-numbers">
               <n-statistic label="Collections" :value="t.collections ?? 0" />
-              <n-statistic label="活跃文档" :value="t.active_documents ?? 0" />
+              <n-statistic label="活跃文档" :value="t.documents ?? 0" />
+              <n-statistic label="Chunk 数" :value="t.active_documents ?? 0" />
             </div>
           </n-card>
         </div>

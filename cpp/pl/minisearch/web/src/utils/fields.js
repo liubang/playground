@@ -6,9 +6,10 @@ export function fv(val) {
   if (typeof val === 'string') return val
   if (typeof val === 'number') return String(val)
   if (typeof val === 'boolean') return String(val)
+  if (val.v != null && val.v.data) return '[' + val.v.data.length + ' floats]'
   if (val.s != null) return val.s
   if (val.n != null) return String(val.n)
-  if (val.v != null) return '[' + (val.v.data ? val.v.data.length : 0) + ' floats]'
+  if (val.v != null) return '[vector]'
   return JSON.stringify(val)
 }
 
@@ -17,9 +18,10 @@ export function fvKind(val) {
   if (val == null) return { kind: 's', value: '' }
   if (typeof val === 'string') return { kind: 's', value: val }
   if (typeof val === 'number') return { kind: 'n', value: String(val) }
+  if (val.v != null && val.v.data) return { kind: 'v', value: val.v.data.length }
   if (val.s != null) return { kind: 's', value: val.s }
   if (val.n != null) return { kind: 'n', value: String(val.n) }
-  if (val.v != null) return { kind: 'v', value: val.v.data ? val.v.data.length : 0 }
+  if (val.v != null) return { kind: 'v', value: 0 }
   return { kind: 's', value: JSON.stringify(val) }
 }
 

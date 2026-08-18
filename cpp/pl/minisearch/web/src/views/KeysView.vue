@@ -1,11 +1,9 @@
 <script setup>
-import { ref, onMounted, h, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import {
   NCard,
-  NSpace,
   NButton,
   NSelect,
-  NDataTable,
   NTag,
   NPopconfirm,
   NModal,
@@ -15,31 +13,45 @@ import {
   NText,
   NIcon,
   NAlert,
-  useMessage,
   NEmpty,
+  NSpin,
+  useMessage,
 } from 'naive-ui'
-import { AddOutline, KeyOutline } from '@vicons/ionicons5'
+import {
+  ChevronForwardOutline,
+  KeyOutline,
+  BusinessOutline,
+  AddOutline,
+  TrashOutline,
+  SwapHorizontalOutline,
+  RefreshOutline,
+} from '@vicons/ionicons5'
 import * as api from '../api/client'
 import { session } from '../store/session'
 
 const message = useMessage()
-
-const tenants = ref([])
-const tenant = ref('')
-const loading = ref(false)
-const rows = ref([])
-
+const isAdmin = session.role === 'admin'
 const canManage = ['admin', 'tenant_admin'].includes(session.role)
+
+// ---- hierarchical expandable list ----
+const tenants = reactive([])
 
 async function loadTenants() {
   try {
-    const resp = await api.listTenants()
-    tenants.value = (resp.tenants || []).map((t) => ({ label: t.name, value: t.name }))
-    if (!tenant.value && tenants.value.length > 0) {
-      tenant.value = tenants.value[0].value
-      loadKeys()
-    } else if (tenant.value) {
-      loadKeys()
+    const resp = isAdmin ? await api.listTenants() : { tenants: [{ name: session.tenant }] }
+    const names = (resp.tenants || []).map((t) => t.name)
+    tenants.splice(0, tenants.length)
+    for (const name of names) {
+      const t = reactive({
+        name,
+        expanded: names.length === 1,
+        loading: false,
+        keys: null,
+        active: 0,
+        total: 0,
+      })
+      tenants.push(t)
+      if (t.expanded) await loadKeys(t)
     }
   } catch (err) {
     if (err.status === 403) message.warning('需要 admin / tenant_admin 角色才能管理密钥')
@@ -47,108 +59,45 @@ async function loadTenants() {
   }
 }
 
-async function loadKeys() {
-  if (!tenant.value) return
-  loading.value = true
+async function loadKeys(t) {
+  t.loading = true
   try {
-    const resp = await api.listKeys(tenant.value)
-    rows.value = resp.keys || []
+    const resp = await api.listKeys(t.name)
+    const keys = resp.keys || []
+    t.keys = keys.map((k) => ({ ...k }))
+    t.active = keys.filter((k) => !k.revoked).length
+    t.total = keys.length
   } catch (err) {
-    message.error('加载密钥失败: ' + err.message)
+    message.error(`加载 ${t.name} 密钥失败: ` + err.message)
   } finally {
-    loading.value = false
+    t.loading = false
   }
 }
 
-function onTenantChange() {
-  loadKeys()
+async function reloadKeys(t) {
+  if (t.expanded) await loadKeys(t)
 }
 
-const roleTagType = (role) =>
-  role === 'tenant_admin' ? 'warning' : role === 'writer' ? 'info' : 'default'
+function toggleTenant(t) {
+  t.expanded = !t.expanded
+  if (t.expanded && !t.keys) loadKeys(t)
+}
 
-const columns = [
-  {
-    title: 'Key ID',
-    key: 'key_id',
-    width: 180,
-    render: (row) => h('span', { style: 'font-family:monospace;font-size:12px' }, row.key_id),
-  },
-  {
-    title: '角色',
-    key: 'role',
-    width: 130,
-    render: (row) =>
-      h(
-        NTag,
-        { size: 'small', bordered: false, type: roleTagType(row.role) },
-        { default: () => row.role },
-      ),
-  },
-  {
-    title: 'Collection 白名单',
-    key: 'collections',
-    render: (row) =>
-      (row.collections || []).length
-        ? h(
-            'div',
-            { style: 'display:flex;flex-wrap:wrap;gap:4px' },
-            row.collections.map((c) =>
-              h(NTag, { size: 'tiny', bordered: false, type: 'default' }, { default: () => c }),
-            ),
-          )
-        : h(NText, { depth: 3 }, { default: () => '(全部)' }),
-  },
-  {
-    title: '创建时间',
-    key: 'created_at',
-    width: 170,
-    render: (row) =>
-      h(
-        NText,
-        { depth: 3, style: 'font-size:13px' },
-        {
-          default: () => (row.created_at ? new Date(row.created_at * 1000).toLocaleString() : '-'),
-        },
-      ),
-  },
-  {
-    title: '状态',
-    key: 'status',
-    width: 90,
-    render: (row) =>
-      row.revoked
-        ? h(NTag, { size: 'small', bordered: false, type: 'error' }, { default: () => '已吊销' })
-        : h(NTag, { size: 'small', bordered: false, type: 'success' }, { default: () => '有效' }),
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 100,
-    render: (row) =>
-      row.revoked
-        ? h(NText, { depth: 3 }, { default: () => '-' })
-        : h(
-            NPopconfirm,
-            { onPositiveClick: () => doRevoke(row) },
-            {
-              trigger: () =>
-                h(
-                  NButton,
-                  { size: 'small', type: 'error', tertiary: true },
-                  { default: () => '吊销' },
-                ),
-              default: () => `确认吊销 Key "${row.key_id}"？`,
-            },
-          ),
-  },
-]
+function findTenant(name) {
+  return tenants.find((t) => t.name === name)
+}
 
-async function doRevoke(row) {
+function roleType(role) {
+  if (role === 'tenant_admin') return 'warning'
+  if (role === 'writer') return 'info'
+  return 'default'
+}
+
+async function doRevoke(tenant, keyId) {
   try {
-    await api.revokeKey(tenant.value, row.key_id)
+    await api.revokeKey(tenant, keyId)
     message.success('已吊销')
-    loadKeys()
+    await reloadKeys(findTenant(tenant))
   } catch (err) {
     message.error('吊销失败: ' + err.message)
   }
@@ -157,9 +106,16 @@ async function doRevoke(row) {
 // ---- 签发 ----
 const issueOpen = ref(false)
 const issuing = ref(false)
+const issueTenant = ref('')
 const issueForm = ref({ role: 'reader', collections: '' })
 const issuedKey = ref('')
 const issuedKeyOpen = ref(false)
+
+function openIssue(tenant) {
+  issueTenant.value = tenant
+  issueForm.value = { role: 'reader', collections: '' }
+  issueOpen.value = true
+}
 
 async function doIssue() {
   const collections = issueForm.value.collections
@@ -168,14 +124,15 @@ async function doIssue() {
     .filter(Boolean)
   issuing.value = true
   try {
-    const resp = await api.issueKey(tenant.value, issueForm.value.role, collections)
+    const resp = await api.issueKey(issueTenant.value, issueForm.value.role, collections)
     issuedKey.value = resp.key || ''
     issueOpen.value = false
-    issueForm.value.collections = ''
-    if (issuedKey.value) {
-      issuedKeyOpen.value = true
+    if (issuedKey.value) issuedKeyOpen.value = true
+    const t = findTenant(issueTenant.value)
+    if (t) {
+      t.expanded = true
+      await reloadKeys(t)
     }
-    loadKeys()
   } catch (err) {
     message.error('签发失败: ' + err.message)
   } finally {
@@ -190,41 +147,150 @@ function copyIssued() {
     .catch(() => message.error('复制失败'))
 }
 
-onMounted(loadTenants)
+// ---- 迁移 ----
+const moveOpen = ref(false)
+const moveTenant = ref('')
+const moveKeyId = ref('')
+const moveTarget = ref('')
+const moveOptions = ref([])
 
-const noKeys = computed(() => !loading.value && rows.value.length === 0)
+async function openMove(tenant, keyId) {
+  moveTenant.value = tenant
+  moveKeyId.value = keyId
+  moveTarget.value = ''
+  moveOpen.value = true
+  try {
+    const resp = await api.listTenants()
+    moveOptions.value = (resp.tenants || [])
+      .map((t) => t.name)
+      .filter((t) => t !== tenant)
+      .map((t) => ({ label: t, value: t }))
+  } catch (err) {
+    message.error('加载租户列表失败: ' + err.message)
+  }
+}
+
+async function doMove() {
+  if (!moveTarget.value) return message.warning('请选择目标租户')
+  try {
+    await api.moveKey(moveTenant.value, moveKeyId.value, moveTarget.value)
+    message.success(`Key 已迁移到 ${moveTarget.value}`)
+    moveOpen.value = false
+    const src = findTenant(moveTenant.value)
+    if (src) await reloadKeys(src)
+    const dst = findTenant(moveTarget.value)
+    if (dst && dst.expanded) await reloadKeys(dst)
+  } catch (err) {
+    message.error('迁移失败: ' + err.message)
+  }
+}
+
+onMounted(loadTenants)
 </script>
 
 <template>
   <div class="mss-stack">
     <n-card :bordered="true">
       <div class="page-head">
-        <n-select
-          v-model:value="tenant"
-          :options="tenants"
-          placeholder="选择租户"
-          style="width: 240px"
-          filterable
-          clearable
-          @update:value="onTenantChange"
-        />
-        <n-button v-if="canManage" type="primary" :disabled="!tenant" @click="issueOpen = true">
-          <template #icon><n-icon :component="AddOutline" /></template>
-          签发 API Key
+        <div>
+          <div class="page-title">密钥管理</div>
+          <n-text depth="3" style="font-size: 13px"> 按租户分组展开，每个 Key 一行可操作。 </n-text>
+        </div>
+        <n-button quaternary @click="loadTenants">
+          <template #icon><n-icon :component="RefreshOutline" /></template>
+          刷新
         </n-button>
       </div>
     </n-card>
 
-    <n-card :bordered="true">
-      <n-data-table
-        :columns="columns"
-        :data="rows"
-        :loading="loading"
-        :row-key="(r) => r.key_id"
-        :bordered="false"
-        :pagination="{ pageSize: 12 }"
-      />
-      <n-empty v-if="noKeys" description="该租户暂无 API Key" style="padding: 32px 0" />
+    <n-card :bordered="true" class="data-card">
+      <n-empty v-if="tenants.length === 0" description="暂无租户数据" style="padding: 32px 0" />
+
+      <div v-for="t in tenants" :key="t.name" class="tree-node">
+        <!-- 租户行 -->
+        <div class="tree-row level-0" @click="toggleTenant(t)">
+          <n-icon
+            class="chevron"
+            :class="{ open: t.expanded }"
+            :component="ChevronForwardOutline"
+          />
+          <n-icon :component="BusinessOutline" color="var(--mss-brand)" class="row-icon" />
+          <span class="row-label">{{ t.name }}</span>
+          <n-tag v-if="t.keys" size="tiny" :bordered="false" type="info" class="row-meta">
+            {{ t.active }} 有效 / {{ t.total }} 总
+          </n-tag>
+          <div class="row-actions" @click.stop>
+            <n-button
+              v-if="canManage"
+              size="tiny"
+              quaternary
+              type="primary"
+              @click="openIssue(t.name)"
+            >
+              <template #icon><n-icon :component="AddOutline" /></template>
+              签发
+            </n-button>
+          </div>
+        </div>
+
+        <!-- 密钥行 -->
+        <div v-show="t.expanded" class="tree-children">
+          <n-spin :show="t.loading" size="small">
+            <template v-if="t.keys && t.keys.length > 0">
+              <div v-for="k in t.keys" :key="k.key_id" class="tree-row level-1">
+                <span class="chevron-placeholder" />
+                <n-icon
+                  :component="KeyOutline"
+                  :color="k.revoked ? '#999' : '#2d8f5f'"
+                  class="row-icon"
+                />
+                <span class="row-label mono">{{ k.key_id }}</span>
+                <n-tag size="tiny" :bordered="false" :type="roleType(k.role)" class="row-meta">
+                  {{ k.role }}
+                </n-tag>
+                <n-tag
+                  size="tiny"
+                  :bordered="false"
+                  :type="k.revoked ? 'error' : 'success'"
+                  class="row-meta"
+                >
+                  {{ k.revoked ? '已吊销' : '有效' }}
+                </n-tag>
+                <div class="row-actions">
+                  <n-button
+                    v-if="isAdmin"
+                    size="tiny"
+                    quaternary
+                    type="info"
+                    @click="openMove(t.name, k.key_id)"
+                  >
+                    <template #icon><n-icon :component="SwapHorizontalOutline" /></template>
+                    迁移
+                  </n-button>
+                  <n-popconfirm
+                    v-if="canManage && !k.revoked"
+                    @positive-click="doRevoke(t.name, k.key_id)"
+                  >
+                    <template #trigger>
+                      <n-button size="tiny" quaternary type="error">
+                        <template #icon><n-icon :component="TrashOutline" /></template>
+                        吊销
+                      </n-button>
+                    </template>
+                    确认吊销 Key "{{ k.key_id }}"？
+                  </n-popconfirm>
+                </div>
+              </div>
+            </template>
+            <n-empty
+              v-else-if="t.keys && t.keys.length === 0"
+              description="暂无密钥"
+              size="small"
+              style="padding: 12px 0"
+            />
+          </n-spin>
+        </div>
+      </div>
     </n-card>
 
     <!-- 签发 Modal -->
@@ -238,7 +304,8 @@ const noKeys = computed(() => !loading.value && rows.value.length === 0)
         明文 Key 仅在签发时返回一次，请立即复制保存。
       </n-alert>
       <n-form label-placement="top">
-        <n-form-item label="角色">
+        <n-text depth="3" style="font-size: 12px">将签发到租户：{{ issueTenant }}</n-text>
+        <n-form-item label="角色" style="margin-top: 12px">
           <n-select
             v-model:value="issueForm.role"
             :options="[
@@ -280,6 +347,27 @@ const noKeys = computed(() => !loading.value && rows.value.length === 0)
         <n-button @click="issuedKeyOpen = false">关闭</n-button>
       </div>
     </n-modal>
+
+    <!-- 迁移 Modal -->
+    <n-modal
+      v-model:show="moveOpen"
+      preset="card"
+      title="迁移 API Key"
+      style="width: 460px; max-width: 92vw"
+    >
+      <n-form label-placement="top">
+        <n-text depth="3" style="font-size: 12px">
+          将 Key「{{ moveKeyId }}」从租户 {{ moveTenant }} 迁移到目标租户，立即生效。
+        </n-text>
+        <n-form-item label="目标租户" style="margin-top: 12px">
+          <n-select v-model:value="moveTarget" :options="moveOptions" placeholder="选择目标租户" />
+        </n-form-item>
+        <div class="modal-actions">
+          <n-button @click="moveOpen = false">取消</n-button>
+          <n-button type="primary" @click="doMove">迁移</n-button>
+        </div>
+      </n-form>
+    </n-modal>
   </div>
 </template>
 
@@ -289,6 +377,11 @@ const noKeys = computed(() => !loading.value && rows.value.length === 0)
   align-items: center;
   justify-content: space-between;
 }
+.page-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -297,6 +390,88 @@ const noKeys = computed(() => !loading.value && rows.value.length === 0)
 .key-output {
   margin: 10px 0 14px;
   font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 13px;
+}
+.mono {
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+}
+
+.data-card :deep(.n-card__content) {
+  padding: 4px 0;
+}
+
+.tree-node {
+  margin-bottom: 1px;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s;
+  min-height: 36px;
+}
+.tree-row:hover {
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.chevron {
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+  font-size: 16px;
+  opacity: 0.6;
+}
+.chevron.open {
+  transform: rotate(90deg);
+}
+.chevron-placeholder {
+  display: inline-block;
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.row-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+}
+
+.row-label {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 60px;
+}
+
+.row-meta {
+  flex-shrink: 0;
+}
+
+.row-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.tree-row:hover .row-actions {
+  opacity: 1;
+}
+
+.tree-children {
+  margin-left: 24px;
+  border-left: 1px solid rgba(128, 128, 128, 0.12);
+  padding-left: 4px;
+}
+
+.level-1 .row-label {
+  font-weight: 500;
   font-size: 13px;
 }
 </style>
