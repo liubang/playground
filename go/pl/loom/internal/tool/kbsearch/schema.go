@@ -66,7 +66,7 @@ func readInputSchema(sh *shared) string {
 		"id": map[string]any{
 			"type":        "string",
 			"minLength":   1,
-			"description": "Document id, exactly as returned in the `id` field of a kb_search result (may contain `/`).",
+			"description": "Document id, copied verbatim from the `id` field of a kb_search result (chunk-level; may contain `/` or `#chunk_N`). Never guess or derive an id — only ids returned by kb_search exist.",
 		},
 	}
 	required := []string{"id"}
@@ -122,8 +122,8 @@ const readOutputSchema = `{
 
 func searchDescription(sh *shared) string {
 	var b strings.Builder
-	b.WriteString("Search the knowledge base (hybrid BM25 + vector retrieval with rerank) and return ranked document excerpts — each as {id, score, fields}. ")
-	b.WriteString("Use it when the task may benefit from domain documentation beyond the local workspace, then call kb_read on a promising result id to read the full entry. ")
+	b.WriteString("Search the knowledge base (hybrid BM25 + vector retrieval with rerank) and return ranked excerpts — each as {id, score, fields}, where id identifies a chunk-level document. ")
+	b.WriteString("Use it when the task may benefit from domain documentation beyond the local workspace, then call kb_read with a result's exact id to read that chunk untruncated. ")
 	b.WriteString("Long field values are truncated in results; kb_read returns them in full. ")
 	b.WriteString("An empty results array means the knowledge base has nothing relevant — answer from your own knowledge rather than retrying.")
 	if sh.multi {
@@ -136,7 +136,8 @@ func searchDescription(sh *shared) string {
 
 func readDescription(sh *shared) string {
 	var b strings.Builder
-	b.WriteString("Read one knowledge base document in full by its id (the `id` field from a kb_search result). ")
+	b.WriteString("Read one knowledge base document in full by its id, copied verbatim from the `id` field of a kb_search result. ")
+	b.WriteString("Ids are chunk-level: a markdown document is stored as chunks named `<doc>#chunk_N`, and there is no document-level entry — reading `<doc>` without the `#chunk_N` suffix returns found=false. ")
 	b.WriteString("Use it after kb_search when an excerpt looks relevant but was truncated. ")
 	b.WriteString("found=false means the document does not exist (wrong id or deleted) — pick another result instead of retrying the same id.")
 	if sh.multi {

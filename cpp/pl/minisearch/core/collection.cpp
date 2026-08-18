@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <unordered_set>
 
 namespace pl::minisearch::core {
 
@@ -185,21 +186,17 @@ bool Collection::Restore(std::vector<Document> documents) {
     if (!docs_.empty() || mapper_.ActiveSize() > 0) {
         return false;
     }
-    int64_t next_docid = 0;
+    // 快照 docid 可稀疏（删除留洞）且帧序任意（写入侧按 docid 排序仅为
+    // 输出确定）；按原值恢复映射，重复 id/docid 视为损坏。
+    std::unordered_set<int64_t> seen_docids;
     for (auto& doc : documents) {
-        if (doc.id.empty() || doc.internal_docid < 0) {
+        if (doc.id.empty() || !mapper_.RestoreMapping(doc.id, doc.internal_docid) ||
+            !seen_docids.insert(doc.internal_docid).second) {
             return false;
         }
-        std::optional<int64_t> tombstoned;
-        const int64_t docid = mapper_.Assign(doc.id, &tombstoned);
-        if (tombstoned.has_value() || docid != doc.internal_docid) {
-            return false; // duplicate id or docid mismatch: corrupt snapshot
-        }
-        next_docid = std::max(next_docid, docid + 1);
         last_version_ = std::max(last_version_, doc.version);
         docs_.emplace(doc.internal_docid, std::move(doc));
     }
-    mapper_.AdvanceNext(next_docid);
     pending_writes_ = 0;
     return true;
 }

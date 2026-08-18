@@ -162,6 +162,76 @@ TEST_F(CheckpointTest, RegistryRestoreAcrossInstances) {
     EXPECT_EQ(restored_entry->inverted->DocCount(), 1);
 }
 
+// 中间删除留下 docid 空洞（{0,1,2} 删除 1 → {0,2}）：恢复必须原样保留
+// 稀疏 docid（FAISS 帧以 docid 为键），而不是按序重排。
+TEST_F(CheckpointTest, RegistryRestoreWithDocidGap) {
+    {
+        auto registry = make_registry();
+        ASSERT_TRUE(registry->Create(spec_).ok);
+        auto entry = registry->Find("kb");
+        ASSERT_TRUE(entry->docs.Upsert(make_doc("doc0", 1, 1.0f)).ok);
+        ASSERT_TRUE(entry->docs.Upsert(make_doc("mid", 1, 1.0f)).ok);
+        ASSERT_TRUE(entry->docs.Upsert(make_doc("doc2", 1, 1.0f)).ok);
+        ASSERT_TRUE(entry->docs.Delete("mid")); // docid 1 留洞
+        ASSERT_TRUE(registry->Checkpoint("kb"));
+    }
+
+    auto registry2 = make_registry();
+    ASSERT_EQ(registry2->LoadFromDisk(), 1u);
+    auto entry = registry2->Find("kb");
+    ASSERT_NE(entry, nullptr);
+
+    pmc::Document doc;
+    ASSERT_TRUE(entry->docs.Get("doc0", &doc));
+    EXPECT_EQ(doc.internal_docid, 0);
+    ASSERT_TRUE(entry->docs.Get("doc2", &doc));
+    EXPECT_EQ(doc.internal_docid, 2); // 原 docid 保留，不重排
+    EXPECT_FALSE(entry->docs.Get("mid", &doc));
+
+    // 高水位越过空洞：新文档拿到 docid 3，不复用 1
+    auto upserted = entry->docs.Upsert(make_doc("fresh", 1, 1.0f));
+    ASSERT_TRUE(upserted.ok);
+    EXPECT_EQ(upserted.internal_docid, 3);
+}
+
+// 快照帧序任意（写入按 docid 排序只是确定性约定）：恢复不得依赖顺序。
+TEST_F(CheckpointTest, RestoreIgnoresFrameOrder) {
+    pmsrv::CollectionRegistry registry;
+    ASSERT_TRUE(registry.Create(spec_).ok);
+    auto entry = registry.Find("kb");
+
+    std::vector<pmc::Document> shuffled;
+    auto d2 = make_doc("doc2", 1, 0.0f);
+    d2.internal_docid = 2;
+    auto d0 = make_doc("doc0", 1, 0.0f);
+    d0.internal_docid = 0;
+    auto d1 = make_doc("doc1", 1, 0.0f);
+    d1.internal_docid = 1;
+    shuffled.push_back(d2);
+    shuffled.push_back(d0);
+    shuffled.push_back(d1);
+    ASSERT_TRUE(entry->docs.Restore(std::move(shuffled)));
+
+    pmc::Document doc;
+    for (const char* id : {"doc0", "doc1", "doc2"}) {
+        EXPECT_TRUE(entry->docs.Get(id, &doc)) << id;
+    }
+    // 高水位：下一个 upsert 分配 docid 3
+    auto upserted = entry->docs.Upsert(make_doc("next", 1, 0.0f));
+    ASSERT_TRUE(upserted.ok);
+    EXPECT_EQ(upserted.internal_docid, 3);
+
+    // 重复 docid / 重复 id 仍视为损坏
+    auto bad = make_doc("dup", 1, 0.0f);
+    bad.internal_docid = 1; // 已被 doc1 占用
+    pmsrv::CollectionRegistry registry2;
+    ASSERT_TRUE(registry2.Create(spec_).ok);
+    auto entry2 = registry2.Find("kb");
+    auto first = make_doc("doc1", 1, 0.0f);
+    first.internal_docid = 1;
+    EXPECT_FALSE(entry2->docs.Restore({first, bad}));
+}
+
 TEST_F(CheckpointTest, RollingRetention) {
     auto registry = make_registry();
     ASSERT_TRUE(registry->Create(spec_).ok);

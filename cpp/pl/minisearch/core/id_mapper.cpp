@@ -46,4 +46,12 @@ bool DocIdMapper::Remove(const std::string& id) {
     return true;
 }
 
+bool DocIdMapper::RestoreMapping(const std::string& id, int64_t docid) {
+    if (docid < 0 || !id_to_doc_.emplace(id, docid).second) {
+        return false;
+    }
+    AdvanceNext(docid + 1);
+    return true;
+}
+
 } // namespace pl::minisearch::core
