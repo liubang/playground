@@ -1,4 +1,57 @@
-/* 全局微调样式 */
+/* MiniSearch Console 全局样式：design token 层 + 少量公共工具类。
+ * 组件一律引用 --mss-* token，不写死色值；暗色由 html.dark 切换
+ * （App.vue 根据 darkThemeState 自主加 class，不依赖 naive 内部类名）。 */
+
+:root {
+  /* 品牌色（渐变仅用于 logo mark，其余场景一律纯色） */
+  --mss-brand: #6366f1;
+  --mss-brand-strong: #4f46e5;
+  --mss-brand-grad: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --mss-brand-soft: rgba(99, 102, 241, 0.12);
+
+  /* 表面与边框 */
+  --mss-bg: #eef0f6;
+  --mss-card: #ffffff;
+  --mss-sider: #ffffff;
+  --mss-border: rgba(15, 23, 42, 0.08);
+  --mss-text-strong: #0f172a;
+  --mss-text-muted: #64748b;
+
+  /* 命中高亮：amber 底与品牌紫互补，辨识度高 */
+  --mss-mark-bg: rgba(245, 158, 11, 0.32);
+  --mss-mark-text: inherit;
+
+  /* 圆角 scale（收敛到 3 档） */
+  --mss-radius-s: 6px;
+  --mss-radius-m: 10px;
+  --mss-radius-l: 14px;
+
+  /* 阴影 scale（收敛到 2 档） */
+  --mss-shadow-1: 0 1px 3px rgba(16, 24, 40, 0.08);
+  --mss-shadow-2: 0 8px 28px rgba(16, 24, 40, 0.12);
+
+  /* 字体 */
+  --mss-font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+}
+
+html.dark {
+  --mss-brand: #818cf8;
+  --mss-brand-strong: #a5b4fc;
+  --mss-brand-soft: rgba(129, 140, 248, 0.18);
+
+  --mss-bg: #0b1220;
+  --mss-card: #1e293b;
+  --mss-sider: #111a2e;
+  --mss-border: rgba(148, 163, 184, 0.14);
+  --mss-text-strong: #f1f5f9;
+  --mss-text-muted: #94a3b8;
+
+  --mss-mark-bg: rgba(245, 158, 11, 0.38);
+
+  --mss-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --mss-shadow-2: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
 html,
 body,
 #app {
@@ -10,19 +63,19 @@ body,
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #f6f7fb;
+  background: var(--mss-bg);
 }
 
-/* 应用区背景：柔和渐变 + 极淡网格，避免大块纯色 */
-.n-config-provider {
+/* 应用区背景：柔和渐变，避免大块纯色 */
+#app {
   background:
-    radial-gradient(ellipse 60% 40% at 85% 0%, rgba(99, 102, 241, 0.06), transparent),
-    radial-gradient(ellipse 50% 35% at 10% 100%, rgba(14, 165, 233, 0.05), transparent);
+    radial-gradient(ellipse 60% 40% at 85% 0%, var(--mss-brand-soft), transparent),
+    radial-gradient(ellipse 50% 35% at 10% 100%, rgba(59, 130, 246, 0.05), transparent);
 }
-.n-dark .n-config-provider {
+html.dark #app {
   background:
-    radial-gradient(ellipse 60% 40% at 85% 0%, rgba(99, 102, 241, 0.08), transparent),
-    radial-gradient(ellipse 50% 35% at 10% 100%, rgba(14, 165, 233, 0.06), transparent);
+    radial-gradient(ellipse 60% 40% at 85% 0%, var(--mss-brand-soft), transparent),
+    radial-gradient(ellipse 50% 35% at 10% 100%, rgba(59, 130, 246, 0.06), transparent);
 }
 
 /* 纵向堆叠布局（替代嵌套 n-space，规避 Naive UI NSpace 嵌套不渲染问题） */
@@ -66,15 +119,11 @@ body {
 
 /* 搜索结果中命中的关键词 */
 mark.mss-mark {
-  background: rgba(99, 102, 241, 0.16);
-  color: inherit;
+  background: var(--mss-mark-bg);
+  color: var(--mss-mark-text);
   border-radius: 3px;
   padding: 0 1px;
   font-weight: 600;
-}
-
-.n-dark mark.mss-mark {
-  background: rgba(129, 140, 248, 0.3);
 }
 
 /* Markdown 渲染容器（搜索结果/文档详情） */
@@ -110,12 +159,12 @@ mark.mss-mark {
   background: rgba(127, 127, 127, 0.12);
   border-radius: 4px;
   padding: 1px 5px;
-  font-family: var(--mono, monospace);
+  font-family: var(--mss-font-mono);
   font-size: 0.9em;
 }
 .mss-markdown pre {
   background: rgba(127, 127, 127, 0.1);
-  border-radius: 8px;
+  border-radius: var(--mss-radius-m);
   padding: 12px;
   overflow-x: auto;
 }
@@ -139,5 +188,5 @@ mark.mss-mark {
   padding: 4px 10px;
 }
 .mss-markdown a {
-  color: var(--primary, #6366f1);
+  color: var(--mss-brand);
 }

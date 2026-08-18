@@ -45,7 +45,7 @@ onMounted(load)
       <n-card :bordered="true">
         <template #header>
           <div class="header-inline">
-            <n-icon :component="BusinessOutline" color="#6366f1" />
+            <n-icon :component="BusinessOutline" color="var(--mss-brand)" />
             <span>分租户统计</span>
           </div>
         </template>

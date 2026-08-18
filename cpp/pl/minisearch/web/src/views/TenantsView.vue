@@ -31,7 +31,7 @@ const columns = [
     key: 'name',
     render: (row) =>
       h('div', { style: 'display:flex;align-items:center;gap:8px;font-weight:600' }, [
-        h(NIcon, { component: BusinessOutline, color: '#6366f1' }),
+        h(NIcon, { component: BusinessOutline, color: 'var(--mss-brand)' }),
         row.name,
       ]),
   },

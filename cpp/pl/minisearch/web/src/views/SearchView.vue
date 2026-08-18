@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   NCard,
   NSelect,
@@ -44,6 +44,9 @@ const degraded = ref([])
 const terms = ref([])
 const searched = ref(false)
 const totalHits = ref(0)
+
+// 结果集内最高分，传给结果卡片做 score 条归一化
+const maxScore = computed(() => hits.value.reduce((m, h) => Math.max(m, Number(h.score || 0)), 0))
 
 // 分词预览
 const analyzeOpen = ref(false)
@@ -270,6 +273,7 @@ const degradedLabel = (d) =>
           :hit="hit"
           :terms="terms"
           :rank="i + 1"
+          :max-score="maxScore"
         />
       </div>
     </n-spin>
@@ -299,11 +303,8 @@ const degradedLabel = (d) =>
 
 <style scoped>
 .search-panel {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9));
-  border-radius: 16px;
-}
-:deep(.n-dark) .search-panel {
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.85));
+  background: var(--mss-card);
+  border-radius: var(--mss-radius-l);
 }
 .search-row {
   display: flex;
@@ -315,20 +316,14 @@ const degradedLabel = (d) =>
   transition: box-shadow 0.2s;
 }
 .search-row .search-input:focus-within {
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 4px var(--mss-brand-soft);
 }
 .search-btn {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  border: none;
   padding: 0 28px;
-  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.3);
-  transition:
-    transform 0.15s,
-    box-shadow 0.15s;
+  transition: transform 0.15s;
 }
 .search-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
 }
 .opts-collapse {
   margin-top: 12px;

@@ -56,9 +56,7 @@ async function onSubmit() {
 <template>
   <div class="login-wrap">
     <div class="login-bg">
-      <div class="orb orb-1" />
-      <div class="orb orb-2" />
-      <div class="grid" />
+      <div class="orb" />
     </div>
 
     <n-card class="login-card" :bordered="false">
@@ -129,67 +127,38 @@ async function onSubmit() {
   min-height: 100vh;
   padding: 24px;
   overflow: hidden;
-  background: #f6f7fb;
-}
-.n-dark .login-wrap {
-  background: #0f172a;
+  background: var(--mss-bg);
 }
 .login-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
 }
+/* 单个静态光斑：登录页长期驻留，不做无限动画 */
 .orb {
   position: absolute;
   border-radius: 50%;
   filter: blur(90px);
-  opacity: 0.55;
-  animation: drift 14s ease-in-out infinite alternate;
+  width: 520px;
+  height: 520px;
+  top: -140px;
+  left: -100px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.35), transparent 70%);
 }
-.orb-1 {
-  width: 480px;
-  height: 480px;
-  top: -120px;
-  left: -80px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.55), transparent 70%);
-}
-.orb-2 {
-  width: 420px;
-  height: 420px;
-  bottom: -140px;
-  right: -60px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.5), transparent 70%);
-  animation-delay: -7s;
-}
-@keyframes drift {
-  from {
-    transform: translate(0, 0) scale(1);
-  }
-  to {
-    transform: translate(40px, 24px) scale(1.08);
-  }
-}
-.grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(100, 116, 139, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(100, 116, 139, 0.07) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 30%, transparent 75%);
-  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 30%, transparent 75%);
+html.dark .orb {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.22), transparent 70%);
 }
 .login-card {
   position: relative;
   z-index: 1;
   width: 400px;
   max-width: 94vw;
-  border-radius: 20px;
-  box-shadow: 0 24px 80px rgba(31, 41, 55, 0.18);
+  border-radius: var(--mss-radius-l);
+  box-shadow: var(--mss-shadow-2);
   background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(16px) saturate(160%);
 }
-.n-dark .login-card {
+html.dark .login-card {
   background: rgba(30, 41, 59, 0.8);
 }
 .login-head {
@@ -206,8 +175,8 @@ async function onSubmit() {
   justify-content: center;
   width: 56px;
   height: 56px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border-radius: var(--mss-radius-l);
+  background: var(--mss-brand-grad); /* 渐变仅保留在 logo mark */
   color: #fff;
   font-size: 28px;
   margin-bottom: 6px;
@@ -222,7 +191,7 @@ async function onSubmit() {
   width: 56px;
   height: 3px;
   border-radius: 2px;
-  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  background: var(--mss-brand);
   margin-top: 8px;
 }
 .login-error {
@@ -231,8 +200,6 @@ async function onSubmit() {
 .login-btn {
   margin-top: 6px;
   letter-spacing: 2px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  border: none;
 }
 .login-foot {
   display: flex;
