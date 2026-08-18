@@ -156,12 +156,31 @@ message AdminTenantStats {
   string name = 1;
   int64 collections = 2;
   int64 active_documents = 3;
+  // 顶层文档数：按 "<name>#chunk_" 前缀去重后的文档数（active_documents 是 chunk 数）
+  int64 documents = 4;
 }
 
 message AdminStatsResponse {
   repeated AdminTenantStats tenants = 1;
   int64 total_collections = 2;
   int64 total_active_documents = 3;
+  int64 total_documents = 4;
+}
+
+// Collection 跨租户迁移（admin）：POST /api/v2/admin/tenants/{src}/collections/{name}:move
+message MoveCollectionRequest {
+  string target = 1; // 目标租户
+}
+
+message MoveCollectionResponse {
+  bool ok = 1;
+  string error = 2;
+  int64 documents = 3; // 迁移的文档（chunk）数
+}
+
+// API Key 跨租户迁移（admin）：POST /api/v2/admin/tenants/{src}/keys/{key_id}:move
+message MoveKeyRequest {
+  string target = 1; // 目标租户
 }
 
 message HttpRequest {}

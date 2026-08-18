@@ -84,6 +84,17 @@ public:
 
     CreateResult Create(const proto::CollectionSpec& spec);
 
+    // 将 collection 迁移到另一个租户的 registry：按相同 schema 在目标侧重建，
+    // 逐文档复制并重建向量/倒排索引（向量随文档字段拷贝，无需重新 embedding），
+    // 全部成功后从本 registry 删除（含持久化数据）。目标侧已有同名 collection
+    // 或复制中途失败时回滚目标侧，源侧保持不变。
+    struct MoveResult {
+        bool ok = false;
+        std::string error;
+        size_t documents = 0;
+    };
+    MoveResult MoveTo(CollectionRegistry& dst, const std::string& name);
+
     std::shared_ptr<CollectionEntry> Find(const std::string& name) const;
 
     bool Drop(const std::string& name);
@@ -93,6 +104,8 @@ public:
     struct Stats {
         size_t collections = 0;
         size_t active_documents = 0;
+        // 顶层文档数：markdown 导入的文档按 "<name>#chunk_" 前缀去重后的数量
+        size_t top_level_documents = 0;
     };
     Stats GetStats() const;
 

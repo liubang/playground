@@ -48,10 +48,24 @@ public:
     // 租户是否已存在（注册表中有 registry）。
     bool HasTenant(const std::string& tenant) const;
 
+    // Collection 跨租户迁移（admin 管理面）：在目标租户的 registry 中按相同
+    // schema 重建并逐文档复制，成功后从源租户删除。目标租户不存在时按
+    // Registry() 语义懒建。
+    CollectionRegistry::MoveResult MoveCollection(const std::string& src,
+                                                  const std::string& dst,
+                                                  const std::string& name);
+
+    // 启动时扫描 data_dir，为每个已存在的租户目录加载 registry，
+    // 保证重启后 Tenants()/stats 立即可见全部租户（而非等首次访问懒加载）。
+    // 返回加载的租户数。
+    size_t LoadExistingTenants();
+
     struct TenantInfo {
         std::string name;
         size_t collections = 0;
         size_t active_documents = 0;
+        // 顶层文档数（按 "<name>#chunk_" 前缀去重）
+        size_t top_level_documents = 0;
     };
     std::vector<TenantInfo> Tenants() const;
 

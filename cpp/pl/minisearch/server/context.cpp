@@ -17,6 +17,8 @@
 
 #include "cpp/pl/minisearch/server/context.h"
 
+#include <filesystem>
+
 #include "cpp/pl/minisearch/core/schema.h"
 
 namespace pl::minisearch::server {
@@ -58,12 +60,58 @@ bool TenantContext::DropTenant(const std::string& tenant) {
     for (const auto& name : store.ListCollections()) {
         store.Drop(name);
     }
+    // 删除租户目录本身，避免重启后空目录被当成已存在租户重新加载
+    std::error_code ec;
+    std::filesystem::remove_all(data_dir_ + "/" + tenant, ec);
     return true;
 }
 
 bool TenantContext::HasTenant(const std::string& tenant) const {
     std::lock_guard<std::mutex> lock(mu_);
     return registries_.count(tenant) > 0;
+}
+
+CollectionRegistry::MoveResult TenantContext::MoveCollection(const std::string& src,
+                                                             const std::string& dst,
+                                                             const std::string& name) {
+    CollectionRegistry::MoveResult result;
+    if (src == dst) {
+        result.error = "source and target tenant are the same";
+        return result;
+    }
+    auto srcRegistry = Registry(src);
+    auto dstRegistry = Registry(dst);
+    if (srcRegistry == nullptr || dstRegistry == nullptr) {
+        result.error = "invalid tenant name";
+        return result;
+    }
+    return srcRegistry->MoveTo(*dstRegistry, name);
+}
+
+size_t TenantContext::LoadExistingTenants() {
+    if (data_dir_.empty()) {
+        return 0;
+    }
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (!fs::is_directory(data_dir_, ec)) {
+        return 0;
+    }
+    size_t loaded = 0;
+    for (const auto& entry : fs::directory_iterator(data_dir_, ec)) {
+        if (!entry.is_directory()) {
+            continue;
+        }
+        const std::string name = entry.path().filename().string();
+        // auth/ 存放 console 用户与 key，不是租户
+        if (name == "auth") {
+            continue;
+        }
+        if (Registry(name) != nullptr) {
+            ++loaded;
+        }
+    }
+    return loaded;
 }
 
 std::vector<TenantContext::TenantInfo> TenantContext::Tenants() const {
@@ -73,7 +121,7 @@ std::vector<TenantContext::TenantInfo> TenantContext::Tenants() const {
     // 锁序固定为 context -> registry（registry 不会回调 context），无死锁。
     for (const auto& [name, registry] : registries_) {
         const auto stats = registry->GetStats();
-        out.push_back({name, stats.collections, stats.active_documents});
+        out.push_back({name, stats.collections, stats.active_documents, stats.top_level_documents});
     }
     return out;
 }

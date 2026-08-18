@@ -71,6 +71,10 @@ public:
     // 软删除：置 revoked 并落盘。不存在或已吊销返回 false。
     bool Revoke(const std::string& key_id);
 
+    // 跨租户迁移：仅修改 key 的租户归属并落盘，对后续认证立即生效。
+    // key 不存在、已吊销或目标租户名非法时返回 false。
+    bool MoveKey(const std::string& key_id, const std::string& dst_tenant);
+
     struct Entry {
         std::string key_id;
         std::string hash; // sha256(key)，落盘即此值

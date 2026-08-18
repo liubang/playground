@@ -295,9 +295,23 @@ void HttpApiService::default_method(google::protobuf::RpcController* controller,
                 return HandleListKeys(cntl, *principal, parts[4]);
             }
         }
+        // /admin/tenants/{src}/keys/{key_id}:move —— API key 跨租户迁移。
+        // key_id 形如 "k_<n>"，不含 ':'，后缀匹配无歧义。
+        if (parts.size() == 7 && parts[3] == "tenants" && parts[5] == "keys" &&
+            method == brpc::HTTP_METHOD_POST && parts[6].ends_with(":move")) {
+            return HandleMoveKey(
+                cntl, *principal, parts[4], parts[6].substr(0, parts[6].size() - 5));
+        }
         if (parts.size() == 7 && parts[3] == "tenants" && parts[5] == "keys" &&
             method == brpc::HTTP_METHOD_DELETE) {
             return HandleRevokeKey(cntl, *principal, parts[4], parts[6]);
+        }
+        // /admin/tenants/{src}/collections/{name}:move —— collection 跨租户迁移。
+        // collection 名字符集为 [A-Za-z0-9_-]，不含 ':'，后缀匹配无歧义。
+        if (parts.size() == 7 && parts[3] == "tenants" && parts[5] == "collections" &&
+            method == brpc::HTTP_METHOD_POST && parts[6].ends_with(":move")) {
+            return HandleMoveCollection(
+                cntl, *principal, parts[4], parts[6].substr(0, parts[6].size() - 5));
         }
         if (parts.size() == 4 && parts[3] == "stats" && method == brpc::HTTP_METHOD_GET) {
             return HandleStats(cntl, *principal);
@@ -1064,6 +1078,30 @@ void HttpApiService::HandleDropTenant(brpc::Controller* cntl,
     SendJsonResponse(cntl, resp, resp.ok() ? 200 : 404);
 }
 
+void HttpApiService::HandleMoveCollection(brpc::Controller* cntl,
+                                          const auth::Principal& principal,
+                                          const std::string& src_tenant,
+                                          const std::string& collection) {
+    if (!is_admin(principal)) {
+        return SendErrorResponse(cntl, 403, "admin role required");
+    }
+    proto::MoveCollectionRequest req;
+    if (!ParseJsonBody(cntl, &req)) {
+        return;
+    }
+    if (!core::IsValidResourceName(collection) || !core::IsValidResourceName(req.target())) {
+        return SendErrorResponse(cntl, 400, "invalid collection or target tenant name");
+    }
+    auto result = context_->MoveCollection(src_tenant, req.target(), collection);
+    proto::MoveCollectionResponse resp;
+    resp.set_ok(result.ok);
+    resp.set_error(result.error);
+    resp.set_documents(static_cast<int64_t>(result.documents));
+    // 目标侧已有同名 collection → 409；其他失败（源不存在等）→ 400。
+    const bool conflict = !result.ok && result.error.find("target:") == 0;
+    SendJsonResponse(cntl, resp, result.ok ? 200 : (conflict ? 409 : 400));
+}
+
 void HttpApiService::HandleIssueKey(brpc::Controller* cntl,
                                     const auth::Principal& principal,
                                     const std::string& tenant) {
@@ -1141,6 +1179,45 @@ void HttpApiService::HandleRevokeKey(brpc::Controller* cntl,
     SendJsonResponse(cntl, resp, resp.ok() ? 200 : 404);
 }
 
+void HttpApiService::HandleMoveKey(brpc::Controller* cntl,
+                                   const auth::Principal& principal,
+                                   const std::string& src_tenant,
+                                   const std::string& key_id) {
+    if (!is_admin(principal)) {
+        return SendErrorResponse(cntl, 403, "admin role required");
+    }
+    proto::MoveKeyRequest req;
+    if (!ParseJsonBody(cntl, &req)) {
+        return;
+    }
+    if (!core::IsValidResourceName(req.target())) {
+        return SendErrorResponse(cntl, 400, "invalid target tenant name");
+    }
+    if (req.target() == src_tenant) {
+        return SendErrorResponse(cntl, 400, "source and target tenant are the same");
+    }
+    // 校验 key 存在且当前归属 src 租户，避免凭 key_id 猜测跨租户改绑
+    bool found = false;
+    for (const auto& entry : keys_->List()) {
+        if (entry.key_id == key_id) {
+            found = true;
+            if (entry.principal.tenant != src_tenant) {
+                return SendErrorResponse(cntl, 400, "key does not belong to tenant " + src_tenant);
+            }
+            if (entry.revoked) {
+                return SendErrorResponse(cntl, 400, "key already revoked");
+            }
+            break;
+        }
+    }
+    if (!found) {
+        return SendErrorResponse(cntl, 404, "unknown key: " + key_id);
+    }
+    proto::GenericResponse resp;
+    resp.set_ok(keys_->MoveKey(key_id, req.target()));
+    SendJsonResponse(cntl, resp, resp.ok() ? 200 : 400);
+}
+
 void HttpApiService::HandleStats(brpc::Controller* cntl, const auth::Principal& principal) {
     if (!is_admin(principal)) {
         return SendErrorResponse(cntl, 403, "admin role required");
@@ -1151,10 +1228,13 @@ void HttpApiService::HandleStats(brpc::Controller* cntl, const auth::Principal& 
         out->set_name(tenant.name);
         out->set_collections(static_cast<int64_t>(tenant.collections));
         out->set_active_documents(static_cast<int64_t>(tenant.active_documents));
+        out->set_documents(static_cast<int64_t>(tenant.top_level_documents));
         resp.set_total_collections(resp.total_collections() +
                                    static_cast<int64_t>(tenant.collections));
         resp.set_total_active_documents(resp.total_active_documents() +
                                         static_cast<int64_t>(tenant.active_documents));
+        resp.set_total_documents(resp.total_documents() +
+                                 static_cast<int64_t>(tenant.top_level_documents));
     }
     SendJsonResponse(cntl, resp);
 }
