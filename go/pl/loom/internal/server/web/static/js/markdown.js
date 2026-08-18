@@ -11,6 +11,17 @@ marked.setOptions({ gfm: true, breaks: false })
 // 代码块语法高亮：lang 已知时走 hljs（输出自带转义），否则纯转义原文。
 // 最终 HTML 仍会过 DOMPurify，双保险。
 marked.use({
+  tokenizer: {
+    // marked v15+ 的 GFM del 规则接受单个 ~（del:/^(~~?).../），会把
+    // "100ms~1s"、"31~33°C" 这类区间写法误判成删除线。这里拦截：孤立单 ~
+    // 一律按普通文本消费（返回 token 即阻止内置 del 再匹配），~~ 交回内置
+    // strikethrough 处理（false = 回落内置）。与 TUI 的 escapeLoneTildes
+    // （internal/ui/markdown.go）同语义。
+    del(src) {
+      if (src[0] === '~' && src[1] !== '~') return { type: 'text', raw: '~', text: '~' }
+      return false
+    },
+  },
   renderer: {
     code({ text, lang }) {
       const language = (lang || '').trim().split(/\s+/)[0]
