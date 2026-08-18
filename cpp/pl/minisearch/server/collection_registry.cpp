@@ -19,6 +19,8 @@
 
 #include <butil/logging.h>
 #include <chrono>
+#include <string_view>
+#include <unordered_set>
 #include <utility>
 
 #include "cpp/pl/minisearch/server/codec.h"
@@ -30,6 +32,13 @@ namespace {
 constexpr size_t kCheckpointWriteThreshold = 1000;
 constexpr auto kCheckpointMaxAge = std::chrono::seconds(300);
 constexpr auto kCheckpointInterval = std::chrono::seconds(60);
+
+// 顶层文档名：markdown 导入的 chunk id 形如 "<name>#chunk_<i>"，
+// 非分块文档 id 不含该后缀，整体即文档名。
+std::string_view top_level_doc_name(const std::string& id) {
+    const auto pos = id.rfind("#chunk_");
+    return pos == std::string::npos ? std::string_view(id) : std::string_view(id).substr(0, pos);
+}
 
 VectorMetric to_vector_metric(const std::string& metric) {
     if (metric == "cosine") {
@@ -160,6 +169,67 @@ std::shared_ptr<CollectionEntry> CollectionRegistry::Find(const std::string& nam
     return it == entries_.end() ? nullptr : it->second;
 }
 
+CollectionRegistry::MoveResult CollectionRegistry::MoveTo(CollectionRegistry& dst,
+                                                          const std::string& name) {
+    MoveResult result;
+    if (&dst == this) {
+        result.error = "source and target registry are the same";
+        return result;
+    }
+    // 1. 取源 entry（shared_ptr 保活，迁移期间并发 Drop 不影响复制过程）
+    std::shared_ptr<CollectionEntry> entry;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        auto it = entries_.find(name);
+        if (it == entries_.end()) {
+            result.error = "unknown collection: " + name;
+            return result;
+        }
+        entry = it->second;
+    }
+    // 2. 目标侧按相同 schema 创建（已存在则失败，不做覆盖）
+    auto created = dst.Create(ToProtoSpec(entry->docs.schema(), name));
+    if (!created.ok) {
+        result.error = "target: " + created.error;
+        return result;
+    }
+    auto dstEntry = dst.Find(name);
+    if (dstEntry == nullptr) {
+        result.error = "target: collection vanished after create";
+        return result;
+    }
+    // 3. 逐文档复制并重建索引；文档版本在目标侧重新分配
+    std::string copyError;
+    entry->docs.ForEachActive([&](const core::Document& doc) {
+        if (!copyError.empty()) {
+            return;
+        }
+        core::Document copy = doc;
+        copy.version = 0;
+        auto upserted = dstEntry->docs.Upsert(std::move(copy));
+        if (!upserted.ok) {
+            copyError = upserted.error;
+            return;
+        }
+        core::Document stored;
+        if (dstEntry->docs.GetByInternal(upserted.internal_docid, &stored)) {
+            dstEntry->IndexVector(upserted.internal_docid, stored);
+            dstEntry->IndexText(upserted.internal_docid, stored);
+        }
+        ++result.documents;
+    });
+    if (!copyError.empty()) {
+        dst.Drop(name); // 回滚目标侧半成品，源侧不动
+        result.error = "copy failed: " + copyError;
+        result.documents = 0;
+        return result;
+    }
+    // 4. 全部复制完成后删除源（含磁盘 checkpoint 数据）
+    Drop(name);
+    result.ok = true;
+    return result;
+}
+
 bool CollectionRegistry::Drop(const std::string& name) {
     std::lock_guard<std::mutex> lock(mu_);
     if (entries_.erase(name) == 0) {
@@ -185,6 +255,11 @@ CollectionRegistry::Stats CollectionRegistry::GetStats() const {
     stats.collections = entries_.size();
     for (const auto& [name, entry] : entries_) {
         stats.active_documents += entry->docs.ActiveCount();
+        // 顶层文档数：按 "<name>#chunk_" 前缀去重
+        std::unordered_set<std::string_view> names;
+        entry->docs.ForEachActive(
+            [&names](const core::Document& doc) { names.insert(top_level_doc_name(doc.id)); });
+        stats.top_level_documents += names.size();
     }
     return stats;
 }

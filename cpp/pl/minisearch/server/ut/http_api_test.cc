@@ -363,6 +363,71 @@ TEST_F(AuthApiTest, TenantAdminCannotCrossTenants) {
     EXPECT_EQ(Request("GET", "/api/v2/admin/tenants", "", ta_key).status, 403);
 }
 
+TEST_F(AuthApiTest, MoveKeyAcrossTenants) {
+    const std::string admin = admin_key_.key;
+
+    // 目标租户 team-b；team-a 签发 reader key
+    ASSERT_EQ(Request("POST", "/api/v2/admin/tenants", R"({"name":"team-b"})", admin).status, 200);
+    auto issued =
+        Request("POST", "/api/v2/admin/tenants/team-a/keys", R"({"role":"reader"})", admin);
+    ASSERT_EQ(issued.status, 200);
+    const std::string key = extract(issued.body, "key");
+    const std::string key_id = extract(issued.body, "key_id");
+    ASSERT_FALSE(key.empty());
+    ASSERT_FALSE(key_id.empty());
+
+    // 迁移前：key 归属 team-a，以 team-a 身份读 collections 正常
+    EXPECT_EQ(Request("GET", "/api/v2/collections", "", key).status, 200);
+
+    // 迁移 team-a → team-b
+    auto moved = Request("POST",
+                         "/api/v2/admin/tenants/team-a/keys/" + key_id + ":move",
+                         R"({"target":"team-b"})",
+                         admin);
+    EXPECT_EQ(moved.status, 200) << moved.body;
+    EXPECT_NE(moved.body.find("\"ok\":true"), std::string::npos) << moved.body;
+
+    // 迁移后列表里 key 归属 team-b
+    auto keys_b = Request("GET", "/api/v2/admin/tenants/team-b/keys", "", admin);
+    EXPECT_NE(keys_b.body.find(key_id), std::string::npos) << keys_b.body;
+    auto keys_a = Request("GET", "/api/v2/admin/tenants/team-a/keys", "", admin);
+    EXPECT_EQ(keys_a.body.find(key_id), std::string::npos) << keys_a.body;
+
+    // 源租户不匹配 → 400（key 已在 team-b）；未知 key → 404；已吊销 → 400
+    EXPECT_EQ(Request("POST",
+                      "/api/v2/admin/tenants/team-a/keys/" + key_id + ":move",
+                      R"({"target":"default"})",
+                      admin)
+                  .status,
+              400);
+    EXPECT_EQ(Request("POST",
+                      "/api/v2/admin/tenants/team-a/keys/k_9999:move",
+                      R"({"target":"default"})",
+                      admin)
+                  .status,
+              404);
+    ASSERT_EQ(Request("DELETE", "/api/v2/admin/tenants/team-b/keys/" + key_id, "", admin).status,
+              200);
+    EXPECT_EQ(Request("POST",
+                      "/api/v2/admin/tenants/team-b/keys/" + key_id + ":move",
+                      R"({"target":"default"})",
+                      admin)
+                  .status,
+              400);
+
+    // 非 admin 无权迁移
+    auto reader =
+        Request("POST", "/api/v2/admin/tenants/team-a/keys", R"({"role":"reader"})", admin);
+    ASSERT_EQ(reader.status, 200);
+    const std::string reader_key = extract(reader.body, "key");
+    EXPECT_EQ(Request("POST",
+                      "/api/v2/admin/tenants/team-a/keys/k_1:move",
+                      R"({"target":"default"})",
+                      reader_key)
+                  .status,
+              403);
+}
+
 TEST_F(AuthApiTest, TenantAdminCannotIssueTenantAdmin) {
     const std::string admin = admin_key_.key;
     auto issued =
@@ -608,6 +673,53 @@ TEST_F(HttpApiTest, CreateTenantAndListDocuments) {
     auto page = Request("GET", "/api/v2/kb/documents?tenant=test-tenant&offset=0&limit=10");
     EXPECT_EQ(page.status, 200);
     EXPECT_NE(page.body.find("\"total\":1"), std::string::npos) << page.body;
+}
+
+// ---------------------------------------------------------------------------
+// Collection 跨租户迁移（admin）：/admin/tenants/{src}/collections/{name}:move
+// ---------------------------------------------------------------------------
+
+TEST_F(HttpApiTest, MoveCollectionAcrossTenants) {
+    // 源租户 default：创建 collection 并写入两个文档
+    ASSERT_EQ(Request("POST", "/api/v2/collections", collection_body("kb")).status, 200);
+    EXPECT_EQ(Request("PUT", "/api/v2/kb/documents/doc1", doc1).status, 200);
+    EXPECT_EQ(Request("PUT", "/api/v2/kb/documents/doc2", doc2).status, 200);
+
+    // 目标租户已有同名 collection → 409，不覆盖，源侧不受影响
+    ASSERT_EQ(Request("POST", "/api/v2/collections?tenant=dst", collection_body("kb")).status, 200);
+    auto conflict =
+        Request("POST", "/api/v2/admin/tenants/default/collections/kb:move", R"({"target":"dst"})");
+    EXPECT_EQ(conflict.status, 409) << conflict.body;
+    auto src_list = Request("GET", "/api/v2/kb/documents");
+    EXPECT_NE(src_list.body.find("\"total\":2"), std::string::npos) << src_list.body;
+
+    // 删除目标侧同名 collection 后迁移成功
+    ASSERT_EQ(Request("DELETE", "/api/v2/collections/kb?tenant=dst&confirm=kb").status, 200);
+    auto moved =
+        Request("POST", "/api/v2/admin/tenants/default/collections/kb:move", R"({"target":"dst"})");
+    EXPECT_EQ(moved.status, 200) << moved.body;
+    EXPECT_NE(moved.body.find("\"ok\":true"), std::string::npos) << moved.body;
+    EXPECT_NE(moved.body.find("\"documents\":2"), std::string::npos) << moved.body;
+
+    // 源侧已删除；目标侧文档可读、倒排索引已重建（可搜索）
+    EXPECT_EQ(Request("GET", "/api/v2/kb/documents").status, 404);
+    auto dst_list = Request("GET", "/api/v2/kb/documents?tenant=dst");
+    EXPECT_NE(dst_list.body.find("\"total\":2"), std::string::npos) << dst_list.body;
+    EXPECT_NE(dst_list.body.find("doc1"), std::string::npos) << dst_list.body;
+    auto search = Request("POST", "/api/v2/kb/search?tenant=dst", R"({"text":"presto","top_k":5})");
+    EXPECT_EQ(search.status, 200) << search.body;
+    EXPECT_NE(search.body.find("doc1"), std::string::npos) << search.body;
+
+    // 源与目标相同 → 400；源 collection 不存在 → 400
+    EXPECT_EQ(
+        Request("POST", "/api/v2/admin/tenants/dst/collections/kb:move", R"({"target":"dst"})")
+            .status,
+        400);
+    EXPECT_EQ(Request("POST",
+                      "/api/v2/admin/tenants/dst/collections/nope:move",
+                      R"({"target":"default"})")
+                  .status,
+              400);
 }
 
 // ---------------------------------------------------------------------------

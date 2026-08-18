@@ -226,6 +226,20 @@ bool KeyStore::Revoke(const std::string& key_id) {
     return true;
 }
 
+bool KeyStore::MoveKey(const std::string& key_id, const std::string& dst_tenant) {
+    std::lock_guard<std::mutex> lock(mu_);
+    if (!core::IsValidResourceName(dst_tenant)) {
+        return false;
+    }
+    auto id_it = by_id_.find(key_id);
+    if (id_it == by_id_.end() || entries_[id_it->second].revoked) {
+        return false;
+    }
+    entries_[id_it->second].principal.tenant = dst_tenant;
+    PersistLocked();
+    return true;
+}
+
 std::vector<KeyStore::Entry> KeyStore::List() const {
     std::lock_guard<std::mutex> lock(mu_);
     return entries_;

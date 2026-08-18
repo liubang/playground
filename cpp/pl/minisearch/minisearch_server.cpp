@@ -156,6 +156,10 @@ int main(int argc, char* argv[]) {
 
     auto context =
         std::make_unique<pl::minisearch::server::TenantContext>(FLAGS_data_dir, FLAGS_index_type);
+    const size_t loaded_tenants = context->LoadExistingTenants();
+    if (loaded_tenants > 0) {
+        LOG(INFO) << "Restored " << loaded_tenants << " tenant(s) from " << FLAGS_data_dir;
+    }
     auto service = std::make_unique<pl::minisearch::server::HttpApiService>(context.get(),
                                                                             keys.get(),
                                                                             FLAGS_auth,

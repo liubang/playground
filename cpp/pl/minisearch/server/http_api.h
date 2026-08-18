@@ -98,12 +98,20 @@ private:
     void HandleCreateTenant(brpc::Controller* cntl, const auth::Principal&);
     void HandleListTenants(brpc::Controller* cntl, const auth::Principal&);
     void HandleDropTenant(brpc::Controller* cntl, const auth::Principal&, const std::string& name);
+    void HandleMoveCollection(brpc::Controller* cntl,
+                              const auth::Principal&,
+                              const std::string& src_tenant,
+                              const std::string& collection);
     void HandleIssueKey(brpc::Controller* cntl, const auth::Principal&, const std::string& tenant);
     void HandleListKeys(brpc::Controller* cntl, const auth::Principal&, const std::string& tenant);
     void HandleRevokeKey(brpc::Controller* cntl,
                          const auth::Principal&,
                          const std::string& tenant,
                          const std::string& key_id);
+    void HandleMoveKey(brpc::Controller* cntl,
+                       const auth::Principal&,
+                       const std::string& src_tenant,
+                       const std::string& key_id);
     void HandleStats(brpc::Controller* cntl, const auth::Principal&);
 
     // Server-side embedding（upsert / import 共用）：vec 字段 mode=server
