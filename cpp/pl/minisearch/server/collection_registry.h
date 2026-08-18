@@ -18,12 +18,14 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "cpp/pl/minisearch/analysis/analyzer.h"
 #include "cpp/pl/minisearch/core/collection.h"

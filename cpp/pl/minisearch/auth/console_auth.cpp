@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <mutex>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 

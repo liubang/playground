@@ -21,6 +21,7 @@
 #include <faiss/index_factory.h>
 #include <faiss/index_io.h>
 #include <fstream>
+#include <mutex>
 
 namespace pl::minisearch {
 

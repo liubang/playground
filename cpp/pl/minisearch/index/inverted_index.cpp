@@ -17,7 +17,9 @@
 
 #include "cpp/pl/minisearch/index/inverted_index.h"
 
+#include <cstring>
 #include <fstream>
+#include <mutex>
 
 namespace pl::minisearch::index {
 

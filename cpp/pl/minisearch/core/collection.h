@@ -22,6 +22,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "cpp/pl/minisearch/core/document.h"
 #include "cpp/pl/minisearch/core/id_mapper.h"
