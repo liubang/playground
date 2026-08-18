@@ -1,12 +1,13 @@
 import { darkTheme } from 'naive-ui'
 
-// MiniSearch 品牌主色：靛蓝紫
+// MiniSearch 品牌主色：靛蓝紫。info 取同色相的 blue-500，避免色族跳跃。
+// 组件自绘部分一律用 style.css 的 --mss-* token，此处仅覆盖 naive 组件。
 export const brand = {
   primary: '#6366f1',
   primaryHover: '#4f46e5',
   primaryPressed: '#4338ca',
   primarySuppl: '#818cf8',
-  info: '#0ea5e9',
+  info: '#3b82f6',
   success: '#10b981',
   warning: '#f59e0b',
   error: '#ef4444',
@@ -32,7 +33,7 @@ export const lightThemeOverrides = {
     cardColor: '#ffffff',
     modalColor: '#ffffff',
     popoverColor: '#ffffff',
-    bodyColor: '#f6f7fb',
+    bodyColor: '#eef0f6',
     boxShadow1: '0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04)',
     boxShadow2: '0 4px 16px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.04)',
     boxShadow3: '0 12px 40px rgba(16, 24, 40, 0.12)',
@@ -95,7 +96,7 @@ export const darkThemeOverrides = {
     borderRadiusSmall: '6px',
     fontFamily: lightThemeOverrides.common.fontFamily,
     fontFamilyMono: lightThemeOverrides.common.fontFamilyMono,
-    bodyColor: '#0f172a',
+    bodyColor: '#0b1220',
     cardColor: '#1e293b',
     modalColor: '#1e293b',
     popoverColor: '#1e293b',

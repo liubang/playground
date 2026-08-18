@@ -10,19 +10,18 @@ const props = defineProps({
   hit: { type: Object, required: true },
   terms: { type: Array, default: () => [] },
   rank: { type: Number, default: 0 },
+  maxScore: { type: Number, default: 0 },
 })
 
 const bodyEl = ref(null)
 const expanded = ref(false)
 
-function scoreType(score) {
-  if (score >= 0.15) return 'success'
-  if (score >= 0.03) return 'info'
-  return 'default'
-}
-
-// RRF 分数很小（典型 0.01~0.1），映射为视觉强度条
-const scorePct = computed(() => Math.min(100, Math.max(5, Number(props.hit.score || 0) * 900)))
+// RRF 分数按本次结果集最大值归一化为视觉强度条（相对强弱而非绝对值）
+const scorePct = computed(() =>
+  props.maxScore > 0
+    ? Math.max(4, Math.round((Number(props.hit.score || 0) / props.maxScore) * 100))
+    : 0,
+)
 
 async function render() {
   await nextTick()
@@ -59,11 +58,7 @@ const fieldNames = () => {
           <div class="score-wrap">
             <span class="score-text">score {{ Number(hit.score).toFixed(4) }}</span>
             <div class="score-bar">
-              <div
-                class="score-bar-fill"
-                :class="'lv-' + scoreType(hit.score)"
-                :style="{ width: scorePct + '%' }"
-              />
+              <div class="score-bar-fill" :style="{ width: scorePct + '%' }" />
             </div>
           </div>
         </template>
@@ -93,14 +88,14 @@ const fieldNames = () => {
 
 <style scoped>
 .hit-card {
-  border-radius: 14px;
+  border-radius: var(--mss-radius-l);
   transition:
     box-shadow 0.2s,
     transform 0.2s;
   animation: mss-fade-up 0.3s ease-out;
 }
 .hit-card:hover {
-  box-shadow: 0 8px 28px rgba(16, 24, 40, 0.1);
+  box-shadow: var(--mss-shadow-2);
   transform: translateY(-1px);
 }
 .hit-head {
@@ -123,16 +118,17 @@ const fieldNames = () => {
   min-width: 22px;
   height: 22px;
   padding: 0 6px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
+  border-radius: var(--mss-radius-s);
+  background: rgba(127, 127, 127, 0.1);
+  color: var(--mss-text-muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
+  font-family: var(--mss-font-mono);
   flex-shrink: 0;
 }
 .hit-id {
   font-size: 12px;
-  font-family: var(--font-family-mono, monospace);
+  font-family: var(--mss-font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -145,7 +141,7 @@ const fieldNames = () => {
 .score-text {
   font-size: 12px;
   font-weight: 600;
-  color: #6366f1;
+  color: var(--mss-brand);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -159,16 +155,8 @@ const fieldNames = () => {
 .score-bar-fill {
   height: 100%;
   border-radius: 2px;
+  background: var(--mss-brand);
   transition: width 0.4s ease;
-}
-.score-bar-fill.lv-success {
-  background: #10b981;
-}
-.score-bar-fill.lv-info {
-  background: #0ea5e9;
-}
-.score-bar-fill.lv-default {
-  background: #94a3b8;
 }
 .hit-title {
   font-size: 15px;

@@ -78,7 +78,7 @@ const userDropdownOptions = computed(() => [
         h('div', { style: 'font-weight:600;font-size:13px' }, session.user || 'console'),
         h(
           'div',
-          { style: 'font-size:12px;color:#94a3b8;margin-top:2px' },
+          { style: 'font-size:12px;color:var(--mss-text-muted);margin-top:2px' },
           `${session.tenant || 'default'} · ${session.role || 'admin'}`,
         ),
       ]),
@@ -180,9 +180,9 @@ const displayName = computed(() => session.user || session.tenant || 'console')
 </template>
 
 <style scoped>
+/* 侧边栏跟随主题：亮色浅色 / 暗色深青，菜单配色由 naive 主题自然适配 */
 .app-sider {
-  background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
-  border-right: none;
+  background: var(--mss-sider);
 }
 .brand {
   display: flex;
@@ -190,7 +190,7 @@ const displayName = computed(() => session.user || session.tenant || 'console')
   gap: 12px;
   height: 64px;
   padding: 0 16px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  border-bottom: 1px solid var(--mss-border);
 }
 .brand-mark {
   display: flex;
@@ -198,8 +198,8 @@ const displayName = computed(() => session.user || session.tenant || 'console')
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border-radius: var(--mss-radius-m);
+  background: var(--mss-brand-grad); /* 渐变仅保留在 logo mark */
   color: #fff;
   font-size: 18px;
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
@@ -213,12 +213,12 @@ const displayName = computed(() => session.user || session.tenant || 'console')
 .brand-name {
   font-size: 16px;
   font-weight: 700;
-  color: #f1f5f9;
+  color: var(--mss-text-strong);
   letter-spacing: 0.3px;
 }
 .brand-sub {
   font-size: 10px;
-  color: #64748b;
+  color: var(--mss-text-muted);
   letter-spacing: 0.4px;
 }
 .sider-nav {
@@ -231,22 +231,22 @@ const displayName = computed(() => session.user || session.tenant || 'console')
 }
 .sider-footer {
   padding: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  border-top: 1px solid var(--mss-border);
 }
 .user-chip {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--mss-radius-m);
   cursor: pointer;
   transition: background 0.15s;
 }
 .user-chip:hover {
-  background: rgba(148, 163, 184, 0.12);
+  background: var(--mss-brand-soft);
 }
 .user-avatar {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: var(--mss-brand);
   color: #fff;
   font-weight: 600;
 }
@@ -258,7 +258,7 @@ const displayName = computed(() => session.user || session.tenant || 'console')
 }
 .user-name {
   font-size: 13px;
-  color: #e2e8f0;
+  color: var(--mss-text-strong);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -276,8 +276,8 @@ const displayName = computed(() => session.user || session.tenant || 'console')
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: saturate(180%) blur(12px);
 }
-:deep(.n-dark) .topbar {
-  background: rgba(15, 23, 42, 0.7);
+html.dark .topbar {
+  background: rgba(11, 18, 32, 0.7);
 }
 .topbar-title {
   font-size: 16px;
