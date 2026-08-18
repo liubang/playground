@@ -17,6 +17,7 @@
 
 #include "cpp/pl/minisearch/storage/checkpoint.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <dirent.h>
@@ -24,6 +25,7 @@
 #include <json2pb/json_to_pb.h>
 #include <json2pb/pb_to_json.h>
 #include <sys/stat.h>
+#include <vector>
 
 #include "cpp/pl/minisearch/server/codec.h"
 
@@ -123,12 +125,19 @@ bool CheckpointStore::Save(const std::string& collection,
     }
 
     // 文档快照（快照读锁由 ForEachActive 持有，期间写者阻塞）。
+    // 按 internal docid 排序写出：帧序确定，恢复侧与 diff/调试更友好。
+    std::vector<core::Document> snapshot;
+    docs.ForEachActive([&snapshot](const core::Document& doc) { snapshot.push_back(doc); });
+    std::sort(
+        snapshot.begin(), snapshot.end(), [](const core::Document& a, const core::Document& b) {
+            return a.internal_docid < b.internal_docid;
+        });
     std::string docs_bytes;
-    docs.ForEachActive([&docs_bytes](const core::Document& doc) {
+    for (const auto& doc : snapshot) {
         proto::Document msg;
         server::ToProtoDocument(doc, &msg, /*include_internal=*/true);
         append_doc_frame(&docs_bytes, msg);
-    });
+    }
     const std::string docs_path = dir + "/checkpoint." + std::to_string(seq) + ".docs";
     if (!write_file(docs_path, docs_bytes)) {
         return false;

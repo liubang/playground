@@ -365,6 +365,8 @@ func TestRead_ServiceDown(t *testing.T) {
 
 // TestRead_IdWithSlash verifies ids containing "/" are routed correctly
 // (the server treats the whole path tail as the id, so "/" stays literal).
+// TestRead_IdWithSlash keeps "/" segments escaped individually (the server
+// treats the whole tail as the id).
 func TestRead_IdWithSlash(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -380,6 +382,41 @@ func TestRead_IdWithSlash(t *testing.T) {
 	read.Execute(context.Background(), prepared)
 	if gotPath != "/api/v2/loom-kb/documents/docs/a.md" {
 		t.Fatalf("path: %q", gotPath)
+	}
+}
+
+// TestRead_ChunkIdWithHash escapes "#" in imported-markdown chunk ids
+// (e.g. presto-tuning#chunk_0); a raw "#" would be parsed as a URL fragment.
+func TestRead_ChunkIdWithHash(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		_, _ = w.Write([]byte(`{"found":true,"document":{"id":"presto-tuning#chunk_0","fields":{}}}`))
+	}))
+	defer srv.Close()
+	_, read := mustNew(t, singleOpts(srv.URL))
+	prepared, _ := read.Prepare(context.Background(), domain.ToolCall{
+		ID: callID(), Name: "kb_read",
+		Arguments: json.RawMessage(`{"id":"presto-tuning#chunk_0"}`),
+	})
+	read.Execute(context.Background(), prepared)
+	if gotPath != "/api/v2/loom-kb/documents/presto-tuning%23chunk_0" {
+		t.Fatalf("path: %q", gotPath)
+	}
+}
+
+// TestRead_ChunkLevelSemantics locks the minisearch-aligned id contract into
+// the tool surface: ids are chunk-level and must be copied verbatim from
+// kb_search results.
+func TestRead_ChunkLevelSemantics(t *testing.T) {
+	_, read := mustNew(t, singleOptions())
+	def := read.Definition()
+	if !strings.Contains(def.Description, "#chunk_N") ||
+		!strings.Contains(def.Description, "verbatim") {
+		t.Fatalf("read description must state chunk-level verbatim ids: %q", def.Description)
+	}
+	if !strings.Contains(string(def.InputSchema), "#chunk_N") {
+		t.Fatalf("id schema must mention chunk-level ids:\n%s", def.InputSchema)
 	}
 }
 

@@ -43,6 +43,12 @@ public:
     // Tombstones the active docid of `id`. Returns false when absent.
     bool Remove(const std::string& id);
 
+    // Checkpoint restore: re-registers `id` at its persisted docid. Unlike
+    // Assign this preserves the docid exactly — snapshot docids may be
+    // sparse (deletes leave gaps) and FAISS frames are keyed by them.
+    // Returns false when `id` is already mapped or docid < 0.
+    bool RestoreMapping(const std::string& id, int64_t docid);
+
     const std::unordered_set<int64_t>& tombstones() const { return tombstones_; }
 
     size_t ActiveSize() const { return id_to_doc_.size(); }
