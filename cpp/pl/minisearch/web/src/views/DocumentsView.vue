@@ -165,6 +165,8 @@ async function doDelete(row) {
 // ---- 导入 Markdown ----
 const importOpen = ref(false)
 const importing = ref(false)
+const importFileName = ref('')
+const fileInput = ref(null)
 const importForm = ref({
   name: '',
   content: '',
@@ -172,6 +174,19 @@ const importForm = ref({
   chunk_size: 1000,
   chunk_overlap: 100,
 })
+
+// 从本地文件读入 Markdown 全文；文件名（去扩展名）在名称为空时回填
+async function onFilePick(e) {
+  const file = e.target.files?.[0]
+  e.target.value = '' // 允许重复选择同一文件
+  if (!file) return
+  if (file.size > 10 * 1024 * 1024) return message.warning('文件过大（上限 10MB）')
+  importForm.value.content = await file.text()
+  importFileName.value = file.name
+  if (!importForm.value.name.trim()) {
+    importForm.value.name = file.name.replace(/\.(md|markdown|txt)$/i, '')
+  }
+}
 
 async function doImport() {
   if (!importForm.value.name.trim()) return message.warning('文档名称不能为空')
@@ -189,6 +204,7 @@ async function doImport() {
     importOpen.value = false
     importForm.value.name = ''
     importForm.value.content = ''
+    importFileName.value = ''
     loadDocs()
   } catch (err) {
     message.error('导入失败: ' + err.message)
@@ -342,7 +358,18 @@ onMounted(loadCollections)
         <n-form-item label="文档名称（chunk id 前缀）">
           <n-input v-model:value="importForm.name" placeholder="my-doc" :disabled="importing" />
         </n-form-item>
-        <n-form-item label="Markdown 内容">
+        <n-form-item>
+          <template #label>
+            <div class="content-label">
+              <span>Markdown 内容</span>
+              <n-button size="tiny" tertiary @click="fileInput?.click()" :disabled="importing">
+                选择 .md 文件…
+              </n-button>
+              <n-text v-if="importFileName" depth="3" style="font-size: 12px">
+                {{ importFileName }}
+              </n-text>
+            </div>
+          </template>
           <n-input
             v-model:value="importForm.content"
             type="textarea"
@@ -350,6 +377,13 @@ onMounted(loadCollections)
             class="code-input"
             placeholder="# Title&#10;Content..."
             :disabled="importing"
+          />
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".md,.markdown,.txt"
+            style="display: none"
+            @change="onFilePick"
           />
         </n-form-item>
         <div class="form-row">
@@ -454,6 +488,12 @@ onMounted(loadCollections)
 </template>
 
 <style scoped>
+.content-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
 .page-head {
   display: flex;
   align-items: center;
