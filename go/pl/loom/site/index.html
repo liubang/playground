@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Loom — 生产级 AI Coding Agent</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Cpath%20fill='%237fbbb3'%20d='M16%202%2030%2016%2016%2030%202%2016Z'/%3E%3Cpath%20fill='%231e2326'%20d='M16%208l8%208-8%208-8-8Z'/%3E%3C/svg%3E">
-<meta name="description" content="Loom 是面向软件工程任务的生产级 AI Coding Agent：交互式 TUI、Web UI、桌面应用与无头运行，事件溯源会话、安全沙箱与分级审批、Skills 扩展。">
+<meta name="description" content="Loom 是面向软件工程任务的生产级 AI Coding Agent：交互式 TUI、Web UI、桌面应用与无头运行，事件溯源会话、安全沙箱与分级审批、Skills 扩展、知识库检索，支持 OpenAI 与 Anthropic 协议。">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <style>
   :root {
@@ -502,7 +502,7 @@
     <div class="feature reveal" style="--fc:#fbbf24">
       <div class="icon"><i class="fa-solid fa-toolbox"></i></div>
       <h3>丰富的内置工具</h3>
-      <p>read_file / edit / write / run_cmd / exec_session / git_diff / lint / web_fetch / update_goal / update_plan …</p>
+      <p>read_file / edit / write / run_cmd / exec_session / git_diff / lint / web_fetch / kb_search / kb_read / update_goal / update_plan …</p>
     </div>
     <div class="feature reveal" style="--fc:#4ade80">
       <div class="icon"><i class="fa-solid fa-puzzle-piece"></i></div>
@@ -534,6 +534,11 @@
       <h3>跨会话记忆</h3>
       <p>分层持久记忆（热 / 温 / 冷 + 滚动摘要），记住你的项目约定与偏好，越用越懂你。</p>
     </div>
+    <div class="feature reveal" style="--fc:#facc15">
+      <div class="icon"><i class="fa-solid fa-book-open"></i></div>
+      <h3>知识库检索</h3>
+      <p>内置 kb_search / kb_read 工具，直连 minisearch 服务（BM25 + 向量混合检索，RRF 融合），chunk 级检索与全文读取，服务故障优雅降级。</p>
+    </div>
     <div class="feature reveal" style="--fc:#a3e635">
       <div class="icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
       <h3>检查点回退</h3>
@@ -547,15 +552,16 @@
     <div class="reveal">
       <div class="eyebrow">Model-Agnostic</div>
       <h2>一个 Agent Harness，<br>任意模型端点</h2>
-      <p>模型无关的消息/工具协议，兼容任意 OpenAI 兼容端点。在 <code>~/.loom/config.yaml</code> 中用 <code>base_url</code> 切换 API 提供商、<code>wire_api</code> 切换线协议（chat / responses / messages）。</p>
+      <p>模型无关的消息/工具协议，内置 OpenAI 与 Anthropic 两种 provider。在 <code>~/.loom/config.yaml</code> 中用 <code>type</code> 选择协议栈、<code>base_url</code> 切换 API 提供商、<code>wire_api</code> 切换线协议（chat / responses / messages）。</p>
       <div class="tools">
-        <span class="tool-tag">gpt-4o</span>
+        <span class="tool-tag">gpt-5</span>
+        <span class="tool-tag">claude</span>
         <span class="tool-tag">deepseek</span>
         <span class="tool-tag">qwen</span>
         <span class="tool-tag">glm</span>
         <span class="tool-tag">ollama</span>
         <span class="tool-tag">vllm</span>
-        <span class="tool-tag">…任何 OpenAI 兼容端点</span>
+        <span class="tool-tag">…OpenAI 兼容端点 + Anthropic 原生 API</span>
       </div>
     </div>
     <div class="mini-term reveal">
@@ -573,7 +579,7 @@
 <section id="install">
   <div class="install reveal">
     <h2>两分钟上手</h2>
-    <p class="sub">CLI 支持 macOS / Linux · 桌面版支持 macOS（Apple Silicon / Intel）· 任意 OpenAI 兼容模型端点</p>
+    <p class="sub">CLI 支持 macOS / Linux · 桌面版支持 macOS（Apple Silicon / Intel）· OpenAI 兼容端点与 Anthropic Messages API</p>
 
     <div class="step">
       <div class="step-label"><span class="num">1</span> 安装</div>
@@ -633,6 +639,7 @@ brew install loom-cli">复制</button>
       <div class="env-item"><span class="k">LOOM_HOME</span><span class="v">数据根目录（默认 ~/.loom）：配置、会话库、日志、记忆、规则、技能</span></div>
       <div class="env-item"><span class="k">context_window</span><span class="v">config.yaml 字段：模型上下文窗口 token 数，驱动自动压缩</span></div>
       <div class="env-item"><span class="k">LOOM_LANGFUSE_PUBLIC_KEY / SECRET_KEY</span><span class="v">经 config.yaml 的 public_key_env / secret_key_env 引用的追踪密钥（默认关闭）</span></div>
+      <div class="env-item"><span class="k">knowledge_base</span><span class="v">config.yaml 字段：base_url / api_key / collections，配置后启用 kb_search / kb_read 知识库工具</span></div>
     </div>
   </div>
 </section>
