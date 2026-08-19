@@ -40,13 +40,14 @@
       {
         "id": "{{id:12}}",
         "payload": {
-          "CachedInputTokens": 0,
-          "CostUSD": 0,
-          "InputTokens": 0,
-          "OutputTokens": 0,
-          "ToolCalls": 0,
-          "Turns": 1,
-          "WallTime": 0
+          "cached_input_tokens": 0,
+          "context_tokens": 0,
+          "cost_usd": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "tool_calls": 0,
+          "turns": 1,
+          "wall_time_ns": 0
         },
         "sequence": 3,
         "session_id": "{{id:1}}",
@@ -2404,13 +2405,14 @@
       {
         "id": "{{id:17}}",
         "payload": {
-          "CachedInputTokens": 14976,
-          "CostUSD": 0,
-          "InputTokens": 15205,
-          "OutputTokens": 272,
-          "ToolCalls": 0,
-          "Turns": 1,
-          "WallTime": 0
+          "cached_input_tokens": 14976,
+          "context_tokens": 15205,
+          "cost_usd": 0,
+          "input_tokens": 15205,
+          "output_tokens": 272,
+          "tool_calls": 0,
+          "turns": 1,
+          "wall_time_ns": 0
         },
         "sequence": 7,
         "session_id": "{{id:1}}",
@@ -2523,13 +2525,14 @@
       {
         "id": "{{id:23}}",
         "payload": {
-          "CachedInputTokens": 14976,
-          "CostUSD": 0,
-          "InputTokens": 25601,
-          "OutputTokens": 585,
-          "ToolCalls": 1,
-          "Turns": 1,
-          "WallTime": 0
+          "cached_input_tokens": 14976,
+          "context_tokens": 25601,
+          "cost_usd": 0,
+          "input_tokens": 25601,
+          "output_tokens": 585,
+          "tool_calls": 1,
+          "turns": 1,
+          "wall_time_ns": 0
         },
         "sequence": 13,
         "session_id": "{{id:1}}",
@@ -2565,13 +2568,14 @@
       {
         "id": "{{id:26}}",
         "payload": {
-          "CachedInputTokens": 14976,
-          "CostUSD": 0,
-          "InputTokens": 25601,
-          "OutputTokens": 585,
-          "ToolCalls": 1,
-          "Turns": 2,
-          "WallTime": 0
+          "cached_input_tokens": 14976,
+          "context_tokens": 25601,
+          "cost_usd": 0,
+          "input_tokens": 25601,
+          "output_tokens": 585,
+          "tool_calls": 1,
+          "turns": 2,
+          "wall_time_ns": 0
         },
         "sequence": 16,
         "session_id": "{{id:1}}",
@@ -2626,13 +2630,14 @@
       {
         "id": "{{id:30}}",
         "payload": {
-          "CachedInputTokens": 30144,
-          "CostUSD": 0,
-          "InputTokens": 41116,
-          "OutputTokens": 600,
-          "ToolCalls": 1,
-          "Turns": 2,
-          "WallTime": 0
+          "cached_input_tokens": 30144,
+          "context_tokens": 41116,
+          "cost_usd": 0,
+          "input_tokens": 41116,
+          "output_tokens": 600,
+          "tool_calls": 1,
+          "turns": 2,
+          "wall_time_ns": 0
         },
         "sequence": 19,
         "session_id": "{{id:1}}",
@@ -2831,13 +2836,14 @@
       {
         "id": "{{id:42}}",
         "payload": {
-          "CachedInputTokens": 0,
-          "CostUSD": 0,
-          "InputTokens": 0,
-          "OutputTokens": 0,
-          "ToolCalls": 0,
-          "Turns": 1,
-          "WallTime": 0
+          "cached_input_tokens": 0,
+          "context_tokens": 0,
+          "cost_usd": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "tool_calls": 0,
+          "turns": 1,
+          "wall_time_ns": 0
         },
         "sequence": 4,
         "session_id": "{{id:7}}",
@@ -3808,13 +3814,14 @@
       {
         "id": "{{id:47}}",
         "payload": {
-          "CachedInputTokens": 0,
-          "CostUSD": 0,
-          "InputTokens": 5132,
-          "OutputTokens": 106,
-          "ToolCalls": 0,
-          "Turns": 1,
-          "WallTime": 0
+          "cached_input_tokens": 0,
+          "context_tokens": 5132,
+          "cost_usd": 0,
+          "input_tokens": 5132,
+          "output_tokens": 106,
+          "tool_calls": 0,
+          "turns": 1,
+          "wall_time_ns": 0
         },
         "sequence": 8,
         "session_id": "{{id:7}}",
@@ -3947,13 +3954,14 @@
       {
         "id": "{{id:55}}",
         "payload": {
-          "CachedInputTokens": 0,
-          "CostUSD": 0,
-          "InputTokens": 5132,
-          "OutputTokens": 106,
-          "ToolCalls": 1,
-          "Turns": 2,
-          "WallTime": 0
+          "cached_input_tokens": 0,
+          "context_tokens": 5132,
+          "cost_usd": 0,
+          "input_tokens": 5132,
+          "output_tokens": 106,
+          "tool_calls": 1,
+          "turns": 2,
+          "wall_time_ns": 0
         },
         "sequence": 16,
         "session_id": "{{id:7}}",
@@ -4015,13 +4023,14 @@
       {
         "id": "{{id:59}}",
         "payload": {
-          "CachedInputTokens": 5120,
-          "CostUSD": 0,
-          "InputTokens": 10396,
-          "OutputTokens": 313,
-          "ToolCalls": 1,
-          "Turns": 2,
-          "WallTime": 0
+          "cached_input_tokens": 5120,
+          "context_tokens": 10396,
+          "cost_usd": 0,
+          "input_tokens": 10396,
+          "output_tokens": 313,
+          "tool_calls": 1,
+          "turns": 2,
+          "wall_time_ns": 0
         },
         "sequence": 19,
         "session_id": "{{id:7}}",

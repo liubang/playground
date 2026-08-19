@@ -83,8 +83,8 @@ var timeKeys = map[string]bool{
 	// verbatim, stable) with a byte-estimate of message text, which
 	// embeds the run's temp paths — the sum is not stable either.
 	"occupancy_tokens": true,
-	// WallTime (domain.Usage, no json tag) is run-duration noise.
-	"WallTime": true,
+	// WallTime (domain.Usage, wall_time_ns) is run-duration noise.
+	"wall_time_ns": true,
 }
 
 // NormalizeContext carries the run's environment-dependent path roots.

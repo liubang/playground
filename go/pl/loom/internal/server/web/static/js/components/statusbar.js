@@ -14,13 +14,24 @@ export class Statusbar {
     this.versionEl.textContent = v || ''
   }
 
-  // snapshot.usage / usage.updated / turn.finished.usage 驱动（累计口径）
+  // snapshot.usage / budget.updated 事件驱动（均为会话累计口径）。
+  // cache 命中率 = cached_input_tokens / context_tokens，分子分母均为
+  // provider 实测（OpenAI prompt_tokens / Anthropic input+cache_read+
+  // cache_creation），有实测调用后才显示。
   setUsage(usage) {
     if (!usage) {
       this.usageEl.textContent = ''
       return
     }
-    this.usageEl.textContent = `${fmtTokens(usage.input_tokens)} in / ${fmtTokens(usage.output_tokens)} out`
+    let text = `${fmtTokens(usage.input_tokens)} in / ${fmtTokens(usage.output_tokens)} out`
+    if (usage.context_tokens > 0) {
+      const pct = Math.min(
+        100,
+        Math.round((usage.cached_input_tokens / usage.context_tokens) * 100),
+      )
+      text += ` · cache ${pct}%`
+    }
+    this.usageEl.textContent = text
   }
 
   setTurns(n) {

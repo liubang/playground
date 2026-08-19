@@ -1645,6 +1645,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 		RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
 		Input: messages, Output: response, StopReason: string(stop),
 		InputTokens: inputTokens, OutputTokens: outputTokens,
+		CachedInputTokens: agg.CachedInputTokens(), CacheCreationInputTokens: agg.CacheCreationInputTokens(),
 		StartTime: startedAt, EndTime: l.Run.Clock.Now(),
 	})
 	// Record the terminal stream facts on the persisted message so that event
@@ -1655,7 +1656,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	}
 	response.Metadata["request_id"] = req.ID.String()
 	response.Metadata["stop_reason"] = string(stop)
-	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens())
+	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens(), agg.ContextTokens())
 	l.lastCallContext = agg.ContextTokens()
 	l.lastCallBase = len(l.Run.Messages)
 	l.Run.AddAssistantMessage(response)
@@ -2633,11 +2634,12 @@ func (l *Loop) summarizeForCompaction(ctx context.Context, base []domain.Message
 	if err != nil {
 		return "", err
 	}
-	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens())
+	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens(), agg.ContextTokens())
 	l.recordGeneration(ctx, trace.GenerationRecord{
 		RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
 		Input: messages, Output: response, StopReason: "compaction",
 		InputTokens: inputTokens, OutputTokens: outputTokens,
+		CachedInputTokens: agg.CachedInputTokens(), CacheCreationInputTokens: agg.CacheCreationInputTokens(),
 		StartTime: startedAt, EndTime: l.Run.Clock.Now(),
 	})
 	text := strings.Join(response.TextParts(), "")
@@ -2651,10 +2653,11 @@ func (l *Loop) summarizeForCompaction(ctx context.Context, base []domain.Message
 // cumulative token counts, the estimated cost (when rates are configured —
 // without it the cost_usd limit can never fire), the goal meter, and the
 // wall-time window.
-func (l *Loop) accountUsage(inputTokens, outputTokens, cachedInputTokens int64) {
+func (l *Loop) accountUsage(inputTokens, outputTokens, cachedInputTokens, contextTokens int64) {
 	l.Run.Usage.InputTokens += inputTokens
 	l.Run.Usage.OutputTokens += outputTokens
 	l.Run.Usage.CachedInputTokens += cachedInputTokens
+	l.Run.Usage.ContextTokens += contextTokens
 	if l.CostInputUSDPerMTok > 0 || l.CostOutputUSDPerMTok > 0 {
 		l.Run.Usage.CostUSD = float64(l.Run.Usage.InputTokens)*l.CostInputUSDPerMTok/1e6 +
 			float64(l.Run.Usage.OutputTokens)*l.CostOutputUSDPerMTok/1e6
@@ -2682,7 +2685,9 @@ func (l *Loop) foldExternalUsage(result domain.ToolResult) {
 	if inputTokens <= 0 && outputTokens <= 0 {
 		return
 	}
-	l.accountUsage(inputTokens, outputTokens, 0)
+	// Externally metered input (a sub-agent's) is a full footprint: the
+	// delegate contract reports complete input sizes, not cache splits.
+	l.accountUsage(inputTokens, outputTokens, 0, inputTokens)
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 }
 

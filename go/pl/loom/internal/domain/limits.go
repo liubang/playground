@@ -115,19 +115,25 @@ func DefaultLimits() Limits {
 // observability counters (status bar, budget events) reset at each prompt
 // boundary — never budget dimensions.
 type Usage struct {
-	Turns        int
-	ToolCalls    int
-	InputTokens  int64
-	OutputTokens int64
+	Turns        int   `json:"turns"`
+	ToolCalls    int   `json:"tool_calls"`
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
 	// CachedInputTokens accumulates provider-reported prompt-cache hits.
 	// Observability only (cache efficiency indicator), never a budget
 	// dimension. Provider semantics DIVERGE: OpenAI's prompt_tokens already
 	// includes cached tokens, while Anthropic's input_tokens EXCLUDES them
 	// (full input = input_tokens + cache_read + cache_creation) — so treat
 	// the field as a ratio-free indicator, not a subset of InputTokens.
-	CachedInputTokens int64
-	CostUSD           float64
-	WallTime          time.Duration
+	CachedInputTokens int64 `json:"cached_input_tokens"`
+	// ContextTokens accumulates the provider-metered context-window
+	// footprint of every call (ModelEvent.ContextTokens: OpenAI
+	// prompt_tokens, Anthropic input+cache_read+cache_creation). It is the
+	// exact, provider-uniform denominator of the session cache-hit ratio
+	// CachedInputTokens/ContextTokens.
+	ContextTokens int64         `json:"context_tokens"`
+	CostUSD       float64       `json:"cost_usd"`
+	WallTime      time.Duration `json:"wall_time_ns"`
 }
 
 // CheckResult reports soft/hard threshold breaches.

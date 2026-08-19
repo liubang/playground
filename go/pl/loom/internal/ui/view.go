@@ -19,6 +19,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -925,9 +926,26 @@ func (m Model) planPanelTitle(width int) string {
 // session-cumulative counters — the tokens budget denominators
 // (docs/CONTEXT_DESIGN.md §4.4.3: context pressure is shown by the ctx
 // segment against the effective window; tokens/cost are the budgets).
+// The cache segment is the provider-metered session hit ratio
+// (CachedInputTokens/ContextTokens), shown once a metered call exists.
 func formatUsage(usage domain.Usage) string {
-	return fmt.Sprintf("turns:%d in:%s out:%s tools:%d",
+	label := fmt.Sprintf("turns:%d in:%s out:%s tools:%d",
 		usage.Turns, humanizeTokens(usage.InputTokens), humanizeTokens(usage.OutputTokens), usage.ToolCalls)
+	if usage.ContextTokens > 0 {
+		label += fmt.Sprintf(" cache:%d%%", cacheHitPercent(usage))
+	}
+	return label
+}
+
+// cacheHitPercent reports the session cache-hit ratio in percent,
+// rounded and clamped for sessions resumed from before ContextTokens
+// was tracked.
+func cacheHitPercent(usage domain.Usage) int {
+	if usage.ContextTokens <= 0 {
+		return 0
+	}
+	pct := int(math.Round(float64(usage.CachedInputTokens) / float64(usage.ContextTokens) * 100))
+	return min(pct, 100)
 }
 
 // budgetUsageRatio reports the highest consumption ratio across the real
