@@ -233,6 +233,12 @@ func (c *httpClient) ResumeSession(ctx context.Context, id domain.SessionID) err
 	if err := c.do(ctx, http.MethodPost, "/v1/sessions", map[string]string{"resume": id.String()}, &out); err != nil {
 		return err
 	}
+	// Resuming is an explicit intent to continue the conversation, so an
+	// archived (read-only) session is restored to active. Read-only
+	// viewing goes through the snapshot/transcript APIs, never Resume.
+	if err := c.do(ctx, http.MethodPost, "/v1/sessions/"+out.SessionID.String()+"/archive", map[string]bool{"archived": false}, nil); err != nil {
+		return fmt.Errorf("unarchive session: %w", err)
+	}
 	c.mu.Lock()
 	c.sessionID = out.SessionID
 	c.mu.Unlock()

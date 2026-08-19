@@ -195,6 +195,7 @@ const app = {
   sessLoading: false,
   showArchived: false, // 侧栏归档视图开关
   readOnly: false, // 当前会话为只读子 agent 会话
+  archived: false, // 当前会话已归档（只读，取消归档后可继续）
   workspaces: [], // 已注册工作区 [{id, name, root_path, session_count}]
 }
 
@@ -557,9 +558,12 @@ async function onSessionAction(id, action) {
       if (!ok) return
       await app.api.deleteSession(id)
       if (id === app.sessionId) {
-        // 删的是当前打开的会话：断开流、回空态
+        // 删的是当前打开的会话：断开流、回空态（只读态一并复位）
         app.stream.detach()
         app.sessionId = null
+        app.archived = false
+        app.readOnly = false
+        updateComposerLock()
         app.transcript.clear()
         app.ctxgauge.reset()
         renderPlanInto($('plan-panel'), null)
@@ -573,6 +577,8 @@ async function onSessionAction(id, action) {
     } else {
       await app.api.archiveSession(id, action === 'archive')
       toast(action === 'archive' ? '已归档' : '已取消归档', true)
+      // 归档/取消归档的是当前打开的会话：同步输入区只读态
+      if (id === app.sessionId) setArchived(action === 'archive')
     }
   } catch (e) {
     if (e.status !== 401) toast('操作失败: ' + e.message)
@@ -580,16 +586,37 @@ async function onSessionAction(id, action) {
   await refreshSessions()
 }
 
-// 只读模式（子 agent 会话）：composer/模型切换禁用；审批与提问卡片不受影响。
+// 只读模式有两个来源：子 agent 会话（snap.delegated）与已归档会话
+// （app.archived）。composer/模型切换统一由 updateComposerLock 收口；
+// 审批与提问卡片不受影响。
+function updateComposerLock() {
+  const locked = app.readOnly || app.archived
+  app.composer.setReadOnly(
+    locked,
+    app.readOnly ? '子 agent 会话 · 只读' : '会话已归档 · 只读（在侧栏归档视图中取消归档后可继续）',
+  )
+  $('send-btn').disabled = locked
+  $('model-btn').disabled = locked
+  $('reasoning-btn').disabled = locked
+  const badge = $('hdr-readonly')
+  badge.hidden = !locked
+  badge.querySelector('.txt').textContent = app.readOnly
+    ? 'sub-agent · read-only'
+    : 'archived · read-only'
+}
+
 function setReadOnly(snap) {
   app.readOnly = !!snap.delegated
-  app.composer.setReadOnly(app.readOnly)
-  $('send-btn').disabled = app.readOnly
-  $('model-btn').disabled = app.readOnly
-  $('reasoning-btn').disabled = app.readOnly
   const badge = $('hdr-readonly')
-  badge.hidden = !app.readOnly
   badge.title = snap.parent_session_id ? `parent: ${snap.parent_session_id}` : ''
+  updateComposerLock()
+}
+
+// setArchived 切换当前会话的归档只读态：打开归档视图中的会话、对当前会话
+// 执行归档/取消归档、或发送被服务端以 session_archived 拒绝时调用。
+function setArchived(archived) {
+  app.archived = archived
+  updateComposerLock()
 }
 
 // composer 草稿按会话隔离：切走前暂存当前输入文本，切回时还原。
@@ -611,9 +638,13 @@ function restoreComposerDraft(id) {
   composerDrafts.delete(id)
 }
 
-async function openSession(id) {
+async function openSession(id, { archived = false } = {}) {
   // 同会话重开 = resync（断流恢复/手动重试）：保留滚动位置，不拽回底部。
   const isResync = app.sessionId === id
+  // 归档只读态：从归档视图打开的会话为只读；resync 时由调用方原样带回。
+  // 立即刷新锁态：snapshot/resume 失败时输入区也不能残留上一个会话的状态。
+  app.archived = archived
+  updateComposerLock()
   stashComposerDraft()
   clearArtifactURLCache()
   app.stream.detach()
@@ -781,7 +812,7 @@ async function confirmDirPicker() {
 async function newSession(workspaceId) {
   const { session_id } = await app.api.createSession(workspaceId || '')
   await refreshSessions()
-  await openSession(session_id)
+  await openSession(session_id, { archived: false })
 }
 
 // 删除工作区（侧栏工作区节点操作）：级联删除其下全部会话（存活会话会被
@@ -974,7 +1005,7 @@ async function resync(reason) {
   app.stream.detach()
   if (!app.sessionId) return
   try {
-    await openSession(app.sessionId)
+    await openSession(app.sessionId, { archived: app.archived })
   } catch (e) {
     if (e.status !== 401) toast('resync failed: ' + e.message)
   }
@@ -1035,7 +1066,8 @@ async function boot() {
     onSelect: (id) => {
       if (id === app.sessionId) return
       collapseSidebarIfNarrow()
-      openSession(id).catch((e) => {
+      // 从归档视图点开的会话 = 已归档（只读）；默认视图 = 活跃会话
+      openSession(id, { archived: app.showArchived }).catch((e) => {
         if (e.status !== 401) toast('open session: ' + e.message)
       })
     },
@@ -1351,6 +1383,10 @@ async function submitPrompt(text, images = [], followup = false) {
     toast('子 agent 会话为只读，不能追问')
     return
   }
+  if (app.archived) {
+    toast('会话已归档，仅可查看；取消归档后可继续对话')
+    return
+  }
   // followup 仅文本：图片随普通 prompt 发送（后端同样拒绝 followup+图片）
   if (followup && images.length) {
     toast('排队到下一轮的消息仅支持文本，图片已忽略')
@@ -1375,6 +1411,13 @@ async function submitPrompt(text, images = [], followup = false) {
     if (e.status === 401) return
     // 失败时仅还原文本，附件留在 composer 以便重试
     app.composer.restoreDraft(text)
+    // 会话在此期间被归档（手动/自动）：切换为只读并引导取消归档
+    if (e.code === 'session_archived') {
+      setArchived(true)
+      refreshSessions()
+      toast('会话已归档，仅可查看；取消归档后可继续对话')
+      return
+    }
     toast('send failed: ' + e.message)
   }
 }

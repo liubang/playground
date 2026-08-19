@@ -234,13 +234,20 @@ func (s *SQLiteStore) RewindSession(ctx context.Context, sessionID domain.Sessio
 	var summary domain.SessionSummary
 	var version int64
 	var id, createdAt, updatedAt string
+	var archivedAt sql.NullInt64
 	if err := tx.QueryRowContext(ctx,
-		"SELECT session_id, version, created_at, updated_at FROM sessions WHERE session_id = ?",
-		sessionID.String()).Scan(&id, &version, &createdAt, &updatedAt); err != nil {
+		"SELECT session_id, version, created_at, updated_at, archived_at_unix_nano FROM sessions WHERE session_id = ?",
+		sessionID.String()).Scan(&id, &version, &createdAt, &updatedAt, &archivedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return RewindResult{}, domain.NewError(domain.ErrInvalidInput, "session not found")
 		}
 		return RewindResult{}, storeError("load session for rewind", err)
+	}
+	// Archived sessions are read-only: rewinding rewrites history, so it
+	// is rejected until the session is explicitly unarchived.
+	if archivedAt.Valid {
+		return RewindResult{}, domain.NewError(domain.ErrSessionArchived,
+			"session is archived (read-only); unarchive it to rewind")
 	}
 	summary.ID = sessionID
 	summary.Version = version

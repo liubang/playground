@@ -665,8 +665,12 @@ func TestSQLiteStoreArchiveSession(t *testing.T) {
 			t.Fatalf("CreateSession: %v", err)
 		}
 	}
-	if err := store.SetSessionArchived(ctx, archived, true); err != nil {
-		t.Fatalf("SetSessionArchived: %v", err)
+	if changed, err := store.SetSessionArchived(ctx, archived, true); err != nil || !changed {
+		t.Fatalf("SetSessionArchived: changed=%v err=%v, want changed=true", changed, err)
+	}
+	// Repeating the current state is a no-op.
+	if changed, err := store.SetSessionArchived(ctx, archived, true); err != nil || changed {
+		t.Fatalf("SetSessionArchived repeat: changed=%v err=%v, want changed=false", changed, err)
 	}
 	def, _, err := store.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
 	if err != nil {
@@ -682,8 +686,8 @@ func TestSQLiteStoreArchiveSession(t *testing.T) {
 	if len(arch) != 1 || arch[0].ID != archived {
 		t.Fatalf("archived listing = %+v, want only the archived session", arch)
 	}
-	if err := store.SetSessionArchived(ctx, archived, false); err != nil {
-		t.Fatalf("SetSessionArchived(false): %v", err)
+	if changed, err := store.SetSessionArchived(ctx, archived, false); err != nil || !changed {
+		t.Fatalf("SetSessionArchived(false): changed=%v err=%v, want changed=true", changed, err)
 	}
 	def, _, err = store.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
 	if err != nil {
@@ -692,8 +696,106 @@ func TestSQLiteStoreArchiveSession(t *testing.T) {
 	if len(def) != 2 {
 		t.Fatalf("default listing after unarchive = %+v, want both sessions", def)
 	}
-	if err := store.SetSessionArchived(ctx, domain.NewSessionID(), true); err == nil {
+	if _, err := store.SetSessionArchived(ctx, domain.NewSessionID(), true); err == nil {
 		t.Fatal("archiving a missing session must fail")
+	}
+}
+
+// Archived sessions are read-only: appends and rewinds are rejected with
+// ErrSessionArchived until the session is explicitly unarchived.
+func TestSQLiteStoreArchivedSessionIsReadOnly(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := store.AppendEvents(ctx, sessionID, 0, transcriptEvents(t, sessionID)); err != nil {
+		t.Fatalf("AppendEvents: %v", err)
+	}
+	// A checkpoint must exist before archiving so the rewind attempt below
+	// reaches the archive guard rather than failing on a missing checkpoint.
+	if err := store.SaveCheckpoint(ctx, testCheckpoint(sessionID, 3, time.Now().UTC())); err != nil {
+		t.Fatalf("SaveCheckpoint: %v", err)
+	}
+
+	if _, err := store.SetSessionArchived(ctx, sessionID, true); err != nil {
+		t.Fatalf("SetSessionArchived: %v", err)
+	}
+	next := []domain.Event{newEvent(sessionID, 4, domain.EventUserMessageAdded, nil)}
+	if err := store.AppendEvents(ctx, sessionID, 3, next); errorCode(err) != domain.ErrSessionArchived {
+		t.Fatalf("AppendEvents on archived session: err = %v, want %s", err, domain.ErrSessionArchived)
+	}
+	if _, err := store.RewindSession(ctx, sessionID, 3); errorCode(err) != domain.ErrSessionArchived {
+		t.Fatalf("RewindSession on archived session: err = %v, want %s", err, domain.ErrSessionArchived)
+	}
+
+	// Unarchiving restores writability.
+	if _, err := store.SetSessionArchived(ctx, sessionID, false); err != nil {
+		t.Fatalf("SetSessionArchived(false): %v", err)
+	}
+	if err := store.AppendEvents(ctx, sessionID, 3, next); err != nil {
+		t.Fatalf("AppendEvents after unarchive: %v", err)
+	}
+}
+
+// ArchiveStaleSessions archives exactly the unarchived sessions whose last
+// activity is at or before the cutoff, and is idempotent.
+func TestSQLiteStoreArchiveStaleSessions(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	staleA, staleB, boundary, fresh := domain.NewSessionID(), domain.NewSessionID(), domain.NewSessionID(), domain.NewSessionID()
+	for _, id := range []domain.SessionID{staleA, staleB, boundary, fresh} {
+		if err := store.CreateSession(ctx, id, domain.WorkspaceID{}); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+		if err := store.AppendEvents(ctx, id, 0, transcriptEvents(t, id)); err != nil {
+			t.Fatalf("AppendEvents: %v", err)
+		}
+	}
+	// Backdate the two stale sessions' last-activity timestamps.
+	staleBefore := time.Now().Add(-48 * time.Hour).UnixNano()
+	for _, id := range []domain.SessionID{staleA, staleB} {
+		if _, err := store.db.ExecContext(ctx,
+			"UPDATE sessions SET updated_at_unix_nano = ? WHERE session_id = ?",
+			staleBefore, id.String()); err != nil {
+			t.Fatalf("backdate %s: %v", id, err)
+		}
+	}
+	// staleB is already archived manually: the sweep must not count it.
+	if _, err := store.SetSessionArchived(ctx, staleB, true); err != nil {
+		t.Fatalf("SetSessionArchived: %v", err)
+	}
+
+	cutoff := time.Now().Add(-24 * time.Hour)
+	// Boundary semantics: updated_at == cutoff is archived (<=), locked by
+	// this case so a future change to "<" goes red.
+	if _, err := store.db.ExecContext(ctx,
+		"UPDATE sessions SET updated_at_unix_nano = ? WHERE session_id = ?",
+		cutoff.UnixNano(), boundary.String()); err != nil {
+		t.Fatalf("backdate boundary %s: %v", boundary, err)
+	}
+	n, err := store.ArchiveStaleSessions(ctx, cutoff)
+	if err != nil {
+		t.Fatalf("ArchiveStaleSessions: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("ArchiveStaleSessions archived %d sessions, want 2 (staleA + boundary)", n)
+	}
+	active, _, err := store.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("ListSessions default: %v", err)
+	}
+	if len(active) != 1 || active[0].ID != fresh {
+		t.Fatalf("default listing = %+v, want only the fresh session", active)
+	}
+	// A second sweep with the same cutoff archives nothing.
+	if n, err := store.ArchiveStaleSessions(ctx, cutoff); err != nil || n != 0 {
+		t.Fatalf("second ArchiveStaleSessions = %d, %v; want 0, nil", n, err)
+	}
+	// Fresh sessions stay active even under a later cutoff.
+	if n, err := store.ArchiveStaleSessions(ctx, time.Now().Add(-time.Hour)); err != nil || n != 0 {
+		t.Fatalf("ArchiveStaleSessions with fresh session = %d, %v; want 0, nil", n, err)
 	}
 }
 

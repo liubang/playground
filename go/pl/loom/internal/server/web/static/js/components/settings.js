@@ -47,6 +47,7 @@ const KNOWN_TOP_KEYS = new Set([
   'ui',
   'subagent',
   'memory',
+  'sessions',
   'image',
   'browser',
   'knowledge_base',
@@ -696,6 +697,17 @@ const TABS = [
           },
           { key: 'memory.min_session_idle', label: '会话静默阈值', ph: '1h' },
           { key: 'memory.max_session_age', label: '会话最大年龄', ph: '720h' },
+        ],
+      ],
+      [
+        '会话归档',
+        [
+          {
+            key: 'sessions.auto_archive_after',
+            label: '自动归档阈值',
+            ph: '如 720h',
+            hint: '超过该时长未活跃的会话自动归档（只读，可随时取消归档）；留空或 0 = 关闭',
+          },
         ],
       ],
       [

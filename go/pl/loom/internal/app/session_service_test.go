@@ -112,6 +112,33 @@ func TestSessionServicePreferenceInheritance(t *testing.T) {
 	}
 }
 
+// TestSessionServiceArchivedSessionRejectsPrompts: an archived session is
+// read-only — SubmitPrompt is rejected synchronously with
+// ErrSessionArchived — until the session is explicitly unarchived.
+func TestSessionServiceArchivedSessionRejectsPrompts(t *testing.T) {
+	svc, _ := newTestService(t, fakes.NewFakeModel())
+	ctx := context.Background()
+
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if changed, err := svc.SetSessionArchived(ctx, h.ID, true); err != nil || !changed {
+		t.Fatalf("SetSessionArchived: changed=%v err=%v, want changed=true", changed, err)
+	}
+	_, _, err = svc.SubmitPrompt(ctx, h.ID, "hello", nil, "", false)
+	var agentErr *domain.AgentError
+	if !errors.As(err, &agentErr) || agentErr.Code != domain.ErrSessionArchived {
+		t.Fatalf("SubmitPrompt on archived session: err = %v, want code %s", err, domain.ErrSessionArchived)
+	}
+	if changed, err := svc.SetSessionArchived(ctx, h.ID, false); err != nil || !changed {
+		t.Fatalf("SetSessionArchived(false): changed=%v err=%v, want changed=true", changed, err)
+	}
+	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "hello", nil, "", false); err != nil {
+		t.Fatalf("SubmitPrompt after unarchive: %v", err)
+	}
+}
+
 // TestModelCatalogModalities: the picker wire shape carries each model's
 // declared modalities so the frontend can badge vision-capable models and
 // gate image attachments; undeclared models stay empty (text-only).

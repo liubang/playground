@@ -783,6 +783,47 @@ subagent:
 	}
 }
 
+func TestResolveSessionsAutoArchive(t *testing.T) {
+	// Absent: the archiver is disabled.
+	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if def.Sessions.AutoArchiveAfter != 0 {
+		t.Fatalf("auto_archive_after default = %v, want 0 (disabled)", def.Sessions.AutoArchiveAfter)
+	}
+
+	cfg := loadFile(t, twoProviderYAML+`
+sessions:
+  auto_archive_after: "720h"
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if cfg.Sessions.AutoArchiveAfter != 30*24*time.Hour {
+		t.Fatalf("auto_archive_after = %v, want 720h", cfg.Sessions.AutoArchiveAfter)
+	}
+
+	// "0" explicitly disables the archiver.
+	zero := loadFile(t, twoProviderYAML+`
+sessions:
+  auto_archive_after: "0"
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if zero.Sessions.AutoArchiveAfter != 0 {
+		t.Fatalf("auto_archive_after = %v, want 0 (disabled)", zero.Sessions.AutoArchiveAfter)
+	}
+
+	_, err := Load(writeConfig(t, twoProviderYAML+`
+sessions:
+  auto_archive_after: "thirty days"
+`), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if err == nil || !strings.Contains(err.Error(), "sessions.auto_archive_after") {
+		t.Fatalf("err = %v, want sessions.auto_archive_after parse error", err)
+	}
+
+	_, err = Load(writeConfig(t, twoProviderYAML+`
+sessions:
+  auto_archive_after: "-1h"
+`), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if err == nil || !strings.Contains(err.Error(), "sessions.auto_archive_after") {
+		t.Fatalf("err = %v, want sessions.auto_archive_after validation error", err)
+	}
+}
+
 func TestResolveMemoryDefaultsAndOverrides(t *testing.T) {
 	// Absent: enabled, follows the default model, built-in pipeline tuning.
 	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))

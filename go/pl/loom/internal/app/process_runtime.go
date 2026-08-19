@@ -19,6 +19,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -96,6 +97,9 @@ type ProcessRuntime struct {
 	reasoningPref      string
 	traceProvider      *trace.Provider
 	memoryPipelineStop context.CancelFunc
+	// autoArchiveStop cancels the background session archiver (nil when
+	// the archiver was never started — e.g. bare test runtimes).
+	autoArchiveStop context.CancelFunc
 	// mcpMu guards MCPManager: created on demand when a hot-applied
 	// config introduces the first MCP server, swapped on shutdown.
 	mcpMu sync.RWMutex
@@ -449,7 +453,63 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 	// effect for processes that never made a manual choice.
 	p.resolved.Store(resolved)
 	p.loadPrefs(ctx)
+	// Session auto-archiver (sessions.auto_archive_after): one pass at
+	// startup, then hourly. Each pass reads Resolved() fresh, so a
+	// hot-applied config change takes effect on the next pass without a
+	// restart. The sweep is a single idempotent UPDATE — concurrent loom
+	// processes sharing the same database may all run it safely. A
+	// live-but-idle session CAN be archived by the sweep; the store's
+	// read-only enforcement then rejects its next write with
+	// ErrSessionArchived until the user unarchives it.
+	p.startSessionArchiver(store)
 	return p, nil
+}
+
+// sessionArchiveSweepInterval is how often the background archiver
+// re-scans for stale sessions; the staleness threshold itself comes from
+// sessions.auto_archive_after and is read fresh every pass.
+const sessionArchiveSweepInterval = time.Hour
+
+// startSessionArchiver launches the background session archiver. The
+// goroutine is cheap when the feature is disabled: every pass re-reads
+// the resolved config and returns immediately while
+// sessions.auto_archive_after is unset.
+func (p *ProcessRuntime) startSessionArchiver(store *session.SQLiteStore) {
+	ctx, cancel := context.WithCancel(context.Background())
+	p.autoArchiveStop = cancel
+	go func() {
+		ticker := time.NewTicker(sessionArchiveSweepInterval)
+		defer ticker.Stop()
+		for {
+			p.archiveStaleSessionsOnce(ctx, store)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+}
+
+// archiveStaleSessionsOnce runs one archiver pass: no-op while disabled.
+func (p *ProcessRuntime) archiveStaleSessionsOnce(ctx context.Context, store *session.SQLiteStore) {
+	resolved := p.Resolved()
+	if resolved == nil || resolved.Sessions.AutoArchiveAfter <= 0 {
+		return
+	}
+	cutoff := time.Now().UTC().Add(-resolved.Sessions.AutoArchiveAfter)
+	n, err := store.ArchiveStaleSessions(ctx, cutoff)
+	if err != nil {
+		// A cancelled pass (Close raced the sweep) is a normal shutdown.
+		if !errors.Is(err, context.Canceled) {
+			p.Logger.Warn("session auto-archive sweep failed", "error", err)
+		}
+		return
+	}
+	if n > 0 {
+		p.Logger.Info("stale sessions auto-archived",
+			"count", n, "idle_for", resolved.Sessions.AutoArchiveAfter.String())
+	}
 }
 
 // Close releases the process-level resources. It must run after every
@@ -464,6 +524,11 @@ func (p *ProcessRuntime) Close() {
 	// consolidation runs on the exit path (P0-A).
 	if p.memoryPipelineStop != nil {
 		p.memoryPipelineStop()
+	}
+	// Stop the session auto-archiver; an in-flight pass finishes or
+	// aborts with the cancelled context.
+	if p.autoArchiveStop != nil {
+		p.autoArchiveStop()
 	}
 	if p.RememberedStore != nil {
 		if err := p.RememberedStore.Close(); err != nil && p.Logger != nil {

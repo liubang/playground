@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
@@ -64,6 +65,7 @@ func TestClassifyConfigChanges(t *testing.T) {
 		{"tracing cost", func(c *config.ResolvedConfig) { c.Tracing.CostInputPerMTok = 1.5 }, "", "tracing cost rates", ""},
 		{"tracing host", func(c *config.ResolvedConfig) { c.Tracing.Host = "https://lf" }, "", "", "tracing"},
 		{"memory", func(c *config.ResolvedConfig) { c.Memory.MaxJobsPerRun = 4 }, "", "", "memory"},
+		{"sessions", func(c *config.ResolvedConfig) { c.Sessions.AutoArchiveAfter = time.Hour }, "", "sessions", ""},
 		{"skills", func(c *config.ResolvedConfig) { c.Skills.Enabled = true }, "", "", "skills"},
 		{"skills disabled", func(c *config.ResolvedConfig) { c.Skills.Disabled = []string{"x"} }, "skills.disabled", "", ""},
 		{"image", func(c *config.ResolvedConfig) { c.Image.Model = "m" }, "", "", "image"},
