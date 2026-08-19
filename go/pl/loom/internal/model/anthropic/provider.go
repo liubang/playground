@@ -907,10 +907,11 @@ func (s *streamState) finish(emit stream.Emitter) {
 	s.closeOpenBlocks(emit)
 	if s.inputTokens > 0 || s.outputTokens > 0 {
 		emit(domain.ModelEvent{
-			Kind:              domain.ModelEventUsage,
-			InputTokens:       s.inputTokens,
-			OutputTokens:      s.outputTokens,
-			CachedInputTokens: s.cachedInputTokens,
+			Kind:                     domain.ModelEventUsage,
+			InputTokens:              s.inputTokens,
+			OutputTokens:             s.outputTokens,
+			CachedInputTokens:        s.cachedInputTokens,
+			CacheCreationInputTokens: s.cacheCreationInputTokens,
 			// The window footprint is the full prompt: non-cached input plus
 			// cache reads and writes, which Anthropic excludes from
 			// input_tokens but which occupied the context window all the same.

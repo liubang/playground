@@ -76,6 +76,9 @@ type StreamAggregator struct {
 	// cachedInputTokens accumulates provider-reported prompt-cache hits
 	// (observability only; inputTokens already includes them).
 	cachedInputTokens int64
+	// cacheCreationInputTokens accumulates provider-reported prompt-cache
+	// writes (Anthropic only; OpenAI folds them into prompt_tokens).
+	cacheCreationInputTokens int64
 	// contextTokens is the provider-metered context-window footprint of
 	// the request (cache-inclusive); see ContextTokens().
 	contextTokens int64
@@ -204,6 +207,7 @@ func (a *StreamAggregator) Apply(evt domain.ModelEvent) error {
 		a.inputTokens = evt.InputTokens
 		a.outputTokens = evt.OutputTokens
 		a.cachedInputTokens = evt.CachedInputTokens
+		a.cacheCreationInputTokens = evt.CacheCreationInputTokens
 		// Providers that do not distinguish the window footprint from the
 		// billing input (OpenAI-style prompt_tokens is already
 		// cache-inclusive) leave ContextTokens unset; the metered input is
@@ -330,6 +334,12 @@ func (a *StreamAggregator) CachedInputTokens() int64 { return a.cachedInputToken
 // (cache-inclusive). It defaults to the metered input when the provider
 // does not report a distinct footprint.
 func (a *StreamAggregator) ContextTokens() int64 { return a.contextTokens }
+
+// CacheCreationInputTokens reports provider-reported prompt-cache writes
+// for the completed call (0 when the provider does not split them out).
+func (a *StreamAggregator) CacheCreationInputTokens() int64 {
+	return a.cacheCreationInputTokens
+}
 
 // InterruptedMessage creates an interrupted message from partial text.
 func (a *StreamAggregator) InterruptedMessage() domain.Message {

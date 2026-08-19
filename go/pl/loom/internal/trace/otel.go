@@ -274,6 +274,21 @@ func (r *otelRecorder) StartRun(ctx context.Context, meta RunMeta) (context.Cont
 	return ctx, &otelRun{span: span, rec: r}
 }
 
+// usageDetails builds the Langfuse usage_details map: input/output plus
+// the provider's prompt-cache split when reported. Langfuse recognizes
+// the Anthropic-style cache keys and prices them with the model's cache
+// rates (cache_read at a discount, cache_creation at a premium).
+func usageDetails(rec GenerationRecord) map[string]int64 {
+	usage := map[string]int64{"input": rec.InputTokens, "output": rec.OutputTokens}
+	if rec.CachedInputTokens > 0 {
+		usage["cache_read_input_tokens"] = rec.CachedInputTokens
+	}
+	if rec.CacheCreationInputTokens > 0 {
+		usage["cache_creation_input_tokens"] = rec.CacheCreationInputTokens
+	}
+	return usage
+}
+
 func (run *otelRun) RecordGeneration(ctx context.Context, rec GenerationRecord) {
 	attrs := []attribute.KeyValue{
 		attribute.String(attrObservationType, "generation"),
@@ -282,9 +297,7 @@ func (run *otelRun) RecordGeneration(ctx context.Context, rec GenerationRecord) 
 		attribute.String(attrGenAIRequestModel, rec.Model),
 		attribute.Int64(attrGenAIInputTokens, rec.InputTokens),
 		attribute.Int64(attrGenAIOutputTokens, rec.OutputTokens),
-		attribute.String(attrObservationUsage, mustJSON(map[string]int64{
-			"input": rec.InputTokens, "output": rec.OutputTokens,
-		})),
+		attribute.String(attrObservationUsage, mustJSON(usageDetails(rec))),
 		attribute.String("loom.request_id", rec.RequestID),
 		attribute.Int("loom.turn", rec.Turn),
 	}

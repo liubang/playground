@@ -46,9 +46,15 @@ type GenerationRecord struct {
 	StopReason   string
 	InputTokens  int64
 	OutputTokens int64
-	StartTime    time.Time
-	EndTime      time.Time
-	Err          error
+	// CachedInputTokens / CacheCreationInputTokens carry the provider's
+	// prompt-cache split for the usage_details cost accounting (Anthropic
+	// cache_read / cache_creation; OpenAI reports reads only, folded into
+	// InputTokens). Zero when the provider does not report them.
+	CachedInputTokens        int64
+	CacheCreationInputTokens int64
+	StartTime                time.Time
+	EndTime                  time.Time
+	Err                      error
 	// PromptName and PromptVersion link the generation to a Langfuse-managed
 	// prompt when the system prompt came from Prompt Management (zero =
 	// not managed).
