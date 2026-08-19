@@ -1,12 +1,12 @@
 // ctxgauge.js — composer 旁的 context 占用环（ring gauge）。
-// 数据源：snapshot.window/occupancy（首屏）+ context.usage / context.compacted 事件。
-// 渐进披露：<60% 安静 muted；≥60% warning；≥ compact trigger 比例 error + 呼吸动画。
+// 数据源：snapshot.window/occupancy（首屏）+ context.usage 事件。
+// occupancy 与后端压缩触发器同口径（provider 实测 + 增量估算），
+// 前端不做任何本地推算。渐进披露：<60% 安静 muted；≥60% warning；
+// ≥ compact trigger 比例 error + 呼吸动画。
 
 import { fmtTokens } from '../format.js'
 
-// 与后端 ContextConfig 默认值一致（internal/domain/budget.go），仅在
-// snapshot 未带 window 字段（旧服务端）时按名义窗口推导兜底。
-const DEFAULT_UTILIZATION = 0.95
+// 压缩触发比例兜底：仅当服务端未给 compact_trigger 时用于着色分级。
 const DEFAULT_TRIGGER_RATIO = 0.8
 // 第一档 notice level（domain 默认 notice_levels[0]）
 const WARM_RATIO = 0.6
@@ -32,23 +32,15 @@ export class CtxGauge {
     this._render()
   }
 
-  // snapshot.window 优先；缺省时用名义窗口 + 默认比率推导（旧服务端回退）。
-  // nominalFallback ≤ 0 表示无可用窗口，组件隐藏。
-  setWindow(w, nominalFallback) {
+  // window 来自 snapshot.window 或 SetModel 响应（服务端推导的阈值投影）；
+  // 缺省表示模型未声明可用窗口，组件隐藏。
+  setWindow(w) {
     if (w && w.effective > 0) {
       this.window = {
         nominal: w.nominal || 0,
         effective: w.effective,
         compactTrigger: w.compact_trigger || 0,
         compactTarget: w.compact_target || 0,
-      }
-    } else if (nominalFallback > 0) {
-      const effective = Math.round(nominalFallback * DEFAULT_UTILIZATION)
-      this.window = {
-        nominal: nominalFallback,
-        effective,
-        compactTrigger: Math.round(effective * DEFAULT_TRIGGER_RATIO),
-        compactTarget: 0,
       }
     } else {
       this.window = null
@@ -62,16 +54,10 @@ export class CtxGauge {
     this._render()
   }
 
-  // context.usage：实测 input 优先（覆盖 system prompt 等 transcript 外开销）
+  // context.usage：occupancy_tokens 与压缩触发器同口径（实测 + 增量估算）。
   onContextUsage(p) {
     if (!p) return
-    this.setOccupancy(Math.max(p.est_tokens || 0, p.last_call_input_tokens || 0))
-  }
-
-  // context.compacted：占用立即回落到压缩后估值，不等下一次模型调用
-  onCompacted(p) {
-    if (!p) return
-    this.setOccupancy(p.est_tokens_after || 0)
+    this.setOccupancy(p.occupancy_tokens)
   }
 
   _render() {

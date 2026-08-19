@@ -1688,8 +1688,8 @@ func (m Model) handleCompactRequested(msg compactRequestedMsg) tea.Model {
 		return m
 	}
 	detail := ""
-	if m.contextEst > 0 {
-		detail = fmt.Sprintf(" (current context ≈ %s)", humanizeTokens(int64(m.contextEst)))
+	if m.contextOccupancy > 0 {
+		detail = fmt.Sprintf(" (current context ≈ %s)", humanizeTokens(m.contextOccupancy))
 	}
 	m.setStatus(fmt.Sprintf("Will compact before the next model call%s", detail), false)
 	return m
@@ -1923,8 +1923,11 @@ func (m Model) handleModelChanged(msg modelChangedMsg) tea.Model {
 		return m
 	}
 	m.modelName = msg.result.Cur.String()
-	if msg.result.Meta.ContextWindow > 0 {
-		m.contextWindow = int(msg.result.Meta.ContextWindow)
+	// Re-base the ctx denominator on the server-derived effective window
+	// (nil = the model declares no usable window → hide the denominator).
+	m.contextWindow = 0
+	if msg.result.Window != nil {
+		m.contextWindow = int(msg.result.Window.Effective)
 	}
 	// A turn already in flight keeps the model it started on; make that
 	// visible instead of letting the user expect an immediate swap.
@@ -2398,7 +2401,7 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 		}
 		// A new session view starts its compaction tally fresh.
 		m.compactions = 0
-		m.contextEst, m.lastCallInput = 0, 0
+		m.contextOccupancy = 0
 	case runtimeevent.KindRunPhaseChanged:
 		var payload runtimeevent.RunPhasePayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
@@ -2494,8 +2497,7 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 	case runtimeevent.KindContextUsage:
 		var payload runtimeevent.ContextUsagePayload
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
-			m.contextEst = payload.EstTokens
-			m.lastCallInput = payload.LastCallInputTokens
+			m.contextOccupancy = payload.OccupancyTokens
 		}
 	case runtimeevent.KindPlanUpdated:
 		var plan domain.Plan

@@ -68,8 +68,9 @@ type Snapshot struct {
 	// against the compaction trigger without re-deriving ratios; nil when
 	// the model declares no usable window.
 	Window *WindowInfo `json:"window,omitempty"`
-	// Occupancy is the current transcript size estimate in tokens (bytes/4),
-	// on the same scale as ContextUsagePayload.EstTokens.
+	// Occupancy estimates the size of the next model request (transcript
+	// plus the per-request overhead captured at turn build), on the same
+	// scale as ContextUsagePayload.OccupancyTokens.
 	Occupancy int64 `json:"occupancy,omitempty"`
 	// ReasoningEffort is the effective reasoning dial ("off"/"low"/... or
 	// "budget:N"); empty means the provider decides. ReasoningOverridden
@@ -264,6 +265,11 @@ type Controller struct {
 	// lastWindowNominal is the previous turn's model window; a shrink marks
 	// the next compaction as a ModelDownshift in the audit event.
 	lastWindowNominal int64
+	// requestOverheadTokens is the per-request overhead estimate (system
+	// prompt parts, plan note, tool schemas) captured at turn build, so
+	// the snapshot's occupancy projects the same next-request scale the
+	// loop reports via context.usage events.
+	requestOverheadTokens int64
 
 	// sessionCtx is the context for the entire TUI session.
 	// Cancelling it terminates the controller.
@@ -697,6 +703,10 @@ type SetModelResult struct {
 	Prev config.ProviderModelRef
 	Cur  config.ProviderModelRef
 	Meta config.Model
+	// Window projects the new model's context thresholds so frontends
+	// re-base occupancy rendering on the same derivation the turn runner
+	// will use; nil when the model declares no usable window.
+	Window *WindowInfo
 }
 
 // SetModel switches the model used by subsequent turns. ref accepts the
@@ -1485,16 +1495,16 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, imageRefs []dom
 	// Derive the model's context thresholds: the declared window (or the
 	// limits fallback) scaled by the configured ratios, with an optional
 	// per-model utilization override.
-	contextCfg := c.bootstrap.Resolved().Context
-	if modelMeta.WindowUtilization != nil {
-		contextCfg.Utilization = *modelMeta.WindowUtilization
-	}
-	window := agent.NewWindowModel(modelMeta.ContextWindow, c.bootstrap.Resolved().Limits.MaxInputTokens, contextCfg)
+	window := c.windowModelFor(modelMeta)
+	// Capture the per-request overhead estimate for snapshot occupancy
+	// projections; refreshed per turn as the plan and tool set evolve.
+	overheadTokens := int64(agent.EstimateOverheadTokens(ctx, c.bootstrap.CurrentPrompt(), current.Model, clock, run.Plan, c.runtime.Registry.List()))
 	// Label the first compaction of this turn: a manual /compact request,
 	// or a switch to a smaller-window model (ModelDownshift).
 	c.mu.Lock()
 	previousWindow := c.lastWindowNominal
 	c.lastWindowNominal = window.Nominal
+	c.requestOverheadTokens = overheadTokens
 	c.mu.Unlock()
 	triggerHint := ""
 	switch {
@@ -1536,10 +1546,9 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, imageRefs []dom
 		CostInputUSDPerMTok:  c.bootstrap.Resolved().Tracing.CostInputPerMTok,
 		CostOutputUSDPerMTok: c.bootstrap.Resolved().Tracing.CostOutputPerMTok,
 		StreamHooks: agent.StreamHooks{
-			OnContextUsage: func(estTokens int, lastCallInputTokens int64) {
+			OnContextUsage: func(occupancyTokens int64) {
 				c.publishDurable(c.sessionID, run.ID, turnCounter, runtimeevent.KindContextUsage, runtimeevent.ContextUsagePayload{
-					EstTokens:           estTokens,
-					LastCallInputTokens: lastCallInputTokens,
+					OccupancyTokens: occupancyTokens,
 				})
 			},
 			OnReasoningDelta: func(delta string) {
@@ -1939,12 +1948,40 @@ func (c *Controller) handleSetModel(cmd controllerCommand) {
 		return
 	}
 	meta, _ := c.bootstrap.Resolved().ModelMeta(ref)
+	windowInfo := c.windowInfoFor(meta)
 	c.mu.Lock()
 	prev := c.currentLocked()
 	c.current = ref
 	c.mu.Unlock()
 	c.logger.Info("model switched", "previous", prev.String(), "current", ref.String())
-	cmd.ResultCh <- controllerResult{Value: SetModelResult{Prev: prev, Cur: ref, Meta: meta}}
+	cmd.ResultCh <- controllerResult{Value: SetModelResult{Prev: prev, Cur: ref, Meta: meta, Window: windowInfo}}
+}
+
+// windowModelFor derives the model's context-window thresholds the one
+// way every consumer shares: the declared window (or the limits fallback)
+// scaled by the configured ratios, with an optional per-model utilization
+// override.
+func (c *Controller) windowModelFor(meta config.Model) agent.WindowModel {
+	contextCfg := c.bootstrap.Resolved().Context
+	if meta.WindowUtilization != nil {
+		contextCfg.Utilization = *meta.WindowUtilization
+	}
+	return agent.NewWindowModel(meta.ContextWindow, c.bootstrap.Resolved().Limits.MaxInputTokens, contextCfg)
+}
+
+// windowInfoFor projects windowModelFor for the wire; nil when the model
+// declares no usable window.
+func (c *Controller) windowInfoFor(meta config.Model) *WindowInfo {
+	window := c.windowModelFor(meta)
+	if !window.Usable() {
+		return nil
+	}
+	return &WindowInfo{
+		Nominal:        window.Nominal,
+		Effective:      window.Effective,
+		CompactTrigger: window.CompactTrigger,
+		CompactTarget:  window.CompactTarget,
+	}
 }
 
 func (c *Controller) handleResumeSession(cmd controllerCommand) {
@@ -2045,21 +2082,9 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 	if c.bootstrap != nil && c.bootstrap.Resolved() != nil {
 		if meta, ok := c.bootstrap.Resolved().ModelMeta(current); ok {
 			contextWindow = meta.ContextWindow
-			// Same derivation as the turn runner: configured ratios with an
-			// optional per-model utilization override.
-			contextCfg := c.bootstrap.Resolved().Context
-			if meta.WindowUtilization != nil {
-				contextCfg.Utilization = *meta.WindowUtilization
-			}
-			window := agent.NewWindowModel(meta.ContextWindow, c.bootstrap.Resolved().Limits.MaxInputTokens, contextCfg)
-			if window.Usable() {
-				windowInfo = &WindowInfo{
-					Nominal:        window.Nominal,
-					Effective:      window.Effective,
-					CompactTrigger: window.CompactTrigger,
-					CompactTarget:  window.CompactTarget,
-				}
-				occupancy = int64(agent.EstimateTokens(c.messages))
+			windowInfo = c.windowInfoFor(meta)
+			if windowInfo != nil {
+				occupancy = int64(agent.EstimateTokens(c.messages)) + c.requestOverheadTokens
 			}
 		}
 	}

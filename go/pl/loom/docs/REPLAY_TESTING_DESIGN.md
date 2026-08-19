@@ -257,5 +257,5 @@ func NewEnv(t *testing.T, opts ...Option) *Env // config 隔离 + runtime 组装
 2. **稳定场景根目录**：录制的工具调用参数是任意碎的流式 delta，绝对路径可能跨越事件边界、无法事后 tokenize——replay 因此必须运行在与 record 相同的路径。record/replay 统一使用 `/tmp/loom-snapshot/<scenario>/` 固定根（go test 与 bazel 沙箱共享），fixture 内完整路径仍做 `{{cwd}}/{{home}}/{{artifacts}}` tokenize/detokenize 双保险。
 3. **events 黄金文件只保留 durable 事件**：ephemeral delta 的碎片化文本与 `delta_bytes` 等派生字段由 calls.jsonl 全保真锁定，不进黄金文件。
 4. **config.recorded.yaml**：record 时把生效 config 脱敏（api_key 占位、api_key_env 删除）入 fixture，replay 原样加载——工具集/limits/窗口与录制时严格一致，否则 request_header 的 tools 序列必然 diff。
-5. **归一化补充**（对照 dsh normalize.ts 的新增项）：loom ID/内容 hash/trace id 按首现序 token 化（map 键序遍历保证序号确定）；`Platform/Shell`、`Current date` 行归一（bazel 沙箱无 $SHELL）；macOS `/private` 路径别名；`WallTime/duration_ms/delta_bytes/est_tokens/started_at/finished_at` 归零；反引号包裹路径的边界感知替换。
+5. **归一化补充**（对照 dsh normalize.ts 的新增项）：loom ID/内容 hash/trace id 按首现序 token 化（map 键序遍历保证序号确定）；`Platform/Shell`、`Current date` 行归一（bazel 沙箱无 $SHELL）；macOS `/private` 路径别名；`WallTime/duration_ms/delta_bytes/occupancy_tokens/started_at/finished_at` 归零；反引号包裹路径的边界感知替换。
 6. **R5 实现未依赖 M4 事件**：指纹直接在 Model 边界对 `ModelRequest` 投影计算（header 字段 + 全消息内容，剥离 ID/时间戳后哈希），比设计的"header 机制"更直接；告警附字段级 diff。

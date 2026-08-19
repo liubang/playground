@@ -1103,9 +1103,14 @@ type Loop struct {
 	prepared map[domain.ToolCallID]domain.PreparedCall
 	// traceRun is the active trace handle for the executing run.
 	traceRun trace.RunHandle
-	// lastCallInput is the provider-metered input token count of the most
-	// recent completed model call, republished with context-usage events.
-	lastCallInput int64
+	// lastCallContext is the provider-metered context-window footprint of
+	// the most recent completed model call (cache-inclusive — the ground
+	// truth for occupancy). lastCallBase is the transcript length when
+	// that call's request was assembled, so messages[lastCallBase:] is
+	// the growth the meter has not seen yet (the response itself, tool
+	// results, steers).
+	lastCallContext int64
+	lastCallBase    int
 	// notices graduates budget/runaway reminders (budget.go); runaway
 	// holds the behavior-based detection state (runaway.go). Both are
 	// owned by the loop goroutine like every other field below.
@@ -1354,7 +1359,7 @@ func (l *Loop) Execute(ctx context.Context) (execErr error) {
 			// Single compaction decision point: before each model call,
 			// compact when occupancy pressure or a forced retry after
 			// provider context-overflow demands it.
-			if l.shouldCompact() {
+			if l.shouldCompact(ctx) {
 				if _, err := l.Run.TransitionTo(domain.PhaseCompacting); err != nil {
 					return err
 				}
@@ -1414,7 +1419,7 @@ func (l *Loop) prepare(ctx context.Context) error {
 	// pairing-safe by construction. Runaway warnings detected during
 	// routing are queued for exactly this point.
 	l.notices.drain(l.Run)
-	l.injectBudgetNotices()
+	l.injectBudgetNotices(ctx)
 	l.runaway.trackStall(l.runawayConfig(), l.Run, &l.notices)
 	return nil
 }
@@ -1651,9 +1656,10 @@ func (l *Loop) callModel(ctx context.Context) error {
 	response.Metadata["request_id"] = req.ID.String()
 	response.Metadata["stop_reason"] = string(stop)
 	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens())
+	l.lastCallContext = agg.ContextTokens()
+	l.lastCallBase = len(l.Run.Messages)
 	l.Run.AddAssistantMessage(response)
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
-	l.lastCallInput = inputTokens
 	// A completed call proves the request fit the window.
 	l.Compaction.noteFit(true)
 	// Consecutive-streak bookkeeping (REVIEW H15): a response that did not
@@ -1666,7 +1672,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	case domain.StopEndTurn, domain.StopMaxOutput, domain.StopContentFilter, domain.StopToolUse:
 		l.unknownStopStreak = 0
 	}
-	l.reportContextUsage()
+	l.reportContextUsage(ctx)
 
 	if len(response.ToolCalls()) == 0 {
 		return l.determineCompletion(ctx, stop)
@@ -1674,11 +1680,12 @@ func (l *Loop) callModel(ctx context.Context) error {
 	return l.routeToolCalls(ctx)
 }
 
-// reportContextUsage publishes the current transcript estimate so frontends
-// can show live context-window occupancy. It is a no-op without the hook.
-func (l *Loop) reportContextUsage() {
+// reportContextUsage publishes the calibrated occupancy of the next model
+// request — the same value the compaction trigger checks — so frontends
+// render exactly what the loop acts on. It is a no-op without the hook.
+func (l *Loop) reportContextUsage(ctx context.Context) {
 	if l.StreamHooks.OnContextUsage != nil {
-		l.StreamHooks.OnContextUsage(estTokens(l.Run.Messages), l.lastCallInput)
+		l.StreamHooks.OnContextUsage(l.contextOccupancy(ctx))
 	}
 }
 
@@ -1695,23 +1702,36 @@ func (l *Loop) reportContextUsage() {
 // conveniently matches the codex "dynamic context as user fragments" model.
 func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domain.ContextRuleRef, string) {
 	messages := append([]domain.Message(nil), l.Run.Messages...)
+	prefix, rules, systemText := requestPrefix(ctx, l.SystemPrompt, l.ModelName, l.Run.Clock, l.Run.Plan, l.Logger)
+	return append(prefix, messages...), rules, systemText
+}
+
+// requestPrefix assembles the ephemeral head every model request carries:
+// the cacheable static system part, the per-request dynamic part, and the
+// live plan note (rebuilt per request and never persisted, so the model
+// keeps plan awareness across context compactions and crash recovery — a
+// summary replacement that drops message history cannot lose the plan).
+// A prompt build failure degrades to no prefix rather than failing the
+// turn. Shared by the loop (effectiveMessages) and the read-only
+// overhead estimate (EstimateOverheadTokens) so both count the same head.
+func requestPrefix(ctx context.Context, builder PromptBuilder, modelName string, clock domain.Clock, plan domain.Plan, logger *slog.Logger) ([]domain.Message, []domain.ContextRuleRef, string) {
 	var prefix []domain.Message
 	var rules []domain.ContextRuleRef
 	var systemText string
-	if l.SystemPrompt != nil {
-		static, dynamic, refs, err := l.systemPromptParts(ctx)
+	if builder != nil {
+		static, dynamic, refs, err := systemPromptParts(ctx, builder, modelName)
 		switch {
 		case err != nil:
-			if l.Logger != nil {
-				l.Logger.Warn("build system prompt failed; continuing without it", "error", err)
+			if logger != nil {
+				logger.Warn("build system prompt failed; continuing without it", "error", err)
 			}
 		default:
 			if s := strings.TrimSpace(static); s != "" {
-				prefix = append(prefix, l.systemMessage(s, true))
+				prefix = append(prefix, systemMessage(s, true, clock))
 				systemText = s
 			}
 			if d := strings.TrimSpace(dynamic); d != "" {
-				prefix = append(prefix, l.systemMessage(d, false))
+				prefix = append(prefix, systemMessage(d, false, clock))
 				if systemText != "" {
 					systemText += "\n\n" + d
 				} else {
@@ -1721,14 +1741,19 @@ func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domai
 			rules = refs
 		}
 	}
-	// Re-inject the live task plan right after the system prompt. The note
-	// is rebuilt per request and never persisted, so the model keeps plan
-	// awareness across context compactions and crash recovery — a summary
-	// replacement that drops message history cannot lose the plan.
-	if plan := l.Run.Plan; len(plan.Items) > 0 && !plan.IsComplete() {
-		prefix = append(prefix, l.systemMessage(planStatusNote(plan), false))
+	if len(plan.Items) > 0 && !plan.IsComplete() {
+		prefix = append(prefix, systemMessage(planStatusNote(plan), false, clock))
 	}
-	return append(prefix, messages...), rules, systemText
+	return prefix, rules, systemText
+}
+
+// EstimateOverheadTokens approximates the per-request overhead beyond the
+// transcript — rendered system prompt parts, the plan note and the tool
+// schemas — so read-only projections (the session snapshot) report
+// occupancy on the same scale as the loop's request estimate.
+func EstimateOverheadTokens(ctx context.Context, builder PromptBuilder, modelName string, clock domain.Clock, plan domain.Plan, tools []domain.ToolDefinition) int {
+	prefix, _, _ := requestPrefix(ctx, builder, modelName, clock, plan, nil)
+	return estTokens(prefix) + schemaTokenEstimate(tools)
 }
 
 // systemPromptParts renders the system prompt split for caching. Builders
@@ -1736,15 +1761,15 @@ func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domai
 // the model-family patch folded into the static part; legacy single-string
 // builders are treated as fully static (their content is what it is — the
 // loop cannot split what it cannot see).
-func (l *Loop) systemPromptParts(ctx context.Context) (string, string, []domain.ContextRuleRef, error) {
-	if sb, ok := l.SystemPrompt.(SectionedPromptBuilder); ok {
+func systemPromptParts(ctx context.Context, builder PromptBuilder, modelName string) (string, string, []domain.ContextRuleRef, error) {
+	if sb, ok := builder.(SectionedPromptBuilder); ok {
 		secs, err := sb.BuildSections(ctx)
 		if err != nil {
 			return "", "", nil, err
 		}
 		static := secs.Static
 		refs := secs.Refs
-		if patch, ref := prompt.FamilyPatch(l.ModelName); patch != "" {
+		if patch, ref := prompt.FamilyPatch(modelName); patch != "" {
 			if strings.TrimSpace(static) != "" {
 				static = strings.TrimRight(static, "\n") + "\n\n" + patch + "\n"
 			} else {
@@ -1756,20 +1781,20 @@ func (l *Loop) systemPromptParts(ctx context.Context) (string, string, []domain.
 		}
 		return static, secs.Dynamic, refs, nil
 	}
-	text, refs, err := l.SystemPrompt.Build(ctx)
+	text, refs, err := builder.Build(ctx)
 	return text, "", refs, err
 }
 
 // systemMessage wraps one ephemeral system-prompt part. cacheable marks the
 // stable static part for provider prompt caching.
-func (l *Loop) systemMessage(text string, cacheable bool) domain.Message {
+func systemMessage(text string, cacheable bool, clock domain.Clock) domain.Message {
 	msg := domain.Message{
 		ID:        domain.NewMessageID(),
 		Role:      domain.RoleSystem,
 		Status:    domain.MessageStatusFinal,
 		Revision:  1,
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: text}},
-		CreatedAt: l.Run.Clock.Now(),
+		CreatedAt: clock.Now(),
 	}
 	if cacheable {
 		msg.Metadata = map[string]string{domain.MetadataPromptCache: domain.PromptCacheEphemeral}
@@ -2246,7 +2271,7 @@ func (l *Loop) executeTools(ctx context.Context) error {
 	l.prepared = nil
 	l.drainGoalUpdates()
 	l.drainPlanUpdates()
-	l.reportContextUsage()
+	l.reportContextUsage(ctx)
 	_, err := l.Run.TransitionTo(domain.PhasePreparing)
 	return err
 }
@@ -2391,7 +2416,7 @@ func (l *Loop) recordToolOutcome(ctx context.Context, item preparedExec, result 
 //     window-derived trigger. The byte-estimate alone never triggers —
 //     only the provider-calibrated occupancy does
 //     (docs/CONTEXT_DESIGN.md §4.2).
-func (l *Loop) shouldCompact() bool {
+func (l *Loop) shouldCompact(ctx context.Context) bool {
 	if l.Compaction.Force {
 		return true
 	}
@@ -2403,28 +2428,40 @@ func (l *Loop) shouldCompact() bool {
 		// transcript either, so let the run proceed to the next model call.
 		return false
 	}
-	return l.contextOccupancy() >= l.Window.CompactTrigger
+	return l.contextOccupancy(ctx) >= l.Window.CompactTrigger
 }
 
 // contextOccupancy estimates the size of the next model request in
-// provider-token scale: the metered input of the last completed call (which
-// covered system prompt, tools and the whole transcript) plus a byte/4
-// estimate of everything appended since. Before the first call — and right
-// after a compaction reset — it is the pure transcript estimate.
-func (l *Loop) contextOccupancy() int64 {
-	if l.lastCallInput == 0 {
-		return int64(estTokens(l.Run.Messages))
+// provider-token scale: the metered footprint of the last completed call
+// (which covered system prompt, tools and the whole transcript,
+// cache-inclusive) plus a byte/4 estimate of everything appended since
+// that call's request was assembled — its own response, tool results and
+// steers. Before the first call — and right after a compaction reset —
+// it is a full request estimate (requestEstimate).
+func (l *Loop) contextOccupancy(ctx context.Context) int64 {
+	if l.lastCallContext == 0 {
+		return int64(l.requestEstimate(ctx))
 	}
-	occupancy := l.lastCallInput
-	messages := l.Run.Messages
-	lastAssistant := -1
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == domain.RoleAssistant {
-			lastAssistant = i
-			break
-		}
+	base := min(l.lastCallBase, len(l.Run.Messages))
+	return l.lastCallContext + int64(estTokens(l.Run.Messages[base:]))
+}
+
+// requestEstimate approximates the full size of the next model request
+// when no metered call exists yet (first call, right after compaction):
+// the ephemeral request head (system prompt parts + plan note), the
+// transcript and the tool schemas, all in the byte/4 estimate scale.
+func (l *Loop) requestEstimate(ctx context.Context) int {
+	prefix, _, _ := requestPrefix(ctx, l.SystemPrompt, l.ModelName, l.Run.Clock, l.Run.Plan, l.Logger)
+	return estTokens(prefix) + estTokens(l.Run.Messages) + schemaTokenEstimate(l.toolDefinitions())
+}
+
+// toolDefinitions lists the registered tool schemas, nil-safe for bare
+// test loops.
+func (l *Loop) toolDefinitions() []domain.ToolDefinition {
+	if l.Registry == nil {
+		return nil
 	}
-	return occupancy + int64(estTokens(messages[lastAssistant+1:]))
+	return l.Registry.List()
 }
 
 // contextOverflowNeedles fingerprints provider context-window rejections
@@ -2685,7 +2722,7 @@ func (l *Loop) compact(ctx context.Context) error {
 	if l.Run.Usage.Turns > 0 {
 		phase = "mid_turn"
 	}
-	occupancyBefore := l.contextOccupancy()
+	occupancyBefore := l.contextOccupancy(ctx)
 	tokensBefore := estTokens(l.Run.Messages)
 
 	// The condenser emits pure directives (docs/SURFACE_DESIGN.md §4.2);
@@ -2760,14 +2797,16 @@ func (l *Loop) compact(ctx context.Context) error {
 	}
 	tokensAfter = estTokens(newMessages)
 
-	// Fresh window: the next request's size is the pure estimate again,
-	// and occupancy notices re-arm (other dimensions never do). Remember
-	// the post-pass estimate so shouldCompact only re-fires on real
-	// transcript growth.
-	l.lastCallInput = 0
+	// Fresh window: the next request's size is the full request estimate
+	// again, and occupancy notices re-arm (other dimensions never do).
+	// Remember the post-pass estimate so shouldCompact only re-fires on
+	// real transcript growth.
+	l.lastCallContext = 0
+	l.lastCallBase = 0
 	l.Compaction.complete(estTokens(newMessages))
 	l.notices.rearm(dimensionOccupancy)
 	l.Run.Messages = newMessages
+	occupancyAfter := l.contextOccupancy(ctx)
 
 	// Directive events precede the audit event; replay applies them in log
 	// order to reconstruct this exact surface (docs/SURFACE_DESIGN.md §4.1.5).
@@ -2824,7 +2863,7 @@ func (l *Loop) compact(ctx context.Context) error {
 		EstTokensBefore:       tokensBefore,
 		EstTokensAfter:        tokensAfter,
 		OccupancyBefore:       occupancyBefore,
-		OccupancyAfter:        int64(tokensAfter),
+		OccupancyAfter:        occupancyAfter,
 		Summarized:            summarized,
 		SummaryBytes:          summaryBytes,
 		TruncatedUserMessages: truncatedUserMessages,
@@ -2860,12 +2899,15 @@ func (l *Loop) compact(ctx context.Context) error {
 
 	// Fit check: a compaction that leaves occupancy at or above the window
 	// counts as a fit failure; the next successful call resets it.
-	if l.Window.Usable() && l.contextOccupancy() >= l.Window.Effective {
+	if l.Window.Usable() && occupancyAfter >= l.Window.Effective {
 		if l.Compaction.noteFit(false) >= 2 {
 			l.terminate(ctx, domain.OutcomeBudgetExhausted)
-			return fmt.Errorf("context still occupies ~%d tokens after repeated compactions (effective window %d); start a new session", l.contextOccupancy(), l.Window.Effective)
+			return fmt.Errorf("context still occupies ~%d tokens after repeated compactions (effective window %d); start a new session", occupancyAfter, l.Window.Effective)
 		}
 	}
+	// Frontends drop the gauge to the post-compaction estimate immediately,
+	// without waiting for the next completed model call.
+	l.reportContextUsage(ctx)
 	_, err := l.Run.TransitionTo(domain.PhasePreparing)
 	return err
 }

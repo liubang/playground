@@ -48,6 +48,7 @@ func newTestController(t *testing.T) client.Client {
 		}},
 		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
 		Limits:  domain.DefaultLimits(),
+		Context: domain.DefaultContextConfig(),
 	}
 	broker := runtimeevent.NewBroker()
 	t.Cleanup(broker.Close)
@@ -746,25 +747,23 @@ func TestApprovalOverlayShowsRulePreviewForStaticCompoundShell(t *testing.T) {
 
 func TestFormatContext(t *testing.T) {
 	tests := []struct {
-		name          string
-		est           int
-		lastCallInput int64
-		window        int
-		wantLabel     string
-		wantWarn      bool
+		name      string
+		occupancy int64
+		window    int
+		wantLabel string
+		wantWarn  bool
 	}{
-		{name: "estimate without window", est: 41_000, wantLabel: "ctx:~41k"},
-		{name: "estimate with window", est: 41_000, window: 128_000, wantLabel: "ctx:~41k/128k"},
-		{name: "fallback to provider value", lastCallInput: 12_345, wantLabel: "ctx:~12k"},
-		{name: "warning at 80 percent", est: 103_000, window: 128_000, wantLabel: "ctx:~103k/128k", wantWarn: true},
+		{name: "occupancy without window", occupancy: 41_000, wantLabel: "ctx:~41k"},
+		{name: "occupancy with window", occupancy: 41_000, window: 128_000, wantLabel: "ctx:~41k/128k"},
+		{name: "warning at 80 percent", occupancy: 103_000, window: 128_000, wantLabel: "ctx:~103k/128k", wantWarn: true},
 		{name: "nothing known", wantLabel: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			label, warn := formatContext(tt.est, tt.lastCallInput, tt.window)
+			label, warn := formatContext(tt.occupancy, tt.window)
 			if label != tt.wantLabel || warn != tt.wantWarn {
-				t.Fatalf("formatContext(%d, %d, %d) = (%q, %v), want (%q, %v)",
-					tt.est, tt.lastCallInput, tt.window, label, warn, tt.wantLabel, tt.wantWarn)
+				t.Fatalf("formatContext(%d, %d) = (%q, %v), want (%q, %v)",
+					tt.occupancy, tt.window, label, warn, tt.wantLabel, tt.wantWarn)
 			}
 		})
 	}
@@ -776,12 +775,12 @@ func TestContextUsageEventDrivesStatusBar(t *testing.T) {
 	m.width = 140
 	m.SetContextWindow(128_000)
 
-	payload := mustPayload(t, runtimeevent.ContextUsagePayload{EstTokens: 41_000, LastCallInputTokens: 39_500})
+	payload := mustPayload(t, runtimeevent.ContextUsagePayload{OccupancyTokens: 41_000})
 	updated, _ := m.Update(runtimeEventMsg(runtimeevent.RuntimeEvent{Sequence: 1, Kind: runtimeevent.KindContextUsage, Payload: payload}))
 	m = updated.(Model)
 
-	if m.contextEst != 41_000 || m.lastCallInput != 39_500 {
-		t.Fatalf("context fields = (%d, %d), want (41000, 39500)", m.contextEst, m.lastCallInput)
+	if m.contextOccupancy != 41_000 {
+		t.Fatalf("context occupancy = %d, want 41000", m.contextOccupancy)
 	}
 	if bar := m.renderStatusBar(); !strings.Contains(bar, "ctx:~41k/128k") {
 		t.Fatalf("status bar missing ctx segment: %q", bar)
@@ -790,8 +789,8 @@ func TestContextUsageEventDrivesStatusBar(t *testing.T) {
 	opened := mustPayload(t, runtimeevent.SessionOpenedPayload{Model: "test-model", Workspace: "/ws"})
 	updated, _ = m.Update(runtimeEventMsg(runtimeevent.RuntimeEvent{Sequence: 2, Kind: runtimeevent.KindSessionOpened, Payload: opened}))
 	m = updated.(Model)
-	if m.contextEst != 0 || m.lastCallInput != 0 {
-		t.Fatalf("session open must reset context occupancy: (%d, %d)", m.contextEst, m.lastCallInput)
+	if m.contextOccupancy != 0 {
+		t.Fatalf("session open must reset context occupancy: %d", m.contextOccupancy)
 	}
 }
 
@@ -1498,8 +1497,10 @@ func TestSlashCommandModel(t *testing.T) {
 	if got := m.modelName; got != "test/model-b" {
 		t.Fatalf("modelName = %q, want test/model-b", got)
 	}
-	if got := m.contextWindow; got != 64000 {
-		t.Fatalf("contextWindow = %d, want 64000 (from model metadata)", got)
+	// The ctx denominator is the server-derived effective window (nominal ×
+	// utilization), matching the compaction thresholds the loop will use.
+	if got := m.contextWindow; got != 60800 {
+		t.Fatalf("contextWindow = %d, want 60800 (effective window from server)", got)
 	}
 	if !strings.Contains(m.statusMessage, "test/model-b") || m.statusIsError {
 		t.Fatalf("status = %q (error=%v), want switch confirmation", m.statusMessage, m.statusIsError)
@@ -1620,7 +1621,7 @@ func TestSlashCommandCompact(t *testing.T) {
 	m := NewModel(ctrl, "test/model-a", "/ws")
 
 	// Schedule: the ack confirms with the current context estimate.
-	m.contextEst = 45200
+	m.contextOccupancy = 45200
 	updated, cmd := m.handleSlashCommand("/compact")
 	m = updated.(Model)
 	if cmd == nil {
@@ -1883,8 +1884,8 @@ func TestSlashCommandModelOpensPicker(t *testing.T) {
 	if got := m.modelName; got != "test/model-b" {
 		t.Fatalf("modelName = %q, want test/model-b", got)
 	}
-	if got := m.contextWindow; got != 64000 {
-		t.Fatalf("contextWindow = %d, want 64000", got)
+	if got := m.contextWindow; got != 60800 {
+		t.Fatalf("contextWindow = %d, want 60800 (effective window from server)", got)
 	}
 }
 

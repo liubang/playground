@@ -837,4 +837,10 @@ func TestStreamReportsCachedInputTokens(t *testing.T) {
 	if usage.InputTokens != 100 || usage.CachedInputTokens != 80 {
 		t.Fatalf("usage = %+v, want input=100 cached=80", usage)
 	}
+	// The context-window footprint is the full prompt: non-cached input
+	// plus cache reads and writes (Anthropic excludes both from
+	// input_tokens, but they occupied the window all the same).
+	if usage.ContextTokens != 200 {
+		t.Fatalf("ContextTokens = %d, want 200 (100 input + 80 cache_read + 20 cache_creation)", usage.ContextTokens)
+	}
 }

@@ -744,6 +744,17 @@ func inlineImageFootprint(dataLen int) int {
 // agent package (e.g. the session snapshot's occupancy field).
 func EstimateTokens(messages []domain.Message) int { return estTokens(messages) }
 
+// schemaTokenEstimate approximates the per-request overhead of the tool
+// schemas (name, description and input schema JSON) every model call
+// carries, in the same byte/4 estimate scale as estTokens.
+func schemaTokenEstimate(tools []domain.ToolDefinition) int {
+	total := 0
+	for _, tool := range tools {
+		total += len(tool.Name) + len(tool.Description) + len(tool.InputSchema)
+	}
+	return total / bytesPerTokenEstimate
+}
+
 // estTokens approximates the token size of the transcript for before/after
 // reporting. It is not used for budget accounting.
 func estTokens(messages []domain.Message) int {

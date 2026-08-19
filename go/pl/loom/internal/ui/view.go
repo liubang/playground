@@ -740,7 +740,7 @@ func (m Model) renderStatusBar() string {
 	}
 	add(usage, usageStyle.Render(usage))
 
-	if ctx, warn := formatContext(m.contextEst, m.lastCallInput, m.contextWindow); ctx != "" {
+	if ctx, warn := formatContext(m.contextOccupancy, m.contextWindow); ctx != "" {
 		ctxStyle := m.theme.Dim
 		if warn {
 			ctxStyle = lipgloss.NewStyle().Foreground(m.theme.Warning)
@@ -944,24 +944,19 @@ func budgetUsageRatio(usage domain.Usage, limits domain.Limits) float64 {
 	return ratio
 }
 
-// formatContext renders the ctx status segment: the estimated size of the
-// next model request, falling back to the provider-metered input of the last
-// call when no estimate exists yet. warn reports occupancy ≥ 80% of the
-// configured context window. Returns "" when nothing is known.
-func formatContext(estTokens int, lastCallInput int64, contextWindow int) (string, bool) {
-	current := int64(estTokens)
-	if current <= 0 {
-		current = lastCallInput
-	}
-	if current <= 0 {
+// formatContext renders the ctx status segment: the calibrated occupancy
+// of the next model request (context.usage events). warn reports occupancy
+// ≥ 80% of the effective context window. Returns "" when nothing is known.
+func formatContext(occupancy int64, contextWindow int) (string, bool) {
+	if occupancy <= 0 {
 		return "", false
 	}
-	label := "ctx:~" + humanizeTokens(current)
+	label := "ctx:~" + humanizeTokens(occupancy)
 	if contextWindow <= 0 {
 		return label, false
 	}
 	label += "/" + humanizeTokens(int64(contextWindow))
-	return label, float64(current)/float64(contextWindow) >= 0.8
+	return label, float64(occupancy)/float64(contextWindow) >= 0.8
 }
 
 // humanizeTokens renders token counts compactly: 999 → "999",

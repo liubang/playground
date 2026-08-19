@@ -739,29 +739,29 @@ func TestShouldCompactTriggers(t *testing.T) {
 	}
 
 	t.Run("idle run does not compact", func(t *testing.T) {
-		if newLoop().shouldCompact() {
+		if newLoop().shouldCompact(context.Background()) {
 			t.Fatal("no pressure, no compaction")
 		}
 	})
 
 	t.Run("cold-start estimate triggers past the window trigger", func(t *testing.T) {
-		// With no metered input yet, occupancy is the pure transcript
-		// estimate — the cold-start path (docs/CONTEXT_DESIGN.md §4.2).
+		// With no metered call yet, occupancy is the full request estimate
+		// — the cold-start path (docs/CONTEXT_DESIGN.md §4.2).
 		loop := newLoop()
 		loop.Run.Messages = append(loop.Run.Messages, textMessage(domain.RoleAssistant, strings.Repeat("x", 4000)))
-		if !loop.shouldCompact() {
+		if !loop.shouldCompact(context.Background()) {
 			t.Fatal("estimate-based occupancy past the trigger should compact")
 		}
 	})
 
 	t.Run("metered occupancy triggers at the window trigger", func(t *testing.T) {
 		loop := newLoop()
-		loop.lastCallInput = 700 // below the 800 trigger
-		if loop.shouldCompact() {
+		loop.lastCallContext = 700 // below the 800 trigger
+		if loop.shouldCompact(context.Background()) {
 			t.Fatal("occupancy below the trigger must not compact")
 		}
-		loop.lastCallInput = 900 // past the trigger
-		if !loop.shouldCompact() {
+		loop.lastCallContext = 900 // past the trigger
+		if !loop.shouldCompact(context.Background()) {
 			t.Fatal("occupancy past the trigger should compact")
 		}
 	})
@@ -769,8 +769,8 @@ func TestShouldCompactTriggers(t *testing.T) {
 	t.Run("zero window disables automatic compaction", func(t *testing.T) {
 		loop := newLoop()
 		loop.Window = WindowModel{}
-		loop.lastCallInput = 1 << 30
-		if loop.shouldCompact() {
+		loop.lastCallContext = 1 << 30
+		if loop.shouldCompact(context.Background()) {
 			t.Fatal("an unusable window disables occupancy-driven compaction")
 		}
 	})
@@ -778,13 +778,83 @@ func TestShouldCompactTriggers(t *testing.T) {
 	t.Run("forced compaction after provider context overflow", func(t *testing.T) {
 		loop := newLoop()
 		loop.Compaction.Force = true
-		if !loop.shouldCompact() {
+		if !loop.shouldCompact(context.Background()) {
 			t.Fatal("forceCompact must trigger compaction with no other pressure")
 		}
 	})
 }
 
 // --- small units ---
+
+// Regression: tool-result messages carry RoleAssistant too, so an
+// occupancy formula keyed on "the last assistant message" silently
+// counted zero growth. The base-index form must count the response and
+// every tool result appended since the metered request was assembled.
+func TestContextOccupancyCountsGrowthSinceLastCall(t *testing.T) {
+	loop := &Loop{Run: NewRun(domain.NewSessionID(), domain.DefaultLimits(), domain.RealClock{})}
+	loop.Run.Messages = append(loop.Run.Messages, textMessage(domain.RoleUser, "task"))
+	// The metered call was assembled with one transcript message; its
+	// response (400 bytes) and one tool result (800 bytes) arrived since.
+	loop.lastCallContext = 1000
+	loop.lastCallBase = 1
+	loop.Run.Messages = append(
+		loop.Run.Messages,
+		textMessage(domain.RoleAssistant, strings.Repeat("a", 400)),
+		toolResultMessage(strings.Repeat("b", 800)),
+	)
+	if got := loop.contextOccupancy(context.Background()); got != 1300 {
+		t.Fatalf("contextOccupancy = %d, want 1300 (1000 metered + 100 response + 200 result)", got)
+	}
+}
+
+// Before the first metered call the occupancy is the full request
+// estimate: transcript plus the per-request overhead (system prompt,
+// tool schemas) — not the bare transcript.
+func TestContextOccupancyColdStartIncludesOverhead(t *testing.T) {
+	registry := NewToolRegistry()
+	tool := fakes.NewFakeTool(domain.ToolDefinition{
+		Name:         "big_tool",
+		Description:  strings.Repeat("d", 400),
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		Capabilities: []domain.Capability{domain.CapFSRead},
+		Source:       domain.ToolSourceBuiltin,
+	}, domain.ToolResult{Status: domain.ToolStatusSuccess})
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	loop := &Loop{
+		Run:      NewRun(domain.NewSessionID(), domain.DefaultLimits(), domain.RealClock{}),
+		Registry: registry,
+	}
+	loop.Run.Messages = append(loop.Run.Messages, textMessage(domain.RoleUser, strings.Repeat("x", 400)))
+	got := loop.contextOccupancy(context.Background())
+	// transcript 100 + schema overhead (8+400+19)/4 = 106 → 206 total.
+	if got != 206 {
+		t.Fatalf("cold-start occupancy = %d, want 206 (transcript 100 + schema overhead 106)", got)
+	}
+}
+
+func TestStreamAggregatorContextTokens(t *testing.T) {
+	// A provider reporting a distinct window footprint (Anthropic: input
+	// excludes cache reads/writes) wins over the billing input.
+	agg := NewStreamAggregator(domain.RealClock{}, StreamHooks{})
+	if err := agg.Apply(domain.ModelEvent{Kind: domain.ModelEventUsage, InputTokens: 100, OutputTokens: 5, ContextTokens: 200}); err != nil {
+		t.Fatal(err)
+	}
+	if got := agg.ContextTokens(); got != 200 {
+		t.Fatalf("ContextTokens = %d, want 200", got)
+	}
+	// A provider that does not distinguish (OpenAI: input already
+	// cache-inclusive) leaves it unset — the metered input is the
+	// occupancy measure then.
+	plain := NewStreamAggregator(domain.RealClock{}, StreamHooks{})
+	if err := plain.Apply(domain.ModelEvent{Kind: domain.ModelEventUsage, InputTokens: 100, OutputTokens: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if got := plain.ContextTokens(); got != 100 {
+		t.Fatalf("ContextTokens default = %d, want 100 (metered input)", got)
+	}
+}
 
 func TestEstTokens(t *testing.T) {
 	messages := []domain.Message{

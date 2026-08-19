@@ -371,12 +371,14 @@ type BudgetNoticePayload struct {
 	WrapUp    bool   `json:"wrap_up,omitempty"`
 }
 
-// ContextUsagePayload reports the estimated size of the transcript the next
-// model request would carry, plus the provider-metered input tokens of the
-// last completed call when known. Estimates are byte/4 approximations.
+// ContextUsagePayload reports the calibrated occupancy of the next model
+// request — the same value the compaction trigger checks: the
+// provider-metered footprint of the last completed call (cache-inclusive)
+// plus a byte/4 estimate of everything appended since, or a full request
+// estimate (system prompt, plan note, transcript, tool schemas) before
+// the first metered call.
 type ContextUsagePayload struct {
-	EstTokens           int   `json:"est_tokens"`
-	LastCallInputTokens int64 `json:"last_call_input_tokens,omitempty"`
+	OccupancyTokens int64 `json:"occupancy_tokens"`
 }
 
 // SteerQueuedPayload reports a user message accepted into a pending

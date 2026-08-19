@@ -621,18 +621,14 @@ func TestLoopReportsContextUsageAfterResponseAndToolBatch(t *testing.T) {
 		CreatedAt: time.Now(),
 	})
 
-	type contextSample struct {
-		est       int
-		lastInput int64
-	}
-	var samples []contextSample
+	var samples []int64
 	loop := &Loop{
 		Run: run, Model: model,
 		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
 		Registry: registry, Logger: slog.Default(),
 		StreamHooks: StreamHooks{
-			OnContextUsage: func(estTokens int, lastCallInputTokens int64) {
-				samples = append(samples, contextSample{est: estTokens, lastInput: lastCallInputTokens})
+			OnContextUsage: func(occupancyTokens int64) {
+				samples = append(samples, occupancyTokens)
 			},
 		},
 	}
@@ -641,19 +637,21 @@ func TestLoopReportsContextUsageAfterResponseAndToolBatch(t *testing.T) {
 	}
 
 	// Expect at least three reports: after the tool-call response, after the
-	// tool batch, and after the final response.
+	// tool batch, and after the final response. Occupancy is the calibrated
+	// next-request size: the metered footprint of the last call (fake model
+	// reports UsageIn as its context tokens) plus everything appended since.
 	if len(samples) < 3 {
 		t.Fatalf("context usage reports = %d, want ≥ 3: %+v", len(samples), samples)
 	}
-	if samples[0].est <= 0 || samples[0].lastInput != 100 {
-		t.Fatalf("first report = %+v, want est>0 and provider input 100", samples[0])
+	if samples[0] < 100 {
+		t.Fatalf("first report = %d, want ≥ metered footprint 100", samples[0])
 	}
-	if samples[1].lastInput != 100 {
-		t.Fatalf("tool-batch report = %+v, want carried lastCallInput 100", samples[1])
+	if samples[1] <= samples[0] {
+		t.Fatalf("tool-batch report = %d, want growth over %d (tool results appended)", samples[1], samples[0])
 	}
 	last := samples[len(samples)-1]
-	if last.lastInput != 200 || last.est <= 0 {
-		t.Fatalf("final report = %+v, want est>0 and provider input 200", last)
+	if last < 200 {
+		t.Fatalf("final report = %d, want ≥ metered footprint 200", last)
 	}
 }
 
@@ -3479,16 +3477,16 @@ func TestShouldCompactOnOccupancy(t *testing.T) {
 	run := newTestRun(domain.DefaultLimits())
 	loop := &Loop{Run: run, Window: WindowModel{Effective: 100, CompactTrigger: 80, CompactTarget: 50}}
 
-	loop.lastCallInput = 85 // past the window-derived trigger
-	if !loop.shouldCompact() {
+	loop.lastCallContext = 85 // past the window-derived trigger
+	if !loop.shouldCompact(context.Background()) {
 		t.Fatal("occupancy past the trigger should compact")
 	}
-	loop.lastCallInput = 50
-	if loop.shouldCompact() {
+	loop.lastCallContext = 50
+	if loop.shouldCompact(context.Background()) {
 		t.Fatal("occupancy below the trigger must not compact")
 	}
 	loop.Compaction.Force = true
-	if !loop.shouldCompact() {
+	if !loop.shouldCompact(context.Background()) {
 		t.Fatal("forceCompact must trigger compaction")
 	}
 }
@@ -3509,30 +3507,30 @@ func TestShouldCompactDoesNotRetriggerWithoutGrowth(t *testing.T) {
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: strings.Repeat("x", 400)}},
 		CreatedAt: time.Now(),
 	})
-	if !loop.shouldCompact() {
+	if !loop.shouldCompact(context.Background()) {
 		t.Fatal("transcript at the occupancy line should trigger compaction")
 	}
 
 	// Simulate a no-progress pass: the condenser left the transcript unchanged.
 	loop.Compaction.lastEst = estTokens(run.Messages)
-	if loop.shouldCompact() {
+	if loop.shouldCompact(context.Background()) {
 		t.Fatal("compaction must not retrigger while the transcript has not grown")
 	}
 	// Metered occupancy pressure alone must not bypass the guard: another
 	// pass over the same transcript cannot help; the run must proceed and
 	// let the provider accept or reject the request.
-	loop.lastCallInput = 95
-	if loop.shouldCompact() {
+	loop.lastCallContext = 95
+	if loop.shouldCompact(context.Background()) {
 		t.Fatal("metered occupancy must not retrigger compaction without transcript growth")
 	}
 
 	// A provider context-overflow rejection still forces a pass.
 	loop.Compaction.Force = true
-	if !loop.shouldCompact() {
+	if !loop.shouldCompact(context.Background()) {
 		t.Fatal("forceCompact must bypass the no-growth guard")
 	}
 	loop.Compaction.Force = false
-	loop.lastCallInput = 0
+	loop.lastCallContext = 0
 
 	// Real transcript growth re-arms compaction.
 	run.AddUserMessage(domain.Message{
@@ -3541,7 +3539,7 @@ func TestShouldCompactDoesNotRetriggerWithoutGrowth(t *testing.T) {
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "more context here"}},
 		CreatedAt: time.Now(),
 	})
-	if !loop.shouldCompact() {
+	if !loop.shouldCompact(context.Background()) {
 		t.Fatal("transcript growth past the last pass must re-arm compaction")
 	}
 }
@@ -3557,8 +3555,8 @@ func TestBudgetNoticeInjection(t *testing.T) {
 	}
 
 	// Level 1: occupancy crosses the first window-derived level.
-	loop.lastCallInput = 65
-	loop.injectBudgetNotices()
+	loop.lastCallContext = 65
+	loop.injectBudgetNotices(context.Background())
 	if len(run.Messages) != 1 || run.Messages[0].Role != domain.RoleSystem ||
 		!strings.Contains(run.Messages[0].TextParts()[0], "narrow the scope") {
 		t.Fatalf("level-1 occupancy reminder missing: %+v", run.Messages)
@@ -3566,12 +3564,12 @@ func TestBudgetNoticeInjection(t *testing.T) {
 
 	// Level 2: crossing the second level fires the compaction-imminent
 	// notice; each level fires once.
-	loop.lastCallInput = 78
-	loop.injectBudgetNotices()
+	loop.lastCallContext = 78
+	loop.injectBudgetNotices(context.Background())
 	if len(run.Messages) != 2 || !strings.Contains(run.Messages[1].TextParts()[0], "auto-compaction is imminent") {
 		t.Fatalf("level-2 occupancy reminder missing: %+v", run.Messages)
 	}
-	loop.injectBudgetNotices()
+	loop.injectBudgetNotices(context.Background())
 	if len(run.Messages) != 2 {
 		t.Fatalf("notices must fire once per level: %+v", run.Messages)
 	}
@@ -3593,9 +3591,9 @@ func TestBudgetNoticeInjection(t *testing.T) {
 	if err := loop.compact(context.Background()); err != nil {
 		t.Fatalf("compact() error = %v", err)
 	}
-	if loop.notices.fired[dimensionOccupancy] != 0 || loop.lastCallInput != 0 {
-		t.Fatalf("compact must re-arm occupancy notices and reset occupancy: fired=%d lastCallInput=%d",
-			loop.notices.fired[dimensionOccupancy], loop.lastCallInput)
+	if loop.notices.fired[dimensionOccupancy] != 0 || loop.lastCallContext != 0 {
+		t.Fatalf("compact must re-arm occupancy notices and reset occupancy: fired=%d lastCallContext=%d",
+			loop.notices.fired[dimensionOccupancy], loop.lastCallContext)
 	}
 }
 
@@ -3609,7 +3607,7 @@ func TestBudgetNoticeTokensAndCost(t *testing.T) {
 
 	run.Usage.InputTokens = 85 // 85% → level 1
 	run.Usage.CostUSD = 0.97   // 97% → level 2
-	loop.injectBudgetNotices()
+	loop.injectBudgetNotices(context.Background())
 	if len(run.Messages) != 2 {
 		t.Fatalf("tokens level-1 and cost level-2 reminders expected: %+v", run.Messages)
 	}
@@ -3618,7 +3616,7 @@ func TestBudgetNoticeTokensAndCost(t *testing.T) {
 		t.Fatalf("unexpected reminder texts: %+v", run.Messages)
 	}
 	// Same levels never refire.
-	loop.injectBudgetNotices()
+	loop.injectBudgetNotices(context.Background())
 	if len(run.Messages) != 2 {
 		t.Fatalf("resource reminders must fire once per level: %+v", run.Messages)
 	}

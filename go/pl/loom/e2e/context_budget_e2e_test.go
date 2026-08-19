@@ -316,8 +316,9 @@ func runEvents(run *agent.Run, eventType domain.EventType) []json.RawMessage {
 	return out
 }
 
-// E1: windowed compaction trigger (metered occupancy), graduated notices
-// at both levels, and a clean finish — against a 1000-token window where
+// E1: windowed compaction trigger (calibrated occupancy — metered
+// footprint plus everything appended since), graduated notices at both
+// levels, and a clean finish — against a 1000-token window where
 // effective=950, notices=[570,712], trigger=760.
 func TestE2EWindowedCompactionAndNotices(t *testing.T) {
 	ws := t.TempDir()
@@ -326,7 +327,7 @@ func TestE2EWindowedCompactionAndNotices(t *testing.T) {
 	writeFile(t, ws, "c.txt", "gamma\n")
 	mock := newMockOpenAI(t, []mockEntry{
 		{ToolName: "read_file", ToolArgs: `{"path":"a.txt"}`, UsageIn: 580, UsageOut: 30},
-		{ToolName: "read_file", ToolArgs: `{"path":"b.txt"}`, UsageIn: 730, UsageOut: 30},
+		{ToolName: "read_file", ToolArgs: `{"path":"b.txt"}`, UsageIn: 700, UsageOut: 30},
 		{ToolName: "read_file", ToolArgs: `{"path":"c.txt"}`, UsageIn: 800, UsageOut: 30},
 		{Text: "all done", UsageIn: 100, UsageOut: 10},
 	})
@@ -341,17 +342,44 @@ func TestE2EWindowedCompactionAndNotices(t *testing.T) {
 	if run.State.Outcome != domain.OutcomeSucceeded {
 		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
 	}
+	// Exactly one auto compaction: the calibrated occupancy (metered 800
+	// plus the response/tool-result growth) crosses the 760 trigger after
+	// the third call.
 	compacted := runEvents(run, domain.EventContextCompacted)
-	if len(compacted) != 1 || !strings.Contains(string(compacted[0]), `"trigger":"auto"`) ||
-		!strings.Contains(string(compacted[0]), `"occupancy_before":800`) {
-		t.Fatalf("expected one auto compaction at metered occupancy 800, got %s", compacted)
+	if len(compacted) != 1 {
+		t.Fatalf("compactions = %d, want 1: %s", len(compacted), compacted)
 	}
-	notices := runEvents(run, domain.EventBudgetNotice)
-	if len(notices) != 2 {
-		t.Fatalf("budget notices = %d, want 2 (level 1 and level 2)", len(notices))
+	var compaction struct {
+		Trigger         string `json:"trigger"`
+		OccupancyBefore int64  `json:"occupancy_before"`
 	}
-	// The level-2 notice reached the model over the wire.
-	if text := mock.requestText(t, 3); !strings.Contains(text, "auto-compaction is imminent") {
+	if err := json.Unmarshal(compacted[0], &compaction); err != nil {
+		t.Fatalf("compaction payload: %v", err)
+	}
+	if compaction.Trigger != "auto" || compaction.OccupancyBefore < 760 {
+		t.Fatalf("compaction = %+v, want auto trigger at occupancy ≥ 760", compaction)
+	}
+	// Graduated notices fired at both occupancy levels (level 1 may refire
+	// after the compaction re-arms it — that is by design).
+	levels := map[int]bool{}
+	for _, raw := range runEvents(run, domain.EventBudgetNotice) {
+		var notice struct {
+			Dimension string `json:"dimension"`
+			Level     int    `json:"level"`
+		}
+		if err := json.Unmarshal(raw, &notice); err != nil {
+			t.Fatalf("notice payload: %v", err)
+		}
+		if notice.Dimension == "occupancy" {
+			levels[notice.Level] = true
+		}
+	}
+	if !levels[1] || !levels[2] {
+		t.Fatalf("occupancy notice levels = %v, want both 1 and 2", levels)
+	}
+	// The level-2 notice reached the model over the wire (injected in the
+	// prepare phase before the third call).
+	if text := mock.requestText(t, 2); !strings.Contains(text, "auto-compaction is imminent") {
 		t.Fatalf("level-2 notice missing from the model's input")
 	}
 }
@@ -556,9 +584,15 @@ func TestE2EMaskExternalizesWithReadablePath(t *testing.T) {
 	}
 	writeFile(t, ws, "big.txt", big.String())
 	writeFile(t, ws, "small.txt", "tiny\n")
+	// Two parallel reads in one response: the calibrated occupancy
+	// (metered 100 + the 27KB big output appended since) crosses the 760
+	// trigger right after the batch, and the trailing small result keeps
+	// the big one maskable (compaction protects only the final message).
 	mock := newMockOpenAI(t, []mockEntry{
-		{ToolName: "read_file", ToolArgs: `{"path":"big.txt","limit":500}`, UsageIn: 100, UsageOut: 30},
-		{ToolName: "read_file", ToolArgs: `{"path":"small.txt"}`, UsageIn: 800, UsageOut: 30},
+		{Tools: []mockToolCall{
+			{Name: "read_file", Args: `{"path":"big.txt","limit":500}`},
+			{Name: "read_file", Args: `{"path":"small.txt"}`},
+		}, UsageIn: 100, UsageOut: 30},
 		{Text: "done", UsageIn: 100, UsageOut: 10},
 	})
 	registry, artStore := realEnv(t, ws)
@@ -573,7 +607,7 @@ func TestE2EMaskExternalizesWithReadablePath(t *testing.T) {
 	if len(compacted) != 1 || !strings.Contains(string(compacted[0]), `"masked_outputs":1`) {
 		t.Fatalf("expected one masked output, got %s", compacted)
 	}
-	text := mock.requestText(t, 2)
+	text := mock.requestText(t, 1)
 	const marker = "externalized to "
 	idx := strings.Index(text, marker)
 	if idx < 0 || !strings.Contains(text, "[tool output compacted]") {

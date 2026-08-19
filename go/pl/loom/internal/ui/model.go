@@ -104,13 +104,13 @@ type Model struct {
 	// collapses the pinned plan panel above the composer.
 	plan       domain.Plan
 	planHidden bool
-	// contextEst is the estimated token size of the next model request
-	// (byte/4 approximation); lastCallInput is the provider-metered input
-	// tokens of the most recent call. contextWindow is the optional model
-	// context-window size used as the denominator in the status bar.
-	contextEst    int
-	lastCallInput int64
-	contextWindow int
+	// contextOccupancy is the calibrated token occupancy of the next model
+	// request (context.usage events: the provider-metered footprint of the
+	// last call plus estimated growth, or a full request estimate before
+	// the first call). contextWindow is the model's effective context
+	// window used as the denominator in the status bar.
+	contextOccupancy int64
+	contextWindow    int
 
 	// Transcript
 	blocks                 *BlockIndex

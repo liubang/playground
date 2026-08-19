@@ -110,15 +110,17 @@ type WindowModel struct {
 ### 4.2 Occupancy：实测优先的占用计量
 
 ```
-occupancy = 最近一次实测 input_tokens（lastCallInput）
-          + 该次响应之后新增 transcript 的 bytes/4 估算
+occupancy = 最近一次实测窗口占用（lastCallContext，cache-inclusive）
+          + 该次请求组装之后新增 transcript 的 bytes/4 估算
 ```
 
-- 与现状 `contextOccupancy()` 公式一致，但**成为唯一计量函数**：压缩触发、梯度提醒、状态栏 `ctx:~N` 全部使用它；
+- **实测口径即 provider 的窗口占用**：Anthropic 为 `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`（后两者被 Anthropic 排除在 `input_tokens` 之外，但同样占据窗口），OpenAI 为 `prompt_tokens`（本身含 cached）；provider 通过 `ModelEvent.ContextTokens` 上报，不区分时回退为计费 input。
+- **增量口径按请求组装点切分**（`lastCallBase`）：该次响应自身、随后追加的工具结果与 steer 全部计入——不能按「最后一条 assistant 消息」切分（loom 的工具结果消息同为 assistant 角色，那样切增量恒为 0）。
+- 该公式**成为唯一计量函数**：压缩触发、梯度提醒、前端占用环（`context.usage` 事件与 snapshot occupancy）全部使用它，UI 显示与触发器永远同源；
 - **废除** `shouldCompact` 中 `est > TargetTokens` 这一独立估算判据 —— 它是本次事故误压缩的直接根源；
-- **冷启动语义**（评审 m9 补充）：`Loop` 每个 prompt 由 controller 整体重建，`lastCallInput` 不跨 prompt 存活，因此**每个 prompt 的首个模型调用前 occupancy 退化为纯 transcript 估算**；turn 内第二次调用起即为实测校准值。该估算偏差只影响"首个请求前是否压缩"的判断，方向保守（宁可多压一次，不会漏压导致 provider 拒绝——后者有 overflow 强制压缩兜底）；
-- `/model` 切换同理：新模型的 Loop 从纯估算起步，不存在"上一个模型的实测值污染新模型 occupancy"的问题（评审 m9 确认）；
-- 压缩成功后 `lastCallInput` 清零（现状已有），occupancy 回退为压缩后 transcript 的估算值；
+- **冷启动语义**（评审 m9 补充）：`Loop` 每个 prompt 由 controller 整体重建，`lastCallContext` 不跨 prompt 存活，因此**每个 prompt 的首个模型调用前 occupancy 为完整请求估算**（system prompt 各部 + plan note + transcript + tool schemas，与 `effectiveMessages` 共用同一前缀构建）；turn 内第二次调用起即为实测校准值。该估算偏差只影响"首个请求前是否压缩"的判断，方向保守（宁可多压一次，不会漏压导致 provider 拒绝——后者有 overflow 强制压缩兜底）；
+- `/model` 切换同理：新模型的 Loop 从完整估算起步，不存在"上一个模型的实测值污染新模型 occupancy"的问题（评审 m9 确认）；
+- 压缩成功后 `lastCallContext` 清零，occupancy 回退为压缩后 transcript 的完整请求估算（含固定开销），并立即向 UI 补发；
 - `estTokens` 降级为压缩管线内部的前后对比指标与事件上报字段，不再参与触发决策。
 
 ### 4.3 Compactor：窗口化的三级压缩管线
