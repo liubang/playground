@@ -18,6 +18,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -178,8 +179,8 @@ func (n *noticeCenter) injectScaled(run *Run, dimension string, usage, limit int
 
 // injectBudgetNotices fires the graduated reminders whose thresholds the
 // current usage just crossed (see noticeCenter.inject).
-func (l *Loop) injectBudgetNotices() {
-	l.notices.inject(l.Run, l.Window, l.contextOccupancy)
+func (l *Loop) injectBudgetNotices(ctx context.Context) {
+	l.notices.inject(l.Run, l.Window, func() int64 { return l.contextOccupancy(ctx) })
 }
 
 // noticeMessage wraps reminder text in a system-role transcript message.

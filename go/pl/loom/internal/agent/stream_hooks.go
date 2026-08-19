@@ -41,12 +41,14 @@ type StreamHooks struct {
 	OnToolCallComplete func(toolIndex int, toolID, toolName, args string)
 	// OnModelUsage is called when usage information is received.
 	OnModelUsage func(inputTokens, outputTokens int64)
-	// OnContextUsage reports the estimated size of the transcript that the
-	// next model request would carry (estTokens, byte/4 approximation) plus
-	// the provider-metered input tokens of the last completed call. It fires
-	// after each completed response and after each tool batch, so frontends
-	// can show live context-window occupancy.
-	OnContextUsage func(estTokens int, lastCallInputTokens int64)
+	// OnContextUsage reports the calibrated occupancy of the next model
+	// request — the same value the compaction trigger checks: the
+	// provider-metered footprint of the last completed call (cache-inclusive)
+	// plus an estimate of everything appended since, or a full request
+	// estimate before the first call. It fires after each completed
+	// response, after each tool batch and after each compaction, so
+	// frontends can show live context-window occupancy.
+	OnContextUsage func(occupancyTokens int64)
 }
 
 // StreamAggregator validates and collects canonical model events while
@@ -74,7 +76,10 @@ type StreamAggregator struct {
 	// cachedInputTokens accumulates provider-reported prompt-cache hits
 	// (observability only; inputTokens already includes them).
 	cachedInputTokens int64
-	responseEnded     bool
+	// contextTokens is the provider-metered context-window footprint of
+	// the request (cache-inclusive); see ContextTokens().
+	contextTokens int64
+	responseEnded bool
 }
 
 type streamResponse struct {
@@ -199,6 +204,14 @@ func (a *StreamAggregator) Apply(evt domain.ModelEvent) error {
 		a.inputTokens = evt.InputTokens
 		a.outputTokens = evt.OutputTokens
 		a.cachedInputTokens = evt.CachedInputTokens
+		// Providers that do not distinguish the window footprint from the
+		// billing input (OpenAI-style prompt_tokens is already
+		// cache-inclusive) leave ContextTokens unset; the metered input is
+		// the occupancy measure then.
+		a.contextTokens = evt.ContextTokens
+		if a.contextTokens <= 0 {
+			a.contextTokens = evt.InputTokens
+		}
 		if a.hooks.OnModelUsage != nil {
 			a.hooks.OnModelUsage(evt.InputTokens, evt.OutputTokens)
 		}
@@ -311,6 +324,12 @@ func malformedArgumentsPlaceholder(raw string) json.RawMessage {
 // completed call (0 when the provider does not report them). The value is
 // observability-only: inputTokens already includes cached tokens.
 func (a *StreamAggregator) CachedInputTokens() int64 { return a.cachedInputTokens }
+
+// ContextTokens reports the provider-metered context-window footprint of
+// the completed call: the exact number of tokens the request occupied
+// (cache-inclusive). It defaults to the metered input when the provider
+// does not report a distinct footprint.
+func (a *StreamAggregator) ContextTokens() int64 { return a.contextTokens }
 
 // InterruptedMessage creates an interrupted message from partial text.
 func (a *StreamAggregator) InterruptedMessage() domain.Message {

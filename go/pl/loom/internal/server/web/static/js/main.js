@@ -13,7 +13,7 @@ import { CtxGauge } from './components/ctxgauge.js'
 import { Picker } from './components/picker.js'
 import { SettingsPanel } from './components/settings.js'
 import { initTooltips } from './components/tooltip.js'
-import { shortId, estTranscriptTokens, randomId, copyText } from './format.js'
+import { shortId, randomId, copyText } from './format.js'
 import { icon, hydrateIcons } from './icons.js'
 
 const TOKEN_KEY = 'loom_token'
@@ -678,10 +678,10 @@ async function openSession(id, { archived = false } = {}) {
   applySnapshotMeta(snap)
   app.statusbar.setUsage(snap.usage)
   app.statusbar.setTurns(snap.turn_count)
-  // ctx 占用环：snapshot.window 优先（旧服务端回退名义窗口推导）；
-  // occupancy 缺省时按 snapshot 消息本地估算（与后端 estTokens 同算法）
-  app.ctxgauge.setWindow(snap.window, snap.context_window)
-  app.ctxgauge.setOccupancy(snap.occupancy || estTranscriptTokens(snap.messages))
+  // ctx 占用环：window 阈值与 occupancy 均由服务端投影（与压缩触发器同口径），
+  // 前端不做本地推算
+  app.ctxgauge.setWindow(snap.window)
+  app.ctxgauge.setOccupancy(snap.occupancy || 0)
   // attach 前再清一次追帧队列：快照拉取期间旧连接 dispatched 的残余事件
   // 要么已被快照覆盖（seq ≤ event_seq），要么会被新流从 event_seq 重放，
   // 丢弃是无损的；留给 rAF 冲刷就会渲染到重建后的 transcript 上造成重复。
@@ -873,12 +873,9 @@ async function pickModel(ref) {
     // （SetModelResult 无 JSON tag，响应键是大写的 Cur/Meta，拼读易错。）
     app.curModelRef = ref
     syncPickerLabels()
-    const meta = r.Meta || r.meta || {}
-    if (meta.context_window || meta.ContextWindow) {
-      // 模型切换后窗口阈值变化：按新名义窗口重推导，等下一次
-      // context.usage / snapshot 刷新精确值
-      app.ctxgauge.setWindow(null, meta.context_window || meta.ContextWindow)
-    }
+    // 模型切换后窗口阈值变化：按服务端推导的新窗口投影重设占用环，
+    // occupancy 等下一次 context.usage / snapshot 刷新
+    app.ctxgauge.setWindow(r.Window || r.window || null)
     toast('模型已切换为 ' + modelLabel(app.curModelRef), true)
   } catch (e) {
     if (e.status !== 401) toast('切换模型失败: ' + e.message)
@@ -971,22 +968,11 @@ function applyRuntimeEvent(evt) {
       app.statusbar.setUsage(evt.payload)
       break
     case 'context.usage':
-      // 实时 context 占用：驱动 composer 旁的占用环
+      // 实时 context 占用：驱动 composer 旁的占用环（压缩后后端会补发新值）
       app.ctxgauge.onContextUsage(evt.payload)
-      break
-    case 'context.compacted':
-      // 压缩后占用立即回落（transcript 明细卡片由 transcript.handleEvent 渲染）
-      app.ctxgauge.onCompacted(evt.payload)
       break
     case 'plan.updated':
       renderPlanInto($('plan-panel'), evt.payload)
-      break
-    case 'model.changed':
-      // 会话内 /model 切换（其他客户端触发）同步到 UI
-      if (evt.payload?.cur) {
-        app.curModelRef = (evt.payload.cur.provider || '') + '/' + (evt.payload.cur.model || '')
-        syncPickerLabels()
-      }
       break
     case 'reasoning.changed':
       if (evt.payload?.effective) {

@@ -184,9 +184,16 @@ type ModelEvent struct {
 	// cache_read_input_tokens, OpenAI prompt_tokens_details.cached_tokens).
 	// Observability only. Caveat: OpenAI's InputTokens already includes cached
 	// tokens, Anthropic's does not — see Usage.CachedInputTokens.
-	CachedInputTokens int64      `json:"cached_input_tokens,omitempty"`
-	StopReason        StopReason `json:"stop_reason,omitempty"`
-	Error             string     `json:"error,omitempty"`
+	CachedInputTokens int64 `json:"cached_input_tokens,omitempty"`
+	// ContextTokens is the provider-metered total footprint the request
+	// occupied in the model's context window — the ground truth for
+	// occupancy: Anthropic input_tokens + cache_read_input_tokens +
+	// cache_creation_input_tokens, OpenAI prompt_tokens (already
+	// cache-inclusive). Zero means the provider does not distinguish it
+	// from InputTokens, which is then the occupancy measure.
+	ContextTokens int64      `json:"context_tokens,omitempty"`
+	StopReason    StopReason `json:"stop_reason,omitempty"`
+	Error         string     `json:"error,omitempty"`
 	// Retryable marks a stream_error as transient (truncated body, transport
 	// drop): re-issuing the request is safe while nothing was delivered
 	// yet. The agent loop only honors it for streams with no activity.

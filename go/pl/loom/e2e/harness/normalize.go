@@ -79,10 +79,10 @@ var timeKeys = map[string]bool{
 	// delta_bytes derives from the length of a streamed argument fragment,
 	// which embeds the run's (differently-long) temp paths.
 	"delta_bytes": true,
-	// est_tokens derives from message text length, which embeds the
-	// run's temp paths. last_call_input_tokens is provider-reported
-	// (replayed verbatim) and stays.
-	"est_tokens": true,
+	// occupancy_tokens mixes the provider-metered footprint (replayed
+	// verbatim, stable) with a byte-estimate of message text, which
+	// embeds the run's temp paths — the sum is not stable either.
+	"occupancy_tokens": true,
 	// WallTime (domain.Usage, no json tag) is run-duration noise.
 	"WallTime": true,
 }

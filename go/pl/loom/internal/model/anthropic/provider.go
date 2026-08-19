@@ -595,12 +595,17 @@ type blockState struct {
 type streamState struct {
 	responseStarted bool
 	stop            domain.StopReason
-	inputTokens     int64
-	outputTokens    int64
-	// cachedInputTokens tracks cache_read_input_tokens (prompt-cache hits;
-	// observability only, already included in inputTokens).
+	// inputTokens is Anthropic's non-cached input count: it EXCLUDES both
+	// cache_read and cache_creation (billing-scale counter only). The
+	// context-window footprint is the sum of all three.
+	inputTokens       int64
+	outputTokens      int64
 	cachedInputTokens int64
-	blocks            map[int]*blockState
+	// cacheCreationInputTokens tracks cache_creation_input_tokens (cache
+	// writes); like reads, they occupied the window but are excluded from
+	// inputTokens.
+	cacheCreationInputTokens int64
+	blocks                   map[int]*blockState
 }
 
 // wire event payloads (subset of the Messages streaming schema).
@@ -655,8 +660,9 @@ type usagePayload struct {
 	InputTokens  int64 `json:"input_tokens,omitempty"`
 	OutputTokens int64 `json:"output_tokens,omitempty"`
 	// Prompt-cache accounting, present when the request used cache_control.
-	// Read hits are what we track for observability; creation writes are
-	// reported for completeness.
+	// Both are excluded from input_tokens but occupied the context window,
+	// so both feed the ContextTokens footprint (reads also serve as the
+	// observability cache-hit counter).
 	CacheReadInputTokens     int64 `json:"cache_read_input_tokens,omitempty"`
 	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens,omitempty"`
 }
@@ -735,6 +741,7 @@ func (s *streamState) onMessageStart(data string, emit stream.Emitter) error {
 		s.inputTokens = evt.Message.Usage.InputTokens
 		s.outputTokens = evt.Message.Usage.OutputTokens
 		s.cachedInputTokens = evt.Message.Usage.CacheReadInputTokens
+		s.cacheCreationInputTokens = evt.Message.Usage.CacheCreationInputTokens
 	}
 	s.responseStarted = true
 	emit(domain.ModelEvent{Kind: domain.ModelEventResponseStart})
@@ -887,6 +894,9 @@ func (s *streamState) onMessageDelta(data string) error {
 		if evt.Usage.CacheReadInputTokens > 0 {
 			s.cachedInputTokens = evt.Usage.CacheReadInputTokens
 		}
+		if evt.Usage.CacheCreationInputTokens > 0 {
+			s.cacheCreationInputTokens = evt.Usage.CacheCreationInputTokens
+		}
 	}
 	return nil
 }
@@ -901,6 +911,10 @@ func (s *streamState) finish(emit stream.Emitter) {
 			InputTokens:       s.inputTokens,
 			OutputTokens:      s.outputTokens,
 			CachedInputTokens: s.cachedInputTokens,
+			// The window footprint is the full prompt: non-cached input plus
+			// cache reads and writes, which Anthropic excludes from
+			// input_tokens but which occupied the context window all the same.
+			ContextTokens: s.inputTokens + s.cachedInputTokens + s.cacheCreationInputTokens,
 		})
 	}
 	stop := s.stop

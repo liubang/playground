@@ -114,9 +114,10 @@ func newFakeStream(entry ScriptEntry) *fakeStream {
 
 	if entry.UsageIn > 0 || entry.UsageOut > 0 {
 		events = append(events, domain.ModelEvent{
-			Kind:         domain.ModelEventUsage,
-			InputTokens:  entry.UsageIn,
-			OutputTokens: entry.UsageOut,
+			Kind:          domain.ModelEventUsage,
+			InputTokens:   entry.UsageIn,
+			OutputTokens:  entry.UsageOut,
+			ContextTokens: entry.UsageIn,
 		})
 	}
 

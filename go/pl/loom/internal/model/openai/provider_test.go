@@ -1386,4 +1386,9 @@ func TestProviderStreamReportsCachedInputTokens(t *testing.T) {
 	if usage.InputTokens != 100 || usage.CachedInputTokens != 64 {
 		t.Fatalf("usage = %+v, want input=100 cached=64", usage)
 	}
+	// prompt_tokens is already cache-inclusive, so it is the exact
+	// context-window footprint of the request.
+	if usage.ContextTokens != 100 {
+		t.Fatalf("ContextTokens = %d, want 100 (prompt_tokens)", usage.ContextTokens)
+	}
 }

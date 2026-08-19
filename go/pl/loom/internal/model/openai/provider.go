@@ -1113,6 +1113,9 @@ func (s *canonicalState) applyChatChunk(chunk chatCompletionChunk, emit func(dom
 			InputTokens:       chunk.Usage.PromptTokens,
 			OutputTokens:      chunk.Usage.CompletionTokens,
 			CachedInputTokens: chunk.Usage.cachedInputTokens(),
+			// prompt_tokens is already cache-inclusive, so it is the exact
+			// context-window footprint of the request.
+			ContextTokens: chunk.Usage.PromptTokens,
 		})
 	}
 
@@ -1237,6 +1240,9 @@ func (s *canonicalState) flushBufferedTerminal(emit func(domain.ModelEvent) bool
 			InputTokens:       s.bufferedUsage.PromptTokens,
 			OutputTokens:      s.bufferedUsage.CompletionTokens,
 			CachedInputTokens: s.bufferedUsage.cachedInputTokens(),
+			// prompt_tokens is already cache-inclusive, so it is the exact
+			// context-window footprint of the request.
+			ContextTokens: s.bufferedUsage.PromptTokens,
 		})
 	}
 	emit(domain.ModelEvent{
