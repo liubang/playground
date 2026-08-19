@@ -149,6 +149,21 @@ func TestEncodeChatMessagesChatML(t *testing.T) {
 	}
 }
 
+// TestUsageDetailsCacheSplit locks the Langfuse usage_details shape:
+// input/output always, cache keys only when the provider reported them.
+func TestUsageDetailsCacheSplit(t *testing.T) {
+	plain := usageDetails(GenerationRecord{InputTokens: 10, OutputTokens: 5})
+	if len(plain) != 2 || plain["input"] != 10 || plain["output"] != 5 {
+		t.Fatalf("usage without cache = %v, want only input/output", plain)
+	}
+	cached := usageDetails(GenerationRecord{
+		InputTokens: 100, OutputTokens: 5, CachedInputTokens: 80, CacheCreationInputTokens: 20,
+	})
+	if cached["cache_read_input_tokens"] != 80 || cached["cache_creation_input_tokens"] != 20 {
+		t.Fatalf("usage with cache = %v, want cache_read=80 cache_creation=20", cached)
+	}
+}
+
 // TestOTelRecorderEmitsRunSpans drives the recorder end-to-end against an
 // in-memory exporter and verifies the span tree and Langfuse attributes.
 func TestOTelRecorderEmitsRunSpans(t *testing.T) {

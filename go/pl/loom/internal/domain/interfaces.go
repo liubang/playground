@@ -185,6 +185,11 @@ type ModelEvent struct {
 	// Observability only. Caveat: OpenAI's InputTokens already includes cached
 	// tokens, Anthropic's does not — see Usage.CachedInputTokens.
 	CachedInputTokens int64 `json:"cached_input_tokens,omitempty"`
+	// CacheCreationInputTokens reports provider-side prompt-cache writes
+	// (Anthropic cache_creation_input_tokens). Zero when the provider
+	// does not split cache writes out (OpenAI folds them into
+	// prompt_tokens). Observability only.
+	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens,omitempty"`
 	// ContextTokens is the provider-metered total footprint the request
 	// occupied in the model's context window — the ground truth for
 	// occupancy: Anthropic input_tokens + cache_read_input_tokens +
