@@ -71,6 +71,15 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 		if err != nil {
 			return fmt.Errorf("load session for resume: %w", err)
 		}
+		// Resuming is an explicit intent to continue the conversation, so
+		// an archived (read-only) session is restored to active first —
+		// otherwise every event append below would fail with
+		// ErrSessionArchived.
+		if changed, err := sqliteStore.SetSessionArchived(ctx, *resumeSessionID, false); err != nil {
+			return fmt.Errorf("unarchive session: %w", err)
+		} else if changed {
+			fmt.Fprintf(os.Stderr, "loom: session %s was archived; it has been unarchived\n", *resumeSessionID)
+		}
 		run, err = agent.RecoverRun(inspection.Session.ID, inspection.Checkpoint,
 			inspection.Transcript.Messages, inspection.Events, inspection.Session.Version,
 			resolved.Limits, domain.RealClock{}, bootstrap.Validator)

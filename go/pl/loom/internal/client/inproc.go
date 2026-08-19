@@ -20,6 +20,7 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/liubang/playground/go/pl/loom/internal/app"
@@ -81,6 +82,12 @@ func (c *inprocClient) ResumeSession(ctx context.Context, id domain.SessionID) e
 	h, err := c.service.ResumeSession(ctx, id)
 	if err != nil {
 		return err
+	}
+	// Resuming is an explicit intent to continue the conversation, so an
+	// archived (read-only) session is restored to active. Read-only
+	// viewing goes through the snapshot/transcript APIs, never Resume.
+	if _, err := c.service.SetSessionArchived(ctx, id, false); err != nil {
+		return fmt.Errorf("unarchive session: %w", err)
 	}
 	c.bind(h)
 	return nil

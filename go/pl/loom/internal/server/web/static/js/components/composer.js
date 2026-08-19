@@ -49,6 +49,8 @@ export class Composer {
     this.onError = onError || ((m) => console.warn(m))
     this.running = false
     this.readOnly = false
+    // 只读原因文案（子 agent 会话 / 已归档会话），随 setReadOnly 更新
+    this.readOnlyLabel = '子 agent 会话 · 只读'
     // 当前模型不支持图片输入时置 false 并给出原因（粘贴/拖拽/按钮统一拦截）
     this.imagesEnabled = true
     this.imagesDisabledReason = ''
@@ -261,10 +263,11 @@ export class Composer {
     this._applyState()
   }
 
-  // setReadOnly 切换只读模式（子 agent 会话）：输入禁用，提示固定；
-  // 审批/提问走 transcript 卡片，不受影响。
-  setReadOnly(readOnly) {
+  // setReadOnly 切换只读模式（子 agent 会话 / 已归档会话）：输入禁用，
+  // 提示固定为 label；审批/提问走 transcript 卡片，不受影响。
+  setReadOnly(readOnly, label) {
     this.readOnly = readOnly
+    if (label) this.readOnlyLabel = label
     this.ta.disabled = readOnly
     if (this.attachBtn) this.attachBtn.disabled = readOnly || !this.imagesEnabled
     this._applyState()
@@ -286,7 +289,7 @@ export class Composer {
   // placeholder 随焦点切换：聚焦时显示按键提示，失焦时显示引导文案。
   _applyState() {
     if (this.readOnly) {
-      this.ta.placeholder = '子 agent 会话 · 只读'
+      this.ta.placeholder = this.readOnlyLabel
       return
     }
     if (this.focused) {

@@ -125,6 +125,8 @@ func mapError(err error) *statusError {
 			return &statusError{status: http.StatusServiceUnavailable, code: "unavailable", message: msg}
 		case domain.ErrConflict:
 			return &statusError{status: http.StatusConflict, code: "conflict", message: msg}
+		case domain.ErrSessionArchived:
+			return &statusError{status: http.StatusConflict, code: "session_archived", message: msg}
 		case domain.ErrBudget:
 			return &statusError{status: http.StatusRequestEntityTooLarge, code: "too_large", message: msg}
 		}

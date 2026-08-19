@@ -120,7 +120,7 @@ func (s *Server) handleArchiveSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, invalidInput("archived is required"))
 		return
 	}
-	if err := s.svc.SetSessionArchived(r.Context(), id, *req.Archived); err != nil {
+	if _, err := s.svc.SetSessionArchived(r.Context(), id, *req.Archived); err != nil {
 		writeError(w, err)
 		return
 	}

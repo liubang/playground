@@ -119,6 +119,7 @@ type ResolvedConfig struct {
 	UI            UI
 	Subagent      ResolvedSubagent
 	Memory        ResolvedMemory
+	Sessions      ResolvedSessions
 	Image         ResolvedImage
 	Browser       ResolvedBrowser
 	KnowledgeBase ResolvedKnowledgeBase
@@ -713,6 +714,13 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 	}
 	out.Memory = memory
 
+	// Session lifecycle maintenance (auto-archive): opt-in, off by default.
+	sessions, err := resolveSessions(f.Sessions)
+	if err != nil {
+		return nil, err
+	}
+	out.Sessions = sessions
+
 	// Text-to-image: reuses a named provider's endpoint and credentials.
 	image, err := resolveImage(f.Image, auths)
 	if err != nil {
@@ -1275,6 +1283,34 @@ func resolveMemory(in Memory, out *ResolvedConfig) (ResolvedMemory, error) {
 		*d.field = v
 	}
 	return resolved, nil
+}
+
+// ResolvedSessions is the sessions section with defaults applied. It must
+// stay comparable (scalar fields only): reload classification diffs it
+// with !=.
+type ResolvedSessions struct {
+	// AutoArchiveAfter archives sessions idle (no appended events) for
+	// longer than this; 0 disables the background archiver.
+	AutoArchiveAfter time.Duration
+}
+
+// resolveSessions validates the sessions section. The archiver is opt-in:
+// absent/empty/"0" leaves AutoArchiveAfter at 0 (disabled).
+func resolveSessions(in Sessions) (ResolvedSessions, error) {
+	var out ResolvedSessions
+	raw := strings.TrimSpace(in.AutoArchiveAfter)
+	if raw == "" {
+		return out, nil
+	}
+	v, err := time.ParseDuration(raw)
+	if err != nil {
+		return ResolvedSessions{}, fmt.Errorf("config: sessions.auto_archive_after: expected a Go duration (e.g. \"720h\"), got %q", in.AutoArchiveAfter)
+	}
+	if v < 0 {
+		return ResolvedSessions{}, fmt.Errorf("config: sessions.auto_archive_after must be >= 0")
+	}
+	out.AutoArchiveAfter = v
+	return out, nil
 }
 
 // resolveRunaway overlays the file's runaway section onto the built-in

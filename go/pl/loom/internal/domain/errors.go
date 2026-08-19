@@ -40,6 +40,11 @@ const (
 	ErrBudget         ErrorCode = "budget"
 	ErrSecurity       ErrorCode = "security"
 	ErrInternal       ErrorCode = "internal"
+	// ErrSessionArchived marks a write attempted against an archived
+	// session: archived sessions are read-only until explicitly
+	// unarchived, so the write is rejected rather than silently
+	// resurrecting the session.
+	ErrSessionArchived ErrorCode = "session_archived"
 )
 
 // AgentError is the standard error type for the agent runtime.

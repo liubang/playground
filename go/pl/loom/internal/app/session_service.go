@@ -681,13 +681,23 @@ func (s *SessionService) DeleteSession(ctx context.Context, id domain.SessionID)
 }
 
 // SetSessionArchived marks a session archived (hidden from default session
-// listings) or restores it to active. The live runtime is unaffected.
-func (s *SessionService) SetSessionArchived(ctx context.Context, id domain.SessionID, archived bool) error {
+// listings, read-only) or restores it to active, reporting whether the
+// state changed. The live runtime is unaffected: read-only enforcement
+// happens in the store, so a live-but-archived session fails its next
+// write with ErrSessionArchived instead of silently resurrecting.
+func (s *SessionService) SetSessionArchived(ctx context.Context, id domain.SessionID, archived bool) (bool, error) {
 	store, ok := s.proc.Store.(*session.SQLiteStore)
 	if !ok {
-		return fmt.Errorf("session archiving is unavailable for this store")
+		return false, fmt.Errorf("session archiving is unavailable for this store")
 	}
-	return store.SetSessionArchived(ctx, id, archived)
+	changed, err := store.SetSessionArchived(ctx, id, archived)
+	if err != nil {
+		return false, err
+	}
+	if changed && s.logger != nil {
+		s.logger.Info("session archive state changed", "session_id", id, "archived", archived)
+	}
+	return changed, nil
 }
 
 // SubmitPrompt forwards a prompt to the session's controller. While the
@@ -707,6 +717,23 @@ func (s *SessionService) SubmitPrompt(ctx context.Context, id domain.SessionID, 
 	h, err := s.handle(id)
 	if err != nil {
 		return SubmitResult{}, false, err
+	}
+	// Archived sessions are read-only: reject new input synchronously so
+	// the caller gets ErrSessionArchived from THIS call. The store-level
+	// append guard is the backstop for races (archived between this check
+	// and the turn's first write). This deliberately runs BEFORE the
+	// idempotency-key replay below: on an archived session even a
+	// duplicate submission reports session_archived rather than replaying
+	// a stale success — archiving is newer information than the cache.
+	if store, ok := s.proc.Store.(*session.SQLiteStore); ok {
+		archived, aerr := store.IsSessionArchived(ctx, id)
+		if aerr != nil {
+			return SubmitResult{}, false, aerr
+		}
+		if archived {
+			return SubmitResult{}, false, domain.NewError(domain.ErrSessionArchived,
+				"session is archived (read-only); unarchive it to continue")
+		}
 	}
 	if idemKey != "" {
 		h.mu.Lock()

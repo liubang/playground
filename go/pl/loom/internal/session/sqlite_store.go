@@ -377,12 +377,21 @@ func (s *SQLiteStore) appendEventsTx(ctx context.Context, sessionID domain.Sessi
 	defer func() { _ = tx.Rollback() }()
 
 	var actualVersion int64
+	var archivedAt sql.NullInt64
 	if err := tx.QueryRowContext(ctx,
-		"SELECT version FROM sessions WHERE session_id = ?", sessionID.String()).Scan(&actualVersion); err != nil {
+		"SELECT version, archived_at_unix_nano FROM sessions WHERE session_id = ?", sessionID.String()).Scan(&actualVersion, &archivedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.NewError(domain.ErrInvalidInput, "session not found")
 		}
 		return storeError("load session version", err)
+	}
+	// Archived sessions are read-only: appending is rejected instead of
+	// silently resurrecting the session. The check rides the write
+	// transaction (BEGIN IMMEDIATE), so a concurrent archive cannot slip
+	// in between this read and the version advance below.
+	if archivedAt.Valid {
+		return domain.NewError(domain.ErrSessionArchived,
+			"session is archived (read-only); unarchive it to continue")
 	}
 	if actualVersion != expectedVersion {
 		return domain.NewError(domain.ErrConflict,
@@ -945,26 +954,93 @@ func (s *SQLiteStore) DeleteSession(ctx context.Context, sessionID domain.Sessio
 	return nil
 }
 
-// SetSessionArchived marks a session archived (hidden from default listings)
-// or restores it to active.
-func (s *SQLiteStore) SetSessionArchived(ctx context.Context, sessionID domain.SessionID, archived bool) error {
+// SetSessionArchived marks a session archived (hidden from default
+// listings, read-only) or restores it to active. It reports whether the
+// state changed; repeating the current state is a no-op.
+//
+// Archiving takes effect immediately even for a session with an
+// in-flight turn: the turn's next event append fails with
+// ErrSessionArchived and the turn aborts. That is the intended trade-off
+// — "put it away" wins over letting a background turn keep writing.
+// The auto-archiver does not hit this in practice (an actively-writing
+// turn keeps updated_at fresh, so the sweep does not select it), though
+// a turn stalled on an approval or a slow model for longer than the
+// configured threshold can still be swept — it then fails on its next
+// append, exactly as with a manual archive.
+//
+// The not-found SELECT after a no-op UPDATE can race a concurrent
+// delete/state change on another connection; that only affects the
+// changed report and error attribution, never correctness (the UPDATE
+// itself is atomic and idempotent).
+func (s *SQLiteStore) SetSessionArchived(ctx context.Context, sessionID domain.SessionID, archived bool) (bool, error) {
 	var at any
+	archivedFlag := 0
 	if archived {
 		at = time.Now().UTC().UnixNano()
+		archivedFlag = 1
 	}
-	res, err := s.db.ExecContext(ctx,
-		"UPDATE sessions SET archived_at_unix_nano = ? WHERE session_id = ?", at, sessionID.String())
+	res, err := s.db.ExecContext(ctx, `
+UPDATE sessions SET archived_at_unix_nano = ?
+WHERE session_id = ? AND (archived_at_unix_nano IS NOT NULL) != ?`,
+		at, sessionID.String(), archivedFlag)
 	if err != nil {
-		return storeError("archive session", err)
+		return false, storeError("archive session", err)
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
-		return storeError("archive session result", err)
+		return false, storeError("archive session result", err)
 	}
-	if affected == 0 {
-		return fmt.Errorf("session not found: %s", sessionID)
+	if affected == 1 {
+		return true, nil
 	}
-	return nil
+	// No row updated: either already in the requested state or no such
+	// session — distinguish so a typo'd ID still fails loudly.
+	var exists int
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT 1 FROM sessions WHERE session_id = ?", sessionID.String()).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, fmt.Errorf("session not found: %s", sessionID)
+		}
+		return false, storeError("check session for archive", err)
+	}
+	return false, nil
+}
+
+// IsSessionArchived reports whether the session is currently archived.
+// A missing session gets the same plain "session not found" error as
+// SetSessionArchived, so HTTP mapping lands on 404 for both.
+func (s *SQLiteStore) IsSessionArchived(ctx context.Context, sessionID domain.SessionID) (bool, error) {
+	var archivedAt sql.NullInt64
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT archived_at_unix_nano FROM sessions WHERE session_id = ?", sessionID.String()).Scan(&archivedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, fmt.Errorf("session not found: %s", sessionID)
+		}
+		return false, storeError("check session archive state", err)
+	}
+	return archivedAt.Valid, nil
+}
+
+// ArchiveStaleSessions marks every unarchived session whose last activity
+// (updated_at) is at or before cutoff as archived, and reports how many
+// sessions this call archived. It is a single atomic UPDATE — idempotent
+// and safe for concurrent loom processes sharing the database. Read paths
+// (listing, inspect, resume-for-viewing) are unaffected: archiving only
+// hides a session from the default view and blocks further writes until
+// it is explicitly unarchived.
+func (s *SQLiteStore) ArchiveStaleSessions(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `
+UPDATE sessions SET archived_at_unix_nano = ?
+WHERE archived_at_unix_nano IS NULL AND updated_at_unix_nano <= ?`,
+		time.Now().UTC().UnixNano(), cutoff.UnixNano())
+	if err != nil {
+		return 0, storeError("archive stale sessions", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, storeError("archive stale sessions result", err)
+	}
+	return n, nil
 }
 
 func addArtifactRefs(ctx context.Context, tx *sql.Tx, sessionID domain.SessionID, refs map[domain.ArtifactID]int64) error {

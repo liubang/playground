@@ -98,6 +98,9 @@ type Client interface {
 	// workspaceID selects the default workspace) and binds the client to it.
 	NewSessionIn(ctx context.Context, workspaceID domain.WorkspaceID) error
 	// ResumeSession binds the client to an existing persisted session.
+	// Resuming is an explicit intent to continue the conversation, so an
+	// archived (read-only) session is restored to active; read-only
+	// viewing goes through the snapshot/transcript APIs instead.
 	ResumeSession(ctx context.Context, id domain.SessionID) error
 	// SessionID returns the bound session (zero before New/Resume).
 	SessionID() domain.SessionID

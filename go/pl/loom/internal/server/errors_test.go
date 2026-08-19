@@ -50,6 +50,19 @@ func TestMapErrorDoesNotOvermatchInvalid(t *testing.T) {
 	}
 }
 
+// TestMapErrorSessionArchived: writes against archived sessions map to
+// 409 session_archived so frontends can switch the session to read-only.
+func TestMapErrorSessionArchived(t *testing.T) {
+	typed := domain.NewError(domain.ErrSessionArchived, "session is archived (read-only); unarchive it to continue")
+	if se := mapError(typed); se.status != http.StatusConflict || se.code != "session_archived" {
+		t.Fatalf("mapError(typed) = %+v, want 409 session_archived", se)
+	}
+	wrapped := fmt.Errorf("append events: %w", typed)
+	if se := mapError(wrapped); se.status != http.StatusConflict || se.code != "session_archived" {
+		t.Fatalf("mapError(wrapped) = %+v, want 409 session_archived", se)
+	}
+}
+
 // TestMapErrorInvalidInputFallbackPhrases: the remaining untyped
 // invalid-input producers still map to 400 via the narrowed phrase set.
 func TestMapErrorInvalidInputFallbackPhrases(t *testing.T) {

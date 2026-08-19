@@ -60,6 +60,7 @@ type File struct {
 	UI       UI       `yaml:"ui,omitempty"`
 	Subagent Subagent `yaml:"subagent,omitempty"`
 	Memory   Memory   `yaml:"memory,omitempty"`
+	Sessions Sessions `yaml:"sessions,omitempty"`
 	Image    Image    `yaml:"image,omitempty"`
 	Browser  Browser  `yaml:"browser,omitempty"`
 	// KnowledgeBase configures the minisearch-backed knowledge base tools
@@ -379,6 +380,16 @@ type Memory struct {
 	// MaxSessionAge skips sessions last touched longer ago than this (Go
 	// duration); empty keeps the default ("720h", 30 days).
 	MaxSessionAge string `yaml:"max_session_age,omitempty"`
+}
+
+// Sessions configures session lifecycle maintenance.
+type Sessions struct {
+	// AutoArchiveAfter (Go duration, e.g. "720h") enables the background
+	// session archiver: sessions whose last activity is older than this
+	// are marked archived — hidden from default listings and read-only
+	// until explicitly unarchived. Empty or "0" disables the archiver
+	// (the default).
+	AutoArchiveAfter string `yaml:"auto_archive_after,omitempty"`
 }
 
 // Browser configures the headless Chrome browser tool. Enabled is

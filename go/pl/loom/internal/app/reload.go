@@ -137,6 +137,11 @@ func classifyConfigChanges(prev, next *config.ResolvedConfig) ConfigApplyReport 
 	if !reflect.DeepEqual(prev.Memory, next.Memory) {
 		r.Restart = append(r.Restart, "memory")
 	}
+	// The session archiver reads Resolved() at every sweep pass, so the
+	// change takes effect on the next pass without a restart.
+	if prev.Sessions != next.Sessions {
+		r.NextTurn = append(r.NextTurn, "sessions")
+	}
 	// The disabled-name set is pushed into every assembled loader by
 	// ApplyConfig (Immediate); enabled/extra_roots stay frozen into the
 	// per-workspace assembly and still require a restart.
