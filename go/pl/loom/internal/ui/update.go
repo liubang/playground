@@ -2550,6 +2550,7 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
 			m.usage.InputTokens, m.usage.OutputTokens = payload.InputTokens, payload.OutputTokens
 			m.usage.Turns, m.usage.ToolCalls = payload.Turns, payload.ToolCalls
+			m.usage.CachedInputTokens, m.usage.ContextTokens = payload.CachedInputTokens, payload.ContextTokens
 		}
 	}
 	if ApplyRuntimeEvent(m.blocks, evt) != "" && !m.followTail {

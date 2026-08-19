@@ -337,6 +337,11 @@ type BudgetUpdatedPayload struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
 	ToolCalls    int   `json:"tool_calls"`
+	// CachedInputTokens / ContextTokens are the session-cumulative
+	// cache-hit numerator and denominator (provider-metered): the hit
+	// ratio is CachedInputTokens/ContextTokens when ContextTokens > 0.
+	CachedInputTokens int64 `json:"cached_input_tokens"`
+	ContextTokens     int64 `json:"context_tokens"`
 }
 
 // UsageUpdatedPayload is a lightweight usage snapshot.

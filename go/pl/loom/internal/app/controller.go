@@ -2627,10 +2627,12 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 		var payload domain.Usage
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindBudgetUpdated, runtimeevent.BudgetUpdatedPayload{
-				Turns:        payload.Turns,
-				InputTokens:  payload.InputTokens,
-				OutputTokens: payload.OutputTokens,
-				ToolCalls:    payload.ToolCalls,
+				Turns:             payload.Turns,
+				InputTokens:       payload.InputTokens,
+				OutputTokens:      payload.OutputTokens,
+				ToolCalls:         payload.ToolCalls,
+				CachedInputTokens: payload.CachedInputTokens,
+				ContextTokens:     payload.ContextTokens,
 			})
 		}
 	case domain.EventContextCompacted:

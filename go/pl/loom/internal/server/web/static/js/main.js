@@ -944,7 +944,6 @@ function applyRuntimeEvent(evt) {
       break
     case 'turn.finished':
       setSessionState('idle')
-      if (evt.payload?.usage) app.statusbar.setUsage(evt.payload.usage)
       refreshSessions()
       break
     case 'approval.requested':
@@ -964,7 +963,8 @@ function applyRuntimeEvent(evt) {
     case 'runtime.fatal':
       setSessionState('idle')
       break
-    case 'usage.updated':
+    case 'budget.updated':
+      // 会话累计口径（usage.updated 是单次调用口径，不驱动状态栏）
       app.statusbar.setUsage(evt.payload)
       break
     case 'context.usage':

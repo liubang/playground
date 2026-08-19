@@ -884,6 +884,16 @@ func TestFormatUsage(t *testing.T) {
 			usage: domain.Usage{InputTokens: 2_500_000, OutputTokens: 999},
 			want:  "turns:0 in:2.5M out:999 tools:0",
 		},
+		{
+			name:  "cache hit ratio once metered",
+			usage: domain.Usage{Turns: 2, InputTokens: 32369, OutputTokens: 54, CachedInputTokens: 16128, ContextTokens: 32369},
+			want:  "turns:2 in:32k out:54 tools:0 cache:50%",
+		},
+		{
+			name:  "cache ratio clamped for pre-tracking sessions",
+			usage: domain.Usage{InputTokens: 1000, CachedInputTokens: 52_000, ContextTokens: 16_000},
+			want:  "turns:0 in:1.0k out:0 tools:0 cache:100%",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -40,13 +40,14 @@
       {
         "id": "{{id:8}}",
         "payload": {
-          "CachedInputTokens": 0,
-          "CostUSD": 0,
-          "InputTokens": 0,
-          "OutputTokens": 0,
-          "ToolCalls": 0,
-          "Turns": 1,
-          "WallTime": 0
+          "cached_input_tokens": 0,
+          "context_tokens": 0,
+          "cost_usd": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "tool_calls": 0,
+          "turns": 1,
+          "wall_time_ns": 0
         },
         "sequence": 3,
         "session_id": "{{id:1}}",
@@ -2388,13 +2389,14 @@
       {
         "id": "{{id:13}}",
         "payload": {
-          "CachedInputTokens": 14976,
-          "CostUSD": 0,
-          "InputTokens": 15152,
-          "OutputTokens": 16,
-          "ToolCalls": 0,
-          "Turns": 1,
-          "WallTime": 0
+          "cached_input_tokens": 14976,
+          "context_tokens": 15152,
+          "cost_usd": 0,
+          "input_tokens": 15152,
+          "output_tokens": 16,
+          "tool_calls": 0,
+          "turns": 1,
+          "wall_time_ns": 0
         },
         "sequence": 7,
         "session_id": "{{id:1}}",
