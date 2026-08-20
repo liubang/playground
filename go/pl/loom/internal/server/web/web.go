@@ -15,11 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/08/05
 
-// Package web serves the embedded SPA (docs/WEB_DESIGN.md §7.1): static
-// assets live in the loom binary via embed.FS, so `loom serve` is the only
+// Package web serves the embedded SPA: assets are built by the Vite+React
+// frontend in internal/server/webui (pnpm build → dist/, committed) and
+// live in the loom binary via embed.FS, so `loom serve` is the only
 // distribution artifact. Caching: index.html is no-store; asset bytes are
 // content-hashed into strong ETags, so revalidation returns 304 after
-// upgrades — no filename stamping build step required.
+// upgrades（Vite 输出文件名已带内容散列，ETag 双保险）。
 package web
 
 import (
@@ -33,7 +34,7 @@ import (
 	"strings"
 )
 
-//go:embed static
+//go:embed dist
 var staticFS embed.FS
 
 type asset struct {
@@ -47,7 +48,7 @@ type asset struct {
 // startup is exact).
 func buildAssets() map[string]asset {
 	assets := map[string]asset{}
-	root, err := fs.Sub(staticFS, "static")
+	root, err := fs.Sub(staticFS, "dist")
 	if err != nil {
 		panic(err) // embed layout is compile-time fixed
 	}

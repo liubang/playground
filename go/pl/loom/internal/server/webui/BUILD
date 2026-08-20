@@ -12,23 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/08/05
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
-load("@rules_go//go:def.bzl", "go_library", "go_test")
+package(default_visibility = ["//go/pl/loom:__subpackages__"])
 
-go_library(
-    name = "web",
-    srcs = ["web.go"],
-    # The embedded SPA: Vite+React app in internal/server/webui, built with
-    # `pnpm build` (outDir=dist, committed; JS build stays outside Bazel).
-    embedsrcs = glob(["dist/**"]),
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/server/web",
-    visibility = ["//go/pl/loom:__subpackages__"],
-)
-
-go_test(
-    name = "web_test",
-    srcs = ["web_test.go"],
-    embed = [":web"],
+# 前端构建桥（非 hermetic）：`bazel run //go/pl/loom/internal/server/webui:build`
+# 等价于 pnpm build，产物写入 web/dist（提交入库）。JS 构建刻意留在 Bazel
+# 依赖图外——web/dist 由 internal/server/web 以 embedsrcs 直接消费，改了
+# 前端代码后先跑本目标再 bazel build 即可。
+sh_binary(
+    name = "build",
+    srcs = ["build.sh"],
 )

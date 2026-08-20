@@ -109,9 +109,10 @@ func TestShareLinkLifecycle(t *testing.T) {
 		t.Fatalf("shared view messages = %d, want the user+assistant pair", len(messages))
 	}
 
-	// The share page itself is a public static asset.
+	// The share page itself is a public static asset (Vite 产物，入口脚本为
+	// /assets/share-<hash>.js)。
 	status, body = getPublic(t, ts.URL+"/share/"+token)
-	if status != http.StatusOK || !strings.Contains(string(body), "share.js") {
+	if status != http.StatusOK || !strings.Contains(string(body), "/assets/share-") {
 		t.Fatalf("GET share page = (%d, %.80s), want 200 HTML", status, body)
 	}
 

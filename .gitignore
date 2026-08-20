@@ -65,6 +65,11 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# loom WebUI：Vite 构建产物提交入库（embed.FS 内嵌进二进制，见
+# go/pl/loom/internal/server/web/BUILD），不受上面 Python 段的 dist/ 忽略
+!go/pl/loom/internal/server/web/dist/
+# loom WebUI：前端依赖不入库
+go/pl/loom/internal/server/webui/node_modules/
 
 # ==============================================================================
 # Python / Manim

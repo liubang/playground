@@ -1,0 +1,15 @@
+<!doctype html>
+<!-- Loom 分享页：公开只读会话视图。链接中的 token 即凭证（无需 serve
+     token）；数据来自 /v1/shared/{token}，每次打开拉取最新内容。 -->
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>loom · shared session</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="share-body">
+    <div id="root"></div>
+    <script type="module" src="/src/share.tsx"></script>
+  </body>
+</html>
