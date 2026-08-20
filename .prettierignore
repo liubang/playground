@@ -1,8 +1,11 @@
 # Bazel 输出目录（软链）
 bazel-*
 
-# 第三方 vendor 静态资源，不纳入格式化
-go/pl/loom/internal/server/web/static/vendor/
+# WebUI 构建产物（Vite 输出的压缩包，提交入库供 embed.FS 内嵌）
+go/pl/loom/internal/server/web/dist/
+
+# pnpm 锁文件由 pnpm install 生成并重写
+pnpm-lock.yaml
 
 # flux 是自定义查询语言（.gitattributes 标记为 JavaScript 仅为 GitHub 高亮），
 # prettier 无法解析

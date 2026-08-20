@@ -5,8 +5,10 @@
 *.flux rules-lint-ignored=true
 # 生成的 protobuf 代码不做格式化
 *.pb.go linguist-generated=true
-# 第三方 vendor 静态资源
-go/pl/loom/internal/server/web/static/vendor/** linguist-generated=true
+# WebUI 构建产物（Vite 输出的压缩包，提交入库供 embed.FS 内嵌，生成文件不重排）
+go/pl/loom/internal/server/web/dist/** linguist-generated=true
+# pnpm 锁文件由 pnpm install 生成并重写（同 maven_install.json 先例）
+pnpm-lock.yaml linguist-generated=true
 # 官网落地页是手工紧凑排版（单行 CSS 声明/单行 JS），与 prettier 风格
 # 冲突；prettier 重排会爆炸成 2 倍行数，故排除（同 *.flux 先例）
 go/pl/loom/site/index.html rules-lint-ignored=true

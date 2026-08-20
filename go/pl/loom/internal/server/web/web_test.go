@@ -58,51 +58,58 @@ func TestStaticServing(t *testing.T) {
 			t.Fatalf("Cache-Control = %q, want no-store", cc)
 		}
 		body, _ := io.ReadAll(resp.Body)
-		if !strings.Contains(string(body), `id="gate"`) {
-			t.Fatalf("index missing the token gate")
+		if !strings.Contains(string(body), `id="root"`) {
+			t.Fatalf("index missing the SPA mount point")
 		}
 	})
 
 	t.Run("assets carry ETag and revalidate", func(t *testing.T) {
-		resp := get("/app.css")
+		// favicon.svg 是构建产物中的稳定命名资产（JS/CSS 均带内容散列）。
+		resp := get("/favicon.svg")
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d", resp.StatusCode)
-		}
-		if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
-			t.Fatalf("Content-Type = %q", ct)
 		}
 		etag := resp.Header.Get("ETag")
 		if etag == "" {
 			t.Fatalf("missing ETag")
 		}
 
-		resp2 := get("/app.css", "If-None-Match", etag)
+		resp2 := get("/favicon.svg", "If-None-Match", etag)
 		resp2.Body.Close()
 		if resp2.StatusCode != http.StatusNotModified {
 			t.Fatalf("revalidation status = %d, want 304", resp2.StatusCode)
 		}
 		if len(body) == 0 {
-			t.Fatalf("empty app.css")
+			t.Fatalf("empty favicon.svg")
 		}
 	})
 
-	t.Run("js modules are javascript", func(t *testing.T) {
-		resp := get("/js/main.js")
+	t.Run("built js bundles are javascript", func(t *testing.T) {
+		// Vite 输出文件名带内容散列，从嵌入资产表里发现一个 .js 路径。
+		var jsPath string
+		for p := range buildAssets() {
+			if strings.HasSuffix(p, ".js") {
+				jsPath = p
+				break
+			}
+		}
+		if jsPath == "" {
+			t.Fatalf("no .js asset embedded (webui dist not built?)")
+		}
+		resp := get(jsPath)
 		resp.Body.Close()
 		if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "javascript") {
 			t.Fatalf("Content-Type = %q", ct)
 		}
 	})
 
-	t.Run("vendored deps embedded", func(t *testing.T) {
-		for _, p := range []string{"/vendor/marked.esm.js", "/vendor/purify.es.mjs"} {
-			resp := get(p)
-			resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("GET %s status = %d", p, resp.StatusCode)
-			}
+	t.Run("share page embedded", func(t *testing.T) {
+		resp := get("/share.html")
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET /share.html status = %d", resp.StatusCode)
 		}
 	})
 

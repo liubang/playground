@@ -671,8 +671,8 @@ func TestWebStaticAndSecurityHeaders(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET / status = %d", resp.StatusCode)
 	}
-	if !strings.Contains(string(body), `id="gate"`) {
-		t.Fatalf("index missing the token gate")
+	if !strings.Contains(string(body), `id="root"`) {
+		t.Fatalf("index missing the SPA mount point")
 	}
 	for header, want := range map[string]string{
 		"Content-Security-Policy": "default-src 'self'",
