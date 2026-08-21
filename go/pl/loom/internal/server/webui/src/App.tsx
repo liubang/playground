@@ -64,6 +64,12 @@ export function App({ controller }: { controller: AppController }) {
   return (
     <BlocksIOContext.Provider value={blocksIO}>
       <div id="app" className={'shell' + (sidebarCollapsed ? ' sidebar-collapsed' : '')}>
+        {/* 窄屏抽屉遮罩：仅断点内显示，点击收起抽屉 */}
+        <div
+          className="sidebar-backdrop"
+          aria-hidden="true"
+          onClick={() => controller.dismissSidebarDrawer()}
+        />
         <div className="app-body">
           <aside id="sidebar" className="sidebar">
             <Sidebar controller={controller} revealWs={revealWs} />

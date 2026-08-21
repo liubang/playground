@@ -345,6 +345,7 @@ button {
 /* ============================== App 壳 ============================== */
 .shell {
   height: 100vh;
+  height: 100dvh; /* 移动端动态视口高，随浏览器工具栏伸缩 */
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto auto;
   background: var(--bg0);
@@ -358,6 +359,10 @@ button {
   grid-template-columns: minmax(0, 1fr);
 }
 .shell.sidebar-collapsed .sidebar {
+  display: none;
+}
+/* 窄屏抽屉遮罩：桌面端隐藏且不占 grid 行（.shell 直接子节点） */
+.sidebar-backdrop {
   display: none;
 }
 
@@ -3114,7 +3119,7 @@ select.set-input {
   opacity: 0.45;
 }
 
-/* 窄屏：侧栏改为抽屉式 overlay（☰ 开关；选中会话后 main.js 自动收起） */
+/* 窄屏：侧栏改为抽屉式 overlay（☰ 开关；选中会话后自动收起） */
 @media (max-width: 767px) {
   .app-body {
     grid-template-columns: minmax(0, 1fr);
@@ -3135,10 +3140,43 @@ select.set-input {
   .shell:not(.sidebar-collapsed) .sidebar {
     transform: none;
   }
+  /* 抽屉遮罩：窄屏抽屉展开时压暗内容、点击收起 */
+  .shell:not(.sidebar-collapsed) .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-drawer) - 1);
+    background: rgba(0, 0, 0, 0.45);
+  }
   .transcript-inner,
   .composer-box,
   .plan-panel {
     max-width: none;
+  }
+
+  /* 头部：收紧间距，隐藏工作区面包屑（侧栏里可看） */
+  .app-header {
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .app-header .hdr-ws {
+    display: none;
+  }
+
+  /* 触摸目标：图标按钮从 ~28px 放大到接近 44pt */
+  .icon-btn {
+    padding: 8px 10px;
+  }
+
+  /* composer / 状态栏：收紧边距 + 底部安全区（刘海屏 home 条） */
+  .composer {
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  }
+  .statusbar {
+    padding: 0 10px;
+    padding-bottom: env(safe-area-inset-bottom);
+    gap: 8px;
+    overflow-x: auto;
   }
 
   /* 分享页窄屏适配：收紧边距、气泡放宽、隐藏次要元信息，
@@ -3283,6 +3321,9 @@ scrolls only via the scrollbar; without it tall lanes would clip. */
   overflow-x: hidden;
   overflow-y: auto;
   position: relative;
+  /* Touch: vertical drags stay native scrolls, horizontal drags reach the
+brush/pinch pointer handlers. */
+  touch-action: pan-y;
   /* Default drag is a range-select zoom (brush); Shift-drag pans. */
   cursor: crosshair;
 }
@@ -3776,6 +3817,32 @@ scrolls only via the scrollbar; without it tall lanes would clip. */
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* 窄屏迷宫适配：必须位于迷宫基础规则之后（同优先级，后者胜出），
+   所以单独一个断点块放在本节末尾 */
+@media (max-width: 767px) {
+  /* 详情面板从 340px 侧栏改为全屏 overlay */
+  .maze-detail {
+    position: fixed;
+    inset: 0;
+    width: auto;
+    z-index: var(--z-modal);
+    border-left: none;
+  }
+  .maze-toolbar {
+    gap: 8px;
+    padding: 6px 8px;
+  }
+  .maze-toolbar-right {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .maze-search {
+    flex: 1 1 110px;
+    width: auto;
+    min-width: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
