@@ -17,6 +17,7 @@ const TOOL_STATUS: Record<string, ['check' | 'xmark' | 'ban', string]> = {
 }
 
 export interface ToolBlockProps {
+  callId?: string // anchor: the maze's chat jump looks up the DOM row by it (data-call-id)
   toolName: string
   target?: string
   diff?: string
@@ -27,6 +28,7 @@ export interface ToolBlockProps {
 }
 
 export const ToolBlock = memo(function ToolBlock({
+  callId,
   toolName,
   target,
   diff,
@@ -63,7 +65,7 @@ export const ToolBlock = memo(function ToolBlock({
   }
 
   return (
-    <div className="block block-tool">
+    <div className="block block-tool" data-call-id={callId || undefined}>
       <div className="tool-head">
         <span className="tool-name mono">{toolName || 'tool'}</span>
         {target && (

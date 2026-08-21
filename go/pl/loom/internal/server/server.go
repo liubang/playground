@@ -248,6 +248,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 		// route exists here at all.
 		mux.HandleFunc("GET /v1/shared/{token}", s.handleSharedView)
 		mux.HandleFunc("GET /v1/shared/{token}/artifacts/{id}", s.handleSharedArtifact)
+		mux.HandleFunc("GET /v1/shared/{token}/maze", s.handleSharedMaze)
 		mux.Handle("GET /share/{token}", web.SharePageHandler())
 		// Static assets for the share page (the catch-all also answers /
 		// with the SPA gate page — a static file, harmless without any
@@ -283,6 +284,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /v1/sessions/{id}", s.handleDeleteSession)
 	mux.HandleFunc("GET /v1/sessions/{id}/transcript", s.handleTranscript)
 	mux.HandleFunc("GET /v1/sessions/{id}/snapshot", s.handleSnapshot)
+	mux.HandleFunc("GET /v1/sessions/{id}/maze", s.handleSessionMaze)
 	mux.HandleFunc("POST /v1/sessions/{id}/prompts", s.handleSubmitPrompt)
 	mux.HandleFunc("POST /v1/sessions/{id}/cancel", s.handleCancelTurn)
 	mux.HandleFunc("POST /v1/sessions/{id}/feedback", s.handleSubmitFeedback)
@@ -300,6 +302,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /v1/sessions/{id}/share", s.handleRevokeShare)
 	mux.HandleFunc("GET /v1/shared/{token}", s.handleSharedView)
 	mux.HandleFunc("GET /v1/shared/{token}/artifacts/{id}", s.handleSharedArtifact)
+	mux.HandleFunc("GET /v1/shared/{token}/maze", s.handleSharedMaze)
 	if s.cfg.Share != nil {
 		mux.HandleFunc("GET /v1/share/endpoint", s.handleGetShareEndpoint)
 		mux.HandleFunc("POST /v1/share/endpoint", s.handleSetShareEndpoint)

@@ -82,7 +82,10 @@ type StreamAggregator struct {
 	// contextTokens is the provider-metered context-window footprint of
 	// the request (cache-inclusive); see ContextTokens().
 	contextTokens int64
-	responseEnded bool
+	// reasoningTokens is the provider-metered reasoning/thinking share of
+	// outputTokens (0 when the provider does not split it out).
+	reasoningTokens int64
+	responseEnded   bool
 }
 
 type streamResponse struct {
@@ -208,6 +211,7 @@ func (a *StreamAggregator) Apply(evt domain.ModelEvent) error {
 		a.outputTokens = evt.OutputTokens
 		a.cachedInputTokens = evt.CachedInputTokens
 		a.cacheCreationInputTokens = evt.CacheCreationInputTokens
+		a.reasoningTokens = evt.ReasoningTokens
 		// Providers that do not distinguish the window footprint from the
 		// billing input (OpenAI-style prompt_tokens is already
 		// cache-inclusive) leave ContextTokens unset; the metered input is
@@ -340,6 +344,11 @@ func (a *StreamAggregator) ContextTokens() int64 { return a.contextTokens }
 func (a *StreamAggregator) CacheCreationInputTokens() int64 {
 	return a.cacheCreationInputTokens
 }
+
+// ReasoningTokens reports the provider-metered reasoning/thinking share of
+// the completed call's output tokens (0 when the provider does not split
+// it out).
+func (a *StreamAggregator) ReasoningTokens() int64 { return a.reasoningTokens }
 
 // InterruptedMessage creates an interrupted message from partial text.
 func (a *StreamAggregator) InterruptedMessage() domain.Message {

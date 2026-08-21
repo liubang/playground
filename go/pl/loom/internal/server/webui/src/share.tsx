@@ -6,9 +6,10 @@ import { createRoot } from 'react-dom/client'
 import './app.css'
 import { TranscriptController } from './app/transcript'
 import { TranscriptView } from './components/TranscriptView'
+import { MazeView } from './components/maze/MazeView'
 import { BlocksIOContext, type ArtifactEntry } from './components/blocks/context'
 import { Icon } from './lib/icons'
-import type { SharedView } from './protocol/types'
+import type { MazeData, SharedView } from './protocol/types'
 
 const THEME_KEY = 'loom_theme'
 
@@ -48,10 +49,26 @@ function ShareApp() {
   const [view, setView] = useState<SharedView | null>(null)
   const [error, setError] = useState('')
   const [showTop, setShowTop] = useState(false)
+  // Trace view: shared sessions can show the execution maze too
+  // (read-only, no chat jump). The view rides the URL hash (#maze) so a
+  // link copied while viewing the trace opens on the trace directly.
+  const [showMaze, setShowMaze] = useState(() => location.hash === '#maze')
+  const [maze, setMaze] = useState<MazeData | null>(null)
+  const [mazeError, setMazeError] = useState('')
   const scrollerRef = useRef<{ el: HTMLDivElement | null }>({ el: null })
 
   // token 取自路径最后一段；格式非法（非 32 位 hex）直接算无效链接。
   const token = location.pathname.split('/').filter(Boolean).pop() || ''
+
+  // Toggle and reflect the view into the hash (replaceState: no history
+  // spam; clearing restores the bare share URL).
+  const toggleMaze = () => {
+    setShowMaze((v) => {
+      const next = !v
+      history.replaceState(null, '', next ? '#maze' : location.pathname)
+      return next
+    })
+  }
 
   // 只读渲染：io 只提供 artifact 解析；无 sendFeedback → 不渲染投票按钮；
   // state 固定 "closed"，applySnapshot 会为最后一轮补齐操作行（复制/时间）。
@@ -97,6 +114,20 @@ function ShareApp() {
     })()
   }, [token, transcript])
 
+  // Maze data loads lazily on first switch to the trace tab.
+  useEffect(() => {
+    if (!showMaze || maze !== null || mazeError) return
+    void (async () => {
+      try {
+        const res = await fetch(`/v1/shared/${encodeURIComponent(token)}/maze`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setMaze((await res.json()) as MazeData)
+      } catch (e) {
+        setMazeError((e as Error).message)
+      }
+    })()
+  }, [showMaze, maze, mazeError, token])
+
   return (
     <>
       <header className="share-header">
@@ -104,25 +135,49 @@ function ShareApp() {
         <span id="share-title" className="share-title" title={view?.session_id || ''}>
           {error ? '' : view?.title || ''}
         </span>
+        <button
+          id="share-maze-toggle"
+          className={'maze-btn' + (showMaze ? ' is-on' : '')}
+          type="button"
+          title={showMaze ? '返回对话记录' : '查看执行轨迹迷宫'}
+          hidden={!!error}
+          onClick={toggleMaze}
+        >
+          <Icon name="layer-group" /> {showMaze ? '对话' : '轨迹'}
+        </button>
         <span className="spacer" />
         <span id="share-meta" className="share-meta">
           {!error && view?.updated_at ? `更新于 ${fmtTime(view.updated_at)}` : ''}
         </span>
       </header>
 
-      <BlocksIOContext.Provider value={blocksIO}>
-        <TranscriptView
-          controller={transcript}
-          io={{}}
-          className="share-transcript"
-          scrollerOut={scrollerRef.current}
-        >
-          <div id="share-error" className="share-error" hidden={!error}>
-            <div className="brand">◆ loom</div>
-            <p id="share-error-text">{error || '链接无效或已撤销。'}</p>
-          </div>
-        </TranscriptView>
-      </BlocksIOContext.Provider>
+      {showMaze ? (
+        <div className="maze-page">
+          {mazeError ? (
+            <div className="maze-error">轨迹加载失败：{mazeError}</div>
+          ) : !maze ? (
+            <div className="maze-empty">正在构建轨迹…</div>
+          ) : maze.lanes.length === 0 || maze.lanes[0].stats.steps === 0 ? (
+            <div className="maze-empty">该会话暂无执行轨迹</div>
+          ) : (
+            <MazeView data={maze} />
+          )}
+        </div>
+      ) : (
+        <BlocksIOContext.Provider value={blocksIO}>
+          <TranscriptView
+            controller={transcript}
+            io={{}}
+            className="share-transcript"
+            scrollerOut={scrollerRef.current}
+          >
+            <div id="share-error" className="share-error" hidden={!error}>
+              <div className="brand">◆ loom</div>
+              <p id="share-error-text">{error || '链接无效或已撤销。'}</p>
+            </div>
+          </TranscriptView>
+        </BlocksIOContext.Provider>
+      )}
 
       <button
         id="share-top"

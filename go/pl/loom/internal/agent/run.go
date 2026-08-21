@@ -600,6 +600,19 @@ func (r *Run) AddBudgetNotice(payload domain.BudgetNoticePayload) domain.Event {
 
 // AddAssistantMessage appends an assistant message.
 func (r *Run) AddAssistantMessage(msg domain.Message) domain.Event {
+	return r.addAssistantMessage(msg, nil)
+}
+
+// AddAssistantMessageWithUsage appends an assistant message and records
+// the per-request metered usage on the persisted event (see
+// domain.ResponseCompletedPayload). Nil usage keeps the pre-existing
+// message-only payload shape (interrupted partial messages, whose usage
+// never arrived).
+func (r *Run) AddAssistantMessageWithUsage(msg domain.Message, usage *domain.RequestUsage) domain.Event {
+	return r.addAssistantMessage(msg, usage)
+}
+
+func (r *Run) addAssistantMessage(msg domain.Message, usage *domain.RequestUsage) domain.Event {
 	r.normalizeMessage(&msg)
 	// Stamp the run/trace identity so both frontends (per-turn feedback
 	// targeting) and the feedback endpoint (run_id → trace_id lookup) can
@@ -614,7 +627,10 @@ func (r *Run) AddAssistantMessage(msg domain.Message) domain.Event {
 	}
 	r.Messages = append(r.Messages, msg)
 	r.Version++
-	evt := r.newEvent(domain.EventModelResponseCompleted, domain.MessageEventPayload{Message: msg})
+	evt := r.newEvent(domain.EventModelResponseCompleted, domain.ResponseCompletedPayload{
+		MessageEventPayload: domain.MessageEventPayload{Message: msg},
+		Usage:               usage,
+	})
 	r.pendingEvents = append(r.pendingEvents, evt)
 	return evt
 }
@@ -841,6 +857,12 @@ type modelRequestAuditPayload struct {
 	ManifestID   string         `json:"manifest_id"`
 	ManifestHash string         `json:"manifest_hash"`
 	PromptHash   string         `json:"prompt_hash"`
+	// Turn is the 1-based prompt turn the request belongs to (the value of
+	// Usage.Turns at issue time). Persisted explicitly so event-log
+	// consumers (trace visualization) do not have to re-derive turn
+	// boundaries from user.message_added positions, which is ambiguous
+	// under mid-run steering.
+	Turn int `json:"turn,omitempty"`
 	// HeaderHash anchors this request to its model.request_header event
 	// (docs/SURFACE_DESIGN.md §4.8): the full header text lives there.
 	HeaderHash string `json:"header_hash,omitempty"`
@@ -1499,7 +1521,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	l.Run.appendEvent(domain.EventModelRequestStarted, modelRequestAuditPayload{
 		RequestID: req.ID, ModelName: modelName, ManifestID: manifest.ID,
 		ManifestHash: manifest.Hash, PromptHash: manifest.PromptHash,
-		HeaderHash: headerHash,
+		Turn: l.Run.Usage.Turns, HeaderHash: headerHash,
 	})
 	if err := l.flushEvents(ctx); err != nil {
 		l.terminate(ctx, domain.OutcomeFailed)
@@ -1656,10 +1678,16 @@ func (l *Loop) callModel(ctx context.Context) error {
 	}
 	response.Metadata["request_id"] = req.ID.String()
 	response.Metadata["stop_reason"] = string(stop)
-	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens(), agg.ContextTokens())
+	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens(), agg.ContextTokens(), agg.ReasoningTokens())
 	l.lastCallContext = agg.ContextTokens()
 	l.lastCallBase = len(l.Run.Messages)
-	l.Run.AddAssistantMessage(response)
+	l.Run.AddAssistantMessageWithUsage(response, &domain.RequestUsage{
+		InputTokens:       inputTokens,
+		OutputTokens:      outputTokens,
+		CachedInputTokens: agg.CachedInputTokens(),
+		ContextTokens:     agg.ContextTokens(),
+		ReasoningTokens:   agg.ReasoningTokens(),
+	})
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 	// A completed call proves the request fit the window.
 	l.Compaction.noteFit(true)
@@ -2634,7 +2662,7 @@ func (l *Loop) summarizeForCompaction(ctx context.Context, base []domain.Message
 	if err != nil {
 		return "", err
 	}
-	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens(), agg.ContextTokens())
+	l.accountUsage(inputTokens, outputTokens, agg.CachedInputTokens(), agg.ContextTokens(), agg.ReasoningTokens())
 	l.recordGeneration(ctx, trace.GenerationRecord{
 		RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
 		Input: messages, Output: response, StopReason: "compaction",
@@ -2653,11 +2681,12 @@ func (l *Loop) summarizeForCompaction(ctx context.Context, base []domain.Message
 // cumulative token counts, the estimated cost (when rates are configured —
 // without it the cost_usd limit can never fire), the goal meter, and the
 // wall-time window.
-func (l *Loop) accountUsage(inputTokens, outputTokens, cachedInputTokens, contextTokens int64) {
+func (l *Loop) accountUsage(inputTokens, outputTokens, cachedInputTokens, contextTokens, reasoningTokens int64) {
 	l.Run.Usage.InputTokens += inputTokens
 	l.Run.Usage.OutputTokens += outputTokens
 	l.Run.Usage.CachedInputTokens += cachedInputTokens
 	l.Run.Usage.ContextTokens += contextTokens
+	l.Run.Usage.ReasoningTokens += reasoningTokens
 	if l.CostInputUSDPerMTok > 0 || l.CostOutputUSDPerMTok > 0 {
 		l.Run.Usage.CostUSD = float64(l.Run.Usage.InputTokens)*l.CostInputUSDPerMTok/1e6 +
 			float64(l.Run.Usage.OutputTokens)*l.CostOutputUSDPerMTok/1e6
@@ -2686,8 +2715,9 @@ func (l *Loop) foldExternalUsage(result domain.ToolResult) {
 		return
 	}
 	// Externally metered input (a sub-agent's) is a full footprint: the
-	// delegate contract reports complete input sizes, not cache splits.
-	l.accountUsage(inputTokens, outputTokens, 0, inputTokens)
+	// delegate contract reports complete input sizes, not cache splits;
+	// the reasoning share is not split out either (0).
+	l.accountUsage(inputTokens, outputTokens, 0, inputTokens, 0)
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 }
 

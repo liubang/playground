@@ -55,6 +55,7 @@ const BlockView = memo(
       case 'tool':
         return (
           <ToolBlock
+            callId={block.callId}
             toolName={block.toolName}
             target={block.target}
             diff={block.diff}

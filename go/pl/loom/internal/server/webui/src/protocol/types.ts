@@ -255,3 +255,73 @@ export interface SetReasoningResult {
   Overridden?: boolean
   overridden?: boolean
 }
+
+// --- Execution-trace maze (GET /v1/sessions/{id}/maze and
+// /v1/shared/{token}/maze; mirrors the Go Maze* types in
+// internal/app/maze.go) ---
+
+export type MazeVerdict = 'ok' | 'answer' | 'error' | 'deadend' | 'retry' | 'pending'
+
+export interface MazeTool {
+  name: string
+  args: string // bar label
+  args_full?: string // detail panel
+  s: number // start (seconds since the lane's first user message)
+  e: number | null // null = still executing
+  dur: number
+  res: string // hover excerpt
+  res_full?: string // detail panel
+  v: MazeVerdict
+  why?: string
+  call_id: string
+  status?: string
+  child_id?: string // sub-session spawned by delegate_task
+}
+
+export interface MazeNode {
+  step: number
+  turn: number
+  s: number
+  e: number
+  tools: MazeTool[]
+  rz: number // reasoning block count
+  rz_txt?: string // reasoning excerpt
+  in_tok?: number | null
+  rz_tok?: number | null
+  out_tok?: number | null
+  v: MazeVerdict
+  why?: string
+  sub?: boolean // aggregated sub-agent detour node
+  label?: string
+  attach?: number // main-path step this detour hangs off
+  msg_seq?: number // chat-jump anchor
+  retries?: number // model-request retry waits
+  live?: boolean // in-flight step (growing)
+}
+
+export interface MazeStats {
+  steps: number
+  tools: number
+  rz: number
+  in_tok: number
+  rz_tok: number
+  out_tok: number
+  t: number
+  main: number
+  detours: number
+}
+
+export interface MazeLane {
+  key: string
+  session_id: string
+  title?: string
+  model?: string
+  main: MazeNode[]
+  detours: MazeNode[]
+  stats: MazeStats
+}
+
+export interface MazeData {
+  tmax: number
+  lanes: MazeLane[]
+}

@@ -6,6 +6,7 @@ import type {
   ConfigEnvelope,
   DirBrowseResult,
   EnvironmentReport,
+  MazeData,
   McpServerStatus,
   ModelCatalog,
   PutConfigResult,
@@ -148,6 +149,8 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
       ),
     resumeSession: (id: string) => req('POST', '/v1/sessions', { resume: id }),
     snapshot: (id: string) => req<Snapshot>('GET', `/v1/sessions/${id}/snapshot`),
+    // Execution-trace maze (shared by the trace tab and the compare view)
+    maze: (id: string) => req<MazeData>('GET', `/v1/sessions/${id}/maze`),
     transcript: (id: string, after = 0, limit = 200) =>
       req('GET', `/v1/sessions/${id}/transcript?after=${after}&limit=${limit}`),
     submitPrompt: (

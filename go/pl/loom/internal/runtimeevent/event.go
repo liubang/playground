@@ -206,7 +206,10 @@ type ModelResponseCompletedPayload struct {
 	StopReason   domain.StopReason `json:"stop_reason"`
 	InputTokens  int64             `json:"input_tokens"`
 	OutputTokens int64             `json:"output_tokens"`
-	HasToolCalls bool              `json:"has_tool_calls"`
+	// ReasoningTokens is the provider-metered reasoning/thinking share of
+	// OutputTokens (0 when the provider does not split it out).
+	ReasoningTokens int64 `json:"reasoning_tokens,omitempty"`
+	HasToolCalls    bool  `json:"has_tool_calls"`
 	// Text is the canonical visible text of the persisted assistant message.
 	// Frontends use it to correct drafts assembled from lossy deltas.
 	Text string `json:"text,omitempty"`

@@ -45,6 +45,7 @@
           "cost_usd": 0,
           "input_tokens": 0,
           "output_tokens": 0,
+          "reasoning_tokens": 0,
           "tool_calls": 0,
           "turns": 1,
           "wall_time_ns": 0
@@ -2343,7 +2344,8 @@
           "manifest_id": "{{id:11}}",
           "model_name": "glm-5.3",
           "prompt_hash": "{{hash:14}}",
-          "request_id": "{{id:4}}"
+          "request_id": "{{id:4}}",
+          "turn": 1
         },
         "sequence": 5,
         "session_id": "{{id:1}}",
@@ -2379,6 +2381,12 @@
             "role": "assistant",
             "sequence": 2,
             "status": "final"
+          },
+          "usage": {
+            "cached_input_tokens": 14976,
+            "context_tokens": 15152,
+            "input_tokens": 15152,
+            "output_tokens": 16
           }
         },
         "sequence": 6,
@@ -2394,6 +2402,7 @@
           "cost_usd": 0,
           "input_tokens": 15152,
           "output_tokens": 16,
+          "reasoning_tokens": 0,
           "tool_calls": 0,
           "turns": 1,
           "wall_time_ns": 0
