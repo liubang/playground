@@ -15,7 +15,9 @@
 //     ticks keep real wall-clock seconds;
 //   - drag selects a range to zoom into (Grafana-style brush), Shift-drag
 //     or a trackpad horizontal swipe pans, wheel zooms around the cursor,
-//     double-click/button resets.
+//     double-click/button resets. Touch: one-finger horizontal drag
+//     brushes (vertical drags stay native scrolls via touch-action),
+//     two-finger pinch zooms and pans.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MazeData, MazeLane, MazeNode, MazeTool, MazeVerdict } from '../../protocol/types'
@@ -31,6 +33,10 @@ const DETOUR_H = 30 // detour row height
 const AXIS_H = 26 // bottom tick strip
 const PAD_X = 12
 const MIN_BAR_W = 5
+
+// Touch devices have no hover; hover cards stick on tap there, so node
+// hover handlers check this first (tap still opens the detail panel).
+const CAN_HOVER = typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches
 
 const VERDICT_META: Record<MazeVerdict, { cls: string; label: string }> = {
   ok: { cls: 'v-ok', label: '成功' },
@@ -281,11 +287,33 @@ export const MazeView = memo(function MazeView({
     return () => el.removeEventListener('wheel', handler)
   }, [])
 
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button !== 0) return
+  // Pointer-based navigation: one handler set covers mouse and touch.
+  // Pointer capture on the canvas keeps the gesture ours even when the
+  // pointer leaves the element mid-drag.
+  const pointersRef = useRef(new Map<number, number>()) // pointerId → clientX
+  const pinchRef = useRef<{ d: number; mid: number } | null>(null)
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return
       suppressClickRef.current = false
-      if (e.shiftKey) {
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } catch {
+        // Unknown pointer id (synthetic events in tests): capture is a
+        // best-effort robustness aid, never worth breaking the gesture.
+      }
+      pointersRef.current.set(e.pointerId, e.clientX)
+      if (pointersRef.current.size === 2) {
+        // Second finger down: abandon any brush/pan, switch to pinch.
+        dragRef.current = null
+        setBrush(null)
+        setPanning(false)
+        const [a, b] = [...pointersRef.current.values()]
+        pinchRef.current = { d: Math.abs(b - a), mid: (a + b) / 2 }
+        return
+      }
+      if (e.pointerType === 'mouse' && e.shiftKey) {
         dragRef.current = { mode: 'pan', x: e.clientX, win: [dStart, dEnd] }
         setPanning(true)
         return
@@ -300,8 +328,38 @@ export const MazeView = memo(function MazeView({
     },
     [dStart, dEnd],
   )
-  const onMouseMove = useCallback(
-    (e: React.MouseEvent) => {
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!pointersRef.current.has(e.pointerId)) return
+      pointersRef.current.set(e.pointerId, e.clientX)
+      // Pinch: iterative zoom (distance ratio) + pan (midpoint travel)
+      // around the midpoint's domain point.
+      if (pinchRef.current && pointersRef.current.size >= 2) {
+        const rect = wrapRef.current?.getBoundingClientRect()
+        if (!rect) return
+        const [a, b] = [...pointersRef.current.values()]
+        const d = Math.abs(b - a)
+        if (d < 1) return
+        const mid = (a + b) / 2
+        const prev = pinchRef.current
+        pinchRef.current = { d, mid }
+        const w = Math.max(rect.width - PAD_X * 2, 1)
+        const span = dEnd - dStart
+        let ns = dStart - ((mid - prev.mid) / w) * span
+        let ne = dEnd - ((mid - prev.mid) / w) * span
+        const scale = prev.d / d
+        const frac = Math.min(Math.max((mid - rect.left - PAD_X) / w, 0), 1)
+        const center = ns + frac * (ne - ns)
+        ns = center - (center - ns) * scale
+        ne = center + (ne - center) * scale
+        if (ne - ns < 0.5) return
+        if (ne - ns >= total) {
+          setWin(null)
+          return
+        }
+        setWin([Math.max(0, ns), Math.min(total, ne)])
+        return
+      }
       const drag = dragRef.current
       if (!drag) return
       if (drag.mode === 'pan') {
@@ -331,9 +389,16 @@ export const MazeView = memo(function MazeView({
       }
       setBrush({ x0: drag.x0, x1 })
     },
-    [total, canvasW],
+    [dStart, dEnd, total, canvasW],
   )
-  const endDrag = useCallback((e: React.MouseEvent) => {
+  const endDrag = useCallback((e: React.PointerEvent) => {
+    pointersRef.current.delete(e.pointerId)
+    if (pinchRef.current) {
+      // A lifted finger ends the pinch; the remaining finger stays inert
+      // until it lifts too (its drag was cancelled when the pinch began).
+      if (pointersRef.current.size < 2) pinchRef.current = null
+      return
+    }
     const drag = dragRef.current
     dragRef.current = null
     setPanning(false)
@@ -456,19 +521,17 @@ export const MazeView = memo(function MazeView({
         <div
           ref={wrapRef}
           className={'maze-canvas' + (panning ? ' is-panning' : '')}
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={endDrag}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
           onClickCapture={(e) => {
             if (!suppressClickRef.current) return
             suppressClickRef.current = false
             e.stopPropagation()
             e.preventDefault()
           }}
-          onMouseLeave={(e) => {
-            endDrag(e)
-            setHover(null)
-          }}
+          onMouseLeave={() => setHover(null)}
           onDoubleClick={(e) => {
             if (e.target === e.currentTarget || (e.target as Element).tagName === 'svg')
               setWin(null)
@@ -689,6 +752,7 @@ const MainNode = memo(function MainNode({
     <g
       className={`maze-node main ${meta.cls}${n.live ? ' is-live' : ''}${dim ? ' is-dim' : ''}${selected ? ' is-selected' : ''}`}
       onMouseEnter={(e) => {
+        if (!CAN_HOVER) return // touch: tap opens the detail panel instead
         // Tooltip is absolutely positioned in the scrolling canvas: account
         // for scrollTop or it lands above the cursor after scrolling.
         const canvas = e.currentTarget.closest('.maze-canvas') as HTMLElement | null
@@ -792,6 +856,7 @@ const DetourNode = memo(function DetourNode({
     <g
       className={`maze-node detour ${meta.cls}${n.sub ? ' is-sub' : ''}${n.live ? ' is-live' : ''}${dim ? ' is-dim' : ''}${selected ? ' is-selected' : ''}`}
       onMouseEnter={(e) => {
+        if (!CAN_HOVER) return // touch: tap opens the detail panel instead
         const canvas = e.currentTarget.closest('.maze-canvas') as HTMLElement | null
         if (!canvas) return
         const rect = canvas.getBoundingClientRect()

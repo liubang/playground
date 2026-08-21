@@ -278,6 +278,11 @@ export class AppController {
     }
   }
 
+  // 窄屏抽屉：点遮罩收起（不写入持久化偏好，与桌面端折叠互不影响）
+  dismissSidebarDrawer() {
+    this.store.set({ sidebarCollapsed: true })
+  }
+
   expandSidebar() {
     this.store.set({ sidebarCollapsed: false })
   }
