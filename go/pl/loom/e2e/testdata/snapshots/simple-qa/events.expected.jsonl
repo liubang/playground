@@ -2,10 +2,10 @@
 {"durable":true,"kind":"session.opened","payload":{"message_count":1,"model":"llm-openai/glm-5.3","resumed":false,"workspace":"{{cwd}}"},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"turn":1,"version":1}
 {"durable":true,"kind":"run.phase_changed","payload":{"phase":"calling_model"},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
 {"durable":true,"kind":"budget.updated","payload":{"cached_input_tokens":0,"context_tokens":0,"input_tokens":0,"output_tokens":0,"tool_calls":0,"turns":1},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
-{"durable":true,"kind":"model.request_started","payload":{"model_name":"glm-5.3","request_id":"{{id:3}}","turn":0},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
+{"durable":true,"kind":"model.request_started","payload":{"model_name":"glm-5.3","request_id":"{{id:3}}","turn":1},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
 {"durable":true,"kind":"usage.updated","payload":{"input_tokens":15152,"output_tokens":16,"turns":1},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"turn":1,"version":1}
 {"durable":true,"kind":"context.usage","payload":{"occupancy_tokens":0},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"turn":1,"version":1}
-{"durable":true,"kind":"model.response_completed","payload":{"has_tool_calls":false,"input_tokens":0,"output_tokens":0,"request_id":"{{id:3}}","stop_reason":"end_turn","text":"好"},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
+{"durable":true,"kind":"model.response_completed","payload":{"has_tool_calls":false,"input_tokens":15152,"output_tokens":16,"request_id":"{{id:3}}","stop_reason":"end_turn","text":"好"},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
 {"durable":true,"kind":"budget.updated","payload":{"cached_input_tokens":14976,"context_tokens":15152,"input_tokens":15152,"output_tokens":16,"tool_calls":0,"turns":1},"run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
 {"durable":true,"kind":"run.completed","run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
 {"durable":true,"kind":"turn.finished","run_id":"{{id:2}}","sequence":0,"session_id":"{{id:1}}","time":0,"turn":1,"version":1}

@@ -131,9 +131,13 @@ type Usage struct {
 	// prompt_tokens, Anthropic input+cache_read+cache_creation). It is the
 	// exact, provider-uniform denominator of the session cache-hit ratio
 	// CachedInputTokens/ContextTokens.
-	ContextTokens int64         `json:"context_tokens"`
-	CostUSD       float64       `json:"cost_usd"`
-	WallTime      time.Duration `json:"wall_time_ns"`
+	ContextTokens int64 `json:"context_tokens"`
+	// ReasoningTokens accumulates the provider-metered reasoning/thinking
+	// share of output tokens (0 for providers that do not split it out).
+	// Observability only, never a budget dimension.
+	ReasoningTokens int64         `json:"reasoning_tokens"`
+	CostUSD         float64       `json:"cost_usd"`
+	WallTime        time.Duration `json:"wall_time_ns"`
 }
 
 // CheckResult reports soft/hard threshold breaches.

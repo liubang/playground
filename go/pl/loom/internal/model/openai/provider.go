@@ -1113,6 +1113,7 @@ func (s *canonicalState) applyChatChunk(chunk chatCompletionChunk, emit func(dom
 			InputTokens:       chunk.Usage.PromptTokens,
 			OutputTokens:      chunk.Usage.CompletionTokens,
 			CachedInputTokens: chunk.Usage.cachedInputTokens(),
+			ReasoningTokens:   chunk.Usage.reasoningTokens(),
 			// prompt_tokens is already cache-inclusive, so it is the exact
 			// context-window footprint of the request.
 			ContextTokens: chunk.Usage.PromptTokens,
@@ -1240,6 +1241,7 @@ func (s *canonicalState) flushBufferedTerminal(emit func(domain.ModelEvent) bool
 			InputTokens:       s.bufferedUsage.PromptTokens,
 			OutputTokens:      s.bufferedUsage.CompletionTokens,
 			CachedInputTokens: s.bufferedUsage.cachedInputTokens(),
+			ReasoningTokens:   s.bufferedUsage.reasoningTokens(),
 			// prompt_tokens is already cache-inclusive, so it is the exact
 			// context-window footprint of the request.
 			ContextTokens: s.bufferedUsage.PromptTokens,
@@ -1424,10 +1426,19 @@ type usageInfo struct {
 	// Responses API nests them under input_tokens_details.
 	PromptTokensDetails *cachedTokenDetails `json:"prompt_tokens_details,omitempty"`
 	InputTokensDetails  *cachedTokenDetails `json:"input_tokens_details,omitempty"`
+	// Chat Completions nests the reasoning share under
+	// completion_tokens_details; the Responses API under
+	// output_tokens_details.
+	CompletionTokensDetails *reasoningTokenDetails `json:"completion_tokens_details,omitempty"`
+	OutputTokensDetails     *reasoningTokenDetails `json:"output_tokens_details,omitempty"`
 }
 
 type cachedTokenDetails struct {
 	CachedTokens int64 `json:"cached_tokens,omitempty"`
+}
+
+type reasoningTokenDetails struct {
+	ReasoningTokens int64 `json:"reasoning_tokens,omitempty"`
 }
 
 // cachedInputTokens extracts the prompt-cache hit count (0 when absent).
@@ -1440,6 +1451,21 @@ func (u *usageInfo) cachedInputTokens() int64 {
 	}
 	if u.InputTokensDetails != nil {
 		return u.InputTokensDetails.CachedTokens
+	}
+	return 0
+}
+
+// reasoningTokens extracts the provider-metered reasoning/thinking share
+// of the completion tokens (0 when absent).
+func (u *usageInfo) reasoningTokens() int64 {
+	if u == nil {
+		return 0
+	}
+	if u.CompletionTokensDetails != nil && u.CompletionTokensDetails.ReasoningTokens > 0 {
+		return u.CompletionTokensDetails.ReasoningTokens
+	}
+	if u.OutputTokensDetails != nil {
+		return u.OutputTokensDetails.ReasoningTokens
 	}
 	return 0
 }
@@ -1491,17 +1517,21 @@ func responseUsage(resp *responsesResponse) *usageInfo {
 	}
 	if resp.Usage.PromptTokens == 0 && resp.Usage.CompletionTokens == 0 {
 		return &usageInfo{
-			PromptTokens:        resp.Usage.InputTokens,
-			CompletionTokens:    resp.Usage.OutputTokens,
-			InputTokensDetails:  resp.Usage.InputTokensDetails,
-			PromptTokensDetails: resp.Usage.PromptTokensDetails,
+			PromptTokens:            resp.Usage.InputTokens,
+			CompletionTokens:        resp.Usage.OutputTokens,
+			InputTokensDetails:      resp.Usage.InputTokensDetails,
+			PromptTokensDetails:     resp.Usage.PromptTokensDetails,
+			CompletionTokensDetails: resp.Usage.CompletionTokensDetails,
+			OutputTokensDetails:     resp.Usage.OutputTokensDetails,
 		}
 	}
 	return &usageInfo{
-		PromptTokens:        resp.Usage.PromptTokens,
-		CompletionTokens:    resp.Usage.CompletionTokens,
-		PromptTokensDetails: resp.Usage.PromptTokensDetails,
-		InputTokensDetails:  resp.Usage.InputTokensDetails,
+		PromptTokens:            resp.Usage.PromptTokens,
+		CompletionTokens:        resp.Usage.CompletionTokens,
+		PromptTokensDetails:     resp.Usage.PromptTokensDetails,
+		InputTokensDetails:      resp.Usage.InputTokensDetails,
+		CompletionTokensDetails: resp.Usage.CompletionTokensDetails,
+		OutputTokensDetails:     resp.Usage.OutputTokensDetails,
 	}
 }
 

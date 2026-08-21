@@ -45,6 +45,7 @@
           "cost_usd": 0,
           "input_tokens": 0,
           "output_tokens": 0,
+          "reasoning_tokens": 0,
           "tool_calls": 0,
           "turns": 1,
           "wall_time_ns": 0
@@ -2343,7 +2344,8 @@
           "manifest_id": "{{id:25}}",
           "model_name": "glm-5.3",
           "prompt_hash": "{{hash:16}}",
-          "request_id": "{{id:4}}"
+          "request_id": "{{id:4}}",
+          "turn": 1
         },
         "sequence": 5,
         "session_id": "{{id:1}}",
@@ -2387,6 +2389,11 @@
             "role": "assistant",
             "sequence": 2,
             "status": "final"
+          },
+          "usage": {
+            "context_tokens": 15180,
+            "input_tokens": 15180,
+            "output_tokens": 57
           }
         },
         "sequence": 6,
@@ -2402,6 +2409,7 @@
           "cost_usd": 0,
           "input_tokens": 15180,
           "output_tokens": 57,
+          "reasoning_tokens": 0,
           "tool_calls": 0,
           "turns": 1,
           "wall_time_ns": 0
@@ -2542,6 +2550,7 @@
           "cost_usd": 0,
           "input_tokens": 15180,
           "output_tokens": 57,
+          "reasoning_tokens": 0,
           "tool_calls": 1,
           "turns": 2,
           "wall_time_ns": 0
@@ -2560,7 +2569,8 @@
           "manifest_id": "{{id:37}}",
           "model_name": "glm-5.3",
           "prompt_hash": "{{hash:19}}",
-          "request_id": "{{id:8}}"
+          "request_id": "{{id:8}}",
+          "turn": 2
         },
         "sequence": 16,
         "session_id": "{{id:1}}",
@@ -2589,6 +2599,12 @@
             "role": "assistant",
             "sequence": 4,
             "status": "final"
+          },
+          "usage": {
+            "cached_input_tokens": 15168,
+            "context_tokens": 21344,
+            "input_tokens": 21344,
+            "output_tokens": 3
           }
         },
         "sequence": 17,
@@ -2604,6 +2620,7 @@
           "cost_usd": 0,
           "input_tokens": 36524,
           "output_tokens": 60,
+          "reasoning_tokens": 0,
           "tool_calls": 1,
           "turns": 2,
           "wall_time_ns": 0
@@ -2682,6 +2699,7 @@
           "cost_usd": 0,
           "input_tokens": 36524,
           "output_tokens": 60,
+          "reasoning_tokens": 0,
           "tool_calls": 0,
           "turns": 1,
           "wall_time_ns": 0
@@ -4980,7 +4998,8 @@
           "manifest_id": "{{id:48}}",
           "model_name": "glm-5.3",
           "prompt_hash": "{{hash:21}}",
-          "request_id": "{{id:11}}"
+          "request_id": "{{id:11}}",
+          "turn": 1
         },
         "sequence": 25,
         "session_id": "{{id:1}}",
@@ -5024,6 +5043,12 @@
             "role": "assistant",
             "sequence": 6,
             "status": "final"
+          },
+          "usage": {
+            "cached_input_tokens": 21312,
+            "context_tokens": 21366,
+            "input_tokens": 21366,
+            "output_tokens": 49
           }
         },
         "sequence": 26,
@@ -5039,6 +5064,7 @@
           "cost_usd": 0,
           "input_tokens": 57890,
           "output_tokens": 109,
+          "reasoning_tokens": 0,
           "tool_calls": 0,
           "turns": 1,
           "wall_time_ns": 0
@@ -5179,6 +5205,7 @@
           "cost_usd": 0,
           "input_tokens": 57890,
           "output_tokens": 109,
+          "reasoning_tokens": 0,
           "tool_calls": 1,
           "turns": 2,
           "wall_time_ns": 0
@@ -5197,7 +5224,8 @@
           "manifest_id": "{{id:60}}",
           "model_name": "glm-5.3",
           "prompt_hash": "{{hash:24}}",
-          "request_id": "{{id:15}}"
+          "request_id": "{{id:15}}",
+          "turn": 2
         },
         "sequence": 36,
         "session_id": "{{id:1}}",
@@ -5233,6 +5261,12 @@
             "role": "assistant",
             "sequence": 8,
             "status": "final"
+          },
+          "usage": {
+            "cached_input_tokens": 21312,
+            "context_tokens": 21472,
+            "input_tokens": 21472,
+            "output_tokens": 11
           }
         },
         "sequence": 37,
@@ -5248,6 +5282,7 @@
           "cost_usd": 0,
           "input_tokens": 79362,
           "output_tokens": 120,
+          "reasoning_tokens": 0,
           "tool_calls": 1,
           "turns": 2,
           "wall_time_ns": 0
@@ -5392,6 +5427,7 @@
           "cost_usd": 0,
           "input_tokens": 79362,
           "output_tokens": 120,
+          "reasoning_tokens": 0,
           "tool_calls": 0,
           "turns": 1,
           "wall_time_ns": 0
@@ -7690,7 +7726,8 @@
           "manifest_id": "{{id:75}}",
           "model_name": "glm-5.3",
           "prompt_hash": "{{hash:26}}",
-          "request_id": "{{id:18}}"
+          "request_id": "{{id:18}}",
+          "turn": 1
         },
         "sequence": 49,
         "session_id": "{{id:1}}",
@@ -7726,6 +7763,12 @@
             "role": "assistant",
             "sequence": 10,
             "status": "final"
+          },
+          "usage": {
+            "cached_input_tokens": 17216,
+            "context_tokens": 17923,
+            "input_tokens": 17923,
+            "output_tokens": 21
           }
         },
         "sequence": 50,
@@ -7741,6 +7784,7 @@
           "cost_usd": 0,
           "input_tokens": 97285,
           "output_tokens": 141,
+          "reasoning_tokens": 0,
           "tool_calls": 0,
           "turns": 1,
           "wall_time_ns": 0

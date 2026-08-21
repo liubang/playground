@@ -107,6 +107,37 @@ type MessageEventPayload struct {
 	Message Message `json:"message"`
 }
 
+// RequestUsage is the per-request metered token usage recorded on
+// EventModelResponseCompleted. Event-log consumers (trace visualization,
+// session inspection) use it to attribute tokens to individual model
+// calls — the alternative, differencing cumulative budget.updated
+// snapshots, misfires because compaction calls and turn-boundary updates
+// also move those counters without producing a transcript step.
+type RequestUsage struct {
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
+	// CachedInputTokens is the request's prompt-cache hit count
+	// (observability only; see Usage.CachedInputTokens for the divergent
+	// provider semantics).
+	CachedInputTokens int64 `json:"cached_input_tokens,omitempty"`
+	// ContextTokens is the provider-metered context-window footprint of
+	// the request (cache-inclusive; see ModelEvent.ContextTokens).
+	ContextTokens int64 `json:"context_tokens,omitempty"`
+	// ReasoningTokens is the provider-metered reasoning/thinking share of
+	// OutputTokens (0 when the provider does not split it out).
+	ReasoningTokens int64 `json:"reasoning_tokens,omitempty"`
+}
+
+// ResponseCompletedPayload is the EventModelResponseCompleted payload: the
+// canonical assistant message plus its per-request usage. The wire shape
+// is a strict superset of MessageEventPayload, so existing readers that
+// unmarshal only the message keep working unchanged; Usage is nil for
+// events written before per-request usage was recorded.
+type ResponseCompletedPayload struct {
+	MessageEventPayload
+	Usage *RequestUsage `json:"usage,omitempty"`
+}
+
 // BudgetNoticePayload is the EventBudgetNotice payload: one graduated
 // budget reminder injected into the transcript (docs/CONTEXT_DESIGN.md
 // §4.4.1). The message is the full transcript entry; the dimension fields

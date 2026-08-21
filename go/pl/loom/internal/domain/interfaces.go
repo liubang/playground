@@ -196,9 +196,16 @@ type ModelEvent struct {
 	// cache_creation_input_tokens, OpenAI prompt_tokens (already
 	// cache-inclusive). Zero means the provider does not distinguish it
 	// from InputTokens, which is then the occupancy measure.
-	ContextTokens int64      `json:"context_tokens,omitempty"`
-	StopReason    StopReason `json:"stop_reason,omitempty"`
-	Error         string     `json:"error,omitempty"`
+	ContextTokens int64 `json:"context_tokens,omitempty"`
+	// ReasoningTokens reports the share of OutputTokens the provider
+	// metered as reasoning/thinking (OpenAI
+	// completion_tokens_details.reasoning_tokens, Responses API
+	// output_tokens_details.reasoning_tokens). Zero when the provider
+	// does not split it out (Anthropic folds thinking into output_tokens).
+	// Observability only.
+	ReasoningTokens int64      `json:"reasoning_tokens,omitempty"`
+	StopReason      StopReason `json:"stop_reason,omitempty"`
+	Error           string     `json:"error,omitempty"`
 	// Retryable marks a stream_error as transient (truncated body, transport
 	// drop): re-issuing the request is safe while nothing was delivered
 	// yet. The agent loop only honors it for streams with no activity.

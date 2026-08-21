@@ -39,6 +39,7 @@ export const Sidebar = memo(function Sidebar({
   const workspaces = useStore(controller.store, (s) => s.workspaces)
   const activeId = useStore(controller.store, (s) => s.sessionId)
   const showArchived = useStore(controller.store, (s) => s.showArchived)
+  const mainView = useStore(controller.store, (s) => s.mainView)
   const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed)
   const listRef = useRef<HTMLDivElement>(null)
   // 首次挂载：把最近活跃工作区设为视觉焦点（展开它、收起其他组）
@@ -184,6 +185,14 @@ export const Sidebar = memo(function Sidebar({
           ) : (
             '归档'
           )}
+        </button>
+        <button
+          id="open-compare"
+          className={'foot-btn' + (mainView === 'compare' ? ' is-active' : '')}
+          title="轨迹对比：选两个会话同轴对比执行过程"
+          onClick={() => controller.openCompare()}
+        >
+          <Icon name="layer-group" /> 对比
         </button>
         <span className="sidebar-foot-brand">◆ loom</span>
       </div>

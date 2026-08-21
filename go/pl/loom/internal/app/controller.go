@@ -2433,10 +2433,11 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindModelRequestStarted, runtimeevent.ModelRequestStartedPayload{
 				RequestID: payload.RequestID,
 				ModelName: payload.ModelName,
+				Turn:      payload.Turn,
 			})
 		}
 	case domain.EventModelResponseCompleted:
-		var payload domain.MessageEventPayload
+		var payload domain.ResponseCompletedPayload
 		if err := json.Unmarshal(ev.Payload, &payload); err == nil {
 			// A successful call recovers any earlier failure projection
 			// (e.g. a context-overflow retry that eventually went through).
@@ -2456,12 +2457,21 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 					stopReason = domain.StopEndTurn
 				}
 			}
-			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindModelResponseCompleted, runtimeevent.ModelResponseCompletedPayload{
+			completed := runtimeevent.ModelResponseCompletedPayload{
 				RequestID:    requestID,
 				StopReason:   stopReason,
 				HasToolCalls: hasToolCalls,
 				Text:         strings.Join(payload.Message.TextParts(), ""),
-			})
+			}
+			// Per-request usage rides on the persisted event since
+			// ResponseCompletedPayload; events written before that carry no
+			// usage and leave the token fields at zero.
+			if payload.Usage != nil {
+				completed.InputTokens = payload.Usage.InputTokens
+				completed.OutputTokens = payload.Usage.OutputTokens
+				completed.ReasoningTokens = payload.Usage.ReasoningTokens
+			}
+			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindModelResponseCompleted, completed)
 			// Stash raw arguments so edit calls can render a diff when the
 			// tool is prepared or escalated to approval. The map is bounded
 			// against leaks from calls that never reach execution.
@@ -2695,11 +2705,14 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 // These mirror the unexported types in the agent package.
 
 type modelRequestAuditDTO struct {
-	RequestID    domain.EventID `json:"request_id"`
-	ModelName    string         `json:"model_name"`
-	ManifestID   string         `json:"manifest_id"`
-	ManifestHash string         `json:"manifest_hash"`
-	PromptHash   string         `json:"prompt_hash"`
+	RequestID  domain.EventID `json:"request_id"`
+	ModelName  string         `json:"model_name"`
+	ManifestID string         `json:"manifest_id"`
+	// Turn is the 1-based prompt turn the request belongs to (0 for events
+	// written before turn was persisted).
+	Turn         int    `json:"turn,omitempty"`
+	ManifestHash string `json:"manifest_hash"`
+	PromptHash   string `json:"prompt_hash"`
 }
 
 type modelRequestFailedDTO struct {

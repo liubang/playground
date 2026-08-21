@@ -12,6 +12,8 @@ import { Composer } from './components/Composer'
 import { StatusBar } from './components/StatusBar'
 import { DirPicker } from './components/DirPicker'
 import { SettingsPanel } from './components/settings/SettingsPanel'
+import { MazePage } from './components/maze/MazePage'
+import { CompareView } from './components/maze/CompareView'
 import { ToastHost } from './components/ui/Toast'
 import { ConfirmHost } from './components/ui/Confirm'
 import { BlocksIOContext } from './components/blocks/context'
@@ -25,6 +27,7 @@ export function App({ controller }: { controller: AppController }) {
   const landingHint = useStore(controller.store, (s) => s.landingHint)
   const landingShowAddWs = useStore(controller.store, (s) => s.landingShowAddWs)
   const banner = useStore(controller.store, (s) => s.banner)
+  const mainView = useStore(controller.store, (s) => s.mainView)
   const [revealWs, setRevealWs] = useState<{ wsId: string; seq: number } | null>(null)
 
   // TranscriptView 的交互回调（稳定引用：controller 方法均为绑定箭头函数）
@@ -91,7 +94,7 @@ export function App({ controller }: { controller: AppController }) {
                   </button>
                 </div>
               </div>
-            ) : (
+            ) : mainView === 'chat' ? (
               <>
                 <TranscriptView
                   controller={controller.transcript}
@@ -105,6 +108,29 @@ export function App({ controller }: { controller: AppController }) {
                   }}
                 />
                 <Composer controller={controller} />
+              </>
+            ) : (
+              // Maze / trace-compare fill the main area (the chat tree
+              // stays mounted but hidden so its state survives the toggle)
+              <>
+                <div style={{ display: 'none' }}>
+                  <TranscriptView
+                    controller={controller.transcript}
+                    io={transcriptIO}
+                    scrollerOut={controller.scrollerRef}
+                    empty={{
+                      hidden: !landingVisible,
+                      hint: landingHint,
+                      showAddWs: landingShowAddWs,
+                      onAddWs: () => controller.openDirPicker(),
+                    }}
+                  />
+                </div>
+                {mainView === 'maze' ? (
+                  <MazePage controller={controller} />
+                ) : (
+                  <CompareView controller={controller} />
+                )}
               </>
             )}
           </main>

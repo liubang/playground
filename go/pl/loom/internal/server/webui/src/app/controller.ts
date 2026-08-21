@@ -84,6 +84,9 @@ export interface AppState {
   imagesDisabledReason: string
   hdrWorkspace: string // header 面包屑：当前会话所属工作区名
   hdrWorkspaceTitle: string
+  // Main-area view: chat ↔ execution-trace maze (Header trace button) ↔
+  // two-session trace compare (sidebar compare entry).
+  mainView: 'chat' | 'maze' | 'compare'
 }
 
 function initialState(): AppState {
@@ -127,6 +130,7 @@ function initialState(): AppState {
     imagesDisabledReason: '',
     hdrWorkspace: '',
     hdrWorkspaceTitle: '',
+    mainView: 'chat',
   }
 }
 
@@ -1152,5 +1156,22 @@ export class AppController {
 
   closeSettings() {
     this.store.set({ settingsOpen: false })
+  }
+
+  // ---------- execution-trace maze ----------
+
+  // Chat ↔ maze main-area toggle (Header trace button). From the compare
+  // view the button lands on the maze (it is the trace entry point).
+  toggleMainView() {
+    const v = this.store.get().mainView
+    this.store.set({ mainView: v === 'chat' ? 'maze' : v === 'maze' ? 'chat' : 'maze' })
+  }
+
+  openCompare() {
+    this.store.set({ mainView: 'compare' })
+  }
+
+  closeCompare() {
+    this.store.set({ mainView: 'chat' })
   }
 }
